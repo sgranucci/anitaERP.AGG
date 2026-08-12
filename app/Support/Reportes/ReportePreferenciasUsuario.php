@@ -118,6 +118,16 @@ class ReportePreferenciasUsuario
         }
     }
 
+    public static function persistirString(string $reporte, string $campo, string $valor): void
+    {
+        Cache::forever(generaKey(self::clave($reporte, $campo)), trim($valor));
+    }
+
+    public static function persistirBool(string $reporte, string $campo, bool $valor): void
+    {
+        Cache::forever(generaKey(self::clave($reporte, $campo)), $valor);
+    }
+
     /**
      * @param  list<int>  $permitidos
      * @return list<int>

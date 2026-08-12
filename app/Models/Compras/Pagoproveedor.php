@@ -26,12 +26,17 @@ class Pagoproveedor extends Model
         'numerotransaccion', 'fecha', 'caja_id', 'proveedor_id', 'detalle', 'estado',
         'monto', 'cotizacion', 'moneda_id', 'modo_cotizacion', 'usuario_id',
         'asiento_id', 'caja_movimiento_id',
+        'propuesta_pago_id', 'pagoproveedor_origen_id', 'pagoproveedor_revertido_por_id',
+        'interbanking_transferencia_id',
+        'interbanking_movimiento_id',
+        'bloqueado_banco',
     ];
 
     protected $casts = [
         'fecha' => 'date',
         'monto' => 'float',
         'cotizacion' => 'float',
+        'bloqueado_banco' => 'boolean',
     ];
 
     public function empresas()
@@ -114,5 +119,30 @@ class Pagoproveedor extends Model
             (int) $this->sucursal,
             $this->numerotransaccion
         );
+    }
+
+    public function propuesta_pagos()
+    {
+        return $this->belongsTo(PropuestaPago::class, 'propuesta_pago_id');
+    }
+
+    public function interbanking_transferencias()
+    {
+        return $this->belongsTo(\App\Models\Caja\InterbankingTransferencia::class, 'interbanking_transferencia_id');
+    }
+
+    public function interbanking_movimientos()
+    {
+        return $this->belongsTo(\App\Models\Caja\InterbankingMovimiento::class, 'interbanking_movimiento_id');
+    }
+
+    public function pagoproveedor_origen()
+    {
+        return $this->belongsTo(self::class, 'pagoproveedor_origen_id');
+    }
+
+    public function pagoproveedor_revertido_por()
+    {
+        return $this->belongsTo(self::class, 'pagoproveedor_revertido_por_id');
     }
 }

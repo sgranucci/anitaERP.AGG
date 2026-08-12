@@ -6,8 +6,11 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Ordencompra;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Services\Stock\RecepcionProveedorCambioCotizacionService;
+use App\Support\Compras\ComprobanteProveedorControlesConfigSupport;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
+use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
+use App\Support\Compras\ComprobanteProveedorLineasFacturaSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 
@@ -19,7 +22,8 @@ use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
  *     avisos: list<string>,
  *     errores: list<string>,
  *     cotizaciones_actualizadas: list<int>,
- *     devolvio_compras: bool
+ *     devolvio_compras: bool,
+ *     recepcion_ids_efectivos: list<int>
  * }
  */
 class ComprobanteProveedorControlesLegajoService
@@ -30,11 +34,14 @@ class ComprobanteProveedorControlesLegajoService
         private ComprobanteProveedorRecepcionesSupport $recepcionesSupport,
         private RecepcionProveedorCambioCotizacionService $cambioCotizacionService,
         private OrdencompraDevolverAComprasNotificacionService $devolverCompras,
+        private ComprobanteProveedorComLegajoResolucionService $comLegajoResolucion,
+        private ComprobanteProveedorMatchLineasService $matchLineas,
     ) {}
 
     /**
      * @param  list<int|string>  $recepcionIds
      * @param  iterable<object>  $conceptos
+     * @param  iterable<int, mixed>|null  $lineasFactura
      * @return ResultadoControles
      */
     public function validarYAplicar(
@@ -50,6 +57,8 @@ class ComprobanteProveedorControlesLegajoService
         float $subtotal,
         iterable $conceptos,
         ?int $excluirComprobanteId = null,
+        bool $estricto = true,
+        ?iterable $lineasFactura = null,
     ): array {
         $resultado = [
             'ok' => true,
@@ -57,18 +66,42 @@ class ComprobanteProveedorControlesLegajoService
             'errores' => [],
             'cotizaciones_actualizadas' => [],
             'devolvio_compras' => false,
+            'recepcion_ids_efectivos' => [],
         ];
 
         if (! $ordencompra) {
             return $resultado;
         }
 
-        $disponibles = $this->recepcionesSupport->listarDisponibles((int) $ordencompra->id, $excluirComprobanteId);
-        $tieneComDisponibles = $disponibles->isNotEmpty();
+        $cfgControles = ComprobanteProveedorControlesConfigSupport::paraEmpresa((int) $ordencompra->empresa_id);
+        if (! $cfgControles['activo']) {
+            // Controles de legajo desactivados en configuración de la empresa.
+            return $resultado;
+        }
 
-        if ($tieneComDisponibles && $modoCarga !== ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) {
+        $tieneComDisponibles = $this->tieneComDisponiblesEnLegajo($ordencompra, $excluirComprobanteId);
+        $politica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica($ordencompra, $tieneComDisponibles);
+
+        if ($politica['bloquea_sin_com']) {
+            $resultado['ok'] = false;
+            $resultado['errores'][] = 'Esta empresa exige el flujo OC/COM/factura: no hay recepción COM disponible '
+                .'y la orden no es anticipada. Debe confirmar una COM con provisión o marcar la OC como anticipada.';
+
+            return $resultado;
+        }
+
+        if ($politica['debe_asignar_com'] && $modoCarga !== ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) {
             $resultado['ok'] = false;
             $resultado['errores'][] = 'El legajo tiene recepciones COM disponibles: el modo de carga debe ser «Factura contra recepción (COM)».';
+
+            return $resultado;
+        }
+
+        if ($politica['permite_factura_anticipada']
+            && $modoCarga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) {
+            $resultado['ok'] = false;
+            $resultado['errores'][] = 'OC anticipada sin COM: use el modo «Factura contra orden de compra» (factura anticipada). '
+                .'Puede cargar más de una factura anticipada en el mismo legajo.';
 
             return $resultado;
         }
@@ -83,12 +116,43 @@ class ComprobanteProveedorControlesLegajoService
             ->unique()
             ->values();
 
+        if ($ids->isEmpty() && ($politica['debe_asignar_com'] || $tieneComDisponibles)) {
+            $auto = $this->comLegajoResolucion->autoAsignarPrimeraPorImporteNeto(
+                $ordencompra,
+                $letra,
+                $condicionivaProveedorId,
+                $total,
+                $subtotal,
+                $conceptos,
+                $excluirComprobanteId,
+                $monedaId,
+                $cotizacionFactura,
+            );
+            if ($auto['ids'] !== []) {
+                $ids = collect($auto['ids']);
+                if (! empty($auto['aviso'])) {
+                    $resultado['avisos'][] = (string) $auto['aviso'];
+                }
+                if (! empty($auto['ordencompra_id']) && (int) $ordencompra->id !== (int) $auto['ordencompra_id']) {
+                    // Mantener OC del form; solo aviso.
+                    $resultado['avisos'][] = 'COM auto-asignada pertenece a OC #'.$auto['ordencompra_id'].'.';
+                }
+            } elseif (! empty($auto['aviso'])) {
+                $resultado['ok'] = false;
+                $resultado['errores'][] = (string) $auto['aviso'];
+
+                return $resultado;
+            }
+        }
+
         if ($ids->isEmpty()) {
             $resultado['ok'] = false;
             $resultado['errores'][] = 'Debe seleccionar al menos una recepción COM para asociar a la factura del legajo.';
 
             return $resultado;
         }
+
+        $resultado['recepcion_ids_efectivos'] = $ids->all();
 
         $recepciones = Recepcion_Proveedor::query()
             ->whereIn('id', $ids->all())
@@ -109,23 +173,43 @@ class ComprobanteProveedorControlesLegajoService
             $conceptos,
         );
         $importeFactura = (float) $importeMeta['importe'];
+        // Homogeneizar a moneda local: COM ME×cot vs factura (ME×cot o MN).
+        $importeFacturaMn = ComprobanteProveedorImporteComparacionComSupport::aMonedaLocal(
+            $importeFactura,
+            $monedaId,
+            $cotizacionFactura,
+        );
 
         $recepciones = $this->recepcionesSupport->enriquecerConImporteProvision($recepciones);
-        $importeCom = round((float) $recepciones->sum(fn ($r) => (float) ($r->importe_provision_com ?? 0)), 2);
+        $importeComMn = round((float) $recepciones->sum(
+            fn ($r) => (float) ($r->importe_provision_com_mn ?? $r->importe_provision_com ?? 0)
+        ), 2);
+        $importeComMe = round((float) $recepciones->sum(
+            fn ($r) => (float) ($r->importe_provision_com ?? 0)
+        ), 2);
 
         $toleranciaPct = ComprobanteProveedorToleranciaImporteSupport::porcentajeParaOc(
             (int) $ordencompra->empresa_id,
             (int) ($ordencompra->centrocosto_id ?? 0) ?: null,
         );
 
-        if (ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia($importeFactura, $importeCom, $toleranciaPct)) {
+        if (ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia($importeFacturaMn, $importeComMn, $toleranciaPct)) {
             $detalle = sprintf(
-                'Importe factura (%s) %s vs provisión COM %s. Tolerancia permitida: %s%% (centro de costo de la OC).',
+                'Importe factura (%s) %s vs provisión COM %s%s. Tolerancia permitida: %s%% (centro de costo de la OC).',
                 $importeMeta['etiqueta'],
-                number_format($importeFactura, 2, ',', '.'),
-                number_format($importeCom, 2, ',', '.'),
+                number_format($importeFacturaMn, 2, ',', '.'),
+                number_format($importeComMn, 2, ',', '.'),
+                abs($importeComMe - $importeComMn) > 0.05
+                    ? ' (ME '.number_format($importeComMe, 2, ',', '.').')'
+                    : '',
                 number_format($toleranciaPct, 2, ',', '.'),
             );
+            if (! $estricto) {
+                // Generación de borrador / PDF+IA: no bloquear ni devolver a Compras.
+                $resultado['avisos'][] = $detalle.' Revise la COM asignada antes de contabilizar.';
+
+                return $resultado;
+            }
             $this->devolverCompras->devolver(
                 (int) $ordencompra->id,
                 'Diferencia de importe factura vs recepción fuera de tolerancia',
@@ -135,6 +219,24 @@ class ComprobanteProveedorControlesLegajoService
             $resultado['devolvio_compras'] = true;
             $resultado['errores'][] = $detalle.' El legajo fue devuelto a COMPRAS y se notificó por correo.';
 
+            return $resultado;
+        }
+
+        $match = $this->matchLineas->validar(
+            $ordencompra,
+            $ids->all(),
+            $this->resolverLineasFacturaParaMatch($lineasFactura, $excluirComprobanteId),
+            $estricto,
+            (int) ($ordencompra->proveedor_id ?? 0),
+        );
+        foreach ($match['avisos'] as $aviso) {
+            $resultado['avisos'][] = $aviso;
+        }
+        foreach ($match['errores'] as $error) {
+            $resultado['ok'] = false;
+            $resultado['errores'][] = $error;
+        }
+        if (! $resultado['ok']) {
             return $resultado;
         }
 
@@ -199,8 +301,6 @@ class ComprobanteProveedorControlesLegajoService
     }
 
     /**
-     * Variante post-persistencia usando el modelo ya guardado + IDs de recepción.
-     *
      * @param  list<int|string>  $recepcionIds
      * @return ResultadoControles
      */
@@ -227,6 +327,40 @@ class ComprobanteProveedorControlesLegajoService
             (float) ($comprobante->subtotal ?? 0),
             $comprobante->comprobante_proveedor_conceptos,
             (int) $comprobante->id,
+            true,
+            ComprobanteProveedorLineasFacturaSupport::desdeComprobante($comprobante),
         );
+    }
+
+    /**
+     * @param  iterable<int, mixed>|null  $lineasFactura
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>>
+     */
+    private function resolverLineasFacturaParaMatch(?iterable $lineasFactura, ?int $comprobanteId)
+    {
+        if ($lineasFactura !== null) {
+            return ComprobanteProveedorLineasFacturaSupport::coleccionDesdeIterable($lineasFactura);
+        }
+        if ($comprobanteId && $comprobanteId > 0) {
+            $cp = Comprobante_Proveedor::query()->find($comprobanteId);
+
+            return ComprobanteProveedorLineasFacturaSupport::desdeComprobante($cp);
+        }
+
+        return collect();
+    }
+
+    private function tieneComDisponiblesEnLegajo(Ordencompra $ordencompra, ?int $excluirComprobanteId): bool
+    {
+        if ($this->recepcionesSupport->listarDisponibles((int) $ordencompra->id, $excluirComprobanteId)->isNotEmpty()) {
+            return true;
+        }
+
+        return $this->recepcionesSupport->listarSinFacturarEnLegajo(
+            (int) $ordencompra->proveedor_id,
+            (int) $ordencompra->empresa_id,
+            $ordencompra->sector_legajocompra_id ? (int) $ordencompra->sector_legajocompra_id : null,
+            $excluirComprobanteId,
+        )->isNotEmpty();
     }
 }

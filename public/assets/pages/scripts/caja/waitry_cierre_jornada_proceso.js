@@ -1567,11 +1567,15 @@
         }
         var puede = !!jp.puede_grabar_asientos_proceso;
         btn.disabled = !puede;
-        btn.title = puede
-            ? (jp.rendicion_anita_pendiente
-                ? 'Completar la rendición Anita pendiente (los asientos ya están grabados).'
-                : 'Grabar los asientos del preview en contabilidad (ERP + ctamov Anita).')
-            : (jp.motivo_asientos_bloqueados || 'No puede grabar asientos en este momento.');
+        if (!puede) {
+            btn.title = jp.motivo_asientos_bloqueados || 'No puede grabar asientos en este momento.';
+        } else if (jp.asientos_grabados && jp.rendicion_anita_pendiente) {
+            btn.title = 'Completar la rendición Anita pendiente (los asientos ya están grabados).';
+        } else if (jp.rendicion_anita_pendiente) {
+            btn.title = 'Grabar asientos y completar la rendición Anita (rendgastro) pendiente.';
+        } else {
+            btn.title = 'Grabar los asientos del preview en contabilidad (ERP + ctamov Anita).';
+        }
     }
 
     function actualizarBotonRevertirProceso(jp) {
@@ -2049,6 +2053,10 @@
                     msg += '\n\nRendgastro (CIERRE-WAITRY) actualizado con el total de las facturas emitidas.';
                 } else if (!data.emision_omitida) {
                     msg += '\n\nAtención: no quedó registrada la rendición Anita (rendgastro).';
+                    if (data.rendicion_anita_error) {
+                        msg += '\nDetalle: ' + data.rendicion_anita_error;
+                    }
+                    msg += '\nAl grabar asientos se reintenta automáticamente.';
                 }
                 if (jpResp.puede_grabar_asientos_proceso && !jpResp.asientos_grabados) {
                     msg += '\n\nSiguiente paso manual: «Grabar asientos contables».';
@@ -2067,6 +2075,14 @@
             }
         }).catch(function (e) {
             alert(e.message);
+            // La factura puede haber quedado grabada aunque la API respondió error
+            // (p. ej. fallo de rendgastro o corte de red). Refrescar estado.
+            analizar({
+                titulo: 'Actualizando tras error en emisión…',
+                subtitulo: 'Se consulta el estado real del proceso por si la factura ya quedó emitida.',
+                mensajes: mensajesProcesoRefrescoTrasOperacion('el intento de emisión'),
+                iconClass: 'text-warning',
+            });
         }).finally(function () {
             mostrarOverlayEmitiendoFacturas(false);
             if (btnConfirmar) {

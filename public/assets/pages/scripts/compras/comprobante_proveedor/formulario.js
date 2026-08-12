@@ -4,13 +4,14 @@ $(function () {
     }
 
     var $form = $('#form-comprobante-proveedor');
-    var comprobanteId = parseInt($form.data('comprobante-id') || '0', 10);
-    var contabilizado = String($form.data('contabilizado') || '0') === '1';
-    var previewUrl = String($form.data('preview-url') || '');
-    var puedeEditarConceptoIva = String($form.data('puede-editar-concepto-iva') || '0') === '1';
-    var urlEditarConceptoIvaTpl = String($form.data('url-editar-concepto-iva') || '');
+    var comprobanteId = parseInt($form.attr('data-comprobante-id') || $form.data('comprobanteId') || '0', 10);
+    var contabilizado = String($form.attr('data-contabilizado') || $form.data('contabilizado') || '0') === '1';
+    // Preferir attr(): jQuery .data() a veces no lee data-preview-url en kebab-case.
+    var previewUrl = String($form.attr('data-preview-url') || $form.data('previewUrl') || '').trim();
+    var puedeEditarConceptoIva = String($form.attr('data-puede-editar-concepto-iva') || $form.data('puedeEditarConceptoIva') || '0') === '1';
+    var urlEditarConceptoIvaTpl = String($form.attr('data-url-editar-concepto-iva') || $form.data('urlEditarConceptoIva') || '');
     var previewTimer = null;
-    var previewXhr = null;
+    var previewSeq = 0;
     var conceptosMeta = {};
 
     try {
@@ -21,16 +22,54 @@ $(function () {
 
     var TIPOS_NETO = ['N', 'G', 'E'];
 
+    function parseMonto(val) {
+        if (window.AsientoMontosFormato && typeof window.AsientoMontosFormato.parseDecimal === 'function') {
+            return window.AsientoMontosFormato.parseDecimal(val);
+        }
+        var n = parseFloat(String(val || '').replace(/\./g, '').replace(',', '.'));
+        return isNaN(n) ? 0 : n;
+    }
+
+    function formatearInputMontoEn($root) {
+        if (window.AsientoMontosFormato && typeof window.AsientoMontosFormato.initEnContenedor === 'function') {
+            window.AsientoMontosFormato.initEnContenedor($root && $root.length ? $root[0] : document);
+        }
+    }
+
     function mostrarSolapa(sel) {
-        $('.cp-solapa').hide();
-        $(sel).show();
+        var paneId = String(sel || '').replace(/^#/, '');
+        if (!paneId) {
+            return;
+        }
+        var $link = $('#cp-tabs-comprobante .nav-link[href="#' + paneId + '"]');
+        if ($link.length && typeof $link.tab === 'function') {
+            $link.tab('show');
+            return;
+        }
+        // Fallback legacy (por si falta Bootstrap tabs)
+        $('.cp-solapa').hide().removeClass('show active');
+        $('#' + paneId).show().addClass('show active');
+    }
+
+    function abrirSolapaCom() {
+        if ($('#cp-solapa-recepciones-com').length) {
+            mostrarSolapa('#cp-solapa-recepciones-com');
+            actualizarUiRecepcionesCom();
+            return;
+        }
+        if ($('#cp-solapa-recepciones-com-inline').length) {
+            mostrarSolapa('#cp-solapa-principal');
+            $('html, body').animate({
+                scrollTop: $('#cp-solapa-recepciones-com-inline').offset().top - 80
+            }, 200);
+            actualizarUiRecepcionesCom();
+        }
     }
 
     function marcarTabActivo(btnDomId) {
-        $('.cp-tab-solapa').removeClass('font-weight-bold');
         var $b = $('#' + btnDomId);
-        if ($b.length) {
-            $b.addClass('font-weight-bold');
+        if ($b.length && $b.hasClass('nav-link') && typeof $b.tab === 'function') {
+            $b.tab('show');
         }
     }
 
@@ -72,7 +111,7 @@ $(function () {
         $('#tbody-concepto-table tr.item-concepto').each(function () {
             var $row = $(this);
             var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10);
-            var monto = parseFloat($row.find('.monto').val() || '0');
+            var monto = parseMonto($row.find('.monto').val() || '0');
             if (conceptoId <= 0 || monto === 0) {
                 return;
             }
@@ -123,7 +162,7 @@ $(function () {
             var $monto = $row.find('.monto');
             var $aviso = $row.find('.cp-aviso-concepto-cuenta');
             var conceptoId = parseInt($select.val() || '0', 10);
-            var monto = parseFloat($monto.val() || '0');
+            var monto = parseMonto($monto.val() || '0');
 
             $row.removeClass('table-warning');
             $aviso.removeClass('text-danger fa fa-exclamation-triangle').text('').attr('title', '');
@@ -138,7 +177,13 @@ $(function () {
                 return;
             }
 
-            if (!meta.cuenta_debe_id || parseInt(meta.cuenta_debe_id, 10) <= 0) {
+            var empresaIdForm = parseInt($('#empresa_id').val() || '0', 10) || 0;
+            var cuentaDebe = parseInt(meta.cuenta_debe_id || '0', 10) || 0;
+            if (meta.cuentas_por_empresa && empresaIdForm > 0 && meta.cuentas_por_empresa[empresaIdForm]) {
+                cuentaDebe = parseInt(meta.cuentas_por_empresa[empresaIdForm], 10) || 0;
+            }
+
+            if (!cuentaDebe || cuentaDebe <= 0) {
                 $row.addClass('table-warning');
                 if (puedeEditarConceptoIva && urlEditarConceptoIvaTpl && conceptoId > 0) {
                     var urlEditar = urlEditarConceptoIvaTpl.replace('__ID__', String(conceptoId));
@@ -205,43 +250,151 @@ $(function () {
         }
     }
 
+    function targetsPreviewAsiento() {
+        return $('.cp-asiento-preview-target');
+    }
+
+    function sincronizarTotalesDesdeConceptos() {
+        var total = 0;
+        var subtotal = 0;
+        var hayLineas = false;
+        $('#tbody-concepto-table tr.item-concepto').each(function () {
+            var $row = $(this);
+            var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10);
+            var monto = parseMonto($row.find('.monto').val() || '0');
+            if (conceptoId <= 0 || Math.abs(monto) < 0.0001) {
+                return;
+            }
+            hayLineas = true;
+            total += monto;
+            var tip = String((conceptosMeta[conceptoId] || {}).tipoconcepto || '');
+            if (TIPOS_NETO.indexOf(tip) >= 0) {
+                subtotal += monto;
+            }
+        });
+        if (!hayLineas) {
+            return;
+        }
+        var fmt = function (n) {
+            if (window.AsientoMontosFormato && typeof window.AsientoMontosFormato.fmt === 'function') {
+                return window.AsientoMontosFormato.fmt(n);
+            }
+            return (Math.round(n * 100) / 100).toLocaleString('es-AR', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            });
+        };
+        if ($('#total').length) {
+            $('#total').val(fmt(total));
+        }
+        if ($('#subtotal').length && subtotal > 0) {
+            $('#subtotal').val(fmt(subtotal));
+        }
+    }
+
+    function serializarFormularioPreview() {
+        sincronizarTotalesDesdeConceptos();
+
+        // Armar payload explícito: montos en decimal (evita es-AR y desfase de #total).
+        // `_method` (PUT del form de edición) haría que Laravel enrute el POST como PUT → 405.
+        var params = $form.serializeArray().filter(function (p) {
+            return p.name !== '_method'
+                && p.name !== 'montos[]'
+                && p.name !== 'concepto_ivacompra_ids[]'
+                && p.name !== 'total'
+                && p.name !== 'subtotal';
+        });
+
+        var total = 0;
+        var subtotal = 0;
+        $('#tbody-concepto-table tr.item-concepto').each(function () {
+            var $row = $(this);
+            var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10);
+            var monto = parseMonto($row.find('.monto').val() || '0');
+            params.push({ name: 'concepto_ivacompra_ids[]', value: String(conceptoId > 0 ? conceptoId : '') });
+            params.push({ name: 'montos[]', value: conceptoId > 0 ? String(monto) : '' });
+            if (conceptoId <= 0 || Math.abs(monto) < 0.0001) {
+                return;
+            }
+            total += monto;
+            var tip = String((conceptosMeta[conceptoId] || {}).tipoconcepto || '');
+            if (TIPOS_NETO.indexOf(tip) >= 0) {
+                subtotal += monto;
+            }
+        });
+
+        total = Math.round(total * 100) / 100;
+        subtotal = Math.round(subtotal * 100) / 100;
+        if (total > 0) {
+            params.push({ name: 'total', value: String(total) });
+        } else {
+            params.push({ name: 'total', value: String(parseMonto($('#total').val() || '0')) });
+        }
+        if (subtotal > 0) {
+            params.push({ name: 'subtotal', value: String(subtotal) });
+        } else {
+            params.push({ name: 'subtotal', value: String(parseMonto($('#subtotal').val() || '0')) });
+        }
+
+        return $.param(params);
+    }
+
     function recargarPreviewAsiento() {
         if (contabilizado || !previewUrl) {
+            if (!previewUrl && window.console && console.warn) {
+                console.warn('CP preview: falta data-preview-url en #form-comprobante-proveedor');
+            }
             return;
         }
 
-        if (previewXhr && previewXhr.readyState !== 4) {
-            previewXhr.abort();
+        var seq = ++previewSeq;
+        var $targets = targetsPreviewAsiento();
+        if ($targets.length) {
+            $targets.data('loading', 1);
+            $targets.css('opacity', 0.55);
         }
 
-        var $body = $('#cp-asiento-preview-body');
-        if ($body.length && !$body.data('loading')) {
-            $body.data('loading', 1);
-        }
-
-        previewXhr = $.ajax({
+        $.ajax({
             url: previewUrl,
             type: 'POST',
             dataType: 'json',
             headers: {
                 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') || $('input[name="_token"]').val()
             },
-            data: $form.serialize()
+            data: serializarFormularioPreview()
         })
             .done(function (res) {
-                if ($body.length && res && res.html) {
-                    $body.html(res.html);
-                    $body.removeData('loading');
+                if (seq !== previewSeq) {
+                    return;
                 }
+                if ($targets.length && res && typeof res.html === 'string') {
+                    $targets.html(res.html);
+                }
+                $targets.css('opacity', 1).removeData('loading');
+                var ahora = new Date();
+                var hh = String(ahora.getHours()).padStart(2, '0');
+                var mm = String(ahora.getMinutes()).padStart(2, '0');
+                var ss = String(ahora.getSeconds()).padStart(2, '0');
+                $('#cp-preview-asiento-status').text('Actualizado ' + hh + ':' + mm + ':' + ss);
                 renderBannerAvisos(res.avisos || [], res.error || null);
                 aplicarAvisosProveedor(res.avisos || []);
                 var coherencia = validarCoherenciaConceptosPantalla();
                 actualizarBadgeAsiento(!!(res.error || (res.avisos && res.avisos.length) || !coherencia.valido));
             })
-            .fail(function () {
-                if ($body.length) {
-                    $body.removeData('loading');
+            .fail(function (xhr, status) {
+                if (seq !== previewSeq) {
+                    return;
                 }
+                $targets.css('opacity', 1).removeData('loading');
+                if (status === 'abort') {
+                    return;
+                }
+                var msg = 'No se pudo actualizar el preview del asiento';
+                if (xhr && xhr.status) {
+                    msg += ' (HTTP ' + xhr.status + ')';
+                }
+                $('#cp-preview-asiento-status').text('Error al actualizar');
+                renderBannerAvisos([], msg);
             });
     }
 
@@ -249,43 +402,134 @@ $(function () {
         if (contabilizado) {
             return;
         }
+        sincronizarTotalesDesdeConceptos();
         marcarAvisosConceptosLocales();
         renderBannerCoherenciaConceptos(validarCoherenciaConceptosPantalla());
         clearTimeout(previewTimer);
-        previewTimer = setTimeout(recargarPreviewAsiento, 350);
+        previewTimer = setTimeout(recargarPreviewAsiento, 280);
     }
 
-    $('#cp-boton-principal').on('click', function () {
-        mostrarSolapa('#cp-solapa-principal');
-        marcarTabActivo('cp-boton-principal');
-    });
-    $('#cp-boton-conceptos').on('click', function () {
-        mostrarSolapa('#cp-solapa-conceptos');
-        marcarTabActivo('cp-boton-conceptos');
-    });
-    $('#cp-boton-cuotas').on('click', function () {
-        mostrarSolapa('#cp-solapa-cuotas');
-        marcarTabActivo('cp-boton-cuotas');
-    });
-    $('#cp-boton-asiento-contable').on('click', function () {
-        mostrarSolapa('#cp-solapa-asiento-contable');
-        marcarTabActivo('cp-boton-asiento-contable');
-    });
-    $('#cp-boton-estados').on('click', function () {
-        mostrarSolapa('#cp-solapa-estados');
-        marcarTabActivo('cp-boton-estados');
-    });
-    $('#cp-boton-archivos').on('click', function () {
-        mostrarSolapa('#cp-solapa-archivos');
-        marcarTabActivo('cp-boton-archivos');
+    window.refrescarPreviewAsiento = function (inmediato) {
+        if (inmediato) {
+            clearTimeout(previewTimer);
+            sincronizarTotalesDesdeConceptos();
+            recargarPreviewAsiento();
+            return;
+        }
+        programarPreviewAsiento();
+    };
+
+    $('#cp-tabs-comprobante a[data-toggle="tab"]').on('shown.bs.tab', function (e) {
+        var href = $(e.target).attr('href') || '';
+        if (href === '#cp-solapa-recepciones-com') {
+            actualizarUiRecepcionesCom();
+        }
+        if (href === '#cp-solapa-asiento-contable' || href === '#cp-solapa-conceptos') {
+            window.refrescarPreviewAsiento(true);
+        }
     });
 
     $('#agrega_renglon_concepto').on('click', function (e) {
         e.preventDefault();
         var renglon = $('#template-renglon-concepto').html();
-        $('#tbody-concepto-table').append(renglon);
-        programarPreviewAsiento();
+        var $nuevo = $(renglon);
+        $('#tbody-concepto-table').append($nuevo);
+        formatearInputMontoEn($nuevo);
+        setTimeout(function () {
+            $nuevo.find('.codigo_concepto_ivacompra').trigger('focus').select();
+        }, 0);
+        // Renglón vacío: no refrescar asiento (evita abortar un preview en curso).
     });
+
+    $('#agrega_renglon_cp_articulo').on('click', function (e) {
+        e.preventDefault();
+        var tpl = document.getElementById('template-renglon-cp-articulo');
+        if (!tpl || !tpl.content) {
+            return;
+        }
+        var $nuevo = $(tpl.content.cloneNode(true));
+        $('#tbody-cp-articulo-table').append($nuevo);
+        formatearInputMontoEn($('#tbody-cp-articulo-table tr.item-cp-articulo').last());
+        setTimeout(function () {
+            $('#tbody-cp-articulo-table tr.item-cp-articulo').last().find('.codigoarticulo').trigger('focus').select();
+        }, 0);
+    });
+
+    $(document).on('click', '.eliminar_cp_articulo', function (e) {
+        e.preventDefault();
+        $(this).closest('tr').remove();
+    });
+
+    if (typeof activa_eventos_consultaarticulo === 'function') {
+        activa_eventos_consultaarticulo();
+    }
+
+    // F1 / Enter en SKU de la solapa Artículos (mismo patrón que conceptos IVA).
+    function esTeclaF1ArticuloCp(e) {
+        return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112 || e.which === 112);
+    }
+
+    function abrirConsultaArticuloDesdeCodigoCp($input) {
+        var $btn = $input.closest('tr.item-cp-articulo').find('.consultaarticulo').first();
+        if ($btn.length) {
+            $btn.trigger('click');
+            return;
+        }
+        $input.closest('td').find('.consultaarticulo').first().trigger('click');
+    }
+
+    $(document).on('keydown', '#cp-articulo-table .codigoarticulo', function (e) {
+        if (esTeclaF1ArticuloCp(e)) {
+            e.preventDefault();
+            e.stopPropagation();
+            if ($('#consultaarticuloModal').hasClass('show') || $('#consultaarticuloModal').is(':visible')) {
+                return;
+            }
+            abrirConsultaArticuloDesdeCodigoCp($(this));
+            return;
+        }
+        if (e.key !== 'Enter' && e.which !== 13) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        var $input = $(this);
+        var sku = String($input.val() || '').trim();
+        if (sku === '') {
+            abrirConsultaArticuloDesdeCodigoCp($input);
+            return;
+        }
+        // Dispara el resolver por SKU de stock/articulo/consulta.js
+        $input.trigger('change');
+        var $next = $input.closest('tr.item-cp-articulo').find('input[name="articulo_codigos_proveedor[]"]');
+        if ($next.length) {
+            setTimeout(function () {
+                $next.trigger('focus').select();
+            }, 50);
+        }
+    });
+
+    if (!window.__cpArticuloF1CaptureActivo) {
+        document.addEventListener('keydown', function (e) {
+            if (!esTeclaF1ArticuloCp(e)) {
+                return;
+            }
+            if (!$('#form-comprobante-proveedor').length && !$('#cp-articulo-table').length) {
+                return;
+            }
+            var t = e.target;
+            if (!t || !t.classList || !t.classList.contains('codigoarticulo')) {
+                return;
+            }
+            if (!t.closest || !t.closest('#cp-articulo-table')) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            abrirConsultaArticuloDesdeCodigoCp($(t));
+        }, true);
+        window.__cpArticuloF1CaptureActivo = true;
+    }
 
     $(document).on('click', '.eliminar_concepto', function (e) {
         e.preventDefault();
@@ -293,13 +537,125 @@ $(function () {
         programarPreviewAsiento();
     });
 
-    function toggleBloqueRecepcionesCom() {
+    $(document).on('keydown', '#tbody-concepto-table .monto', function (e) {
+        if (e.key !== 'Enter' && e.which !== 13) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        var $row = $(this).closest('tr');
+        if (window.AsientoMontosFormato && typeof window.AsientoMontosFormato.formatearInput === 'function') {
+            window.AsientoMontosFormato.formatearInput(this);
+        }
+        var coherencia = validarCoherenciaConceptosPantalla();
+        renderBannerCoherenciaConceptos(coherencia);
+        marcarAvisosConceptosLocales();
+        // No agregar renglón vacío al Enter: abortaba el preview y podía confundir al grabar.
+        sincronizarTotalesDesdeConceptos();
+        window.refrescarPreviewAsiento(true);
+        if (!coherencia.valido) {
+            return;
+        }
+        var $nextCodigo = $row.nextAll('tr.item-concepto').first().find('.codigo_concepto_ivacompra');
+        if ($nextCodigo.length) {
+            $nextCodigo.trigger('focus').select();
+            return;
+        }
+        $(this).trigger('blur');
+    });
+
+    $(document).on('click', '#cp-abrir-solapa-com-desde-datos, #cp-abrir-solapa-com-desde-oc', function (e) {
+        e.preventDefault();
+        abrirSolapaCom();
+    });
+
+    $(document).on('click', '#cp-refrescar-preview-conceptos', function (e) {
+        e.preventDefault();
+        window.refrescarPreviewAsiento(true);
+    });
+
+    $(document).on('click', '#cp-ir-solapa-asiento', function (e) {
+        e.preventDefault();
+        mostrarSolapa('#cp-solapa-asiento-contable');
+    });
+
+    function formatearMonto(n) {
+        if (window.AsientoMontosFormato && typeof window.AsientoMontosFormato.fmt === 'function') {
+            return window.AsientoMontosFormato.fmt(n);
+        }
+        return (Math.round(n * 100) / 100).toLocaleString('es-AR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        });
+    }
+
+    function actualizarUiRecepcionesCom() {
+        var $bloque = $('#cp-bloque-recepciones-com');
+        if (!$bloque.length) {
+            return;
+        }
+
         var modo = $('#modo_carga').val();
         if (modo === 'ASIGNA_RECEPCION') {
-            $('#cp-bloque-recepciones-com').show();
+            $bloque.show();
         } else {
-            $('#cp-bloque-recepciones-com').hide();
+            $bloque.hide();
         }
+
+        var toleranciaPct = parseFloat($bloque.attr('data-tolerancia-pct')) || 0;
+        var importeRef = parseFloat($bloque.attr('data-importe-ref')) || 0;
+
+        var sumaCom = 0;
+        var checks = 0;
+        $('.cp-com-check:checked').each(function () {
+            checks++;
+            var $fila = $(this).closest('.cp-com-fila');
+            sumaCom += parseFloat($fila.attr('data-importe-com')) || 0;
+            var id = String($fila.attr('data-recepcion-id'));
+            $('.cp-com-articulos-bloque[data-recepcion-id="' + id + '"]').show();
+        });
+        $('.cp-com-check:not(:checked)').each(function () {
+            var id = String($(this).closest('.cp-com-fila').attr('data-recepcion-id'));
+            $('.cp-com-articulos-bloque[data-recepcion-id="' + id + '"]').hide();
+        });
+
+        if (checks > 0) {
+            $('#cp-com-articulos-vacio').hide();
+        } else {
+            $('#cp-com-articulos-vacio').show();
+        }
+
+        var $resumen = $('#cp-com-resumen-diferencia');
+        if (checks === 0) {
+            $resumen
+                .removeClass('alert-success alert-warning alert-danger')
+                .addClass('alert-secondary')
+                .html('<i class="fa fa-info-circle"></i> Seleccione al menos una recepción COM.')
+                .show();
+            return;
+        }
+
+        var diff = Math.abs(importeRef - sumaCom);
+        var pct = sumaCom > 0.00001 ? (diff / Math.abs(sumaCom)) * 100 : (diff > 0.05 ? 100 : 0);
+        var okCentavos = diff <= 0.05;
+        var okTol = okCentavos || pct <= toleranciaPct + 0.0001;
+        var cls = okTol ? 'alert-success' : 'alert-danger';
+        var msg = 'Provisión COM (moneda local): <strong>$' + formatearMonto(sumaCom) +
+            '</strong> · Ref. factura: <strong>$' + formatearMonto(importeRef) +
+            '</strong> · Diferencia: <strong>$' + formatearMonto(diff) +
+            '</strong> (' + formatearMonto(pct) + '%) · Tolerancia: ' + formatearMonto(toleranciaPct) + '%';
+        if (!okTol) {
+            msg += ' — <strong>fuera de tolerancia</strong> (al guardar se devolverá el legajo a Compras).';
+        } else if (!okCentavos && diff > 0) {
+            msg += ' — dentro de tolerancia; el excedente neto se prorratea en el asiento sobre artículos COM.';
+        } else {
+            msg += ' — coincide con la provisión.';
+        }
+        $resumen.removeClass('alert-secondary alert-success alert-warning alert-danger').addClass(cls).html(msg).show();
+    }
+
+    function toggleBloqueRecepcionesCom() {
+        actualizarUiRecepcionesCom();
         programarPreviewAsiento();
     }
 
@@ -310,17 +666,73 @@ $(function () {
         programarPreviewAsiento();
     });
 
+    // Tras formatear es-AR en blur (montos_formato.js dispara asiento:monto-actualizado).
+    $(document).on('asiento:monto-actualizado', function () {
+        window.refrescarPreviewAsiento(true);
+    });
+
     $(document).on('change', '#tbody-concepto-table .concepto_ivacompra_id, #tbody-concepto-table .monto', function () {
         programarPreviewAsiento();
     });
 
+    $(document).on('cp:concepto-ivacompra-elegido', function () {
+        programarPreviewAsiento();
+    });
+
+    function actualizarAbreviaturaTipoComprobante() {
+        var $sel = $('#tipotransaccion_compra_id');
+        var abrev = String($sel.find('option:selected').attr('data-abreviatura') || '').trim();
+        $('#cp-tipotransaccion-abreviatura').val(abrev);
+    }
+
+    actualizarAbreviaturaTipoComprobante();
+
+    $('#tipotransaccion_compra_id').on('change', function () {
+        actualizarAbreviaturaTipoComprobante();
+        var tipoId = parseInt(String($(this).val() || '0'), 10);
+        var $aviso = $('#cp-conceptos-tipo-aviso');
+        if (tipoId <= 0) {
+            return;
+        }
+        // Limpiar líneas: el operador debe reelegir conceptos válidos para el nuevo tipo.
+        var limpio = false;
+        $('#tbody-concepto-table tr.item-concepto').each(function () {
+            var $row = $(this);
+            if (parseInt(String($row.find('.concepto_ivacompra_id').val() || '0'), 10) > 0) {
+                limpio = true;
+            }
+            $row.find('.concepto_ivacompra_id').val('');
+            $row.find('.codigo_concepto_ivacompra').val('');
+            $row.find('.nombre_concepto_ivacompra').val('');
+        });
+        if (limpio && $aviso.length) {
+            $aviso.removeClass('d-none').html(
+                '<i class="fa fa-info-circle"></i> Cambió el tipo de comprobante: vuelva a elegir los conceptos IVA (filtrados por el nuevo tipo).'
+            );
+        }
+        programarPreviewAsiento();
+    });
+
     $(document).on('change', '#cp-bloque-recepciones-com input[type=checkbox]', function () {
+        actualizarUiRecepcionesCom();
         programarPreviewAsiento();
     });
 
     $form.on('submit', function (e) {
         if (contabilizado) {
             return;
+        }
+        var modo = $('#modo_carga').val();
+        if (modo === 'ASIGNA_RECEPCION' && $('#cp-bloque-recepciones-com').length) {
+            if ($('.cp-com-check:checked').length === 0) {
+                e.preventDefault();
+                if ($('#cp-solapa-recepciones-com').length) {
+                    mostrarSolapa('#cp-solapa-recepciones-com');
+                    marcarTabActivo('cp-boton-recepciones-com');
+                }
+                alert('Debe seleccionar al menos una recepción COM para asociar a la factura del legajo.');
+                return;
+            }
         }
         var coherencia = validarCoherenciaConceptosPantalla();
         renderBannerCoherenciaConceptos(coherencia);
@@ -416,10 +828,20 @@ $(function () {
     if (paramsUrl.get('solapa') === 'asiento' && $('#cp-solapa-asiento-contable').length) {
         mostrarSolapa('#cp-solapa-asiento-contable');
         marcarTabActivo('cp-boton-asiento-contable');
+    } else if (paramsUrl.get('solapa') === 'com' && $('#cp-solapa-recepciones-com').length) {
+        abrirSolapaCom();
     } else if (paramsUrl.get('solapa') === 'archivos' && $('#cp-solapa-archivos').length) {
         mostrarSolapa('#cp-solapa-archivos');
         marcarTabActivo('cp-boton-archivos');
+    } else if (window.cpAbrirSolapaComAlInicio && $('#cp-solapa-recepciones-com').length) {
+        abrirSolapaCom();
+    } else if ($('#cp-boton-recepciones-com .badge-danger').length && $('#cp-solapa-recepciones-com').length) {
+        abrirSolapaCom();
+    } else {
+        marcarTabActivo('cp-boton-principal');
     }
+
+    formatearInputMontoEn($form);
 
     (function initCotizacionDiaComprobante() {
         if (contabilizado) {
@@ -428,6 +850,12 @@ $(function () {
         var carpetaBase = typeof window.carpetaBase !== 'undefined' ? window.carpetaBase : '';
         var cotizacionManual = false;
         var refrescoXhr = null;
+        var $cot = $('#cotizacion');
+        var origenInicial = String($cot.data('cotizacion-origen') || '');
+        // Si viene de precarga/factura, no pisar el valor al refrescar del día.
+        if (origenInicial === 'precarga' || origenInicial === 'factura') {
+            cotizacionManual = true;
+        }
 
         function monedaIdForm() {
             return parseInt($('#moneda_id').val() || '1', 10) || 1;
@@ -437,11 +865,33 @@ $(function () {
             return (($('#fechacomprobante').val() || '') + '').substring(0, 10);
         }
 
-        function refrescarCotizacionDia() {
+        function actualizarHintDia(cotDia, cotFactura) {
+            var $hint = $('#cp-cotizacion-dia-hint');
+            if (!$hint.length) {
+                return;
+            }
+            var mid = monedaIdForm();
+            if (mid <= 1) {
+                $hint.html('Moneda local: cotización = 1');
+                return;
+            }
+            var diaTxt = (cotDia > 0) ? cotDia.toFixed(4).replace('.', ',') : '—';
+            var html = 'Cotización del día (venta): <strong id="cp-cotizacion-dia-valor">' + diaTxt + '</strong>';
+            if (cotFactura && cotFactura > 1 && Math.abs(cotFactura - cotDia) > 0.0000005) {
+                html += ' · En factura/precarga: <strong id="cp-cotizacion-factura-valor">'
+                    + cotFactura.toFixed(4).replace('.', ',') + '</strong> (campo usa la de factura/precarga)';
+            }
+            $hint.html(html);
+        }
+
+        function refrescarCotizacionDia(opciones) {
+            opciones = opciones || {};
+            var forzarCampo = !!opciones.forzarCampo;
             var mid = monedaIdForm();
             var fecha = fechaComprobanteForm();
             if (mid <= 1) {
-                $('#cotizacion').val(1);
+                $cot.val(1);
+                actualizarHintDia(1, null);
                 return;
             }
             if (!fecha) {
@@ -454,27 +904,37 @@ $(function () {
                 fecha: fecha,
                 moneda_id: mid
             }).done(function (res) {
-                if (cotizacionManual) {
+                var cot = parseFloat(res && res.cotizacion);
+                if (!(cot > 0)) {
                     return;
                 }
-                var cot = parseFloat(res && res.cotizacion);
-                if (cot > 0) {
-                    $('#cotizacion').val(cot);
+                var cotActual = parseFloat($cot.val() || '0') || 0;
+                var cotFacturaAttr = parseFloat($cot.attr('data-cotizacion-factura') || '0') || 0;
+                actualizarHintDia(cot, cotFacturaAttr > 1 ? cotFacturaAttr : (cotActual > 1 ? cotActual : null));
+                // Completar si no hay cotización; no pisar la de factura/precarga.
+                if (forzarCampo || (!cotizacionManual && cotActual <= 1)) {
+                    $cot.val(cot);
+                    $cot.attr('data-cotizacion-origen', 'dia');
                 }
             });
         }
 
-        $('#cotizacion').on('input change', function () {
+        $cot.on('input change', function () {
             cotizacionManual = true;
+            $cot.attr('data-cotizacion-origen', 'manual');
         });
 
         $('#fechacomprobante, #moneda_id').on('change', function () {
             cotizacionManual = false;
-            refrescarCotizacionDia();
+            $cot.attr('data-cotizacion-factura', '');
+            refrescarCotizacionDia({ forzarCampo: true });
             if (!contabilizado) {
                 programarPreviewAsiento();
             }
         });
+
+        // Al abrir: traer cotización del día (hint + campo si falta).
+        refrescarCotizacionDia({ forzarCampo: false });
     })();
 
     if (!contabilizado) {

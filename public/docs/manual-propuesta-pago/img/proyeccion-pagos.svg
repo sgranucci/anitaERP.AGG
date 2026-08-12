@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <rect width="960" height="540" fill="#f7f9fc"/>
+  <rect x="24" y="24" width="912" height="56" rx="6" fill="#85C1E9"/>
+  <text x="48" y="60" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="700" fill="#17202A">Proyección de pagos a proveedores</text>
+  <rect x="24" y="96" width="280" height="420" rx="6" fill="#ffffff" stroke="#cccccc"/>
+  <text x="40" y="128" font-family="DejaVu Sans, Arial, sans-serif" font-size="14" font-weight="700" fill="#17202A">Filtros</text>
+  <text x="40" y="158" font-size="12" font-family="DejaVu Sans, Arial, sans-serif" fill="#555555">Empresas · Fecha base</text>
+  <text x="40" y="182" font-size="12" font-family="DejaVu Sans, Arial, sans-serif" fill="#555555">A vencer / Vencidos</text>
+  <text x="40" y="206" font-size="12" font-family="DejaVu Sans, Arial, sans-serif" fill="#555555">Tramos 7,15,30,60,90,120</text>
+  <text x="40" y="230" font-size="12" font-family="DejaVu Sans, Arial, sans-serif" fill="#555555">Moneda · Adelantos</text>
+  <text x="40" y="254" font-size="12" font-family="DejaVu Sans, Arial, sans-serif" fill="#555555">Agrupar: concepto cash flow</text>
+  <rect x="40" y="280" width="120" height="32" rx="4" fill="#17a2b8"/>
+  <text x="68" y="301" font-size="13" font-family="DejaVu Sans, Arial, sans-serif" fill="#ffffff">Consultar</text>
+  <rect x="320" y="96" width="616" height="420" rx="6" fill="#ffffff" stroke="#cccccc"/>
+  <rect x="336" y="112" width="584" height="36" rx="4" fill="#85C1E9"/>
+  <text x="352" y="135" font-size="12" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" fill="#17202A">N.Pro. · Nombre · Tramos · Aprob. · Adeudado · N.Con.</text>
+  <text x="352" y="180" font-size="13" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" fill="#17202A">12 GAMING SUPPLIES</text>
+  <text x="352" y="210" font-size="12" font-family="DejaVu Sans, Arial, sans-serif" fill="#1a5276">A-0001-00000011 · 1.000,00 · concepto 12</text>
+  <text x="352" y="250" font-size="13" font-family="DejaVu Sans, Arial, sans-serif" font-weight="700" fill="#17202A">18 SUELDOS</text>
+  <text x="352" y="280" font-size="12" font-family="DejaVu Sans, Arial, sans-serif" fill="#1a5276">A-0001-00000012 · 2.500,00 · cuenta 521060001</text>
+  <text x="352" y="340" font-size="12" font-family="DejaVu Sans, Arial, sans-serif" fill="#555555">Menú: Cuentas a pagar ’ Reportes ’ Proyección de pagos</text>
+  <text x="352" y="368" font-size="12" font-family="DejaVu Sans, Arial, sans-serif" fill="#555555">Ruta: compras/proyeccion-pagos · permiso listar-reporte-proyeccion-pagos</text>
+  <text x="352" y="396" font-size="12" font-family="DejaVu Sans, Arial, sans-serif" fill="#555555">Columnas · PDF / Excel / CSV · links azules al ABM</text>
+  <text x="48" y="500" font-family="DejaVu Sans, Arial, sans-serif" font-size="12" fill="#666666">Anita ERP · diagrama de respaldo del manual (reemplazar por captura PNG real)</text>
+</svg>

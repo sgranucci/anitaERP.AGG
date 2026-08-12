@@ -32,17 +32,36 @@ Configuración comprobante proveedor
                         'col_label' => 'col-lg-3 control-label text-right pr-2',
                         'col_input' => 'col-lg-8',
                     ])
+
+                    @include('compras.configuracion_comprobante_proveedor.partials.flujo_proceso_selector')
+
+                    @include('compras.configuracion_comprobante_proveedor.partials.contabilidad_com_selector', [
+                        'comGeneraContabilidad' => $comGeneraContabilidad,
+                        'empresa_id' => $empresa_id,
+                    ])
+
+                    @include('compras.configuracion_comprobante_proveedor.partials.contabilidad_com_selector', [
+                        'comGeneraContabilidad' => $comGeneraContabilidad,
+                        'empresa_id' => $empresa_id,
+                    ])
+
+                    @include('compras.configuracion_comprobante_proveedor.partials.controles_linea', [
+                        'config' => $config,
+                    ])
+
                     <div class="form-group row">
                         <label class="col-lg-3 control-label text-right pr-2"></label>
                         <div class="col-lg-8">
                             <div class="custom-control custom-checkbox">
+                                <input type="hidden" name="activo" value="0">
                                 <input type="checkbox" class="custom-control-input" id="activo" name="activo" value="1"
                                     @checked(old('activo', $config->activo ?? true))>
                                 <label class="custom-control-label" for="activo">Controles de legajo activos</label>
                             </div>
                             <p class="text-muted small mb-0">
-                                Tolerancia de importe factura vs recepción COM por centro de costo de la OC.
-                                Default (sin CC específico): 0%. Centro de costo 85 (Gastronomía): 5% salvo que se indique otra cosa.
+                                Si está activo: tolerancia de importe factura vs recepción COM por centro de costo de la OC,
+                                cotización ME y (si se habilitan arriba) match SKU/precio.
+                                Default importe (sin CC específico): 0%. Centro de costo 85 (Gastronomía): 5% salvo que se indique otra cosa.
                             </p>
                         </div>
                     </div>

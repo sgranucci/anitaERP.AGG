@@ -48,6 +48,8 @@ final class FacturaProveedorPieTotalesSupport
         ];
 
         foreach ([
+            // Telecom / ISP: "TOTAL FACTURA DEL PERIODO" + tabla Detalle de impuestos (IVA / Per.IIBB).
+            'pie_detalle_impuestos_periodo' => fn () => $this->extraerDetalleImpuestosPeriodo($texto),
             'pie_horizontal' => fn () => $this->extraerHorizontal($texto),
             'pie_pares' => fn () => $this->extraerPorPares($texto),
             'pie_vertical' => fn () => $this->extraerVertical($texto),
@@ -65,6 +67,99 @@ final class FacturaProveedorPieTotalesSupport
         }
 
         return $vacio;
+    }
+
+    /**
+     * Bloque tipo:
+     *   TOTAL FACTURA DEL PERIODO … $ 1.183.650,16
+     *   Detalle de impuestos | Monto Base | Alic. | Monto Impuesto
+     *   IVA | 932.008,00 | 21,00 % | $ 195.721,68
+     *   Per.IIBB.Bs. As. | 932.008,00 | 6,00 % | $ 55.920,48
+     *
+     * @return array{
+     *   subtotal: float,
+     *   iva: float,
+     *   impuestos_internos: float,
+     *   percepcion_iva: float,
+     *   percepcion_iibb: float,
+     *   total: float
+     * }|null
+     */
+    private function extraerDetalleImpuestosPeriodo(string $texto): ?array
+    {
+        $tieneSenal = preg_match('/detalle\s+de\s+impuestos/iu', $texto)
+            || preg_match('/TOTAL\s+FACTURA(?:\s+DEL)?\s+PER[IÍ]ODO/iu', $texto);
+        if (! $tieneSenal) {
+            return null;
+        }
+
+        $total = null;
+        if (preg_match(
+            '/TOTAL\s+FACTURA(?:\s+DEL)?\s+PER[IÍ]ODO[^\n]{0,100}?\$?\s*([\d.]+,\d{2})/iu',
+            $texto,
+            $mTotal
+        )) {
+            $total = $this->importeParser->parsear($mTotal[1]);
+        }
+
+        $base = null;
+        $iva = null;
+        // IVA + base + alícuota% + monto impuesto (último importe $).
+        if (preg_match(
+            '/\bIVA\b(?![^\n]{0,30}inscript)[^\n%]{0,80}?([\d.]+,\d{2})\s+([\d]+(?:[.,]\d+)?)\s*%[^\n$]{0,30}\$?\s*([\d.]+,\d{2})/iu',
+            $texto,
+            $mIva
+        )) {
+            $base = $this->importeParser->parsear($mIva[1]);
+            $iva = $this->importeParser->parsear($mIva[3]);
+        }
+
+        $iibb = null;
+        if (preg_match(
+            '/Per\.?\s*[Il1]+\.?B{1,2}[^\n%]{0,100}?([\d.]+,\d{2})\s+([\d]+(?:[.,]\d+)?)\s*%[^\n$]{0,30}\$?\s*([\d.]+,\d{2})/iu',
+            $texto,
+            $mIibb
+        )) {
+            if ($base === null) {
+                $base = $this->importeParser->parsear($mIibb[1]);
+            }
+            $iibb = $this->importeParser->parsear($mIibb[3]);
+        }
+
+        if ($base === null && $iva !== null && $iva > 0) {
+            // Inferir neto desde IVA 21% si no vino la base.
+            $base = round($iva / 0.21, 2);
+        }
+
+        if ($base === null || $base <= 0) {
+            return null;
+        }
+
+        $iva = $iva ?? 0.0;
+        $iibb = $iibb ?? 0.0;
+        if ($total === null || $total <= 0) {
+            $total = round($base + $iva + $iibb, 2);
+        }
+
+        // Coherencia: base + IVA + IIBB ≈ total (tolera 1 peso).
+        $suma = round($base + $iva + $iibb, 2);
+        if (abs($suma - $total) > 1.0) {
+            // Si el total del rótulo no cierra, preferir la suma del detalle.
+            if ($iva > 0 || $iibb > 0) {
+                $total = $suma;
+            } else {
+                return null;
+            }
+        }
+
+        return [
+            'subtotal' => $base,
+            'iva' => $iva,
+            'impuestos_internos' => 0.0,
+            'percepcion_iva' => 0.0,
+            'percepcion_iibb' => $iibb,
+            'total' => $total,
+        ];
     }
 
     /**

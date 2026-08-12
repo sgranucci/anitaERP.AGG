@@ -257,6 +257,10 @@ class ArbolaprobacionController extends Controller
                 $arbolaprobacion_movimiento = app(\App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService::class)
                     ->findPorSolicitudpago((int) $comprobante_id);
                 break;
+            case 'PP':
+                $arbolaprobacion_movimiento = app(\App\Services\Compras\PropuestaPagoArbolIntegracionService::class)
+                    ->findPorPropuestaPago((int) $comprobante_id);
+                break;
             case 'OC':
                 $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorOrdencompra($comprobante_id);
                 break;
@@ -323,7 +327,7 @@ class ArbolaprobacionController extends Controller
             }
         }
 
-        if ($flEncontro && in_array($tipocomprobante, ['OV', 'SP', 'PE'], true)) {
+        if ($flEncontro && in_array($tipocomprobante, ['OV', 'SP', 'PE', 'PP'], true)) {
             $datos = $this->arbolaprobacionService->portalDatosComprobantePorHash(
                 (string) $tipocomprobante,
                 (int) $comprobante_id,
@@ -655,6 +659,10 @@ class ArbolaprobacionController extends Controller
                 $arbolaprobacion_movimiento = app(\App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService::class)
                     ->findPorSolicitudpago((int) $comprobante_id);
                 break;
+            case 'PP':
+                $arbolaprobacion_movimiento = app(\App\Services\Compras\PropuestaPagoArbolIntegracionService::class)
+                    ->findPorPropuestaPago((int) $comprobante_id);
+                break;
             case 'OC':
                 $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorOrdencompra($comprobante_id);
                 break;
@@ -716,7 +724,7 @@ class ArbolaprobacionController extends Controller
             ]));
         }
 
-        if ($flEncontro && in_array($tipocomprobante, ['OV', 'SP', 'PE'], true)) {
+        if ($flEncontro && in_array($tipocomprobante, ['OV', 'SP', 'PE', 'PP'], true)) {
             $datos = $this->arbolaprobacionService->portalDatosComprobantePorHash(
                 (string) $tipocomprobante,
                 (int) $comprobante_id,

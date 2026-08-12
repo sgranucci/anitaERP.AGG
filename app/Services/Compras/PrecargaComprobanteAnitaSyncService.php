@@ -541,7 +541,7 @@ class PrecargaComprobanteAnitaSyncService
         ]));
     }
 
-    private function normalizarDecimal(mixed $valor): float
+        private function normalizarDecimal(mixed $valor): float
     {
         if (is_int($valor) || is_float($valor)) {
             return (float) $valor;
@@ -558,6 +558,17 @@ class PrecargaComprobanteAnitaSyncService
             $s = str_replace(',', '.', $s);
         } elseif (str_contains($s, ',')) {
             $s = str_replace(',', '.', $s);
+        } elseif (str_contains($s, '.')) {
+            // Solo puntos: miles AR (1.208.932 / 932.008) vs decimal EN (72535.95).
+            $partes = explode('.', $s);
+            $ultima = $partes[array_key_last($partes)];
+            if (count($partes) >= 3 && strlen($ultima) === 2) {
+                $dec = array_pop($partes);
+                $s = implode('', $partes).'.'.$dec;
+            } elseif (count($partes) >= 2 && strlen($ultima) === 3) {
+                $s = str_replace('.', '', $s);
+            }
+            // Un punto + 2 decimales: dejar como decimal EN.
         } else {
             $s = str_replace(',', '', $s);
         }

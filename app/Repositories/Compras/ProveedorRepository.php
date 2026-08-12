@@ -169,6 +169,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
     {
         return $this->model->with("proveedor_exclusiones")
 									->with("proveedor_archivos")
+									->with("proveedor_documentos_fiscales")
 									->with("proveedor_formapagos")
 									->with("tipossuspensionproveedores")
 									->with("tipoempresas")
@@ -190,6 +191,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
     {
         return $this->model->with("proveedor_exclusiones")
 									->with("proveedor_archivos")
+									->with("proveedor_documentos_fiscales")
 									->with("proveedor_formapagos")
 									->with("tipossuspensionproveedores")
 									->with("tipoempresas")
@@ -211,6 +213,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
     {
         $query = $this->model->with("proveedor_exclusiones")
 									->with("proveedor_archivos")
+									->with("proveedor_documentos_fiscales")
 									->with("proveedor_formapagos")
 									->with("tipossuspensionproveedores")
 									->with("tipoempresas")
@@ -238,6 +241,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
     {
         if (null == $proveedor = $this->model->with("proveedor_exclusiones")
 											->with("proveedor_archivos")
+											->with("proveedor_documentos_fiscales")
 											->with("proveedor_formapagos")
 											->with("tipossuspensionproveedores")
 											->with("tipoempresas")

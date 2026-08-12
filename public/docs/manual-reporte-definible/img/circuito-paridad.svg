@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="300" viewBox="0 0 960 300">
+  <rect width="960" height="300" fill="#f8fafc"/>
+  <text x="32" y="36" font-family="DejaVu Sans,Arial" font-size="18" fill="#1F4E79" font-weight="700">Paridad Anita — tres brazos</text>
+  <rect x="40" y="70" width="260" height="80" rx="8" fill="#D6EAF8" stroke="#85C1E9"/>
+  <text x="100" y="105" font-family="DejaVu Sans,Arial" font-size="14" fill="#1B4F72" font-weight="700">Informe</text>
+  <text x="70" y="130" font-family="DejaVu Sans,Arial" font-size="12" fill="#5D6D7E">impreso (saldos_mes)</text>
+  <rect x="350" y="70" width="260" height="80" rx="8" fill="#FCF3CF" stroke="#F4D03F"/>
+  <text x="400" y="105" font-family="DejaVu Sans,Arial" font-size="14" fill="#7D6608" font-weight="700">Asientos ERP</text>
+  <text x="390" y="130" font-family="DejaVu Sans,Arial" font-size="12" fill="#5D6D7E">recalculado asiento_mov</text>
+  <rect x="660" y="70" width="260" height="80" rx="8" fill="#D5F5E3" stroke="#58D68D"/>
+  <text x="730" y="105" font-family="DejaVu Sans,Arial" font-size="14" fill="#196F3D" font-weight="700">Anita</text>
+  <text x="690" y="130" font-family="DejaVu Sans,Arial" font-size="12" fill="#5D6D7E">ctamov + subdiario</text>
+  <text x="120" y="190" font-family="DejaVu Sans,Arial" font-size="13" fill="#C0392B">Dif. motor ←→</text>
+  <text x="480" y="190" font-family="DejaVu Sans,Arial" font-size="13" fill="#C0392B">Dif. Anita ←→</text>
+  <text x="40" y="240" font-family="DejaVu Sans,Arial" font-size="13" fill="#34495E">Badge fuente de verdad según corte 2025/2026 · export Pdf/Excel/Csv · solo diferencias</text>
+</svg>

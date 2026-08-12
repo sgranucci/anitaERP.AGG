@@ -14,7 +14,9 @@ Cada manual del ERP sigue el mismo patrón para incluir **capturas reales** de l
 | Canjes marketing | `config/manual_canjes_marketing.php` | `public/docs/manual-canjes-marketing/img/` | `php artisan manual:capturar-canjes-marketing-interno` |
 | Vending | `config/manual_vending.php` | `public/docs/manual-vending/img/` | `php artisan manual:capturar-vending-interno` |
 | Solicitudes de pago | `config/manual_solicitudpago.php` | `public/docs/manual-solicitudpago/img/` | `php artisan manual:capturar-solicitudpago-interno` |
+| Propuesta de pagos / Tesorería AP | `config/manual_propuesta_pago.php` | `public/docs/manual-propuesta-pago/img/` | (SVG de respaldo; captura PNG a definir) |
 | Contable (cierres/aperturas) | `config/manual_contable.php` | `public/docs/manual-contable/img/` | `php artisan manual:capturar-contable-interno` |
+| Reportes contables definibles | `config/manual_reporte_definible.php` | `public/docs/manual-reporte-definible/img/` | (SVG de circuitos/wireframes; captura PNG a definir) |
 
 ## Cómo vincular una captura a un capítulo
 
@@ -53,6 +55,7 @@ php docs/manual-canjes-marketing/generar.php
 php docs/manual-vending/generar.php
 php docs/manual-recepcion-movstock/generar.php
 php docs/manual-solicitudpago/generar.php
+php docs/manual-propuesta-pago/generar.php
 php docs/manual-contable/generar.php
 ```
 
@@ -61,6 +64,12 @@ Capturas Contable:
 ```bash
 php artisan manual:capturar-contable-interno --usuario=admin
 php docs/manual-contable/generar.php
+```
+
+Reportes contables definibles (diagramas SVG incluidos; PNG de pantallas opcionales):
+
+```bash
+php docs/manual-reporte-definible/generar.php
 ```
 
 Alternativa Compras/Stock con navegador: `python3 docs/manual-compras/capturar_playwright.py` (requiere Chromium).

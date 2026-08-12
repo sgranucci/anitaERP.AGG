@@ -31,6 +31,8 @@ class MayorPlanoCuentaComprobanteEnricher
             'rendicion_estacionamiento_caja_id' => 0,
             'transferencia_mercaderia_id' => 0,
             'caja_movimiento_id' => 0,
+            'solicitudpago_id' => 0,
+            'solicitudpago_codigo' => '',
             'cobranza_id' => 0,
             'pagoproveedor_id' => 0,
             'recepcionproveedor_id' => 0,
@@ -64,10 +66,15 @@ class MayorPlanoCuentaComprobanteEnricher
             ->keyBy('id');
 
         $remesaIds = [];
+        $solicitudpagoIds = [];
         foreach ($mapa as $row) {
             $rid = (int) ($row->remesa_id ?? 0);
             if ($rid > 0) {
                 $remesaIds[$rid] = $rid;
+            }
+            $spid = (int) ($row->solicitudpago_id ?? 0);
+            if ($spid > 0) {
+                $solicitudpagoIds[$spid] = $spid;
             }
         }
 
@@ -76,6 +83,14 @@ class MayorPlanoCuentaComprobanteEnricher
             $numerosRemesa = DB::table('remesa')
                 ->whereIn('id', array_values($remesaIds))
                 ->pluck('numero', 'id')
+                ->all();
+        }
+
+        $codigosSp = [];
+        if ($solicitudpagoIds !== [] && Schema::hasTable('solicitudpago')) {
+            $codigosSp = DB::table('solicitudpago')
+                ->whereIn('id', array_values($solicitudpagoIds))
+                ->pluck('codigo', 'id')
                 ->all();
         }
 
@@ -96,6 +111,9 @@ class MayorPlanoCuentaComprobanteEnricher
             $filas[$idx]['rendicion_estacionamiento_caja_id'] = (int) ($row->rendicion_estacionamiento_caja_id ?? 0);
             $filas[$idx]['transferencia_mercaderia_id'] = (int) ($row->transferencia_mercaderia_id ?? 0);
             $filas[$idx]['caja_movimiento_id'] = (int) ($row->caja_movimiento_id ?? 0);
+            $spId = (int) ($row->solicitudpago_id ?? 0);
+            $filas[$idx]['solicitudpago_id'] = $spId;
+            $filas[$idx]['solicitudpago_codigo'] = (string) ($codigosSp[$spId] ?? '');
             $filas[$idx]['cobranza_id'] = (int) ($row->cobranza_id ?? 0);
             $filas[$idx]['pagoproveedor_id'] = (int) ($row->pagoproveedor_id ?? 0);
             $filas[$idx]['recepcionproveedor_id'] = (int) ($row->recepcionproveedor_id ?? 0);
@@ -157,7 +175,23 @@ class MayorPlanoCuentaComprobanteEnricher
             return 'Mov.stock #'.(int) $fila['movimientostock_id'];
         }
         if ((int) ($fila['caja_movimiento_id'] ?? 0) > 0) {
-            return 'Mov.caja #'.(int) $fila['caja_movimiento_id'];
+            $etiqueta = 'Mov.caja #'.(int) $fila['caja_movimiento_id'];
+            $spCodigo = trim((string) ($fila['solicitudpago_codigo'] ?? ''));
+            $spId = (int) ($fila['solicitudpago_id'] ?? 0);
+            if ($spCodigo !== '') {
+                $etiqueta .= ' / SP '.$spCodigo;
+            } elseif ($spId > 0) {
+                $etiqueta .= ' / SP #'.$spId;
+            }
+
+            return $etiqueta;
+        }
+        if ((int) ($fila['solicitudpago_id'] ?? 0) > 0) {
+            $spCodigo = trim((string) ($fila['solicitudpago_codigo'] ?? ''));
+
+            return $spCodigo !== ''
+                ? 'SP '.$spCodigo
+                : 'SP #'.(int) $fila['solicitudpago_id'];
         }
         $ocId = (int) ($fila['ordencompra_id'] ?? $fila['ordencompra_id_asiento'] ?? 0);
         if ($ocId > 0) {
@@ -192,6 +226,9 @@ class MayorPlanoCuentaComprobanteEnricher
         }
         if ((int) ($fila['caja_movimiento_id'] ?? 0) > 0) {
             return 'TES';
+        }
+        if ((int) ($fila['solicitudpago_id'] ?? 0) > 0) {
+            return 'SP';
         }
         if ((int) ($fila['recepcionproveedor_id'] ?? 0) > 0) {
             return 'REC';

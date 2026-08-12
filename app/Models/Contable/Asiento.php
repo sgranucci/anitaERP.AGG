@@ -14,6 +14,7 @@ use App\Models\Stock\MovimientoStock;
 use App\Models\Caja\Cobranza;
 use App\Models\Caja\Remesa;
 use App\Models\Seguridad\Usuario;
+use App\Models\Solicitudpago\Solicitudpago;
 use Auth;
 
 class Asiento extends Model implements Auditable
@@ -29,7 +30,7 @@ class Asiento extends Model implements Auditable
     protected $fillable = ['empresa_id', 'tipoasiento_id', 'numeroasiento', 'fecha', 'venta_id', 'movimientostock_id',
                             'cobranza_id',
                             'pagoproveedor_id',
-                            'compra_id', 'caja_movimiento_id', 'remesa_id',
+                            'compra_id', 'caja_movimiento_id', 'solicitudpago_id', 'remesa_id',
                             'jornada_gastronomia_id', 'rendicion_estacionamiento_caja_id', 'transferencia_mercaderia_id',
                             'ordencompra_id', 'recepcionproveedor_id',
                             'comprobante_proveedor_id', 'observacion',
@@ -123,5 +124,10 @@ class Asiento extends Model implements Auditable
     public function remesas()
     {
         return $this->belongsTo(Remesa::class, 'remesa_id');
+    }
+
+    public function solicitudpagos()
+    {
+        return $this->belongsTo(Solicitudpago::class, 'solicitudpago_id');
     }
 }

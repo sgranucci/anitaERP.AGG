@@ -309,6 +309,7 @@
                                 'puede_ver_recepcion_proveedor' => $puede_ver_recepcion_proveedor ?? false,
                                 'puede_ver_movimientostock' => $puede_ver_movimientostock ?? false,
                                 'puede_ver_caja_movimiento' => $puede_ver_caja_movimiento ?? false,
+                                'puede_ver_solicitudpago' => $puede_ver_solicitudpago ?? false,
                                 'multiempresa' => $multiempresa ?? false,
                             ])
                         </table>

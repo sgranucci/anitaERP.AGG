@@ -52,6 +52,13 @@
                 <div class="meta">Generado {{ now()->format('d/m/Y H:i') }}</div>
                 @if (filled($busqueda ?? null))
                     <div class="meta">Búsqueda: {{ $busqueda }}</div>
+                @elseif (! empty($filtros['valor'] ?? null))
+                    <div class="meta">Filtro: {{ $filtros['valor'] }}</div>
+                @endif
+                @if (! empty($filtros['empresa_id'] ?? null))
+                    <div class="meta">Empresa id: {{ $filtros['empresa_id'] }}</div>
+                @elseif (($filtros['empresa_scope'] ?? '') === 'todas')
+                    <div class="meta">Todas las empresas asignadas</div>
                 @endif
                 <div class="meta">{{ $totalFilas }} registro(s)</div>
             </td>

@@ -86,6 +86,7 @@ class Proveedor_FormapagoRepository implements Proveedor_FormapagoRepositoryInte
         $nombres = (array) ($data['nombres'] ?? []);
         $formapagoIds = (array) ($data['formapago_ids'] ?? []);
         $cbus = (array) ($data['cbus'] ?? []);
+        $aliasCbus = (array) ($data['alias_cbus'] ?? []);
         $tipocuentacajaIds = (array) ($data['tipocuentacaja_ids'] ?? []);
         $monedaIds = (array) ($data['moneda_ids'] ?? []);
         $numerocuentas = (array) ($data['numerocuentas'] ?? []);
@@ -110,6 +111,7 @@ class Proveedor_FormapagoRepository implements Proveedor_FormapagoRepositoryInte
 
             if ($nombre === '' && $formapagoId === null && $tipocuentacajaId === null && $monedaId === null
                 && trim((string) ($cbus[$i] ?? '')) === ''
+                && trim((string) ($aliasCbus[$i] ?? '')) === ''
                 && trim((string) ($numerocuentas[$i] ?? '')) === ''
                 && trim((string) ($nroinscripciones[$i] ?? '')) === ''
                 && $this->idEnteroONull($bancoIds[$i] ?? null) === null
@@ -128,6 +130,7 @@ class Proveedor_FormapagoRepository implements Proveedor_FormapagoRepositoryInte
                 'nombre' => $nombre,
                 'formapago_id' => $formapagoId,
                 'cbu' => $this->textoONull($cbus[$i] ?? null),
+                'alias_cbu' => $this->textoONull($aliasCbus[$i] ?? null),
                 'tipocuentacaja_id' => $tipocuentacajaId,
                 'moneda_id' => $monedaId,
                 'numerocuenta' => (string) ($numerocuentas[$i] ?? ''),

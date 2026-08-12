@@ -95,13 +95,24 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
     }
 
     /**
-     * OC con al menos un renglón de artículo de stock → exige COM.
-     * Solo partidas de gasto / sin articulo_id → gasto/servicio (no exige COM).
+     * ¿El envío a CxP exige COM?
+     * - Empresa con flujo OC/COM/FAC: sí, salvo OC anticipada (factura anticipada sin COM aún)
+     *   o OC solo de gasto/servicio (sin artículo de stock).
+     * - Empresa sin ese flujo: no exige COM en el gate (COM queda optativa en la factura).
      */
     public static function exigeRecepcionCom(Ordencompra $oc): bool
     {
         $ocId = (int) $oc->id;
         if ($ocId <= 0) {
+            return false;
+        }
+
+        $empresaId = (int) ($oc->empresa_id ?? 0);
+        if (! ComprobanteProveedorFlujoOcComFacSupport::exigeFlujo($empresaId)) {
+            return false;
+        }
+
+        if (ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($oc)) {
             return false;
         }
 

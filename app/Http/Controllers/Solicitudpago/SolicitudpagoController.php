@@ -17,6 +17,7 @@ use App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService;
 use App\Services\Solicitudpago\SolicitudpagoCargaMasivaCsvService;
 use App\Services\Solicitudpago\SolicitudpagoComprobantePdfService;
 use App\Services\Solicitudpago\SolicitudpagoPaqueteMailPdfService;
+use App\Services\Caja\IngresoEgresoAnularRevertirService;
 use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
 use App\Support\Solicitudpago\SolicitudpagoArchivoStorageSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
@@ -42,6 +43,7 @@ class SolicitudpagoController extends Controller
         private SolicitudpagoComprobantePdfService $comprobantePdfService,
         private SolicitudpagoPaqueteMailPdfService $paqueteMailPdfService,
         private SolicitudpagoCargaMasivaCsvService $cargaMasivaCsvService,
+        private IngresoEgresoAnularRevertirService $ingresoEgresoAnularRevertirService,
     ) {
     }
 
@@ -666,6 +668,7 @@ class SolicitudpagoController extends Controller
     public function irAPago($id)
     {
         can('actualizar-solicitud-pago');
+        can('crear-ingresos-egresos-caja');
         $this->asegurarAccesoSolicitud((int) $id);
         $sp = $this->repository->findOrFail($id);
         if ($sp->estado !== SolicitudpagoEstados::AUTORIZADA) {
@@ -678,7 +681,73 @@ class SolicitudpagoController extends Controller
             'empresa_id' => $sp->empresa_id,
             'proveedor_id' => $sp->proveedor_id,
             'detalle' => 'Pago SP '.$sp->codigo,
+            'origen' => 'solicitudpago',
         ]);
+    }
+
+    public function anularPago(Request $request, $id)
+    {
+        can('anular-pago-solicitud-pago');
+        $this->asegurarAccesoSolicitud((int) $id);
+
+        $mov = $this->ingresoEgresoAnularRevertirService->movimientoPagoDeSolicitud((int) $id);
+        if ($mov === null) {
+            $msg = 'No hay orden de pago (IE) vinculada a esta solicitud.';
+            if ($request->ajax()) {
+                return response()->json(['mensaje' => $msg], 422);
+            }
+
+            return redirect()->back()->with('mensaje', $msg);
+        }
+
+        try {
+            $resultado = $this->ingresoEgresoAnularRevertirService->anularFisicamente((int) $mov->id);
+            if ($request->ajax()) {
+                return response()->json(['mensaje' => 'ok', 'resultado' => $resultado]);
+            }
+
+            return redirect()->route('consultar_solicitudpago')->with('mensaje', 'Pago anulado físicamente. Solicitud vuelve a AUTORIZADA.');
+        } catch (\Throwable $e) {
+            if ($request->ajax()) {
+                return response()->json(['mensaje' => $e->getMessage()], 422);
+            }
+
+            return redirect()->back()->with('mensaje', $e->getMessage());
+        }
+    }
+
+    public function revertirPago(Request $request, $id)
+    {
+        can('revertir-pago-solicitud-pago');
+        $this->asegurarAccesoSolicitud((int) $id);
+
+        $mov = $this->ingresoEgresoAnularRevertirService->movimientoPagoDeSolicitud((int) $id);
+        if ($mov === null) {
+            $msg = 'No hay orden de pago (IE) vinculada a esta solicitud.';
+            if ($request->ajax()) {
+                return response()->json(['mensaje' => $msg], 422);
+            }
+
+            return redirect()->back()->with('mensaje', $msg);
+        }
+
+        try {
+            $resultado = $this->ingresoEgresoAnularRevertirService->revertir((int) $mov->id, $request->input('fecha'));
+            if ($request->ajax()) {
+                return response()->json(['mensaje' => 'ok', 'resultado' => $resultado]);
+            }
+
+            return redirect()->route('consultar_solicitudpago')->with(
+                'mensaje',
+                'Pago revertido. Anulación N° '.$resultado['numerotransaccion'].'. Solicitud AUTORIZADA.'
+            );
+        } catch (\Throwable $e) {
+            if ($request->ajax()) {
+                return response()->json(['mensaje' => $e->getMessage()], 422);
+            }
+
+            return redirect()->back()->with('mensaje', $e->getMessage());
+        }
     }
 
     /** @return array<string, mixed> */

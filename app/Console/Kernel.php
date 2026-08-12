@@ -47,6 +47,13 @@ class Kernel extends ConsoleKernel
         $schedule->command('interbanking:persistir-transferencias', ['--dias' => 60])
             ->dailyAt('08:00')
             ->when(fn () => InterbankingCalendarioSync::debeSincronizarDiario());
+
+        // Tras sync IB: reintentar conciliar OP de propuestas ejecutadas
+        $schedule->command('compras:bridge-bancario-propuestas', ['--dias' => 14])
+            ->dailyAt('08:20')
+            ->when(fn () => (bool) config('propuesta_pago.bridge_bancario_habilitado', false))
+            ->runInBackground()
+            ->withoutOverlapping(30);
         // Red de seguridad: si el worker dedicado de supervisor no está levantado,
         // igual se drenan las importaciones de padrones encoladas desde la pantalla.
         // Con el worker activo esta corrida no encuentra trabajos y sale enseguida.
@@ -132,6 +139,21 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(30)
             ->appendOutputTo(storage_path('logs/compras-contratos-vencimiento-schedule.log'))
             ->when(fn () => (bool) config('compras.contratos_vencimiento.habilitado', true));
+
+        $schedule->command('contable:verificar-saldos-cuenta-mes', ['--mail' => true])
+            ->dailyAt((string) config('contable.saldos_cuenta_mes.integridad_diaria.hora', '06:10'))
+            ->runInBackground()
+            ->withoutOverlapping(120)
+            ->appendOutputTo(storage_path('logs/contable-saldos-integridad-schedule.log'))
+            ->when(fn () => (bool) config('contable.saldos_cuenta_mes.integridad_diaria.habilitada', true));
+
+        // Corre cada hora: cada suscripción define su propio día y hora de envío.
+        $schedule->command('contable:distribuir-reportes-definibles')
+            ->hourly()
+            ->runInBackground()
+            ->withoutOverlapping(120)
+            ->appendOutputTo(storage_path('logs/contable-reporte-definible-distribucion.log'))
+            ->when(fn () => (bool) config('contable.reporte_definible.distribucion.habilitada', true));
 
         $schedule->command('gastronomia:auditoria-anita-diaria')
             ->dailyAt((string) config('gastronomia.auditoria_anita_diaria.hora', '06:30'))

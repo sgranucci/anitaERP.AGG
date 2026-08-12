@@ -106,6 +106,10 @@ class MovimientoStockSurmarEtiquetaService
     public function revertirEtiquetasPorMovimientos(array $movimientoIds): array
     {
         $stats = ['reactivadas' => 0, 'hijas_anuladas' => 0, 'consumos_borrados' => 0];
+        // AGG / no-Bierzo: no tocar tablas Surmar (id 3 = Rebisco; stock_etiqueta puede no existir).
+        if (! SurmarSupport::esEmpresaSurmar(SurmarSupport::EMPRESA_ID)) {
+            return $stats;
+        }
         $ids = array_values(array_unique(array_filter(array_map('intval', $movimientoIds), fn (int $id) => $id > 0)));
         if ($ids === []) {
             return $stats;

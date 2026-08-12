@@ -69,6 +69,13 @@ class AyudaManuales
                 'disponible' => true,
             ],
             [
+                'modulo' => 'Cuentas a pagar / Propuesta de pagos',
+                'bajada' => 'Proyección de pagos, armar y autorizar lote (árbol PP), ejecutar OP, lote bancario, clearing, cockpit y cash forecast.',
+                'url' => route('manual_propuesta_pago'),
+                'icono' => 'fa-university',
+                'disponible' => true,
+            ],
+            [
                 'modulo' => 'Contable — Cierres y aperturas',
                 'bajada' => 'Agenda mensual por módulo, cierre general, hora de ejecución, histórico y aperturas temporales.',
                 'url' => route('manual_contable'),

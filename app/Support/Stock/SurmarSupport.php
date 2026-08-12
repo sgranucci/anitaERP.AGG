@@ -29,8 +29,21 @@ final class SurmarSupport
         return self::EMPRESA_ID;
     }
 
+    /** Entorno El Bierzo (config app.empresa). AGG u otros nunca son Surmar. */
+    public static function esEntornoBierzo(): bool
+    {
+        return strtoupper((string) config('app.empresa')) === 'EL BIERZO';
+    }
+
+    /**
+     * Surmar solo si: EMPRESA=EL BIERZO + empresa_id=3 + nombre contiene «surmar».
+     * En AGG id 3 es Rebisco → siempre false.
+     */
     public static function esEmpresaSurmar(?int $empresaId): bool
     {
+        if (! self::esEntornoBierzo()) {
+            return false;
+        }
         if ((int) $empresaId !== self::EMPRESA_ID) {
             return false;
         }
@@ -55,9 +68,6 @@ final class SurmarSupport
      */
     public static function pathSistemaAnita(?int $empresaId): ?string
     {
-        if (strtoupper((string) config('app.empresa')) !== 'EL BIERZO') {
-            return null;
-        }
         if (! self::esEmpresaSurmar($empresaId)) {
             return null;
         }

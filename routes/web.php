@@ -116,6 +116,15 @@ Route::post('configuracion/ubicacion-impresora', 'Configuracion\UbicacionImpreso
 Route::get('configuracion/ubicacion-impresora/{id}/editar', 'Configuracion\UbicacionImpresoraController@editar')->name('editar_ubicacion_impresora');
 Route::put('configuracion/ubicacion-impresora/{id}', 'Configuracion\UbicacionImpresoraController@actualizar')->name('actualizar_ubicacion_impresora');
 Route::delete('configuracion/ubicacion-impresora/{id}', 'Configuracion\UbicacionImpresoraController@eliminar')->name('eliminar_ubicacion_impresora');
+
+Route::get('configuracion/sistema-numerador', 'Configuracion\SistemaNumeradorController@index')->name('sistema_numerador');
+Route::get('configuracion/lista-sistema-numerador/{formato?}/{busqueda?}', 'Configuracion\SistemaNumeradorController@listar')->name('lista_sistema_numerador');
+Route::get('configuracion/sistema-numerador/crear', 'Configuracion\SistemaNumeradorController@crear')->name('crear_sistema_numerador');
+Route::post('configuracion/sistema-numerador', 'Configuracion\SistemaNumeradorController@guardar')->name('guardar_sistema_numerador');
+Route::get('configuracion/sistema-numerador/{id}/editar', 'Configuracion\SistemaNumeradorController@editar')->name('editar_sistema_numerador');
+Route::put('configuracion/sistema-numerador/{id}', 'Configuracion\SistemaNumeradorController@actualizar')->name('actualizar_sistema_numerador');
+Route::delete('configuracion/sistema-numerador/{id}', 'Configuracion\SistemaNumeradorController@eliminar')->name('eliminar_sistema_numerador');
+Route::post('configuracion/sistema-numerador/{id}/sincronizar-anita', 'Configuracion\SistemaNumeradorController@sincronizarAnita')->name('sincronizar_sistema_numerador');
 Route::get('configuracion/uso-salida-impresora', 'Configuracion\UsoSalidaImpresoraController@index')->name('uso_salida_impresora');
 Route::get('configuracion/lista-uso-salida-impresora/{formato?}/{busqueda?}', 'Configuracion\UsoSalidaImpresoraController@listar')->name('lista_uso_salida_impresora');
 Route::get('configuracion/uso-salida-impresora/crear', 'Configuracion\UsoSalidaImpresoraController@crear')->name('crear_uso_salida_impresora');
@@ -1022,6 +1031,80 @@ Route::get('contable/cc-vs-mayor-anita', 'Contable\CcVsMayorAnitaController@inde
 Route::get('contable/listar-cc-vs-mayor-anita/{formato}', 'Contable\CcVsMayorAnitaController@exportar')->name('listar_cc_vs_mayor_anita');
 Route::get('contable/sumas-saldos', 'Contable\SumasSaldosController@index')->name('sumas_saldos');
 Route::get('contable/listar-sumas-saldos/{formato}', 'Contable\SumasSaldosController@exportar')->name('listar_sumas_saldos');
+
+Route::get('contable/reporte-definible', 'Contable\ReporteDefinibleController@index')->name('reporte_definible');
+Route::get('contable/lista-reporte-definible/{formato?}/{busqueda?}', 'Contable\ReporteDefinibleController@listar')->name('lista_reporte_definible');
+Route::get('contable/reporte-definible/crear', 'Contable\ReporteDefinibleController@crear')->name('crear_reporte_definible');
+Route::post('contable/reporte-definible', 'Contable\ReporteDefinibleController@guardar')->name('guardar_reporte_definible');
+Route::post('contable/reporte-definible/importar-anita', 'Contable\ReporteDefinibleController@importarAnita')->name('importar_reporte_definible_anita');
+Route::get('contable/reporte-definible/ejecutar/{id?}', 'Contable\ReporteDefinibleController@ejecutar')->name('ejecutar_reporte_definible');
+Route::get('contable/listar-reporte-definible/{id}/{formato}', 'Contable\ReporteDefinibleController@exportar')->name('listar_reporte_definible');
+Route::get('contable/reporte-definible-conjunto', 'Contable\ReporteDefinibleConjuntoController@index')->name('reporte_definible_conjunto');
+Route::get('contable/reporte-definible-conjunto/crear', 'Contable\ReporteDefinibleConjuntoController@crear')->name('crear_reporte_definible_conjunto');
+Route::post('contable/reporte-definible-conjunto', 'Contable\ReporteDefinibleConjuntoController@guardar')->name('guardar_reporte_definible_conjunto');
+Route::get('contable/reporte-definible-conjunto/{id}/editar', 'Contable\ReporteDefinibleConjuntoController@editar')->name('editar_reporte_definible_conjunto');
+Route::put('contable/reporte-definible-conjunto/{id}', 'Contable\ReporteDefinibleConjuntoController@actualizar')->name('actualizar_reporte_definible_conjunto');
+Route::delete('contable/reporte-definible-conjunto/{id}', 'Contable\ReporteDefinibleConjuntoController@eliminar')->name('eliminar_reporte_definible_conjunto');
+Route::post('contable/reporte-definible-conjunto/{id}/cuentas', 'Contable\ReporteDefinibleConjuntoController@guardarCuenta')->name('guardar_cuenta_reporte_definible_conjunto');
+Route::delete('contable/reporte-definible-conjunto/{id}/cuentas/{cuentaId}', 'Contable\ReporteDefinibleConjuntoController@eliminarCuenta')->name('eliminar_cuenta_reporte_definible_conjunto');
+Route::get('contable/reporte-definible/{id}/preview', 'Contable\ReporteDefinibleController@preview')->name('preview_reporte_definible');
+Route::get('contable/reporte-definible/{id}/paridad-anita', 'Contable\ReporteDefinibleController@paridadAnita')->name('paridad_anita_reporte_definible');
+Route::get('contable/listar-paridad-reporte-definible/{id}/{formato?}', 'Contable\ReporteDefinibleController@exportarParidadAnita')->name('listar_paridad_reporte_definible');
+Route::get('contable/reporte-definible/{id}/drill', 'Contable\ReporteDefinibleController@drillJson')->name('drill_reporte_definible');
+Route::post('contable/reporte-definible/{id}/publicar-resultado', 'Contable\ReporteDefinibleController@publicarResultado')->name('publicar_resultado_reporte_definible');
+Route::get('contable/reporte-definible/{id}/publicaciones', 'Contable\ReporteDefinibleController@publicaciones')->name('publicaciones_reporte_definible');
+Route::get('contable/reporte-definible/{id}/publicaciones/{publicacionId}', 'Contable\ReporteDefinibleController@verPublicacion')->name('ver_publicacion_reporte_definible');
+Route::post('contable/reporte-definible/{id}/publicar-version', 'Contable\ReporteDefinibleController@publicarVersion')->name('publicar_version_reporte_definible');
+Route::post('contable/reporte-definible/{id}/restaurar-version/{versionId}', 'Contable\ReporteDefinibleController@restaurarVersion')->name('restaurar_version_reporte_definible');
+Route::post('contable/reporte-definible/desde-plantilla', 'Contable\ReporteDefinibleController@crearDesdePlantilla')->name('crear_desde_plantilla_reporte_definible');
+Route::get('contable/reporte-definible/{id}/editar', 'Contable\ReporteDefinibleController@editar')->name('editar_reporte_definible');
+Route::put('contable/reporte-definible/{id}', 'Contable\ReporteDefinibleController@actualizar')->name('actualizar_reporte_definible');
+Route::delete('contable/reporte-definible/{id}', 'Contable\ReporteDefinibleController@eliminar')->name('eliminar_reporte_definible');
+Route::post('contable/reporte-definible/{id}/copiar', 'Contable\ReporteDefinibleController@copiar')->name('copiar_reporte_definible');
+Route::post('contable/reporte-definible/{id}/rubros', 'Contable\ReporteDefinibleController@guardarRubro')->name('guardar_rubro_reporte_definible');
+Route::put('contable/reporte-definible/{id}/rubros/{rubroId}', 'Contable\ReporteDefinibleController@actualizarRubro')->name('actualizar_rubro_reporte_definible');
+Route::delete('contable/reporte-definible/{id}/rubros/{rubroId}', 'Contable\ReporteDefinibleController@eliminarRubro')->name('eliminar_rubro_reporte_definible');
+Route::post('contable/reporte-definible/{id}/rubros/{rubroId}/cuentas', 'Contable\ReporteDefinibleController@guardarCuenta')->name('guardar_cuenta_reporte_definible');
+Route::delete('contable/reporte-definible/{id}/cuentas/{cuentaId}', 'Contable\ReporteDefinibleController@eliminarCuenta')->name('eliminar_cuenta_reporte_definible');
+Route::get('contable/reporte-definible/{id}/estructura', 'Contable\ReporteDefinibleController@estructuraJson')->name('estructura_reporte_definible');
+Route::get('contable/reporte-definible/{id}/rubros/{rubroId}/cuentas', 'Contable\ReporteDefinibleController@cuentasRubroJson')->name('cuentas_rubro_reporte_definible');
+Route::get('contable/reporte-definible/{id}/layouts', 'Contable\ReporteDefinibleController@layoutsJson')->name('layouts_reporte_definible');
+Route::post('contable/reporte-definible/{id}/layouts/clonar', 'Contable\ReporteDefinibleController@clonarLayout')->name('clonar_layout_reporte_definible');
+Route::post('contable/reporte-definible/{id}/layouts', 'Contable\ReporteDefinibleController@crearLayout')->name('crear_layout_reporte_definible');
+Route::put('contable/reporte-definible/{id}/layouts/{layoutId}', 'Contable\ReporteDefinibleController@actualizarLayout')->name('actualizar_layout_reporte_definible');
+Route::delete('contable/reporte-definible/{id}/layouts/{layoutId}', 'Contable\ReporteDefinibleController@eliminarLayout')->name('eliminar_layout_reporte_definible');
+Route::post('contable/reporte-definible/{id}/layouts/{layoutId}/default', 'Contable\ReporteDefinibleController@marcarLayoutDefault')->name('default_layout_reporte_definible');
+Route::post('contable/reporte-definible/{id}/layouts/{layoutId}/columnas', 'Contable\ReporteDefinibleController@agregarColumnaLayout')->name('guardar_columna_layout_reporte_definible');
+Route::put('contable/reporte-definible/{id}/layouts/{layoutId}/columnas/{columnaId}', 'Contable\ReporteDefinibleController@actualizarColumnaLayout')->name('actualizar_columna_layout_reporte_definible');
+Route::delete('contable/reporte-definible/{id}/layouts/{layoutId}/columnas/{columnaId}', 'Contable\ReporteDefinibleController@eliminarColumnaLayout')->name('eliminar_columna_layout_reporte_definible');
+Route::post('contable/reporte-definible/{id}/layouts/{layoutId}/reordenar', 'Contable\ReporteDefinibleController@reordenarColumnasLayout')->name('reordenar_columnas_layout_reporte_definible');
+Route::get('contable/reporte-definible/{id}/eli-reglas', 'Contable\ReporteDefinibleController@eliReglasJson')->name('eli_reglas_reporte_definible');
+Route::post('contable/reporte-definible/{id}/eli-reglas', 'Contable\ReporteDefinibleController@guardarEliRegla')->name('guardar_eli_regla_reporte_definible');
+Route::put('contable/reporte-definible/{id}/eli-reglas/{reglaId}', 'Contable\ReporteDefinibleController@actualizarEliRegla')->name('actualizar_eli_regla_reporte_definible');
+Route::delete('contable/reporte-definible/{id}/eli-reglas/{reglaId}', 'Contable\ReporteDefinibleController@eliminarEliRegla')->name('eliminar_eli_regla_reporte_definible');
+Route::post('contable/reporte-definible/{id}/participaciones', 'Contable\ReporteDefinibleController@guardarParticipacion')->name('guardar_participacion_reporte_definible');
+Route::delete('contable/reporte-definible/{id}/participaciones/{partId}', 'Contable\ReporteDefinibleController@eliminarParticipacion')->name('eliminar_participacion_reporte_definible');
+Route::get('contable/reporte-definible/{id}/diff-version', 'Contable\ReporteDefinibleController@diffVersion')->name('diff_version_reporte_definible');
+Route::post('contable/reporte-definible/{id}/accesos', 'Contable\ReporteDefinibleController@syncAccesos')->name('sync_accesos_reporte_definible');
+Route::get('contable/reporte-definible/{id}/variantes', 'Contable\ReporteDefinibleController@variantesJson')->name('variantes_reporte_definible');
+Route::post('contable/reporte-definible/{id}/variantes', 'Contable\ReporteDefinibleController@guardarVariante')->name('guardar_variante_reporte_definible');
+Route::delete('contable/reporte-definible/{id}/variantes/{varianteId}', 'Contable\ReporteDefinibleController@eliminarVariante')->name('eliminar_variante_reporte_definible');
+Route::get('contable/reporte-definible/{id}/suscripciones', 'Contable\ReporteDefinibleController@suscripcionesJson')->name('suscripciones_reporte_definible');
+Route::post('contable/reporte-definible/{id}/suscripciones', 'Contable\ReporteDefinibleController@guardarSuscripcion')->name('guardar_suscripcion_reporte_definible');
+Route::put('contable/reporte-definible/{id}/suscripciones/{suscripcionId}', 'Contable\ReporteDefinibleController@actualizarSuscripcion')->name('actualizar_suscripcion_reporte_definible');
+Route::delete('contable/reporte-definible/{id}/suscripciones/{suscripcionId}', 'Contable\ReporteDefinibleController@eliminarSuscripcion')->name('eliminar_suscripcion_reporte_definible');
+Route::post('contable/reporte-definible/{id}/suscripciones/{suscripcionId}/probar', 'Contable\ReporteDefinibleController@probarSuscripcion')->name('probar_suscripcion_reporte_definible');
+Route::get('contable/reporte-definible/{id}/alertas', 'Contable\ReporteDefinibleController@alertasJson')->name('alertas_reporte_definible');
+Route::post('contable/reporte-definible/{id}/alertas', 'Contable\ReporteDefinibleController@guardarAlerta')->name('guardar_alerta_reporte_definible');
+Route::put('contable/reporte-definible/{id}/alertas/{alertaId}', 'Contable\ReporteDefinibleController@actualizarAlerta')->name('actualizar_alerta_reporte_definible');
+Route::delete('contable/reporte-definible/{id}/alertas/{alertaId}', 'Contable\ReporteDefinibleController@eliminarAlerta')->name('eliminar_alerta_reporte_definible');
+Route::get('contable/reporte-definible/{id}/notas', 'Contable\ReporteDefinibleController@notasJson')->name('notas_reporte_definible');
+Route::post('contable/reporte-definible/{id}/notas', 'Contable\ReporteDefinibleController@guardarNota')->name('guardar_nota_reporte_definible');
+Route::put('contable/reporte-definible/{id}/notas/{notaId}', 'Contable\ReporteDefinibleController@actualizarNota')->name('actualizar_nota_reporte_definible');
+Route::delete('contable/reporte-definible/{id}/notas/{notaId}', 'Contable\ReporteDefinibleController@eliminarNota')->name('eliminar_nota_reporte_definible');
+Route::get('contable/reporte-definible/{id}/notas/{notaId}/historial', 'Contable\ReporteDefinibleController@historialNota')->name('historial_nota_reporte_definible');
+Route::get('contable/reporte-definible/{id}/validar', 'Contable\ReporteDefinibleController@validarJson')->name('validar_reporte_definible');
+Route::post('contable/reporte-definible/{id}/cobertura/agregar-cuentas', 'Contable\ReporteDefinibleController@agregarCuentasCobertura')->name('agregar_cuentas_cobertura_reporte_definible');
 
 Route::get('contable/cuentas-automaticas', 'Contable\ContabilidadCuentaAutomaticaController@index')->name('cuentas_automaticas_contables');
 Route::put('contable/cuentas-automaticas', 'Contable\ContabilidadCuentaAutomaticaController@actualizar')->name('actualizar_cuentas_automaticas_contables');
@@ -2696,6 +2779,7 @@ Route::post('caja/waitry-cierre-jornada/api/proceso/config/{empresaId}', 'Caja\W
  */
 
 Route::get('caja/tipotransaccion_caja', 'Caja\Tipotransaccion_CajaController@index')->name('tipotransaccion_caja');
+Route::get('caja/listatipotransaccion_caja/{formato?}/{busqueda?}', 'Caja\Tipotransaccion_CajaController@listar')->name('lista_tipotransaccion_caja');
 Route::get('caja/tipotransaccion_caja/crear', 'Caja\Tipotransaccion_CajaController@crear')->name('crear_tipotransaccion_caja');
 Route::post('caja/tipotransaccion_caja', 'Caja\Tipotransaccion_CajaController@guardar')->name('guardar_tipotransaccion_caja');
 Route::get('caja/tipotransaccion_caja/{id}/editar', 'Caja\Tipotransaccion_CajaController@editar')->name('editar_tipotransaccion_caja');
@@ -2738,12 +2822,15 @@ Route::get('caja/movimientocaja', 'Caja\MovimientoCajaController@index')->name('
 Route::get('caja/ingresoegreso', 'Caja\IngresoEgresoController@index')->name('ingresoegreso');
 Route::get('caja/ingresoegreso/crear/{caja?}', 'Caja\IngresoEgresoController@crear')->name('crear_ingresoegreso');
 Route::post('caja/ingresoegreso', 'Caja\IngresoEgresoController@guardar')->name('guardar_ingresoegreso');
+Route::get('caja/ingresoegreso/{id}/imprimir-pdf', 'Caja\IngresoEgresoController@imprimir')->name('imprimir_ingresoegreso');
 Route::get('caja/ingresoegreso/{id}/{origen?}/editar', 'Caja\IngresoEgresoController@editar')->name('editar_ingresoegreso');
 Route::put('caja/actualizaringresoegreso/{id}', 'Caja\IngresoEgresoController@actualizar')->name('actualizar_ingresoegreso');
 Route::delete('caja/ingresoegreso/{id}/{origen?}', 'Caja\IngresoEgresoController@eliminar')->name('eliminar_ingresoegreso');
+Route::post('caja/ingresoegreso/{id}/anular-fisicamente', 'Caja\IngresoEgresoController@anularFisicamente')->name('anular_fisicamente_ingresoegreso');
 Route::get('caja/listaingresoegreso/{formato?}/{busqueda?}', 'Caja\IngresoEgresoController@listar')->name('lista_ingresoegreso');
 Route::post('caja/copiar_ingresoegreso', 'Caja\IngresoEgresoController@copiarIngresoEgreso')->name('copiar_ingresoegreso');
 Route::post('caja/revertir_ingresoegreso', 'Caja\IngresoEgresoController@revertirIngresoEgreso')->name('revertir_ingresoegreso');
+Route::post('caja/ingresoegreso/{id}/revertir', 'Caja\IngresoEgresoController@revertirIngresoEgreso')->name('revertir_ingresoegreso_id');
 Route::post('caja/generaasientocontable_ingresoegreso', 'Caja\IngresoEgresoController@generaAsientoContable')->name('generaasientocontable_ingresoegreso');
 Route::post('caja/ingresoegreso/comprobante-iva/preview-asiento', 'Caja\IngresoEgresoController@previewAsientoComprobanteIva')->name('ingresoegreso_comprobante_iva_preview_asiento');
 Route::post('caja/ingresoegreso/comprobante-iva/pdf-ia-preview', 'Caja\IngresoEgresoController@previewPdfComprobanteIva')->name('ingresoegreso_comprobante_iva_pdf_ia_preview');
@@ -2926,6 +3013,11 @@ Route::delete('compras/columna_ivacompra/{id}', 'Compras\Columna_IvacompraContro
  */
 
 Route::get('compras/concepto_ivacompra', 'Compras\Concepto_IvacompraController@index')->name('concepto_ivacompra');
+Route::get('compras/lista-concepto-ivacompra/{formato?}/{busqueda?}', 'Compras\Concepto_IvacompraController@listar')->name('lista_concepto_ivacompra');
+Route::get('compras/concepto_ivacompra/replicar-cuentas/{empresa_id}/{cuentacontabledebe_id}', 'Compras\Concepto_IvacompraController@replicarCuentasPorEmpresa')
+    ->name('replicar_cuentas_concepto_ivacompra');
+Route::post('compras/concepto_ivacompra/consulta', 'Compras\Concepto_IvacompraController@consultaConceptoIvacompra')->name('consulta_concepto_ivacompra');
+Route::match(['get', 'post'], 'compras/concepto_ivacompra/resolver', 'Compras\Concepto_IvacompraController@resolverConceptoIvacompra')->name('resolver_concepto_ivacompra');
 Route::get('compras/concepto_ivacompra/crear', 'Compras\Concepto_IvacompraController@crear')->name('crear_concepto_ivacompra');
 Route::post('compras/concepto_ivacompra', 'Compras\Concepto_IvacompraController@guardar')->name('guardar_concepto_ivacompra');
 Route::get('compras/concepto_ivacompra/{id}/editar', 'Compras\Concepto_IvacompraController@editar')->name('editar_concepto_ivacompra');
@@ -2991,6 +3083,10 @@ Route::get('compras/portal-proveedores/ordenes', 'Compras\PortalProveedorOrdenco
 Route::get('compras/portal-proveedores/ordenes/listar/{formato}', 'Compras\PortalProveedorOrdencompraController@exportar')->name('listar_portal_proveedores_ordenes');
 Route::get('compras/portal-proveedores/ordenes/{id}', 'Compras\PortalProveedorOrdencompraController@show')->name('portal_proveedores_orden');
 
+Route::get('compras/portal-proveedores/documentos', 'Compras\PortalProveedorDocumentoController@index')->name('portal_proveedores_documentos');
+Route::post('compras/portal-proveedores/documentos', 'Compras\PortalProveedorDocumentoController@guardar')->name('guardar_portal_proveedores_documentos');
+Route::get('compras/portal-proveedores/documentos/{id}/archivo', 'Compras\PortalProveedorDocumentoController@ver')->name('portal_proveedores_documento_archivo');
+
 Route::get('compras/portal-proveedores/pagos', 'Compras\PortalProveedorPagoController@index')->name('portal_proveedores_pagos');
 Route::get('compras/portal-proveedores/pagos/listar/{formato}', 'Compras\PortalProveedorPagoController@exportar')->name('listar_portal_proveedores_pagos');
 Route::get('compras/portal-proveedores/pagos/{id}', 'Compras\PortalProveedorPagoController@show')->name('portal_proveedores_pago');
@@ -3025,8 +3121,10 @@ Route::post('compras/comprobante-proveedor', 'Compras\Comprobante_ProveedorContr
 Route::get('compras/comprobante-proveedor/{id}/editar', 'Compras\Comprobante_ProveedorController@editar')->name('editar_comprobante_proveedor');
 Route::put('compras/comprobante-proveedor/{id}', 'Compras\Comprobante_ProveedorController@actualizar')->name('actualizar_comprobante_proveedor');
 Route::delete('compras/comprobante-proveedor/{id}', 'Compras\Comprobante_ProveedorController@eliminar')->name('eliminar_comprobante_proveedor');
-Route::match(['get', 'post'], 'compras/comprobante-proveedor/preview-asiento', 'Compras\Comprobante_ProveedorController@previewAsientoContable')->name('preview_asiento_comprobante_proveedor_nuevo');
-Route::match(['get', 'post'], 'compras/comprobante-proveedor/{id}/preview-asiento', 'Compras\Comprobante_ProveedorController@previewAsientoContable')->name('preview_asiento_comprobante_proveedor');
+Route::delete('compras/comprobante-proveedor/{id}/con-precarga', 'Compras\Comprobante_ProveedorController@eliminarConPrecarga')->name('eliminar_comprobante_proveedor_con_precarga');
+// put/patch: el form de edición spoofea `_method`, y el preview serializa el form completo.
+Route::match(['get', 'post', 'put', 'patch'], 'compras/comprobante-proveedor/preview-asiento', 'Compras\Comprobante_ProveedorController@previewAsientoContable')->name('preview_asiento_comprobante_proveedor_nuevo');
+Route::match(['get', 'post', 'put', 'patch'], 'compras/comprobante-proveedor/{id}/preview-asiento', 'Compras\Comprobante_ProveedorController@previewAsientoContable')->name('preview_asiento_comprobante_proveedor');
 Route::post('compras/comprobante-proveedor/{id}/contabilizar', 'Compras\Comprobante_ProveedorController@contabilizar')->name('contabilizar_comprobante_proveedor');
 Route::post('compras/comprobante-proveedor/validar-proveedor-arca', 'Compras\Comprobante_ProveedorController@validarProveedorArcaPadron')->name('comprobante_proveedor_validar_proveedor_arca');
 Route::post('compras/comprobante-proveedor/validar-proveedor-arca-apoc', 'Compras\Comprobante_ProveedorController@validarProveedorArcaApoc')->name('comprobante_proveedor_validar_proveedor_arca_apoc');
@@ -3038,15 +3136,58 @@ Route::put('compras/configuracion-comprobante-proveedor', 'Compras\Configuracion
 Route::post('compras/configuracion-comprobante-proveedor/tolerancias', 'Compras\ConfiguracionComprobanteProveedorController@guardarTolerancias')->name('guardar_tolerancias_comprobante_proveedor');
 
 Route::get('compras/pagoproveedor', 'Compras\PagoproveedorController@index')->name('pagoproveedor');
+Route::get('compras/listapagoproveedor/{formato?}/{busqueda?}', 'Compras\PagoproveedorController@listar')->name('lista_pagoproveedor');
 Route::get('compras/pagoproveedor/crear', 'Compras\PagoproveedorController@crear')->name('crear_pagoproveedor');
 Route::post('compras/pagoproveedor', 'Compras\PagoproveedorController@guardar')->name('guardar_pagoproveedor');
 Route::get('compras/pagoproveedor/{id}/editar', 'Compras\PagoproveedorController@editar')->name('editar_pagoproveedor');
 Route::put('compras/pagoproveedor/{id}', 'Compras\PagoproveedorController@actualizar')->name('actualizar_pagoproveedor');
+Route::post('compras/pagoproveedor/{id}/confirmar', 'Compras\PagoproveedorController@confirmar')->name('confirmar_pagoproveedor');
+Route::delete('compras/pagoproveedor/{id}', 'Compras\PagoproveedorController@eliminar')->name('eliminar_pagoproveedor');
+Route::post('compras/pagoproveedor/{id}/anular', 'Compras\PagoproveedorController@anularFisicamente')->name('anular_pagoproveedor');
+Route::post('compras/pagoproveedor/{id}/revertir', 'Compras\PagoproveedorController@revertir')->name('revertir_pagoproveedor');
+Route::post('compras/pagoproveedor/{id}/marcar-pagada', 'Compras\PagoproveedorController@marcarPagada')->name('marcar_pagada_pagoproveedor');
+Route::post('compras/pagoproveedor/{id}/marcar-conciliada', 'Compras\PagoproveedorController@marcarConciliada')->name('marcar_conciliada_pagoproveedor');
 Route::get('compras/pagoproveedor/api/deuda-proveedor', 'Compras\PagoproveedorController@apiDeudaProveedor')->name('api_deuda_pagoproveedor');
 Route::post('compras/pagoproveedor/api/calcular-retenciones', 'Compras\PagoproveedorController@apiCalcularRetenciones')->name('api_calcular_retenciones_pagoproveedor');
 Route::post('compras/pagoproveedor/api/genera-asiento', 'Compras\PagoproveedorController@generaAsientoContable')->name('api_genera_asiento_pagoproveedor');
 Route::get('compras/pagoproveedor/{id}/imprimir', 'Compras\PagoproveedorController@imprimir')->name('imprimir_pagoproveedor');
 Route::get('compras/pagoproveedor/{id}/retencion/{retencionId}/imprimir', 'Compras\PagoproveedorController@imprimirRetencion')->name('imprimir_retencion_pagoproveedor');
+
+/*
+ * Propuesta de pagos (lote / proyección) + cash position
+ */
+Route::get('compras/configuracion-propuesta-pago', 'Compras\ConfiguracionPropuestaPagoController@index')->name('configuracion_propuesta_pago');
+Route::put('compras/configuracion-propuesta-pago', 'Compras\ConfiguracionPropuestaPagoController@actualizar')->name('actualizar_configuracion_propuesta_pago');
+
+Route::get('compras/propuesta-pago', 'Compras\PropuestaPagoController@index')->name('propuesta_pago');
+Route::get('compras/listar-propuesta-pago/{formato?}', 'Compras\PropuestaPagoController@listar')->name('listar_propuesta_pago');
+Route::get('compras/propuesta-pago/crear', 'Compras\PropuestaPagoController@crear')->name('crear_propuesta_pago');
+Route::post('compras/propuesta-pago', 'Compras\PropuestaPagoController@guardar')->name('guardar_propuesta_pago');
+Route::get('compras/propuesta-pago/{id}/editar', 'Compras\PropuestaPagoController@editar')->name('editar_propuesta_pago');
+Route::put('compras/propuesta-pago/{id}', 'Compras\PropuestaPagoController@actualizar')->name('actualizar_propuesta_pago');
+Route::delete('compras/propuesta-pago/{id}', 'Compras\PropuestaPagoController@eliminar')->name('eliminar_propuesta_pago');
+Route::post('compras/propuesta-pago/{id}/enviar-aprobacion', 'Compras\PropuestaPagoController@enviarAprobacion')->name('enviar_aprobacion_propuesta_pago');
+Route::post('compras/propuesta-pago/{id}/ejecutar', 'Compras\PropuestaPagoController@ejecutar')->name('ejecutar_propuesta_pago');
+Route::post('compras/propuesta-pago/{id}/reabrir', 'Compras\PropuestaPagoController@reabrir')->name('reabrir_propuesta_pago');
+Route::post('compras/propuesta-pago/{id}/reabrir-parcial', 'Compras\PropuestaPagoController@reabrirParcial')->name('reabrir_parcial_propuesta_pago');
+Route::post('compras/propuesta-pago/{id}/clonar-delta', 'Compras\PropuestaPagoController@clonarDelta')->name('clonar_delta_propuesta_pago');
+Route::post('compras/propuesta-pago/{id}/conciliar-bridge', 'Compras\PropuestaPagoController@conciliarBridge')->name('conciliar_bridge_propuesta_pago');
+Route::post('compras/propuesta-pago/{id}/lote-bancario', 'Compras\PropuestaPagoController@generarLoteBancario')->name('generar_lote_bancario_propuesta_pago');
+Route::get('compras/propuesta-pago/{id}/lote-bancario/exportar', 'Compras\PropuestaPagoController@exportarLoteBancario')->name('exportar_lote_bancario_propuesta_pago');
+Route::post('compras/propuesta-pago/{id}/lote-bancario/marcar-enviado', 'Compras\PropuestaPagoController@marcarLoteEnviado')->name('marcar_lote_enviado_propuesta_pago');
+Route::get('compras/propuesta-pago/{id}/auditoria', 'Compras\PropuestaPagoController@auditoria')->name('auditoria_propuesta_pago');
+Route::get('compras/propuesta-pago/{id}/auditoria/pdf', 'Compras\PropuestaPagoController@exportarAuditoria')->name('exportar_auditoria_propuesta_pago');
+Route::get('compras/propuesta-pago/{id}/imprimir', 'Compras\PropuestaPagoController@imprimir')->name('imprimir_propuesta_pago');
+Route::get('compras/cash-position', 'Compras\CashPositionController@index')->name('cash_position');
+Route::get('compras/tesoreria', 'Compras\TesoreriaCockpitController@index')->name('tesoreria_cockpit');
+Route::get('compras/manual-propuesta-pago', 'Compras\ManualPropuestaPagoController@index')->name('manual_propuesta_pago');
+Route::get('compras/manual-propuesta-pago/descargar-pdf', 'Compras\ManualPropuestaPagoController@descargarPdf')->name('manual_propuesta_pago_pdf');
+Route::get('compras/manual-propuesta-pago/descargar-word', 'Compras\ManualPropuestaPagoController@descargarWord')->name('manual_propuesta_pago_word');
+Route::get('compras/clearing-bancario', 'Compras\ClearingBancarioController@index')->name('clearing_bancario');
+Route::post('compras/clearing-bancario/procesar', 'Compras\ClearingBancarioController@procesar')->name('procesar_clearing_bancario');
+Route::post('compras/clearing-bancario/{id}/confirmar', 'Compras\ClearingBancarioController@confirmar')->name('confirmar_clearing_bancario');
+Route::post('compras/clearing-bancario/{id}/rechazar', 'Compras\ClearingBancarioController@rechazar')->name('rechazar_clearing_bancario');
+Route::post('compras/clearing-bancario/forzar', 'Compras\ClearingBancarioController@forzar')->name('forzar_clearing_bancario');
 
 /*
  * Tabla de encuestas
@@ -3070,6 +3211,8 @@ Route::get('compras/requisicion', 'Compras\RequisicionController@index')->name('
 Route::get('compras/requisicion/seguimiento-aprobacion', 'Compras\RequisicionController@seguimientoAprobacion')->name('seguimiento_aprobacion_requisicion');
 Route::get('compras/requisicion-reporte', 'Compras\RequisicionReporteController@index')->name('reporte_requisicion_compras');
 Route::get('compras/listar-requisicion-reporte/{formato?}', 'Compras\RequisicionReporteController@exportar')->name('listar_reporte_requisicion_compras');
+Route::get('compras/proyeccion-pagos', 'Compras\ProyeccionPagosReporteController@index')->name('reporte_proyeccion_pagos');
+Route::get('compras/listar-proyeccion-pagos/{formato?}', 'Compras\ProyeccionPagosReporteController@exportar')->name('listar_reporte_proyeccion_pagos');
 Route::get('compras/requisicion/crear', 'Compras\RequisicionController@crear')->name('crear_requisicion');
 Route::post('compras/requisicion', 'Compras\RequisicionController@guardar')->name('guardar_requisicion');
 Route::get('compras/requisicion/{id}/editar', 'Compras\RequisicionController@editar')->name('editar_requisicion');
@@ -3854,6 +3997,8 @@ Route::get('solicitudpago/solicitudpago/{id}/unir-archivos', 'Solicitudpago\Soli
 Route::post('solicitudpago/solicitudpago/{id}/importar-cuotas', 'Solicitudpago\SolicitudpagoController@importarCuotas')->name('importar_cuotas_solicitudpago');
 Route::post('solicitudpago/solicitudpago/{id}/marcar-pagada', 'Solicitudpago\SolicitudpagoController@marcarPagada')->name('marcar_pagada_solicitudpago');
 Route::get('solicitudpago/solicitudpago/{id}/ir-a-pago', 'Solicitudpago\SolicitudpagoController@irAPago')->name('ir_a_pago_solicitudpago');
+Route::post('solicitudpago/solicitudpago/{id}/anular-pago', 'Solicitudpago\SolicitudpagoController@anularPago')->name('anular_pago_solicitudpago');
+Route::post('solicitudpago/solicitudpago/{id}/revertir-pago', 'Solicitudpago\SolicitudpagoController@revertirPago')->name('revertir_pago_solicitudpago');
 // Compatibilidad: correos del árbol previos a la ruta /visualizar/{id}/{hash}
 Route::get('solicitudpago/solicitudpago/{id}/{hash}', 'Solicitudpago\SolicitudpagoController@visualizar');
 

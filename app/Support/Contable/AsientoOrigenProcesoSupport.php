@@ -40,6 +40,11 @@ final class AsientoOrigenProcesoSupport
             'route' => 'editar_ingresoegreso',
             'permiso' => ['listar-ingresos-egresos-caja', 'editar-ingresos-egresos-caja'],
         ],
+        'solicitudpago_id' => [
+            'label' => 'Solicitud de pago',
+            'route' => 'editar_solicitudpago',
+            'permiso' => ['listar-solicitud-pago', 'editar-solicitud-pago'],
+        ],
         'cobranza_id' => [
             'label' => 'Cobranza',
             'route' => 'editar_cobranza',

@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <rect width="960" height="540" fill="#f7f9fc"/>
+  <rect x="24" y="24" width="912" height="56" rx="6" fill="#85C1E9"/>
+  <text x="48" y="60" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="700" fill="#17202A">Circuito premium de pagos</text>
+  <rect x="24" y="96" width="912" height="420" rx="6" fill="#ffffff" stroke="#cccccc"/>
+  
+  <text x="48" y="140" font-family="DejaVu Sans, Arial, sans-serif" font-size="16" fill="#17202A">Deuda → Propuesta → Árbol PP → AUTORIZADA → OP → Lote bancario → Clearing → Cockpit</text>
+  <rect x="48" y="170" width="120" height="54" rx="6" fill="#eaf2f8" stroke="#2E75B6"/><text x="68" y="202" font-size="13" font-family="DejaVu Sans, Arial, sans-serif" fill="#17202A">1. Armar</text>
+  <rect x="188" y="170" width="120" height="54" rx="6" fill="#eaf2f8" stroke="#2E75B6"/><text x="200" y="202" font-size="13" font-family="DejaVu Sans, Arial, sans-serif" fill="#17202A">2. Aprobar</text>
+  <rect x="328" y="170" width="120" height="54" rx="6" fill="#eaf2f8" stroke="#2E75B6"/><text x="340" y="202" font-size="13" font-family="DejaVu Sans, Arial, sans-serif" fill="#17202A">3. Ejecutar</text>
+  <rect x="468" y="170" width="120" height="54" rx="6" fill="#eaf2f8" stroke="#2E75B6"/><text x="488" y="202" font-size="13" font-family="DejaVu Sans, Arial, sans-serif" fill="#17202A">4. Banco</text>
+  <rect x="608" y="170" width="120" height="54" rx="6" fill="#eaf2f8" stroke="#2E75B6"/><text x="620" y="202" font-size="13" font-family="DejaVu Sans, Arial, sans-serif" fill="#17202A">5. Clearing</text>
+  <rect x="748" y="170" width="150" height="54" rx="6" fill="#d5f5e3" stroke="#1e8449"/><text x="768" y="202" font-size="13" font-family="DejaVu Sans, Arial, sans-serif" fill="#17202A">6. Seguimiento</text>
+  <text x="48" y="280" font-size="14" font-family="DejaVu Sans, Arial, sans-serif" fill="#17202A">La autorización premium es sobre el LOTE (propuesta), no sobre cada deuda ni cada OP.</text>
+  <text x="48" y="320" font-size="14" font-family="DejaVu Sans, Arial, sans-serif" fill="#17202A">Pantallas: propuesta-pago · clearing-bancario · tesoreria · cash-position · pagoproveedor</text>
+
+  <text x="48" y="500" font-family="DejaVu Sans, Arial, sans-serif" font-size="12" fill="#666666">Anita ERP · diagrama de respaldo del manual (reemplazar por captura PNG real)</text>
+</svg>

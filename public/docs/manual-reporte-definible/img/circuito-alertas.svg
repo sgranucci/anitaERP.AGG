@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="240" viewBox="0 0 960 240">
+  <rect width="960" height="240" fill="#f8fafc"/>
+  <text x="32" y="36" font-family="DejaVu Sans,Arial" font-size="18" fill="#1F4E79" font-weight="700">Alertas post-corrida</text>
+  <rect x="40" y="70" width="280" height="70" rx="8" fill="#FCF3CF" stroke="#F4D03F"/><text x="70" y="110" font-family="DejaVu Sans,Arial" font-size="13" fill="#7D6608">Var % ≥ umbral</text>
+  <rect x="340" y="70" width="280" height="70" rx="8" fill="#F5B7B1" stroke="#E74C3C"/><text x="370" y="110" font-family="DejaVu Sans,Arial" font-size="13" fill="#922B21">Cobertura plan rota</text>
+  <rect x="640" y="70" width="280" height="70" rx="8" fill="#D5F5E3" stroke="#58D68D"/><text x="680" y="100" font-family="DejaVu Sans,Arial" font-size="13" fill="#196F3D">Ecuación = 0</text>
+  <text x="670" y="122" font-family="DejaVu Sans,Arial" font-size="11" fill="#5D6D7E">R001-(R050+R080)</text>
+  <text x="40" y="190" font-family="DejaVu Sans,Arial" font-size="13" fill="#34495E">Aparecen como avisos al ejecutar. Validar definición chequea la estructura sin correr el número.</text>
+</svg>

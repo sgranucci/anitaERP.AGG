@@ -30,18 +30,27 @@ class ComprobanteProveedorCuentacorrienteService
         $signo = (string) ($comprobante->tipotransaccion_compras?->signo ?? 'S') === 'R' ? -1 : 1;
         $fecha = $comprobante->fechacomprobante?->format('Y-m-d') ?? now()->format('Y-m-d');
 
+        $monedaFacturaId = (int) ($comprobante->moneda_id ?: 1);
+        $cotizacionFactura = (float) ($comprobante->cotizacion ?: 1);
+
         foreach ($comprobante->comprobante_proveedor_cuotas as $cuota) {
             if ($cuota->proveedor_cuentacorriente_id) {
                 continue;
+            }
+
+            $montoCuota = (float) ($cuota->monto ?? 0);
+            if (abs($montoCuota) < 0.0001) {
+                $montoCuota = (float) ($comprobante->total ?? 0);
             }
 
             $cc = $this->cuentacorrienteRepository->create([
                 'fecha' => $fecha,
                 'fechavencimiento' => $cuota->fechavencimiento?->format('Y-m-d') ?? $fecha,
                 'proveedor_id' => $comprobante->proveedor_id,
-                'total' => round((float) $cuota->monto * $signo, 4),
-                'moneda_id' => $cuota->moneda_id ?? $comprobante->moneda_id,
-                'cotizacion' => $cuota->cotizacion ?? $comprobante->cotizacion ?? 1,
+                'total' => round($montoCuota * $signo, 4),
+                // Siempre moneda/cotización de la factura (no ME residual de la OC).
+                'moneda_id' => $monedaFacturaId,
+                'cotizacion' => $cotizacionFactura,
                 'empresa_id' => $comprobante->empresa_id,
                 'comprobante_proveedor_id' => $comprobante->id,
                 'comprobante_proveedor_cuota_id' => $cuota->id,
@@ -59,11 +68,16 @@ class ComprobanteProveedorCuentacorrienteService
             return;
         }
 
+        $monedaFacturaId = (int) ($comprobante->moneda_id ?: 1);
+        $cotizacionFactura = (float) ($comprobante->cotizacion ?: 1);
+
         $meta = $this->condicionPagoDesdeOc->resolverDesdeOrdencompra(
             $comprobante->ordencompras,
             $comprobante->ordencompra_comprobante_id,
             (float) $comprobante->total,
             $comprobante->fechacomprobante?->format('Y-m-d') ?? now()->format('Y-m-d'),
+            $monedaFacturaId,
+            $cotizacionFactura,
         );
 
         foreach ($meta['cuotas'] as $cuota) {
@@ -72,8 +86,8 @@ class ComprobanteProveedorCuentacorrienteService
                 'numero_cuota' => (int) ($cuota['numero_cuota'] ?? 1),
                 'fechavencimiento' => $cuota['fechavencimiento'],
                 'monto' => (float) ($cuota['monto'] ?? 0),
-                'moneda_id' => (int) ($cuota['moneda_id'] ?? $comprobante->moneda_id),
-                'cotizacion' => $cuota['cotizacion'] ?? null,
+                'moneda_id' => $monedaFacturaId,
+                'cotizacion' => $cotizacionFactura,
                 'formapago_id' => (int) ($cuota['formapago_id'] ?? 1),
                 'detalle' => $cuota['detalle'] ?? null,
                 'ordencompra_comprobante_cuota_id' => $cuota['ordencompra_comprobante_cuota_id'] ?? null,

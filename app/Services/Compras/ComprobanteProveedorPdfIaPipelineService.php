@@ -2,10 +2,12 @@
 
 namespace App\Services\Compras;
 
+use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorArticulosHeuristicaSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorCabeceraHeuristicaSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorConceptosHeuristicaSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorExtraccionFusionSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorNombreArchivoParserSupport;
+use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorNumeroComprobanteSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorOllamaStructurerSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorPieTotalesSupport;
 use App\Support\Stock\RecepcionProveedorOcr\RecepcionProveedorOcrTextoExtractor;
@@ -23,6 +25,7 @@ final class ComprobanteProveedorPdfIaPipelineService
         private RecepcionProveedorOcrTextoExtractor $textoExtractor,
         private FacturaProveedorCabeceraHeuristicaSupport $cabeceraHeuristica,
         private FacturaProveedorConceptosHeuristicaSupport $conceptosHeuristica,
+        private FacturaProveedorArticulosHeuristicaSupport $articulosHeuristica,
         private FacturaProveedorOllamaStructurerSupport $ollamaStructurer,
         private FacturaProveedorExtraccionFusionSupport $fusion,
         private FacturaProveedorNombreArchivoParserSupport $nombreArchivoParser,
@@ -57,7 +60,10 @@ final class ComprobanteProveedorPdfIaPipelineService
             $cabecera = $this->aplicarPieACabecera($cabecera, $pie);
             $conceptos = $this->aplicarPieAConceptos($conceptos, $pie);
 
-            $heuristica = array_merge($cabecera, ['lineas' => $conceptos]);
+            $heuristica = array_merge($cabecera, [
+                'lineas' => $conceptos,
+                'articulos' => $this->articulosHeuristica->extraer($textoOcr),
+            ]);
 
             $ollama = null;
             if (config('comprobante_proveedor_pdf_ia.ollama.habilitado', true)) {
@@ -68,6 +74,8 @@ final class ComprobanteProveedorPdfIaPipelineService
             // El nombre del agente (FGA-A-00003-01377643.pdf) manda sobre OCR/Ollama:
             // un PV mal leído dispara obs ARCA 104 (CAE no corresponde al punto de venta).
             $resultado = $this->aplicarCamposAutoridadArchivo($resultado, $pdf->getClientOriginalName());
+            // Compacto OCR (0070A00369548) y fecha dd.mm.yyyy de heurística mandan si el archivo no trae PV/nro.
+            $resultado = $this->aplicarCamposAutoridadCompactoYFechaOcr($resultado, $textoOcr, $heuristica);
             $resultado = $this->aplicarPieAResultado($resultado, $pie);
             $resultado = $this->sanearCuitsYOc($resultado);
             $resultado = $this->sanearSoloTotalComoExento($resultado, $textoOcr);
@@ -77,6 +85,7 @@ final class ComprobanteProveedorPdfIaPipelineService
             Log::channel($this->logChannel())->info('pdf_ia.pipeline_ok', [
                 'ocr_chars' => $chars,
                 'lineas' => count($resultado['lineas'] ?? []),
+                'articulos' => count($resultado['articulos'] ?? []),
                 'fuentes' => $resultado['_meta']['fuentes'] ?? [],
                 'numero_oc' => $resultado['numero_oc'] ?? null,
                 'cuit_proveedor' => $resultado['cuit_proveedor'] ?? null,
@@ -108,6 +117,44 @@ final class ComprobanteProveedorPdfIaPipelineService
      * @param  array<string, mixed>  $data
      * @return array<string, mixed>
      */
+    /**
+     * Número compacto del PDF (Factura N° 0070A00369548) y fecha con puntos
+     * ganan sobre Ollama cuando el nombre de archivo no trae PV/número.
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $heuristica
+     * @return array<string, mixed>
+     */
+    private function aplicarCamposAutoridadCompactoYFechaOcr(
+        array $data,
+        string $textoOcr,
+        array $heuristica,
+    ): array {
+        $archivoTieneNro = ! empty($data['_archivo']['numero_factura'] ?? null)
+            && ! empty($data['_archivo']['sucursal'] ?? null);
+
+        if (! $archivoTieneNro) {
+            $compacto = FacturaProveedorNumeroComprobanteSupport::extraerCompactoDesdeTexto($textoOcr)
+                ?? FacturaProveedorNumeroComprobanteSupport::parsearValorCompacto($data['numero_factura'] ?? null)
+                ?? FacturaProveedorNumeroComprobanteSupport::parsearValorCompacto(
+                    ($data['sucursal'] ?? '').($data['letra'] ?? '').($data['numero_factura'] ?? '')
+                );
+
+            if ($compacto !== null && ($compacto['numero'] ?? 0) > 0) {
+                $data['letra'] = $compacto['letra'];
+                $data['sucursal'] = $compacto['sucursal'];
+                $data['numero_factura'] = $compacto['numero'];
+            }
+        }
+
+        // Fecha etiquetada del OCR (incluye 05.08.2026) es más confiable que el LLM.
+        if (! empty($heuristica['fecha_factura'])) {
+            $data['fecha_factura'] = $heuristica['fecha_factura'];
+        }
+
+        return $data;
+    }
+
     private function aplicarCamposAutoridadArchivo(array $data, string $nombreArchivo): array
     {
         $meta = is_array($data['_archivo'] ?? null)
@@ -127,6 +174,11 @@ final class ComprobanteProveedorPdfIaPipelineService
         }
         if (! empty($meta['numero_factura'])) {
             $data['numero_factura'] = $meta['numero_factura'];
+        }
+        // Nombre tipo "oc 220146.pdf": OC del archivo si el OCR no la vio.
+        if (! empty($meta['numero_oc']) && empty($data['numero_oc'])) {
+            $data['numero_oc'] = $meta['numero_oc'];
+            $data['numero_oc_origen'] = 'nombre_archivo';
         }
 
         return $data;
@@ -316,6 +368,25 @@ final class ComprobanteProveedorPdfIaPipelineService
                 $data['numero_oc'] = null;
                 $data['numero_oc_origen'] = 'descartado_igual_factura';
                 $data['_meta']['numero_oc_descartado'] = $ocDigitos;
+            }
+        }
+
+        // Descarta PV/número tomados del CUIT (ej. 33-69509841 de 33-69509841-9).
+        $sucursal = (int) ($data['sucursal'] ?? 0);
+        $nroFac = (int) ($data['numero_factura'] ?? 0);
+        if ($sucursal > 0 && $nroFac > 0) {
+            foreach ([$prov, $dest] as $cuitDigits) {
+                if (strlen($cuitDigits) !== 11) {
+                    continue;
+                }
+                $prefijo = (int) substr($cuitDigits, 0, 2);
+                $medio = (int) substr($cuitDigits, 2, 8);
+                if ($sucursal === $prefijo && $nroFac === $medio) {
+                    $data['sucursal'] = null;
+                    $data['numero_factura'] = null;
+                    $data['_meta']['pv_numero_descartado_cuit'] = $cuitDigits;
+                    break;
+                }
             }
         }
 

@@ -88,11 +88,16 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                             <td>{{$data->nombreproveedor ?? ($data->proveedores->nombre ?? '')}}</td>
                             <td>{{$data->nombretipotransaccion_compra ?? ($data->tipotransaccion_compras->nombre ?? '')}}</td>
                             <td>{{$data->letra}}{{$data->sucursal}}-{{$data->numerocomprobante}}</td>
-                            <td>{{$data->fechafactura}}</td>
-                            <td>{{$data->fecharecepcionemail}}</td>
+                            <td>{{ filled($data->fechafactura) ? \Carbon\Carbon::parse($data->fechafactura)->format('d/m/Y') : '' }}</td>
+                            <td>{{ filled($data->fecharecepcionemail) ? \Carbon\Carbon::parse($data->fecharecepcionemail)->format('d/m/Y') : '' }}</td>
                             <td>{{$data->numeroordencompra ?? ''}}</td>
-                            <td>{{$data->total}}</td>
-                            <td>{{$data->estado}}</td>
+                            <td class="text-right">{{ number_format((float) ($data->total ?? 0), 2, ',', '.') }}</td>
+                            <td>
+                                {{$data->estado}}
+                                @if (!empty($data->comprobante_proveedor_id))
+                                    <br><span class="badge badge-success" title="Comprobante ya generado">CP #{{ $data->comprobante_proveedor_id }}</span>
+                                @endif
+                            </td>
                             <td><small>{{ \App\Support\Compras\PrecargaComprobanteOrigenEntrada::etiqueta($data->origen_entrada ?? null) }}</small></td>
                             <td class="text-nowrap">
                                 @if (filled($data->rutaalmacenamiento) && puedeVerPrecargaFacturaPdf())
@@ -104,7 +109,13 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                                     <i class="fa fa-file-pdf-o text-danger"></i>
                                 </a>
                                 @endif
-                                @if (can('crear-comprobante-proveedor', false))
+                                @if (!empty($data->comprobante_proveedor_id) && (can('editar-comprobante-proveedor', false) || can('listar-comprobante-proveedor', false)))
+                                <a href="{{ route('editar_comprobante_proveedor', ['id' => $data->comprobante_proveedor_id]) }}"
+                                   class="btn-accion-tabla tooltipsC text-primary"
+                                   title="Abrir comprobante #{{ $data->comprobante_proveedor_id }}">
+                                    <i class="fa fa-external-link"></i>
+                                </a>
+                                @elseif (can('crear-comprobante-proveedor', false))
                                 <form action="{{ route('generar_comprobante_desde_precarga', ['id' => $data->id]) }}" method="POST" class="d-inline"
                                     onsubmit="return confirm('¿Generar comprobante de proveedor en borrador desde esta precarga?');">
                                     @csrf
@@ -137,6 +148,15 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
 </div>
 {{ $datas->appends($filtrosQuery ?? [])->links() }}
 @if (!empty($pdfIaHabilitado) && can('crear-precarga-proveedores', false))
-    @include('compras.precarga_comprobante_proveedor.partials.modal_pdf_ia')
+    @include('compras.precarga_comprobante_proveedor.partials.modal_pdf_ia', [
+        'pdfIaOverlayId' => 'precarga-pdf-ia-proceso-overlay',
+    ])
+    @include('includes.proceso_overlay_aviso', [
+        'overlayId' => 'precarga-pdf-ia-proceso-overlay',
+        'tituloId' => 'precarga-pdf-ia-proceso-titulo',
+        'subtituloId' => 'precarga-pdf-ia-proceso-subtitulo',
+        'titulo' => 'Analizando factura…',
+        'subtitulo' => 'El OCR y la validación pueden demorar. No cierre la página.',
+    ])
 @endif
 @endsection

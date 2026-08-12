@@ -39,10 +39,7 @@ final class SicoreCompraConcmovAnitaSupport
         $lineas = $nroInterno > 0 ? $this->leeConcmov($nroInterno) : [];
         $coef = $this->coefMonedaCompra($compra);
 
-        $montoComprobante = (float) ($compra['com_total'] ?? $compra['com_monto'] ?? 0);
-        if ($montoComprobante <= 0) {
-            $montoComprobante = (float) ($compra['com_subtotal'] ?? 0);
-        }
+        $montoComprobante = (float) ($compra['com_monto'] ?? 0);
 
         $totConcepto = $this->totConceptoNetoGravado($lineas);
 
@@ -86,7 +83,7 @@ final class SicoreCompraConcmovAnitaSupport
             'tabla' => 'compra',
             'campos' => implode(', ', [
                 'com_proveedor', 'com_tipo', 'com_letra', 'com_sucursal', 'com_nro',
-                'com_nro_interno', 'com_fecha', 'com_subtotal', 'com_total', 'com_monto',
+                'com_nro_interno', 'com_fecha', 'com_monto',
                 'com_cod_mon', 'com_cotizacion',
             ]),
             'whereArmado' => $where,
@@ -121,7 +118,7 @@ final class SicoreCompraConcmovAnitaSupport
             'acc' => 'list',
             'sistema' => 'compras',
             'tabla' => 'concmov',
-            'campos' => 'concv_nro_interno, concv_concepto, concv_importe, concv_monto',
+            'campos' => 'concv_nro_interno, concv_concepto, concv_importe',
             'whereArmado' => ' WHERE concv_nro_interno = '.$nroInterno,
             'orderBy' => 'concv_concepto',
         ];
@@ -129,7 +126,7 @@ final class SicoreCompraConcmovAnitaSupport
         $filas = [];
         foreach (ApiAnita::decodificarListaFilas($api->apiCall($payload)) as $row) {
             $row = (array) $row;
-            $importe = (float) ($row['concv_monto'] ?? $row['concv_importe'] ?? 0);
+            $importe = (float) ($row['concv_importe'] ?? 0);
             if (abs($importe) < 0.0001) {
                 continue;
             }

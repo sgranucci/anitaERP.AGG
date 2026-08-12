@@ -6,6 +6,7 @@
                 'nombre' => $nombre,
                 'formapago_id' => old('formapago_ids.'.$i),
                 'cbu' => old('cbus.'.$i),
+                'alias_cbu' => old('alias_cbus.'.$i),
                 'tipocuentacaja_id' => old('tipocuentacaja_ids.'.$i),
                 'moneda_id' => old('moneda_ids.'.$i),
                 'numerocuenta' => old('numerocuentas.'.$i),
@@ -34,6 +35,7 @@
     				<th style="width: 10%;">Nombre <span class="text-danger">*</span></th>
     				<th style="width: 10%;">Forma de pago <span class="text-danger">*</span></th>
     				<th style="width: 10%;">CBU</th>
+    				<th style="width: 8%;">Alias CBU</th>
     				<th style="width: 5%;">TC <small class="text-muted">(transf.)</small></th>
     				<th>Moneda <span class="text-danger">*</span></th>
     				<th style="width: 10%;">N&uacute;mero de cuenta</th>
@@ -66,6 +68,11 @@
                 			<td>
         						<div class="form-group">
         							<input type="text" name="cbus[]" value="{{ $formapago->cbu ?? '' }}" class="form-control cbus fp-cbu" placeholder="CBU">
+        						</div>
+                			</td>
+                			<td>
+        						<div class="form-group">
+        							<input type="text" name="alias_cbus[]" value="{{ $formapago->alias_cbu ?? '' }}" class="form-control alias_cbus fp-alias-cbu" placeholder="Alias" maxlength="80">
         						</div>
                 			</td>
 							<td>

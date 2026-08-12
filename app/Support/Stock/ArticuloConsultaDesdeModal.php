@@ -56,7 +56,11 @@ class ArticuloConsultaDesdeModal
             || can('listar-recepcion-proveedor-surmar', false)
             || can('crear-recepcion-proveedor-surmar', false)
             || can('editar-recepcion-proveedor-surmar', false)
-            || can('actualizar-recepcion-proveedor-surmar', false);
+            || can('actualizar-recepcion-proveedor-surmar', false)
+            || can('crear-comprobante-proveedor', false)
+            || can('editar-comprobante-proveedor', false)
+            || can('actualizar-comprobante-proveedor', false)
+            || can('listar-comprobante-proveedor', false);
     }
 
     public static function urlEditar(int $id): string

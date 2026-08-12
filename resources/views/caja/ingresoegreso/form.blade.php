@@ -2,6 +2,17 @@
     <div id="form-errors"></div>
     <input type="hidden" name="solicitudpago_id" id="solicitudpago_id"
            value="{{ old('solicitudpago_id', $data->solicitudpago_id ?? request('solicitudpago_id')) }}">
+    @php
+        $montoPendienteSp = 0.0;
+        if (! empty($solicitudpagoOrigen)) {
+            $montoPendienteSp = \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::montoPendiente($solicitudpagoOrigen);
+        }
+    @endphp
+    <input type="hidden" id="solicitudpago_monto_pendiente" name="solicitudpago_monto_pendiente"
+           value="{{ $montoPendienteSp > 0 ? number_format($montoPendienteSp, 2, '.', '') : '' }}">
+    @if ($montoPendienteSp > 0)
+        <input type="hidden" id="solicitudpago_moneda_id" value="{{ (int) ($solicitudpagoOrigen->moneda_id ?? 0) }}">
+    @endif
     <div class="row">
         <div class="col-sm-6">
             @include('includes.form-empresa-asignada', [
@@ -124,10 +135,10 @@
                                 <input type="hidden" name="cuentacaja[]" class="form-control iicuenta" readonly value="{{ $loop->index+1 }}" />
                                 <input type="hidden" class="cuentacaja_id" name="cuentacaja_ids[]" value="{{$cuenta->cuentacaja_id ?? ''}}" >
                                 <input type="hidden" class="cuentacaja_id_previa" name="cuentacaja_id_previa[]" value="{{$cuenta->cuentacaja_id ?? ''}}" >
-                                <button type="button" title="Consulta cuentas" class="btn-accion-tabla consultacuentacaja tooltipsC">
+                                <button type="button" title="Consulta cuentas (F1)" class="btn-accion-tabla consultacuentacaja tooltipsC">
                                         <i class="fa fa-search text-primary"></i>
                                 </button>
-                                <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigo form-control" name="codigos[]" value="{{$cuenta->cuentacajas->codigo ?? ''}}" >
+                                <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigo form-control" name="codigos[]" value="{{$cuenta->cuentacajas->codigo ?? ''}}" title="C&oacute;digo: Enter valida, F1 consulta" autocomplete="off">
                                 <input type="hidden" class="codigo_previo" name="codigo_previos[]" value="{{$cuenta->cuentacajas->codigo ?? ''}}" >
                             </div>
                         </td>

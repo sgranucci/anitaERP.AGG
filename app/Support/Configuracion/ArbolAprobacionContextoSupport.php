@@ -52,12 +52,31 @@ final class ArbolAprobacionContextoSupport
 
         $pasoActual = null;
         if ($movimientoPendiente) {
-            $firmante = self::nombreUsuario($usuarioRepository, (int) ($movimientoPendiente->destinatariousuario_id ?? 0));
+            $nivel = (int) ($movimientoPendiente->nivel ?? 0);
+            $firmantes = self::firmantesPendientesDelNivel(
+                $arbolService,
+                $tipo,
+                (int) ($snapshot['documento_id'] ?? 0),
+                $nivel,
+                $usuarioRepository,
+            );
+            if ($firmantes === []) {
+                $uid = (int) ($movimientoPendiente->destinatariousuario_id ?? 0);
+                if ($uid > 0) {
+                    $firmantes[] = [
+                        'id' => $uid,
+                        'nombre' => self::nombreUsuario($usuarioRepository, $uid) ?? ('Usuario #'.$uid),
+                    ];
+                }
+            }
+            $nombres = array_values(array_filter(array_column($firmantes, 'nombre')));
             $pasoActual = [
                 'movimiento_id' => (int) $movimientoPendiente->id,
-                'nivel' => (int) ($movimientoPendiente->nivel ?? 0),
-                'firmante_id' => (int) ($movimientoPendiente->destinatariousuario_id ?? 0) ?: null,
-                'firmante_nombre' => $firmante,
+                'nivel' => $nivel,
+                'firmante_id' => (int) ($firmantes[0]['id'] ?? $movimientoPendiente->destinatariousuario_id ?? 0) ?: null,
+                'firmante_nombre' => $nombres[0] ?? null,
+                'firmantes' => $firmantes,
+                'firmantes_nombres' => $nombres,
                 'circuito_oc' => $movimientoPendiente->circuito_oc ?? null,
             ];
         }
@@ -349,9 +368,19 @@ final class ArbolAprobacionContextoSupport
         }
 
         if ($pasoActual) {
-            $out[] = 'Paso actual: nivel '.(int) $pasoActual['nivel']
-                .($pasoActual['firmante_nombre'] ? ' — '.$pasoActual['firmante_nombre'] : '')
-                .'.';
+            $nombres = $pasoActual['firmantes_nombres'] ?? [];
+            if (! is_array($nombres) || $nombres === []) {
+                $nombres = ! empty($pasoActual['firmante_nombre'])
+                    ? [(string) $pasoActual['firmante_nombre']]
+                    : [];
+            }
+            $lineaPaso = 'Paso actual: nivel '.(int) $pasoActual['nivel'];
+            if (count($nombres) === 1) {
+                $lineaPaso .= ' — '.$nombres[0];
+            } elseif (count($nombres) > 1) {
+                $lineaPaso .= ' — firmantes: '.implode(', ', $nombres);
+            }
+            $out[] = $lineaPaso.'.';
         }
 
         if (! empty($siAprobas['estado_tras_este_paso'])) {
@@ -390,6 +419,53 @@ final class ArbolAprobacionContextoSupport
         }
 
         return max(0.0, min(1.0, round($score, 4)));
+    }
+
+    /**
+     * Todos los firmantes con movimiento pendiente en el mismo nivel del comprobante.
+     * Varios en un nivel: alcanza con que uno apruebe; en la consulta se listan todos.
+     *
+     * @return list<array{id: int, nombre: string}>
+     */
+    private static function firmantesPendientesDelNivel(
+        ArbolaprobacionService $arbolService,
+        string $tipo,
+        int $documentoId,
+        int $nivel,
+        UsuarioRepositoryInterface $usuarioRepository,
+    ): array {
+        if ($documentoId <= 0 || $nivel <= 0 || $tipo === '') {
+            return [];
+        }
+
+        $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[
+            array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))
+        ]['nombre'] ?? 'Pendiente';
+
+        $vistos = [];
+        $firmantes = [];
+        foreach ($arbolService->coleccionMovimientosPorTipo($tipo, $documentoId) as $mov) {
+            if ((int) ($mov->nivel ?? 0) !== $nivel) {
+                continue;
+            }
+            if (strcasecmp((string) ($mov->estado ?? ''), (string) $nombrePendiente) !== 0) {
+                continue;
+            }
+            $uid = (int) ($mov->destinatariousuario_id ?? 0);
+            if ($uid <= 0 || isset($vistos[$uid])) {
+                continue;
+            }
+            $vistos[$uid] = true;
+            $nombreRel = optional($mov->destinatariousuarios)->nombre;
+            $firmantes[] = [
+                'id' => $uid,
+                'nombre' => $nombreRel
+                    ? (string) $nombreRel
+                    : (self::nombreUsuario($usuarioRepository, $uid) ?? ('Usuario #'.$uid)),
+            ];
+        }
+
+        return $firmantes;
     }
 
     private static function nombreUsuario(UsuarioRepositoryInterface $usuarioRepository, int $usuarioId): ?string

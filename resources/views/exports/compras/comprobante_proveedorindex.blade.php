@@ -1,7 +1,17 @@
 @php
     $esExcel = ! empty($esExcel);
     $datas = $datas ?? collect();
-    $subtitulo = 'Generado '.date('d/m/Y H:i').' — '.(is_countable($datas) ? count($datas) : 0).' registro(s)';
+    $filtros = $filtros ?? [];
+    $partesSub = ['Generado '.date('d/m/Y H:i'), (is_countable($datas) ? count($datas) : 0).' registro(s)'];
+    if (! empty($filtros['valor'])) {
+        $partesSub[] = 'Filtro: '.$filtros['valor'];
+    }
+    if (! empty($filtros['empresa_id'])) {
+        $partesSub[] = 'Empresa id: '.$filtros['empresa_id'];
+    } elseif (($filtros['empresa_scope'] ?? '') === 'todas') {
+        $partesSub[] = 'Todas las empresas asignadas';
+    }
+    $subtitulo = implode(' — ', $partesSub);
     $formatoNumero = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
     $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoNumero);
     $fmtMonto = function ($v) use ($esExcel, $formatoNumero, $autoExcelNum) {

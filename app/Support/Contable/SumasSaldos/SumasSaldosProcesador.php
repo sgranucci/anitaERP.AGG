@@ -3,6 +3,7 @@
 namespace App\Support\Contable\SumasSaldos;
 
 use App\Services\Contable\AnitaAsientoImportService;
+use App\Support\Configuracion\CotizacionVigenteSupport;
 use App\Support\Contable\CuentacontableSaldoMesSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\SumasSaldosListadoFiltros;
@@ -970,20 +971,9 @@ class SumasSaldosProcesador
 
         $fechaKey = strlen($fecha) >= 10 ? substr($fecha, 0, 10) : $fecha;
         $cacheKey = $fechaKey.'|'.$monedaId;
-        if (array_key_exists($cacheKey, $this->cacheCotizacionDia)) {
-            return $this->cacheCotizacionDia[$cacheKey];
-        }
 
-        $valor = (float) (DB::table('cotizacion_moneda as cm')
-            ->join('cotizacion as c', 'c.id', '=', 'cm.cotizacion_id')
-            ->where('cm.moneda_id', $monedaId)
-            ->whereDate('c.fecha', '<=', $fechaKey)
-            ->orderByDesc('c.fecha')
-            ->value('cm.cotizacionventa') ?? 0);
-
-        $this->cacheCotizacionDia[$cacheKey] = $valor;
-
-        return $valor;
+        return $this->cacheCotizacionDia[$cacheKey]
+            ??= CotizacionVigenteSupport::ventaValor($fechaKey, $monedaId);
     }
 
     /**

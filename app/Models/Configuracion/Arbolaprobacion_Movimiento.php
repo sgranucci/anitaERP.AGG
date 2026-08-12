@@ -19,7 +19,7 @@ class Arbolaprobacion_Movimiento extends Model implements Auditable
     
     protected $fillable = [
                             'arbolaprobacion_id', 'fechaenvio', 'enviousuario_id', 'requisicion_id', 'requisicion_sala_id', 'ordencompra_id',
-							'solicitudpago_id', 'ordenventa_id', 'pedido_id', 'hashaprobacion', 'hashrechazo', 'hashvisualizar', 'nivel',
+							'solicitudpago_id', 'ordenventa_id', 'pedido_id', 'propuesta_pago_id', 'hashaprobacion', 'hashrechazo', 'hashvisualizar', 'nivel',
 							'destinatariousuario_id', 'fechaproceso', 'estado', 'observacion', 'circuito_oc',
                             'arbolaprobacion_oc_trigger_id',
                         ];
@@ -53,6 +53,11 @@ class Arbolaprobacion_Movimiento extends Model implements Auditable
 	public function ordencompras()
 	{
     	return $this->belongsTo(Ordencompra::class, 'ordencompra_id');
+	}
+
+	public function propuesta_pagos()
+	{
+    	return $this->belongsTo(\App\Models\Compras\PropuestaPago::class, 'propuesta_pago_id');
 	}
 
     public function enviousuarios()

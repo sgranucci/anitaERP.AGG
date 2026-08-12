@@ -3,6 +3,7 @@
 namespace App\Support\Compras\AnitaSync\ComprobanteProveedor;
 
 use App\Models\Compras\Comprobante_Proveedor_Cuota;
+use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use Carbon\Carbon;
 
 final class PromovCuotaAnitaMapper
@@ -35,11 +36,21 @@ final class PromovCuotaAnitaMapper
             ? Carbon::parse($cuota->fechavencimiento)->format('Ymd')
             : $ctx->fechaYmd();
 
-        $cot = $cuota->cotizacion !== null
-            ? number_format((float) $cuota->cotizacion, 4, '.', '')
-            : $ctx->cotizacion();
-
-        $monedaId = $cuota->moneda_id ?? $ctx->comprobante->moneda_id ?? 1;
+        // Misma moneda/cotización que compra (factura). No heredar ME de la OC en la cuota.
+        $monedaFacturaId = (int) ($ctx->comprobante->moneda_id ?: 1);
+        $cotizacionFactura = (float) ($ctx->comprobante->cotizacion ?: 1);
+        $monto = (float) ($cuota->monto ?? 0);
+        if (abs($monto) < 0.0001) {
+            $monto = (float) ($ctx->comprobante->total ?? 0);
+        } else {
+            $monto = ComprobanteProveedorImporteComparacionComSupport::desdeRecepcionAFactura(
+                $monto,
+                (int) ($cuota->moneda_id ?: $monedaFacturaId),
+                (float) ($cuota->cotizacion ?: $cotizacionFactura),
+                $monedaFacturaId,
+                $cotizacionFactura,
+            );
+        }
 
         return "
             '".$ctx->proveedorCodigo()."',
@@ -50,9 +61,9 @@ final class PromovCuotaAnitaMapper
             '".$ctx->nroInterno."',
             '".$ctx->fechaYmd()."',
             '".$vto."',
-            '".$ctx->decimal($cuota->monto)."',
-            '".$monedaId."',
-            '".$cot."',
+            '".$ctx->decimal($monto)."',
+            '".$ctx->monedaCodigoAnita()."',
+            '".$ctx->cotizacion()."',
             '".$ctx->empresaCodigo()."',
             '".(int) $cuota->numero_cuota."',
             '0'

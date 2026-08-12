@@ -12,6 +12,7 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use App\Services\Compras\ComprobanteProveedorPdfIaService;
+use App\Services\Compras\ComprobanteProveedorPersistenciaService;
 use App\Support\Compras\PrecargaRecepcionErrorRegistrar;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros;
@@ -34,6 +35,8 @@ class Precarga_Comprobante_ProveedorController extends Controller
 
     private ComprobanteProveedorPdfIaService $pdfIaService;
 
+    private ComprobanteProveedorPersistenciaService $persistenciaComprobanteService;
+
 	public function __construct(Precarga_Comprobante_ProveedorRepositoryInterface $precarga_comprobante_proveedorRepository,
                                 Precarga_Comprobante_Proveedor_ConceptoRepositoryInterface $precarga_comprobante_proveedor_conceptoRepository,
                                 EmpresaRepositoryInterface $empresaRepository,
@@ -42,6 +45,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
                                 PrecargaComprobanteAnitaSyncService $precargaAnitaSync,
                                 PrecargaFacturaScanPathResolver $facturaScanPathResolver,
                                 ComprobanteProveedorPdfIaService $pdfIaService,
+                                ComprobanteProveedorPersistenciaService $persistenciaComprobanteService,
                                 )
     {
         $this->precarga_comprobante_proveedorRepository = $precarga_comprobante_proveedorRepository;
@@ -52,6 +56,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
         $this->precargaAnitaSync = $precargaAnitaSync;
         $this->facturaScanPathResolver = $facturaScanPathResolver;
         $this->pdfIaService = $pdfIaService;
+        $this->persistenciaComprobanteService = $persistenciaComprobanteService;
     }
 
     /**
@@ -198,12 +203,32 @@ class Precarga_Comprobante_ProveedorController extends Controller
 
         try {
             $resultado = $this->pdfIaService->confirmar($payload, $request->file('pdf'));
+            $precargaId = (int) $resultado['precarga_id'];
+            $mensaje = (string) ($resultado['message'] ?? 'Precarga registrada desde PDF+IA.');
+            $redirect = route('editar_precarga_comprobante_proveedor', ['id' => $precargaId]);
+
+            // Flujo corto: generar borrador de comprobante y abrir el ABM.
+            if (can('crear-comprobante-proveedor', false)) {
+                try {
+                    $comprobante = $this->persistenciaComprobanteService->generarBorradorDesdePrecarga($precargaId);
+                    $mensaje = 'Precarga y comprobante generados desde PDF+IA. Revise datos, COM y conceptos.';
+                    $avisos = $this->persistenciaComprobanteService->ultimosAvisosControles();
+                    if ($avisos !== []) {
+                        $mensaje .= ' '.implode(' ', $avisos);
+                    }
+                    $redirect = route('editar_comprobante_proveedor', ['id' => $comprobante->id]);
+                } catch (\Throwable $eGen) {
+                    report($eGen);
+                    $mensaje .= ' No se pudo generar el comprobante automáticamente: '.$eGen->getMessage()
+                        .'. Puede generarlo desde la precarga.';
+                }
+            }
 
             return response()->json([
                 'ok' => true,
-                'precarga_id' => $resultado['precarga_id'],
-                'message' => $resultado['message'],
-                'redirect' => route('editar_precarga_comprobante_proveedor', ['id' => $resultado['precarga_id']]),
+                'precarga_id' => $precargaId,
+                'message' => $mensaje,
+                'redirect' => $redirect,
             ]);
         } catch (RuntimeException $e) {
             PrecargaRecepcionErrorRegistrar::desdePdfIa(
@@ -356,6 +381,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
         can('editar-precarga-proveedores');
 
 		$data = $this->precarga_comprobante_proveedorRepository->find($id);
+        $data->load('comprobante_proveedor:id,precarga_comprobante_proveedor_id,estado,letra,sucursal,numerocomprobante');
 
         $empresa_query = $this->empresaRepository->allFiltrado();
         $tipotransaccion_compra_query = $this->tipotransaccion_compraRepository->all('*');

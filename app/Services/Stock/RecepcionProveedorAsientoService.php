@@ -6,7 +6,6 @@ use App\ApiAnita;
 use App\Models\Compras\Ordencompra;
 use App\Models\Contable\Tipoasiento;
 use App\Models\Stock\Articulo;
-use App\Models\Stock\Configuracion_RecepcionProveedor;
 use App\Models\Contable\Asiento;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Contable\AsientoRepositoryInterface;
@@ -15,6 +14,7 @@ use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
 use App\Support\Stock\RecepcionProveedorAsientoDescripcionSupport;
 use App\Support\Stock\RecepcionProveedorCtamovCuadreSupport;
@@ -40,13 +40,7 @@ class RecepcionProveedorAsientoService
 
     public function debeGenerarAsiento(int $empresaId): bool
     {
-        if (! config('recepcion_proveedor.contabilidad_activa')) {
-            return false;
-        }
-
-        $cfg = Configuracion_RecepcionProveedor::query()->where('empresa_id', $empresaId)->first();
-
-        return $cfg ? (bool) $cfg->activa_contabilidad : config('recepcion_proveedor.contabilidad_activa');
+        return ComprobanteProveedorComContabilidadSupport::generaAsientoCom($empresaId);
     }
 
     /**

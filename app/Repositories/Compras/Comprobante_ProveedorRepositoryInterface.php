@@ -14,5 +14,8 @@ interface Comprobante_ProveedorRepositoryInterface
 
     public function find($id);
 
-    public function leeComprobanteProveedor(?string $busqueda, bool $paginar);
+    /**
+     * @param  array|string|null  $filtros
+     */
+    public function leeComprobanteProveedor($filtros, bool $paginar = false);
 }

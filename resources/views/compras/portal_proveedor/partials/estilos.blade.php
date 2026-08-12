@@ -63,4 +63,79 @@
         margin-bottom: .75rem;
         display: block;
     }
+    .portal-circuito {
+        border: 1px solid #d5e8f5;
+        border-radius: 4px;
+        background: #f8fbfd;
+        padding: 1rem 1.1rem;
+    }
+    .portal-circuito-steps {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .75rem 0;
+    }
+    .portal-circuito-paso {
+        position: relative;
+        flex: 1 1 140px;
+        min-width: 120px;
+        padding-right: .5rem;
+    }
+    .portal-circuito-paso .paso-nodo {
+        width: 34px;
+        height: 34px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: .45rem;
+        border: 2px solid #aeb6bf;
+        background: #fff;
+        color: #7f8c8d;
+        z-index: 1;
+        position: relative;
+    }
+    .portal-circuito-paso.paso-completo .paso-nodo {
+        background: #145a32;
+        border-color: #145a32;
+        color: #fff;
+    }
+    .portal-circuito-paso.paso-en-curso .paso-nodo {
+        background: #2471A3;
+        border-color: #2471A3;
+        color: #fff;
+    }
+    .portal-circuito-paso .paso-linea {
+        position: absolute;
+        top: 16px;
+        left: 34px;
+        right: 0;
+        height: 3px;
+        background: #d5d8dc;
+        z-index: 0;
+    }
+    .portal-circuito-paso.paso-completo .paso-linea {
+        background: #27ae60;
+    }
+    .portal-circuito-paso.paso-en-curso .paso-linea {
+        background: linear-gradient(90deg, #2471A3 0%, #d5d8dc 100%);
+    }
+    .portal-circuito-paso .paso-titulo {
+        font-weight: 600;
+        color: #1B4F72;
+        font-size: .9rem;
+    }
+    .portal-circuito-paso .paso-detalle {
+        font-size: .75rem;
+        color: #5d6d7e;
+        line-height: 1.3;
+    }
+    .portal-aviso-doc-vencido {
+        border-left: 4px solid #c0392b;
+    }
+    .portal-preview-frame {
+        width: 100%;
+        min-height: 70vh;
+        border: 0;
+        background: #ecf0f1;
+    }
 </style>

@@ -101,6 +101,9 @@
                     <button type="button" id="botonform5" class="btn btn-info btn-sm">
                         <span class="fa fa-copy"></span> Archivos asociados
                     </button>
+                    <button type="button" id="botonform6" class="btn btn-info btn-sm">
+                        <span class="fa fa-id-card"></span> CM05 / CUIT
+                    </button>
                     <button type="button" id="btn-consulta-arca-padron-crear" class="btn btn-outline-secondary btn-sm" title="Ingresá el CUIT y consultá el padrón ARCA">
                         <i class="fa fa-search"></i> Consulta padrón ARCA
                     </button>
@@ -118,6 +121,7 @@
                     @include('compras.proveedor.form3')
                     @include('compras.proveedor.form4')
                     @include('compras.proveedor.form5')
+                    @include('compras.proveedor.form6')
                     @include('compras.proveedor.suspensionmodal')
                     @include('compras.proveedor.partials.arca_validacion_support', ['proveedorId' => $data->id])
                     @include('compras.proveedor.partials.arca_apoc_validacion_support', ['proveedorId' => $data->id])

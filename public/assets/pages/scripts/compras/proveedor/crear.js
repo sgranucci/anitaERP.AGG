@@ -390,6 +390,7 @@
             $(".form3").hide();
             $(".form4").hide();
             $(".form5").hide();
+            $(".form6").hide();
         });
 
         $("#botonform2").click(function(){
@@ -398,6 +399,7 @@
             $(".form3").hide();
             $(".form4").hide();
             $(".form5").hide();
+            $(".form6").hide();
 
 			$("#titulo").html("");
 			$("#titulo").html("<span class='fa fa-cash-register'></span> Datos impuestos");
@@ -409,6 +411,7 @@
             $(".form3").show();
             $(".form4").hide();
             $(".form5").hide();
+            $(".form6").hide();
 
 	        $("#tbody-tabla .localidades").each(function(index) {
             	var provincia = $(this).parents("tr").find(".provincias");
@@ -431,6 +434,7 @@
             $(".form3").hide();
             $(".form4").show();
             $(".form5").hide();
+            $(".form6").hide();
 
 		 	// Hace foco en el campo de la leyenda
 			$("#leyenda").focus();
@@ -442,6 +446,38 @@
             $(".form3").hide();
             $(".form4").hide();
             $(".form5").show();
+            $(".form6").hide();
+        });
+
+        $("#botonform6").click(function(){
+            $(".form1").hide();
+            $(".form2").hide();
+            $(".form3").hide();
+            $(".form4").hide();
+            $(".form5").hide();
+            $(".form6").show();
+        });
+
+        $(document).on('click', '.eliminar-documento-fiscal-proveedor', function () {
+            $(this).closest('.col-md-6, .col-lg-4').remove();
+        });
+
+        $(document).on('click', '.eliminar-renglon-documento-fiscal', function () {
+            var $tbody = $('#tbody-tabla-documento-fiscal');
+            if ($tbody.find('tr').length <= 1) {
+                $tbody.find('input[type=file]').val('');
+                $tbody.find('input[type=date], input[type=number]').val('');
+                return;
+            }
+            $(this).closest('tr').remove();
+        });
+
+        $('#agrega_renglon_documento_fiscal').click(function () {
+            var tpl = document.getElementById('proveedor-template-renglon-documento-fiscal');
+            if (!tpl) {
+                return;
+            }
+            $('#tbody-tabla-documento-fiscal').append(tpl.content.cloneNode(true));
         });
 	
         $( "#botonform0" ).click(function() {

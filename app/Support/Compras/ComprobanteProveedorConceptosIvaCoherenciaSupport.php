@@ -4,6 +4,7 @@ namespace App\Support\Compras;
 
 use App\Models\Compras\Concepto_Ivacompra;
 use Illuminate\Support\Collection;
+use App\Support\Contable\MontoEsArSupport;
 use RuntimeException;
 
 /**
@@ -30,7 +31,7 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
 
         for ($i = 0; $i < $max; $i++) {
             $conceptoId = (int) ($conceptoIds[$i] ?? 0);
-            $monto = round((float) ($montos[$i] ?? 0), 2);
+            $monto = MontoEsArSupport::parse($montos[$i] ?? 0);
             if ($conceptoId <= 0 || abs($monto) < 0.0001) {
                 continue;
             }

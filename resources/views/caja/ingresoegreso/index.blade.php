@@ -7,6 +7,7 @@
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/filtro.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js') }}" type="text/javascript"></script>
 <script>
     function eliminarIngresoEgreso(event) {
         if (!confirm('¿Desea eliminar la transacción de caja?')) {
@@ -33,7 +34,7 @@
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-ingresoegreso',
                         'filtroValor' => $filtros['valor'] ?? '',
-                        'tieneCriterios' => IngresoEgresoListadoFiltros::tieneCriteriosTexto($filtros ?? []),
+                        'tieneCriterios' => IngresoEgresoListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
                         'limpiarUrl' => $limpiarUrl,
                         'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
                         'toggleTarget' => '#panel-filtros-ingresoegreso',
@@ -50,6 +51,16 @@
                 ])
             </form>
             @include('caja.ingresoegreso.partials.filtros_externos')
+            @if (! empty($filtros['solicitudpago_id']))
+                <div class="px-3 py-2 border-bottom bg-light small">
+                    <i class="fa fa-link text-primary"></i>
+                    Filtrado por solicitud de pago id <strong>{{ (int) $filtros['solicitudpago_id'] }}</strong>.
+                    <a href="{{ route('editar_solicitudpago', ['id' => (int) $filtros['solicitudpago_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                       class="text-primary ml-1" target="_blank" rel="noopener">Abrir SP</a>
+                    <a href="{{ route('ingresoegreso', \App\Support\Caja\IngresoEgresoListadoFiltros::paraQueryStringEmpresa($filtros ?? [])) }}"
+                       class="ml-2">Quitar filtro SP</a>
+                </div>
+            @endif
             @if (! empty($alcance_centro_costo))
                 <div class="px-3 py-2 border-bottom bg-white text-muted small">
                     <i class="fa fa-filter"></i>
@@ -87,7 +98,13 @@
                             <td>{{ $data->nombreempresa }}</td>
                             <td>{{ $data->numerotransaccion }}</td>
                             <td>{{ $data->fecha ? date('d/m/Y', strtotime($data->fecha)) : '' }}</td>
-                            <td>{{ $data->nombretipotransaccion_caja }}</td>
+                            <td>
+                                @if (!empty($data->abreviaturatipotransaccion_caja))
+                                    <span class="text-muted">{{ $data->abreviaturatipotransaccion_caja }}</span>
+                                    —
+                                @endif
+                                {{ $data->nombretipotransaccion_caja }}
+                            </td>
                             <td>{{ $data->nombreconceptogasto ?? '' }}</td>
                             <td>{{ $data->detalle ?? '' }}</td>
                             @if (config('app.empresa') == 'Iguassu Travel')
@@ -115,11 +132,46 @@
                                 </ul>
                             </td>
                             <td class="text-nowrap">
+                                @if (can('listar-ingresos-egresos-caja', false))
+                                    <a href="{{ route('imprimir_ingresoegreso', $data->id) }}"
+                                       class="btn-accion-tabla tooltipsC"
+                                       title="Emitir comprobante / orden de pago"
+                                       target="_blank" rel="noopener">
+                                        <i class="fa fa-print"></i>
+                                    </a>
+                                @endif
                                 @if (can('editar-ingresos-egresos-caja', false))
                                     <a href="{{ route('editar_ingresoegreso', ['id' => $data->id, 'origen' => 'ingresoegreso'] + $retornoListadoQuery) }}"
                                        class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                         <i class="fa fa-edit"></i>
                                     </a>
+                                @endif
+                                @if (
+                                    can('anular-ingresos-egresos-caja', false)
+                                    && empty($data->caja_movimiento_origen_id)
+                                    && empty($data->caja_movimiento_revertido_por_id)
+                                )
+                                    <form action="{{ route('anular_fisicamente_ingresoegreso', ['id' => $data->id]) }}"
+                                          class="d-inline form-anular-fisico-ie" method="POST">
+                                        @csrf
+                                        <button type="submit" class="btn-accion-tabla tooltipsC" title="Anular físicamente (borra OP y reabre SP)">
+                                            <i class="fa fa-ban text-danger"></i>
+                                        </button>
+                                    </form>
+                                @endif
+                                @if (
+                                    can('revertir-ingresos-egresos-caja', false)
+                                    && empty($data->caja_movimiento_origen_id)
+                                    && empty($data->caja_movimiento_revertido_por_id)
+                                )
+                                    <form action="{{ route('revertir_ingresoegreso_id', ['id' => $data->id]) }}"
+                                          class="d-inline form-revertir-ie" method="POST">
+                                        @csrf
+                                        <input type="hidden" name="id" value="{{ $data->id }}">
+                                        <button type="submit" class="btn-accion-tabla tooltipsC" title="Revertir (compensatorio + asiento + Anita)">
+                                            <i class="fa fa-undo text-warning"></i>
+                                        </button>
+                                    </form>
                                 @endif
                                 @if (can('borrar-ingresos-egresos-caja', false))
                                     <form action="{{ route('eliminar_ingresoegreso', ['id' => $data->id]) }}" class="d-inline form-eliminar" method="POST">

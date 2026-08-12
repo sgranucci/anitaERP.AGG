@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Caja\IngresoEgresoTransferenciaSupport;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
@@ -43,6 +44,12 @@ class ValidacionIngresoEgreso extends FormRequest
                 IngresoEgresoTransferenciaSupport::assertBalanceado($this->all());
             } catch (InvalidArgumentException $e) {
                 $validator->errors()->add('tipotransaccion_caja_id', $e->getMessage());
+            }
+
+            try {
+                IngresoEgresoSolicitudpagoSupport::assertMontoCoincideConSolicitud($this->all());
+            } catch (InvalidArgumentException $e) {
+                $validator->errors()->add('solicitudpago_id', $e->getMessage());
             }
         });
     }

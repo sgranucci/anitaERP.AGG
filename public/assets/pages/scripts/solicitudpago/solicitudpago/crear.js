@@ -157,6 +157,61 @@ function fechaMovimientoArbolSpTexto(raw) {
     return s.substring(0, 19).replace('T', ' ');
 }
 
+function spOcultarDetalleNivelActual() {
+    var $d = $('#sp-detalle-nivel-actual');
+    if ($d.length) {
+        $d.addClass('d-none').empty();
+    }
+}
+
+/**
+ * Resumen arriba de la grilla: todos los firmantes pendientes del nivel actual.
+ */
+function spRenderDetalleNivelActual(rows) {
+    var $d = $('#sp-detalle-nivel-actual');
+    if (!$d.length) {
+        return;
+    }
+    var nivelMin = null;
+    var porNivel = {};
+    $.each(rows || [], function (_, value) {
+        if (String(value.estado || '').toLowerCase() !== 'pendiente') {
+            return;
+        }
+        var n = parseInt(value.nivel, 10);
+        if (!isFinite(n) || n <= 0) {
+            return;
+        }
+        if (nivelMin === null || n < nivelMin) {
+            nivelMin = n;
+        }
+        if (!porNivel[n]) {
+            porNivel[n] = [];
+        }
+        var nombre = (value.destinatariousuarios && value.destinatariousuarios.nombre) || '';
+        nombre = String(nombre).trim();
+        if (nombre !== '' && porNivel[n].indexOf(nombre) === -1) {
+            porNivel[n].push(nombre);
+        }
+    });
+    if (nivelMin === null) {
+        spOcultarDetalleNivelActual();
+        return;
+    }
+    var firmantes = porNivel[nivelMin] || [];
+    var html = '<strong>Nivel actual ' + nivelMin + '</strong>';
+    if (firmantes.length === 1) {
+        html += ': pendiente de <strong>' + $('<div>').text(firmantes[0]).html() + '</strong>.';
+    } else if (firmantes.length > 1) {
+        html += ': pendientes de aprobación (' + firmantes.length + ' firmantes) — <strong>'
+            + $('<div>').text(firmantes.join(', ')).html() + '</strong>.';
+        html += ' <span class="text-muted">Alcanza con que uno apruebe.</span>';
+    } else {
+        html += ': hay movimiento(s) pendiente(s) sin destinatario.';
+    }
+    $d.removeClass('d-none').html(html);
+}
+
 function leeArbolSolicitudpago() {
     var id = $('#solicitudpago_id').val();
     var $w = $('#solicitudpago-arbol-table tbody.container-arbol');
@@ -164,6 +219,7 @@ function leeArbolSolicitudpago() {
         return;
     }
     if (!id) {
+        spOcultarDetalleNivelActual();
         $w.empty().append(
             '<tr><td colspan="7" class="text-center text-muted">Guarde la solicitud para disparar el árbol del concepto.</td></tr>'
         );
@@ -185,6 +241,7 @@ function leeArbolSolicitudpago() {
             window.AnitaArbolPanelIa.render(resp.ai_contexto_arbol || null, '#sp-panel-ia-arbol');
         }
         if (!rows.length) {
+            spOcultarDetalleNivelActual();
             $w.append(
                 '<tr><td colspan="7" class="text-center text-muted">Sin movimientos registrados en el árbol.</td></tr>'
             );
@@ -207,8 +264,10 @@ function leeArbolSolicitudpago() {
             $tr.append($('<td></td>').attr('title', obs).text(obs !== '' ? obs : '—'));
             $w.append($tr);
         });
+        spRenderDetalleNivelActual(rows);
         spActualizarBadgeArbol(pendientes);
     }).fail(function () {
+        spOcultarDetalleNivelActual();
         $w.empty().append(
             '<tr><td colspan="7" class="text-center text-danger">No se pudieron cargar los movimientos del árbol de aprobación.</td></tr>'
         );

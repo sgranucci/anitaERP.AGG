@@ -27,6 +27,10 @@ class SurmarTrazabilidadService
         ?int $anitaNroInterno = null,
         ?int $anitaNroApertura = null,
     ): Collection {
+        if (! SurmarSupport::esEmpresaSurmar(SurmarSupport::EMPRESA_ID)) {
+            return collect();
+        }
+
         $codigo = trim((string) $codigo);
         if ($codigo !== '') {
             try {
@@ -87,6 +91,8 @@ class SurmarTrazabilidadService
      */
     public function historialEtiqueta(int $etiquetaId): array
     {
+        SurmarSupport::abortSiNoSurmar(SurmarSupport::EMPRESA_ID);
+
         $etiqueta = Stock_Etiqueta::query()
             ->with(['articulos', 'depositos', 'unidadesmedida', 'usuarios'])
             ->where('empresa_id', SurmarSupport::EMPRESA_ID)

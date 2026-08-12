@@ -9,49 +9,78 @@ use Illuminate\Support\Facades\Schema;
  * - separa (stkumd) → «En que separa»
  * - cant_unid → «Cantidad que separa»
  * - nro_apertura → «Nro.» en etiqueta y lote/apertura
+ *
+ * Solo EL BIERZO (Surmar). En AGG no existe cant_pieza ni stock_etiqueta.
  */
 return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('recepcion_proveedor_articulo', function (Blueprint $table) {
-            if (! Schema::hasColumn('recepcion_proveedor_articulo', 'separa_unidadmedida_id')) {
-                $table->unsignedInteger('separa_unidadmedida_id')->nullable()->after('cant_pieza');
-            }
-            if (! Schema::hasColumn('recepcion_proveedor_articulo', 'cant_unid_separa')) {
-                $table->unsignedInteger('cant_unid_separa')->default(1)->after('separa_unidadmedida_id');
-            }
-            if (! Schema::hasColumn('recepcion_proveedor_articulo', 'nro_apertura')) {
-                $table->unsignedInteger('nro_apertura')->default(1)->after('cant_unid_separa');
-            }
-        });
+        if (! $this->esEntornoSurmar()) {
+            return;
+        }
 
-        Schema::table('stock_etiqueta', function (Blueprint $table) {
-            if (! Schema::hasColumn('stock_etiqueta', 'separa_unidadmedida_id')) {
-                $table->unsignedInteger('separa_unidadmedida_id')->nullable()->after('unidadmedida_id');
-            }
-            if (! Schema::hasColumn('stock_etiqueta', 'cant_unid_separa')) {
-                $table->unsignedInteger('cant_unid_separa')->default(1)->after('separa_unidadmedida_id');
-            }
-        });
+        if (Schema::hasTable('recepcion_proveedor_articulo')) {
+            Schema::table('recepcion_proveedor_articulo', function (Blueprint $table) {
+                if (! Schema::hasColumn('recepcion_proveedor_articulo', 'separa_unidadmedida_id')) {
+                    $after = Schema::hasColumn('recepcion_proveedor_articulo', 'cant_pieza')
+                        ? 'cant_pieza'
+                        : null;
+                    $col = $table->unsignedInteger('separa_unidadmedida_id')->nullable();
+                    if ($after !== null) {
+                        $col->after($after);
+                    }
+                }
+                if (! Schema::hasColumn('recepcion_proveedor_articulo', 'cant_unid_separa')) {
+                    $table->unsignedInteger('cant_unid_separa')->default(1)->after('separa_unidadmedida_id');
+                }
+                if (! Schema::hasColumn('recepcion_proveedor_articulo', 'nro_apertura')) {
+                    $table->unsignedInteger('nro_apertura')->default(1)->after('cant_unid_separa');
+                }
+            });
+        }
+
+        if (Schema::hasTable('stock_etiqueta')) {
+            Schema::table('stock_etiqueta', function (Blueprint $table) {
+                if (! Schema::hasColumn('stock_etiqueta', 'separa_unidadmedida_id')) {
+                    $table->unsignedInteger('separa_unidadmedida_id')->nullable()->after('unidadmedida_id');
+                }
+                if (! Schema::hasColumn('stock_etiqueta', 'cant_unid_separa')) {
+                    $table->unsignedInteger('cant_unid_separa')->default(1)->after('separa_unidadmedida_id');
+                }
+            });
+        }
     }
 
     public function down(): void
     {
-        Schema::table('recepcion_proveedor_articulo', function (Blueprint $table) {
-            foreach (['nro_apertura', 'cant_unid_separa', 'separa_unidadmedida_id'] as $col) {
-                if (Schema::hasColumn('recepcion_proveedor_articulo', $col)) {
-                    $table->dropColumn($col);
-                }
-            }
-        });
+        if (! $this->esEntornoSurmar()) {
+            return;
+        }
 
-        Schema::table('stock_etiqueta', function (Blueprint $table) {
-            foreach (['cant_unid_separa', 'separa_unidadmedida_id'] as $col) {
-                if (Schema::hasColumn('stock_etiqueta', $col)) {
-                    $table->dropColumn($col);
+        if (Schema::hasTable('recepcion_proveedor_articulo')) {
+            Schema::table('recepcion_proveedor_articulo', function (Blueprint $table) {
+                foreach (['nro_apertura', 'cant_unid_separa', 'separa_unidadmedida_id'] as $col) {
+                    if (Schema::hasColumn('recepcion_proveedor_articulo', $col)) {
+                        $table->dropColumn($col);
+                    }
                 }
-            }
-        });
+            });
+        }
+
+        if (Schema::hasTable('stock_etiqueta')) {
+            Schema::table('stock_etiqueta', function (Blueprint $table) {
+                foreach (['cant_unid_separa', 'separa_unidadmedida_id'] as $col) {
+                    if (Schema::hasColumn('stock_etiqueta', $col)) {
+                        $table->dropColumn($col);
+                    }
+                }
+            });
+        }
+    }
+
+    private function esEntornoSurmar(): bool
+    {
+        return strtoupper((string) config('app.empresa')) === 'EL BIERZO';
     }
 };

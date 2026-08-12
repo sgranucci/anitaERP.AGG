@@ -114,9 +114,16 @@
         var conceptoId = parseInt($row.find('.ie-cp-concepto-id').val() || '0', 10);
         var meta = conceptosMeta[String(conceptoId)] || {};
         var cuentaId = parseInt($row.find('.ie-cp-cuenta-id').val() || '0', 10);
-        if (cuentaId <= 0 && meta.cuenta_debe_id) {
-            $row.find('.ie-cp-cuenta-id').val(meta.cuenta_debe_id);
-            cuentaId = meta.cuenta_debe_id;
+        if (cuentaId <= 0) {
+            var empresaIdForm = parseInt($('#empresa_id').val() || '0', 10) || 0;
+            if (meta.cuentas_por_empresa && empresaIdForm > 0 && meta.cuentas_por_empresa[empresaIdForm]) {
+                cuentaId = parseInt(meta.cuentas_por_empresa[empresaIdForm], 10) || 0;
+            } else if (meta.cuenta_debe_id) {
+                cuentaId = parseInt(meta.cuenta_debe_id, 10) || 0;
+            }
+            if (cuentaId > 0) {
+                $row.find('.ie-cp-cuenta-id').val(cuentaId);
+            }
         }
         if (cuentaId <= 0) {
             $row.find('.ie-cp-cuenta-codigo').val('');

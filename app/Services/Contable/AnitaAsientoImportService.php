@@ -486,8 +486,18 @@ final class AnitaAsientoImportService
     private function reemplazarExistente(int $asientoId, array $plan): void
     {
         DB::transaction(function () use ($asientoId, $plan) {
-            Asiento_Movimiento::query()->where('asiento_id', $asientoId)->delete();
-            Asiento::query()->whereKey($asientoId)->update([
+            // Borrado y update fila por fila: el delete/update masivo no dispara los observers y
+            // dejaba cuentacontable_saldo_mes sumando dos veces el asiento reimportado.
+            Asiento_Movimiento::query()
+                ->where('asiento_id', $asientoId)
+                ->get()
+                ->each(fn (Asiento_Movimiento $movimiento) => $movimiento->delete());
+
+            $asiento = Asiento::query()->find($asientoId);
+            if ($asiento === null) {
+                return;
+            }
+            $asiento->update([
                 'tipoasiento_id' => $plan['tipoasiento_id'],
                 'fecha' => $plan['fecha'],
                 'observacion' => $plan['observacion'],

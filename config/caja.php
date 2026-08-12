@@ -80,4 +80,77 @@ return [
 
     /** Fallback de caja física cuando la PC no tiene caja_id en config. */
     'caja_default_id' => (int) env('CAJA_DEFAULT_ID', 1),
+
+    /*
+     * IE desde solicitud de pago (Pagar IE):
+     * tipo de transacción por abreviatura (default OPP). ID opcional pisa la abreviatura.
+     */
+    'ingresoegreso_sp_tipotransaccion_abreviatura' => env('CAJA_IE_SP_TIPOTRANSACCION_ABREV', 'OPP'),
+    'ingresoegreso_sp_tipotransaccion_id' => (int) env('CAJA_IE_SP_TIPOTRANSACCION_ID', 0),
+
+    /*
+     * Numeración IE alineada a Anita ventas.numerador (num_clave por empresa).
+     * false = solo MAX+1 ERP (semilla propia). true = lee/avanza Anita (hasta apagarlo).
+     * Nota: las semillas viven en sistema "ventas" (no shared); OPP=223/224/225 = mismas OP Anita.
+     */
+    'ingresoegreso_anita_numeracion_habilitada' => filter_var(
+        env('CAJA_IE_ANITA_NUMERACION_HABILITADA', true),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+    'ingresoegreso_anita_sistema_numerador' => env('CAJA_IE_ANITA_SISTEMA_NUMERADOR', 'ventas'),
+    'ingresoegreso_anita_semillas' => [
+        'OPP' => [
+            1 => (int) env('CAJA_IE_ANITA_SEMILLA_OPP_EMP1', 223),
+            2 => (int) env('CAJA_IE_ANITA_SEMILLA_OPP_EMP2', 224),
+            3 => (int) env('CAJA_IE_ANITA_SEMILLA_OPP_EMP3', 225),
+        ],
+        'EGR' => [
+            1 => (int) env('CAJA_IE_ANITA_SEMILLA_EGR_EMP1', 361),
+            2 => (int) env('CAJA_IE_ANITA_SEMILLA_EGR_EMP2', 362),
+            3 => (int) env('CAJA_IE_ANITA_SEMILLA_EGR_EMP3', 363),
+        ],
+        'ING' => [
+            1 => (int) env('CAJA_IE_ANITA_SEMILLA_ING_EMP1', 346),
+            2 => (int) env('CAJA_IE_ANITA_SEMILLA_ING_EMP2', 347),
+            3 => (int) env('CAJA_IE_ANITA_SEMILLA_ING_EMP3', 348),
+        ],
+        'TRA' => [
+            1 => (int) env('CAJA_IE_ANITA_SEMILLA_TRA_EMP1', 334),
+            2 => (int) env('CAJA_IE_ANITA_SEMILLA_TRA_EMP2', 335),
+            3 => (int) env('CAJA_IE_ANITA_SEMILLA_TRA_EMP3', 336),
+        ],
+    ],
+
+    /*
+     * Escritura Anita tesmov al grabar/borrar IE (OPP/EGR/ING/TRA).
+     * Una fila por línea de cuentacaja (mismo patrón que cobranza).
+     */
+    /*
+     * Escritura Anita che_ban al grabar/borrar IE (a-movim.c / pago.c):
+     * pago + auxpag(tctes) + tesmov; cheques emitidos → cpromae + auxpag(CHP) + tesmov(CHP).
+     */
+    'ingresoegreso_anita_tesmov_habilitada' => filter_var(
+        env('CAJA_IE_ANITA_TESMOV_HABILITADA', true),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+    'ingresoegreso_anita_tesmov_sistema' => env('CAJA_IE_ANITA_TESMOV_SISTEMA', 'che_ban'),
+    /** Letra Anita (a-movim usa espacio). */
+    'ingresoegreso_anita_tesmov_letra' => (($letraIeAnita = env('CAJA_IE_ANITA_TESMOV_LETRA')) === null
+        || $letraIeAnita === '')
+            ? ' '
+            : (string) $letraIeAnita,
+    /**
+     * Sucursal Anita (pag/tesmov). null/vacío = código empresa Anita (MultiEmpresa a-movim).
+     * Forzar 0 con CAJA_IE_ANITA_TESMOV_SUCURSAL=0.
+     */
+    'ingresoegreso_anita_tesmov_sucursal' => (($sucIeAnita = env('CAJA_IE_ANITA_TESMOV_SUCURSAL')) === null
+        || $sucIeAnita === '')
+            ? null
+            : (int) $sucIeAnita,
+
+    /*
+     * Árbol de aprobación opcional para IE por umbral de monto.
+     * 0 = desactivado (default). Si monto IE >= umbral al guardar: log/warning stub (sin árbol IE completo).
+     */
+    'arbol_umbral_monto' => (float) env('CAJA_IE_ARBOL_UMBRAL_MONTO', 0),
 ];

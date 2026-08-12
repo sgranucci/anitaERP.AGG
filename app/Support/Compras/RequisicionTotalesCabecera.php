@@ -2,9 +2,9 @@
 
 namespace App\Support\Compras;
 
-use App\Models\Configuracion\Cotizacion;
 use App\Models\Compras\Requisicion;
 use App\Queries\Configuracion\CotizacionQueryInterface;
+use App\Support\Configuracion\CotizacionVigenteSupport;
 
 /**
  * Total de requisición en la moneda del primer ítem (por id de línea), con conversión vía cotización diaria.
@@ -128,58 +128,23 @@ final class RequisicionTotalesCabecera
         string $fechaYmd,
         int $monedaIdBaseParaRef,
     ): float {
-        $cotRecord = $cotizacionQuery->leeCotizacionDiaria($fechaYmd);
+        $refMoneda = $monedaIdBaseParaRef === 1 ? 2 : $monedaIdBaseParaRef;
 
-        if (! $cotRecord instanceof Cotizacion) {
-            return 1.0;
-        }
-
-        $cotRecord->loadMissing('cotizacion_monedas');
-
-        foreach ($cotRecord->cotizacion_monedas as $cotizacionMoneda) {
-            if ($monedaIdBaseParaRef === 1) {
-                $refMoneda = 2;
-            } else {
-                $refMoneda = $monedaIdBaseParaRef;
-            }
-            if ((int) $cotizacionMoneda->moneda_id === $refMoneda) {
-                $valor = (float) $cotizacionMoneda->cotizacionventa;
-
-                return $valor > 0 ? $valor : 1.0;
-            }
-        }
-
-        return 1.0;
+        return CotizacionVigenteSupport::ventaValorOUno($fechaYmd, $refMoneda);
     }
 
     /**
      * Cotización de venta (pesos por unidad de moneda extranjera) para una moneda concreta en una fecha.
      * La moneda base (ARS, id 1) devuelve 1.
+     *
+     * Usa la cotización vigente: si la tabla no tiene valor para ese día, toma la última real anterior
+     * (ver CotizacionVigenteSupport). Antes devolvía 1.0 y el dólar se convertía como si fuera peso.
      */
     public static function cotizacionVentaPorMonedaEnFecha(
         CotizacionQueryInterface $cotizacionQuery,
         string $fechaYmd,
         int $monedaId,
     ): float {
-        if ($monedaId <= 1) {
-            return 1.0;
-        }
-
-        $cotRecord = $cotizacionQuery->leeCotizacionDiaria($fechaYmd);
-        if (! $cotRecord instanceof Cotizacion) {
-            return 1.0;
-        }
-
-        $cotRecord->loadMissing('cotizacion_monedas');
-
-        foreach ($cotRecord->cotizacion_monedas as $cotizacionMoneda) {
-            if ((int) $cotizacionMoneda->moneda_id === $monedaId) {
-                $valor = (float) $cotizacionMoneda->cotizacionventa;
-
-                return $valor > 0 ? $valor : 1.0;
-            }
-        }
-
-        return 1.0;
+        return CotizacionVigenteSupport::ventaValorOUno($fechaYmd, $monedaId);
     }
 }

@@ -5,6 +5,7 @@ namespace App\Repositories\Compras;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Pagoproveedor_Comprobante;
+use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Queries\Configuracion\CotizacionQueryInterface;
@@ -492,8 +493,42 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
         $oc->setRelation('portal_facturas', $facturas);
         $oc->setAttribute('portal_precargas', $precargas);
         $oc->setAttribute('portal_pagos_count', $facturas->sum(static fn ($f) => count($f->portal_pagos ?? [])));
+        $oc->setAttribute('portal_retenciones', $this->retencionesDesdeFacturasPortal($facturas));
 
         return $oc;
+    }
+
+    /**
+     * Certificados de retención de las OP vinculadas a las facturas del expediente OC.
+     *
+     * @param  Collection<int, Comprobante_Proveedor>  $facturas
+     * @return Collection<int, Pagoproveedor_Retencion>
+     */
+    private function retencionesDesdeFacturasPortal(Collection $facturas): Collection
+    {
+        $pagoIds = [];
+        foreach ($facturas as $fac) {
+            foreach ($fac->portal_pagos ?? [] as $pago) {
+                $pid = (int) ($pago->id ?? 0);
+                if ($pid > 0) {
+                    $pagoIds[$pid] = true;
+                }
+            }
+        }
+        $ids = array_keys($pagoIds);
+        if ($ids === []) {
+            return collect();
+        }
+
+        return Pagoproveedor_Retencion::query()
+            ->whereIn('pagoproveedor_id', $ids)
+            ->with([
+                'pagoproveedores:id,empresa_id,proveedor_id,fecha,tipocomprobante,letra,sucursal,numerotransaccion,estado',
+                'provincias:id,nombre',
+            ])
+            ->orderBy('pagoproveedor_id')
+            ->orderBy('id')
+            ->get();
     }
 
     /**

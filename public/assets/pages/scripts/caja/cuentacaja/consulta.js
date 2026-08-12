@@ -45,6 +45,10 @@ $("input").keydown(function (e){
     var keyCode= e.which;
     // Si la tecla es el Intro/Enter
     if (keyCode == 13){
+      // Grillas que validan / navegan con Enter (no bloquear)
+      if ($(this).closest('#cuenta-table').length) {
+        return;
+      }
       // Evitamos que se ejecute eventos
       e.preventDefault();
       // Devolvemos falso

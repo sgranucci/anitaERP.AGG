@@ -13,6 +13,7 @@ use App\Models\Stock\Recepcion_Proveedor;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
+use App\Support\Contable\MontoEsArSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 
@@ -43,9 +44,9 @@ final class ComprobanteProveedorAsientoPreviewSupport
             'fechacomprobante' => $request->input('fechacomprobante', $base->fechacomprobante ?? now()->format('Y-m-d')),
             'fechaiva' => $request->input('fechaiva', $base->fechaiva ?? now()->format('Y-m-d')),
             'moneda_id' => (int) $request->input('moneda_id', $base->moneda_id ?? 1),
-            'cotizacion' => (float) $request->input('cotizacion', $base->cotizacion ?? 1),
-            'subtotal' => (float) $request->input('subtotal', $base->subtotal ?? 0),
-            'total' => (float) $request->input('total', $base->total ?? 0),
+            'cotizacion' => MontoEsArSupport::parse($request->input('cotizacion', $base->cotizacion ?? 1)),
+            'subtotal' => MontoEsArSupport::parse($request->input('subtotal', $base->subtotal ?? 0)),
+            'total' => MontoEsArSupport::parse($request->input('total', $base->total ?? 0)),
             'modo_carga' => (string) $request->input('modo_carga', $base->modo_carga ?? ComprobanteProveedorModoCarga::SIN_RECEPCION),
         ]);
 
@@ -74,6 +75,8 @@ final class ComprobanteProveedorAsientoPreviewSupport
             $this->construirConceptosDesdeRequest($request)
         );
 
+        $this->sincronizarTotalesDesdeConceptos($comprobante);
+
         $comprobante->setRelation(
             'comprobante_proveedor_recepciones',
             $this->construirRecepcionesDesdeRequest($request)
@@ -83,12 +86,50 @@ final class ComprobanteProveedorAsientoPreviewSupport
     }
 
     /**
+     * En preview on-the-fly el campo #total a veces queda desfasado del monto de conceptos
+     * (ej. al editar Perc. IIBB). El Haber del asiento usa total: alinear con la suma de líneas.
+     */
+    private function sincronizarTotalesDesdeConceptos(Comprobante_Proveedor $comprobante): void
+    {
+        $conceptos = $comprobante->comprobante_proveedor_conceptos;
+        if ($conceptos === null || $conceptos->isEmpty()) {
+            return;
+        }
+
+        $total = 0.0;
+        $subtotal = 0.0;
+        foreach ($conceptos as $linea) {
+            $monto = abs((float) ($linea->monto ?? 0));
+            if ($monto < 0.0001) {
+                continue;
+            }
+            $total += $monto;
+            $tipo = (string) ($linea->concepto_ivacompras?->tipoconcepto ?? '');
+            if (ComprobanteProveedorConceptoIvaTipos::esNeto($tipo)) {
+                $subtotal += $monto;
+            }
+        }
+
+        $total = round($total, 2);
+        if ($total <= 0) {
+            return;
+        }
+
+        $comprobante->total = $total;
+        if ($subtotal > 0) {
+            $comprobante->subtotal = round($subtotal, 2);
+        }
+    }
+
+    /**
      * @return list<array{tipo: string, mensaje: string, concepto_ivacompra_id?: int, nombre?: string}>
      */
     public function avisosFaltantes(Comprobante_Proveedor $comprobante): array
     {
         $avisos = [];
         $modoAsignaRecepcion = $comprobante->modo_carga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
+        $usaProvisionCom = $modoAsignaRecepcion
+            && ComprobanteProveedorComContabilidadSupport::generaAsientoCom((int) ($comprobante->empresa_id ?? 0));
 
         // MN/ME: OC si hay; sin OC → moneda del comprobante.
         $resMoneda = ProveedorCuentaContableMonedaSupport::resolverMonedaParaCuentaProveedor($comprobante);
@@ -119,15 +160,17 @@ final class ComprobanteProveedorAsientoPreviewSupport
         }
 
         if ($modoAsignaRecepcion) {
-            $provisionId = CuentaAutomaticaResolver::resolverId(
-                (int) $comprobante->empresa_id,
-                CuentaAutomaticaClaves::RECEPCION_PROVISION_FACTURAS
-            );
-            if (! $provisionId) {
-                $avisos[] = [
-                    'tipo' => 'provision_sin_config',
-                    'mensaje' => 'Falta configurar la cuenta de provisión de facturas a recibir para la empresa.',
-                ];
+            if ($usaProvisionCom) {
+                $provisionId = CuentaAutomaticaResolver::resolverId(
+                    (int) $comprobante->empresa_id,
+                    CuentaAutomaticaClaves::RECEPCION_PROVISION_FACTURAS
+                );
+                if (! $provisionId) {
+                    $avisos[] = [
+                        'tipo' => 'provision_sin_config',
+                        'mensaje' => 'Falta configurar la cuenta de provisión de facturas a recibir para la empresa.',
+                    ];
+                }
             }
 
             if ($comprobante->comprobante_proveedor_recepciones->isEmpty()) {
@@ -169,7 +212,7 @@ final class ComprobanteProveedorAsientoPreviewSupport
 
             $tipoConcepto = (string) ($concepto->tipoconcepto ?? '');
 
-            if ($modoAsignaRecepcion && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+            if ($usaProvisionCom && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
                 continue;
             }
 
@@ -178,13 +221,15 @@ final class ComprobanteProveedorAsientoPreviewSupport
                 continue;
             }
 
-            $cuentaId = (int) ($concepto->cuentacontabledebe_id ?? 0);
+            $empresaId = (int) ($comprobante->empresa_id ?? 0);
+            $cuentaId = (int) ($concepto->cuentacontableDebeIdParaEmpresa($empresaId));
             if ($cuentaId <= 0) {
                 $avisos[] = [
                     'tipo' => 'concepto_sin_cuenta_debe',
                     'concepto_ivacompra_id' => (int) $concepto->id,
                     'nombre' => (string) $concepto->nombre,
-                    'mensaje' => 'Falta cuenta contable DEBE en concepto IVA «'.$concepto->nombre.'».',
+                    'mensaje' => 'Falta cuenta contable DEBE en concepto IVA «'.$concepto->nombre.'»'
+                        .($empresaId > 0 ? ' para la empresa del comprobante.' : '.'),
                 ];
             }
         }
@@ -194,17 +239,27 @@ final class ComprobanteProveedorAsientoPreviewSupport
 
     /**
      * @param  Collection<int, Concepto_Ivacompra>  $conceptosQuery
-     * @return array<int, array{cuenta_debe_id: int, tipoconcepto: string, nombre: string}>
+     * @return array<int, array{cuenta_debe_id: int, tipoconcepto: string, nombre: string, impuesto_tasa: float, cuentas_por_empresa: array<int, int>}>
      */
-    public function metaConceptosParaCliente(Collection $conceptosQuery): array
+    public function metaConceptosParaCliente(Collection $conceptosQuery, ?int $empresaId = null): array
     {
         $meta = [];
         foreach ($conceptosQuery as $concepto) {
+            if (! $concepto->relationLoaded('concepto_ivacompra_empresas')) {
+                $concepto->load('concepto_ivacompra_empresas');
+            }
+            $mapa = $concepto->mapaCuentaDebePorEmpresa();
+            $primeraClave = array_key_first($mapa);
+            $cuentaDefault = $empresaId !== null
+                ? $concepto->cuentacontableDebeIdParaEmpresa($empresaId)
+                : (int) ($concepto->cuentacontabledebe_id ?? ($primeraClave !== null ? ($mapa[$primeraClave] ?? 0) : 0));
+
             $meta[(int) $concepto->id] = [
-                'cuenta_debe_id' => (int) ($concepto->cuentacontabledebe_id ?? 0),
+                'cuenta_debe_id' => $cuentaDefault,
                 'tipoconcepto' => (string) ($concepto->tipoconcepto ?? ''),
                 'nombre' => (string) ($concepto->nombre ?? ''),
                 'impuesto_tasa' => round((float) ($concepto->impuestos->valor ?? 0), 3),
+                'cuentas_por_empresa' => $mapa,
             ];
         }
 

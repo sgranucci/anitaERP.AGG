@@ -1,18 +1,18 @@
 <template id="template-renglon-condicioniva">
     <tr class="item-condicioniva">
         <td>
-            <input type="text" name="condicioniva[]" class="form-control iicondicioniva" readonly value="1" />
+            <input type="text" name="condicioniva[]" class="form-control form-control-sm iicondicioniva" readonly value="1" />
         </td>
         <td>
-            <select name="condicioniva_ids[]" id="condicioniva_ids" data-placeholder="Condición de iva" class="form-control condicioniva_id" data-fouc>
-                <option value="">-- Elija condición de iva --</option>
+            <select name="condicioniva_ids[]" class="form-control form-control-sm condicioniva_id">
+                <option value="">-- Elija condición de IVA --</option>
                 @foreach ($condicioniva_query as $condicioniva)
                     <option value="{{ $condicioniva->id }}">{{ $condicioniva->nombre }}</option>
                 @endforeach
             </select>
         </td>
-        <td>
-            <button type="button" style="width: 7%;" title="Elimina esta linea" class="btn-accion-tabla eliminar_condicioniva tooltipsC">
+        <td class="text-center">
+            <button type="button" title="Eliminar renglón" class="btn-accion-tabla eliminar_condicioniva tooltipsC">
                 <i class="fa fa-times-circle text-danger"></i>
             </button>
         </td>

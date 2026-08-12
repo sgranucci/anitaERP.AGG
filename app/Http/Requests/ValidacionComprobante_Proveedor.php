@@ -31,6 +31,8 @@ class ValidacionComprobante_Proveedor extends FormRequest
             'numerocae' => 'nullable|string|max:30',
             'tipo_autorizacion' => 'nullable|string|in:'.implode(',', ComprobanteProveedorTipoAutorizacion::todos()),
             'modo_carga' => 'nullable|string|in:'.implode(',', ComprobanteProveedorModoCarga::todos()),
+            'recepcion_proveedor_ids' => 'nullable|array',
+            'recepcion_proveedor_ids.*' => 'integer|min:1',
             'concepto_ivacompra_ids' => 'nullable|array',
             'concepto_ivacompra_ids.*' => 'nullable|integer',
             'montos' => 'nullable|array',

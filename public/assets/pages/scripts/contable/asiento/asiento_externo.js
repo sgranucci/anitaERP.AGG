@@ -225,7 +225,8 @@ var totalHaberAsiento = 0;
 					{
 						$(codigo).parents("tr").find('.centrocostoasiento').attr("readonly", false);
 
-						completarCentroCosto(codigo, data.id, 0);
+						var ccPrevio = parseInt($(codigo).parents("tr").find('.centrocostoasiento_id_previo').val() || '0', 10) || 0;
+						completarCentroCosto(codigo, data.id, ccPrevio);
 					}
 					else
 					{

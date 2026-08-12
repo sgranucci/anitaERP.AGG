@@ -6,8 +6,10 @@ use App\Models\Compras\Proveedor;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Moneda;
 use App\Models\Contable\Centrocosto;
+use App\Models\Caja\Caja_Movimiento;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class Solicitudpago extends Model implements Auditable
@@ -124,5 +126,15 @@ class Solicitudpago extends Model implements Auditable
     public function archivos()
     {
         return $this->hasMany(Solicitudpago_Archivo::class, 'solicitudpago_id')->orderBy('nro_linea');
+    }
+
+    /**
+     * Órdenes de pago / IE generados desde esta SP (excluye compensatorios de reverso).
+     */
+    public function cajaMovimientosPago(): HasMany
+    {
+        return $this->hasMany(Caja_Movimiento::class, 'solicitudpago_id')
+            ->whereNull('caja_movimiento_origen_id')
+            ->orderByDesc('id');
     }
 }

@@ -111,8 +111,14 @@ class ConciliacionBancariaExport
         $ws->setCellValue('E23', 'Concepto');
         $ws->setCellValue('G23', 'Importe');
 
+        // Contaduría: solo TRF/CABAL de soporte. Cheques → Pendientes; gastos → ING-GTOS.
+        $pendientesMayo = $this->resultado['pendientes_banco_caratula']
+            ?? \App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaPendienteSupport::filtrarPendientesBancoParaSolapaMes(
+                $this->resultado['pendientes_banco'] ?? []
+            );
+
         $row = 24;
-        foreach ($this->resultado['pendientes_banco'] ?? [] as $mov) {
+        foreach ($pendientesMayo as $mov) {
             $clasif = \App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaCodificacionSupport::clasificarMovimientoBanco($mov);
             $ws->setCellValue('B'.$row, isset($mov['process_date']) ? date('Y-m-d', strtotime((string) $mov['process_date'])) : '');
             $ws->setCellValue('C'.$row, \App\Support\Contable\ConciliacionBancaria\ConciliacionBancariaMovimientoBancoSupport::formatearReferencia($mov['voucher_number'] ?? null));

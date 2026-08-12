@@ -5,10 +5,10 @@
                 <input type="hidden" name="cuentacaja[]" class="form-control iicuenta" readonly value="1" />
                 <input type="hidden" class="cuentacaja_id" name="cuentacaja_ids[]" value="" >
                 <input type="hidden" class="cuentacaja_id_previa" name="cuentacaja_id_previa[]" value="" >
-                <button type="button" title="Consulta cuentas" style="padding:1;" class="btn-accion-tabla consultacuentacaja tooltipsC">
+                <button type="button" title="Consulta cuentas (F1)" style="padding:1;" class="btn-accion-tabla consultacuentacaja tooltipsC">
                         <i class="fa fa-search text-primary"></i>
                 </button>
-                <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigo form-control" name="codigos[]" value="" >
+                <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigo form-control" name="codigos[]" value="" title="C&oacute;digo: Enter valida, F1 consulta" autocomplete="off">
                 <input type="hidden" class="codigo_previo" name="codigo_previos[]" value="" >
             </div>
         </td>							

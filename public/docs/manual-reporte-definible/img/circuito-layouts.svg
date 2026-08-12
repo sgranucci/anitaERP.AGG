@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="300" viewBox="0 0 960 300">
+  <rect width="960" height="300" fill="#f8fafc"/>
+  <text x="32" y="36" font-family="DejaVu Sans,Arial" font-size="18" fill="#1F4E79" font-weight="700">Layouts de columnas</text>
+  <rect x="30" y="60" width="140" height="50" rx="6" fill="#D6EAF8" stroke="#85C1E9"/><text x="60" y="90" font-family="DejaVu Sans,Arial" font-size="12" fill="#1B4F72">Actual</text>
+  <rect x="185" y="60" width="140" height="50" rx="6" fill="#D6EAF8" stroke="#85C1E9"/><text x="230" y="90" font-family="DejaVu Sans,Arial" font-size="12" fill="#1B4F72">YTD</text>
+  <rect x="340" y="60" width="140" height="50" rx="6" fill="#D6EAF8" stroke="#85C1E9"/><text x="360" y="90" font-family="DejaVu Sans,Arial" font-size="12" fill="#1B4F72">Año anterior</text>
+  <rect x="495" y="60" width="140" height="50" rx="6" fill="#FCF3CF" stroke="#F4D03F"/><text x="535" y="90" font-family="DejaVu Sans,Arial" font-size="12" fill="#7D6608">Plan</text>
+  <rect x="650" y="60" width="140" height="50" rx="6" fill="#FCF3CF" stroke="#F4D03F"/><text x="680" y="90" font-family="DejaVu Sans,Arial" font-size="12" fill="#7D6608">Var / Var%</text>
+  <rect x="805" y="60" width="130" height="50" rx="6" fill="#E8DAEF" stroke="#AF7AC5"/><text x="825" y="90" font-family="DejaVu Sans,Arial" font-size="12" fill="#6C3483">Valuación</text>
+  <rect x="30" y="140" width="900" height="130" rx="10" fill="#fff" stroke="#ccd6e0"/>
+  <text x="50" y="175" font-family="DejaVu Sans,Arial" font-size="13" fill="#34495E">Presets: ACTUAL · YTD · ACT_PLAN_VAR · ACT_YTD_AA · FULL_GERENCIAL</text>
+  <text x="50" y="205" font-family="DejaVu Sans,Arial" font-size="13" fill="#34495E">Multi-valuación: columnas histórico + ajustado + moneda (USD) en el mismo estado</text>
+  <text x="50" y="235" font-family="DejaVu Sans,Arial" font-size="13" fill="#34495E">Cotización vigente: si el día está en cero, usa la última real anterior y avisa</text>
+</svg>

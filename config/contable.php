@@ -9,6 +9,32 @@ return [
     'saldos_cuenta_mes' => [
         'observer_habilitado' => env('CONTABLE_SALDOS_CUENTA_MES_OBSERVER', false),
         'moneda_local_id' => (int) env('CONTABLE_SALDOS_CUENTA_MES_MONEDA_LOCAL_ID', env('COTIZACION_ID_MONEDA_DEFAULT', 1)),
+
+        /*
+        | Control nocturno de integridad: compara el snapshot mensual contra los asientos.
+        | Un desvío silencioso hace salir mal el balance impreso (incidente 11/ago/2026).
+        | empresas: IDs separados por coma. ventana_meses: 0 = todo el histórico.
+        */
+        'integridad_diaria' => [
+            'habilitada' => env('CONTABLE_SALDOS_INTEGRIDAD_HABILITADA', true),
+            'hora' => env('CONTABLE_SALDOS_INTEGRIDAD_HORA', '06:10'),
+            'email' => env('CONTABLE_SALDOS_INTEGRIDAD_EMAIL', ''),
+            'empresas' => env('CONTABLE_SALDOS_INTEGRIDAD_EMPRESAS', '1,2,3'),
+            'ventana_meses' => (int) env('CONTABLE_SALDOS_INTEGRIDAD_VENTANA_MESES', 24),
+            'mail_siempre' => env('CONTABLE_SALDOS_INTEGRIDAD_MAIL_SIEMPRE', false),
+        ],
+    ],
+
+    /*
+    | Reportes contables definibles.
+    | distribucion: envío automático por mail de los informes suscriptos. El comando
+    | contable:distribuir-reportes-definibles corre cada hora y cada suscripción define
+    | su día y hora; por eso acá solo se habilita o deshabilita el mecanismo.
+    */
+    'reporte_definible' => [
+        'distribucion' => [
+            'habilitada' => env('CONTABLE_REPORTE_DEFINIBLE_DISTRIBUCION', true),
+        ],
     ],
 
     /*

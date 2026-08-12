@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="280" viewBox="0 0 960 280">
+  <rect width="960" height="280" fill="#f8fafc"/>
+  <text x="32" y="36" font-family="DejaVu Sans,Arial" font-size="18" fill="#1F4E79" font-weight="700">De la definición al número presentado</text>
+  <rect x="30" y="70" width="170" height="70" rx="8" fill="#D6EAF8" stroke="#85C1E9"/>
+  <text x="55" y="100" font-family="DejaVu Sans,Arial" font-size="12" fill="#1B4F72">Definición</text>
+  <text x="45" y="122" font-family="DejaVu Sans,Arial" font-size="11" fill="#5D6D7E">rubros · cuentas</text>
+  <path d="M210 105 H250" stroke="#2E75B6" stroke-width="2.5" marker-end="url(#a)"/>
+  <rect x="256" y="70" width="170" height="70" rx="8" fill="#FCF3CF" stroke="#F4D03F"/>
+  <text x="290" y="100" font-family="DejaVu Sans,Arial" font-size="12" fill="#7D6608">Corrida</text>
+  <text x="275" y="122" font-family="DejaVu Sans,Arial" font-size="11" fill="#5D6D7E">filtros · layout</text>
+  <path d="M436 105 H476" stroke="#2E75B6" stroke-width="2.5" marker-end="url(#a)"/>
+  <rect x="482" y="70" width="170" height="70" rx="8" fill="#D5F5E3" stroke="#58D68D"/>
+  <text x="520" y="100" font-family="DejaVu Sans,Arial" font-size="12" fill="#196F3D">Resultado</text>
+  <text x="500" y="122" font-family="DejaVu Sans,Arial" font-size="11" fill="#5D6D7E">grilla · avisos</text>
+  <path d="M662 105 H702" stroke="#2E75B6" stroke-width="2.5" marker-end="url(#a)"/>
+  <rect x="708" y="70" width="220" height="70" rx="8" fill="#E8DAEF" stroke="#AF7AC5"/>
+  <text x="745" y="100" font-family="DejaVu Sans,Arial" font-size="12" fill="#6C3483">Presentación</text>
+  <text x="725" y="122" font-family="DejaVu Sans,Arial" font-size="11" fill="#5D6D7E">PDF · Excel · publicación</text>
+  <rect x="30" y="180" width="900" height="70" rx="10" fill="#fff" stroke="#ccd6e0"/>
+  <text x="50" y="212" font-family="DejaVu Sans,Arial" font-size="13" fill="#34495E">Fuente de corrida: snapshot saldos_mes (períodos) o asiento_movimiento (rango / valuación / plan)</text>
+  <text x="50" y="235" font-family="DejaVu Sans,Arial" font-size="13" fill="#34495E">Anita Informix: import de estructura + control de paridad (no es la fuente del informe diario)</text>
+  <defs><marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#2E75B6"/></marker></defs>
+</svg>

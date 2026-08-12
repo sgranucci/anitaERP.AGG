@@ -449,13 +449,18 @@ class IngresoEgresoComprobanteIvaService
                 ->whereIn('tipo', [ComprobanteProveedorArchivoTipos::ORIGEN_IA, ComprobanteProveedorArchivoTipos::ADJUNTO])
                 ->isNotEmpty(),
             'pdf_temp_id' => null,
-            'conceptos' => $cp->comprobante_proveedor_conceptos->map(function (Comprobante_Proveedor_Concepto $linea) {
+            'conceptos' => $cp->comprobante_proveedor_conceptos->map(function (Comprobante_Proveedor_Concepto $linea) use ($cp) {
+                $empresaId = (int) ($cp->empresa_id ?? 0);
+                $cuentaFallback = $linea->concepto_ivacompras
+                    ? $linea->concepto_ivacompras->cuentacontableDebeIdParaEmpresa($empresaId)
+                    : 0;
+
                 return [
                     'concepto_ivacompra_id' => (int) $linea->concepto_ivacompra_id,
                     'concepto_nombre' => $linea->concepto_ivacompras?->nombre,
                     'monto' => (float) $linea->monto,
                     'cuentacontabledebe_id' => $linea->cuentacontabledebe_id,
-                    'cuenta_debe_id' => (int) ($linea->cuentacontabledebe_id ?? $linea->concepto_ivacompras?->cuentacontabledebe_id ?? 0),
+                    'cuenta_debe_id' => (int) ($linea->cuentacontabledebe_id ?? $cuentaFallback),
                 ];
             })->values()->all(),
         ];

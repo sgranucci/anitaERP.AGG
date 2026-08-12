@@ -66,6 +66,11 @@ final class FacturaProveedorExtraccionFusionSupport
             $total
         );
 
+        $fusion['articulos'] = $this->fusionarArticulos(
+            $heuristica['articulos'] ?? [],
+            $ollama['articulos'] ?? $ollama['lineas_articulo'] ?? $ollama['items'] ?? [],
+        );
+
         return $this->normalizarSalida($fusion, $ollama !== null ? ['heuristica', 'ollama'] : ['heuristica']);
     }
 
@@ -257,11 +262,72 @@ final class FacturaProveedorExtraccionFusionSupport
     {
         unset($data['_meta']);
         $data['lineas'] = $this->sanearLineas($data['lineas'] ?? []);
+        $data['articulos'] = $this->sanearArticulos($data['articulos'] ?? []);
         $data['_meta'] = [
             'fuentes' => $fuentes,
             'lineas_detectadas' => count($data['lineas']),
+            'articulos_detectados' => count($data['articulos']),
         ];
 
         return $data;
+    }
+
+    /**
+     * @param  mixed  $heur
+     * @param  mixed  $ollama
+     * @return list<array<string, mixed>>
+     */
+    private function fusionarArticulos(mixed $heur, mixed $ollama): array
+    {
+        $h = is_array($heur) ? $heur : [];
+        $o = is_array($ollama) ? $ollama : [];
+        // Preferir Ollama si trajo ítems; si no, heurística.
+        if ($o !== []) {
+            return $o;
+        }
+
+        return $h;
+    }
+
+    /**
+     * @param  mixed  $articulos
+     * @return list<array{sku: string, codigo_proveedor: string, descripcion: string, cantidad: float, precio_unitario: float}>
+     */
+    private function sanearArticulos(mixed $articulos): array
+    {
+        if (! is_array($articulos)) {
+            return [];
+        }
+
+        $salida = [];
+        foreach ($articulos as $fila) {
+            if (! is_array($fila)) {
+                continue;
+            }
+            $tipo = strtolower(trim((string) ($fila['tipo'] ?? '')));
+            if ($tipo !== '' && in_array($tipo, ['neto', 'iva', 'exento', 'percepcion', 'otro'], true)) {
+                continue;
+            }
+            $sku = trim((string) ($fila['sku'] ?? $fila['codigo'] ?? ''));
+            $codProv = trim((string) ($fila['codigo_proveedor'] ?? $fila['codigo_articulo_proveedor'] ?? ''));
+            $desc = trim((string) ($fila['descripcion'] ?? $fila['detalle'] ?? ''));
+            $cant = (float) ($fila['cantidad'] ?? $fila['qty'] ?? 0);
+            $precio = (float) ($fila['precio_unitario'] ?? $fila['precio'] ?? $fila['precio_unit'] ?? 0);
+            if ($sku === '' && $codProv === '' && $desc === '') {
+                continue;
+            }
+            if ($cant <= 0 && $precio <= 0) {
+                continue;
+            }
+            $salida[] = [
+                'sku' => $sku !== '' ? $sku : $codProv,
+                'codigo_proveedor' => $codProv !== '' ? $codProv : $sku,
+                'descripcion' => mb_substr($desc, 0, 255),
+                'cantidad' => $cant > 0 ? $cant : 1.0,
+                'precio_unitario' => $precio,
+            ];
+        }
+
+        return $salida;
     }
 }

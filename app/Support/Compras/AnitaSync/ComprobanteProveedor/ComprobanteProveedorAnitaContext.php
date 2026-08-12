@@ -85,6 +85,16 @@ final class ComprobanteProveedorAnitaContext
         return number_format((float) $valor, 4, '.', '');
     }
 
+    public function escape(string $valor, int $maxLen = 0): string
+    {
+        $texto = str_replace("'", '', $valor);
+        if ($maxLen > 0) {
+            $texto = mb_substr($texto, 0, $maxLen);
+        }
+
+        return $texto;
+    }
+
     public function numeroOrdenCompra(): string
     {
         $oc = $this->comprobante->ordencompras;

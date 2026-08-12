@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="460" viewBox="0 0 960 460">
+  <rect width="960" height="460" fill="#eef2f6"/>
+  <rect x="16" y="16" width="928" height="428" rx="6" fill="#fff" stroke="#17a2b8" stroke-width="3"/>
+  <rect x="16" y="16" width="928" height="40" fill="#17a2b8"/>
+  <text x="36" y="42" font-family="DejaVu Sans,Arial" font-size="14" fill="#fff" font-weight="700">Ejecutar reporte definible</text>
+  <rect x="28" y="70" width="900" height="120" rx="4" fill="#f8f9fa" stroke="#dee2e6"/>
+  <text x="44" y="95" font-family="DejaVu Sans,Arial" font-size="11" fill="#333">Informe [22 SUMAS…]  Variante [—] Guardar como [    ] [OK]</text>
+  <text x="44" y="120" font-family="DejaVu Sans,Arial" font-size="11" fill="#333">Apertura ○ Por períodos  ○ Entre fechas   Layout [ACTUAL ▼]</text>
+  <text x="44" y="145" font-family="DejaVu Sans,Arial" font-size="11" fill="#333">Mes/Año 11/2025 — 11/2025   Base [Movimiento del período]   Asientos [Sin cierre ni inflación]</text>
+  <text x="44" y="170" font-family="DejaVu Sans,Arial" font-size="11" fill="#333">☑ Emp.1  ☑ Emp.2  ☑ Emp.3   ☑ Consolidar   [Consultar]</text>
+  <text x="28" y="220" font-family="DejaVu Sans,Arial" font-size="13" fill="#1B4F72" font-weight="700">SUMAS Y SALDOS PARA BCE · Período 11/2025 · Fuente saldos_mes</text>
+  <text x="28" y="245" font-family="DejaVu Sans,Arial" font-size="11" fill="#666">[Pdf] [Excel] [Csv] [Paridad Anita] [Publicar] [Publicados]</text>
+  <rect x="28" y="260" width="900" height="28" fill="#85C1E9"/>
+  <text x="40" y="279" font-family="DejaVu Sans,Arial" font-size="11" fill="#17202A" font-weight="700">Código · Concepto · 11/2025 · Detalle · Mayor</text>
+  <text x="40" y="310" font-family="DejaVu Sans,Arial" font-size="11" fill="#1B4F72">R001  ACTIVO¹                 1.232.312.966,54     🔍</text>
+  <text x="40" y="335" font-family="DejaVu Sans,Arial" font-size="11" fill="#1B4F72">R002    ACTIVO CORRIENTE      1.350.804.612,46     🔍</text>
+  <text x="40" y="360" font-family="DejaVu Sans,Arial" font-size="11" fill="#566573">R003      CAJA Y BANCOS          92.916.931,87     🔍</text>
+  <rect x="28" y="385" width="900" height="45" rx="4" fill="#eaf2f8" stroke="#85C1E9"/>
+  <text x="40" y="405" font-family="DejaVu Sans,Arial" font-size="11" fill="#1B4F72" font-weight="700">Notas al pie</text>
+  <text x="40" y="422" font-family="DejaVu Sans,Arial" font-size="10" fill="#34495E">1. Valuado a costo reexpresado al cierre.   2. Cifras expresadas en pesos.</text>
+</svg>

@@ -29,7 +29,9 @@ class ComprobanteProveedorAnitaSyncService
         $comprobante->loadMissing([
             'comprobante_proveedor_conceptos.concepto_ivacompras',
             'comprobante_proveedor_cuotas',
-            'empresas', 'proveedores', 'tipotransaccion_compras', 'monedas', 'ordencompras',
+            'empresas', 'proveedores.condicionivas', 'proveedores.provincias',
+            'proveedor_condicioniva_eventual', 'condicionpagos',
+            'tipotransaccion_compras', 'monedas', 'ordencompras',
         ]);
 
         if (! $comprobante->anita_nro_interno) {
@@ -57,7 +59,9 @@ class ComprobanteProveedorAnitaSyncService
         $comprobante->loadMissing([
             'comprobante_proveedor_conceptos.concepto_ivacompras',
             'comprobante_proveedor_cuotas',
-            'empresas', 'proveedores', 'tipotransaccion_compras', 'monedas', 'ordencompras',
+            'empresas', 'proveedores.condicionivas', 'proveedores.provincias',
+            'proveedor_condicioniva_eventual', 'condicionpagos',
+            'tipotransaccion_compras', 'monedas', 'ordencompras',
         ]);
 
         if (! $comprobante->anita_nro_interno) {

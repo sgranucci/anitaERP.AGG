@@ -83,15 +83,41 @@
                             @endif
                         @endif
                         @if ($data->estado === 'AUTORIZADA')
-                            <a href="{{ route('ir_a_pago_solicitudpago', $data->id) }}" class="btn btn-outline-primary btn-sm">
-                                <i class="fa fa-money"></i> Pagar (IE)
-                            </a>
+                            @if (can('crear-ingresos-egresos-caja', false))
+                                <a href="{{ route('ir_a_pago_solicitudpago', $data->id) }}" class="btn btn-outline-primary btn-sm">
+                                    <i class="fa fa-money"></i> Pagar (IE)
+                                </a>
+                            @endif
                             <form action="{{ route('marcar_pagada_solicitudpago', $data->id) }}" method="POST" class="d-inline">
                                 @csrf
                                 <button type="submit" class="btn btn-outline-success btn-sm" onclick="return confirm('¿Marcar como PAGADA sin IE?');">
                                     <i class="fa fa-check"></i> Marcar pagada
                                 </button>
                             </form>
+                        @endif
+                    @endif
+                    @if (
+                        ($data->estado ?? '') === 'PAGADA'
+                        || ($data->cajaMovimientosPago ?? collect())->isNotEmpty()
+                    )
+                        @php $pagoPrincipal = ($data->cajaMovimientosPago ?? collect())->first(); @endphp
+                        @if (
+                            $pagoPrincipal
+                            && (can('listar-ingresos-egresos-caja', false) || can('editar-ingresos-egresos-caja', false))
+                        )
+                            <a href="{{ route('editar_ingresoegreso', ['id' => $pagoPrincipal->id, 'origen' => 'solicitudpago']) }}"
+                               class="btn btn-outline-primary btn-sm"
+                               target="_blank" rel="noopener">
+                                <i class="fa fa-file-invoice-dollar"></i>
+                                Ver pago
+                                {{ $pagoPrincipal->tipotransaccioncajas->abreviatura ?? '' }}
+                                {{ $pagoPrincipal->numerotransaccion }}
+                            </a>
+                            <a href="{{ route('ingresoegreso', ['solicitudpago_id' => $data->id, 'empresa_todas' => 1]) }}"
+                               class="btn btn-outline-info btn-sm"
+                               target="_blank" rel="noopener">
+                                <i class="fa fa-list"></i> Listar pagos
+                            </a>
                         @endif
                     @endif
                     @if (! $ocultarVolver)
@@ -114,6 +140,7 @@
                     Para anularla use <strong>Suspender</strong>.
                 </div>
             @endif
+            @include('solicitudpago.solicitudpago.partials.pagos_caja')
             <form action="{{route('actualizar_solicitudpago', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off"
                   @if ($soloConsulta && ! $puedeActualizar) onsubmit="return false;" @endif>
                 @csrf

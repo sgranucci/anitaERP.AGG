@@ -22,6 +22,10 @@ final class RecepcionProveedorSurmarOcSupport
      */
     public static function buscarPendientes(?string $consulta, int $limite = 80): array
     {
+        if (! SurmarSupport::esEmpresaSurmar(SurmarSupport::EMPRESA_ID)) {
+            return [];
+        }
+
         $limite = max(1, min(200, $limite));
         $consulta = trim((string) $consulta);
         $empresaId = SurmarSupport::EMPRESA_ID;
@@ -101,6 +105,8 @@ final class RecepcionProveedorSurmarOcSupport
      */
     public static function resolver(int $ordencompraId, bool $validarNuevaRecepcion = true): array
     {
+        SurmarSupport::abortSiNoSurmar(SurmarSupport::EMPRESA_ID);
+
         $oc = self::cargarOc($ordencompraId);
         if ($validarNuevaRecepcion) {
             RecepcionProveedorOcPendienteSupport::assertPermiteNuevaRecepcion($oc);
@@ -114,6 +120,8 @@ final class RecepcionProveedorSurmarOcSupport
 
     public static function resolverPorNumero(int $numeroOc, bool $validarNuevaRecepcion = true): array
     {
+        SurmarSupport::abortSiNoSurmar(SurmarSupport::EMPRESA_ID);
+
         $oc = Ordencompra::query()
             ->where('empresa_id', SurmarSupport::EMPRESA_ID)
             ->where('numeroordencompra', $numeroOc)
@@ -128,6 +136,8 @@ final class RecepcionProveedorSurmarOcSupport
 
     public static function cargarOc(int $ordencompraId): Ordencompra
     {
+        SurmarSupport::abortSiNoSurmar(SurmarSupport::EMPRESA_ID);
+
         if ($ordencompraId <= 0) {
             throw new \RuntimeException('Orden de compra inválida.');
         }

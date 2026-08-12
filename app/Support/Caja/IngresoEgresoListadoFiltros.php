@@ -23,6 +23,7 @@ class IngresoEgresoListadoFiltros
         'fecha' => ['column' => 'caja_movimiento.fecha', 'type' => 'texto', 'label' => 'Fecha'],
         'empresa' => ['column' => 'empresa.nombre', 'type' => 'texto', 'label' => 'Empresa'],
         'tipotransaccion' => ['column' => 'tipotransaccion_caja.nombre', 'type' => 'texto', 'label' => 'Tipo de transacción'],
+        'abreviatura' => ['column' => 'tipotransaccion_caja.abreviatura', 'type' => 'texto', 'label' => 'Abreviatura tipo'],
         'concepto' => ['column' => 'conceptogasto.nombre', 'type' => 'texto', 'label' => 'Concepto'],
         'detalle' => ['column' => 'caja_movimiento.detalle', 'type' => 'texto', 'label' => 'Detalle'],
         'ordenservicio' => ['column' => 'caja_movimiento.ordenservicio_id', 'type' => 'entero', 'label' => 'Orden de servicio'],
@@ -105,6 +106,7 @@ class IngresoEgresoListadoFiltros
             'empresa_scope' => $empresaScope,
             'fecha_desde' => trim((string) $request->input('fecha_desde', '')),
             'fecha_hasta' => trim((string) $request->input('fecha_hasta', '')),
+            'solicitudpago_id' => max(0, (int) $request->input('solicitudpago_id', 0)) ?: null,
         ];
     }
 
@@ -161,6 +163,10 @@ class IngresoEgresoListadoFiltros
 
     public static function tieneCriteriosAplicados(array $filtros): bool
     {
+        if (! empty($filtros['solicitudpago_id'])) {
+            return true;
+        }
+
         return self::tieneCriteriosTexto($filtros);
     }
 
@@ -176,6 +182,7 @@ class IngresoEgresoListadoFiltros
             'busqueda_rapida' => false,
             'fecha_desde' => '',
             'fecha_hasta' => '',
+            'solicitudpago_id' => null,
             'empresa_id' => null,
             'empresa_scope' => 'todas',
         ];
@@ -216,6 +223,9 @@ class IngresoEgresoListadoFiltros
         if (! empty($filtros['fecha_hasta'])) {
             $params['fecha_hasta'] = $filtros['fecha_hasta'];
         }
+        if (! empty($filtros['solicitudpago_id'])) {
+            $params['solicitudpago_id'] = (int) $filtros['solicitudpago_id'];
+        }
 
         return $params;
     }
@@ -242,6 +252,10 @@ class IngresoEgresoListadoFiltros
     {
         if (! empty($filtros['empresa_id'])) {
             $query->where('caja_movimiento.empresa_id', (int) $filtros['empresa_id']);
+        }
+
+        if (! empty($filtros['solicitudpago_id'])) {
+            $query->where('caja_movimiento.solicitudpago_id', (int) $filtros['solicitudpago_id']);
         }
 
         if (($filtros['fecha_desde'] ?? '') !== '') {
@@ -324,6 +338,7 @@ class IngresoEgresoListadoFiltros
             $textCols = [
                 'empresa.nombre',
                 'tipotransaccion_caja.nombre',
+                'tipotransaccion_caja.abreviatura',
                 'caja_movimiento.detalle',
                 'conceptogasto.nombre',
                 'caja_movimiento.fecha',
@@ -341,6 +356,12 @@ class IngresoEgresoListadoFiltros
                 }
             }
 
+            // Abreviaturas cortas (OP → OPP): también match exacto case-insensitive
+            if ($operador === 'contiene' || $operador === 'igual' || $operador === 'empieza') {
+                $q->orWhereRaw('UPPER(tipotransaccion_caja.abreviatura) = ?', [strtoupper($valor)]);
+                $q->orWhereRaw('UPPER(tipotransaccion_caja.abreviatura) LIKE ?', [strtoupper(self::escapeLike($valor)).'%']);
+            }
+
             if ($operador === 'igual' || $operador === 'contiene') {
                 $q->orWhere('caja_movimiento.numerotransaccion', $valor);
             }
@@ -352,6 +373,33 @@ class IngresoEgresoListadoFiltros
      */
     private static function aplicarEnCampo(Builder $query, string $campoKey, string $operador, string $valor): void
     {
+        // Tipo: nombre o abreviatura (OP / OPP / "Orden de pago")
+        if ($campoKey === 'tipotransaccion') {
+            if ($operador === 'vacio') {
+                $query->where(function ($q) {
+                    $q->where(function ($w) {
+                        $w->whereNull('tipotransaccion_caja.nombre')->orWhere('tipotransaccion_caja.nombre', '');
+                    })->where(function ($w) {
+                        $w->whereNull('tipotransaccion_caja.abreviatura')->orWhere('tipotransaccion_caja.abreviatura', '');
+                    });
+                });
+
+                return;
+            }
+            if ($valor === '') {
+                return;
+            }
+
+            $query->where(function ($q) use ($operador, $valor) {
+                self::aplicarTexto($q, 'tipotransaccion_caja.nombre', $operador, $valor);
+                $q->orWhere(function ($w) use ($operador, $valor) {
+                    self::aplicarTexto($w, 'tipotransaccion_caja.abreviatura', $operador, $valor);
+                });
+            });
+
+            return;
+        }
+
         $def = self::CAMPOS[$campoKey] ?? self::CAMPOS['detalle'];
         $type = $def['type'];
 

@@ -7,6 +7,7 @@ use App\Models\Caja\Cobranza;
 use App\Repositories\Caja\Caja_MovimientoRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Caja\CobranzaNumeracionTransaccion;
+use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Exception;
 use App\ApiAnita;
@@ -70,22 +71,22 @@ class Caja_MovimientoRepository implements Caja_MovimientoRepositoryInterface
 		return $caja_movimiento;
     }
 
-    public function delete($id)
+	public function delete($id)
     {
 		$caja_movimiento = $this->model->findOrFail($id);
 
-		// Elimina anita
+		// Elimina anita tesmov
 		if ($caja_movimiento)
 		{
-			$empresa = $this->empresaRepository->findPorId($caja_movimiento->empresa_id);
-			if ($empresa)
-				$codigoEmpresa = $empresa->codigo;
-			else
-				$codigoEmpresa = 1;
-						
-			$anita = self::eliminarAnita($codigoEmpresa, $caja_movimiento->tipotransaccion_caja_id,
-										$caja_movimiento->numerotransaccion);
-
+			try {
+				IngresoEgresoAnitaTesmovSupport::eliminarDesdeMovimiento($caja_movimiento);
+			} catch (\Throwable $e) {
+				// Si falla Anita, no bloquea borrado ERP solo si no había escritura habilitada;
+				// con escritura activa re-lanzamos para no dejar huérfanos inconsistentes.
+				if (IngresoEgresoAnitaTesmovSupport::estaHabilitada()) {
+					throw $e;
+				}
+			}
 
         	$caja_movimiento = $this->model->destroy($id);
 		}

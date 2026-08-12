@@ -28,9 +28,14 @@ class RecepcionProveedorSurmarController extends Controller
     ) {
     }
 
+    private function assertSurmar(): void
+    {
+    }
+
     public function index(Request $request)
     {
         can('listar-recepcion-proveedor-surmar');
+        $this->assertSurmar();
         $filtros = RecepcionProveedorSurmarListadoFiltros::resolverDesdeRequest($request);
         $coleccion = $this->service->listar($filtros, true);
         $filtrosQuery = RecepcionProveedorSurmarListadoFiltros::paraQueryString($filtros);
@@ -48,6 +53,7 @@ class RecepcionProveedorSurmarController extends Controller
     {
         can('listar-recepcion-proveedor-surmar');
 
+        $this->assertSurmar();
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
@@ -86,6 +92,7 @@ class RecepcionProveedorSurmarController extends Controller
     {
         can('crear-recepcion-proveedor-surmar');
 
+        $this->assertSurmar();
         return view('stock.recepcion_proveedor_surmar.crear', [
             'empresa_id' => SurmarSupport::EMPRESA_ID,
             'empresa_query' => $this->empresaRepository->allFiltrado(),
@@ -96,6 +103,7 @@ class RecepcionProveedorSurmarController extends Controller
     {
         can('crear-recepcion-proveedor-surmar');
 
+        $this->assertSurmar();
         $data = $request->validate([
             'ordencompra_id' => 'required|integer|min:1',
             'proveedor_id' => 'nullable|integer|min:1',
@@ -133,6 +141,7 @@ class RecepcionProveedorSurmarController extends Controller
     public function cargar(Request $request, int $id)
     {
         can('editar-recepcion-proveedor-surmar');
+        $this->assertSurmar();
         $recepcion = $this->service->buscar($id);
 
         $lineas = RecepcionProveedorArticuloSurmar::query()
@@ -168,6 +177,7 @@ class RecepcionProveedorSurmarController extends Controller
     {
         can('editar-recepcion-proveedor-surmar');
 
+        $this->assertSurmar();
         $data = $request->validate([
             'fecha' => 'required|date',
             'deposito_id' => 'required|integer|min:1',
@@ -199,6 +209,7 @@ class RecepcionProveedorSurmarController extends Controller
     public function apiBuscarOcPendientes(Request $request): JsonResponse
     {
         can('crear-recepcion-proveedor-surmar');
+        $this->assertSurmar();
         $consulta = $request->query('q');
         $consulta = is_string($consulta) ? trim($consulta) : null;
 
@@ -211,6 +222,7 @@ class RecepcionProveedorSurmarController extends Controller
     {
         can('crear-recepcion-proveedor-surmar');
 
+        $this->assertSurmar();
         $ordencompraId = (int) $request->input('ordencompra_id', 0);
         $numeroOc = (int) $request->input('numero_oc', 0);
 
@@ -245,6 +257,7 @@ class RecepcionProveedorSurmarController extends Controller
     {
         can('editar-recepcion-proveedor-surmar');
 
+        $this->assertSurmar();
         $data = $request->validate([
             'ordencompra_articulo_id' => 'nullable|integer|min:1',
             'articulo_id' => 'required|integer|min:1',
@@ -310,6 +323,7 @@ class RecepcionProveedorSurmarController extends Controller
     {
         can('editar-recepcion-proveedor-surmar');
 
+        $this->assertSurmar();
         $data = $request->validate([
             'lote_proveedor' => 'required|string|max:30',
             'certificado' => 'nullable|string|max:30',
@@ -351,6 +365,7 @@ class RecepcionProveedorSurmarController extends Controller
     public function apiPreviewEtiqueta(int $id, int $etiquetaId): JsonResponse
     {
         can('editar-recepcion-proveedor-surmar');
+        $this->assertSurmar();
         $recepcion = $this->service->buscar($id);
         $zpl = $this->service->zplEtiqueta($etiquetaId);
         // Re-fetch etiqueta for preview via service
@@ -371,6 +386,7 @@ class RecepcionProveedorSurmarController extends Controller
     {
         can('editar-recepcion-proveedor-surmar');
 
+        $this->assertSurmar();
         try {
             $this->service->eliminarLineaProvisoria($id, $lineaId);
         } catch (ValidationException $e) {
@@ -389,6 +405,7 @@ class RecepcionProveedorSurmarController extends Controller
     {
         can('confirmar-recepcion-proveedor-surmar');
 
+        $this->assertSurmar();
         try {
             $recepcion = $this->service->confirmar($id);
         } catch (ValidationException $e) {
@@ -406,6 +423,7 @@ class RecepcionProveedorSurmarController extends Controller
     {
         can('anular-recepcion-proveedor-surmar');
 
+        $this->assertSurmar();
         try {
             $this->service->anular($id);
         } catch (ValidationException $e) {
@@ -423,6 +441,7 @@ class RecepcionProveedorSurmarController extends Controller
     {
         can('anular-recepcion-proveedor-surmar');
 
+        $this->assertSurmar();
         try {
             $this->service->eliminarBorrador($id);
         } catch (ValidationException $e) {
@@ -461,6 +480,7 @@ class RecepcionProveedorSurmarController extends Controller
     public function imprimirEtiqueta(int $etiquetaId)
     {
         can('imprimir-etiqueta-recepcion-surmar');
+        $this->assertSurmar();
         $zpl = $this->service->zplEtiqueta($etiquetaId);
 
         return response($zpl, 200, [
@@ -476,6 +496,7 @@ class RecepcionProveedorSurmarController extends Controller
     {
         can('imprimir-etiqueta-recepcion-surmar');
 
+        $this->assertSurmar();
         $data = $request->validate([
             'etiqueta_id' => 'nullable|integer|min:1',
             'etiqueta_ids' => 'nullable|array',
@@ -532,6 +553,7 @@ class RecepcionProveedorSurmarController extends Controller
     public function pdfEtiqueta(int $etiquetaId)
     {
         can('imprimir-etiqueta-recepcion-surmar');
+        $this->assertSurmar();
         $file = $this->impresionEtiquetaService->generarPdfEtiqueta($etiquetaId);
 
         return response()->download($file['path'], $file['filename'], [
@@ -542,6 +564,7 @@ class RecepcionProveedorSurmarController extends Controller
     public function apiEstadoSalidaEtiqueta(): JsonResponse
     {
         can('listar-recepcion-proveedor-surmar');
+        $this->assertSurmar();
         $salida = $this->impresionEtiquetaService->salidaConfigurada();
 
         return response()->json([

@@ -94,6 +94,23 @@
                             <tbody id="precarga-pdf-ia-conceptos-tbody"></tbody>
                         </table>
                     </div>
+                    <h6 class="mt-3 mb-2">Artículos detectados</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered mb-0">
+                            <thead style="background:#85C1E9;color:#17202A;">
+                                <tr>
+                                    <th>SKU</th>
+                                    <th>Cód. proveedor</th>
+                                    <th>Descripción</th>
+                                    <th class="text-right">Cant.</th>
+                                    <th class="text-right">Precio</th>
+                                </tr>
+                            </thead>
+                            <tbody id="precarga-pdf-ia-articulos-tbody">
+                                <tr class="text-muted"><td colspan="5">Sin ítems detectados.</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
                 </div>
             </div>
             <div class="modal-footer">

@@ -127,6 +127,8 @@
                         $recepcionIdFila = (int) ($fila['recepcionproveedor_id'] ?? 0);
                         $movStockIdFila = (int) ($fila['movimientostock_id'] ?? 0);
                         $cajaMovIdFila = (int) ($fila['caja_movimiento_id'] ?? 0);
+                        $solicitudpagoIdFila = (int) ($fila['solicitudpago_id'] ?? 0);
+                        $solicitudpagoCodigoFila = trim((string) ($fila['solicitudpago_codigo'] ?? ''));
                         $puedeVerCp = $puede_ver_comprobante_proveedor ?? false;
                         $puedeVerFactura = $puede_ver_factura ?? false;
                         $puedeVerRemesa = $puede_ver_remesa ?? false;
@@ -138,7 +140,9 @@
                         $puedeVerRecepcion = $puede_ver_recepcion_proveedor ?? false;
                         $puedeVerMovStock = $puede_ver_movimientostock ?? false;
                         $puedeVerCajaMov = $puede_ver_caja_movimiento ?? false;
+                        $puedeVerSp = $puede_ver_solicitudpago ?? false;
                         $hrefComprobante = null;
+                        $hrefSolicitudpago = null;
                         if ($puedeVerCp && $cpIdFila > 0) {
                             $hrefComprobante = route('editar_comprobante_proveedor', ['id' => $cpIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']);
                         } elseif ($puedeVerFactura && $ventaIdFila > 0) {
@@ -161,6 +165,8 @@
                             $hrefComprobante = route('editar_movimientostock', ['id' => $movStockIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']);
                         } elseif ($puedeVerCajaMov && $cajaMovIdFila > 0) {
                             $hrefComprobante = route('editar_ingresoegreso', ['id' => $cajaMovIdFila, 'origen' => 'modal_consulta']);
+                        } elseif ($puedeVerSp && $solicitudpagoIdFila > 0) {
+                            $hrefComprobante = route('editar_solicitudpago', ['id' => $solicitudpagoIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']);
                         } elseif ($puedeVerOc) {
                             $ocIdComp = (int) ($fila['ordencompra_id'] ?? 0);
                             if ($ocIdComp <= 0) {
@@ -169,6 +175,9 @@
                             if ($ocIdComp > 0) {
                                 $hrefComprobante = route('editar_ordencompra', ['id' => $ocIdComp, 'origen' => 'modal_consulta', 'vista' => 'consulta']);
                             }
+                        }
+                        if ($puedeVerSp && $solicitudpagoIdFila > 0 && $cajaMovIdFila > 0) {
+                            $hrefSolicitudpago = route('editar_solicitudpago', ['id' => $solicitudpagoIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']);
                         }
                         if ($textoComprobante === '' && $hrefComprobante) {
                             $textoComprobante = 'Ver origen';
@@ -182,6 +191,16 @@
                         @else
                             {{ $textoComprobante }}
                         @endif
+                        @if ($hrefSolicitudpago)
+                            <span class="text-muted"> · </span>
+                            <a href="{{ $hrefSolicitudpago }}" target="_blank" rel="noopener" class="text-primary">
+                                SP {{ $solicitudpagoCodigoFila !== '' ? $solicitudpagoCodigoFila : '#'.$solicitudpagoIdFila }}
+                            </a>
+                        @endif
+                    @elseif ($hrefSolicitudpago)
+                        <a href="{{ $hrefSolicitudpago }}" target="_blank" rel="noopener" class="text-primary">
+                            SP {{ $solicitudpagoCodigoFila !== '' ? $solicitudpagoCodigoFila : '#'.$solicitudpagoIdFila }}
+                        </a>
                     @endif
                 </td>
                 <td>

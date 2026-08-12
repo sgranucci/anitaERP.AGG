@@ -23,23 +23,36 @@
 
 @section('contenido')
 @php
-    $volverUrl = isset($caja_id)
-        ? route('consulta_movimiento_caja')
-        : route('ingresoegreso');
+    $volverUrl = route('ingresoegreso');
+    if (($origen ?? '') === 'movimientocaja' || isset($caja_id)) {
+        $volverUrl = route('consulta_movimiento_caja');
+    } elseif (($origen ?? '') === 'solicitudpago') {
+        $volverUrl = route('consultar_solicitudpago');
+    }
 @endphp
 <div class="row" id="crear">
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
         @if (! empty($solicitudpagoOrigen))
+            @php
+                $montoSpUi = \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::montoPendiente($solicitudpagoOrigen);
+            @endphp
             <div class="alert alert-info">
                 <strong>Pago desde solicitud de pago #{{ $solicitudpagoOrigen->codigo }}</strong>
-                — monto SP: {{ number_format((float) $solicitudpagoOrigen->monto, 2, ',', '.') }}
+                — monto fijo a pagar:
+                <strong>{{ number_format($montoSpUi, 2, ',', '.') }}</strong>
+                @if ($solicitudpagoOrigen->monedas)
+                    {{ $solicitudpagoOrigen->monedas->abreviatura ?? '' }}
+                @endif
                 @if ($solicitudpagoOrigen->estado)
                     — estado: {{ $solicitudpagoOrigen->estado }}
                 @endif
                 <br>
-                Al guardar este IE, si la solicitud está AUTORIZADA pasará a PAGADA.
+                El total de cuentas de caja (y cheques) debe coincidir exactamente con ese monto; no puede ser ni mayor ni menor.
+                Tipo de transacción: {{ config('caja.ingresoegreso_sp_tipotransaccion_abreviatura', 'OPP') }}.
+                El asiento contable se arma con las cuentas de la solicitud.
+                Al guardar, la solicitud AUTORIZADA pasa a PAGADA, se emite el PDF de la orden de pago y se vuelve al listado de solicitudes.
                 <a href="{{ route('editar_solicitudpago', $solicitudpagoOrigen->id) }}" target="_blank" rel="noopener">
                     Abrir solicitud
                 </a>
@@ -55,7 +68,12 @@
                 </h3>
                 <div class="card-tools">
                     <a href="{{ $volverUrl }}" class="btn btn-outline-info btn-sm">
-                        <i class="fa fa-fw fa-reply-all"></i> Volver al listado
+                        <i class="fa fa-fw fa-reply-all"></i>
+                        @if (($origen ?? '') === 'solicitudpago')
+                            Volver a solicitudes
+                        @else
+                            Volver al listado
+                        @endif
                     </a>
                 </div>
             </div>
@@ -67,9 +85,11 @@
                 <input type="hidden" class="origen" id="origen" name="origen" value="{{ $origen ?? '' }}">
                 @include('caja.ingresoegreso.partials.tabs_header')
                 <div class="card-body">
+                    @include('caja.ingresoegreso.partials.modo_uso_selector')
                     @include('caja.ingresoegreso.form')
                     @include('caja.ingresoegreso.form2')
                     @include('caja.ingresoegreso.form3')
+                    @include('caja.ingresoegreso.form4')
                     @include('includes.contable.formasientoexterno')
                     @include('caja.ingresoegreso.form6')
                 </div>

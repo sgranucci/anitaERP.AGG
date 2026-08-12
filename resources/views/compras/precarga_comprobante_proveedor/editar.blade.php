@@ -14,10 +14,33 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
+        @if ($data->comprobante_proveedor)
+        <div class="alert alert-warning">
+            <i class="fa fa-info-circle"></i>
+            Esta precarga ya tiene el comprobante
+            <strong>#{{ $data->comprobante_proveedor->id }}</strong>
+            ({{ $data->comprobante_proveedor->estado }}
+            @if (filled($data->comprobante_proveedor->letra) || filled($data->comprobante_proveedor->numerocomprobante))
+                — {{ $data->comprobante_proveedor->letra }}{{ $data->comprobante_proveedor->sucursal }}-{{ $data->comprobante_proveedor->numerocomprobante }}
+            @endif
+            ).
+            No se puede generar otro desde aquí.
+            @if (can('editar-comprobante-proveedor', false) || can('listar-comprobante-proveedor', false))
+                <a href="{{ route('editar_comprobante_proveedor', ['id' => $data->comprobante_proveedor->id]) }}" class="alert-link">
+                    Abrir comprobante #{{ $data->comprobante_proveedor->id }}
+                </a>
+            @endif
+        </div>
+        @endif
         <div class="card card-danger">
             <div class="card-header">
                 <h3 class="card-title">Editar Precarga de Comprobantes de Proveedores</h3>&nbsp;ID:&nbsp;{{$data->id }}
                 <div class="card-tools">
+                    @if ($data->comprobante_proveedor && (can('editar-comprobante-proveedor', false) || can('listar-comprobante-proveedor', false)))
+                    <a href="{{ route('editar_comprobante_proveedor', ['id' => $data->comprobante_proveedor->id]) }}" class="btn btn-outline-primary btn-sm mr-2">
+                        <i class="fa fa-external-link"></i> Ver comprobante #{{ $data->comprobante_proveedor->id }}
+                    </a>
+                    @endif
                     @include('compras.precarga_comprobante_proveedor.partials.boton_ver_factura_pdf', [
                         'precargaId' => $data->id,
                         'rutaalmacenamiento' => $data->rutaalmacenamiento ?? null,

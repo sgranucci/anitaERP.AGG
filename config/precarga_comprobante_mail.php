@@ -45,7 +45,7 @@ return [
     'aviso_errores' => [
         'habilitado' => (bool) env('PRECARGA_MAIL_AVISO_ERRORES_HABILITADO', true),
         // Coma-separado para varios destinatarios.
-        'destinatarios' => env('PRECARGA_MAIL_AVISO_ERRORES_A', 'sergiogranucci@gmail.com'),
+        'destinatarios' => env('PRECARGA_MAIL_AVISO_ERRORES_A', 'facturas@grupoagg.com'),
     ],
 
     /*

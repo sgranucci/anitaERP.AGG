@@ -2,98 +2,214 @@
 
 namespace App\Repositories\Compras;
 
+use App\ApiAnita;
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Concepto_Ivacompra_Condicioniva;
-use App\Repositories\Compras\Columna_IvacompraRepositoryInterface;
-use App\Repositories\Configuracion\ProvinciaRepositoryInterface;
+use App\Models\Compras\Concepto_Ivacompra_Empresa;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\ImpuestoRepositoryInterface;
+use App\Repositories\Configuracion\ProvinciaRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
-use App\ApiAnita;
+use App\Support\Compras\ConceptoIvacompraListadoFiltros;
 use Auth;
+use DB;
+use Exception;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+use InvalidArgumentException;
 
 class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterface
 {
-    protected $model, $model_condicioniva;
+    protected $model;
+
+    protected $model_condicioniva;
+
     private $columna_ivacompraRepository;
+
     private $provinciaRepository;
+
     private $impuestoRepository;
+
     private $cuentacontableRepository;
+
+    private $empresaRepository;
+
     protected $tableAnita = 'conccomp';
+
     protected $keyField = 'codigo';
+
     protected $keyFieldAnita = 'concc_concepto';
 
-    /**
-     * PostRepository constructor.
-     *
-     * @param Post $post
-     */
-    public function __construct(Concepto_Ivacompra $concepto_ivacompra,
-                                Concepto_Ivacompra_Condicioniva $concepto_ivacompra_condicioniva,
-                                Columna_IvacompraRepositoryInterface $columna_ivacomprarepository,
-                                ProvinciaRepositoryInterface $provinciarepository,
-                                ImpuestoRepositoryInterface $impuestorepository,
-                                CuentacontableRepositoryInterface $cuentacontablerepository)
-    {
+    private const RELACIONES_FORM = [
+        'concepto_ivacompra_condicionivas',
+        'columna_ivacompras',
+        'empresas',
+        'cuentacontablesdebe',
+        'cuentacontableshaber',
+        'provincias',
+        'impuestos',
+        'concepto_ivacompra_empresas.empresa',
+        'concepto_ivacompra_empresas.cuentacontabledebe',
+        'concepto_ivacompra_empresas.cuentacontablehaber',
+    ];
+
+    public function __construct(
+        Concepto_Ivacompra $concepto_ivacompra,
+        Concepto_Ivacompra_Condicioniva $concepto_ivacompra_condicioniva,
+        Columna_IvacompraRepositoryInterface $columna_ivacomprarepository,
+        ProvinciaRepositoryInterface $provinciarepository,
+        ImpuestoRepositoryInterface $impuestorepository,
+        CuentacontableRepositoryInterface $cuentacontablerepository,
+        EmpresaRepositoryInterface $empresarepository,
+    ) {
         $this->model = $concepto_ivacompra;
         $this->model_condicioniva = $concepto_ivacompra_condicioniva;
         $this->columna_ivacompraRepository = $columna_ivacomprarepository;
         $this->provinciaRepository = $provinciarepository;
         $this->impuestoRepository = $impuestorepository;
         $this->cuentacontableRepository = $cuentacontablerepository;
+        $this->empresaRepository = $empresarepository;
     }
 
     public function all()
     {
         $hay_concepto_ivacompra = Concepto_Ivacompra::first();
 
-		if (!$hay_concepto_ivacompra)
-			Self::sincronizarConAnita();
+        if (! $hay_concepto_ivacompra) {
+            $this->sincronizarConAnita();
+        }
 
-        return $this->model->with('concepto_ivacompra_condicionivas')->with('columna_ivacompras')->with('empresas')->with('cuentacontablesdebe')
-                        ->with('cuentacontableshaber')->with('provincias')->with('impuestos')
-                        ->orderBy('nombre','ASC')->get();
+        return $this->model->with(self::RELACIONES_FORM)
+            ->orderBy('nombre', 'ASC')
+            ->get();
+    }
+
+    /**
+     * @param  array<string, mixed>|string|null  $filtros
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator|\Illuminate\Support\Collection<int, Concepto_Ivacompra>
+     */
+    public function leeConceptoIvacompra($filtros, bool $paginar = false)
+    {
+        if (! $this->model->newQuery()->exists()) {
+            $this->sincronizarConAnita();
+        }
+
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = [
+                'modo' => ConceptoIvacompraListadoFiltros::MODO_TODOS,
+                'campo' => 'nombre',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'valor_hasta' => '',
+                'busqueda' => $texto,
+                'empresa_id' => 0,
+                'empresas_asignadas' => $this->empresaRepository->traeEmpresasAsignadas(),
+            ];
+        } elseif (! is_array($filtros)) {
+            $filtros = ConceptoIvacompraListadoFiltros::filtrosVacios();
+            $filtros['empresas_asignadas'] = $this->empresaRepository->traeEmpresasAsignadas();
+        }
+
+        $query = $this->model->newQuery()
+            ->select('concepto_ivacompra.*')
+            ->with([
+                'columna_ivacompras',
+                'provincias',
+                'impuestos',
+                'concepto_ivacompra_empresas.empresa',
+                'concepto_ivacompra_empresas.cuentacontabledebe',
+                'concepto_ivacompra_empresas.cuentacontablehaber',
+                'cuentacontablesdebe',
+                'cuentacontableshaber',
+            ]);
+
+        ConceptoIvacompraListadoFiltros::aplicarJoinsListado($query, $filtros);
+        ConceptoIvacompraListadoFiltros::aplicarScopeEmpresasAsignadas($query, $filtros);
+
+        if (ConceptoIvacompraListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            ConceptoIvacompraListadoFiltros::aplicar($query, $filtros);
+        }
+
+        $query->orderBy('concepto_ivacompra.nombre');
+
+        return $paginar
+            ? $query->paginate(10)->appends(ConceptoIvacompraListadoFiltros::paraQueryString($filtros))
+            : $query->get();
     }
 
     public function create(array $data)
     {
-        $concepto_ivacompra = $this->model->create($data);
-		//
-		// Graba anita
-		Self::guardarAnita($data);
+        [$cabecera, $lineas, $condicionivaIds] = $this->separarCabeceraLineasYCondiciones($data);
+
+        DB::beginTransaction();
+        try {
+            $concepto = $this->model->create($cabecera);
+            $this->sincronizarLineasEmpresa((int) $concepto->id, $lineas);
+            $this->sincronizarCondicionesIva((int) $concepto->id, $condicionivaIds);
+            $this->sincronizarCabeceraLegacyDesdeLineas((int) $concepto->id, $lineas);
+
+            $payloadAnita = $this->payloadAnitaDesdeRegistro(
+                $concepto->fresh(self::RELACIONES_FORM),
+                $condicionivaIds
+            );
+            $this->guardarAnita($payloadAnita);
+
+            DB::commit();
+        } catch (Exception $e) {
+            DB::rollBack();
+
+            throw $e;
+        }
+
+        return $concepto->fresh(self::RELACIONES_FORM);
     }
 
     public function update(array $data, $id)
     {
-        $concepto_ivacompra = $this->model->findOrFail($id)
-            ->update($data);
-		//
-		// Actualiza anita
+        [$cabecera, $lineas, $condicionivaIds] = $this->separarCabeceraLineasYCondiciones($data);
 
-		Self::actualizarAnita($data, $data['codigo']);
+        DB::beginTransaction();
+        try {
+            $concepto = $this->model->findOrFail($id);
+            $concepto->update($cabecera);
+            $this->sincronizarLineasEmpresa((int) $id, $lineas);
+            $this->sincronizarCondicionesIva((int) $id, $condicionivaIds);
+            $this->sincronizarCabeceraLegacyDesdeLineas((int) $id, $lineas);
 
-        return $concepto_ivacompra;
+            $fresh = $concepto->fresh(self::RELACIONES_FORM);
+            $payloadAnita = $this->payloadAnitaDesdeRegistro($fresh, $condicionivaIds);
+            $this->actualizarAnita($payloadAnita, (string) ($payloadAnita['codigo'] ?? $fresh->codigo));
+
+            DB::commit();
+        } catch (Exception $e) {
+            DB::rollBack();
+
+            throw $e;
+        }
+
+        return $fresh;
     }
 
     public function delete($id)
     {
-    	$concepto_ivacompra = Concepto_Ivacompra::find($id);
-		//
-		// Elimina anita
-		Self::eliminarAnita($concepto_ivacompra->codigo);
+        $concepto_ivacompra = Concepto_Ivacompra::find($id);
+        if ($concepto_ivacompra === null) {
+            return false;
+        }
 
-        $concepto_ivacompra = $this->model->destroy($id);
+        $this->eliminarAnita($concepto_ivacompra->codigo);
 
-		return $concepto_ivacompra;
+        Concepto_Ivacompra_Empresa::query()->where('concepto_ivacompra_id', $id)->delete();
+        $this->model_condicioniva->newQuery()->where('concepto_ivacompra_id', $id)->delete();
+
+        return (bool) $this->model->destroy($id);
     }
 
     public function find($id)
     {
-        if (null == $concepto_ivacompra = $this->model->with('concepto_ivacompra_condicionivas')->with('columna_ivacompras')->with('empresas')
-                                            ->with('cuentacontablesdebe')->with('cuentacontableshaber')
-                                            ->with('provincias')->with('impuestos')->find($id)) 
-        {
-            throw new ModelNotFoundException("Registro no encontrado");
+        $concepto_ivacompra = $this->model->with(self::RELACIONES_FORM)->find($id);
+        if ($concepto_ivacompra === null) {
+            throw new ModelNotFoundException('Registro no encontrado');
         }
 
         return $concepto_ivacompra;
@@ -101,11 +217,9 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
 
     public function findOrFail($id)
     {
-        if (null == $concepto_ivacompra = $this->model->with('concepto_ivacompra_condicionivas')->with('columna_ivacompras')->with('empresas')
-                                            ->with('cuentacontablesdebe')->with('cuentacontableshaber')
-                                            ->with('provincias')->with('impuestos')->findOrFail($id)) 
-        {
-            throw new ModelNotFoundException("Registro no encontrado");
+        $concepto_ivacompra = $this->model->with(self::RELACIONES_FORM)->findOrFail($id);
+        if ($concepto_ivacompra === null) {
+            throw new ModelNotFoundException('Registro no encontrado');
         }
 
         return $concepto_ivacompra;
@@ -113,10 +227,7 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
 
     public function findPorCodigo($codigo)
     {
-        return $this->model->with('concepto_ivacompra_condicionivas')->with('columna_ivacompras')
-                           ->with('empresas')
-                           ->with('cuentacontablesdebe')->with('cuentacontableshaber')
-                           ->with('provincias')->with('impuestos')->where('codigo', $codigo)->first(); 
+        return $this->model->with(self::RELACIONES_FORM)->where('codigo', $codigo)->first();
     }
 
     public function sincronizarConAnita(){
@@ -254,9 +365,30 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
 
             if ($concepto_ivacompra)
 			{
+                $empresaIdLinea = 0;
+                if ($cuentacontabledebe_id) {
+                    $cta = $this->cuentacontableRepository->findPorId($cuentacontabledebe_id);
+                    $empresaIdLinea = (int) ($cta->empresa_id ?? 0);
+                }
+                if ($empresaIdLinea <= 0 && $cuentacontablehaber_id) {
+                    $cta = $this->cuentacontableRepository->findPorId($cuentacontablehaber_id);
+                    $empresaIdLinea = (int) ($cta->empresa_id ?? 0);
+                }
+                if ($empresaIdLinea <= 0) {
+                    $empresaIdLinea = 1;
+                }
+                if ($cuentacontabledebe_id || $cuentacontablehaber_id) {
+                    Concepto_Ivacompra_Empresa::query()->create([
+                        'concepto_ivacompra_id' => $concepto_ivacompra->id,
+                        'empresa_id' => $empresaIdLinea,
+                        'cuentacontabledebe_id' => $cuentacontabledebe_id,
+                        'cuentacontablehaber_id' => $cuentacontablehaber_id,
+                    ]);
+                }
+
 				for ($i = 0; $i < count($dataAnitamov); $i++)
 				{
-        			$concepto_ivacomp_condicioniva = $this->model_condicioniva->create([
+        			$this->model_condicioniva->create([
             											'concepto_ivacompra_id' => $concepto_ivacompra->id,
             											'condicioniva_id' => $dataAnitamov[$i]->conci_cond_iva
 														]);
@@ -268,7 +400,7 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
 	public function guardarAnita($request) {
         $apiAnita = new ApiAnita();
 
-        Self::armaVariablesParaGrabar($request, $columnaSubdiario, $contenido, $cuentaDebe,
+        $this->armaVariablesParaGrabar($request, $columnaSubdiario, $contenido, $cuentaDebe,
                                             $cuentaHaber, $alicuotaIva);
 
         $data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
@@ -334,7 +466,7 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
 	public function actualizarAnita($request, $id) {
         $apiAnita = new ApiAnita();
 
-        Self::armaVariablesParaGrabar($request, $columnaSubdiario, $contenido, $cuentaDebe,
+        $this->armaVariablesParaGrabar($request, $columnaSubdiario, $contenido, $cuentaDebe,
                                             $cuentaHaber, $alicuotaIva);
 
 		$data = array( 'acc' => 'update', 'tabla' => $this->tableAnita, 
@@ -424,14 +556,16 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
         }
 
         // Lee cuenta contable
-        $cuenta = $this->cuentacontableRepository->findPorId($request['cuentacontabledebe_id']);
+        $cuentaDebeId = (int) ($request['cuentacontabledebe_id'] ?? 0);
+        $cuenta = $cuentaDebeId > 0 ? $this->cuentacontableRepository->findPorId($cuentaDebeId) : null;
         if ($cuenta)
             $cuentaDebe = $cuenta->codigo;
         else
             $cuentaDebe = 0;
 
         // Lee cuenta contable
-        $cuenta = $this->cuentacontableRepository->findPorId($request['cuentacontablehaber_id']);
+        $cuentaHaberId = (int) ($request['cuentacontablehaber_id'] ?? 0);
+        $cuenta = $cuentaHaberId > 0 ? $this->cuentacontableRepository->findPorId($cuentaHaberId) : null;
         if ($cuenta)
             $cuentaHaber = $cuenta->codigo;
         else
@@ -440,13 +574,17 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
         $alicuotaIva = null;
         if ($request['tipoconcepto'] == 'B' || $request['tipoconcepto'] == 'S' || $request['tipoconcepto'] == 'A')            
         {
-            $provincia = $this->provinciaRepository->findPorId($request['provincia_id']);
+            $provincia = ! empty($request['provincia_id'])
+                ? $this->provinciaRepository->findPorId($request['provincia_id'])
+                : null;
             if ($provincia)
                 $alicuotaIva = $provincia->jurisdiccion;
         }
         else
         {
-            $impuesto = $this->impuestoRepository->find($request['impuesto_id']);
+            $impuesto = ! empty($request['impuesto_id'])
+                ? $this->impuestoRepository->find($request['impuesto_id'])
+                : null;
             $alicuotaIva = 0;
             if ($impuesto)
                 $alicuotaIva = $impuesto->valor;
@@ -470,5 +608,149 @@ class Concepto_IvacompraRepository implements Concepto_IvacompraRepositoryInterf
             'whereArmado' => " WHERE conci_concepto = '".$id."' " );
         $apiAnita->apiCallEscritura($data);
 	}
-	
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array{0: array<string, mixed>, 1: list<array<string, mixed>>, 2: list<int>}
+     */
+    private function separarCabeceraLineasYCondiciones(array $data): array
+    {
+        $cabecera = [
+            'nombre' => trim((string) ($data['nombre'] ?? '')),
+            'nombre_ia' => trim((string) ($data['nombre_ia'] ?? '')),
+            'codigo' => trim((string) ($data['codigo'] ?? '')),
+            'formula' => ($data['formula'] ?? null) !== null && $data['formula'] !== ''
+                ? (string) $data['formula']
+                : null,
+            'columna_ivacompra_id' => ($data['columna_ivacompra_id'] ?? null) ?: null,
+            'tipoconcepto' => (string) ($data['tipoconcepto'] ?? ''),
+            'retieneganancia' => (string) ($data['retieneganancia'] ?? 'N'),
+            'retieneIIBB' => (string) ($data['retieneIIBB'] ?? 'N'),
+            'provincia_id' => ($data['provincia_id'] ?? null) ?: null,
+            'impuesto_id' => ($data['impuesto_id'] ?? null) ?: null,
+            'empresa_id' => null,
+        ];
+
+        $lineas = $this->normalizarLineasEmpresa($data);
+        $condicionivaIds = [];
+        foreach (array_values((array) ($data['condicioniva_ids'] ?? [])) as $cid) {
+            $cid = (int) $cid;
+            if ($cid > 0) {
+                $condicionivaIds[] = $cid;
+            }
+        }
+
+        return [$cabecera, $lineas, $condicionivaIds];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return list<array<string, mixed>>
+     */
+    private function normalizarLineasEmpresa(array $data): array
+    {
+        $empresaIds = array_values((array) ($data['empresa_ids'] ?? []));
+        $debeIds = array_values((array) ($data['cuentacontabledebe_ids'] ?? []));
+        $haberIds = array_values((array) ($data['cuentacontablehaber_ids'] ?? []));
+
+        $lineas = [];
+        $vistos = [];
+        $n = max(count($empresaIds), count($debeIds), count($haberIds));
+
+        for ($i = 0; $i < $n; $i++) {
+            $empresaId = (int) ($empresaIds[$i] ?? 0);
+            $debeId = (int) ($debeIds[$i] ?? 0);
+            $haberId = (int) ($haberIds[$i] ?? 0);
+            if ($empresaId <= 0) {
+                continue;
+            }
+            if ($debeId <= 0 && $haberId <= 0) {
+                continue;
+            }
+            if (isset($vistos[$empresaId])) {
+                throw new InvalidArgumentException('Hay empresas duplicadas en la grilla de cuentas.');
+            }
+            $vistos[$empresaId] = true;
+
+            $lineas[] = [
+                'empresa_id' => $empresaId,
+                'cuentacontabledebe_id' => $debeId > 0 ? $debeId : null,
+                'cuentacontablehaber_id' => $haberId > 0 ? $haberId : null,
+            ];
+        }
+
+        return $lineas;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $lineas
+     */
+    private function sincronizarLineasEmpresa(int $conceptoId, array $lineas): void
+    {
+        Concepto_Ivacompra_Empresa::query()->where('concepto_ivacompra_id', $conceptoId)->delete();
+
+        foreach ($lineas as $linea) {
+            Concepto_Ivacompra_Empresa::query()->create([
+                'concepto_ivacompra_id' => $conceptoId,
+                'empresa_id' => (int) $linea['empresa_id'],
+                'cuentacontabledebe_id' => $linea['cuentacontabledebe_id'] ?? null,
+                'cuentacontablehaber_id' => $linea['cuentacontablehaber_id'] ?? null,
+            ]);
+        }
+    }
+
+    /**
+     * @param  list<int>  $condicionivaIds
+     */
+    private function sincronizarCondicionesIva(int $conceptoId, array $condicionivaIds): void
+    {
+        $this->model_condicioniva->newQuery()->where('concepto_ivacompra_id', $conceptoId)->delete();
+        foreach ($condicionivaIds as $condicionivaId) {
+            $this->model_condicioniva->create([
+                'concepto_ivacompra_id' => $conceptoId,
+                'condicioniva_id' => $condicionivaId,
+            ]);
+        }
+    }
+
+    /**
+     * Mantiene columnas legacy de cabecera (Anita / consumidores viejos) con la 1ª línea.
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     */
+    private function sincronizarCabeceraLegacyDesdeLineas(int $conceptoId, array $lineas): void
+    {
+        $primera = collect($lineas)->sortBy('empresa_id')->first();
+        $this->model->newQuery()->whereKey($conceptoId)->update([
+            'empresa_id' => $primera['empresa_id'] ?? null,
+            'cuentacontabledebe_id' => $primera['cuentacontabledebe_id'] ?? null,
+            'cuentacontablehaber_id' => $primera['cuentacontablehaber_id'] ?? null,
+        ]);
+    }
+
+    /**
+     * Anita solo admite un set de cuentas: se toma la primera línea (empresa menor).
+     *
+     * @param  list<int>  $condicionivaIds
+     * @return array<string, mixed>
+     */
+    private function payloadAnitaDesdeRegistro(Concepto_Ivacompra $registro, array $condicionivaIds): array
+    {
+        $linea = $registro->concepto_ivacompra_empresas->sortBy('empresa_id')->first();
+
+        return [
+            'nombre' => (string) $registro->nombre,
+            'codigo' => (string) $registro->codigo,
+            'formula' => (string) ($registro->formula ?? ''),
+            'columna_ivacompra_id' => $registro->columna_ivacompra_id,
+            'tipoconcepto' => (string) $registro->tipoconcepto,
+            'retieneganancia' => (string) $registro->retieneganancia,
+            'retieneIIBB' => (string) $registro->retieneIIBB,
+            'provincia_id' => $registro->provincia_id,
+            'impuesto_id' => $registro->impuesto_id,
+            'cuentacontabledebe_id' => (int) ($linea->cuentacontabledebe_id ?? $registro->cuentacontabledebe_id ?? 0),
+            'cuentacontablehaber_id' => (int) ($linea->cuentacontablehaber_id ?? $registro->cuentacontablehaber_id ?? 0),
+            'condicioniva_ids' => $condicionivaIds,
+        ];
+    }
 }

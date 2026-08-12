@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Compras;
 
+use App\Exports\Compras\PagoproveedorListadoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionPagoproveedor;
 use App\Models\Caja\Cheque;
@@ -14,17 +15,23 @@ use App\Repositories\Compras\Proveedor_CuentacorrienteRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use App\Services\Compras\PagoproveedorAnularRevertirService;
 use App\Services\Compras\PagoproveedorService;
 use App\Services\Compras\RetencionesPagoCalculator;
+use App\Support\Compras\PagoproveedorListadoFiltros;
+use App\Support\Compras\PropuestaPagoModoSupport;
 use App\Support\Compras\Retencion\RetencionesPagoInput;
+use App\Support\Configuracion\EmpresaLogoArchivo;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
+use Maatwebsite\Excel\Facades\Excel;
 
 class PagoproveedorController extends Controller
 {
     public function __construct(
         private PagoproveedorRepositoryInterface $pagoproveedorRepository,
         private PagoproveedorService $pagoproveedorService,
+        private PagoproveedorAnularRevertirService $anularRevertirService,
         private EmpresaRepositoryInterface $empresaRepository,
         private MonedaRepositoryInterface $monedaRepository,
         private CajaRepositoryInterface $cajaRepository,
@@ -39,25 +46,76 @@ class PagoproveedorController extends Controller
     {
         can('listar-pagoproveedor');
 
-        $filtros = [
-            'empresa_id' => $request->query('empresa_id'),
-            'proveedor_id' => $request->query('proveedor_id'),
-            'estado' => $request->query('estado'),
-            'fecha_desde' => $request->query('fecha_desde'),
-            'fecha_hasta' => $request->query('fecha_hasta'),
-            'numero' => $request->query('numero'),
-        ];
-        $filtrosQuery = array_filter($filtros, static fn ($v) => $v !== null && $v !== '');
-
+        $filtros = PagoproveedorListadoFiltros::resolverDesdeRequest($request);
+        $filtrosQuery = PagoproveedorListadoFiltros::paraQueryString($filtros);
         $coleccion = $this->pagoproveedorRepository->leePagoproveedor($filtros, true);
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $camposFiltro = PagoproveedorListadoFiltros::CAMPOS;
 
-        return view('compras.pagoproveedor.index', compact('coleccion', 'filtros', 'filtrosQuery', 'empresa_query'));
+        return view('compras.pagoproveedor.index', compact(
+            'coleccion',
+            'filtros',
+            'filtrosQuery',
+            'empresa_query',
+            'camposFiltro'
+        ));
+    }
+
+    public function listar(Request $request, $formato = null, $busqueda = null)
+    {
+        can('listar-pagoproveedor');
+        ini_set('memory_limit', '512M');
+        ini_set('max_execution_time', '120');
+
+        $filtros = PagoproveedorListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $formato = strtoupper((string) $formato);
+
+        if (! in_array($formato, ['PDF', 'EXCEL', 'CSV'], true)) {
+            return redirect()->route('pagoproveedor', PagoproveedorListadoFiltros::paraQueryString($filtros));
+        }
+
+        if ($formato === 'PDF') {
+            $datas = $this->pagoproveedorRepository->leePagoproveedor($filtros, false);
+            foreach ($datas as $fila) {
+                $fila->nombreempresa = $fila->empresas->nombre ?? '';
+            }
+            $logos = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($datas);
+            $pdf = Pdf::loadView('compras.pagoproveedor.listado', [
+                'datas' => $datas,
+                'logosCabecera' => $logos,
+                'filtros' => $filtros,
+            ])->setPaper('legal', 'landscape');
+
+            $dir = storage_path('pdf/listados');
+            if (! is_dir($dir)) {
+                mkdir($dir, 0755, true);
+            }
+            $path = $dir.'/listado_pagoproveedor.pdf';
+            $pdf->save($path);
+
+            return response()->file($path);
+        }
+
+        $export = app(PagoproveedorListadoExport::class)->parametros($filtros);
+        $nombre = 'pagoproveedor_'.date('Ymd_His');
+
+        if ($formato === 'CSV') {
+            return Excel::download($export, $nombre.'.csv', \Maatwebsite\Excel\Excel::CSV);
+        }
+
+        return Excel::download($export, $nombre.'.xlsx');
     }
 
     public function crear(Request $request)
     {
         can('crear-pagoproveedor');
+
+        $empresaId = (int) ($request->query('empresa_id') ?: session('empresa_id') ?: 0);
+        if ($empresaId > 0 && ! PropuestaPagoModoSupport::config($empresaId)->permite_op_sin_propuesta) {
+            return redirect()
+                ->route('propuesta_pago')
+                ->withErrors(['error' => 'Esta empresa exige OP vía propuesta de pagos (modo premium sin OP unitaria).']);
+        }
 
         $proveedorId = (int) $request->query('proveedor_id', 0);
         $data = (object) [
@@ -81,6 +139,11 @@ class PagoproveedorController extends Controller
     {
         can('crear-pagoproveedor');
         session(['empresa_id' => $request->empresa_id]);
+
+        $empresaId = (int) $request->empresa_id;
+        if ($empresaId > 0 && ! PropuestaPagoModoSupport::config($empresaId)->permite_op_sin_propuesta) {
+            return back()->withErrors(['error' => 'Esta empresa exige OP vía propuesta de pagos.'])->withInput();
+        }
 
         $resultado = $this->pagoproveedorService->guardaPago($request);
         if (! empty($resultado['errores'])) {
@@ -114,6 +177,85 @@ class PagoproveedorController extends Controller
         return redirect()
             ->route('editar_pagoproveedor', $id)
             ->with('mensaje', 'Orden de pago actualizada.');
+    }
+
+    public function confirmar(Request $request, int $id)
+    {
+        can('confirmar-pagoproveedor');
+
+        $resultado = $this->pagoproveedorService->confirmar($id);
+        if (! empty($resultado['errores'])) {
+            return redirect()->back()->with('mensaje', $resultado['errores']);
+        }
+
+        return redirect()->route('pagoproveedor')->with('mensaje', 'Orden de pago confirmada.');
+    }
+
+    public function eliminar(Request $request, int $id)
+    {
+        can('borrar-pagoproveedor');
+
+        $pago = $this->pagoproveedorRepository->findOrFail($id);
+        if ((string) $pago->estado !== 'PRE CARGA') {
+            return redirect()->back()->with('mensaje', 'Solo se pueden eliminar OP en PRE CARGA. Use anular o revertir.');
+        }
+
+        $this->pagoproveedorRepository->delete($id);
+
+        return redirect()->route('pagoproveedor')->with('mensaje', 'Orden de pago eliminada.');
+    }
+
+    public function anularFisicamente(Request $request, int $id)
+    {
+        can('anular-pagoproveedor');
+
+        try {
+            $this->anularRevertirService->anularFisicamente($id);
+
+            return redirect()->route('pagoproveedor')->with('mensaje', 'Orden de pago anulada físicamente.');
+        } catch (\Throwable $e) {
+            return redirect()->back()->with('mensaje', $e->getMessage());
+        }
+    }
+
+    public function revertir(Request $request, int $id)
+    {
+        can('revertir-pagoproveedor');
+
+        try {
+            $resultado = $this->anularRevertirService->revertir($id, $request->input('fecha'));
+
+            return redirect()->route('pagoproveedor')->with(
+                'mensaje',
+                'OP revertida. Compensatoria N° '.$resultado['numerotransaccion'].'.'
+            );
+        } catch (\Throwable $e) {
+            return redirect()->back()->with('mensaje', $e->getMessage());
+        }
+    }
+
+    public function marcarPagada(Request $request, int $id)
+    {
+        can('marcar-pagada-pagoproveedor');
+
+        $resultado = $this->pagoproveedorService->marcarPagada($id);
+        if (! empty($resultado['errores'])) {
+            return redirect()->back()->with('mensaje', $resultado['errores']);
+        }
+
+        return redirect()->route('editar_pagoproveedor', $id)->with('mensaje', 'OP marcada como PAGADA.');
+    }
+
+    public function marcarConciliada(Request $request, int $id)
+    {
+        can('marcar-conciliada-pagoproveedor');
+
+        $resultado = $this->pagoproveedorService->marcarConciliada($id);
+        if (! empty($resultado['errores'])) {
+            return redirect()->back()->with('mensaje', $resultado['errores']);
+        }
+
+        return redirect()->route('editar_pagoproveedor', $id)->with('mensaje', 'OP marcada como CONCILIADA.');
     }
 
     public function generaAsientoContable(Request $request)

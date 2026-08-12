@@ -27,4 +27,10 @@
             <i class="fa fa-percent"></i> Retenciones
         </a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link {{ $moduloActivo === 'documentos' ? 'active' : '' }}"
+           href="{{ route('portal_proveedores_documentos', $qid) }}">
+            <i class="fa fa-id-card-o"></i> CUIT / CM05
+        </a>
+    </li>
 </ul>

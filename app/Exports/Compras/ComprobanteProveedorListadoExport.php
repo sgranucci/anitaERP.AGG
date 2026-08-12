@@ -29,7 +29,7 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
     /** Congela también ID y Empresa (columnas A y B): el freeze arranca en C. */
     private const COL_FREEZE = 'C';
 
-    private ?string $busqueda = null;
+    private ?array $filtros = null;
 
     private bool $flDesdeIndex = false;
 
@@ -55,7 +55,7 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
     public function view(): View
     {
         if ($this->flDesdeIndex) {
-            $datas = $this->comprobanteRepository->leeComprobanteProveedor($this->busqueda, false);
+            $datas = $this->comprobanteRepository->leeComprobanteProveedor($this->filtros ?? [], false);
             self::enriquecerNombreEmpresa($datas);
 
             $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($datas);
@@ -67,6 +67,7 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
 
             return view('exports.compras.comprobante_proveedorindex', [
                 'datas' => $datas,
+                'filtros' => $this->filtros ?? [],
                 'esExcel' => true,
                 'reservarFilaLogoExcel' => $this->hayFilaLogos,
                 'formatoNumero' => $this->formatoNumeroEfectivo(),
@@ -195,9 +196,21 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
         return 'Comprobantes proveedor';
     }
 
-    public function parametros(?string $busqueda, bool $esCsv = false): self
+    /**
+     * @param  array|string|null  $filtros
+     */
+    public function parametros($filtros, bool $esCsv = false): self
     {
-        $this->busqueda = $busqueda;
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = array_merge(\App\Support\Compras\ComprobanteProveedorListadoFiltros::filtrosVacios(), [
+                'valor' => $texto,
+                'busqueda' => $texto,
+                'empresa_scope' => 'todas',
+            ]);
+        }
+
+        $this->filtros = is_array($filtros) ? $filtros : [];
         $this->esCsv = $esCsv;
         $this->flDesdeIndex = true;
 

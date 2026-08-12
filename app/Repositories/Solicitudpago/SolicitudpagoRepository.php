@@ -63,7 +63,17 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
         }
 
         $q = $this->model->newQuery()
-            ->with(['empresas', 'proveedores', 'conceptos', 'sectores', 'centrocostos', 'formapagosol', 'monedas', 'madre'])
+            ->with([
+                'empresas',
+                'proveedores',
+                'conceptos',
+                'sectores',
+                'centrocostos',
+                'formapagosol',
+                'monedas',
+                'madre',
+                'cajaMovimientosPago.tipotransaccioncajas:id,abreviatura,nombre',
+            ])
             ->withCount([
                 'cuotas as cuotas_pendientes_count' => fn ($qq) => $qq->whereNull('solicitudpago_hija_id'),
                 'cuotas as cuotas_total_count',
@@ -124,6 +134,7 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
                 'cuotas.hijas',
                 'estados.usuarios',
                 'archivos.usuarios',
+                'cajaMovimientosPago.tipotransaccioncajas:id,abreviatura,nombre',
             ])
             ->find($id);
 

@@ -111,6 +111,12 @@ class Comprobante_Proveedor extends Model implements Auditable
             ->orderBy('orden');
     }
 
+    public function comprobante_proveedor_articulos()
+    {
+        return $this->hasMany(Comprobante_Proveedor_Articulo::class, 'comprobante_proveedor_id')
+            ->orderBy('orden');
+    }
+
     public function comprobante_proveedor_recepciones()
     {
         return $this->hasMany(Comprobante_Proveedor_Recepcion::class, 'comprobante_proveedor_id')

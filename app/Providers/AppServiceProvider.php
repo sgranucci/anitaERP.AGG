@@ -8,6 +8,7 @@ use App\Models\Contable\Asiento;
 use App\Models\Contable\Asiento_Movimiento;
 use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Stock\MovimientoStock;
+use App\Models\Stock\Transferencia_Mercaderia;
 use App\Models\Ventas\Ordentrabajo;
 use App\Models\Ventas\Ordentrabajo_Tarea;
 use App\Models\Ventas\Pedido_Combinacion;
@@ -18,6 +19,7 @@ use App\Observers\Contable\AsientoObserver;
 use App\Observers\Contable\Asiento_MovimientoObserver;
 use App\Observers\Stock\Articulo_MovimientoObserver;
 use App\Observers\Stock\MovimientoStockObserver;
+use App\Observers\Stock\Transferencia_MercaderiaObserver;
 use App\Observers\Ventas\OrdentrabajoObserver;
 use App\Observers\Ventas\Ordentrabajo_TareaObserver;
 use App\Observers\Ventas\Pedido_Combinacion_EstadoObserver;
@@ -99,6 +101,7 @@ class AppServiceProvider extends ServiceProvider
         Pedido_Combinacion_Estado::observe(Pedido_Combinacion_EstadoObserver::class);
         Articulo_Movimiento::observe(Articulo_MovimientoObserver::class);
         MovimientoStock::observe(MovimientoStockObserver::class);
+        Transferencia_Mercaderia::observe(Transferencia_MercaderiaObserver::class);
         Venta::observe(VentaObserver::class);
         Venta_Emision::observe(Venta_EmisionObserver::class);
         Ordentrabajo::observe(OrdentrabajoObserver::class);
@@ -745,6 +748,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Compras\Proveedor_Documento_FiscalRepositoryInterface',
+            'App\Repositories\Compras\Proveedor_Documento_FiscalRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Compras\Proveedor_EncuestaRepositoryInterface',
             'App\Repositories\Compras\Proveedor_EncuestaRepository',
         );
@@ -762,6 +770,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Compras\PagoproveedorRepositoryInterface',
             'App\Repositories\Compras\PagoproveedorRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Compras\PropuestaPagoRepositoryInterface',
+            'App\Repositories\Compras\PropuestaPagoRepository',
         );
 
         $this->app->bind(
@@ -957,6 +970,10 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Configuracion\UbicacionImpresoraRepositoryInterface',
             'App\Repositories\Configuracion\UbicacionImpresoraRepository',
+        );
+        $this->app->bind(
+            'App\Repositories\Configuracion\SistemaNumeradorRepositoryInterface',
+            'App\Repositories\Configuracion\SistemaNumeradorRepository',
         );
 
         $this->app->bind(

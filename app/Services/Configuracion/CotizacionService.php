@@ -4,6 +4,7 @@ namespace App\Services\Configuracion;
 use App\Repositories\Configuracion\CotizacionRepositoryInterface;
 use App\Repositories\Configuracion\Cotizacion_MonedaRepositoryInterface;
 use App\Queries\Configuracion\CotizacionQueryInterface;
+use App\Support\Configuracion\CotizacionVigenteSupport;
 
 class CotizacionService 
 {
@@ -20,26 +21,19 @@ class CotizacionService
 		$this->cotizacionQuery = $cotizacionquery;
 	}
 
+	/**
+	 * Cotización vigente de la moneda en la fecha: si la tabla no tiene valor propio de ese día
+	 * (fila cargada en cero o día sin carga), toma la última cotización real anterior.
+	 * Ver App\Support\Configuracion\CotizacionVigenteSupport.
+	 */
 	public function leeCotizacionDiaria($fecha, $moneda_id)
 	{
-		$cotizacion = $this->cotizacionQuery->leeCotizacionDiaria($fecha, $moneda_id);
+		$refMoneda = ((int) $moneda_id === 1) ? 2 : (int) $moneda_id;
 
-		$cotizacionVenta = $cotizacionCompra = 0;
-		foreach($cotizacion->cotizacion_monedas as $cotizacion_moneda)
-		{
-			if ($moneda_id == 1)
-				$refMoneda = 2;
-			else
-				$refMoneda = $moneda_id;
-
-			if ($cotizacion_moneda->moneda_id == $refMoneda)
-			{
-				$cotizacionVenta = $cotizacion_moneda->cotizacionventa;
-				$cotizacionCompra = $cotizacion_moneda->cotizacioncompra;
-				$flEncontro = true;
-			}
-		}
-		return ['cotizacionventa' => $cotizacionVenta, 'cotizacioncompra' => $cotizacionCompra];
+		return [
+			'cotizacionventa' => CotizacionVigenteSupport::venta($fecha, $refMoneda)['valor'],
+			'cotizacioncompra' => CotizacionVigenteSupport::compra($fecha, $refMoneda)['valor'],
+		];
 	}
 
 	public function calculaCotizacionVenta($fecha, $moneda_id, $cotizacion = null)

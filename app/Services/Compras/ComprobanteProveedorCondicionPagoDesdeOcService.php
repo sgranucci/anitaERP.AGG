@@ -33,6 +33,8 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
         ?int $ordencompraComprobanteId,
         float $totalComprobante,
         string $fechaBase,
+        ?int $monedaFacturaId = null,
+        ?float $cotizacionFactura = null,
     ): array {
         $ocComprobante = null;
         if ($ordencompraComprobanteId) {
@@ -62,17 +64,35 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
 
         $cuotasOc = $ocComprobante->ordencompra_comprobante_cuotas->sortBy('id')->values();
         $sumOc = (float) $cuotasOc->sum('monto');
-        $factor = $sumOc > 0 ? $totalComprobante / $sumOc : 1.0;
+        // totalComprobante ya está en moneda factura: el factor escala importes a esa moneda.
+        $factor = $sumOc > 0 ? $totalComprobante / $sumOc : 0.0;
 
         $cuotas = [];
         $n = 1;
+        $ultimo = $cuotasOc->count();
+        $asignado = 0.0;
         foreach ($cuotasOc as $cuotaOc) {
+            if ($sumOc > 0) {
+                if ($n === $ultimo) {
+                    $monto = round($totalComprobante - $asignado, 4);
+                } else {
+                    $monto = round((float) $cuotaOc->monto * $factor, 4);
+                    $asignado += $monto;
+                }
+            } else {
+                // OC sin montos: toda la factura en la primera cuota (moneda factura).
+                $monto = $n === 1 ? round($totalComprobante, 4) : 0.0;
+            }
+
             $cuotas[] = [
                 'numero_cuota' => $n,
                 'fechavencimiento' => $this->formatearFecha($cuotaOc->fechavencimiento),
-                'monto' => round((float) $cuotaOc->monto * $factor, 4),
-                'moneda_id' => (int) $cuotaOc->moneda_id,
-                'cotizacion' => $cuotaOc->cotizacion !== null ? (float) $cuotaOc->cotizacion : null,
+                'monto' => $monto,
+                // Moneda/cotización de la factura, no de la OC (puede ser ME con factura en pesos).
+                'moneda_id' => (int) ($monedaFacturaId ?: $cuotaOc->moneda_id ?: 1),
+                'cotizacion' => $cotizacionFactura !== null
+                    ? (float) $cotizacionFactura
+                    : ($cuotaOc->cotizacion !== null ? (float) $cuotaOc->cotizacion : null),
                 'formapago_id' => (int) $cuotaOc->formapago_id,
                 'detalle' => $cuotaOc->detalle,
                 'ordencompra_comprobante_cuota_id' => (int) $cuotaOc->id,

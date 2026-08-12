@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="320" viewBox="0 0 960 320">
+  <rect width="960" height="320" fill="#f8fafc"/>
+  <text x="32" y="36" font-family="DejaVu Sans,Arial" font-size="18" fill="#1F4E79" font-weight="700">Mapa del módulo</text>
+  <rect x="24" y="60" width="140" height="56" rx="8" fill="#D6EAF8" stroke="#85C1E9"/>
+  <text x="48" y="94" font-family="DejaVu Sans,Arial" font-size="13" fill="#1B4F72">1. Catálogo</text>
+  <path d="M170 88 H210" stroke="#2E75B6" stroke-width="2.5" marker-end="url(#a)"/>
+  <rect x="216" y="60" width="150" height="56" rx="8" fill="#FCF3CF" stroke="#F4D03F"/>
+  <text x="242" y="94" font-family="DejaVu Sans,Arial" font-size="13" fill="#7D6608">2. Diseñar</text>
+  <path d="M372 88 H412" stroke="#2E75B6" stroke-width="2.5" marker-end="url(#a)"/>
+  <rect x="418" y="60" width="150" height="56" rx="8" fill="#D5F5E3" stroke="#58D68D"/>
+  <text x="444" y="94" font-family="DejaVu Sans,Arial" font-size="13" fill="#196F3D">3. Ejecutar</text>
+  <path d="M574 88 H614" stroke="#2E75B6" stroke-width="2.5" marker-end="url(#a)"/>
+  <rect x="620" y="40" width="150" height="44" rx="8" fill="#E8DAEF" stroke="#AF7AC5"/>
+  <text x="648" y="68" font-family="DejaVu Sans,Arial" font-size="12" fill="#6C3483">Publicar</text>
+  <rect x="620" y="96" width="150" height="44" rx="8" fill="#E8DAEF" stroke="#AF7AC5"/>
+  <text x="640" y="124" font-family="DejaVu Sans,Arial" font-size="12" fill="#6C3483">Distribuir mail</text>
+  <rect x="620" y="152" width="150" height="44" rx="8" fill="#E8DAEF" stroke="#AF7AC5"/>
+  <text x="646" y="180" font-family="DejaVu Sans,Arial" font-size="12" fill="#6C3483">Paridad Anita</text>
+  <rect x="24" y="210" width="910" height="90" rx="10" fill="#fff" stroke="#ccd6e0"/>
+  <text x="44" y="245" font-family="DejaVu Sans,Arial" font-size="13" fill="#34495E">Diseñar = estructura + layouts + IC + alertas + notas + envíos</text>
+  <text x="44" y="275" font-family="DejaVu Sans,Arial" font-size="13" fill="#34495E">Ejecutar = filtros → grilla → export / drill / publicar / control Anita</text>
+  <defs><marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#2E75B6"/></marker></defs>
+</svg>

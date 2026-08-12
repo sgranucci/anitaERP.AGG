@@ -24,11 +24,14 @@ class CertificadoSenasaSurmarController extends Controller
     ) {
     }
 
+    private function assertSurmar(): void
+    {
+    }
+
     public function index(Request $request)
     {
         can('listar-certificado-senasa-surmar');
-        SurmarSupport::abortSiNoSurmar(SurmarSupport::EMPRESA_ID);
-
+        $this->assertSurmar();
         $filtros = CertificadoSenasaSurmarListadoFiltros::resolverDesdeRequest($request);
         $coleccion = $this->service->listar($filtros, true);
         $filtrosQuery = CertificadoSenasaSurmarListadoFiltros::paraQueryString($filtros);
@@ -45,8 +48,7 @@ class CertificadoSenasaSurmarController extends Controller
     public function listar(Request $request, $formato = null, $busqueda = null)
     {
         can('listar-certificado-senasa-surmar');
-        SurmarSupport::abortSiNoSurmar(SurmarSupport::EMPRESA_ID);
-
+        $this->assertSurmar();
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
@@ -84,8 +86,7 @@ class CertificadoSenasaSurmarController extends Controller
     public function crear()
     {
         can('crear-certificado-senasa-surmar');
-        SurmarSupport::abortSiNoSurmar(SurmarSupport::EMPRESA_ID);
-
+        $this->assertSurmar();
         return view('stock.certificado_senasa_surmar.crear', [
             'empresa_id' => SurmarSupport::EMPRESA_ID,
             'camiones' => Camion::query()->orderBy('codigo')->get(['id', 'codigo', 'dominio', 'cantidad_precinto']),
@@ -98,6 +99,7 @@ class CertificadoSenasaSurmarController extends Controller
     {
         can('crear-certificado-senasa-surmar');
 
+        $this->assertSurmar();
         $data = $request->validate([
             'fecha' => 'required|date',
             'camion_id' => 'required|integer|min:1',
@@ -129,6 +131,7 @@ class CertificadoSenasaSurmarController extends Controller
     public function cargar(int $id)
     {
         can('editar-certificado-senasa-surmar');
+        $this->assertSurmar();
         $cert = $this->service->buscar($id);
 
         $lineas = $cert->articulos
@@ -148,6 +151,7 @@ class CertificadoSenasaSurmarController extends Controller
     {
         can('editar-certificado-senasa-surmar');
 
+        $this->assertSurmar();
         $data = $request->validate([
             'linea_id' => 'nullable|integer|min:1',
             'articulo_id' => 'required|integer|min:1',
@@ -174,6 +178,7 @@ class CertificadoSenasaSurmarController extends Controller
     {
         can('editar-certificado-senasa-surmar');
 
+        $this->assertSurmar();
         try {
             $this->service->eliminarLinea($id, $lineaId);
         } catch (ValidationException $e) {
@@ -187,6 +192,7 @@ class CertificadoSenasaSurmarController extends Controller
     {
         can('editar-certificado-senasa-surmar');
 
+        $this->assertSurmar();
         $codigo = trim((string) $request->input('codigo', $request->input('etiqueta_id', '')));
         if ($codigo === '') {
             return response()->json(['ok' => false, 'errors' => ['etiqueta' => ['Indique ID o código Anita.']]], 422);
@@ -205,6 +211,7 @@ class CertificadoSenasaSurmarController extends Controller
     {
         can('confirmar-certificado-senasa-surmar');
 
+        $this->assertSurmar();
         try {
             $cert = $this->service->confirmar($id);
         } catch (ValidationException $e) {
@@ -225,6 +232,7 @@ class CertificadoSenasaSurmarController extends Controller
     {
         can('anular-certificado-senasa-surmar');
 
+        $this->assertSurmar();
         try {
             $cert = $this->service->anular($id);
         } catch (ValidationException $e) {
@@ -239,6 +247,7 @@ class CertificadoSenasaSurmarController extends Controller
     public function descargarXml(int $id)
     {
         can('listar-certificado-senasa-surmar');
+        $this->assertSurmar();
         $cert = $this->service->buscar($id);
         if (! $cert->xml_path || ! Storage::disk('local')->exists($cert->xml_path)) {
             return back()->with('error', 'No hay XML SENASA generado para este certificado.');

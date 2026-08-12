@@ -7,6 +7,7 @@ use App\Models\Compras\Configuracion_ComprobanteProveedor;
 use App\Models\Compras\Configuracion_ComprobanteProveedorTolerancia;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
 use Illuminate\Http\Request;
 
 class ConfiguracionComprobanteProveedorController extends Controller
@@ -27,6 +28,7 @@ class ConfiguracionComprobanteProveedorController extends Controller
         $config = Configuracion_ComprobanteProveedor::query()
             ->where('empresa_id', $empresa_id)
             ->first();
+        $comGeneraContabilidad = ComprobanteProveedorComContabilidadSupport::generaAsientoCom($empresa_id);
         $centrocosto_query = $this->centrocostoRepository->all();
         $filasTolerancia = Configuracion_ComprobanteProveedorTolerancia::query()
             ->where('empresa_id', $empresa_id)
@@ -39,6 +41,7 @@ class ConfiguracionComprobanteProveedorController extends Controller
             'empresa_query',
             'empresa_id',
             'config',
+            'comGeneraContabilidad',
             'centrocosto_query',
             'filasTolerancia',
         ));
@@ -51,14 +54,36 @@ class ConfiguracionComprobanteProveedorController extends Controller
         $data = $request->validate([
             'empresa_id' => 'required|integer|exists:empresa,id',
             'activo' => 'nullable|boolean',
+            'exige_flujo_oc_com_fac' => 'nullable|boolean',
+            'com_genera_contabilidad' => 'nullable|boolean',
+            'controla_sku_vs_com' => 'nullable|boolean',
+            'controla_precio_unitario' => 'nullable|boolean',
+            'tolerancia_precio_pct' => 'nullable|numeric|min:0|max:100',
         ]);
 
+        $empresaId = (int) $data['empresa_id'];
+        $comGeneraContabilidad = $request->input('com_genera_contabilidad') === '1'
+            || $request->boolean('com_genera_contabilidad');
+
         Configuracion_ComprobanteProveedor::updateOrCreate(
-            ['empresa_id' => (int) $data['empresa_id']],
-            ['activo' => $request->boolean('activo', true)],
+            ['empresa_id' => $empresaId],
+            [
+                'activo' => $request->input('activo') === '1' || $request->boolean('activo'),
+                // Hidden 0/1 del selector gráfico de flujo.
+                'exige_flujo_oc_com_fac' => $request->input('exige_flujo_oc_com_fac') === '1'
+                    || $request->boolean('exige_flujo_oc_com_fac'),
+                'controla_sku_vs_com' => $request->input('controla_sku_vs_com') === '1'
+                    || $request->boolean('controla_sku_vs_com'),
+                'controla_precio_unitario' => $request->input('controla_precio_unitario') === '1'
+                    || $request->boolean('controla_precio_unitario'),
+                'tolerancia_precio_pct' => (float) ($data['tolerancia_precio_pct'] ?? 0),
+            ],
         );
 
-        return redirect(self::RUTA_INDEX.'?empresa_id='.$data['empresa_id'])
+        // Misma bandera que Configuración recepción proveedores (asiento al confirmar COM).
+        ComprobanteProveedorComContabilidadSupport::persistir($empresaId, $comGeneraContabilidad);
+
+        return redirect(self::RUTA_INDEX.'?empresa_id='.$empresaId)
             ->with('mensaje', 'Configuración guardada.');
     }
 
@@ -114,9 +139,15 @@ class ConfiguracionComprobanteProveedorController extends Controller
             ->whereNotIn('id', $keptIds)
             ->delete();
 
-        Configuracion_ComprobanteProveedor::updateOrCreate(
+        Configuracion_ComprobanteProveedor::firstOrCreate(
             ['empresa_id' => $empresaId],
-            ['activo' => true],
+            [
+                'activo' => true,
+                'exige_flujo_oc_com_fac' => false,
+                'controla_sku_vs_com' => false,
+                'controla_precio_unitario' => false,
+                'tolerancia_precio_pct' => 0,
+            ],
         );
 
         return redirect(self::RUTA_INDEX.'?empresa_id='.$empresaId)

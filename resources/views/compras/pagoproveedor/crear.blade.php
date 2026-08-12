@@ -20,11 +20,11 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title">Crear orden de pago</h3>
                 <div class="card-tools">
-                    <a href="{{ route('pagoproveedor') }}" class="btn btn-outline-info btn-sm"><i class="fa fa-reply"></i> Volver</a>
+                    <a href="{{ route('pagoproveedor') }}" class="btn btn-outline-info btn-sm"><i class="fa fa-reply-all"></i> Volver</a>
                 </div>
             </div>
             <form action="{{ route('guardar_pagoproveedor') }}" method="POST" id="form-pagoproveedor" class="form-horizontal form--label-right" autocomplete="off">

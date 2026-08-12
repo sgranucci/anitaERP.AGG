@@ -54,17 +54,55 @@ class CotizacionTesoreriaConsultaSupport
             return null;
         }
 
-        $row = self::filaParaFecha($fecha, $empresaId);
+        $row = self::filaConTasaVenta($fecha, $codigoAnita, $empresaId);
         if ($row === null) {
             return null;
         }
 
         $valor = $row->tasaVenta($codigoAnita);
-        if ($valor === null || $valor <= 0) {
+
+        return ($valor !== null && $valor > 0) ? (float) $valor : null;
+    }
+
+    /**
+     * Fila con tasa de venta usable (> 0) para la moneda: la del día o, si ese día no tiene
+     * cambio cargado, la última anterior que sí lo tenga (cotización vigente).
+     * Como último recurso, la primera posterior, para no perder el importe.
+     */
+    public static function filaConTasaVenta(
+        string|Carbon $fecha,
+        int $codigoAnita,
+        int $empresaId = self::EMPRESA_DEFAULT,
+    ): ?CotizacionTesoreria {
+        $ymd = self::normalizarFechaYmd($fecha);
+        if ($ymd === null) {
             return null;
         }
 
-        return (float) $valor;
+        $empresaId = $empresaId > 0 ? $empresaId : self::EMPRESA_DEFAULT;
+        $anita = (int) str_replace('-', '', $ymd);
+        $columna = CotizacionTesoreriaMonedasSupport::columnaVenta($codigoAnita);
+
+        $vigente = CotizacionTesoreria::query()
+            ->where('empresa_id', $empresaId)
+            ->where($columna, '>', 0)
+            ->where(function ($q) use ($ymd, $anita) {
+                $q->where('fecha', '<=', $ymd)->orWhere('fecha_anita', '<=', $anita);
+            })
+            ->orderByDesc('fecha')
+            ->orderByDesc('fecha_anita')
+            ->first();
+
+        if ($vigente !== null) {
+            return $vigente;
+        }
+
+        return CotizacionTesoreria::query()
+            ->where('empresa_id', $empresaId)
+            ->where($columna, '>', 0)
+            ->orderBy('fecha')
+            ->orderBy('fecha_anita')
+            ->first();
     }
 
     /**
@@ -77,18 +115,20 @@ class CotizacionTesoreriaConsultaSupport
         int $monedaId,
         int $empresaId = self::EMPRESA_DEFAULT,
     ): array {
-        $row = self::filaParaFecha($fecha, $empresaId);
-        $fechaUsada = $row?->fecha?->format('Y-m-d');
-
         if ($monedaId <= self::MONEDA_PESOS_CODIGO) {
             return [
                 'cotizacionventa' => 1.0,
                 'cotizacioncompra' => 1.0,
-                'fecha_usada' => $fechaUsada,
+                'fecha_usada' => self::filaParaFecha($fecha, $empresaId)?->fecha?->format('Y-m-d'),
             ];
         }
 
         $codigoAnita = self::codigoAnitaDesdeMonedaId($monedaId);
+        $row = $codigoAnita !== null
+            ? self::filaConTasaVenta($fecha, $codigoAnita, $empresaId)
+            : self::filaParaFecha($fecha, $empresaId);
+        $fechaUsada = $row?->fecha?->format('Y-m-d');
+
         if ($codigoAnita === null || $row === null) {
             return [
                 'cotizacionventa' => null,

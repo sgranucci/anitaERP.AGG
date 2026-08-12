@@ -5,6 +5,7 @@ namespace App\Support\Caja;
 use App\Support\Database\SqlDialectSupport;
 use App\Models\Caja\Caja_Movimiento;
 use App\Models\Caja\Cobranza;
+use App\Support\Configuracion\SistemaNumeradorSupport;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -121,6 +122,7 @@ final class CobranzaNumeracionTransaccion
 
     /**
      * Siguiente número secuencial en BD (solo dígitos; usar dentro de {@see conExclusividad}).
+     * OPP/EGR/ING/TRA: alinea con semilla Anita (ventas.numerador) si está habilitado.
      */
     public static function calcularSiguienteNumeroSecuencialBd(int $empresaId, int $tipotransaccionCajaId): string
     {
@@ -133,6 +135,15 @@ final class CobranzaNumeracionTransaccion
         }
 
         $max = self::maximoNumerotransaccionSecuencial($empresaId, $tipotransaccionCajaId, true);
+
+        // OPP/EGR/ING/TRA: numerador ERP (sistema_numerador); sync Anita si está habilitado.
+        if (SistemaNumeradorSupport::aplicaTipoCaja($tipotransaccionCajaId)) {
+            return SistemaNumeradorSupport::reservarSiguienteCaja(
+                $empresaId,
+                $tipotransaccionCajaId,
+                $max
+            );
+        }
 
         return self::siguienteDesdeMaximo($max);
     }

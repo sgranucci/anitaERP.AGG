@@ -1,0 +1,82 @@
+---
+description: Leer cotización de moneda extranjera con la vigente (saltea filas en cero y toma la última real anterior)
+alwaysApply: true
+---
+
+# Cotización de moneda extranjera: siempre la vigente
+
+La tabla `cotizacion` / `cotizacion_moneda` tiene filas cargadas **en cero** para los días sin novedad (fines de semana, feriados, tramos que el cron BNA o el sync Anita no trajeron). Una fila en cero **no es una cotización**: significa "ese día no hubo cambio nuevo". Lo mismo pasa en `cotizacion_tesoreria` con `cambio_venta_N = 0`.
+
+Toda lectura de moneda extranjera debe usar la **cotización vigente**: el último valor **real (> 0)** con fecha **menor o igual** a la del movimiento. Si no hay ninguna anterior (período previo al inicio de la carga), se usa la primera posterior para no perder el importe.
+
+Incidente que originó la regla: 2025-09-24 a 2026-03-29 quedaron 90 filas de dólar en cero. Un informe con columna en dólares descartó 8403 movimientos y Compras convertía el dólar con coeficiente **1** (dólar tratado como peso).
+
+## Punto único
+
+| Tabla | Support |
+|---|---|
+| `cotizacion` + `cotizacion_moneda` | **`App\Support\Configuracion\CotizacionVigenteSupport`** |
+| `cotizacion_tesoreria` (POS / rendiciones, por empresa) | `App\Support\Caja\CotizacionTesoreriaConsultaSupport::filaConTasaVenta()` / `ventaPorMonedaId()` |
+
+Fachadas que ya delegan (usarlas está bien): `CotizacionService::leeCotizacionDiaria`, `RequisicionTotalesCabecera::cotizacionVentaPorMonedaEnFecha`, `ComprobanteProveedorCotizacionSupport`, `MayorConceptoMonedaConverter`.
+
+## Correcto
+
+```php
+use App\Support\Configuracion\CotizacionVigenteSupport;
+
+// Valor + trazabilidad de qué cotización se usó
+$cot = CotizacionVigenteSupport::venta($fechaYmd, $monedaId);
+// $cot['valor'], $cot['fecha'] (fecha de la cotización usada), $cot['exacta'], $cot['hacia_adelante']
+
+// Solo el número
+$tasa = CotizacionVigenteSupport::ventaValor($fechaYmd, $monedaId);      // 0.0 si la moneda no tiene ninguna
+$tasa = CotizacionVigenteSupport::ventaValorOUno($fechaYmd, $monedaId);  // 1.0 cuando el flujo no puede cortar
+```
+
+Moneda local (id 1) devuelve siempre `1.0`; no hace falta preguntar antes.
+
+## Prohibido
+
+```php
+// ❌ Query propia: toma la fila del día aunque venga en cero
+DB::table('cotizacion_moneda as cm')->join('cotizacion as c', ...)
+    ->where('cm.moneda_id', $monedaId)
+    ->whereDate('c.fecha', '<=', $fecha)   // sin filtrar cm.cotizacionventa > 0
+    ->orderByDesc('c.fecha')->value('cm.cotizacionventa');
+
+// ❌ Coincidencia exacta del día para convertir importes
+->whereDate('c.fecha', $fecha)
+
+// ❌ Degradar el cero a 1 en silencio: convierte dólares como si fueran pesos
+$tasa = $fila->cotizacionventa > 0 ? $fila->cotizacionventa : 1.0;
+```
+
+La coincidencia exacta **sí** corresponde en el ABM y en los imports (`LeeCotizacionApi`, `CotizacionTesoreriaAnitaImportService`): ahí se busca la fila del día para insertar o actualizar, no para convertir.
+
+## Cotización grabada en el documento
+
+Si el comprobante ya tiene `cotizacion` (`asiento_movimiento.cotizacion`, `venta.cotizacion`, líneas de OC/recepción, `ctav_cotizacion`/`subd_cotizacion` de Anita), **esa manda**: es la tasa con la que se registró la operación. Recién cuando viene nula o en cero se resuelve con la vigente de la tabla.
+
+## Avisar cuando la cotización no es del día
+
+En reportes y conversiones masivas, contar los movimientos que usaron una cotización de otra fecha y mostrarlo como advertencia con la fecha más antigua usada (patrón `ReporteDefinibleSaldoReader::movimientosCotizacionVigente()` → advertencia en `ReporteDefinibleProcesador`). Convertir con una tasa vieja sin decirlo deja al usuario sin saber por qué el número en dólares no cierra.
+
+## Al agregar lectura de moneda extranjera
+
+1. ¿Convierte importes? → `CotizacionVigenteSupport` (o la fachada del módulo), nunca SQL propio.
+2. ¿Es POS / rendición / remesa por empresa? → `CotizacionTesoreriaConsultaSupport`.
+3. ¿Es proceso masivo o reporte? → contar y avisar las conversiones con cotización de otra fecha.
+4. ¿El documento ya trae `cotizacion`? → usarla primero; la tabla es el fallback.
+
+## Comprobación rápida (agente)
+
+```bash
+# No debe haber queries propias a cotizacion_moneda fuera del support / ABM / import
+rg "cotizacion_moneda" app --glob '*.php' -l
+
+# Ni ceros degradados a 1
+rg "cotizacionventa.*> 0 \?|cotizacionventa == 0" app --glob '*.php'
+
+php -l app/Support/Configuracion/CotizacionVigenteSupport.php
+```

@@ -3,7 +3,7 @@
         @include('includes.form-error')
         @include('includes.mensaje')
 
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title">
                     @if ($esEdicion)
@@ -32,6 +32,26 @@
                         </button>
                     </form>
                     @endif
+                    @if ($esEdicion && can('borrar-comprobante-proveedor', false))
+                    <form action="{{ route('eliminar_comprobante_proveedor', ['id' => $data->id]) }}" method="POST" class="d-inline"
+                        onsubmit="return confirm('¿Borrar el comprobante #{{ $data->id }} en anitaERP y Anita (asiento, CC, compra/promov/ctamov)? Esta acción no se puede deshacer.');">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-outline-danger btn-sm">
+                            <i class="fa fa-times-circle"></i> Borrar factura
+                        </button>
+                    </form>
+                    @if (($data->precarga_comprobante_proveedor_id ?? null) && can('borrar-precarga-proveedores', false))
+                    <form action="{{ route('eliminar_comprobante_proveedor_con_precarga', ['id' => $data->id]) }}" method="POST" class="d-inline"
+                        onsubmit="return confirm('¿Borrar el comprobante #{{ $data->id }} y también la precarga #{{ $data->precarga_comprobante_proveedor_id }} (ERP + Anita)? Esta acción no se puede deshacer.');">
+                        @csrf
+                        @method('DELETE')
+                        <button type="submit" class="btn btn-danger btn-sm">
+                            <i class="fa fa-trash"></i> Borrar factura y precarga
+                        </button>
+                    </form>
+                    @endif
+                    @endif
                 </div>
             </div>
 
@@ -54,26 +74,88 @@
                     @method('PUT')
                 @endif
 
-                <div class="text-center py-2 border-bottom rounded-top bg-white">
-                    <button type="button" id="cp-boton-principal" class="btn btn-primary btn-sm mx-1 cp-tab-solapa font-weight-bold">Datos principales</button>
-                    <button type="button" id="cp-boton-conceptos" class="btn btn-info btn-sm mx-1 cp-tab-solapa">Conceptos IVA</button>
-                    <button type="button" id="cp-boton-cuotas" class="btn btn-info btn-sm mx-1 cp-tab-solapa">Cuotas / condición</button>
-                    @if ($mostrarSolapaAsiento ?? false)
-                    <button type="button" id="cp-boton-asiento-contable" class="btn btn-info btn-sm mx-1 cp-tab-solapa">
-                        <span class="fa fa-calculator"></span> Asiento contable
-                        @if(! empty($asientoPreview['error']) || ! empty($asientoPreview['avisos'] ?? []))
-                        <span class="badge badge-warning ml-1 cp-badge-asiento-error" title="Revise el cuadre antes de contabilizar">!</span>
-                        @elseif(! empty($data->asiento_id))
-                        <span class="badge badge-light ml-1">OK</span>
+                @include('includes.tabs-activas-estilos')
+                <div class="tabs-activas px-3 pt-2 bg-white border-bottom">
+                    <ul class="nav nav-tabs" id="cp-tabs-comprobante" role="tablist">
+                        <li class="nav-item">
+                            <a class="nav-link active cp-tab-solapa" id="cp-boton-principal" data-toggle="tab"
+                               href="#cp-solapa-principal" role="tab" aria-controls="cp-solapa-principal" aria-selected="true">
+                                <i class="fa fa-file-text-o"></i> Datos principales
+                            </a>
+                        </li>
+                        @if ($mostrarSolapaCom ?? false)
+                        <li class="nav-item">
+                            <a class="nav-link cp-tab-solapa" id="cp-boton-recepciones-com" data-toggle="tab"
+                               href="#cp-solapa-recepciones-com" role="tab" aria-controls="cp-solapa-recepciones-com" aria-selected="false">
+                                @if ($com_politica['permite_factura_anticipada'] ?? false)
+                                    <i class="fa fa-clock-o"></i> Factura anticipada
+                                @else
+                                    <i class="fa fa-truck"></i> Recepciones COM
+                                    @if ($com_obligatoria ?? false)
+                                    <span class="badge badge-danger">Oblig.</span>
+                                    @elseif ($com_politica['bloquea_sin_com'] ?? false)
+                                    <span class="badge badge-danger">Falta COM</span>
+                                    @endif
+                                @endif
+                            </a>
+                        </li>
                         @endif
-                    </button>
-                    @endif
-                    @if ($esEdicion)
-                    <button type="button" id="cp-boton-estados" class="btn btn-info btn-sm mx-1 cp-tab-solapa">Estados e historia</button>
-                    <button type="button" id="cp-boton-archivos" class="btn btn-info btn-sm mx-1 cp-tab-solapa">
-                        <span class="fa fa-paperclip"></span> Archivos
-                    </button>
-                    @endif
+                        <li class="nav-item">
+                            <a class="nav-link cp-tab-solapa" id="cp-boton-conceptos" data-toggle="tab"
+                               href="#cp-solapa-conceptos" role="tab" aria-controls="cp-solapa-conceptos" aria-selected="false">
+                                <i class="fa fa-list"></i> Conceptos IVA
+                            </a>
+                        </li>
+                        @if ($mostrarSolapaArticulos ?? false)
+                        <li class="nav-item">
+                            <a class="nav-link cp-tab-solapa" id="cp-boton-articulos" data-toggle="tab"
+                               href="#cp-solapa-articulos" role="tab" aria-controls="cp-solapa-articulos" aria-selected="false">
+                                <i class="fa fa-cubes"></i> Artículos
+                                @php
+                                    $cantArt = old('articulo_skus')
+                                        ? count((array) old('articulo_skus'))
+                                        : (int) (($articulos ?? collect())->count());
+                                @endphp
+                                @if ($cantArt > 0)
+                                <span class="badge badge-info">{{ $cantArt }}</span>
+                                @endif
+                            </a>
+                        </li>
+                        @endif
+                        <li class="nav-item">
+                            <a class="nav-link cp-tab-solapa" id="cp-boton-cuotas" data-toggle="tab"
+                               href="#cp-solapa-cuotas" role="tab" aria-controls="cp-solapa-cuotas" aria-selected="false">
+                                <i class="fa fa-calendar"></i> Cuotas / condición
+                            </a>
+                        </li>
+                        @if ($mostrarSolapaAsiento ?? false)
+                        <li class="nav-item">
+                            <a class="nav-link cp-tab-solapa" id="cp-boton-asiento-contable" data-toggle="tab"
+                               href="#cp-solapa-asiento-contable" role="tab" aria-controls="cp-solapa-asiento-contable" aria-selected="false">
+                                <i class="fa fa-calculator"></i> Asiento contable
+                                @if(! empty($asientoPreview['error']) || ! empty($asientoPreview['avisos'] ?? []))
+                                <span class="badge badge-warning cp-badge-asiento-error" title="Revise el cuadre antes de contabilizar">!</span>
+                                @elseif(! empty($data->asiento_id))
+                                <span class="badge badge-success">OK</span>
+                                @endif
+                            </a>
+                        </li>
+                        @endif
+                        @if ($esEdicion)
+                        <li class="nav-item">
+                            <a class="nav-link cp-tab-solapa" id="cp-boton-estados" data-toggle="tab"
+                               href="#cp-solapa-estados" role="tab" aria-controls="cp-solapa-estados" aria-selected="false">
+                                <i class="fa fa-history"></i> Estados e historia
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link cp-tab-solapa" id="cp-boton-archivos" data-toggle="tab"
+                               href="#cp-solapa-archivos" role="tab" aria-controls="cp-solapa-archivos" aria-selected="false">
+                                <i class="fa fa-paperclip"></i> Archivos
+                            </a>
+                        </li>
+                        @endif
+                    </ul>
                 </div>
 
                 <div class="card-body">
@@ -109,32 +191,49 @@
                     <input type="hidden" name="ordencompra_comprobante_id" value="{{ old('ordencompra_comprobante_id', $data->ordencompra_comprobante_id ?? '') }}">
                     <input type="hidden" name="condicionpago_id" value="{{ old('condicionpago_id', $data->condicionpago_id ?? '') }}">
 
-                    <div id="cp-solapa-principal" class="cp-solapa">
-                        @include('compras.comprobante_proveedor.partials.solapa_datos')
-                        @include('compras.comprobante_proveedor.partials.solapa_recepciones_com')
+                    <div class="tab-content">
+                        <div class="tab-pane fade show active cp-solapa" id="cp-solapa-principal" role="tabpanel">
+                            @include('compras.comprobante_proveedor.partials.solapa_datos')
+                            @if (! ($mostrarSolapaCom ?? false))
+                                {{-- Sin solapa dedicada: bloque embebido por si el modo cambia a ASIGNA_RECEPCION --}}
+                                <div id="cp-solapa-recepciones-com-inline" class="cp-solapa-inline mt-3">
+                                    @include('compras.comprobante_proveedor.partials.solapa_recepciones_com')
+                                </div>
+                            @endif
+                        </div>
+                        @if ($mostrarSolapaCom ?? false)
+                        <div class="tab-pane fade cp-solapa" id="cp-solapa-recepciones-com" role="tabpanel">
+                            @include('compras.comprobante_proveedor.partials.solapa_recepciones_com')
+                        </div>
+                        @endif
+                        <div class="tab-pane fade cp-solapa" id="cp-solapa-conceptos" role="tabpanel">
+                            @include('compras.comprobante_proveedor.partials.solapa_conceptos')
+                        </div>
+                        @if ($mostrarSolapaArticulos ?? false)
+                        <div class="tab-pane fade cp-solapa" id="cp-solapa-articulos" role="tabpanel">
+                            @include('compras.comprobante_proveedor.partials.solapa_articulos')
+                        </div>
+                        @endif
+                        <div class="tab-pane fade cp-solapa" id="cp-solapa-cuotas" role="tabpanel">
+                            @include('compras.comprobante_proveedor.partials.solapa_cuotas')
+                        </div>
+                        @if ($mostrarSolapaAsiento ?? false)
+                        <div class="tab-pane fade cp-solapa" id="cp-solapa-asiento-contable" role="tabpanel">
+                            @include('compras.comprobante_proveedor.partials.solapa_asiento_contable', [
+                                'asientoPreview' => $asientoPreview ?? ['activo' => false],
+                                'data' => $data,
+                            ])
+                        </div>
+                        @endif
+                        @if ($esEdicion)
+                        <div class="tab-pane fade cp-solapa" id="cp-solapa-estados" role="tabpanel">
+                            @include('compras.comprobante_proveedor.partials.solapa_estados')
+                        </div>
+                        <div class="tab-pane fade cp-solapa" id="cp-solapa-archivos" role="tabpanel">
+                            @include('compras.comprobante_proveedor.partials.solapa_archivos')
+                        </div>
+                        @endif
                     </div>
-                    <div id="cp-solapa-conceptos" class="cp-solapa" style="display:none;">
-                        @include('compras.comprobante_proveedor.partials.solapa_conceptos')
-                    </div>
-                    <div id="cp-solapa-cuotas" class="cp-solapa" style="display:none;">
-                        @include('compras.comprobante_proveedor.partials.solapa_cuotas')
-                    </div>
-                    @if ($mostrarSolapaAsiento ?? false)
-                    <div id="cp-solapa-asiento-contable" class="cp-solapa" style="display:none;">
-                        @include('compras.comprobante_proveedor.partials.solapa_asiento_contable', [
-                            'asientoPreview' => $asientoPreview ?? ['activo' => false],
-                            'data' => $data,
-                        ])
-                    </div>
-                    @endif
-                    @if ($esEdicion)
-                    <div id="cp-solapa-estados" class="cp-solapa" style="display:none;">
-                        @include('compras.comprobante_proveedor.partials.solapa_estados')
-                    </div>
-                    <div id="cp-solapa-archivos" class="cp-solapa" style="display:none;">
-                        @include('compras.comprobante_proveedor.partials.solapa_archivos')
-                    </div>
-                    @endif
                 </div>
 
                 @if ($esEdicion && ($data->estado ?? '') === \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO)
@@ -151,18 +250,14 @@
                     <div class="row">
                         <div class="col-lg-3"></div>
                         <div class="col-lg-6">
-                            @if ($esEdicion)
-                                @include('includes.boton-form-editar')
-                            @else
-                                @include('includes.boton-form-crear')
-                            @endif
+                            <button type="submit" form="form-comprobante-proveedor" class="btn botonsubmit btn-success">Actualizar</button>
                         </div>
                     </div>
                     @elseif (! $esEdicion)
                     <div class="row">
                         <div class="col-lg-3"></div>
                         <div class="col-lg-6">
-                            @include('includes.boton-form-crear')
+                            <button type="submit" form="form-comprobante-proveedor" class="btn botonsubmit btn-success">Guardar</button>
                         </div>
                     </div>
                     @endif
@@ -173,10 +268,26 @@
 </div>
 
 @include('includes.compras.modalconsultaproveedor')
+@include('includes.compras.modalconsultaconcepto_ivacompra')
+@if ($mostrarSolapaArticulos ?? false)
+@include('includes.stock.modalconsultaarticulo')
+@endif
 @include('includes.compras.arca_impuestos_validacion_modal')
 @include('includes.compras.arca_apoc_validacion_modal')
 @include('compras.comprobante_proveedor.partials.proveedor_arca_support')
 @include('compras.comprobante_proveedor.partials.proveedor_arca_apoc_support')
 @include('compras.comprobante_proveedor.template_concepto')
+@if ($mostrarSolapaArticulos ?? false)
+@include('compras.comprobante_proveedor.template_articulo')
+@endif
 @include('compras.comprobante_proveedor.partials.template_cp_archivos')
 <script type="application/json" id="cp-conceptos-cuenta-meta">@json($conceptos_cuenta_meta ?? [])</script>
+<script>
+window.cpAbrirSolapaComAlInicio = {{
+    ($mostrarSolapaCom ?? false) && (
+        ($com_obligatoria ?? false)
+        || count($recepciones_seleccionadas ?? []) > 0
+        || old('modo_carga', $data->modo_carga ?? '') === \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION
+    ) ? 'true' : 'false'
+}};
+</script>

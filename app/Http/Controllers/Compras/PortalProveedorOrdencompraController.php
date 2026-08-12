@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Repositories\Compras\OrdencompraRepositoryInterface;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Compras\PortalProveedorCircuitoOcSupport;
 use App\Support\Compras\PortalProveedorContexto;
 use App\Support\Compras\PortalProveedorOrdencompraListadoFiltros;
 use App\Support\Configuracion\EmpresaLogoArchivo;
@@ -82,6 +83,7 @@ final class PortalProveedorOrdencompraController extends Controller
             'proveedor' => $proveedor,
             'proveedorId' => $proveedorId,
             'orden' => $orden,
+            'circuito' => PortalProveedorCircuitoOcSupport::desdeOrden($orden),
             'canalMail' => [],
             'pdfIaHabilitado' => false,
             'filtrosQuery' => PortalProveedorContexto::queryBase($proveedorId),

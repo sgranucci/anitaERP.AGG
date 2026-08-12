@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <rect width="960" height="540" fill="#f7f9fc"/>
+  <rect x="24" y="24" width="912" height="56" rx="6" fill="#85C1E9"/>
+  <text x="48" y="60" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="700" fill="#17202A">Auditoría y compliance</text>
+  <rect x="24" y="96" width="912" height="420" rx="6" fill="#ffffff" stroke="#cccccc"/>
+  <text x="48" y="180" font-size="15" font-family="DejaVu Sans, Arial, sans-serif" fill="#17202A">Pantalla de referencia del manual: Auditoría y compliance</text><text x="48" y="220" font-size="14" font-family="DejaVu Sans, Arial, sans-serif" fill="#555555">Consulte el capítulo correspondiente para el detalle de botones y permisos.</text><text x="48" y="260" font-size="14" font-family="DejaVu Sans, Arial, sans-serif" fill="#555555">Rutas: compras/propuesta-pago · compras/tesoreria · compras/clearing-bancario</text>
+  <text x="48" y="500" font-family="DejaVu Sans, Arial, sans-serif" font-size="12" fill="#666666">Anita ERP · diagrama de respaldo del manual (reemplazar por captura PNG real)</text>
+</svg>

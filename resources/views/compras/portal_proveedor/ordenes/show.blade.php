@@ -66,6 +66,10 @@
                     'proveedorId' => $proveedorId,
                 ])
 
+                @include('compras.portal_proveedor.ordenes.partials.circuito_progreso', [
+                    'circuito' => $circuito ?? null,
+                ])
+
                 <div class="row mb-3">
                     <div class="col-md-6">
                         <dl class="row mb-0">
@@ -246,6 +250,74 @@
                                     <td colspan="7" class="text-muted text-center">
                                         Todavía no hay facturas asociadas a esta OC.
                                         Puede presentar una desde el módulo Facturas.
+                                    </td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+
+                @php
+                    $retencionesOc = $orden->portal_retenciones ?? collect();
+                @endphp
+                <h5><i class="fa fa-percent"></i> Retenciones del circuito</h5>
+                <p class="text-muted small">
+                    Los certificados se emiten al confirmar la orden de pago. Desde aquí puede consultarlos y descargarlos
+                    (el proveedor no emite retenciones; las genera el pagador).
+                </p>
+                <div class="table-responsive mb-2">
+                    <table class="table table-bordered table-sm">
+                        <thead style="background:#85C1E9;color:#17202A;">
+                            <tr>
+                                <th>OP</th>
+                                <th>Tipo</th>
+                                <th>Régimen / provincia</th>
+                                <th class="text-right">Base</th>
+                                <th class="text-right">Importe</th>
+                                <th></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @forelse ($retencionesOc as $ret)
+                                @php
+                                    $pagoRet = $ret->pagoproveedores;
+                                @endphp
+                                <tr>
+                                    <td>
+                                        @if ($pagoRet)
+                                            <a class="text-primary"
+                                               href="{{ route('portal_proveedores_pago', ['id' => $pagoRet->id, 'proveedor_id' => $proveedorId]) }}"
+                                               target="_blank" rel="noopener">
+                                                {{ $pagoRet->etiquetaComprobante() }}
+                                            </a>
+                                        @else
+                                            —
+                                        @endif
+                                    </td>
+                                    <td>{{ method_exists($ret, 'etiquetaTipo') ? $ret->etiquetaTipo() : ($ret->tiporetencion ?? '—') }}</td>
+                                    <td>
+                                        {{ $ret->codigo_regimen ?: ($ret->codigo_retencion ?: '—') }}
+                                        @if (optional($ret->provincias)->nombre)
+                                            · {{ $ret->provincias->nombre }}
+                                        @endif
+                                    </td>
+                                    <td class="text-right">{{ number_format((float) ($ret->base_calculo ?? 0), 2, ',', '.') }}</td>
+                                    <td class="text-right">{{ number_format((float) ($ret->importe ?? 0), 2, ',', '.') }}</td>
+                                    <td>
+                                        @if ($pagoRet)
+                                            <a href="{{ route('portal_proveedores_retencion_pdf', ['id' => $pagoRet->id, 'retencionId' => $ret->id, 'proveedor_id' => $proveedorId]) }}"
+                                               class="btn-accion-tabla tooltipsC" title="PDF retención"
+                                               target="_blank" rel="noopener">
+                                                <i class="fa fa-file-pdf-o text-danger"></i>
+                                            </a>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="6" class="text-muted text-center">
+                                        Todavía no hay certificados de retención vinculados a los pagos de esta OC.
+                                        También puede consultarlos en la solapa Retenciones.
                                     </td>
                                 </tr>
                             @endforelse

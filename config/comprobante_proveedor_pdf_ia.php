@@ -24,9 +24,10 @@ return [
         'timeout' => (int) env('COMPROBANTE_PROVEEDOR_PDF_IA_OLLAMA_TIMEOUT', 180),
         'temperature' => (float) env('COMPROBANTE_PROVEEDOR_PDF_IA_OLLAMA_TEMPERATURE', 0.05),
         'max_tokens' => (int) env('COMPROBANTE_PROVEEDOR_PDF_IA_OLLAMA_MAX_TOKENS', 4096),
-        'max_chars_ocr' => (int) env('COMPROBANTE_PROVEEDOR_PDF_IA_OLLAMA_MAX_CHARS_OCR', 12000),
-        // Reparto del recorte de OCR: 0.4 = 40% cabecera y 60% pie (donde están los totales).
-        'cabecera_ratio' => (float) env('COMPROBANTE_PROVEEDOR_PDF_IA_OLLAMA_CABECERA_RATIO', 0.4),
+        'max_chars_ocr' => (int) env('COMPROBANTE_PROVEEDOR_PDF_IA_OLLAMA_MAX_CHARS_OCR', 14000),
+        // Recorte OCR: cabecera + cuerpo (ítems) + pie.
+        'cabecera_ratio' => (float) env('COMPROBANTE_PROVEEDOR_PDF_IA_OLLAMA_CABECERA_RATIO', 0.28),
+        'medio_ratio' => (float) env('COMPROBANTE_PROVEEDOR_PDF_IA_OLLAMA_MEDIO_RATIO', 0.44),
     ],
 
     'corpus' => [

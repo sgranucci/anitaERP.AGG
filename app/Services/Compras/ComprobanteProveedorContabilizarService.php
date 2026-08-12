@@ -8,7 +8,9 @@ use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
+use Throwable;
 
 class ComprobanteProveedorContabilizarService
 {
@@ -46,43 +48,181 @@ class ComprobanteProveedorContabilizarService
             throw new RuntimeException('Agregue al menos un concepto IVA antes de contabilizar.');
         }
 
+        // Limpia ctamov huérfanos de intentos previos (mismo patrón que recepción COM).
+        $this->asientoService->eliminarCtamovAnitaDeComprobante($comprobante);
+
+        $numeroAsientoAnita = null;
+        $anitaNroInternoEscrito = null;
+        $ctamovEscrito = false;
+
         try {
-            return DB::transaction(function () use ($comprobante) {
+            $resultadoErp = DB::transaction(function () use ($comprobante) {
                 $comprobante->load('comprobante_proveedor_recepciones.recepcion_proveedores');
 
-                $asientoId = $this->asientoService->generarAsiento($comprobante);
+                // 1) Asiento + CC solo en MySQL (sin tocar ctamov).
+                $asientoErp = $this->asientoService->generarAsientoErp($comprobante);
 
                 $this->cuentacorrienteService->generarDesdeComprobante($comprobante);
 
                 $comprobante->forceFill([
-                    'asiento_id' => $asientoId,
+                    'asiento_id' => $asientoErp['asiento_id'],
                     'estado' => ComprobanteProveedorEstados::CONTABILIZADO,
                 ])->save();
-
-                $this->anitaSyncService->syncCreate($comprobante->fresh([
-                    'comprobante_proveedor_conceptos.concepto_ivacompras',
-                    'comprobante_proveedor_cuotas',
-                    'empresas', 'proveedores', 'tipotransaccion_compras', 'monedas', 'ordencompras',
-                ]));
 
                 Comprobante_Proveedor_Estado::query()->create([
                     'comprobante_proveedor_id' => $comprobante->id,
                     'fecha' => now()->format('Y-m-d'),
                     'estado' => ComprobanteProveedorEstados::CONTABILIZADO,
                     'usuario_id' => Auth::id(),
-                    'observacion' => 'Contabilizado en ERP (asiento #'.$asientoId.')',
+                    'observacion' => 'Contabilizado en ERP (asiento #'.$asientoErp['asiento_id']
+                        .' / Anita '.$asientoErp['numeroasiento'].')',
                 ]);
 
-                return $comprobante->fresh();
+                return $asientoErp;
             });
-        } catch (\Throwable $e) {
+
+            $numeroAsientoAnita = $resultadoErp['numeroasiento'];
+
+            // 2) Anita compra/concmov/promov (fuera del TX MySQL: si falla, compensamos abajo).
+            $paraAnita = $comprobante->fresh([
+                'comprobante_proveedor_conceptos.concepto_ivacompras',
+                'comprobante_proveedor_cuotas',
+                'empresas', 'proveedores.condicionivas', 'proveedores.provincias',
+                'proveedor_condicioniva_eventual', 'condicionpagos',
+                'tipotransaccion_compras', 'monedas', 'ordencompras',
+            ]);
+            $this->anitaSyncService->syncCreate($paraAnita);
+            $anitaNroInternoEscrito = (int) ($paraAnita->fresh()->anita_nro_interno ?? 0) ?: null;
+
+            // 3) ctamov al final: solo si compra Anita ya está OK.
+            $this->asientoService->sincronizarCtamovAnita($comprobante, $resultadoErp['payload_anita']);
+            $ctamovEscrito = true;
+
             $comprobante->forceFill([
+                'anita_nro_interno' => $anitaNroInternoEscrito,
+                'anita_sync_estado' => ComprobanteProveedorAnitaSyncEstado::SYNC_OK,
+                'anita_sync_error' => null,
+                'anita_sync_at' => now(),
+            ])->save();
+
+            return $comprobante->fresh();
+        } catch (Throwable $e) {
+            $this->compensarAnitaTrasFallo(
+                $comprobante,
+                $numeroAsientoAnita,
+                $anitaNroInternoEscrito,
+                $ctamovEscrito,
+                $e,
+            );
+
+            // Si el ERP ya había commiteado, revertir estado/asiento locales.
+            $this->revertirErpTrasFalloAnita($comprobante);
+
+            $comprobante->forceFill([
+                'anita_nro_interno' => null,
                 'anita_sync_estado' => ComprobanteProveedorAnitaSyncEstado::ERROR,
                 'anita_sync_error' => $e->getMessage(),
                 'anita_sync_at' => now(),
             ])->save();
 
             throw $e;
+        }
+    }
+
+    private function compensarAnitaTrasFallo(
+        Comprobante_Proveedor $comprobante,
+        ?string $numeroAsientoAnita,
+        ?int $anitaNroInternoEscrito,
+        bool $ctamovEscrito,
+        Throwable $original,
+    ): void {
+        try {
+            // Siempre por clave del comprobante + número reservado (aunque ctamovEscrito sea false:
+            // un intento viejo o un create sin omitir podría haber dejado líneas).
+            $this->asientoService->eliminarCtamovAnitaDeComprobante($comprobante, $numeroAsientoAnita);
+        } catch (Throwable $cleanupEx) {
+            Log::error('comprobante_proveedor.ctamov_cleanup_fallo', [
+                'comprobante_id' => $comprobante->id,
+                'numeroasiento' => $numeroAsientoAnita,
+                'error_original' => $original->getMessage(),
+                'error_cleanup' => $cleanupEx->getMessage(),
+                'ctamov_escrito' => $ctamovEscrito,
+            ]);
+        }
+
+        if ($anitaNroInternoEscrito) {
+            try {
+                $comprobante->forceFill(['anita_nro_interno' => $anitaNroInternoEscrito]);
+                $this->anitaSyncService->syncDelete($comprobante->loadMissing([
+                    'proveedores', 'tipotransaccion_compras',
+                ]));
+            } catch (Throwable $cleanupEx) {
+                Log::error('comprobante_proveedor.compra_cleanup_fallo', [
+                    'comprobante_id' => $comprobante->id,
+                    'anita_nro_interno' => $anitaNroInternoEscrito,
+                    'error_original' => $original->getMessage(),
+                    'error_cleanup' => $cleanupEx->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * Si falló el sync Anita después del commit MySQL, no dejar el CP “contabilizado” a medias.
+     */
+    private function revertirErpTrasFalloAnita(Comprobante_Proveedor $comprobante): void
+    {
+        $comprobante->refresh();
+        if ($comprobante->estado !== ComprobanteProveedorEstados::CONTABILIZADO
+            && ! $comprobante->asiento_id) {
+            return;
+        }
+
+        $asientoId = (int) ($comprobante->asiento_id ?? 0);
+
+        try {
+            DB::transaction(function () use ($comprobante, $asientoId) {
+                // Cuenta corriente generada en el intento.
+                $ccIds = DB::table('comprobante_proveedor_cuota')
+                    ->where('comprobante_proveedor_id', $comprobante->id)
+                    ->whereNotNull('proveedor_cuentacorriente_id')
+                    ->pluck('proveedor_cuentacorriente_id')
+                    ->filter()
+                    ->map(fn ($id) => (int) $id)
+                    ->all();
+
+                DB::table('comprobante_proveedor_cuota')
+                    ->where('comprobante_proveedor_id', $comprobante->id)
+                    ->update(['proveedor_cuentacorriente_id' => null]);
+
+                if ($ccIds !== []) {
+                    DB::table('proveedor_cuentacorriente')->whereIn('id', $ccIds)->delete();
+                }
+
+                // Soltar FK antes de borrar asiento (RESTRICT).
+                $comprobante->forceFill([
+                    'asiento_id' => null,
+                    'estado' => ComprobanteProveedorEstados::BORRADOR,
+                ])->save();
+
+                if ($asientoId > 0) {
+                    DB::table('asiento_movimiento')->where('asiento_id', $asientoId)->delete();
+                    DB::table('asiento')->where('id', $asientoId)->delete();
+                }
+
+                Comprobante_Proveedor_Estado::query()
+                    ->where('comprobante_proveedor_id', $comprobante->id)
+                    ->where('estado', ComprobanteProveedorEstados::CONTABILIZADO)
+                    ->orderByDesc('id')
+                    ->limit(1)
+                    ->delete();
+            });
+        } catch (Throwable $revertEx) {
+            Log::error('comprobante_proveedor.revert_erp_tras_fallo_anita', [
+                'comprobante_id' => $comprobante->id,
+                'asiento_id' => $asientoId,
+                'error' => $revertEx->getMessage(),
+            ]);
         }
     }
 }

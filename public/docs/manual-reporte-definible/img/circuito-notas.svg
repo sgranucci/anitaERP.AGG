@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="260" viewBox="0 0 960 260">
+  <rect width="960" height="260" fill="#f8fafc"/>
+  <text x="32" y="36" font-family="DejaVu Sans,Arial" font-size="18" fill="#1F4E79" font-weight="700">Notas al pie versionadas</text>
+  <rect x="40" y="70" width="220" height="60" rx="8" fill="#D6EAF8" stroke="#85C1E9"/><text x="80" y="105" font-family="DejaVu Sans,Arial" font-size="13" fill="#1B4F72">Texto v1</text>
+  <path d="M270 100 H320" stroke="#2E75B6" stroke-width="2.5" marker-end="url(#a)"/>
+  <rect x="326" y="70" width="220" height="60" rx="8" fill="#FCF3CF" stroke="#F4D03F"/><text x="360" y="105" font-family="DejaVu Sans,Arial" font-size="13" fill="#7D6608">Editar → v2</text>
+  <path d="M556 100 H606" stroke="#2E75B6" stroke-width="2.5" marker-end="url(#a)"/>
+  <rect x="612" y="70" width="300" height="60" rx="8" fill="#D5F5E3" stroke="#58D68D"/><text x="650" y="105" font-family="DejaVu Sans,Arial" font-size="13" fill="#196F3D">Historial conservado</text>
+  <text x="40" y="180" font-family="DejaVu Sans,Arial" font-size="13" fill="#34495E">Vigencia AAAAMM desde/hasta · llamada numerada al ejecutar · sale en pantalla, PDF, Excel y mail</text>
+  <text x="40" y="210" font-family="DejaVu Sans,Arial" font-size="13" fill="#34495E">Publicación guarda el texto del momento; no entra al hash de importes</text>
+  <defs><marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#2E75B6"/></marker></defs>
+</svg>

@@ -51,6 +51,11 @@
                     'proveedorId' => $proveedorId,
                 ])
 
+                @include('compras.portal_proveedor.partials.avisos_documentos_fiscales', [
+                    'avisos' => $avisosDocumentos ?? [],
+                    'proveedorId' => $proveedorId,
+                ])
+
                 <div class="table-responsive p-0">
                     <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                         <thead style="background:#85C1E9;color:#17202A;">
@@ -95,9 +100,16 @@
                                 <td>{{ optional($precarga->created_at)->format('d/m/Y H:i') }}</td>
                                 <td class="text-nowrap">
                                     @if (filled($precarga->rutaalmacenamiento))
+                                    <button type="button"
+                                            class="btn-accion-tabla tooltipsC portal-preview-factura"
+                                            title="Vista previa"
+                                            data-preview-url="{{ route('portal_proveedores_factura', ['id' => $precarga->id, 'proveedor_id' => $proveedorId]) }}"
+                                            data-preview-titulo="{{ optional($precarga->tipotransaccion_compras)->abreviatura }} {{ $precarga->letra }} {{ $precarga->sucursal }}-{{ $precarga->numerocomprobante }}">
+                                        <i class="fa fa-eye text-primary"></i>
+                                    </button>
                                     <a href="{{ route('portal_proveedores_factura', ['id' => $precarga->id, 'proveedor_id' => $proveedorId]) }}"
                                        class="btn-accion-tabla tooltipsC"
-                                       title="Ver factura PDF"
+                                       title="Abrir PDF"
                                        target="_blank"
                                        rel="noopener">
                                         <i class="fa fa-file-pdf-o text-danger"></i>
@@ -126,6 +138,8 @@
                 @endif
             </div>
         </div>
+
+        @include('compras.portal_proveedor.partials.modal_preview_factura')
 
         @if (!empty($pdfIaHabilitado) && can('cargar-portal-proveedores', false))
             @include('compras.precarga_comprobante_proveedor.partials.modal_pdf_ia', [

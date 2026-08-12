@@ -4,6 +4,7 @@ namespace App\Services\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Archivo;
+use App\Models\Compras\Comprobante_Proveedor_Articulo;
 use App\Models\Compras\Comprobante_Proveedor_Cuota;
 use App\Models\Compras\Comprobante_Proveedor_Estado;
 use App\Models\Compras\Comprobante_Proveedor_Recepcion;
@@ -17,11 +18,15 @@ use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
+use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
+use App\Support\Compras\ComprobanteProveedorLineasFacturaSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
+use App\Support\Stock\ArticuloSkuMatchSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use RuntimeException;
@@ -40,6 +45,7 @@ class ComprobanteProveedorPersistenciaService
         private ComprobanteProveedorRecepcionesSupport $recepcionesSupport,
         private Comprobante_Proveedor_ArchivoRepositoryInterface $archivoRepository,
         private ComprobanteProveedorControlesLegajoService $controlesLegajo,
+        private ComprobanteProveedorComplianceValidacionService $complianceValidacion,
     ) {}
 
     /** @return list<string> */
@@ -73,6 +79,7 @@ class ComprobanteProveedorPersistenciaService
         $comprobante = $this->comprobanteRepository->create($payload);
 
         $this->sincronizarConceptos($request, $comprobante);
+        $this->sincronizarArticulos($request, $comprobante);
         $this->sincronizarCuotas($request, $comprobante);
         $this->sincronizarRecepciones($request, $comprobante);
         $this->registrarEstadoInicial($comprobante);
@@ -119,6 +126,7 @@ class ComprobanteProveedorPersistenciaService
         $comprobante = $this->comprobanteRepository->find($id);
         $this->conceptoRepository->deletePorComprobanteProveedor($id);
         $this->sincronizarConceptos($request, $comprobante);
+        $this->sincronizarArticulos($request, $comprobante);
         Comprobante_Proveedor_Cuota::query()->where('comprobante_proveedor_id', $id)->delete();
         $this->sincronizarCuotas($request, $comprobante);
         $this->sincronizarRecepciones($request, $comprobante);
@@ -171,11 +179,15 @@ class ComprobanteProveedorPersistenciaService
         );
 
         $seleccionCom = $prefill['recepciones_seleccionadas'] ?? [];
-        if (is_array($seleccionCom) && $seleccionCom !== []) {
-            $ordencompra = $data->ordencompras
-                ?? (($payload['ordencompra_id'] ?? null)
-                    ? Ordencompra::query()->find((int) $payload['ordencompra_id'])
-                    : null);
+        if (! is_array($seleccionCom)) {
+            $seleccionCom = [];
+        }
+        $ordencompra = $data->ordencompras
+            ?? (($payload['ordencompra_id'] ?? null)
+                ? Ordencompra::query()->find((int) $payload['ordencompra_id'])
+                : null);
+        $modoCarga = (string) ($payload['modo_carga'] ?? '');
+        if ($ordencompra && ($seleccionCom !== [] || $modoCarga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION)) {
             $condicionivaId = Proveedor::query()->whereKey((int) ($payload['proveedor_id'] ?? 0))->value('condicioniva_id');
             $conceptos = collect($prefill['conceptos'] ?? [])->map(function ($linea) {
                 $conceptoId = (int) ($linea->concepto_ivacompra_id ?? 0);
@@ -188,9 +200,9 @@ class ComprobanteProveedorPersistenciaService
 
                 return $linea;
             });
-            $this->aplicarResultadoControles($this->controlesLegajo->validarYAplicar(
+            $resultadoControles = $this->controlesLegajo->validarYAplicar(
                 $ordencompra,
-                (string) ($payload['modo_carga'] ?? ''),
+                $modoCarga,
                 $seleccionCom,
                 (float) ($payload['cotizacion'] ?? 1),
                 (int) ($payload['moneda_id'] ?? 1),
@@ -201,7 +213,32 @@ class ComprobanteProveedorPersistenciaService
                 (float) ($payload['subtotal'] ?? 0),
                 $conceptos,
                 null,
-            ));
+                false, // borrador desde precarga: no bloquear por diferencia COM
+                $prefill['articulos'] ?? collect(),
+            );
+            $this->aplicarResultadoControles($resultadoControles);
+            $idsEfectivos = $resultadoControles['recepcion_ids_efectivos'] ?? [];
+            if (is_array($idsEfectivos) && $idsEfectivos !== []) {
+                $prefill['recepciones_seleccionadas'] = $idsEfectivos;
+            }
+        }
+
+        $lineasCompliance = ComprobanteProveedorConceptosIvaCoherenciaSupport::lineasDesdeArrays(
+            collect($prefill['conceptos'] ?? [])->pluck('concepto_ivacompra_id')->all(),
+            collect($prefill['conceptos'] ?? [])->pluck('monto')->all(),
+        );
+        $resultadoCompliance = $this->complianceValidacion->validarAlGrabar($payload, $lineasCompliance);
+        // Borrador desde precarga/PDF+IA: no bloquear por ARCA; marcar para revisar.
+        if (! ($resultadoCompliance['ok'] ?? true)) {
+            $payload['pararevisar'] = true;
+            $this->ultimosAvisosControles = array_values(array_unique(array_merge(
+                $this->ultimosAvisosControles,
+                $resultadoCompliance['errores'] ?? [],
+                $resultadoCompliance['avisos'] ?? [],
+                ['Comprobante dejado en borrador para revisar (constatación ARCA u otros controles).'],
+            )));
+        } else {
+            $this->aplicarResultadoCompliance($resultadoCompliance);
         }
 
         $comprobante = $this->comprobanteRepository->create($payload);
@@ -215,6 +252,19 @@ class ComprobanteProveedorPersistenciaService
             ]);
         }
 
+        foreach ($prefill['articulos'] ?? [] as $i => $articulo) {
+            Comprobante_Proveedor_Articulo::query()->create([
+                'comprobante_proveedor_id' => $comprobante->id,
+                'orden' => $i + 1,
+                'articulo_id' => $articulo->articulo_id ?: null,
+                'sku' => $articulo->sku ?: null,
+                'codigo_proveedor' => $articulo->codigo_proveedor ?: null,
+                'descripcion' => $articulo->descripcion ?: null,
+                'cantidad' => (float) ($articulo->cantidad ?? 0),
+                'precio_unitario' => (float) ($articulo->precio_unitario ?? 0),
+            ]);
+        }
+
         $this->persistirCuotasDesdeArray($comprobante, $prefill['cuotas']);
         $this->vincularRecepcionesDesdePrefill($comprobante, $prefill);
         $this->registrarEstadoInicial($comprobante);
@@ -223,6 +273,7 @@ class ComprobanteProveedorPersistenciaService
         return $comprobante->fresh([
             'comprobante_proveedor_recepciones',
             'comprobante_proveedor_conceptos',
+            'comprobante_proveedor_articulos',
         ]);
     }
 
@@ -339,7 +390,7 @@ class ComprobanteProveedorPersistenciaService
         );
         $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineas);
 
-        foreach ($lineas as $i => $linea) {
+            foreach ($lineas as $i => $linea) {
             $conceptoId = (int) ($linea['concepto_ivacompra_id'] ?? 0);
             if ($conceptoId <= 0) {
                 continue;
@@ -355,6 +406,38 @@ class ComprobanteProveedorPersistenciaService
                 'concepto_ivacompra_id' => $concepto->id,
                 'orden' => $i + 1,
                 'monto' => $linea['monto'] ?? 0,
+            ]);
+        }
+    }
+
+    private function sincronizarArticulos(Request $request, Comprobante_Proveedor $comprobante): void
+    {
+        $input = $request->all();
+        if (! ComprobanteProveedorLineasFacturaSupport::requestTraeLineas($input)) {
+            return;
+        }
+
+        Comprobante_Proveedor_Articulo::query()
+            ->where('comprobante_proveedor_id', $comprobante->id)
+            ->delete();
+
+        $lineas = ComprobanteProveedorLineasFacturaSupport::desdeArraysRequest($input);
+        foreach ($lineas as $i => $linea) {
+            $sku = (string) ($linea['sku'] ?? '');
+            $articuloId = (int) ($linea['articulo_id'] ?? 0) ?: null;
+            if ($articuloId === null && $sku !== '') {
+                $articuloId = ArticuloSkuMatchSupport::resolverCanonico($sku)?->id;
+            }
+
+            Comprobante_Proveedor_Articulo::query()->create([
+                'comprobante_proveedor_id' => $comprobante->id,
+                'orden' => $i + 1,
+                'articulo_id' => $articuloId,
+                'sku' => $sku !== '' ? $sku : null,
+                'codigo_proveedor' => filled($linea['codigo_proveedor'] ?? null) ? $linea['codigo_proveedor'] : null,
+                'descripcion' => filled($linea['descripcion'] ?? null) ? $linea['descripcion'] : null,
+                'cantidad' => (float) ($linea['cantidad'] ?? 0),
+                'precio_unitario' => (float) ($linea['precio_unitario'] ?? 0),
             ]);
         }
     }
@@ -395,6 +478,8 @@ class ComprobanteProveedorPersistenciaService
                     $comprobante->ordencompra_comprobante_id,
                     (float) $comprobante->total,
                     $comprobante->fechacomprobante?->format('Y-m-d') ?? now()->format('Y-m-d'),
+                    (int) ($comprobante->moneda_id ?: 1),
+                    (float) ($comprobante->cotizacion ?: 1),
                 );
                 $cuotas = $meta['cuotas'];
             }
@@ -406,14 +491,30 @@ class ComprobanteProveedorPersistenciaService
     /** @param list<array<string, mixed>> $cuotas */
     private function persistirCuotasDesdeArray(Comprobante_Proveedor $comprobante, array $cuotas): void
     {
+        $monedaFacturaId = (int) ($comprobante->moneda_id ?: 1);
+        $cotizacionFactura = (float) ($comprobante->cotizacion ?: 1);
+
         foreach ($cuotas as $cuota) {
+            $monedaCuotaId = (int) ($cuota['moneda_id'] ?? $monedaFacturaId);
+            $cotizacionCuota = isset($cuota['cotizacion']) ? (float) $cuota['cotizacion'] : $cotizacionFactura;
+            $monto = (float) ($cuota['monto'] ?? 0);
+            if ($monto > 0 && $monedaCuotaId !== $monedaFacturaId) {
+                $monto = ComprobanteProveedorImporteComparacionComSupport::desdeRecepcionAFactura(
+                    $monto,
+                    $monedaCuotaId,
+                    $cotizacionCuota,
+                    $monedaFacturaId,
+                    $cotizacionFactura,
+                );
+            }
+
             Comprobante_Proveedor_Cuota::query()->create([
                 'comprobante_proveedor_id' => $comprobante->id,
                 'numero_cuota' => (int) ($cuota['numero_cuota'] ?? 1),
                 'fechavencimiento' => $cuota['fechavencimiento'],
-                'monto' => (float) ($cuota['monto'] ?? 0),
-                'moneda_id' => (int) ($cuota['moneda_id'] ?? $comprobante->moneda_id ?? 1),
-                'cotizacion' => $cuota['cotizacion'] ?? null,
+                'monto' => $monto,
+                'moneda_id' => $monedaFacturaId,
+                'cotizacion' => $cotizacionFactura,
                 'formapago_id' => (int) ($cuota['formapago_id'] ?? 1),
                 'detalle' => $cuota['detalle'] ?? null,
                 'ordencompra_comprobante_cuota_id' => $cuota['ordencompra_comprobante_cuota_id'] ?? null,
@@ -488,12 +589,24 @@ class ComprobanteProveedorPersistenciaService
             ->value('condicioniva_id');
 
         $modo = (string) ($payload['modo_carga'] ?? '');
-        if ($ordencompra && $this->recepcionesSupport->listarDisponibles($ordencompraId, $excluirComprobanteId)->isNotEmpty()) {
-            $modo = ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
+        if ($ordencompra) {
+            $tieneCom = $this->recepcionesSupport
+                ->listarDisponibles($ordencompraId, $excluirComprobanteId)
+                ->isNotEmpty();
+            if (! $tieneCom) {
+                $tieneCom = $this->recepcionesSupport->listarSinFacturarEnLegajo(
+                    (int) $ordencompra->proveedor_id,
+                    (int) $ordencompra->empresa_id,
+                    $ordencompra->sector_legajocompra_id ? (int) $ordencompra->sector_legajocompra_id : null,
+                    $excluirComprobanteId,
+                )->isNotEmpty();
+            }
+            $politica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica($ordencompra, $tieneCom);
+            $modo = ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido($politica, $modo);
             $payload['modo_carga'] = $modo;
         }
 
-        $this->aplicarResultadoControles($this->controlesLegajo->validarYAplicar(
+        $resultadoControles = $this->controlesLegajo->validarYAplicar(
             $ordencompra,
             $modo,
             $request->input('recepcion_proveedor_ids', []),
@@ -506,15 +619,51 @@ class ComprobanteProveedorPersistenciaService
             (float) ($payload['subtotal'] ?? 0),
             $conceptos,
             $excluirComprobanteId,
-        ));
+            true,
+            ComprobanteProveedorLineasFacturaSupport::requestTraeLineas($request->all())
+                ? ComprobanteProveedorLineasFacturaSupport::desdeArraysRequest($request->all())
+                : ($excluirComprobanteId
+                    ? ComprobanteProveedorLineasFacturaSupport::desdeComprobante(
+                        $this->comprobanteRepository->find($excluirComprobanteId)
+                    )
+                    : collect()),
+        );
+        $this->aplicarResultadoControles($resultadoControles);
+
+        $idsEfectivos = $resultadoControles['recepcion_ids_efectivos'] ?? [];
+        if (is_array($idsEfectivos) && $idsEfectivos !== []) {
+            $request->merge(['recepcion_proveedor_ids' => $idsEfectivos]);
+        }
+
+        $this->aplicarResultadoCompliance(
+            $this->complianceValidacion->validarAlGrabar($payload, $lineas)
+        );
     }
 
     /** @param array{ok: bool, avisos: list<string>, errores: list<string>} $resultado */
     private function aplicarResultadoControles(array $resultado): void
     {
-        $this->ultimosAvisosControles = $resultado['avisos'] ?? [];
+        $this->ultimosAvisosControles = array_values(array_filter(
+            array_map('strval', $resultado['avisos'] ?? [])
+        ));
         if (! ($resultado['ok'] ?? false)) {
             throw new RuntimeException(implode(' ', $resultado['errores'] ?? ['Control de legajo rechazado.']));
+        }
+    }
+
+    /** @param array{ok: bool, avisos: list<string>, errores: list<string>} $resultado */
+    private function aplicarResultadoCompliance(array $resultado): void
+    {
+        $avisos = array_values(array_filter(array_map('strval', $resultado['avisos'] ?? [])));
+        if ($avisos !== []) {
+            $this->ultimosAvisosControles = array_values(array_unique(array_merge(
+                $this->ultimosAvisosControles,
+                $avisos
+            )));
+        }
+
+        if (! ($resultado['ok'] ?? false)) {
+            throw new RuntimeException(implode(' ', $resultado['errores'] ?? ['Validación de compliance rechazada.']));
         }
     }
 

@@ -6,6 +6,7 @@ use App\Models\Compras\Comprobante_Proveedor_Recepcion;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Services\Stock\RecepcionProveedorAsientoService;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -26,7 +27,11 @@ class ComprobanteProveedorRecepcionesSupport
         $yaFacturadas = $this->recepcionIdsFacturadas($comprobanteId);
 
         return Recepcion_Proveedor::query()
-            ->with(['ordencompras'])
+            ->with([
+                'ordencompras',
+                'recepcion_proveedor_articulos.articulos',
+                'recepcion_proveedor_articulos.unidadesmedida',
+            ])
             ->where('ordencompra_id', $ordencompraId)
             ->where('tipo', Recepcion_Proveedor::TIPO_RECEPCION)
             ->where('estado', Recepcion_Proveedor::ESTADO_CONFIRMADA)
@@ -51,7 +56,11 @@ class ComprobanteProveedorRecepcionesSupport
         $yaFacturadas = $this->recepcionIdsFacturadas($excluirComprobanteId);
 
         return Recepcion_Proveedor::query()
-            ->with(['ordencompras'])
+            ->with([
+                'ordencompras',
+                'recepcion_proveedor_articulos.articulos',
+                'recepcion_proveedor_articulos.unidadesmedida',
+            ])
             ->where('proveedor_id', $proveedorId)
             ->where('empresa_id', $empresaId)
             ->where('tipo', Recepcion_Proveedor::TIPO_RECEPCION)
@@ -75,13 +84,36 @@ class ComprobanteProveedorRecepcionesSupport
      */
     public function enriquecerConImporteProvision(Collection $recepciones): Collection
     {
+        $recepciones->loadMissing(['monedas']);
+
         return $recepciones->map(function (Recepcion_Proveedor $recepcion) {
-            $recepcion->importe_provision_com = $this->importeProvisionCom($recepcion);
+            $me = $this->importeProvisionCom($recepcion);
+            $recepcion->importe_provision_com = $me;
+            $recepcion->importe_provision_com_mn = $this->importeProvisionComEnMonedaLocal($recepcion, $me);
 
             return $recepcion;
         });
     }
 
+    /**
+     * Carga artículos de cada COM para mostrar en la carga de factura.
+     *
+     * @param  Collection<int, Recepcion_Proveedor>  $recepciones
+     * @return Collection<int, Recepcion_Proveedor>
+     */
+    public function enriquecerConArticulos(Collection $recepciones): Collection
+    {
+        $recepciones->loadMissing([
+            'recepcion_proveedor_articulos.articulos',
+            'recepcion_proveedor_articulos.unidadesmedida',
+        ]);
+
+        return $recepciones;
+    }
+
+    /**
+     * Provisión COM en moneda de la recepción (p. ej. USD 623 del DEBE del asiento).
+     */
     public function importeProvisionCom(Recepcion_Proveedor $recepcion): float
     {
         try {
@@ -91,6 +123,20 @@ class ComprobanteProveedorRecepcionesSupport
         } catch (\Throwable) {
             return 0.0;
         }
+    }
+
+    /**
+     * Provisión COM en moneda local: si la recepción es ME, ME × cotización.
+     */
+    public function importeProvisionComEnMonedaLocal(Recepcion_Proveedor $recepcion, ?float $importeMe = null): float
+    {
+        $me = $importeMe !== null ? round($importeMe, 2) : $this->importeProvisionCom($recepcion);
+
+        return ComprobanteProveedorImporteComparacionComSupport::aMonedaLocal(
+            $me,
+            (int) ($recepcion->moneda_id ?: 1),
+            (float) ($recepcion->cotizacion ?: 1),
+        );
     }
 
     /**

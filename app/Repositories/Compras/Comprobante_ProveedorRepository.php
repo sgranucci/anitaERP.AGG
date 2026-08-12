@@ -3,11 +3,14 @@
 namespace App\Repositories\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Compras\ComprobanteProveedorListadoFiltros;
 
 class Comprobante_ProveedorRepository implements Comprobante_ProveedorRepositoryInterface
 {
     public function __construct(
         private Comprobante_Proveedor $model,
+        private EmpresaRepositoryInterface $empresaRepository,
     ) {}
 
     public function all()
@@ -39,9 +42,10 @@ class Comprobante_ProveedorRepository implements Comprobante_ProveedorRepository
             'proveedores',
             'tipotransaccion_compras',
             'monedas',
-            'ordencompras',
+            'ordencompras.sector_legajocompras',
             'precarga_comprobante_proveedores',
             'comprobante_proveedor_conceptos',
+            'comprobante_proveedor_articulos.articulos',
             'comprobante_proveedor_cuotas',
             'comprobante_proveedor_estados.usuarios',
             'comprobante_proveedor_archivos',
@@ -49,23 +53,34 @@ class Comprobante_ProveedorRepository implements Comprobante_ProveedorRepository
         ])->find($id);
     }
 
-    public function leeComprobanteProveedor(?string $busqueda, bool $paginar)
+    public function leeComprobanteProveedor($filtros, bool $paginar = false)
     {
-        $query = $this->model->newQuery()
-            ->with(['empresas', 'proveedores', 'tipotransaccion_compras'])
-            ->orderByDesc('id');
-
-        if ($busqueda !== null && trim($busqueda) !== '') {
-            $term = trim($busqueda);
-            $query->where(function ($q) use ($term) {
-                if (ctype_digit($term)) {
-                    $q->where('comprobante_proveedor.id', (int) $term);
-                }
-                $q->orWhere('numerocomprobante', 'like', '%'.$term.'%')
-                    ->orWhere('estado', 'like', '%'.$term.'%')
-                    ->orWhereHas('proveedores', fn ($p) => $p->where('nombre', 'like', '%'.$term.'%'));
-            });
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = array_merge(ComprobanteProveedorListadoFiltros::filtrosVacios(), [
+                'modo' => ComprobanteProveedorListadoFiltros::MODO_TODOS,
+                'campo' => 'nombreproveedor',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'valor_hasta' => '',
+                'busqueda' => $texto,
+                'empresa_scope' => 'todas',
+            ]);
+        } elseif (! is_array($filtros)) {
+            $filtros = ComprobanteProveedorListadoFiltros::filtrosVacios();
         }
+
+        $query = $this->model->newQuery()
+            ->select('comprobante_proveedor.*')
+            ->leftJoin('empresa', 'empresa.id', '=', 'comprobante_proveedor.empresa_id')
+            ->leftJoin('proveedor', 'proveedor.id', '=', 'comprobante_proveedor.proveedor_id')
+            ->leftJoin('tipotransaccion_compra', 'tipotransaccion_compra.id', '=', 'comprobante_proveedor.tipotransaccion_compra_id')
+            ->with(['empresas', 'proveedores', 'tipotransaccion_compras'])
+            ->orderByDesc('comprobante_proveedor.id');
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'comprobante_proveedor.empresa_id');
+
+        ComprobanteProveedorListadoFiltros::aplicar($query, $filtros);
 
         return $paginar ? $query->paginate(10) : $query->get();
     }

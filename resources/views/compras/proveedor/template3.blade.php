@@ -20,6 +20,11 @@
 			</div>
 		</td>
 		<td>
+			<div class="form-group">
+				<input type="text" name="alias_cbus[]" value="" class="form-control alias_cbus fp-alias-cbu" placeholder="Alias" maxlength="80">
+			</div>
+		</td>
+		<td>
 			<select name="tipocuentacaja_ids[]" data-placeholder="Tipo de cuenta de caja" class="form-control tipocuentacaja fp-tipocuentacaja" data-fouc data-fp-label="TC (tipo de cuenta)">
 				<option value=""></option>
 				@foreach($tipocuentacaja_query as $key => $value)

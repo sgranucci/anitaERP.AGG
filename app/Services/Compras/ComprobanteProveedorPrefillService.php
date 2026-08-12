@@ -71,6 +71,7 @@ class ComprobanteProveedorPrefillService
             'data' => $data,
             'origen_entrada' => ComprobanteProveedorOrigenEntrada::MANUAL,
             'conceptos' => collect(),
+            'articulos' => collect(),
             'cuotas' => [],
             'cuotas_escaladas' => false,
             'permite_edicion_cuotas' => true,
@@ -88,6 +89,7 @@ class ComprobanteProveedorPrefillService
                 'tipotransaccion_compras',
                 'monedas',
                 'precarga_comprobante_proveedor_conceptos',
+                'precarga_comprobante_proveedor_articulos.articulos',
             ])
             ->findOrFail($precargaId);
 
@@ -112,6 +114,24 @@ class ComprobanteProveedorPrefillService
             $precarga->cotizacion
         );
 
+        $subtotal = (float) $precarga->subtotal;
+        $total = (float) $precarga->total;
+        $sumaConceptos = round((float) $precarga->precarga_comprobante_proveedor_conceptos->sum('monto'), 2);
+        if ($sumaConceptos > 0 && ($total <= 1 || $sumaConceptos > $total * 10 || abs($sumaConceptos - $total) > max(1.0, $total * 0.5))) {
+            $total = $sumaConceptos;
+            if ($subtotal <= 1 || $subtotal > $total) {
+                // Neto ≈ mayor línea de concepto (neto gravado) o total si no hay desglose.
+                $subtotal = (float) $precarga->precarga_comprobante_proveedor_conceptos->max('monto');
+                if ($subtotal <= 0 || $subtotal > $total) {
+                    $subtotal = $total;
+                }
+            }
+            Precarga_Comprobante_Proveedor::query()->whereKey($precarga->id)->update([
+                'subtotal' => $subtotal,
+                'total' => $total,
+            ]);
+        }
+
         $data = new Comprobante_Proveedor([
             'empresa_id' => $precarga->empresa_id,
             'proveedor_id' => $precarga->proveedor_id,
@@ -127,8 +147,8 @@ class ComprobanteProveedorPrefillService
             'fechavencimientocae' => $precarga->fechavencimientocaicae,
             'numerocae' => $precarga->numerocae,
             'tipo_autorizacion' => $precarga->tipo_autorizacion,
-            'subtotal' => $precarga->subtotal,
-            'total' => $precarga->total,
+            'subtotal' => $subtotal,
+            'total' => $total,
             'moneda_id' => $monedaId,
             'cotizacion' => $cotizacion,
             'modo_carga' => $modoCarga,
@@ -152,12 +172,32 @@ class ComprobanteProveedorPrefillService
             ]);
         });
 
+        $articulos = $precarga->precarga_comprobante_proveedor_articulos->map(function ($a) {
+            return new \App\Models\Compras\Comprobante_Proveedor_Articulo([
+                'articulo_id' => $a->articulo_id,
+                'sku' => $a->sku,
+                'codigo_proveedor' => $a->codigo_proveedor,
+                'descripcion' => $a->descripcion,
+                'cantidad' => $a->cantidad,
+                'precio_unitario' => $a->precio_unitario,
+                'orden' => $a->orden ?? 1,
+            ]);
+        });
+        $articulos->each(function ($fila, $idx) use ($precarga) {
+            $src = $precarga->precarga_comprobante_proveedor_articulos[$idx] ?? null;
+            if ($src && $src->relationLoaded('articulos') && $src->articulos) {
+                $fila->setRelation('articulos', $src->articulos);
+            }
+        });
+
         $cuotasMeta = $ordencompra
             ? $this->condicionPagoDesdeOc->resolverDesdeOrdencompra(
                 $ordencompra,
                 null,
                 (float) $precarga->total,
                 $fechacomprobante,
+                $monedaId,
+                $cotizacion,
             )
             : [
                 'condicionpago_id' => null,
@@ -180,6 +220,7 @@ class ComprobanteProveedorPrefillService
                 $precarga->origen_entrada
             ),
             'conceptos' => $conceptos,
+            'articulos' => $articulos,
             'cuotas' => $this->alinearCuotasConCabecera(
                 $cuotasMeta['cuotas'] ?? [],
                 $monedaId,
@@ -199,6 +240,8 @@ class ComprobanteProveedorPrefillService
                 null,
                 (float) $precarga->total,
                 $fechacomprobante,
+                (int) ($prefill['data']->moneda_id ?: $monedaId),
+                (float) ($prefill['data']->cotizacion ?: $cotizacion),
             );
             if ($cuotasMeta['condicionpago_id']) {
                 $prefill['data']->condicionpago_id = $cuotasMeta['condicionpago_id'];
@@ -258,6 +301,8 @@ class ComprobanteProveedorPrefillService
             null,
             0.0,
             $fecha,
+            $monedaId,
+            $cotizacion,
         );
 
         if ($cuotasMeta['condicionpago_id']) {
@@ -277,6 +322,7 @@ class ComprobanteProveedorPrefillService
             'data' => $data,
             'origen_entrada' => ComprobanteProveedorOrigenEntrada::ORDENCOMPRA,
             'conceptos' => collect(),
+            'articulos' => collect(),
             'cuotas' => $cuotas,
             'cuotas_escaladas' => (bool) ($cuotasMeta['cuotas_escaladas'] ?? false),
             'permite_edicion_cuotas' => (bool) ($cuotasMeta['permite_edicion_cuotas'] ?? true),
@@ -293,8 +339,10 @@ class ComprobanteProveedorPrefillService
             'tipotransaccion_compras',
             'monedas',
             'ordencompras',
+            'ordencompras.sector_legajocompras',
             'precarga_comprobante_proveedores',
-            'comprobante_proveedor_conceptos',
+            'comprobante_proveedor_conceptos.concepto_ivacompras',
+            'comprobante_proveedor_articulos.articulos',
             'comprobante_proveedor_cuotas',
             'comprobante_proveedor_estados.usuarios',
             'comprobante_proveedor_archivos',
@@ -328,6 +376,7 @@ class ComprobanteProveedorPrefillService
                     $comprobante->ordencompra_id,
                 ),
             'conceptos' => $comprobante->comprobante_proveedor_conceptos,
+            'articulos' => $comprobante->comprobante_proveedor_articulos,
             'cuotas' => $cuotas,
             'cuotas_escaladas' => false,
             'permite_edicion_cuotas' => true,

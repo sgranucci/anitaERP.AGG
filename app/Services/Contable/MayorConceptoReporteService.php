@@ -7,6 +7,7 @@ use App\Support\Contable\MayorConcepto\MayorConceptoAnitaBridgeReader;
 use App\Support\Contable\MayorConcepto\MayorConceptoAuditoriaSupport;
 use App\Support\Contable\MayorConcepto\MayorConceptoConciliacionAsientoSupport;
 use App\Support\Contable\MayorConcepto\MayorConceptoMonedaConverter;
+use App\Support\Contable\MayorConcepto\MayorConceptoOrdencompraVistaEnricher;
 use App\Support\Contable\MayorConcepto\MayorConceptoPeriodoProcesador;
 use App\Support\Contable\MayorConcepto\MayorConceptoRuntimeSupport;
 use App\Support\Contable\MayorConceptoListadoFiltros;
@@ -25,6 +26,7 @@ class MayorConceptoReporteService
         private readonly EmpresaRepositoryInterface $empresaRepository,
         private readonly MayorConceptoAuditoriaSupport $auditoriaSupport,
         private readonly MayorConceptoConciliacionAsientoSupport $conciliacionAsientoSupport,
+        private readonly MayorConceptoOrdencompraVistaEnricher $ordencompraVistaEnricher,
     ) {
     }
 
@@ -1061,35 +1063,7 @@ class MayorConceptoReporteService
      */
     private function enriquecerOrdencompraIds(array $filas): array
     {
-        $numerosOc = [];
-        foreach ($filas as $fila) {
-            if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
-                continue;
-            }
-            $nro = (int) ($fila['nro_oc'] ?? 0);
-            if ($nro > 0) {
-                $numerosOc[$nro] = true;
-            }
-        }
-
-        if ($numerosOc === []) {
-            return $filas;
-        }
-
-        $mapa = DB::table('ordencompra')
-            ->whereIn('numeroordencompra', array_keys($numerosOc))
-            ->pluck('id', 'numeroordencompra')
-            ->all();
-
-        foreach ($filas as $idx => $fila) {
-            if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
-                continue;
-            }
-            $nro = (int) ($fila['nro_oc'] ?? 0);
-            $filas[$idx]['ordencompra_id'] = $nro > 0 ? (int) ($mapa[$nro] ?? 0) : 0;
-        }
-
-        return $filas;
+        return $this->ordencompraVistaEnricher->enriquecer($filas, $this->bridgeReader());
     }
 
     /**

@@ -67,6 +67,7 @@ class Caja_MovimientoQuery implements Caja_MovimientoQueryInterface
             'caja_movimiento.numerotransaccion as numerotransaccion',
             'caja_movimiento.tipotransaccion_caja_id as tipotransaccion_caja_id',
             'tipotransaccion_caja.nombre as nombretipotransaccion_caja',
+            'tipotransaccion_caja.abreviatura as abreviaturatipotransaccion_caja',
             'caja_movimiento.fecha as fecha',
             'conceptogasto.nombre as nombreconceptogasto',
             'caja_movimiento.detalle as detalle',

@@ -27,7 +27,7 @@ final class ComprobanteProveedorFacturaAnticipadaSupport
             return false;
         }
 
-        return strtoupper(trim((string) $oc->tratamiento)) === 'ANTICIPADA';
+        return ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($oc);
     }
 
     public static function ocTieneCapex(?Ordencompra $oc): bool

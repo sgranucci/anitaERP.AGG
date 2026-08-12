@@ -134,6 +134,15 @@
 </div>
 
 @if (!empty($pdfIaHabilitado) && can('crear-precarga-proveedores', false))
-    @include('compras.precarga_comprobante_proveedor.partials.modal_pdf_ia')
+    @include('compras.precarga_comprobante_proveedor.partials.modal_pdf_ia', [
+        'pdfIaOverlayId' => 'precarga-pdf-ia-proceso-overlay',
+    ])
+    @include('includes.proceso_overlay_aviso', [
+        'overlayId' => 'precarga-pdf-ia-proceso-overlay',
+        'tituloId' => 'precarga-pdf-ia-proceso-titulo',
+        'subtituloId' => 'precarga-pdf-ia-proceso-subtitulo',
+        'titulo' => 'Analizando factura…',
+        'subtitulo' => 'El OCR y la validación pueden demorar. No cierre la página.',
+    ])
 @endif
 @endsection

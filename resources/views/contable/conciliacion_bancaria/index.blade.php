@@ -137,7 +137,9 @@
                                 · {{ number_format($resultado['suma_pendientes_cheques_caratula'] ?? 0, 2, ',', '.') }}
                             </p>
                             <p><strong>Mayor sin match (otros):</strong> {{ count($resultado['pendientes_contables_otros'] ?? []) }}</p>
-                            <p><strong>Pendientes banco:</strong> {{ count($resultado['pendientes_banco'] ?? []) }}</p>
+                            <p><strong>Pendientes banco (soporte MAYO):</strong> {{ count($resultado['pendientes_banco_caratula'] ?? []) }}
+                                <span class="text-muted small">· sin match total: {{ count($resultado['pendientes_banco'] ?? []) }}</span>
+                            </p>
                         </div>
                     </div>
 
@@ -239,12 +241,17 @@
                             @endif
                         </div>
                         <div class="tab-pane" id="tab-banco-pend">
+                            <p class="text-muted small mb-2">
+                                Como Contaduría en la solapa del mes: solo transferencias/créditos de soporte (TRF, CABAL)
+                                pendientes de contabilizar. <strong>No</strong> incluye cheques (van a Pendientes)
+                                ni gastos bancarios (van a Gastos / ING-GTOS).
+                            </p>
                             <table class="table table-sm table-striped">
                                 <thead style="background:#85C1E9;color:#17202A">
                                     <tr><th>Fecha</th><th>Concepto</th><th>Comprobante</th><th>Importe</th></tr>
                                 </thead>
                                 <tbody>
-                                    @forelse ($resultado['pendientes_banco'] ?? [] as $mov)
+                                    @forelse ($resultado['pendientes_banco_caratula'] ?? [] as $mov)
                                         @php
                                             $tipo = strtoupper($mov['debit_credit_type'] ?? '');
                                             $monto = (float) ($mov['amount'] ?? 0);
@@ -257,7 +264,7 @@
                                             <td class="text-right">{{ number_format($imp, 2, ',', '.') }}</td>
                                         </tr>
                                     @empty
-                                        <tr><td colspan="4" class="text-muted">Sin pendientes banco.</td></tr>
+                                        <tr><td colspan="4" class="text-muted">Sin pendientes banco de soporte (TRF/CABAL).</td></tr>
                                     @endforelse
                                 </tbody>
                             </table>

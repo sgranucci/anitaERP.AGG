@@ -16,28 +16,54 @@ final class FacturaProveedorOcrRecorteSupport
     /** Si el corte por línea descarta más que esto del bloque, se corta seco. */
     private const MAX_DESCARTE_POR_LINEA = 0.2;
 
-    public static function cabeceraYPie(string $texto, int $maxChars, float $ratioCabecera = 0.4): string
-    {
+    /**
+     * Conserva cabecera + muestra del cuerpo (ítems) + pie.
+     * Ratio: cabecera | medio | pie (suman 1).
+     */
+    public static function cabeceraMedioYPie(
+        string $texto,
+        int $maxChars,
+        float $ratioCabecera = 0.28,
+        float $ratioMedio = 0.44,
+    ): string {
         $texto = trim($texto);
 
         if ($maxChars <= 0 || mb_strlen($texto) <= $maxChars) {
             return $texto;
         }
 
-        $ratio = min(0.9, max(0.1, $ratioCabecera));
-        $presupuesto = $maxChars - mb_strlen(self::SEPARADOR);
+        $ratioCabecera = min(0.6, max(0.15, $ratioCabecera));
+        $ratioMedio = min(0.7, max(0.1, $ratioMedio));
+        if ($ratioCabecera + $ratioMedio > 0.9) {
+            $ratioMedio = 0.9 - $ratioCabecera;
+        }
+        $ratioPie = 1 - $ratioCabecera - $ratioMedio;
 
+        $sep1 = "\n[...]\n";
+        $sep2 = "\n[...]\n";
+        $presupuesto = $maxChars - mb_strlen($sep1) - mb_strlen($sep2);
         if ($presupuesto <= 0) {
             return mb_substr($texto, 0, $maxChars);
         }
 
-        $charsCabecera = (int) round($presupuesto * $ratio);
-        $charsPie = $presupuesto - $charsCabecera;
+        $charsCab = (int) round($presupuesto * $ratioCabecera);
+        $charsMed = (int) round($presupuesto * $ratioMedio);
+        $charsPie = $presupuesto - $charsCab - $charsMed;
 
-        $cabecera = self::cortarFinalEnLinea(mb_substr($texto, 0, $charsCabecera));
+        $largo = mb_strlen($texto);
+        $cabecera = self::cortarFinalEnLinea(mb_substr($texto, 0, $charsCab));
+
+        $inicioMedio = (int) round($largo * $ratioCabecera);
+        $medio = self::cortarFinalEnLinea(mb_substr($texto, $inicioMedio, $charsMed));
         $pie = self::cortarInicioEnLinea(mb_substr($texto, -$charsPie));
 
-        return $cabecera.self::SEPARADOR.$pie;
+        return $cabecera.$sep1.$medio.$sep2.$pie;
+    }
+
+    public static function cabeceraYPie(string $texto, int $maxChars, float $ratioCabecera = 0.4): string
+    {
+        // Compat: usa cabecera+medio+pie para no perder ítems del cuerpo.
+        return self::cabeceraMedioYPie($texto, $maxChars, $ratioCabecera * 0.7, 0.45);
     }
 
     /** Recorta hasta el último salto de línea para no cortar un renglón por la mitad. */

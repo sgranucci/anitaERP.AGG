@@ -7,6 +7,7 @@ use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use App\Support\Ventas\Gastronomia\CierreJornadaAnitaCompensacionOverlaySupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaCuadroDetalleSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaFacturadoAnitaSupport;
@@ -164,6 +165,16 @@ final class GastronomiaCierreJornadaProcesoService
     ): array {
         $jornada = $this->resolverJornada($jornadaId);
         $fecha = $fechaFactura ?? ($jornada->fecha_jornada?->format('Y-m-d') ?? '');
+        $t0 = microtime(true);
+
+        Log::info('cierre_jornada_waitry.proceso.emitir.inicio', [
+            'jornada_id' => $jornadaId,
+            'empresa_id' => (int) $jornada->empresa_id,
+            'fecha_jornada' => $jornada->fecha_jornada?->format('Y-m-d'),
+            'porcentaje' => $porcentaje,
+            'puntoventa_id' => $puntoventaId,
+            'usuario_id' => Auth::id(),
+        ]);
 
         $resultado = app(GastronomiaCierreJornadaFacturaProcesoEmisionService::class)->emitir(
             $jornadaId,
@@ -174,17 +185,40 @@ final class GastronomiaCierreJornadaProcesoService
         );
 
         if (! ($resultado['ok'] ?? false)) {
+            Log::warning('cierre_jornada_waitry.proceso.emitir.rechazado', [
+                'jornada_id' => $jornadaId,
+                'empresa_id' => (int) $jornada->empresa_id,
+                'ms' => (int) round((microtime(true) - $t0) * 1000),
+                'error' => $resultado['error'] ?? $resultado['mensaje'] ?? null,
+            ]);
+
             return $resultado;
         }
 
         // Manual: emitir ≠ asientos. Rendgastro cuelga de las ventas emitidas.
         // Automático sigue grabando asientos en su propio paso.
-        return $this->completarRendgastroTrasEmision($jornadaId, $resultado);
+        $resultado = $this->completarRendgastroTrasEmision($jornadaId, $resultado);
+
+        Log::info('cierre_jornada_waitry.proceso.emitir.fin', [
+            'jornada_id' => $jornadaId,
+            'empresa_id' => (int) $jornada->empresa_id,
+            'ms' => (int) round((microtime(true) - $t0) * 1000),
+            'venta_id' => $resultado['venta_id'] ?? ($resultado['facturas'][0]['venta_id'] ?? null),
+            'total_factura' => $resultado['total_factura'] ?? null,
+            'rendicion_anita_ok' => (bool) (($resultado['rendicion_anita']['ok'] ?? false)
+                || (($resultado['jornada_proceso']['rendicion_anita_grabada'] ?? false))),
+            'rendicion_anita_error' => $resultado['rendicion_anita_error'] ?? null,
+        ]);
+
+        return $resultado;
     }
 
     /**
      * Persiste rendgastro CIERRE-WAITRY a partir de las facturas del proceso (ventas),
      * sin depender de asientos contables.
+     *
+     * Si Anita falla, NO revierte la factura ya emitida: deja el proceso usable
+     * (asientos pueden reintentar rendgastro) y registra el error en log + respuesta.
      *
      * @param  array<string, mixed>  $resultadoEmision
      * @return array<string, mixed>
@@ -207,16 +241,45 @@ final class GastronomiaCierreJornadaProcesoService
             return $resultadoEmision;
         }
 
+        $t0 = microtime(true);
         try {
             $rendicion = app(GastronomiaCierreJornadaProcesoRendicionAnitaService::class)->grabar($jornadaId);
         } catch (Throwable $e) {
-            $msgEmision = trim((string) ($resultadoEmision['mensaje'] ?? 'Facturas del proceso emitidas.'));
-            throw new RuntimeException(
-                $msgEmision.' Luego falló la rendición Anita (rendgastro): '.$e->getMessage(),
-                0,
-                $e,
-            );
+            Log::error('cierre_jornada_waitry.proceso.rendgastro.fallo_post_emision', [
+                'jornada_id' => $jornadaId,
+                'empresa_id' => (int) $jornada->empresa_id,
+                'fecha_jornada' => $jornada->fecha_jornada?->format('Y-m-d'),
+                'ms' => (int) round((microtime(true) - $t0) * 1000),
+                'venta_id' => $resultadoEmision['venta_id'] ?? ($emision['venta_id'] ?? null),
+                'total_factura' => $resultadoEmision['total_factura'] ?? ($emision['total_factura'] ?? null),
+                'error' => $e->getMessage(),
+                'exception' => $e::class,
+            ]);
+
+            $snapshot = GastronomiaCierreJornadaProcesoSnapshot::query()
+                ->where('jornada_gastronomia_id', $jornadaId)
+                ->first();
+            $resultadoEmision['rendicion_anita'] = [
+                'ok' => false,
+                'error' => $e->getMessage(),
+            ];
+            $resultadoEmision['rendicion_anita_error'] = $e->getMessage();
+            $base = trim((string) ($resultadoEmision['mensaje'] ?? 'Facturas del proceso emitidas.'));
+            $resultadoEmision['mensaje'] = $base
+                .' Atención: falló la rendición Anita (rendgastro): '.$e->getMessage()
+                .'. Puede reintentarla con «Grabar asientos contables».';
+            $resultadoEmision['jornada_proceso'] = CierreJornadaProcesoJornadaSupport::contexto($jornada, $snapshot);
+
+            return $resultadoEmision;
         }
+
+        Log::info('cierre_jornada_waitry.proceso.rendgastro.ok', [
+            'jornada_id' => $jornadaId,
+            'empresa_id' => (int) $jornada->empresa_id,
+            'ms' => (int) round((microtime(true) - $t0) * 1000),
+            'nro_oper' => $rendicion['rendicion']['nro_oper'] ?? ($rendicion['nro_oper'] ?? null),
+            'ya_existia' => (bool) ($rendicion['ya_existia'] ?? false),
+        ]);
 
         $resultadoEmision['rendicion_anita'] = $rendicion;
         $msgRend = trim((string) ($rendicion['mensaje'] ?? ''));

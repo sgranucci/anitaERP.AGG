@@ -27,7 +27,7 @@ class IngresoEgresoComprobanteIvaAsientoVinculoService
             ->where('caja_movimiento_id', $cajaMovimientoId)
             ->where('origen_entrada', ComprobanteProveedorOrigenEntrada::INGRESO_EGRESO)
             ->whereNull('deleted_at')
-            ->with(['comprobante_proveedor_conceptos.concepto_ivacompras'])
+            ->with(['comprobante_proveedor_conceptos.concepto_ivacompras.concepto_ivacompra_empresas'])
             ->get();
 
         if ($comprobantes->isEmpty()) {
@@ -74,7 +74,10 @@ class IngresoEgresoComprobanteIvaAsientoVinculoService
                     continue;
                 }
 
-                $cuentaId = (int) ($linea->cuentacontabledebe_id ?? $linea->concepto_ivacompras?->cuentacontabledebe_id ?? 0);
+                $empresaId = (int) ($comprobante->empresa_id ?? 0);
+                $cuentaId = (int) ($linea->cuentacontabledebe_id
+                    ?? $linea->concepto_ivacompras?->cuentacontableDebeIdParaEmpresa($empresaId)
+                    ?? 0);
                 if ($cuentaId <= 0) {
                     continue;
                 }

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Stock;
 
 use App\Http\Controllers\Controller;
 use App\Services\Stock\SurmarTrazabilidadService;
+use App\Support\Stock\SurmarSupport;
 use Illuminate\Http\Request;
 
 class TrazabilidadSurmarController extends Controller
@@ -13,10 +14,15 @@ class TrazabilidadSurmarController extends Controller
     ) {
     }
 
+    private function assertSurmar(): void
+    {
+    }
+
     public function index(Request $request)
     {
         can('listar-trazabilidad-surmar');
 
+        $this->assertSurmar();
         $etiquetaId = (int) $request->input('etiqueta_id', 0);
         $articuloId = (int) $request->input('articulo_id', 0);
         $lote = trim((string) $request->input('lote', ''));

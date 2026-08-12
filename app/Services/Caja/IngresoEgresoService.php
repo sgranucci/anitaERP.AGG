@@ -27,7 +27,11 @@ use Carbon\Carbon;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Caja\IngresoEgresoChequeAsientoSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAsientoSupport;
+use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
+use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Caja\IngresoEgresoTransferenciaSupport;
+use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
+use App\Models\Solicitudpago\Solicitudpago;
 use InvalidArgumentException;
 use App;
 use Auth;
@@ -101,9 +105,12 @@ class IngresoEgresoService
 
 		try {
 			IngresoEgresoTransferenciaSupport::assertBalanceado($data);
+			IngresoEgresoSolicitudpagoSupport::assertMontoCoincideConSolicitud($data);
 		} catch (InvalidArgumentException $e) {
 			return ['errores' => $e->getMessage()];
 		}
+
+		$this->avisarUmbralArbolIeSiCorresponde($data);
 
    		// Crea estado
 	   	$data['fechas'][] = Carbon::now();
@@ -149,7 +156,8 @@ class IngresoEgresoService
 				return ['errores' => $e->getMessage()];
 			}
 		}
-        return ['mensaje' => 'ok'];
+
+		return $this->respuestaExitoGrabacion($caja_movimiento ?? null, $request);
 	}
 
 	private function agrega($data, $caja_movimiento, $request)
@@ -181,6 +189,7 @@ class IngresoEgresoService
 			$data['caja_movimiento_id'] = $caja_movimiento->id;
 
 			$data['observacion'] = $data['detalle'];
+			$data = $this->aplicarReferenciaComprobanteAsiento($data, $caja_movimiento);
 
 			$asiento = $this->asientoRepository->create($data);
 
@@ -190,6 +199,8 @@ class IngresoEgresoService
 			if ($asiento)
 				$asiento_movimiento = $this->asiento_movimientoRepository->create($data, $asiento->id);
 		}
+
+		IngresoEgresoAnitaTesmovSupport::grabarDesdeMovimiento($caja_movimiento->fresh());
 	}
 
     public function actualizaIngresoEgreso($request, $id, $origen = null)
@@ -208,6 +219,7 @@ class IngresoEgresoService
 
 		try {
 			IngresoEgresoTransferenciaSupport::assertBalanceado($data);
+			IngresoEgresoSolicitudpagoSupport::assertMontoCoincideConSolicitud($data);
 		} catch (InvalidArgumentException $e) {
 			return ['errores' => $e->getMessage()];
 		}
@@ -288,6 +300,9 @@ class IngresoEgresoService
 			$data['caja_movimiento_id'] = $id;
 			$data['observacion'] = $data['detalle'];
 
+			$movRef = $this->caja_movimientoRepository->find($id);
+			$data = $this->aplicarReferenciaComprobanteAsiento($data, $movRef);
+
 			if (count($asiento) > 0)
 			{
 				$asiento = $this->asientoRepository->update($data, $asiento_id);
@@ -317,6 +332,10 @@ class IngresoEgresoService
 					$asiento_movimiento = $this->asiento_movimientoRepository->create($data, $asiento->id);
 			}
 		}
+
+		$mov = $this->caja_movimientoRepository->find($id);
+		IngresoEgresoAnitaTesmovSupport::eliminarDesdeMovimiento($mov);
+		IngresoEgresoAnitaTesmovSupport::grabarDesdeMovimiento($mov);
 	}
 
 	public function copiarIngresoEgreso(Request $request)
@@ -412,6 +431,11 @@ class IngresoEgresoService
 		$conceptogasto_id = json_decode($data['conceptogasto_id'] ?? '0');
 		$empresa_id = (int) json_decode($data['empresa_id'] ?? '0');
 		$fechaOperacion = (string) ($data['fecha'] ?? date('Y-m-d'));
+		$solicitudpagoId = (int) ($data['solicitudpago_id'] ?? 0);
+		if ($solicitudpagoId <= 0 && isset($data['solicitudpago_id'])) {
+			$decodedSp = json_decode((string) $data['solicitudpago_id']);
+			$solicitudpagoId = (int) ($decodedSp ?? 0);
+		}
 
 		$tipotransaccion_caja = $this->tipotransaccion_cajaRepository->find($tipotransaccion_caja_id);
 		$signo = 1;
@@ -426,6 +450,39 @@ class IngresoEgresoService
 		// Transferencia (TRA): los montos ya vienen firmados (+ entrada / − salida).
 		if (IngresoEgresoTransferenciaSupport::esTransferencia($tipotransaccion_caja)) {
 			$signo = 1;
+		}
+
+		// Pago desde SP: asiento = cuentas de la solicitud (on the fly).
+		if ($solicitudpagoId > 0 && count($datosContables) == 0) {
+			$sp = Solicitudpago::query()
+				->with(['cuentas.cuentacontables'])
+				->find($solicitudpagoId);
+			if ($sp && $sp->cuentas->isNotEmpty()) {
+				$monedaId = (int) ($sp->moneda_id ?? 0);
+				$cotizacion = 1;
+				if (is_array($datosCaja) || $datosCaja instanceof \Traversable) {
+					foreach ($datosCaja as $movimiento) {
+						$monedaMov = (int) ($movimiento->moneda_ids ?? 0);
+						if ($monedaMov > 0) {
+							$monedaId = $monedaMov;
+							$cotizacion = $movimiento->cotizaciones ?? 1;
+							break;
+						}
+					}
+				}
+				if ($monedaId <= 0) {
+					$monedaId = 1;
+				}
+
+				$asientoSp = IngresoEgresoSolicitudpagoSupport::lineasAsientoDesdeSolicitud(
+					$sp,
+					$monedaId,
+					$cotizacion
+				);
+				if ($asientoSp !== []) {
+					return ['mensaje' => 'ok', 'asiento' => $asientoSp];
+				}
+			}
 		}
 
 		// Arma cuentas contables de cada imputacion de caja
@@ -670,6 +727,137 @@ class IngresoEgresoService
 
 		$monedaRef = (int) ($monedaIds[0] ?? 1);
 		$this->comprobanteIvaService->validarTotalesContraCaja($comprobantes, $lineasCaja, $monedaRef);
+	}
+
+	/**
+	 * Referencia de comprobante en ctamov (tipo/letra/sucursal/nro) + leyenda por línea.
+	 * Misma clave que pago/tesmov Anita (a-movim.c MultiEmpresa).
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @param  \App\Models\Caja\Caja_Movimiento|null  $movimiento
+	 * @return array<string, mixed>
+	 */
+	private function aplicarReferenciaComprobanteAsiento(array $data, $movimiento = null): array
+	{
+		$tipoId = (int) ($data['tipotransaccion_caja_id'] ?? ($movimiento->tipotransaccion_caja_id ?? 0));
+		$tipo = '';
+		if ($tipoId > 0) {
+			$tt = $this->tipotransaccion_cajaRepository->find($tipoId);
+			$tipo = strtoupper(substr(trim((string) ($tt->abreviatura ?? '')), 0, 3));
+		}
+		if ($tipo === '' && $movimiento) {
+			$movimiento->loadMissing('tipotransaccioncajas');
+			if ($movimiento->tipotransaccioncajas) {
+				$tipo = strtoupper(substr(trim((string) $movimiento->tipotransaccioncajas->abreviatura), 0, 3));
+			}
+		}
+		if ($tipo === '') {
+			$tipo = 'OPP';
+		}
+
+		$nro = (int) ($data['numerotransaccion'] ?? ($movimiento->numerotransaccion ?? 0));
+
+		$empresaId = (int) ($data['empresa_id'] ?? ($movimiento->empresa_id ?? 0));
+		$empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId);
+		if ($empresaAnita <= 0) {
+			$empresaAnita = $empresaId;
+		}
+
+		$sucursalCfg = config('caja.ingresoegreso_anita_tesmov_sucursal');
+		$sucursal = $sucursalCfg === null || $sucursalCfg === ''
+			? $empresaAnita
+			: (int) $sucursalCfg;
+
+		$letra = (string) config('caja.ingresoegreso_anita_tesmov_letra', ' ');
+		if ($letra === '') {
+			$letra = ' ';
+		}
+
+		$data['tipo'] = $tipo;
+		$data['letra'] = $letra;
+		$data['sucursal'] = $sucursal;
+		$data['nro'] = $nro;
+
+		$spId = (int) ($data['solicitudpago_id'] ?? 0);
+		if ($spId <= 0 && $movimiento) {
+			$spId = (int) ($movimiento->solicitudpago_id ?? 0);
+		}
+		$data['solicitudpago_id'] = $spId > 0 ? $spId : null;
+
+		$detalle = (string) ($data['detalle'] ?? ($movimiento->detalle ?? ''));
+		if (! isset($data['observaciones']) || ! is_array($data['observaciones'])) {
+			$data['observaciones'] = [];
+		}
+		$qLineas = is_array($data['cuentacontable_ids'] ?? null) ? count($data['cuentacontable_ids']) : count($data['observaciones']);
+		for ($i = 0; $i < $qLineas; $i++) {
+			$obs = $data['observaciones'][$i] ?? null;
+			if ($obs === null || trim((string) $obs) === '') {
+				$data['observaciones'][$i] = $detalle;
+			}
+		}
+
+		return $data;
+	}
+
+	/**
+	 * Respuesta AJAX post-alta: PDF de OP si hay SP vinculada; redirect al index SP si origen=solicitudpago.
+	 *
+	 * @return array{mensaje: string, caja_movimiento_id?: int, url_comprobante_pdf?: string, redirect_url: string}
+	 */
+	private function respuestaExitoGrabacion($caja_movimiento, $request): array
+	{
+		$respuesta = ['mensaje' => 'ok'];
+
+		$origenUi = (string) ($request->input('origen') ?? '');
+		if ($origenUi === 'solicitudpago') {
+			$respuesta['redirect_url'] = route('consultar_solicitudpago');
+		} elseif ($origenUi === 'movimientocaja') {
+			$respuesta['redirect_url'] = url('caja/movimientocaja');
+		} else {
+			$respuesta['redirect_url'] = route('ingresoegreso');
+		}
+
+		if ($caja_movimiento && isset($caja_movimiento->id)) {
+			$id = (int) $caja_movimiento->id;
+			$respuesta['caja_movimiento_id'] = $id;
+			$spId = (int) ($caja_movimiento->solicitudpago_id ?? $request->input('solicitudpago_id') ?? 0);
+			if ($spId > 0) {
+				$respuesta['url_comprobante_pdf'] = route('imprimir_ingresoegreso', $id);
+			}
+		}
+
+		return $respuesta;
+	}
+
+	/**
+	 * Stub: si arbol_umbral_monto > 0 y el monto del IE lo alcanza, solo registra warning.
+	 * No dispara árbol de aprobación IE (default off).
+	 *
+	 * @param  array<string, mixed>  $data
+	 */
+	private function avisarUmbralArbolIeSiCorresponde(array $data): void
+	{
+		$umbral = (float) config('caja.arbol_umbral_monto', 0);
+		if ($umbral <= 0) {
+			return;
+		}
+
+		$monto = 0.0;
+		foreach ((array) ($data['montos'] ?? []) as $m) {
+			$monto += abs((float) $m);
+		}
+		if ($monto <= 0) {
+			$monto = abs((float) ($data['monto'] ?? 0));
+		}
+		if ($monto < $umbral) {
+			return;
+		}
+
+		Log::warning('IE supera umbral de árbol (stub; árbol IE no implementado)', [
+			'umbral' => $umbral,
+			'monto' => $monto,
+			'empresa_id' => $data['empresa_id'] ?? null,
+		]);
 	}
 
 }

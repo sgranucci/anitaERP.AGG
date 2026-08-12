@@ -25,6 +25,20 @@ class Precarga_Comprobante_Proveedor extends Model implements Auditable
     	return $this->hasMany(Precarga_Comprobante_Proveedor_Concepto::class, 'precarga_comprobante_proveedor_id');
 	}
 
+	public function precarga_comprobante_proveedor_articulos()
+	{
+    	return $this->hasMany(Precarga_Comprobante_Proveedor_Articulo::class, 'precarga_comprobante_proveedor_id')
+            ->orderBy('orden');
+	}
+
+    /**
+     * Comprobante de proveedor generado desde esta precarga (si existe).
+     */
+    public function comprobante_proveedor()
+    {
+        return $this->hasOne(Comprobante_Proveedor::class, 'precarga_comprobante_proveedor_id');
+    }
+
     public function empresas()
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');

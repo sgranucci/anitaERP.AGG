@@ -50,4 +50,16 @@ return [
         'habilitado' => filter_var(env('ARCA_WSCDC_PRECARGA_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
         'cbte_modo_default' => env('ARCA_WSCDC_CBTE_MODO_DEFAULT', 'CAE'),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Comprobante proveedor (ABM / carga manual o desde precarga)
+    |--------------------------------------------------------------------------
+    |
+    | Constatación WSCDC al grabar factura de proveedor (además de CAE en UI).
+    |
+    */
+    'comprobante' => [
+        'habilitado' => filter_var(env('ARCA_WSCDC_COMPROBANTE_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+    ],
 ];

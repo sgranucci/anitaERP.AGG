@@ -81,6 +81,30 @@ final class ConciliacionBancariaPendienteSupport
     }
 
     /**
+     * Solapa mes (MAYO/…) “Movimientos bancarios pendientes de contabilizar”:
+     * Contaduría solo lista transferencias/créditos de soporte (CABAL, TRF chicas).
+     * Cheques → solapa Pendientes; gastos (imp./IIBB/IVA/comisiones) → ING-GTOS.
+     *
+     * @param  array<string, mixed>  $banco
+     */
+    public static function esPendienteBancoParaSolapaMes(array $banco): bool
+    {
+        return self::esCreditoBancoParaCaratula($banco);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $pendientes
+     * @return list<array<string, mixed>>
+     */
+    public static function filtrarPendientesBancoParaSolapaMes(array $pendientes): array
+    {
+        return array_values(array_filter(
+            $pendientes,
+            static fn (array $mov) => self::esPendienteBancoParaSolapaMes($mov),
+        ));
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $pendientes
      * @return array{
      *   cheques: list<array<string,mixed>>,

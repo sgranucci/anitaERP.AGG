@@ -9,6 +9,7 @@ use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
+use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 
@@ -57,8 +58,13 @@ class ComprobanteProveedorComLegajoResolucionService
                 return $linea;
             }),
         );
+        $importeMn = ComprobanteProveedorImporteComparacionComSupport::aMonedaLocal(
+            (float) $importeMeta['importe'],
+            (int) ($precarga->moneda_id ?? 1),
+            (float) ($precarga->cotizacion ?? 1),
+        );
 
-        $seleccion = $this->resolverSeleccion($recepciones, $importeMeta['importe']);
+        $seleccion = $this->resolverSeleccion($recepciones, $importeMn);
 
         return [
             'recepciones_disponibles' => $recepciones,
@@ -66,7 +72,7 @@ class ComprobanteProveedorComLegajoResolucionService
             'com_resolucion' => [
                 'ambigua' => $seleccion['ambigua'],
                 'mensaje' => $seleccion['mensaje'],
-                'importe_comparacion' => $importeMeta['importe'],
+                'importe_comparacion' => $importeMn,
                 'importe_comparacion_etiqueta' => $importeMeta['etiqueta'],
                 'ordencompra_id' => $seleccion['ordencompra_id'],
             ],
@@ -109,6 +115,173 @@ class ComprobanteProveedorComLegajoResolucionService
             'recepciones_seleccionadas' => $resolucion['recepciones_seleccionadas'],
             'com_resolucion' => $resolucion['com_resolucion'],
         ]);
+    }
+
+    /**
+     * Si el circuito exige COM y no hay IDs elegidos: toma la primera pendiente
+     * cuyo neto de provisión coincide con el importe neto/total de la factura.
+     *
+     * @param  iterable<object>  $conceptos
+     * @return array{
+     *     ids: list<int>,
+     *     auto: bool,
+     *     aviso: string|null,
+     *     ordencompra_id: int|null,
+     *     importe_comparacion: float,
+     *     etiqueta: string
+     * }
+     */
+    public function autoAsignarPrimeraPorImporteNeto(
+        Ordencompra $ordencompra,
+        string $letra,
+        ?int $condicionivaProveedorId,
+        float $total,
+        float $subtotal,
+        iterable $conceptos,
+        ?int $excluirComprobanteId = null,
+        int $monedaId = 1,
+        float $cotizacion = 1.0,
+    ): array {
+        $recepciones = $this->recepcionesSupport->listarDisponibles((int) $ordencompra->id, $excluirComprobanteId);
+        if ($recepciones->isEmpty()) {
+            $recepciones = $this->recepcionesSupport->listarSinFacturarEnLegajo(
+                (int) $ordencompra->proveedor_id,
+                (int) $ordencompra->empresa_id,
+                $ordencompra->sector_legajocompra_id ? (int) $ordencompra->sector_legajocompra_id : null,
+                $excluirComprobanteId,
+            );
+        }
+
+        $recepciones = $this->recepcionesSupport
+            ->enriquecerConImporteProvision($recepciones)
+            ->sortBy([
+                fn (Recepcion_Proveedor $r) => $r->fecha?->format('Y-m-d') ?? '9999-99-99',
+                fn (Recepcion_Proveedor $r) => (int) $r->id,
+            ])
+            ->values();
+
+        $importeMeta = ComprobanteProveedorImporteComparacionComSupport::importeParaCompararConRecepcion(
+            $letra,
+            $condicionivaProveedorId,
+            $total,
+            $subtotal,
+            $conceptos,
+        );
+        $importe = ComprobanteProveedorImporteComparacionComSupport::aMonedaLocal(
+            (float) $importeMeta['importe'],
+            $monedaId,
+            $cotizacion,
+        );
+
+        $provisionMn = static fn (Recepcion_Proveedor $rec): float => (float) (
+            $rec->importe_provision_com_mn ?? $rec->importe_provision_com ?? 0
+        );
+
+        if ($recepciones->isEmpty()) {
+            return [
+                'ids' => [],
+                'auto' => false,
+                'aviso' => null,
+                'ordencompra_id' => null,
+                'importe_comparacion' => $importe,
+                'etiqueta' => $importeMeta['etiqueta'],
+            ];
+        }
+
+        $toleranciaPct = ComprobanteProveedorToleranciaImporteSupport::porcentajeParaOc(
+            (int) $ordencompra->empresa_id,
+            (int) ($ordencompra->centrocosto_id ?? 0) ?: null,
+        );
+
+        $exactas = $recepciones->filter(function (Recepcion_Proveedor $rec) use ($importe, $provisionMn) {
+            return ComprobanteProveedorImporteComparacionComSupport::coinciden($importe, $provisionMn($rec));
+        })->values();
+
+        $candidatas = $exactas;
+        if ($candidatas->isEmpty()) {
+            $candidatas = $recepciones->filter(function (Recepcion_Proveedor $rec) use ($importe, $toleranciaPct, $provisionMn) {
+                return ! ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia(
+                    $importe,
+                    $provisionMn($rec),
+                    $toleranciaPct
+                );
+            })->values();
+        }
+
+        if ($candidatas->isEmpty()) {
+            // Flujo simple: si hay una sola COM, asignarla igual (aviso); si hay varias, la más cercana.
+            if ($recepciones->count() === 1) {
+                /** @var Recepcion_Proveedor $unica */
+                $unica = $recepciones->first();
+                $prov = $provisionMn($unica);
+
+                return [
+                    'ids' => [(int) $unica->id],
+                    'auto' => true,
+                    'aviso' => sprintf(
+                        'COM #%s asignada automáticamente aunque el neto no coincide (factura %s vs provisión COM %s). Revise antes de contabilizar.',
+                        $unica->id,
+                        number_format($importe, 2, ',', '.'),
+                        number_format($prov, 2, ',', '.')
+                    ),
+                    'ordencompra_id' => (int) ($unica->ordencompra_id ?? 0) ?: (int) $ordencompra->id,
+                    'importe_comparacion' => $importe,
+                    'etiqueta' => $importeMeta['etiqueta'],
+                ];
+            }
+
+            $cercana = $recepciones->sortBy(function (Recepcion_Proveedor $rec) use ($importe, $provisionMn) {
+                return abs($provisionMn($rec) - $importe);
+            })->first();
+
+            if ($cercana) {
+                $prov = $provisionMn($cercana);
+
+                return [
+                    'ids' => [(int) $cercana->id],
+                    'auto' => true,
+                    'aviso' => sprintf(
+                        'COM #%s asignada por aproximación (factura %s vs provisión COM %s). Hay más de una COM: confirme la correcta antes de contabilizar.',
+                        $cercana->id,
+                        number_format($importe, 2, ',', '.'),
+                        number_format($prov, 2, ',', '.')
+                    ),
+                    'ordencompra_id' => (int) ($cercana->ordencompra_id ?? 0) ?: (int) $ordencompra->id,
+                    'importe_comparacion' => $importe,
+                    'etiqueta' => $importeMeta['etiqueta'],
+                ];
+            }
+
+            return [
+                'ids' => [],
+                'auto' => false,
+                'aviso' => sprintf(
+                    'No hay COM pendiente cuyo neto coincida con el %s de la factura (%s).',
+                    $importeMeta['etiqueta'],
+                    number_format($importe, 2, ',', '.')
+                ),
+                'ordencompra_id' => null,
+                'importe_comparacion' => $importe,
+                'etiqueta' => $importeMeta['etiqueta'],
+            ];
+        }
+
+        /** @var Recepcion_Proveedor $elegida */
+        $elegida = $candidatas->first();
+
+        return [
+            'ids' => [(int) $elegida->id],
+            'auto' => true,
+            'aviso' => sprintf(
+                'COM #%s asignada automáticamente (primera pendiente con %s ≈ %s).',
+                $elegida->id,
+                $importeMeta['etiqueta'],
+                number_format($provisionMn($elegida), 2, ',', '.')
+            ),
+            'ordencompra_id' => (int) ($elegida->ordencompra_id ?? 0) ?: (int) $ordencompra->id,
+            'importe_comparacion' => $importe,
+            'etiqueta' => $importeMeta['etiqueta'],
+        ];
     }
 
     private function resolverSectorLegajo(Precarga_Comprobante_Proveedor $precarga, ?Ordencompra $ordencompra): ?int
@@ -167,7 +340,7 @@ class ComprobanteProveedorComLegajoResolucionService
         }
 
         $coincidencias = $recepciones->filter(function (Recepcion_Proveedor $rec) use ($importeComprobante) {
-            $importeCom = (float) ($rec->importe_provision_com ?? 0);
+            $importeCom = (float) ($rec->importe_provision_com_mn ?? $rec->importe_provision_com ?? 0);
 
             return ComprobanteProveedorImporteComparacionComSupport::coinciden($importeComprobante, $importeCom);
         })->values();

@@ -5,11 +5,13 @@ namespace App\Repositories\Compras;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Compras\PagoproveedorListadoFiltros;
 use App\Support\Compras\PortalProveedorPagosListadoFiltros;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+
 class PagoproveedorRepository implements PagoproveedorRepositoryInterface
 {
     public function __construct(
@@ -61,35 +63,41 @@ class PagoproveedorRepository implements PagoproveedorRepositoryInterface
     }
 
     /**
-     * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>|string|null  $filtros
      */
-    public function leePagoproveedor(array $filtros, bool $flPaginando = true): LengthAwarePaginator|Collection
+    public function leePagoproveedor(array|string|null $filtros = [], bool $flPaginando = true): LengthAwarePaginator|Collection
     {
+        if (is_string($filtros)) {
+            $filtros = array_merge(PagoproveedorListadoFiltros::filtrosVacios(), [
+                'valor' => $filtros,
+                'busqueda' => $filtros,
+            ]);
+        }
+        $filtros = is_array($filtros) ? $filtros : PagoproveedorListadoFiltros::filtrosVacios();
+
         $query = $this->model->query()
+            ->select('pagoproveedor.*')
+            ->leftJoin('empresa', 'empresa.id', '=', 'pagoproveedor.empresa_id')
+            ->leftJoin('proveedor', 'proveedor.id', '=', 'pagoproveedor.proveedor_id')
             ->with(['empresas', 'proveedores', 'monedas'])
-            ->orderByDesc('fecha')
-            ->orderByDesc('id');
+            ->orderByDesc('pagoproveedor.fecha')
+            ->orderByDesc('pagoproveedor.id');
 
-        if (! empty($filtros['empresa_id'])) {
-            $query->where('empresa_id', (int) $filtros['empresa_id']);
-        }
-        if (! empty($filtros['proveedor_id'])) {
-            $query->where('proveedor_id', (int) $filtros['proveedor_id']);
-        }
-        if (! empty($filtros['estado'])) {
-            $query->where('estado', (string) $filtros['estado']);
-        }
-        if (! empty($filtros['fecha_desde'])) {
-            $query->whereDate('fecha', '>=', $filtros['fecha_desde']);
-        }
-        if (! empty($filtros['fecha_hasta'])) {
-            $query->whereDate('fecha', '<=', $filtros['fecha_hasta']);
-        }
-        if (! empty($filtros['numero'])) {
-            $query->where('numerotransaccion', 'like', '%'.$filtros['numero'].'%');
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'pagoproveedor.empresa_id');
+
+        if (PagoproveedorListadoFiltros::tieneCriteriosAplicados($filtros)
+            || PagoproveedorListadoFiltros::tieneCriteriosTexto($filtros)
+            || (int) ($filtros['empresa_id'] ?? 0) > 0
+        ) {
+            PagoproveedorListadoFiltros::aplicar($query, $filtros);
         }
 
-        return $flPaginando ? $query->paginate(10) : $query->get();
+        $coleccion = $flPaginando ? $query->paginate(10) : $query->get();
+        foreach ($coleccion as $fila) {
+            $fila->nombreempresa = $fila->empresas->nombre ?? '';
+        }
+
+        return $coleccion;
     }
 
     public function listarPortalProveedor(int $proveedorId, array $filtros = [], bool $paginar = true): LengthAwarePaginator|Collection

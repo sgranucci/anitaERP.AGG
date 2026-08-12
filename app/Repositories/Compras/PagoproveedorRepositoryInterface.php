@@ -19,9 +19,9 @@ interface PagoproveedorRepositoryInterface
     public function findOrFail(int $id): Pagoproveedor;
 
     /**
-     * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>|string|null  $filtros
      */
-    public function leePagoproveedor(array $filtros, bool $flPaginando = true): LengthAwarePaginator|Collection;
+    public function leePagoproveedor(array|string|null $filtros = [], bool $flPaginando = true): LengthAwarePaginator|Collection;
 
     /**
      * Pagos visibles en el portal de proveedores (sin precargas internas).

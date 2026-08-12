@@ -6,7 +6,9 @@ use App\Exports\Compras\ComprobanteProveedorListadoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionComprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Archivo;
+use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Proveedor;
+use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Compras\Comprobante_ProveedorRepositoryInterface;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Repositories\Compras\Tipotransaccion_CompraRepositoryInterface;
@@ -16,15 +18,20 @@ use App\Services\Compras\ComprobanteProveedorPrefillService;
 use App\Services\Compras\ComprobanteProveedorRecepcionesSupport;
 use App\Services\Compras\ComprobanteProveedorComLegajoResolucionService;
 use App\Services\Compras\ComprobanteProveedorContabilizarService;
+use App\Services\Compras\ComprobanteProveedorEliminarService;
 use App\Services\Compras\ComprobanteProveedorAsientoService;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Support\Compras\ComprobanteProveedorArchivoPathSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
+use App\Support\Compras\ComprobanteProveedorControlesConfigSupport;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
+use App\Support\Compras\ComprobanteProveedorListadoFiltros;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
+use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
@@ -48,6 +55,7 @@ class Comprobante_ProveedorController extends Controller
         private PrecargaFacturaScanPathResolver $facturaScanPathResolver,
         private ComprobanteProveedorArchivoPathSupport $archivoPathSupport,
         private ComprobanteProveedorContabilizarService $contabilizarService,
+        private ComprobanteProveedorEliminarService $eliminarService,
         private ComprobanteProveedorRecepcionesSupport $recepcionesSupport,
         private ComprobanteProveedorAsientoService $asientoService,
         private ComprobanteProveedorAsientoPreviewSupport $asientoPreviewSupport,
@@ -60,10 +68,16 @@ class Comprobante_ProveedorController extends Controller
     {
         can('listar-comprobante-proveedor');
 
-        $busqueda = $request->input('busqueda');
-        $datas = $this->comprobanteRepository->leeComprobanteProveedor($busqueda, true);
+        $filtros = $this->resolverFiltrosListado($request);
+        $datas = $this->comprobanteRepository->leeComprobanteProveedor($filtros, true);
 
-        return view('compras.comprobante_proveedor.index', compact('datas', 'busqueda'));
+        return view('compras.comprobante_proveedor.index', [
+            'datas' => $datas,
+            'filtros' => $filtros,
+            'filtrosQuery' => ComprobanteProveedorListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => ComprobanteProveedorListadoFiltros::CAMPOS,
+            'empresa_query' => $this->empresaRepository->allFiltrado(),
+        ]);
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)
@@ -73,18 +87,22 @@ class Comprobante_ProveedorController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        $filtros = $this->resolverFiltrosListado($request, $busqueda);
+        $filtrosQuery = ComprobanteProveedorListadoFiltros::paraQueryString($filtros);
+
         if (! $formato) {
-            return redirect()->route('comprobante_proveedor', array_filter([
-                'busqueda' => $busqueda ?? $request->input('busqueda'),
-            ]));
+            return redirect()->route('comprobante_proveedor', $filtrosQuery);
         }
 
         switch ($formato) {
             case 'PDF':
-                $datas = $this->comprobanteRepository->leeComprobanteProveedor($busqueda, false);
+                $datas = $this->comprobanteRepository->leeComprobanteProveedor($filtros, false);
 
-                $view = \View::make('compras.comprobante_proveedor.listado', compact('datas', 'busqueda'))
-                    ->render();
+                $view = \View::make('compras.comprobante_proveedor.listado', [
+                    'datas' => $datas,
+                    'filtros' => $filtros,
+                    'filtrosQuery' => $filtrosQuery,
+                ])->render();
                 $path = storage_path('pdf/listados');
                 $nombre_pdf = 'listado_comprobante_proveedor';
 
@@ -96,18 +114,16 @@ class Comprobante_ProveedorController extends Controller
 
             case 'EXCEL':
                 return (new ComprobanteProveedorListadoExport($this->comprobanteRepository))
-                    ->parametros($busqueda)
+                    ->parametros($filtros)
                     ->download('comprobante_proveedor.xlsx');
 
             case 'CSV':
                 return (new ComprobanteProveedorListadoExport($this->comprobanteRepository))
-                    ->parametros($busqueda, true)
+                    ->parametros($filtros, true)
                     ->download('comprobante_proveedor.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 
-        return redirect()->route('comprobante_proveedor', array_filter([
-            'busqueda' => $busqueda,
-        ]));
+        return redirect()->route('comprobante_proveedor', $filtrosQuery);
     }
 
     public function crear(Request $request)
@@ -182,7 +198,7 @@ class Comprobante_ProveedorController extends Controller
         }
 
         return redirect()
-            ->route('editar_comprobante_proveedor', ['id' => $comprobante->id])
+            ->route('comprobante_proveedor')
             ->with('mensaje', $mensaje);
     }
 
@@ -220,7 +236,7 @@ class Comprobante_ProveedorController extends Controller
         }
 
         return redirect()
-            ->route('editar_comprobante_proveedor', ['id' => $id, 'solapa' => 'asiento'])
+            ->route('comprobante_proveedor')
             ->with('mensaje', $mensaje);
     }
 
@@ -257,7 +273,11 @@ class Comprobante_ProveedorController extends Controller
 
     public function previewAsientoContable(Request $request, ?int $id = null): JsonResponse
     {
-        can('editar-comprobante-proveedor');
+        if (! can('editar-comprobante-proveedor', false)
+            && ! can('crear-comprobante-proveedor', false)
+            && ! can('actualizar-comprobante-proveedor', false)) {
+            can('editar-comprobante-proveedor');
+        }
 
         $existente = null;
         if ($id) {
@@ -296,18 +316,69 @@ class Comprobante_ProveedorController extends Controller
     {
         can('borrar-comprobante-proveedor');
 
-        if ($request->ajax()) {
-            $flBorro = $this->comprobanteRepository->delete($id);
+        try {
+            $resultado = $this->eliminarService->eliminar($id, tambienPrecarga: false);
+        } catch (\Throwable $e) {
+            if ($request->ajax()) {
+                return response()->json(['mensaje' => 'error', 'error' => $e->getMessage()], 422);
+            }
 
-            return response()->json(['mensaje' => $flBorro ? 'ok' : 'error']);
+            return redirect()
+                ->route('editar_comprobante_proveedor', ['id' => $id])
+                ->with('errores', ['No se pudo borrar el comprobante: '.$e->getMessage()]);
         }
 
-        abort(404);
+        if ($request->ajax()) {
+            return response()->json(['mensaje' => 'ok', 'detalle' => $resultado['mensaje']]);
+        }
+
+        return redirect()
+            ->route('comprobante_proveedor')
+            ->with('mensaje', $resultado['mensaje']);
+    }
+
+    public function eliminarConPrecarga(Request $request, int $id)
+    {
+        can('borrar-comprobante-proveedor');
+        if (! can('borrar-precarga-proveedores', false)) {
+            can('borrar-precarga-proveedores');
+        }
+
+        try {
+            $resultado = $this->eliminarService->eliminar($id, tambienPrecarga: true);
+        } catch (\Throwable $e) {
+            if ($request->ajax()) {
+                return response()->json(['mensaje' => 'error', 'error' => $e->getMessage()], 422);
+            }
+
+            return redirect()
+                ->route('editar_comprobante_proveedor', ['id' => $id])
+                ->with('errores', ['No se pudo borrar: '.$e->getMessage()]);
+        }
+
+        if ($request->ajax()) {
+            return response()->json(['mensaje' => 'ok', 'detalle' => $resultado['mensaje']]);
+        }
+
+        return redirect()
+            ->route('comprobante_proveedor')
+            ->with('mensaje', $resultado['mensaje']);
     }
 
     public function generarDesdePrecarga(int $precargaId)
     {
         can('crear-comprobante-proveedor');
+
+        $existente = Comprobante_Proveedor::query()
+            ->where('precarga_comprobante_proveedor_id', $precargaId)
+            ->whereNull('deleted_at')
+            ->orderBy('id')
+            ->first();
+        if ($existente) {
+            return redirect()
+                ->route('editar_comprobante_proveedor', ['id' => $existente->id])
+                ->with('mensaje', 'Esta precarga ya tiene el comprobante #'.$existente->id.' generado. Se abrió para revisión.');
+        }
 
         try {
             $comprobante = $this->persistenciaService->generarBorradorDesdePrecarga($precargaId);
@@ -345,7 +416,7 @@ class Comprobante_ProveedorController extends Controller
         }
 
         return redirect()
-            ->route('editar_comprobante_proveedor', ['id' => $id, 'solapa' => 'asiento'])
+            ->route('comprobante_proveedor')
             ->with('mensaje', 'Comprobante contabilizado: asiento, cuenta corriente y sync Anita.');
     }
 
@@ -569,11 +640,32 @@ class Comprobante_ProveedorController extends Controller
         $asientoPreview = ['activo' => ! $contabilizado, 'es_preview' => true, 'lineas' => []];
 
         if ($comprobanteId && $data) {
-            $data->loadMissing('comprobante_proveedor_recepciones');
+            $data->loadMissing([
+                'comprobante_proveedor_recepciones.recepcion_proveedores.ordencompras',
+                'comprobante_proveedor_recepciones.recepcion_proveedores.recepcion_proveedor_articulos.articulos',
+                'comprobante_proveedor_recepciones.recepcion_proveedores.recepcion_proveedor_articulos.unidadesmedida',
+            ]);
             $recepcionesSeleccionadas = $data->comprobante_proveedor_recepciones
                 ->pluck('recepcion_proveedor_id')
                 ->map(fn ($id) => (int) $id)
                 ->all();
+
+            if ($recepcionesSeleccionadas !== []) {
+                $vinculadas = Recepcion_Proveedor::query()
+                    ->with([
+                        'ordencompras',
+                        'recepcion_proveedor_articulos.articulos',
+                        'recepcion_proveedor_articulos.unidadesmedida',
+                    ])
+                    ->whereIn('id', $recepcionesSeleccionadas)
+                    ->get();
+                $recepcionesDisponibles = $vinculadas
+                    ->merge($recepcionesDisponibles)
+                    ->unique('id')
+                    ->values();
+                $recepcionesDisponibles = $this->recepcionesSupport->enriquecerConImporteProvision($recepcionesDisponibles);
+                $recepcionesDisponibles = $this->recepcionesSupport->enriquecerConArticulos($recepcionesDisponibles);
+            }
 
             $asientoPreview = $this->asientoService->previewParaVista($data);
             if (! $contabilizado) {
@@ -586,6 +678,78 @@ class Comprobante_ProveedorController extends Controller
             }
         }
 
+        $comObligatoria = false;
+        $comPolitica = [
+            'exige_flujo' => false,
+            'es_anticipada' => false,
+            'tiene_com' => false,
+            'debe_asignar_com' => false,
+            'permite_factura_anticipada' => false,
+            'bloquea_sin_com' => false,
+        ];
+        if ($data) {
+            $data->loadMissing(['ordencompras.sector_legajocompras']);
+            $oc = $data->ordencompras;
+            $tieneCom = $recepcionesDisponibles->isNotEmpty();
+            $comPolitica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica($oc, $tieneCom);
+            $comObligatoria = (bool) ($comPolitica['debe_asignar_com'] ?? false);
+
+            $modoSugerido = ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido(
+                $comPolitica,
+                (string) ($data->modo_carga ?? '')
+            );
+            if ($comObligatoria || ($comPolitica['permite_factura_anticipada'] ?? false)) {
+                $data->modo_carga = $modoSugerido;
+            }
+        }
+
+        $toleranciaPct = 0.0;
+        if ($data) {
+            $data->loadMissing('ordencompras');
+            $oc = $data->ordencompras;
+            if ($oc) {
+                $toleranciaPct = ComprobanteProveedorToleranciaImporteSupport::porcentajeParaOc(
+                    (int) $oc->empresa_id,
+                    (int) ($oc->centrocosto_id ?? 0) ?: null,
+                );
+            }
+        }
+
+        $recepcionesDisponibles = $this->recepcionesSupport->enriquecerConArticulos($recepcionesDisponibles);
+
+        $cotizacionMeta = [
+            'cotizacion_dia' => 1.0,
+            'cotizacion_origen' => 'mn',
+            'cotizacion_factura' => null,
+        ];
+        if ($data) {
+            $fechaCot = '';
+            if ($data->fechacomprobante instanceof \DateTimeInterface) {
+                $fechaCot = $data->fechacomprobante->format('Y-m-d');
+            } else {
+                $fechaCot = substr((string) ($data->fechacomprobante ?? now()->format('Y-m-d')), 0, 10);
+            }
+            $monedaCot = (int) ($data->moneda_id ?? 1);
+            $cotPrecarga = null;
+            if (! empty($data->precarga_comprobante_proveedor_id)) {
+                $data->loadMissing('precarga_comprobante_proveedores');
+                $cotPrecarga = $data->precarga_comprobante_proveedores->cotizacion ?? null;
+            }
+            $cotizacionMeta = ComprobanteProveedorCotizacionSupport::resolverConReferenciaDia(
+                $this->cotizacionQuery,
+                $fechaCot,
+                $monedaCot,
+                $data->cotizacion ?? null,
+                $cotPrecarga
+            );
+            // Si no había cotización usable en ME, completar con la del día.
+            if (ComprobanteProveedorCotizacionSupport::esMonedaExtranjera($monedaCot)
+                && (float) ($data->cotizacion ?? 0) <= 1.0
+                && (float) $cotizacionMeta['cotizacion'] > 1.0) {
+                $data->cotizacion = $cotizacionMeta['cotizacion'];
+            }
+        }
+
         return array_merge($prefill, [
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'tipotransaccion_compra_query' => $this->tipotransaccionCompraRepository->all('*'),
@@ -595,13 +759,41 @@ class Comprobante_ProveedorController extends Controller
             'estados' => ComprobanteProveedorEstados::todos(),
             'recepciones_disponibles' => $recepcionesDisponibles,
             'recepciones_seleccionadas' => $recepcionesSeleccionadas,
+            'com_obligatoria' => $comObligatoria,
+            'com_politica' => $comPolitica,
+            'com_tolerancia_pct' => $toleranciaPct,
             'com_resolucion' => $prefill['com_resolucion'] ?? $this->resolverComResolucionFormulario($data, $recepcionesSeleccionadas),
             'asientoPreview' => $asientoPreview,
             'mostrarSolapaAsiento' => ! $contabilizado,
-            'conceptos_cuenta_meta' => $this->asientoPreviewSupport->metaConceptosParaCliente(
-                $this->conceptoIvacompraRepository->all()
+            'mostrarSolapaCom' => $comObligatoria
+                || count($recepcionesSeleccionadas) > 0
+                || ($comPolitica['permite_factura_anticipada'] ?? false)
+                || ($comPolitica['bloquea_sin_com'] ?? false)
+                || (string) ($data->modo_carga ?? '') === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION,
+            // Match SKU/precio off en AGG: ocultar solapa vacía; mostrar si hay líneas (OCR) o flags activos.
+            'mostrarSolapaArticulos' => $this->mostrarSolapaArticulosFormulario(
+                (int) ($data->empresa_id ?? 0),
+                $prefill['articulos'] ?? collect()
             ),
+            'conceptos_cuenta_meta' => $this->asientoPreviewSupport->metaConceptosParaCliente(
+                $this->conceptoIvacompraRepository->all(),
+                (int) ($data->empresa_id ?? 0) ?: null
+            ),
+            'cotizacion_dia' => $cotizacionMeta['cotizacion_dia'],
+            'cotizacion_origen' => $cotizacionMeta['cotizacion_origen'],
+            'cotizacion_factura' => $cotizacionMeta['cotizacion_factura'],
         ]);
+    }
+
+    private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
+    {
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+
+        return ComprobanteProveedorListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busquedaRuta,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
     }
 
     private function resolverRecepcionesDisponiblesFormulario(
@@ -671,5 +863,29 @@ class Comprobante_ProveedorController extends Controller
         }
 
         return $resolucion['com_resolucion'];
+    }
+
+    /**
+     * Solapa Artículos: uso operativo = match SKU/precio (flags).
+     * Si están off (AGG), solo mostrar cuando ya hay líneas (OCR/precarga/edición).
+     *
+     * @param  \Illuminate\Support\Collection<int, mixed>|iterable<mixed>  $articulos
+     */
+    private function mostrarSolapaArticulosFormulario(int $empresaId, iterable $articulos): bool
+    {
+        if (old('articulo_skus') !== null || old('articulo_skus_marker') !== null) {
+            return true;
+        }
+
+        $cfg = ComprobanteProveedorControlesConfigSupport::paraEmpresa($empresaId);
+        if (! empty($cfg['match_lineas_activo']) && ! empty($cfg['activo'])) {
+            return true;
+        }
+
+        if ($articulos instanceof \Illuminate\Support\Collection) {
+            return $articulos->isNotEmpty();
+        }
+
+        return count(is_countable($articulos) ? $articulos : iterator_to_array($articulos)) > 0;
     }
 }

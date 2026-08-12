@@ -121,6 +121,7 @@ class MayorPlanoCuentaController extends Controller
             'puede_ver_recepcion_proveedor' => can('listar-recepcion-proveedor', false) || can('editar-recepcion-proveedor', false),
             'puede_ver_movimientostock' => can('listar-movimientos-de-stock', false) || can('editar-movimientos-de-stock', false),
             'puede_ver_caja_movimiento' => can('listar-ingresos-egresos-caja', false) || can('editar-ingresos-egresos-caja', false),
+            'puede_ver_solicitudpago' => can('listar-solicitud-pago', false) || can('editar-solicitud-pago', false),
             'multiempresa' => count($filtros['empresa_ids'] ?? []) > 1
                 || empty($filtros['consolidar_empresas']),
         ]);

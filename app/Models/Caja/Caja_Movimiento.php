@@ -23,6 +23,8 @@ class Caja_Movimiento extends Model implements Auditable
                             'cobranza_id',
                             'pagoproveedor_id',
                             'solicitudpago_id',
+                            'caja_movimiento_origen_id',
+                            'caja_movimiento_revertido_por_id',
                             'venta_id',
                             'detalle',
                             'usuario_id',
@@ -78,6 +80,16 @@ class Caja_Movimiento extends Model implements Auditable
         return $this->belongsTo(\App\Models\Solicitudpago\Solicitudpago::class, 'solicitudpago_id');
     }
 
+    public function movimientoOrigen()
+    {
+        return $this->belongsTo(self::class, 'caja_movimiento_origen_id');
+    }
+
+    public function movimientoRevertidoPor()
+    {
+        return $this->belongsTo(self::class, 'caja_movimiento_revertido_por_id');
+    }
+
     public function empresas()
     {
         return $this->belongsTo(Empresa::class, 'empresa_id');
@@ -85,7 +97,7 @@ class Caja_Movimiento extends Model implements Auditable
 
     public function tipotransaccioncajas()
     {
-        return $this->belongsTo(Tipotransaccion_caja::class, 'tipotransaccion_caja_id');
+        return $this->belongsTo(Tipotransaccion_Caja::class, 'tipotransaccion_caja_id');
     }
 
     public function proveedores()

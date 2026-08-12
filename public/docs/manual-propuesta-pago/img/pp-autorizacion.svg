@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <rect width="960" height="540" fill="#f7f9fc"/>
+  <rect x="24" y="24" width="912" height="56" rx="6" fill="#85C1E9"/>
+  <text x="48" y="60" font-family="DejaVu Sans, Arial, sans-serif" font-size="22" font-weight="700" fill="#17202A">Autorización del lote (árbol PP)</text>
+  <rect x="24" y="96" width="912" height="420" rx="6" fill="#ffffff" stroke="#cccccc"/>
+  
+  <text x="48" y="140" font-size="16" font-family="DejaVu Sans, Arial, sans-serif" fill="#17202A">Premium: Enviar a aprobación → EN_APROBACION → firmantes → AUTORIZADA</text>
+  <rect x="60" y="180" width="180" height="80" rx="8" fill="#fdebd0" stroke="#d68910"/><text x="85" y="225" font-size="14" font-family="DejaVu Sans, Arial, sans-serif" fill="#17202A">BORRADOR</text>
+  <rect x="290" y="180" width="180" height="80" rx="8" fill="#d6eaf8" stroke="#2874a6"/><text x="305" y="225" font-size="14" font-family="DejaVu Sans, Arial, sans-serif" fill="#17202A">EN_APROBACION</text>
+  <rect x="520" y="180" width="180" height="80" rx="8" fill="#d5f5e3" stroke="#1e8449"/><text x="545" y="225" font-size="14" font-family="DejaVu Sans, Arial, sans-serif" fill="#17202A">AUTORIZADA</text>
+  <text x="48" y="320" font-size="14" font-family="DejaVu Sans, Arial, sans-serif" fill="#17202A">Light: el mismo botón autoriza sin firmantes (modo por empresa).</text>
+  <text x="48" y="360" font-size="14" font-family="DejaVu Sans, Arial, sans-serif" fill="#17202A">Se fija monto autorizado (snapshot). Excluir líneas después no lo baja.</text>
+  <text x="48" y="400" font-size="14" font-family="DejaVu Sans, Arial, sans-serif" fill="#17202A">Auditoría muestra quién firmó cada nivel del árbol PP.</text>
+
+  <text x="48" y="500" font-family="DejaVu Sans, Arial, sans-serif" font-size="12" fill="#666666">Anita ERP · diagrama de respaldo del manual (reemplazar por captura PNG real)</text>
+</svg>

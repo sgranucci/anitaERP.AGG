@@ -24,12 +24,15 @@ use App\Models\Compras\Concepto_Ivacompra;
 use App\Services\Caja\IngresoEgresoComprobanteIvaPdfIaService;
 use App\Services\Caja\IngresoEgresoComprobanteIvaService;
 use App\Services\Caja\IngresoEgresoService;
+use App\Services\Caja\IngresoEgresoAnularRevertirService;
 use App\Support\Compras\ComprobanteProveedorTipoTesoreria;
 use App\Support\Caja\IngresoEgresoComprobanteIvaValidacionSupport;
 use App\Support\Caja\IngresoEgresoListadoFiltros;
+use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Caja\IngresoEgresoVisibilidadSupport;
 use App\Queries\Caja\Caja_MovimientoQueryInterface;
 use App\Exports\Caja\Caja_MovimientoExport;
+use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
@@ -59,6 +62,7 @@ class IngresoEgresoController extends Controller
     private $condicionivaRepository;
     private $comprobanteIvaService;
     private $comprobanteIvaPdfIaService;
+    private IngresoEgresoAnularRevertirService $anularRevertirService;
 
 	public function __construct(Caja_MovimientoRepositoryInterface $caja_movimientorepository,
                                 Tipotransaccion_CajaRepositoryInterface $tipotransaccion_cajarepository,
@@ -78,6 +82,7 @@ class IngresoEgresoController extends Controller
                                 CondicionivaRepositoryInterface $condicionivaRepository,
                                 IngresoEgresoComprobanteIvaService $comprobanteIvaService,
                                 IngresoEgresoComprobanteIvaPdfIaService $comprobanteIvaPdfIaService,
+                                IngresoEgresoAnularRevertirService $anularRevertirService,
                                 )
     {
         $this->caja_movimientoRepository = $caja_movimientorepository;
@@ -98,6 +103,7 @@ class IngresoEgresoController extends Controller
         $this->condicionivaRepository = $condicionivaRepository;
         $this->comprobanteIvaService = $comprobanteIvaService;
         $this->comprobanteIvaPdfIaService = $comprobanteIvaPdfIaService;
+        $this->anularRevertirService = $anularRevertirService;
     }
 
     /**
@@ -195,6 +201,8 @@ class IngresoEgresoController extends Controller
                 $nombreCaja = $caja->nombre;
 
             $origen = 'movimientocaja';
+        } elseif ($request->input('origen') === 'solicitudpago') {
+            $origen = 'solicitudpago';
         }
 
         $data = new \App\Models\Caja\Caja_Movimiento();
@@ -203,7 +211,7 @@ class IngresoEgresoController extends Controller
             $spId = (int) $request->input('solicitudpago_id');
             $data->solicitudpago_id = $spId;
             $solicitudpagoOrigen = \App\Models\Solicitudpago\Solicitudpago::query()
-                ->with('proveedores')
+                ->with(['proveedores', 'monedas', 'cuentas.cuentacontables', 'cuentas.centrocostos'])
                 ->find($spId);
             if ($solicitudpagoOrigen) {
                 if (! $request->filled('empresa_id') && $solicitudpagoOrigen->empresa_id) {
@@ -216,6 +224,13 @@ class IngresoEgresoController extends Controller
                 if (! $request->filled('detalle')) {
                     $data->detalle = 'Pago SP '.$solicitudpagoOrigen->codigo
                         .($solicitudpagoOrigen->detalle ? ' — '.$solicitudpagoOrigen->detalle : '');
+                }
+                if (! $request->filled('tipotransaccion_caja_id')) {
+                    $tipoSpId = IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorConfig();
+                    if ($tipoSpId > 0) {
+                        $data->tipotransaccion_caja_id = $tipoSpId;
+                        session(['tipotransaccion_caja_id' => $tipoSpId]);
+                    }
                 }
             }
         }
@@ -276,7 +291,9 @@ class IngresoEgresoController extends Controller
             $origen = 'ingresoegreso';
 
         $data = $this->caja_movimientoRepository->find($id);
+        $data->loadMissing(['solicitudpagos.monedas', 'tipotransaccioncajas']);
 
+        $solicitudpagoOrigen = $data->solicitudpagos;
         $tipotransaccion_caja_query = $this->tipotransaccion_cajaRepository->all();
         $conceptogasto_query = $this->conceptogastoRepository->all();
         $moneda_query = $this->monedaRepository->all();
@@ -303,7 +320,7 @@ class IngresoEgresoController extends Controller
                 'conceptogasto_query',
                 'empresa_query', 'cuentacaja_query', 'cuentacontable_query',
                 'centrocosto_query', 'chequera_query', 'caracter_enum',
-                'caja_id', 'nombreCaja', 'origen'),
+                'caja_id', 'nombreCaja', 'origen', 'solicitudpagoOrigen'),
             $this->datosComprobantesIva((int) $id),
         ));
     }
@@ -367,9 +384,112 @@ class IngresoEgresoController extends Controller
         }
     }
 
+    public function anularFisicamente(Request $request, int $id)
+    {
+        can('anular-ingresos-egresos-caja');
+        IngresoEgresoVisibilidadSupport::abortSiNoAccesible($id);
+
+        try {
+            $resultado = $this->anularRevertirService->anularFisicamente($id);
+            if ($request->ajax()) {
+                return response()->json([
+                    'mensaje' => 'ok',
+                    'resultado' => $resultado,
+                ]);
+            }
+
+            return redirect()->route('ingresoegreso')->with('mensaje', 'Movimiento anulado físicamente.');
+        } catch (\Throwable $e) {
+            if ($request->ajax()) {
+                return response()->json(['mensaje' => $e->getMessage()], 422);
+            }
+
+            return redirect()->back()->with('mensaje', $e->getMessage());
+        }
+    }
+
+    public function revertirIngresoEgreso(Request $request, $id = null)
+    {
+        can('revertir-ingresos-egresos-caja');
+        $id = (int) ($id ?? $request->input('id') ?? $request->input('caja_movimiento_id') ?? 0);
+        if ($id <= 0) {
+            if ($request->ajax()) {
+                return response()->json(['mensaje' => 'Falta id de movimiento.'], 422);
+            }
+
+            return redirect()->back()->with('mensaje', 'Falta id de movimiento.');
+        }
+
+        IngresoEgresoVisibilidadSupport::abortSiNoAccesible($id);
+
+        try {
+            $resultado = $this->anularRevertirService->revertir($id, $request->input('fecha'));
+            if ($request->ajax()) {
+                return response()->json([
+                    'mensaje' => 'ok',
+                    'resultado' => $resultado,
+                ]);
+            }
+
+            return redirect()->route('ingresoegreso')->with(
+                'mensaje',
+                'Movimiento revertido. Anulación N° '.$resultado['numerotransaccion'].'.'
+            );
+        } catch (\Throwable $e) {
+            if ($request->ajax()) {
+                return response()->json(['mensaje' => $e->getMessage()], 422);
+            }
+
+            return redirect()->back()->with('mensaje', $e->getMessage());
+        }
+    }
+
     public function generaAsientoContable(Request $request)
     {
         return $this->ingresoegresoService->generaAsientoContable($request->all());
+    }
+
+    public function imprimir(int $id)
+    {
+        can('listar-ingresos-egresos-caja');
+        IngresoEgresoVisibilidadSupport::abortSiNoAccesible($id);
+
+        $movimiento = $this->caja_movimientoRepository->find($id);
+        $movimiento->loadMissing([
+            'solicitudpagos',
+            'empresas',
+            'proveedores',
+            'tipotransaccioncajas',
+            'caja_movimiento_cuentacajas.cuentacajas',
+            'caja_movimiento_cuentacajas.monedas',
+            'cheques.bancos',
+            'asientos.asiento_movimientos.cuentacontables',
+        ]);
+
+        $pdf = Pdf::loadView('caja.ingresoegreso.comprobante', [
+            'movimiento' => $movimiento,
+        ])->setPaper('a4');
+
+        $dir = storage_path('pdf/ingresoegreso');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+        // Asegurar escritura por www-data aunque el dir lo haya creado CLI/otro usuario.
+        if (! is_writable($dir)) {
+            @chmod($dir, 0775);
+        }
+        if (! is_writable($dir)) {
+            throw new \RuntimeException(
+                'No se puede escribir en '.$dir.'. Revisar permisos (grupo www-data, 775).'
+            );
+        }
+        $path = $dir.'/op_'.$movimiento->id.'.pdf';
+        $pdf->save($path);
+
+        return response()->file($path, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="orden_pago_'.$movimiento->numerotransaccion.'.pdf"',
+        ]);
     }
 
     public function buscarCheque(Request $request)
@@ -537,16 +657,22 @@ class IngresoEgresoController extends Controller
         $tipos_tesoreria = ComprobanteProveedorTipoTesoreria::todos();
 
         $conceptos_cuenta_meta = Concepto_Ivacompra::query()
-            ->with('impuestos')
+            ->with(['impuestos', 'concepto_ivacompra_empresas'])
             ->get()
-            ->mapWithKeys(static fn (Concepto_Ivacompra $c) => [
-                (string) $c->id => [
-                    'nombre' => $c->nombre,
-                    'tipoconcepto' => $c->tipoconcepto,
-                    'cuenta_debe_id' => (int) ($c->cuentacontabledebe_id ?? 0),
-                    'impuesto_tasa' => round((float) ($c->impuestos->valor ?? 0), 3),
-                ],
-            ])
+            ->mapWithKeys(static function (Concepto_Ivacompra $c) {
+                $mapa = $c->mapaCuentaDebePorEmpresa();
+                $primeraClave = array_key_first($mapa);
+
+                return [
+                    (string) $c->id => [
+                        'nombre' => $c->nombre,
+                        'tipoconcepto' => $c->tipoconcepto,
+                        'cuenta_debe_id' => (int) ($c->cuentacontabledebe_id ?? ($primeraClave !== null ? ($mapa[$primeraClave] ?? 0) : 0)),
+                        'cuentas_por_empresa' => $mapa,
+                        'impuesto_tasa' => round((float) ($c->impuestos->valor ?? 0), 3),
+                    ],
+                ];
+            })
             ->all();
 
         $comprobantes_ivacompra_inicial = $cajaMovimientoId

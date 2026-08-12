@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="260" viewBox="0 0 960 260">
+  <rect width="960" height="260" fill="#f8fafc"/>
+  <text x="32" y="36" font-family="DejaVu Sans,Arial" font-size="18" fill="#1F4E79" font-weight="700">Fuente de verdad del período</text>
+  <rect x="40" y="70" width="400" height="140" rx="10" fill="#D5F5E3" stroke="#58D68D"/>
+  <text x="70" y="110" font-family="DejaVu Sans,Arial" font-size="15" fill="#196F3D" font-weight="700">Hasta 31/12/2025</text>
+  <text x="70" y="145" font-family="DejaVu Sans,Arial" font-size="14" fill="#1B4F72">Badge: anitaERP</text>
+  <text x="70" y="175" font-family="DejaVu Sans,Arial" font-size="13" fill="#34495E">La verdad es el ERP importado</text>
+  <rect x="500" y="70" width="420" height="140" rx="10" fill="#FCF3CF" stroke="#F4D03F"/>
+  <text x="530" y="110" font-family="DejaVu Sans,Arial" font-size="15" fill="#7D6608" font-weight="700">Desde 01/01/2026</text>
+  <text x="530" y="145" font-family="DejaVu Sans,Arial" font-size="14" fill="#1B4F72">Badge: Anita</text>
+  <text x="530" y="175" font-family="DejaVu Sans,Arial" font-size="13" fill="#34495E">Hasta completar la carga al ERP</text>
+</svg>

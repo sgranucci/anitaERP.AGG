@@ -10,9 +10,12 @@ use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Services\Stock\RecepcionProveedorAsientoService;
+use App\Support\Compras\ComprobanteProveedorAsientoDescripcionSupport;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
+use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
 use App\Support\Compras\ComprobanteProveedorFacturaAnticipadaSupport;
+use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ProveedorCuentaContableMonedaSupport;
@@ -33,10 +36,31 @@ class ComprobanteProveedorAsientoService
         private ComprobanteProveedorAsientoPreviewSupport $previewSupport,
     ) {}
 
+    /**
+     * Graba asiento ERP + ctamov Anita (compat). Preferir generarAsientoErp + sincronizarCtamovAnita
+     * desde ContabilizarService para poder compensar ctamov si falla el sync de compra.
+     */
     public function generarAsiento(Comprobante_Proveedor $comprobante): int
     {
+        $resultado = $this->generarAsientoErp($comprobante);
+        $this->sincronizarCtamovAnita($comprobante, $resultado['payload_anita']);
+
+        return $resultado['asiento_id'];
+    }
+
+    /**
+     * Solo MySQL: no escribe ctamov (omitir_anita). El caller sincroniza Anita al final.
+     *
+     * @return array{
+     *     asiento_id: int,
+     *     numeroasiento: string,
+     *     payload_anita: array<string, mixed>
+     * }
+     */
+    public function generarAsientoErp(Comprobante_Proveedor $comprobante): array
+    {
         $preview = $this->armarPreview($comprobante);
-        $payload = $preview['payload_asiento'];
+        $payload = array_merge($preview['payload_asiento'], ['omitir_anita' => true]);
 
         $asiento = $this->asientoRepository->create($payload);
         if ($asiento === 'Error' || ! $asiento) {
@@ -46,22 +70,79 @@ class ComprobanteProveedorAsientoService
         $asientoId = (int) $asiento->id;
         $this->asientoMovimientoRepository->create($payload, $asientoId);
 
-        $comprobante->loadMissing('asientos');
-        $asientoModel = $comprobante->asientos ?? $asiento;
+        $asientoModel = $asiento->fresh() ?? $asiento;
+        $numeroAsiento = trim((string) ($asientoModel->numeroasiento ?? ''));
+        if ($numeroAsiento === '') {
+            throw new RuntimeException('El asiento ERP no obtuvo número para sincronizar Anita.');
+        }
+
         $fechaAsiento = $asientoModel->fecha instanceof \DateTimeInterface
             ? $asientoModel->fecha->format('Y-m-d')
             : (string) $asientoModel->fecha;
 
-        $dataAnita = array_merge($payload, [
-            'numeroasiento' => $asientoModel->numeroasiento,
+        $payloadAnita = array_merge($preview['payload_asiento'], [
+            'numeroasiento' => $numeroAsiento,
             'empresa_id' => (int) $comprobante->empresa_id,
-            'tipoasiento_id' => (int) $payload['tipoasiento_id'],
+            'tipoasiento_id' => (int) $preview['payload_asiento']['tipoasiento_id'],
             'fecha' => $fechaAsiento,
         ]);
 
-        $this->asientoRepository->sincronizarCtamovAnita($dataAnita);
+        return [
+            'asiento_id' => $asientoId,
+            'numeroasiento' => $numeroAsiento,
+            'payload_anita' => $payloadAnita,
+        ];
+    }
 
-        return $asientoId;
+    /**
+     * Empuja ctamov (delete+insert por numeroasiento). Antes limpia por clave del comprobante.
+     *
+     * @param  array<string, mixed>  $payloadAnita
+     */
+    public function sincronizarCtamovAnita(Comprobante_Proveedor $comprobante, array $payloadAnita): void
+    {
+        $this->eliminarCtamovAnitaDeComprobante($comprobante, null);
+
+        // ERP guarda la descripción completa; ctamov Informix solo admite 30 (a-compprov.c).
+        if (isset($payloadAnita['observaciones']) && is_array($payloadAnita['observaciones'])) {
+            $payloadAnita['observaciones'] = array_map(
+                static fn ($obs) => ComprobanteProveedorAsientoDescripcionSupport::aCtamovDesdeErp((string) $obs),
+                $payloadAnita['observaciones']
+            );
+        }
+
+        $this->asientoRepository->sincronizarCtamovAnita($payloadAnita);
+    }
+
+    /**
+     * Compensación / preparación: borra ctamov del comprobante y, si hay número, del asiento.
+     */
+    public function eliminarCtamovAnitaDeComprobante(
+        Comprobante_Proveedor $comprobante,
+        ?string $numeroAsiento = null,
+    ): void {
+        $comprobante->loadMissing('tipotransaccion_compras');
+
+        $tipo = substr((string) ($comprobante->tipotransaccion_compras?->abreviatura ?? ''), 0, 3);
+        $letra = strtoupper(substr((string) ($comprobante->letra ?? ''), 0, 1));
+        $sucursal = (int) ($comprobante->sucursal ?? 0);
+        $nro = (int) ($comprobante->numerocomprobante ?? 0);
+        $empresaId = (int) ($comprobante->empresa_id ?? 0);
+
+        if ($empresaId > 0 && $tipo !== '' && $letra !== '' && $nro > 0) {
+            $this->asientoRepository->eliminarCtamovAnitaPorComprobante(
+                $empresaId,
+                $tipo,
+                $letra,
+                $sucursal,
+                $nro,
+            );
+        }
+
+        $numero = trim((string) ($numeroAsiento ?? ''));
+        if ($empresaId > 0 && $numero !== '') {
+            $this->asientoRepository->eliminarCtamovAnitaPorNumero($empresaId, $numero);
+        }
     }
 
     /**
@@ -87,6 +168,9 @@ class ComprobanteProveedorAsientoService
             ?? 1);
 
         $modoAsignaRecepcion = $comprobante->modo_carga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
+        // Provisión FAR solo si la empresa genera asiento en la COM (GR valuado).
+        $usaProvisionCom = $modoAsignaRecepcion
+            && ComprobanteProveedorComContabilidadSupport::generaAsientoCom((int) ($comprobante->empresa_id ?? 0));
         $facturaAnticipada = ComprobanteProveedorFacturaAnticipadaSupport::aplica($comprobante);
         $tieneCapexAnticipo = $facturaAnticipada
             ? ComprobanteProveedorFacturaAnticipadaSupport::ocTieneCapex($comprobante->ordencompras)
@@ -100,6 +184,16 @@ class ComprobanteProveedorAsientoService
 
         $lineasDebe = [];
         $totalNetoConceptos = 0.0;
+        // Con recepción vinculada: "COM: nro codigo nombre"; si no, "codigo nombre".
+        $varianteLinea = $modoAsignaRecepcion ? 'com' : 'normal';
+        $descLineaErp = ComprobanteProveedorAsientoDescripcionSupport::descripcionLineaErp(
+            $comprobante,
+            $varianteLinea
+        );
+        $descDiferenciaErp = ComprobanteProveedorAsientoDescripcionSupport::descripcionLineaErp(
+            $comprobante,
+            'diferencia'
+        );
 
         foreach ($comprobante->comprobante_proveedor_conceptos as $linea) {
             $concepto = $linea->concepto_ivacompras;
@@ -110,13 +204,14 @@ class ComprobanteProveedorAsientoService
 
             $tipoConcepto = (string) ($concepto?->tipoconcepto ?? '');
 
-            if ($modoAsignaRecepcion && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+            if ($usaProvisionCom && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
                 $totalNetoConceptos += $monto;
 
                 continue;
             }
 
-            if ($modoAsignaRecepcion && ! ComprobanteProveedorConceptoIvaTipos::esImpuesto($tipoConcepto)) {
+            if ($modoAsignaRecepcion && ! ComprobanteProveedorConceptoIvaTipos::esImpuesto($tipoConcepto)
+                && ! ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
                 throw new RuntimeException(
                     'Concepto IVA «'.($concepto?->nombre ?? $linea->concepto_ivacompra_id).'» con tipo «'.$tipoConcepto.'» no admite factura contra COM.'
                 );
@@ -128,16 +223,18 @@ class ComprobanteProveedorAsientoService
                     'cuentacontable_id' => $cuentaAnticipoId,
                     'importe' => $monto,
                     'centrocosto_id' => $centrocostoId,
-                    'observacion' => ComprobanteProveedorFacturaAnticipadaSupport::observacionDebe($tieneCapexAnticipo),
+                    'observacion' => $descLineaErp,
                 ];
 
                 continue;
             }
 
-            $cuentaId = (int) ($concepto?->cuentacontabledebe_id ?? 0);
+            $empresaId = (int) ($comprobante->empresa_id ?? 0);
+            $cuentaId = (int) ($concepto?->cuentacontableDebeIdParaEmpresa($empresaId) ?? 0);
             if ($cuentaId <= 0) {
                 throw new RuntimeException(
-                    'Falta cuenta contable DEBE en concepto IVA «'.($concepto?->nombre ?? $linea->concepto_ivacompra_id).'».'
+                    'Falta cuenta contable DEBE en concepto IVA «'.($concepto?->nombre ?? $linea->concepto_ivacompra_id).'»'
+                    .($empresaId > 0 ? ' para la empresa del comprobante.' : '.')
                 );
             }
 
@@ -145,11 +242,11 @@ class ComprobanteProveedorAsientoService
                 'cuentacontable_id' => $cuentaId,
                 'importe' => $monto,
                 'centrocosto_id' => $centrocostoId,
-                'observacion' => (string) ($concepto?->nombre ?? ''),
+                'observacion' => $descLineaErp,
             ];
         }
 
-        if ($modoAsignaRecepcion) {
+        if ($usaProvisionCom) {
             $totalProvision = $this->totalProvisionRecepcionesVinculadas($comprobante);
             $diferenciaNeto = round($totalNetoConceptos - $totalProvision, 2);
 
@@ -166,15 +263,21 @@ class ComprobanteProveedorAsientoService
                     'cuentacontable_id' => $cuentaProvisionId,
                     'importe' => $totalProvision,
                     'centrocosto_id' => $centrocostoId,
-                    'observacion' => 'Reversión provisión facturas a recibir',
+                    'observacion' => $descLineaErp,
                 ];
             }
 
             if ($diferenciaNeto > 0.05) {
-                $lineasDebe = array_merge(
-                    $lineasDebe,
-                    $this->lineasDebeDiferenciaArticulosProrrateada($comprobante, $diferenciaNeto, $centrocostoId),
+                $lineasDiff = $this->lineasDebeDiferenciaArticulosProrrateada(
+                    $comprobante,
+                    $diferenciaNeto,
+                    $centrocostoId
                 );
+                foreach ($lineasDiff as &$lineaDiff) {
+                    $lineaDiff['observacion'] = $descDiferenciaErp;
+                }
+                unset($lineaDiff);
+                $lineasDebe = array_merge($lineasDebe, $lineasDiff);
             }
         }
 
@@ -221,7 +324,7 @@ class ComprobanteProveedorAsientoService
             'cuentacontable_id' => $cuentaProveedor,
             'importe' => $totalComprobante,
             'centrocosto_id' => $centrocostoId,
-            'observacion' => 'Proveedor '.$comprobante->proveedores?->nombre,
+            'observacion' => $descLineaErp,
         ]];
 
         if ($esNotaCredito) {
@@ -238,7 +341,7 @@ class ComprobanteProveedorAsientoService
             'fecha' => $comprobante->fechacomprobante?->format('Y-m-d') ?? now()->format('Y-m-d'),
             'comprobante_proveedor_id' => $comprobante->id,
             'ordencompra_id' => $comprobante->ordencompra_id,
-            'observacion' => 'Comprobante proveedor '.$tipoAbrev.' '.$comprobante->letra.'-'.$comprobante->sucursal.'-'.$comprobante->numerocomprobante,
+            'observacion' => ComprobanteProveedorAsientoDescripcionSupport::descripcionAsientoErp($comprobante),
             'tipo' => substr($tipoAbrev, 0, 3),
             'letra' => $comprobante->letra,
             'sucursal' => $comprobante->sucursal,
@@ -498,9 +601,10 @@ class ComprobanteProveedorAsientoService
         );
     }
 
-  /**
-   * Importe provisionado por cada COM vinculada (neto sin IVA, coherente con el asiento de recepción).
-   */
+    /**
+     * Importe provisionado por cada COM vinculada, en moneda del comprobante (asiento factura).
+     * Si la COM está en ME y la factura en pesos: ME × cotización de la recepción.
+     */
     private function totalProvisionRecepcionesVinculadas(Comprobante_Proveedor $comprobante): float
     {
         $vinculos = $comprobante->comprobante_proveedor_recepciones;
@@ -510,6 +614,9 @@ class ComprobanteProveedorAsientoService
             );
         }
 
+        $monedaFacturaId = (int) ($comprobante->moneda_id ?: 1);
+        $cotizacionFactura = (float) ($comprobante->cotizacion ?: 1);
+
         $total = 0.0;
         foreach ($vinculos as $vinculo) {
             $recepcion = $vinculo->recepcion_proveedores;
@@ -517,8 +624,19 @@ class ComprobanteProveedorAsientoService
                 throw new RuntimeException('Recepción vinculada inexistente.');
             }
 
+            if (! ComprobanteProveedorComContabilidadSupport::recepcionTieneProvisionContable($recepcion)) {
+                continue;
+            }
+
             $preview = $this->recepcionAsientoService->previewAsientoContable($recepcion);
-            $total += (float) ($preview['total_debe'] ?? 0);
+            $importeEnMonedaRecepcion = (float) ($preview['total_debe'] ?? 0);
+            $total += ComprobanteProveedorImporteComparacionComSupport::desdeRecepcionAFactura(
+                $importeEnMonedaRecepcion,
+                (int) ($recepcion->moneda_id ?: 1),
+                (float) ($recepcion->cotizacion ?: 1),
+                $monedaFacturaId,
+                $cotizacionFactura,
+            );
         }
 
         return round($total, 2);
@@ -541,12 +659,17 @@ class ComprobanteProveedorAsientoService
 
         /** @var array<string, array{cuentacontable_id:int, centrocosto_id:int, importe:float}> $agrupado */
         $agrupado = [];
+        $monedaFacturaId = (int) ($comprobante->moneda_id ?: 1);
+        $cotizacionFactura = (float) ($comprobante->cotizacion ?: 1);
 
         foreach ($comprobante->comprobante_proveedor_recepciones as $vinculo) {
             $recepcion = $vinculo->recepcion_proveedores;
             if (! $recepcion) {
                 continue;
             }
+
+            $monedaRecepcionId = (int) ($recepcion->moneda_id ?: 1);
+            $cotizacionRecepcion = (float) ($recepcion->cotizacion ?: 1);
 
             foreach ($this->recepcionAsientoService->lineasDebeArticulosAgrupadas($recepcion) as $linea) {
                 $ccId = (int) ($linea['centrocosto_id'] ?? 0);
@@ -560,7 +683,14 @@ class ComprobanteProveedorAsientoService
                     ];
                 }
 
-                $agrupado[$clave]['importe'] += (float) $linea['importe'];
+                // Base de prorrateo en moneda factura (ME×cot si COM en dólares y factura en pesos).
+                $agrupado[$clave]['importe'] += ComprobanteProveedorImporteComparacionComSupport::desdeRecepcionAFactura(
+                    (float) $linea['importe'],
+                    $monedaRecepcionId,
+                    $cotizacionRecepcion,
+                    $monedaFacturaId,
+                    $cotizacionFactura,
+                );
             }
         }
 

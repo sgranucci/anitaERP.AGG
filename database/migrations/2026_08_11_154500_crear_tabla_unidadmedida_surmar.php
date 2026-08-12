@@ -7,11 +7,16 @@ use Illuminate\Support\Facades\Schema;
 /**
  * Unidades de medida Anita Surmar (stkumd en /usr2/surmar).
  * Distintas de unidadmedida ERP/El Bierzo (ids y códigos no coinciden).
+ * Solo EL BIERZO.
  */
 return new class extends Migration
 {
     public function up(): void
     {
+        if (! $this->esEntornoSurmar()) {
+            return;
+        }
+
         if (Schema::hasTable('unidadmedida_surmar')) {
             return;
         }
@@ -26,6 +31,15 @@ return new class extends Migration
 
     public function down(): void
     {
+        if (! $this->esEntornoSurmar()) {
+            return;
+        }
+
         Schema::dropIfExists('unidadmedida_surmar');
+    }
+
+    private function esEntornoSurmar(): bool
+    {
+        return strtoupper((string) config('app.empresa')) === 'EL BIERZO';
     }
 };

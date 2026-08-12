@@ -116,6 +116,21 @@ class ArbolaprobacionService
             );
         }
 
+        // PP: propuesta de pagos (ABM global por empresa + monto del lote).
+        if ($tipocomprobante === 'PP') {
+            if (! \App\Models\Compras\PropuestaPago::query()->whereKey($comprobante_id)->exists()) {
+                return 0;
+            }
+
+            return app(\App\Services\Compras\PropuestaPagoArbolIntegracionService::class)->procesaArbol(
+                (int) $comprobante_id,
+                $operacion,
+                fn ($tipo, $id) => $this->leeAprobacionComprobante($tipo, $id),
+                fn (...$args) => $this->buscaProximoNivel(...$args),
+                fn (...$args) => $this->enviaCorreo(...$args),
+            );
+        }
+
         if ($tipocomprobante === 'RE') {
             $requisicionPre = $this->requisicionRepository->find($comprobante_id);
             if (! $requisicionPre) {
@@ -597,6 +612,10 @@ class ArbolaprobacionService
                 $arbolaprobacion_movimiento = app(\App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService::class)
                     ->findPorSolicitudpago((int) $comprobante_id);
                 break;
+            case 'Propuesta de pagos':
+                $arbolaprobacion_movimiento = app(\App\Services\Compras\PropuestaPagoArbolIntegracionService::class)
+                    ->findPorPropuestaPago((int) $comprobante_id);
+                break;
             case 'Ordenes de compra':
                 $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorOrdencompra($comprobante_id);
                 $arbolaprobacion_movimiento = $this->filtrarMovimientosOrdencompraPorCircuito($arbolaprobacion_movimiento, $circuitoOc, $ocTriggerId);
@@ -920,6 +939,8 @@ class ArbolaprobacionService
                 $q->where('pedido_id', $movimientoPre->pedido_id);
             } elseif ($movimientoPre->solicitudpago_id) {
                 $q->where('solicitudpago_id', $movimientoPre->solicitudpago_id);
+            } elseif ($movimientoPre->propuesta_pago_id) {
+                $q->where('propuesta_pago_id', $movimientoPre->propuesta_pago_id);
             } elseif ($movimientoPre->ordencompra_id) {
                 $q->where('ordencompra_id', $movimientoPre->ordencompra_id);
             }
@@ -1028,6 +1049,10 @@ class ArbolaprobacionService
                         (int) $movimientoPre->nivel,
                         (int) $usuario_id
                     );
+            }
+
+            if ($tipocomprobante === 'PP') {
+                // Tras aprobar, procesaArbol (abajo) marcará AUTORIZADA si no hay más niveles.
             }
 
             if ($tipocomprobante === 'RE') {
@@ -1616,6 +1641,8 @@ class ArbolaprobacionService
                 $q->where('pedido_id', $movimientoPre->pedido_id);
             } elseif ($movimientoPre->solicitudpago_id) {
                 $q->where('solicitudpago_id', $movimientoPre->solicitudpago_id);
+            } elseif ($movimientoPre->propuesta_pago_id) {
+                $q->where('propuesta_pago_id', $movimientoPre->propuesta_pago_id);
             } elseif ($movimientoPre->ordencompra_id) {
                 $q->where('ordencompra_id', $movimientoPre->ordencompra_id);
             }
@@ -1666,6 +1693,10 @@ class ArbolaprobacionService
                     break;
                 case 'SP':
                     app(\App\Services\Solicitudpago\SolicitudpagoArbolIntegracionService::class)
+                        ->rechazaPorRechazo((int) $comprobante_id, $usuario_id, $observacion);
+                    break;
+                case 'PP':
+                    app(\App\Services\Compras\PropuestaPagoArbolIntegracionService::class)
                         ->rechazaPorRechazo((int) $comprobante_id, $usuario_id, $observacion);
                     break;
                 case 'OC':
@@ -2831,6 +2862,8 @@ class ArbolaprobacionService
                 ->findPorSolicitudpago($comprobanteId),
             'PE' => app(\App\Services\Ventas\PedidoInterformingArbolIntegracionService::class)
                 ->findPorPedido($comprobanteId),
+            'PP' => app(\App\Services\Compras\PropuestaPagoArbolIntegracionService::class)
+                ->findPorPropuestaPago($comprobanteId),
             default => collect(),
         };
     }

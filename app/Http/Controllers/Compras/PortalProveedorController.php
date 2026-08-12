@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Compras;
 
 use App\Http\Controllers\Controller;
 use App\Repositories\Compras\Precarga_Comprobante_ProveedorRepositoryInterface;
+use App\Repositories\Compras\Proveedor_Documento_FiscalRepositoryInterface;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
 use App\Services\Compras\ComprobanteProveedorPdfIaService;
 use App\Support\Compras\PortalProveedorContexto;
@@ -28,6 +29,7 @@ final class PortalProveedorController extends Controller
     public function __construct(
         private ProveedorRepositoryInterface $proveedorRepository,
         private Precarga_Comprobante_ProveedorRepositoryInterface $precargaRepository,
+        private Proveedor_Documento_FiscalRepositoryInterface $documentoFiscalRepository,
         private ComprobanteProveedorPdfIaService $pdfIaService,
         private PrecargaFacturaScanPathResolver $facturaScanPathResolver,
     ) {}
@@ -39,11 +41,13 @@ final class PortalProveedorController extends Controller
         $proveedor = PortalProveedorContexto::resolverProveedor($request, $this->proveedorRepository);
         $proveedorId = $proveedor ? (int) $proveedor->id : 0;
         $precargas = null;
+        $avisosDocumentos = [];
 
         if ($proveedorId > 0) {
             $precargas = $this->precargaRepository
                 ->listarPortalProveedor($proveedorId, true)
                 ->appends(['proveedor_id' => $proveedorId]);
+            $avisosDocumentos = $this->documentoFiscalRepository->avisosPortal($proveedorId);
         }
 
         return view('compras.portal_proveedor.index', [
@@ -51,6 +55,7 @@ final class PortalProveedorController extends Controller
             'proveedor' => $proveedor,
             'proveedorId' => $proveedorId > 0 ? $proveedorId : null,
             'precargas' => $precargas,
+            'avisosDocumentos' => $avisosDocumentos,
             'pdfIaHabilitado' => (bool) config('comprobante_proveedor_pdf_ia.habilitado'),
             'canalMail' => $this->datosCanalMail(),
         ]);
@@ -70,10 +75,12 @@ final class PortalProveedorController extends Controller
     private function datosCanalMail(): array
     {
         $casilla = trim((string) config('precarga_comprobante_mail.imap.username', ''));
+        $ingestaOn = (bool) config('precarga_comprobante_mail.habilitada');
 
         return [
-            'habilitado' => (bool) config('precarga_comprobante_mail.habilitada')
-                && $casilla !== '',
+            // Mostrar casilla aunque la ingesta esté apagada (falta password IMAP).
+            'habilitado' => $casilla !== '',
+            'ingesta_activa' => $ingestaOn && $casilla !== '',
             'casilla' => $casilla,
             'carpeta' => (string) config('precarga_comprobante_mail.carpeta', 'INBOX'),
             'intervalo_min' => (int) config('precarga_comprobante_mail.intervalo_minutos', 5),

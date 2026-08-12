@@ -138,6 +138,18 @@ return [
     ],
 
     /*
+    | Mail al contabilizar TRCONT con artículos TITO (precio promedio 3 compras).
+    | Observer: Transferencia_MercaderiaObserver al asignar asiento_id.
+    */
+    'aviso_tito_trcont' => [
+        'habilitado' => filter_var(env('STOCK_AVISO_TITO_TRCONT_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'destinatarios' => env(
+            'STOCK_AVISO_TITO_TRCONT_DESTINATARIOS',
+            'sergiogranucci@gmail.com,egalarza@grupoagg.com'
+        ),
+    ],
+
+    /*
     | Precio sugerido en movimientos de stock manuales (ArticuloPrecioMovimientoStockSupport).
     | Salidas con estas abreviaturas → lista de precios de venta vigente.
     | Resto de tipos → última compra (misma cadena que precio_ultima_compra).

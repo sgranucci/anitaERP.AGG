@@ -16,6 +16,7 @@ use App\Support\Ventas\Gastronomia\CierreJornadaProcesoConfigSupport;
 use App\Support\Ventas\CaeaEmisionFechaCorrelatividadSupport;
 use App\Models\Ventas\JornadaGastronomia;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Throwable;
 
@@ -157,10 +158,30 @@ class WaitryCierreJornadaController extends Controller
                 $request->boolean('usar_recuperacion_snapshot'),
             ));
         } catch (InvalidArgumentException $e) {
+            Log::warning('cierre_jornada_waitry.proceso.emitir.invalid', [
+                'empresa_id' => (int) $request->input('empresa_id'),
+                'fecha_jornada' => (string) $request->input('fecha_jornada'),
+                'error' => $e->getMessage(),
+            ]);
+
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
         } catch (\RuntimeException $e) {
+            Log::error('cierre_jornada_waitry.proceso.emitir.runtime', [
+                'empresa_id' => (int) $request->input('empresa_id'),
+                'fecha_jornada' => (string) $request->input('fecha_jornada'),
+                'error' => $e->getMessage(),
+                'exception' => $e::class,
+            ]);
+
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
         } catch (Throwable $e) {
+            Log::error('cierre_jornada_waitry.proceso.emitir.exception', [
+                'empresa_id' => (int) $request->input('empresa_id'),
+                'fecha_jornada' => (string) $request->input('fecha_jornada'),
+                'error' => $e->getMessage(),
+                'exception' => $e::class,
+            ]);
+
             return response()->json([
                 'ok' => false,
                 'error' => GastronomiaJornadaService::mensajeDesdeExcepcion($e),
@@ -182,17 +203,44 @@ class WaitryCierreJornadaController extends Controller
         try {
             $this->prepararEntornoProcesoApi(300);
 
-            return response()->json($this->procesoService->grabarAsientosProcesoPorEmpresaYFecha(
+            $resultado = $this->procesoService->grabarAsientosProcesoPorEmpresaYFecha(
                 (int) $request->input('empresa_id'),
                 (string) $request->input('fecha_jornada'),
                 (float) $request->input('porcentaje', 0),
                 $request->input('fecha_asiento') ? (string) $request->input('fecha_asiento') : null,
-            ));
+            );
+            Log::info('cierre_jornada_waitry.proceso.asientos.ok', [
+                'empresa_id' => (int) $request->input('empresa_id'),
+                'fecha_jornada' => (string) $request->input('fecha_jornada'),
+                'cantidad_asientos' => $resultado['cantidad_asientos'] ?? null,
+            ]);
+
+            return response()->json($resultado);
         } catch (InvalidArgumentException $e) {
+            Log::warning('cierre_jornada_waitry.proceso.asientos.invalid', [
+                'empresa_id' => (int) $request->input('empresa_id'),
+                'fecha_jornada' => (string) $request->input('fecha_jornada'),
+                'error' => $e->getMessage(),
+            ]);
+
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
         } catch (\RuntimeException $e) {
+            Log::error('cierre_jornada_waitry.proceso.asientos.runtime', [
+                'empresa_id' => (int) $request->input('empresa_id'),
+                'fecha_jornada' => (string) $request->input('fecha_jornada'),
+                'error' => $e->getMessage(),
+                'exception' => $e::class,
+            ]);
+
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
         } catch (Throwable $e) {
+            Log::error('cierre_jornada_waitry.proceso.asientos.exception', [
+                'empresa_id' => (int) $request->input('empresa_id'),
+                'fecha_jornada' => (string) $request->input('fecha_jornada'),
+                'error' => $e->getMessage(),
+                'exception' => $e::class,
+            ]);
+
             return response()->json([
                 'ok' => false,
                 'error' => GastronomiaJornadaService::mensajeDesdeExcepcion($e),

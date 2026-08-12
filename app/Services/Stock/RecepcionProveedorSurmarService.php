@@ -57,6 +57,8 @@ class RecepcionProveedorSurmarService
     /** @param array<string, mixed> $filtros */
     public function listar(array $filtros = [], bool $paginar = true)
     {
+        SurmarSupport::abortSiNoSurmar(SurmarSupport::EMPRESA_ID);
+
         $query = Recepcion_Proveedor::query()
             ->select([
                 'recepcion_proveedor.*',
@@ -81,6 +83,8 @@ class RecepcionProveedorSurmarService
 
     public function buscar(int $id): Recepcion_Proveedor
     {
+        SurmarSupport::abortSiNoSurmar(SurmarSupport::EMPRESA_ID);
+
         $recepcion = Recepcion_Proveedor::query()
             ->with([
                 'proveedores',
@@ -107,6 +111,7 @@ class RecepcionProveedorSurmarService
     public function iniciar(array $data): Recepcion_Proveedor
     {
         $empresaId = SurmarSupport::EMPRESA_ID;
+        SurmarSupport::abortSiNoSurmar($empresaId);
         $ordencompraId = (int) ($data['ordencompra_id'] ?? 0);
         $depositoId = (int) ($data['deposito_id'] ?? 0);
         $fecha = (string) ($data['fecha'] ?? now()->toDateString());

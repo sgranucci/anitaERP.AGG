@@ -12,9 +12,9 @@
         <tr>
             <th>Cuota</th>
             <th>Vencimiento</th>
-            <th>Monto</th>
+            <th class="text-right">Monto</th>
             <th>Moneda</th>
-            <th>Cotización</th>
+            <th class="text-right">Cotización</th>
             <th>Forma pago</th>
             <th>Detalle</th>
         </tr>
@@ -33,8 +33,9 @@
                         @if (! ($permite_edicion_cuotas ?? true)) readonly @endif>
                 </td>
                 <td>
-                    <input type="number" step="0.01" name="cuota_monto[]" class="form-control form-control-sm"
-                        value="{{ $cuota['monto'] ?? 0 }}"
+                    <input type="text" inputmode="decimal" name="cuota_monto[]"
+                        class="form-control form-control-sm js-monto-ar text-right"
+                        value="{{ number_format((float) ($cuota['monto'] ?? 0), 2, ',', '.') }}"
                         @if (! ($permite_edicion_cuotas ?? true)) readonly @endif>
                 </td>
                 <td>
@@ -43,8 +44,9 @@
                         @if (! ($permite_edicion_cuotas ?? true)) readonly @endif>
                 </td>
                 <td>
-                    <input type="number" step="0.0001" name="cuota_cotizacion[]" class="form-control form-control-sm"
-                        value="{{ $cuota['cotizacion'] ?? '' }}"
+                    <input type="text" inputmode="decimal" name="cuota_cotizacion[]"
+                        class="form-control form-control-sm js-monto-ar text-right"
+                        value="{{ filled($cuota['cotizacion'] ?? null) ? number_format((float) $cuota['cotizacion'], 2, ',', '.') : '' }}"
                         @if (! ($permite_edicion_cuotas ?? true)) readonly @endif>
                 </td>
                 <td>

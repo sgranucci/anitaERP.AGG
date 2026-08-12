@@ -74,7 +74,8 @@ $(function () {
         if (!overlay) {
             return;
         }
-        var tituloNodo = overlay.querySelector('strong');
+        var tituloNodo = document.getElementById(overlayId + '-titulo')
+            || overlay.querySelector('strong');
         if (tituloNodo && titulo) {
             tituloNodo.textContent = titulo;
         }
@@ -269,6 +270,24 @@ $(function () {
             );
         });
 
+        var articulos = (res.articulos || data.articulos || []);
+        var $tbodyArt = $('#precarga-pdf-ia-articulos-tbody').empty();
+        if (!articulos.length) {
+            $tbodyArt.append('<tr class="text-muted"><td colspan="5">Sin ítems detectados.</td></tr>');
+        } else {
+            articulos.forEach(function (a) {
+                $tbodyArt.append(
+                    '<tr>' +
+                    '<td>' + $('<div>').text(a.sku || '').html() + '</td>' +
+                    '<td>' + $('<div>').text(a.codigo_proveedor || '').html() + '</td>' +
+                    '<td>' + $('<div>').text(a.descripcion || '').html() + '</td>' +
+                    '<td class="text-right">' + (a.cantidad != null ? a.cantidad : '') + '</td>' +
+                    '<td class="text-right">' + (a.precio_unitario != null ? a.precio_unitario : '') + '</td>' +
+                    '</tr>'
+                );
+            });
+        }
+
         var adv = res.advertencias || data.advertencias || [];
         var $advBox = $('#precarga-pdf-ia-advertencias');
         $advBox.addClass('d-none').empty();
@@ -283,6 +302,7 @@ $(function () {
         if (meta.fuentes && meta.fuentes.length) {
             var metaHtml = '<small class="text-muted">Motor: ' + meta.fuentes.join(' + ') +
                 (meta.lineas_detectadas != null ? ' · ' + meta.lineas_detectadas + ' conceptos detectados' : '') +
+                (meta.articulos_detectados != null ? ' · ' + meta.articulos_detectados + ' artículos' : '') +
                 (meta.ocr_chars != null ? ' · OCR ' + meta.ocr_chars + ' caracteres' : '') +
                 '</small>';
             $advBox.removeClass('d-none').append('<div class="mt-2">' + metaHtml + '</div>');

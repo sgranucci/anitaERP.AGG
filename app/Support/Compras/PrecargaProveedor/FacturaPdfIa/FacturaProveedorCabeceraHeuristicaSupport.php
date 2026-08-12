@@ -106,7 +106,25 @@ final class FacturaProveedorCabeceraHeuristicaSupport
         $sucursal = null;
         $numero = null;
 
-        if (preg_match('/\b(\d{1,5})\s*[-–]\s*(\d{4,8})\b/u', $texto, $m)) {
+        // Compacto AFIP: 0070A00369548 (PV + letra + nro 8) — priorizar sobre guiones.
+        $compacto = FacturaProveedorNumeroComprobanteSupport::extraerCompactoDesdeTexto($texto);
+        if ($compacto !== null) {
+            $letra = $compacto['letra'] ?: $letra;
+            $sucursal = $compacto['sucursal'];
+            $numero = $compacto['numero'];
+        }
+
+        // AFIP típico: 0001-00001234 (PV 4–5 dígitos + número 8).
+        if ($sucursal === null && preg_match('/\b(\d{4,5})\s*[-–]\s*(\d{8})\b/u', $texto, $m)) {
+            $sucursal = (int) ltrim($m[1], '0');
+            $numero = (int) ltrim($m[2], '0');
+        }
+
+        // PV-número genérico, pero NO un CUIT (33-69509841-9 → no tomar 33-69509841).
+        if ($sucursal === null
+            && preg_match('/\b(\d{1,5})\s*[-–]\s*(\d{4,8})(?!\s*[-–]\s*\d)\b/u', $texto, $m)
+            && ! $this->pareceFragmentoCuit((int) ltrim($m[1], '0'), (int) ltrim($m[2], '0'), $texto)
+        ) {
             $sucursal = (int) ltrim($m[1], '0');
             $numero = (int) ltrim($m[2], '0');
         }
@@ -115,7 +133,16 @@ final class FacturaProveedorCabeceraHeuristicaSupport
             $sucursal = (int) ltrim($m[1], '0');
         }
         if ($numero === null && preg_match('/(?:comp(?:robante)?\.?\s*nro|n[°ºo]\s*comprobante)[:\s]*(\d+)/iu', $texto, $m)) {
-            $numero = (int) ltrim($m[1], '0');
+            $candidato = (int) ltrim($m[1], '0');
+            if (! $this->pareceSoloMedioCuit($candidato, $texto)) {
+                $numero = $candidato;
+            }
+        }
+
+        if ($sucursal !== null && $numero !== null
+            && $this->pareceFragmentoCuit($sucursal, $numero, $texto)) {
+            $sucursal = null;
+            $numero = null;
         }
 
         return [
@@ -123,6 +150,38 @@ final class FacturaProveedorCabeceraHeuristicaSupport
             'sucursal' => $sucursal,
             'numero' => $numero,
         ];
+    }
+
+    /** Evita tomar 33-69509841 de un CUIT 33-69509841-9 como PV-número. */
+    private function pareceFragmentoCuit(int $sucursal, int $numero, string $texto): bool
+    {
+        if ($sucursal <= 0 || $numero <= 0) {
+            return false;
+        }
+
+        $prefijo = str_pad((string) $sucursal, 2, '0', STR_PAD_LEFT);
+        $medio = str_pad((string) $numero, 8, '0', STR_PAD_LEFT);
+        if (strlen($prefijo) > 2 || strlen((string) $sucursal) > 2) {
+            // PV de 3–5 dígitos no es prefijo CUIT.
+            if ($sucursal > 99) {
+                return false;
+            }
+        }
+
+        return (bool) preg_match(
+            '/\b'.$prefijo.'\s*[-–]?\s*'.$medio.'\s*[-–]?\s*\d\b/u',
+            $texto
+        );
+    }
+
+    private function pareceSoloMedioCuit(int $numero, string $texto): bool
+    {
+        if ($numero < 10000000 || $numero > 99999999) {
+            return false;
+        }
+        $medio = str_pad((string) $numero, 8, '0', STR_PAD_LEFT);
+
+        return (bool) preg_match('/\b\d{2}\s*[-–]?\s*'.$medio.'\s*[-–]?\s*\d\b/u', $texto);
     }
 
     private function inferirTipoComprobante(string $texto): string
@@ -160,10 +219,15 @@ final class FacturaProveedorCabeceraHeuristicaSupport
 
     private function extraerFechaFactura(string $texto): ?string
     {
-        if (preg_match('/fecha\s+(?:de\s+)?(?:emisi[oó]n|factura|comprobante)[:\s]*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/iu', $texto, $m)) {
+        // Incluye dd.mm.yyyy (Telmex / varios emisores) además de / y -.
+        if (preg_match('/fecha\s+(?:de\s+)?(?:emisi[oó]n|factura|comprobante)[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu', $texto, $m)) {
             return $this->isoFecha($m[1], $m[2], $m[3]);
         }
-        if (preg_match('/\b(\d{1,2})[\/\-](\d{1,2})[\/\-](20\d{2})\b/u', $texto, $m)) {
+        // "Fecha:" / "Fecha 05/08/2026" / "Fecha 05.08.2026" sin la palabra emisión.
+        if (preg_match('/\bfecha\b[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/iu', $texto, $m)) {
+            return $this->isoFecha($m[1], $m[2], $m[3]);
+        }
+        if (preg_match('/\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](20\d{2})\b/u', $texto, $m)) {
             return $this->isoFecha($m[1], $m[2], $m[3]);
         }
 
@@ -244,6 +308,18 @@ final class FacturaProveedorCabeceraHeuristicaSupport
 
     private function extraerTotal(string $texto): ?float
     {
+        // Telecom/ISP: TOTAL FACTURA DEL PERIODO $ 1.183.650,16
+        if (preg_match(
+            '/TOTAL\s+FACTURA(?:\s+DEL)?\s+PER[IÍ]ODO[^\n]{0,100}?\$?\s*([\d.]+,\d{2})/iu',
+            $texto,
+            $mPeriodo
+        )) {
+            $vPeriodo = $this->importeParser->parsear($mPeriodo[1]);
+            if ($vPeriodo !== null && $vPeriodo >= 50) {
+                return $vPeriodo;
+            }
+        }
+
         // Preferir "TOTAL $ 1.571.612,21" explícito (no Subtotal/Neto).
         $filas = preg_split('/\R/u', $texto) ?: [];
         $mejor = null;

@@ -23,6 +23,8 @@
 
 <div id="sp-panel-ia-arbol" class="d-none mb-3"></div>
 
+<div id="sp-detalle-nivel-actual" class="d-none alert alert-info py-2 mb-3" role="status"></div>
+
 <h5 class="mb-2">Movimientos &aacute;rbol de aprobaci&oacute;n</h5>
 <div class="table-responsive">
     <table class="table table-sm table-bordered table-striped" id="solicitudpago-arbol-table">
