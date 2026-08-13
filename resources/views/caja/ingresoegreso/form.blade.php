@@ -76,7 +76,7 @@
                 <div class="col-lg-7">
                     <div class="input-group">
                         <input type="text" class="form-control conceptogasto_id" id="conceptogasto_id" name="conceptogasto_id" value="{{ $data->conceptogasto_id ?? '' }}">
-                        <input type="text" class="form-control nombreconceptogasto" id="nombreconceptogasto" name="nombreconceptogasto" value="{{ $data->conceptogastos->nombre ?? '' }}">
+                        <input type="text" class="form-control nombreconceptogasto" id="nombreconceptogasto" name="nombreconceptogasto" value="{{ optional($data->conceptogastos)->nombre ?? '' }}">
                         <div class="input-group-append">
                             <button type="button" title="Consulta conceptos" class="btn btn-outline-secondary consultaconceptogasto tooltipsC">
                                 <i class="fa fa-search text-primary"></i>

@@ -26,7 +26,7 @@ class SolicitudpagoListadoExport implements FromView, ShouldAutoSize, WithColumn
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'K';
+    private const COL_ULTIMA = 'N';
 
     /** Congela Código, Fecha y Vencimiento (A–C): freeze arranca en D. */
     private const COL_FREEZE = 'D';
@@ -104,19 +104,22 @@ class SolicitudpagoListadoExport implements FromView, ShouldAutoSize, WithColumn
             return [];
         }
 
-        // Identificadores/textos como texto; F = Monto con máscara neutra (sumable/adaptable); J = cuotas (entero).
+        // Identificadores/textos como texto; I = Monto; M = cuotas (entero).
         return [
             'A' => NumberFormat::FORMAT_TEXT,
             'B' => NumberFormat::FORMAT_TEXT,
             'C' => NumberFormat::FORMAT_TEXT,
             'D' => NumberFormat::FORMAT_TEXT,
             'E' => NumberFormat::FORMAT_TEXT,
-            'F' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
+            'F' => NumberFormat::FORMAT_TEXT,
             'G' => NumberFormat::FORMAT_TEXT,
             'H' => NumberFormat::FORMAT_TEXT,
-            'I' => NumberFormat::FORMAT_TEXT,
-            'J' => NumberFormat::FORMAT_NUMBER,
+            'I' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
+            'J' => NumberFormat::FORMAT_TEXT,
             'K' => NumberFormat::FORMAT_TEXT,
+            'L' => NumberFormat::FORMAT_TEXT,
+            'M' => NumberFormat::FORMAT_NUMBER,
+            'N' => NumberFormat::FORMAT_TEXT,
         ];
     }
 
@@ -159,14 +162,17 @@ class SolicitudpagoListadoExport implements FromView, ShouldAutoSize, WithColumn
             'A' => 10,
             'B' => 12,
             'C' => 12,
-            'D' => 28,
-            'E' => 28,
-            'F' => 12,
-            'G' => 14,
-            'H' => 14,
+            'D' => 22,
+            'E' => 16,
+            'F' => 16,
+            'G' => 12,
+            'H' => 28,
             'I' => 12,
-            'J' => 10,
-            'K' => 12,
+            'J' => 14,
+            'K' => 14,
+            'L' => 12,
+            'M' => 10,
+            'N' => 18,
         ];
     }
 

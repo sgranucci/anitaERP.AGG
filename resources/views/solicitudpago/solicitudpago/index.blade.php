@@ -53,7 +53,7 @@
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => SolicitudpagoListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
                         'limpiarUrl' => $limpiarFiltrosUrl ?? route('consultar_solicitudpago', ['limpiar_filtros' => 1]),
-                        'placeholder' => 'Búsqueda rápida (código, detalle, beneficiario)…',
+                        'placeholder' => 'Búsqueda rápida (código, detalle, beneficiario, N° proveedor, sector)…',
                         'toggleTarget' => '#panel-filtros-solicitudpago',
                         'toggleId' => 'btn-toggle-filtros-solicitudpago',
                         'inputId' => 'filtro_valor',
@@ -97,6 +97,9 @@
                             <th>Fecha</th>
                             <th>Vencimiento</th>
                             <th>Concepto</th>
+                            <th>Sector</th>
+                            <th>Forma de pago</th>
+                            <th>N&deg; proveedor</th>
                             <th>Proveedor / Beneficiario</th>
                             <th>Detalle</th>
                             <th class="text-right">Monto</th>
@@ -137,6 +140,9 @@
                             <td>{{ optional($data->fecha)->format('d/m/Y') }}</td>
                             <td>{{ optional($data->fecha_vencimiento)->format('d/m/Y') ?: '—' }}</td>
                             <td>{{ optional($data->conceptos)->nombre ?? '—' }}</td>
+                            <td>{{ optional($data->sectores)->nombre ?? '—' }}</td>
+                            <td>{{ optional($data->formapagosol)->nombre ?? '—' }}</td>
+                            <td>{{ optional($data->proveedores)->codigo ?? '—' }}</td>
                             <td>
                                 @if ($data->proveedores)
                                     {{ $data->proveedores->nombre }}

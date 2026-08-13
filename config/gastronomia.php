@@ -370,6 +370,21 @@ return [
     'cuentas_libres_habilitadas' => filter_var(env('GASTRONOMIA_CUENTAS_LIBRES_HABILITADAS', true), FILTER_VALIDATE_BOOLEAN),
 
     /**
+     * POS gastronomía AGG/Kandiko: clave de supervisor al anular una cuenta en el mismo POS
+     * (botón Cerrar cuenta). El cajero no puede borrar cuentas sin esa clave. No aplica a saneamiento.
+     */
+    'anular_cuenta_pendiente_exige_clave' => filter_var(
+        env('GASTRONOMIA_ANULAR_CUENTA_PENDIENTE_EXIGE_CLAVE', false),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+    'anular_cuenta_pendiente_clave' => (string) env('GASTRONOMIA_ANULAR_CUENTA_PENDIENTE_CLAVE', ''),
+    /** @var list<int> empresa_id Kandiko = 2 en AGG */
+    'anular_cuenta_pendiente_empresa_ids' => array_values(array_filter(array_map(
+        'intval',
+        explode(',', (string) env('GASTRONOMIA_ANULAR_CUENTA_PENDIENTE_EMPRESA_IDS', '2')),
+    ))),
+
+    /**
      * Tras emitir en el POS: imprimir ticket térmico vía salida_factura (comando con %s).
      * El PDF (listaunafactura) queda para consulta y reimpresión manual.
      */

@@ -8,7 +8,6 @@ use App\Models\Caja\RendicionMaquina;
 use App\Models\Caja\RendicionMaquinaAjusteWigos;
 use App\Models\Caja\Usocuentacaja;
 use App\Repositories\Admin\UsuarioRepositoryInterface;
-use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaAjusteWigosSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaCompletoDelDiaSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaContextoBuilder;
@@ -16,6 +15,7 @@ use App\Support\Caja\RendicionMaquina\RendicionMaquinaPreviasSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaResultadoCalculo;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaTurno;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaValorQrPrecargaSupport;
+use App\Support\Caja\RendicionMaquina\RendicionMaquinaValoresCuentacajaSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaVariables;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaWigosLeeOnlineSupport;
 use Illuminate\Support\Facades\DB;
@@ -36,6 +36,7 @@ final class RendicionMaquinaService
     public function calcularDesdePayload(array $payload): RendicionMaquinaResultadoCalculo
     {
         $payload = $this->enriquecerPayloadConPrevias($payload);
+        $payload = $this->enriquecerPayloadValoresCuentacaja($payload);
         $contexto = RendicionMaquinaContextoBuilder::desdePayload($payload);
 
         return $this->calculoService->calcular($contexto);
@@ -76,6 +77,7 @@ final class RendicionMaquinaService
 
         $this->assertUnicoEmpresaFechaTurno($empresaId, $fecha, $turno, $id);
 
+        $payload = $this->enriquecerPayloadValoresCuentacaja($payload);
         $resultado = $this->calcularDesdePayload($payload);
         $totales = $resultado->totalesCierre();
 
@@ -344,6 +346,23 @@ final class RendicionMaquinaService
     }
 
     /**
+     * Completa moneda_id desde cuentacaja y cotización vigente de tesorería.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function enriquecerPayloadValoresCuentacaja(array $payload): array
+    {
+        $payload['valores'] = RendicionMaquinaValoresCuentacajaSupport::enriquecerLineas(
+            is_array($payload['valores'] ?? null) ? $payload['valores'] : [],
+            (string) ($payload['fecha'] ?? date('Y-m-d')),
+            (int) ($payload['empresa_id'] ?? 0)
+        );
+
+        return $payload;
+    }
+
+    /**
      * Trae drop/tito/venta/QR desde WIGOS (RENDM_lee_on_line / calc_datos_wigos).
      * En turno Completo consolida M/T/N (lee_rendiciones_del_dia) y valores/gastos.
      *
@@ -599,6 +618,13 @@ final class RendicionMaquinaService
         $rendicion->valores()->delete();
         $rendicion->gastos()->delete();
 
+        $fechaYmd = $rendicion->fecha?->format('Y-m-d') ?? date('Y-m-d');
+        $lineasValor = RendicionMaquinaValoresCuentacajaSupport::enriquecerLineas(
+            $lineasValor,
+            $fechaYmd,
+            $empresaId
+        );
+
         $ordenValor = 0;
         foreach ($lineasValor as $linea) {
             $cuentacajaId = (int) ($linea['cuentacaja_id'] ?? 0);
@@ -610,23 +636,11 @@ final class RendicionMaquinaService
                 throw new InvalidArgumentException("Cuenta de caja {$cuentacajaId} no válida para la empresa.");
             }
 
-            $cotizacion = isset($linea['cotizacion']) ? round((float) $linea['cotizacion'], 6) : null;
-            if ($cotizacion === null || $cotizacion <= 0) {
-                $cuenta = Cuentacaja::query()->find($cuentacajaId, ['id', 'moneda_id']);
-                $monedaId = (int) ($cuenta->moneda_id ?? 1);
-                $fechaYmd = $rendicion->fecha?->format('Y-m-d') ?? date('Y-m-d');
-                $cotizacion = CotizacionTesoreriaConsultaSupport::calculaVenta(
-                    $fechaYmd,
-                    $monedaId,
-                    (int) $rendicion->empresa_id
-                );
-            }
-
             $rendicion->valores()->create([
                 'cuentacaja_id' => $cuentacajaId,
                 'codigo_valormae' => $this->nullableInt($linea['codigo_valormae'] ?? null),
                 'monto' => $monto,
-                'cotizacion' => $cotizacion,
+                'cotizacion' => round((float) ($linea['cotizacion'] ?? 1), 6),
                 'orden' => $ordenValor++,
             ]);
         }
@@ -772,10 +786,6 @@ final class RendicionMaquinaService
             $saved = $montosGuardados[(int) $cuenta->id] ?? null;
             $etiqueta = $cuenta->etiquetaOperaciones();
             $monedaId = (int) ($cuenta->moneda_id ?? 1);
-            $cotizacion = $saved['cotizacion'] ?? null;
-            if ($cotizacion === null || $cotizacion <= 0) {
-                $cotizacion = CotizacionTesoreriaConsultaSupport::calculaVenta($fechaYmd, $monedaId, $empresaId);
-            }
             $lineas[] = [
                 'cuentacaja_id' => (int) $cuenta->id,
                 'codigo' => (string) $cuenta->codigo,
@@ -783,14 +793,17 @@ final class RendicionMaquinaService
                 'descripcion_operaciones' => trim((string) ($cuenta->descripcion_operaciones ?? '')),
                 'nombre_maestro' => (string) $cuenta->nombre,
                 'monto' => $saved['monto'] ?? 0.0,
-                'cotizacion' => $cotizacion,
+                'cotizacion' => $saved['cotizacion'] ?? null,
                 'codigo_valormae' => $saved['codigo_valormae'] ?? null,
-                'tipo_valormae' => null,
                 'moneda_id' => $monedaId,
             ];
         }
 
-        return $this->ordenarLineasPorCodigoNumerico($lineas);
+        return RendicionMaquinaValoresCuentacajaSupport::enriquecerLineas(
+            $this->ordenarLineasPorCodigoNumerico($lineas),
+            $fechaYmd,
+            $empresaId
+        );
     }
 
     /**

@@ -86,7 +86,11 @@ final class RendicionMaquinaCompletoDelDiaSupport
         if ($empresaId <= 0 || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaYmd)) {
             return [
                 'inputs' => $inputs,
-                'valores' => self::catalogoValoresVacios($empresaId),
+                'valores' => RendicionMaquinaValoresCuentacajaSupport::enriquecerLineas(
+                    self::catalogoValoresVacios($empresaId),
+                    $fechaYmd,
+                    $empresaId
+                ),
                 'gastos' => self::catalogoGastosVacios($empresaId),
                 'orquestador' => $orquestador,
                 'meta' => $meta,
@@ -139,7 +143,11 @@ final class RendicionMaquinaCompletoDelDiaSupport
 
         return [
             'inputs' => $inputs,
-            'valores' => $valores,
+            'valores' => RendicionMaquinaValoresCuentacajaSupport::enriquecerLineas(
+                $valores,
+                $fechaYmd,
+                $empresaId
+            ),
             'gastos' => $gastos,
             'orquestador' => $orquestador,
             'meta' => $meta,
@@ -860,7 +868,7 @@ final class RendicionMaquinaCompletoDelDiaSupport
         $cuentas = Cuentacaja::query()
             ->paraEmpresa($empresaId)
             ->whereHas('usocuentacajas', fn ($q) => $q->where('usocuentacaja.id', $usoId))
-            ->get(['id', 'codigo', 'nombre', 'descripcion_operaciones']);
+            ->get(['id', 'codigo', 'nombre', 'descripcion_operaciones', 'moneda_id']);
 
         $lineas = [];
         foreach ($cuentas as $cuenta) {
@@ -873,7 +881,7 @@ final class RendicionMaquinaCompletoDelDiaSupport
                 'monto' => 0.0,
                 'cotizacion' => null,
                 'codigo_valormae' => ctype_digit((string) $cuenta->codigo) ? (int) $cuenta->codigo : null,
-                'tipo_valormae' => null,
+                'moneda_id' => (int) ($cuenta->moneda_id ?? 1),
             ];
         }
 

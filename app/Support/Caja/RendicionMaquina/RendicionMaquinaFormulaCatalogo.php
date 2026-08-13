@@ -120,7 +120,7 @@ final class RendicionMaquinaFormulaCatalogo
                 'seccion' => 'salidas',
                 'orden' => 125,
                 'activo' => true,
-                'detalle' => 'Depósito calculado (calcula_arqueo_maquina / a-rendmaquina.c)',
+                'detalle' => 'Depósito calculado (valores en pesos: ME × cotización tesorería + gastos + vta ant. gastro)',
             ],
             [
                 'codigo' => 'D30',

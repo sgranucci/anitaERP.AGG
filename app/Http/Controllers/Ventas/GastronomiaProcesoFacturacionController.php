@@ -36,6 +36,7 @@ use App\Support\Ventas\GastronomiaCuentacajaSoloAutomaticaSupport;
 use App\Support\Ventas\GastronomiaCuentacajaTotem;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
+use App\Support\Ventas\Gastronomia\GastronomiaAnularCuentaPendienteClaveSupport;
 use App\Support\Ventas\GastronomiaTurnoOperativoTotalesSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -184,6 +185,7 @@ class GastronomiaProcesoFacturacionController extends Controller
                 )
                 : null,
             'url_habilitacion_turno' => route('gastronomia_habilitacion_turno'),
+            'exige_clave_anular_cuenta_pendiente' => GastronomiaAnularCuentaPendienteClaveSupport::activoParaEmpresa($empresaId),
         ]);
     }
 
@@ -252,6 +254,7 @@ class GastronomiaProcesoFacturacionController extends Controller
             'waitry_habilitado' => $cfg->waitryHabilitadoEnTerminal(),
             'waitry_get_orders_minutos_atras' => max(0, (int) config('waitry.get_orders_minutos_atras', 20)),
             'waitry_get_orders_cache_segundos' => max(0, (int) config('waitry.get_orders_cache_segundos', 15)),
+            'exige_clave_anular_cuenta_pendiente' => GastronomiaAnularCuentaPendienteClaveSupport::activoParaEmpresa((int) $cfg->empresa_id),
         ]);
     }
 
@@ -701,13 +704,17 @@ class GastronomiaProcesoFacturacionController extends Controller
         return response()->json(['ok' => true, 'cuenta' => $this->cuentaService->cuentaConLineas($cuentaId)]);
     }
 
-    public function apiCerrarCuenta(int $id)
+    public function apiCerrarCuenta(Request $request, int $id)
     {
         can('usar-proceso-facturacion-gastronomia');
 
         $cuenta = $this->cuentaService->cuentaConLineas($id);
 
         try {
+            GastronomiaAnularCuentaPendienteClaveSupport::validar(
+                $cuenta,
+                $request->input('clave')
+            );
             $this->cuentaService->cerrarSinFacturar($cuenta);
         } catch (\Throwable $e) {
             return response()->json(['error' => $e->getMessage()], 422);

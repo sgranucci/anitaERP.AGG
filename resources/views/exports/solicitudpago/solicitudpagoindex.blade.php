@@ -19,16 +19,16 @@
 	@if (!empty($reservarFilaLogoExcel))
 		<tbody>
 			<tr>
-				<td colspan="11" style="height: 52px;">&#160;</td>
+				<td colspan="14" style="height: 52px;">&#160;</td>
 			</tr>
 		</tbody>
 	@endif
 	<tbody>
 		<tr>
-			<td colspan="11"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de solicitudes de pago</h2></td>
+			<td colspan="14"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de solicitudes de pago</h2></td>
 		</tr>
 		<tr>
-			<td colspan="11"><strong>{{ $subtitulo }}</strong></td>
+			<td colspan="14"><strong>{{ $subtitulo }}</strong></td>
 		</tr>
 	</tbody>
 	<thead>
@@ -37,6 +37,9 @@
 			<th>Fecha</th>
 			<th>Vencimiento</th>
 			<th>Concepto</th>
+			<th>Sector</th>
+			<th>Forma de pago</th>
+			<th>N&deg; proveedor</th>
 			<th>Proveedor / Beneficiario</th>
 			<th>Monto</th>
 			<th>Tratamiento</th>
@@ -57,6 +60,9 @@
 				<td>{{ optional($data->fecha)->format('d/m/Y') }}</td>
 				<td>{{ optional($data->fecha_vencimiento)->format('d/m/Y') }}</td>
 				<td>{{ optional($data->conceptos)->nombre ?? '' }}</td>
+				<td>{{ optional($data->sectores)->nombre ?? '' }}</td>
+				<td>{{ optional($data->formapagosol)->nombre ?? '' }}</td>
+				<td>{{ optional($data->proveedores)->codigo ?? '' }}</td>
 				<td>{{ optional($data->proveedores)->nombre ?? ($data->beneficiario ?? '') }}</td>
 				<td>{{ $fmtMonto($data->monto) }}</td>
 				<td>{{ $tratNombre }}</td>

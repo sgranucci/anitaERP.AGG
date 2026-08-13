@@ -627,6 +627,7 @@
         cubiertosObligatorioAlAbrir: @json($cubiertos_obligatorio_al_abrir ?? true),
         cubiertosDefaultAlAbrir: {{ (int) ($cubiertos_default_al_abrir ?? 1) }},
         mozoObligatorioAlAbrir: @json($mozo_obligatorio_al_abrir ?? true),
+        exigeClaveAnularCuentaPendiente: @json($exige_clave_anular_cuenta_pendiente ?? false),
         jornadaObligatoria: @json($jornada_obligatoria ?? true),
         jornada: @json($jornada),
         urlJornada: _gastroBase + '/ventas/gastronomia/jornada',
@@ -1087,6 +1088,28 @@
                 <button type="button" class="btn btn-primary btn-sm" id="modal-gastro-aviso-aceptar" data-dismiss="modal">
                     Entendido <small class="text-white-50">(Enter)</small>
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Clave para anular cuenta pendiente de facturar (AGG / Kandiko) -->
+<div class="modal fade" id="modal-anular-cuenta-pendiente" tabindex="-1" role="dialog" aria-labelledby="modal-anular-cuenta-pendiente-titulo" data-backdrop="static" data-keyboard="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title mb-0" id="modal-anular-cuenta-pendiente-titulo">Clave de supervisor</h6>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">&times;</button>
+            </div>
+            <div class="modal-body py-3">
+                <p class="mb-2">Para anular esta cuenta hace falta la clave del supervisor.</p>
+                <label for="anular-cuenta-pendiente-clave" class="control-label">Clave de supervisor</label>
+                <input type="password" class="form-control" id="anular-cuenta-pendiente-clave" autocomplete="off">
+                <p class="text-danger small mb-0 mt-2 d-none" id="anular-cuenta-pendiente-error"></p>
+            </div>
+            <div class="modal-footer py-2">
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-danger btn-sm" id="modal-anular-cuenta-pendiente-confirmar">Anular cuenta</button>
             </div>
         </div>
     </div>

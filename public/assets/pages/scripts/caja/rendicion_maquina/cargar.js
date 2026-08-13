@@ -319,17 +319,24 @@
         tbody.innerHTML = ordenarPorCodigoNumerico(lineas).map(function (linea) {
             var id = parseInt(linea.cuentacaja_id, 10) || 0;
             var codigo = escapeHtml(linea.codigo || '');
-            var nombre = escapeHtml(linea.nombre || '');
+            var nombreRaw = linea.nombre || '';
+            var nombre = escapeHtml(nombreRaw);
             var monto = fmtMoney(linea.monto || 0);
             var cot = parseFloat(linea.cotizacion);
             if (!isFinite(cot) || cot <= 0) {
                 cot = 1;
             }
             var monedaId = parseInt(linea.moneda_id, 10) || 1;
+            var title = nombreRaw;
+            if (monedaId > 1) {
+                title += ' — moneda extranjera × cotización ' + cot;
+            }
             return '<tr data-cuentacaja-id="' + id + '" data-cotizacion="' + cot + '" data-moneda-id="' + monedaId + '">'
                 + '<td class="text-muted col-codigo">' + codigo + '</td>'
-                + '<td class="col-desc" title="' + nombre + '">' + nombre + '</td>'
-                + '<td class="col-monto"><input type="text" inputmode="decimal" class="form-control form-control-sm text-right js-valor-monto js-monto-ar" autocomplete="off" value="' + monto + '"></td>'
+                + '<td class="col-desc" title="' + escapeHtml(title) + '">' + nombre + '</td>'
+                + '<td class="col-monto"><input type="text" inputmode="decimal" class="form-control form-control-sm text-right js-valor-monto js-monto-ar" autocomplete="off" value="' + monto + '"'
+                + (monedaId > 1 ? ' title="' + escapeHtml(title) + '"' : '')
+                + '></td>'
                 + '</tr>';
         }).join('');
         initFormatoMontos(tbody);

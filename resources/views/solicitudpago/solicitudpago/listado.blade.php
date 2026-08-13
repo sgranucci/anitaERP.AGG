@@ -65,17 +65,20 @@
 	<table class="data">
 		<thead>
 			<tr>
-				<th style="width: 7%;">C&oacute;digo</th>
-				<th style="width: 11%;">Empresa</th>
-				<th style="width: 7%;">Fecha</th>
-				<th style="width: 7%;">Vencimiento</th>
-				<th style="width: 14%;">Concepto</th>
-				<th style="width: 14%;">Proveedor / Benef.</th>
-				<th style="width: 8%;">Monto</th>
-				<th style="width: 8%;">Tratamiento</th>
-				<th style="width: 8%;">Estado</th>
-				<th style="width: 7%;">SP madre</th>
-				<th style="width: 9%;">Cuotas pend.</th>
+				<th style="width: 6%;">C&oacute;digo</th>
+				<th style="width: 9%;">Empresa</th>
+				<th style="width: 6%;">Fecha</th>
+				<th style="width: 6%;">Vencimiento</th>
+				<th style="width: 10%;">Concepto</th>
+				<th style="width: 8%;">Sector</th>
+				<th style="width: 8%;">Forma de pago</th>
+				<th style="width: 6%;">N&deg; prov.</th>
+				<th style="width: 11%;">Proveedor / Benef.</th>
+				<th style="width: 7%;">Monto</th>
+				<th style="width: 6%;">Tratamiento</th>
+				<th style="width: 6%;">Estado</th>
+				<th style="width: 5%;">SP madre</th>
+				<th style="width: 6%;">Cuotas pend.</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -86,6 +89,9 @@
 					<td>{{ optional($data->fecha)->format('d/m/Y') }}</td>
 					<td>{{ optional($data->fecha_vencimiento)->format('d/m/Y') }}</td>
 					<td>{{ optional($data->conceptos)->nombre ?? '' }}</td>
+					<td>{{ optional($data->sectores)->nombre ?? '' }}</td>
+					<td>{{ optional($data->formapagosol)->nombre ?? '' }}</td>
+					<td>{{ optional($data->proveedores)->codigo ?? '' }}</td>
 					<td>{{ optional($data->proveedores)->nombre ?? ($data->beneficiario ?? '') }}</td>
 					<td>{{ number_format((float) $data->monto, 2, ',', '.') }}</td>
 					<td>{{ $tratMap[$data->tratamiento] ?? $data->tratamiento }}</td>

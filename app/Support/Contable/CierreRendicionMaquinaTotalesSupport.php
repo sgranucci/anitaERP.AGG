@@ -5,7 +5,9 @@ namespace App\Support\Contable;
 use App\Models\Caja\AperturaGastoEmpresa;
 use App\Models\Caja\Flash\FlashCaja;
 use App\Models\Caja\RendicionMaquina;
+use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaTurno;
+use App\Support\Caja\RendicionMaquina\RendicionMaquinaValoresCuentacajaSupport;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -133,10 +135,17 @@ final class CierreRendicionMaquinaTotalesSupport
 
             $caja = $valor->cuentacaja;
             $codigoValormae = (int) ($valor->codigo_valormae ?? 0);
-            $cotizacion = (float) ($valor->cotizacion ?? 1);
-            if ($cotizacion <= 0) {
-                $cotizacion = 1.0;
+            $monedaId = (int) ($caja?->moneda_id ?? 1);
+            $cotizacion = (float) ($valor->cotizacion ?? 0);
+            if (! RendicionMaquinaValoresCuentacajaSupport::cotizacionUsable($cotizacion, $monedaId)) {
+                $fechaYmd = $rendicion->fecha?->format('Y-m-d') ?? date('Y-m-d');
+                $cotizacion = CotizacionTesoreriaConsultaSupport::calculaVenta(
+                    $fechaYmd,
+                    $monedaId,
+                    $empresaId
+                );
             }
+            $montoPesos = RendicionMaquinaValoresCuentacajaSupport::montoEnPesos($monedaId, $monto, $cotizacion);
 
             $nombreCodigo = strtolower(trim(
                 (string) ($caja?->codigo ?? '').' '
@@ -145,36 +154,32 @@ final class CierreRendicionMaquinaTotalesSupport
             ));
 
             if (self::esTotalcoin($nombreCodigo, $codigoValormae)) {
-                $tot['totalcoin'] = round($tot['totalcoin'] + $monto, 2);
+                $tot['totalcoin'] = round($tot['totalcoin'] + $montoPesos, 2);
 
                 continue;
             }
 
             if (self::contieneAlguno($nombreCodigo, ['visa', 'master', 'electron', 'maestro'])) {
-                $tot['tarjetas'] = round($tot['tarjetas'] + $monto, 2);
+                $tot['tarjetas'] = round($tot['tarjetas'] + $montoPesos, 2);
 
                 continue;
             }
 
             if (self::contieneAlguno($nombreCodigo, ['mep'])) {
-                $tot['mep'] = round($tot['mep'] + $monto, 2);
+                $tot['mep'] = round($tot['mep'] + $montoPesos, 2);
 
                 continue;
             }
 
-            $moneda = strtoupper(trim((string) ($caja?->monedas?->codigo ?? $caja?->monedas?->nombre ?? '')));
-            if (self::contieneAlguno($moneda, ['USD', 'DOL', 'U$S', 'DOLAR'])) {
-                $tot['dolares_en_pesos'] = round($tot['dolares_en_pesos'] + ($monto * $cotizacion), 2);
-
-                continue;
-            }
-            if (self::contieneAlguno($moneda, ['EUR', 'EURO'])) {
-                $tot['euros_en_pesos'] = round($tot['euros_en_pesos'] + ($monto * $cotizacion), 2);
-
-                continue;
-            }
-            if (self::contieneAlguno($nombreCodigo, ['cripto', 'crypto', 'bitcoin', 'btc'])) {
-                $tot['cripto_en_pesos'] = round($tot['cripto_en_pesos'] + ($monto * $cotizacion), 2);
+            if (RendicionMaquinaValoresCuentacajaSupport::esMonedaExtranjera($monedaId)) {
+                $moneda = strtoupper(trim((string) ($caja?->monedas?->codigo ?? $caja?->monedas?->nombre ?? '')));
+                if (self::contieneAlguno($moneda, ['EUR', 'EURO'])) {
+                    $tot['euros_en_pesos'] = round($tot['euros_en_pesos'] + $montoPesos, 2);
+                } elseif (self::contieneAlguno($nombreCodigo, ['cripto', 'crypto', 'bitcoin', 'btc'])) {
+                    $tot['cripto_en_pesos'] = round($tot['cripto_en_pesos'] + $montoPesos, 2);
+                } else {
+                    $tot['dolares_en_pesos'] = round($tot['dolares_en_pesos'] + $montoPesos, 2);
+                }
 
                 continue;
             }

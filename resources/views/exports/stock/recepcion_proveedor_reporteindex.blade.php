@@ -51,6 +51,7 @@
         'modo' => $modo ?? 'detalle',
         'para_excel' => true,
         'para_pdf' => true,
+        'solo_thead_tbody' => true,
         'columnas_completas' => true,
         'puede_ver_recepcion' => false,
         'puede_ver_articulo' => false,

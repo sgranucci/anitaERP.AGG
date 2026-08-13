@@ -44,6 +44,9 @@
         if (data.cuentas_libres_habilitadas != null) {
             G.cuentasLibresHabilitadas = !!data.cuentas_libres_habilitadas;
         }
+        if (data.exige_clave_anular_cuenta_pendiente != null) {
+            G.exigeClaveAnularCuentaPendiente = !!data.exige_clave_anular_cuenta_pendiente;
+        }
         aplicarVisibilidadCuentasLibres();
     }
 
@@ -6489,20 +6492,88 @@
             return;
         }
         if (!cuentaId) return;
-        if (!confirm('¿Cerrar cuenta sin facturar?')) return;
+        let clave = '';
+        if (G.exigeClaveAnularCuentaPendiente) {
+            clave = await pedirClaveAnularCuentaPendiente();
+            if (clave === null) {
+                return;
+            }
+        } else {
+            const tieneConsumos = cuentaTieneConsumosPendientes(cuentaActivaConLineas);
+            const msg = tieneConsumos
+                ? '¿Anular esta cuenta pendiente de facturar? Los consumos no se facturarán.'
+                : '¿Cerrar esta cuenta vacía?';
+            if (!confirm(msg)) return;
+        }
         try {
+            const body = {};
+            if (clave !== '') {
+                body.clave = clave;
+            }
             await api(`/ventas/gastronomia/api/cuenta/${cuentaId}/cerrar`, {
                 method: 'POST',
                 headers: hdrJson(),
-                body: '{}',
+                body: JSON.stringify(body),
             });
-            toast('Cuenta cerrada', 'success');
+            toast('Cuenta anulada', 'success');
             limpiarEstadoCuentaActiva();
             cargarMesas();
             cargarCuentasActivas();
         } catch (e) {
             toast(e.message, 'error');
         }
+    }
+
+    function cuentaTieneConsumosPendientes(cuenta) {
+        const lineas = cuenta && cuenta.lineas ? cuenta.lineas : [];
+        return lineas.length > 0;
+    }
+
+    function pedirClaveAnularCuentaPendiente() {
+        return new Promise((resolve) => {
+            const modalEl = document.getElementById('modal-anular-cuenta-pendiente');
+            const input = document.getElementById('anular-cuenta-pendiente-clave');
+            const errEl = document.getElementById('anular-cuenta-pendiente-error');
+            if (!modalEl || !input || typeof $ === 'undefined') {
+                const typed = window.prompt('Clave de supervisor para anular la cuenta:');
+                resolve(typed === null ? null : String(typed));
+                return;
+            }
+            let settled = false;
+            const finish = (valor) => {
+                if (settled) return;
+                settled = true;
+                $('#modal-anular-cuenta-pendiente').modal('hide');
+                resolve(valor);
+            };
+            if (errEl) {
+                errEl.classList.add('d-none');
+                errEl.textContent = '';
+            }
+            input.value = '';
+            const onConfirm = () => {
+                const v = String(input.value || '');
+                if (v.trim() === '') {
+                    if (errEl) {
+                        errEl.textContent = 'Ingrese la clave de supervisor.';
+                        errEl.classList.remove('d-none');
+                    }
+                    input.focus();
+                    return;
+                }
+                finish(v);
+            };
+            modalEl._gastroAnularClaveConfirm = onConfirm;
+            $('#modal-anular-cuenta-pendiente')
+                .off('hidden.bs.modal.gastroAnularClave')
+                .on('hidden.bs.modal.gastroAnularClave', function () {
+                    finish(null);
+                })
+                .modal('show');
+            setTimeout(() => {
+                input.focus();
+            }, 200);
+        });
     }
 
     async function validarEmisionServidor(mediosPago, efectivizar, opciones) {
@@ -7003,6 +7074,27 @@
             });
         }
         document.getElementById('btn-cerrar-cuenta').addEventListener('click', cerrarCuenta);
+        const btnAnularCuentaClave = document.getElementById('modal-anular-cuenta-pendiente-confirmar');
+        if (btnAnularCuentaClave) {
+            btnAnularCuentaClave.addEventListener('click', () => {
+                const modalEl = document.getElementById('modal-anular-cuenta-pendiente');
+                if (modalEl && typeof modalEl._gastroAnularClaveConfirm === 'function') {
+                    modalEl._gastroAnularClaveConfirm();
+                }
+            });
+        }
+        const inputAnularCuentaClave = document.getElementById('anular-cuenta-pendiente-clave');
+        if (inputAnularCuentaClave) {
+            inputAnularCuentaClave.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const modalEl = document.getElementById('modal-anular-cuenta-pendiente');
+                    if (modalEl && typeof modalEl._gastroAnularClaveConfirm === 'function') {
+                        modalEl._gastroAnularClaveConfirm();
+                    }
+                }
+            });
+        }
         document.getElementById('btn-agregar-consumo').addEventListener('click', async () => {
             let articuloParaModal = articuloSeleccionadoEnFila();
             if (!articuloParaModal || !articuloParaModal.id) {

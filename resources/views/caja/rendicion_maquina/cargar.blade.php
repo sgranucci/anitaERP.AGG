@@ -541,15 +541,24 @@
                                     </thead>
                                     <tbody>
                                         @forelse ($cuentasValor as $linea)
+                                            @php
+                                                $monedaIdLinea = (int) ($linea['moneda_id'] ?? 1);
+                                                $cotLinea = (float) ($linea['cotizacion'] ?? 1);
+                                                $titleCuenta = (string) ($linea['nombre'] ?? '');
+                                                if ($monedaIdLinea > 1) {
+                                                    $titleCuenta .= ' — moneda extranjera × cotización '.number_format($cotLinea, 4, ',', '.');
+                                                }
+                                            @endphp
                                             <tr data-cuentacaja-id="{{ (int) $linea['cuentacaja_id'] }}"
-                                                data-cotizacion="{{ number_format((float) ($linea['cotizacion'] ?? 1), 6, '.', '') }}"
-                                                data-moneda-id="{{ (int) ($linea['moneda_id'] ?? 1) }}">
+                                                data-cotizacion="{{ number_format($cotLinea, 6, '.', '') }}"
+                                                data-moneda-id="{{ $monedaIdLinea }}">
                                                 <td class="text-muted col-codigo">{{ $linea['codigo'] ?? '' }}</td>
-                                                <td class="col-desc" title="{{ $linea['nombre'] ?? '' }}">{{ $linea['nombre'] ?? '' }}</td>
+                                                <td class="col-desc" title="{{ $titleCuenta }}">{{ $linea['nombre'] ?? '' }}</td>
                                                 <td class="col-monto">
                                                     <input type="text" inputmode="decimal"
                                                            class="form-control form-control-sm text-right js-valor-monto js-monto-ar"
                                                            autocomplete="off"
+                                                           title="{{ $monedaIdLinea > 1 ? $titleCuenta : '' }}"
                                                            value="{{ number_format((float) ($linea['monto'] ?? 0), 2, ',', '.') }}">
                                                 </td>
                                             </tr>

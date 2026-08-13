@@ -16,12 +16,15 @@
     $puedeVerCp = ! $paraPdf && ! $paraExcel && ($puede_ver_comprobante ?? false);
     $colspanCompleto = $esResumen ? 16 : ($columnasCompletas ? 41 : 17);
     $tableClass = $table_class ?? 'table table-hover table-striped table-sm mb-0';
+    $soloTheadTbody = ! empty($solo_thead_tbody);
     $filasIterable = $filas ?? [];
     if ($filasIterable instanceof \Illuminate\Pagination\LengthAwarePaginator) {
         $filasIterable = $filasIterable->items();
     }
 @endphp
+@if (! $soloTheadTbody)
 <table id="tabla-paginada" class="{{ $tableClass }} rpr-tabla">
+@endif
     <thead style="background:#85C1E9;color:#17202A;">
         <tr>
             @if ($esResumen)
@@ -335,4 +338,6 @@
         </tr>
     @endforelse
     </tbody>
+@if (! $soloTheadTbody)
 </table>
+@endif

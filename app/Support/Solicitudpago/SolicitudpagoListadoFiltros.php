@@ -15,6 +15,9 @@ final class SolicitudpagoListadoFiltros
         'codigo' => ['etiqueta' => 'Código', 'tipo' => 'entero', 'columna' => 'solicitudpago.codigo'],
         'detalle' => ['etiqueta' => 'Detalle', 'tipo' => 'texto', 'columna' => 'solicitudpago.detalle'],
         'beneficiario' => ['etiqueta' => 'Beneficiario', 'tipo' => 'texto', 'columna' => 'solicitudpago.beneficiario'],
+        'proveedor_codigo' => ['etiqueta' => 'N° proveedor', 'tipo' => 'entero', 'relacion' => 'proveedores', 'columna' => 'codigo'],
+        'sector' => ['etiqueta' => 'Sector', 'tipo' => 'texto', 'relacion' => 'sectores', 'columna' => 'nombre'],
+        'forma_pago' => ['etiqueta' => 'Forma de pago', 'tipo' => 'texto', 'relacion' => 'formapagosol', 'columna' => 'nombre'],
         'fecha' => ['etiqueta' => 'Fecha', 'tipo' => 'texto', 'columna' => 'solicitudpago.fecha'],
     ];
 
@@ -246,7 +249,19 @@ final class SolicitudpagoListadoFiltros
                 $q->where('solicitudpago.codigo', 'like', '%'.$valor.'%')
                     ->orWhere('solicitudpago.detalle', 'like', '%'.$valor.'%')
                     ->orWhere('solicitudpago.beneficiario', 'like', '%'.$valor.'%')
-                    ->orWhere('solicitudpago.observacion', 'like', '%'.$valor.'%');
+                    ->orWhere('solicitudpago.observacion', 'like', '%'.$valor.'%')
+                    ->orWhereHas('proveedores', function ($pq) use ($valor) {
+                        $pq->where('codigo', 'like', '%'.$valor.'%')
+                            ->orWhere('nombre', 'like', '%'.$valor.'%');
+                    })
+                    ->orWhereHas('sectores', function ($sq) use ($valor) {
+                        $sq->where('nombre', 'like', '%'.$valor.'%')
+                            ->orWhere('codigo', 'like', '%'.$valor.'%');
+                    })
+                    ->orWhereHas('formapagosol', function ($fq) use ($valor) {
+                        $fq->where('nombre', 'like', '%'.$valor.'%')
+                            ->orWhere('codigo', 'like', '%'.$valor.'%');
+                    });
                 if ($estadosValor !== []) {
                     $q->orWhereIn('solicitudpago.estado', $estadosValor);
                 }
@@ -272,8 +287,21 @@ final class SolicitudpagoListadoFiltros
             return $query;
         }
 
-        $col = $campo['columna'];
         $op = $filtros['operador'] ?? 'contiene';
+        if (! empty($campo['relacion'])) {
+            self::aplicarSobreRelacion(
+                $query,
+                (string) $campo['relacion'],
+                (string) $campo['columna'],
+                (string) ($campo['tipo'] ?? 'texto'),
+                $op,
+                $valor
+            );
+
+            return $query;
+        }
+
+        $col = $campo['columna'];
         if (($campo['tipo'] ?? '') === 'entero') {
             $n = (int) $valor;
             match ($op) {
@@ -335,6 +363,39 @@ final class SolicitudpagoListadoFiltros
         $v = trim($valor);
 
         return $v !== '' && preg_match('/\d/', $v) === 1;
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\Solicitudpago\Solicitudpago>  $query
+     */
+    private static function aplicarSobreRelacion($query, string $relacion, string $columna, string $tipo, string $op, string $valor): void
+    {
+        $query->whereHas($relacion, function ($q) use ($columna, $tipo, $op, $valor) {
+            if ($tipo === 'entero') {
+                $n = (int) $valor;
+                match ($op) {
+                    'mayor' => $q->where($columna, '>', $n),
+                    'menor' => $q->where($columna, '<', $n),
+                    'mayor_igual' => $q->where($columna, '>=', $n),
+                    'menor_igual' => $q->where($columna, '<=', $n),
+                    default => $q->where($columna, $n),
+                };
+
+                return;
+            }
+
+            match ($op) {
+                'igual' => $q->where($columna, $valor),
+                'empieza' => $q->where($columna, 'like', $valor.'%'),
+                'termina' => $q->where($columna, 'like', '%'.$valor),
+                default => $q->where(function ($inner) use ($columna, $valor) {
+                    $inner->where($columna, 'like', '%'.$valor.'%');
+                    if ($columna === 'nombre') {
+                        CoincidenciaFlexibleTexto::aplicar($inner, $columna, $valor);
+                    }
+                }),
+            };
+        });
     }
 
     public static function operadoresParaCampo(string $campo): array

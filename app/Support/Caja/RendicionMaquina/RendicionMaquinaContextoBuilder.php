@@ -95,20 +95,24 @@ final class RendicionMaquinaContextoBuilder
                 continue;
             }
 
-            $tipo = trim((string) ($linea['tipo_valormae'] ?? $linea['valm_tipo'] ?? ''));
+            $monedaId = (int) ($linea['moneda_id'] ?? 1);
             $cotizacion = (float) ($linea['cotizacion'] ?? 0);
-            // Paridad calcula_arqueo_maquina: VALM_EFE_DOLAR / EURO / CRIPTO → total * cotización
-            if (in_array($tipo, ['1', '2', '8'], true)) {
-                $montoPesos = round($monto * $cotizacion, 2);
+            $montoPesos = RendicionMaquinaValoresCuentacajaSupport::montoEnPesos(
+                $monedaId,
+                $monto,
+                $cotizacion
+            );
+
+            $total += $montoPesos;
+            if (RendicionMaquinaValoresCuentacajaSupport::esMonedaExtranjera($monedaId)) {
                 $divisa += $montoPesos;
-                $total += $montoPesos;
+                continue;
+            }
+
+            if (self::esValorQrCuentacaja($linea)) {
+                $qr += $montoPesos;
             } else {
-                $total += $monto;
-                if (in_array($tipo, ['5', '9'], true)) {
-                    $qr += $monto;
-                } else {
-                    $efectivo += $monto;
-                }
+                $efectivo += $montoPesos;
             }
         }
 
@@ -134,5 +138,27 @@ final class RendicionMaquinaContextoBuilder
         }
 
         return round($total, 2);
+    }
+
+    /**
+     * QR / TotalCoin se detecta por la cuenta de caja, no por valormae.
+     *
+     * @param  array<string, mixed>  $linea
+     */
+    private static function esValorQrCuentacaja(array $linea): bool
+    {
+        $texto = mb_strtolower(trim(implode(' ', [
+            (string) ($linea['codigo'] ?? ''),
+            (string) ($linea['nombre'] ?? ''),
+            (string) ($linea['descripcion_operaciones'] ?? ''),
+            (string) ($linea['nombre_maestro'] ?? ''),
+        ])));
+        if ($texto === '') {
+            return false;
+        }
+
+        return str_contains($texto, 'qr')
+            || str_contains($texto, 'totalcoin')
+            || str_contains($texto, 'total coin');
     }
 }
