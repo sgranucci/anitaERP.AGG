@@ -30,5 +30,34 @@
         border-radius: 0.25rem;
         padding: 0.35rem 0.65rem;
     }
+    /* Misma altura entre select, input date/text y botones en filas de filtros */
+    [data-listado-filtros-panel] .form-control-sm,
+    [data-listado-filtros-externos] .form-control-sm {
+        height: calc(1.8125rem + 2px);
+        min-height: calc(1.8125rem + 2px);
+        padding-top: 0.25rem;
+        padding-bottom: 0.25rem;
+        line-height: 1.5;
+        box-sizing: border-box;
+    }
+    [data-listado-filtros-panel] select.form-control-sm,
+    [data-listado-filtros-externos] select.form-control-sm {
+        padding-right: 1.75rem;
+    }
+    [data-listado-filtros-panel] .btn-sm,
+    [data-listado-filtros-externos] .btn-sm {
+        height: calc(1.8125rem + 2px);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-sizing: border-box;
+        padding-top: 0;
+        padding-bottom: 0;
+    }
+    .listado-filtros-label-spacer {
+        visibility: hidden;
+        user-select: none;
+        pointer-events: none;
+    }
 </style>
 @endonce

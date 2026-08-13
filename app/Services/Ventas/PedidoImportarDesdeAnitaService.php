@@ -9,6 +9,7 @@ use App\Models\Ventas\Pedido;
 use App\Models\Ventas\Pedido_Articulo;
 use App\Models\Ventas\Pedido_Articulo_Caja;
 use App\Models\Ventas\Transporte;
+use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Zonavta;
 use App\Support\Ventas\KiloPedidoListadoFiltros;
 use Carbon\Carbon;
@@ -18,7 +19,7 @@ use RuntimeException;
 
 /**
  * Importa pedidos Anita (pendmae/pendmov) a ERP filtrados por fecha de entrega y transporte/reparto.
- * Solo EL BIERZO.
+ * Solo EL BIERZO (letra X en Anita; penv_observacion no existe en este esquema).
  */
 class PedidoImportarDesdeAnitaService
 {
@@ -74,7 +75,7 @@ class PedidoImportarDesdeAnitaService
                 'codigo' => $codigo,
                 'sucursal' => (int) ($cab->penm_sucursal ?? 0),
                 'nro' => (int) ($cab->penm_nro ?? 0),
-                'letra' => trim((string) ($cab->penm_letra ?? 'A')),
+                'letra' => trim((string) ($cab->penm_letra ?? 'X')),
                 'codigo_cliente' => $codigoCliente,
                 'nombre_cliente' => $nombreCliente,
                 'fecha' => $this->formatearFechaAnita($cab->penm_fecha ?? null),
@@ -175,10 +176,10 @@ class PedidoImportarDesdeAnitaService
             $condicionventaId = 3;
         }
 
-        $vendedorId = (int) ($cab->penm_vendedor ?? 0);
-        if ($vendedorId === 0) {
-            $vendedorId = 1;
-        }
+        $vendedorId = $this->resolverVendedorId(
+            $cab->penm_vendedor ?? null,
+            (int) ($cliente->vendedor_id ?? 0)
+        );
 
         $transporte = Transporte::query()
             ->select('id', 'codigo')
@@ -219,7 +220,7 @@ class PedidoImportarDesdeAnitaService
 
         $lineasAnita = $this->leerPendmov(
             (string) ($cab->penm_tipo ?? 'PED'),
-            (string) ($cab->penm_letra ?? 'A'),
+            (string) ($cab->penm_letra ?? 'X'),
             $sucursal,
             (int) ($cab->penm_nro ?? 0)
         );
@@ -334,7 +335,8 @@ class PedidoImportarDesdeAnitaService
             [$desde, $hasta] = [$hasta, $desde];
         }
 
-        $where = " WHERE penm_tipo='PED' AND penm_letra='A'"
+        // El Bierzo graba pedidos Anita con letra X (no A).
+        $where = " WHERE penm_tipo='PED' AND penm_letra='X'"
             ." AND penm_fecha_ent BETWEEN {$desde} AND {$hasta}";
         $where .= $this->whereRepartoAnita((string) ($filtros['filtro_reparto'] ?? ''));
 
@@ -414,7 +416,7 @@ class PedidoImportarDesdeAnitaService
             'campos' => '
                 penv_cliente, penv_tipo, penv_letra, penv_sucursal, penv_nro, penv_orden,
                 penv_articulo, penv_cantidad, penv_precio, penv_dto_art, penv_incl_impuesto,
-                penv_cod_mon, penv_observacion, penv_pieza, penv_kilos_reales, penv_piezas_reales,
+                penv_cod_mon, penv_pieza, penv_kilos_reales, penv_piezas_reales,
                 penv_reparto, penv_fl_bonif
             ',
             'whereArmado' => " WHERE penv_tipo='".$this->esc($tipo)."' AND penv_letra='".$this->esc($letra)
@@ -435,7 +437,7 @@ class PedidoImportarDesdeAnitaService
     private function codigoErpDesdeCabecera(object $cab): string
     {
         $tipo = trim((string) ($cab->penm_tipo ?? 'PED')) ?: 'PED';
-        $letra = trim((string) ($cab->penm_letra ?? 'A')) ?: 'A';
+        $letra = trim((string) ($cab->penm_letra ?? 'X')) ?: 'X';
 
         return $tipo.'-'.$letra.'-'
             .str_pad((string) (int) ($cab->penm_sucursal ?? 0), 5, '0', STR_PAD_LEFT).'-'
@@ -496,6 +498,40 @@ class PedidoImportarDesdeAnitaService
                 }
             })
             ->first();
+    }
+
+    private function resolverVendedorId(mixed $vendedorAnita, int $vendedorClienteId): int
+    {
+        $codigo = trim((string) $vendedorAnita);
+        $codigoNum = (string) (int) $codigo;
+        $idAnita = (int) $codigo;
+
+        if ($codigo !== '' && $codigo !== '0') {
+            $vendedor = Vendedor::query()
+                ->select('id')
+                ->where(function ($q) use ($codigo, $codigoNum) {
+                    $q->where('codigo', $codigo);
+                    if ($codigoNum !== '0' && $codigoNum !== $codigo) {
+                        $q->orWhere('codigo', $codigoNum);
+                    }
+                })
+                ->first();
+
+            if ($vendedor) {
+                return (int) $vendedor->id;
+            }
+
+            // Fallback: Anita a veces alinea id ERP con el código numérico.
+            if ($idAnita > 0 && Vendedor::query()->whereKey($idAnita)->exists()) {
+                return $idAnita;
+            }
+        }
+
+        if ($vendedorClienteId > 0 && Vendedor::query()->whereKey($vendedorClienteId)->exists()) {
+            return $vendedorClienteId;
+        }
+
+        return 1;
     }
 
     private function resolverZonavtaId(mixed $zonavtaAnita): ?int
