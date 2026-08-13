@@ -363,6 +363,7 @@
 </div>
 <input type="hidden" id="csrf_token" class="form-control" value="{{csrf_token()}}" />
 <input type="hidden" id="tipotransacciondefault_id" name="tipotransacciondefault_id" class="form-control" value="{{$tipotransacciondefault_id}}" />
+<input type="hidden" id="puntoventaremitodefault_id" class="form-control" value="{{ $puntoventaremitodefault_id ?? '' }}">
 <input type="hidden" id="modofacturacion" name="modofacturacion" class="form-control" value="{{$data->puntoventas->modofacturacion ?? ''}}" />
 <input type="hidden" id="ordenventa_id" name="ordenventa_id" class="form-control" value="{{$data->ordenventa_id ?? ''}}" />
 <input type="hidden" id="estadocliente" value="{{ $data->clientes->estado ?? '' }}">

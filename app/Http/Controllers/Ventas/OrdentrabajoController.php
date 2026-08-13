@@ -14,6 +14,7 @@ use App\Repositories\Ventas\PuntoventaRepositoryInterface;
 use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
 use App\Repositories\Ventas\IncotermRepositoryInterface;
 use App\Repositories\Ventas\FormapagoRepositoryInterface;
+use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use App\Models\Stock\Mventa;
 use App\Models\Stock\Talle;
 use App\Models\Stock\Combinacion;
@@ -394,9 +395,10 @@ class OrdentrabajoController extends Controller
 			}
 		}
 
-		$puntoventadefault_id = cache()->get(generaKey('puntoventa'));
-		$puntoventaremitodefault_id = cache()->get(generaKey('puntoventaremito'));
-		$tipotransacciondefault_id = cache()->get(generaKey('tipotransaccion'));
+		$prefsFacturacion = UsuarioPreferenciaFacturacionSupport::leer();
+		$puntoventadefault_id = $prefsFacturacion['puntoventa_id'];
+		$puntoventaremitodefault_id = $prefsFacturacion['puntoventaremito_id'];
+		$tipotransacciondefault_id = $prefsFacturacion['tipotransaccion_id'];
 
 		return view('ventas.ordentrabajo.editar', compact('ordentrabajo', 'cliente_query', 'articulo_query', 
 														'combinacion_query', 'mventa_query', 'talle_query', 

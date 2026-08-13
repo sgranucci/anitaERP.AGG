@@ -23,6 +23,7 @@
         preferencias: @json(route('factura_preferencias'))
     };
 </script>
+@include('includes.ventas.preferencias_facturacion_scripts')
 <script src="{{asset("assets/pages/scripts/ventas/factura/crear.js")}}" type="text/javascript"></script>
 @if ($layoutItemsPedido)
 <script src="{{asset("assets/pages/scripts/ventas/factura/crear-bierzo-items.js")}}" type="text/javascript"></script>

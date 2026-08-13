@@ -45,13 +45,11 @@ final class CertificadoSenasaSurmarXmlBuilder
             /** @var CertificadoSenasaSurmarArticulo $linea */
             $neto = (float) $linea->kilos;
             $cajas = (float) $linea->cajas;
-            $piezas = (float) $linea->piezas;
+            // Anita: cantidad XML = Round(cajas); si Round==0 → 1
             if (round($cajas, 0) == 0.0) {
                 $cajas = 1.0;
             }
-            if ($piezas <= 0) {
-                $piezas = 1.0;
-            }
+            $cantidad = round($cajas, 0);
             $totalCajas += $cajas;
             $bruto = $neto + $cajas;
 
@@ -78,12 +76,16 @@ final class CertificadoSenasaSurmarXmlBuilder
             $xml[] = "\t\t\tfechaDeVencimiento=\"".$fechaVto->format('Y-m-d').'"/>';
             $xml[] = "\t\t<se:pesoNeto>".number_format($neto, 2, '.', '').'</se:pesoNeto>';
             $xml[] = "\t\t<se:pesoBruto>".number_format($bruto, 2, '.', '').'</se:pesoBruto>';
-            $xml[] = "\t\t<se:cantidad>".number_format($piezas, 0, '.', '').'</se:cantidad>';
+            $xml[] = "\t\t<se:cantidad>".number_format($cantidad, 0, '.', '').'</se:cantidad>';
             $xml[] = "\t\t<se:envasePrimario>".$this->esc($envase !== '' ? $envase : ' ').'</se:envasePrimario>';
             $xml[] = "\t\t<se:envaseSecundario>Caja</se:envaseSecundario>";
             $xml[] = "\t\t<se:codEnvasePrimarioSENASA>".$codEnvase.'</se:codEnvasePrimarioSENASA>';
             $xml[] = "\t\t<se:codEnvaseSecundarioSENASA>".$this->esc((string) config('senasa.cod_envase_secundario')).'</se:codEnvaseSecundarioSENASA>';
             $xml[] = "\t\t<se:marca>".$this->esc(mb_substr($marca, 0, 30)).'</se:marca>';
+            $origen = trim((string) ($linea->cert_tercero ?? ''));
+            if ($origen !== '') {
+                $xml[] = "\t\t<se:certificadoDeOrigen>".$this->esc($origen).'</se:certificadoDeOrigen>';
+            }
             $xml[] = "\t</se:detalle>";
         }
         $xml[] = '</se:detalles>';

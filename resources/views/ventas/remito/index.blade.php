@@ -45,8 +45,35 @@ function eliminarRemito(event) {
                 </div>
             </div>
             <form method="get" action="{{ route('remito') }}" id="form-filtros-remito" class="mb-0">
-                @include('ventas.partials.filtros_reparto_fecha_entrega')
-                @include('ventas.remito.partials.filtros_listado', [
+                    @include('ventas.partials.filtros_reparto_fecha_entrega')
+                    <div class="border-bottom">
+                        <div class="card-body bg-white py-2 text-body">
+                            <div class="form-row align-items-center">
+                                <div class="form-group col-md-auto mb-0">
+                                    <div class="custom-control custom-checkbox">
+                                        <input type="checkbox"
+                                               class="custom-control-input"
+                                               name="solo_huerfanos"
+                                               id="solo_huerfanos"
+                                               value="1"
+                                               form="form-filtros-remito"
+                                               {{ !empty($filtros['solo_huerfanos']) ? 'checked' : '' }}>
+                                        <label class="custom-control-label" for="solo_huerfanos">
+                                            Solo huérfanos (sin factura)
+                                        </label>
+                                    </div>
+                                </div>
+                                @if (can('listar-asignacion-remito-factura', false))
+                                    <div class="form-group col-md-auto mb-0 ml-auto">
+                                        <a href="{{ route('asignacion_remito_factura') }}" class="btn btn-outline-primary btn-sm">
+                                            <i class="fa fa-link"></i> Asignar a facturas
+                                        </a>
+                                    </div>
+                                @endif
+                            </div>
+                        </div>
+                    </div>
+                    @include('ventas.remito.partials.filtros_listado', [
                     'limpiarUrl' => route('remito'),
                 ])
             </form>
@@ -101,7 +128,12 @@ function eliminarRemito(event) {
                                     {{ $kilo }}
                                 </td>
                                 <td>{{ $remito->nombretransporte ?? '' }}</td>
-                                <td>{{ $remito['estado'] }}</td>
+                                <td>
+                                    {{ $remito['estado'] }}
+                                    @if (empty($remito['venta_id']))
+                                        <span class="badge badge-warning">Sin factura</span>
+                                    @endif
+                                </td>
                                 <td>
                                     @if (can('editar-remitos', false))
                                         <a href="{{ route('editar_remito', ['id' => $remito['id']] + $retornoListadoQuery) }}"

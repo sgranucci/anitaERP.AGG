@@ -6,6 +6,8 @@ Nuevo certificado SENASA Surmar
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/transporte/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/certificado_senasa_surmar/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/certificado_senasa_surmar/crear.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -65,17 +67,24 @@ Nuevo certificado SENASA Surmar
                             </select>
                         </div>
                     </div>
-                    <div class="form-group row">
-                        <label class="col-lg-4 control-label text-right pr-2" for="transporte_id">Transporte / expreso</label>
+                    <div class="form-group row tm-transporte-campo">
+                        <label class="col-lg-4 control-label text-right pr-2" for="codigotransporte">Reparto</label>
                         <div class="col-lg-6">
-                            <select name="transporte_id" id="transporte_id" class="form-control">
-                                <option value="">Seleccione…</option>
-                                @foreach ($transportes as $t)
-                                    <option value="{{ $t->id }}" @if ((string) old('transporte_id') === (string) $t->id) selected @endif>
-                                        {{ $t->codigo }} — {{ $t->nombre }}
-                                    </option>
-                                @endforeach
-                            </select>
+                            <div class="input-group">
+                                <input type="hidden" name="transporte_id" id="transporte_id" class="transporte_id"
+                                    value="{{ old('transporte_id', optional($transporteSeleccionado)->id ?? '') }}">
+                                <input type="text" class="form-control codigotransporte" id="codigotransporte" name="codigotransporte"
+                                    value="{{ old('codigotransporte', optional($transporteSeleccionado)->codigo ?? '') }}"
+                                    placeholder="C&oacute;d." title="C&oacute;digo; Enter valida; F1 consulta" autocomplete="off" style="max-width:7rem;">
+                                <input type="text" class="form-control nombretransporte" id="nombretransporte"
+                                    value="{{ old('nombretransporte', optional($transporteSeleccionado)->nombre ?? '') }}"
+                                    placeholder="Reparto" readonly>
+                                <div class="input-group-append">
+                                    <button type="button" class="btn btn-outline-secondary consultatransporte" title="Consultar repartos (F1)">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <div class="form-group row">
@@ -126,4 +135,5 @@ Nuevo certificado SENASA Surmar
     </div>
 </div>
 @include('includes.ventas.modalconsultacliente')
+@include('includes.ventas.modalconsultatransporte')
 @endsection

@@ -23,6 +23,11 @@ use App\Support\Ventas\FacturaListadoFiltros; ?>
             <div class="card-header">
                 <h3 class="card-title">Comprobantes de venta</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @if (can('listar-asignacion-remito-factura', false))
+                        <a href="{{ route('asignacion_remito_factura') }}" class="btn btn-outline-secondary btn-sm mr-1" style="color:#fff;">
+                            <i class="fa fa-link"></i> Asignar remitos
+                        </a>
+                    @endif
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-factura',
                         'filtroValor' => $filtros['valor'] ?? '',

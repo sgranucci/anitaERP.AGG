@@ -48,6 +48,8 @@ use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
 use App\Models\Stock\Categoria;
 use App\Models\Stock\Linea;
+use App\Support\Ventas\PedidoEstadoErpSupport;
+use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use App\Models\Stock\Talle;
 use App\Models\Stock\Material;
 use App\Models\Stock\Materialcapellada;
@@ -82,7 +84,6 @@ use App\Services\Ventas\FacturaelectronicaService;
 use App\Services\Stock\MovimientoStockService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use LynX39\LaraPdfMerger\Facades\PdfMerger;
 use SimpleSoftwareIO\QrCode\Facades\QrCode;
@@ -379,7 +380,7 @@ class FacturacionService
 		
 			$pedido_articulo = $this->pedido_articuloRepository->find($pedido_articulo_id);
 
-			if ($pedido_articulo->estado == 'P')
+			if (PedidoEstadoErpSupport::esItemPendienteFacturable($pedido_articulo->estado ?? null))
 			{
 				// Trae el articulo
 				$articulo = $this->articuloQuery->traeArticuloPorId($pedido_articulo->articulo_id);
@@ -559,10 +560,7 @@ class FacturacionService
 
 	public function generaFacturaPorPedido(array $data)
 	{
-		// Guarda tipo de transaccion y punto de venta en cache
-		Cache::forever(generaKey('tipotransaccion'), $data['tipotransaccion_id']);
-		Cache::forever(generaKey('puntoventa'), $data['puntoventa_id']);
-		Cache::forever(generaKey('puntoventaremito'), $data['puntoventaremito_id']);
+		UsuarioPreferenciaFacturacionSupport::guardar($data);
 
 		$cliente_id = $data['cliente_id'];
 		$tipoTransaccion_id = $data['tipotransaccion_id'];
@@ -647,8 +645,9 @@ class FacturacionService
 
 				$this->flGrabaComprobanteDividido = true;
 
-				// Graba comprobante dividido
+				// Graba comprobante dividido (Villafranca / sucursal 15): se emite, pero no se muestra en el OK
 				$retorno2 = Self::generaUnaFacturaPorPedido($data, $cliente, $pedido);
+				$retorno2 = $this->ocultarComprobanteDivididoEnMensaje($retorno2);
 
 				$retorno = [$retorno1, $retorno2];
 			}
@@ -1172,7 +1171,7 @@ class FacturacionService
 					}
 					DB::commit();
 
-					return ['factura' => $venta['codigo']];
+					return $this->respuestaFacturaPedidoOk($venta['codigo'] ?? '');
 				} catch (\Exception $e) {
 					DB::rollback();
 
@@ -1191,6 +1190,30 @@ class FacturacionService
 			return ['error' => 'Error con punto de venta asignado'];
 
 		return ['error' => 'No se pudo generar la factura del pedido.'];
+	}
+
+	/**
+	 * OK de factura de pedido. La de Villafranca (división / sucursal 15) se emite
+	 * igual, pero el mensaje final solo debe mostrar la de El Bierzo.
+	 */
+	private function respuestaFacturaPedidoOk(string $codigo): array
+	{
+		$payload = ['factura' => $codigo];
+
+		return $this->ocultarComprobanteDivididoEnMensaje($payload);
+	}
+
+	private function ocultarComprobanteDivididoEnMensaje($retorno)
+	{
+		if (! is_array($retorno) || ! empty($retorno['error'])) {
+			return $retorno;
+		}
+
+		if ($this->flGrabaComprobanteDividido) {
+			$retorno['ocultar_mensaje'] = true;
+		}
+
+		return $retorno;
 	}
 
 	// Calcula la factura por orden de venta
@@ -1321,9 +1344,7 @@ class FacturacionService
 
 	public function generaFacturaPorOrdenventa(array $data)
 	{
-		// Guarda tipo de transaccion y punto de venta en cache
-		Cache::forever(generaKey('tipotransaccion'), $data['tipotransaccion_id']);
-		Cache::forever(generaKey('puntoventa'), $data['puntoventa_id']);
+		UsuarioPreferenciaFacturacionSupport::guardar($data);
 
 		// Recalcula factura
 		$calculoFactura = Self::calculaFacturaPorOrdenventa($data);
@@ -1746,9 +1767,7 @@ class FacturacionService
 	{
 		$data = $this->normalizaItemsFacturaGeneralDesdePedido($data);
 
-		// Guarda tipo de transaccion y punto de venta en cache
-		Cache::forever(generaKey('tipotransaccion'), $data['tipotransaccion_id']);
-		Cache::forever(generaKey('puntoventa'), $data['puntoventa_id']);
+		UsuarioPreferenciaFacturacionSupport::guardar($data);
 
 		// Recibe datos para facturar
 		$cliente_id = $data['cliente_id'];
@@ -1980,9 +1999,7 @@ class FacturacionService
 	{
 		$data = $this->normalizaItemsFacturaGeneralDesdePedido($data);
 
-		// Guarda tipo de transaccion y punto de venta en cache
-		Cache::forever(generaKey('tipotransaccion'), $data['tipotransaccion_id']);
-		Cache::forever(generaKey('puntoventa'), $data['puntoventa_id']);
+		UsuarioPreferenciaFacturacionSupport::guardar($data);
 
 		// Recalcula factura
 		$calculoFactura = Self::calculaFacturaGeneral($data);
@@ -2313,10 +2330,7 @@ class FacturacionService
 
 	public function generaFacturaPorItemOt(array $data)
 	{
-		// Guarda tipo de transaccion y punto de venta en cache
-		Cache::forever(generaKey('tipotransaccion'), $data['tipotransaccion_id']);
-		Cache::forever(generaKey('puntoventa'), $data['puntoventa_id']);
-		Cache::forever(generaKey('puntoventaremito'), $data['puntoventaremito_id']);
+		UsuarioPreferenciaFacturacionSupport::guardar($data);
 
 		// Recibe datos para facturar
 		$pedidos_combinacion_id = $data['pedido_combinacion_id'];
@@ -5967,8 +5981,10 @@ class FacturacionService
                             $tipotransaccion_query, $puntoventa_query, $lote_query, $moneda_query,
 							$actividad_arca_query, $flGeneraNotaDeCredito);
 
-		$tipotransacciondefault_id = cache()->get(generaKey('tipotransaccion'));
-        $puntoventadefault_id = cache()->get(generaKey('puntoventa'));
+		$prefsFacturacion = UsuarioPreferenciaFacturacionSupport::leer();
+		$tipotransacciondefault_id = $prefsFacturacion['tipotransaccion_id'];
+        $puntoventadefault_id = $prefsFacturacion['puntoventa_id'];
+        $puntoventaremitodefault_id = $prefsFacturacion['puntoventaremito_id'];
 
         $urlOrigen = request()->headers->get('referer');
         $consultaFacturasDia = request()->query('origen') === 'gastronomia_facturas_dia';
@@ -5977,6 +5993,7 @@ class FacturacionService
 			'mventa_query', 'modulo_query', 
 			'listaprecio_query', 
 			'tipotransaccion_query', 'tipotransacciondefault_id', 'puntoventa_query', 'puntoventadefault_id',
+            'puntoventaremitodefault_id',
             'deposito_query', 'lote_query', 'cliente_query','vendedor_query', 'condicionventa_query',
             'transporte_query', 'formapago_query', 'incoterm_query', 'flGeneraNotaDeCredito', 'moneda_query',
 			'actividad_arca_query', 'urlOrigen', 'consultaFacturasDia')); 
@@ -6663,9 +6680,7 @@ class FacturacionService
 	 */
 	public function generaFacturaPorRemito(array $data)
 	{
-		Cache::forever(generaKey('tipotransaccion'), $data['tipotransaccion_id']);
-		Cache::forever(generaKey('puntoventa'), $data['puntoventa_id']);
-		Cache::forever(generaKey('puntoventaremito'), $data['puntoventaremito_id'] ?? 0);
+		UsuarioPreferenciaFacturacionSupport::guardar($data);
 
 		$remito = app(\App\Services\Ventas\RemitoService::class)->leeRemito($data['remito_id'] ?? 0);
 		if (! $remito) {

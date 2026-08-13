@@ -97,21 +97,25 @@
 			|| normalizarTextoFactura(item.numero);
 	}
 
-	function facturasGeneradasPedido(data) {
-		var facturas = [];
-		if (Array.isArray(data)) {
-			for (var j = 0; j < data.length; j++) {
-				var facturaItem = extraerFacturaDeItem(data[j]);
-				if (facturaItem) {
-					facturas.push(facturaItem);
-				}
-			}
-			return facturas;
-		}
+	function esCodigoSucursalVillafranca(codigo) {
+		return /(?:^|[\s-])00015-/.test(String(codigo || ''));
+	}
 
-		var facturaUnica = extraerFacturaDeItem(data);
-		if (facturaUnica) {
-			facturas.push(facturaUnica);
+	function debeOcultarFacturaEnMensajeOk(item, codigo, cantidadItems) {
+		if (item && (item.ocultar_mensaje === true || item.ocultar_mensaje === 1 || item.ocultar_mensaje === '1')) {
+			return true;
+		}
+		return cantidadItems > 1 && esCodigoSucursalVillafranca(codigo);
+	}
+
+	function facturasGeneradasPedido(data) {
+		var items = Array.isArray(data) ? data : [data];
+		var facturas = [];
+		for (var j = 0; j < items.length; j++) {
+			var facturaItem = extraerFacturaDeItem(items[j]);
+			if (facturaItem && !debeOcultarFacturaEnMensajeOk(items[j], facturaItem, items.length)) {
+				facturas.push(facturaItem);
+			}
 		}
 		return facturas;
 	}
@@ -136,6 +140,7 @@
 		var items = Array.isArray(data) ? data : [data];
 		var comprobantes = [];
 		var errores = [];
+		var huboExitoOculto = false;
 
 		for (var i = 0; i < items.length; i++) {
 			var item = items[i];
@@ -149,14 +154,20 @@
 
 			if (errorItem) {
 				errores.push(errorItem);
-				if (factura) {
+				if (factura && !debeOcultarFacturaEnMensajeOk(item, factura, items.length)) {
 					comprobantes.push({ codigo: factura, ok: false, detalle: errorItem });
 				}
 				continue;
 			}
 
 			if (factura) {
+				if (debeOcultarFacturaEnMensajeOk(item, factura, items.length)) {
+					huboExitoOculto = true;
+					continue;
+				}
 				comprobantes.push({ codigo: factura, ok: true, detalle: null });
+			} else if (item.ocultar_mensaje) {
+				huboExitoOculto = true;
 			}
 		}
 
@@ -181,6 +192,11 @@
 			subtitulo = facturasOk.length > 1
 				? 'Se emitieron ' + facturasOk.length + ' comprobantes.'
 				: 'El comprobante quedó registrado correctamente.';
+			exito = true;
+		} else if (huboExitoOculto) {
+			estado = 'ok';
+			titulo = 'Factura generada';
+			subtitulo = 'El comprobante quedó registrado correctamente.';
 			exito = true;
 		} else {
 			errores.push('No se recibió el número de factura generada.');
@@ -1819,10 +1835,7 @@
 		selectTipoTransaccion.empty();
 		selectTipoTransaccion.append('<option value="">-- Seleccionar tipo de transacción --</option>');
 		$.each(sel_tipotransaccion, function(obj, item) {
-			if (tipoTransaccionDefault == item.id)
-				op = 'selected="selected"';
-			else
-				op = '';
+			op = window.PreferenciasFacturacionUsuario.opcionSelected(tipoTransaccionDefault, item.id);
 			selectTipoTransaccion.append('<option value="' + item.id + '"'+op+'>' + item.abreviatura + '-' + item.nombre + '</option>');
 		});
 
@@ -1830,10 +1843,7 @@
 		selectPuntoVenta.empty();
 		selectPuntoVenta.append('<option value="">-- Seleccionar punto de venta --</option>');
 		$.each(sel_puntoventa, function(obj, item) {
-			if (puntoVentaDefault == item.id)
-				op = 'selected="selected"';
-			else
-				op = '';
+			op = window.PreferenciasFacturacionUsuario.opcionSelected(puntoVentaDefault, item.id);
 			selectPuntoVenta.append('<option value="' + item.id + '"'+op+'>' + item.codigo + '-' + item.nombre + '</option>');
 		});
 
@@ -1841,10 +1851,7 @@
 		selectPuntoVentaRemito.empty();
 		selectPuntoVentaRemito.append('<option value="">-- Seleccionar punto de venta --</option>');
 		$.each(sel_puntoventaremito, function(obj, item) {
-			if (puntoVentaRemitoDefault == item.id)
-				op = 'selected="selected"';
-			else
-				op = '';
+			op = window.PreferenciasFacturacionUsuario.opcionSelected(puntoVentaRemitoDefault, item.id);
 			selectPuntoVentaRemito.append('<option value="' + item.id + '"'+op+'>' + item.codigo + '-' + item.nombre + '</option>');
 		});
 

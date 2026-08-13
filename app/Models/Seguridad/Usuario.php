@@ -30,7 +30,7 @@ class Usuario extends Authenticatable implements Auditable
 
     protected $table = 'usuario';
 
-    protected $fillable = ['usuario', 'nombre', 'email', 'password', 'foto', 'suspendido', 'centrocosto_id', 'vendedor_id', 'oficinacompra_id', 'sector_legajocompra_id'];
+    protected $fillable = ['usuario', 'nombre', 'email', 'password', 'foto', 'suspendido', 'centrocosto_id', 'vendedor_id', 'oficinacompra_id', 'sector_legajocompra_id', 'tipotransaccion_venta_id', 'puntoventa_id', 'puntoventaremito_id'];
 
     protected $casts = [
         'suspendido' => 'boolean',

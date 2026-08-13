@@ -91,6 +91,7 @@ class FacturaListadoFiltros
             'empresa_id' => (int) $request->input('empresa_id', 0),
             'fecha_desde' => $fechaDesde,
             'fecha_hasta' => $fechaHasta,
+            'solo_sin_remito' => $request->boolean('solo_sin_remito'),
         ];
     }
 
@@ -148,6 +149,10 @@ class FacturaListadoFiltros
             return true;
         }
 
+        if (! empty($filtros['solo_sin_remito'])) {
+            return true;
+        }
+
         // Rango de fechas distinto del mes actual por defecto.
         $default = self::rangoFechasPorDefecto();
         if (($filtros['fecha_desde'] ?? '') !== $default['fecha_desde']
@@ -183,6 +188,7 @@ class FacturaListadoFiltros
             'empresa_id' => 0,
             'fecha_desde' => $rango['fecha_desde'],
             'fecha_hasta' => $rango['fecha_hasta'],
+            'solo_sin_remito' => false,
         ];
     }
 
@@ -214,6 +220,9 @@ class FacturaListadoFiltros
         if (! empty($filtros['fecha_hasta'])) {
             $params['fecha_hasta'] = $filtros['fecha_hasta'];
         }
+        if (! empty($filtros['solo_sin_remito'])) {
+            $params['solo_sin_remito'] = 1;
+        }
 
         return $params;
     }
@@ -238,6 +247,10 @@ class FacturaListadoFiltros
     {
         self::aplicarEmpresa($query, (int) ($filtros['empresa_id'] ?? 0));
         self::aplicarRangoFechas($query, (string) ($filtros['fecha_desde'] ?? ''), (string) ($filtros['fecha_hasta'] ?? ''));
+
+        if (! empty($filtros['solo_sin_remito'])) {
+            $query->whereNull('venta.remito_id');
+        }
 
         $valor = trim((string) ($filtros['valor'] ?? ''));
         if ($valor === '') {

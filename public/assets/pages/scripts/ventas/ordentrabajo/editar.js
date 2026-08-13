@@ -233,10 +233,7 @@ $(document).on('shown.bs.modal', '#facturarOrdenTrabajoModal', function() {
     selectTipoTransaccion.empty();
     selectTipoTransaccion.append('<option value="">-- Seleccionar tipo de transacción --</option>');
     $.each(sel_tipotransaccion, function(obj, item) {
-        if (tipoTransaccionDefault == item.id)
-            op = 'selected="selected"';
-        else
-            op = '';
+        op = window.PreferenciasFacturacionUsuario.opcionSelected(tipoTransaccionDefault, item.id);
         selectTipoTransaccion.append('<option value="' + item.id + '"'+op+'>' + item.abreviatura + '-' + item.nombre + '</option>');
     });
 
@@ -244,10 +241,7 @@ $(document).on('shown.bs.modal', '#facturarOrdenTrabajoModal', function() {
     selectPuntoVenta.empty();
     selectPuntoVenta.append('<option value="">-- Seleccionar punto de venta --</option>');
     $.each(sel_puntoventa, function(obj, item) {
-        if (puntoVentaDefault == item.id)
-            op = 'selected="selected"';
-        else
-            op = '';
+        op = window.PreferenciasFacturacionUsuario.opcionSelected(puntoVentaDefault, item.id);
         selectPuntoVenta.append('<option value="' + item.id + '"'+op+'>' + item.codigo + '-' + item.nombre + '</option>');
     });
 
@@ -255,10 +249,7 @@ $(document).on('shown.bs.modal', '#facturarOrdenTrabajoModal', function() {
     selectPuntoVentaRemito.empty();
     selectPuntoVentaRemito.append('<option value="">-- Seleccionar punto de venta --</option>');
     $.each(sel_puntoventaremito, function(obj, item) {
-        if (puntoVentaRemitoDefault == item.id)
-            op = 'selected="selected"';
-        else
-            op = '';
+        op = window.PreferenciasFacturacionUsuario.opcionSelected(puntoVentaRemitoDefault, item.id);
         selectPuntoVentaRemito.append('<option value="' + item.id + '"'+op+'>' + item.codigo + '-' + item.nombre + '</option>');
     });
 

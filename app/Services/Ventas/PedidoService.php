@@ -15,6 +15,7 @@ use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
 use App\Models\Configuracion\Salida;
 use App\Support\Configuracion\SalidaImpresionFallbackSupport;
 use App\Support\Configuracion\SeteoSalidaProgramaSupport;
+use App\Support\Ventas\PedidoEstadoErpSupport;
 use App\Services\Configuracion\ImpuestoService;
 use App\Services\Stock\Articulo_MovimientoService;
 use App\Services\Stock\PrecioService;
@@ -561,8 +562,13 @@ class PedidoService
 
 		if ($funcion == 'create')
 		{	
-			$data['estado'] = 'P';
+			$data['estado'] = PedidoEstadoErpSupport::PENDIENTE;
 			$data['estadopedido'] = 'Pendiente';
+		} else {
+			$data['estado'] = PedidoEstadoErpSupport::normalizarEstadoCabecera(
+				$data['estado'] ?? null,
+				$data['estadopedido'] ?? null
+			);
 		}
 
 		$data['tipo'] = 'PED';
@@ -634,6 +640,7 @@ class PedidoService
 					$loteids = $data['loteids'];
 					$observaciones = $data['observaciones'];
 					$ids = $data['ids'];
+					$estadosItems = $data['estados'] ?? [];
 
 					if ($funcion == 'update')
 					{
@@ -669,7 +676,7 @@ class PedidoService
 											"descuentointegrado" => '',
 											"lote_id" => $loteids[$i],
 											"observacion" => $observaciones[$i],
-											"estado" => $data['estado']
+											"estado" => PedidoEstadoErpSupport::normalizarEstadoItem($estadosItems[$i] ?? null)
 											], $_id[$i]);
 							}
 						}
@@ -701,7 +708,7 @@ class PedidoService
 									"descuentointegrado" => '',
 									"lote_id" => $loteids[$i_movimiento],
 									"observacion" => $observaciones[$i_movimiento],
-									"estado" => $data['estado']			
+									"estado" => PedidoEstadoErpSupport::normalizarEstadoItem($estadosItems[$i_movimiento] ?? PedidoEstadoErpSupport::PENDIENTE)
 								]);
 							$articuloIdsAvisoProduccion[] = $articulos[$i_movimiento];
 						}

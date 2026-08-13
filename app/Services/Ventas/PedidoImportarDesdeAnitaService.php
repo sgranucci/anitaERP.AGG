@@ -12,6 +12,7 @@ use App\Models\Ventas\Transporte;
 use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Zonavta;
 use App\Support\Ventas\KiloPedidoListadoFiltros;
+use App\Support\Ventas\PedidoEstadoErpSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -191,13 +192,9 @@ class PedidoImportarDesdeAnitaService
 
         $zonavtaId = $this->resolverZonavtaId($cab->penm_zonavta ?? null);
 
-        $estadoAnita = trim((string) ($cab->penm_estado ?? 'P'));
-        $estadopedido = match (strtoupper($estadoAnita)) {
-            'S' => 'Suspendido',
-            'A' => 'Anulado',
-            'F' => 'Facturado',
-            default => 'Pendiente',
-        };
+        $mapeoEstado = PedidoEstadoErpSupport::mapearCabeceraDesdeAnita(
+            trim((string) ($cab->penm_estado ?? ''))
+        );
 
         $campos = [
             'fecha' => $this->fechaAnitaACarbon($cab->penm_fecha ?? null),
@@ -207,8 +204,8 @@ class PedidoImportarDesdeAnitaService
             'vendedor_id' => $vendedorId,
             'transporte_id' => $transporte?->id,
             'mventa_id' => $mventaId,
-            'estado' => $estadoAnita !== '' ? $estadoAnita : 'P',
-            'estadopedido' => $estadopedido,
+            'estado' => $mapeoEstado['estado'],
+            'estadopedido' => $mapeoEstado['estadopedido'],
             'usuario_id' => $usuarioId > 0 ? $usuarioId : null,
             'leyenda' => trim((string) ($cab->penm_leyenda ?? '')) ?: ' ',
             'descuento' => (float) ($cab->penm_dto ?? 0),

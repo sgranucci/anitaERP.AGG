@@ -4,6 +4,7 @@ namespace App\Support\Ventas\CertificadoSanitario;
 
 use App\ApiAnita;
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Codigosenasa;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Pedido;
 use App\Models\Ventas\Transporte;
@@ -39,12 +40,14 @@ final class PedidoCertificadoSource
             : (bool) config('senasa.fallback_anita_pedido', true);
 
         if (! $fallback) {
-            return $lineasErp->values();
+            return CertificadoSanitarioOrigenSupport::enriquecerLineas($lineasErp->values());
         }
 
         $lineasAnita = $this->lineasDesdeAnita($fecha, $filtros, $codigosErp);
 
-        return $lineasErp->concat($lineasAnita)->values();
+        return CertificadoSanitarioOrigenSupport::enriquecerLineas(
+            $lineasErp->concat($lineasAnita)->values()
+        );
     }
 
     /**
@@ -56,10 +59,12 @@ final class PedidoCertificadoSource
         $query = Pedido::query()
             ->with([
                 'clientes.localidades.provincias',
+                'clientes.coeficientes',
                 'transportes',
                 'zonavtas',
                 'pedido_articulos.articulos.codigosenasas.envasesenasas',
                 'pedido_articulos.articulos.lineas',
+                'pedido_articulos.articulos.mventas',
             ])
             ->whereDate('fechaentrega', $fecha->toDateString())
             ->where(function ($q) {
@@ -105,6 +110,22 @@ final class PedidoCertificadoSource
                     continue;
                 }
 
+                $piezas = (float) ($item->pieza ?? 0);
+                $cajas = $this->cajasDesdePiezas($piezas, (float) ($art->unidadesxenvase ?? 0));
+                if ($cajas == 0.0) {
+                    $cajas = (float) ($item->caja ?? 0);
+                }
+                $cantidades = CertificadoSanitarioCoeficienteSupport::cantidadesParaCertificado(
+                    $cliente,
+                    $transporte,
+                    (float) ($item->kilo ?? 0),
+                    $cajas,
+                    $piezas
+                );
+                if ($cantidades === null) {
+                    continue;
+                }
+
                 $out->push(new PedidoCertificadoLinea(
                     codigoPedido: (string) ($pedido->codigo ?? $pedido->id),
                     origen: 'erp',
@@ -115,17 +136,18 @@ final class PedidoCertificadoSource
                     zonavtaId: $zona?->id,
                     codigoZona: $zona?->codigo !== null ? (int) $zona->codigo : ($zona?->id),
                     sku: $sku,
+                    articuloNombre: trim((string) ($art->descripcion ?? $art->nombre ?? '')),
                     articuloId: (int) $art->id,
-                    kilos: (float) ($item->kilo ?? 0),
-                    cajas: (float) ($item->caja ?? 0),
-                    piezas: (float) ($item->pieza ?? 0),
+                    kilos: $cantidades['kilos'],
+                    cajas: $cantidades['cajas'],
+                    piezas: $cantidades['piezas'],
                     codigosenasaId: (int) $cods->id,
-                    llevafrio: (string) ($cods->llevafrio ?? 'N'),
+                    llevafrio: Codigosenasa::codigoFrio($cods->llevafrio ?? 'N'),
                     registroSenasa: trim((string) ($cods->registro ?? '')),
                     prefijoSenasa: trim((string) ($cods->prefijo ?? '')),
                     envasesenasaId: $cods->envasesenasa_id ? (int) $cods->envasesenasa_id : null,
                     envaseNombre: trim((string) ($cods->envasesenasas->nombre ?? '')),
-                    marca: trim((string) ($art->lineas->nombre ?? $art->nombre ?? '')),
+                    marca: trim((string) ($art->mventas->nombre ?? $art->lineas->nombre ?? $art->nombre ?? '')),
                     vencimientoEnDias: (int) ($art->vencimientoendia ?? 0),
                     pesoAprox: (float) ($art->peso ?? 0),
                     localidadSenasaCodigo: $loc && $loc->codigosenasa ? (int) $loc->codigosenasa : null,
@@ -185,6 +207,7 @@ final class PedidoCertificadoSource
             $codigoCliente = ltrim(trim((string) $cab->penm_cliente), '0');
             $codigoClienteAnita = trim((string) $cab->penm_cliente);
             $cliente = Cliente::query()
+                ->with('coeficientes')
                 ->where(function ($q) use ($codigoCliente, $codigoClienteAnita) {
                     $q->where('codigo', $codigoCliente);
                     if ($codigoClienteAnita !== '' && $codigoClienteAnita !== $codigoCliente) {
@@ -230,7 +253,7 @@ final class PedidoCertificadoSource
                 }
                 $skuAlt = ltrim($sku, '0');
                 $art = Articulo::query()
-                    ->with(['codigosenasas.envasesenasas', 'lineas'])
+                    ->with(['codigosenasas.envasesenasas', 'lineas', 'mventas'])
                     ->where(function ($q) use ($sku, $skuAlt) {
                         $q->where('sku', $sku);
                         if ($skuAlt !== '' && $skuAlt !== $sku) {
@@ -240,6 +263,18 @@ final class PedidoCertificadoSource
                     ->first();
                 $cods = $art?->codigosenasas;
                 if (! $cods) {
+                    continue;
+                }
+
+                $piezas = (float) ($mov->penv_pieza ?? 0);
+                $cantidades = CertificadoSanitarioCoeficienteSupport::cantidadesParaCertificado(
+                    $cliente,
+                    $transporte,
+                    (float) ($mov->penv_cantidad ?? 0),
+                    $this->cajasDesdePiezas($piezas, (float) ($art->unidadesxenvase ?? 0)),
+                    $piezas
+                );
+                if ($cantidades === null) {
                     continue;
                 }
 
@@ -253,17 +288,18 @@ final class PedidoCertificadoSource
                     zonavtaId: $zona?->id,
                     codigoZona: (int) $cab->penm_zonavta,
                     sku: $sku,
+                    articuloNombre: trim((string) ($art->descripcion ?? $art->nombre ?? '')),
                     articuloId: $art?->id,
-                    kilos: (float) ($mov->penv_cantidad ?? 0),
-                    cajas: $this->cajasDesdePiezas((float) ($mov->penv_pieza ?? 0), (float) ($art->unidadesxenvase ?? 0)),
-                    piezas: (float) ($mov->penv_pieza ?? 0),
+                    kilos: $cantidades['kilos'],
+                    cajas: $cantidades['cajas'],
+                    piezas: $cantidades['piezas'],
                     codigosenasaId: (int) $cods->id,
-                    llevafrio: (string) ($cods->llevafrio ?? 'N'),
+                    llevafrio: Codigosenasa::codigoFrio($cods->llevafrio ?? 'N'),
                     registroSenasa: trim((string) ($cods->registro ?? '')),
                     prefijoSenasa: trim((string) ($cods->prefijo ?? '')),
                     envasesenasaId: $cods->envasesenasa_id ? (int) $cods->envasesenasa_id : null,
                     envaseNombre: trim((string) ($cods->envasesenasas->nombre ?? '')),
-                    marca: trim((string) ($art->lineas->nombre ?? $art->nombre ?? '')),
+                    marca: trim((string) ($art->mventas->nombre ?? $art->lineas->nombre ?? $art->nombre ?? '')),
                     vencimientoEnDias: (int) ($art->vencimientoendia ?? 0),
                     pesoAprox: (float) ($art->peso ?? 0),
                     localidadSenasaCodigo: $loc && $loc->codigosenasa ? (int) $loc->codigosenasa : null,

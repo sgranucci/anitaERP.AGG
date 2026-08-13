@@ -13,6 +13,7 @@ use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Pedido_Combinacion;
 use App\Models\Ventas\Transporte;
 use App\Models\Seguridad\Usuario;
+use App\Support\Ventas\PedidoArticuloOrdenSupport;
 use App\Traits\Ventas\PedidoTrait;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -41,11 +42,15 @@ class Pedido extends Model implements Auditable
 
 	public function pedido_articulos()
 	{
-    	return $this->hasMany(Pedido_Articulo::class, 'pedido_id')
+    	$rel = $this->hasMany(Pedido_Articulo::class, 'pedido_id')
                     ->with('articulos')
                     ->with('pedido_articulo_estados')
                     ->with('lotes')
                     ->with('descuentoventa_ids');
+
+		PedidoArticuloOrdenSupport::aplicarAQuery($rel);
+
+		return $rel;
 	}
 
 	public function pedido_articulo_cajas()

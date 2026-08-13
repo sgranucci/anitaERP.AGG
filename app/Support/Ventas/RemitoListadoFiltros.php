@@ -111,11 +111,16 @@ class RemitoListadoFiltros
             'valor_hasta' => trim((string) $request->input('filtro_valor_hasta', '')),
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
+            'solo_huerfanos' => $request->boolean('solo_huerfanos'),
         ], ListadoRepartoFechaEntregaSupport::resolverDesdeRequest($request));
     }
 
     public static function tieneCriteriosAplicados(array $filtros): bool
     {
+        if (! empty($filtros['solo_huerfanos'])) {
+            return true;
+        }
+
         if (ListadoRepartoFechaEntregaSupport::tieneCriteriosNoDefault($filtros)) {
             return true;
         }
@@ -155,6 +160,7 @@ class RemitoListadoFiltros
             'valor' => '',
             'valor_hasta' => '',
             'busqueda' => '',
+            'solo_huerfanos' => false,
         ], ListadoRepartoFechaEntregaSupport::vaciosConHoy());
     }
 
@@ -179,6 +185,9 @@ class RemitoListadoFiltros
         if (! empty($filtros['valor_hasta'])) {
             $params['filtro_valor_hasta'] = $filtros['valor_hasta'];
         }
+        if (! empty($filtros['solo_huerfanos'])) {
+            $params['solo_huerfanos'] = 1;
+        }
 
         return array_merge($params, ListadoRepartoFechaEntregaSupport::paraQueryString($filtros));
     }
@@ -189,6 +198,18 @@ class RemitoListadoFiltros
     public static function aplicar(Builder $query, array $filtros): void
     {
         ListadoRepartoFechaEntregaSupport::aplicar($query, $filtros, 'remito.fechaentrega');
+
+        if (! empty($filtros['solo_huerfanos'])) {
+            $query->whereNull('remito.venta_id')
+                ->where(function ($q) {
+                    $q->whereNull('remito.estadoremito')
+                        ->orWhereNotIn('remito.estadoremito', [
+                            RemitoEstadosSupport::ESTADOREMITO_FACTURADO,
+                            RemitoEstadosSupport::ESTADOREMITO_ANULADO,
+                            RemitoEstadosSupport::ESTADOREMITO_SUSPENDIDO,
+                        ]);
+                });
+        }
 
         if (! self::tieneCriteriosInteligentes($filtros)) {
             return;

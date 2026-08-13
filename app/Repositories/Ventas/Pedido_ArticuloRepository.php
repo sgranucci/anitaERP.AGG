@@ -17,6 +17,7 @@ use App\Models\Stock\Talle;
 use App\Queries\Ventas\PedidoQueryInterface;
 use App\Queries\Ventas\ClienteQueryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Support\Ventas\PedidoArticuloOrdenSupport;
 use App\ApiAnita;
 use Carbon\Carbon;
 use Auth;
@@ -130,11 +131,11 @@ class Pedido_ArticuloRepository implements Pedido_ArticuloRepositoryInterface
 
 	public function findPorPedidoId($pedido_id)
     {
-    	$pedido_articulo = $this->model->select('pedido_articulo.id as id') 
-										->where('pedido_articulo.pedido_id', $pedido_id)
-										->get();
+    	$query = $this->model->select('pedido_articulo.id as id')
+										->where('pedido_articulo.pedido_id', $pedido_id);
+		PedidoArticuloOrdenSupport::aplicarAQuery($query);
 
-		return $pedido_articulo;
+		return $query->get();
     }
 
     public function sincronizarConAnita()

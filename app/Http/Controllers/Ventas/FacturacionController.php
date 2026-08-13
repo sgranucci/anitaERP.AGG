@@ -4,8 +4,8 @@ namespace App\Http\Controllers\Ventas;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use App\Services\Ventas\FacturacionService;
 use App\Queries\Ventas\ClienteQueryInterface;
@@ -162,12 +162,10 @@ class FacturacionController extends Controller
                                 $tipotransaccion_query, $puntoventa_query, $lote_query, $moneda_query,
                                 $actividad_arca_query);
 
-        $tipotransacciondefault_id = cache()->get(generaKey('tipotransaccion'));
-        $puntoventadefault_id = cache()->get(generaKey('puntoventa'));
-
-        if (! $puntoventadefault_id && config('facturacion.PUNTOVENTA_FACTURACION')) {
-            $puntoventadefault_id = config('facturacion.PUNTOVENTA_FACTURACION');
-        }
+        $prefsFacturacion = UsuarioPreferenciaFacturacionSupport::leer();
+        $tipotransacciondefault_id = $prefsFacturacion['tipotransaccion_id'];
+        $puntoventadefault_id = $prefsFacturacion['puntoventa_id'];
+        $puntoventaremitodefault_id = $prefsFacturacion['puntoventaremito_id'];
 
         $data = new \stdClass();
         $layoutItemsPedido = facturaUsaLayoutItemsPedido();
@@ -184,6 +182,7 @@ class FacturacionController extends Controller
             'data',
             'mventa_query', 'modulo_query', 'listaprecio_query',
             'tipotransaccion_query', 'tipotransacciondefault_id', 'puntoventa_query', 'puntoventadefault_id',
+            'puntoventaremitodefault_id',
             'deposito_query', 'lote_query', 'cliente_query', 'vendedor_query', 'condicionventa_query',
             'transporte_query', 'formapago_query', 'incoterm_query', 'moneda_query', 'actividad_arca_query',
             'layoutItemsPedido', 'descuentoventa_query', 'unidadmedida_query'));
@@ -191,15 +190,20 @@ class FacturacionController extends Controller
 
     public function preferencias(Request $request): JsonResponse
     {
-        can('crear-factura');
-
-        if ($request->filled('tipotransaccion_id')) {
-            Cache::forever(generaKey('tipotransaccion'), (int) $request->input('tipotransaccion_id'));
+        if (
+            ! can('crear-factura', false)
+            && ! can('editar-pedidos', false)
+            && ! can('crear-remitos', false)
+            && ! can('editar-remitos', false)
+        ) {
+            can('crear-factura');
         }
 
-        if ($request->filled('puntoventa_id')) {
-            Cache::forever(generaKey('puntoventa'), (int) $request->input('puntoventa_id'));
-        }
+        UsuarioPreferenciaFacturacionSupport::guardar($request->only([
+            'tipotransaccion_id',
+            'puntoventa_id',
+            'puntoventaremito_id',
+        ]));
 
         return response()->json(['ok' => true]);
     }

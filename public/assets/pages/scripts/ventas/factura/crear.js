@@ -66,13 +66,18 @@
 	);
 
 	function guardarPreferenciasFactura() {
+		if (window.PreferenciasFacturacionUsuario) {
+			window.PreferenciasFacturacionUsuario.guardar();
+			return;
+		}
 		if (!window.FACTURA_URLS || !window.FACTURA_URLS.preferencias) {
 			return;
 		}
 		$.post(window.FACTURA_URLS.preferencias, {
 			_token: $('meta[name="csrf-token"]').attr('content'),
 			tipotransaccion_id: $('#tipotransaccion_id').val() || '',
-			puntoventa_id: $('#puntoventa_id').val() || ''
+			puntoventa_id: $('#puntoventa_id').val() || '',
+			puntoventaremito_id: $('#puntoventaremito_id').val() || ''
 		});
 	}
 
@@ -526,10 +531,7 @@
 		selectPuntoVenta.empty();
 		selectPuntoVenta.append('<option value="">-- Seleccionar punto de venta --</option>');
 		$.each(sel_puntoventa, function(obj, item) {
-			if (puntoVentaDefault == item.id)
-				op = 'selected="selected"';
-			else
-				op = '';
+			op = window.PreferenciasFacturacionUsuario.opcionSelected(puntoVentaDefault, item.id);
 			selectPuntoVenta.append('<option value="' + item.id + '"'+op+'>' + item.codigo + '-' + item.nombre + '</option>');
 		});
 
@@ -546,10 +548,7 @@
 		selectPuntoVentaRemito.empty();
 		selectPuntoVentaRemito.append('<option value="">-- Seleccionar punto de venta --</option>');
 		$.each(sel_puntoventaremito, function(obj, item) {
-			if (puntoVentaRemitoDefault == item.id)
-				op = 'selected="selected"';
-			else
-				op = '';
+			op = window.PreferenciasFacturacionUsuario.opcionSelected(puntoVentaRemitoDefault, item.id);
 			selectPuntoVentaRemito.append('<option value="' + item.id + '"'+op+'>' + item.codigo + '-' + item.nombre + '</option>');
 		});
 

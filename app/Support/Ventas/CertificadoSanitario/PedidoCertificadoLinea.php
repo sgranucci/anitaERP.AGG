@@ -17,6 +17,7 @@ final class PedidoCertificadoLinea
         public readonly ?int $zonavtaId,
         public readonly ?int $codigoZona,
         public readonly string $sku,
+        public readonly string $articuloNombre,
         public readonly ?int $articuloId,
         public readonly float $kilos,
         public readonly float $cajas,
@@ -37,7 +38,46 @@ final class PedidoCertificadoLinea
         public readonly string $clienteTelefono,
         public readonly string $localidadNombre,
         public readonly string $provinciaNombre,
+        /** Amparo SENASA de terceros (certart.certa_cert_terc / se:certificadoDeOrigen). */
+        public readonly string $certificadoOrigen = '',
     ) {
+    }
+
+    public function conCertificadoOrigen(string $certificadoOrigen): self
+    {
+        return new self(
+            codigoPedido: $this->codigoPedido,
+            origen: $this->origen,
+            codigoCliente: $this->codigoCliente,
+            clienteId: $this->clienteId,
+            transporteId: $this->transporteId,
+            codigoTransporte: $this->codigoTransporte,
+            zonavtaId: $this->zonavtaId,
+            codigoZona: $this->codigoZona,
+            sku: $this->sku,
+            articuloNombre: $this->articuloNombre,
+            articuloId: $this->articuloId,
+            kilos: $this->kilos,
+            cajas: $this->cajas,
+            piezas: $this->piezas,
+            codigosenasaId: $this->codigosenasaId,
+            llevafrio: $this->llevafrio,
+            registroSenasa: $this->registroSenasa,
+            prefijoSenasa: $this->prefijoSenasa,
+            envasesenasaId: $this->envasesenasaId,
+            envaseNombre: $this->envaseNombre,
+            marca: $this->marca,
+            vencimientoEnDias: $this->vencimientoEnDias,
+            pesoAprox: $this->pesoAprox,
+            localidadSenasaCodigo: $this->localidadSenasaCodigo,
+            clienteNombre: $this->clienteNombre,
+            clienteDireccion: $this->clienteDireccion,
+            clienteCp: $this->clienteCp,
+            clienteTelefono: $this->clienteTelefono,
+            localidadNombre: $this->localidadNombre,
+            provinciaNombre: $this->provinciaNombre,
+            certificadoOrigen: trim($certificadoOrigen),
+        );
     }
 
     public function claveAgrupacion(bool $abrePorLocalidad): string

@@ -46,10 +46,24 @@ function limpiarTransporteEnContexto($ctx) {
     $('#nombretransporte').val('');
 }
 
-function resolverPorCodigoTransporte(codigo, $ctx) {
+function resolverPorCodigoTransporte(codigo, $ctx, opciones) {
+    opciones = opciones || {};
     var cod = $.trim(codigo);
+    var focusSiguiente = function () {
+        if (!opciones.focusSiguiente) {
+            return;
+        }
+        var $next = $(opciones.focusSiguiente);
+        if ($next.length) {
+            setTimeout(function () {
+                $next.trigger('focus').select();
+            }, 0);
+        }
+    };
+
     if (cod === '') {
         limpiarTransporteEnContexto($ctx);
+        focusSiguiente();
         return;
     }
 
@@ -59,13 +73,16 @@ function resolverPorCodigoTransporte(codigo, $ctx) {
             aplicarTransporteEnContexto($ctx, data);
             if ($ctx && $ctx.length && $ctx.closest('#asignarKilosRemitoModal').length) {
                 $('#asigna_kilos_porcentaje').trigger('focus');
+                return;
             }
-            // No enfocar #fechaentrega: en Firefox rueda/teclas pueden cambiar la fecha sin que se note.
+            focusSiguiente();
         } else {
             limpiarTransporteEnContexto($ctx);
+            focusSiguiente();
         }
     }).fail(function() {
         limpiarTransporteEnContexto($ctx);
+        focusSiguiente();
     });
 }
 
@@ -119,18 +136,64 @@ function contextoTransporteEnAsignaKilos() {
         && ptrTransporteContext.closest('#asignarKilosRemitoModal').length);
 }
 
-// Si pulsamos tecla enter en un Input no envia formulario
-$("input").keydown(function (e){
-    // Capturamos qué tecla ha sido
-    var keyCode= e.which;
-    // Si la tecla es el Intro/Enter
-    if (keyCode == 13){
-      // Evitamos que se ejecute eventos
-      e.preventDefault();
-      // Devolvemos falso
-      return false;
+function manejarF1CodigoTransporteCapture(e) {
+    if (!esTeclaF1Transporte(e)) {
+        return;
     }
-  });
+    var target = e.target;
+    if (!target || !target.classList || !target.classList.contains('codigotransporte')) {
+        return;
+    }
+    if (target.readOnly || target.disabled) {
+        return;
+    }
+    if (modalConsultaTransporteAbierto()) {
+        return;
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    abrirModalConsultaTransporteDesdeInput($(target));
+}
+
+function manejarEnterCodigoTransporteCapture(e) {
+    if (!(e && (e.key === 'Enter' || e.which === 13 || e.keyCode === 13))) {
+        return;
+    }
+    var target = e.target;
+    if (!target || !target.classList || !target.classList.contains('codigotransporte')) {
+        return;
+    }
+    if (target.readOnly || target.disabled) {
+        return;
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    var $input = $(target);
+    var $ctx = $input.closest('.tm-transporte-campo');
+    var opts = {};
+    if ($('#codigozonavta').length) {
+        opts.focusSiguiente = '#codigozonavta';
+    }
+    resolverPorCodigoTransporte($input.val(), $ctx.length ? $ctx : null, opts);
+}
+
+if (!window.__transporteF1CaptureActivo) {
+    document.addEventListener('keydown', manejarF1CodigoTransporteCapture, true);
+    document.addEventListener('keydown', manejarEnterCodigoTransporteCapture, true);
+    window.__transporteF1CaptureActivo = true;
+}
+
+$('input').keydown(function (e) {
+    if (e.which !== 13 && e.key !== 'Enter') {
+        return;
+    }
+    // Dejar pasar Enter en códigos que validan por su propio handler (reparto / zona).
+    if ($(this).is('.codigotransporte, .codigozonavta')) {
+        return;
+    }
+    e.preventDefault();
+    return false;
+});
 
 $(document).on('keyup', '#consultatransporte', function () {
     var valor = $(this).val();
@@ -197,17 +260,28 @@ function activa_eventos_consultatransporte()
         // No enfocar #fechaentrega tras elegir reparto (evita cambio accidental de fecha).
     });
 
-    // F1 en campo código de reparto/transporte (formulario o modal Asignar kilos)
-    $(document).off('keydown.transporteF1').on('keydown.transporteF1', '.codigotransporte', function (e) {
-        if (!esTeclaF1Transporte(e)) {
+    $(document).off('keydown.transporteF1Enter', '.codigotransporte').on('keydown.transporteF1Enter', '.codigotransporte', function (e) {
+        if (esTeclaF1Transporte(e)) {
+            if (modalConsultaTransporteAbierto()) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            abrirModalConsultaTransporteDesdeInput($(this));
             return;
         }
-        if (modalConsultaTransporteAbierto()) {
+        if (e.which !== 13 && e.key !== 'Enter') {
             return;
         }
         e.preventDefault();
         e.stopPropagation();
-        abrirModalConsultaTransporteDesdeInput($(this));
+        var $ctx = $(this).closest('.tm-transporte-campo');
+        var opts = {};
+        // En pantallas con zona (certificado, pedido, etc.): Enter en reparto salta a zona.
+        if ($('#codigozonavta').length) {
+            opts.focusSiguiente = '#codigozonavta';
+        }
+        resolverPorCodigoTransporte($(this).val(), $ctx.length ? $ctx : null, opts);
     });
 
     $('.codigotransporte').off('change.transporte blur.transporte').on('change.transporte blur.transporte', function (event) {

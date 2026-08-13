@@ -83,14 +83,14 @@ class CertificadoSenasaSurmarController extends Controller
         return redirect()->route('certificado_senasa_surmar', CertificadoSenasaSurmarListadoFiltros::paraQueryString($filtros));
     }
 
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-certificado-senasa-surmar');
         $this->assertSurmar();
         return view('stock.certificado_senasa_surmar.crear', [
             'empresa_id' => SurmarSupport::EMPRESA_ID,
             'camiones' => Camion::query()->orderBy('codigo')->get(['id', 'codigo', 'dominio', 'cantidad_precinto']),
-            'transportes' => Transporte::query()->orderBy('codigo')->get(['id', 'codigo', 'nombre']),
+            'transporteSeleccionado' => $this->resolverTransporteDesdeRequest($request),
             'punto_emision' => (int) config('arca_wsremcarne.defaults.punto_emision', 1),
         ]);
     }
@@ -116,6 +116,8 @@ class CertificadoSenasaSurmarController extends Controller
         ]);
         $data['genera_web'] = $request->boolean('genera_web');
         $data['genera_remito'] = $request->boolean('genera_remito');
+        $transporte = $this->resolverTransporteDesdeRequest($request);
+        $data['transporte_id'] = $transporte?->id;
 
         try {
             $cert = $this->service->iniciar($data);
@@ -258,5 +260,23 @@ class CertificadoSenasaSurmarController extends Controller
             basename($cert->xml_path),
             ['Content-Type' => 'application/xml']
         );
+    }
+
+    private function resolverTransporteDesdeRequest(Request $request): ?Transporte
+    {
+        $id = (int) $request->input('transporte_id', old('transporte_id', 0));
+        if ($id > 0) {
+            $porId = Transporte::query()->find($id);
+            if ($porId) {
+                return $porId;
+            }
+        }
+
+        $codigo = trim((string) $request->input('codigotransporte', old('codigotransporte', '')));
+        if ($codigo === '') {
+            return null;
+        }
+
+        return Transporte::query()->where('codigo', $codigo)->first();
     }
 }

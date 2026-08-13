@@ -41,4 +41,23 @@ return [
     */
     'fallback_anita_pedido' => (bool) env('SENASA_FALLBACK_ANITA_PEDIDO', true),
 
+    /*
+    | Días hacia atrás para buscar el último amparo (certart.certa_cert_terc) en Anita
+    | cuando el producto es de otro establecimiento.
+    */
+    'origen_dias_busqueda' => (int) env('SENASA_ORIGEN_DIAS_BUSQUEDA', 45),
+
+    /*
+    | Numeración como p-certsan.c (Anita). true = SER + numabm + CSI/CSP.
+    | false = correlativo propio del ERP (cuando se deje de numerar en Anita).
+    */
+    'numeracion_anita' => [
+        'habilitada' => filter_var(env('SENASA_NUMERACION_ANITA', true), FILTER_VALIDATE_BOOLEAN),
+        'sistema_ventas' => env('SENASA_ANITA_SISTEMA_VENTAS', 'ventas'),
+        'sistema_shared' => env('SENASA_ANITA_SISTEMA_SHARED', 'shared'),
+        'numabm_programa' => env('SENASA_ANITA_NUMA_PROGRAMA', 'p-certsan.c'),
+        'numabm_sistema' => env('SENASA_ANITA_NUMA_SISTEMA', 'ventas'),
+        'tope_por_serie' => (int) env('SENASA_ANITA_TOPE_SERIE', 10000),
+    ],
+
 ];

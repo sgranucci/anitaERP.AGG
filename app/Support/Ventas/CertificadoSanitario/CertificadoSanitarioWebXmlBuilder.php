@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas\CertificadoSanitario;
 
+use App\Models\Stock\Codigosenasa;
 use App\Models\Ventas\Camion;
 use App\Models\Ventas\CertificadoSanitario;
 use Carbon\Carbon;
@@ -22,7 +23,9 @@ final class CertificadoSanitarioWebXmlBuilder
         ?Camion $camion = null,
     ): string {
         $frio = strtoupper($frio) === 'S' ? 'S' : 'N';
-        $filtradas = $lineas->filter(fn (PedidoCertificadoLinea $l) => strtoupper($l->llevafrio) === $frio)->values();
+        $filtradas = $lineas->filter(
+            fn (PedidoCertificadoLinea $l) => Codigosenasa::codigoFrio($l->llevafrio) === $frio
+        )->values();
         if ($filtradas->isEmpty()) {
             return '';
         }
@@ -58,15 +61,13 @@ final class CertificadoSanitarioWebXmlBuilder
             $base = $grupo['linea'];
             $neto = (float) $grupo['kilos'];
             $cajas = (float) $grupo['cajas'];
-            $cantidad = (float) $grupo['piezas'];
+            // Anita certsan.fc: cantidad = Round(cajas); si Round==0 → 1
             if (round($cajas, 0) == 0.0) {
                 $cajas = 1.0;
             }
+            $cantidad = round($cajas, 0);
             $totalCajas += $cajas;
             $bruto = $neto + $cajas;
-            if ($cantidad <= 0) {
-                $cantidad = 1.0;
-            }
 
             $codigoProducto = $this->codigoProducto($base);
             $fechaElab = $fecha->copy()->subDays(2);
@@ -89,6 +90,14 @@ final class CertificadoSanitarioWebXmlBuilder
             $xml[] = "\t\t<se:codEnvasePrimarioSENASA>".(int) ($base->envasesenasaId ?? 0).'</se:codEnvasePrimarioSENASA>';
             $xml[] = "\t\t<se:codEnvaseSecundarioSENASA>".$this->escXml((string) config('senasa.cod_envase_secundario')).'</se:codEnvaseSecundarioSENASA>';
             $xml[] = "\t\t<se:marca>".$this->escXml($base->marca).'</se:marca>';
+            $origen = trim((string) ($grupo['certificadoOrigen'] ?? $base->certificadoOrigen ?? ''));
+            if ($origen === '' && CertificadoSanitarioOrigenSupport::esProductoTercero($base->prefijoSenasa)) {
+                $origen = CertificadoSanitarioOrigenSupport::resolverParaSku($base->sku, $base->prefijoSenasa);
+            }
+            $origen = CertificadoSanitarioOrigenSupport::normalizar($origen, $base->prefijoSenasa);
+            if ($origen !== '') {
+                $xml[] = "\t\t<se:certificadoDeOrigen>".$this->escXml($origen).'</se:certificadoDeOrigen>';
+            }
             $xml[] = "\t</se:detalle>";
         }
 
@@ -149,11 +158,15 @@ final class CertificadoSanitarioWebXmlBuilder
                     'kilos' => 0.0,
                     'cajas' => 0.0,
                     'piezas' => 0.0,
+                    'certificadoOrigen' => trim($l->certificadoOrigen),
                 ];
             }
             $map[$key]['kilos'] += $l->kilos;
             $map[$key]['cajas'] += $l->cajas;
             $map[$key]['piezas'] += $l->piezas;
+            if ($map[$key]['certificadoOrigen'] === '' && trim($l->certificadoOrigen) !== '') {
+                $map[$key]['certificadoOrigen'] = trim($l->certificadoOrigen);
+            }
         }
         ksort($map);
 

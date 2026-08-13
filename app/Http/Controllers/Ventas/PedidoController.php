@@ -26,6 +26,7 @@ use App\Support\Ventas\KiloPedidoListadoFiltros;
 use App\Support\Ventas\KiloCategoriaListadoFiltros;
 use App\Support\Ventas\ListadoRepartoFechaEntregaSupport;
 use App\Support\Ventas\PedidoListadoFiltros;
+use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use Illuminate\Http\RedirectResponse;
 use App\Models\Configuracion\Moneda;
 use App\Models\Ventas\Cliente;
@@ -814,9 +815,10 @@ class PedidoController extends Controller
 							$puntoventa_query, $tipotransaccion_query, $formapago_query, $incoterm_query,
 							$unidadmedida_query);
 		
-		$puntoventadefault_id = cache()->get(generaKey('puntoventa'));
-		$puntoventaremitodefault_id = cache()->get(generaKey('puntoventaremito'));
-		$tipotransacciondefault_id = cache()->get(generaKey('tipotransaccion'));
+		$prefsFacturacion = UsuarioPreferenciaFacturacionSupport::leer();
+		$puntoventadefault_id = $prefsFacturacion['puntoventa_id'];
+		$puntoventaremitodefault_id = $prefsFacturacion['puntoventaremito_id'];
+		$tipotransacciondefault_id = $prefsFacturacion['tipotransaccion_id'];
 		$formapago_query = $this->formapagoRepository->all();
 		$incoterm_query = $this->incotermRepository->all();
 		$descuentoventa_query = $this->descuentoventaRepository->all();
@@ -913,17 +915,12 @@ class PedidoController extends Controller
 		if (!$flEncontro)
 			return back()->with('errores', ['Cliente '.$pedido->clientes->nombre.' no activo']);
 
-		$puntoventadefault_id = cache()->get(generaKey('puntoventa'));
-		$puntoventaremitodefault_id = cache()->get(generaKey('puntoventaremito'));
-		$tipotransacciondefault_id = cache()->get(generaKey('tipotransaccion'));
+		$prefsFacturacion = UsuarioPreferenciaFacturacionSupport::leer();
+		$puntoventadefault_id = $prefsFacturacion['puntoventa_id'];
+		$puntoventaremitodefault_id = $prefsFacturacion['puntoventaremito_id'];
+		$tipotransacciondefault_id = $prefsFacturacion['tipotransaccion_id'];
 		$descuentoventa_query = $this->descuentoventaRepository->all();
 		$actividad_arca_query = $this->actividad_arcaRepository->all();
-
-		if (!$puntoventadefault_id)
-			$puntoventadefault_id = config('facturacion.PUNTOVENTA_FACTURACION');
-
-		if (!$puntoventaremitodefault_id)
-			$puntoventaremitodefault_id = config('facturacion.PUNTOVENTA_REMITO');
 
 		$ocultarVolver = $soloConsulta;
 		$puedeActualizarPedido = can('actualizar-pedidos', false);

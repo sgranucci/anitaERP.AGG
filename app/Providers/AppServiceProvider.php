@@ -1284,6 +1284,10 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Services\Ventas\AsignacionRemitoFacturaService',
+        );
+
+        $this->app->bind(
             'App\Queries\Ventas\Pedido_CombinacionQueryInterface',
             'App\Queries\Ventas\Pedido_CombinacionQuery',
         );

@@ -28,6 +28,19 @@
                 <input type="date" name="fecha_hasta" id="fecha_hasta" class="form-control form-control-sm"
                        value="{{ $f['fecha_hasta'] ?? '' }}">
             </div>
+            <div class="form-group col-md-auto mb-2">
+                <div class="custom-control custom-checkbox mt-4">
+                    <input type="checkbox"
+                           class="custom-control-input"
+                           name="solo_sin_remito"
+                           id="solo_sin_remito"
+                           value="1"
+                           {{ !empty($f['solo_sin_remito']) ? 'checked' : '' }}>
+                    <label class="custom-control-label" for="solo_sin_remito">
+                        Sin remito
+                    </label>
+                </div>
+            </div>
         </div>
         <div class="form-row align-items-end">
             <div class="form-group col-md-2 col-sm-6 mb-2">

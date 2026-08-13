@@ -16,6 +16,8 @@ use App\Repositories\Ventas\Remito_ArticuloRepositoryInterface;
 use App\Repositories\Ventas\VentaRepositoryInterface;
 use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
 use App\Services\Stock\MovimientoStockService;
+use App\Support\Ventas\PedidoEstadoErpSupport;
+use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\View;
@@ -467,6 +469,10 @@ class RemitoService
             return ['error' => 'Punto de venta de remito inexistente'];
         }
 
+        UsuarioPreferenciaFacturacionSupport::guardar([
+            'puntoventaremito_id' => $puntoventaId,
+        ]);
+
         $numero = $this->ventaRepository->traeUltimoNumeroRemito('REM', 'R', $puntoventa->codigo);
         if ($numero === 'error') {
             return ['error' => 'No se pudo obtener numeración de remito'];
@@ -489,7 +495,7 @@ class RemitoService
 
         foreach ($ids as $pedidoArticuloId) {
             $pa = $this->pedido_articuloRepository->find($pedidoArticuloId);
-            if (! $pa || $pa->pedido_id != $pedido->id || $pa->estado != 'P') {
+            if (! $pa || $pa->pedido_id != $pedido->id || ! PedidoEstadoErpSupport::esItemPendienteFacturable($pa->estado ?? null)) {
                 continue;
             }
             $kilo = (float) $pa->pesada > 0 ? (float) $pa->pesada : (float) $pa->kilo;

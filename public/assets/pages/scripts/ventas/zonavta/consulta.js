@@ -84,14 +84,78 @@ function resolverPorCodigoZonavta(codigo, $ctx) {
     });
 }
 
-// Si pulsamos tecla enter en un Input no envia formulario
-$("input").keydown(function (e){
-    var keyCode= e.which;
-    if (keyCode == 13){
-      e.preventDefault();
-      return false;
+function abrirModalConsultaZonavtaDesdeInput($input) {
+    ptrZonavtaContext = resolverContextoZonavta($input);
+    $('#consultazonavtaModal').modal('show');
+    buscar_datos_zonavta('');
+}
+
+function esTeclaF1Zonavta(e) {
+    return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
+}
+
+function modalConsultaZonavtaAbierto() {
+    var m = document.getElementById('consultazonavtaModal');
+    return !!(m && (m.classList.contains('show') || m.classList.contains('in')));
+}
+
+function manejarF1CodigoZonavtaCapture(e) {
+    if (!esTeclaF1Zonavta(e)) {
+        return;
     }
-});
+    var target = e.target;
+    if (!target || !target.classList || !target.classList.contains('codigozonavta')) {
+        return;
+    }
+    if (target.readOnly || target.disabled) {
+        return;
+    }
+    if (modalConsultaZonavtaAbierto()) {
+        return;
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    abrirModalConsultaZonavtaDesdeInput($(target));
+}
+
+function manejarEnterCodigoZonavtaCapture(e) {
+    if (!(e && (e.key === 'Enter' || e.which === 13 || e.keyCode === 13))) {
+        return;
+    }
+    var target = e.target;
+    if (!target || !target.classList || !target.classList.contains('codigozonavta')) {
+        return;
+    }
+    if (target.readOnly || target.disabled) {
+        return;
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    var $input = $(target);
+    var $ctx = resolverContextoZonavta($input);
+    resolverPorCodigoZonavta($input.val(), $ctx);
+}
+
+if (!window.__zonavtaF1CaptureActivo) {
+    document.addEventListener('keydown', manejarF1CodigoZonavtaCapture, true);
+    document.addEventListener('keydown', manejarEnterCodigoZonavtaCapture, true);
+    window.__zonavtaF1CaptureActivo = true;
+}
+
+// Enter en inputs no envía el form; código zona/reparto validan por su handler.
+if (!window.__zonavtaEnterGuardActivo) {
+    $(document).on('keydown.zonavtaEnterGuard', 'input', function (e) {
+        if (e.which !== 13 && e.key !== 'Enter') {
+            return;
+        }
+        if ($(this).is('.codigozonavta, .codigotransporte')) {
+            return;
+        }
+        e.preventDefault();
+        return false;
+    });
+    window.__zonavtaEnterGuardActivo = true;
+}
 
 $(document).on('keyup', '#consultazonavta', function () {
     var valor = $(this).val();
@@ -142,6 +206,25 @@ function activa_eventos_consultazonavta()
             var url = carpetaBase + '/ventas/zonavta/' + id + '/editar?origen=modal_consulta&vista=consulta';
             window.open(url, '_blank', 'noopener');
         }
+    });
+
+    $(document).off('keydown.zonavtaF1Enter', '.codigozonavta').on('keydown.zonavtaF1Enter', '.codigozonavta', function (e) {
+        if (esTeclaF1Zonavta(e)) {
+            if (modalConsultaZonavtaAbierto()) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            abrirModalConsultaZonavtaDesdeInput($(this));
+            return;
+        }
+        if (e.which !== 13 && e.key !== 'Enter') {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        var $ctx = resolverContextoZonavta($(this));
+        resolverPorCodigoZonavta($(this).val(), $ctx);
     });
 
     $('.tm-zonavta-campo .codigozonavta').off('blur.zonavta').on('blur.zonavta', function () {

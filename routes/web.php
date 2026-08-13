@@ -2144,6 +2144,10 @@ Route::post('ventas/facturarporremito', 'Ventas\FacturacionController@facturarPo
 Route::post('ventas/generaremmitodesdepedido', 'Ventas\RemitoController@generarDesdePedido')->name('generar_remito_desde_pedido');
 Route::post('ventas/remito/asignarkilos', 'Ventas\RemitoController@asignarKilos')->name('asignar_kilos_remito');
 
+Route::get('ventas/asignacion-remito-factura', 'Ventas\AsignacionRemitoFacturaController@index')->name('asignacion_remito_factura');
+Route::get('ventas/asignacion-remito-factura/consultar', 'Ventas\AsignacionRemitoFacturaController@consultar')->name('consultar_asignacion_remito_factura');
+Route::post('ventas/asignacion-remito-factura/confirmar', 'Ventas\AsignacionRemitoFacturaController@confirmar')->name('confirmar_asignacion_remito_factura');
+
 // Actualiza pedido desde otras aplicaciones fuera del ABM
 Route::get('ventas/actualizasolopedido/{estadopedido}/{pedido_id}', 'Ventas\PedidoController@actualizaSoloPedido')->name('actualiza_solo_pedido');
 Route::get('ventas/leerhistoriaitempedido/{pedido_articulo_id}', 'Ventas\PedidoController@leerHistoriaItemPedido')->name('leer_historia_item_pedido');
@@ -4529,11 +4533,22 @@ Route::post('ventas/camion/consultacamion', 'Ventas\CamionController@consultaCam
 Route::get('ventas/leercamion/{codigo}', 'Ventas\CamionController@leeUnCamion')->name('leer_camion');
 
 Route::get('ventas/certificado-sanitario', 'Ventas\CertificadoSanitarioController@index')->name('consultar_certificado_sanitario');
+Route::get('ventas/lista-certificado-sanitario/{formato?}/{busqueda?}', 'Ventas\CertificadoSanitarioController@listar')->name('lista_certificado_sanitario');
 Route::get('ventas/certificado-sanitario/crear', 'Ventas\CertificadoSanitarioController@crear')->name('crear_certificado_sanitario');
 Route::post('ventas/certificado-sanitario', 'Ventas\CertificadoSanitarioController@guardar')->name('guardar_certificado_sanitario');
-Route::get('ventas/certificado-sanitario/{id}', 'Ventas\CertificadoSanitarioController@ver')->name('ver_certificado_sanitario');
-Route::get('ventas/certificado-sanitario/{id}/xml/{tipo}', 'Ventas\CertificadoSanitarioController@descargarXml')->name('descargar_certificado_sanitario_xml');
-Route::delete('ventas/certificado-sanitario/{id}', 'Ventas\CertificadoSanitarioController@eliminar')->name('eliminar_certificado_sanitario');
+Route::get('ventas/certificado-sanitario/{id}/xml/{tipo}', 'Ventas\CertificadoSanitarioController@descargarXml')
+    ->whereNumber('id')
+    ->where('tipo', '[SsNn]')
+    ->name('descargar_certificado_sanitario_xml');
+Route::get('ventas/certificado-sanitario/{id}/pdf', 'Ventas\CertificadoSanitarioController@pdfSolicitud')
+    ->whereNumber('id')
+    ->name('pdf_certificado_sanitario');
+Route::get('ventas/certificado-sanitario/{id}', 'Ventas\CertificadoSanitarioController@ver')
+    ->whereNumber('id')
+    ->name('ver_certificado_sanitario');
+Route::delete('ventas/certificado-sanitario/{id}', 'Ventas\CertificadoSanitarioController@eliminar')
+    ->whereNumber('id')
+    ->name('eliminar_certificado_sanitario');
 
 /*
  * CAI remitos ARCA (letra R)

@@ -16,6 +16,7 @@
     var NO_FACTURAR = "{{ config('cliente.NO_FACTURAR') }}";
     var CLIENTE_STOCK_ID = "{{ config('cliente.CLIENTE_STOCK_ID') }}";
 </script>
+@include('includes.ventas.preferencias_facturacion_scripts')
 <script src="{{asset("assets/pages/scripts/ventas/ordentrabajo/editar.js")}}" type="text/javascript"></script>
 @endsection
 

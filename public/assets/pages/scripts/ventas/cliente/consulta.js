@@ -171,15 +171,14 @@ function buscar_datos_cliente(consulta) {
 
 // Si pulsamos tecla enter en un Input no envia formulario
 $("input").keydown(function (e){
-    // Capturamos qué tecla ha sido
-    var keyCode= e.which;
-    // Si la tecla es el Intro/Enter
-    if (keyCode == 13){
-      // Evitamos que se ejecute eventos
-      e.preventDefault();
-      // Devolvemos falso
-      return false;
+    if (e.which !== 13 && e.key !== 'Enter') {
+        return;
     }
+    if ($(this).is('.codigotransporte')) {
+        return;
+    }
+    e.preventDefault();
+    return false;
   });
 
 $(document).on('keyup', '#consultacliente', function () {

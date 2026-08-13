@@ -93,6 +93,7 @@ class RemitoQuery implements RemitoQueryInterface
             'cliente.nombre as nombrecliente',
             'remito.codigo as codigo',
             'remito.estadoremito as estado',
+            'remito.venta_id as venta_id',
             'remito.transporte_id as transporte_id',
             'transporte.nombre as nombretransporte',
             'transporte.codigo as codigotransporte',
