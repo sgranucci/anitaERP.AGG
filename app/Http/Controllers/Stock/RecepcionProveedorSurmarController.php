@@ -190,7 +190,11 @@ class RecepcionProveedorSurmarController extends Controller
             'nro_establecimiento' => 'nullable|integer|min:0|max:10000',
             'deposito_codigo' => 'nullable|string|max:30',
             'deposito_descripcion' => 'nullable|string|max:120',
+            'volver_solapa' => 'nullable|string|in:items,encabezado',
         ]);
+
+        $solapaDestino = ($request->input('volver_solapa') === 'items') ? 'items' : 'encabezado';
+        unset($data['volver_solapa']);
 
         try {
             $this->service->actualizarEncabezado($id, $data);
@@ -202,7 +206,7 @@ class RecepcionProveedorSurmarController extends Controller
         }
 
         return redirect()
-            ->route('cargar_recepcion_proveedor_surmar', ['id' => $id, 'solapa' => 'encabezado'])
+            ->route('cargar_recepcion_proveedor_surmar', ['id' => $id, 'solapa' => $solapaDestino])
             ->with('mensaje', 'Encabezado / datos SENASA actualizados.');
     }
 
@@ -261,7 +265,7 @@ class RecepcionProveedorSurmarController extends Controller
         $data = $request->validate([
             'ordencompra_articulo_id' => 'nullable|integer|min:1',
             'articulo_id' => 'required|integer|min:1',
-            'lote_proveedor' => 'required|string|max:30',
+            'lote_proveedor' => 'nullable|string|max:30',
             'certificado' => 'nullable|string|max:30',
             'fecha_vto' => 'nullable|date',
             'peso_bruto' => 'nullable|numeric|min:0',
@@ -325,7 +329,7 @@ class RecepcionProveedorSurmarController extends Controller
 
         $this->assertSurmar();
         $data = $request->validate([
-            'lote_proveedor' => 'required|string|max:30',
+            'lote_proveedor' => 'nullable|string|max:30',
             'certificado' => 'nullable|string|max:30',
             'fecha_vto' => 'nullable|date',
             'peso_bruto' => 'nullable|numeric|min:0',

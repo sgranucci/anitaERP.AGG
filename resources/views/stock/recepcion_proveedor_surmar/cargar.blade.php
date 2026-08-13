@@ -241,8 +241,7 @@ window.SURMAR_RECEPCION = {
                                 <button type="submit" class="btn btn-success">
                                     <i class="fa fa-save"></i> Guardar encabezado
                                 </button>
-                                <button type="button" class="btn btn-outline-primary" data-toggle="tab" href="#tab-items"
-                                        onclick="document.getElementById('tab-items-link').click();">
+                                <button type="submit" class="btn btn-outline-primary" name="volver_solapa" value="items">
                                     Ir a ítems <i class="fa fa-arrow-right"></i>
                                 </button>
                             </div>

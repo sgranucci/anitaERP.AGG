@@ -444,16 +444,24 @@ class RecepcionProveedorSurmarService
     {
         $lote = trim((string) ($data['lote_proveedor'] ?? ''));
         $certificadoCabecera = trim((string) ($recepcion->certificado_senasa ?? ''));
+        $certificadoEnviado = trim((string) ($data['certificado'] ?? ''));
         if ($lote === '' && $certificadoCabecera !== '') {
             $lote = $certificadoCabecera;
         }
         if ($lote === '') {
-            $lote = trim((string) ($data['certificado'] ?? ''));
+            $lote = $certificadoEnviado;
         }
         if ($lote === '') {
             throw ValidationException::withMessages([
                 'lote_proveedor' => 'Debe ingresar el lote (o cargar el certificado SENASA en el encabezado).',
             ]);
+        }
+
+        // Si el operador cargó el certificado en pantalla y aún no guardó el encabezado,
+        // persistirlo para que el próximo ítem / recarga lo herede.
+        if ($certificadoCabecera === '' && $certificadoEnviado !== '') {
+            $recepcion->update(['certificado_senasa' => $certificadoEnviado]);
+            $recepcion->certificado_senasa = $certificadoEnviado;
         }
 
         return $lote;

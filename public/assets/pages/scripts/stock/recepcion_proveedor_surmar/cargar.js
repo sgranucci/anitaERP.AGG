@@ -228,7 +228,20 @@
     }
 
     function loteDesdeCertificadoCabecera() {
+        var vivo = $.trim($('#certificado_senasa').val() || '');
+        if (vivo) {
+            cfg.certificadoSenasa = vivo;
+            return vivo;
+        }
         return $.trim(cfg.certificadoSenasa || '');
+    }
+
+    function aplicarLoteDesdeCabecera() {
+        var loteCab = loteDesdeCertificadoCabecera();
+        if (loteCab) {
+            $('#lote_proveedor').val(loteCab);
+        }
+        return loteCab;
     }
 
     function renderOc() {
@@ -324,10 +337,7 @@
         $('#precio_oc').val(l.precio != null ? l.precio : '');
         var vto = calcularFechaVtoDesdeArticulo(l.vencimientoendia);
         $('#fecha_vto').val(vto || '');
-        var loteCab = loteDesdeCertificadoCabecera();
-        if (loteCab) {
-            $('#lote_proveedor').val(loteCab);
-        }
+        aplicarLoteDesdeCabecera();
         actualizarOrigenArticulo('OC');
         renderOc();
         $('#lote_proveedor').focus();
@@ -348,6 +358,7 @@
         if (vto) {
             $('#fecha_vto').val(vto);
         }
+        aplicarLoteDesdeCabecera();
         actualizarOrigenArticulo('EXTRA');
         $msg.text('Artículo EXTRA (fuera de OC) — complete lote y pesos').removeClass('text-danger text-success').addClass('text-muted');
     }
@@ -607,6 +618,7 @@
             $('#articulo_id').val(g.articulo_id || '');
             $('#codigoarticulo').val(g.codigo || '');
             $('#descripcionarticulo').val(g.descripcion || '');
+            aplicarLoteDesdeCabecera();
             actualizarOrigenArticulo('OC');
             return;
         }
@@ -632,6 +644,7 @@
             $('#articulo_id').val(linea.articulo_id || '');
             $('#codigoarticulo').val(linea.codigo || '');
             $('#descripcionarticulo').val(linea.descripcion || '');
+            aplicarLoteDesdeCabecera();
             actualizarOrigenArticulo('OC');
             return;
         }
@@ -654,6 +667,7 @@
         $('#articulo_id').val('');
         $('#codigoarticulo').val('');
         $('#descripcionarticulo').val('');
+        aplicarLoteDesdeCabecera();
         actualizarOrigenArticulo('EXTRA');
         $msg.text('Artículo fuera de OC — use la lupa (F1) o escriba el SKU').removeClass('text-danger text-success').addClass('text-muted');
         var $lupa = $('#surmar-nuevo-item-campos .consultaarticulo').first();
@@ -666,7 +680,7 @@
 
     function limpiarForm() {
         // Conserva la línea OC elegida para etiquetar más unidades o el mismo artículo.
-        $('#lote_proveedor').val(loteDesdeCertificadoCabecera());
+        aplicarLoteDesdeCabecera();
         limpiarPesosForm();
     }
 
@@ -1509,10 +1523,7 @@
                 if ($('#articulo_id').val()) {
                     limpiarVinculoOc();
                     actualizarOrigenArticulo('EXTRA');
-                    var loteCab = loteDesdeCertificadoCabecera();
-                    if (loteCab && !$('#lote_proveedor').val()) {
-                        $('#lote_proveedor').val(loteCab);
-                    }
+                    aplicarLoteDesdeCabecera();
                     $('#lote_proveedor').trigger('focus');
                 }
             }, 150);
@@ -1527,6 +1538,14 @@
 
         window.addEventListener('pageshow', ocultarOverlay);
         setSeparaDefault();
+        aplicarLoteDesdeCabecera();
+        $('#certificado_senasa').on('input change', function () {
+            cfg.certificadoSenasa = $.trim($(this).val() || '');
+            aplicarLoteDesdeCabecera();
+        });
+        $('a[href="#tab-items"]').on('shown.bs.tab', function () {
+            aplicarLoteDesdeCabecera();
+        });
         if (cfg.editable && lineasOc.length === 1) {
             elegirLineaOc(lineasOc[0]);
         }
