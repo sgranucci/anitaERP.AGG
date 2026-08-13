@@ -4,10 +4,9 @@
 @endsection
 
 @section("scripts")
-<script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ticket/ticket/crear.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ticket/ticket/comentario_tarea.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ticket/categoria_ticket/consulta.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ticket/ticket/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ticket/ticket/crear.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ticket/ticket/comentario_tarea.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ticket/ticket/comentario_tarea.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ticket/categoria_ticket/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ticket/categoria_ticket/consulta.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -24,7 +23,7 @@
                     </a>
                 </div>
             </div>
-            <form action="{{route('actualiza_ticket', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
+            <form action="{{route('actualiza_ticket', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off" novalidate>
                 @csrf @method("put")
                 <div align="center" style="margin: 5px;">
                     <button type="button" id="botonform1" class="btn btn-primary btn-sm">
@@ -50,4 +49,5 @@
         </div>
     </div>
 </div>
+@include('includes.ticket.modalconsultacategoria')
 @endsection

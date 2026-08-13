@@ -127,10 +127,18 @@
             </div>
             <div class="form-group row">
                 <label for="estado_ticket" class="col-lg-3 control-label text-right pr-2">Estado del ticket</label>
+                @php
+                    $estadoTicketVal = old(
+                        'estado_ticket',
+                        $esAltaTicket
+                            ? ($estado_enum[0]['nombre'] ?? 'Sin Asignar')
+                            : ($data->estado_ticket ?? '')
+                    );
+                @endphp
                 <select name="estado_ticket" id="estado_ticket" data-placeholder="Estado del ticket" class="col-lg-3 form-control required" data-fouc required>
                     <option value="">-- Seleccionar --</option>
                     @foreach($estado_enum as $value)
-                        @if( $value['nombre'] == old('estado_ticket', $data->estado_ticket ?? ''))
+                        @if( $value['nombre'] == $estadoTicketVal)
                             <option value="{{ $value['nombre'] }}" selected="select">{{ $value['nombre'] }}</option>    
                         @else
                             <option value="{{ $value['nombre'] }}">{{ $value['nombre'] }}</option>    
@@ -280,7 +288,9 @@
         </div>
     </div>
     <input type="hidden" id="id" name="id" value="{{ $data->id ?? '' }}" />
-    <input type="hidden" id="usuario_id" name="usuario_id" value="{{ $data->usuario_id ?? '' }}" />
+    @if (! ($esAltaTicket ?? false))
+        <input type="hidden" id="usuario_id" name="usuario_id" value="{{ $data->usuario_id ?? '' }}" />
+    @endif
     <input type="hidden" id="permiso_usuario" name="permiso_usuario" value="{{ can('supervisor-ticket', false) }}" />
     <input type="hidden" id="url_cambia_estado_tarea" value="{{ url('ticket/cambiar_estado_tarea') }}" />
     @if (! empty($data->id))
@@ -292,11 +302,5 @@
     @endif
 </div>
 <input type="hidden" id="csrf_token" class="form-control" value="{{csrf_token()}}" />
-
-@include('includes.ticket.modalconsultacategoria')
-@include('includes.ticket.modalconsultatarea_ticket')
-@include('includes.ticket.modalconsultatecnico_ticket')
-@include('includes.ticket.modalconsultasubcategoria')
-@include('includes.stock.modalconsultaarticulo')
 
 

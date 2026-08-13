@@ -94,8 +94,11 @@ class TicketService
 			}
 		} catch (\Exception $e) {
 			DB::rollback();
-
-			// Borra el asiento creado
+			Log::error('TicketService::guardaTicket', [
+				'error' => $e->getMessage(),
+				'file' => $e->getFile(),
+				'line' => $e->getLine(),
+			]);
 
 			return ['errores' => $e->getMessage()];
 		}

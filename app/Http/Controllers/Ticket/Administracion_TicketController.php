@@ -163,7 +163,13 @@ class Administracion_TicketController extends Controller
      */
     public function guardar(ValidacionTicket $request)
     {
-        $this->ticketService->guardaTicket($request, 'administracion');
+        $resultado = $this->ticketService->guardaTicket($request, 'administracion');
+
+        if (! empty($resultado['errores'])) {
+            return back()
+                ->withInput()
+                ->withErrors(['error' => 'No se pudo guardar el ticket. Revisá los datos e intentá de nuevo.']);
+        }
 
         return redirect()->route('consulta_administracion_ticket', QueryRetornoListado::desdeRequest($request, AdministracionTicketListadoFiltros::class))
             ->with('mensaje', 'Ticket creado con éxito');

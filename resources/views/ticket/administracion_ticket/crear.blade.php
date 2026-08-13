@@ -4,14 +4,13 @@
 @endsection
 
 @section("scripts")
-<script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/admin/usuario/consulta.js') }}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ticket/administracion_ticket/crear.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ticket/tarea_ticket/consulta.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ticket/tecnico_ticket/consulta.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ticket/categoria_ticket/consulta.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ticket/subcategoria_ticket/consulta.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/admin/usuario/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/admin/usuario/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ticket/administracion_ticket/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ticket/administracion_ticket/crear.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ticket/tarea_ticket/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ticket/tarea_ticket/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ticket/tecnico_ticket/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ticket/tecnico_ticket/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ticket/categoria_ticket/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ticket/categoria_ticket/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ticket/subcategoria_ticket/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ticket/subcategoria_ticket/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/consulta.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -31,7 +30,7 @@
                     </a>
                 </div>
             </div>
-            <form action="{{ route('guarda_administracion_ticket', $filtrosQuery ?? []) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
+            <form action="{{ route('guarda_administracion_ticket', $filtrosQuery ?? []) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off" novalidate>
                 @csrf
                 @include('includes.tabs-activas-estilos')
                 <div class="card-body">
@@ -57,7 +56,7 @@
                     <div class="row">
                         <div class="col-lg-3"></div>
                         <div class="col-lg-6">
-                            @include('includes.boton-form-crear')
+                            <button type="submit" form="form-general" class="btn botonsubmit btn-success">Guardar</button>
                         </div>
                     </div>
                 </div>
@@ -66,4 +65,9 @@
     </div>
 </div>
 @include('includes.admin.modalconsultausuario')
+@include('includes.ticket.modalconsultacategoria')
+@include('includes.ticket.modalconsultatarea_ticket')
+@include('includes.ticket.modalconsultatecnico_ticket')
+@include('includes.ticket.modalconsultasubcategoria')
+@include('includes.stock.modalconsultaarticulo')
 @endsection

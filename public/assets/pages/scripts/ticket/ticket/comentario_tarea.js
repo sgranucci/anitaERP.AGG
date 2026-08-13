@@ -88,12 +88,29 @@ $(function () {
                 return false;
             }
 
-            if ($form.length && typeof $form.valid === 'function' && ! $form.valid()) {
+            var form = document.getElementById('form-general');
+            if (! form) {
+                alert('No se encontró el formulario para guardar.');
                 return false;
             }
 
-            $form.data('ticket-omitir-aviso-comentario', true);
-            $form.trigger('submit');
+            if (typeof validarCamposObligatoriosFormulario === 'function') {
+                var resultado = validarCamposObligatoriosFormulario(form);
+                if (! resultado.valido) {
+                    if (typeof mostrarSolapaDelPrimerCampoInvalido === 'function') {
+                        mostrarSolapaDelPrimerCampoInvalido(resultado.primerInvalido);
+                    }
+                    if (typeof notificarCamposObligatoriosPendientes === 'function') {
+                        notificarCamposObligatoriosPendientes(resultado.primerInvalido, resultado.cantidadInvalidos);
+                    }
+                    if (typeof enfocarCampoInvalido === 'function') {
+                        enfocarCampoInvalido(resultado.primerInvalido);
+                    }
+                    return false;
+                }
+            }
+
+            HTMLFormElement.prototype.submit.call(form);
         });
 
     vincularAvisoComentarioEnSubmit();

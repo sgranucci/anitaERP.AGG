@@ -143,7 +143,13 @@ class TicketController extends Controller
      */
     public function guardar(ValidacionTicket $request)
     {
-        $this->ticketService->guardaTicket($request);
+        $resultado = $this->ticketService->guardaTicket($request);
+
+        if (! empty($resultado['errores'])) {
+            return back()
+                ->withInput()
+                ->withErrors(['error' => 'No se pudo guardar el ticket. Revisá los datos e intentá de nuevo.']);
+        }
 
         return redirect('ticket/ticket')->with('mensaje', 'Ticket creado con éxito');
 	}

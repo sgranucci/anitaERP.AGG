@@ -142,4 +142,3 @@
     <input type="hidden" id="usuario_id" name="usuario_id" value="{{ $data->usuario_id ?? '' }}" />
 </div>
 <input type="hidden" id="csrf_token" class="form-control" value="{{csrf_token()}}" />
-@include('includes.ticket.modalconsultacategoria')

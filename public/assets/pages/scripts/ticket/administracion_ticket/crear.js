@@ -16,6 +16,9 @@
 				.toggleClass('fa-chevron-right', event.type === 'hide');
 		});
 
+		$(document).off('click.ticketAdminSubmit', '#btn-actualizar-administracion-ticket')
+			.on('click.ticketAdminSubmit', '#btn-actualizar-administracion-ticket', enviarFormularioAdministracionTicket);
+
 		activa_eventos(true);
 		leeEstadoTarea();
 		calculaEstadoTicket();
@@ -40,28 +43,41 @@
 			}
 			actualizarTiempoInsumidoTotal();
 		});
-
-		// type=button: no submit nativo; avisamos comentarios y luego enviamos
-		$(document).off('click.ticketAdminSubmit', '#btn-actualizar-administracion-ticket, .botonsubmit')
-			.on('click.ticketAdminSubmit', '#btn-actualizar-administracion-ticket, .botonsubmit', function (event) {
-				event.preventDefault();
-				event.stopImmediatePropagation();
-
-				if (! confirmarComentariosPendientesOAbortar()) {
-					return false;
-				}
-
-				let form = document.getElementById('form-general');
-				if (! form) {
-					alert('No se encontró el formulario para guardar.');
-					return false;
-				}
-
-				// submit nativo del prototipo (evita conflicto si existe name/id=submit
-				// y no depende de jquery.validate, que a veces corta el envío en silencio)
-				HTMLFormElement.prototype.submit.call(form);
-			});
     });
+
+	function enviarFormularioAdministracionTicket(event) {
+		event.preventDefault();
+		event.stopImmediatePropagation();
+
+		if (! confirmarComentariosPendientesOAbortar()) {
+			return false;
+		}
+
+		let form = document.getElementById('form-general');
+		if (! form) {
+			alert('No se encontró el formulario para guardar.');
+			return false;
+		}
+
+		if (typeof validarCamposObligatoriosFormulario === 'function') {
+			let resultado = validarCamposObligatoriosFormulario(form);
+			if (! resultado.valido) {
+				if (typeof mostrarSolapaDelPrimerCampoInvalido === 'function') {
+					mostrarSolapaDelPrimerCampoInvalido(resultado.primerInvalido);
+				}
+				if (typeof notificarCamposObligatoriosPendientes === 'function') {
+					notificarCamposObligatoriosPendientes(resultado.primerInvalido, resultado.cantidadInvalidos);
+				}
+				if (typeof enfocarCampoInvalido === 'function') {
+					enfocarCampoInvalido(resultado.primerInvalido);
+				}
+				return false;
+			}
+		}
+
+		// Native submit: jquery.validate + $('#form').submit() cortan el envío en silencio.
+		HTMLFormElement.prototype.submit.call(form);
+	}
 
 	function hayComentariosSinEnviar() {
 		let pendiente = false;

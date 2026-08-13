@@ -11,13 +11,12 @@
         </button>
       </div>
       <div class="modal-body">
-        <form action="" method="post">
-			      <div class="form-group row">
-   				    <label for="consulta_tecnico_ticket" class="col-form-label">Buscar:</label>
-              <input type="text" name="consultatecnico_ticket" id="consultatecnico_ticket" autofocus>
-              <input type="hidden" name="consultatecnico_ticket_id" id="consultatecnico_ticket_id">
-			      </div>
-        </form>
+        {{-- Sin form anidado: este partial va dentro de form-general. --}}
+        <div class="form-group row">
+          <label for="consulta_tecnico_ticket" class="col-form-label">Buscar:</label>
+          <input type="text" name="consultatecnico_ticket" id="consultatecnico_ticket" autofocus>
+          <input type="hidden" name="consultatecnico_ticket_id" id="consultatecnico_ticket_id">
+        </div>
         
         <table class="table table-striped table-bordered table-hover" id="tabla-data">
           <thead>

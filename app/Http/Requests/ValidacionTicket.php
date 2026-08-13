@@ -18,6 +18,9 @@ class ValidacionTicket extends FormRequest
 
     protected function prepareForValidation()
     {
+        if (! $this->filled('categoria_ticket_id')) {
+            $this->merge(['categoria_ticket_id' => null]);
+        }
         if (! $this->filled('subcategoria_ticket_id')) {
             $this->merge(['subcategoria_ticket_id' => null]);
         }
@@ -33,12 +36,25 @@ class ValidacionTicket extends FormRequest
         return [
             'sector_id' => 'required',
             'sala_id' => 'required',
-            'categoria_ticket_id' => 'required',
+            'categoria_ticket_id' => 'nullable|integer',
             'subcategoria_ticket_id' => 'nullable|integer|exists:subcategoria_ticket,id',
             'areadestino_id' => 'required',
             'usuario_id' => 'nullable|integer',
             'titulo' => 'required|string|max:255',
             'comentario' => 'required|string',
+        ];
+    }
+
+    public function attributes()
+    {
+        return [
+            'sector_id' => 'sector',
+            'sala_id' => 'sala',
+            'areadestino_id' => 'área de destino',
+            'categoria_ticket_id' => 'categoría',
+            'subcategoria_ticket_id' => 'subcategoría',
+            'titulo' => 'título',
+            'comentario' => 'comentario',
         ];
     }
 }

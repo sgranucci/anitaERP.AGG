@@ -45,7 +45,7 @@
 		@include('ticket.ticket.template2')
         <div class="row">
         	<div class="col-md-12">
-        		<button id="agrega_renglon_archivo" class="pull-right btn btn-danger">+ Agrega rengl&oacute;n</button>
+        		<button type="button" id="agrega_renglon_archivo" class="pull-right btn btn-danger">+ Agrega rengl&oacute;n</button>
         	</div>
         </div>
     </div>

@@ -11,36 +11,29 @@
 		$("#botonform2").click(function(){
 			$(".form1").hide();
             $(".form2").show();
-
-			$("#titulo").html("");
-			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
         });
-
-		$( ".botonsubmit" ).click(function() {
-			$( "#form-general" ).submit();
-		});
     });
 
 	function activa_eventos(flInicio)
 	{
-		// Si esta agregando items desactiva los eventos
-		if (!flInicio)
-		{
+		if (typeof activa_eventos_consultacategoria_ticket === 'function') {
+			activa_eventos_consultacategoria_ticket();
 		}
-
-		// Activa eventos de consulta
-		activa_eventos_consultacategoria_ticket();
 	}
 
-	function agregaRenglonArchivo(){
-    	event.preventDefault();
+	function agregaRenglonArchivo(event){
+    	if (event) {
+			event.preventDefault();
+		}
     	var renglon = $('#template-renglon-archivo').html();
 
     	$("#tbody-tabla-archivo").append(renglon);
     }
 
-    function borraRenglonArchivo() {
-    	event.preventDefault();
+    function borraRenglonArchivo(event) {
+    	if (event) {
+			event.preventDefault();
+		}
     	$(this).parents('tr').remove();
     }
 
@@ -50,8 +43,3 @@
 
 		$(elem).parents("tr").find(".nombresanteriores").val(filename);
 	}
-
-
-		
-
-
