@@ -40,6 +40,7 @@ Nuevo pedido Interforming
 @include('includes.ventas.modalconsultacliente')
 @include('includes.ventas.modalconsultavendedor')
 @include('includes.ventas.modalconsultatransporte')
+@include('includes.ventas.modalseleccionclienteentrega')
 @include('includes.stock.modalconsultaarticulo')
 @include('includes.stock.modalconsultadeposito')
 @endsection

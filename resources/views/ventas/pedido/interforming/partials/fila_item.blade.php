@@ -28,23 +28,28 @@
                value="{{ $item['articulo_cliente'] ?? '' }}" maxlength="16">
     </td>
     <td>
-        <input type="number" step="0.000001" name="items[{{ $idx }}][cantidad]" class="form-control form-control-sm"
-               value="{{ $item['cantidad'] ?? '' }}" required>
+        <input type="number" step="0.000001" name="items[{{ $idx }}][cantidad]"
+               class="form-control form-control-sm cantidad" value="{{ $item['cantidad'] ?? '' }}" required>
+        <input type="hidden" class="coeficienteconversion" value="{{ $item['coeficienteconversion'] ?? '' }}">
+        <input type="hidden" class="umd_abreviatura" value="{{ $item['umd_abreviatura'] ?? '' }}">
     </td>
     <td>
-        <select name="items[{{ $idx }}][unidadmedida_id]" class="form-control form-control-sm">
+        <select name="items[{{ $idx }}][unidadmedida_id]" class="form-control form-control-sm unidadmedida_id">
             <option value="">--</option>
             @foreach ($unidadmedida_query as $um)
-                <option value="{{ $um->id }}" @if ((int) ($item['unidadmedida_id'] ?? 0) === (int) $um->id) selected @endif>
+                <option value="{{ $um->id }}"
+                    data-abreviatura="{{ $um->abreviatura ?? '' }}"
+                    @if ((int) ($item['unidadmedida_id'] ?? 0) === (int) $um->id) selected @endif>
                     {{ $um->abreviatura ?? $um->nombre }}
                 </option>
             @endforeach
         </select>
-        <input type="hidden" name="items[{{ $idx }}][unidadmedida_alter_id]" value="{{ $item['unidadmedida_alter_id'] ?? '' }}">
+        <input type="hidden" name="items[{{ $idx }}][unidadmedida_alter_id]" class="unidadmedida_alter_id"
+               value="{{ $item['unidadmedida_alter_id'] ?? '' }}">
     </td>
     <td>
-        <input type="number" step="0.000001" name="items[{{ $idx }}][cantidad_alter]" class="form-control form-control-sm"
-               value="{{ $item['cantidad_alter'] ?? '' }}">
+        <input type="number" step="0.000001" name="items[{{ $idx }}][cantidad_alter]"
+               class="form-control form-control-sm cantidad_alter" value="{{ $item['cantidad_alter'] ?? '' }}">
     </td>
     <td>
         <input type="date" name="items[{{ $idx }}][fechaentrega]" class="form-control form-control-sm"
@@ -57,11 +62,13 @@
         <input type="hidden" name="items[{{ $idx }}][partida]" value="{{ $item['partida'] ?? 0 }}">
     </td>
     <td>
-        <input type="number" step="0.000001" name="items[{{ $idx }}][precio]" class="form-control form-control-sm"
-               value="{{ $item['precio'] ?? '' }}">
-        <input type="hidden" name="items[{{ $idx }}][moneda_id]" value="{{ $item['moneda_id'] ?? '' }}">
-        <input type="hidden" name="items[{{ $idx }}][listaprecio_id]" value="{{ $item['listaprecio_id'] ?? '' }}">
-        <input type="hidden" name="items[{{ $idx }}][incluyeimpuesto]" value="{{ $item['incluyeimpuesto'] ?? 'N' }}">
+        <input type="number" step="0.000001" name="items[{{ $idx }}][precio]"
+               class="form-control form-control-sm precio" value="{{ $item['precio'] ?? '' }}">
+        <input type="hidden" name="items[{{ $idx }}][moneda_id]" class="moneda_id" value="{{ $item['moneda_id'] ?? '' }}">
+        <input type="hidden" name="items[{{ $idx }}][listaprecio_id]" class="listaprecio_id"
+               value="{{ $item['listaprecio_id'] ?? '' }}">
+        <input type="hidden" name="items[{{ $idx }}][incluyeimpuesto]" class="incluyeimpuesto"
+               value="{{ $item['incluyeimpuesto'] ?? 'N' }}">
         <input type="hidden" name="items[{{ $idx }}][estado]" value="{{ $item['estado'] ?? 'P' }}">
         <input type="hidden" name="items[{{ $idx }}][orden_compra]" value="{{ $item['orden_compra'] ?? '' }}">
     </td>

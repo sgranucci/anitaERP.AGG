@@ -112,12 +112,32 @@
                    value="{{ old('nombretransporte', $pedido->transportes->nombre ?? '') }}" readonly>
         </div>
 
-        <div class="form-group row">
-            <label class="col-lg-3 col-form-label">Lugar entrega</label>
-            <input type="text" name="lugarentrega" id="lugarentrega" class="col-lg-8 form-control"
-                   value="{{ old('lugarentrega', $pedido->lugarentrega ?? '') }}" maxlength="60">
+        <div class="form-group row" id="divlugar">
+            <label for="lugarentrega" id="label-lugarentrega" class="col-lg-3 col-form-label">Lugar entrega</label>
+            <div class="col-lg-8">
+                <div class="input-group">
+                    <input type="text" name="lugarentrega" id="lugarentrega" class="form-control"
+                           value="{{ old('lugarentrega', $pedido->lugarentrega ?? '') }}" maxlength="60"
+                           placeholder="Seleccione un lugar de entrega del cliente">
+                    <div class="input-group-append" id="div-cambiar-lugarentrega" style="display: none;">
+                        <button type="button" id="btn-cambiar-lugarentrega" class="btn btn-outline-secondary btn-sm"
+                                title="Cambiar lugar de entrega">
+                            Cambiar
+                        </button>
+                    </div>
+                </div>
+                <small id="aviso-lugarentrega-obligatorio" class="form-text text-danger" style="display: none;">
+                    Este cliente tiene lugares de entrega cargados. Debe elegir uno para continuar.
+                </small>
+            </div>
             <input type="hidden" name="cliente_entrega_id" id="cliente_entrega_id"
                    value="{{ old('cliente_entrega_id', $pedido->cliente_entrega_id ?? '') }}">
+            <input type="hidden" id="cliente_entrega_id_previa" name="cliente_entrega_id_previa"
+                   value="{{ old('cliente_entrega_id', $pedido->cliente_entrega_id ?? '') }}">
+            <input type="hidden" id="entrega_nombre" name="entrega_nombre" value="">
+            <input type="hidden" id="fl_cliente_tiene_entrega" value="0">
+            <input type="hidden" id="descuento" name="descuento" value="{{ old('descuento', $pedido->descuento ?? 0) }}">
+            <input type="hidden" id="zonavta_id" name="zonavta_id" value="{{ old('zonavta_id', $pedido->zonavta_id ?? '') }}">
         </div>
     </div>
 

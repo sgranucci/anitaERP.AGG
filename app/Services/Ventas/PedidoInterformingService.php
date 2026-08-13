@@ -212,7 +212,11 @@ class PedidoInterformingService
         $pedido->lugarentrega = $data['lugarentrega'] ?? null;
         $pedido->leyenda = $data['leyenda'] ?? null;
         $pedido->descuento = (float) ($data['descuento'] ?? 0);
-        $pedido->descuentointegrado = $data['descuentointegrado'] ?? null;
+        // Anita/AGG graban espacio (columna NOT NULL sin default usable)
+        $pedido->descuentointegrado = (string) ($data['descuentointegrado'] ?? ' ');
+        if (trim($pedido->descuentointegrado) === '') {
+            $pedido->descuentointegrado = ' ';
+        }
         $pedido->orden_compra = isset($data['orden_compra']) ? substr(trim((string) $data['orden_compra']), 0, 15) : null;
         $pedido->deposito_id = $data['deposito_id'] ?? null;
         $pedido->moneda_id = $data['moneda_id'] ?? null;
@@ -277,7 +281,7 @@ class PedidoInterformingService
             $row->listaprecio_id = (int) ($item['listaprecio_id'] ?? $listaDefault);
             $row->moneda_id = (int) ($item['moneda_id'] ?? $pedido->moneda_id ?? 1);
             $row->descuento = (float) ($item['descuento'] ?? 0);
-            $row->descuentointegrado = $item['descuentointegrado'] ?? null;
+            $row->descuentointegrado = (string) ($item['descuentointegrado'] ?? '');
             $row->unidadmedida_id = $item['unidadmedida_id'] ?? null;
             $row->unidadmedida_alter_id = $item['unidadmedida_alter_id'] ?? null;
             $row->cantidad_alter = $item['cantidad_alter'] ?? null;

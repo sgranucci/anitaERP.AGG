@@ -21,7 +21,8 @@ class Cliente_EntregaQuery implements Cliente_EntregaQueryInterface
     public function traeCliente_EntregaporCliente_id($cliente_id)
     {
         return $this->model
-            ->select('id', 'nombre', 'domicilio', 'localidad_id', 'provincia_id', 'codigopostal')
+            ->with(['transportes:id,codigo,nombre'])
+            ->select('id', 'nombre', 'domicilio', 'localidad_id', 'provincia_id', 'codigopostal', 'transporte_id')
             ->where('cliente_id', $cliente_id)
             ->orderBy('nombre')
             ->get()
@@ -35,6 +36,9 @@ class Cliente_EntregaQuery implements Cliente_EntregaQueryInterface
                     'codigopostal' => $entrega->codigopostal,
                     'localidad' => $entrega->desc_localidades,
                     'provincia' => $entrega->desc_provincias,
+                    'transporte_id' => $entrega->transporte_id,
+                    'transporte_codigo' => $entrega->transportes->codigo ?? null,
+                    'transporte_nombre' => $entrega->transportes->nombre ?? null,
                 ];
             })
             ->values();
