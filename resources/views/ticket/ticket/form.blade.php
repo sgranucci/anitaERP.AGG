@@ -116,8 +116,9 @@
                 <label for="estado_ticket" class="col-lg-3 col-form-label">Estado del ticket</label>
                 <input type="text" class="col-lg-3 estado_ticket form-control" id="estado_ticket" name="estado_ticket" value="{{$data->estado_ticket??''}}" readonly>
             </div>
-        </div>
+        </div>        
     </div>
+    @include('ticket.partials.estadisticas_resolucion')
     <div class="col-md-12">
         <div class="form-group">
             <label for="titulo">Título</label>

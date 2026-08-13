@@ -96,6 +96,45 @@ class ComprobanteProveedorRecepcionesSupport
     }
 
     /**
+     * Expresa la provisión COM en la moneda de la factura (manda la factura).
+     *
+     * @param  Collection<int, Recepcion_Proveedor>  $recepciones
+     * @return Collection<int, Recepcion_Proveedor>
+     */
+    public function enriquecerConImporteEnMonedaFactura(
+        Collection $recepciones,
+        int $monedaFacturaId,
+        float $cotizacionFactura,
+        mixed $fechaFactura = null,
+    ): Collection {
+        $necesitaProvision = $recepciones->contains(function (Recepcion_Proveedor $r) {
+            return ! isset($r->importe_provision_com);
+        });
+        if ($necesitaProvision) {
+            $recepciones = $this->enriquecerConImporteProvision($recepciones);
+        }
+
+        return $recepciones->map(function (Recepcion_Proveedor $recepcion) use (
+            $monedaFacturaId,
+            $cotizacionFactura,
+            $fechaFactura,
+        ) {
+            $me = (float) ($recepcion->importe_provision_com ?? 0);
+            $recepcion->importe_provision_com_factura = ComprobanteProveedorImporteComparacionComSupport::desdeRecepcionAFacturaTolerante(
+                $me,
+                (int) ($recepcion->moneda_id ?: 1),
+                (float) ($recepcion->cotizacion ?: 0),
+                $monedaFacturaId,
+                $cotizacionFactura,
+                $recepcion->fecha ?? null,
+                $fechaFactura,
+            );
+
+            return $recepcion;
+        });
+    }
+
+    /**
      * Carga artículos de cada COM para mostrar en la carga de factura.
      *
      * @param  Collection<int, Recepcion_Proveedor>  $recepciones
@@ -135,7 +174,9 @@ class ComprobanteProveedorRecepcionesSupport
         return ComprobanteProveedorImporteComparacionComSupport::aMonedaLocal(
             $me,
             (int) ($recepcion->moneda_id ?: 1),
-            (float) ($recepcion->cotizacion ?: 1),
+            (float) ($recepcion->cotizacion ?: 0),
+            $recepcion->fecha ?? null,
+            'la recepción COM '.($recepcion->numerorecepcion ?? $recepcion->id),
         );
     }
 

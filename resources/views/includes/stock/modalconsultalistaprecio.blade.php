@@ -11,22 +11,26 @@
         </button>
       </div>
       <div class="modal-body">
-        <form action="" method="post">
+        <form action="" method="post" onsubmit="return false;">
           <div class="form-group row">
             <label for="consultalistaprecio" class="col-form-label">Buscar:</label>
-            <input type="text" name="consultalistaprecio" id="consultalistaprecio" autofocus>
+            <input type="text" name="consultalistaprecio" id="consultalistaprecio" class="form-control" autocomplete="off" autofocus>
           </div>
         </form>
 
-        <table class="table table-striped table-bordered table-hover" id="tabla-data">
-          <thead>
-              <th>ID</th>
-              <th>Nombre</th>
-              <th>C&oacute;digo Anita</th>
-              <th>Acciones</th>
-          </thead>
-          <tbody id="datoslistaprecio"></tbody>
-        </table>
+        <div class="table-responsive" style="max-height: 60vh; overflow: auto;">
+          <table class="table table-striped table-bordered table-hover mb-0" id="tabla-consulta-listaprecio">
+            <thead style="background:#85C1E9;color:#17202A;">
+              <tr>
+                <th>ID</th>
+                <th>Nombre</th>
+                <th>C&oacute;digo Anita</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="datoslistaprecio"></tbody>
+          </table>
+        </div>
       </div>
       <div class="modal-footer">
         <button type="button" id="cierraconsultalistaprecioModal" class="btn btn-secondary" data-dismiss="modal">Cierra</button>

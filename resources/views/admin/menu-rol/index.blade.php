@@ -10,6 +10,7 @@ Menú - Rol
 @section('contenido')
 <div id="menu-rol-page"
     data-permisos-url="{{ route('menu_rol_permisos') }}"
+    data-usuarios-url="{{ route('menu_rol_usuarios') }}"
     data-guardar-menu-rol-url="{{ route('guardar_menu_rol') }}"
     data-guardar-permiso-rol-url="{{ route('guardar_permiso_rol') }}"
     data-centrocosto-id="{{ e($centrocostoId) }}">
@@ -76,7 +77,8 @@ Menú - Rol
                     @else
                         de {{ $totalRolesSistema }}
                     @endif.
-                    Use <i class="fa fa-key"></i> para permisos de cada opción.
+                    Use <i class="fa fa-key"></i> para permisos de cada opción
+                    y <i class="fa fa-users"></i> en el encabezado del rol para ver sus usuarios.
                     Las filas azules marcan el inicio de cada módulo.
                     Desplace horizontalmente para ver más roles; la columna Menú permanece fija.
                 </p>
@@ -93,6 +95,13 @@ Menú - Rol
                                 data-rol-id="{{ $id }}"
                                 data-rol-nombre="{{ e(mb_strtolower($nombre)) }}"
                                 title="{{ $nombre }}">
+                                <button type="button"
+                                    class="btn btn-sm btn-outline-dark btn-usuarios-rol"
+                                    title="Usuarios del rol {{ $nombre }}"
+                                    data-rol-id="{{ $id }}"
+                                    data-rol-nombre="{{ e($nombre) }}">
+                                    <i class="fa fa-users"></i>
+                                </button>
                                 <span class="menu-rol-th-rol">{{ $nombre }}</span>
                             </th>
                             @endforeach
@@ -144,6 +153,32 @@ Menú - Rol
                 </div>
                 <div id="modalPermisosMenuVacio" class="alert alert-info" style="display: none;">
                     No hay permisos asociados a este ítem de menú (<code>menu_id</code> en la tabla permiso).
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="modalUsuariosRol" tabindex="-1" role="dialog" aria-labelledby="modalUsuariosRolLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg" role="document">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalUsuariosRolLabel">Usuarios del rol</h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div id="modalUsuariosRolCargando" class="text-center p-4 text-muted" style="display: none;">
+                    Cargando usuarios…
+                </div>
+                <div id="modalUsuariosRolError" class="alert alert-danger" style="display: none;"></div>
+                <div id="modalUsuariosRolContenedor" class="table-responsive" style="display: none;"></div>
+                <div id="modalUsuariosRolVacio" class="alert alert-info" style="display: none;">
+                    Este rol no tiene usuarios asignados.
                 </div>
             </div>
             <div class="modal-footer">

@@ -12,6 +12,7 @@ use App\Repositories\Compras\Tipotransaccion_Compra_CentrocostoRepositoryInterfa
 use App\Repositories\Compras\Tipotransaccion_Compra_Concepto_IvacompraRepositoryInterface;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use App\Support\Compras\ConceptoIvacompraConsultaSupport;
 use DB;
 
 class Tipotransaccion_CompraController extends Controller
@@ -177,5 +178,97 @@ class Tipotransaccion_CompraController extends Controller
         } else {
             abort(404);
         }
+    }
+
+    public function consultaTipotransaccionCompra(Request $request)
+    {
+        if (! $this->puedeConsultarTipotransaccionCompra()) {
+            abort(403);
+        }
+
+        $consulta = strtoupper(trim((string) ($request->get('consulta') ?? '')));
+        $centrocostoId = (int) ($request->input('centrocosto_id') ?: 0) ?: null;
+
+        $data = $this->repository->listarParaConsulta($consulta !== '' ? $consulta : null, $centrocostoId);
+        $puedeAbrirAbm = can('editar-tipo-transaccion-compra', false) || can('listar-tipo-transaccion-compra', false);
+
+        $output = ['data' => ''];
+        if ($data->isEmpty()) {
+            $output['data'] = '<tr><td colspan="4">Sin resultados</td></tr>';
+        } else {
+            foreach ($data as $row) {
+                $output['data'] .= '<tr>';
+                $output['data'] .= '<td class="id">'.e($row->id).'</td>';
+                $output['data'] .= '<td class="abreviatura">'.e($row->abreviatura).'</td>';
+                $output['data'] .= '<td class="nombre">'.e($row->nombre).'</td>';
+                $output['data'] .= '<td class="text-nowrap">';
+                $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultatipotransaccioncompra">Elegir</a>';
+                if ($puedeAbrirAbm) {
+                    $urlConsulta = route('editar_tipotransaccion_compra', [
+                        'id' => $row->id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ]);
+                    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($urlConsulta).'" target="_blank" rel="noopener">Consultar</a>';
+                }
+                $output['data'] .= '</td>';
+                $output['data'] .= '</tr>';
+            }
+        }
+
+        return json_encode($output, JSON_UNESCAPED_UNICODE);
+    }
+
+    public function leeUnTipotransaccionPorAbreviatura(Request $request, string $abreviatura)
+    {
+        if (! $this->puedeConsultarTipotransaccionCompra()) {
+            abort(403);
+        }
+
+        $centrocostoId = (int) ($request->input('centrocosto_id') ?: 0) ?: null;
+        $abrev = strtoupper(trim($abreviatura));
+        $tipo = $this->repository->findPorAbreviaturaFiltrado($abrev, $centrocostoId);
+
+        if (! $tipo) {
+            return response()->json(['id' => null]);
+        }
+
+        return response()->json([
+            'id' => (int) $tipo->id,
+            'abreviatura' => (string) $tipo->abreviatura,
+            'nombre' => (string) $tipo->nombre,
+        ]);
+    }
+
+    public function conceptosIvaPorTipo(int $id)
+    {
+        if (! $this->puedeConsultarTipotransaccionCompra()) {
+            abort(403);
+        }
+
+        $lista = ConceptoIvacompraConsultaSupport::listarPorTipoTransaccion($id);
+
+        return response()->json([
+            'ok' => true,
+            'conceptos' => $lista->map(fn ($c) => [
+                'id' => (int) $c->id,
+                'codigo' => (string) ($c->codigo ?? ''),
+                'nombre' => (string) ($c->nombre ?? ''),
+                'tipoconcepto' => (string) ($c->tipoconcepto ?? ''),
+                'cuentacontable_id' => $c->cuentacontable_id ? (int) $c->cuentacontable_id : null,
+            ])->values()->all(),
+        ]);
+    }
+
+    private function puedeConsultarTipotransaccionCompra(): bool
+    {
+        return can('listar-tipo-transaccion-compra', false)
+            || can('crear-comprobante-proveedor', false)
+            || can('editar-comprobante-proveedor', false)
+            || can('actualizar-comprobante-proveedor', false)
+            || can('listar-comprobante-proveedor', false)
+            || can('crear-precarga-proveedores', false)
+            || can('editar-precarga-proveedores', false)
+            || can('listar-precarga-proveedores', false);
     }
 }

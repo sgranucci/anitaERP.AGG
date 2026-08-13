@@ -15,6 +15,7 @@ use App\Support\Ventas\GastronomiaCuentacajaSoloAutomaticaSupport;
 use App\Support\Ventas\GastronomiaUsoCuentacajaSupport;
 use App\Support\Ventas\MaquinavendingRendicionListadoFiltros;
 use App\Support\Ventas\MaquinavendingRendicionPermiso;
+use App\Support\Contable\CierreRendicionOrigenConsultaSupport;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -263,7 +264,9 @@ class MaquinavendingRendicionController extends Controller
 
     public function comprobante(Request $request, int $id)
     {
-        can('ver-comprobante-maquinavending-rendicion-gastronomia');
+        CierreRendicionOrigenConsultaSupport::exigir(
+            CierreRendicionOrigenConsultaSupport::puedeVerPdfRendicionVentasMaquinavending(),
+        );
 
         $rendicion = $this->repository->findOrFail($id);
         if (! $this->empresaRepository->empresaIdPermitida((int) $rendicion->empresa_id)) {

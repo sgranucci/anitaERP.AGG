@@ -68,7 +68,7 @@ class Cobranza extends Model implements Auditable
 
     public function asientos()
 	{
-    	return $this->belongsTo(Asiento::class, 'id', 'cobranza_id')->with('asiento_movimientos');
+    	return $this->hasOne(Asiento::class, 'cobranza_id')->with('asiento_movimientos');
 	}
 
     public function empresas()

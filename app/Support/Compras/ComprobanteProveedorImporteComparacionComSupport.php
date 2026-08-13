@@ -2,8 +2,13 @@
 
 namespace App\Support\Compras;
 
+use Carbon\Carbon;
+
 /**
  * Importe del comprobante a comparar con la provisión COM (neto sin IVA).
+ *
+ * Las conversiones de moneda viven en ComprobanteProveedorMonedaMotor; acá solo se elige
+ * qué importe de la factura se compara (total vs neto gravado) y se delega la conversión.
  */
 final class ComprobanteProveedorImporteComparacionComSupport
 {
@@ -57,30 +62,40 @@ final class ComprobanteProveedorImporteComparacionComSupport
     }
 
     /**
-     * Lleva el importe del comprobante a moneda local para comparar con provisión COM en pesos.
-     * Si la factura es ME con cotización > 1, convierte (ME × cot).
-     * Si cotización ≈ 1 en ME, asume que los montos ya están en MN (dato inconsistente típico de precarga).
+     * Lleva el importe a moneda local con la cotización del propio documento.
+     *
+     * Delega en ComprobanteProveedorMonedaMotor: una cotización 0 ó 1 en moneda extranjera no
+     * se degrada a paridad, se resuelve la vigente de la fecha (antes el dólar se contabilizaba
+     * como peso). Tolerante: los listados y comparaciones no cortan si falta la cotización.
      */
-    public static function aMonedaLocal(float $importe, int $monedaId, float $cotizacion): float
-    {
-        if (! ComprobanteProveedorCotizacionSupport::esMonedaExtranjera($monedaId)) {
-            return round($importe, 2);
-        }
-
-        $cot = $cotizacion > 0 ? $cotizacion : 1.0;
-        if ($cot <= 1.0001) {
-            return round($importe, 2);
-        }
-
-        return round($importe * $cot, 2);
+    public static function aMonedaLocal(
+        float $importe,
+        int $monedaId,
+        float $cotizacion,
+        string|Carbon|null $fecha = null,
+        string $contexto = 'comprobante de proveedor',
+    ): float {
+        return ComprobanteProveedorMonedaMotor::convertirTolerante(
+            $importe,
+            $monedaId,
+            $cotizacion,
+            $fecha,
+            1,
+            1.0,
+            $fecha,
+            $contexto,
+            'moneda nacional',
+        );
     }
 
     /**
      * Convierte un importe de la moneda de la recepción a la moneda del comprobante (asiento factura).
      *
-     * - Factura en pesos + COM en ME → ME × cotización de la COM (valor contable en MN).
+     * - Factura en pesos + COM en ME → ME × cotización de la COM (valor con el que se provisionó).
      * - Misma moneda → sin cambio.
      * - Factura ME y COM en otra moneda → vía MN (ME_com × cot_com / cot_fac).
+     *
+     * @throws \RuntimeException si falta la cotización de alguno de los dos documentos
      */
     public static function desdeRecepcionAFactura(
         float $importeEnMonedaRecepcion,
@@ -88,27 +103,45 @@ final class ComprobanteProveedorImporteComparacionComSupport
         float $cotizacionRecepcion,
         int $monedaFacturaId,
         float $cotizacionFactura,
+        string|Carbon|null $fechaRecepcion = null,
+        string|Carbon|null $fechaFactura = null,
     ): float {
-        $importe = round($importeEnMonedaRecepcion, 2);
-        $monRec = max(1, $monedaRecepcionId);
-        $monFac = max(1, $monedaFacturaId);
+        return ComprobanteProveedorMonedaMotor::convertir(
+            $importeEnMonedaRecepcion,
+            $monedaRecepcionId,
+            $cotizacionRecepcion,
+            $fechaRecepcion,
+            $monedaFacturaId,
+            $cotizacionFactura,
+            $fechaFactura,
+            'la recepción COM',
+            'la factura del proveedor',
+        );
+    }
 
-        if ($monRec === $monFac) {
-            return $importe;
-        }
-
-        $mn = self::aMonedaLocal($importe, $monRec, $cotizacionRecepcion);
-
-        if (! ComprobanteProveedorCotizacionSupport::esMonedaExtranjera($monFac)) {
-            return $mn;
-        }
-
-        $cotFac = $cotizacionFactura > 0 ? $cotizacionFactura : 1.0;
-        if ($cotFac <= 1.0001) {
-            return $mn;
-        }
-
-        return round($mn / $cotFac, 2);
+    /**
+     * Igual que desdeRecepcionAFactura pero para pantallas/selección (no corta si falta cotización).
+     */
+    public static function desdeRecepcionAFacturaTolerante(
+        float $importeEnMonedaRecepcion,
+        int $monedaRecepcionId,
+        float $cotizacionRecepcion,
+        int $monedaFacturaId,
+        float $cotizacionFactura,
+        string|Carbon|null $fechaRecepcion = null,
+        string|Carbon|null $fechaFactura = null,
+    ): float {
+        return ComprobanteProveedorMonedaMotor::convertirTolerante(
+            $importeEnMonedaRecepcion,
+            $monedaRecepcionId,
+            $cotizacionRecepcion,
+            $fechaRecepcion,
+            $monedaFacturaId,
+            $cotizacionFactura,
+            $fechaFactura,
+            'la recepción COM',
+            'la factura del proveedor',
+        );
     }
 
     public static function coinciden(float $importeComprobante, float $importeCom): bool

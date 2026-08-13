@@ -226,15 +226,24 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
                     ->orderBy('comprobante_proveedor.id')
                     ->limit(1);
             }, 'comprobante_proveedor_id')
+            ->selectSub(function ($query) {
+                $query->from('comprobante_proveedor')
+                    ->select('estado')
+                    ->whereColumn(
+                        'comprobante_proveedor.precarga_comprobante_proveedor_id',
+                        'precarga_comprobante_proveedor.id'
+                    )
+                    ->whereNull('comprobante_proveedor.deleted_at')
+                    ->orderBy('comprobante_proveedor.id')
+                    ->limit(1);
+            }, 'comprobante_proveedor_estado')
             ->join('empresa', 'empresa.id', '=', 'precarga_comprobante_proveedor.empresa_id')
             ->leftjoin('proveedor', 'proveedor.id', '=', 'precarga_comprobante_proveedor.proveedor_id')
             ->join('tipotransaccion_compra', 'tipotransaccion_compra.id', '=', 'precarga_comprobante_proveedor.tipotransaccion_compra_id');
 
         $precarga_comprobante_proveedors->whereIn('precarga_comprobante_proveedor.empresa_id', $empresas);
 
-        if (PrecargaComprobanteProveedorListadoFiltros::tieneCriteriosAplicados($filtros)) {
-            PrecargaComprobanteProveedorListadoFiltros::aplicar($precarga_comprobante_proveedors, $filtros);
-        }
+        PrecargaComprobanteProveedorListadoFiltros::aplicar($precarga_comprobante_proveedors, $filtros);
 
         $precarga_comprobante_proveedors->orderBy('precarga_comprobante_proveedor.id', 'desc');
 

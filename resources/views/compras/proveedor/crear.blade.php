@@ -52,6 +52,9 @@
                     <button type="button" id="botonform6" class="btn btn-info btn-sm">
                         <span class="fa fa-id-card"></span> CM05 / CUIT
                     </button>
+                    <button type="button" id="botonform7" class="btn btn-info btn-sm">
+                        <span class="fa fa-bolt"></span> Servicios
+                    </button>
                     <button type="button" id="btn-consulta-arca-padron-crear" class="btn btn-outline-secondary btn-sm" title="Ingresá el CUIT y consultá el padrón ARCA">
                         <i class="fa fa-search"></i> Consulta padrón ARCA
                     </button>
@@ -70,6 +73,7 @@
                     @include('compras.proveedor.form4')
                     @include('compras.proveedor.form5')
                     @include('compras.proveedor.form6')
+                    @include('compras.proveedor.form7')
                     @include('compras.proveedor.partials.arca_validacion_support', ['proveedorId' => null])
                 </div>
                 <div class="card-footer">

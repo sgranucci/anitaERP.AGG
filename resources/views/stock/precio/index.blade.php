@@ -6,6 +6,7 @@
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/listaprecio/consulta.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/precio/filtro.js")}}" type="text/javascript"></script>
 <style>
     .precio-index-toolbar {
@@ -26,10 +27,29 @@
         padding-right: 0.25rem;
         font-size: 0.8rem;
     }
-    .precio-index-toolbar .precio-toolbar-lista {
-        width: auto;
-        min-width: 6.5rem;
-        max-width: 11rem;
+    .precio-index-toolbar .precio-toolbar-lista.tm-listaprecio-campo {
+        display: inline-flex;
+        align-items: center;
+        gap: 2px;
+        max-width: 14rem;
+    }
+    .precio-index-toolbar .precio-toolbar-lista .codigolistaprecio {
+        width: 3.75rem;
+        min-width: 3.75rem;
+        padding-left: 0.25rem;
+        padding-right: 0.25rem;
+        font-size: 0.8rem;
+    }
+    .precio-index-toolbar .precio-toolbar-lista .nombrelistaprecio {
+        width: 7rem;
+        min-width: 4rem;
+        max-width: 7rem;
+        padding-left: 0.25rem;
+        padding-right: 0.25rem;
+        font-size: 0.75rem;
+    }
+    .precio-index-toolbar .precio-toolbar-lista .btn-accion-tabla {
+        color: #fff;
     }
     .precio-index-toolbar #filtro_valor {
         width: 8.5rem;
@@ -70,6 +90,17 @@
     $fechaVigenciaFiltro = $filtros['fecha_vigencia'] ?? date('Y-m-d');
     $listaprecioIdFiltro = $filtros['listaprecio_id'] ?? null;
     $ocultarPrecioCero = (bool) ($filtros['ocultar_precio_cero'] ?? true);
+    $listaFiltroCodigo = '';
+    $listaFiltroNombre = '';
+    if ($listaprecioIdFiltro !== null && (int) $listaprecioIdFiltro > 0) {
+        $listaSeleccionada = collect($listasPrecio ?? [])->first(function ($lista) use ($listaprecioIdFiltro) {
+            return (int) $lista->id === (int) $listaprecioIdFiltro;
+        });
+        if ($listaSeleccionada) {
+            $listaFiltroCodigo = (string) ($listaSeleccionada->codigo ?? '');
+            $listaFiltroNombre = (string) ($listaSeleccionada->nombre ?? '');
+        }
+    }
 @endphp
 
 @section('contenido')
@@ -89,17 +120,22 @@
                         <input type="date" id="fecha_vigencia_toolbar" name="fecha_vigencia" form="form-filtros-precio"
                             value="{{ $fechaVigenciaFiltro }}" class="form-control form-control-sm precio-toolbar-fecha"
                             title="Fecha de vigencia de referencia">
-                        <label class="precio-toolbar-label ml-1 mr-1" for="listaprecio_id_toolbar">Lista</label>
-                        <select id="listaprecio_id_toolbar" name="listaprecio_id" form="form-filtros-precio"
-                            class="form-control form-control-sm precio-toolbar-lista" title="Lista de precios">
-                            <option value="">Todas</option>
-                            @foreach($listasPrecio as $lista)
-                                <option value="{{ $lista->id }}"
-                                    {{ $listaprecioIdFiltro !== null && (int) $listaprecioIdFiltro === (int) $lista->id ? 'selected' : '' }}>
-                                    {{ $lista->nombre }}
-                                </option>
-                            @endforeach
-                        </select>
+                        <label class="precio-toolbar-label ml-1 mr-1" for="codigolistaprecio">Lista</label>
+                        <div class="tm-listaprecio-campo precio-toolbar-lista" title="Lista de precios: c&oacute;digo + Enter / F1 / lupa">
+                            <input type="hidden" name="listaprecio_id" form="form-filtros-precio"
+                                id="listaprecio_id" class="listaprecio_id"
+                                value="{{ $listaprecioIdFiltro !== null ? (int) $listaprecioIdFiltro : '' }}">
+                            <button type="button" class="btn-accion-tabla consultalistaprecio tooltipsC"
+                                title="Consultar listas (F1)">
+                                <i class="fa fa-search"></i>
+                            </button>
+                            <input type="text" class="form-control form-control-sm codigolistaprecio" id="codigolistaprecio"
+                                value="{{ $listaFiltroCodigo }}" placeholder="C&oacute;d." autocomplete="off"
+                                title="C&oacute;digo de lista (Enter / F1). Vac&iacute;o = todas">
+                            <input type="text" class="form-control form-control-sm nombrelistaprecio" id="nombrelistaprecio"
+                                value="{{ $listaFiltroNombre }}" placeholder="Todas" readonly tabindex="-1"
+                                title="{{ $listaFiltroNombre !== '' ? $listaFiltroNombre : 'Todas las listas' }}">
+                        </div>
                         @include('includes.listado.filtros_toolbar', [
                             'formId' => 'form-filtros-precio',
                             'filtroValor' => $filtros['valor'] ?? '',
@@ -150,6 +186,7 @@
                     @else
                         Se están mostrando también los registros con <strong>precio en 0</strong>.
                     @endif
+                    Lista: escriba el <strong>código</strong> (ej. 162) y pulse <kbd>Enter</kbd> o <kbd>F1</kbd> / lupa para el modal.
                     Use <strong>Filtros</strong> para criterios avanzados por campo (opcional).
                 </div>
             </div>
@@ -217,4 +254,5 @@
         </div>
     </div>
 </div>
+@include('includes.stock.modalconsultalistaprecio')
 @endsection

@@ -6,17 +6,20 @@ use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Compras\PagoproveedorListadoFiltros;
+use App\Support\Compras\PagoproveedorListadoUnificadoSupport;
 use App\Support\Compras\PortalProveedorPagosListadoFiltros;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Collection as SupportCollection;
 
 class PagoproveedorRepository implements PagoproveedorRepositoryInterface
 {
     public function __construct(
         private Pagoproveedor $model,
         private EmpresaRepositoryInterface $empresaRepository,
+        private PagoproveedorListadoUnificadoSupport $listadoUnificadoSupport,
     ) {
     }
 
@@ -63,9 +66,12 @@ class PagoproveedorRepository implements PagoproveedorRepositoryInterface
     }
 
     /**
+     * Listado unificado: OP `pagoproveedor` + OPP de Ingresos/Egresos.
+     *
      * @param  array<string, mixed>|string|null  $filtros
+     * @return LengthAwarePaginator|SupportCollection
      */
-    public function leePagoproveedor(array|string|null $filtros = [], bool $flPaginando = true): LengthAwarePaginator|Collection
+    public function leePagoproveedor(array|string|null $filtros = [], bool $flPaginando = true): LengthAwarePaginator|SupportCollection
     {
         if (is_string($filtros)) {
             $filtros = array_merge(PagoproveedorListadoFiltros::filtrosVacios(), [
@@ -75,29 +81,7 @@ class PagoproveedorRepository implements PagoproveedorRepositoryInterface
         }
         $filtros = is_array($filtros) ? $filtros : PagoproveedorListadoFiltros::filtrosVacios();
 
-        $query = $this->model->query()
-            ->select('pagoproveedor.*')
-            ->leftJoin('empresa', 'empresa.id', '=', 'pagoproveedor.empresa_id')
-            ->leftJoin('proveedor', 'proveedor.id', '=', 'pagoproveedor.proveedor_id')
-            ->with(['empresas', 'proveedores', 'monedas'])
-            ->orderByDesc('pagoproveedor.fecha')
-            ->orderByDesc('pagoproveedor.id');
-
-        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'pagoproveedor.empresa_id');
-
-        if (PagoproveedorListadoFiltros::tieneCriteriosAplicados($filtros)
-            || PagoproveedorListadoFiltros::tieneCriteriosTexto($filtros)
-            || (int) ($filtros['empresa_id'] ?? 0) > 0
-        ) {
-            PagoproveedorListadoFiltros::aplicar($query, $filtros);
-        }
-
-        $coleccion = $flPaginando ? $query->paginate(10) : $query->get();
-        foreach ($coleccion as $fila) {
-            $fila->nombreempresa = $fila->empresas->nombre ?? '';
-        }
-
-        return $coleccion;
+        return $this->listadoUnificadoSupport->listar($filtros, $flPaginando);
     }
 
     public function listarPortalProveedor(int $proveedorId, array $filtros = [], bool $paginar = true): LengthAwarePaginator|Collection

@@ -137,6 +137,26 @@ class EfeAnitaBridgeReader
     }
 
     /**
+     * Pozo acumulado (pozoacum) al inicio del período — p-vtabingo.c POZOAC_busca_pozo_acum.
+     *
+     * @return list<object>
+     */
+    public function listarPozoacum(int $empresaId, int $fechaHasta): array
+    {
+        $errores = [];
+
+        return $this->listar(
+            'caja',
+            'pozoacum',
+            'pozoa_fecha,pozoa_empresa,pozoa_importe',
+            ' WHERE pozoa_empresa='.$empresaId
+            .' AND pozoa_fecha<='.$fechaHasta,
+            $errores,
+            'pozoacum-bingo',
+        );
+    }
+
+    /**
      * Premios bingo del período (rendpremio).
      *
      * @return list<object>

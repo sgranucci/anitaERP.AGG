@@ -207,8 +207,10 @@ class Administracion_TicketController extends Controller
 
         $this->ticketService->actualizaTicket($request, $id, 'administracion');
 
-        return redirect()->route('consulta_administracion_ticket', QueryRetornoListado::desdeRequest($request, AdministracionTicketListadoFiltros::class))
-            ->with('mensaje', 'Ticket actualizado con éxito');
+        return redirect()->route(
+            'edita_administracion_ticket',
+            QueryRetornoListado::paramsRutaEditar($request, AdministracionTicketListadoFiltros::class, (int) $id)
+        )->with('mensaje', 'Ticket actualizado con éxito');
     }
 
     /**

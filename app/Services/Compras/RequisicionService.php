@@ -644,7 +644,10 @@ class RequisicionService
 
         if (! $esProvisorio) {
             try {
-                ValidacionPresupuestoPartidaCapexLineas::validar($data);
+                ValidacionPresupuestoPartidaCapexLineas::validar(
+                    $data,
+                    ValidacionPresupuestoPartidaCapexLineas::idsAsignadosDesdeLineas($existente->requisicion_articulos ?? [])
+                );
             } catch (\InvalidArgumentException $e) {
                 return ['mensaje' => 'error', 'errores' => $e->getMessage()];
             }

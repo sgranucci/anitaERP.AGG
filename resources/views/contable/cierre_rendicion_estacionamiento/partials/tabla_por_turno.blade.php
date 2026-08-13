@@ -1,5 +1,10 @@
 @php
     use App\Support\Contable\CierreRendicionEstacionamientoGrupoSupport;
+    use App\Support\Contable\CierreRendicionOrigenConsultaSupport;
+    $puedeConsultarRend = CierreRendicionOrigenConsultaSupport::puedeConsultarRendicionEstacionamiento();
+    $puedePdfRend = CierreRendicionOrigenConsultaSupport::puedeVerPdfRendicionEstacionamiento();
+    $puedeConsultarTurno = CierreRendicionOrigenConsultaSupport::puedeConsultarCierreTurnoEstacionamiento();
+    $puedePdfTurno = CierreRendicionOrigenConsultaSupport::puedeVerPdfCierreTurnoEstacionamiento();
 @endphp
 @forelse ($coleccion as $row)
 @php
@@ -25,7 +30,7 @@
         @endif
     </td>
     <td>
-        @if (can('listar-rendicion-estacionamiento-caja', false))
+        @if ($puedeConsultarRend)
             <a href="{{ route('editar_rendicionestacionamiento', ['id' => $row->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'] + ($retornoListadoQuery ?? [])) }}"
                class="text-primary" target="_blank" rel="noopener">{{ $row->codigo }}</a>
         @else
@@ -87,10 +92,25 @@
                 <i class="fa fa-unlock"></i>
             </button>
         @endif
-        @if (can('listar-rendicion-estacionamiento-caja', false))
+        @if ($puedePdfRend)
             <a href="{{ route('imprimir_rendicion_estacionamiento', ['id' => $row->id, 'inline' => 1]) }}"
                class="btn-accion-tabla tooltipsC" title="PDF rendici&oacute;n" target="_blank" rel="noopener">
                 <i class="fa fa-file-pdf-o text-danger"></i>
+            </a>
+        @endif
+        @php
+            $turnoIdFila = (int) ($row->turno_operativo_estacionamiento_id ?? 0);
+        @endphp
+        @if ($turnoIdFila > 0 && $puedeConsultarTurno)
+            <a href="{{ route('estacionamiento_cierre_turno_ver', ['id' => $turnoIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+               class="btn-accion-tabla tooltipsC" title="Consultar cierre de turno" target="_blank" rel="noopener">
+                <i class="fas fa-file-invoice text-primary"></i>
+            </a>
+        @endif
+        @if ($turnoIdFila > 0 && $puedePdfTurno)
+            <a href="{{ route('estacionamiento_cierre_turno_comprobante_cierre', ['id' => $turnoIdFila, 'inline' => 1]) }}"
+               class="btn-accion-tabla tooltipsC" title="PDF cierre de turno" target="_blank" rel="noopener">
+                <i class="fa fa-file-pdf-o"></i>
             </a>
         @endif
     </td>

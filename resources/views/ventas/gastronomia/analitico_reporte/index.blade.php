@@ -54,6 +54,8 @@
                         <p class="mb-0 small text-muted">
                             Datos desde anitaERP (venta / emisi&oacute;n gastronom&iacute;a). Costo lista 5000+mes.
                             Legajo mozo = c&oacute;digo del mozo.
+                            Art&iacute;culos a precio 0 por opcionales de promo o invitaci&oacute;n se aclaran en
+                            <strong>Obs. precio 0</strong>.
                         </p>
                     </div>
 

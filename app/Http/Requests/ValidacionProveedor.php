@@ -72,6 +72,11 @@ class ValidacionProveedor extends FormRequest
             'banco_ids' => 'nullable|array',
             'mediopago_ids' => 'nullable|array',
             'emails' => 'nullable|array',
+            'servicios_clientes' => 'nullable|array',
+            'servicios_detalles' => 'nullable|array',
+            'servicios_empresa_ids' => 'nullable|array',
+            'servicios_clientes.*' => 'nullable|string|max:255',
+            'servicios_detalles.*' => 'nullable|string|max:255',
         ];
 
         if (config('proveedor.filtro_empresa')) {

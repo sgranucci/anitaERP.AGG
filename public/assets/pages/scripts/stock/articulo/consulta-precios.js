@@ -9,6 +9,9 @@ $(function () {
 	var articuloIdActivo = 0;
 	var articuloSkuActivo = '';
 	var articuloDescActivo = '';
+	var filasCache = [];
+	var paginaActual = 1;
+	var POR_PAGINA = 8;
 
 	function fmtNum(n) {
 		if (n === null || n === undefined || n === '') {
@@ -46,6 +49,18 @@ $(function () {
 		return 'index';
 	}
 
+	/** Conserva filtros/página del index de artículos al ir a crear/editar precio. */
+	function retornoListadoQsActual() {
+		if (detectarOrigenRetorno() !== 'index') {
+			return '';
+		}
+		var params = new URLSearchParams(window.location.search || '');
+		params.delete('abrir_consulta_precios');
+		params.delete('articulo_id');
+		params.delete('fecha_referencia');
+		return params.toString();
+	}
+
 	function urlPrecioConRetornoArticulo(baseUrl, articuloId, fechaRef, listaprecioId) {
 		if (!baseUrl || !articuloId) {
 			return baseUrl;
@@ -65,11 +80,19 @@ $(function () {
 		if (listaprecioId) {
 			url += '&listaprecio_id=' + encodeURIComponent(listaprecioId);
 		}
+		var listadoQs = retornoListadoQsActual();
+		if (listadoQs) {
+			url += '&retorno_listado_qs=' + encodeURIComponent(listadoQs);
+		}
 		return url;
 	}
 
 	function urlEditarPrecioConRetorno(baseUrl, articuloId, fechaRef) {
 		return urlPrecioConRetornoArticulo(baseUrl, articuloId, fechaRef, '');
+	}
+
+	function listaIdFiltro() {
+		return $.trim($('#consultaprecioarticuloListaId').val() || '');
 	}
 
 	function actualizarBotonNuevoPrecio(data, fechaRef, listaprecioId) {
@@ -90,19 +113,126 @@ $(function () {
 			.removeClass('d-none');
 	}
 
+	function totalPaginas() {
+		return Math.max(1, Math.ceil(filasCache.length / POR_PAGINA) || 1);
+	}
+
+	function actualizarPaginador() {
+		var total = filasCache.length;
+		var pages = totalPaginas();
+		if (paginaActual > pages) {
+			paginaActual = pages;
+		}
+		if (paginaActual < 1) {
+			paginaActual = 1;
+		}
+
+		var desde = total === 0 ? 0 : (paginaActual - 1) * POR_PAGINA + 1;
+		var hasta = Math.min(paginaActual * POR_PAGINA, total);
+
+		$('#consultaprecioarticuloPaginadorInfo').text(
+			total === 0
+				? 'Sin registros'
+				: 'Mostrando ' + desde + '–' + hasta + ' de ' + total
+		);
+		$('#consultaprecioarticuloPagLabel').text(paginaActual + ' / ' + pages);
+		$('#consultaprecioarticuloPagPrev').prop('disabled', paginaActual <= 1 || total === 0);
+		$('#consultaprecioarticuloPagNext').prop('disabled', paginaActual >= pages || total === 0);
+	}
+
+	function renderFilasPagina() {
+		var $body = $('#consultaprecioarticuloBody');
+		$body.empty();
+
+		if (!filasCache.length) {
+			var listaprecioId = listaIdFiltro();
+			var msgVacio =
+				listaprecioId !== ''
+					? 'Este artículo no tiene precios cargados en la lista seleccionada.'
+					: 'Este artículo no tiene precios cargados en ninguna lista.';
+			$body.append(
+				'<tr><td colspan="8" class="text-center text-muted">' + esc(msgVacio) + '</td></tr>'
+			);
+			actualizarPaginador();
+			return;
+		}
+
+		var start = (paginaActual - 1) * POR_PAGINA;
+		var slice = filasCache.slice(start, start + POR_PAGINA);
+		var fechaRef = $('#consultaprecioarticuloFechaRef').val() || hoyIso();
+
+		slice.forEach(function (r) {
+			var $tr = $('<tr></tr>');
+			if (r.es_vigente) {
+				$tr.addClass('table-info');
+			}
+
+			var listaLabel = esc(r.listaprecio_nombre || '');
+			if (r.es_vigente) {
+				listaLabel += ' <span class="badge badge-primary ml-1">Vigente</span>';
+			}
+
+			$tr.append($('<td></td>').text(r.listaprecio_codigo || ''));
+			$tr.append($('<td></td>').html(listaLabel));
+			$tr.append($('<td></td>').text(r.fechavigencia_fmt || r.fechavigencia || ''));
+			$tr.append(
+				$('<td class="text-right"></td>').html('<strong>' + fmtNum(r.precio) + '</strong>')
+			);
+			$tr.append($('<td class="text-right"></td>').text(fmtNum(r.precioanterior)));
+			$tr.append($('<td></td>').text(r.moneda_nombre || ''));
+			$tr.append($('<td></td>').text(r.usuario_nombre || ''));
+
+			var $acc = $('<td class="text-nowrap"></td>');
+			if (r.puede_editar && r.editar_url) {
+				var hrefEditar = urlEditarPrecioConRetorno(
+					r.editar_url,
+					articuloIdActivo,
+					fechaRef
+				);
+				$acc.append(
+					$('<a></a>')
+						.attr('href', hrefEditar)
+						.addClass('btn-accion-tabla tooltipsC')
+						.attr('title', 'Editar precio')
+						.html('<i class="fa fa-edit"></i>')
+				);
+			}
+			$tr.append($acc);
+			$body.append($tr);
+		});
+
+		actualizarPaginador();
+		$('.consultaprecioarticulo-tabla-wrap').scrollTop(0);
+	}
+
 	function abrirModalConsulta(articuloId, sku, desc, fechaRef, listaprecioId) {
 		articuloIdActivo = articuloId;
 		articuloSkuActivo = sku || '';
 		articuloDescActivo = desc || '';
+		filasCache = [];
+		paginaActual = 1;
 
 		$('#consultaprecioarticuloTitulo').text(
 			'Precios — ' + articuloSkuActivo + (articuloDescActivo ? ' — ' + articuloDescActivo : '')
 		);
 		$('#consultaprecioarticuloFechaRef').val(fechaRef || hoyIso());
-		$('#consultaprecioarticuloListaId').val(listaprecioId ? String(listaprecioId) : '');
+
+		var $campoLista = $('#consultaprecioarticuloModal .tm-listaprecio-campo');
+		$campoLista.find('.listaprecio_id').val(listaprecioId ? String(listaprecioId) : '');
+		$campoLista.find('.codigolistaprecio').val('');
+		$campoLista.find('.nombrelistaprecio').val('');
+		if (listaprecioId && typeof resolverPorCodigoListaprecio === 'function') {
+			// Si viene ID, mostrar datos vía lectura por id numérico (el endpoint acepta id)
+			resolverPorCodigoListaprecio(String(listaprecioId), $campoLista, {
+				notificar: false,
+				silencioso: true,
+			});
+		}
+
 		$('#consultaprecioarticuloBody').empty();
 		$('#consultaprecioarticuloError').addClass('d-none').text('');
 		$('#consultaprecioarticuloNuevo').addClass('d-none');
+		actualizarPaginador();
 		$('#consultaprecioarticuloModal').modal('show');
 		cargarConsulta();
 	}
@@ -117,7 +247,7 @@ $(function () {
 		var $err = $('#consultaprecioarticuloError');
 		var $load = $('#consultaprecioarticuloCargando');
 		var fechaRef = $('#consultaprecioarticuloFechaRef').val() || hoyIso();
-		var listaprecioId = $('#consultaprecioarticuloListaId').val() || '';
+		var listaprecioId = listaIdFiltro();
 
 		$err.addClass('d-none').text('');
 		$body.empty();
@@ -145,65 +275,21 @@ $(function () {
 
 				var ref = data.fecha_referencia || fechaRef;
 				$sub.text(
-					'Referencia de vigencia: ' +
+					'Referencia: ' +
 						ref +
-						'. Historial por lista de precios (vigente hacia atrás). La fila resaltada es el precio vigente a esa fecha en cada lista.'
+						'. Historial por lista (vigente hacia atrás). Fila resaltada = vigente a esa fecha.'
 				);
 
-				var filas = data.filas || [];
-				if (!filas.length) {
-					var msgVacio = listaprecioId !== ''
-						? 'Este artículo no tiene precios cargados en la lista seleccionada.'
-						: 'Este artículo no tiene precios cargados en ninguna lista.';
-					$body.append(
-						'<tr><td colspan="8" class="text-center text-muted">' + esc(msgVacio) + '</td></tr>'
-					);
-					return;
-				}
-
-				filas.forEach(function (r) {
-					var $tr = $('<tr></tr>');
-					if (r.es_vigente) {
-						$tr.addClass('table-info');
-					}
-
-					var listaLabel = esc(r.listaprecio_nombre || '');
-					if (r.es_vigente) {
-						listaLabel += ' <span class="badge badge-primary ml-1">Vigente</span>';
-					}
-
-					$tr.append($('<td></td>').html(listaLabel));
-					$tr.append($('<td></td>').text(esc(r.listaprecio_codigo || '')));
-					$tr.append($('<td></td>').text(esc(r.fechavigencia_fmt || r.fechavigencia || '')));
-					$tr.append(
-						$('<td class="text-right"></td>').html('<strong>' + fmtNum(r.precio) + '</strong>')
-					);
-					$tr.append($('<td class="text-right"></td>').text(fmtNum(r.precioanterior)));
-					$tr.append($('<td></td>').text(esc(r.moneda_nombre || '')));
-					$tr.append($('<td></td>').text(esc(r.usuario_nombre || '')));
-
-					var $acc = $('<td class="text-nowrap"></td>');
-					if (r.puede_editar && r.editar_url) {
-						var hrefEditar = urlEditarPrecioConRetorno(
-							r.editar_url,
-							articuloIdActivo,
-							fechaRef
-						);
-						$acc.append(
-							$('<a></a>')
-								.attr('href', hrefEditar)
-								.addClass('btn-accion-tabla tooltipsC')
-								.attr('title', 'Editar precio')
-								.html('<i class="fa fa-edit"></i>')
-						);
-					}
-					$tr.append($acc);
-					$body.append($tr);
-				});
+				filasCache = data.filas || [];
+				paginaActual = 1;
+				renderFilasPagina();
 			})
 			.fail(function (xhr) {
 				$load.addClass('d-none');
 				$('#consultaprecioarticuloNuevo').addClass('d-none');
+				filasCache = [];
+				paginaActual = 1;
+				renderFilasPagina();
 				var msg =
 					(xhr.responseJSON && xhr.responseJSON.message) ||
 					xhr.statusText ||
@@ -243,6 +329,18 @@ $(function () {
 		}, 300);
 	}
 
+	if (typeof activa_eventos_consultalistaprecio === 'function') {
+		activa_eventos_consultalistaprecio();
+	}
+
+	window.onListaprecioSeleccionado = function () {
+		if (!$('#consultaprecioarticuloModal').hasClass('show')) {
+			return;
+		}
+		paginaActual = 1;
+		cargarConsulta();
+	};
+
 	$(document).on('click', '.consultapreciosarticulo', function (event) {
 		event.preventDefault();
 		var articuloId = parseInt($(this).data('articulo-id'), 10) || 0;
@@ -259,18 +357,64 @@ $(function () {
 	});
 
 	$('#consultaprecioarticuloRecargar').on('click', function () {
+		var $campo = $('#consultaprecioarticuloModal .tm-listaprecio-campo');
+		var codigo = $.trim($campo.find('.codigolistaprecio').val() || '');
+
+		if (codigo === '') {
+			$campo.find('.listaprecio_id').val('');
+			$campo.find('.nombrelistaprecio').val('');
+			paginaActual = 1;
+			cargarConsulta();
+			return;
+		}
+
+		if (typeof resolverPorCodigoListaprecio !== 'function') {
+			paginaActual = 1;
+			cargarConsulta();
+			return;
+		}
+
+		resolverPorCodigoListaprecio(codigo, $campo, {
+			notificar: false,
+			silencioso: false,
+			onDone: function () {
+				paginaActual = 1;
+				cargarConsulta();
+			},
+		});
+	});
+
+	$('#consultaprecioarticuloFechaRef').on('change', function () {
+		paginaActual = 1;
 		cargarConsulta();
 	});
 
-	$(document).on('change', '#consultaprecioarticuloListaId', function () {
-		cargarConsulta();
+	$('#consultaprecioarticuloPagPrev').on('click', function () {
+		if (paginaActual <= 1) {
+			return;
+		}
+		paginaActual -= 1;
+		renderFilasPagina();
+	});
+
+	$('#consultaprecioarticuloPagNext').on('click', function () {
+		if (paginaActual >= totalPaginas()) {
+			return;
+		}
+		paginaActual += 1;
+		renderFilasPagina();
 	});
 
 	$('#consultaprecioarticuloModal').on('hidden.bs.modal', function () {
 		articuloIdActivo = 0;
 		articuloSkuActivo = '';
 		articuloDescActivo = '';
-		$('#consultaprecioarticuloListaId').val('');
+		filasCache = [];
+		paginaActual = 1;
+		var $campoLista = $(this).find('.tm-listaprecio-campo');
+		$campoLista.find('.listaprecio_id').val('');
+		$campoLista.find('.codigolistaprecio').val('');
+		$campoLista.find('.nombrelistaprecio').val('');
 	});
 
 	procesarRetornoConsultaPrecios();

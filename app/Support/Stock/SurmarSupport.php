@@ -2,6 +2,8 @@
 
 namespace App\Support\Stock;
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
+
 /**
  * Gate y constantes del módulo stock/producción Surmar (El Bierzo).
  * Empresa operativa fija id=3 en Bierzo. En AGG el id 3 es REBISCO: no tratarlo como Surmar.
@@ -32,7 +34,7 @@ final class SurmarSupport
     /** Entorno El Bierzo (config app.empresa). AGG u otros nunca son Surmar. */
     public static function esEntornoBierzo(): bool
     {
-        return strtoupper((string) config('app.empresa')) === 'EL BIERZO';
+        return EntornoEmpresaSupport::esElBierzo();
     }
 
     /**

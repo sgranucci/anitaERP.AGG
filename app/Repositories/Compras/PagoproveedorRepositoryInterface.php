@@ -5,6 +5,7 @@ namespace App\Repositories\Compras;
 use App\Models\Compras\Pagoproveedor;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Collection as SupportCollection;
 
 interface PagoproveedorRepositoryInterface
 {
@@ -19,9 +20,12 @@ interface PagoproveedorRepositoryInterface
     public function findOrFail(int $id): Pagoproveedor;
 
     /**
+     * Listado unificado: OP `pagoproveedor` + OPP de Ingresos/Egresos.
+     *
      * @param  array<string, mixed>|string|null  $filtros
+     * @return LengthAwarePaginator|SupportCollection
      */
-    public function leePagoproveedor(array|string|null $filtros = [], bool $flPaginando = true): LengthAwarePaginator|Collection;
+    public function leePagoproveedor(array|string|null $filtros = [], bool $flPaginando = true): LengthAwarePaginator|SupportCollection;
 
     /**
      * Pagos visibles en el portal de proveedores (sin precargas internas).

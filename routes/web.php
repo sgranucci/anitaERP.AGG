@@ -84,6 +84,7 @@ Route::group(['prefix' => 'admin', 'namespace' => 'Admin', 'middleware' => ['aut
     Route::delete('rol/{id}', 'RolController@eliminar')->name('eliminar_rol');
     /* RUTAS MENU_ROL */
     Route::get('menu-rol/permisos', 'MenuRolController@permisosPorMenu')->name('menu_rol_permisos');
+    Route::get('menu-rol/usuarios', 'MenuRolController@usuariosPorRol')->name('menu_rol_usuarios');
     Route::get('menu-rol', 'MenuRolController@index')->name('menu_rol');
     Route::post('menu-rol', 'MenuRolController@guardar')->name('guardar_menu_rol');
     /* RUTAS PERMISO_ROL */
@@ -1138,6 +1139,8 @@ Route::get('contable/cierres-turno-gastronomia/cierre/{id}/comprobante', 'Contab
 Route::get('contable/cierres-turno-gastronomia/parcial/{id}/comprobante', 'Contable\CierreTurnoGastronomiaContableController@comprobanteParcial')->name('cierres_turno_gastronomia_contable_comprobante_parcial');
 
 Route::get('contable/cierre-rendiciones-bingo', 'Contable\CierreRendicionBingoController@index')->name('cierre_rendicion_bingo_contable');
+Route::get('contable/cierre-rendiciones-bingo/conciliacion-flash', 'Contable\CierreRendicionBingoController@conciliacionFlash')->name('cierre_rendicion_bingo_conciliacion_flash');
+Route::get('contable/listar-cierre-rendiciones-bingo-conciliacion-flash/{formato?}', 'Contable\CierreRendicionBingoController@listarConciliacionFlash')->name('listar_cierre_rendicion_bingo_conciliacion_flash');
 Route::get('contable/listar-cierre-rendiciones-bingo/{formato?}/{busqueda?}', 'Contable\CierreRendicionBingoController@listar')->name('listar_cierre_rendicion_bingo_contable');
 Route::get('contable/cierre-rendiciones-bingo/api/pendientes-cierre', 'Contable\CierreRendicionBingoController@apiPendientesCierre')->name('api_cierre_rendicion_bingo_pendientes');
 Route::post('contable/cierre-rendiciones-bingo/api/preview-asiento', 'Contable\CierreRendicionBingoController@apiPreviewAsiento')->name('api_cierre_rendicion_bingo_preview');
@@ -1374,6 +1377,8 @@ Route::get('stock/reporte-transferencias-pendientes', 'Stock\TransferenciaPendie
 Route::get('stock/listar-reporte-transferencias-pendientes/{formato?}', 'Stock\TransferenciaPendienteReporteController@exportar')->name('listar_reporte_transferencias_pendientes');
 Route::get('stock/informes-de-stock/existencias-por-deposito', 'Stock\ExistenciasDepositoReporteController@index')->name('reporte_existencias_deposito');
 Route::get('stock/listar-reporte-existencias-deposito/{formato?}', 'Stock\ExistenciasDepositoReporteController@exportar')->name('listar_reporte_existencias_deposito');
+Route::get('stock/reporte-recepcion-proveedor', 'Stock\RecepcionProveedorReporteController@index')->name('reporte_recepcion_proveedor');
+Route::get('stock/listar-reporte-recepcion-proveedor/{formato?}', 'Stock\RecepcionProveedorReporteController@exportar')->name('listar_reporte_recepcion_proveedor');
 
 /*
  * Préstamos de materiales
@@ -2608,7 +2613,7 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::get('caja/lista-rendicion-maquina/{formato?}/{busqueda?}', 'Caja\RendicionMaquinaController@listar')->name('lista_rendicion_maquina');
     Route::get('caja/rendicion-maquina/crear', 'Caja\RendicionMaquinaController@crear')->name('crear_rendicion_maquina');
     Route::get('caja/rendicion-maquina/{id}/imprimir', 'Caja\RendicionMaquinaController@imprimir')->name('imprimir_rendicion_maquina');
-    Route::get('caja/rendicion-maquina/{id}/editar', 'Caja\RendicionMaquinaController@editar')->name('editar_rendicion_maquina');
+    Route::get('caja/rendicion-maquina/{id}/editar', 'Caja\RendicionMaquinaController@editar')->name('editar_rendicion_maquina')->middleware('modo.consulta');
     Route::post('caja/rendicion-maquina/api/calcular', 'Caja\RendicionMaquinaController@apiCalcular')->name('rendicion_maquina_api_calcular');
     Route::post('caja/rendicion-maquina/api/guardar', 'Caja\RendicionMaquinaController@apiGuardar')->name('rendicion_maquina_api_guardar');
     Route::post('caja/rendicion-maquina/api/traer-wigos', 'Caja\RendicionMaquinaController@apiTraerWigos')->name('rendicion_maquina_api_traer_wigos');
@@ -2717,7 +2722,7 @@ Route::get('caja/listarendiciongastronomia/{formato?}/{busqueda?}', 'Caja\Rendic
 Route::get('caja/rendiciongastronomia/crear/{caja?}', 'Caja\RendicionGastronomiaController@crear')->name('crear_rendiciongastronomia');
 Route::post('caja/rendiciongastronomia', 'Caja\RendicionGastronomiaController@guardar')->name('guardar_rendiciongastronomia');
 Route::get('caja/rendiciongastronomia/{id}/imprimir', 'Caja\RendicionGastronomiaController@imprimir')->name('imprimir_rendicion_gastronomia');
-Route::get('caja/rendiciongastronomia/{id}/editar', 'Caja\RendicionGastronomiaController@editar')->name('editar_rendiciongastronomia');
+Route::get('caja/rendiciongastronomia/{id}/editar', 'Caja\RendicionGastronomiaController@editar')->name('editar_rendiciongastronomia')->middleware('modo.consulta');
 Route::put('caja/rendiciongastronomia/{id}', 'Caja\RendicionGastronomiaController@actualizar')->name('actualizar_rendiciongastronomia');
 Route::delete('caja/rendiciongastronomia/{id}', 'Caja\RendicionGastronomiaController@eliminar')->name('eliminar_rendiciongastronomia');
 Route::post('caja/rendiciongastronomia/api/datos-turno', 'Caja\RendicionGastronomiaController@apiDatosTurno')->name('api_rendicion_gastronomia_datos_turno');
@@ -2731,7 +2736,7 @@ Route::get('caja/listarrendicionmaquinavending/{formato?}/{busqueda?}', 'Caja\Re
 Route::get('caja/rendicionmaquinavending/crear/{caja?}', 'Caja\RendicionMaquinavendingController@crear')->name('crear_rendicionmaquinavending');
 Route::post('caja/rendicionmaquinavending', 'Caja\RendicionMaquinavendingController@guardar')->name('guardar_rendicionmaquinavending');
 Route::get('caja/rendicionmaquinavending/{id}/imprimir', 'Caja\RendicionMaquinavendingController@imprimir')->name('imprimir_rendicion_maquinavending');
-Route::get('caja/rendicionmaquinavending/{id}/editar', 'Caja\RendicionMaquinavendingController@editar')->name('editar_rendicionmaquinavending');
+Route::get('caja/rendicionmaquinavending/{id}/editar', 'Caja\RendicionMaquinavendingController@editar')->name('editar_rendicionmaquinavending')->middleware('modo.consulta');
 Route::put('caja/rendicionmaquinavending/{id}', 'Caja\RendicionMaquinavendingController@actualizar')->name('actualizar_rendicionmaquinavending');
 Route::delete('caja/rendicionmaquinavending/{id}', 'Caja\RendicionMaquinavendingController@eliminar')->name('eliminar_rendicionmaquinavending');
 Route::post('caja/rendicionmaquinavending/api/consulta-rendicion', 'Caja\RendicionMaquinavendingController@apiConsultaRendicionVentas')->name('api_rendicion_maquinavending_consulta_rendicion');
@@ -2750,7 +2755,7 @@ Route::get('caja/listarendicionestacionamiento/{formato?}/{busqueda?}', 'Caja\Re
 Route::get('caja/rendicionestacionamiento/crear/{caja?}', 'Caja\RendicionEstacionamientoController@crear')->name('crear_rendicionestacionamiento');
 Route::post('caja/rendicionestacionamiento', 'Caja\RendicionEstacionamientoController@guardar')->name('guardar_rendicionestacionamiento');
 Route::get('caja/rendicionestacionamiento/{id}/imprimir', 'Caja\RendicionEstacionamientoController@imprimir')->name('imprimir_rendicion_estacionamiento');
-Route::get('caja/rendicionestacionamiento/{id}/editar', 'Caja\RendicionEstacionamientoController@editar')->name('editar_rendicionestacionamiento');
+Route::get('caja/rendicionestacionamiento/{id}/editar', 'Caja\RendicionEstacionamientoController@editar')->name('editar_rendicionestacionamiento')->middleware('modo.consulta');
 Route::put('caja/rendicionestacionamiento/{id}', 'Caja\RendicionEstacionamientoController@actualizar')->name('actualizar_rendicionestacionamiento');
 Route::delete('caja/rendicionestacionamiento/{id}', 'Caja\RendicionEstacionamientoController@eliminar')->name('eliminar_rendicionestacionamiento');
 Route::post('caja/rendicionestacionamiento/api/datos-turno', 'Caja\RendicionEstacionamientoController@apiDatosTurno')->name('api_rendicion_estacionamiento_datos_turno');
@@ -3031,6 +3036,9 @@ Route::delete('compras/concepto_ivacompra/{id}', 'Compras\Concepto_IvacompraCont
 Route::get('compras/tipotransaccion_compra', 'Compras\Tipotransaccion_CompraController@index')->name('tipotransaccion_compra');
 Route::get('compras/tipotransaccion_compra/crear', 'Compras\Tipotransaccion_CompraController@crear')->name('crear_tipotransaccion_compra');
 Route::post('compras/tipotransaccion_compra', 'Compras\Tipotransaccion_CompraController@guardar')->name('guardar_tipotransaccion_compra');
+Route::post('compras/tipotransaccion_compra/consultatipotransaccion', 'Compras\Tipotransaccion_CompraController@consultaTipotransaccionCompra')->name('consulta_tipotransaccion_compra');
+Route::get('compras/tipotransaccion_compra/leer/{abreviatura}', 'Compras\Tipotransaccion_CompraController@leeUnTipotransaccionPorAbreviatura')->name('leer_tipotransaccion_compra_abreviatura');
+Route::get('compras/tipotransaccion_compra/{id}/conceptos-iva', 'Compras\Tipotransaccion_CompraController@conceptosIvaPorTipo')->name('conceptos_iva_tipotransaccion_compra');
 Route::get('compras/tipotransaccion_compra/{id}/editar', 'Compras\Tipotransaccion_CompraController@editar')->name('editar_tipotransaccion_compra');
 Route::put('compras/tipotransaccion_compra/{id}', 'Compras\Tipotransaccion_CompraController@actualizar')->name('actualizar_tipotransaccion_compra');
 Route::delete('compras/tipotransaccion_compra/{id}', 'Compras\Tipotransaccion_CompraController@eliminar')->name('eliminar_tipotransaccion_compra');
@@ -3583,6 +3591,9 @@ Route::get('ticket/cambiar_tecnico/{ticket_tarea_id}/{tecnico_ticket_id}', 'Tick
 Route::get('ticket/finalizar_tarea/{ticket_tarea_id}/{fechafinalizacion}/{tiempoinsumido}', 'Ticket\Administracion_TicketController@finalizarTarea')->name('finalizar_tarea');
 Route::post('ticket/cambiar_estado_tarea/{ticket_tarea_id}', 'Ticket\Administracion_TicketController@cambiarEstadoTarea')->name('cambia_estado_tarea');
 Route::post('ticket/administracion_ticket/limpiafiltro', 'Ticket\Administracion_TicketController@limpiafiltro')->name('administracion_ticket_limpiafiltro');
+
+Route::get('ticket/informe-estadistico', 'Ticket\TicketEstadisticaReporteController@index')->name('informe_estadistico_ticket');
+Route::get('ticket/listar-informe-estadistico-ticket/{formato}', 'Ticket\TicketEstadisticaReporteController@exportar')->name('listar_informe_estadistico_ticket');
 
 /*
  * Salas

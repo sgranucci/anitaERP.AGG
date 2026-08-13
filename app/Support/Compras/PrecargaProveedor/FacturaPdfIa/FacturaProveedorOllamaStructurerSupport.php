@@ -95,7 +95,7 @@ final class FacturaProveedorOllamaStructurerSupport
 
         if ($usaModelfileAnita) {
             return <<<PROMPT
-Ejemplos reales del mismo proveedor (referencia de conceptos e importes; tipo FGA/FIB lo resuelve el ERP):
+Ejemplos reales del mismo proveedor (referencia de conceptos e importes; tipo FGA/FIB/FIS lo resuelve el ERP vía listaConcepto — servicios/medidores → FIS/FNS):
 {$bloqueCorpus}
 
 Heurísticas previas (pueden tener errores — corregí con el OCR). Incluyen `lineas` (conceptos IVA) y `articulos` (ítems):
@@ -118,8 +118,9 @@ EXTRAÉ DOS COSAS DISTINTAS:
 2) Ítems de mercadería del detalle (`articulos`): código/SKU, descripción, cantidad y precio unitario.
 No mezcles artículos dentro de `lineas` ni conceptos IVA dentro de `articulos`.
 
-IMPORTANTE: El tipo contable fino (FGA, FIA, CGA, DIB, etc.) NO lo deduzcas del nombre de archivo:
+IMPORTANTE: El tipo contable fino (FGA, FIA, FIS, FNS, CGA, DIB, etc.) NO lo deduzcas del nombre de archivo:
 el ERP lo arma con la OC + centro de costo (listaConcepto).
+Si el proveedor tiene medidores/servicios cargados en anitaERP, listaConcepto fuerza tipo Servicio (FIS/FNS/…).
 En JSON usá solo el tipo GENÉRICO AFIP:
 - "FC" = Factura
 - "ND" = Nota de débito (texto "Nota de Débito", N/D, código 002/007/012…)
@@ -134,6 +135,8 @@ Número de factura:
 - Si viene COMPACTO sin guiones (muy común): "Factura N° 0070A00369548"
   → sucursal=70, letra="A", numero_factura=369548 (NO juntes los dígitos en un solo número).
 fecha_factura: ISO YYYY-MM-DD. Si el PDF dice 05.08.2026 o 05/08/2026 → "2026-08-05".
+fecha_vencimiento: vencimiento de PAGO comercial (Fecha de vencimiento / Vencimiento / Vto. pago). NO confundir con fecha_vto_cai_cae.
+fecha_vto_cai_cae: solo el vencimiento del CAE/CAI/CAEA.
 
 Ejemplos reales del mismo proveedor (agente externo ya procesado — usá como referencia de conceptos e importes):
 {$bloqueCorpus}
@@ -150,6 +153,7 @@ Respondé ÚNICAMENTE JSON válido con esta forma:
   "fecha_factura": "2026-08-05",
   "numerocae": "12345678901234",
   "fecha_vto_cai_cae": "2026-02-15",
+  "fecha_vencimiento": "2026-08-20",
   "subtotal": 1000.00,
   "total": 1210.00,
   "moneda": "PESOS",
@@ -166,7 +170,11 @@ Respondé ÚNICAMENTE JSON válido con esta forma:
 tipos de linea (conceptos) permitidos: neto, iva, exento, no_gravado, percepcion_iva, percepcion_iibb, percepcion_ganancias, interno, otro_tributo, retencion_iva, retencion_iibb.
 Si solo hay TOTAL final sin desglose neto/IVA (o Imp. Exento = Total), una sola línea tipo "exento" con importe = total (subtotal = total). No inventes IVA.
 En articulos: si no hay código interno, usá el código del proveedor en sku y codigo_proveedor. Si no hay detalle de ítems, devolvé articulos: [].
-moneda: PESOS, DOLARES o EUROS.
+moneda: SOLO "PESOS", "DOLARES" o "EUROS".
+IMPORTANTE Argentina: el símbolo "$" significa PESOS, NUNCA dólares.
+"Son Pesos:", "Importe $" y el pie "tipo de cambio … por cada dolar" son PESOS (solo referencia impositiva).
+Solo poné "DOLARES" si hay "Moneda: USD/U\$S", importes con U\$S/USD, o "facturado/importe en dólares".
+La palabra "dólar" suelta en el pie NO alcanza. Sin señal fuerte → "PESOS" y cotizacion=1.
 
 Heurísticas previas (pueden tener errores, corregí con el OCR):
 {$hints}

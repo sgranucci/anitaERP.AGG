@@ -1048,6 +1048,42 @@ class MayorConceptoAnitaBridgeReader
     }
 
     /**
+     * Batch: aplicaciones que referencian COM por nro (sin filtrar letra/sucursal).
+     *
+     * @param  list<int>  $nrosCom
+     * @return list<object>
+     */
+    public function cargarAplicpedPorReferenciasCom(array $nrosCom, array &$errores): array
+    {
+        $nros = array_values(array_unique(array_filter(array_map(
+            static fn ($n) => (int) $n,
+            $nrosCom,
+        ), static fn (int $n) => $n > 0)));
+
+        if ($nros === []) {
+            return [];
+        }
+
+        $filas = [];
+        foreach (array_chunk($nros, 80) as $lote) {
+            $in = implode(',', $lote);
+            $filas = array_merge(
+                $filas,
+                $this->listar(
+                    'compras',
+                    'aplicped',
+                    'aplp_proveedor,aplp_tipo,aplp_letra,aplp_sucursal,aplp_nro,aplp_ref_tipo,aplp_ref_letra,aplp_ref_sucursal,aplp_ref_nro,aplp_orden,aplp_cantfact',
+                    ' WHERE aplp_ref_tipo="COM" AND aplp_ref_nro IN ('.$in.')',
+                    $errores,
+                    'aplicped-ref-com-batch',
+                ),
+            );
+        }
+
+        return $filas;
+    }
+
+    /**
      * Concepto de compras desde OC (PEP) vía artículo → ctaconc (busca_concepto_oc en l-mayorconc.c).
      */
     public function conceptoDesdeOrdenCompra(int $empresaId, int $nroOc, array &$errores): int

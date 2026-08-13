@@ -217,6 +217,16 @@ $(function () {
         );
         $('#precarga-pdf-ia-cae').text(res.numerocae || (data.extraccion && data.extraccion.numerocae) || '');
         $('#precarga-pdf-ia-fecha').text(res.fecha_factura || '');
+        $('#precarga-pdf-ia-vencimiento').text(
+            res.fecha_vencimiento
+            || (data.extraccion && data.extraccion.fecha_vencimiento)
+            || '—'
+        );
+        $('#precarga-pdf-ia-vto-cae').text(
+            res.fecha_vto_cai_cae
+            || (data.extraccion && data.extraccion.fecha_vto_cai_cae)
+            || '—'
+        );
         var estadoArca = '—';
         if (constArca.ejecutada === false) {
             estadoArca = 'No ejecutada';

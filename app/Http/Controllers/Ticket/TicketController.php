@@ -128,7 +128,7 @@ class TicketController extends Controller
     {
         can('crear-ticket');
 
-        $areadestino_query = $this->areadestinoRepository->all();
+        $areadestino_query = $this->areadestinoRepository->allParaPedido();
         $sector_query = $this->sector_ticketRepository->all();
         $sala_query = $this->salaRepository->all();
 
@@ -162,7 +162,7 @@ class TicketController extends Controller
         if (! \App\Support\Ticket\TicketAlcanceCentrocostoSupport::puedeAccederTicketCarga($data)) {
             abort(403, 'No tiene acceso a este ticket.');
         }
-        $areadestino_query = $this->areadestinoRepository->all();
+        $areadestino_query = $this->areadestinoRepository->allParaPedido();
         $sector_query = $this->sector_ticketRepository->all();
         $sala_query = $this->salaRepository->all();
         $estado_enum = Ticket_Estado::$enumEstado;

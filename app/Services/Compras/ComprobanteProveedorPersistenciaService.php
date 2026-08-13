@@ -22,14 +22,19 @@ use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\ComprobanteProveedorLineasFacturaSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
+use App\Support\Compras\ComprobanteProveedorMonedaMotor;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
+use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
+use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
+use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use App\Support\Stock\ArticuloSkuMatchSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use RuntimeException;
+use Throwable;
 
 class ComprobanteProveedorPersistenciaService
 {
@@ -46,6 +51,7 @@ class ComprobanteProveedorPersistenciaService
         private Comprobante_Proveedor_ArchivoRepositoryInterface $archivoRepository,
         private ComprobanteProveedorControlesLegajoService $controlesLegajo,
         private ComprobanteProveedorComplianceValidacionService $complianceValidacion,
+        private ComprobanteProveedorContabilizarService $contabilizarService,
     ) {}
 
     /** @return list<string> */
@@ -74,6 +80,15 @@ class ComprobanteProveedorPersistenciaService
             $payload['tipo_autorizacion'] ?? null,
         );
 
+        ComprobanteProveedorAnitaCompraExistenciaSupport::assertNoDuplicadoEnAnita(
+            (int) $payload['empresa_id'],
+            (int) $payload['proveedor_id'],
+            (int) $payload['tipotransaccion_compra_id'],
+            (string) $payload['letra'],
+            (int) $payload['sucursal'],
+            (int) $payload['numerocomprobante'],
+        );
+
         $this->ejecutarControlesDesdeRequest($request, $payload, null);
 
         $comprobante = $this->comprobanteRepository->create($payload);
@@ -84,6 +99,11 @@ class ComprobanteProveedorPersistenciaService
         $this->sincronizarRecepciones($request, $comprobante);
         $this->registrarEstadoInicial($comprobante);
         $this->vincularArchivoPrecarga($comprobante);
+        $this->marcarPrecargaGenerada(
+            isset($payload['precarga_comprobante_proveedor_id'])
+                ? (int) $payload['precarga_comprobante_proveedor_id']
+                : null
+        );
         $this->archivoRepository->sincronizarDesdeRequest($request, (int) $comprobante->id);
 
         return $comprobante->fresh([
@@ -95,13 +115,34 @@ class ComprobanteProveedorPersistenciaService
 
     public function actualizarDesdeRequest(Request $request, int $id): Comprobante_Proveedor
     {
+        $this->ultimosAvisosControles = [];
+
         $comprobante = $this->comprobanteRepository->find($id);
         if (! $comprobante) {
             throw new RuntimeException('Comprobante de proveedor inexistente.');
         }
 
-        if (! in_array($comprobante->estado, ComprobanteProveedorEstados::editables(), true)) {
+        ComprobanteProveedorPagoSupport::assertSinPagosAplicados($id, 'actualizar');
+
+        $estadosEditables = [
+            ComprobanteProveedorEstados::BORRADOR,
+            ComprobanteProveedorEstados::PENDIENTE_REVISION,
+            ComprobanteProveedorEstados::PENDIENTE_APROBACION,
+            ComprobanteProveedorEstados::PENDIENTE_DIFERENCIA,
+            ComprobanteProveedorEstados::APROBADO,
+            ComprobanteProveedorEstados::CONTABILIZADO,
+        ];
+        if (! in_array($comprobante->estado, $estadosEditables, true)) {
             throw new RuntimeException('El comprobante no admite edición en estado «'.$comprobante->estado.'».');
+        }
+
+        $estabaContabilizado = $comprobante->estado === ComprobanteProveedorEstados::CONTABILIZADO;
+        if ($estabaContabilizado) {
+            $this->contabilizarService->descontabilizarSinPagos($id);
+            $comprobante = $this->comprobanteRepository->find($id);
+            if (! $comprobante) {
+                throw new RuntimeException('Comprobante de proveedor inexistente tras descontabilizar.');
+            }
         }
 
         $payload = $this->armarPayloadCabecera($request);
@@ -119,6 +160,16 @@ class ComprobanteProveedorPersistenciaService
             $payload['tipo_autorizacion'] ?? null,
         );
 
+        ComprobanteProveedorAnitaCompraExistenciaSupport::assertNoDuplicadoEnAnita(
+            (int) $payload['empresa_id'],
+            (int) $payload['proveedor_id'],
+            (int) $payload['tipotransaccion_compra_id'],
+            (string) $payload['letra'],
+            (int) $payload['sucursal'],
+            (int) $payload['numerocomprobante'],
+            (int) ($comprobante->anita_nro_interno ?? 0) ?: null,
+        );
+
         $this->ejecutarControlesDesdeRequest($request, $payload, $id);
 
         $this->comprobanteRepository->update($payload, $id);
@@ -131,6 +182,20 @@ class ComprobanteProveedorPersistenciaService
         $this->sincronizarCuotas($request, $comprobante);
         $this->sincronizarRecepciones($request, $comprobante);
         $this->archivoRepository->sincronizarDesdeRequest($request, $id);
+        $this->marcarPrecargaGenerada(
+            isset($payload['precarga_comprobante_proveedor_id'])
+                ? (int) $payload['precarga_comprobante_proveedor_id']
+                : null
+        );
+
+        if ($estabaContabilizado) {
+            try {
+                $this->contabilizarService->contabilizar($id);
+                $this->ultimosAvisosControles[] = 'Se regeneró el asiento, la cuenta corriente y el sync Anita.';
+            } catch (Throwable $e) {
+                $this->ultimosAvisosControles[] = 'Quedó en borrador: no se pudo re-contabilizar ('.$e->getMessage().'). Contabilice manualmente.';
+            }
+        }
 
         return $comprobante->fresh([
             'comprobante_proveedor_conceptos',
@@ -176,6 +241,15 @@ class ComprobanteProveedorPersistenciaService
             $precargaId,
             $payload['numerocae'] ?? null,
             $payload['tipo_autorizacion'] ?? null,
+        );
+
+        ComprobanteProveedorAnitaCompraExistenciaSupport::assertNoDuplicadoEnAnita(
+            (int) $payload['empresa_id'],
+            (int) ($payload['proveedor_id'] ?? 0),
+            (int) $payload['tipotransaccion_compra_id'],
+            (string) $payload['letra'],
+            (int) $payload['sucursal'],
+            (int) $payload['numerocomprobante'],
         );
 
         $seleccionCom = $prefill['recepciones_seleccionadas'] ?? [];
@@ -269,6 +343,7 @@ class ComprobanteProveedorPersistenciaService
         $this->vincularRecepcionesDesdePrefill($comprobante, $prefill);
         $this->registrarEstadoInicial($comprobante);
         $this->vincularArchivoPrecarga($comprobante);
+        $this->marcarPrecargaGenerada($precargaId);
 
         return $comprobante->fresh([
             'comprobante_proveedor_recepciones',
@@ -492,7 +567,13 @@ class ComprobanteProveedorPersistenciaService
     private function persistirCuotasDesdeArray(Comprobante_Proveedor $comprobante, array $cuotas): void
     {
         $monedaFacturaId = (int) ($comprobante->moneda_id ?: 1);
-        $cotizacionFactura = (float) ($comprobante->cotizacion ?: 1);
+        $fechaFactura = $comprobante->fechacomprobante?->format('Y-m-d') ?? now()->format('Y-m-d');
+        $cotizacionFactura = ComprobanteProveedorMonedaMotor::cotizacionValida(
+            $monedaFacturaId,
+            $comprobante->cotizacion,
+            $fechaFactura,
+            'la factura del proveedor',
+        );
 
         foreach ($cuotas as $cuota) {
             $monedaCuotaId = (int) ($cuota['moneda_id'] ?? $monedaFacturaId);
@@ -505,6 +586,8 @@ class ComprobanteProveedorPersistenciaService
                     $cotizacionCuota,
                     $monedaFacturaId,
                     $cotizacionFactura,
+                    $fechaFactura,
+                    $fechaFactura,
                 );
             }
 
@@ -697,6 +780,18 @@ class ComprobanteProveedorPersistenciaService
             'ruta_externa' => $precarga->rutaalmacenamiento,
             'precarga_comprobante_proveedor_id' => $precarga->id,
         ]);
+    }
+
+    private function marcarPrecargaGenerada(?int $precargaId): void
+    {
+        if (! $precargaId || $precargaId <= 0) {
+            return;
+        }
+
+        Precarga_Comprobante_Proveedor::query()
+            ->whereKey($precargaId)
+            ->where('estado', '!=', PrecargaComprobanteEstados::GENERADA)
+            ->update(['estado' => PrecargaComprobanteEstados::GENERADA]);
     }
 
     private function origenComprobanteDesdePrecarga(int $precargaId): string

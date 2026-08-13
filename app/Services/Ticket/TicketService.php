@@ -12,6 +12,10 @@ use App\Repositories\Ticket\Ticket_ArticuloRepositoryInterface;
 use App\Repositories\Ticket\Tecnico_TicketRepositoryInterface;
 use App\Models\Ticket\Ticket_Estado;
 use App\Models\Ticket\Ticket_Tarea_Novedad;
+use App\Services\Configuracion\ModuloAvisoService;
+use App\Support\Seguridad\UsuarioOperativoSupport;
+use App\Support\Ticket\AdministracionTicketListadoFiltros;
+use App\Support\Ticket\TicketEstadisticaSupport;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -31,6 +35,7 @@ class TicketService
 	private $ticket_articuloRepository;
 	private $tecnico_ticketRepository;
 	private $ticketTareaAsignadaNotificacionService;
+	private $moduloAvisoService;
 
     public function __construct(TicketRepositoryInterface $ticketrepository,
                                 Ticket_EstadoRepositoryInterface $ticket_estadorepository,
@@ -39,7 +44,8 @@ class TicketService
 								Ticket_Tarea_NovedadRepositoryInterface $ticket_tarea_novedadrepository,
 								Tecnico_TicketRepositoryInterface $tecnico_ticketrepository,
 								Ticket_ArticuloRepositoryInterface $ticket_articulorepository,
-								TicketTareaAsignadaNotificacionService $ticketTareaAsignadaNotificacionService
+								TicketTareaAsignadaNotificacionService $ticketTareaAsignadaNotificacionService,
+								ModuloAvisoService $moduloAvisoService
 								)
     {
 		$this->ticketRepository = $ticketrepository;
@@ -50,6 +56,7 @@ class TicketService
 		$this->ticket_articuloRepository = $ticket_articulorepository;
 		$this->tecnico_ticketRepository = $tecnico_ticketrepository;
 		$this->ticketTareaAsignadaNotificacionService = $ticketTareaAsignadaNotificacionService;
+		$this->moduloAvisoService = $moduloAvisoService;
     }
 
 	public function guardaTicket($request, $origen = null)
@@ -65,6 +72,7 @@ class TicketService
 
 		// Estado del ticket en el alta como "pendiente"
 		$data['estado_ticket'] = Ticket_Estado::$enumEstado[0]['nombre'];
+		$data['usuario_id'] = $this->resolverUsuarioIdAlta($data, $origen);
 		DB::beginTransaction();
 		try
 		{
@@ -79,6 +87,8 @@ class TicketService
 
 			DB::commit();
 
+			$this->avisarAltaTecnologiaSiCorresponde($ticket);
+
 			if ($origen === 'administracion') {
 				$this->ticketTareaAsignadaNotificacionService->notificar($ticket->id, $tareasNotificar);
 			}
@@ -90,6 +100,40 @@ class TicketService
 			return ['errores' => $e->getMessage()];
 		}
         return ['mensaje' => 'ok'];
+	}
+
+	/**
+	 * En administración se puede abrir el ticket a nombre de otro usuario operativo.
+	 * En carga de tickets el dueño es siempre quien está logueado.
+	 */
+	private function resolverUsuarioIdAlta(array $data, ?string $origen): int
+	{
+		$authId = (int) Auth::id();
+		if ($origen !== 'administracion') {
+			return $authId;
+		}
+
+		$solicitanteId = (int) ($data['usuario_id'] ?? 0);
+		if ($solicitanteId <= 0) {
+			return $authId;
+		}
+
+		$usuario = UsuarioOperativoSupport::find($solicitanteId);
+
+		return $usuario ? (int) $usuario->id : $authId;
+	}
+
+	private function avisarAltaTecnologiaSiCorresponde($ticket): void
+	{
+		if (! $ticket || ! isset($ticket->id)) {
+			return;
+		}
+
+		if (! AdministracionTicketListadoFiltros::esAreaSistemas((int) ($ticket->areadestino_id ?? 0))) {
+			return;
+		}
+
+		$this->moduloAvisoService->enviar('ticket', 'alta_tecnologia', (int) $ticket->id);
 	}
 
 	// Agrega tablas asociadas
@@ -144,17 +188,38 @@ class TicketService
 
 	private function actualiza($data, $id, $request)
 	{
+		$ticketActual = $this->ticketRepository->find($id);
+		$estadoAnterior = (string) ($ticketActual->estado_ticket ?? '');
+		$estadoNuevo = (string) ($data['estado_ticket'] ?? $estadoAnterior);
+		$data = TicketEstadisticaSupport::aplicarAlGuardar($ticketActual, $data);
+
 		// Graba ticket
 		$ticket = $this->ticketRepository->update($data, $id);
 
 		if ($ticket === 'Error')
 			throw new Exception('Error en grabacion ticket.');
 
+		if ($estadoNuevo === TicketEstadisticaSupport::ESTADO_FINALIZADO
+			&& $estadoAnterior !== TicketEstadisticaSupport::ESTADO_FINALIZADO) {
+			$this->ticket_estadoRepository->creaEstado(
+				$id,
+				Carbon::now(),
+				TicketEstadisticaSupport::ESTADO_FINALIZADO,
+				Auth::user()->id,
+				'Ticket finalizado'
+			);
+		}
+
 		// Graba movimientos de estados y archivos
 		$this->ticket_archivoRepository->update($request, $id);
 
 		$result = $this->ticket_tareaRepository->update($data, $id);
 		$ticket_articulo = $this->ticket_articuloRepository->update($data, $id);
+
+		$ticketRefrescado = $this->ticketRepository->find($id);
+		$ticketRefrescado->update([
+			'tiempo_insumido_total' => TicketEstadisticaSupport::sumarTiempoInsumido((int) $id),
+		]);
 
 		return $result['tareas_recien_creadas'] ?? [];
 	}
@@ -274,6 +339,14 @@ class TicketService
 
 		$ticket_tarea = $this->ticket_tareaRepository->find($ticket_tarea_id);
 
+		$estadisticas = [
+			'estado_ticket' => '',
+			'fecha_resolucion' => '',
+			'hora_resolucion' => '',
+			'tiempo_insumido_total' => 0,
+			'cerro_ticket' => false,
+		];
+
 		if ($ticket_tarea)
 		{
 			$this->ticket_estadoRepository->creaEstado($ticket_tarea->ticket_id, Carbon::now(), $tarea_novedad->estado,
@@ -281,9 +354,29 @@ class TicketService
 
 			$ticket_tarea->update(['fechafinalizacion' => $fechafinalizacion,
 									'tiempoinsumido' => $tiempoinsumido]);
+
+			$ticket = $this->ticketRepository->find($ticket_tarea->ticket_id);
+			$estadisticas = TicketEstadisticaSupport::sincronizarTrasFinalizarTarea($ticket);
+
+			if (! empty($estadisticas['sello_nuevo'])) {
+				$this->ticket_estadoRepository->creaEstado(
+					$ticket->id,
+					Carbon::now(),
+					TicketEstadisticaSupport::ESTADO_FINALIZADO,
+					Auth::user()->id,
+					'Ticket finalizado: todas las tareas cerradas'
+				);
+			}
 		}
 
-		return 'ok';
+		return [
+			'mensaje' => 'ok',
+			'estado_ticket' => $estadisticas['estado_ticket'],
+			'fecha_resolucion' => $estadisticas['fecha_resolucion'],
+			'hora_resolucion' => $estadisticas['hora_resolucion'],
+			'tiempo_insumido_total' => $estadisticas['tiempo_insumido_total'],
+			'cerro_ticket' => ! empty($estadisticas['cerro_ticket']),
+		];
 	}
 
 	public function cambiarEstadoTarea($ticket_tarea_id, string $estado): array

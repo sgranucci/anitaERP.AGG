@@ -36,6 +36,7 @@ class ValidacionTicket extends FormRequest
             'categoria_ticket_id' => 'required',
             'subcategoria_ticket_id' => 'nullable|integer|exists:subcategoria_ticket,id',
             'areadestino_id' => 'required',
+            'usuario_id' => 'nullable|integer',
             'titulo' => 'required|string|max:255',
             'comentario' => 'required|string',
         ];

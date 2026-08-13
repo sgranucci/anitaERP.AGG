@@ -12,6 +12,9 @@ class ClienteUifFotoDocumento
 {
     public const LEGACY_PUBLIC_SUBDIR = 'imagenes/fotos_documentos_uif';
 
+    /** Extensiones admitidas en el campo DNI (imagen o PDF, como en Anita dni_uif). */
+    public const EXTENSIONES_PERMITIDAS = ['jpg', 'jpeg', 'png', 'gif', 'webp', 'pdf'];
+
     public static function basePath(): string
     {
         // Con withOrigen() escribe en fotos_clientes / _KSA / _RSA según la PC.
@@ -147,9 +150,10 @@ class ClienteUifFotoDocumento
         if ($base === '') {
             throw new \InvalidArgumentException('El número de documento es necesario para guardar la foto del DNI.');
         }
-        $ext = strtolower($file->getClientOriginalExtension() ?: 'jpg');
-        if (! in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
-            $ext = 'jpg';
+        $ext = strtolower($file->getClientOriginalExtension() ?: '');
+        if (! in_array($ext, self::EXTENSIONES_PERMITIDAS, true)) {
+            $mime = strtolower((string) $file->getMimeType());
+            $ext = str_contains($mime, 'pdf') ? 'pdf' : 'jpg';
         }
 
         return $base.'.'.$ext;
@@ -462,7 +466,7 @@ class ClienteUifFotoDocumento
                     continue;
                 }
                 $e = strtolower((string) pathinfo($path, PATHINFO_EXTENSION));
-                if (! in_array($e, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
+                if (! in_array($e, self::EXTENSIONES_PERMITIDAS, true)) {
                     continue;
                 }
                 $bn = strtolower(basename($path));
@@ -514,7 +518,7 @@ class ClienteUifFotoDocumento
         $ranked = [];
         foreach ($rows as $row) {
             $n = (string) $row->nombrearchivo;
-            if ($n === '' || ! preg_match('/\.(jpe?g|png|gif|webp)$/i', $n)) {
+            if ($n === '' || ! preg_match('/\.(jpe?g|png|gif|webp|pdf)$/i', $n)) {
                 continue;
             }
             $src = ClienteUifArchivoStorage::absoluteClienteAdjunto($clienteUifId, $n);
@@ -551,7 +555,7 @@ class ClienteUifFotoDocumento
             return null;
         }
         $ext = strtolower((string) pathinfo($pick['src'], PATHINFO_EXTENSION));
-        if (! in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true)) {
+        if (! in_array($ext, self::EXTENSIONES_PERMITIDAS, true)) {
             return null;
         }
 

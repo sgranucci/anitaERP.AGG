@@ -19,7 +19,7 @@ class SincronizarProveedorDesdeAnita extends Command
                             {--dry-run : Informe sin escribir en el ERP}
                             {--informe-solo-erp : Solo listar códigos presentes en ERP y ausentes en Anita}';
 
-    protected $description = 'Importa/actualiza proveedores desde Anita (promae, proexcl, propago). Anita es la fuente de verdad.';
+    protected $description = 'Importa/actualiza proveedores desde Anita (promae, proexcl, propago, servicios). Anita es la fuente de verdad.';
 
     public function handle(
         ProveedorRepositoryInterface $proveedorRepository,

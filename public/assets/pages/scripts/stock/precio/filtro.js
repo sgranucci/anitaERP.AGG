@@ -5,6 +5,7 @@
     var CAMPO_LISTA = 'listaprecio';
     var operadoresPorCampo = {};
     var LF = window.ListadoFiltros;
+    var submitListaPendiente = null;
 
     function $valorPrincipal() {
         return $('#filtro_valor');
@@ -135,10 +136,32 @@
         actualizarVisibilidad();
     }
 
+    function enviarFiltroListaToolbar() {
+        var $form = $('#form-filtros-precio');
+        if (!$form.length) {
+            return;
+        }
+        if (submitListaPendiente) {
+            clearTimeout(submitListaPendiente);
+        }
+        submitListaPendiente = setTimeout(function () {
+            submitListaPendiente = null;
+            $form.trigger('submit');
+        }, 50);
+    }
+
     $(function () {
         if (!$('#form-filtros-precio').length) {
             return;
         }
+
+        if (typeof activa_eventos_consultalistaprecio === 'function') {
+            activa_eventos_consultalistaprecio();
+        }
+
+        window.onListaprecioSeleccionado = function () {
+            enviarFiltroListaToolbar();
+        };
 
         parseOperadores();
 

@@ -296,7 +296,7 @@ class Kernel extends ConsoleKernel
             ->when(fn () => (bool) config('solicitudpago.sync_anita.habilitado', true));
 
         // Solicitudes de pago — generación de hijas por cuota (Anita p-controlsolpm).
-        // Cron armado pero DESACTIVADO por defecto (SOLICITUDPAGO_GENERAR_CUOTAS_HABILITADO=false).
+        // Gate: SOLICITUDPAGO_GENERAR_CUOTAS_HABILITADO.
         $horariosCuotasSp = config('solicitudpago.generar_cuotas.horarios', ['08:00', '14:00', '18:00']);
         if (! is_array($horariosCuotasSp) || $horariosCuotasSp === []) {
             $horariosCuotasSp = ['08:00', '14:00', '18:00'];

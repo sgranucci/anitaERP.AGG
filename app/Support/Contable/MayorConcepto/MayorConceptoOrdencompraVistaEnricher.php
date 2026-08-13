@@ -5,15 +5,17 @@ namespace App\Support\Contable\MayorConcepto;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Ajusta Nro.OC. / ordencompra_id en la vista del mayor por concepto.
+ * Ajusta Nro.OC. / ordencompra_id / Capex en la vista del mayor por concepto.
  *
- * El motor guarda el nro del comprobante COM (recepción Anita). En pantalla eso
- * hace que el link/impresión apunte a la recepción o a una OC vieja con el mismo
- * número. Acá se resuelve la OC real sin tocar el motor de imputación.
+ * El motor deja el nro COM (recepción). Solo presentación, sin tocar el motor:
+ * - Busca en anitaERP: recepción COM → ordencompra
+ * - Si hay OC, lee códigos Capex de las líneas (ordencompra_articulo)
+ * - Si no hay OC en anitaERP, no enlaza (no sync Anita; la mayoría ya está local)
+ * - No matchea por número crudo (chocaba con OC viejas / imprimía recepción)
  */
 class MayorConceptoOrdencompraVistaEnricher
 {
-    /** @var array<string, array{nro: int, id: int}|null> */
+    /** @var array<string, array{nro: int, id: int, capex_codigo: string, capex_id: int}> */
     private array $cacheResolucion = [];
 
     /**
@@ -22,6 +24,7 @@ class MayorConceptoOrdencompraVistaEnricher
      */
     public function enriquecer(array $filas, ?MayorConceptoAnitaBridgeReader $bridge = null): array
     {
+        unset($bridge);
         $this->cacheResolucion = [];
 
         $candidatos = [];
@@ -38,11 +41,11 @@ class MayorConceptoOrdencompraVistaEnricher
         }
 
         if ($candidatos === []) {
-            return $filas;
+            return $this->inicializarCapexVacios($filas);
         }
 
         foreach ($candidatos as $empresaId => $numeros) {
-            $this->precargarDesdeRecepcionErp((int) $empresaId, array_keys($numeros));
+            $this->precargarDesdeRecepcionErp((int) $empresaId, array_map('intval', array_keys($numeros)));
         }
 
         foreach ($filas as $idx => $fila) {
@@ -54,20 +57,42 @@ class MayorConceptoOrdencompraVistaEnricher
             $empresaId = (int) ($fila['empresa_id'] ?? 0);
             if ($nroCom <= 0 || $empresaId <= 0) {
                 $filas[$idx]['ordencompra_id'] = 0;
+                $filas[$idx]['capex_codigo'] = '';
+                $filas[$idx]['capex_id'] = 0;
 
                 continue;
             }
 
-            $resuelto = $this->resolver($empresaId, $nroCom, $bridge);
+            $resuelto = $this->cacheResolucion[$this->clave($empresaId, $nroCom)] ?? null;
             if ($resuelto === null) {
-                // No enlazar por número crudo: suele ser COM/recepción u OC ajena.
                 $filas[$idx]['ordencompra_id'] = 0;
+                $filas[$idx]['capex_codigo'] = '';
+                $filas[$idx]['capex_id'] = 0;
 
                 continue;
             }
 
             $filas[$idx]['nro_oc'] = $resuelto['nro'];
             $filas[$idx]['ordencompra_id'] = $resuelto['id'];
+            $filas[$idx]['capex_codigo'] = $resuelto['capex_codigo'];
+            $filas[$idx]['capex_id'] = $resuelto['capex_id'];
+        }
+
+        return $filas;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private function inicializarCapexVacios(array $filas): array
+    {
+        foreach ($filas as $idx => $fila) {
+            if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
+                continue;
+            }
+            $filas[$idx]['capex_codigo'] = $fila['capex_codigo'] ?? '';
+            $filas[$idx]['capex_id'] = (int) ($fila['capex_id'] ?? 0);
         }
 
         return $filas;
@@ -97,22 +122,27 @@ class MayorConceptoOrdencompraVistaEnricher
             return;
         }
 
-        $ocIds = $recepciones->pluck('ordencompra_id')->unique()->filter()->all();
+        $ocIds = $recepciones->pluck('ordencompra_id')->unique()->filter()->map(fn ($id) => (int) $id)->all();
+
         $ocs = DB::table('ordencompra')
             ->whereIn('id', $ocIds)
             ->get(['id', 'numeroordencompra'])
             ->keyBy('id');
 
+        $capexPorOc = $this->mapearCapexPorOrdencompra($ocIds);
+
         foreach ($recepciones as $rp) {
-            $oc = $ocs->get((int) $rp->ordencompra_id);
+            $ocId = (int) $rp->ordencompra_id;
+            $oc = $ocs->get($ocId);
             if ($oc === null) {
                 continue;
             }
             $nroOc = (int) $oc->numeroordencompra;
-            $ocId = (int) $oc->id;
-            if ($nroOc <= 0 || $ocId <= 0) {
+            if ($nroOc <= 0) {
                 continue;
             }
+
+            $capex = $capexPorOc[$ocId] ?? ['codigo' => '', 'id' => 0];
 
             foreach ([(int) $rp->anita_nro, (int) $rp->numerorecepcion] as $nroCom) {
                 if ($nroCom <= 0) {
@@ -121,108 +151,68 @@ class MayorConceptoOrdencompraVistaEnricher
                 $this->cacheResolucion[$this->clave($empresaId, $nroCom)] = [
                     'nro' => $nroOc,
                     'id' => $ocId,
+                    'capex_codigo' => $capex['codigo'],
+                    'capex_id' => $capex['id'],
                 ];
             }
         }
     }
 
     /**
-     * @return array{nro: int, id: int}|null
-     */
-    private function resolver(int $empresaId, int $nroCom, ?MayorConceptoAnitaBridgeReader $bridge): ?array
-    {
-        $clave = $this->clave($empresaId, $nroCom);
-        if (array_key_exists($clave, $this->cacheResolucion)) {
-            return $this->cacheResolucion[$clave];
-        }
-
-        $desdeAnita = $this->resolverDesdePepHermano($empresaId, $nroCom, $bridge);
-        $this->cacheResolucion[$clave] = $desdeAnita;
-
-        return $desdeAnita;
-    }
-
-    /**
-     * COM referenciada desde una factura suele tener PEP hermana = OC real.
+     * Códigos Capex distintos de las líneas de cada OC.
+     * Si hay uno solo, deja capex_id para enlace; si hay varios, solo el texto unido.
      *
-     * @return array{nro: int, id: int}|null
+     * @param  list<int>  $ordencompraIds
+     * @return array<int, array{codigo: string, id: int}>
      */
-    private function resolverDesdePepHermano(
-        int $empresaId,
-        int $nroCom,
-        ?MayorConceptoAnitaBridgeReader $bridge,
-    ): ?array {
-        if ($bridge === null || $nroCom <= 0) {
-            return null;
+    private function mapearCapexPorOrdencompra(array $ordencompraIds): array
+    {
+        if ($ordencompraIds === []) {
+            return [];
         }
 
-        $nroOc = $this->nroOcDesdePepHermano($bridge, $empresaId, $nroCom);
-        if ($nroOc <= 0) {
-            return null;
-        }
+        $filas = DB::table('ordencompra_articulo as oa')
+            ->join('capex as c', 'c.id', '=', 'oa.capex_id')
+            ->whereIn('oa.ordencompra_id', $ordencompraIds)
+            ->whereNotNull('oa.capex_id')
+            ->where('oa.capex_id', '>', 0)
+            ->whereNotNull('c.codigo')
+            ->where('c.codigo', '!=', '')
+            ->orderBy('c.codigo')
+            ->get(['oa.ordencompra_id', 'c.id', 'c.codigo']);
 
-        $ocId = (int) DB::table('ordencompra')
-            ->where('empresa_id', $empresaId)
-            ->where('numeroordencompra', $nroOc)
-            ->value('id');
-
-        if ($ocId <= 0) {
-            $ocId = (int) DB::table('ordencompra')
-                ->where('numeroordencompra', $nroOc)
-                ->orderBy('id')
-                ->value('id');
-        }
-
-        if ($ocId <= 0) {
-            return null;
-        }
-
-        return ['nro' => $nroOc, 'id' => $ocId];
-    }
-
-    private function nroOcDesdePepHermano(
-        MayorConceptoAnitaBridgeReader $bridge,
-        int $empresaId,
-        int $nroCom,
-    ): int {
-        $errores = [];
-        $intentos = [
-            ['X', $empresaId],
-            ['X', 1],
-            [' ', 0],
-        ];
-
-        $refs = [];
-        foreach ($intentos as [$letra, $suc]) {
-            $refs = $bridge->cargarAplicpedPorReferencia('COM', $letra, (int) $suc, $nroCom, '', $errores);
-            if ($refs !== []) {
-                break;
-            }
-        }
-
-        foreach ($refs as $ref) {
-            $prov = trim((string) ($ref->aplp_proveedor ?? ''));
-            $tipo = trim((string) ($ref->aplp_tipo ?? ''));
-            $letra = trim((string) ($ref->aplp_letra ?? ' '));
-            $suc = (int) ($ref->aplp_sucursal ?? 0);
-            $nro = (int) ($ref->aplp_nro ?? 0);
-            if ($prov === '' || $tipo === '' || $nro <= 0) {
+        $mapa = [];
+        foreach ($filas as $fila) {
+            $ocId = (int) $fila->ordencompra_id;
+            $codigo = trim((string) $fila->codigo);
+            $capexId = (int) $fila->id;
+            if ($ocId <= 0 || $codigo === '') {
                 continue;
             }
 
-            $apl = $bridge->cargarAplicpedFactura($prov, $tipo, $letra, $suc, $nro, $errores);
-            foreach ($apl as $linea) {
-                if (strtoupper(trim((string) ($linea->aplp_ref_tipo ?? ''))) !== 'PEP') {
-                    continue;
-                }
-                $pep = (int) ($linea->aplp_ref_nro ?? 0);
-                if ($pep > 0 && $pep !== $nroCom) {
-                    return $pep;
-                }
+            if (! isset($mapa[$ocId])) {
+                $mapa[$ocId] = [
+                    'codigos' => [],
+                    'ids' => [],
+                ];
+            }
+
+            if (! in_array($codigo, $mapa[$ocId]['codigos'], true)) {
+                $mapa[$ocId]['codigos'][] = $codigo;
+                $mapa[$ocId]['ids'][] = $capexId;
             }
         }
 
-        return 0;
+        $resultado = [];
+        foreach ($mapa as $ocId => $datos) {
+            $codigos = $datos['codigos'];
+            $resultado[$ocId] = [
+                'codigo' => implode(', ', $codigos),
+                'id' => count($codigos) === 1 ? (int) ($datos['ids'][0] ?? 0) : 0,
+            ];
+        }
+
+        return $resultado;
     }
 
     private function clave(int $empresaId, int $nroCom): string

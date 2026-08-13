@@ -1,7 +1,10 @@
-<div class="card form4" style="display: none">
+<div class="card card-outline card-info form4">
+    <div class="card-header py-2">
+        <strong><i class="fa fa-paperclip"></i> Archivos asociados</strong>
+    </div>
     <div class="card-body">
-    	<table class="table" id="archivo-table">
-    		<thead>
+    	<table class="table table-sm table-bordered" id="archivo-table">
+    		<thead style="background:#85C1E9;color:#17202A;">
     			<tr>
     				<th>Archivo</th>
     				<th>Vista</th>
@@ -45,7 +48,9 @@
 		@include('ticket.ticket.template2')
         <div class="row">
         	<div class="col-md-12">
-        		<button id="agrega_renglon_archivo" class="pull-right btn btn-danger">+ Agrega rengl&oacute;n</button>
+        		<button type="button" id="agrega_renglon_archivo" class="btn btn-outline-primary btn-sm">
+                    <i class="fa fa-plus"></i> Agrega rengl&oacute;n
+                </button>
         	</div>
         </div>
     </div>

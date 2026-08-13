@@ -3,7 +3,7 @@
     $archivoClienteUifRestringido = esSoloVisualizacionClienteUif();
 @endphp
 <div class="card form5" style="display: none">
-    <div class="card-body">
+    <div class="card-body" id="div-archivos-uif">
         @if ($tieneCliente)
             <p class="text-muted small mb-2">Archivos actuales</p>
             @include('uif.cliente_uif.partials.archivos_adjuntos', ['data' => $data, 'ocultarInputsConservar' => $archivoClienteUifRestringido])

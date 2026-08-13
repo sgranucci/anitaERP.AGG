@@ -8,7 +8,9 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\RendicionMaquinavendingCajaService;
 use App\Support\Caja\RendicionMaquinavendingCajaListadoFiltros;
 use App\Support\Caja\RendicionMaquinavendingCajaPermiso;
+use App\Support\Contable\CierreRendicionOrigenConsultaSupport;
 use App\Support\Listado\FiltrosListadoRequest;
+use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -118,22 +120,34 @@ class RendicionMaquinavendingController extends Controller
         return $redirect;
     }
 
-    public function editar(int $id)
+    public function editar(Request $request, int $id)
     {
-        can('editar-rendicion-maquinavending-caja');
+        $soloConsulta = QueryRetornoListado::esModalConsulta($request);
+        if ($soloConsulta) {
+            CierreRendicionOrigenConsultaSupport::exigir(
+                CierreRendicionOrigenConsultaSupport::puedeConsultarRendicionMaquinavending(),
+            );
+        } else {
+            can('editar-rendicion-maquinavending-caja');
+        }
 
         $data = $this->service->findConDetalle($id);
-        try {
-            RendicionMaquinavendingCajaPermiso::assertModificacionPermitida($data);
-        } catch (InvalidArgumentException $e) {
-            return redirect('caja/rendicionmaquinavending')
-                ->with('errores', [$e->getMessage()]);
+        if (! $soloConsulta) {
+            try {
+                RendicionMaquinavendingCajaPermiso::assertModificacionPermitida($data);
+            } catch (InvalidArgumentException $e) {
+                return redirect('caja/rendicionmaquinavending')
+                    ->with('errores', [$e->getMessage()]);
+            }
         }
 
         return view('caja.rendicionmaquinavending.editar', [
             'data' => $data,
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'nombreCaja' => (string) ($data->caja?->nombre ?? ''),
+            'soloConsulta' => $soloConsulta,
+            'puedeActualizarRendicion' => ! $soloConsulta
+                && can('actualizar-rendicion-maquinavending-caja', false),
         ]);
     }
 
@@ -204,7 +218,9 @@ class RendicionMaquinavendingController extends Controller
 
     public function imprimir(Request $request, int $id)
     {
-        can('listar-rendicion-maquinavending-caja');
+        CierreRendicionOrigenConsultaSupport::exigir(
+            CierreRendicionOrigenConsultaSupport::puedeVerPdfRendicionMaquinavending(),
+        );
 
         $rendicion = $this->service->findConDetalle($id);
         $datos = $this->service->datosComprobante($rendicion);

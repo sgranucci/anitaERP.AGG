@@ -131,6 +131,7 @@ class MayorConceptoController extends Controller
             'puede_ver_cuenta' => can('listar-cuentas-contables', false) || can('editar-cuentas-contables', false),
             'puede_ver_concepto' => can('listar-conceptos-de-gastos', false) || can('editar-conceptos-de-gastos', false),
             'puede_ver_ordencompra' => can('listar-ordencompra', false) || can('editar-ordencompra', false),
+            'puede_ver_capex' => can('listar-capex', false) || can('editar-capex', false),
         ]);
     }
 

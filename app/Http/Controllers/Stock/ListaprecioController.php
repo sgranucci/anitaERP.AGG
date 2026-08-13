@@ -151,10 +151,7 @@ class ListaprecioController extends Controller
 
     public function consultaListaprecio(Request $request)
     {
-        if (! can('listar-listaprecio', false)
-            && ! can('listar-clientes', false)
-            && ! can('editar-clientes', false)
-            && ! can('crear-clientes', false)) {
+        if (! $this->puedeConsultarListaprecio()) {
             abort(403);
         }
 
@@ -202,14 +199,24 @@ class ListaprecioController extends Controller
 
     public function leeUnListaprecioPorCodigo(string $codigo)
     {
-        if (! can('listar-listaprecio', false)
-            && ! can('listar-clientes', false)
-            && ! can('editar-clientes', false)
-            && ! can('crear-clientes', false)) {
+        if (! $this->puedeConsultarListaprecio()) {
             abort(403);
         }
 
         return $this->findListaprecioPorCodigo($codigo);
+    }
+
+    private function puedeConsultarListaprecio(): bool
+    {
+        return can('listar-listaprecio', false)
+            || can('listar-clientes', false)
+            || can('editar-clientes', false)
+            || can('crear-clientes', false)
+            || can('listar-precios', false)
+            || can('crear-precios', false)
+            || can('editar-precios', false)
+            || can('actualizar-precios', false)
+            || can('listar-articulos', false);
     }
 
     private function findListaprecioPorCodigo(string $codigo): ?Listaprecio
@@ -229,9 +236,19 @@ class ListaprecioController extends Controller
 
         $alt = ltrim($codigo, '0');
         if ($alt !== '' && $alt !== $codigo) {
-            return Listaprecio::query()
+            $listaprecio = Listaprecio::query()
                 ->select('id', 'nombre', 'codigo')
                 ->where('codigo', $alt)
+                ->first();
+            if ($listaprecio) {
+                return $listaprecio;
+            }
+        }
+
+        if (ctype_digit($codigo)) {
+            return Listaprecio::query()
+                ->select('id', 'nombre', 'codigo')
+                ->whereKey((int) $codigo)
                 ->first();
         }
 

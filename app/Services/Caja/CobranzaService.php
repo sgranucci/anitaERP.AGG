@@ -424,9 +424,8 @@ class CobranzaService
 			if (count($asiento) > 0)
 			{
 				$asiento_id = $asiento[0]->id;
-
-				if (!isset($data['numeroasiento']))
-					$data['numeroasiento'] = $asiento[0]->numeroasiento;
+				$data['tipoasiento_id'] = $asiento[0]->tipoasiento_id;
+				$data['numeroasiento'] = $asiento[0]->numeroasiento;
 			}
 
 			// Arma el asiento contable

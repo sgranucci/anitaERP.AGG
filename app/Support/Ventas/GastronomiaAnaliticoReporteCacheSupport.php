@@ -28,7 +28,7 @@ final class GastronomiaAnaliticoReporteCacheSupport
     {
         $userId = (int) (auth()->id() ?? 0);
 
-        return 'gastronomia_analitico_reporte_v1_'.$userId.'_'.self::firma($filtros);
+        return 'gastronomia_analitico_reporte_v2_'.$userId.'_'.self::firma($filtros);
     }
 
     /**

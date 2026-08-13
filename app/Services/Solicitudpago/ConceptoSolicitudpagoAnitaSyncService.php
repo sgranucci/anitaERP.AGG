@@ -16,6 +16,7 @@ use App\Models\Solicitudpago\Formapagosol;
 use App\Models\Solicitudpago\Sector_Solicitudpago;
 use App\Repositories\Solicitudpago\FormapagosolRepositoryInterface;
 use App\Repositories\Solicitudpago\Sector_SolicitudpagoRepositoryInterface;
+use App\Support\Solicitudpago\ConceptoSolicitudpagoCuentaEmpresaSupport;
 use App\Support\Solicitudpago\ConceptoSolicitudpagoEstados;
 use App\Support\Solicitudpago\ConceptoSolicitudpagoFormaPago;
 use Illuminate\Support\Facades\DB;
@@ -244,7 +245,8 @@ class ConceptoSolicitudpagoAnitaSyncService
                 $dh = 'D';
             }
 
-            // Anita empresa 0 = cuenta genérica (todas las empresas que tengan ese código).
+            // Anita empresa 0 = cuenta genérica: solo empresas con usuarios asignados
+            // (Biyemas/Kandiko/Rebisco). Budget/Temporal no operan SP.
             $cuentasMatch = Cuentacontable::query()
                 ->where(function ($q) use ($codigoAnita, $codigoCuenta) {
                     $q->where('codigo', $codigoAnita)
@@ -254,10 +256,16 @@ class ConceptoSolicitudpagoAnitaSyncService
 
             if ($empresaCodigo > 0) {
                 $empresaId = $mapaEmpresas[$empresaCodigo] ?? null;
-                if ($empresaId === null) {
+                if ($empresaId === null || ! ConceptoSolicitudpagoCuentaEmpresaSupport::esOperativa((int) $empresaId)) {
                     continue;
                 }
                 $cuentasMatch->where('empresa_id', $empresaId);
+            } else {
+                $idsOperativas = ConceptoSolicitudpagoCuentaEmpresaSupport::idsConUsuariosAsignados();
+                if ($idsOperativas === []) {
+                    continue;
+                }
+                $cuentasMatch->whereIn('empresa_id', $idsOperativas);
             }
 
             foreach ($cuentasMatch->get(['id', 'empresa_id']) as $cuenta) {

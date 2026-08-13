@@ -456,14 +456,20 @@ class IngresoEgresoController extends Controller
 
         $movimiento = $this->caja_movimientoRepository->find($id);
         $movimiento->loadMissing([
-            'solicitudpagos',
-            'empresas',
-            'proveedores',
+            'solicitudpagos.conceptos',
+            'solicitudpagos.centrocostos',
+            'solicitudpagos.monedas',
+            'solicitudpagos.cuentas.centrocostos',
+            'empresas.localidad',
+            'proveedores.condicionivas',
+            'proveedores.condicionIIBBs',
+            'usuarios',
             'tipotransaccioncajas',
             'caja_movimiento_cuentacajas.cuentacajas',
             'caja_movimiento_cuentacajas.monedas',
             'cheques.bancos',
             'asientos.asiento_movimientos.cuentacontables',
+            'asientos.asiento_movimientos.centrocostos',
         ]);
 
         $pdf = Pdf::loadView('caja.ingresoegreso.comprobante', [

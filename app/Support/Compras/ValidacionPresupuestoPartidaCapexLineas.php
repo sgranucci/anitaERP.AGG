@@ -10,6 +10,9 @@ use App\Models\Presupuesto\Presupuesto;
  * Valida que partidas de gasto y CAPEX en líneas de documentos de compras
  * correspondan al presupuesto vigente y al centro de costo destino de cada línea.
  *
+ * En edición, los IDs ya grabados en el documento se aceptan aunque pertenezcan
+ * a un presupuesto anterior (OC / requisición de un ejercicio viejo).
+ *
  * Si `compras.oc_pedir_partida_capex` es false (El Bierzo), no exige ni valida.
  */
 final class ValidacionPresupuestoPartidaCapexLineas
@@ -17,10 +20,12 @@ final class ValidacionPresupuestoPartidaCapexLineas
     /**
      * @param  array<string, mixed>  $payload  Request all() con articulo_ids[], cantidades[], centrocostodestino_ids[],
      *                                          partidagasto_ids[], capex_ids[], empresa_id, centrocosto_id
+     * @param  array{capex_ids?: list<int>, partidagasto_ids?: list<int>}  $idsYaAsignados
+     *         IDs ya persistidos. IDs nuevos siguen exigiendo presupuesto vigente y CAPEX ACTIVO.
      *
      * @throws \InvalidArgumentException
      */
-    public static function validar(array $payload): void
+    public static function validar(array $payload, array $idsYaAsignados = []): void
     {
         if (! OrdencompraUiConfigSupport::pedirPartidaCapex()) {
             return;
@@ -39,6 +44,8 @@ final class ValidacionPresupuestoPartidaCapexLineas
 
         $n = count($articulo_ids);
         $ccCabecera = (int) ($payload['centrocosto_id'] ?? 0);
+        $capexYa = self::idsEnteros($idsYaAsignados['capex_ids'] ?? []);
+        $pgYa = self::idsEnteros($idsYaAsignados['partidagasto_ids'] ?? []);
 
         for ($i = 0; $i < $n; $i++) {
             $articulo_id = $payload['articulo_ids'][$i] ?? null;
@@ -63,7 +70,8 @@ final class ValidacionPresupuestoPartidaCapexLineas
                 if ((int) $pg->empresa_id !== $empresaId) {
                     throw new \InvalidArgumentException('Línea '.($i + 1).': la partida no corresponde a la empresa del documento.');
                 }
-                if ((int) $pg->presupuesto_id !== $ultimoPid) {
+                $partidaYaAsignada = in_array((int) $pgId, $pgYa, true);
+                if (! $partidaYaAsignada && (int) $pg->presupuesto_id !== $ultimoPid) {
                     throw new \InvalidArgumentException('Línea '.($i + 1).': la partida debe pertenecer al presupuesto vigente.');
                 }
                 if ((int) $pg->centrocosto_id !== $ccLinea) {
@@ -80,10 +88,11 @@ final class ValidacionPresupuestoPartidaCapexLineas
                 if ((int) $cx->empresa_id !== $empresaId) {
                     throw new \InvalidArgumentException('Línea '.($i + 1).': el CAPEX no corresponde a la empresa del documento.');
                 }
-                if ((string) $cx->estado !== 'ACTIVO') {
+                $capexYaAsignado = in_array((int) $capexId, $capexYa, true);
+                if (! $capexYaAsignado && (string) $cx->estado !== 'ACTIVO') {
                     throw new \InvalidArgumentException('Línea '.($i + 1).': el CAPEX debe estar ACTIVO.');
                 }
-                if ((int) $cx->presupuesto_id !== $ultimoPid) {
+                if (! $capexYaAsignado && (int) $cx->presupuesto_id !== $ultimoPid) {
                     throw new \InvalidArgumentException('Línea '.($i + 1).': el CAPEX debe pertenecer al presupuesto vigente.');
                 }
                 if ((int) $cx->centrocosto_id !== $ccLinea) {
@@ -91,5 +100,53 @@ final class ValidacionPresupuestoPartidaCapexLineas
                 }
             }
         }
+    }
+
+    /**
+     * Extrae IDs de CAPEX / partida ya grabados en las líneas del documento.
+     *
+     * @param  iterable<mixed>  $lineas
+     * @return array{capex_ids: list<int>, partidagasto_ids: list<int>}
+     */
+    public static function idsAsignadosDesdeLineas(iterable $lineas): array
+    {
+        $capex = [];
+        $pg = [];
+        foreach ($lineas as $linea) {
+            $capexId = (int) ($linea->capex_id ?? 0);
+            if ($capexId > 0) {
+                $capex[] = $capexId;
+            }
+            $pgId = (int) ($linea->partidagasto_id ?? 0);
+            if ($pgId > 0) {
+                $pg[] = $pgId;
+            }
+        }
+
+        return [
+            'capex_ids' => array_values(array_unique($capex)),
+            'partidagasto_ids' => array_values(array_unique($pg)),
+        ];
+    }
+
+    /**
+     * @param  mixed  $ids
+     * @return list<int>
+     */
+    private static function idsEnteros($ids): array
+    {
+        if (! is_array($ids)) {
+            return [];
+        }
+
+        $out = [];
+        foreach ($ids as $id) {
+            $n = (int) $id;
+            if ($n > 0) {
+                $out[] = $n;
+            }
+        }
+
+        return $out;
     }
 }

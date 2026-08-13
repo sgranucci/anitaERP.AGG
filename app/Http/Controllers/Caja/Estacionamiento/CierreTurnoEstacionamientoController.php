@@ -15,6 +15,7 @@ use App\Support\Caja\Estacionamiento\EstacionamientoCierresTurnoListadoFiltros;
 use App\Support\Caja\Estacionamiento\EstacionamientoCierreTurnoReporteSupport;
 use App\Support\Caja\Estacionamiento\EstacionamientoIdentificadorPc;
 use App\Support\Caja\Estacionamiento\EstacionamientoTurnoOperativoTotalesSupport;
+use App\Support\Contable\CierreRendicionOrigenConsultaSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -109,7 +110,9 @@ class CierreTurnoEstacionamientoController extends Controller
 
     public function apiComprobantes(Request $request)
     {
-        can('listar-cierres-turno-estacionamiento');
+        CierreRendicionOrigenConsultaSupport::exigir(
+            CierreRendicionOrigenConsultaSupport::puedeConsultarCierreTurnoEstacionamiento(),
+        );
 
         $tipo = trim((string) $request->input('tipo', ''));
         $id = (int) $request->input('id', 0);
@@ -201,7 +204,9 @@ class CierreTurnoEstacionamientoController extends Controller
 
     public function comprobanteParcial(Request $request, int $id)
     {
-        can('ver-comprobante-cierre-turno-estacionamiento');
+        CierreRendicionOrigenConsultaSupport::exigir(
+            CierreRendicionOrigenConsultaSupport::puedeVerPdfCierreTurnoEstacionamiento(),
+        );
 
         $parcial = CierreParcialTurnoEstacionamiento::query()->findOrFail($id);
         $this->assertAccesoEmpresa((int) ($parcial->turnoOperativo?->empresa_id ?? 0));
@@ -214,7 +219,9 @@ class CierreTurnoEstacionamientoController extends Controller
 
     public function comprobanteCierre(Request $request, int $id)
     {
-        can('ver-comprobante-cierre-turno-estacionamiento');
+        CierreRendicionOrigenConsultaSupport::exigir(
+            CierreRendicionOrigenConsultaSupport::puedeVerPdfCierreTurnoEstacionamiento(),
+        );
 
         $turno = TurnoOperativoEstacionamiento::query()
             ->where('estado', TurnoOperativoEstacionamiento::ESTADO_CERRADO)
@@ -230,7 +237,9 @@ class CierreTurnoEstacionamientoController extends Controller
 
     public function verCierre(Request $request, int $id)
     {
-        can('listar-cierres-turno-estacionamiento');
+        CierreRendicionOrigenConsultaSupport::exigir(
+            CierreRendicionOrigenConsultaSupport::puedeConsultarCierreTurnoEstacionamiento(),
+        );
 
         $turno = TurnoOperativoEstacionamiento::query()
             ->where('estado', TurnoOperativoEstacionamiento::ESTADO_CERRADO)
@@ -244,7 +253,7 @@ class CierreTurnoEstacionamientoController extends Controller
             'turno' => $turno,
             'datos' => $datos,
             'referencia' => (string) ($datos['subtitulo'] ?? 'Op. #'.$turno->id),
-            'puede_ver_comprobante' => can('ver-comprobante-cierre-turno-estacionamiento', false),
+            'puede_ver_comprobante' => CierreRendicionOrigenConsultaSupport::puedeVerPdfCierreTurnoEstacionamiento(),
             'puede_ver_factura' => can('ver-factura-estacionamiento', false),
             'desde_modal' => $request->query('origen') === 'modal_consulta',
         ]);

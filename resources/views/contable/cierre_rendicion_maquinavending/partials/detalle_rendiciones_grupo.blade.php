@@ -1,5 +1,8 @@
 @php
-    use App\Support\Contable\CierreRendicionMaquinavendingGrupoSupport;
+    use App\Support\Contable\CierreRendicionOrigenConsultaSupport;
+    $puedeConsultarRend = CierreRendicionOrigenConsultaSupport::puedeConsultarRendicionMaquinavending();
+    $puedePdfRend = CierreRendicionOrigenConsultaSupport::puedeVerPdfRendicionMaquinavending();
+    $puedePdfVentas = CierreRendicionOrigenConsultaSupport::puedeVerPdfRendicionVentasMaquinavending();
 @endphp
 <tr class="grupo-detalle collapse" id="detalle-grupo-{{ $grupoId }}" data-parent="#tabla-paginada">
     <td colspan="11" class="p-0 bg-light">
@@ -14,13 +17,14 @@
                     <th class="text-right">Invit.</th>
                     <th class="text-right">Cobrado</th>
                     <th>Estado</th>
-                    <th class="width120">Acciones</th>
+                    <th class="width160">Acciones</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach ($rendiciones as $row)
                 @php
                     $cerrada = $row->tieneCierreContable();
+                    $origenId = (int) ($row->maquinavending_rendicion_id ?? 0);
                 @endphp
                 <tr class="{{ $cerrada ? 'table-success' : '' }}">
                     <td>{{ $row->id }}</td>
@@ -28,6 +32,9 @@
                     <td>{{ $row->fecharendicion?->format('d/m/Y H:i') }}</td>
                     <td>
                         <small>{{ $row->maquinavending?->nombre ?? '—' }}</small>
+                        @if ($row->maquinavendingRendicion?->numero_cierre)
+                            <br><span class="text-muted">Cierre ventas #{{ $row->maquinavendingRendicion->numero_cierre }}</span>
+                        @endif
                     </td>
                     <td class="text-right text-nowrap">{{ number_format((float) $row->totalfactura, 2, ',', '.') }}</td>
                     <td class="text-right text-nowrap">
@@ -50,14 +57,22 @@
                         @endif
                     </td>
                     <td class="text-nowrap">
-                        @if (can('listar-rendicion-maquinavending-caja', false))
+                        @if ($puedeConsultarRend)
                             <a href="{{ route('editar_rendicionmaquinavending', ['id' => $row->id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
-                               class="btn-accion-tabla tooltipsC" title="Ver rendici&oacute;n" target="_blank" rel="noopener">
+                               class="btn-accion-tabla tooltipsC" title="Consultar rendici&oacute;n caja" target="_blank" rel="noopener">
                                 <i class="fa fa-edit"></i>
                             </a>
+                        @endif
+                        @if ($puedePdfRend)
                             <a href="{{ route('imprimir_rendicion_maquinavending', ['id' => $row->id, 'inline' => 1]) }}"
-                               class="btn-accion-tabla tooltipsC" title="PDF rendici&oacute;n" target="_blank" rel="noopener">
+                               class="btn-accion-tabla tooltipsC" title="PDF rendici&oacute;n caja" target="_blank" rel="noopener">
                                 <i class="fa fa-file-pdf-o text-danger"></i>
+                            </a>
+                        @endif
+                        @if ($origenId > 0 && $puedePdfVentas)
+                            <a href="{{ route('maquinavending_rendicion_comprobante', ['id' => $origenId, 'inline' => 1]) }}"
+                               class="btn-accion-tabla tooltipsC" title="PDF rendici&oacute;n ventas (origen)" target="_blank" rel="noopener">
+                                <i class="fa fa-file-pdf-o"></i>
                             </a>
                         @endif
                     </td>

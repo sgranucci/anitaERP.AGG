@@ -59,9 +59,6 @@ class PagoproveedorListadoExport implements FromView, ShouldAutoSize, WithColumn
     public function view(): View
     {
         $datas = $this->pagoproveedorRepository->leePagoproveedor($this->filtros ?? [], false);
-        foreach ($datas as $fila) {
-            $fila->nombreempresa = $fila->empresas->nombre ?? '';
-        }
 
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($datas);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;

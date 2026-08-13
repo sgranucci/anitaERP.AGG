@@ -61,5 +61,8 @@ return [
     */
     'comprobante' => [
         'habilitado' => filter_var(env('ARCA_WSCDC_COMPROBANTE_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        // false = avisar y permitir grabar (WS caído, rechazo ARCA, datos incompletos).
+        // true = bloquear el grabado ante hallazgos WSCDC (modo estricto).
+        'bloquear_al_fallar' => filter_var(env('ARCA_WSCDC_COMPROBANTE_BLOQUEAR_AL_FALLAR', false), FILTER_VALIDATE_BOOLEAN),
     ],
 ];

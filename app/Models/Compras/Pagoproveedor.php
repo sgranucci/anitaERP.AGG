@@ -101,12 +101,9 @@ class Pagoproveedor extends Model
             ->with('caja_movimiento_cuentacajas.cuentacajas');
     }
 
-    /**
-     * Colección 0..n para formasientoexterno (`->first()`).
-     */
     public function asientos()
     {
-        return $this->hasMany(Asiento::class, 'pagoproveedor_id')
+        return $this->hasOne(Asiento::class, 'pagoproveedor_id')
             ->with('asiento_movimientos');
     }
 

@@ -95,19 +95,19 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
 
     private function colUltima(): string
     {
-        return $this->esMultiempresa() ? 'R' : 'Q';
+        return $this->esMultiempresa() ? 'S' : 'R';
     }
 
     /** @return list<string> Columnas de importes (cotiz / debe / haber). */
     private function columnasImportes(): array
     {
-        return $this->esMultiempresa() ? ['P', 'Q', 'R'] : ['O', 'P', 'Q'];
+        return $this->esMultiempresa() ? ['Q', 'R', 'S'] : ['P', 'Q', 'R'];
     }
 
     /** @return list<string> Solo Debe y Haber. */
     private function columnasDebeHaber(): array
     {
-        return $this->esMultiempresa() ? ['Q', 'R'] : ['P', 'Q'];
+        return $this->esMultiempresa() ? ['R', 'S'] : ['Q', 'R'];
     }
 
     public function view(): View
@@ -177,7 +177,7 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
             'subtitulo' => $subtitulo,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'multiempresa' => $multiempresa,
-            'colSpanExcel' => $multiempresa ? 18 : 17,
+            'colSpanExcel' => $multiempresa ? 19 : 18,
         ]);
     }
 
@@ -254,9 +254,13 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
             $fmt['B'] = NumberFormat::FORMAT_TEXT;
             $fmt['F'] = NumberFormat::FORMAT_TEXT;
             $fmt['G'] = NumberFormat::FORMAT_TEXT;
+            $fmt['K'] = NumberFormat::FORMAT_TEXT; // Nro.OC.
+            $fmt['L'] = NumberFormat::FORMAT_TEXT; // Capex
         } else {
             $fmt['E'] = NumberFormat::FORMAT_TEXT;
             $fmt['F'] = NumberFormat::FORMAT_TEXT;
+            $fmt['J'] = NumberFormat::FORMAT_TEXT; // Nro.OC.
+            $fmt['K'] = NumberFormat::FORMAT_TEXT; // Capex
         }
 
         // Importes: en modo "auto" van como número real con máscara neutra (#,##0.00),
@@ -293,13 +297,14 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
                 'I' => 15,  // Comprobante
                 'J' => 11,  // Cheque
                 'K' => 9,   // Nro.OC.
-                'L' => 18,  // Emisor
-                'M' => 13,  // CUIT
-                'N' => 32,  // Descripción mov.
-                'O' => 5,   // Mon
-                'P' => 11,  // Cotiz.
-                'Q' => 16,  // Debe
-                'R' => 16,  // Haber
+                'L' => 10,  // Capex
+                'M' => 18,  // Emisor
+                'N' => 13,  // CUIT
+                'O' => 32,  // Descripción mov.
+                'P' => 5,   // Mon
+                'Q' => 11,  // Cotiz.
+                'R' => 16,  // Debe
+                'S' => 16,  // Haber
             ];
         }
 
@@ -314,13 +319,14 @@ class MayorConceptoExport implements FromView, WithColumnFormatting, WithColumnW
             'H' => 15,  // Comprobante
             'I' => 11,  // Cheque
             'J' => 9,   // Nro.OC.
-            'K' => 18,  // Emisor
-            'L' => 13,  // CUIT
-            'M' => 32,  // Descripción mov.
-            'N' => 5,   // Mon
-            'O' => 11,  // Cotiz.
-            'P' => 16,  // Debe
-            'Q' => 16,  // Haber
+            'K' => 10,  // Capex
+            'L' => 18,  // Emisor
+            'M' => 13,  // CUIT
+            'N' => 32,  // Descripción mov.
+            'O' => 5,   // Mon
+            'P' => 11,  // Cotiz.
+            'Q' => 16,  // Debe
+            'R' => 16,  // Haber
         ];
     }
 

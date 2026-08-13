@@ -2195,11 +2195,12 @@ class FacturacionService
 				if ($signo == -1 && isset($factura))
 				{
 					$factura->loadMissing(['asientos.asiento_movimientos']);
-					if ($factura->asientos->isNotEmpty()) {
+					$asientoFactura = $factura->asientos;
+					if ($asientoFactura) {
 						$asientoContable = [];
-						foreach ($factura->asientos[0]->asiento_movimientos as $movimiento)
+						foreach ($asientoFactura->asiento_movimientos as $movimiento)
 						{
-							$asientoContable[] = ['empresa_id' => $factura->asientos[0]->empresa_id,
+							$asientoContable[] = ['empresa_id' => $asientoFactura->empresa_id,
 												'cuentacontable_id' => $movimiento->cuentacontable_id,
 												'monto' => $movimiento->monto*-1
 												];

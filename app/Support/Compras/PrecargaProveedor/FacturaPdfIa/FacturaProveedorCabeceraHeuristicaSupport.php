@@ -12,6 +12,7 @@ final class FacturaProveedorCabeceraHeuristicaSupport
     public function __construct(
         private FacturaProveedorImporteParserSupport $importeParser,
         private RecepcionProveedorOcrNumeroOcExtractor $numeroOcExtractor,
+        private FacturaProveedorMonedaOcrSupport $monedaOcr,
     ) {}
 
     /**
@@ -39,6 +40,7 @@ final class FacturaProveedorCabeceraHeuristicaSupport
             'numerocae' => $cae['numero'],
             'tipo_autorizacion' => $cae['tipo'],
             'fecha_vto_cai_cae' => $this->extraerFechaVtoCae($textoNorm),
+            'fecha_vencimiento' => $this->extraerFechaVencimientoPago($textoNorm),
             'subtotal' => $this->extraerSubtotal($textoNorm),
             'total' => $this->extraerTotal($textoNorm),
             'moneda' => $monedaCotiz['moneda'],
@@ -269,8 +271,30 @@ final class FacturaProveedorCabeceraHeuristicaSupport
 
     private function extraerFechaVtoCae(string $texto): ?string
     {
-        if (preg_match('/vto\.?\s*(?:C[\.\-\s]*A[\.\-\s]*E|CAI)\.?\s*:?\s*(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/iu', $texto, $m)) {
+        // Incluye dd.mm.yyyy además de / y -.
+        if (preg_match('/vto\.?\s*(?:C[\.\-\s]*A[\.\-\s]*E|CAI)\.?\s*:?\s*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu', $texto, $m)) {
             return $this->isoFecha($m[1], $m[2], $m[3]);
+        }
+
+        return null;
+    }
+
+    /**
+     * Vencimiento de pago comercial (no Vto. CAE/CAI).
+     */
+    private function extraerFechaVencimientoPago(string $texto): ?string
+    {
+        $patrones = [
+            '/fecha\s+(?:de\s+)?vencimiento(?:\s+(?:de\s+)?pago)?[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
+            '/vencimiento\s+(?:del\s+)?pago[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
+            '/\bfecha\s+vto\.?(?!\s*(?:C[\.\-\s]*A[\.\-\s]*E|CAI))[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
+            '/\bvencimiento\b(?!\s*(?:C[\.\-\s]*A[\.\-\s]*E|CAI))[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
+            '/\bvto\.?(?!\s*(?:C[\.\-\s]*A[\.\-\s]*E|CAI))[:\s]*(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/iu',
+        ];
+        foreach ($patrones as $patron) {
+            if (preg_match($patron, $texto, $m)) {
+                return $this->isoFecha($m[1], $m[2], $m[3]);
+            }
         }
 
         return null;
@@ -365,22 +389,35 @@ final class FacturaProveedorCabeceraHeuristicaSupport
     /** @return array{moneda: string, cotizacion: float} */
     private function extraerMonedaYCotizacion(string $texto): array
     {
+        // Default Argentina: pesos. El signo "$" NO implica dólares.
         $moneda = 'PESOS';
-        if (preg_match('/\b(?:U\$S|USD|DOLAR(?:ES)?|DÓLAR(?:ES)?)\b/iu', $texto)) {
+        if ($this->textoIndicaDolares($texto)) {
             $moneda = 'DOLARES';
-        } elseif (preg_match('/\b(?:EUR|EURO(?:S)?)\b/iu', $texto)) {
+        } elseif ($this->textoIndicaEuros($texto)) {
             $moneda = 'EUROS';
         }
 
         $cotizacion = 1.0;
-        if (preg_match('/(?:tipo\s+de\s+cambio|cotiz(?:aci[oó]n)?|t\.?\s*c\.?)[:\s]*(\d[\d.,]+)/iu', $texto, $m)) {
+        if ($moneda !== 'PESOS'
+            && preg_match('/(?:tipo\s+de\s+cambio|cotiz(?:aci[oó]n)?|t\.?\s*c\.?)[:\s]*(\d[\d.,]+)/iu', $texto, $m)
+        ) {
             $parsed = $this->importeParser->parsear($m[1]);
-            if ($parsed !== null && $parsed > 0) {
+            if ($parsed !== null && $parsed > 1.0001) {
                 $cotizacion = $parsed;
             }
         }
 
         return ['moneda' => $moneda, 'cotizacion' => $cotizacion];
+    }
+
+    private function textoIndicaDolares(string $texto): bool
+    {
+        return $this->monedaOcr->indicaDolares($texto);
+    }
+
+    private function textoIndicaEuros(string $texto): bool
+    {
+        return $this->monedaOcr->indicaEuros($texto);
     }
 
     private function normalizar(string $texto): string

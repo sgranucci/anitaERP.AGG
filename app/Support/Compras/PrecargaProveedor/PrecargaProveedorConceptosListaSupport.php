@@ -5,10 +5,12 @@ namespace App\Support\Compras\PrecargaProveedor;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Services\Compras\ComprobanteService;
 use App\Services\Compras\OrdencompraService;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorTipoItemSupport;
 use RuntimeException;
 
 /**
  * Lista de conceptos IVA compra para precarga (misma lógica que API listaConcepto).
+ * Tipo de ítem: si el proveedor tiene medidores en proveedor_servicio → fuerza S (FIS/FNS/…).
  */
 final class PrecargaProveedorConceptosListaSupport
 {
@@ -54,18 +56,7 @@ final class PrecargaProveedorConceptosListaSupport
             throw new RuntimeException('Centro de costo de la OC sin tipo IVA válido');
         }
 
-        $tipoItem = 'B';
-        foreach ($itemsOrdenCompra as $item) {
-            if ($item->stkm_tipo_articulo == 'S') {
-                $tipoItem = 'S';
-            }
-            if ($item->stkm_agrupacion == '0081') {
-                $tipoItem = 'L';
-            }
-            if ($item->stkm_tipo_articulo == 'U') {
-                $tipoItem = 'U';
-            }
-        }
+        $tipoItem = PrecargaProveedorTipoItemSupport::resolver($itemsOrdenCompra, $cuitProveedor);
 
         $inicial = match ($tipoComprobante) {
             'FC' => 'F',
@@ -110,6 +101,8 @@ final class PrecargaProveedorConceptosListaSupport
             'tipocomprobante' => $abreviatura,
             'letra' => (string) ($datosOrdenCompra->prom_letra ?? 'A'),
             'centro_costo_codigo' => $centroCostoDestino,
+            'es_proveedor_servicios' => PrecargaProveedorTipoItemSupport::proveedorTieneServicios($cuitProveedor),
+            'tipo_item' => $tipoItem,
             'conceptos' => $conceptos,
         ];
     }

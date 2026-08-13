@@ -19,44 +19,27 @@
 		activa_eventos(true);
 		leeEstadoTarea();
 		calculaEstadoTicket();
+		if (typeof activa_eventos_consultausuario === 'function') {
+			activa_eventos_consultausuario();
+		}
 
-		$("#botonform1").click(function(){
-            $(".form1").show();
-            $(".form2").hide();
-			$(".form3").hide();
-			$(".form4").hide();
-        });
-		$("#botonform2").click(function(){
-			$(".form1").hide();
-            $(".form2").show();
-			$(".form3").hide();
-			$(".form4").hide();
+		$('a[data-toggle="tab"][href="#tab-historia"]').on('shown.bs.tab', function () {
+			if ($('#id').val()) {
+				leeHistoria();
+			}
+		});
 
-			$("#titulo").html("");
-			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
-        });
-		$("#botonform3").click(function(){
-			$(".form1").hide();
-            $(".form2").hide();
-			$(".form3").show();
-			$(".form4").hide();
-
-			$("#titulo").html("");
-			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
-
-			// lee historia
-			leeHistoria();
-        });
-
-		$("#botonform4").click(function(){
-			$(".form1").hide();
-            $(".form2").hide();
-			$(".form3").hide();
-			$(".form4").show();
-
-			$("#titulo").html("");
-			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
-        });
+		$(document).on('change', '#estado_ticket', function () {
+			let estado = $(this).val();
+			if (estado === 'Finalizado') {
+				sellarResolucionSiVacio();
+			} else {
+				$('#fecha_resolucion').val('');
+				$('#hora_resolucion').val('');
+				$('#panel-estadisticas-ticket .badge-success').remove();
+			}
+			actualizarTiempoInsumidoTotal();
+		});
 
 		// type=button: no submit nativo; avisamos comentarios y luego enviamos
 		$(document).off('click.ticketAdminSubmit', '#btn-actualizar-administracion-ticket, .botonsubmit')
@@ -220,8 +203,13 @@
 					$tr.find('.fechafinalizacion')
 						.addClass('border-success')
 						.css({'background-color': '#d4edda', 'font-weight': 'bold'});
+					aplicarEstadisticasDesdeRespuesta(data);
 					calculaEstadoTicket();
-					alert('Tarea finalizada con éxito.\nFecha de finalización: ' + legible + '\nMinutos: ' + tiempoinsumido);
+					let extra = '';
+					if (data && data.cerro_ticket) {
+						extra = '\nEl ticket quedó Finalizado.';
+					}
+					alert('Tarea finalizada con éxito.\nFecha de finalización: ' + legible + '\nMinutos: ' + tiempoinsumido + extra);
 					return;
 				}
 				$tr.find('.fechafinalizacion').val('');
@@ -259,6 +247,7 @@
 		$tr.next('.fila-comentarios-tarea-admin').remove();
     	$tr.remove();
     	actualizaRenglonesTarea_Ticket();
+		calculaEstadoTicket();
     }
 
     function actualizaRenglonesTarea_Ticket() {
@@ -438,13 +427,19 @@
 				var nov = $.map(novedades, function(value, index){
 					return [value];
 				});
-				let ultimoEstado = "Pendiente";
-				$.each(nov, function(index,value){
-					ultimoEstado = value.estado;
-				});
+				let fechafinalizacion = $.trim($(ptrTarea).find(".fechafinalizacion").val() || '');
+				let ultimoEstado = $estado.val() || "Pendiente";
+				if (fechafinalizacion !== '') {
+					ultimoEstado = "Finalizada";
+				} else if (nov.length > 0) {
+					$.each(nov, function(index,value){
+						ultimoEstado = value.estado;
+					});
+				}
 
 				$estado.val(ultimoEstado);
 				$estado.attr('data-estado-previo', ultimoEstado);
+				calculaEstadoTicket();
 			});
 		});
 	}
@@ -467,30 +462,104 @@
 		});
 	}
 
+	function horaAhoraHhmm() {
+		let fecha = new Date();
+		let hh = String(fecha.getHours()).padStart(2, '0');
+		let mm = String(fecha.getMinutes()).padStart(2, '0');
+		return hh + ':' + mm;
+	}
+
+	function formatearMinutos(n) {
+		if (! (n > 0) && n !== 0) {
+			return '';
+		}
+		if (Math.abs(n - Math.round(n)) < 0.0001) {
+			return String(Math.round(n));
+		}
+		return String(Math.round(n * 100) / 100).replace('.', ',');
+	}
+
+	function sellarResolucionSiVacio() {
+		let fecha = $.trim($('#fecha_resolucion').val() || '');
+		let hora = $.trim($('#hora_resolucion').val() || '');
+		let hoy = fechaHoyYmd();
+		if (fecha === '') {
+			$('#fecha_resolucion').val(hoy);
+			fecha = hoy;
+		}
+		if ((hora === '' || hora === '00:00') && fecha === hoy) {
+			$('#hora_resolucion').val(horaAhoraHhmm());
+		}
+	}
+
+	function actualizarTiempoInsumidoTotal() {
+		let total = 0;
+		$("#tarea-ticket-table .item-tarea-ticket .tiempoinsumido").each(function () {
+			let n = parseFloat(String($(this).val() || '').replace(',', '.'));
+			if (n > 0) {
+				total += n;
+			}
+		});
+		let texto = formatearMinutos(total);
+		if (texto === '' && total === 0) {
+			texto = '0';
+		}
+		$('#tiempo_insumido_total').val(texto);
+		$('#tiempo-insumido-total-tareas').text(texto);
+	}
+
+	function aplicarEstadisticasDesdeRespuesta(data) {
+		if (! data || typeof data !== 'object') {
+			return;
+		}
+		if (data.estado_ticket) {
+			$('#estado_ticket').val(data.estado_ticket);
+		}
+		if (data.fecha_resolucion) {
+			$('#fecha_resolucion').val(data.fecha_resolucion);
+		}
+		if (data.hora_resolucion) {
+			$('#hora_resolucion').val(String(data.hora_resolucion).substring(0, 5));
+		}
+		if (data.tiempo_insumido_total !== undefined && data.tiempo_insumido_total !== null) {
+			$('#tiempo_insumido_total').val(formatearMinutos(parseFloat(data.tiempo_insumido_total)));
+		}
+	}
+
 	function calculaEstadoTicket()
 	{
 		let estadoTicket = $('#estado_ticket').val();
 
 		if (estadoTicket != 'Baja' && estadoTicket != 'Suspendido')
 		{
-			// Verifica si tiene tareas
-			$("#tarea-ticket-table .item-tarea-ticket").each(function() {
-				let ticket_tarea_id = $(this).find('.ticket_tarea_id').val();
-				let estadotarea = $(this).find('.estadotarea').val();
-				let tiempoinsumido = $(this).find(".tiempoinsumido").val();
-				let fechafinalizacion = $(this).find(".fechafinalizacion").val();
+			let hayTareas = false;
+			let todasFinalizadas = true;
 
-				if (fechafinalizacion != '')
+			$("#tarea-ticket-table .item-tarea-ticket").each(function() {
+				hayTareas = true;
+				let estadotarea = $(this).find('.estadotarea').val();
+				let fechafinalizacion = $.trim($(this).find(".fechafinalizacion").val() || '');
+
+				if (fechafinalizacion !== '')
 				{
 					estadotarea = 'Finalizada';
 					$(this).find(".estadotarea").val("Finalizada");
 				}
 
-				if (estadotarea != 'Finalizada')
-					estadoTicket = 'Pendiente';
+				if (estadotarea !== 'Finalizada') {
+					todasFinalizadas = false;
+				}
 			});
+
+			if (hayTareas && todasFinalizadas) {
+				estadoTicket = 'Finalizado';
+				sellarResolucionSiVacio();
+			}
+
 			$('#estado_ticket').val(estadoTicket);
 		}
+
+		actualizarTiempoInsumidoTotal();
 	}
 
 	function actualizarContadorComentarios(ticketTareaId, total) {

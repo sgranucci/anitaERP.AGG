@@ -17,7 +17,7 @@ ALCANCE — extraer SOLO:
 
 PROHIBIDO:
 - Líneas de artículos, SKU, cantidades, descripciones de mercadería, remitos, filas de detalle de productos.
-- Inferir tipo contable FGA, FIA, FIB, FNB, FCA, etc. desde el PDF o nombre de archivo. Siempre tipo_comprobante: "FC" (el ERP resuelve FGA/FIA con la OC vía listaConcepto).
+- Inferir tipo contable FGA, FIA, FIB, FNB, FIS, FNS, FCA, etc. desde el PDF o nombre de archivo. Siempre tipo_comprobante genérico AFIP: "FC"/"ND"/"NC" (el ERP resuelve FGA/FIA/FIS/FNS con la OC vía listaConcepto; si el proveedor tiene medidores/servicios, fuerza tipo Servicio FIS/FNS).
 - Inventar importes: si un valor no es legible, omitir o null; no rellenar con ceros arbitrarios.
 
 FORMATO JSON obligatorio:

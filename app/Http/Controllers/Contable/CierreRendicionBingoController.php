@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\Contable;
 
+use App\Exports\Contable\CierreRendicionBingoConciliacionFlashExport;
 use App\Exports\Contable\CierreRendicionBingoListadoExport;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Contable\CierreRendicionBingoService;
 use App\Support\Contable\CierreRendicionBingoListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -75,6 +77,136 @@ class CierreRendicionBingoController extends Controller
             'cierre_rendicion_bingo_contable',
             CierreRendicionBingoListadoFiltros::paraQueryString($filtros),
         );
+    }
+
+    public function conciliacionFlash(Request $request)
+    {
+        can('listar-cierre-rendicion-bingo-contable');
+
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $asignadas = $this->empresaRepository->traeEmpresasAsignadas();
+        $empresaId = (int) $request->input('empresa_id', 0);
+
+        if ($empresaId <= 0 && count($asignadas) === 1) {
+            $primera = $empresaQuery->first();
+            if ($primera !== null) {
+                $empresaId = (int) $primera->id;
+            }
+        } elseif ($empresaId > 0 && count($asignadas) >= 1 && ! in_array($empresaId, $asignadas, true)) {
+            $primera = $empresaQuery->first();
+            $empresaId = $primera !== null ? (int) $primera->id : 0;
+        }
+
+        $fechaDesde = trim((string) $request->input('fecha_desde', ''));
+        $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+        $consultar = $request->boolean('consultar');
+
+        if (! $consultar || ($fechaDesde === '' && $fechaHasta === '')) {
+            $defaults = $this->service->resolverRangoConciliacionDefault($empresaId);
+            $fechaDesde = $defaults['desde'];
+            $fechaHasta = $defaults['hasta'];
+        } elseif ($fechaHasta === '' && $fechaDesde !== '') {
+            $fechaHasta = now()->toDateString();
+        }
+
+        $resultado = null;
+        $errorFlash = null;
+
+        if ($consultar && $empresaId > 0 && $fechaDesde !== '' && $fechaHasta !== '') {
+            try {
+                ini_set('memory_limit', '-1');
+                ini_set('max_execution_time', '0');
+
+                $resultado = $this->service->conciliarFlash($empresaId, $fechaDesde, $fechaHasta);
+            } catch (\Throwable $e) {
+                $errorFlash = $e->getMessage();
+            }
+        }
+
+        $filtrosQueryConciliacion = array_filter([
+            'empresa_id' => $empresaId > 0 ? $empresaId : null,
+            'fecha_desde' => $fechaDesde !== '' ? $fechaDesde : null,
+            'fecha_hasta' => $fechaHasta !== '' ? $fechaHasta : null,
+            'consultar' => $consultar ? 1 : null,
+        ], static fn ($v) => $v !== null && $v !== '');
+
+        return view('contable.cierre_rendicion_bingo.conciliacion_flash', [
+            'empresa_query' => $empresaQuery,
+            'empresa_id' => $empresaId,
+            'fecha_desde' => $fechaDesde,
+            'fecha_hasta' => $fechaHasta,
+            'consultar' => $consultar,
+            'resultado' => $resultado,
+            'error_flash' => $errorFlash,
+            'filtrosQueryConciliacion' => $filtrosQueryConciliacion,
+            'retornoListadoQuery' => $this->resolverRetornoListadoQuery($request),
+        ]);
+    }
+
+    public function listarConciliacionFlash(Request $request, ?string $formato = null)
+    {
+        can('exportar-cierre-rendicion-bingo-contable');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $fechaDesde = trim((string) $request->input('fecha_desde', ''));
+        $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+
+        $redirectQuery = array_filter([
+            'empresa_id' => $empresaId > 0 ? $empresaId : null,
+            'fecha_desde' => $fechaDesde !== '' ? $fechaDesde : null,
+            'fecha_hasta' => $fechaHasta !== '' ? $fechaHasta : null,
+            'consultar' => 1,
+        ], static fn ($v) => $v !== null && $v !== '');
+
+        if ($empresaId <= 0 || $fechaDesde === '' || $fechaHasta === '') {
+            return redirect()
+                ->route('cierre_rendicion_bingo_conciliacion_flash', $redirectQuery)
+                ->with('mensaje_error', 'Indique empresa y rango de jornadas para exportar.');
+        }
+
+        try {
+            $resultado = $this->service->conciliarFlash($empresaId, $fechaDesde, $fechaHasta);
+        } catch (\Throwable $e) {
+            return redirect()
+                ->route('cierre_rendicion_bingo_conciliacion_flash', $redirectQuery)
+                ->with('mensaje_error', $e->getMessage());
+        }
+
+        switch ($formato) {
+            case 'PDF':
+                $view = \View::make('contable.cierre_rendicion_bingo.conciliacion_flash_listado', [
+                    'resultado' => $resultado,
+                    'esExcel' => false,
+                    'filas' => CierreRendicionBingoConciliacionFlashExport::aplanarFilas($resultado),
+                ])->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    mkdir($path, 0755, true);
+                }
+                $nombrePdf = 'listado_conciliacion_flash_bingo';
+
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombrePdf.'.pdf');
+
+                return response()->download($path.'/'.$nombrePdf.'.pdf');
+
+            case 'EXCEL':
+            case 'CSV':
+                $mime = $formato === 'CSV' ? Excel::CSV : Excel::XLSX;
+                $ext = $formato === 'CSV' ? 'csv' : 'xlsx';
+
+                return \Maatwebsite\Excel\Facades\Excel::download(
+                    new CierreRendicionBingoConciliacionFlashExport($resultado, $formato === 'CSV'),
+                    'conciliacion_flash_bingo.'.$ext,
+                    $mime,
+                );
+        }
+
+        return redirect()->route('cierre_rendicion_bingo_conciliacion_flash', $redirectQuery);
     }
 
     public function apiPendientesCierre(Request $request): JsonResponse
@@ -289,5 +421,30 @@ class CierreRendicionBingoController extends Controller
         $first = $empresaQuery->first();
 
         return $first !== null ? (int) $first->id : 0;
+    }
+
+    /**
+     * @return array<string, string|int>
+     */
+    private function resolverRetornoListadoQuery(Request $request): array
+    {
+        $retorno = $request->input('retorno');
+        if (is_array($retorno) && $retorno !== []) {
+            $query = [];
+            foreach ($retorno as $key => $value) {
+                if (! is_string($key) || $key === '' || ! is_scalar($value)) {
+                    continue;
+                }
+                $trimmed = is_string($value) ? trim($value) : $value;
+                if ($trimmed === '' || $trimmed === null) {
+                    continue;
+                }
+                $query[$key] = $trimmed;
+            }
+
+            return $query;
+        }
+
+        return QueryRetornoListado::desdeRequest($request, CierreRendicionBingoListadoFiltros::class);
     }
 }

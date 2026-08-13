@@ -11,6 +11,7 @@ use App\Services\Caja\RendicionMaquina\RendicionMaquinaService;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaAjusteWigosSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaTurno;
 use App\Support\Caja\RendicionMaquinaListadoFiltros;
+use App\Support\Contable\CierreRendicionOrigenConsultaSupport;
 use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -116,7 +117,14 @@ class RendicionMaquinaController extends Controller
 
     public function editar(Request $request, $id)
     {
-        can('editar-rendicion-maquina');
+        $soloConsulta = QueryRetornoListado::esModalConsulta($request);
+        if ($soloConsulta) {
+            CierreRendicionOrigenConsultaSupport::exigir(
+                CierreRendicionOrigenConsultaSupport::puedeConsultarRendicionMaquina(),
+            );
+        } else {
+            can('editar-rendicion-maquina');
+        }
 
         $rendicion = $this->repository->findOrFail($id);
         $this->assertAccesoEmpresa((int) $rendicion->empresa_id);
@@ -130,6 +138,7 @@ class RendicionMaquinaController extends Controller
 
         return view('caja.rendicion_maquina.cargar', [
             'modo_edicion' => true,
+            'soloConsulta' => $soloConsulta,
             'rendicion_id' => (int) $rendicion->id,
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'empresa_id' => (int) $rendicion->empresa_id,
@@ -137,7 +146,7 @@ class RendicionMaquinaController extends Controller
             'turno' => (string) $rendicion->turno,
             'datos' => $datos,
             'filtrosQuery' => QueryRetornoListado::desdeRequest($request, RendicionMaquinaListadoFiltros::class),
-            'puede_ajustar_wigos' => RendicionMaquinaAjusteWigosSupport::usuarioPuedeAjustar(),
+            'puede_ajustar_wigos' => ! $soloConsulta && RendicionMaquinaAjusteWigosSupport::usuarioPuedeAjustar(),
             'puede_ver_log_wigos' => RendicionMaquinaAjusteWigosSupport::usuarioPuedeVerLog(),
         ]);
     }
@@ -260,6 +269,7 @@ class RendicionMaquinaController extends Controller
             'inputs' => $datos['inputs'],
             'wigos_json' => $datos['wigos_json'],
             'valores' => $datos['valores'] ?? null,
+            'precarga_valores' => $datos['precarga_valores'] ?? null,
             'gastos' => $datos['gastos'] ?? null,
             'previas' => $datos['previas'] ?? [],
             'calc_orquestador' => $datos['calc_orquestador'] ?? [],
@@ -270,7 +280,9 @@ class RendicionMaquinaController extends Controller
 
     public function imprimir(Request $request, int $id)
     {
-        can('imprimir-rendicion-maquina');
+        CierreRendicionOrigenConsultaSupport::exigir(
+            CierreRendicionOrigenConsultaSupport::puedeVerPdfRendicionMaquina(),
+        );
 
         $rendicion = RendicionMaquina::query()
             ->with([

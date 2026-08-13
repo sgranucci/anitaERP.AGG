@@ -3,8 +3,11 @@
 namespace App\Repositories\Uif;
 
 use App\Models\Uif\Cliente_Premio_Uif;
+use App\Models\Uif\Cliente_Uif;
+use App\Services\Uif\ClientePremioUifFotoTesoreria;
 use App\Support\Uif\ClientePremioUifListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 use Auth;
 
@@ -122,40 +125,104 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
 	{
         $cid = isset($data['cliente_uif_id']) ? filter_var($data['cliente_uif_id'], FILTER_VALIDATE_INT) : false;
         $anita = isset($data['anita_inropremioid']) ? filter_var($data['anita_inropremioid'], FILTER_VALIDATE_INT) : false;
-
         $salaId = isset($data['sala_id']) ? (int) $data['sala_id'] : 0;
 
-        if ($cid !== false && $cid > 0 && $anita !== false && $anita > 0) {
-            $existQ = $this->model->newQuery()
-                ->where('cliente_uif_id', $cid)
-                ->where('anita_inropremioid', $anita);
-            if ($salaId > 0) {
-                $existQ->where('sala_id', $salaId);
-            }
-            $exist = $existQ->first();
-            if ($exist !== null) {
-                $exist->update($data);
-
-                return $exist->fresh();
-            }
-
-            $legacy = $this->model->newQuery()
-                ->where('cliente_uif_id', $cid)
-                ->whereNull('anita_inropremioid')
-                ->where('fechaentrega', $data['fechaentrega'] ?? null)
-                ->where('monto', $data['monto'] ?? null)
-                ->when($salaId > 0, fn ($q) => $q->where('sala_id', $salaId))
-                ->orderBy('id')
-                ->first();
-            if ($legacy !== null) {
-                $legacy->update($data);
-
-                return $legacy->fresh();
-            }
+        if ($cid === false || $cid <= 0) {
+            return $this->model->create($data);
         }
 
-        return $this->model->create($data);
+        return DB::transaction(function () use ($data, $cid, $anita, $salaId) {
+            Cliente_Uif::query()->whereKey($cid)->lockForUpdate()->first();
+
+            if ($anita !== false && $anita > 0) {
+                $existQ = $this->model->newQuery()
+                    ->where('cliente_uif_id', $cid)
+                    ->where('anita_inropremioid', $anita);
+                if ($salaId > 0) {
+                    $existQ->where('sala_id', $salaId);
+                }
+                $exist = $existQ->first();
+                if ($exist !== null) {
+                    return $this->actualizarPremioExistente($exist, $data);
+                }
+
+                $legacy = $this->model->newQuery()
+                    ->where('cliente_uif_id', $cid)
+                    ->whereNull('anita_inropremioid')
+                    ->where('fechaentrega', $data['fechaentrega'] ?? null)
+                    ->where('monto', $data['monto'] ?? null)
+                    ->when($salaId > 0, fn ($q) => $q->where('sala_id', $salaId))
+                    ->orderBy('id')
+                    ->first();
+                if ($legacy !== null) {
+                    return $this->actualizarPremioExistente($legacy, $data);
+                }
+
+                return $this->model->create($data);
+            }
+
+            $manual = $this->buscarPremioManualDuplicado($cid, $data, $salaId);
+            if ($manual !== null) {
+                return $this->actualizarPremioExistente($manual, $data);
+            }
+
+            return $this->model->create($data);
+        });
 	}
+
+    /**
+     * Alta manual: mismo cliente + fecha + monto + tito + posición (+ sala) = el mismo premio.
+     * Evita el doble POST del formulario (Guardar dos veces / doble clic).
+     */
+    private function buscarPremioManualDuplicado(int $clienteUifId, array $data, int $salaId): ?Cliente_Premio_Uif
+    {
+        $fecha = $data['fechaentrega'] ?? null;
+        $monto = $data['monto'] ?? null;
+        if ($fecha === null || $fecha === '' || $monto === null || $monto === '') {
+            return null;
+        }
+
+        $q = $this->model->newQuery()
+            ->where('cliente_uif_id', $clienteUifId)
+            ->whereNull('anita_inropremioid')
+            ->where('fechaentrega', $fecha)
+            ->where('monto', $monto)
+            ->when($salaId > 0, fn ($query) => $query->where('sala_id', $salaId));
+
+        $this->aplicarIgualdadTextoOVacio($q, 'numerotito', $data['numerotito'] ?? null);
+        $this->aplicarIgualdadTextoOVacio($q, 'posicion', $data['posicion'] ?? null);
+
+        return $q->orderBy('id')->first();
+    }
+
+    /**
+     * @param  \Illuminate\Database\Eloquent\Builder<Cliente_Premio_Uif>  $query
+     */
+    private function aplicarIgualdadTextoOVacio($query, string $columna, $valor): void
+    {
+        $texto = is_string($valor) ? trim($valor) : (string) ($valor ?? '');
+        if ($texto === '') {
+            $query->where(function ($q) use ($columna) {
+                $q->whereNull($columna)->orWhere($columna, '');
+            });
+
+            return;
+        }
+
+        $query->where($columna, $texto);
+    }
+
+    private function actualizarPremioExistente(Cliente_Premio_Uif $existente, array $data): Cliente_Premio_Uif
+    {
+        $fotoAnterior = (string) ($existente->foto ?? '');
+        $existente->update($data);
+        $fotoNueva = (string) ($existente->fresh()->foto ?? '');
+        if ($fotoAnterior !== '' && $fotoNueva !== $fotoAnterior) {
+            ClientePremioUifFotoTesoreria::deletePublicFotoIfUnused($fotoAnterior);
+        }
+
+        return $existente->fresh();
+    }
 
     public function update(array $data, $id)
     {

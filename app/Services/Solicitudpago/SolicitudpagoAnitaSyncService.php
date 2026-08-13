@@ -64,8 +64,9 @@ class SolicitudpagoAnitaSyncService
         $creados = 0;
         $actualizados = 0;
         $madrePendientes = [];
+        $idsNuevos = [];
 
-        DB::transaction(function () use ($cabeceras, $mapas, &$creados, &$actualizados, &$madrePendientes) {
+        DB::transaction(function () use ($cabeceras, $mapas, &$creados, &$actualizados, &$madrePendientes, &$idsNuevos) {
             foreach ($cabeceras as $row) {
                 $codigo = (int) ($row->solpm_id ?? 0);
                 if ($codigo <= 0) {
@@ -80,15 +81,15 @@ class SolicitudpagoAnitaSyncService
 
                 $existente = Solicitudpago::query()->where('codigo', $codigo)->first();
                 if ($existente) {
-                    // No pisar detalle ERP ya cargado si Anita viene vacío (histórico frecuente).
-                    $detalleAnita = trim((string) ($attrs['detalle'] ?? ''));
-                    if ($detalleAnita === '' && trim((string) ($existente->detalle ?? '')) !== '') {
-                        unset($attrs['detalle']);
+                    // Ya está en ERP: solo alinear estado (pago / autorización siguen ocurriendo en Anita).
+                    $estadoAnita = (string) ($attrs['estado'] ?? '');
+                    if ($estadoAnita !== '' && (string) $existente->estado !== $estadoAnita) {
+                        $existente->update(['estado' => $estadoAnita]);
+                        $actualizados++;
                     }
-                    $existente->update($attrs);
-                    $actualizados++;
                 } else {
-                    Solicitudpago::query()->create($attrs);
+                    $nuevo = Solicitudpago::query()->create($attrs);
+                    $idsNuevos[] = (int) $nuevo->id;
                     $creados++;
                 }
             }
@@ -103,12 +104,16 @@ class SolicitudpagoAnitaSyncService
             }
         }
 
-        $this->sincronizarCuentas($api, $sistema, $porCodigo, $mapas);
-        $this->sincronizarCuotas($api, $sistema, $porCodigo);
+        $idsCuentas = $this->idsParaCompletarRelacion($porCodigo, $idsNuevos, 'cuentas');
+        $idsCuotas = $this->idsParaCompletarRelacion($porCodigo, $idsNuevos, 'cuotas');
+        $idsArchivos = $this->idsParaCompletarRelacion($porCodigo, $idsNuevos, 'archivos');
+
+        $this->sincronizarCuentas($api, $sistema, $porCodigo, $mapas, $idsCuentas);
+        $this->sincronizarCuotas($api, $sistema, $porCodigo, $idsCuotas);
         // Anita a veces deja solpm_id_sp_orig=0 en hijas; el vínculo real está en solpagocuota.
         $madresDesdeCuotas = $this->reconciliarMadresDesdeCuotas();
         $this->sincronizarEstados($api, $sistema, $porCodigo, $mapas);
-        $this->sincronizarArchivos($api, $sistema, $porCodigo, $mapas);
+        $this->sincronizarArchivos($api, $sistema, $porCodigo, $mapas, $idsArchivos);
 
         return [
             'cabeceras' => count($cabeceras),
@@ -116,6 +121,42 @@ class SolicitudpagoAnitaSyncService
             'actualizados' => $actualizados,
             'madres_desde_cuotas' => $madresDesdeCuotas,
         ];
+    }
+
+    /**
+     * IDs nuevos + existentes sin filas en la relación (huecos de un sync anterior).
+     *
+     * @param  array<int, int>  $porCodigo
+     * @param  list<int>  $idsNuevos
+     * @return list<int>
+     */
+    private function idsParaCompletarRelacion(array $porCodigo, array $idsNuevos, string $relacion): array
+    {
+        $destino = array_fill_keys($idsNuevos, true);
+        $existentes = array_values(array_diff(array_map('intval', array_values($porCodigo)), $idsNuevos));
+        if ($existentes === []) {
+            return array_keys($destino);
+        }
+
+        $conRelacion = [];
+        foreach (array_chunk($existentes, 1000) as $chunk) {
+            $ids = Solicitudpago::query()
+                ->whereIn('id', $chunk)
+                ->whereHas($relacion)
+                ->pluck('id')
+                ->all();
+            foreach ($ids as $id) {
+                $conRelacion[(int) $id] = true;
+            }
+        }
+
+        foreach ($existentes as $id) {
+            if (! isset($conRelacion[$id])) {
+                $destino[$id] = true;
+            }
+        }
+
+        return array_keys($destino);
     }
 
     /**
@@ -232,9 +273,15 @@ class SolicitudpagoAnitaSyncService
     /**
      * @param  array<int, int>  $porCodigo
      * @param  array<string, mixed>  $mapas
+     * @param  list<int>  $soloSpIds
      */
-    private function sincronizarCuentas(ApiAnita $api, string $sistema, array $porCodigo, array $mapas): void
+    private function sincronizarCuentas(ApiAnita $api, string $sistema, array $porCodigo, array $mapas, array $soloSpIds): void
     {
+        if ($soloSpIds === []) {
+            return;
+        }
+        $filtro = array_flip($soloSpIds);
+
         $filas = $this->listar($api, $sistema, 'solpagocta',
             'solpc_id, solpc_empresa, solpc_cuenta, solpc_ccosto, solpc_d_h, solpc_monto'
         );
@@ -244,7 +291,7 @@ class SolicitudpagoAnitaSyncService
         foreach ($filas as $row) {
             $codigoSp = (int) ($row->solpc_id ?? 0);
             $spId = $porCodigo[$codigoSp] ?? null;
-            if (! $spId) {
+            if (! $spId || ! isset($filtro[$spId])) {
                 continue;
             }
             $idsTocados[$spId] = true;
@@ -297,9 +344,15 @@ class SolicitudpagoAnitaSyncService
 
     /**
      * @param  array<int, int>  $porCodigo
+     * @param  list<int>  $soloSpIds
      */
-    private function sincronizarCuotas(ApiAnita $api, string $sistema, array $porCodigo): void
+    private function sincronizarCuotas(ApiAnita $api, string $sistema, array $porCodigo, array $soloSpIds): void
     {
+        if ($soloSpIds === []) {
+            return;
+        }
+        $filtro = array_flip($soloSpIds);
+
         $filas = $this->listar($api, $sistema, 'solpagocuota',
             'solpcu_id, solpcu_cuota, solpcu_fecha_vto, solpcu_monto, solpcu_id_sp'
         );
@@ -310,7 +363,7 @@ class SolicitudpagoAnitaSyncService
         foreach ($filas as $row) {
             $codigoSp = (int) ($row->solpcu_id ?? 0);
             $spId = $porCodigo[$codigoSp] ?? null;
-            if (! $spId) {
+            if (! $spId || ! isset($filtro[$spId])) {
                 continue;
             }
             $fechaVto = SolicitudpagoAnitaFechaSupport::fechaDesdeAnita($row->solpcu_fecha_vto ?? 0);
@@ -394,14 +447,62 @@ class SolicitudpagoAnitaSyncService
         foreach (array_chunk($buffer, 500) as $chunk) {
             Solicitudpago_Estado::query()->insert($chunk);
         }
+
+        // Historial Anita manda: si el último estado_act difiere de la cabecera, alinear.
+        $this->alinearCabeceraConUltimoEstado(array_keys($idsTocados));
+    }
+
+    /**
+     * @param  list<int>  $spIds
+     */
+    private function alinearCabeceraConUltimoEstado(array $spIds): void
+    {
+        if ($spIds === []) {
+            return;
+        }
+
+        foreach (array_chunk($spIds, 500) as $chunk) {
+            $ultimos = Solicitudpago_Estado::query()
+                ->whereIn('solicitudpago_id', $chunk)
+                ->orderBy('solicitudpago_id')
+                ->orderBy('fecha')
+                ->orderBy('id')
+                ->get(['solicitudpago_id', 'estado_actual']);
+
+            $porSp = [];
+            foreach ($ultimos as $fila) {
+                $porSp[(int) $fila->solicitudpago_id] = (string) $fila->estado_actual;
+            }
+
+            if ($porSp === []) {
+                continue;
+            }
+
+            $cabeceras = Solicitudpago::query()
+                ->whereIn('id', array_keys($porSp))
+                ->get(['id', 'estado']);
+
+            foreach ($cabeceras as $sp) {
+                $estadoHist = $porSp[(int) $sp->id] ?? '';
+                if ($estadoHist !== '' && (string) $sp->estado !== $estadoHist) {
+                    $sp->update(['estado' => $estadoHist]);
+                }
+            }
+        }
     }
 
     /**
      * @param  array<int, int>  $porCodigo
      * @param  array<string, mixed>  $mapas
+     * @param  list<int>  $soloSpIds
      */
-    private function sincronizarArchivos(ApiAnita $api, string $sistema, array $porCodigo, array $mapas): void
+    private function sincronizarArchivos(ApiAnita $api, string $sistema, array $porCodigo, array $mapas, array $soloSpIds): void
     {
+        if ($soloSpIds === []) {
+            return;
+        }
+        $filtro = array_flip($soloSpIds);
+
         $filas = $this->listar($api, $sistema, 'solpagoarch',
             'solpa_nro_sol, solpa_nro_linea, solpa_archivo, solpa_usuario, solpa_fecha_act, solpa_hora_act'
         );
@@ -415,7 +516,7 @@ class SolicitudpagoAnitaSyncService
         foreach ($filas as $row) {
             $codigoSp = (int) ($row->solpa_nro_sol ?? 0);
             $spId = $porCodigo[$codigoSp] ?? null;
-            if (! $spId) {
+            if (! $spId || ! isset($filtro[$spId])) {
                 continue;
             }
             $archivo = trim((string) ($row->solpa_archivo ?? ''));

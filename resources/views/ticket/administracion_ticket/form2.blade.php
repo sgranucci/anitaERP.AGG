@@ -1,14 +1,16 @@
-<div class="card form2" style="display: none">
-    <h3>Artículos</h3>
+<div class="card card-outline card-info form2">
+    <div class="card-header py-2">
+        <strong><i class="fa fa-cubes"></i> Art&iacute;culos</strong>
+    </div>
     <div class="card-body">
-        <table class="table" id="ticket-articulo-table">
-            <thead>
+        <table class="table table-sm table-bordered" id="ticket-articulo-table">
+            <thead style="background:#85C1E9;color:#17202A;">
                 <tr>
-                    <th style="width: 15%;">Artículo</th>
-                    <th>Descripción</th>
-                    <th>Cantidad</th=>
-                    <th>Requisición</th=>
-                    <th>Recepción</th>
+                    <th style="width: 15%;">Art&iacute;culo</th>
+                    <th>Descripci&oacute;n</th>
+                    <th>Cantidad</th>
+                    <th>Requisici&oacute;n</th>
+                    <th>Recepci&oacute;n</th>
                     <th></th>
                 </tr>
             </thead>
@@ -57,7 +59,9 @@
         <div class="row">
             <div class="col-sm-6">
                 <div class="form-group row">
-                    <button id="agrega_renglon_ticket_articulo" class="pull-right btn btn-danger">+ Agrega rengl&oacute;n</button>
+            <button type="button" id="agrega_renglon_ticket_articulo" class="btn btn-outline-primary btn-sm">
+                <i class="fa fa-plus"></i> Agrega rengl&oacute;n
+            </button>
                 </div>
             </div>
         </div>

@@ -421,7 +421,7 @@ class PagoproveedorService
                 ];
                 $this->persistirRetenciones($pago, $data);
 
-                if (! $pago->asiento_id && $pago->asientos->isEmpty()) {
+                if (! $pago->asiento_id && ! $pago->asientos) {
                     // Sin líneas contables en request: no fuerza asiento vacío.
                 }
             });

@@ -122,6 +122,10 @@
         badge.textContent = 'Turno ' + turno;
         badge.classList.remove('badge-primary', 'badge-info', 'badge-dark', 'badge-warning');
         badge.classList.add(claseBadgeTurno(turno));
+        var avisoQr = document.getElementById('aviso-precarga-qr-maquinas');
+        if (avisoQr) {
+            avisoQr.style.display = turno === 'M' ? '' : 'none';
+        }
     }
 
     function recolectarInputs() {
@@ -328,6 +332,41 @@
                 + '<td class="col-monto"><input type="text" inputmode="decimal" class="form-control form-control-sm text-right js-valor-monto js-monto-ar" autocomplete="off" value="' + monto + '"></td>'
                 + '</tr>';
         }).join('');
+        initFormatoMontos(tbody);
+    }
+
+    /**
+     * Turno mañana: pisa solo TotalCoin QR Máquinas (drop QR rodillo + impuesto QR).
+     * No regenera la grilla para no borrar el resto de valores ya cargados.
+     */
+    function aplicarPrecargaValores(lineas) {
+        (lineas || []).forEach(function (linea) {
+            var id = parseInt(linea.cuentacaja_id, 10) || 0;
+            if (id <= 0) {
+                return;
+            }
+            var tr = app.querySelector('#tabla-valores-rendicion tbody tr[data-cuentacaja-id="' + id + '"]');
+            if (!tr) {
+                return;
+            }
+            var inp = tr.querySelector('.js-valor-monto');
+            if (!inp) {
+                return;
+            }
+            inp.value = fmtMoney(linea.monto || 0);
+            inp.title = 'Precargado: drop QR rodillo + impuesto QR (WIGOS). Editable.';
+        });
+    }
+
+    function recolectarGastos() {
+        var lineas = [];
+        app.querySelectorAll('#tabla-gastos-rendicion tbody tr[data-apertura-gasto-id]').forEach(function (tr) {
+            lineas.push({
+                apertura_gasto_id: parseInt(tr.dataset.aperturaGastoId, 10),
+                monto: parseNum(tr.querySelector('.js-gasto-monto')?.value)
+            });
+        });
+        return lineas;
     }
 
     function renderGastos(lineas) {
@@ -605,6 +644,9 @@
         // Completo: valores/gastos consolidados de M/T/N (lee_rendiciones_del_dia)
         if (Array.isArray(data.valores)) {
             renderValores(data.valores);
+        }
+        if (Array.isArray(data.precarga_valores)) {
+            aplicarPrecargaValores(data.precarga_valores);
         }
         if (Array.isArray(data.gastos)) {
             renderGastos(data.gastos);

@@ -1,6 +1,6 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-    {{ ! empty($modo_edicion) ? 'Editar rendición de máquinas' : 'Nueva rendición de máquinas' }}
+    {{ ! empty($soloConsulta) ? 'Consultar rendición de máquinas' : (! empty($modo_edicion) ? 'Editar rendición de máquinas' : 'Nueva rendición de máquinas') }}
 @endsection
 
 @section("scripts")
@@ -185,6 +185,7 @@
     $camposManuales = $d['campos_manuales'] ?? [];
     $retornoListadoQuery = $filtrosQuery ?? [];
     $turnoActual = (string) ($turno ?? 'M');
+    $mostrarAvisoPrecargaQr = $turnoActual === 'M';
     $badgeTurno = match ($turnoActual) {
         'C' => 'badge-warning',
         'N' => 'badge-dark',
@@ -192,6 +193,8 @@
         default => 'badge-primary',
     };
     $modoEdicion = ! empty($modo_edicion);
+    $soloConsulta = ! empty($soloConsulta);
+    $soloLectura = $soloConsulta;
     $personalCampos = [
         [
             'label' => 'Supervisor',
@@ -244,25 +247,33 @@
             <div class="card-header rendmaq-card-header">
                 <h3 class="card-title mb-0">
                     @if ($modoEdicion)
-                        Editar rendici&oacute;n #{{ (int) ($rendicion_id ?? 0) }}
+                        @if ($soloConsulta)
+                            Consultar rendici&oacute;n #{{ (int) ($rendicion_id ?? 0) }}
+                        @else
+                            Editar rendici&oacute;n #{{ (int) ($rendicion_id ?? 0) }}
+                        @endif
                     @else
                         Nueva rendici&oacute;n de m&aacute;quinas
                     @endif
                     <span id="rendmaq-badge-turno" class="badge {{ $badgeTurno }} ml-2">Turno {{ $turnoActual }}</span>
                 </h3>
                 <div class="rendmaq-toolbar">
+                    @if (! $soloConsulta)
                     <a href="{{ route('rendicion_maquina', $retornoListadoQuery) }}" class="btn btn-sm btn-rendmaq-header">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
-                    @if (! empty($puede_ver_log_wigos))
+                    @endif
+                    @if (! $soloConsulta && ! empty($puede_ver_log_wigos))
                         <button type="button" class="btn btn-sm btn-rendmaq-header" id="btn-ver-log-ajustes">
                             <i class="fa fa-history"></i> Log ajustes
                         </button>
                     @endif
+                    @if (! $soloConsulta)
                     <button type="button" class="btn btn-sm btn-rendmaq-wigos" id="btn-traer-wigos">
                         <i class="fa fa-cloud-download"></i> Traer WIGOS
                     </button>
-                    @if ($modoEdicion && can('imprimir-rendicion-maquina', false))
+                    @endif
+                    @if ($modoEdicion && \App\Support\Contable\CierreRendicionOrigenConsultaSupport::puedeVerPdfRendicionMaquina())
                         <a href="{{ route('imprimir_rendicion_maquina', ['id' => (int) $rendicion_id, 'inline' => 1]) }}"
                            target="_blank" rel="noopener"
                            class="btn btn-sm btn-rendmaq-header"
@@ -270,9 +281,14 @@
                             <i class="fa fa-print"></i> PDF
                         </a>
                     @endif
+                    @if ($soloConsulta)
+                        <button type="button" class="btn btn-sm btn-rendmaq-header" onclick="window.close()">
+                            Cerrar solapa
+                        </button>
+                    @endif
                 </div>
             </div>
-            <div class="card-body pb-0">
+            <div class="card-body pb-0 @if($soloLectura) pe-none @endif" @if($soloLectura) style="opacity:.92" @endif>
                 @if (! $modoEdicion)
                     <div class="alert alert-info py-2 px-3" id="aviso-wigos-progreso" role="status">
                         <i class="fa fa-spinner fa-spin"></i>
@@ -507,7 +523,13 @@
 
                     <div>
                         <div class="card card-outline card-info mb-3">
-                            <div class="card-header py-2"><strong>Valores (cuentas de caja)</strong></div>
+                            <div class="card-header py-2">
+                                <strong>Valores (cuentas de caja)</strong>
+                                <small class="text-muted d-block font-weight-normal" id="aviso-precarga-qr-maquinas"
+                                       style="{{ $mostrarAvisoPrecargaQr ? '' : 'display:none' }}">
+                                    En turno mañana, TotalCoin QR Máquina se precarga al traer WIGOS (drop QR rodillo + impuesto QR).
+                                </small>
+                            </div>
                             <div class="card-body p-0 table-responsive">
                                 <table class="table table-sm table-bordered mb-0 rendmaq-panel" id="tabla-valores-rendicion">
                                     <thead>
@@ -605,12 +627,18 @@
                 <div class="d-flex flex-wrap align-items-center justify-content-between mb-2">
                     <strong class="mb-1 mb-md-0"><i class="fa fa-calculator text-info"></i> Totales (siempre visibles)</strong>
                     <div class="rendmaq-footer-acciones">
-                        <a href="{{ route('rendicion_maquina', $retornoListadoQuery) }}" class="btn btn-outline-info btn-sm">
-                            <i class="fa fa-fw fa-reply-all"></i> Volver al listado
-                        </a>
-                        <button type="button" class="btn btn-success btn-sm" id="btn-guardar-rendicion">
-                            <i class="fa fa-save"></i> Guardar rendici&oacute;n
-                        </button>
+                        @if ($soloConsulta)
+                            <button type="button" class="btn btn-secondary btn-sm" onclick="window.close()">
+                                Cerrar solapa
+                            </button>
+                        @else
+                            <a href="{{ route('rendicion_maquina', $retornoListadoQuery) }}" class="btn btn-outline-info btn-sm">
+                                <i class="fa fa-fw fa-reply-all"></i> Volver al listado
+                            </a>
+                            <button type="button" class="btn btn-success btn-sm" id="btn-guardar-rendicion">
+                                <i class="fa fa-save"></i> Guardar rendici&oacute;n
+                            </button>
+                        @endif
                     </div>
                 </div>
                 <div class="totales-grid" id="panel-totales-rendicion">

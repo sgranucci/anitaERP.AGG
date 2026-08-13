@@ -237,6 +237,7 @@ final class ComprobanteProveedorPdfIaService
             'fechafactura' => $this->resolverFechaFacturaParaGrabar($resuelto),
             'fecharecepcionemail' => $resuelto['fecha_recepcion_email'] ?? now()->format('Y-m-d'),
             'fechavencimientocaicae' => $resuelto['fecha_vto_cai_cae'] ?? null,
+            'fechavencimiento' => $resuelto['fecha_vencimiento'] ?? null,
             'numerocae' => $resuelto['numerocae'] ?? null,
             'tipo_autorizacion' => $tipoAutorizacion,
             'numeroordencompra' => $numeroOc,
@@ -376,6 +377,19 @@ final class ComprobanteProveedorPdfIaService
             }
         }
 
+        try {
+            $empresaOc = $this->resolucionSupport->resolverEmpresaPorOc($numeroOc);
+            if ((int) $empresaOc['empresa_id'] !== (int) $empresa['empresa_id']) {
+                $advertencias[] = 'El CUIT destinatario matcheó '.$empresa['nombre']
+                    .', pero la OC '.$numeroOc.' es de '.$empresaOc['nombre']
+                    .'. Se usa la empresa de la OC.';
+                $empresa = $empresaOc;
+                $extraido['cuit_destinatario_origen'] = 'oc_prevalece';
+            }
+        } catch (RuntimeException) {
+            // Sin OC local: se mantiene la empresa del CUIT.
+        }
+
         $proveedor = $this->resolucionSupport->resolverProveedorPorOc($cuitProveedor, $numeroOc);
 
         // FC / ND / NC (o REC/REM) desde OCR/LLM; el tipo fino (FIA, CGA…) lo arma listaConcepto + CC.
@@ -466,6 +480,7 @@ final class ComprobanteProveedorPdfIaService
             'fecha_recepcion_email' => now()->format('Y-m-d'),
             'numerocae' => $this->normalizarTexto($extraido['numerocae'] ?? null),
             'fecha_vto_cai_cae' => $this->normalizarFechaYmd($extraido['fecha_vto_cai_cae'] ?? null),
+            'fecha_vencimiento' => $this->normalizarFechaYmd($extraido['fecha_vencimiento'] ?? null),
             'subtotal' => $subtotalFactura,
             'total' => $totalFactura,
             'moneda' => strtoupper((string) ($extraido['moneda'] ?? 'PESOS')),
@@ -847,9 +862,15 @@ final class ComprobanteProveedorPdfIaService
 
     private function resolverMonedaId(mixed $moneda): int
     {
-        return match (strtoupper((string) $moneda)) {
-            'DOLARES', 'USD' => 2,
-            'EUROS', 'EUR' => 3,
+        $valor = strtoupper(trim((string) $moneda));
+        // "$" / vacío / ARS → pesos.
+        if ($valor === '' || $valor === '$' || $valor === 'ARS' || $valor === 'PESO' || $valor === 'PESOS') {
+            return 1;
+        }
+
+        return match ($valor) {
+            'DOLARES', 'DOLAR', 'USD', 'US$', 'U$S', 'DOL' => 2,
+            'EUROS', 'EURO', 'EUR' => 3,
             default => 1,
         };
     }

@@ -4,10 +4,26 @@
 @endsection
 
 @section("scripts")
+<script src="{{ asset('assets/pages/scripts/stock/listaprecio/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/precio/actualizar-categoria.js') }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
+@php
+    $listaIdValor = $listaprecioId !== null ? (int) $listaprecioId : 0;
+    $listaCodigo = '';
+    $listaNombre = '';
+    if ($listaIdValor > 0) {
+        $listaSel = collect($listasPrecio ?? [])->first(function ($lista) use ($listaIdValor) {
+            return (int) $lista->id === $listaIdValor;
+        });
+        if ($listaSel) {
+            $listaCodigo = (string) ($listaSel->codigo ?? '');
+            $listaNombre = (string) ($listaSel->nombre ?? '');
+        }
+    }
+    $puedeAbrirAbmLista = can('editar-listaprecio', false) || can('listar-listaprecio', false);
+@endphp
 <meta name="csrf-token" content="{{ csrf_token() }}" />
 <div class="row">
     <div class="col-lg-12">
@@ -31,7 +47,7 @@
                         Solo participan <strong>artículos facturables</strong> de la categoría elegida.
                     </div>
                     <div class="form-group row">
-                        <label for="categoria_id" class="col-lg-3 col-form-label requerido">Categoría</label>
+                        <label for="categoria_id" class="col-lg-3 control-label text-right pr-2 requerido">Categoría</label>
                         <div class="col-lg-8">
                             <select name="categoria_id" id="categoria_id" class="form-control" required>
                                 <option value="">-- Elija categoría --</option>
@@ -44,23 +60,35 @@
                             </select>
                         </div>
                     </div>
-                    <div class="form-group row">
-                        <label for="listaprecio_id" class="col-lg-3 col-form-label">Lista de precios</label>
+                    <div class="form-group row tm-listaprecio-campo">
+                        <label for="codigolistaprecio" class="col-lg-3 control-label text-right pr-2">Lista de precios</label>
                         <div class="col-lg-8">
-                            <select name="listaprecio_id" id="listaprecio_id" class="form-control">
-                                <option value="">Todas las listas</option>
-                                @foreach ($listasPrecio as $lista)
-                                    <option value="{{ $lista->id }}"
-                                        @if ($listaprecioId !== null && (int) $listaprecioId === (int) $lista->id) selected @endif>
-                                        {{ $lista->nombre }}
-                                    </option>
-                                @endforeach
-                            </select>
-                            <small class="form-text text-muted">Opcional. Si no elige lista, se actualizan todas las listas donde el artículo tiene precio vigente.</small>
+                            <div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
+                                <input type="hidden" name="listaprecio_id" id="listaprecio_id" class="listaprecio_id"
+                                    value="{{ $listaIdValor > 0 ? $listaIdValor : '' }}">
+                                <button type="button" title="Consulta listas de precios (F1)" class="btn-accion-tabla consultalistaprecio tooltipsC flex-shrink-0">
+                                    <i class="fa fa-search text-primary"></i>
+                                </button>
+                                @if ($puedeAbrirAbmLista)
+                                    <a href="{{ $listaIdValor > 0 ? route('editar_listaprecio', ['id' => $listaIdValor, 'origen' => 'modal_consulta', 'vista' => 'consulta']) : '#' }}"
+                                        target="_blank" rel="noopener"
+                                        class="btn-accion-tabla btn-link-editar-listaprecio tooltipsC flex-shrink-0 {{ $listaIdValor > 0 ? '' : 'd-none' }}"
+                                        title="Consultar lista de precios en ABM">
+                                        <i class="fa fa-edit"></i>
+                                    </a>
+                                @endif
+                                <input type="text" class="form-control codigolistaprecio flex-shrink-0" id="codigolistaprecio"
+                                    value="{{ $listaCodigo }}" placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem;"
+                                    title="C&oacute;digo de lista (Enter / F1). Vac&iacute;o = todas">
+                                <input type="text" class="form-control nombrelistaprecio" id="nombrelistaprecio"
+                                    value="{{ $listaNombre }}" placeholder="Todas las listas" readonly
+                                    style="min-width: 0; flex: 1 1 auto;">
+                            </div>
+                            <small class="form-text text-muted">Opcional. Vacío / sin código = todas las listas con precio vigente.</small>
                         </div>
                     </div>
                     <div class="form-group row">
-                        <label for="porcentaje" class="col-lg-3 col-form-label requerido">Porcentaje de ajuste</label>
+                        <label for="porcentaje" class="col-lg-3 control-label text-right pr-2 requerido">Porcentaje de ajuste</label>
                         <div class="col-lg-8">
                             <div class="input-group">
                                 <input type="number" name="porcentaje" id="porcentaje" class="form-control"
@@ -71,7 +99,7 @@
                         </div>
                     </div>
                     <div class="form-group row">
-                        <label for="fecha_referencia" class="col-lg-3 col-form-label requerido">Precios vigentes al</label>
+                        <label for="fecha_referencia" class="col-lg-3 control-label text-right pr-2 requerido">Precios vigentes al</label>
                         <div class="col-lg-8">
                             <input type="date" name="fecha_referencia" id="fecha_referencia" class="form-control"
                                 value="{{ old('fecha_referencia', $fechaReferencia) }}" required>
@@ -79,7 +107,7 @@
                         </div>
                     </div>
                     <div class="form-group row">
-                        <label for="nueva_fechavigencia" class="col-lg-3 col-form-label requerido">Nueva vigencia</label>
+                        <label for="nueva_fechavigencia" class="col-lg-3 control-label text-right pr-2 requerido">Nueva vigencia</label>
                         <div class="col-lg-8">
                             <input type="date" name="nueva_fechavigencia" id="nueva_fechavigencia" class="form-control"
                                 value="{{ old('nueva_fechavigencia', $nuevaFechavigencia) }}" required>
@@ -98,7 +126,7 @@
                         <div class="alert alert-secondary" id="preview-precios-categoria-resumen"></div>
                         <div class="table-responsive">
                             <table class="table table-sm table-bordered">
-                                <thead class="thead-light">
+                                <thead style="background:#85C1E9;color:#17202A;">
                                     <tr>
                                         <th>SKU</th>
                                         <th>Artículo</th>
@@ -127,4 +155,5 @@
         </div>
     </div>
 </div>
+@include('includes.stock.modalconsultalistaprecio')
 @endsection

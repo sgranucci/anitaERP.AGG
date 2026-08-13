@@ -28,6 +28,7 @@ final class CierreRendicionBingoTotalesSupport
         $premiosAnita = self::premiosAnitaPorOperacion($rendiciones, $fechaDia);
 
         $totRecaudacion = 0.0;
+        $totCartones = 0;
         $totEfectivo = 0.0;
         $totSobrante = 0.0;
         $totRedondeo = 0.0;
@@ -46,6 +47,7 @@ final class CierreRendicionBingoTotalesSupport
 
         foreach ($rendiciones as $rendicion) {
             $totRecaudacion = round($totRecaudacion + (float) ($rendicion->total_cartones ?? 0), 2);
+            $totCartones += (int) ($rendicion->cant_cartones ?? 0);
             $efectivo = round((float) ($rendicion->deposito ?? 0) - (float) ($rendicion->vales ?? 0), 2);
             $totEfectivo = round($totEfectivo + $efectivo, 2);
             $totSobrante = round($totSobrante + (float) ($rendicion->sobrante_faltante ?? 0), 2);
@@ -105,8 +107,16 @@ final class CierreRendicionBingoTotalesSupport
         $otrosPremios = round($totPozoUltBolaPagado - $totRealPozoUltBola, 2);
         $difCajaAsiento = round($totDifCaja + $totRefuerPrest, 2);
 
+        $resultadoFlash = round(
+            $totEfectivo - $totSobrante - $totRefuerPrest - $totRedondeo,
+            2,
+        );
+
         return [
             'tot_recaudacion' => $totRecaudacion,
+            'tot_cartones' => $totCartones,
+            'tot_resultado_flash' => $resultadoFlash,
+            'acum_concepto' => $acumConcepto,
             'tot_efectivo' => $totEfectivo,
             'tot_sobrante' => $totSobrante,
             'tot_redondeo' => $totRedondeo,
@@ -127,6 +137,51 @@ final class CierreRendicionBingoTotalesSupport
             'dif_caja_asiento' => $difCajaAsiento,
             'canones' => $canones,
         ];
+    }
+
+    /**
+     * Evolución SI pozo AC (p-vtabingo.c un_dia): (pozo_ac * 0.99) + (recaudación * 0.05) − real PORC_POZO.
+     *
+     * @param  array<int, array<string, mixed>>  $concbIndex
+     * @param  array<int, array{pagado: float, real: float}>  $acumConcepto
+     */
+    public static function evolSiPozoAc(
+        float $pozoAcAnterior,
+        float $recaudacion,
+        array $concbIndex,
+        array $acumConcepto,
+    ): float {
+        $pozos = 0.0;
+        foreach ($concbIndex as $concepto => $meta) {
+            if (($meta['tipo_conc'] ?? '') !== CierreRendicionBingoConceptoTipos::PORC_POZO) {
+                continue;
+            }
+            $pozos = round($pozos - (float) ($acumConcepto[(int) $concepto]['real'] ?? 0), 2);
+        }
+
+        return round(($pozoAcAnterior * 0.99) + ($recaudacion * 0.05) + $pozos, 2);
+    }
+
+    /**
+     * Importe a mostrar de un concepto PAGO: real de premios, o % de recaudación si no hay premio.
+     *
+     * @param  array<string, mixed>  $meta
+     * @param  array<int, array{pagado: float, real: float}>  $acumConcepto
+     */
+    public static function importePagoConcepto(array $meta, array $acumConcepto, float $recaudacion): float
+    {
+        $concepto = (int) ($meta['concepto'] ?? 0);
+        $real = round((float) ($acumConcepto[$concepto]['real'] ?? 0), 2);
+        if (abs($real) > 0.0001) {
+            return $real;
+        }
+
+        $porc = (float) ($meta['porcentaje'] ?? 0);
+        if ($porc > 0 && $recaudacion > 0) {
+            return round($recaudacion * $porc / 100, 2);
+        }
+
+        return 0.0;
     }
 
     /**
@@ -408,6 +463,9 @@ final class CierreRendicionBingoTotalesSupport
     {
         return [
             'tot_recaudacion' => 0.0,
+            'tot_cartones' => 0,
+            'tot_resultado_flash' => 0.0,
+            'acum_concepto' => [],
             'tot_efectivo' => 0.0,
             'tot_sobrante' => 0.0,
             'tot_redondeo' => 0.0,

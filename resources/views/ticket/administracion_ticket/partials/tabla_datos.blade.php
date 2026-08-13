@@ -1,4 +1,6 @@
 @php
+    use App\Support\Ticket\TicketEstadisticaSupport;
+
     $paraPdf = $para_pdf ?? false;
     $mostrarAcciones = $mostrar_acciones ?? false;
     $puedeVerTicket = $puede_ver_ticket ?? false;
@@ -22,20 +24,22 @@
         return implode(', ', $nombres);
     };
 @endphp
-<thead>
+<thead style="background:#85C1E9;color:#17202A;">
     <tr>
         <th style="@if($paraPdf) width: 4%; @endif">ID</th>
-        <th style="@if($paraPdf) width: 7%; @endif">Fecha</th>
-        <th style="@if($paraPdf) width: 8%; @endif">Sala</th>
-        <th style="@if($paraPdf) width: 8%; @endif">Sector</th>
-        <th style="@if($paraPdf) width: 10%; @endif">&Aacute;rea de destino</th>
-        <th style="@if($paraPdf) width: 10%; @endif">Gener&oacute; usuario</th>
-        <th style="@if($paraPdf) width: 9%; @endif">Categor&iacute;a</th>
-        <th style="@if($paraPdf) width: 9%; @endif">Subcategor&iacute;a</th>
-        <th style="@if($paraPdf) width: 7%; @endif">Estado</th>
-        <th style="@if($paraPdf) width: 12%; @endif">T&iacute;tulo</th>
-        <th style="@if($paraPdf) width: 14%; @endif">Comentario</th>
-        <th style="@if($paraPdf) width: 10%; @endif">T&eacute;cnico asignado</th>
+        <th style="@if($paraPdf) width: 6%; @endif">Fecha</th>
+        <th style="@if($paraPdf) width: 7%; @endif">Sala</th>
+        <th style="@if($paraPdf) width: 7%; @endif">Sector</th>
+        <th style="@if($paraPdf) width: 8%; @endif">&Aacute;rea de destino</th>
+        <th style="@if($paraPdf) width: 8%; @endif">Gener&oacute; usuario</th>
+        <th style="@if($paraPdf) width: 8%; @endif">Categor&iacute;a</th>
+        <th style="@if($paraPdf) width: 8%; @endif">Subcategor&iacute;a</th>
+        <th style="@if($paraPdf) width: 6%; @endif">Estado</th>
+        <th style="@if($paraPdf) width: 10%; @endif">T&iacute;tulo</th>
+        <th style="@if($paraPdf) width: 10%; @endif">Comentario</th>
+        <th style="@if($paraPdf) width: 8%; @endif">T&eacute;cnico asignado</th>
+        <th style="@if($paraPdf) width: 8%; @endif">Resoluci&oacute;n</th>
+        <th style="@if($paraPdf) width: 5%; @endif">Tiempo insumido (min)</th>
         @if ($mostrarAcciones)
             <th class="width40" data-orderable="false"></th>
         @endif
@@ -65,6 +69,8 @@
             <td>{{ $data->titulo }}</td>
             <td>{{ $data->comentario }}</td>
             <td>{{ $nombresTecnicos($data) }}</td>
+            <td>{{ TicketEstadisticaSupport::formatearResolucionDisplay($data->fecha_resolucion ?? null, $data->hora_resolucion ?? null) }}</td>
+            <td class="text-right">{{ TicketEstadisticaSupport::formatearTiempoInsumido($data->tiempo_insumido_total ?? null) }}</td>
             @if ($mostrarAcciones)
                 <td>
                     @if ($puedeVerTicket)
@@ -85,3 +91,4 @@
         </tr>
     @endforeach
 </tbody>
+

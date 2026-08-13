@@ -55,6 +55,7 @@
         'puede_ver_cuenta' => false,
         'puede_ver_concepto' => false,
         'puede_ver_ordencompra' => false,
+        'puede_ver_capex' => false,
         'formatearMonto' => $formatearMontoExcel,
         'formatearCotizacion' => $formatearCotizacionExcel,
     ])

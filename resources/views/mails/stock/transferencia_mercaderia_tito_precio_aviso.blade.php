@@ -107,11 +107,20 @@
                             <li>
                                 #{{ (int) ($compra['n'] ?? 0) }}:
                                 {{ $fmt6($compra['precio'] ?? 0) }}
+                                @if (! empty($compra['moneda']))
+                                    {{ $compra['moneda'] }}
+                                @endif
+                                @if (! empty($compra['cotizacion']) && (float) $compra['cotizacion'] > 1)
+                                    × {{ $fmt6($compra['cotizacion']) }}
+                                @endif
                                 @if (! empty($compra['com']))
                                     · COM {{ (int) $compra['com'] }}
                                 @endif
                                 @if (! empty($compra['fecha']))
                                     · {{ $compra['fecha'] }}
+                                @endif
+                                @if (! empty($compra['fuente']) && $compra['fuente'] === 'recepmov')
+                                    · recepmov
                                 @endif
                             </li>
                         @endforeach
@@ -127,7 +136,8 @@
 <p style="margin:18px 0 0 0; font-size:12px; color:#666;">
     El asiento recalcula el precio con
     <code>ArticuloPrecioPromedioCompraSupport</code>
-    (3 COM ERP confirmadas, o fallback Anita stkm_pre_compra1/2/3).
+    (3 COM ERP confirmadas, precio en pesos con moneda/cotización de Anita recepmov;
+    si no hay 3 COM, fallback Anita stkm_pre_compra1/2/3).
 </p>
 </body>
 </html>

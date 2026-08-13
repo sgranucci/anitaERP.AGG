@@ -19,7 +19,6 @@ return [
 
     /*
     | Schedule solicitudpago:generar-cuotas (Kernel).
-    | Dejar habilitado=false hasta poner en marcha el cron en el servidor.
     | Horarios: lista CSV HH:MM (ej. 08:00,14:00,18:00).
     */
     'generar_cuotas' => [

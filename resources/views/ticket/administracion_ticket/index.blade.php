@@ -79,6 +79,17 @@ use App\Support\Ticket\AdministracionTicketListadoFiltros;
             <form method="get" action="{{ route('consulta_administracion_ticket') }}" id="form-filtros-administracion-ticket" class="mb-0">
                 @include('ticket.administracion_ticket.partials.filtros_listado')
             </form>
+            <div class="card-body py-2 border-bottom bg-white d-flex flex-wrap align-items-center justify-content-between">
+                <div class="mb-1 mb-md-0">
+                    @include('includes.exportar-tabla-queryparams', [
+                        'ruta' => 'lista_administracion_ticket',
+                        'queryparams' => $filtrosQuery ?? [],
+                    ])
+                </div>
+                <div class="mb-1 mb-md-0 ml-auto">
+                    @include('ticket.administracion_ticket.partials.filtros_externos')
+                </div>
+            </div>
             <div class="card-body table-responsive p-0">
                 @if ($ver_todos_tickets ?? true)
                     <div class="alert alert-secondary py-2 mb-0 mx-3 mt-3 small">
@@ -92,10 +103,6 @@ use App\Support\Ticket\AdministracionTicketListadoFiltros;
                         Marque «Ver todos los tickets» para ver el resto del equipo.
                     </div>
                 @endif
-                @include('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'lista_administracion_ticket',
-                    'queryparams' => $filtrosQuery ?? [],
-                ])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     @include('ticket.administracion_ticket.partials.tabla_datos', [
                         'ticket' => $ticket,

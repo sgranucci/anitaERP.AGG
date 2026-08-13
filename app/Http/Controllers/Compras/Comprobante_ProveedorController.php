@@ -13,6 +13,7 @@ use App\Repositories\Compras\Comprobante_ProveedorRepositoryInterface;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Repositories\Compras\Tipotransaccion_CompraRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Compras\ComprobanteProveedorPersistenciaService;
 use App\Services\Compras\ComprobanteProveedorPrefillService;
 use App\Services\Compras\ComprobanteProveedorRecepcionesSupport;
@@ -30,6 +31,7 @@ use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\ComprobanteProveedorListadoFiltros;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
+use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
@@ -50,6 +52,7 @@ class Comprobante_ProveedorController extends Controller
         private EmpresaRepositoryInterface $empresaRepository,
         private Tipotransaccion_CompraRepositoryInterface $tipotransaccionCompraRepository,
         private Concepto_IvacompraRepositoryInterface $conceptoIvacompraRepository,
+        private MonedaRepositoryInterface $monedaRepository,
         private ComprobanteProveedorPrefillService $prefillService,
         private ComprobanteProveedorPersistenciaService $persistenciaService,
         private PrecargaFacturaScanPathResolver $facturaScanPathResolver,
@@ -197,8 +200,27 @@ class Comprobante_ProveedorController extends Controller
             $mensaje .= ' '.implode(' ', $avisos);
         }
 
+        $contabilizarAlGuardar = $request->input('accion') === 'contabilizar';
+        if ($contabilizarAlGuardar) {
+            can('contabilizar-comprobante-proveedor');
+            try {
+                $this->contabilizarService->contabilizar((int) $comprobante->id);
+            } catch (\Throwable $e) {
+                return redirect()
+                    ->route('editar_comprobante_proveedor', ['id' => $comprobante->id])
+                    ->with('errores', [
+                        'El comprobante se guardó en borrador, pero no se pudo contabilizar: '.$e->getMessage(),
+                    ]);
+            }
+
+            return redirect()
+                ->route('editar_comprobante_proveedor', ['id' => $comprobante->id])
+                ->with('mensaje', 'Comprobante contabilizado: asiento, cuenta corriente y sync Anita.');
+        }
+
+        // Borrador: queda en editar para que aparezca Contabilizar (mismo patrón que recepción).
         return redirect()
-            ->route('comprobante_proveedor')
+            ->route('editar_comprobante_proveedor', ['id' => $comprobante->id])
             ->with('mensaje', $mensaje);
     }
 
@@ -380,27 +402,8 @@ class Comprobante_ProveedorController extends Controller
                 ->with('mensaje', 'Esta precarga ya tiene el comprobante #'.$existente->id.' generado. Se abrió para revisión.');
         }
 
-        try {
-            $comprobante = $this->persistenciaService->generarBorradorDesdePrecarga($precargaId);
-        } catch (\Throwable $e) {
-            return redirect()
-                ->route('precarga_comprobante_proveedor')
-                ->with('errores', ['No se pudo generar el comprobante: '.$e->getMessage()]);
-        }
-
-        $mensaje = 'Comprobante generado desde precarga. Revise datos y conceptos.';
-        if ($comprobante->modo_carga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION
-            && $comprobante->comprobante_proveedor_recepciones->isEmpty()) {
-            $mensaje = 'Comprobante generado desde precarga. Hay COM sin facturar en el legajo: seleccione la recepción correcta antes de contabilizar.';
-        }
-        $avisos = $this->persistenciaService->ultimosAvisosControles();
-        if ($avisos !== []) {
-            $mensaje .= ' '.implode(' ', $avisos);
-        }
-
-        return redirect()
-            ->route('editar_comprobante_proveedor', ['id' => $comprobante->id])
-            ->with('mensaje', $mensaje);
+        // No grabar hasta que el operador pulse Guardar en el alta.
+        return redirect()->route('crear_comprobante_proveedor', ['precarga_id' => $precargaId]);
     }
 
     public function contabilizar(int $id)
@@ -637,7 +640,30 @@ class Comprobante_ProveedorController extends Controller
 
         $recepcionesSeleccionadas = $prefill['recepciones_seleccionadas'] ?? [];
         $contabilizado = ($data->estado ?? '') === ComprobanteProveedorEstados::CONTABILIZADO;
-        $asientoPreview = ['activo' => ! $contabilizado, 'es_preview' => true, 'lineas' => []];
+        $tienePagos = $comprobanteId
+            ? ComprobanteProveedorPagoSupport::tienePagosAplicados((int) $comprobanteId)
+            : false;
+        $bloqueadoEdicion = $tienePagos
+            || ($data->estado ?? '') === ComprobanteProveedorEstados::ANULADO;
+        $puedeActualizar = (bool) $comprobanteId && ! $bloqueadoEdicion;
+        $asientoPreview = ['activo' => ! $bloqueadoEdicion, 'es_preview' => true, 'lineas' => []];
+
+        $monedaFacturaId = (int) ($data->moneda_id ?? 1);
+        $cotizacionFactura = (float) ($data->cotizacion ?? 0);
+        $fechaFactura = null;
+        if ($data) {
+            if ($data->fechacomprobante instanceof \DateTimeInterface) {
+                $fechaFactura = $data->fechacomprobante->format('Y-m-d');
+            } else {
+                $fechaFactura = substr((string) ($data->fechacomprobante ?? ''), 0, 10) ?: null;
+            }
+        }
+        $recepcionesDisponibles = $this->recepcionesSupport->enriquecerConImporteEnMonedaFactura(
+            $recepcionesDisponibles,
+            $monedaFacturaId,
+            $cotizacionFactura,
+            $fechaFactura,
+        );
 
         if ($comprobanteId && $data) {
             $data->loadMissing([
@@ -663,12 +689,17 @@ class Comprobante_ProveedorController extends Controller
                     ->merge($recepcionesDisponibles)
                     ->unique('id')
                     ->values();
-                $recepcionesDisponibles = $this->recepcionesSupport->enriquecerConImporteProvision($recepcionesDisponibles);
+                $recepcionesDisponibles = $this->recepcionesSupport->enriquecerConImporteEnMonedaFactura(
+                    $recepcionesDisponibles,
+                    $monedaFacturaId,
+                    $cotizacionFactura,
+                    $fechaFactura,
+                );
                 $recepcionesDisponibles = $this->recepcionesSupport->enriquecerConArticulos($recepcionesDisponibles);
             }
 
             $asientoPreview = $this->asientoService->previewParaVista($data);
-            if (! $contabilizado) {
+            if (! $bloqueadoEdicion) {
                 $data->loadMissing([
                     'comprobante_proveedor_conceptos.concepto_ivacompras',
                     'proveedores',
@@ -754,6 +785,7 @@ class Comprobante_ProveedorController extends Controller
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'tipotransaccion_compra_query' => $this->tipotransaccionCompraRepository->all('*'),
             'concepto_ivacompra_query' => $this->conceptoIvacompraRepository->all(),
+            'moneda_query' => $this->monedaRepository->all(),
             'modos_carga' => ComprobanteProveedorModoCarga::todos(),
             'origenes_entrada' => ComprobanteProveedorOrigenEntrada::todos(),
             'estados' => ComprobanteProveedorEstados::todos(),
@@ -764,7 +796,10 @@ class Comprobante_ProveedorController extends Controller
             'com_tolerancia_pct' => $toleranciaPct,
             'com_resolucion' => $prefill['com_resolucion'] ?? $this->resolverComResolucionFormulario($data, $recepcionesSeleccionadas),
             'asientoPreview' => $asientoPreview,
-            'mostrarSolapaAsiento' => ! $contabilizado,
+            'mostrarSolapaAsiento' => ! $bloqueadoEdicion,
+            'tiene_pagos' => $tienePagos,
+            'bloqueado_edicion' => $bloqueadoEdicion,
+            'puede_actualizar' => $puedeActualizar,
             'mostrarSolapaCom' => $comObligatoria
                 || count($recepcionesSeleccionadas) > 0
                 || ($comPolitica['permite_factura_anticipada'] ?? false)

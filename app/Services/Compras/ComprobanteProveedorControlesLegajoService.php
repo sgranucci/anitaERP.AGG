@@ -127,6 +127,7 @@ class ComprobanteProveedorControlesLegajoService
                 $excluirComprobanteId,
                 $monedaId,
                 $cotizacionFactura,
+                $fechaComprobanteYmd,
             );
             if ($auto['ids'] !== []) {
                 $ids = collect($auto['ids']);
@@ -173,16 +174,15 @@ class ComprobanteProveedorControlesLegajoService
             $conceptos,
         );
         $importeFactura = (float) $importeMeta['importe'];
-        // Homogeneizar a moneda local: COM ME×cot vs factura (ME×cot o MN).
-        $importeFacturaMn = ComprobanteProveedorImporteComparacionComSupport::aMonedaLocal(
-            $importeFactura,
+
+        $recepciones = $this->recepcionesSupport->enriquecerConImporteEnMonedaFactura(
+            $recepciones,
             $monedaId,
             $cotizacionFactura,
+            $fechaComprobanteYmd,
         );
-
-        $recepciones = $this->recepcionesSupport->enriquecerConImporteProvision($recepciones);
-        $importeComMn = round((float) $recepciones->sum(
-            fn ($r) => (float) ($r->importe_provision_com_mn ?? $r->importe_provision_com ?? 0)
+        $importeComFactura = round((float) $recepciones->sum(
+            fn ($r) => (float) ($r->importe_provision_com_factura ?? $r->importe_provision_com ?? 0)
         ), 2);
         $importeComMe = round((float) $recepciones->sum(
             fn ($r) => (float) ($r->importe_provision_com ?? 0)
@@ -193,14 +193,14 @@ class ComprobanteProveedorControlesLegajoService
             (int) ($ordencompra->centrocosto_id ?? 0) ?: null,
         );
 
-        if (ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia($importeFacturaMn, $importeComMn, $toleranciaPct)) {
+        if (ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia($importeFactura, $importeComFactura, $toleranciaPct)) {
             $detalle = sprintf(
                 'Importe factura (%s) %s vs provisión COM %s%s. Tolerancia permitida: %s%% (centro de costo de la OC).',
                 $importeMeta['etiqueta'],
-                number_format($importeFacturaMn, 2, ',', '.'),
-                number_format($importeComMn, 2, ',', '.'),
-                abs($importeComMe - $importeComMn) > 0.05
-                    ? ' (ME '.number_format($importeComMe, 2, ',', '.').')'
+                number_format($importeFactura, 2, ',', '.'),
+                number_format($importeComFactura, 2, ',', '.'),
+                abs($importeComMe - $importeComFactura) > 0.05
+                    ? ' (ME origen '.number_format($importeComMe, 2, ',', '.').')'
                     : '',
                 number_format($toleranciaPct, 2, ',', '.'),
             );

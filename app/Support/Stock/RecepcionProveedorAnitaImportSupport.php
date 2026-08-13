@@ -206,8 +206,76 @@ class RecepcionProveedorAnitaImportSupport
         if ($cod === '') {
             return 1;
         }
+        if (is_numeric($cod)) {
+            $cod = (string) (int) $cod;
+        }
 
         return self::$monedaIdPorCodigoAnita[$cod] ?? 1;
+    }
+
+    /**
+     * @param  list<object>  $lineasAnita
+     * @return array{moneda_id: int, cotizacion: float}
+     */
+    public static function monedaYCotizacionDesdeRecepmov(array $lineasAnita, int $monedaDefault = 1): array
+    {
+        foreach ($lineasAnita as $lin) {
+            $codMon = $lin->recv_cod_mon ?? null;
+            if ($codMon === null || trim((string) $codMon) === '') {
+                continue;
+            }
+
+            $cotizacion = (float) ($lin->recv_cotizacion ?? 1) ?: 1.0;
+
+            return [
+                'moneda_id' => self::monedaIdDesdeCodigoAnita($codMon),
+                'cotizacion' => $cotizacion,
+            ];
+        }
+
+        return [
+            'moneda_id' => $monedaDefault > 0 ? $monedaDefault : 1,
+            'cotizacion' => 1.0,
+        ];
+    }
+
+    public static function skuAnitaDesdeErp(string $sku): string
+    {
+        return str_pad(trim($sku), 13, '0', STR_PAD_LEFT);
+    }
+
+    public static function skuCoincideConRecepmov(string $skuErp, string $recvArticulo): bool
+    {
+        $erp = trim($skuErp);
+        $anita = trim($recvArticulo);
+        if ($erp === '' || $anita === '') {
+            return false;
+        }
+
+        $erpPad = self::skuAnitaDesdeErp($erp);
+        $anitaPad = self::skuAnitaDesdeErp($anita);
+
+        return $erp === $anita || $erpPad === $anita || $erpPad === $anitaPad;
+    }
+
+    /**
+     * @param  list<object>  $lineasAnita
+     */
+    public static function lineaRecepmovPorSku(array $lineasAnita, string $skuErp): ?object
+    {
+        foreach ($lineasAnita as $lin) {
+            $recvArticulo = trim((string) ($lin->recv_articulo ?? ''));
+            if (! self::skuCoincideConRecepmov($skuErp, $recvArticulo)) {
+                continue;
+            }
+            if ((float) ($lin->recv_precio ?? 0) <= 0) {
+                continue;
+            }
+
+            return $lin;
+        }
+
+        return null;
     }
 
     private static function cargarMapaMonedaIdPorCodigoAnita(): void

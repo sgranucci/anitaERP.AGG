@@ -22,12 +22,6 @@
 <!-- Bootstrap Date-Picker Plugin -->
 <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.4.1/js/bootstrap-datepicker.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.4.1/css/bootstrap-datepicker3.css"/>
-<script>
-    function sub()
-	{
-		$('#form-general')[0].submit();
-	}
-</script>
 @endsection
 
 @section('contenido')
@@ -70,7 +64,9 @@
                 <div class="card-footer" style="padding-top: 0">
                 	<div class="row">
                    		<div class="col-lg-4">
-                        	<button type="button" onclick="sub()" class="btn btn-success">Actualizar</button>
+                        	<button type="button" id="botonform0" class="btn btn-success">
+                        		<i class="fa fa-save"></i> Actualizar
+                        	</button>
                     	</div>
             		</div>
             	</div>
@@ -78,4 +74,11 @@
         </div>
     </div>
 </div>
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'premio-uif-guardando-overlay',
+    'tituloId' => 'premio-uif-guardando-titulo',
+    'subtituloId' => 'premio-uif-guardando-subtitulo',
+    'titulo' => 'Actualizando premio…',
+    'subtitulo' => 'Por favor espere. No cierre ni recargue la página.',
+])
 @endsection

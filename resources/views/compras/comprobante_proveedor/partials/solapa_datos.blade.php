@@ -35,16 +35,19 @@
     $cpColLabel = 'col-lg-4 col-form-label control-label text-right pr-2';
     $cpColInput = 'col-lg-8';
     $tipoSelId = (int) old('tipotransaccion_compra_id', $data->tipotransaccion_compra_id ?? 0);
-    $tipoAbrevActual = '';
-    foreach ($tipotransaccion_compra_query as $tipoOptAbrev) {
-        if ((int) $tipoOptAbrev->id === $tipoSelId) {
-            $tipoAbrevActual = (string) ($tipoOptAbrev->abreviatura ?? '');
-            break;
+    $tipoAbrevActual = (string) ($data->tipotransaccion_compras->abreviatura ?? '');
+    $tipoNombreActual = (string) ($data->tipotransaccion_compras->nombre ?? '');
+    if ($tipoAbrevActual === '' && $tipoSelId > 0) {
+        foreach ($tipotransaccion_compra_query ?? [] as $tipoOptAbrev) {
+            if ((int) $tipoOptAbrev->id === $tipoSelId) {
+                $tipoAbrevActual = (string) ($tipoOptAbrev->abreviatura ?? '');
+                $tipoNombreActual = (string) ($tipoOptAbrev->nombre ?? '');
+                break;
+            }
         }
     }
-    if ($tipoAbrevActual === '') {
-        $tipoAbrevActual = (string) ($data->tipotransaccion_compras->abreviatura ?? '');
-    }
+    $centrocostoOcId = (int) ($data->ordencompras->centrocosto_id ?? 0);
+    $desdePrecarga = (int) ($data->precarga_comprobante_proveedor_id ?? 0) > 0;
 @endphp
 <div class="row">
     <div class="col-sm-6">
@@ -55,31 +58,19 @@
             'col_label' => $cpColLabel,
             'col_input' => $cpColInput,
         ])
-        <div class="form-group row">
-            <label for="tipotransaccion_compra_id" class="{{ $cpColLabel }} requerido">Tipo comprobante</label>
-            <div class="{{ $cpColInput }}">
-                <div class="d-flex align-items-center" style="gap:8px;">
-                    <select name="tipotransaccion_compra_id" id="tipotransaccion_compra_id" class="form-control required" required style="flex:1; min-width:0;">
-                        <option value="">-- Seleccionar --</option>
-                        @foreach ($tipotransaccion_compra_query as $value)
-                            <option value="{{ $value->id }}"
-                                data-abreviatura="{{ $value->abreviatura }}"
-                                @if ((int) $value->id === $tipoSelId) selected @endif>
-                                {{ $value->nombre }}
-                            </option>
-                        @endforeach
-                    </select>
-                    <input type="text"
-                           id="cp-tipotransaccion-abreviatura"
-                           class="form-control text-center font-weight-bold"
-                           value="{{ $tipoAbrevActual }}"
-                           readonly
-                           tabindex="-1"
-                           title="Abreviatura del tipo de transacción"
-                           style="width:4.5rem; flex:0 0 4.5rem;">
-                </div>
-            </div>
-        </div>
+        @include('compras.partials.campo_consulta_tipotransaccion_compra', [
+            'prefix' => 'comprobante_proveedor',
+            'tipoId' => $tipoSelId,
+            'abreviatura' => $tipoAbrevActual,
+            'nombre' => $tipoNombreActual,
+            'inputName' => 'tipotransaccion_compra_id',
+            'inputId' => 'tipotransaccion_compra_id',
+            'required' => true,
+            'solo_lectura' => ! empty($bloqueado_edicion),
+            'col_label' => $cpColLabel,
+            'col_input' => $cpColInput,
+            'centrocosto_id' => $centrocostoOcId,
+        ])
         <div class="form-group row">
             <label class="{{ $cpColLabel }} requerido">Número</label>
             <div class="{{ $cpColInput }}">
@@ -160,15 +151,16 @@
         <div class="form-group row">
             <label for="fechaiva" class="{{ $cpColLabel }} requerido">Fecha IVA</label>
             <div class="col-lg-5">
+                @php
+                    $fechaIvaDefault = date('Y-m-d');
+                    if ($esEdicion ?? false) {
+                        $fechaIvaDefault = $data->fechaiva instanceof \DateTimeInterface
+                            ? $data->fechaiva->format('Y-m-d')
+                            : ($data->fechaiva ?? date('Y-m-d'));
+                    }
+                @endphp
                 <input type="date" name="fechaiva" id="fechaiva" class="form-control"
-                    value="{{ old('fechaiva', $data->fechaiva instanceof \DateTimeInterface ? $data->fechaiva->format('Y-m-d') : ($data->fechaiva ?? date('Y-m-d'))) }}" required>
-            </div>
-        </div>
-        <div class="form-group row">
-            <label for="fecharecepcion" class="{{ $cpColLabel }}">Recepción email</label>
-            <div class="col-lg-5">
-                <input type="datetime-local" name="fecharecepcion" id="fecharecepcion" class="form-control"
-                    value="{{ old('fecharecepcion', $data->fecharecepcion ? $data->fecharecepcion->format('Y-m-d\TH:i') : '') }}">
+                    value="{{ old('fechaiva', $fechaIvaDefault) }}" required>
             </div>
         </div>
         <div class="form-group row">
@@ -193,43 +185,59 @@
         @endif
     </div>
     <div class="col-sm-6">
+        @if ($desdePrecarga)
         <div class="form-group row">
             <label for="tipo_autorizacion" class="{{ $cpColLabel }}">Tipo autorización</label>
             <div class="col-lg-3">
                 @php
                     $tipoAut = old('tipo_autorizacion', $data->tipo_autorizacion ?? (filled(old('numerocae', $data->numerocae ?? '')) ? 'CAE' : ''));
                 @endphp
-                <select name="tipo_autorizacion" id="tipo_autorizacion" class="form-control">
+                <select name="tipo_autorizacion" id="tipo_autorizacion" class="form-control" readonly disabled>
                     <option value="">—</option>
                     @foreach (\App\Support\Compras\ComprobanteProveedorTipoAutorizacion::todos() as $tipoOpt)
                         <option value="{{ $tipoOpt }}" @selected($tipoAut === $tipoOpt)>{{ $tipoOpt }}</option>
                     @endforeach
                 </select>
+                <input type="hidden" name="tipo_autorizacion" value="{{ $tipoAut }}">
             </div>
             <label for="numerocae" class="col-lg-2 col-form-label control-label text-right pr-2">Nº CAE/CAEA</label>
             <div class="col-lg-3">
-                <input type="text" name="numerocae" id="numerocae" class="form-control"
+                <input type="text" name="numerocae" id="numerocae" class="form-control" readonly
                     value="{{ old('numerocae', $data->numerocae ?? '') }}">
             </div>
         </div>
         <div class="form-group row">
             <div class="{{ $cpColLabel }}"></div>
             <div class="{{ $cpColInput }}">
-                <small class="form-text text-muted mt-0">CAEA puede repetirse; CAE/CAI se controlan como únicos.</small>
+                <small class="form-text text-muted mt-0">Datos de la precarga (solo lectura). CAEA puede repetirse; CAE/CAI se controlan como únicos.</small>
             </div>
         </div>
         <div class="form-group row">
             <label for="fechavencimientocae" class="{{ $cpColLabel }}">Vto. CAE</label>
             <div class="col-lg-5">
-                <input type="date" name="fechavencimientocae" id="fechavencimientocae" class="form-control"
+                <input type="date" name="fechavencimientocae" id="fechavencimientocae" class="form-control" readonly
                     value="{{ old('fechavencimientocae', $data->fechavencimientocae instanceof \DateTimeInterface ? $data->fechavencimientocae->format('Y-m-d') : ($data->fechavencimientocae ?? '')) }}">
             </div>
         </div>
+        @endif
         <div class="form-group row">
             <label for="moneda_id" class="{{ $cpColLabel }} requerido">Moneda</label>
             <div class="col-lg-3">
-                <input type="number" name="moneda_id" id="moneda_id" class="form-control"
-                    value="{{ old('moneda_id', $data->moneda_id ?? 1) }}" required>
+                @php
+                    $monedaSelId = (int) old('moneda_id', $data->moneda_id ?? 1);
+                @endphp
+                <select name="moneda_id" id="moneda_id" class="form-control" required
+                    @if (! empty($bloqueado_edicion)) disabled @endif>
+                    @foreach ($moneda_query ?? [] as $monedaOpt)
+                        <option value="{{ $monedaOpt->id }}"
+                            @selected($monedaSelId === (int) $monedaOpt->id)>
+                            {{ $monedaOpt->nombre }}@if (filled($monedaOpt->abreviatura ?? null)) ({{ $monedaOpt->abreviatura }})@endif
+                        </option>
+                    @endforeach
+                </select>
+                @if (! empty($bloqueado_edicion))
+                    <input type="hidden" name="moneda_id" value="{{ $monedaSelId }}">
+                @endif
             </div>
             <label for="cotizacion" class="col-lg-2 col-form-label control-label text-right pr-2">Cotización</label>
             <div class="col-lg-3">
@@ -264,26 +272,28 @@
                 </small>
             </div>
         </div>
-        <div class="form-group row">
-            <label class="{{ $cpColLabel }}">Moneda nombre</label>
-            <div class="{{ $cpColInput }}">
-                <input type="text" class="form-control" readonly value="{{ $data->monedas->nombre ?? '' }}">
-            </div>
-        </div>
     </div>
     <div class="col-sm-6">
         <div class="form-group row">
             <label for="subtotal" class="{{ $cpColLabel }}">Subtotal</label>
             <div class="col-lg-5">
-                <input type="text" inputmode="decimal" name="subtotal" id="subtotal" class="form-control js-monto-ar text-right"
-                    value="{{ number_format((float) old('subtotal', $data->subtotal ?? 0), 2, ',', '.') }}">
+                <input type="text" inputmode="decimal" name="subtotal" id="subtotal"
+                    class="form-control js-monto-ar text-right bg-light"
+                    value="{{ number_format((float) old('subtotal', $data->subtotal ?? 0), 2, ',', '.') }}"
+                    readonly tabindex="-1"
+                    title="Se calcula con la suma de conceptos netos">
+                <small class="form-text text-muted mt-0">Calculado desde conceptos (neto).</small>
             </div>
         </div>
         <div class="form-group row">
             <label for="total" class="{{ $cpColLabel }}">Total</label>
             <div class="col-lg-5">
-                <input type="text" inputmode="decimal" name="total" id="total" class="form-control js-monto-ar text-right"
-                    value="{{ number_format((float) old('total', $data->total ?? 0), 2, ',', '.') }}">
+                <input type="text" inputmode="decimal" name="total" id="total"
+                    class="form-control js-monto-ar text-right bg-light"
+                    value="{{ number_format((float) old('total', $data->total ?? 0), 2, ',', '.') }}"
+                    readonly tabindex="-1"
+                    title="Se calcula con la suma de todos los conceptos">
+                <small class="form-text text-muted mt-0">Calculado desde conceptos.</small>
             </div>
         </div>
         <div class="form-group row">
@@ -318,6 +328,19 @@
         'recepcion_proveedor_ids',
         $recepciones_seleccionadas ?? []
     ))));
+    $etiquetasComBanner = [];
+    foreach ($idsComBanner as $idComBanner) {
+        $recepcionBanner = ($recepciones_disponibles ?? collect())->firstWhere('id', $idComBanner);
+        if (! $recepcionBanner) {
+            $vinculoBanner = optional($data->comprobante_proveedor_recepciones ?? collect())
+                ->firstWhere('recepcion_proveedor_id', $idComBanner);
+            $recepcionBanner = $vinculoBanner?->recepcion_proveedores;
+        }
+        $numeroBanner = $recepcionBanner->numerorecepcion ?? null;
+        $etiquetasComBanner[] = filled($numeroBanner)
+            ? (string) $numeroBanner.' (ID '.$idComBanner.')'
+            : '#'.$idComBanner;
+    }
     $mostrarBannerCom = ($mostrarSolapaCom ?? false)
         && (
             ($com_obligatoria ?? false)
@@ -326,16 +349,19 @@
         );
 @endphp
 @if ($mostrarBannerCom)
-<div class="alert alert-info mt-3 mb-0" id="cp-banner-com-datos">
+<div class="alert alert-info mt-3 mb-0" id="cp-banner-com-datos"
+     data-com-obligatoria="{{ ($com_obligatoria ?? false) ? '1' : '0' }}">
     <i class="fa fa-truck"></i>
-    @if (count($idsComBanner) > 0)
-        COM asignada(s):
-        <strong>#{{ implode(', #', $idsComBanner) }}</strong>.
-    @elseif ($com_obligatoria ?? false)
-        Debe asignar recepción(es) COM obligatoria(s).
-    @else
-        Este comprobante usa modo asignación de recepción COM.
-    @endif
+    <span id="cp-banner-com-texto">
+        @if (count($etiquetasComBanner) > 0)
+            COM asignada(s):
+            <strong>{{ implode(', ', $etiquetasComBanner) }}</strong>.
+        @elseif ($com_obligatoria ?? false)
+            Debe asignar recepción(es) COM obligatoria(s).
+        @else
+            Este comprobante usa modo asignación de recepción COM.
+        @endif
+    </span>
     <button type="button" class="btn btn-sm btn-outline-primary ml-2" id="cp-abrir-solapa-com-desde-datos">
         Ir a Recepciones COM
     </button>

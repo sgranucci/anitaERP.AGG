@@ -14,6 +14,7 @@
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/listaprecio/consulta.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta-precios.js")}}" type="text/javascript"></script>
 @if (config('app.empresa') == 'INTERFORMING')
 <script src="{{ asset('assets/pages/scripts/stock/sifab_maestro/consulta.js') }}?v=20260727" type="text/javascript"></script>
@@ -184,6 +185,7 @@ window.consultaFormulaArticuloConfig = {
 @include('includes.contable.modalconsultacuentacontable')
 @include('stock.formula_articulo.partials.modal_ver_formula_articulo')
 @include('includes.stock.modalconsultaprecioarticulo')
+@include('includes.stock.modalconsultalistaprecio')
 @if (can('editar-compras-articulos', false) || can('actualizar-compras-articulos', false))
 @include('includes.compras.modalconsultaproveedor')
 @endif

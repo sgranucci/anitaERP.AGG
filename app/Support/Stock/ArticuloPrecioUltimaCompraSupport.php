@@ -308,12 +308,51 @@ final class ArticuloPrecioUltimaCompraSupport
 
     /**
      * Últimas N recepciones COM confirmadas con precio &gt; 0 (más recientes primero).
-     * Los precios se devuelven en moneda local (pesos).
+     * Los precios se devuelven en moneda local (pesos) según moneda ERP de la línea.
      *
      * @param  list<int>  $articuloIds
      * @return array<int, list<float>> articulo_id => precios (máx. $limite)
      */
     public static function ultimasRecepcionesConfirmadasPorArticuloIds(array $articuloIds, int $limite = 3): array
+    {
+        $detalle = self::ultimasRecepcionesConfirmadasDetallePorArticuloIds($articuloIds, $limite);
+        $out = [];
+        foreach ($detalle as $articuloId => $filas) {
+            $out[$articuloId] = [];
+            foreach ($filas as $fila) {
+                $precioLocal = self::precioUnitarioMonedaLocal(
+                    (float) ($fila['precio'] ?? 0),
+                    isset($fila['moneda_id']) ? (int) $fila['moneda_id'] : null,
+                    isset($fila['cotizacion']) ? (float) $fila['cotizacion'] : null,
+                );
+                if ($precioLocal <= 0) {
+                    continue;
+                }
+                $out[$articuloId][] = $precioLocal;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Últimas N COM confirmadas (sin convertir). Incluye clave Anita para leer recepmov.
+     *
+     * @param  list<int>  $articuloIds
+     * @return array<int, list<array{
+     *     precio: float,
+     *     moneda_id: int|null,
+     *     cotizacion: float|null,
+     *     fecha: string|null,
+     *     numerorecepcion: int|null,
+     *     sku: string,
+     *     anita_tipo: string,
+     *     anita_letra: string,
+     *     anita_sucursal: int,
+     *     anita_nro: int
+     * }>>
+     */
+    public static function ultimasRecepcionesConfirmadasDetallePorArticuloIds(array $articuloIds, int $limite = 3): array
     {
         $articuloIds = array_values(array_unique(array_filter(array_map('intval', $articuloIds), static fn ($id) => $id > 0)));
         $limite = max(1, $limite);
@@ -321,8 +360,25 @@ final class ArticuloPrecioUltimaCompraSupport
             return [];
         }
 
+        $columnas = [
+            'rpa.articulo_id',
+            'rpa.precio',
+            'rpa.moneda_id',
+            'rpa.cotizacion',
+            'rp.fecha',
+            'rp.numerorecepcion',
+            'a.sku',
+        ];
+        if (Schema::hasColumn('recepcion_proveedor', 'anita_tipo')) {
+            $columnas[] = 'rp.anita_tipo';
+            $columnas[] = 'rp.anita_letra';
+            $columnas[] = 'rp.anita_sucursal';
+            $columnas[] = 'rp.anita_nro';
+        }
+
         $recepcionesQuery = DB::table('recepcion_proveedor_articulo as rpa')
             ->join('recepcion_proveedor as rp', 'rp.id', '=', 'rpa.recepcion_proveedor_id')
+            ->join('articulo as a', 'a.id', '=', 'rpa.articulo_id')
             ->whereIn('rpa.articulo_id', $articuloIds)
             ->where('rp.estado', RecepcionProveedorEstados::CONFIRMADA)
             ->where('rp.tipo', Recepcion_Proveedor::TIPO_RECEPCION)
@@ -336,12 +392,7 @@ final class ArticuloPrecioUltimaCompraSupport
             ->orderByDesc('rp.fecha')
             ->orderByDesc('rp.id')
             ->orderByDesc('rpa.id')
-            ->get([
-                'rpa.articulo_id',
-                'rpa.precio',
-                'rpa.moneda_id',
-                'rpa.cotizacion',
-            ]);
+            ->get($columnas);
 
         $out = [];
         foreach ($recepciones as $fila) {
@@ -355,15 +406,22 @@ final class ArticuloPrecioUltimaCompraSupport
             if (count($out[$articuloId]) >= $limite) {
                 continue;
             }
-            $precioLocal = self::precioUnitarioMonedaLocal(
-                (float) $fila->precio,
-                isset($fila->moneda_id) ? (int) $fila->moneda_id : null,
-                isset($fila->cotizacion) ? (float) $fila->cotizacion : null,
-            );
-            if ($precioLocal <= 0) {
+            $precio = (float) ($fila->precio ?? 0);
+            if ($precio <= 0) {
                 continue;
             }
-            $out[$articuloId][] = $precioLocal;
+            $out[$articuloId][] = [
+                'precio' => $precio,
+                'moneda_id' => isset($fila->moneda_id) ? (int) $fila->moneda_id : null,
+                'cotizacion' => isset($fila->cotizacion) ? (float) $fila->cotizacion : null,
+                'fecha' => $fila->fecha ? (string) $fila->fecha : null,
+                'numerorecepcion' => isset($fila->numerorecepcion) ? (int) $fila->numerorecepcion : null,
+                'sku' => trim((string) ($fila->sku ?? '')),
+                'anita_tipo' => trim((string) ($fila->anita_tipo ?? 'COM')) ?: 'COM',
+                'anita_letra' => trim((string) ($fila->anita_letra ?? 'X')) ?: 'X',
+                'anita_sucursal' => (int) ($fila->anita_sucursal ?? 0),
+                'anita_nro' => (int) ($fila->anita_nro ?? 0),
+            ];
         }
 
         return $out;

@@ -18,6 +18,7 @@ use App\Support\Ventas\GastronomiaCierresTurnoListadoFiltros;
 use App\Support\Ventas\GastronomiaCierreTurnoReporteSupport;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\GastronomiaTurnoOperativoTotalesSupport;
+use App\Support\Contable\CierreRendicionOrigenConsultaSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -120,7 +121,7 @@ class CierreTurnoGastronomiaController extends Controller
 
     public function apiComprobantes(Request $request)
     {
-        can('listar-cierres-turno-gastronomia');
+        $this->assertPuedeConsultarCierreTurno();
 
         $tipo = trim((string) $request->input('tipo', ''));
         $id = (int) $request->input('id', 0);
@@ -173,7 +174,7 @@ class CierreTurnoGastronomiaController extends Controller
 
     public function apiCanjesPremio(Request $request)
     {
-        can('listar-cierres-turno-gastronomia');
+        $this->assertPuedeConsultarCierreTurno();
 
         try {
             $alcance = $this->resolverAlcanceCierre($request);
@@ -204,7 +205,7 @@ class CierreTurnoGastronomiaController extends Controller
 
     public function apiTicketsTarjeta(Request $request)
     {
-        can('listar-cierres-turno-gastronomia');
+        $this->assertPuedeConsultarCierreTurno();
 
         try {
             $alcance = $this->resolverAlcanceCierre($request);
@@ -235,7 +236,7 @@ class CierreTurnoGastronomiaController extends Controller
 
     public function apiCanjesFidelidad(Request $request)
     {
-        can('listar-cierres-turno-gastronomia');
+        $this->assertPuedeConsultarCierreTurno();
 
         try {
             $alcance = $this->resolverAlcanceCierre($request);
@@ -327,7 +328,9 @@ class CierreTurnoGastronomiaController extends Controller
 
     public function comprobanteParcial(Request $request, int $id)
     {
-        can('ver-comprobante-cierre-turno-gastronomia');
+        CierreRendicionOrigenConsultaSupport::exigir(
+            CierreRendicionOrigenConsultaSupport::puedeVerPdfCierreTurnoGastronomia(),
+        );
 
         $parcial = CierreParcialTurnoGastronomia::query()->findOrFail($id);
         $this->assertAccesoEmpresa((int) ($parcial->turnoOperativo?->empresa_id ?? 0));
@@ -340,7 +343,9 @@ class CierreTurnoGastronomiaController extends Controller
 
     public function comprobanteCierre(Request $request, int $id)
     {
-        can('ver-comprobante-cierre-turno-gastronomia');
+        CierreRendicionOrigenConsultaSupport::exigir(
+            CierreRendicionOrigenConsultaSupport::puedeVerPdfCierreTurnoGastronomia(),
+        );
 
         $turno = TurnoOperativoGastronomia::query()
             ->where('estado', TurnoOperativoGastronomia::ESTADO_CERRADO)
@@ -356,7 +361,7 @@ class CierreTurnoGastronomiaController extends Controller
 
     public function verCierre(Request $request, int $id)
     {
-        can('listar-cierres-turno-gastronomia');
+        $this->assertPuedeConsultarCierreTurno();
 
         $turno = TurnoOperativoGastronomia::query()
             ->where('estado', TurnoOperativoGastronomia::ESTADO_CERRADO)
@@ -374,7 +379,7 @@ class CierreTurnoGastronomiaController extends Controller
             'turno' => $turno,
             'datos' => $datos,
             'referencia' => (string) ($datos['subtitulo'] ?? 'Op. #'.$turno->id),
-            'puede_ver_comprobante' => can('ver-comprobante-cierre-turno-gastronomia', false),
+            'puede_ver_comprobante' => CierreRendicionOrigenConsultaSupport::puedeVerPdfCierreTurnoGastronomia(),
             'puede_ver_factura' => can('ver-factura-gastronomia', false),
             'puede_corregir_arqueo' => can('corregir-arqueo-cierre-turno-gastronomia', false),
             'correccion_arqueo' => $correccionArqueo,
@@ -500,6 +505,13 @@ class CierreTurnoGastronomiaController extends Controller
             $filtros,
             $identificadorPc,
             can('ver-cierres-turno-todas-terminales-gastronomia', false),
+        );
+    }
+
+    private function assertPuedeConsultarCierreTurno(): void
+    {
+        CierreRendicionOrigenConsultaSupport::exigir(
+            CierreRendicionOrigenConsultaSupport::puedeConsultarCierreTurnoGastronomia(),
         );
     }
 

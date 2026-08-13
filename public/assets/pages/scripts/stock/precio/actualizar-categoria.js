@@ -8,6 +8,19 @@ $(function () {
     var previewUrl = carpetaBase + '/stock/precio/actualizar-por-categoria/preview';
     var aplicarUrl = carpetaBase + '/stock/precio/actualizar-por-categoria';
 
+    if (typeof activa_eventos_consultalistaprecio === 'function') {
+        activa_eventos_consultalistaprecio();
+    }
+
+    function invalidarPreview() {
+        $btnAplicar.prop('disabled', true);
+        $preview.addClass('d-none');
+    }
+
+    window.onListaprecioSeleccionado = function () {
+        invalidarPreview();
+    };
+
     function formData() {
         return {
             _token: $('meta[name="csrf-token"]').attr('content') || $form.find('[name="_token"]').val(),
@@ -97,7 +110,6 @@ $(function () {
     });
 
     $form.find('select, input').on('change input', function () {
-        $btnAplicar.prop('disabled', true);
-        $preview.addClass('d-none');
+        invalidarPreview();
     });
 });

@@ -123,14 +123,20 @@ class ComprobanteProveedorComplianceValidacionService
         }
 
         if (strlen($cae) !== 14) {
-            $resultado['errores'][] = 'El CAE debe tener 14 dígitos para constatar el comprobante recibido en ARCA (WSCDC).';
+            $this->agregarHallazgoWscdc(
+                $resultado,
+                'El CAE debe tener 14 dígitos para constatar el comprobante recibido en ARCA (WSCDC).'
+            );
 
             return;
         }
 
         $cmpReq = $this->armarCmpReqDesdePayload($payload, $cae);
         if ($cmpReq === null) {
-            $resultado['errores'][] = 'Faltan datos (CUIT emisor/receptor, tipo AFIP, fecha, punto de venta o número) para constatar el comprobante en ARCA (WSCDC).';
+            $this->agregarHallazgoWscdc(
+                $resultado,
+                'Faltan datos (CUIT emisor/receptor, tipo AFIP, fecha, punto de venta o número) para constatar el comprobante en ARCA (WSCDC).'
+            );
 
             return;
         }
@@ -142,7 +148,8 @@ class ComprobanteProveedorComplianceValidacionService
                 'error' => $e->getMessage(),
                 'cmp_req' => $cmpReq,
             ]);
-            $resultado['avisos'][] = 'No se pudo constatar en ARCA (WSCDC): '.$e->getMessage();
+            // WS caído / timeout / cert: nunca bloquea el grabado.
+            $resultado['avisos'][] = 'No se pudo constatar en ARCA (WSCDC); se grabó igual. Revise luego. Detalle: '.$e->getMessage();
             $resultado['wscdc'] = ['ejecutada' => true, 'ok' => false, 'error' => $e->getMessage()];
 
             return;
@@ -152,11 +159,27 @@ class ComprobanteProveedorComplianceValidacionService
         $resultado['wscdc'] = $resultadoWscdc;
 
         foreach ($resultadoWscdc['errores'] ?? [] as $err) {
-            $resultado['errores'][] = $err;
+            $this->agregarHallazgoWscdc($resultado, (string) $err);
         }
         foreach ($resultadoWscdc['avisos'] ?? [] as $aviso) {
             $resultado['avisos'][] = $aviso;
         }
+    }
+
+    /**
+     * WSCDC: por defecto solo avisa (permite grabar). Con bloquear_al_fallar=true endurece.
+     *
+     * @param  ResultadoCompliance  $resultado
+     */
+    private function agregarHallazgoWscdc(array &$resultado, string $mensaje): void
+    {
+        if ($this->wscdcBloqueaAlFallar()) {
+            $resultado['errores'][] = $mensaje;
+
+            return;
+        }
+
+        $resultado['avisos'][] = $mensaje;
     }
 
     /**
@@ -512,6 +535,11 @@ class ComprobanteProveedorComplianceValidacionService
     {
         return filter_var(config('arca_wscdc.habilitado', true), FILTER_VALIDATE_BOOLEAN)
             && filter_var(config('arca_wscdc.comprobante.habilitado', true), FILTER_VALIDATE_BOOLEAN);
+    }
+
+    private function wscdcBloqueaAlFallar(): bool
+    {
+        return filter_var(config('arca_wscdc.comprobante.bloquear_al_fallar', false), FILTER_VALIDATE_BOOLEAN);
     }
 
     private function formatearCuit(string $cuit): string

@@ -281,11 +281,8 @@ class IngresoEgresoService
 			// Busca el asiento correspondiente al movimiento de caja
 			$asiento = $this->asientoRepository->leeAsientoPorClave($id, 'caja_movimiento_id');
 
-			if (count($asiento) > 0)
+			if (count($asiento) > 0) {
 				$asiento_id = $asiento[0]->id;
-
-			if (!isset($data['numeroasiento']))
-			{
 				$data['tipoasiento_id'] = $asiento[0]->tipoasiento_id;
 				$data['numeroasiento'] = $asiento[0]->numeroasiento;
 			}
@@ -477,7 +474,9 @@ class IngresoEgresoService
 				$asientoSp = IngresoEgresoSolicitudpagoSupport::lineasAsientoDesdeSolicitud(
 					$sp,
 					$monedaId,
-					$cotizacion
+					$cotizacion,
+					is_array($datosCaja) ? $datosCaja : [],
+					$empresa_id
 				);
 				if ($asientoSp !== []) {
 					return ['mensaje' => 'ok', 'asiento' => $asientoSp];

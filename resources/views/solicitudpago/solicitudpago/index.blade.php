@@ -95,6 +95,7 @@
                             <th>C&oacute;digo</th>
                             <th>Empresa</th>
                             <th>Fecha</th>
+                            <th>Vencimiento</th>
                             <th>Concepto</th>
                             <th>Proveedor / Beneficiario</th>
                             <th>Detalle</th>
@@ -134,6 +135,7 @@
                             </td>
                             <td>{{ optional($data->empresas)->nombre ?? '—' }}</td>
                             <td>{{ optional($data->fecha)->format('d/m/Y') }}</td>
+                            <td>{{ optional($data->fecha_vencimiento)->format('d/m/Y') ?: '—' }}</td>
                             <td>{{ optional($data->conceptos)->nombre ?? '—' }}</td>
                             <td>
                                 @if ($data->proveedores)

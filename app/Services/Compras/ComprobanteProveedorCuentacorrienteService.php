@@ -5,6 +5,7 @@ namespace App\Services\Compras;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Cuota;
 use App\Repositories\Compras\Proveedor_CuentacorrienteRepositoryInterface;
+use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use RuntimeException;
 
 class ComprobanteProveedorCuentacorrienteService
@@ -28,7 +29,7 @@ class ComprobanteProveedorCuentacorrienteService
         }
 
         $signo = (string) ($comprobante->tipotransaccion_compras?->signo ?? 'S') === 'R' ? -1 : 1;
-        $fecha = $comprobante->fechacomprobante?->format('Y-m-d') ?? now()->format('Y-m-d');
+        $fecha = ComprobanteProveedorFechaContableSupport::fechaYmd($comprobante);
 
         $monedaFacturaId = (int) ($comprobante->moneda_id ?: 1);
         $cotizacionFactura = (float) ($comprobante->cotizacion ?: 1);

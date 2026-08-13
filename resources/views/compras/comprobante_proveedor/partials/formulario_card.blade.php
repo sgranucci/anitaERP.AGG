@@ -1,3 +1,14 @@
+@php
+    $mostrarContabilizar = can('contabilizar-comprobante-proveedor', false)
+        && (
+            ! ($esEdicion ?? false)
+            || (
+                ($data->estado ?? '') !== \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO
+                && ($data->estado ?? '') !== \App\Support\Compras\ComprobanteProveedorEstados::ANULADO
+                && empty($tiene_pagos)
+            )
+        );
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -14,6 +25,23 @@
                     @endif
                 </h3>
                 <div class="card-tools">
+                    @if ($mostrarContabilizar)
+                        @if ($esEdicion)
+                        <form action="{{ route('contabilizar_comprobante_proveedor', ['id' => $data->id]) }}" method="POST" class="d-inline"
+                            onsubmit="return confirm('¿Confirmar / contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
+                            @csrf
+                            <button type="submit" class="btn btn-warning btn-sm">
+                                <i class="fa fa-check"></i> Contabilizar
+                            </button>
+                        </form>
+                        @else
+                        <button type="submit" form="form-comprobante-proveedor" name="accion" value="contabilizar"
+                            class="btn btn-warning btn-sm"
+                            onclick="return confirm('¿Guardar y contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
+                            <i class="fa fa-check"></i> Contabilizar
+                        </button>
+                        @endif
+                    @endif
                     <a href="{{ route('comprobante_proveedor') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
@@ -23,16 +51,7 @@
                         <i class="fa fa-file-pdf-o"></i> Ver PDF
                     </a>
                     @endif
-                    @if ($esEdicion && ($data->estado ?? '') !== \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO && can('contabilizar-comprobante-proveedor', false))
-                    <form action="{{ route('contabilizar_comprobante_proveedor', ['id' => $data->id]) }}" method="POST" class="d-inline"
-                        onsubmit="return confirm('¿Contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
-                        @csrf
-                        <button type="submit" class="btn btn-success btn-sm">
-                            <i class="fa fa-check"></i> Contabilizar
-                        </button>
-                    </form>
-                    @endif
-                    @if ($esEdicion && can('borrar-comprobante-proveedor', false))
+                    @if ($esEdicion && ! ($tiene_pagos ?? false) && can('borrar-comprobante-proveedor', false))
                     <form action="{{ route('eliminar_comprobante_proveedor', ['id' => $data->id]) }}" method="POST" class="d-inline"
                         onsubmit="return confirm('¿Borrar el comprobante #{{ $data->id }} en anitaERP y Anita (asiento, CC, compra/promov/ctamov)? Esta acción no se puede deshacer.');">
                         @csrf
@@ -65,7 +84,7 @@
                 @if ($esEdicion && ($data->id ?? null))
                 data-comprobante-id="{{ (int) $data->id }}"
                 @endif
-                data-contabilizado="{{ (($data->estado ?? '') === \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO) ? '1' : '0' }}"
+                data-contabilizado="{{ ! empty($bloqueado_edicion) ? '1' : '0' }}"
                 data-preview-url="{{ ($esEdicion && ($data->id ?? null)) ? route('preview_asiento_comprobante_proveedor', ['id' => $data->id]) : route('preview_asiento_comprobante_proveedor_nuevo') }}"
                 data-puede-editar-concepto-iva="{{ can('editar-concepto-iva-compra', false) ? '1' : '0' }}"
                 data-url-editar-concepto-iva="{{ url('compras/concepto_ivacompra/__ID__/editar') }}">
@@ -236,39 +255,86 @@
                     </div>
                 </div>
 
-                @if ($esEdicion && ($data->estado ?? '') === \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO)
-                    <div class="alert alert-success mx-3 mt-3">
-                        Contabilizado. Asiento #{{ $data->asiento_id ?? '—' }}
+                @if ($esEdicion && ($tiene_pagos ?? false))
+                    <div class="alert alert-warning mx-3 mt-3">
+                        <i class="fa fa-lock"></i>
+                        Comprobante con pagos aplicados: no se puede modificar ni borrar.
+                        @if (($data->estado ?? '') === \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO)
+                            Asiento #{{ $data->asiento_id ?? '—' }}
+                            @if ($data->anita_nro_interno)
+                                · Anita nro interno {{ $data->anita_nro_interno }}
+                            @endif
+                        @endif
+                    </div>
+                @elseif ($esEdicion && ($data->estado ?? '') === \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO)
+                    <div class="alert alert-info mx-3 mt-3">
+                        Contabilizado sin pagos. Asiento #{{ $data->asiento_id ?? '—' }}
                         @if ($data->anita_nro_interno)
                             · Anita nro interno {{ $data->anita_nro_interno }}
                         @endif
+                        · Al actualizar se regenerará asiento, cuenta corriente y sync Anita.
                     </div>
                 @endif
 
-                <div class="card-footer">
-                    @if ($esEdicion && ($data->estado ?? '') !== \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO)
-                    <div class="row">
-                        <div class="col-lg-3"></div>
-                        <div class="col-lg-6">
-                            <button type="submit" form="form-comprobante-proveedor" class="btn botonsubmit btn-success">Actualizar</button>
-                        </div>
-                    </div>
-                    @elseif (! $esEdicion)
-                    <div class="row">
-                        <div class="col-lg-3"></div>
-                        <div class="col-lg-6">
-                            <button type="submit" form="form-comprobante-proveedor" class="btn botonsubmit btn-success">Guardar</button>
-                        </div>
-                    </div>
-                    @endif
-                </div>
             </form>
+
+            <div class="card-footer">
+                @if ($esEdicion && ($puede_actualizar ?? false))
+                <div class="row">
+                    <div class="col-lg-3"></div>
+                    <div class="col-lg-6 d-flex flex-wrap align-items-center">
+                        <button type="submit" form="form-comprobante-proveedor" class="btn botonsubmit btn-success mr-2 mb-1"
+                            @if (($data->estado ?? '') === \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO)
+                            onclick="return confirm('El comprobante está contabilizado. Al guardar se regenerará el asiento, la cuenta corriente y Anita. ¿Continuar?');"
+                            @endif
+                        >Actualizar</button>
+                        @if ($mostrarContabilizar)
+                        <form action="{{ route('contabilizar_comprobante_proveedor', ['id' => $data->id]) }}" method="POST" class="d-inline mb-1"
+                            onsubmit="return confirm('¿Confirmar / contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
+                            @csrf
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fa fa-check"></i> Contabilizar
+                            </button>
+                        </form>
+                        @endif
+                    </div>
+                </div>
+                @elseif (! $esEdicion)
+                <div class="row">
+                    <div class="col-lg-3"></div>
+                    <div class="col-lg-6 d-flex flex-wrap align-items-center">
+                        <button type="submit" form="form-comprobante-proveedor" class="btn botonsubmit btn-success mr-2 mb-1">Guardar</button>
+                        @if ($mostrarContabilizar)
+                        <button type="submit" form="form-comprobante-proveedor" name="accion" value="contabilizar"
+                            class="btn btn-primary mb-1"
+                            onclick="return confirm('¿Guardar y contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
+                            <i class="fa fa-check"></i> Contabilizar
+                        </button>
+                        @endif
+                    </div>
+                </div>
+                @elseif ($mostrarContabilizar)
+                <div class="row">
+                    <div class="col-lg-3"></div>
+                    <div class="col-lg-6">
+                        <form action="{{ route('contabilizar_comprobante_proveedor', ['id' => $data->id]) }}" method="POST" class="d-inline"
+                            onsubmit="return confirm('¿Confirmar / contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
+                            @csrf
+                            <button type="submit" class="btn btn-primary">
+                                <i class="fa fa-check"></i> Contabilizar
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                @endif
+            </div>
         </div>
     </div>
 </div>
 
 @include('includes.compras.modalconsultaproveedor')
 @include('includes.compras.modalconsultaconcepto_ivacompra')
+@include('includes.compras.modalconsultatipotransaccioncompra')
 @if ($mostrarSolapaArticulos ?? false)
 @include('includes.stock.modalconsultaarticulo')
 @endif
@@ -283,11 +349,6 @@
 @include('compras.comprobante_proveedor.partials.template_cp_archivos')
 <script type="application/json" id="cp-conceptos-cuenta-meta">@json($conceptos_cuenta_meta ?? [])</script>
 <script>
-window.cpAbrirSolapaComAlInicio = {{
-    ($mostrarSolapaCom ?? false) && (
-        ($com_obligatoria ?? false)
-        || count($recepciones_seleccionadas ?? []) > 0
-        || old('modo_carga', $data->modo_carga ?? '') === \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION
-    ) ? 'true' : 'false'
-}};
+window.cpAbrirSolapaComAlInicio = false;
+window.cpCentrocostoOcId = {{ (int) ($data->ordencompras->centrocosto_id ?? 0) }};
 </script>

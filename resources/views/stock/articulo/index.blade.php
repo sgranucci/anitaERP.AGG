@@ -11,6 +11,7 @@ Art&iacute;culos
 <script src="{{asset("assets/pages/scripts/configuracion/configurar_salida.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/modeloetiqueta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/configurar_modeloetiqueta.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/listaprecio/consulta.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta-precios.js")}}" type="text/javascript"></script>
 @if (can('imprimir-articulos-qr', false))
 <script src="{{ asset('assets/pages/scripts/stock/articulo/etiqueta-imprimiendo.js') }}" type="text/javascript"></script>
@@ -250,6 +251,7 @@ use App\Support\Stock\ArticuloListadoFiltros; ?>
 </div>
 {{ $articulos->appends($filtrosQuery ?? [])->links() }}
 @include('includes.stock.modalconsultaprecioarticulo')
+@include('includes.stock.modalconsultalistaprecio')
 @if (can('imprimir-articulos-qr', false))
 @include('includes.stock.modaletiquetanpuarticulo')
 @include('includes.stock.modaletiquetacantidadarticulo')

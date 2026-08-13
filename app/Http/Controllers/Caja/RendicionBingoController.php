@@ -8,6 +8,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\Bingo\RendicionBingoCajaService;
 use App\Support\Caja\Bingo\RendicionBingoCajaListadoFiltros;
 use App\Support\Caja\Bingo\RendicionBingoCajaPermiso;
+use App\Support\Contable\CierreRendicionOrigenConsultaSupport;
 use App\Support\Listado\FiltrosListadoRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -247,7 +248,9 @@ class RendicionBingoController extends Controller
 
     public function imprimir(int $id)
     {
-        can('imprimir-rendicion-bingo-caja');
+        CierreRendicionOrigenConsultaSupport::exigir(
+            CierreRendicionOrigenConsultaSupport::puedeVerPdfRendicionBingo(),
+        );
         $rendicion = RendicionBingoCaja::query()
             ->with(['empresa', 'turnoOperativo.turno', 'turnoOperativo.usuarioHabilitado', 'jornada', 'creousuario'])
             ->findOrFail($id);

@@ -66,13 +66,14 @@
 		<thead>
 			<tr>
 				<th style="width: 7%;">C&oacute;digo</th>
-				<th style="width: 12%;">Empresa</th>
-				<th style="width: 8%;">Fecha</th>
-				<th style="width: 15%;">Concepto</th>
-				<th style="width: 15%;">Proveedor / Benef.</th>
-				<th style="width: 9%;">Monto</th>
-				<th style="width: 9%;">Tratamiento</th>
-				<th style="width: 9%;">Estado</th>
+				<th style="width: 11%;">Empresa</th>
+				<th style="width: 7%;">Fecha</th>
+				<th style="width: 7%;">Vencimiento</th>
+				<th style="width: 14%;">Concepto</th>
+				<th style="width: 14%;">Proveedor / Benef.</th>
+				<th style="width: 8%;">Monto</th>
+				<th style="width: 8%;">Tratamiento</th>
+				<th style="width: 8%;">Estado</th>
 				<th style="width: 7%;">SP madre</th>
 				<th style="width: 9%;">Cuotas pend.</th>
 			</tr>
@@ -83,6 +84,7 @@
 					<td>{{ $data->codigo }}</td>
 					<td>{{ $data->nombreempresa ?? (optional($data->empresas)->nombre ?? '') }}</td>
 					<td>{{ optional($data->fecha)->format('d/m/Y') }}</td>
+					<td>{{ optional($data->fecha_vencimiento)->format('d/m/Y') }}</td>
 					<td>{{ optional($data->conceptos)->nombre ?? '' }}</td>
 					<td>{{ optional($data->proveedores)->nombre ?? ($data->beneficiario ?? '') }}</td>
 					<td>{{ number_format((float) $data->monto, 2, ',', '.') }}</td>

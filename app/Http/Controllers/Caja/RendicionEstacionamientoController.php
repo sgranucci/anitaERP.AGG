@@ -9,7 +9,7 @@ use App\Services\Caja\RendicionEstacionamientoCajaService;
 use App\Support\Caja\EstacionamientoJornadaComprobantePermiso;
 use App\Support\Caja\RendicionEstacionamientoCajaListadoFiltros;
 use App\Support\Caja\RendicionEstacionamientoCajaPermiso;
-use App\Support\Caja\RendicionEstacionamientoPdfPermiso;
+use App\Support\Contable\CierreRendicionOrigenConsultaSupport;
 use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
@@ -161,9 +161,10 @@ class RendicionEstacionamientoController extends Controller
 
     public function imprimir(Request $request, int $id)
     {
-        if (! RendicionEstacionamientoPdfPermiso::puedeVerPdfRendicion()) {
-            abort(403, 'No tiene permiso para ver el PDF de la rendición.');
-        }
+        CierreRendicionOrigenConsultaSupport::exigir(
+            CierreRendicionOrigenConsultaSupport::puedeVerPdfRendicionEstacionamiento(),
+            'No tiene permiso para ver el PDF de la rendición.',
+        );
 
         $payload = $this->service->datosParaImpresion($id);
         $nombre = 'rendicion_estacionamiento_'.$id.'_'.($payload['datos']['codigo_anita'] ?: 'sin_codigo').'.pdf';
@@ -208,7 +209,9 @@ class RendicionEstacionamientoController extends Controller
     {
         $soloConsulta = QueryRetornoListado::esModalConsulta($request);
         if ($soloConsulta) {
-            can('listar-rendicion-estacionamiento-caja');
+            CierreRendicionOrigenConsultaSupport::exigir(
+                CierreRendicionOrigenConsultaSupport::puedeConsultarRendicionEstacionamiento(),
+            );
         } else {
             can('editar-rendicion-estacionamiento-caja');
         }

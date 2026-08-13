@@ -1,0 +1,53 @@
+---
+description: Migraciones de menú, roles y usuarios — filtrar siempre por EMPRESA (AGG, Interforming, El Bierzo, …)
+globs: database/migrations/**/*.php
+alwaysApply: true
+---
+
+# Migraciones por entorno (`EMPRESA`)
+
+Un solo repo corre en **AGG**, **INTERFORMING**, **EL BIERZO**, Ferli, Frasle, etc. `config('app.empresa')` es el **cliente/instalación**, no la tabla `empresa` (Biyemas/Kandiko/Rebisco dentro de AGG).
+
+Incidente 12/ago/2026: `2026_07_27_230200_eliminar_rol_ger_gastronomia_interforming` corrió en AGG, borró **Ger-gastronomía** y dejó a `hdattilo` sin rol (no podía entrar). Restaurado en `2026_08_12_210000_restaurar_rol_ger_gastronomia_agg`.
+
+## Obligatorio
+
+Toda migración que cree/borre/asigne **menú**, **permiso**, **rol** o **usuario_rol** y sea de un cliente:
+
+```php
+use App\Support\Configuracion\EntornoEmpresaSupport;
+
+public function up(): void
+{
+    if (! EntornoEmpresaSupport::esInterforming()) { // o esAgg() / esElBierzo()
+        return;
+    }
+    // …
+}
+```
+
+Lo mismo en `down()`. El filename debe incluir el cliente (`*_interforming.php`, `*_agg.php`, `*_elbierzo.php`).
+
+## Prohibido
+
+```php
+// ❌ Borrar rol/menú/usuarios sin gate — pega en todos los clientes
+DB::table('usuario_rol')->where('rol_id', $rolId)->delete();
+DB::table('rol')->where('id', $rolId)->delete();
+
+// ❌ Asumir que un rol_id de El Bierzo existe igual en AGG
+```
+
+## Correcto
+
+- **Alta** de menú/rol de un módulo propio de un cliente → early-return si no es ese `EMPRESA`.
+- **Baja** destructiva (borrar rol, desasignar usuarios, quitar menú) → gate **más estricto**; si ya corrió en el cliente equivocado, migración nueva de **restore** en el afectado + gate en la histórica para installs futuros.
+- Menú/permiso **genérico** del ERP (todos los clientes) → no hace falta gate; no borrar roles ajenos.
+
+## Comprobación rápida
+
+```bash
+rg "usuario_rol|DB::table\('rol'\)|menu_rol|permiso_rol" database/migrations/ARCHIVO_NUEVO.php
+rg "EntornoEmpresaSupport|config\('app.empresa'\)" database/migrations/ARCHIVO_NUEVO.php
+# Si toca menú/rol/usuario y es de un cliente, el gate tiene que estar
+```

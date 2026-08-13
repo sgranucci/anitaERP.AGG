@@ -4,8 +4,8 @@ namespace App\Models\Admin;
 
 use Illuminate\Database\Eloquent\Model;
 use App\Models\Contable\Centrocosto;
+use App\Models\Seguridad\Usuario;
 use OwenIt\Auditing\Contracts\Auditable;
-use App\Models\Admin\Permiso_Rol;
 
 class Rol extends Model implements Auditable
 {
@@ -16,6 +16,11 @@ class Rol extends Model implements Auditable
     public function roles()
     {
         return $this->belongsToMany(Rol::class);
+    }
+
+    public function usuarios()
+    {
+        return $this->belongsToMany(Usuario::class, 'usuario_rol');
     }
 
     public function centrocostos()

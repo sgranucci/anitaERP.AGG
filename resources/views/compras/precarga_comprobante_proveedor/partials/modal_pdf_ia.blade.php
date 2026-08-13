@@ -79,6 +79,8 @@
                         <div class="col-md-3"><strong>Estado ARCA:</strong> <span id="precarga-pdf-ia-estado-arca"></span></div>
                     </div>
                     <div class="row mb-3">
+                        <div class="col-md-3"><strong>Vencimiento:</strong> <span id="precarga-pdf-ia-vencimiento"></span></div>
+                        <div class="col-md-3"><strong>Vto. CAE:</strong> <span id="precarga-pdf-ia-vto-cae"></span></div>
                         <div class="col-md-6"><strong>Comprobante:</strong> <span id="precarga-pdf-ia-numero"></span></div>
                     </div>
                     <div class="table-responsive">

@@ -4,14 +4,10 @@ namespace App\Support\Stock;
 
 use App\Mail\Stock\TransferenciaMercaderiaTitoPrecioAviso;
 use App\Models\Stock\Articulo;
-use App\Models\Stock\Recepcion_Proveedor;
 use App\Models\Stock\Transferencia_Mercaderia;
 use App\Models\Stock\Transferencia_Mercaderia_Articulo;
-use App\Services\Stock\StkmaeUltimaCompraAnitaService;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Schema;
 
 /**
  * Aviso por mail al contabilizar TRCONT con artículos TITO (precio promedio 3 compras).
@@ -105,8 +101,6 @@ final class TransferenciaMercaderiaTitoPrecioAvisoSupport
         }
 
         $promedios = ArticuloPrecioPromedioCompraSupport::resolverPorArticulos($articulos);
-        $detalleComprasErp = self::detalleUltimasComprasErp(array_keys($articulos));
-        $detalleAnita = self::detalleComprasAnita($articulos, $promedios);
 
         $filas = [];
         $totalImporte = 0.0;
@@ -117,7 +111,7 @@ final class TransferenciaMercaderiaTitoPrecioAvisoSupport
                 continue;
             }
             $articuloId = (int) $articulo->id;
-            $dato = $promedios[$articuloId] ?? ['precio' => null, 'origen' => null];
+            $dato = $promedios[$articuloId] ?? ['precio' => null, 'origen' => null, 'compras' => []];
             $precioPromedio = $dato['precio'] !== null ? (float) $dato['precio'] : null;
             $origen = $dato['origen'] ?? null;
             $cantidad = (float) ($linea->cantidad_origen ?? 0);
@@ -126,13 +120,6 @@ final class TransferenciaMercaderiaTitoPrecioAvisoSupport
                 : null;
             if ($importe !== null) {
                 $totalImporte += $importe;
-            }
-
-            $compras = [];
-            if ($origen === ArticuloPrecioPromedioCompraSupport::ORIGEN_ERP_COM) {
-                $compras = $detalleComprasErp[$articuloId] ?? [];
-            } elseif ($origen === ArticuloPrecioPromedioCompraSupport::ORIGEN_ANITA_STKMAE) {
-                $compras = $detalleAnita[$articuloId] ?? [];
             }
 
             $filas[] = [
@@ -147,7 +134,7 @@ final class TransferenciaMercaderiaTitoPrecioAvisoSupport
                 'origen' => $origen,
                 'origen_etiqueta' => self::etiquetaOrigen($origen),
                 'importe' => $importe,
-                'compras' => $compras,
+                'compras' => $dato['compras'] ?? [],
             ];
         }
 
@@ -194,125 +181,5 @@ final class TransferenciaMercaderiaTitoPrecioAvisoSupport
             ArticuloPrecioPromedioCompraSupport::ORIGEN_ANITA_STKMAE => 'Promedio Anita stkmae compra1/2/3',
             default => 'Sin precio',
         };
-    }
-
-    /**
-     * @param  list<int>  $articuloIds
-     * @return array<int, list<array{n: int, precio: float, fecha: string|null, com: int|null}>>
-     */
-    private static function detalleUltimasComprasErp(array $articuloIds): array
-    {
-        $articuloIds = array_values(array_unique(array_filter(array_map('intval', $articuloIds), static fn ($id) => $id > 0)));
-        if ($articuloIds === []) {
-            return [];
-        }
-
-        $limite = ArticuloPrecioPromedioCompraSupport::CANTIDAD;
-        $query = DB::table('recepcion_proveedor_articulo as rpa')
-            ->join('recepcion_proveedor as rp', 'rp.id', '=', 'rpa.recepcion_proveedor_id')
-            ->whereIn('rpa.articulo_id', $articuloIds)
-            ->where('rp.estado', RecepcionProveedorEstados::CONFIRMADA)
-            ->where('rp.tipo', Recepcion_Proveedor::TIPO_RECEPCION)
-            ->where('rpa.precio', '>', 0);
-
-        if (Schema::hasColumn('recepcion_proveedor', 'deleted_at')) {
-            $query->whereNull('rp.deleted_at');
-        }
-
-        $filas = $query
-            ->orderByDesc('rp.fecha')
-            ->orderByDesc('rp.id')
-            ->orderByDesc('rpa.id')
-            ->get([
-                'rpa.articulo_id',
-                'rpa.precio',
-                'rpa.moneda_id',
-                'rpa.cotizacion',
-                'rp.fecha',
-                'rp.numerorecepcion',
-            ]);
-
-        $out = [];
-        foreach ($filas as $fila) {
-            $articuloId = (int) $fila->articulo_id;
-            if ($articuloId <= 0) {
-                continue;
-            }
-            if (! isset($out[$articuloId])) {
-                $out[$articuloId] = [];
-            }
-            if (count($out[$articuloId]) >= $limite) {
-                continue;
-            }
-            $precioLocal = ArticuloPrecioUltimaCompraSupport::precioUnitarioMonedaLocal(
-                (float) $fila->precio,
-                isset($fila->moneda_id) ? (int) $fila->moneda_id : null,
-                isset($fila->cotizacion) ? (float) $fila->cotizacion : null,
-            );
-            if ($precioLocal <= 0) {
-                continue;
-            }
-            $out[$articuloId][] = [
-                'n' => count($out[$articuloId]) + 1,
-                'precio' => $precioLocal,
-                'fecha' => $fila->fecha ? (string) $fila->fecha : null,
-                'com' => isset($fila->numerorecepcion) ? (int) $fila->numerorecepcion : null,
-            ];
-        }
-
-        return $out;
-    }
-
-    /**
-     * @param  array<int, Articulo>  $articulos
-     * @param  array<int, array{precio: float|null, origen: string|null}>  $promedios
-     * @return array<int, list<array{n: int, precio: float, fecha: string|null, com: int|null}>>
-     */
-    private static function detalleComprasAnita(array $articulos, array $promedios): array
-    {
-        $skusPorId = [];
-        foreach ($articulos as $id => $articulo) {
-            if (($promedios[$id]['origen'] ?? null) !== ArticuloPrecioPromedioCompraSupport::ORIGEN_ANITA_STKMAE) {
-                continue;
-            }
-            $sku = trim((string) ($articulo->sku ?? ''));
-            if ($sku !== '') {
-                $skusPorId[(int) $id] = $sku;
-            }
-        }
-
-        if ($skusPorId === []) {
-            return [];
-        }
-
-        /** @var StkmaeUltimaCompraAnitaService $anita */
-        $anita = app(StkmaeUltimaCompraAnitaService::class);
-        $datos = $anita->obtenerDatosUltimaCompraPorSkus(array_values($skusPorId));
-
-        $out = [];
-        foreach ($skusPorId as $id => $sku) {
-            $dato = $datos[$sku] ?? null;
-            if ($dato === null) {
-                continue;
-            }
-            $compras = [];
-            foreach ([1 => 'compra1', 2 => 'compra2', 3 => 'compra3'] as $n => $campo) {
-                $precio = (float) ($dato[$campo] ?? 0);
-                if ($precio <= 0) {
-                    continue;
-                }
-                $compras[] = [
-                    'n' => $n,
-                    'precio' => round($precio, 6),
-                    'fecha' => null,
-                    'com' => null,
-                ];
-            }
-            if ($compras !== []) {
-                $out[$id] = $compras;
-            }
-        }
-
-        return $out;
     }
 }

@@ -34,8 +34,8 @@ class SolicitudpagoSincronizarAnitaCommand extends Command
         }
 
         $this->line('Cabeceras Anita: '.(int) ($r['cabeceras'] ?? 0));
-        $this->line('Creadas: '.(int) ($r['creados'] ?? 0));
-        $this->line('Actualizadas: '.(int) ($r['actualizados'] ?? 0));
+        $this->line('Creadas (faltantes): '.(int) ($r['creados'] ?? 0));
+        $this->line('Estados actualizados: '.(int) ($r['actualizados'] ?? 0));
         $this->line('Madres desde cuotas: '.(int) ($r['madres_desde_cuotas'] ?? 0));
 
         return self::SUCCESS;

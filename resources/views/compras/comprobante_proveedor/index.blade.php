@@ -92,6 +92,17 @@ use App\Support\Listado\QueryRetornoListado;
                                     <i class="fa fa-edit"></i>
                                 </a>
                                 @endif
+                                @if (($row->estado ?? '') !== \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO
+                                    && ($row->estado ?? '') !== \App\Support\Compras\ComprobanteProveedorEstados::ANULADO
+                                    && can('contabilizar-comprobante-proveedor', false))
+                                <form action="{{ route('contabilizar_comprobante_proveedor', ['id' => $row->id]) }}" method="POST" class="d-inline"
+                                    onsubmit="return confirm('¿Confirmar / contabilizar el comprobante #{{ $row->id }}?');">
+                                    @csrf
+                                    <button type="submit" class="btn-accion-tabla tooltipsC text-success" title="Confirmar / Contabilizar">
+                                        <i class="fa fa-check"></i>
+                                    </button>
+                                </form>
+                                @endif
                                 @if (can('borrar-comprobante-proveedor', false))
                                 <form action="{{ route('eliminar_comprobante_proveedor', ['id' => $row->id]) }}" method="POST" class="d-inline form-eliminar">
                                     @csrf

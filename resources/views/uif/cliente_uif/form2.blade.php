@@ -3,10 +3,6 @@
 	$reqSup = $esSupervisorForm2 ? 'required' : '';
 @endphp
 <div class="form2" style="display: none">
-	<div id="uif-alertas-cumplimiento" class="alert alert-warning d-none mb-3" role="alert">
-		<strong><i class="fa fa-exclamation-triangle"></i> <span id="uif-alertas-cumplimiento-titulo">Pendientes de cumplimiento UIF</span></strong>
-		<ul id="uif-alertas-cumplimiento-lista" class="mb-0 mt-2 pl-3"></ul>
-	</div>
 	<div class="row">
 		<div class="col-sm-6">
 			<div class="form-group row">

@@ -6,6 +6,7 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Estado;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -168,9 +169,81 @@ class ComprobanteProveedorContabilizarService
     }
 
     /**
+     * Revierte asiento ERP + CC + Anita de un CONTABILIZADO sin pagos,
+     * dejando el comprobante en BORRADOR para reedición.
+     */
+    public function descontabilizarSinPagos(int $comprobanteId): Comprobante_Proveedor
+    {
+        $comprobante = Comprobante_Proveedor::query()
+            ->with(['asientos', 'proveedores', 'tipotransaccion_compras'])
+            ->find($comprobanteId);
+
+        if (! $comprobante) {
+            throw new RuntimeException('Comprobante de proveedor inexistente.');
+        }
+
+        ComprobanteProveedorPagoSupport::assertSinPagosAplicados($comprobanteId, 'descontabilizar');
+
+        if ($comprobante->estado !== ComprobanteProveedorEstados::CONTABILIZADO
+            && ! $comprobante->asiento_id
+            && ! $comprobante->anita_nro_interno) {
+            return $comprobante;
+        }
+
+        $asientoId = (int) ($comprobante->asiento_id ?? 0);
+        $numeroAsiento = $comprobante->asientos
+            ? (string) ($comprobante->asientos->numeroasiento ?? '')
+            : '';
+        $anitaNro = (int) ($comprobante->anita_nro_interno ?? 0);
+
+        try {
+            if ($asientoId > 0 || $anitaNro > 0) {
+                $this->asientoService->eliminarCtamovAnitaDeComprobante(
+                    $comprobante,
+                    $numeroAsiento !== '' ? $numeroAsiento : null
+                );
+            }
+            if ($anitaNro > 0) {
+                $this->anitaSyncService->syncDelete($comprobante);
+            }
+        } catch (Throwable $e) {
+            Log::error('comprobante_proveedor.descontabilizar_anita_fallo', [
+                'comprobante_id' => $comprobanteId,
+                'anita_nro_interno' => $anitaNro,
+                'error' => $e->getMessage(),
+            ]);
+            throw new RuntimeException(
+                'No se pudo revertir en Anita antes de editar: '.$e->getMessage()
+            );
+        }
+
+        $this->revertirErpTrasFalloAnita($comprobante, true);
+
+        $comprobante->refresh();
+        $comprobante->forceFill([
+            'anita_nro_interno' => null,
+            'anita_sync_estado' => null,
+            'anita_sync_error' => null,
+            'anita_sync_at' => null,
+            'estado' => ComprobanteProveedorEstados::BORRADOR,
+            'asiento_id' => null,
+        ])->save();
+
+        Comprobante_Proveedor_Estado::query()->create([
+            'comprobante_proveedor_id' => $comprobante->id,
+            'fecha' => now()->format('Y-m-d'),
+            'estado' => ComprobanteProveedorEstados::BORRADOR,
+            'usuario_id' => Auth::id(),
+            'observacion' => 'Descontabilizado para reedición (sin pagos aplicados).',
+        ]);
+
+        return $comprobante->fresh();
+    }
+
+    /**
      * Si falló el sync Anita después del commit MySQL, no dejar el CP “contabilizado” a medias.
      */
-    private function revertirErpTrasFalloAnita(Comprobante_Proveedor $comprobante): void
+    private function revertirErpTrasFalloAnita(Comprobante_Proveedor $comprobante, bool $lanzarSiFalla = false): void
     {
         $comprobante->refresh();
         if ($comprobante->estado !== ComprobanteProveedorEstados::CONTABILIZADO
@@ -223,6 +296,11 @@ class ComprobanteProveedorContabilizarService
                 'asiento_id' => $asientoId,
                 'error' => $revertEx->getMessage(),
             ]);
+            if ($lanzarSiFalla) {
+                throw new RuntimeException(
+                    'No se pudo revertir el asiento/CC en ERP: '.$revertEx->getMessage()
+                );
+            }
         }
     }
 }

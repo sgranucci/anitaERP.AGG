@@ -82,4 +82,28 @@ final class ConceptoIvacompraConsultaSupport
             ->where('tipotransaccion_compra_id', $tipotransaccionCompraId)
             ->exists();
     }
+
+    /**
+     * Renglones de concepto (monto 0) configurados para el tipo — plantilla de carga.
+     *
+     * @return Collection<int, \App\Models\Compras\Comprobante_Proveedor_Concepto>
+     */
+    public static function renglonesPlantillaParaTipo(int $tipotransaccionCompraId): Collection
+    {
+        $lista = self::listarPorTipoTransaccion($tipotransaccionCompraId);
+        if ($lista->isEmpty()) {
+            return collect();
+        }
+
+        return $lista->values()->map(function (Concepto_Ivacompra $concepto, int $idx) {
+            $renglon = new \App\Models\Compras\Comprobante_Proveedor_Concepto([
+                'concepto_ivacompra_id' => $concepto->id,
+                'monto' => 0,
+                'orden' => $idx + 1,
+            ]);
+            $renglon->setRelation('concepto_ivacompras', $concepto);
+
+            return $renglon;
+        });
+    }
 }

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Contable;
 
+use App\Models\Caja\RendicionGastronomiaCaja;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Support\Contable\CierreTurnoGastronomiaContableConciliacionSupport;
 use App\Support\Contable\CierreTurnoGastronomiaContableListadoFiltros;
@@ -35,6 +36,7 @@ final class CierreTurnoGastronomiaContableService
         $filtros['identificador_pc'] = '';
 
         $filas = $this->reporteSupport->listadoConFiltros($filtros);
+        $this->enriquecerRendicionesCaja($filas);
 
         if (! $paginar) {
             return $filas;
@@ -110,5 +112,40 @@ final class CierreTurnoGastronomiaContableService
         }
 
         return Carbon::parse($fecha)->toDateString();
+    }
+
+    /**
+     * @param  Collection<int, object>  $filas
+     */
+    private function enriquecerRendicionesCaja(Collection $filas): void
+    {
+        $turnoIds = $filas
+            ->filter(static fn ($f) => ($f->tipo ?? '') === 'cierre')
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn ($id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($turnoIds === []) {
+            return;
+        }
+
+        $porTurno = RendicionGastronomiaCaja::query()
+            ->whereIn('turno_operativo_gastronomia_id', $turnoIds)
+            ->orderByDesc('id')
+            ->get(['id', 'codigo', 'turno_operativo_gastronomia_id'])
+            ->unique('turno_operativo_gastronomia_id')
+            ->keyBy('turno_operativo_gastronomia_id');
+
+        foreach ($filas as $fila) {
+            if (($fila->tipo ?? '') !== 'cierre') {
+                continue;
+            }
+            $rend = $porTurno->get((int) $fila->id);
+            $fila->rendicion_caja_id = $rend !== null ? (int) $rend->id : null;
+            $fila->rendicion_caja_codigo = $rend !== null ? (string) $rend->codigo : null;
+        }
     }
 }

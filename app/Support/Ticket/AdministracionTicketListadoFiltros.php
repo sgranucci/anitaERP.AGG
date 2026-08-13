@@ -2,6 +2,7 @@
 
 namespace App\Support\Ticket;
 
+use App\Models\Ticket\Ticket_Estado;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
 use Illuminate\Database\Eloquent\Builder;
@@ -15,6 +16,14 @@ class AdministracionTicketListadoFiltros
     public const MODO_TODOS = 'todos';
 
     public const MODO_CAMPO = 'campo';
+
+    /** Filtro externo de estado: Pendiente + En ejecución (default del index). */
+    public const FILTRO_ESTADO_EN_CURSO = 'EN_CURSO';
+
+    public const FILTRO_ESTADO_TODOS = 'TODOS';
+
+    /** @var list<string> */
+    public const ESTADOS_EN_CURSO = ['Pendiente', 'En ejecución'];
 
     /** @var array<string, array{column: string, type: string, label: string}> */
     public const CAMPOS = [
@@ -30,6 +39,8 @@ class AdministracionTicketListadoFiltros
         'usuario' => ['column' => 'usuario.nombre', 'type' => 'texto', 'label' => 'Generó usuario'],
         'tecnico' => ['column' => 'nombretecnico', 'type' => 'texto', 'label' => 'Técnico asignado'],
         'estado' => ['column' => 'ticket.estado_ticket', 'type' => 'texto', 'label' => 'Estado'],
+        'fecha_resolucion' => ['column' => 'ticket.fecha_resolucion', 'type' => 'fecha', 'label' => 'Fecha resolución'],
+        'tiempo_insumido' => ['column' => 'ticket.tiempo_insumido_total', 'type' => 'entero', 'label' => 'Tiempo insumido (min)'],
     ];
 
     /** @var list<string> */
@@ -117,9 +128,12 @@ class AdministracionTicketListadoFiltros
             'valor_hasta' => trim((string) $request->input('filtro_valor_hasta', '')),
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
-            'estado' => trim((string) $request->input('estado', '')),
+            'estado' => '',
+            'filtro_estado' => self::resolverFiltroEstadoDesdeRequest($request),
             'fecha_desde' => trim((string) $request->input('fecha_desde', '')),
             'fecha_hasta' => trim((string) $request->input('fecha_hasta', '')),
+            'fecha_resolucion_desde' => trim((string) $request->input('fecha_resolucion_desde', '')),
+            'fecha_resolucion_hasta' => trim((string) $request->input('fecha_resolucion_hasta', '')),
             'ver_todos_tickets' => $request->has('ver_todos_tickets')
                 ? $request->boolean('ver_todos_tickets')
                 : true,
@@ -149,12 +163,17 @@ class AdministracionTicketListadoFiltros
 
     public static function tieneCriteriosUsuario(array $filtros): bool
     {
-        if (trim((string) ($filtros['estado'] ?? '')) !== '') {
+        if (self::normalizarFiltroEstado((string) ($filtros['filtro_estado'] ?? '')) !== self::FILTRO_ESTADO_EN_CURSO) {
             return true;
         }
 
         if (trim((string) ($filtros['fecha_desde'] ?? '')) !== ''
             || trim((string) ($filtros['fecha_hasta'] ?? '')) !== '') {
+            return true;
+        }
+
+        if (trim((string) ($filtros['fecha_resolucion_desde'] ?? '')) !== ''
+            || trim((string) ($filtros['fecha_resolucion_hasta'] ?? '')) !== '') {
             return true;
         }
 
@@ -203,8 +222,11 @@ class AdministracionTicketListadoFiltros
             'valor_hasta' => '',
             'busqueda' => '',
             'estado' => '',
+            'filtro_estado' => self::FILTRO_ESTADO_EN_CURSO,
             'fecha_desde' => '',
             'fecha_hasta' => '',
+            'fecha_resolucion_desde' => '',
+            'fecha_resolucion_hasta' => '',
             'ver_todos_tickets' => true,
             'tecnico_usuario_id' => 0,
         ];
@@ -231,14 +253,23 @@ class AdministracionTicketListadoFiltros
         if (! empty($filtros['valor_hasta'])) {
             $params['filtro_valor_hasta'] = $filtros['valor_hasta'];
         }
-        if (! empty($filtros['estado'])) {
-            $params['estado'] = $filtros['estado'];
+        $filtroEstado = self::normalizarFiltroEstado((string) ($filtros['filtro_estado'] ?? ''));
+        if ($filtroEstado === self::FILTRO_ESTADO_TODOS) {
+            $params['filtro_estado'] = self::FILTRO_ESTADO_TODOS;
+        } elseif ($filtroEstado !== self::FILTRO_ESTADO_EN_CURSO) {
+            $params['filtro_estado'] = $filtroEstado;
         }
         if (! empty($filtros['fecha_desde'])) {
             $params['fecha_desde'] = $filtros['fecha_desde'];
         }
         if (! empty($filtros['fecha_hasta'])) {
             $params['fecha_hasta'] = $filtros['fecha_hasta'];
+        }
+        if (! empty($filtros['fecha_resolucion_desde'])) {
+            $params['fecha_resolucion_desde'] = $filtros['fecha_resolucion_desde'];
+        }
+        if (! empty($filtros['fecha_resolucion_hasta'])) {
+            $params['fecha_resolucion_hasta'] = $filtros['fecha_resolucion_hasta'];
         }
         $params['ver_todos_tickets'] = ! empty($filtros['ver_todos_tickets']) ? '1' : '0';
 
@@ -252,6 +283,7 @@ class AdministracionTicketListadoFiltros
     {
         self::aplicarEstado($query, $filtros);
         self::aplicarRangoFechas($query, $filtros);
+        self::aplicarRangoFechaResolucion($query, $filtros);
 
         if (! self::tieneCriteriosTexto($filtros)) {
             return;
@@ -279,20 +311,86 @@ class AdministracionTicketListadoFiltros
         return trim((string) ($filtros['valor'] ?? '')) !== '';
     }
 
+    public static function normalizarFiltroEstado(string $valor): string
+    {
+        $valor = trim($valor);
+        if ($valor === '' || $valor === self::FILTRO_ESTADO_EN_CURSO) {
+            return self::FILTRO_ESTADO_EN_CURSO;
+        }
+        if ($valor === self::FILTRO_ESTADO_TODOS) {
+            return self::FILTRO_ESTADO_TODOS;
+        }
+
+        foreach (Ticket_Estado::$enumEstado as $item) {
+            if (($item['nombre'] ?? '') === $valor) {
+                return $valor;
+            }
+        }
+
+        return self::FILTRO_ESTADO_EN_CURSO;
+    }
+
+    public static function etiquetaFiltroEstado(string $filtroEstado): string
+    {
+        $filtroEstado = self::normalizarFiltroEstado($filtroEstado);
+        if ($filtroEstado === self::FILTRO_ESTADO_EN_CURSO) {
+            return 'En curso (Pendiente / En ejecución)';
+        }
+        if ($filtroEstado === self::FILTRO_ESTADO_TODOS) {
+            return 'Todos';
+        }
+
+        return $filtroEstado;
+    }
+
     /**
-     * @param  Builder<\App\Models\Ticket\Ticket>  $query
+     * @return list<array{valor: string, label: string}>
      */
+    public static function opcionesFiltroEstadoExterno(): array
+    {
+        return [
+            ['valor' => self::FILTRO_ESTADO_EN_CURSO, 'label' => 'En curso'],
+            ['valor' => 'Pendiente', 'label' => 'Pendiente'],
+            ['valor' => 'En ejecución', 'label' => 'En ejecución'],
+            ['valor' => 'Finalizado', 'label' => 'Finalizado'],
+            ['valor' => 'Suspendido', 'label' => 'Suspendido'],
+            ['valor' => self::FILTRO_ESTADO_TODOS, 'label' => 'Todos'],
+        ];
+    }
+
+    private static function resolverFiltroEstadoDesdeRequest(Request $request): string
+    {
+        if ($request->has('filtro_estado')) {
+            return self::normalizarFiltroEstado((string) $request->input('filtro_estado'));
+        }
+
+        $legacy = trim((string) $request->input('estado', ''));
+        if ($legacy !== '') {
+            return self::normalizarFiltroEstado($legacy);
+        }
+
+        return self::FILTRO_ESTADO_EN_CURSO;
+    }
+
     private static function aplicarEstado(Builder $query, array $filtros): void
     {
-        $estado = trim((string) ($filtros['estado'] ?? ''));
-        if ($estado !== '') {
-            $query->where('ticket.estado_ticket', $estado);
+        $filtro = self::normalizarFiltroEstado((string) ($filtros['filtro_estado'] ?? ''));
+
+        if ($filtro === self::FILTRO_ESTADO_TODOS) {
+            return;
+        }
+
+        if (self::tieneFiltroFechaResolucion($filtros) && $filtro === self::FILTRO_ESTADO_EN_CURSO) {
+            return;
+        }
+
+        if ($filtro === self::FILTRO_ESTADO_EN_CURSO) {
+            $query->whereIn('ticket.estado_ticket', self::ESTADOS_EN_CURSO);
 
             return;
         }
 
-        $query->where('ticket.estado_ticket', '!=', 'Finalizado');
-        $query->where('ticket.estado_ticket', '!=', 'Suspendido');
+        $query->where('ticket.estado_ticket', $filtro);
     }
 
     /**
@@ -333,6 +431,39 @@ class AdministracionTicketListadoFiltros
         }
 
         return [$desde, $hasta];
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private static function tieneFiltroFechaResolucion(array $filtros): bool
+    {
+        return trim((string) ($filtros['fecha_resolucion_desde'] ?? '')) !== ''
+            || trim((string) ($filtros['fecha_resolucion_hasta'] ?? '')) !== '';
+    }
+
+    /**
+     * @param  Builder<\App\Models\Ticket\Ticket>  $query
+     * @param  array<string, mixed>  $filtros
+     */
+    private static function aplicarRangoFechaResolucion(Builder $query, array $filtros): void
+    {
+        [$desde, $hasta] = self::normalizarRangoFechas(
+            (string) ($filtros['fecha_resolucion_desde'] ?? ''),
+            (string) ($filtros['fecha_resolucion_hasta'] ?? '')
+        );
+
+        if ($desde !== '' && $hasta !== '') {
+            $query->whereBetween('ticket.fecha_resolucion', [$desde, $hasta]);
+
+            return;
+        }
+
+        if ($desde !== '') {
+            $query->where('ticket.fecha_resolucion', '>=', $desde);
+        } elseif ($hasta !== '') {
+            $query->where('ticket.fecha_resolucion', '<=', $hasta);
+        }
     }
 
     /**
@@ -605,11 +736,11 @@ class AdministracionTicketListadoFiltros
             $partes[] = 'Alcance: tickets asignados al usuario';
         }
 
-        $estado = trim((string) ($filtros['estado'] ?? ''));
-        if ($estado !== '') {
-            $partes[] = 'Estado: '.$estado;
+        $filtroEstado = self::normalizarFiltroEstado((string) ($filtros['filtro_estado'] ?? ''));
+        if (self::tieneFiltroFechaResolucion($filtros) && $filtroEstado === self::FILTRO_ESTADO_EN_CURSO) {
+            $partes[] = 'Estado: incluye finalizados (filtro por fecha de resolución)';
         } else {
-            $partes[] = 'Estado: excluye Finalizado y Suspendido';
+            $partes[] = 'Estado: '.self::etiquetaFiltroEstado($filtroEstado);
         }
 
         [$desde, $hasta] = self::normalizarRangoFechas(
@@ -623,6 +754,14 @@ class AdministracionTicketListadoFiltros
             $partes[] = 'Fecha desde: '.self::formatearFechaDisplay($desde);
         } elseif ($hasta !== '') {
             $partes[] = 'Fecha hasta: '.self::formatearFechaDisplay($hasta);
+        }
+
+        [$resDesde, $resHasta] = self::normalizarRangoFechas(
+            (string) ($filtros['fecha_resolucion_desde'] ?? ''),
+            (string) ($filtros['fecha_resolucion_hasta'] ?? '')
+        );
+        if ($resDesde !== '' && $resHasta !== '') {
+            $partes[] = 'Resolución: '.self::formatearFechaDisplay($resDesde).' – '.self::formatearFechaDisplay($resHasta);
         }
 
         if (($filtros['operador'] ?? '') === 'vacio') {

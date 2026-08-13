@@ -58,6 +58,7 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                     'limpiarUrl' => route('precarga_comprobante_proveedor'),
                 ])
             </form>
+            @include('compras.precarga_comprobante_proveedor.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_precarga_comprobante_proveedor',
@@ -95,7 +96,14 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                             <td>
                                 {{$data->estado}}
                                 @if (!empty($data->comprobante_proveedor_id))
-                                    <br><span class="badge badge-success" title="Comprobante ya generado">CP #{{ $data->comprobante_proveedor_id }}</span>
+                                    @php
+                                        $cpEstado = $data->comprobante_proveedor_estado ?? null;
+                                    @endphp
+                                    @if ($cpEstado === \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO)
+                                        <br><span class="badge badge-success" title="Comprobante contabilizado">CP #{{ $data->comprobante_proveedor_id }}</span>
+                                    @else
+                                        <br><span class="badge badge-warning" title="Borrador de comprobante (aún no contabilizado)">Borrador CP #{{ $data->comprobante_proveedor_id }}</span>
+                                    @endif
                                 @endif
                             </td>
                             <td><small>{{ \App\Support\Compras\PrecargaComprobanteOrigenEntrada::etiqueta($data->origen_entrada ?? null) }}</small></td>
@@ -116,13 +124,11 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                                     <i class="fa fa-external-link"></i>
                                 </a>
                                 @elseif (can('crear-comprobante-proveedor', false))
-                                <form action="{{ route('generar_comprobante_desde_precarga', ['id' => $data->id]) }}" method="POST" class="d-inline"
-                                    onsubmit="return confirm('¿Generar comprobante de proveedor en borrador desde esta precarga?');">
-                                    @csrf
-                                    <button type="submit" class="btn-accion-tabla tooltipsC text-success" title="Generar comprobante proveedor">
-                                        <i class="fa fa-file-text-o"></i>
-                                    </button>
-                                </form>
+                                <a href="{{ route('crear_comprobante_proveedor', ['precarga_id' => $data->id]) }}"
+                                   class="btn-accion-tabla tooltipsC text-success"
+                                   title="Abrir alta de comprobante desde esta precarga (no graba hasta Guardar)">
+                                    <i class="fa fa-file-text-o"></i>
+                                </a>
                                 @endif
                        			@if (can('editar-precarga-proveedores', false))
                                 	<a href="{{route('editar_precarga_comprobante_proveedor', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

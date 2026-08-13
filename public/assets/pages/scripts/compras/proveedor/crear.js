@@ -391,6 +391,7 @@
             $(".form4").hide();
             $(".form5").hide();
             $(".form6").hide();
+            $(".form7").hide();
         });
 
         $("#botonform2").click(function(){
@@ -400,6 +401,7 @@
             $(".form4").hide();
             $(".form5").hide();
             $(".form6").hide();
+            $(".form7").hide();
 
 			$("#titulo").html("");
 			$("#titulo").html("<span class='fa fa-cash-register'></span> Datos impuestos");
@@ -412,6 +414,7 @@
             $(".form4").hide();
             $(".form5").hide();
             $(".form6").hide();
+            $(".form7").hide();
 
 	        $("#tbody-tabla .localidades").each(function(index) {
             	var provincia = $(this).parents("tr").find(".provincias");
@@ -435,6 +438,7 @@
             $(".form4").show();
             $(".form5").hide();
             $(".form6").hide();
+            $(".form7").hide();
 
 		 	// Hace foco en el campo de la leyenda
 			$("#leyenda").focus();
@@ -447,6 +451,7 @@
             $(".form4").hide();
             $(".form5").show();
             $(".form6").hide();
+            $(".form7").hide();
         });
 
         $("#botonform6").click(function(){
@@ -456,6 +461,17 @@
             $(".form4").hide();
             $(".form5").hide();
             $(".form6").show();
+            $(".form7").hide();
+        });
+
+        $("#botonform7").click(function(){
+            $(".form1").hide();
+            $(".form2").hide();
+            $(".form3").hide();
+            $(".form4").hide();
+            $(".form5").hide();
+            $(".form6").hide();
+            $(".form7").show();
         });
 
         $(document).on('click', '.eliminar-documento-fiscal-proveedor', function () {
@@ -542,6 +558,8 @@
         $(document).on('click', '.eliminar_exclusion', borraRenglonExclusion);
         $('#agrega_renglon_formapago').on('click', agregaRenglonFormapago);
         $(document).on('click', '.eliminar_formapago', borraRenglonFormapago);
+        $('#agrega_renglon_servicio').on('click', agregaRenglonServicio);
+        $(document).on('click', '.eliminar_servicio', borraRenglonServicio);
         $('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
         $(document).on('click', '.eliminar-archivo-proveedor', borraTarjetaArchivoProveedor);
@@ -631,6 +649,28 @@
     	var item = 1;
 
     	$("#tbody-formapago-table .iiformapago").each(function() {
+    		$(this).val(item++);
+    	});
+    }
+
+    function agregaRenglonServicio(event){
+    	event.preventDefault();
+    	var renglon = $('#template-renglon-servicio').html();
+        $("#tbody-servicio-table").append(renglon);
+        var empresaId = $('#empresa_id').val() || '';
+        $("#tbody-servicio-table tr.item-servicio:last .servicio-empresa-id").val(empresaId);
+    	actualizaRenglonesServicio();
+    }
+
+    function borraRenglonServicio(event) {
+    	event.preventDefault();
+    	$(this).parents('tr').remove();
+    	actualizaRenglonesServicio();
+    }
+
+    function actualizaRenglonesServicio() {
+    	var item = 1;
+    	$("#tbody-servicio-table .iiservicio").each(function() {
     		$(this).val(item++);
     	});
     }

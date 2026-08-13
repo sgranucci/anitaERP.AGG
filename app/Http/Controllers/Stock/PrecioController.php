@@ -19,6 +19,8 @@ use App\Repositories\Ventas\ClienteRepositoryInterface;
 use App\Services\Stock\PrecioActualizacionCategoriaService;
 use App\Services\Stock\PrecioImportPreviewService;
 use App\Services\Stock\PrecioService;
+use App\Support\Listado\QueryRetornoListado;
+use App\Support\Stock\ArticuloListadoFiltros;
 use App\Support\Stock\PrecioImportColumnasSupport;
 use App\Support\Stock\PrecioListadoFiltros;
 use App\Models\Stock\Categoria;
@@ -636,7 +638,7 @@ class PrecioController extends Controller
     }
 
     /**
-     * @return array{articulo_id: int, origen: string, fecha_referencia: string}|null
+     * @return array{articulo_id:int,origen:string,fecha_referencia:string,filtros_query:array<string,string|int>,listado_qs:string,url_volver:string}|null
      */
     private function resolverRetornoArticuloPrecios(Request $request): ?array
     {
@@ -652,11 +654,63 @@ class PrecioController extends Controller
             $fecha = Carbon::today()->format('Y-m-d');
         }
 
-        return [
+        $filtrosQuery = $this->parseRetornoListadoQsArticulo(
+            (string) $request->input('retorno_listado_qs', $request->query('retorno_listado_qs', ''))
+        );
+        $listadoQs = $filtrosQuery !== [] ? http_build_query($filtrosQuery) : '';
+
+        $retorno = [
             'articulo_id' => $articuloId,
             'origen' => $origen,
             'fecha_referencia' => $fecha,
+            'filtros_query' => $filtrosQuery,
+            'listado_qs' => $listadoQs,
+            'url_volver' => '',
         ];
+        $retorno['url_volver'] = $this->urlRetornoConsultaPreciosArticulo($retorno);
+
+        return $retorno;
+    }
+
+    /**
+     * @return array<string, string|int>
+     */
+    private function parseRetornoListadoQsArticulo(string $qs): array
+    {
+        $qs = trim($qs);
+        if ($qs === '') {
+            return [];
+        }
+        if (strlen($qs) > 2500) {
+            $qs = substr($qs, 0, 2500);
+        }
+
+        parse_str($qs, $parsed);
+        if (! is_array($parsed) || $parsed === []) {
+            return [];
+        }
+
+        $fake = Request::create('/', 'GET', $parsed);
+
+        return QueryRetornoListado::desdeRequest($fake, ArticuloListadoFiltros::class);
+    }
+
+    /**
+     * @param  array{articulo_id:int,origen:string,fecha_referencia:string,filtros_query?:array<string,string|int>}  $retorno
+     */
+    private function urlRetornoConsultaPreciosArticulo(array $retorno): string
+    {
+        $params = array_merge($retorno['filtros_query'] ?? [], [
+            'abrir_consulta_precios' => 1,
+            'articulo_id' => $retorno['articulo_id'],
+            'fecha_referencia' => $retorno['fecha_referencia'],
+        ]);
+
+        $url = $retorno['origen'] === 'editar'
+            ? route('editar_articulo', ['id' => $retorno['articulo_id']])
+            : route('articulo');
+
+        return $url.'?'.http_build_query($params);
     }
 
     private function redirectDespuesDeGuardarPrecio(Request $request, string $mensaje)
@@ -666,16 +720,6 @@ class PrecioController extends Controller
             return redirect('stock/precio')->with('mensaje', $mensaje);
         }
 
-        $params = [
-            'abrir_consulta_precios' => 1,
-            'articulo_id' => $retorno['articulo_id'],
-            'fecha_referencia' => $retorno['fecha_referencia'],
-        ];
-
-        $url = $retorno['origen'] === 'editar'
-            ? route('editar_articulo', ['id' => $retorno['articulo_id']])
-            : route('articulo');
-
-        return redirect($url.'?'.http_build_query($params))->with('mensaje', $mensaje);
+        return redirect($retorno['url_volver'])->with('mensaje', $mensaje);
     }
 }

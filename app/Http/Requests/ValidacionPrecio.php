@@ -24,10 +24,11 @@ class ValidacionPrecio extends FormRequest
     public function rules()
     {
         return [
-            'listaprecio_id' => 'required',
-            'fechavigencia' => 'required|date_format:d-m-Y',
-            'moneda_id' => 'required',
-            'precio' => 'required',
+            'articulo_id' => 'required|integer|exists:articulo,id',
+            'listaprecio_id' => 'required|integer|exists:listaprecio,id',
+            'fechavigencia' => 'required|date_format:Y-m-d',
+            'moneda_id' => 'required|integer|exists:moneda,id',
+            'precio' => 'required|numeric',
         ];
     }
 }

@@ -809,6 +809,7 @@
                                 'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
                                 'puede_ver_concepto' => $puede_ver_concepto ?? false,
                                 'puede_ver_ordencompra' => $puede_ver_ordencompra ?? false,
+                                'puede_ver_capex' => $puede_ver_capex ?? false,
                             ])
                         </table>
                     </div>

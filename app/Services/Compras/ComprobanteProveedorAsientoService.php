@@ -16,8 +16,10 @@ use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
 use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
 use App\Support\Compras\ComprobanteProveedorFacturaAnticipadaSupport;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
+use App\Support\Compras\ComprobanteProveedorMonedaMotor;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ProveedorCuentaContableMonedaSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
@@ -162,6 +164,9 @@ class ComprobanteProveedorAsientoService
             'comprobante_proveedor_recepciones.recepcion_proveedores',
         ]);
 
+        // La moneda de la factura manda: todo el asiento se arma en ella y con su cotización.
+        $monedaFactura = $this->monedaFactura($comprobante);
+
         $esNotaCredito = (string) ($comprobante->tipotransaccion_compras?->signo ?? 'S') === 'R';
         $centrocostoId = (int) ($comprobante->proveedores?->centrocostocompra_id
             ?? $comprobante->ordencompras?->centrocosto_id
@@ -248,6 +253,19 @@ class ComprobanteProveedorAsientoService
 
         if ($usaProvisionCom) {
             $totalProvision = $this->totalProvisionRecepcionesVinculadas($comprobante);
+
+            // Ambos importes ya están en moneda de la factura: un cociente del orden de la
+            // cotización solo puede venir de una moneda mal declarada, no de una diferencia
+            // de precio. Cortar acá evita el asiento inflado por el factor de cambio.
+            ComprobanteProveedorMonedaMotor::assertImportesCoherentes(
+                $totalNetoConceptos,
+                $totalProvision,
+                $monedaFactura['moneda_id'],
+                $this->cotizacionEscala($comprobante, $monedaFactura['cotizacion']),
+                'la provisión de las recepciones COM',
+                $monedaFactura['nombre'],
+            );
+
             $diferenciaNeto = round($totalNetoConceptos - $totalProvision, 2);
 
             if ($diferenciaNeto < -0.05) {
@@ -285,7 +303,8 @@ class ComprobanteProveedorAsientoService
             throw new RuntimeException('No hay conceptos con monto para contabilizar.');
         }
 
-        // MN/ME: moneda OC si hay; si no, moneda del comprobante (Anita filtra_moneda_oc).
+        // La moneda de la OC solo elige la cuenta (proveedores MN vs ME), nunca los importes:
+        // esos ya están en moneda de la factura (Anita filtra_moneda_oc).
         $resMoneda = ProveedorCuentaContableMonedaSupport::resolverMonedaParaCuentaProveedor($comprobante);
         $monedaCuentaId = (int) $resMoneda['moneda_id'];
         $origenMoneda = ProveedorCuentaContableMonedaSupport::etiquetaOrigenMoneda($resMoneda['origen']);
@@ -338,7 +357,7 @@ class ComprobanteProveedorAsientoService
         $payloadAsiento = [
             'empresa_id' => $comprobante->empresa_id,
             'tipoasiento_id' => $tipoAsiento->id,
-            'fecha' => $comprobante->fechacomprobante?->format('Y-m-d') ?? now()->format('Y-m-d'),
+            'fecha' => ComprobanteProveedorFechaContableSupport::fechaYmd($comprobante),
             'comprobante_proveedor_id' => $comprobante->id,
             'ordencompra_id' => $comprobante->ordencompra_id,
             'observacion' => ComprobanteProveedorAsientoDescripcionSupport::descripcionAsientoErp($comprobante),
@@ -359,21 +378,21 @@ class ComprobanteProveedorAsientoService
 
         foreach ($lineasDebe as $linea) {
             $payloadAsiento['cuentacontable_ids'][] = $linea['cuentacontable_id'];
-            $payloadAsiento['moneda_ids'][] = $comprobante->moneda_id;
+            $payloadAsiento['moneda_ids'][] = $monedaFactura['moneda_id'];
             $payloadAsiento['centrocosto_ids'][] = $linea['centrocosto_id'] ?? $centrocostoId;
             $payloadAsiento['debes'][] = $linea['importe'];
             $payloadAsiento['haberes'][] = 0;
-            $payloadAsiento['cotizaciones'][] = $comprobante->cotizacion ?? 1;
+            $payloadAsiento['cotizaciones'][] = $monedaFactura['cotizacion'];
             $payloadAsiento['observaciones'][] = $linea['observacion'] ?? '';
         }
 
         foreach ($lineasHaber as $linea) {
             $payloadAsiento['cuentacontable_ids'][] = $linea['cuentacontable_id'];
-            $payloadAsiento['moneda_ids'][] = $comprobante->moneda_id;
+            $payloadAsiento['moneda_ids'][] = $monedaFactura['moneda_id'];
             $payloadAsiento['centrocosto_ids'][] = $linea['centrocosto_id'] ?? $centrocostoId;
             $payloadAsiento['debes'][] = 0;
             $payloadAsiento['haberes'][] = $linea['importe'];
-            $payloadAsiento['cotizaciones'][] = $comprobante->cotizacion ?? 1;
+            $payloadAsiento['cotizaciones'][] = $monedaFactura['cotizacion'];
             $payloadAsiento['observaciones'][] = $linea['observacion'] ?? '';
         }
 
@@ -603,7 +622,7 @@ class ComprobanteProveedorAsientoService
 
     /**
      * Importe provisionado por cada COM vinculada, en moneda del comprobante (asiento factura).
-     * Si la COM está en ME y la factura en pesos: ME × cotización de la recepción.
+     * Cada COM se convierte con su propia cotización: es el valor con el que se provisionó.
      */
     private function totalProvisionRecepcionesVinculadas(Comprobante_Proveedor $comprobante): float
     {
@@ -614,8 +633,7 @@ class ComprobanteProveedorAsientoService
             );
         }
 
-        $monedaFacturaId = (int) ($comprobante->moneda_id ?: 1);
-        $cotizacionFactura = (float) ($comprobante->cotizacion ?: 1);
+        $factura = $this->monedaFactura($comprobante);
 
         $total = 0.0;
         foreach ($vinculos as $vinculo) {
@@ -633,13 +651,71 @@ class ComprobanteProveedorAsientoService
             $total += ComprobanteProveedorImporteComparacionComSupport::desdeRecepcionAFactura(
                 $importeEnMonedaRecepcion,
                 (int) ($recepcion->moneda_id ?: 1),
-                (float) ($recepcion->cotizacion ?: 1),
-                $monedaFacturaId,
-                $cotizacionFactura,
+                (float) ($recepcion->cotizacion ?: 0),
+                $factura['moneda_id'],
+                $factura['cotizacion'],
+                $this->fechaDocumento($recepcion->fecha ?? null),
+                $factura['fecha'],
             );
         }
 
         return round($total, 2);
+    }
+
+    /**
+     * Moneda de la factura: la que manda en todo el asiento.
+     *
+     * @return array{moneda_id: int, cotizacion: float, fecha: string, nombre: string}
+     */
+    private function monedaFactura(Comprobante_Proveedor $comprobante): array
+    {
+        $comprobante->loadMissing('monedas');
+
+        $monedaId = ComprobanteProveedorMonedaMotor::normalizarMonedaId($comprobante->moneda_id);
+        $fecha = $this->fechaDocumento($comprobante->fechacomprobante ?? null);
+
+        return [
+            'moneda_id' => $monedaId,
+            'cotizacion' => ComprobanteProveedorMonedaMotor::cotizacionValida(
+                $monedaId,
+                $comprobante->cotizacion,
+                $fecha,
+                'la factura del proveedor',
+            ),
+            'fecha' => $fecha,
+            'nombre' => (string) ($comprobante->monedas?->nombre ?? ''),
+        ];
+    }
+
+    private function fechaDocumento(mixed $fecha): string
+    {
+        if ($fecha instanceof \DateTimeInterface) {
+            return $fecha->format('Y-m-d');
+        }
+
+        $texto = trim((string) $fecha);
+
+        return $texto !== '' ? substr($texto, 0, 10) : now()->format('Y-m-d');
+    }
+
+    /**
+     * Escala de cotización en juego entre la factura y sus COM: sirve para detectar
+     * importes cargados en otra moneda (ver ComprobanteProveedorMonedaMotor).
+     */
+    private function cotizacionEscala(Comprobante_Proveedor $comprobante, float $cotizacionFactura): float
+    {
+        $escala = $cotizacionFactura;
+
+        foreach ($comprobante->comprobante_proveedor_recepciones as $vinculo) {
+            $recepcion = $vinculo->recepcion_proveedores;
+            if (! $recepcion) {
+                continue;
+            }
+
+            $escala = max($escala, (float) ($recepcion->cotizacion ?: 0));
+        }
+
+        return $escala;
     }
 
     /**
@@ -659,8 +735,7 @@ class ComprobanteProveedorAsientoService
 
         /** @var array<string, array{cuentacontable_id:int, centrocosto_id:int, importe:float}> $agrupado */
         $agrupado = [];
-        $monedaFacturaId = (int) ($comprobante->moneda_id ?: 1);
-        $cotizacionFactura = (float) ($comprobante->cotizacion ?: 1);
+        $factura = $this->monedaFactura($comprobante);
 
         foreach ($comprobante->comprobante_proveedor_recepciones as $vinculo) {
             $recepcion = $vinculo->recepcion_proveedores;
@@ -669,7 +744,8 @@ class ComprobanteProveedorAsientoService
             }
 
             $monedaRecepcionId = (int) ($recepcion->moneda_id ?: 1);
-            $cotizacionRecepcion = (float) ($recepcion->cotizacion ?: 1);
+            $cotizacionRecepcion = (float) ($recepcion->cotizacion ?: 0);
+            $fechaRecepcion = $this->fechaDocumento($recepcion->fecha ?? null);
 
             foreach ($this->recepcionAsientoService->lineasDebeArticulosAgrupadas($recepcion) as $linea) {
                 $ccId = (int) ($linea['centrocosto_id'] ?? 0);
@@ -688,8 +764,10 @@ class ComprobanteProveedorAsientoService
                     (float) $linea['importe'],
                     $monedaRecepcionId,
                     $cotizacionRecepcion,
-                    $monedaFacturaId,
-                    $cotizacionFactura,
+                    $factura['moneda_id'],
+                    $factura['cotizacion'],
+                    $fechaRecepcion,
+                    $factura['fecha'],
                 );
             }
         }

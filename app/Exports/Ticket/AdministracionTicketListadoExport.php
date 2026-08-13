@@ -24,7 +24,7 @@ class AdministracionTicketListadoExport implements FromView, ShouldAutoSize, Wit
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'L';
+    private const COL_ULTIMA = 'N';
 
     private TicketQueryInterface $ticketQuery;
 
@@ -137,6 +137,8 @@ class AdministracionTicketListadoExport implements FromView, ShouldAutoSize, Wit
             'J' => 24,
             'K' => 28,
             'L' => 18,
+            'M' => 16,
+            'N' => 14,
         ];
     }
 

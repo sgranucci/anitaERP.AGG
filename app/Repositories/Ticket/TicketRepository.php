@@ -26,7 +26,9 @@ class TicketRepository implements TicketRepositoryInterface
 
     public function create(array $data)
     {
-		$data['usuario_id'] = Auth::user()->id;
+		if (empty($data['usuario_id'])) {
+			$data['usuario_id'] = Auth::user()->id;
+		}
 		$data = $this->normalizarSubcategoriaTicketId($data);
 
 		return $this->model->create($data);

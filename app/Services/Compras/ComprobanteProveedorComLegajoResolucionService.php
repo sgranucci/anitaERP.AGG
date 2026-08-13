@@ -38,13 +38,22 @@ class ComprobanteProveedorComLegajoResolucionService
     public function resolverDesdePrecarga(Precarga_Comprobante_Proveedor $precarga, ?Ordencompra $ordencompra): array
     {
         $sectorLegajoId = $this->resolverSectorLegajo($precarga, $ordencompra);
-        $recepciones = $this->recepcionesSupport->listarSinFacturarEnLegajo(
-            (int) $precarga->proveedor_id,
-            (int) $precarga->empresa_id,
-            $sectorLegajoId,
-        );
+        if ($ordencompra) {
+            $recepciones = $this->recepcionesSupport->listarDisponibles((int) $ordencompra->id);
+        } else {
+            $recepciones = $this->recepcionesSupport->listarSinFacturarEnLegajo(
+                (int) $precarga->proveedor_id,
+                (int) $precarga->empresa_id,
+                $sectorLegajoId,
+            );
+        }
 
-        $recepciones = $this->recepcionesSupport->enriquecerConImporteProvision($recepciones);
+        $recepciones = $this->recepcionesSupport->enriquecerConImporteEnMonedaFactura(
+            $recepciones,
+            (int) ($precarga->moneda_id ?? 1),
+            (float) ($precarga->cotizacion ?? 0),
+            $precarga->fechafactura ?? null,
+        );
 
         $conceptosIvacompra = $this->cargarConceptosPrecarga($precarga);
         $importeMeta = ComprobanteProveedorImporteComparacionComSupport::importeParaCompararConRecepcion(
@@ -58,13 +67,10 @@ class ComprobanteProveedorComLegajoResolucionService
                 return $linea;
             }),
         );
-        $importeMn = ComprobanteProveedorImporteComparacionComSupport::aMonedaLocal(
-            (float) $importeMeta['importe'],
-            (int) ($precarga->moneda_id ?? 1),
-            (float) ($precarga->cotizacion ?? 1),
-        );
+        // Manda la moneda de la factura: comparar en esa moneda (no forzar a pesos).
+        $importeFactura = (float) $importeMeta['importe'];
 
-        $seleccion = $this->resolverSeleccion($recepciones, $importeMn);
+        $seleccion = $this->resolverSeleccion($recepciones, $importeFactura);
 
         return [
             'recepciones_disponibles' => $recepciones,
@@ -72,7 +78,7 @@ class ComprobanteProveedorComLegajoResolucionService
             'com_resolucion' => [
                 'ambigua' => $seleccion['ambigua'],
                 'mensaje' => $seleccion['mensaje'],
-                'importe_comparacion' => $importeMn,
+                'importe_comparacion' => $importeFactura,
                 'importe_comparacion_etiqueta' => $importeMeta['etiqueta'],
                 'ordencompra_id' => $seleccion['ordencompra_id'],
             ],
@@ -98,8 +104,9 @@ class ComprobanteProveedorComLegajoResolucionService
         $data = $prefill['data'];
         $data->modo_carga = ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
 
-        $ordencompraId = $resolucion['com_resolucion']['ordencompra_id']
-            ?? $ordencompra?->id
+        // La OC de la precarga manda: una COM de otra OC del mismo proveedor no la reemplaza.
+        $ordencompraId = $ordencompra?->id
+            ?? $resolucion['com_resolucion']['ordencompra_id']
             ?? (int) ($data->ordencompra_id ?? 0);
 
         if ($ordencompraId > 0) {
@@ -141,6 +148,7 @@ class ComprobanteProveedorComLegajoResolucionService
         ?int $excluirComprobanteId = null,
         int $monedaId = 1,
         float $cotizacion = 1.0,
+        ?string $fechaFacturaYmd = null,
     ): array {
         $recepciones = $this->recepcionesSupport->listarDisponibles((int) $ordencompra->id, $excluirComprobanteId);
         if ($recepciones->isEmpty()) {
@@ -153,7 +161,12 @@ class ComprobanteProveedorComLegajoResolucionService
         }
 
         $recepciones = $this->recepcionesSupport
-            ->enriquecerConImporteProvision($recepciones)
+            ->enriquecerConImporteEnMonedaFactura(
+                $recepciones,
+                $monedaId,
+                $cotizacion,
+                $fechaFacturaYmd,
+            )
             ->sortBy([
                 fn (Recepcion_Proveedor $r) => $r->fecha?->format('Y-m-d') ?? '9999-99-99',
                 fn (Recepcion_Proveedor $r) => (int) $r->id,
@@ -167,14 +180,13 @@ class ComprobanteProveedorComLegajoResolucionService
             $subtotal,
             $conceptos,
         );
-        $importe = ComprobanteProveedorImporteComparacionComSupport::aMonedaLocal(
-            (float) $importeMeta['importe'],
-            $monedaId,
-            $cotizacion,
-        );
+        // Manda la moneda de la factura.
+        $importe = (float) $importeMeta['importe'];
 
-        $provisionMn = static fn (Recepcion_Proveedor $rec): float => (float) (
-            $rec->importe_provision_com_mn ?? $rec->importe_provision_com ?? 0
+        $provisionFactura = static fn (Recepcion_Proveedor $rec): float => (float) (
+            $rec->importe_provision_com_factura
+            ?? $rec->importe_provision_com
+            ?? 0
         );
 
         if ($recepciones->isEmpty()) {
@@ -193,16 +205,16 @@ class ComprobanteProveedorComLegajoResolucionService
             (int) ($ordencompra->centrocosto_id ?? 0) ?: null,
         );
 
-        $exactas = $recepciones->filter(function (Recepcion_Proveedor $rec) use ($importe, $provisionMn) {
-            return ComprobanteProveedorImporteComparacionComSupport::coinciden($importe, $provisionMn($rec));
+        $exactas = $recepciones->filter(function (Recepcion_Proveedor $rec) use ($importe, $provisionFactura) {
+            return ComprobanteProveedorImporteComparacionComSupport::coinciden($importe, $provisionFactura($rec));
         })->values();
 
         $candidatas = $exactas;
         if ($candidatas->isEmpty()) {
-            $candidatas = $recepciones->filter(function (Recepcion_Proveedor $rec) use ($importe, $toleranciaPct, $provisionMn) {
+            $candidatas = $recepciones->filter(function (Recepcion_Proveedor $rec) use ($importe, $toleranciaPct, $provisionFactura) {
                 return ! ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia(
                     $importe,
-                    $provisionMn($rec),
+                    $provisionFactura($rec),
                     $toleranciaPct
                 );
             })->values();
@@ -213,7 +225,7 @@ class ComprobanteProveedorComLegajoResolucionService
             if ($recepciones->count() === 1) {
                 /** @var Recepcion_Proveedor $unica */
                 $unica = $recepciones->first();
-                $prov = $provisionMn($unica);
+                $prov = $provisionFactura($unica);
 
                 return [
                     'ids' => [(int) $unica->id],
@@ -230,12 +242,12 @@ class ComprobanteProveedorComLegajoResolucionService
                 ];
             }
 
-            $cercana = $recepciones->sortBy(function (Recepcion_Proveedor $rec) use ($importe, $provisionMn) {
-                return abs($provisionMn($rec) - $importe);
+            $cercana = $recepciones->sortBy(function (Recepcion_Proveedor $rec) use ($importe, $provisionFactura) {
+                return abs($provisionFactura($rec) - $importe);
             })->first();
 
             if ($cercana) {
-                $prov = $provisionMn($cercana);
+                $prov = $provisionFactura($cercana);
 
                 return [
                     'ids' => [(int) $cercana->id],
@@ -276,7 +288,7 @@ class ComprobanteProveedorComLegajoResolucionService
                 'COM #%s asignada automáticamente (primera pendiente con %s ≈ %s).',
                 $elegida->id,
                 $importeMeta['etiqueta'],
-                number_format($provisionMn($elegida), 2, ',', '.')
+                number_format($provisionFactura($elegida), 2, ',', '.')
             ),
             'ordencompra_id' => (int) ($elegida->ordencompra_id ?? 0) ?: (int) $ordencompra->id,
             'importe_comparacion' => $importe,
@@ -340,7 +352,11 @@ class ComprobanteProveedorComLegajoResolucionService
         }
 
         $coincidencias = $recepciones->filter(function (Recepcion_Proveedor $rec) use ($importeComprobante) {
-            $importeCom = (float) ($rec->importe_provision_com_mn ?? $rec->importe_provision_com ?? 0);
+            $importeCom = (float) (
+                $rec->importe_provision_com_factura
+                ?? $rec->importe_provision_com
+                ?? 0
+            );
 
             return ComprobanteProveedorImporteComparacionComSupport::coinciden($importeComprobante, $importeCom);
         })->values();

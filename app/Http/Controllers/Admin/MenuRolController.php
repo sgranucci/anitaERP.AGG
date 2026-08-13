@@ -50,6 +50,38 @@ class MenuRolController extends Controller
     }
 
     /**
+     * Usuarios asignados a un rol (pantalla menú–rol; incluye suspendidos con marca).
+     */
+    public function usuariosPorRol(Request $request)
+    {
+        $request->validate([
+            'rol_id' => 'required|integer|exists:rol,id',
+        ]);
+
+        $rol = Rol::query()->findOrFail((int) $request->input('rol_id'));
+
+        $usuarios = $rol->usuarios()
+            ->orderBy('nombre')
+            ->get(['usuario.id', 'usuario.usuario', 'usuario.nombre', 'usuario.email', 'usuario.suspendido'])
+            ->map(static function ($u) {
+                return [
+                    'id' => (int) $u->id,
+                    'usuario' => (string) ($u->usuario ?? ''),
+                    'nombre' => (string) ($u->nombre ?? ''),
+                    'email' => (string) ($u->email ?? ''),
+                    'suspendido' => (bool) ($u->suspendido ?? false),
+                    'url_editar' => route('editar_usuario', ['id' => $u->id]),
+                ];
+            })
+            ->values();
+
+        return response()->json([
+            'rol' => ['id' => (int) $rol->id, 'nombre' => (string) $rol->nombre],
+            'usuarios' => $usuarios,
+        ]);
+    }
+
+    /**
      * Permisos del menú y matriz por rol (mismos roles que la vista según filtro de centro de costo).
      */
     public function permisosPorMenu(Request $request)

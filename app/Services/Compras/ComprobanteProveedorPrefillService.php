@@ -11,6 +11,7 @@ use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
+use App\Support\Compras\ConceptoIvacompraConsultaSupport;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -56,7 +57,7 @@ class ComprobanteProveedorPrefillService
     {
         $data = new Comprobante_Proveedor([
             'fechacomprobante' => now()->format('Y-m-d'),
-            'fechaiva' => now()->format('Y-m-d'),
+            'fechaiva' => $this->fechaIvaDefaultAlta(),
             'modo_carga' => ComprobanteProveedorModoCarga::SIN_RECEPCION,
             'estado' => ComprobanteProveedorEstados::BORRADOR,
             'subtotal' => 0,
@@ -94,14 +95,15 @@ class ComprobanteProveedorPrefillService
             ->findOrFail($precargaId);
 
         $ordencompra = $this->resolverOrdencompraDesdePrecarga($precarga);
+        if ($ordencompra) {
+            $ordencompra->loadMissing(['empresas', 'proveedores', 'ordencompra_articulos']);
+        }
 
         $fechacomprobante = $precarga->fechafactura
             ? Carbon::parse($precarga->fechafactura)->format('Y-m-d')
             : now()->format('Y-m-d');
 
-        $fecharecepcion = $precarga->fecharecepcionemail
-            ? Carbon::parse($precarga->fecharecepcionemail)->startOfDay()
-            : null;
+        $fecharecepcion = null;
 
         $modoCarga = $ordencompra
             ? ComprobanteProveedorModoCarga::ASIGNA_OC
@@ -133,7 +135,7 @@ class ComprobanteProveedorPrefillService
         }
 
         $data = new Comprobante_Proveedor([
-            'empresa_id' => $precarga->empresa_id,
+            'empresa_id' => (int) ($ordencompra?->empresa_id ?: $precarga->empresa_id),
             'proveedor_id' => $precarga->proveedor_id,
             'tipotransaccion_compra_id' => $precarga->tipotransaccion_compra_id,
             'ordencompra_id' => $ordencompra?->id,
@@ -142,8 +144,9 @@ class ComprobanteProveedorPrefillService
             'sucursal' => $precarga->sucursal,
             'numerocomprobante' => $precarga->numerocomprobante,
             'fechacomprobante' => $fechacomprobante,
-            'fechaiva' => $fechacomprobante,
+            'fechaiva' => $this->fechaIvaDefaultAlta(),
             'fecharecepcion' => $fecharecepcion,
+            'fechavencimiento' => $this->fechaYmdDesdePrecarga($precarga->fechavencimiento ?? null),
             'fechavencimientocae' => $precarga->fechavencimientocaicae,
             'numerocae' => $precarga->numerocae,
             'tipo_autorizacion' => $precarga->tipo_autorizacion,
@@ -157,7 +160,7 @@ class ComprobanteProveedorPrefillService
             'pararevisar' => (bool) $precarga->pararevisar,
         ]);
 
-        $data->setRelation('empresas', $precarga->empresas);
+        $data->setRelation('empresas', $ordencompra?->empresas ?? $precarga->empresas);
         $data->setRelation('proveedores', $precarga->proveedores);
         $data->setRelation('tipotransaccion_compras', $precarga->tipotransaccion_compras);
         $data->setRelation('monedas', $precarga->monedas);
@@ -171,6 +174,12 @@ class ComprobanteProveedorPrefillService
                 'orden' => $c->orden ?? 1,
             ]);
         });
+
+        if ($conceptos->isEmpty() && (int) ($precarga->tipotransaccion_compra_id ?? 0) > 0) {
+            $conceptos = ConceptoIvacompraConsultaSupport::renglonesPlantillaParaTipo(
+                (int) $precarga->tipotransaccion_compra_id
+            );
+        }
 
         $articulos = $precarga->precarga_comprobante_proveedor_articulos->map(function ($a) {
             return new \App\Models\Compras\Comprobante_Proveedor_Articulo([
@@ -257,6 +266,14 @@ class ComprobanteProveedorPrefillService
             $prefill['cuotas_escaladas'] = (bool) ($cuotasMeta['cuotas_escaladas'] ?? false);
         }
 
+        $prefill['cuotas'] = $this->aplicarVencimientoFacturaACuotas(
+            $prefill['cuotas'] ?? [],
+            $this->fechaYmdDesdePrecarga($precarga->fechavencimiento ?? null),
+            (float) ($prefill['data']->total ?? $precarga->total ?? 0),
+            (int) ($prefill['data']->moneda_id ?: $monedaId),
+            (float) ($prefill['data']->cotizacion ?: $cotizacion),
+        );
+
         return $prefill;
     }
 
@@ -281,7 +298,7 @@ class ComprobanteProveedorPrefillService
             'proveedor_id' => $ordencompra->proveedor_id,
             'ordencompra_id' => $ordencompra->id,
             'fechacomprobante' => $fecha,
-            'fechaiva' => $fecha,
+            'fechaiva' => $this->fechaIvaDefaultAlta(),
             'modo_carga' => ComprobanteProveedorModoCarga::ASIGNA_OC,
             'estado' => ComprobanteProveedorEstados::BORRADOR,
             'subtotal' => 0,
@@ -391,11 +408,25 @@ class ComprobanteProveedorPrefillService
             return null;
         }
 
-        return Ordencompra::query()
+        $nro = (int) preg_replace('/\D/', '', $numeroOc);
+        if ($nro <= 0) {
+            return null;
+        }
+
+        $base = Ordencompra::query()
             ->with('ordencompra_articulos')
+            ->where('numeroordencompra', $nro);
+
+        // El número de la precarga manda. Si la OC está en otra empresa (CUIT del PDF
+        // vs empresa de la OC), igual se usa esa OC; no otra del mismo proveedor.
+        $mismaEmpresa = (clone $base)
             ->where('empresa_id', $precarga->empresa_id)
-            ->where('numeroordencompra', $numeroOc)
             ->first();
+        if ($mismaEmpresa) {
+            return $mismaEmpresa;
+        }
+
+        return $base->orderByDesc('id')->first();
     }
 
     private function resolverMonedaIdDesdeOrdencompra(Ordencompra $ordencompra): int
@@ -406,15 +437,25 @@ class ComprobanteProveedorPrefillService
         return max(1, (int) ($linea->moneda_id ?? 1));
     }
 
+    /**
+     * Manda la moneda de la factura leída del PDF. La OC solo se usa cuando la precarga no
+     * trae moneda: su moneda decide la cuenta de proveedores MN/ME, no los importes de la
+     * factura (una OC en dólares se puede facturar en pesos y viceversa).
+     */
     private function resolverMonedaIdDesdePrecarga(
         Precarga_Comprobante_Proveedor $precarga,
         ?Ordencompra $ordencompra,
     ): int {
+        $desdePrecarga = (int) ($precarga->moneda_id ?: 0);
+        if ($desdePrecarga > 0) {
+            return $desdePrecarga;
+        }
+
         if ($ordencompra) {
             return $this->resolverMonedaIdDesdeOrdencompra($ordencompra);
         }
 
-        return max(1, (int) ($precarga->moneda_id ?: 1));
+        return 1;
     }
 
     private function resolverCotizacionDesdePrecarga(
@@ -442,5 +483,70 @@ class ComprobanteProveedorPrefillService
 
             return $cuota;
         }, $cuotas);
+    }
+
+    /** Fecha IVA en alta: siempre el día de carga; el operador puede cambiarla en el form. */
+    private function fechaIvaDefaultAlta(): string
+    {
+        return now()->format('Y-m-d');
+    }
+
+    private function fechaYmdDesdePrecarga(mixed $valor): ?string
+    {
+        if ($valor instanceof \DateTimeInterface) {
+            return $valor->format('Y-m-d');
+        }
+        if (! is_string($valor) && ! is_numeric($valor)) {
+            return null;
+        }
+        $texto = trim((string) $valor);
+        if ($texto === '') {
+            return null;
+        }
+        try {
+            return Carbon::parse($texto)->format('Y-m-d');
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Si la IA/OCR leyó el vencimiento de pago de la factura, lo aplica a la 1ª cuota
+     * (o crea una cuota única si no hay cuotas de la OC).
+     *
+     * @param  list<array<string, mixed>>  $cuotas
+     * @return list<array<string, mixed>>
+     */
+    private function aplicarVencimientoFacturaACuotas(
+        array $cuotas,
+        ?string $fechaVencimientoYmd,
+        float $total,
+        int $monedaId,
+        float $cotizacion,
+    ): array {
+        if ($fechaVencimientoYmd === null || $fechaVencimientoYmd === '') {
+            return $cuotas;
+        }
+
+        if ($cuotas === []) {
+            if ($total <= 0) {
+                return $cuotas;
+            }
+
+            return [[
+                'numero_cuota' => 1,
+                'fechavencimiento' => $fechaVencimientoYmd,
+                'monto' => round($total, 2),
+                'moneda_id' => $monedaId,
+                'cotizacion' => $cotizacion,
+                'formapago_id' => null,
+                'detalle' => 'Vencimiento factura',
+                'ordencompra_comprobante_cuota_id' => null,
+            ]];
+        }
+
+        $cuotas[0]['fechavencimiento'] = $fechaVencimientoYmd;
+
+        return $cuotas;
     }
 }

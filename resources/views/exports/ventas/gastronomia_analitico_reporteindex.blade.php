@@ -4,16 +4,16 @@
 @endphp
 <table>
     @if (! empty($reservarFilaLogoExcel))
-        <tr><td colspan="24" style="height: 52px;"></td></tr>
+        <tr><td colspan="25" style="height: 52px;"></td></tr>
     @endif
     <tr>
-        <td colspan="24"><strong style="font-size: 16px;">{{ $titulo ?? 'Reporte analítico gastronomía' }}</strong></td>
+        <td colspan="25"><strong style="font-size: 16px;">{{ $titulo ?? 'Reporte analítico gastronomía' }}</strong></td>
     </tr>
     <tr>
-        <td colspan="24">Generado {{ date('d/m/Y H:i') }}</td>
+        <td colspan="25">Generado {{ date('d/m/Y H:i') }}</td>
     </tr>
     @if (! empty($subtitulo))
-        <tr><td colspan="24">{{ $subtitulo }}</td></tr>
+        <tr><td colspan="25">{{ $subtitulo }}</td></tr>
     @endif
     <tr>
         <th>Id</th>
@@ -31,6 +31,7 @@
         <th>Tipo venta</th>
         <th>Cantidad</th>
         <th>Precio unitario</th>
+        <th>Obs. precio 0</th>
         <th>Total</th>
         <th>Costo</th>
         <th>Tipo descuento</th>
@@ -44,7 +45,7 @@
     @foreach ($filas as $f)
         @if (($f->tipo_fila ?? 'detalle') === 'header_empresa')
             <tr>
-                <td colspan="24"><strong>Empresa: {{ $f->nombreempresa ?? $f->sala ?? '' }}</strong></td>
+                <td colspan="25"><strong>Empresa: {{ $f->nombreempresa ?? $f->sala ?? '' }}</strong></td>
             </tr>
         @else
         <tr>
@@ -63,6 +64,7 @@
             <td>{{ $f->tipo_venta ?? '' }}</td>
             <td>{{ number_format((float) ($f->cantidad ?? 0), 4, '.', '') }}</td>
             <td>{{ number_format((float) ($f->precio_unitario ?? 0), 2, '.', '') }}</td>
+            <td>{{ $f->observacion_precio ?? '' }}</td>
             <td>{{ number_format((float) ($f->total ?? 0), 2, '.', '') }}</td>
             <td>{{ number_format((float) ($f->costo ?? 0), 2, '.', '') }}</td>
             <td>{{ $f->tipo_descuento ?? '' }}</td>
@@ -79,6 +81,7 @@
         <tr>
             <td colspan="13"><strong>Totales ({{ (int) ($tot['cantidad_filas'] ?? 0) }} filas)</strong></td>
             <td>{{ number_format((float) ($tot['cantidad_total'] ?? 0), 4, '.', '') }}</td>
+            <td></td>
             <td></td>
             <td>{{ number_format((float) ($tot['total_importe'] ?? 0), 2, '.', '') }}</td>
             <td>{{ number_format((float) ($tot['costo_total'] ?? 0), 2, '.', '') }}</td>

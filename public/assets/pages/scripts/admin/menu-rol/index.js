@@ -1,6 +1,7 @@
 (function () {
     var $page = $('#menu-rol-page');
     var permisosUrl = $page.data('permisos-url');
+    var usuariosUrl = $page.data('usuarios-url');
     var guardarMenuRolUrl = $page.data('guardarMenuRolUrl');
     var guardarPermisoRolUrl = $page.data('guardarPermisoRolUrl');
     var centrocostoIdFiltro = $page.data('centrocostoId');
@@ -226,6 +227,32 @@
         return html;
     }
 
+    function buildUsuariosRolTable(usuarios) {
+        var html = '<table class="table table-sm table-striped table-bordered table-hover mb-0">';
+        html += '<thead style="background:#85C1E9;color:#17202A;"><tr>';
+        html += '<th>Usuario</th><th>Nombre</th><th>Email</th><th>Estado</th><th class="text-center">Acciones</th>';
+        html += '</tr></thead><tbody>';
+        usuarios.forEach(function (u) {
+            var estado = u.suspendido
+                ? '<span class="badge badge-secondary">Suspendido</span>'
+                : '<span class="badge badge-success">Activo</span>';
+            html += '<tr>';
+            html += '<td>' + escapeHtml(u.usuario || '') + '</td>';
+            html += '<td>' + escapeHtml(u.nombre || '') + '</td>';
+            html += '<td>' + escapeHtml(u.email || '') + '</td>';
+            html += '<td>' + estado + '</td>';
+            html += '<td class="text-center text-nowrap">';
+            if (u.url_editar) {
+                html += '<a class="btn-accion-tabla tooltipsC text-primary" href="' + escapeHtml(u.url_editar) + '"';
+                html += ' target="_blank" rel="noopener" title="Editar usuario">';
+                html += '<i class="fa fa-edit"></i></a>';
+            }
+            html += '</td></tr>';
+        });
+        html += '</tbody></table>';
+        return html;
+    }
+
     $('#filtro-nombre-menu, #filtro-nombre-rol').on('input', aplicarFiltrosCliente);
     $('#filtro-modulo-menu').on('change', aplicarFiltrosCliente);
 
@@ -287,6 +314,51 @@
             error: function (xhr) {
                 $cargando.hide();
                 var msg = 'No se pudieron cargar los permisos.';
+                if (xhr.responseJSON && xhr.responseJSON.message) {
+                    msg = xhr.responseJSON.message;
+                }
+                $error.text(msg).show();
+            }
+        });
+    });
+
+    $(document).on('click', '.btn-usuarios-rol', function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+
+        var rolId = $(this).data('rol-id');
+        var rolNombre = $(this).data('rol-nombre');
+        var $modal = $('#modalUsuariosRol');
+        var $cargando = $('#modalUsuariosRolCargando');
+        var $error = $('#modalUsuariosRolError');
+        var $contenedor = $('#modalUsuariosRolContenedor');
+        var $vacio = $('#modalUsuariosRolVacio');
+
+        $error.hide().text('');
+        $contenedor.empty().hide();
+        $vacio.hide();
+        $cargando.show();
+        $('#modalUsuariosRolLabel').text('Usuarios del rol: ' + rolNombre);
+
+        $modal.modal('show');
+
+        $.ajax({
+            url: usuariosUrl,
+            type: 'GET',
+            headers: { Accept: 'application/json' },
+            data: { rol_id: rolId },
+            success: function (data) {
+                $cargando.hide();
+                var usuarios = data.usuarios || [];
+                if (usuarios.length === 0) {
+                    $vacio.show();
+                    return;
+                }
+                $contenedor.html(buildUsuariosRolTable(usuarios)).show();
+            },
+            error: function (xhr) {
+                $cargando.hide();
+                var msg = 'No se pudieron cargar los usuarios del rol.';
                 if (xhr.responseJSON && xhr.responseJSON.message) {
                     msg = xhr.responseJSON.message;
                 }

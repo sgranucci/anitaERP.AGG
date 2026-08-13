@@ -12,21 +12,99 @@
         .meta td { border: none; padding: 2px 4px; }
         .right { text-align: right; }
         .logo { max-height: 48px; max-width: 160px; }
+        .total-grande {
+            margin-top: 12px;
+            padding: 4px 8px;
+            border: 1px solid #17202A;
+            font-size: 13px;
+            font-weight: bold;
+            text-align: right;
+        }
+        .importe-letras { margin-top: 8px; font-size: 11px; }
+        .firma-box { margin-top: 48px; }
+        .firma-box td { border: none; text-align: center; padding-top: 8px; vertical-align: top; }
+        .firma-linea { border-top: 1px solid #333; width: 80%; margin: 40px auto 6px auto; }
+        .muted { color: #555; font-size: 9px; }
     </style>
 </head>
 <body>
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
+    use App\Support\Sueldos\NumeroALetrasEs;
+
     $logo = EmpresaLogoArchivo::dataUriDesdeNombre($movimiento->empresas->nombre ?? null);
     $tipo = $movimiento->tipotransaccioncajas->abreviatura
         ?? $movimiento->tipotransaccioncajas->nombre
         ?? '';
     $sp = $movimiento->solicitudpagos;
+    $empresa = $movimiento->empresas;
+    $proveedor = $movimiento->proveedores;
+    $usuarioLogin = optional($movimiento->usuarios)->usuario
+        ?: optional($movimiento->usuarios)->nombre
+        ?: '';
+
     $totalAbs = 0.0;
+    $cotizacionMostrada = null;
+    $monedaAbrTotal = '';
     foreach ($movimiento->caja_movimiento_cuentacajas as $linea) {
-        $coef = ((int) ($linea->moneda_id ?? 1) > 1) ? (float) ($linea->cotizacion ?: 1) : 1.0;
-        $totalAbs += abs((float) $linea->monto) * $coef;
+        $totalAbs += abs((float) $linea->monto);
+        $monedaIdLinea = (int) ($linea->moneda_id ?? 1);
+        $cotizLinea = (float) ($linea->cotizacion ?? 0);
+        if ($monedaIdLinea > 1 && $cotizLinea > 0 && $cotizacionMostrada === null) {
+            $cotizacionMostrada = $cotizLinea;
+        }
+        if ($monedaAbrTotal === '') {
+            $monedaAbrTotal = (string) ($linea->monedas->abreviatura ?? '');
+        }
     }
+    if ($monedaAbrTotal === '' && $sp) {
+        $monedaAbrTotal = (string) (optional($sp->monedas)->abreviatura ?? '');
+    }
+    if ($cotizacionMostrada === null) {
+        foreach ($movimiento->caja_movimiento_cuentacajas as $linea) {
+            $c = (float) ($linea->cotizacion ?? 0);
+            if ($c > 1.0001) {
+                $cotizacionMostrada = $c;
+                break;
+            }
+        }
+    }
+
+    $conceptoTexto = '';
+    if ($sp && $sp->conceptos) {
+        $conceptoTexto = trim(($sp->conceptos->codigo ?? '').' '.($sp->conceptos->nombre ?? ''));
+    }
+    if ($sp && trim((string) ($sp->detalle ?? '')) !== '') {
+        $conceptoTexto = $conceptoTexto !== ''
+            ? $conceptoTexto.' — '.$sp->detalle
+            : $sp->detalle;
+    }
+    if ($conceptoTexto === '' && trim((string) ($movimiento->detalle ?? '')) !== '') {
+        $conceptoTexto = $movimiento->detalle;
+    }
+
+    // CC de la imputación (asiento / cuentas SP), no el de cabecera de la SP.
+    $centroCostoTexto = '';
+    $asientoMovs = optional(optional($movimiento->asientos)->asiento_movimientos) ?: collect();
+    foreach ($asientoMovs as $am) {
+        if (! empty($am->centrocosto_id) && $am->centrocostos) {
+            $centroCostoTexto = trim(($am->centrocostos->codigo ?? '').' '.($am->centrocostos->nombre ?? ''));
+            break;
+        }
+    }
+    if ($centroCostoTexto === '' && $sp) {
+        foreach ($sp->cuentas ?? [] as $ctaSp) {
+            if (! empty($ctaSp->centrocosto_id) && $ctaSp->centrocostos) {
+                $centroCostoTexto = trim(($ctaSp->centrocostos->codigo ?? '').' '.($ctaSp->centrocostos->nombre ?? ''));
+                break;
+            }
+        }
+    }
+    if ($centroCostoTexto === '' && $sp && $sp->centrocostos) {
+        $centroCostoTexto = trim(($sp->centrocostos->codigo ?? '').' '.($sp->centrocostos->nombre ?? ''));
+    }
+
+    $importeLetras = mb_strtoupper(NumeroALetrasEs::monto($totalAbs), 'UTF-8');
 @endphp
 
 <table class="meta" style="margin-bottom:10px;">
@@ -45,13 +123,46 @@
 
 <table class="meta">
     <tr>
-        <td><strong>Empresa:</strong> {{ $movimiento->empresas->nombre ?? '' }}</td>
+        <td><strong>Empresa:</strong> {{ $empresa->nombre ?? '' }}</td>
         <td><strong>Fecha:</strong> {{ $movimiento->fecha ? date('d/m/Y', strtotime($movimiento->fecha)) : '' }}</td>
     </tr>
+    @php
+        $direccionEmpresa = trim((string) ($empresa->domicilio ?? ''));
+        $localidadEmpresa = trim((string) (optional($empresa->localidad)->nombre ?? ''));
+        if ($direccionEmpresa !== '' && $localidadEmpresa !== '' && stripos($direccionEmpresa, $localidadEmpresa) === false) {
+            $direccionEmpresa .= ' - '.$localidadEmpresa;
+        }
+    @endphp
+    @if ($direccionEmpresa !== '')
+        <tr>
+            <td colspan="2"><strong>Direcci&oacute;n:</strong> {{ $direccionEmpresa }}</td>
+        </tr>
+    @endif
+    @if (! empty($empresa->nroinscripcion))
+        <tr>
+            <td colspan="2"><strong>CUIT empresa:</strong> {{ $empresa->nroinscripcion }}</td>
+        </tr>
+    @endif
     <tr>
-        <td><strong>Proveedor:</strong> {{ $movimiento->proveedores->nombre ?? '' }}</td>
+        <td><strong>Proveedor:</strong> {{ $proveedor->nombre ?? '' }}</td>
         <td><strong>Tipo:</strong> {{ $movimiento->tipotransaccioncajas->nombre ?? $tipo }}</td>
     </tr>
+    @if ($proveedor)
+        <tr>
+            <td colspan="2">
+                <strong>Datos del proveedor:</strong>
+                CUIT {{ $proveedor->nroinscripcion ?: '—' }}
+                &nbsp;|&nbsp; Ing. Brutos {{ $proveedor->nroIIBB ?: '—' }}
+                &nbsp;|&nbsp; Cond. IVA {{ optional($proveedor->condicionivas)->nombre ?: '—' }}
+                &nbsp;|&nbsp; Tel. {{ $proveedor->telefono ?: '—' }}
+            </td>
+        </tr>
+    @endif
+    @if ($usuarioLogin !== '')
+        <tr>
+            <td colspan="2"><strong>Usuario:</strong> {{ $usuarioLogin }}</td>
+        </tr>
+    @endif
     @if ($sp)
         <tr>
             <td>
@@ -61,13 +172,34 @@
             <td><strong>Estado SP:</strong> {{ $sp->estado }}</td>
         </tr>
     @endif
-    <tr>
-        <td colspan="2"><strong>Detalle:</strong> {{ $movimiento->detalle }}</td>
-    </tr>
-    <tr>
-        <td colspan="2"><strong>Total:</strong> {{ number_format($totalAbs, 2, ',', '.') }}</td>
-    </tr>
+    @if ($conceptoTexto !== '')
+        <tr>
+            <td colspan="2"><strong>Concepto:</strong> {{ $conceptoTexto }}</td>
+        </tr>
+    @endif
+    @if ($centroCostoTexto !== '')
+        <tr>
+            <td colspan="2"><strong>Centro de costos:</strong> {{ $centroCostoTexto }}</td>
+        </tr>
+    @endif
+    @if ($cotizacionMostrada !== null)
+        <tr>
+            <td colspan="2"><strong>Cotizaci&oacute;n:</strong> {{ number_format((float) $cotizacionMostrada, 4, ',', '.') }}</td>
+        </tr>
+    @endif
+    @if (! $sp && trim((string) ($movimiento->detalle ?? '')) !== '')
+        <tr>
+            <td colspan="2"><strong>Detalle:</strong> {{ $movimiento->detalle }}</td>
+        </tr>
+    @endif
 </table>
+
+<div class="importe-letras">
+    <strong>Importe en letras:</strong> {{ $importeLetras }}
+    @if ($monedaAbrTotal !== '')
+        ({{ $monedaAbrTotal }})
+    @endif
+</div>
 
 <h3>Cuentas de caja</h3>
 <table>
@@ -149,5 +281,27 @@
         </tbody>
     </table>
 @endif
+
+<div class="total-grande">
+    TOTAL GENERAL:
+    @if ($monedaAbrTotal !== '')
+        {{ $monedaAbrTotal }}
+    @endif
+    {{ number_format($totalAbs, 2, ',', '.') }}
+</div>
+
+<table class="firma-box meta">
+    <tr>
+        <td style="width:50%;">
+            <div class="firma-linea"></div>
+            Recib&iacute; conforme<br>
+            <span class="muted">(firma del proveedor)</span>
+        </td>
+        <td style="width:50%;">
+            <div class="firma-linea"></div>
+            Firma / autorizaci&oacute;n
+        </td>
+    </tr>
+</table>
 </body>
 </html>

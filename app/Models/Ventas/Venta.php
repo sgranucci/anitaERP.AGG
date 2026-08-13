@@ -63,7 +63,7 @@ class Venta extends Model implements Auditable
 
     public function asientos()
 	{
-    	return $this->hasMany(Asiento::class, 'venta_id')->with('asiento_movimientos');
+    	return $this->hasOne(Asiento::class, 'venta_id')->with('asiento_movimientos');
 	}
 
     public function caja_movimientos()

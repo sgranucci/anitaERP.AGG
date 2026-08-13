@@ -1674,6 +1674,7 @@ class RecepcionProveedorAnitaBridgeService
             $plan[] = [
                 'where' => $where,
                 'nueva_cant' => $nuevaCant,
+                'cantentr_anterior' => $actual,
                 'ref' => $ref,
             ];
         }
@@ -1684,6 +1685,7 @@ class RecepcionProveedorAnitaBridgeService
             penmp_sucursal={$cfg['oc_sucursal']} and
             penmp_nro=".(int) $oc->numeroordencompra;
 
+        $lineasActualizadas = false;
         foreach ($plan as $paso) {
             $valores = ! empty($paso['cerrar_linea'])
                 ? RecepcionProveedorAnitaEscrituraSupport::pendmovpCerrarLineaUpdateSet((float) $paso['cantidad_oc'])
@@ -1696,9 +1698,17 @@ class RecepcionProveedorAnitaBridgeService
                 'valores' => $valores,
                 'whereArmado' => $paso['where'],
             ], 'recepcion pendmovp update '.$paso['ref']);
+            $lineasActualizadas = true;
         }
 
-        if ($plan !== []) {
+        if ($plan === []) {
+            return;
+        }
+
+        // Estado de cabecera: no debe tumbar la confirmación ni dejar cantentr a medias.
+        // Incidente OC 222259: lock en pendmaep tras update de líneas → reintentos inflaron cantentr
+        // porque el rollback no revertía (pendmov_aplicado aún false).
+        try {
             $estadoCabecera = $this->resolverEstadoCabeceraOcDesdePendmovp($api, $cfg, (int) $oc->numeroordencompra);
             $this->anitaEscritura($api, [
                 'acc' => 'update',
@@ -1707,7 +1717,59 @@ class RecepcionProveedorAnitaBridgeService
                 'valores' => RecepcionProveedorAnitaEscrituraSupport::penmpEstadoUpdateSet($estadoCabecera),
                 'whereArmado' => $whereCab,
             ], 'recepcion penmp estado OC '.(int) $oc->numeroordencompra);
+        } catch (\Throwable $e) {
+            if ($this->esErrorLockAnita($e->getMessage())) {
+                Log::warning('RecepcionProveedorAnitaBridge: penmp estado con lock; cantentr ya aplicado', [
+                    'ordencompra' => (int) $oc->numeroordencompra,
+                    'mensaje' => $e->getMessage(),
+                ]);
+
+                return;
+            }
+
+            if ($lineasActualizadas) {
+                $this->restaurarCantentrPlanTrasFalloCabecera($api, $cfg, $plan);
+            }
+
+            throw $e;
         }
+    }
+
+    /** @param list<array<string, mixed>> $plan */
+    private function restaurarCantentrPlanTrasFalloCabecera(ApiAnita $api, array $cfg, array $plan): void
+    {
+        foreach ($plan as $paso) {
+            if (! array_key_exists('cantentr_anterior', $paso) || ! empty($paso['cerrar_linea'])) {
+                continue;
+            }
+            try {
+                $this->anitaEscritura($api, [
+                    'acc' => 'update',
+                    'sistema' => $cfg['sistema_compras'],
+                    'tabla' => $cfg['tablas']['oc_linea'],
+                    'valores' => RecepcionProveedorAnitaEscrituraSupport::pendmovpCantentrUpdateSet(
+                        (float) $paso['cantentr_anterior']
+                    ),
+                    'whereArmado' => $paso['where'],
+                ], 'recepcion pendmovp restore '.$paso['ref']);
+            } catch (\Throwable $restoreError) {
+                Log::error('RecepcionProveedorAnitaBridge: no se pudo restaurar cantentr tras fallo cabecera', [
+                    'ref' => $paso['ref'] ?? null,
+                    'cantentr_anterior' => $paso['cantentr_anterior'] ?? null,
+                    'mensaje' => $restoreError->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    private function esErrorLockAnita(string $mensaje): bool
+    {
+        $m = strtolower($mensaje);
+
+        return str_contains($m, 'could not lock')
+            || str_contains($m, 'record is locked')
+            || str_contains($m, '263:')
+            || str_contains($m, 'bloqueado');
     }
 
     /**

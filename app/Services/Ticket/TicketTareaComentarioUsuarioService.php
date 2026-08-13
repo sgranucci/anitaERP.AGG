@@ -12,6 +12,7 @@ use App\Models\Seguridad\Usuario;
 use App\Repositories\Ticket\Tecnico_TicketRepositoryInterface;
 use App\Repositories\Ticket\Ticket_EstadoRepositoryInterface;
 use App\Support\Ticket\TicketAlcanceCentrocostoSupport;
+use App\Support\Ticket\TicketEstadisticaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -114,7 +115,10 @@ class TicketTareaComentarioUsuarioService
                 'comentario' => $comentario,
             ]);
 
-            $ticket->update(['estado_ticket' => $estadoPendiente]);
+            $ticket->update(array_merge(
+                ['estado_ticket' => $estadoPendiente],
+                TicketEstadisticaSupport::payloadAlReabrir($ticket)
+            ));
 
             $this->ticketEstadoRepository->creaEstado(
                 $ticket->id,

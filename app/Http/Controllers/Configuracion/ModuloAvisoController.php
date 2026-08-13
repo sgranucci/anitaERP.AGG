@@ -166,6 +166,14 @@ class ModuloAvisoController extends Controller
             ]);
         }
 
+        if ($modulo === 'ticket' && $codigo === 'alta_tecnologia') {
+            return array_merge($comunes, [
+                '{id}', '{numero}', '{titulo}', '{sala}', '{sector}',
+                '{categoria}', '{subcategoria}', '{usuario}', '{cargado_por}',
+                '{comentario}', '{fecha}', '{estado}', '{area}',
+            ]);
+        }
+
         if ($modulo === 'compras' && $codigo === 'ordencompra_alertas_abiertas') {
             return array_merge($comunes, [
                 '{fecha}', '{dias_sin_recepcion}',

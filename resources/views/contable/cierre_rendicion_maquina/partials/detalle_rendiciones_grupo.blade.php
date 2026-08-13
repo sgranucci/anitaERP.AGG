@@ -1,3 +1,8 @@
+@php
+    use App\Support\Contable\CierreRendicionOrigenConsultaSupport;
+    $puedeConsultarRend = CierreRendicionOrigenConsultaSupport::puedeConsultarRendicionMaquina();
+    $puedePdfRend = CierreRendicionOrigenConsultaSupport::puedeVerPdfRendicionMaquina();
+@endphp
 <tr class="grupo-detalle collapse" id="detalle-grupo-{{ $grupoId }}" data-parent="#tabla-paginada">
     <td colspan="10" class="p-0 bg-light">
         <table class="table table-sm table-bordered mb-0">
@@ -10,7 +15,7 @@
                     <th class="text-right">Resultado</th>
                     <th class="text-right">Transferencia</th>
                     <th>Estado</th>
-                    <th class="width120">Acciones</th>
+                    <th class="width160">Acciones</th>
                 </tr>
             </thead>
             <tbody>
@@ -33,7 +38,13 @@
                         @endif
                     </td>
                     <td class="text-nowrap">
-                        @if (can('listar-rendicion-maquina', false))
+                        @if ($puedeConsultarRend)
+                            <a href="{{ route('editar_rendicion_maquina', ['id' => $row->id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                               class="btn-accion-tabla tooltipsC" title="Consultar rendici&oacute;n" target="_blank" rel="noopener">
+                                <i class="fa fa-edit"></i>
+                            </a>
+                        @endif
+                        @if ($puedePdfRend)
                             <a href="{{ route('imprimir_rendicion_maquina', ['id' => $row->id, 'inline' => 1]) }}"
                                class="btn-accion-tabla tooltipsC" title="PDF rendici&oacute;n" target="_blank" rel="noopener">
                                 <i class="fa fa-file-pdf-o text-danger"></i>

@@ -19,22 +19,23 @@
 	@if (!empty($reservarFilaLogoExcel))
 		<tbody>
 			<tr>
-				<td colspan="10" style="height: 52px;">&#160;</td>
+				<td colspan="11" style="height: 52px;">&#160;</td>
 			</tr>
 		</tbody>
 	@endif
 	<tbody>
 		<tr>
-			<td colspan="10"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de solicitudes de pago</h2></td>
+			<td colspan="11"><h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de solicitudes de pago</h2></td>
 		</tr>
 		<tr>
-			<td colspan="10"><strong>{{ $subtitulo }}</strong></td>
+			<td colspan="11"><strong>{{ $subtitulo }}</strong></td>
 		</tr>
 	</tbody>
 	<thead>
 		<tr>
 			<th>C&oacute;digo</th>
 			<th>Fecha</th>
+			<th>Vencimiento</th>
 			<th>Concepto</th>
 			<th>Proveedor / Beneficiario</th>
 			<th>Monto</th>
@@ -54,6 +55,7 @@
 			<tr>
 				<td>{{ $data->codigo }}</td>
 				<td>{{ optional($data->fecha)->format('d/m/Y') }}</td>
+				<td>{{ optional($data->fecha_vencimiento)->format('d/m/Y') }}</td>
 				<td>{{ optional($data->conceptos)->nombre ?? '' }}</td>
 				<td>{{ optional($data->proveedores)->nombre ?? ($data->beneficiario ?? '') }}</td>
 				<td>{{ $fmtMonto($data->monto) }}</td>

@@ -16,9 +16,15 @@ class Precarga_Comprobante_Proveedor extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
     protected $fillable = ['empresa_id', 'proveedor_id', 'identificacion_proveedor_cuit', 'tipotransaccion_compra_id', 'letra', 'sucursal', 
                             'numerocomprobante', 'fechafactura', 'fecharecepcionemail', 'fecharecepcionemail', 
-                            'fechavencimientocaicae', 'numerocae', 'tipo_autorizacion', 'numeroordencompra', 'rutaalmacenamiento',
+                            'fechavencimientocaicae', 'fechavencimiento', 'numerocae', 'tipo_autorizacion', 'numeroordencompra', 'rutaalmacenamiento',
                             'pararevisar', 'subtotal', 'total', 'estado', 'origen_entrada', 'moneda', 'moneda_id', 'cotizacion'];
     protected $table = 'precarga_comprobante_proveedor';
+
+    protected $casts = [
+        'fechafactura' => 'date',
+        'fechavencimientocaicae' => 'date',
+        'fechavencimiento' => 'date',
+    ];
 
 	public function precarga_comprobante_proveedor_conceptos()
 	{

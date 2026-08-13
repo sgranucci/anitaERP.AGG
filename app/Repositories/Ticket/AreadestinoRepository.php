@@ -52,6 +52,15 @@ class AreadestinoRepository implements AreadestinoRepositoryInterface
         return $areadestino;
     }
 
+    /**
+     * Carga de Tickets: el usuario pide trabajo a un área (Tecnología, laboratorio, etc.).
+     * No se filtra por tecnico_ticket: un técnico de Sistemas también puede pedir a otras áreas.
+     */
+    public function allParaPedido()
+    {
+        return $this->model->orderBy('nombre')->get();
+    }
+
     public function create(array $data)
     {
         $areadestino = $this->model->create($data);

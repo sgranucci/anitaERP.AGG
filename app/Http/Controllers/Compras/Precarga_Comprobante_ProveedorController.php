@@ -12,7 +12,6 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use App\Services\Compras\ComprobanteProveedorPdfIaService;
-use App\Services\Compras\ComprobanteProveedorPersistenciaService;
 use App\Support\Compras\PrecargaRecepcionErrorRegistrar;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros;
@@ -35,8 +34,6 @@ class Precarga_Comprobante_ProveedorController extends Controller
 
     private ComprobanteProveedorPdfIaService $pdfIaService;
 
-    private ComprobanteProveedorPersistenciaService $persistenciaComprobanteService;
-
 	public function __construct(Precarga_Comprobante_ProveedorRepositoryInterface $precarga_comprobante_proveedorRepository,
                                 Precarga_Comprobante_Proveedor_ConceptoRepositoryInterface $precarga_comprobante_proveedor_conceptoRepository,
                                 EmpresaRepositoryInterface $empresaRepository,
@@ -45,7 +42,6 @@ class Precarga_Comprobante_ProveedorController extends Controller
                                 PrecargaComprobanteAnitaSyncService $precargaAnitaSync,
                                 PrecargaFacturaScanPathResolver $facturaScanPathResolver,
                                 ComprobanteProveedorPdfIaService $pdfIaService,
-                                ComprobanteProveedorPersistenciaService $persistenciaComprobanteService,
                                 )
     {
         $this->precarga_comprobante_proveedorRepository = $precarga_comprobante_proveedorRepository;
@@ -56,7 +52,6 @@ class Precarga_Comprobante_ProveedorController extends Controller
         $this->precargaAnitaSync = $precargaAnitaSync;
         $this->facturaScanPathResolver = $facturaScanPathResolver;
         $this->pdfIaService = $pdfIaService;
-        $this->persistenciaComprobanteService = $persistenciaComprobanteService;
     }
 
     /**
@@ -205,23 +200,12 @@ class Precarga_Comprobante_ProveedorController extends Controller
             $resultado = $this->pdfIaService->confirmar($payload, $request->file('pdf'));
             $precargaId = (int) $resultado['precarga_id'];
             $mensaje = (string) ($resultado['message'] ?? 'Precarga registrada desde PDF+IA.');
-            $redirect = route('editar_precarga_comprobante_proveedor', ['id' => $precargaId]);
-
-            // Flujo corto: generar borrador de comprobante y abrir el ABM.
+            // No grabar comprobante hasta Guardar: abrir alta prellenada desde la precarga.
+            $redirect = can('crear-comprobante-proveedor', false)
+                ? route('crear_comprobante_proveedor', ['precarga_id' => $precargaId])
+                : route('editar_precarga_comprobante_proveedor', ['id' => $precargaId]);
             if (can('crear-comprobante-proveedor', false)) {
-                try {
-                    $comprobante = $this->persistenciaComprobanteService->generarBorradorDesdePrecarga($precargaId);
-                    $mensaje = 'Precarga y comprobante generados desde PDF+IA. Revise datos, COM y conceptos.';
-                    $avisos = $this->persistenciaComprobanteService->ultimosAvisosControles();
-                    if ($avisos !== []) {
-                        $mensaje .= ' '.implode(' ', $avisos);
-                    }
-                    $redirect = route('editar_comprobante_proveedor', ['id' => $comprobante->id]);
-                } catch (\Throwable $eGen) {
-                    report($eGen);
-                    $mensaje .= ' No se pudo generar el comprobante automáticamente: '.$eGen->getMessage()
-                        .'. Puede generarlo desde la precarga.';
-                }
+                $mensaje .= ' Se abrió el alta del comprobante (no se graba hasta Guardar).';
             }
 
             return response()->json([

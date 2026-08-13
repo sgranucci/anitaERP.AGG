@@ -138,11 +138,15 @@ class RecepcionProveedorImportarDesdeAnitaService
 
         $usuarioId = $usuarioId ?? (int) (Usuario::query()->orderBy('id')->value('id') ?? 1);
         $monedaDefault = (int) (Moneda::query()->orderBy('id')->value('id') ?? 1);
+        $monedaCabecera = RecepcionProveedorAnitaImportSupport::monedaYCotizacionDesdeRecepmov(
+            $lineasAnita,
+            $monedaDefault
+        );
 
         try {
             $recepcionId = DB::transaction(function () use (
                 $cab, $empresaId, $nro, $sucursal, $ordencompraId, $ocCentrocostoId, $proveedorId,
-                $usuarioId, $monedaDefault, $lineasAnita, $conImpacto
+                $usuarioId, $monedaDefault, $monedaCabecera, $lineasAnita, $conImpacto
             ) {
                 $fecha = RecepcionProveedorAnitaImportSupport::fechaDesdeAnita((int) ($cab->recm_fecha ?? 0));
 
@@ -154,8 +158,8 @@ class RecepcionProveedorImportarDesdeAnitaService
                     'fecha' => $fecha,
                     'numerorecepcion' => $nro,
                     'numerofactura' => '',
-                    'moneda_id' => $monedaDefault,
-                    'cotizacion' => 1,
+                    'moneda_id' => $monedaCabecera['moneda_id'],
+                    'cotizacion' => $monedaCabecera['cotizacion'],
                     'estado' => $conImpacto
                         ? RecepcionProveedorEstados::BORRADOR
                         : RecepcionProveedorEstados::CONFIRMADA,
@@ -286,6 +290,10 @@ class RecepcionProveedorImportarDesdeAnitaService
                     $usuarioId, $monedaDefault, $lineasAnita, &$stats
                 ) {
                     $fecha = RecepcionProveedorAnitaImportSupport::fechaDesdeAnita((int) ($cab->recm_fecha ?? 0));
+                    $monedaCabecera = RecepcionProveedorAnitaImportSupport::monedaYCotizacionDesdeRecepmov(
+                        $lineasAnita,
+                        $monedaDefault
+                    );
 
                     $recepcion = Recepcion_Proveedor::create([
                         'ordencompra_id' => $ordencompraId,
@@ -295,8 +303,8 @@ class RecepcionProveedorImportarDesdeAnitaService
                         'fecha' => $fecha,
                         'numerorecepcion' => $nro,
                         'numerofactura' => '',
-                        'moneda_id' => $monedaDefault,
-                        'cotizacion' => 1,
+                        'moneda_id' => $monedaCabecera['moneda_id'],
+                        'cotizacion' => $monedaCabecera['cotizacion'],
                         'estado' => RecepcionProveedorEstados::CONFIRMADA,
                         'observacion' => trim((string) ($cab->recm_observacion ?? '')) ?: null,
                         'anita_tipo' => 'COM',
@@ -414,7 +422,7 @@ class RecepcionProveedorImportarDesdeAnitaService
                 'cantidad_stock' => $cantidad,
                 'precio' => (float) ($lin->recv_precio ?? 0),
                 'precio_ordencompra' => (float) ($lin->recv_precio ?? 0),
-                'moneda_id' => RecepcionProveedorAnitaImportSupport::monedaIdDesdeCodigoAnita($lin->recv_cod_mon ?? 1),
+                'moneda_id' => self::monedaIdLineaDesdeRecepmov($lin, $monedaDefault),
                 'cotizacion' => (float) ($lin->recv_cotizacion ?? 1) ?: 1,
                 'descuento' => (float) ($lin->recv_dto_art ?? 0),
                 'deposito_id' => $this->resolverDepositoId(
@@ -436,6 +444,16 @@ class RecepcionProveedorImportarDesdeAnitaService
         }
 
         return $lineasGrabadas;
+    }
+
+    private static function monedaIdLineaDesdeRecepmov(object $lin, int $monedaDefault): int
+    {
+        $codMon = $lin->recv_cod_mon ?? null;
+        if ($codMon === null || trim((string) $codMon) === '') {
+            return $monedaDefault > 0 ? $monedaDefault : 1;
+        }
+
+        return RecepcionProveedorAnitaImportSupport::monedaIdDesdeCodigoAnita($codMon);
     }
 
     private function resolverEmpresaId(int $codigoSucursal): ?int

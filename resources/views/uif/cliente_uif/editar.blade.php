@@ -11,7 +11,7 @@
 <script src="{{asset("assets/pages/scripts/uif/actividad_uif/consulta.js")}}" type="text/javascript"></script>
 @include('uif.cliente_uif.partials.sexo_aprendizaje_script')
 <script src="{{asset("assets/pages/scripts/uif/cliente_uif/arca-padron.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/uif/cliente_uif/crear.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/uif/cliente_uif/crear.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/uif/cliente_uif/crear.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/imprimirHtml.js")}}" type="text/javascript"></script>
 
 <!-- Bootstrap Date-Picker Plugin -->
@@ -87,6 +87,9 @@
                     </div>
                     @endif
                 </div>
+                @if (empty($soloSolapaPremios))
+                    @include('uif.cliente_uif.partials.banner_cumplimiento')
+                @endif
                 <div id="tab2" class="d-none" data-arca-constancia-url="{{ route('arca_constancia_inscripcion') }}" aria-hidden="true"></div>
                 <div class="card-body" style="padding-bottom: 0; padding-top: 5px;">
                     @include('uif.cliente_uif.form1')

@@ -11,6 +11,8 @@ use App\Models\Compras\Comprobante_Proveedor_Estado;
 use App\Models\Compras\Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Repositories\Compras\Precarga_Comprobante_ProveedorRepositoryInterface;
+use App\Support\Compras\ComprobanteProveedorPagoSupport;
+use App\Support\Compras\PrecargaComprobanteEstados;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -132,6 +134,10 @@ class ComprobanteProveedorEliminarService
         if ($tambienPrecarga && $precargaId > 0) {
             $this->eliminarPrecargaSiCorresponde($precargaId);
             $precargaBorrada = true;
+        } elseif (! $tambienPrecarga && $precargaId > 0) {
+            Precarga_Comprobante_Proveedor::query()
+                ->whereKey($precargaId)
+                ->update(['estado' => PrecargaComprobanteEstados::PENDIENTE]);
         }
 
         $mensaje = 'Comprobante #'.$comprobanteId.' borrado físicamente en anitaERP'
@@ -149,27 +155,7 @@ class ComprobanteProveedorEliminarService
 
     private function assertPuedeBorrar(Comprobante_Proveedor $comprobante): void
     {
-        $cuotaIds = $comprobante->comprobante_proveedor_cuotas
-            ->pluck('proveedor_cuentacorriente_id')
-            ->filter()
-            ->map(fn ($id) => (int) $id)
-            ->all();
-
-        if ($cuotaIds === []) {
-            return;
-        }
-
-        $conPago = DB::table('proveedor_cuentacorriente')
-            ->whereIn('id', $cuotaIds)
-            ->whereNotNull('pagoproveedor_id')
-            ->where('pagoproveedor_id', '>', 0)
-            ->exists();
-
-        if ($conPago) {
-            throw new RuntimeException(
-                'No se puede borrar: hay pagos aplicados sobre la cuenta corriente del comprobante.'
-            );
-        }
+        ComprobanteProveedorPagoSupport::assertSinPagosAplicados((int) $comprobante->id, 'borrar');
     }
 
     private function eliminarPrecargaSiCorresponde(int $precargaId): void

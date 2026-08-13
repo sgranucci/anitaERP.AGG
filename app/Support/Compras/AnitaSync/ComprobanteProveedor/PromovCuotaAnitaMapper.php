@@ -4,8 +4,16 @@ namespace App\Support\Compras\AnitaSync\ComprobanteProveedor;
 
 use App\Models\Compras\Comprobante_Proveedor_Cuota;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
+use App\Support\Compras\ComprobanteProveedorMonedaMotor;
 use Carbon\Carbon;
 
+/**
+ * Cuota de factura en cuenta corriente Anita (tabla promov, 22 columnas).
+ *
+ * En alta de factura los campos de pago/referencia/marca van en 0 (numéricos) o
+ * blanco (char): Anita nativo hace strrep(Null) sobre el registro y solo completa
+ * lo que corresponde. Dejar NULL rompe lecturas CISAM (ldlong/lddbl) y pagos.
+ */
 final class PromovCuotaAnitaMapper
 {
     public static function camposInsert(): string
@@ -16,15 +24,23 @@ final class PromovCuotaAnitaMapper
             prov_letra,
             prov_sucursal,
             prov_nro,
-            prov_nro_interno,
+            prov_ref_tipo,
+            prov_ref_letra,
+            prov_ref_sucursal,
+            prov_ref_nro,
             prov_fecha,
             prov_fecha_vto,
             prov_monto,
             prov_cod_mon,
             prov_cotizacion,
-            prov_empresa,
             prov_nro_cuota,
-            prov_t_pagado
+            prov_t_pagado,
+            prov_fecha_pago,
+            prov_nro_interno,
+            prov_empresa,
+            prov_fecha_marca,
+            prov_hora_marca,
+            prov_usuario_marca
         ';
     }
 
@@ -38,7 +54,13 @@ final class PromovCuotaAnitaMapper
 
         // Misma moneda/cotización que compra (factura). No heredar ME de la OC en la cuota.
         $monedaFacturaId = (int) ($ctx->comprobante->moneda_id ?: 1);
-        $cotizacionFactura = (float) ($ctx->comprobante->cotizacion ?: 1);
+        $fechaFactura = $ctx->comprobante->fechacomprobante?->format('Y-m-d');
+        $cotizacionFactura = ComprobanteProveedorMonedaMotor::cotizacionValida(
+            $monedaFacturaId,
+            $ctx->comprobante->cotizacion,
+            $fechaFactura,
+            'la factura del proveedor',
+        );
         $monto = (float) ($cuota->monto ?? 0);
         if (abs($monto) < 0.0001) {
             $monto = (float) ($ctx->comprobante->total ?? 0);
@@ -49,24 +71,35 @@ final class PromovCuotaAnitaMapper
                 (float) ($cuota->cotizacion ?: $cotizacionFactura),
                 $monedaFacturaId,
                 $cotizacionFactura,
+                $fechaFactura,
+                $fechaFactura,
             );
         }
 
+        // Alta de factura: sin pago ni referencia (OPP/NC las completa el pago).
         return "
             '".$ctx->proveedorCodigo()."',
             '".$ctx->tipoComprobante()."',
             '".$ctx->letra()."',
             '".$ctx->sucursal()."',
             '".$ctx->numero()."',
-            '".$ctx->nroInterno."',
+            '   ',
+            ' ',
+            '0',
+            '0',
             '".$ctx->fechaYmd()."',
             '".$vto."',
             '".$ctx->decimal($monto)."',
             '".$ctx->monedaCodigoAnita()."',
             '".$ctx->cotizacion()."',
-            '".$ctx->empresaCodigo()."',
             '".(int) $cuota->numero_cuota."',
-            '0'
+            '0',
+            '0',
+            '".$ctx->nroInterno."',
+            '".$ctx->empresaCodigo()."',
+            '0',
+            '',
+            ''
         ";
     }
 

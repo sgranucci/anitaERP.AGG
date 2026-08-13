@@ -8,6 +8,7 @@ use App\Models\Caja\Bingo\TurnoOperativoBingo;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Caja\Bingo\BingoCierreTurnoReporteSupport;
 use App\Support\Caja\Bingo\BingoIdentificadorPc;
+use App\Support\Contable\CierreRendicionOrigenConsultaSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -62,7 +63,9 @@ class CierreTurnoBingoController extends Controller
 
     public function comprobanteCierre(int $id)
     {
-        can('ver-comprobante-cierre-turno-bingo');
+        CierreRendicionOrigenConsultaSupport::exigir(
+            CierreRendicionOrigenConsultaSupport::puedeVerPdfCierreTurnoBingo(),
+        );
         $turno = TurnoOperativoBingo::query()
             ->with(['turno', 'jornada', 'usuarioHabilitado', 'usuarioCierre', 'empresa', 'cierresParciales'])
             ->findOrFail($id);

@@ -25,9 +25,9 @@ class GastronomiaAnaliticoReporteExport implements FromArray, WithColumnFormatti
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'X';
+    private const COL_ULTIMA = 'Y';
 
-    private const COL_COUNT = 24;
+    private const COL_COUNT = 25;
 
     /** @var array<string, mixed> */
     private array $filtros = [];
@@ -120,8 +120,8 @@ class GastronomiaAnaliticoReporteExport implements FromArray, WithColumnFormatti
         $rows[] = [
             'Id', 'Fecha jornada', 'Fecha real', 'Sala', 'Tipo comprobante', 'Punto venta',
             'Nº comprobante', 'Mozo Id', 'Nombre mozo', 'Legajo mozo', 'Código artículo',
-            'Descripción artículo', 'Tipo venta', 'Cantidad', 'Precio unitario', 'Total', 'Costo',
-            'Tipo descuento', 'Categoría artículo', 'Cliente', 'Año', 'Hora', 'Mes', 'Día',
+            'Descripción artículo', 'Tipo venta', 'Cantidad', 'Precio unitario', 'Obs. precio 0',
+            'Total', 'Costo', 'Tipo descuento', 'Categoría artículo', 'Cliente', 'Año', 'Hora', 'Mes', 'Día',
         ];
 
         $excelRow = $this->filaPrimeraDatosExcel;
@@ -147,6 +147,7 @@ class GastronomiaAnaliticoReporteExport implements FromArray, WithColumnFormatti
                     (string) ($f->tipo_venta ?? ''),
                     round((float) ($f->cantidad ?? 0), 4),
                     round((float) ($f->precio_unitario ?? 0), 2),
+                    (string) ($f->observacion_precio ?? ''),
                     round((float) ($f->total ?? 0), 2),
                     round((float) ($f->costo ?? 0), 2),
                     (string) ($f->tipo_descuento ?? ''),
@@ -168,6 +169,7 @@ class GastronomiaAnaliticoReporteExport implements FromArray, WithColumnFormatti
                 array_fill(0, 12, ''),
                 [
                     round((float) ($tot['cantidad_total'] ?? 0), 4),
+                    '',
                     '',
                     round((float) ($tot['total_importe'] ?? 0), 2),
                     round((float) ($tot['costo_total'] ?? 0), 2),
@@ -207,12 +209,13 @@ class GastronomiaAnaliticoReporteExport implements FromArray, WithColumnFormatti
             'K' => NumberFormat::FORMAT_TEXT,
             'N' => NumberFormat::FORMAT_NUMBER_00,
             'O' => NumberFormat::FORMAT_NUMBER_00,
-            'P' => NumberFormat::FORMAT_NUMBER_00,
+            'P' => NumberFormat::FORMAT_TEXT,
             'Q' => NumberFormat::FORMAT_NUMBER_00,
-            'U' => NumberFormat::FORMAT_TEXT,
+            'R' => NumberFormat::FORMAT_NUMBER_00,
             'V' => NumberFormat::FORMAT_TEXT,
             'W' => NumberFormat::FORMAT_TEXT,
             'X' => NumberFormat::FORMAT_TEXT,
+            'Y' => NumberFormat::FORMAT_TEXT,
         ];
     }
 
@@ -221,8 +224,8 @@ class GastronomiaAnaliticoReporteExport implements FromArray, WithColumnFormatti
         return [
             'A' => 10, 'B' => 12, 'C' => 12, 'D' => 18, 'E' => 10, 'F' => 10,
             'G' => 14, 'H' => 10, 'I' => 18, 'J' => 10, 'K' => 12, 'L' => 28,
-            'M' => 10, 'N' => 10, 'O' => 10, 'P' => 10, 'Q' => 10, 'R' => 16,
-            'S' => 14, 'T' => 22, 'U' => 8, 'V' => 8, 'W' => 6, 'X' => 6,
+            'M' => 10, 'N' => 10, 'O' => 10, 'P' => 36, 'Q' => 10, 'R' => 10,
+            'S' => 16, 'T' => 14, 'U' => 22, 'V' => 8, 'W' => 8, 'X' => 6, 'Y' => 6,
         ];
     }
 

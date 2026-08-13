@@ -48,7 +48,6 @@ final class ComprobanteProveedorEstados
             self::PENDIENTE_DIFERENCIA,
             self::APROBADO,
             self::CONTABILIZADO,
-            self::ANULADO,
         ];
     }
 }

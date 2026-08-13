@@ -1,7 +1,7 @@
 @php
     $archivosAdjuntos = collect($data->comprobante_proveedor_archivos ?? [])
         ->filter(fn ($a) => in_array($a->tipo, \App\Support\Compras\ComprobanteProveedorArchivoTipos::subibles(), true));
-    $bloqueado = ($data->estado ?? '') === \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO;
+    $bloqueado = ! empty($bloqueado_edicion);
 @endphp
 
 @if ($archivosAdjuntos->isNotEmpty())

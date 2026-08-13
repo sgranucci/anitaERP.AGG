@@ -1,11 +1,9 @@
 @php
     $tabsArticuloActiva = $tabsArticuloActiva ?? 'datos';
-    // Slugs reales: formula-articulo (singular, menu fórmulas). Plural legacy no existe en BD.
+    // Fórmulas: permisos del menú stock/formula-articulo (singular).
     $mostrarFormula = can('editar-formula-articulo', false)
         || can('actualizar-formula-articulo', false)
         || can('listar-formula-articulo', false)
-        || can('editar-formula-articulos', false)
-        || can('actualizar-formula-articulos', false)
         || can('editar-articulos', false)
         || can('actualizar-articulos', false);
     $mostrarCompras = can('editar-compras-articulos', false) || can('actualizar-compras-articulos', false);

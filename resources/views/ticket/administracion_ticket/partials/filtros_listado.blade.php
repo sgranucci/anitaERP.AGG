@@ -1,10 +1,12 @@
 @php
     use App\Support\Ticket\AdministracionTicketListadoFiltros;
-    use App\Models\Ticket\Ticket_Estado;
     $f = $filtros ?? [];
     $modo = $f['modo'] ?? AdministracionTicketListadoFiltros::MODO_TODOS;
     $campoActivo = $f['campo'] ?? 'titulo';
     $operadorActivo = $f['operador'] ?? 'contiene';
+    $filtroEstado = AdministracionTicketListadoFiltros::normalizarFiltroEstado(
+        (string) ($f['filtro_estado'] ?? AdministracionTicketListadoFiltros::FILTRO_ESTADO_EN_CURSO)
+    );
     $operadoresJson = [];
     foreach (AdministracionTicketListadoFiltros::CAMPOS as $key => $meta) {
         $operadoresJson[$key] = AdministracionTicketListadoFiltros::operadoresParaCampo($key);
@@ -12,6 +14,11 @@
 @endphp
 <div class="collapse border-bottom" id="panel-filtros-administracion-ticket" data-listado-filtros-panel>
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
+    @if ($filtroEstado === AdministracionTicketListadoFiltros::FILTRO_ESTADO_TODOS)
+        <input type="hidden" name="filtro_estado" value="{{ AdministracionTicketListadoFiltros::FILTRO_ESTADO_TODOS }}">
+    @elseif ($filtroEstado !== AdministracionTicketListadoFiltros::FILTRO_ESTADO_EN_CURSO)
+        <input type="hidden" name="filtro_estado" value="{{ $filtroEstado }}">
+    @endif
     <div class="card-body bg-light py-2 text-body">
         <div class="form-row align-items-end">
             <div class="form-group col-md-2 col-sm-6 mb-2">
@@ -48,21 +55,20 @@
                        autocomplete="off">
             </div>
             <div class="form-group col-md-2 col-sm-6 mb-2">
-                <label class="small mb-1" for="estado">Estado</label>
-                <select name="estado" id="estado" class="form-control form-control-sm">
-                    <option value="">Activos (sin finalizados/suspendidos)</option>
-                    @foreach (Ticket_Estado::$enumEstado as $estadoItem)
-                        <option value="{{ $estadoItem['nombre'] }}" @selected(($f['estado'] ?? '') === $estadoItem['nombre'])>{{ $estadoItem['nombre'] }}</option>
-                    @endforeach
-                </select>
-            </div>
-            <div class="form-group col-md-2 col-sm-6 mb-2">
-                <label class="small mb-1" for="fecha_desde">Fecha desde</label>
+                <label class="small mb-1" for="fecha_desde">Fecha desde (alta)</label>
                 <input type="date" name="fecha_desde" id="fecha_desde" class="form-control form-control-sm" value="{{ $f['fecha_desde'] ?? '' }}">
             </div>
             <div class="form-group col-md-2 col-sm-6 mb-2">
-                <label class="small mb-1" for="fecha_hasta">Fecha hasta</label>
+                <label class="small mb-1" for="fecha_hasta">Fecha hasta (alta)</label>
                 <input type="date" name="fecha_hasta" id="fecha_hasta" class="form-control form-control-sm" value="{{ $f['fecha_hasta'] ?? '' }}">
+            </div>
+            <div class="form-group col-md-2 col-sm-6 mb-2">
+                <label class="small mb-1" for="fecha_resolucion_desde">Resoluci&oacute;n desde</label>
+                <input type="date" name="fecha_resolucion_desde" id="fecha_resolucion_desde" class="form-control form-control-sm" value="{{ $f['fecha_resolucion_desde'] ?? '' }}">
+            </div>
+            <div class="form-group col-md-2 col-sm-6 mb-2">
+                <label class="small mb-1" for="fecha_resolucion_hasta">Resoluci&oacute;n hasta</label>
+                <input type="date" name="fecha_resolucion_hasta" id="fecha_resolucion_hasta" class="form-control form-control-sm" value="{{ $f['fecha_resolucion_hasta'] ?? '' }}">
             </div>
             <div class="form-group col-md-auto mb-2">
                 <button type="submit" class="btn btn-primary btn-sm" data-aplicar-filtros-panel="1">

@@ -96,18 +96,24 @@ class RecepcionProveedorController extends Controller
     {
         $soloConsulta = $request->query('origen') === 'modal_consulta';
 
-        $recepcion = $this->service->buscar($id);
-
         if ($soloConsulta) {
             if (! can('listar-recepcion-proveedor', false) && ! can('editar-recepcion-proveedor', false)) {
                 abort(403);
             }
-        } elseif ($recepcion->estado === 'BORRADOR') {
-            if (! can('editar-recepcion-proveedor', false) && ! can('actualizar-recepcion-proveedor', false)) {
+        }
+
+        // Desde factura/OC/reportes (modo consulta) no aplicar filtro por centro de costo:
+        // el operador ya tiene la COM en contexto y suele ser de otro CC (Cuentas a Pagar).
+        $recepcion = $this->service->buscar($id, soloFiltroEmpresa: $soloConsulta);
+
+        if (! $soloConsulta) {
+            if ($recepcion->estado === 'BORRADOR') {
+                if (! can('editar-recepcion-proveedor', false) && ! can('actualizar-recepcion-proveedor', false)) {
+                    can('editar-recepcion-proveedor');
+                }
+            } else {
                 can('editar-recepcion-proveedor');
             }
-        } else {
-            can('editar-recepcion-proveedor');
         }
 
         $empresa_query = $this->empresaRepository->allFiltrado();

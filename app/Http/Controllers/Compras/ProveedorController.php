@@ -48,6 +48,7 @@ use App\Repositories\Compras\Proveedor_ExclusionRepositoryInterface;
 use App\Repositories\Compras\Proveedor_ArchivoRepositoryInterface;
 use App\Repositories\Compras\Proveedor_Documento_FiscalRepositoryInterface;
 use App\Repositories\Compras\Proveedor_FormapagoRepositoryInterface;
+use App\Repositories\Compras\Proveedor_ServicioRepositoryInterface;
 use App\Repositories\Compras\Proveedor_EncuestaRepositoryInterface;
 use App\Repositories\Compras\Proveedor_Encuesta_PreguntaRepositoryInterface;
 use App\Repositories\Compras\Proveedor_CuentacorrienteRepositoryInterface;
@@ -70,6 +71,7 @@ class ProveedorController extends Controller
 	private $proveedor_archivoRepository;
 	private $proveedor_documento_fiscalRepository;
     private $proveedor_formapagoRepository;
+    private $proveedor_servicioRepository;
     private $proveedor_encuestaRepository;
     private $proveedor_encuesta_preguntaRepository;
     private $proveedor_cuentacorrienteRepository;
@@ -118,7 +120,8 @@ class ProveedorController extends Controller
         MediopagoRepositoryInterface $mediopagorepository,
         ProveedorRepositoryInterface $proveedorrepository, 
 		Proveedor_ExclusionRepositoryInterface $proveedor_exclusionrepository, 
-        Proveedor_FormapagoRepositoryInterface $proveedor_formapagorepository, 
+        Proveedor_FormapagoRepositoryInterface $proveedor_formapagorepository,
+        Proveedor_ServicioRepositoryInterface $proveedor_serviciorepository,
 		Proveedor_ArchivoRepositoryInterface $proveedor_archivorepository,
         Proveedor_Documento_FiscalRepositoryInterface $proveedor_documento_fiscalrepository,
         Proveedor_EncuestaRepositoryInterface $proveedor_encuestarepository, 
@@ -137,6 +140,7 @@ class ProveedorController extends Controller
         $this->proveedor_encuestaRepository = $proveedor_encuestarepository;
         $this->proveedor_encuesta_preguntaRepository = $proveedor_encuesta_preguntarepository;
         $this->proveedor_formapagoRepository = $proveedor_formapagorepository;
+        $this->proveedor_servicioRepository = $proveedor_serviciorepository;
         $this->proveedor_cuentacorrienteRepository = $proveedor_cuentacorrienterepository;
         $this->tiposuspensionproveedorRepository = $tiposuspensionproveedorrepository;
         $this->tipoempresaRepository = $tipoempresarepository;
@@ -329,6 +333,7 @@ class ProveedorController extends Controller
             {
                 $proveedor_exclusion = $this->proveedor_exclusionRepository->create($request->all(), $proveedor->id);
                 $proveedor_formapago = $this->proveedor_formapagoRepository->create($request->all(), $proveedor->id);
+                $this->proveedor_servicioRepository->create($request->all(), $proveedor->id);
                 $proveedor_archivo = $this->proveedor_archivoRepository->create($request, $proveedor->id);
                 $this->proveedor_documento_fiscalRepository->sincronizarDesdeRequest((int) $proveedor->id, $request);
             }
@@ -427,6 +432,9 @@ class ProveedorController extends Controller
 
             // Graba forma de pago
             $this->proveedor_formapagoRepository->update($request->all(), $id);
+
+            // Graba servicios / medidores
+            $this->proveedor_servicioRepository->update($request->all(), $id);
 
             // Graba archivos asociados
             $this->proveedor_archivoRepository->update($request, $id);

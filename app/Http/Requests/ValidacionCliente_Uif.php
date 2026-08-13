@@ -71,7 +71,7 @@ class ValidacionCliente_Uif extends FormRequest
                     }
                 },
             ],
-            'fotodocumento' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:10240',
+            'fotodocumento' => 'nullable|file|mimes:jpeg,png,jpg,gif,webp,pdf|max:10240',
             'periodos' => 'sometimes|array',
             'periodos.*' => [
                 function (string $attribute, mixed $value, \Closure $fail) {
@@ -207,7 +207,7 @@ class ValidacionCliente_Uif extends FormRequest
             'pais_uif_id' => 'país de residencia',
             'actividad_uif_id' => 'actividad',
             'numerodocumento' => 'número de documento',
-            'fotodocumento' => 'foto del documento',
+            'fotodocumento' => 'foto o PDF del DNI',
             'periodos.*' => 'período (riesgo)',
             'so_uif_id' => 'sujeto obligado',
             'pep_uif_id' => 'expuesto políticamente',

@@ -10,6 +10,7 @@ use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Support\Contable\CierreRendicionBingoAsientoSupport;
+use App\Support\Contable\CierreRendicionBingoConciliacionFlashSupport;
 use App\Support\Contable\CierreRendicionBingoConfigSupport;
 use App\Support\Contable\CierreRendicionBingoFbiAnitaSupport;
 use App\Support\Contable\CierreRendicionBingoGrupoSupport;
@@ -575,6 +576,26 @@ class CierreRendicionBingoService
         }
 
         return ['ok' => $ok, 'errores' => $errores];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    public function conciliarFlash(int $empresaId, string $fechaDesde, string $fechaHasta, ?float $tolerancia = null): array
+    {
+        return app(CierreRendicionBingoConciliacionFlashSupport::class)
+            ->conciliar($empresaId, $fechaDesde, $fechaHasta, $tolerancia);
+    }
+
+    /**
+     * @return array{desde: string, hasta: string}
+     */
+    public function resolverRangoConciliacionDefault(int $empresaId): array
+    {
+        $hasta = Carbon::today()->toDateString();
+        $desde = Carbon::today()->startOfMonth()->toDateString();
+
+        return ['desde' => $desde, 'hasta' => $hasta];
     }
 
     /**

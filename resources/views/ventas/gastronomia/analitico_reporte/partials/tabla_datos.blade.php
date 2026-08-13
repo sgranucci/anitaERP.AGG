@@ -18,6 +18,7 @@
         <th>Tipo venta</th>
         <th class="text-right">Cant.</th>
         <th class="text-right">P. unit.</th>
+        <th>Obs. precio 0</th>
         <th class="text-right">Total</th>
         <th class="text-right">Costo</th>
         <th>Tipo desc.</th>
@@ -33,7 +34,7 @@
     @forelse ($filas ?? [] as $f)
         @if (($f->tipo_fila ?? 'detalle') === 'header_empresa')
             <tr class="fila-header-empresa font-weight-bold" style="background-color: #d6eaf8;">
-                <td colspan="24">
+                <td colspan="25">
                     <i class="fa fa-building"></i>
                     Empresa: {{ $f->nombreempresa ?? $f->sala ?? '' }}
                 </td>
@@ -136,6 +137,16 @@
             <td>{{ $f->tipo_venta ?? '—' }}</td>
             <td class="text-right">{{ number_format((float) ($f->cantidad ?? 0), 3, ',', '.') }}</td>
             <td class="text-right">{{ number_format((float) ($f->precio_unitario ?? 0), 2, ',', '.') }}</td>
+            <td>
+                @php
+                    $obsPrecio = trim((string) ($f->observacion_precio ?? ''));
+                @endphp
+                @if ($obsPrecio !== '')
+                    <span class="text-muted" title="{{ $obsPrecio }}">{{ $obsPrecio }}</span>
+                @else
+                    —
+                @endif
+            </td>
             <td class="text-right">{{ number_format((float) ($f->total ?? 0), 2, ',', '.') }}</td>
             <td class="text-right">{{ number_format((float) ($f->costo ?? 0), 2, ',', '.') }}</td>
             <td>
@@ -181,7 +192,7 @@
         @endif
     @empty
         <tr>
-            <td colspan="24" class="text-center text-muted py-4">Sin movimientos para los filtros indicados.</td>
+            <td colspan="25" class="text-center text-muted py-4">Sin movimientos para los filtros indicados.</td>
         </tr>
     @endforelse
 </tbody>

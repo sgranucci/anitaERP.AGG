@@ -17,6 +17,8 @@ use App\Support\Compras\ApiPrecargaProveedorLogger;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorResolucionSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorTipoItemSupport;
 use DB;
 use Illuminate\Validation\ValidationException;
 
@@ -146,17 +148,9 @@ class ApiController extends Controller
 
                     if (!$flError)
                     {
-                        // Verifica el tipo de item
-                        $tipoItem = 'B';
-                        foreach($itemsOrdenCompra as $item)
-                        {
-                            if ($item->stkm_tipo_articulo == 'S')
-                                $tipoItem = 'S';
-                            if ($item->stkm_agrupacion == '0081')
-                                $tipoItem = 'L';
-                            if ($item->stkm_tipo_articulo == 'U')
-                                $tipoItem = 'U';
-                        }
+                        // Verifica el tipo de item (fuerza S si el proveedor tiene medidores/servicios)
+                        $tipoItem = PrecargaProveedorTipoItemSupport::resolver($itemsOrdenCompra, $cuitProveedor);
+                        $esProveedorServicios = PrecargaProveedorTipoItemSupport::proveedorTieneServicios($cuitProveedor);
 
                         switch($tipoComprobante)
                         {
@@ -197,6 +191,7 @@ class ApiController extends Controller
                         $log->info('lista_concepto.tipo_resuelto', [
                             'abreviatura' => $abreviatura,
                             'tipo_item' => $tipoItem,
+                            'es_proveedor_servicios' => $esProveedorServicios,
                             'centro_costo_destino' => $centroCostoDestino,
                             'letra_proveedor' => $letraProveedor,
                         ]);
@@ -219,6 +214,8 @@ class ApiController extends Controller
                         $respuesta[] = [
                             'tipocomprobante' => $abreviatura,
                             'letra' => $letraProveedor,
+                            'es_proveedor_servicios' => $esProveedorServicios,
+                            'tipo_item' => $tipoItem,
                             'concepto' => $conceptos
                         ];
 
@@ -383,41 +380,58 @@ class ApiController extends Controller
         $proveedor_id = $resueltoProveedor['proveedor_id'];
         $codigoProveedor = $resueltoProveedor['codigoProveedor'];
 
-        // Busca empresa por documento
-        $empresas = $this->empresaRepository->findPorDocumento($request->cuit_empresa);
+        $resolucionEmpresa = app(PrecargaProveedorResolucionSupport::class);
+        try {
+            $resueltoEmpresa = $resolucionEmpresa->resolverEmpresaPorCuit((string) $request->cuit_empresa);
+        } catch (\RuntimeException $e) {
+            if ($numeroOc === '') {
+                $log->warning('recibe_comprobante.empresa_error', [
+                    'cuit_empresa' => $request->cuit_empresa,
+                    'message' => $e->getMessage(),
+                    'status' => 422,
+                ]);
 
-        $empresa_id = 1;
-        $codigoEmpresa = '1';
-        if ($empresas)
-        {
-            foreach ($empresas as $empresa)
-            {
-                if ($empresa->codigo < '5')
-                {
-                    $empresa_id = $empresa->id;
-                    $codigoEmpresa = $empresa->codigo;
-                }
-            }        
-        }
-        else
-        {
-            // Lo busca sin guiones
-            $numerodocumento =  str_replace("-", "", $request->cuit_empresa); 
+                return response()->json(['message' => $e->getMessage()], 422);
+            }
+            try {
+                $resueltoEmpresa = $resolucionEmpresa->resolverEmpresaPorOc($numeroOc);
+                $log->warning('recibe_comprobante.empresa_fallback_oc', [
+                    'cuit_empresa' => $request->cuit_empresa,
+                    'numero_oc' => $numeroOc,
+                    'empresa_id' => $resueltoEmpresa['empresa_id'],
+                    'message' => $e->getMessage(),
+                ]);
+            } catch (\RuntimeException $eOc) {
+                $log->warning('recibe_comprobante.empresa_error', [
+                    'cuit_empresa' => $request->cuit_empresa,
+                    'numero_oc' => $numeroOc,
+                    'message' => $e->getMessage(),
+                    'status' => 422,
+                ]);
 
-            $empresas = $this->empresaRepository->findPorDocumento($numerodocumento);
-
-            if ($empresas)
-            {
-                foreach ($empresas as $empresa)
-                {
-                    if ($empresa->codigo < '5')
-                    {
-                        $empresa_id = $empresa->id;
-                        $codigoEmpresa = $empresa->codigo;
-                    }
-                }
+                return response()->json(['message' => $e->getMessage()], 422);
             }
         }
+
+        if ($numeroOc !== '') {
+            try {
+                $empresaOc = $resolucionEmpresa->resolverEmpresaPorOc($numeroOc);
+                if ((int) $empresaOc['empresa_id'] !== (int) $resueltoEmpresa['empresa_id']) {
+                    $log->warning('recibe_comprobante.empresa_oc_prevalece', [
+                        'cuit_empresa' => $request->cuit_empresa,
+                        'empresa_cuit_id' => $resueltoEmpresa['empresa_id'],
+                        'empresa_oc_id' => $empresaOc['empresa_id'],
+                        'numero_oc' => $numeroOc,
+                    ]);
+                    $resueltoEmpresa = $empresaOc;
+                }
+            } catch (\RuntimeException) {
+                // OC sin empresa local: se mantiene la del CUIT.
+            }
+        }
+
+        $empresa_id = (int) $resueltoEmpresa['empresa_id'];
+        $codigoEmpresa = (string) $resueltoEmpresa['codigo'];
 
         $log->info('recibe_comprobante.empresa_resuelta', [
             'empresa_id' => $empresa_id,

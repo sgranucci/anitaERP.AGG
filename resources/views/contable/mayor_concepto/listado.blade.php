@@ -181,9 +181,11 @@
             'puede_ver_asiento' => false,
             'puede_ver_cuenta' => false,
             'puede_ver_concepto' => false,
+            'puede_ver_ordencompra' => false,
+            'puede_ver_capex' => false,
         ])
         @if (! empty($tot))
-            @php $colSpanTotalesPdf = ($multiempresa ?? false) ? 16 : 15; @endphp
+            @php $colSpanTotalesPdf = ($multiempresa ?? false) ? 17 : 16; @endphp
             <tfoot>
                 <tr class="fila-total-general">
                     <th colspan="{{ $colSpanTotalesPdf }}">Totales</th>

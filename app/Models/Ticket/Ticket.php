@@ -17,8 +17,14 @@ class Ticket extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
     use SoftDeletes;
     protected $fillable = ['fecha', 'sala_id', 'subcategoria_ticket_id', 'areadestino_id', 'sector_id', 'titulo', 'comentario',
-							'usuario_id', 'bienuso_id', 'observacion', 'estado_ticket'];
+							'usuario_id', 'bienuso_id', 'observacion', 'estado_ticket',
+							'fecha_resolucion', 'hora_resolucion', 'tiempo_insumido_total'];
     protected $table = 'ticket';
+
+    protected $casts = [
+        'fecha_resolucion' => 'date',
+        'tiempo_insumido_total' => 'float',
+    ];
 
     public function ticket_estados()
 	{

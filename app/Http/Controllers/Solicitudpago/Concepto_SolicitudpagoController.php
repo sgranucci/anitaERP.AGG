@@ -276,7 +276,7 @@ class Concepto_SolicitudpagoController extends Controller
         return [
             'sector_query' => $this->sectorRepository->all(),
             'formapagosol_query' => $this->formapagosolRepository->all(),
-            'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'empresa_query' => $this->empresaRepository->all(),
             'centrocosto_query' => $this->centrocostoRepository->all(),
             'forma_pago_enum' => ConceptoSolicitudpagoFormaPago::opciones(),
             'estado_enum' => ConceptoSolicitudpagoEstados::opciones(),

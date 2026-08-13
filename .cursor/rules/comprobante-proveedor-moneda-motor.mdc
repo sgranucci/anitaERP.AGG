@@ -1,0 +1,77 @@
+---
+description: Facturas de proveedor - manda la moneda de la factura y todo se convierte con la cotización de su propio documento
+alwaysApply: true
+---
+
+# Facturas de proveedor: motor de moneda
+
+La contabilidad de compras de AGG tiene **movimientos cruzados de moneda**: OC en dólares con recepción en dólares y factura en pesos, factura en dólares contra COM en pesos, cuotas heredadas de la OC, etc. Todo eso se resuelve en un solo lugar:
+
+**`App\Support\Compras\ComprobanteProveedorMonedaMotor`**
+
+## Reglas de negocio (no negociables)
+
+1. **Manda la moneda de la factura.** El asiento, las cuotas, la cuenta corriente y Anita se arman en la moneda del comprobante. Todo importe de otra fuente (COM/recepción, cuota de OC, anticipo) se convierte a esa moneda **antes** de sumarse.
+2. **Cada importe se convierte con la cotización de su propio documento.** Una COM en dólares vale `ME × cotización de la COM` (el valor con el que se provisionó), no la cotización de la factura. Recién ese valor en pesos se lleva a la moneda de la factura dividiendo por la cotización de la factura.
+3. **La moneda de la OC no define importes.** Solo elige la contrapartida: cuenta de proveedores **moneda nacional** vs **moneda extranjera** (`ProveedorCuentaContableMonedaSupport`). Una OC en dólares se factura en pesos sin problema.
+4. **Cotización 0 ó 1 en moneda extranjera no es cotización.** Se resuelve la vigente de la fecha del documento (`CotizacionVigenteSupport`); si la moneda no tiene ninguna cargada, se corta con error. Degradar a 1 contabiliza dólares como pesos.
+5. **La moneda detectada del PDF manda sobre la de la OC** en el prefill de precarga (`ComprobanteProveedorPrefillService`). La OC solo se usa si la precarga no trae moneda.
+
+## Correcto
+
+```php
+use App\Support\Compras\ComprobanteProveedorMonedaMotor;
+
+// Cotización a usar en el asiento / Anita (nunca 1 en ME)
+$cot = ComprobanteProveedorMonedaMotor::cotizacionValida(
+    $comprobante->moneda_id,
+    $comprobante->cotizacion,
+    $comprobante->fechacomprobante?->format('Y-m-d'),
+    'la factura del proveedor',
+);
+
+// COM en dólares → moneda de la factura
+$importe = ComprobanteProveedorMonedaMotor::convertir(
+    $importeRecepcion, $recepcion->moneda_id, $recepcion->cotizacion, $recepcion->fecha,
+    $comprobante->moneda_id, $cot, $comprobante->fechacomprobante,
+    'la recepción COM', 'la factura del proveedor',
+);
+
+// Listados y comparaciones de pantalla (no cortan, loguean)
+ComprobanteProveedorMonedaMotor::convertirTolerante(...);
+```
+
+Fachada del módulo: `ComprobanteProveedorImporteComparacionComSupport::desdeRecepcionAFactura()` / `::aMonedaLocal()` (ambas delegan en el motor y aceptan la fecha del documento).
+
+## Guarda de coherencia
+
+`ComprobanteProveedorMonedaMotor::assertImportesCoherentes()` corta el asiento cuando el importe de la factura y la provisión COM —ya expresados en la **misma** moneda— difieren en un factor del orden de la cotización. Es el síntoma de una moneda mal declarada (factura marcada en dólares con importes en pesos). Sin esa guarda, la diferencia se prorratea como "diferencia de precio" y el asiento queda ~1500 veces inflado.
+
+Al agregar un cálculo nuevo que mezcle factura y COM/OC, llamar a la guarda con la mayor cotización en juego.
+
+## Prohibido
+
+```php
+// ❌ Cotización degradada: el dólar termina contabilizado como peso
+$cot = $comprobante->cotizacion ?: 1;
+if ($cot <= 1.0001) { return $importe; }
+
+// ❌ Comparar o sumar importes de monedas distintas sin convertir
+$diferencia = $netoFactura - $provisionCom;
+
+// ❌ Tomar la moneda de la OC como moneda de la factura
+$monedaId = $this->resolverMonedaIdDesdeOrdencompra($ordencompra);
+
+// ❌ Conversión propia en el módulo en vez del motor
+$mn = $importe * $recepcion->cotizacion;
+```
+
+## Comprobación rápida (agente)
+
+```bash
+rg "cotizacion \?: 1|cotizacion \?\? 1" app/Services/Compras app/Support/Compras --glob '*.php'
+rg "ComprobanteProveedorMonedaMotor" app --glob '*.php' -l
+php -l app/Support/Compras/ComprobanteProveedorMonedaMotor.php
+```
+
+Tras tocar el motor, verificar el preview del asiento de un comprobante con COM en moneda distinta a la factura: el DEBE de provisión tiene que dar `importe COM × cotización COM` expresado en moneda de la factura.

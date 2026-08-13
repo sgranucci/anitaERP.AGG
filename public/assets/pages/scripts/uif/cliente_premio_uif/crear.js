@@ -1,5 +1,6 @@
 
     var ptrriesgo;
+    var premioUifEnviando = false;
 
     $(function () {
         $("#botonform1").click(function(){
@@ -15,6 +16,21 @@
         $('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
         $(document).on('click', '.eliminar-archivo-premio-uif', borraTarjetaArchivoPremioUif);
+        $('#botonform0').on('click', enviarFormularioPremioUif);
+        $('#form-general').on('submit', function (e) {
+            if (premioUifEnviando) {
+                e.preventDefault();
+                e.stopImmediatePropagation();
+                return false;
+            }
+            if (!formularioPremioUifEsValido(this)) {
+                return true;
+            }
+            marcarPremioUifEnviando();
+            return true;
+        });
+        window.addEventListener('pageshow', finalizarBannerGrabacionPremioUif);
+        window.addEventListener('pagehide', ocultarOverlayGuardandoPremioUif);
 
         activa_eventos(true);
 
@@ -45,6 +61,92 @@
 		if (!flInicio)
 		{
 		}
+    }
+
+    function enviarFormularioPremioUif(event) {
+        if (event) {
+            event.preventDefault();
+        }
+        if (premioUifEnviando) {
+            return;
+        }
+        var form = document.getElementById('form-general');
+        if (!form) {
+            return;
+        }
+        if (!formularioPremioUifEsValido(form, true)) {
+            return;
+        }
+        marcarPremioUifEnviando();
+        form.submit();
+    }
+
+    function formularioPremioUifEsValido(form, reportar) {
+        if (!form) {
+            return false;
+        }
+        if (typeof form.checkValidity === 'function' && !form.checkValidity()) {
+            if (reportar && typeof form.reportValidity === 'function') {
+                form.reportValidity();
+            }
+            return false;
+        }
+        return true;
+    }
+
+    function overlayGuardandoPremioUif() {
+        return document.getElementById('premio-uif-guardando-overlay');
+    }
+
+    function mostrarOverlayGuardandoPremioUif() {
+        var overlay = overlayGuardandoPremioUif();
+        if (!overlay) {
+            return;
+        }
+        overlay.classList.remove('d-none');
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+    }
+
+    function ocultarOverlayGuardandoPremioUif() {
+        var overlay = overlayGuardandoPremioUif();
+        if (!overlay) {
+            return;
+        }
+        overlay.classList.add('d-none');
+        overlay.style.display = '';
+        overlay.setAttribute('aria-hidden', 'true');
+    }
+
+    function marcarPremioUifEnviando() {
+        premioUifEnviando = true;
+        var $btn = $('#botonform0');
+        if ($btn.length) {
+            $btn.prop('disabled', true);
+            if (!$btn.data('html-original')) {
+                $btn.data('html-original', $btn.html());
+            }
+            $btn.html('<i class="fa fa-spinner fa-spin"></i> Guardando…');
+        }
+        mostrarOverlayGuardandoPremioUif();
+    }
+
+    function restaurarBotonPremioUif() {
+        premioUifEnviando = false;
+        var $btn = $('#botonform0');
+        if (!$btn.length) {
+            return;
+        }
+        $btn.prop('disabled', false);
+        var htmlOrig = $btn.data('html-original');
+        if (htmlOrig) {
+            $btn.html(htmlOrig);
+        }
+    }
+
+    function finalizarBannerGrabacionPremioUif() {
+        ocultarOverlayGuardandoPremioUif();
+        restaurarBotonPremioUif();
     }
 
     function agregaRenglonArchivo(event){

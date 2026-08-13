@@ -2,8 +2,11 @@
 
 namespace App\Support\Caja;
 
+use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\Tipotransaccion_Caja;
+use App\Models\Contable\Cuentacontable;
 use App\Models\Solicitudpago\Solicitudpago;
+use App\Support\Contable\CuentacajaCuentacontableResolverSupport;
 use InvalidArgumentException;
 
 /**
@@ -47,13 +50,18 @@ class IngresoEgresoSolicitudpagoSupport
 
     /**
      * Asiento TES on-the-fly desde las imputaciones de la SP.
+     * Si hay cuentas de caja del pago, la pierna caja/banco (111xxx) se toma
+     * de la cuenta financiera, no de la plantilla del concepto/SP.
      *
+     * @param  list<object>  $datosCaja
      * @return list<array<string, mixed>>
      */
     public static function lineasAsientoDesdeSolicitud(
         Solicitudpago $sp,
         int $monedaId,
-        float|int|string $cotizacion
+        float|int|string $cotizacion,
+        array $datosCaja = [],
+        int $empresaId = 0
     ): array {
         $sp->loadMissing(['cuentas.cuentacontables']);
 
@@ -85,7 +93,86 @@ class IngresoEgresoSolicitudpagoSupport
             ];
         }
 
+        $empresaAsiento = $empresaId > 0 ? $empresaId : (int) ($sp->empresa_id ?? 0);
+        $lineasCaja = self::lineasDesdeCuentacaja($datosCaja, $empresaAsiento, $monedaId, $cotizacion);
+        if ($lineasCaja === []) {
+            return $lineas;
+        }
+
+        $sinBanco = array_values(array_filter(
+            $lineas,
+            static fn (array $linea) => ! self::esCodigoCajaBanco((string) ($linea['codigo'] ?? ''))
+        ));
+
+        return array_merge($sinBanco, $lineasCaja);
+    }
+
+    /**
+     * @param  list<object>  $datosCaja
+     * @return list<array<string, mixed>>
+     */
+    private static function lineasDesdeCuentacaja(
+        array $datosCaja,
+        int $empresaId,
+        int $monedaId,
+        float|int|string $cotizacion
+    ): array {
+        $lineas = [];
+        foreach ($datosCaja as $movimiento) {
+            $cajaId = (int) ($movimiento->cuentacaja_ids ?? $movimiento->cuentacaja_id ?? 0);
+            $importe = (float) ($movimiento->montos ?? $movimiento->monto ?? 0);
+            if ($cajaId <= 0 || abs($importe) < 0.01) {
+                continue;
+            }
+
+            $caja = Cuentacaja::query()->with('cuentacontables')->find($cajaId);
+            if ($caja === null) {
+                continue;
+            }
+
+            $cuentaId = (int) (CuentacajaCuentacontableResolverSupport::resolverIdParaEmpresa($caja, $empresaId) ?? 0);
+            if ($cuentaId <= 0) {
+                $cuentaId = (int) ($caja->cuentacontable_id ?? 0);
+            }
+            if ($cuentaId <= 0) {
+                continue;
+            }
+
+            $cuenta = $caja->cuentacontables;
+            if ($cuenta === null || (int) $cuenta->id !== $cuentaId) {
+                $cuenta = Cuentacontable::query()->find($cuentaId, ['id', 'codigo', 'nombre']);
+            }
+            if ($cuenta === null) {
+                continue;
+            }
+
+            $monedaMov = (int) ($movimiento->moneda_ids ?? $monedaId);
+            $cotizMov = $movimiento->cotizaciones ?? $cotizacion;
+            $dh = $importe < 0 ? 'H' : 'D';
+            $monto = round(abs($importe), 2);
+
+            $lineas[] = [
+                'cuentacontable_id' => $cuentaId,
+                'codigo' => $cuenta->codigo,
+                'nombre' => $cuenta->nombre,
+                'moneda_id' => $monedaMov > 0 ? $monedaMov : $monedaId,
+                'cotizacion' => $cotizMov === '' || $cotizMov === null ? 1 : $cotizMov,
+                'centrocosto_id' => 0,
+                'debe' => $dh === 'D' ? $monto : '',
+                'haber' => $dh === 'H' ? $monto : '',
+                'observacion' => '',
+                'carga_cuentacontable_manual' => 'N',
+            ];
+        }
+
         return $lineas;
+    }
+
+    public static function esCodigoCajaBanco(string $codigo): bool
+    {
+        $n = (int) preg_replace('/\D/', '', $codigo);
+
+        return $n >= 111000000 && $n < 112000000;
     }
 
     /**

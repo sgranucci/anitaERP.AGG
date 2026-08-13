@@ -74,7 +74,12 @@
             </div>
 		</div>
         <div class="form-group row">
-			<label for="fechavencimientocaicae" class="col-lg-3 col-form-label requerido">Vencimiento</label>
+			<label for="fechavencimiento" class="col-lg-3 col-form-label">Vencimiento</label>
+			<div class="col-lg-3">
+				<input type="date" name="fechavencimiento" id="fechavencimiento" class="form-control"
+                       value="{{substr(old('fechavencimiento', optional($data->fechavencimiento ?? null)->format('Y-m-d') ?? ($data->fechavencimiento ?? '')),0,10)}}" readonly>
+			</div>
+			<label for="fechavencimientocaicae" class="col-lg-2 col-form-label requerido">Vto. CAE</label>
 			<div class="col-lg-3">
 				<input type="date" name="fechavencimientocaicae" id="fechavencimientocaicae" class="form-control" value="{{substr(old('fechavencimientocaicae', $data->fechavencimientocaicae ?? date('Y-m-d')),0,10)}}" readonly>
 			</div>

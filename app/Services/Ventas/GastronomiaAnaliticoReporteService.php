@@ -6,6 +6,7 @@ use App\Models\Stock\Listaprecio;
 use App\Models\Stock\Precio;
 use App\Queries\Ventas\GastronomiaAnaliticoReporteQuery;
 use App\Support\Ventas\Gastronomia\GastronomiaInformeGerenteCostoListaSupport;
+use App\Support\Ventas\GastronomiaAnaliticoPrecioCeroSupport;
 use App\Support\Ventas\GastronomiaAnaliticoReporteFiltros;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -60,6 +61,7 @@ final class GastronomiaAnaliticoReporteService
 
         if ($filasRaw instanceof LengthAwarePaginator) {
             $items = $itemsBase->map($mapear)->values();
+            GastronomiaAnaliticoPrecioCeroSupport::enriquecer($items);
             if (GastronomiaAnaliticoReporteFiltros::debeSepararPorEmpresa($filtros)) {
                 $items = $this->insertarHeadersEmpresa($items, true);
             }
@@ -67,6 +69,7 @@ final class GastronomiaAnaliticoReporteService
             $filas = $filasRaw;
         } else {
             $filas = $itemsBase->map($mapear)->values();
+            GastronomiaAnaliticoPrecioCeroSupport::enriquecer($filas);
             if (GastronomiaAnaliticoReporteFiltros::debeSepararPorEmpresa($filtros)) {
                 $filas = $this->insertarHeadersEmpresa($filas, false);
             }
@@ -283,6 +286,7 @@ final class GastronomiaAnaliticoReporteService
         $row->costo = $costo;
         $row->tipo_venta = trim((string) ($row->tipo_venta ?? 'venta'));
         $row->tipo_descuento = trim((string) ($row->tipo_descuento ?? ''));
+        $row->observacion_precio = '';
         $row->categoria_articulo = trim((string) ($row->categoria_articulo ?? ''));
         $row->cliente = trim((string) ($row->cliente ?? ''));
         $row->sala = trim((string) ($row->sala ?? ''));

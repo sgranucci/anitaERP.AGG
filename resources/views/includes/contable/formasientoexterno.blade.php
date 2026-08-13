@@ -1,5 +1,6 @@
 @php
-    $asientoEdicion = ($data ?? null)?->asientos?->first();
+    {{-- hasOne: lazy load del asiento de este comprobante. Nunca ->first() (eso consulta el primer asiento de toda la tabla). --}}
+    $asientoEdicion = ($data ?? null)?->asientos;
     $lineasAsiento = $asientoEdicion?->asiento_movimientos ?? collect();
     $totalDebeAsientoExt = 0.0;
     $totalHaberAsientoExt = 0.0;

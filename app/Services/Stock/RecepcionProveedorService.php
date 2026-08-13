@@ -69,9 +69,17 @@ class RecepcionProveedorService
         return $this->repository->leeRecepciones($filtros, true);
     }
 
-    public function buscar(int $id): Recepcion_Proveedor
+    public function buscar(int $id, bool $soloFiltroEmpresa = false): Recepcion_Proveedor
     {
         $recepcion = $this->repository->find($id);
+
+        if ($soloFiltroEmpresa) {
+            if (! RecepcionProveedorVisibilidadSupport::empresaIdPermitida((int) $recepcion->empresa_id)) {
+                throw new \Illuminate\Database\Eloquent\ModelNotFoundException('Recepción de proveedor no encontrada');
+            }
+
+            return $recepcion;
+        }
 
         if (! RecepcionProveedorVisibilidadSupport::recepcionAccesible($recepcion)) {
             throw new \Illuminate\Database\Eloquent\ModelNotFoundException('Recepción de proveedor no encontrada');

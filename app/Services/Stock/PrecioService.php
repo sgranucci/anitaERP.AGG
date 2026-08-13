@@ -289,19 +289,30 @@ class PrecioService
 	 */
 	public function crearDesdeFormulario(Request $request): Precio
 	{
-		if (! PrecioSoloFacturableSupport::articuloIdEsFacturable((int) $request->articulo_id)) {
-			throw new \InvalidArgumentException('Solo se pueden registrar precios de artículos facturables.');
+		$articuloId = (int) $request->articulo_id;
+		$listaprecioId = (int) $request->listaprecio_id;
+		if (! PrecioSoloFacturableSupport::permiteRegistrar($articuloId, $listaprecioId)) {
+			throw new \InvalidArgumentException(
+				'Solo se pueden registrar precios de artículos facturables, o de listas de impuesto interno / especiales (incluyeimpuesto=2).'
+			);
 		}
 
-		$fechavigencia = Carbon::createFromFormat('d-m-Y', $request->fechavigencia);
+		$fechavigencia = $this->parseFechavigenciaFormulario((string) $request->fechavigencia);
+		$precioAnterior = (float) Precio::query()
+			->where('articulo_id', $articuloId)
+			->where('listaprecio_id', $listaprecioId)
+			->whereDate('fechavigencia', '<=', $fechavigencia->format('Y-m-d'))
+			->orderByDesc('fechavigencia')
+			->orderByDesc('id')
+			->value('precio');
 
 		return Precio::create([
-			'articulo_id' => $request->articulo_id,
-			'listaprecio_id' => $request->listaprecio_id,
+			'articulo_id' => $articuloId,
+			'listaprecio_id' => $listaprecioId,
 			'fechavigencia' => $fechavigencia,
 			'moneda_id' => $request->moneda_id,
 			'precio' => $request->precio,
-			'precioanterior' => 0,
+			'precioanterior' => $precioAnterior,
 			'usuarioultcambio_id' => Auth::id(),
 		]);
 	}
@@ -314,17 +325,20 @@ class PrecioService
 	public function actualizarDesdeFormulario(Request $request, int $id): array
 	{
 		$precioRegistro = Precio::findOrFail($id);
+		$listaprecioId = (int) ($request->listaprecio_id ?: $precioRegistro->listaprecio_id);
 
-		if (! PrecioSoloFacturableSupport::articuloIdEsFacturable((int) $precioRegistro->articulo_id)) {
-			throw new \InvalidArgumentException('Solo se pueden actualizar precios de artículos facturables.');
+		if (! PrecioSoloFacturableSupport::permiteRegistrar((int) $precioRegistro->articulo_id, $listaprecioId)) {
+			throw new \InvalidArgumentException(
+				'Solo se pueden actualizar precios de artículos facturables, o de listas de impuesto interno / especiales (incluyeimpuesto=2).'
+			);
 		}
 
-		$fechavigencia = Carbon::createFromFormat('d-m-Y', $request->fechavigencia);
+		$fechavigencia = $this->parseFechavigenciaFormulario((string) $request->fechavigencia);
 		$fechaOriginal = Carbon::parse($precioRegistro->fechavigencia)->format('Y-m-d');
 		$fechaNueva = $fechavigencia->format('Y-m-d');
 
 		$payload = [
-			'listaprecio_id' => $request->listaprecio_id,
+			'listaprecio_id' => $listaprecioId,
 			'moneda_id' => $request->moneda_id,
 			'precio' => $request->precio,
 			'usuarioultcambio_id' => Auth::id(),
@@ -352,5 +366,15 @@ class PrecioService
 			'precio' => $precioNuevo,
 			'creado_nueva_vigencia' => true,
 		];
+	}
+
+	private function parseFechavigenciaFormulario(string $valor): Carbon
+	{
+		$valor = trim($valor);
+		if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $valor)) {
+			return Carbon::createFromFormat('Y-m-d', $valor)->startOfDay();
+		}
+
+		return Carbon::createFromFormat('d-m-Y', $valor)->startOfDay();
 	}
 }

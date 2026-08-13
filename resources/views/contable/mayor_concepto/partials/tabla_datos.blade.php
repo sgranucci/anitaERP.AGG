@@ -14,12 +14,13 @@
         return number_format((float) $valor, 4, ',', '.');
     };
     $mostrarEmpresa = $multiempresa ?? false;
-    $colSpanTotales = $mostrarEmpresa ? 16 : 15;
-    $colSpanVacio = $mostrarEmpresa ? 18 : 17;
+    $colSpanTotales = $mostrarEmpresa ? 17 : 16;
+    $colSpanVacio = $mostrarEmpresa ? 19 : 18;
     $puedeVerAsiento = (bool) ($puede_ver_asiento ?? false);
     $puedeVerCuenta = (bool) ($puede_ver_cuenta ?? false);
     $puedeVerConcepto = (bool) ($puede_ver_concepto ?? false);
     $puedeVerOc = (bool) ($puede_ver_ordencompra ?? false);
+    $puedeVerCapex = (bool) ($puede_ver_capex ?? false);
 @endphp
 <thead>
     <tr style="background-color: #85C1E9; color: #17202A; font-weight: bold;">
@@ -36,6 +37,7 @@
         <th>Comprobante</th>
         <th>Cheque</th>
         <th>Nro.OC.</th>
+        <th>Capex</th>
         <th>Emisor</th>
         <th>CUIT</th>
         <th>Descripción mov.</th>
@@ -146,6 +148,22 @@
                             </a>
                         @else
                             {{ $fila['nro_oc'] }}
+                        @endif
+                    @endif
+                </td>
+                <td>
+                    @php
+                        $capexCodigo = trim((string) ($fila['capex_codigo'] ?? ''));
+                        $capexId = (int) ($fila['capex_id'] ?? 0);
+                    @endphp
+                    @if ($capexCodigo !== '')
+                        @if ($puedeVerCapex && $capexId > 0)
+                            <a href="{{ route('editar_capex', ['id' => $capexId, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                               target="_blank" rel="noopener" class="text-primary" title="Consultar Capex">
+                                {{ $capexCodigo }}
+                            </a>
+                        @else
+                            {{ $capexCodigo }}
                         @endif
                     @endif
                 </td>

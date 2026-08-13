@@ -11,9 +11,9 @@
             'empresa_id' => $empresaId,
             'name' => 'empresa_ids[]',
             'select_class' => 'empresa',
-            'permite_vacio' => true,
+            'permite_vacio' => false,
             'opcion_vacia' => '-- Empresa --',
-            'required' => false,
+            'required' => true,
         ])
     </td>
     <td>

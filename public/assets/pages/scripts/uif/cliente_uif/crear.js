@@ -298,30 +298,61 @@
 
         inicializarDocumentoYCuitUif();
 
-        if (esEdicionClienteUif()) {
-            setTimeout(function () {
-                verificaAlertaUif();
-            }, 1500);
-        }
+        $(document).on('change', [
+            '#fechaconfirmapep', '#fechafirmapep', '#fechavencimientodni',
+            '#fechavencimientoactividad', '#firmodeclaracionjurada', '#riesgopep',
+            '#fechainformenosis', '#fechainformepep', '#fotodocumento',
+            '#so_uif_id', '#pep_uif_id'
+        ].join(', '), verificaAlertaUif);
+        $(document).on('change', '#tbody-tabla-archivo input[type=file]', verificaAlertaUif);
+        $(document).on('click', '.uif-banner-item-link, [data-uif-ir-tab]', function (event) {
+            event.preventDefault();
+            irAPendienteUif($(this).attr('data-uif-ir-tab'), $(this).attr('data-uif-selector'));
+        });
+
+        setTimeout(verificaAlertaUif, 200);
 
         var inputArchivo = document.getElementById('fotodocumento');
         if (inputArchivo) {
+            var previewPdfObjectUrl = null;
             inputArchivo.addEventListener('change', function () {
                 var archivoSeleccionado = document.getElementById('archivoseleccionado');
                 var previewWrap = document.getElementById('fotodocumento-preview-nuevo');
                 var previewImg = document.getElementById('fotodocumento-preview-img');
+                var previewPdf = document.getElementById('fotodocumento-preview-pdf');
+                if (previewPdfObjectUrl) {
+                    URL.revokeObjectURL(previewPdfObjectUrl);
+                    previewPdfObjectUrl = null;
+                }
                 if (this.files && this.files[0]) {
                     var f = this.files[0];
+                    var esPdf = (f.type === 'application/pdf') || /\.pdf$/i.test(f.name || '');
                     if (archivoSeleccionado) {
                         archivoSeleccionado.innerHTML = f.name;
                     }
                     if (f.type && f.type.indexOf('image/') === 0 && previewImg && previewWrap) {
+                        if (previewPdf) {
+                            previewPdf.classList.add('d-none');
+                            previewPdf.removeAttribute('src');
+                        }
+                        previewImg.classList.remove('d-none');
                         var reader = new FileReader();
                         reader.onload = function (e) {
                             previewImg.src = e.target.result;
                             previewWrap.style.display = 'block';
                         };
                         reader.readAsDataURL(f);
+                    } else if (esPdf && previewWrap) {
+                        if (previewImg) {
+                            previewImg.classList.add('d-none');
+                            previewImg.removeAttribute('src');
+                        }
+                        if (previewPdf) {
+                            previewPdfObjectUrl = URL.createObjectURL(f);
+                            previewPdf.src = previewPdfObjectUrl;
+                            previewPdf.classList.remove('d-none');
+                        }
+                        previewWrap.style.display = 'block';
                     } else if (previewWrap) {
                         previewWrap.style.display = 'none';
                     }
@@ -332,11 +363,20 @@
                     if (previewWrap) {
                         previewWrap.style.display = 'none';
                     }
+                    if (previewImg) {
+                        previewImg.removeAttribute('src');
+                    }
+                    if (previewPdf) {
+                        previewPdf.classList.add('d-none');
+                        previewPdf.removeAttribute('src');
+                    }
                 }
+                verificaAlertaUif();
             });
         }
 
         aplicarRestriccionPerfilClienteUif();
+        verificaAlertaUif();
 
         // Alta/edición cajero: no dejar que campos ocultos de form2 bloqueen el Guardar (HTML5).
         $(document).on('click', '#botonform0', function (event) {
@@ -576,11 +616,13 @@
     	var renglon = $('#template-renglon-archivo').html();
 
     	$("#tbody-tabla-archivo").append(renglon);
+        verificaAlertaUif();
     }
 
     function borraRenglonArchivo(event) {
     	event.preventDefault();
     	$(this).parents('tr').remove();
+        verificaAlertaUif();
     }
 
     function borraTarjetaArchivoClienteUif(event) {
@@ -588,9 +630,11 @@
         var $wrap = $(this).closest('.cliente-uif-archivo-item');
         if ($wrap.length) {
             $wrap.remove();
+            verificaAlertaUif();
             return;
         }
         $(this).closest('.col-md-6').remove();
+        verificaAlertaUif();
     }
 
     function actualizaArchivo(elem) {
@@ -805,78 +849,267 @@
         }
     }
 
+    var SELECTORES_CAMPO_ALERTA_UIF = [
+        '#div-fotodocumento', '#div-archivos-uif',
+        '#div-fechafirmapep', '#div-fechaconfirmapep', '#div-fechavencimientodni',
+        '#div-fechavencimientoactividad', '#div-firmodeclaracionjurada', '#div-riesgopep',
+        '#div-fechainformenosis', '#div-fechainformepep'
+    ];
+
+    function tieneFotoDocumentoUif() {
+        var input = document.getElementById('fotodocumento');
+        if (input && input.files && input.files.length) {
+            return true;
+        }
+        return $('.cliente-uif-fotodocumento-vista').length > 0;
+    }
+
+    function tieneArchivosAdjuntosUif() {
+        if ($('.cliente-uif-archivo-item').length) {
+            return true;
+        }
+        var tieneNuevo = false;
+        $('#tbody-tabla-archivo input[type=file]').each(function () {
+            if (this.files && this.files.length) {
+                tieneNuevo = true;
+                return false;
+            }
+        });
+        return tieneNuevo;
+    }
+
     function marcarDivAlertaUif(selector, activo) {
-        $(selector).css('color', activo ? '#dc3545' : '');
+        var $el = $(selector);
+        $el.toggleClass('uif-campo-pendiente', !!activo);
+        if (!activo) {
+            $el.css('color', '');
+        }
+    }
+
+    function limpiarMarcasAlertaUif() {
+        SELECTORES_CAMPO_ALERTA_UIF.forEach(function (sel) {
+            marcarDivAlertaUif(sel, false);
+        });
+    }
+
+    function asegurarBadgeTabUif(btnSelector, badgeId) {
+        var $btn = $(btnSelector);
+        if (!$btn.length) {
+            return $();
+        }
+        var $badge = $btn.find('#' + badgeId);
+        if (!$badge.length) {
+            $badge = $('<span/>', {
+                id: badgeId,
+                class: 'badge badge-danger uif-tab-badge d-none',
+                text: '0'
+            });
+            $btn.append(' ').append($badge);
+        }
+        return $badge;
+    }
+
+    function actualizarBadgesTabUif(items) {
+        var porTab = { 1: 0, 2: 0, 5: 0 };
+        (items || []).forEach(function (item) {
+            var tab = String(item.tab || '');
+            if (porTab[tab] !== undefined) {
+                porTab[tab] += 1;
+            }
+        });
+        [
+            { btn: '#botonform1', id: 'uif-badge-form1', n: porTab[1] },
+            { btn: '#botonform2', id: 'uif-badge-form2', n: porTab[2] },
+            { btn: '#botonform5', id: 'uif-badge-form5', n: porTab[5] }
+        ].forEach(function (cfg) {
+            var $badge = asegurarBadgeTabUif(cfg.btn, cfg.id);
+            if (!$badge.length) {
+                return;
+            }
+            if (cfg.n > 0) {
+                $badge.text(cfg.n).removeClass('d-none');
+            } else {
+                $badge.addClass('d-none').text('0');
+            }
+        });
+    }
+
+    function irAPendienteUif(tab, selector) {
+        var n = parseInt(tab, 10);
+        if (n >= 1 && n <= 5) {
+            $('#botonform' + n).trigger('click');
+        }
+        if (!selector) {
+            return;
+        }
+        setTimeout(function () {
+            var el = document.querySelector(selector);
+            if (el && typeof el.scrollIntoView === 'function') {
+                el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, 80);
     }
 
     function renderAlertasCumplimientoUif(items, opciones) {
         var $box = $('#uif-alertas-cumplimiento');
         var $lista = $('#uif-alertas-cumplimiento-lista');
         var $titulo = $('#uif-alertas-cumplimiento-titulo');
+        var $subtitulo = $('#uif-alertas-cumplimiento-subtitulo');
+        var $contador = $('#uif-alertas-cumplimiento-contador');
+        var $acciones = $('#uif-alertas-cumplimiento-acciones');
         if (!$box.length || !$lista.length) {
             return;
         }
         opciones = opciones || {};
+        items = items || [];
         $lista.empty();
+        if ($acciones.length) {
+            $acciones.empty();
+        }
+        actualizarBadgesTabUif(items);
         if (!items.length) {
-            $box.addClass('d-none');
+            $box.addClass('d-none').removeClass('is-warning is-danger');
             return;
         }
         if ($titulo.length) {
-            $titulo.text(opciones.titulo || 'Pendientes de cumplimiento UIF');
+            $titulo.text(opciones.titulo || 'Faltan documentos o firmas UIF');
+        }
+        if ($subtitulo.length) {
+            $subtitulo.text(opciones.subtitulo || '');
+            $subtitulo.toggleClass('d-none', !opciones.subtitulo);
+        }
+        if ($contador.length) {
+            $contador.text(items.length);
         }
         $box
-            .removeClass('alert-warning alert-info')
-            .addClass(opciones.claseAlert || 'alert-warning');
-        items.forEach(function (txt) {
-            $lista.append($('<li/>').text(txt));
+            .removeClass('is-warning is-danger alert-warning alert-info alert-danger')
+            .addClass(opciones.claseBanner || 'is-danger');
+        items.forEach(function (item) {
+            var texto = typeof item === 'string' ? item : (item.texto || '');
+            var $li = $('<li/>');
+            if (item && (item.tab || item.selector)) {
+                var $a = $('<a/>', {
+                    href: '#',
+                    class: 'uif-banner-item-link',
+                    text: texto
+                });
+                $a.attr('data-uif-ir-tab', item.tab || '');
+                $a.attr('data-uif-selector', item.selector || '');
+                $li.append($a);
+            } else {
+                $li.text(texto);
+            }
+            $lista.append($li);
         });
+        if ($acciones.length) {
+            var tabsUsados = {};
+            var botones = [
+                { tab: '1', label: 'Datos principales' },
+                { tab: '2', label: 'Datos UIF' },
+                { tab: '5', label: 'Archivos asociados' }
+            ];
+            items.forEach(function (item) {
+                if (item && item.tab) {
+                    tabsUsados[String(item.tab)] = true;
+                }
+            });
+            botones.forEach(function (btn) {
+                if (!tabsUsados[btn.tab]) {
+                    return;
+                }
+                $acciones.append(
+                    $('<button/>', {
+                        type: 'button',
+                        class: 'btn btn-sm btn-outline-dark',
+                        text: 'Ir a ' + btn.label
+                    }).attr('data-uif-ir-tab', btn.tab)
+                );
+            });
+        }
         $box.removeClass('d-none');
     }
 
+    function avisoUif(texto, tab, selector) {
+        return { texto: texto, tab: tab, selector: selector };
+    }
+
     function verificaAlertaUif() {
-        if (!esEdicionClienteUif()) {
-            renderAlertasCumplimientoUif([]);
+        if (!$('#uif-alertas-cumplimiento').length) {
             return;
         }
 
-        var idsResaltar = [
-            '#div-fechafirmapep', '#div-fechaconfirmapep', '#div-fechavencimientodni',
-            '#div-fechavencimientoactividad', '#div-firmodeclaracionjurada', '#div-riesgopep',
-            '#div-fechainformenosis', '#div-fechainformepep'
-        ];
-        idsResaltar.forEach(function (sel) { marcarDivAlertaUif(sel, false); });
+        limpiarMarcasAlertaUif();
 
-        // Cajero / no supervisor: aviso informativo (no es error de carga; Enc-UIF verifica después).
-        if ($('#essupervisor').val() !== 'S') {
-            var pendientesCajero = [];
+        var esSupervisor = $('#essupervisor').val() === 'S';
+        var avisos = [];
+
+        if (!tieneFotoDocumentoUif()) {
+            avisos.push(avisoUif(
+                'Pedí y adjuntá la foto o PDF del DNI.',
+                '1',
+                '#div-fotodocumento'
+            ));
+            marcarDivAlertaUif('#div-fotodocumento', true);
+        }
+
+        if (!tieneArchivosAdjuntosUif()) {
+            avisos.push(avisoUif(
+                'Adjuntá documentación de respaldo (declaración jurada, informes, constancias) en Archivos asociados.',
+                '5',
+                '#div-archivos-uif'
+            ));
+            marcarDivAlertaUif('#div-archivos-uif', true);
+        }
+
+        if (!esSupervisor) {
+            if (!parseFechaCampoUif($('#fechafirmapep').val())) {
+                avisos.push(avisoUif(
+                    'Pedí la firma PEP y cargá la fecha de última firma.',
+                    '2',
+                    '#div-fechafirmapep'
+                ));
+                marcarDivAlertaUif('#div-fechafirmapep', true);
+            }
             if (!parseFechaCampoUif($('#fechaconfirmapep').val())) {
-                pendientesCajero.push('Validación de firma PEP (fecha de confirmación).');
+                avisos.push(avisoUif(
+                    'Falta validación de firma PEP (la completa Enc-UIF).',
+                    '2',
+                    '#div-fechaconfirmapep'
+                ));
+                marcarDivAlertaUif('#div-fechaconfirmapep', true);
             }
             if (!parseFechaCampoUif($('#fechavencimientodni').val())) {
-                pendientesCajero.push('Vencimiento de DNI.');
+                avisos.push(avisoUif(
+                    'Pedí el DNI vigente; el vencimiento lo carga Enc-UIF.',
+                    '2',
+                    '#div-fechavencimientodni'
+                ));
+                marcarDivAlertaUif('#div-fechavencimientodni', true);
             }
             if (!parseFechaCampoUif($('#fechavencimientoactividad').val())) {
-                pendientesCajero.push('Vencimiento de actividad económica.');
+                avisos.push(avisoUif(
+                    'Pedí constancia de actividad económica (vencimiento lo carga Enc-UIF).',
+                    '2',
+                    '#div-fechavencimientoactividad'
+                ));
+                marcarDivAlertaUif('#div-fechavencimientoactividad', true);
             }
             if ($('#firmodeclaracionjurada').val() !== 'S') {
-                pendientesCajero.push('Declaración jurada de origen de ingresos/fondos.');
+                avisos.push(avisoUif(
+                    'Pedí la declaración jurada firmada de origen de ingresos/fondos.',
+                    '2',
+                    '#div-firmodeclaracionjurada'
+                ));
+                marcarDivAlertaUif('#div-firmodeclaracionjurada', true);
             }
-            if (!pendientesCajero.length) {
-                renderAlertasCumplimientoUif([]);
-                return;
-            }
-            renderAlertasCumplimientoUif(
-                pendientesCajero,
-                {
-                    titulo: 'Pendiente de verificación UIF (lo completa un encargado)',
-                    claseAlert: 'alert-info'
-                }
-            );
+            renderAlertasCumplimientoUif(avisos, {
+                titulo: 'Pedí al cliente estos documentos y firmas',
+                subtitulo: 'Adjuntá lo que puedas ahora. Enc-UIF completa fechas de validación, vencimientos e informes.',
+                claseBanner: 'is-warning'
+            });
             return;
         }
 
-        var avisos = [];
         var fechaBase = new Date();
         var fecha6Meses = new Date(fechaBase.getTime());
         fecha6Meses.setMonth(fecha6Meses.getMonth() - 6);
@@ -885,62 +1118,114 @@
         var fechaConfirmaPep = $('#fechaconfirmapep').val();
         var parsedConfPep = parseFechaCampoUif(fechaConfirmaPep);
         if (!parsedConfPep) {
-            avisos.push('PEP: falta fecha de validación de última firma' + (String(fechaConfirmaPep || '').trim() ? ' (fecha no válida).' : '.'));
+            avisos.push(avisoUif(
+                'PEP: falta fecha de validación de última firma' + (String(fechaConfirmaPep || '').trim() ? ' (fecha no válida).' : '.'),
+                '2',
+                '#div-fechaconfirmapep'
+            ));
             marcarDivAlertaUif('#div-fechafirmapep', true);
             marcarDivAlertaUif('#div-fechaconfirmapep', true);
         } else if (parsedConfPep.ts < umbral6MesesMs) {
-            avisos.push('PEP: debe renovar firma (última validación: ' + formateaFecha(parsedConfPep.isoYmd) + ').');
+            avisos.push(avisoUif(
+                'PEP: debe renovar firma (última validación: ' + formateaFecha(parsedConfPep.isoYmd) + ').',
+                '2',
+                '#div-fechaconfirmapep'
+            ));
             marcarDivAlertaUif('#div-fechafirmapep', true);
             marcarDivAlertaUif('#div-fechaconfirmapep', true);
         }
 
         var parsedDni = parseFechaCampoUif($('#fechavencimientodni').val());
         if (!parsedDni) {
-            avisos.push('DNI: falta o es inválida la fecha de vencimiento.');
+            avisos.push(avisoUif(
+                'DNI: falta o es inválida la fecha de vencimiento.',
+                '2',
+                '#div-fechavencimientodni'
+            ));
             marcarDivAlertaUif('#div-fechavencimientodni', true);
         } else if (parsedDni.ts < Date.now()) {
-            avisos.push('DNI: vencido el ' + formateaFecha(parsedDni.isoYmd) + '.');
+            avisos.push(avisoUif(
+                'DNI: vencido el ' + formateaFecha(parsedDni.isoYmd) + '.',
+                '2',
+                '#div-fechavencimientodni'
+            ));
             marcarDivAlertaUif('#div-fechavencimientodni', true);
         }
 
         var parsedVtoAct = parseFechaCampoUif($('#fechavencimientoactividad').val());
         if (!parsedVtoAct) {
-            avisos.push('Actividad económica: falta o es inválida la fecha de vencimiento.');
+            avisos.push(avisoUif(
+                'Actividad económica: falta o es inválida la fecha de vencimiento.',
+                '2',
+                '#div-fechavencimientoactividad'
+            ));
             marcarDivAlertaUif('#div-fechavencimientoactividad', true);
         } else if (parsedVtoAct.ts < umbral6MesesMs) {
-            avisos.push('Actividad económica: vencimiento próximo o vencido (' + formateaFecha(parsedVtoAct.isoYmd) + ').');
+            avisos.push(avisoUif(
+                'Actividad económica: vencimiento próximo o vencido (' + formateaFecha(parsedVtoAct.isoYmd) + ').',
+                '2',
+                '#div-fechavencimientoactividad'
+            ));
             marcarDivAlertaUif('#div-fechavencimientoactividad', true);
         }
 
         if ($('#firmodeclaracionjurada').val() !== 'S') {
-            avisos.push('Falta declaración jurada de origen de ingresos y/o fondos.');
+            avisos.push(avisoUif(
+                'Falta declaración jurada firmada de origen de ingresos y/o fondos.',
+                '2',
+                '#div-firmodeclaracionjurada'
+            ));
             marcarDivAlertaUif('#div-firmodeclaracionjurada', true);
         }
 
         if ($('#riesgopep').val() === 'ALTO') {
-            avisos.push('Nivel de riesgo PEP: ALTO.');
+            avisos.push(avisoUif(
+                'Nivel de riesgo PEP: ALTO.',
+                '2',
+                '#div-riesgopep'
+            ));
             marcarDivAlertaUif('#div-riesgopep', true);
         }
 
         var parsedNosis = parseFechaCampoUif($('#fechainformenosis').val());
         if (!parsedNosis) {
-            avisos.push('Informe NOSIS: sin fecha o fecha inválida.');
+            avisos.push(avisoUif(
+                'Informe NOSIS: sin fecha o fecha inválida.',
+                '2',
+                '#div-fechainformenosis'
+            ));
             marcarDivAlertaUif('#div-fechainformenosis', true);
         } else if (parsedNosis.ts < umbral6MesesMs) {
-            avisos.push('Informe NOSIS: debe renovar (último: ' + formateaFecha(parsedNosis.isoYmd) + ').');
+            avisos.push(avisoUif(
+                'Informe NOSIS: debe renovar (último: ' + formateaFecha(parsedNosis.isoYmd) + ').',
+                '2',
+                '#div-fechainformenosis'
+            ));
             marcarDivAlertaUif('#div-fechainformenosis', true);
         }
 
         var parsedInfPep = parseFechaCampoUif($('#fechainformepep').val());
         if (!parsedInfPep) {
-            avisos.push('Informe PEP: sin fecha o fecha inválida.');
+            avisos.push(avisoUif(
+                'Informe PEP: sin fecha o fecha inválida.',
+                '2',
+                '#div-fechainformepep'
+            ));
             marcarDivAlertaUif('#div-fechainformepep', true);
         } else if (parsedInfPep.ts < umbral6MesesMs) {
-            avisos.push('Informe PEP: debe renovar (último: ' + formateaFecha(parsedInfPep.isoYmd) + ').');
+            avisos.push(avisoUif(
+                'Informe PEP: debe renovar (último: ' + formateaFecha(parsedInfPep.isoYmd) + ').',
+                '2',
+                '#div-fechainformepep'
+            ));
             marcarDivAlertaUif('#div-fechainformepep', true);
         }
 
-        renderAlertasCumplimientoUif(avisos);
+        renderAlertasCumplimientoUif(avisos, {
+            titulo: 'Faltan documentos o firmas de cumplimiento UIF',
+            subtitulo: 'Completá o renová estos requisitos. Tocá un ítem para ir al campo.',
+            claseBanner: 'is-danger'
+        });
     }
 
     /**

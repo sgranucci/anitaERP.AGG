@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\SuitecrmPermiso;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
@@ -7,7 +8,10 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Interforming: el rol Ger-gastronomía es de AGG y no corresponde.
- * Sin usuarios asignados; solo limpia menu_rol / permiso_rol y borra el rol.
+ *
+ * Gate obligatorio: solo INTERFORMING. En AGG esta migración corrió sin filtro
+ * (12/ago/2026) y dejó a hdattilo sin rol; restore en
+ * 2026_08_12_210000_restaurar_rol_ger_gastronomia_agg.
  */
 return new class extends Migration
 {
@@ -15,6 +19,10 @@ return new class extends Migration
 
     public function up(): void
     {
+        if (! EntornoEmpresaSupport::esInterforming()) {
+            return;
+        }
+
         $rolId = (int) (DB::table('rol')->where('nombre', self::ROL_NOMBRE)->value('id') ?? 0);
         if ($rolId <= 0) {
             $rolId = (int) (DB::table('rol')->where('nombre', 'like', 'Ger-gastronom%')->orderBy('id')->value('id') ?? 0);

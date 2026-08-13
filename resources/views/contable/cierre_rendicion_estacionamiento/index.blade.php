@@ -108,7 +108,7 @@
                             <strong>Venta total</strong> = neta + NC (m&aacute;s comparable al asiento).
                         @else
                             Vista <strong>unificada</strong>: un asiento contable por <strong>fecha jornada + punto de venta</strong>.
-                            Use <i class="fa fa-chevron-down"></i> para ver cada rendici&oacute;n del d&iacute;a.
+                            Use <i class="fa fa-chevron-down"></i> para consultar cada rendici&oacute;n y el cierre de turno (PDF).
                             <strong>Venta neta</strong> = facturas − NC;
                             <strong>Venta total</strong> = neta + NC (m&aacute;s comparable al asiento).
                         @endif
@@ -185,7 +185,7 @@
                             <td class="text-center align-middle">
                                 <button type="button" class="btn btn-link btn-sm p-0 js-toggle-grupo-detalle"
                                         data-target="#detalle-grupo-{{ $grupoId }}"
-                                        title="Ver rendiciones del grupo">
+                                        title="Ver rendiciones y cierres de turno que alimentan este cierre">
                                     <i class="fa fa-chevron-down"></i>
                                 </button>
                             </td>

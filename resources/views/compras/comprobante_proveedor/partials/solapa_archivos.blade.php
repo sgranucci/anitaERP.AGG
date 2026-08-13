@@ -1,5 +1,5 @@
 @php
-    $bloqueado = ($data->estado ?? '') === \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO;
+    $bloqueado = ! empty($bloqueado_edicion);
     $archivos = collect($data->comprobante_proveedor_archivos ?? []);
     $archivoFactura = $archivos->firstWhere('tipo', \App\Support\Compras\ComprobanteProveedorArchivoTipos::ORIGEN_IA);
     $archivosSubidos = $archivos->filter(fn ($a) => in_array($a->tipo, \App\Support\Compras\ComprobanteProveedorArchivoTipos::subibles(), true));

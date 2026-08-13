@@ -118,6 +118,58 @@ class Tipotransaccion_CompraRepository implements Tipotransaccion_CompraReposito
                	->with('tipotransaccion_compra_concepto_ivacompras')->where('abreviatura', $abreviatura)->first();
     }
 
+    public function listarParaConsulta(?string $consulta = null, ?int $centrocostoId = null): \Illuminate\Support\Collection
+    {
+        $query = $this->model->newQuery()
+            ->select('id', 'abreviatura', 'nombre')
+            ->orderBy('nombre')
+            ->limit(200);
+
+        $this->aplicarFiltroCentrocosto($query, $centrocostoId);
+
+        $texto = strtoupper(trim((string) $consulta));
+        if ($texto !== '') {
+            $query->where(function ($q) use ($texto) {
+                $q->where('abreviatura', 'LIKE', '%'.$texto.'%')
+                    ->orWhere('nombre', 'LIKE', '%'.$texto.'%');
+            });
+        }
+
+        return $query->get();
+    }
+
+    public function findPorAbreviaturaFiltrado(string $abreviatura, ?int $centrocostoId = null): ?Tipotransaccion_Compra
+    {
+        $abrev = strtoupper(trim($abreviatura));
+        if ($abrev === '') {
+            return null;
+        }
+
+        $query = $this->model->newQuery()
+            ->where('abreviatura', $abrev);
+
+        $this->aplicarFiltroCentrocosto($query, $centrocostoId);
+
+        return $query->first();
+    }
+
+    /**
+     * Con OC: solo tipos vinculados al centro de costo.
+     * Sin CC: sin filtro adicional.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder<\App\Models\Compras\Tipotransaccion_Compra>  $query
+     */
+    private function aplicarFiltroCentrocosto($query, ?int $centrocostoId): void
+    {
+        if (! $centrocostoId || $centrocostoId <= 0) {
+            return;
+        }
+
+        $query->whereHas('tipotransaccion_compra_centrocostos', function ($q) use ($centrocostoId) {
+            $q->where('centrocosto_id', $centrocostoId);
+        });
+    }
+
     public function sincronizarConAnita(){
 		ini_set('max_execution_time', '300');
 	  	ini_set('memory_limit', '512M');

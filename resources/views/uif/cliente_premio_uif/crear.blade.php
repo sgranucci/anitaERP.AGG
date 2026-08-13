@@ -21,11 +21,6 @@
 <!-- Bootstrap Date-Picker Plugin -->
 <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.4.1/js/bootstrap-datepicker.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.4.1/css/bootstrap-datepicker3.css"/>
-<script>
-$( "#botonform0" ).click(function() {
-  $( "#form-general" )[0].submit();
-});
-</script>
 @endsection
 
 @section('contenido')
@@ -78,4 +73,11 @@ $( "#botonform0" ).click(function() {
         </div>
     </div>
 </div>
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'premio-uif-guardando-overlay',
+    'tituloId' => 'premio-uif-guardando-titulo',
+    'subtituloId' => 'premio-uif-guardando-subtitulo',
+    'titulo' => 'Guardando premio…',
+    'subtitulo' => 'Por favor espere. No cierre ni recargue la página.',
+])
 @endsection

@@ -5,6 +5,8 @@ namespace App\Repositories\Compras;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Proveedor_Exclusion;
 use App\Models\Compras\Proveedor_Formapago;
+use App\Models\Compras\Proveedor_Servicio;
+use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Impuesto;
 use App\Models\Configuracion\Localidad;
 use App\Models\Configuracion\Provincia;
@@ -24,6 +26,7 @@ use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Support\Compras\ProveedorExclusionAnitaSupport;
 use App\Support\Compras\ProveedorListadoFiltros;
+use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Models\Seguridad\Usuario;
 use App\Traits\AnitaBridgeEscritura;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -36,7 +39,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
     use AnitaBridgeEscritura;
 
     protected $model;
-    protected $tableAnita = ['promae', 'proley', 'proexcl', 'propago'];
+    protected $tableAnita = ['promae', 'proley', 'proexcl', 'propago', 'servicios'];
     protected $keyField = 'codigo';
     protected $keyFieldAnita = 'prom_proveedor';
     /** @var string|null Path Anita override (ej. /usr2/surmar); null = ANITA_BDD_PATH default */
@@ -171,6 +174,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 									->with("proveedor_archivos")
 									->with("proveedor_documentos_fiscales")
 									->with("proveedor_formapagos")
+									->with("proveedor_servicios")
 									->with("tipossuspensionproveedores")
 									->with("tipoempresas")
 									->with("condicionIIBBs")
@@ -193,6 +197,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 									->with("proveedor_archivos")
 									->with("proveedor_documentos_fiscales")
 									->with("proveedor_formapagos")
+									->with("proveedor_servicios")
 									->with("tipossuspensionproveedores")
 									->with("tipoempresas")
 									->with("condicionIIBBs")
@@ -215,6 +220,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 									->with("proveedor_archivos")
 									->with("proveedor_documentos_fiscales")
 									->with("proveedor_formapagos")
+									->with("proveedor_servicios")
 									->with("tipossuspensionproveedores")
 									->with("tipoempresas")
 									->with("condicionIIBBs")
@@ -243,6 +249,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 											->with("proveedor_archivos")
 											->with("proveedor_documentos_fiscales")
 											->with("proveedor_formapagos")
+											->with("proveedor_servicios")
 											->with("tipossuspensionproveedores")
 											->with("tipoempresas")
 											->with("condicionIIBBs")
@@ -966,6 +973,9 @@ class ProveedorRepository implements ProveedorRepositoryInterface
             $filasPropago = $this->consultarPropagoAnita($apiAnita, $key);
             $this->reemplazarFormapagosDesdeAnita($proveedor, $filasPropago);
 
+            $filasServicios = $this->consultarServiciosAnita($apiAnita, $key);
+            $this->reemplazarServiciosDesdeAnita($proveedor, $filasServicios);
+
             return $resultado;
         }
 
@@ -1124,6 +1134,80 @@ class ProveedorRepository implements ProveedorRepositoryInterface
                 'email' => $formapago->prop_e_mail_conf,
             ]);
         }
+    }
+
+    /**
+     * @return list<object>
+     */
+    private function consultarServiciosAnita(ApiAnita $apiAnita, string $key): array
+    {
+        $data = $this->withAnitaPath([
+            'acc' => 'list',
+            'tabla' => $this->tableAnita[4],
+            'sistema' => 'compras',
+            // Descripción al final por si el bridge parte mal campos con | (regla Anita).
+            'campos' => '
+					serv_empresa,
+					serv_proveedor,
+					serv_cliente,
+					serv_detalle
+				',
+            'whereArmado' => " WHERE serv_proveedor = '{$key}' ",
+        ]);
+
+        return ApiAnita::decodificarListaFilas($apiAnita->apiCall($data));
+    }
+
+    private function reemplazarServiciosDesdeAnita(Proveedor $proveedor, array $filasServicios): void
+    {
+        Proveedor_Servicio::query()->where('proveedor_id', $proveedor->id)->delete();
+
+        $vistos = [];
+        foreach ($filasServicios as $fila) {
+            $cliente = trim((string) ($fila->serv_cliente ?? ''));
+            if ($cliente === '') {
+                continue;
+            }
+
+            $empresaId = $this->empresaIdDesdeCodigoAnita($fila->serv_empresa ?? null);
+            if ($proveedor->empresa_id && $empresaId && (int) $proveedor->empresa_id !== (int) $empresaId) {
+                continue;
+            }
+
+            $clave = ($empresaId ?? 0).'|'.mb_strtolower($cliente);
+            if (isset($vistos[$clave])) {
+                continue;
+            }
+            $vistos[$clave] = true;
+
+            Proveedor_Servicio::query()->create([
+                'proveedor_id' => $proveedor->id,
+                'empresa_id' => $empresaId ?? $proveedor->empresa_id,
+                'cliente' => mb_substr($cliente, 0, 255),
+                'detalle' => mb_substr(trim((string) ($fila->serv_detalle ?? '')), 0, 255) ?: null,
+            ]);
+        }
+    }
+
+    private function empresaIdDesdeCodigoAnita($codigoAnitaEmpresa): ?int
+    {
+        $codigo = trim((string) $codigoAnitaEmpresa);
+        if ($codigo === '' || $codigo === '0') {
+            return null;
+        }
+
+        $id = Empresa::query()->where('codigo', $codigo)->value('id');
+        if ($id) {
+            return (int) $id;
+        }
+
+        if (ctype_digit($codigo)) {
+            $id = Empresa::query()->whereKey((int) $codigo)->value('id');
+
+            return $id ? (int) $id : null;
+        }
+
+        return null;
     }
 
 	protected function anitaBridgeLogEvento(): string
@@ -1343,6 +1427,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			['promadic', 'proad_proveedor', 'promadic delete previo alta'],
 			[$this->tableAnita[2], 'proex_proveedor', 'proexcl delete previo alta'],
 			[$this->tableAnita[3], 'prop_proveedor', 'propago delete previo alta'],
+			[$this->tableAnita[4], 'serv_proveedor', 'servicios delete previo alta'],
 		];
 
 		foreach ($tablas as [$tabla, $campo, $contexto]) {
@@ -1433,6 +1518,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
 		self::grabaExclusion($request, $apiAnita);
 		self::grabaFormaDePago($request, $apiAnita);
+		self::grabaServicios($request, $apiAnita);
 	}
 
 	private function actualizarAnita($request, $id) {
@@ -1694,6 +1780,60 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		}
 	}
 
+	private function grabaServicios($request, ?ApiAnita $apiAnita = null)
+	{
+		$apiAnita = $apiAnita ?? new ApiAnita();
+		$codigoAnita = ProveedorExclusionAnitaSupport::codigoAnitaParaBridge((string) ($request['codigo'] ?? ''));
+
+		$clientes = (array) ($request['servicios_clientes'] ?? []);
+		$detalles = (array) ($request['servicios_detalles'] ?? []);
+		$empresaIds = (array) ($request['servicios_empresa_ids'] ?? []);
+
+		$max = max(count($clientes), count($detalles), count($empresaIds));
+		$empresaDefault = (int) ($request['empresa_id'] ?? 0);
+
+		for ($i = 0; $i < $max; $i++) {
+			$cliente = trim((string) ($clientes[$i] ?? ''));
+			$detalle = trim((string) ($detalles[$i] ?? ''));
+			if ($cliente === '') {
+				continue;
+			}
+
+			$empresaId = (int) ($empresaIds[$i] ?? 0);
+			if ($empresaId <= 0) {
+				$empresaId = $empresaDefault;
+			}
+			$empresaAnita = $empresaId > 0
+				? SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId)
+				: 1;
+
+			$clienteEsc = ProveedorExclusionAnitaSupport::escaparSqlAnita(mb_substr($cliente, 0, 30));
+			$detalleEsc = ProveedorExclusionAnitaSupport::escaparSqlAnita(mb_substr($detalle, 0, 40));
+
+			$data = [
+				'tabla' => $this->tableAnita[4],
+				'acc' => 'insert',
+				'sistema' => 'compras',
+				'campos' => '
+						serv_empresa,
+						serv_proveedor,
+						serv_cliente,
+						serv_mail_resp,
+						serv_mail_aux,
+						serv_detalle
+					',
+				'valores' => "
+						'".$empresaAnita."',
+						'".$codigoAnita."',
+						'".$clienteEsc."',
+						'',
+						'',
+						'".$detalleEsc."' ",
+			];
+			$this->apiCallAnitaEscritura($apiAnita, $data, 'servicios insert');
+		}
+	}
+
 	private function eliminarAnita($id) {
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[0], 
@@ -1718,6 +1858,12 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 				'sistema' => 'compras',
 				'whereArmado' => " WHERE prop_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
         $this->apiCallAnitaEscritura($apiAnita, $data, 'propago delete');
+
+		// Borra servicios / medidores
+		$data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[4],
+				'sistema' => 'compras',
+				'whereArmado' => " WHERE serv_proveedor = '".str_pad($id, 6, "0", STR_PAD_LEFT)."' " );
+		$this->apiCallAnitaEscritura($apiAnita, $data, 'servicios delete');
 	}
 
 	// Devuelve ultimo codigo de proveedors + 1 para agregar nuevos en Anita

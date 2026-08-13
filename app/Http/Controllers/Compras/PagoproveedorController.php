@@ -76,9 +76,6 @@ class PagoproveedorController extends Controller
 
         if ($formato === 'PDF') {
             $datas = $this->pagoproveedorRepository->leePagoproveedor($filtros, false);
-            foreach ($datas as $fila) {
-                $fila->nombreempresa = $fila->empresas->nombre ?? '';
-            }
             $logos = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($datas);
             $pdf = Pdf::loadView('compras.pagoproveedor.listado', [
                 'datas' => $datas,

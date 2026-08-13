@@ -23,6 +23,7 @@ final class FacturaProveedorExtraccionFusionSupport
         $campos = [
             'numero_oc', 'tipo_comprobante', 'letra',
             'sucursal', 'numero_factura', 'fecha_factura', 'numerocae', 'tipo_autorizacion', 'fecha_vto_cai_cae',
+            'fecha_vencimiento',
             'subtotal', 'total', 'moneda', 'cotizacion',
         ];
 
@@ -30,6 +31,11 @@ final class FacturaProveedorExtraccionFusionSupport
         foreach ($campos as $campo) {
             // tipo_autorizacion: priorizar heurística (detecta CAEA vs CAE en el texto).
             if ($campo === 'tipo_autorizacion') {
+                $fusion[$campo] = $this->elegir($heuristica[$campo] ?? null, $ollama[$campo] ?? null);
+                continue;
+            }
+            // moneda/cotización: heurística manda. Ollama confunde el "$" argentino con USD.
+            if ($campo === 'moneda' || $campo === 'cotizacion') {
                 $fusion[$campo] = $this->elegir($heuristica[$campo] ?? null, $ollama[$campo] ?? null);
                 continue;
             }

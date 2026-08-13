@@ -254,15 +254,17 @@
 				</div>
 			</div>
 		</div>
-        <div class='col-md-12'>
+        <div class='col-md-12' id="div-fotodocumento">
 			<div class="form-group row">
-				<label for="fotodocumento">Foto DNI:</label>
-				<input type="file" id="fotodocumento" name="fotodocumento" accept="image/jpeg,image/png,image/gif,image/webp" style="color: transparent" value="{{$data->fotodocumento ?? ''}}">
+				<label for="fotodocumento">Foto / PDF DNI:</label>
+				<input type="file" id="fotodocumento" name="fotodocumento" accept="image/jpeg,image/png,image/gif,image/webp,application/pdf,.pdf" style="color: transparent" value="{{$data->fotodocumento ?? ''}}">
+				<small class="text-muted d-block">Imagen (JPG, PNG, GIF, WebP) o PDF. Máx. 10&nbsp;MB.</small>
 				<div id="archivoseleccionado" style="align: left;"></div>
 				<div id="fotodocumento-preview-nuevo" class="mt-2" style="display: none;">
 					<small class="text-muted d-block mb-1">Vista previa (archivo seleccionado):</small>
 					<div class="text-center bg-white border rounded p-2">
 						<img id="fotodocumento-preview-img" src="" alt="Vista previa" class="img-fluid rounded" style="max-height: min(18vh, 160px); max-width: 100%; object-fit: contain;">
+						<iframe id="fotodocumento-preview-pdf" src="" class="w-100 border-0 d-none bg-secondary" style="height: min(24vh, 260px); min-height: 140px;" title="Vista previa PDF del documento"></iframe>
 					</div>
 				</div>
 				@if (!empty($data['fotodocumento']))

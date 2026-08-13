@@ -6,6 +6,7 @@ use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorArticulos
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorCabeceraHeuristicaSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorConceptosHeuristicaSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorExtraccionFusionSupport;
+use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorMonedaOcrSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorNombreArchivoParserSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorNumeroComprobanteSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorOllamaStructurerSupport;
@@ -30,6 +31,7 @@ final class ComprobanteProveedorPdfIaPipelineService
         private FacturaProveedorExtraccionFusionSupport $fusion,
         private FacturaProveedorNombreArchivoParserSupport $nombreArchivoParser,
         private FacturaProveedorPieTotalesSupport $pieTotales,
+        private FacturaProveedorMonedaOcrSupport $monedaOcr,
     ) {}
 
     /**
@@ -76,6 +78,7 @@ final class ComprobanteProveedorPdfIaPipelineService
             $resultado = $this->aplicarCamposAutoridadArchivo($resultado, $pdf->getClientOriginalName());
             // Compacto OCR (0070A00369548) y fecha dd.mm.yyyy de heurística mandan si el archivo no trae PV/nro.
             $resultado = $this->aplicarCamposAutoridadCompactoYFechaOcr($resultado, $textoOcr, $heuristica);
+            $resultado = $this->sanearMonedaArgentina($resultado, $textoOcr, $heuristica);
             $resultado = $this->aplicarPieAResultado($resultado, $pie);
             $resultado = $this->sanearCuitsYOc($resultado);
             $resultado = $this->sanearSoloTotalComoExento($resultado, $textoOcr);
@@ -87,6 +90,8 @@ final class ComprobanteProveedorPdfIaPipelineService
                 'lineas' => count($resultado['lineas'] ?? []),
                 'articulos' => count($resultado['articulos'] ?? []),
                 'fuentes' => $resultado['_meta']['fuentes'] ?? [],
+                'moneda' => $resultado['moneda'] ?? null,
+                'cotizacion' => $resultado['cotizacion'] ?? null,
                 'numero_oc' => $resultado['numero_oc'] ?? null,
                 'cuit_proveedor' => $resultado['cuit_proveedor'] ?? null,
                 'cuit_destinatario' => $resultado['cuit_destinatario'] ?? null,
@@ -150,6 +155,49 @@ final class ComprobanteProveedorPdfIaPipelineService
         // Fecha etiquetada del OCR (incluye 05.08.2026) es más confiable que el LLM.
         if (! empty($heuristica['fecha_factura'])) {
             $data['fecha_factura'] = $heuristica['fecha_factura'];
+        }
+
+        return $data;
+    }
+
+    /**
+     * En facturas AR el "$" es peso. Solo DOLARES/EUROS con mención explícita (USD, U$S, etc.).
+     *
+     * @param  array<string, mixed>  $data
+     * @param  array<string, mixed>  $heuristica
+     * @return array<string, mixed>
+     */
+    private function sanearMonedaArgentina(array $data, string $textoOcr, array $heuristica): array
+    {
+        $monedaH = strtoupper((string) ($heuristica['moneda'] ?? 'PESOS'));
+        $moneda = strtoupper((string) ($data['moneda'] ?? $monedaH));
+
+        $hayDolares = $this->monedaOcr->indicaDolares($textoOcr);
+        $hayEuros = $this->monedaOcr->indicaEuros($textoOcr);
+        $pesosFuerte = $this->monedaOcr->indicaPesosFuerte($textoOcr);
+
+        // Pie "tipo de cambio … dolar" / "Son Pesos:" ⇒ pesos aunque Ollama diga DOLARES.
+        if ($pesosFuerte && ! $hayDolares && ! $hayEuros) {
+            $moneda = 'PESOS';
+        }
+        if (in_array($moneda, ['DOLARES', 'USD', 'DOLAR', 'DOL'], true) && ! $hayDolares) {
+            $moneda = 'PESOS';
+        }
+        if (in_array($moneda, ['EUROS', 'EUR', 'EURO'], true) && ! $hayEuros) {
+            $moneda = 'PESOS';
+        }
+        if ($monedaH === 'PESOS' && ! $hayDolares && ! $hayEuros) {
+            $moneda = 'PESOS';
+        }
+
+        $data['moneda'] = $moneda;
+        if ($moneda === 'PESOS') {
+            $data['cotizacion'] = 1.0;
+        } elseif (empty($data['cotizacion']) || (float) $data['cotizacion'] <= 1.0001) {
+            $cotH = (float) ($heuristica['cotizacion'] ?? 0);
+            if ($cotH > 1.0001) {
+                $data['cotizacion'] = $cotH;
+            }
         }
 
         return $data;

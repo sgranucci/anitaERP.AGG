@@ -2,6 +2,7 @@
 
 namespace App\Support\Compras;
 
+use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
 use Carbon\Carbon;
@@ -70,8 +71,12 @@ class PrecargaComprobanteProveedorListadoFiltros
 
     public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
     {
+        $estadoScope = self::resolverEstadoExterno($request);
+
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return self::filtrosVacios();
+            return array_merge(self::filtrosVacios(), [
+                'estado_scope' => $estadoScope,
+            ]);
         }
 
         $valor = FiltrosListadoRequest::valorBusqueda($request, $busquedaRuta);
@@ -104,7 +109,24 @@ class PrecargaComprobanteProveedorListadoFiltros
             'valor_hasta' => trim((string) $request->input('filtro_valor_hasta', '')),
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
+            'estado_scope' => $estadoScope,
         ];
+    }
+
+    /**
+     * Por defecto: solo pendientes. Query `estado=GENERADA|PENDIENTE|todas`.
+     */
+    public static function resolverEstadoExterno(Request $request): string
+    {
+        $raw = strtoupper(trim((string) $request->input('estado', '')));
+        if ($raw === 'TODAS' || $request->boolean('estado_todas')) {
+            return 'todas';
+        }
+        if ($raw === PrecargaComprobanteEstados::GENERADA) {
+            return PrecargaComprobanteEstados::GENERADA;
+        }
+
+        return PrecargaComprobanteEstados::PENDIENTE;
     }
 
     public static function tieneCriteriosAplicados(array $filtros): bool
@@ -133,7 +155,7 @@ class PrecargaComprobanteProveedorListadoFiltros
     }
 
     /**
-     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string}
+     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string, estado_scope: string}
      */
     public static function filtrosVacios(): array
     {
@@ -144,6 +166,7 @@ class PrecargaComprobanteProveedorListadoFiltros
             'valor' => '',
             'valor_hasta' => '',
             'busqueda' => '',
+            'estado_scope' => PrecargaComprobanteEstados::PENDIENTE,
         ];
     }
 
@@ -152,7 +175,7 @@ class PrecargaComprobanteProveedorListadoFiltros
      */
     public static function paraQueryString(array $filtros): array
     {
-        $params = [];
+        $params = self::paraQueryStringEstado($filtros);
         if (($filtros['modo'] ?? self::MODO_TODOS) !== self::MODO_TODOS) {
             $params['filtro_modo'] = $filtros['modo'];
         }
@@ -173,10 +196,29 @@ class PrecargaComprobanteProveedorListadoFiltros
     }
 
     /**
+     * @return array<string, string|int>
+     */
+    public static function paraQueryStringEstado(array $filtros): array
+    {
+        $scope = (string) ($filtros['estado_scope'] ?? PrecargaComprobanteEstados::PENDIENTE);
+        if ($scope === 'todas') {
+            return ['estado_todas' => 1];
+        }
+        if ($scope === PrecargaComprobanteEstados::GENERADA) {
+            return ['estado' => PrecargaComprobanteEstados::GENERADA];
+        }
+
+        // Default pendiente: no hace falta query param (limpiar vuelve a pendientes).
+        return [];
+    }
+
+    /**
      * @param  Builder<\App\Models\Compras\Precarga_Comprobante_Proveedor>  $query
      */
     public static function aplicar(Builder $query, array $filtros): void
     {
+        self::aplicarEstadoExterno($query, $filtros);
+
         $valor = trim((string) ($filtros['valor'] ?? ''));
         if ($valor === '' && ($filtros['operador'] ?? '') !== 'vacio' && trim((string) ($filtros['valor_hasta'] ?? '')) === '') {
             return;
@@ -192,6 +234,24 @@ class PrecargaComprobanteProveedorListadoFiltros
         }
 
         self::aplicarBusquedaGlobal($query, $operador, $valor);
+    }
+
+    /**
+     * @param  Builder<\App\Models\Compras\Precarga_Comprobante_Proveedor>  $query
+     */
+    public static function aplicarEstadoExterno(Builder $query, array $filtros): void
+    {
+        $scope = (string) ($filtros['estado_scope'] ?? PrecargaComprobanteEstados::PENDIENTE);
+        if ($scope === 'todas') {
+            return;
+        }
+        if ($scope === PrecargaComprobanteEstados::GENERADA) {
+            $query->where('precarga_comprobante_proveedor.estado', PrecargaComprobanteEstados::GENERADA);
+
+            return;
+        }
+
+        $query->where('precarga_comprobante_proveedor.estado', PrecargaComprobanteEstados::PENDIENTE);
     }
 
     /**

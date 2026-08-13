@@ -61,22 +61,47 @@
                     </thead>
                     <tbody>
                         @forelse($coleccion as $fila)
+                            @php
+                                $esIeOpp = $fila instanceof \App\Support\Compras\PagoproveedorListadoFila
+                                    && $fila->esIeOpp();
+                            @endphp
                             <tr>
                                 <td>{{ optional($fila->fecha)->format('d/m/Y') }}</td>
-                                <td>{{ $fila->etiquetaComprobante() }}</td>
+                                <td>
+                                    {{ $fila->etiquetaComprobante() }}
+                                    @if ($esIeOpp)
+                                        <span class="badge badge-secondary ml-1">IE</span>
+                                    @endif
+                                </td>
                                 <td>{{ $fila->empresas->nombre ?? '' }}</td>
                                 <td>{{ $fila->proveedores->nombre ?? '' }}</td>
                                 <td class="text-right">{{ number_format((float)$fila->monto, 2, ',', '.') }} {{ $fila->monedas->abreviatura ?? '' }}</td>
                                 <td>{{ $fila->estado }}</td>
                                 <td class="text-nowrap">
-                                    @if (can('editar-pagoproveedor', false))
-                                        <a href="{{ route('editar_pagoproveedor', ['id' => $fila->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar">
-                                            <i class="fa fa-edit"></i>
+                                    @if ($esIeOpp)
+                                        @if (can('editar-ingresos-egresos-caja', false) || can('listar-ingresos-egresos-caja', false))
+                                            <a href="{{ route('editar_ingresoegreso', ['id' => $fila->id, 'origen' => 'pagoproveedor']) }}"
+                                               class="btn-accion-tabla tooltipsC" title="Consultar OP (IE)"
+                                               target="_blank" rel="noopener">
+                                                <i class="fa fa-edit"></i>
+                                            </a>
+                                        @endif
+                                        @if (can('listar-ingresos-egresos-caja', false))
+                                            <a class="btn-accion-tabla tooltipsC" target="_blank" rel="noopener"
+                                               href="{{ route('imprimir_ingresoegreso', $fila->id) }}" title="Imprimir">
+                                                <i class="fa fa-print"></i>
+                                            </a>
+                                        @endif
+                                    @else
+                                        @if (can('editar-pagoproveedor', false))
+                                            <a href="{{ route('editar_pagoproveedor', ['id' => $fila->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar">
+                                                <i class="fa fa-edit"></i>
+                                            </a>
+                                        @endif
+                                        <a class="btn-accion-tabla tooltipsC" target="_blank" rel="noopener" href="{{ route('imprimir_pagoproveedor', $fila->id) }}" title="Imprimir">
+                                            <i class="fa fa-print"></i>
                                         </a>
                                     @endif
-                                    <a class="btn-accion-tabla tooltipsC" target="_blank" rel="noopener" href="{{ route('imprimir_pagoproveedor', $fila->id) }}" title="Imprimir">
-                                        <i class="fa fa-print"></i>
-                                    </a>
                                 </td>
                             </tr>
                         @empty

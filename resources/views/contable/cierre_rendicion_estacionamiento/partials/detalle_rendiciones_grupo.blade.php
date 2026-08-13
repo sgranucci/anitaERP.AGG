@@ -1,5 +1,10 @@
 @php
     use App\Support\Contable\CierreRendicionEstacionamientoGrupoSupport;
+    use App\Support\Contable\CierreRendicionOrigenConsultaSupport;
+    $puedeConsultarRend = CierreRendicionOrigenConsultaSupport::puedeConsultarRendicionEstacionamiento();
+    $puedePdfRend = CierreRendicionOrigenConsultaSupport::puedeVerPdfRendicionEstacionamiento();
+    $puedeConsultarTurno = CierreRendicionOrigenConsultaSupport::puedeConsultarCierreTurnoEstacionamiento();
+    $puedePdfTurno = CierreRendicionOrigenConsultaSupport::puedeVerPdfCierreTurnoEstacionamiento();
 @endphp
 <tr class="grupo-detalle collapse" id="detalle-grupo-{{ $grupoId }}" data-parent="#tabla-paginada">
     <td colspan="13" class="p-0 bg-light">
@@ -16,7 +21,7 @@
                     <th class="text-right">Invit.</th>
                     <th class="text-right">Cobrado</th>
                     <th>Estado</th>
-                    <th class="width120">Acciones</th>
+                    <th class="width160">Acciones</th>
                 </tr>
             </thead>
             <tbody>
@@ -26,6 +31,7 @@
                     $nc = (float) ($row->totalnotacredito ?? 0);
                     $neta = (float) ($row->totalfactura ?? 0);
                     $bruta = round($neta + $nc, 2);
+                    $turnoId = (int) ($row->turno_operativo_estacionamiento_id ?? 0);
                 @endphp
                 <tr class="{{ $cerrada ? 'table-success' : '' }}">
                     <td>{{ $row->id }}</td>
@@ -70,14 +76,28 @@
                         @endif
                     </td>
                     <td class="text-nowrap">
-                        @if (can('listar-rendicion-estacionamiento-caja', false))
+                        @if ($puedeConsultarRend)
                             <a href="{{ route('editar_rendicionestacionamiento', ['id' => $row->id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
-                               class="btn-accion-tabla tooltipsC" title="Ver rendici&oacute;n" target="_blank" rel="noopener">
+                               class="btn-accion-tabla tooltipsC" title="Consultar rendici&oacute;n" target="_blank" rel="noopener">
                                 <i class="fa fa-edit"></i>
                             </a>
+                        @endif
+                        @if ($puedePdfRend)
                             <a href="{{ route('imprimir_rendicion_estacionamiento', ['id' => $row->id, 'inline' => 1]) }}"
                                class="btn-accion-tabla tooltipsC" title="PDF rendici&oacute;n" target="_blank" rel="noopener">
                                 <i class="fa fa-file-pdf-o text-danger"></i>
+                            </a>
+                        @endif
+                        @if ($turnoId > 0 && $puedeConsultarTurno)
+                            <a href="{{ route('estacionamiento_cierre_turno_ver', ['id' => $turnoId, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                               class="btn-accion-tabla tooltipsC" title="Consultar cierre de turno" target="_blank" rel="noopener">
+                                <i class="fas fa-file-invoice text-primary"></i>
+                            </a>
+                        @endif
+                        @if ($turnoId > 0 && $puedePdfTurno)
+                            <a href="{{ route('estacionamiento_cierre_turno_comprobante_cierre', ['id' => $turnoId, 'inline' => 1]) }}"
+                               class="btn-accion-tabla tooltipsC" title="PDF cierre de turno" target="_blank" rel="noopener">
+                                <i class="fa fa-file-pdf-o"></i>
                             </a>
                         @endif
                     </td>

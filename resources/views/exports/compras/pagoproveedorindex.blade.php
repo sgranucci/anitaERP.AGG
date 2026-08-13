@@ -20,7 +20,12 @@
         @foreach($datas as $fila)
             <tr>
                 <td>{{ optional($fila->fecha)->format('d/m/Y') }}</td>
-                <td>{{ $fila->etiquetaComprobante() }}</td>
+                <td>
+                    {{ $fila->etiquetaComprobante() }}
+                    @if ($fila instanceof \App\Support\Compras\PagoproveedorListadoFila && $fila->esIeOpp())
+                        (IE)
+                    @endif
+                </td>
                 <td>{{ $fila->empresas->nombre ?? '' }}</td>
                 <td>{{ $fila->proveedores->nombre ?? '' }}</td>
                 <td>{{ number_format((float)$fila->monto, 2, ',', '.') }}</td>

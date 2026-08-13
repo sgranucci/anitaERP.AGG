@@ -103,5 +103,6 @@ return [
             env('BINGO_CIERRE_POZO_ACUMULADO_DESDE_ANITA', 'true'),
             FILTER_VALIDATE_BOOLEAN
         ),
+        'conciliacion_flash_tolerancia' => (float) env('BINGO_CIERRE_FLASH_TOLERANCIA', 0.02),
     ],
 ];

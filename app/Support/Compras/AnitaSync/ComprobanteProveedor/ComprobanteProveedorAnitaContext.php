@@ -3,6 +3,7 @@
 namespace App\Support\Compras\AnitaSync\ComprobanteProveedor;
 
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Support\Compras\ComprobanteProveedorMonedaMotor;
 use Carbon\Carbon;
 
 /**
@@ -75,9 +76,20 @@ final class ComprobanteProveedorAnitaContext
         return (string) ($this->comprobante->moneda_id ?? 1);
     }
 
+    /**
+     * Cotización de la factura. En moneda extranjera nunca vale 1: si el comprobante no la
+     * trae se resuelve la vigente, para no grabar dólares con coeficiente de peso en Anita.
+     */
     public function cotizacion(): string
     {
-        return number_format((float) ($this->comprobante->cotizacion ?? 1), 4, '.', '');
+        $cotizacion = ComprobanteProveedorMonedaMotor::cotizacionValida(
+            (int) ($this->comprobante->moneda_id ?: 1),
+            $this->comprobante->cotizacion,
+            $this->comprobante->fechacomprobante?->format('Y-m-d'),
+            'la factura del proveedor',
+        );
+
+        return number_format($cotizacion, 4, '.', '');
     }
 
     public function decimal(mixed $valor): string

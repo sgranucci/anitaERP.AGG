@@ -15,6 +15,7 @@ use App\Support\Caja\RendicionMaquina\RendicionMaquinaContextoBuilder;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaPreviasSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaResultadoCalculo;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaTurno;
+use App\Support\Caja\RendicionMaquina\RendicionMaquinaValorQrPrecargaSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaVariables;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaWigosLeeOnlineSupport;
 use Illuminate\Support\Facades\DB;
@@ -516,6 +517,15 @@ final class RendicionMaquinaService
             ? (string) ($resultado['crudo']['completo_del_dia']['origen_noche'] ?? 'ninguno')
             : 'n/a';
 
+        $resultado['precarga_valores'] = $this->precargaValorQrManiana(
+            $empresaId,
+            $fechaYmd,
+            $turnoNorm,
+            $inputs,
+            (bool) ($resultado['meta']['stub'] ?? false),
+            $esCompleto
+        );
+
         return $resultado;
     }
 
@@ -683,6 +693,31 @@ final class RendicionMaquinaService
             ->where('turno', $rendicion->turno)
             ->whereNull('rendicion_maquina_id')
             ->update(['rendicion_maquina_id' => (int) $rendicion->id]);
+    }
+
+    /**
+     * Turno mañana: precarga TotalCoin QR Máquinas = drop QR rodillo + impuesto QR (WIGOS).
+     * No pisa el consolidado del Completo ni una lectura stub (WIGOS falló).
+     *
+     * @param  array<string, float|int|string>  $inputs
+     * @return list<array{cuentacaja_id: int, monto: float}>|null
+     */
+    private function precargaValorQrManiana(
+        int $empresaId,
+        string $fechaYmd,
+        string $turno,
+        array $inputs,
+        bool $esStub,
+        bool $esCompleto
+    ): ?array {
+        if ($esStub || $esCompleto || ! RendicionMaquinaTurno::esManiana($turno)) {
+            return null;
+        }
+
+        $catalogo = $this->listarCuentasValor($empresaId, null, $fechaYmd);
+        $lineas = RendicionMaquinaValorQrPrecargaSupport::lineasPrecarga($inputs, $catalogo);
+
+        return $lineas === [] ? null : $lineas;
     }
 
     /**

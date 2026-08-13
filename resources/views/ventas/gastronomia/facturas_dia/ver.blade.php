@@ -529,7 +529,10 @@
                 </div>
 
                 <div class="tab-pane fade" id="tab-contable">
-                    @php $asientos = $venta->asientos ?? collect(); @endphp
+                    @php
+                        $asientoVenta = $venta->asientos;
+                        $asientos = $asientoVenta ? collect([$asientoVenta]) : collect();
+                    @endphp
                     @if ($asientos->isEmpty())
                         <p class="text-muted mb-0">Sin asientos asociados.</p>
                     @else

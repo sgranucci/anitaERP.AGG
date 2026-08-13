@@ -3,8 +3,8 @@
 namespace App\Support\Sueldos;
 
 /**
- * Convierte enteros a letras (español AR) para neto en recibo.
- * Suficiente para montos de liquidación; sin centavos (Anita redondea neto).
+ * Convierte números a letras (español AR).
+ * Usado en recibo de sueldos (neto entero) y en OP / comprobantes con centavos.
  */
 class NumeroALetrasEs
 {
@@ -35,6 +35,25 @@ class NumeroALetrasEs
         }
 
         return self::grupo($n);
+    }
+
+    /**
+     * Monto con centavos: "mil doscientos con 50/100".
+     */
+    public static function monto(int|float $n): string
+    {
+        $n = abs((float) $n);
+        $enteros = (int) floor($n + 1e-9);
+        $centavos = (int) round(($n - $enteros) * 100);
+        if ($centavos === 100) {
+            $enteros++;
+            $centavos = 0;
+        }
+
+        $texto = self::entero($enteros);
+        $frac = str_pad((string) $centavos, 2, '0', STR_PAD_LEFT);
+
+        return $texto.' con '.$frac.'/100';
     }
 
     private static function grupo(int $n): string

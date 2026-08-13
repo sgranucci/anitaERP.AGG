@@ -11,12 +11,17 @@
 
 @php
     use App\Support\Contable\CierreTurnoGastronomiaContableListadoFiltros;
+    use App\Support\Contable\CierreRendicionOrigenConsultaSupport;
     use App\Support\Listado\QueryRetornoListado;
     $retornoListadoQuery = QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $limpiarUrl = route(
         'cierres_turno_gastronomia_contable',
         CierreTurnoGastronomiaContableListadoFiltros::paraQueryStringEmpresa($filtros ?? [])
     );
+    $puedeConsultarTurno = CierreRendicionOrigenConsultaSupport::puedeConsultarCierreTurnoGastronomia();
+    $puedePdfTurno = CierreRendicionOrigenConsultaSupport::puedeVerPdfCierreTurnoGastronomia();
+    $puedeConsultarRend = CierreRendicionOrigenConsultaSupport::puedeConsultarRendicionGastronomia();
+    $puedePdfRend = CierreRendicionOrigenConsultaSupport::puedeVerPdfRendicionGastronomia();
 @endphp
 
 @section('contenido')
@@ -60,7 +65,8 @@
                 ])
                 <div class="alert alert-info mx-3 mt-3 mb-2 py-2 small">
                     Solo consulta y conciliaci&oacute;n. La contabilizaci&oacute;n de gastronom&iacute;a se realiza en el proceso
-                    <strong>post-cierre Waitry</strong> (Caja). Aqu&iacute; puede revisar cierres de turno y confrontarlos con
+                    <strong>post-cierre Waitry</strong> (Caja). Aqu&iacute; puede revisar cierres de turno, su PDF y la rendici&oacute;n
+                    de caja asociada, y confrontarlos con
                     <code>flash_ayb</code> y el mayor contable (asientos Waitry + Anita).
                 </div>
                 <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
@@ -76,7 +82,7 @@
                             <th>Jornada</th>
                             <th>Usuario</th>
                             <th class="text-right">Total final</th>
-                            <th class="width100" data-orderable="false">Acciones</th>
+                            <th class="width160" data-orderable="false">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -94,19 +100,47 @@
                                 <td class="text-right">${{ number_format((float) $f->total, 2, ',', '.') }}</td>
                                 <td class="text-nowrap">
                                     @if (($f->tipo ?? '') === 'cierre')
-                                        <a class="btn-accion-tabla tooltipsC text-primary"
-                                           href="{{ route('cierres_turno_gastronomia_contable_comprobante_cierre', ['id' => $f->id, 'inline' => 1]) }}"
-                                           target="_blank" rel="noopener"
-                                           title="Ver comprobante de cierre">
-                                            <i class="fas fa-file-invoice"></i>
-                                        </a>
+                                        @if ($puedeConsultarTurno)
+                                            <a class="btn-accion-tabla tooltipsC"
+                                               href="{{ route('gastronomia_cierre_turno_ver', ['id' => $f->id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                                               target="_blank" rel="noopener"
+                                               title="Consultar cierre de turno">
+                                                <i class="fa fa-edit"></i>
+                                            </a>
+                                        @endif
+                                        @if ($puedePdfTurno)
+                                            <a class="btn-accion-tabla tooltipsC text-primary"
+                                               href="{{ route('cierres_turno_gastronomia_contable_comprobante_cierre', ['id' => $f->id, 'inline' => 1]) }}"
+                                               target="_blank" rel="noopener"
+                                               title="PDF cierre de turno">
+                                                <i class="fas fa-file-invoice"></i>
+                                            </a>
+                                        @endif
+                                        @if (! empty($f->rendicion_caja_id) && $puedeConsultarRend)
+                                            <a class="btn-accion-tabla tooltipsC"
+                                               href="{{ route('editar_rendiciongastronomia', ['id' => $f->rendicion_caja_id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                                               target="_blank" rel="noopener"
+                                               title="Consultar rendici&oacute;n de caja{{ ! empty($f->rendicion_caja_codigo) ? ' '.$f->rendicion_caja_codigo : '' }}">
+                                                <i class="fa fa-inbox"></i>
+                                            </a>
+                                        @endif
+                                        @if (! empty($f->rendicion_caja_id) && $puedePdfRend)
+                                            <a class="btn-accion-tabla tooltipsC"
+                                               href="{{ route('imprimir_rendicion_gastronomia', ['id' => $f->rendicion_caja_id, 'inline' => 1]) }}"
+                                               target="_blank" rel="noopener"
+                                               title="PDF rendici&oacute;n de caja">
+                                                <i class="fa fa-file-pdf-o text-danger"></i>
+                                            </a>
+                                        @endif
                                     @elseif (($f->tipo ?? '') === 'parcial')
-                                        <a class="btn-accion-tabla tooltipsC text-primary"
-                                           href="{{ route('cierres_turno_gastronomia_contable_comprobante_parcial', ['id' => $f->id, 'inline' => 1]) }}"
-                                           target="_blank" rel="noopener"
-                                           title="Ver comprobante parcial">
-                                            <i class="fas fa-file-invoice"></i>
-                                        </a>
+                                        @if ($puedePdfTurno)
+                                            <a class="btn-accion-tabla tooltipsC text-primary"
+                                               href="{{ route('cierres_turno_gastronomia_contable_comprobante_parcial', ['id' => $f->id, 'inline' => 1]) }}"
+                                               target="_blank" rel="noopener"
+                                               title="PDF cierre parcial">
+                                                <i class="fas fa-file-invoice"></i>
+                                            </a>
+                                        @endif
                                     @endif
                                 </td>
                             </tr>

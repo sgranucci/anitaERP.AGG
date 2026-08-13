@@ -95,6 +95,7 @@
                 <p class="small text-muted px-3 pt-2 mb-0">
                     Un cierre diario por <strong>empresa + fecha jornada</strong>.
                     Genera FSL exenta (PV por empresa en config) y asientos MAQ como Anita legacy.
+                    Use <i class="fa fa-chevron-down"></i> para consultar las rendiciones del d&iacute;a (PDF).
                 </p>
                 <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
@@ -128,7 +129,7 @@
                             <td class="text-center align-middle">
                                 <button type="button" class="btn btn-link btn-sm p-0 js-toggle-grupo-detalle"
                                         data-target="#detalle-grupo-{{ $grupoId }}"
-                                        title="Ver rendiciones del d&iacute;a">
+                                        title="Ver rendiciones que alimentan este cierre">
                                     <i class="fa fa-chevron-down"></i>
                                 </button>
                             </td>

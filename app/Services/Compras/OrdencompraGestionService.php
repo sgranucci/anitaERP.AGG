@@ -492,7 +492,10 @@ class OrdencompraGestionService
         }
 
         try {
-            ValidacionPresupuestoPartidaCapexLineas::validar($payload);
+            ValidacionPresupuestoPartidaCapexLineas::validar(
+                $payload,
+                ValidacionPresupuestoPartidaCapexLineas::idsAsignadosDesdeLineas($existente->ordencompra_articulos ?? [])
+            );
         } catch (\InvalidArgumentException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }

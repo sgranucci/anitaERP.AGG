@@ -99,7 +99,7 @@
                 ])
                 <p class="small text-muted px-3 pt-2 mb-0">
                     Un asiento contable por <strong>fecha jornada + punto de venta</strong>.
-                    Use <i class="fa fa-chevron-down"></i> para ver cada rendici&oacute;n del d&iacute;a.
+                    Use <i class="fa fa-chevron-down"></i> para consultar cada rendici&oacute;n de caja y el PDF de ventas origen.
                 </p>
                 <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
@@ -135,7 +135,7 @@
                             <td class="text-center align-middle">
                                 <button type="button" class="btn btn-link btn-sm p-0 js-toggle-grupo-detalle"
                                         data-target="#detalle-grupo-{{ $grupoId }}"
-                                        title="Ver rendiciones del grupo">
+                                        title="Ver rendiciones de caja y PDF de ventas origen">
                                     <i class="fa fa-chevron-down"></i>
                                 </button>
                             </td>

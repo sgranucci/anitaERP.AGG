@@ -8,8 +8,9 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\RendicionGastronomiaCajaService;
 use App\Support\Caja\RendicionGastronomiaCajaListadoFiltros;
 use App\Support\Caja\RendicionGastronomiaCajaPermiso;
-use App\Support\Caja\RendicionGastronomiaPdfPermiso;
+use App\Support\Contable\CierreRendicionOrigenConsultaSupport;
 use App\Support\Listado\FiltrosListadoRequest;
+use App\Support\Listado\QueryRetornoListado;
 use App\Support\Ventas\GastronomiaJornadaComprobantePermiso;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -155,9 +156,10 @@ class RendicionGastronomiaController extends Controller
 
     public function imprimir(Request $request, int $id)
     {
-        if (! RendicionGastronomiaPdfPermiso::puedeVerPdfRendicion()) {
-            abort(403, 'No tiene permiso para ver el PDF de la rendición.');
-        }
+        CierreRendicionOrigenConsultaSupport::exigir(
+            CierreRendicionOrigenConsultaSupport::puedeVerPdfRendicionGastronomia(),
+            'No tiene permiso para ver el PDF de la rendición.',
+        );
 
         $payload = $this->service->datosParaImpresion($id);
         $nombre = 'rendicion_gastronomia_'.$id.'_'.($payload['datos']['codigo_anita'] ?: 'sin_codigo').'.pdf';
@@ -198,18 +200,27 @@ class RendicionGastronomiaController extends Controller
             : $pdf->download($nombreArchivo);
     }
 
-    public function editar(int $id)
+    public function editar(Request $request, int $id)
     {
-        can('editar-rendicion-gastronomia-caja');
+        $soloConsulta = QueryRetornoListado::esModalConsulta($request);
+        if ($soloConsulta) {
+            CierreRendicionOrigenConsultaSupport::exigir(
+                CierreRendicionOrigenConsultaSupport::puedeConsultarRendicionGastronomia(),
+            );
+        } else {
+            can('editar-rendicion-gastronomia-caja');
+        }
 
         $data = $this->service->findConDetalle($id);
-        if (! RendicionGastronomiaCajaPermiso::puedeActualizarPorFecha($data)) {
-            return redirect('caja/rendiciongastronomia')
-                ->with('errores', [RendicionGastronomiaCajaPermiso::mensajeRestriccionFecha()]);
-        }
-        if (! RendicionGastronomiaCajaPermiso::puedeModificarRendicionTurno($data)) {
-            return redirect('caja/rendiciongastronomia')
-                ->with('errores', [RendicionGastronomiaCajaPermiso::mensajeJornadaPresentadaBloqueoTurno()]);
+        if (! $soloConsulta) {
+            if (! RendicionGastronomiaCajaPermiso::puedeActualizarPorFecha($data)) {
+                return redirect('caja/rendiciongastronomia')
+                    ->with('errores', [RendicionGastronomiaCajaPermiso::mensajeRestriccionFecha()]);
+            }
+            if (! RendicionGastronomiaCajaPermiso::puedeModificarRendicionTurno($data)) {
+                return redirect('caja/rendiciongastronomia')
+                    ->with('errores', [RendicionGastronomiaCajaPermiso::mensajeJornadaPresentadaBloqueoTurno()]);
+            }
         }
 
         $empresaQuery = $this->empresaRepository->allFiltrado();
@@ -235,6 +246,11 @@ class RendicionGastronomiaController extends Controller
             }
         }
 
+        $puedeActualizarRendicion = ! $soloConsulta
+            && can('actualizar-rendicion-gastronomia-caja', false)
+            && RendicionGastronomiaCajaPermiso::puedeActualizarPorFecha($data)
+            && RendicionGastronomiaCajaPermiso::puedeModificarRendicionTurno($data);
+
         return view('caja.rendiciongastronomia.editar', compact(
             'data',
             'empresaQuery',
@@ -242,6 +258,8 @@ class RendicionGastronomiaController extends Controller
             'totalesTurno',
             'totalesDia',
             'auditoriaJornada',
+            'soloConsulta',
+            'puedeActualizarRendicion',
         ));
     }
 

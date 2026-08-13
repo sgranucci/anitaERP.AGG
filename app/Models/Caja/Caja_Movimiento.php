@@ -62,7 +62,7 @@ class Caja_Movimiento extends Model implements Auditable
 
     public function asientos()
 	{
-    	return $this->belongsTo(Asiento::class, 'id', 'caja_movimiento_id')->with('asiento_movimientos');
+    	return $this->hasOne(Asiento::class, 'caja_movimiento_id')->with('asiento_movimientos');
 	}
 
     public function cobranzas()

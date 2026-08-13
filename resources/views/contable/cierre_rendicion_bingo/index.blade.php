@@ -31,10 +31,12 @@
 @php
     use App\Support\Contable\CierreRendicionBingoGrupoSupport;
     use App\Support\Contable\CierreRendicionBingoListadoFiltros;
+    use App\Support\Listado\QueryRetornoListado;
 @endphp
 
 @section('contenido')
 @php
+    $retornoListadoQuery = QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $limpiarUrl = route(
         'cierre_rendicion_bingo_contable',
         CierreRendicionBingoListadoFiltros::paraQueryStringEmpresa($filtros ?? [])
@@ -53,6 +55,10 @@
                             <i class="fa fa-hourglass-half"></i> Pendientes de cerrar
                             <span class="badge badge-dark ml-1 d-none" id="badge-pendientes-cierre">0</span>
                         </button>
+                        <a href="{{ route('cierre_rendicion_bingo_conciliacion_flash', $retornoListadoQuery) }}"
+                           class="btn btn-sm btn-outline-info mr-2 mb-1" title="Informe p-vtabingo y cruce vs flash">
+                            <i class="fa fa-balance-scale"></i> Conciliación flash
+                        </a>
                     @endif
                     @if (can('ejecutar-cierre-rendicion-bingo-contable', false))
                         <button type="button" class="btn btn-sm btn-success mr-2 mb-1" id="btn-abrir-cierre-rango"
@@ -84,6 +90,7 @@
                 <p class="small text-muted px-3 pt-2 mb-0">
                     Un cierre diario por <strong>empresa + fecha jornada</strong>.
                     Genera FBI exenta (PV por empresa en config) y asientos BIN como Anita legacy.
+                    Use <i class="fa fa-chevron-down"></i> para consultar las rendiciones y cierres de turno (PDF).
                 </p>
                 <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">
@@ -117,7 +124,7 @@
                             <td class="text-center align-middle">
                                 <button type="button" class="btn btn-link btn-sm p-0 js-toggle-grupo-detalle"
                                         data-target="#detalle-grupo-{{ $grupoId }}"
-                                        title="Ver rendiciones del d&iacute;a">
+                                        title="Ver rendiciones y cierres de turno que alimentan este cierre">
                                     <i class="fa fa-chevron-down"></i>
                                 </button>
                             </td>
