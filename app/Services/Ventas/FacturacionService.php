@@ -1172,7 +1172,7 @@ class FacturacionService
 					DB::commit();
 
 					return $this->respuestaFacturaPedidoOk($venta['codigo'] ?? '');
-				} catch (\Exception $e) {
+				} catch (\Throwable $e) {
 					DB::rollback();
 
 					// Borra factura de anita
