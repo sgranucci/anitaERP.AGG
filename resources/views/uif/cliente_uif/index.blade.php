@@ -38,6 +38,7 @@ use App\Support\Uif\ClienteUifListadoFiltros; ?>
             <div class="card-header">
                 <h3 class="card-title">Clientes UIF</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.uif.boton-manual')
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-cliente-uif',
                         'filtroValor' => $filtros['valor'] ?? '',

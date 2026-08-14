@@ -83,6 +83,8 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
             'ordencompra_comprobantes.ordencompra_comprobante_cuotas.formapagos',
             'ordencompra_estados.usuarios',
             'ordencompra_archivos',
+            'contrato_cuentacontables',
+            'contrato_responsables',
         ])->find($id);
         if (! $oc) {
             throw new ModelNotFoundException('Orden de compra no encontrada');

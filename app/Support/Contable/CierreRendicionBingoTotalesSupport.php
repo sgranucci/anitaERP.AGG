@@ -2,10 +2,8 @@
 
 namespace App\Support\Contable;
 
-use App\ApiAnita;
 use App\Models\Caja\Bingo\BingoConceptoRendicion;
 use App\Models\Caja\Bingo\RendicionBingoCaja;
-use App\Support\Contable\Efe\EfeAnitaBridgeReader;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 
@@ -25,7 +23,6 @@ final class CierreRendicionBingoTotalesSupport
         }
 
         $concbIndex = CierreRendicionBingoConcbingoSupport::indicePorConcepto($empresaId);
-        $premiosAnita = self::premiosAnitaPorOperacion($rendiciones, $fechaDia);
 
         $totRecaudacion = 0.0;
         $totCartones = 0;
@@ -54,7 +51,7 @@ final class CierreRendicionBingoTotalesSupport
             $totRedondeo = round($totRedondeo + (float) ($rendicion->redondeo ?? 0), 2);
             $totRefuerPrest = round($totRefuerPrest + (float) ($rendicion->refuerzo_prestamo ?? 0), 2);
 
-            $premios = self::premiosDeRendicion($rendicion, $concbIndex, $premiosAnita);
+            $premios = self::premiosDesdeErp($rendicion, $concbIndex);
             $totPantallaR = 0.0;
             $totPozoR = 0.0;
             $totBingoR = 0.0;
@@ -99,7 +96,7 @@ final class CierreRendicionBingoTotalesSupport
         }
 
         $canones = self::calcularCanones($concbIndex, $totRecaudacion, $acumConcepto);
-        $ventaAcumulada = self::ventaAcumuladaMes($empresaId, $fechaDia, $totRecaudacion, $rendiciones);
+        $ventaAcumulada = self::ventaAcumuladaMes($empresaId, $fechaDia);
         $ventaAcumuladaAnterior = round($ventaAcumulada - $totRecaudacion, 2);
         $pagoHospital = self::calcularPagoHospital($empresaId, $totRecaudacion, $ventaAcumulada, $ventaAcumuladaAnterior);
 
@@ -140,7 +137,8 @@ final class CierreRendicionBingoTotalesSupport
     }
 
     /**
-     * Evolución SI pozo AC (p-vtabingo.c un_dia): (pozo_ac * 0.99) + (recaudación * 0.05) − real PORC_POZO.
+     * Evolución SI pozo AC (p-vtabingo.c un_dia, solo si fl_imp_dia):
+     * (pozo_ac * 0.99) + (recaudación * 0.05) − Σ real de conceptos PORC_POZO.
      *
      * @param  array<int, array<string, mixed>>  $concbIndex
      * @param  array<int, array{pagado: float, real: float}>  $acumConcepto
@@ -252,79 +250,21 @@ final class CierreRendicionBingoTotalesSupport
         return round($recaudacion * 0.01, 2);
     }
 
-    /**
-     * @param  Collection<int, RendicionBingoCaja>  $rendiciones
-     */
-    private static function ventaAcumuladaMes(
-        int $empresaId,
-        string $fechaDia,
-        float $recaudacionDia,
-        Collection $rendiciones,
-    ): float {
+    private static function ventaAcumuladaMes(int $empresaId, string $fechaDia): float
+    {
         $fecha = Carbon::parse($fechaDia);
         $inicioMes = $fecha->copy()->startOfMonth()->toDateString();
 
-        $acumErp = (float) RendicionBingoCaja::query()
+        return round((float) RendicionBingoCaja::query()
             ->where('empresa_id', $empresaId)
             ->whereDate('fecha_jornada', '>=', $inicioMes)
             ->whereDate('fecha_jornada', '<=', $fechaDia)
-            ->sum('total_cartones');
-
-        $acum = round($acumErp, 2);
-
-        if (filter_var(config('bingo.cierre_rendicion_contable.pozo_acumulado_desde_anita', true), FILTER_VALIDATE_BOOLEAN)) {
-            $acumAnita = self::recaudacionAnitaMesHasta($empresaId, $inicioMes, $fecha->copy()->subDay()->toDateString());
-            if ($acumAnita > 0 && $acumAnita > $acum - $recaudacionDia) {
-                $acum = round($acumAnita + $recaudacionDia, 2);
-            }
-        }
-
-        return $acum;
-    }
-
-    private static function recaudacionAnitaMesHasta(int $empresaId, string $desde, string $hasta): float
-    {
-        if ($desde > $hasta) {
-            return 0.0;
-        }
-
-        $empresaAnita = $empresaId;
-        $fechaDesde = (int) Carbon::parse($desde)->format('Ymd');
-        $fechaHasta = (int) Carbon::parse($hasta)->format('Ymd');
-
-        try {
-            $reader = new EfeAnitaBridgeReader;
-            $filas = $reader->listarRendbingo($empresaAnita, $fechaDesde, $fechaHasta);
-            $total = 0.0;
-            foreach ($filas as $row) {
-                $total = round($total + (float) ($row->rendb_total_carton ?? 0), 2);
-            }
-
-            return $total;
-        } catch (\Throwable) {
-            return 0.0;
-        }
+            ->sum('total_cartones'), 2);
     }
 
     /**
-     * @param  array<int, array<string, mixed>>  $concbIndex
-     * @param  array<string, list<array{concepto:int,pagado:float,real:float,tipo_conc:string}>>  $premiosAnita
-     * @return list<array{concepto:int,pagado:float,real:float,tipo_conc:string}>
-     */
-    private static function premiosDeRendicion(
-        RendicionBingoCaja $rendicion,
-        array $concbIndex,
-        array $premiosAnita,
-    ): array {
-        $clave = self::claveOperacion($rendicion);
-        if ($clave !== '' && isset($premiosAnita[$clave]) && $premiosAnita[$clave] !== []) {
-            return $premiosAnita[$clave];
-        }
-
-        return self::premiosDesdeErp($rendicion, $concbIndex);
-    }
-
-    /**
+     * Premios / conceptos de la rendición ERP (conceptos_json).
+     *
      * @param  array<int, array<string, mixed>>  $concbIndex
      * @return list<array{concepto:int,pagado:float,real:float,tipo_conc:string}>
      */
@@ -370,90 +310,6 @@ final class CierreRendicionBingoTotalesSupport
         }
 
         return array_values($acum);
-    }
-
-    /**
-     * @param  Collection<int, RendicionBingoCaja>  $rendiciones
-     * @return array<string, list<array{concepto:int,pagado:float,real:float,tipo_conc:string}>>
-     */
-    private static function premiosAnitaPorOperacion(Collection $rendiciones, string $fechaDia): array
-    {
-        $fecha = (int) Carbon::parse($fechaDia)->format('Ymd');
-        $concbIndex = [];
-
-        try {
-            $api = new ApiAnita;
-            $raw = $api->apiCall([
-                'acc' => 'list',
-                'sistema' => 'caja',
-                'tabla' => 'rendpremio',
-                'campos' => 'rendp_nro_oper,rendp_tipo_oper,rendp_concepto,rendp_pagado,rendp_real,rendp_fecha',
-                'whereArmado' => ' WHERE rendp_fecha = '.$fecha,
-            ]);
-            $filas = ApiAnita::decodificarListaFilas($raw);
-        } catch (\Throwable) {
-            return [];
-        }
-
-        if ($filas === []) {
-            return [];
-        }
-
-        $empresaId = (int) ($rendiciones->first()?->empresa_id ?? 0);
-        $concbIndex = CierreRendicionBingoConcbingoSupport::indicePorConcepto($empresaId);
-
-        /** @var array<int, string> $operPorNro */
-        $operPorNro = [];
-        foreach ($rendiciones as $r) {
-            $nro = (int) ($r->nro_oper_anita ?? 0);
-            if ($nro > 0) {
-                $operPorNro[$nro] = self::claveOperacion($r);
-            }
-        }
-
-        /** @var array<string, list<array{concepto:int,pagado:float,real:float,tipo_conc:string}>> $out */
-        $out = [];
-
-        foreach ($filas as $row) {
-            $nro = (int) ($row->rendp_nro_oper ?? 0);
-            $clave = $operPorNro[$nro] ?? '';
-            if ($clave === '') {
-                continue;
-            }
-
-            $concepto = (int) ($row->rendp_concepto ?? 0);
-            if ($concepto <= 0) {
-                continue;
-            }
-
-            if (! isset($out[$clave])) {
-                $out[$clave] = [];
-            }
-
-            $tipo = (string) ($concbIndex[$concepto]['tipo_conc'] ?? '');
-            $pagado = round((float) ($row->rendp_pagado ?? 0), 2);
-            $real = round((float) ($row->rendp_real ?? 0), 2);
-
-            $out[$clave][] = [
-                'concepto' => $concepto,
-                'pagado' => $pagado,
-                'real' => $real,
-                'tipo_conc' => $tipo,
-            ];
-        }
-
-        return $out;
-    }
-
-    private static function claveOperacion(RendicionBingoCaja $rendicion): string
-    {
-        $nro = (int) ($rendicion->nro_oper_anita ?? 0);
-        $tipo = substr((string) config('rendicion_bingo_anita.tipo_oper', 'F'), 0, 1);
-        if ($nro <= 0) {
-            return '';
-        }
-
-        return $nro.'|'.$tipo;
     }
 
     /**

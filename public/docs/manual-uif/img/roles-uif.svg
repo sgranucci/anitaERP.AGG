@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="260" viewBox="0 0 960 260">
+  <style>
+    .card{fill:#1e293b;stroke:#334155;stroke-width:1.5;rx:14}
+    .h{fill:#e2e8f0;font-family:Inter,Segoe UI,sans-serif;font-size:15px;font-weight:700}
+    .b{fill:#94a3b8;font-family:Inter,Segoe UI,sans-serif;font-size:12px}
+    .tag{fill:#3b82f6}
+  </style>
+  <rect width="960" height="260" fill="#0f172a"/>
+  <text x="24" y="32" fill="#3b82f6" font-family="Inter,sans-serif" font-size="16" font-weight="700">Roles UIF</text>
+  <rect class="card" x="24" y="52" width="290" height="180"/>
+  <rect class="tag" x="40" y="68" width="8" height="28" rx="2"/>
+  <text class="h" x="58" y="88">Cajero UIF</text>
+  <text class="b" x="40" y="120">Alta de clientes y premios</text>
+  <text class="b" x="40" y="142">en sala (PC BSA/KSA/RSA)</text>
+  <text class="b" x="40" y="164">No opera el informe mensual</text>
+  <text class="b" x="40" y="186">salvo que tenga Op/Enc-Uif</text>
+
+  <rect class="card" x="334" y="52" width="290" height="180"/>
+  <rect class="tag" x="350" y="68" width="8" height="28" rx="2"/>
+  <text class="h" x="368" y="88">Op-Uif</text>
+  <text class="b" x="350" y="120">Consulta informe por mes</text>
+  <text class="b" x="350" y="142">Excel · PDF · XML</text>
+  <text class="b" x="350" y="164">Apoya carga operativa</text>
+  <text class="b" x="350" y="186">Menú Informe datos clientes</text>
+
+  <rect class="card" x="644" y="52" width="290" height="180"/>
+  <rect class="tag" x="660" y="68" width="8" height="28" rx="2"/>
+  <text class="h" x="678" y="88">Enc-Uif</text>
+  <text class="b" x="660" y="120">Supervisión completa</text>
+  <text class="b" x="660" y="142">Informe + congelados</text>
+  <text class="b" x="660" y="164">Conciliación Wigos</text>
+  <text class="b" x="660" y="186">Tablas maestras UIF</text>
+</svg>

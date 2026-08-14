@@ -189,10 +189,26 @@ class EfeMensualExport
             return;
         }
 
+        $filasOrdenadas = $posicionFinanciera['filas_ordenadas'] ?? [];
         $totales = $posicionFinanciera['totales_por_etiqueta'] ?? [];
-        if ($totales === []) {
+        if ($filasOrdenadas === [] && $totales === []) {
             return;
         }
+
+        /** @var array<string, list<float>> $colas */
+        $colas = [];
+        foreach ($filasOrdenadas as $fila) {
+            $clave = $this->normalizarEtiquetaPosFin((string) ($fila['etiqueta'] ?? ''));
+            if ($clave === '') {
+                continue;
+            }
+            $colas[$clave][] = (float) ($fila['valor'] ?? 0);
+        }
+
+        $etiquetasEgaShow = [
+            'EGA Z', 'Total EGA', 'SHOW Z', 'Total SHOW',
+            'EFECTIVO', 'TK.CANJE SHOW', 'MERCADO PAGO', 'PASSLINE',
+        ];
 
         $ultima = min($sheet->getHighestRow(), 250);
         for ($fila = 1; $fila <= $ultima; $fila++) {
@@ -201,11 +217,34 @@ class EfeMensualExport
                 continue;
             }
 
-            $valor = $this->resolverTotalPosFin($totales, $etiqueta);
+            $clave = $this->normalizarEtiquetaPosFin($etiqueta);
+            $valor = null;
+
+            if (isset($colas[$clave]) && $colas[$clave] !== []) {
+                $valor = array_shift($colas[$clave]);
+            } elseif ($totales !== []) {
+                $valor = $this->resolverTotalPosFin($totales, $etiqueta);
+            }
+
+            // EGA / SHOW: si no hay valor ERP, forzar 0 (ya no se usan).
+            if ($valor === null) {
+                foreach ($etiquetasEgaShow as $omitida) {
+                    if ($this->normalizarEtiquetaPosFin($omitida) === $clave) {
+                        $valor = 0.0;
+                        break;
+                    }
+                }
+            }
+
             if ($valor !== null) {
                 $sheet->setCellValue('B'.$fila, $valor);
             }
         }
+    }
+
+    private function normalizarEtiquetaPosFin(string $etiqueta): string
+    {
+        return preg_replace('/\s+/', ' ', mb_strtoupper(trim($etiqueta))) ?? '';
     }
 
     /**
@@ -217,10 +256,9 @@ class EfeMensualExport
             return (float) $totales[$etiqueta];
         }
 
-        $normalizada = preg_replace('/\s+/', ' ', mb_strtoupper(trim($etiqueta))) ?? '';
+        $normalizada = $this->normalizarEtiquetaPosFin($etiqueta);
         foreach ($totales as $clave => $valor) {
-            $claveNorm = preg_replace('/\s+/', ' ', mb_strtoupper(trim($clave))) ?? '';
-            if ($claveNorm === $normalizada) {
+            if ($this->normalizarEtiquetaPosFin((string) $clave) === $normalizada) {
                 return (float) $valor;
             }
         }

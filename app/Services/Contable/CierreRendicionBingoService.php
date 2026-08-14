@@ -16,6 +16,7 @@ use App\Support\Contable\CierreRendicionBingoFbiAnitaSupport;
 use App\Support\Contable\CierreRendicionBingoGrupoSupport;
 use App\Support\Contable\CierreRendicionBingoListadoFiltros;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Caja\Bingo\BingoPozoAcumuladoSupport;
 use App\Support\Caja\Bingo\RendicionBingoCajaListadoFiltros;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -239,6 +240,13 @@ class CierreRendicionBingoService
                 ]);
             }
 
+            BingoPozoAcumuladoSupport::registrarCierreDia(
+                $empresaId,
+                $fechaDia,
+                null,
+                is_int($usuarioId) ? $usuarioId : null,
+            );
+
             return [
                 'asiento_id' => $asientoIds[0],
                 'asiento_ids' => $asientoIds,
@@ -300,7 +308,7 @@ class CierreRendicionBingoService
             Auth::id(),
         );
 
-        DB::transaction(function () use ($rendiciones, $asientoIds) {
+        DB::transaction(function () use ($rendiciones, $asientoIds, $empresaId, $fechaDia) {
             $rendicionIds = $rendiciones->pluck('id')->map(fn ($id) => (int) $id)->all();
             RendicionBingoCaja::query()
                 ->whereIn('id', $rendicionIds)
@@ -325,6 +333,8 @@ class CierreRendicionBingoService
                     'factura_fecha' => null,
                     'estado_facturacion' => null,
                 ]);
+
+            BingoPozoAcumuladoSupport::borrarDesdeFecha($empresaId, $fechaDia);
         });
     }
 

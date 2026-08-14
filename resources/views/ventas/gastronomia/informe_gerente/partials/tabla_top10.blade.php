@@ -18,7 +18,7 @@
                 <td class="text-right">${{ number_format($fila['importe'], 2, ',', '.') }}</td>
             </tr>
         @empty
-            <tr><td colspan="5" class="text-center text-muted">Sin ventas en la jornada.</td></tr>
+            <tr><td colspan="5" class="text-center text-muted">Sin ventas en el período.</td></tr>
         @endforelse
     </tbody>
 </table>

@@ -98,11 +98,33 @@ return [
         })(),
         /** Estado rendbingo tras cierre (legacy RENDB_FACTURADO = 'F'). */
         'estado_facturado_anita' => env('BINGO_CIERRE_ESTADO_FACTURADO_ANITA', 'F'),
-        /** Pozo acumulado mensual: leer Anita hasta mes entero en ERP. */
+        /** Pozo acumulado: semilla opcional vía bridge Anita (tabla pozoacum). Preferir semilla ERP. */
         'pozo_acumulado_desde_anita' => filter_var(
-            env('BINGO_CIERRE_POZO_ACUMULADO_DESDE_ANITA', 'true'),
+            env('BINGO_CIERRE_POZO_ACUMULADO_DESDE_ANITA', 'false'),
             FILTER_VALIDATE_BOOLEAN
         ),
+        /**
+         * Fallback de semilla SI pozo AC por empresa_id (JSON) si aún no hay filas en
+         * bingo_pozo_acumulado. Preferir la tabla (migración siembra Biyemas 31/07/2026).
+         *
+         * @var array<int, float>
+         */
+        'pozo_acumulado_semilla_por_empresa' => (static function (): array {
+            $raw = env('BINGO_CIERRE_POZO_ACUMULADO_SEMILLA_POR_EMPRESA');
+            if ($raw === null || $raw === '') {
+                return [];
+            }
+            $decoded = is_array($raw) ? $raw : json_decode((string) $raw, true);
+            if (! is_array($decoded)) {
+                return [];
+            }
+            $map = [];
+            foreach ($decoded as $empresaId => $importe) {
+                $map[(int) $empresaId] = round((float) $importe, 2);
+            }
+
+            return $map;
+        })(),
         'conciliacion_flash_tolerancia' => (float) env('BINGO_CIERRE_FLASH_TOLERANCIA', 0.02),
     ],
 ];

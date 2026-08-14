@@ -26,9 +26,25 @@
     };
     $comprobantesPayload = [];
     if (isset($data) && $data && $data->ordencompra_comprobantes && $data->ordencompra_comprobantes->count()) {
-        foreach ($data->ordencompra_comprobantes as $c) {
+        $compsOrdenados = $data->ordencompra_comprobantes
+            ->sortBy(function ($c) use ($ocComprobanteFechaJson) {
+                return [
+                    $ocComprobanteFechaJson($c->fechavencimiento) ?: '9999-99-99',
+                    (int) $c->id,
+                ];
+            })
+            ->values();
+        foreach ($compsOrdenados as $c) {
             $cuotas = [];
-            foreach ($c->ordencompra_comprobante_cuotas ?? [] as $q) {
+            $cuotasOrdenadas = ($c->ordencompra_comprobante_cuotas ?? collect())
+                ->sortBy(function ($q) use ($ocComprobanteFechaJson) {
+                    return [
+                        $ocComprobanteFechaJson($q->fechavencimiento) ?: '9999-99-99',
+                        (int) $q->id,
+                    ];
+                })
+                ->values();
+            foreach ($cuotasOrdenadas as $q) {
                 $cuotas[] = [
                     'fechavencimiento' => $ocComprobanteFechaJson($q->fechavencimiento),
                     'monto' => (float) $q->monto,
@@ -47,6 +63,7 @@
                 'detalle' => $c->detalle,
                 'cantidadcuota' => $c->cantidadcuota,
                 'condicionpago_id' => $c->condicionpago_id,
+                'estado' => \App\Support\Compras\OrdencompraComprobanteEstados::normalizar($c->estado ?? null),
                 'cuotas' => $cuotas,
             ];
         }
@@ -1014,6 +1031,7 @@
                 <tr>
                     <th>#</th>
                     <th>Tipo</th>
+                    <th>Estado</th>
                     <th>Vencimiento</th>
                     <th class="text-right">Monto</th>
                     <th>Moneda</th>

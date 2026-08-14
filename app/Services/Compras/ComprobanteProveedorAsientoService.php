@@ -20,6 +20,7 @@ use App\Support\Compras\ComprobanteProveedorMonedaMotor;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
+use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Compras\ProveedorCuentaContableMonedaSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
@@ -160,7 +161,7 @@ class ComprobanteProveedorAsientoService
             'comprobante_proveedor_conceptos.concepto_ivacompras',
             'proveedores',
             'tipotransaccion_compras',
-            'ordencompras.ordencompra_articulos',
+            'ordencompras.ordencompra_articulos.articulos.articulo_cuentacontables',
             'comprobante_proveedor_recepciones.recepcion_proveedores',
         ]);
 
@@ -176,6 +177,15 @@ class ComprobanteProveedorAsientoService
         // Provisión FAR solo si la empresa genera asiento en la COM (GR valuado).
         $usaProvisionCom = $modoAsignaRecepcion
             && ComprobanteProveedorComContabilidadSupport::generaAsientoCom((int) ($comprobante->empresa_id ?? 0));
+        $fechaFacturaYmd = $this->fechaDocumento($comprobante->fechacomprobante ?? null);
+        $contratoImputacionArticulos = OrdencompraContratoRutaFacturaSupport::imputacionArticulos(
+            $comprobante->ordencompras,
+            $fechaFacturaYmd
+        ) && ! $modoAsignaRecepcion;
+        $contratoImputacionManual = OrdencompraContratoRutaFacturaSupport::imputacionManual(
+            $comprobante->ordencompras,
+            $fechaFacturaYmd
+        ) && ! $modoAsignaRecepcion;
         $facturaAnticipada = ComprobanteProveedorFacturaAnticipadaSupport::aplica($comprobante);
         $tieneCapexAnticipo = $facturaAnticipada
             ? ComprobanteProveedorFacturaAnticipadaSupport::ocTieneCapex($comprobante->ordencompras)
@@ -222,6 +232,36 @@ class ComprobanteProveedorAsientoService
                 );
             }
 
+            // Contrato sin recepción: neto → cuentas de artículos de la OC (prorrateo al final).
+            if ($contratoImputacionArticulos && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+                $totalNetoConceptos += $monto;
+
+                continue;
+            }
+
+            // Contrato sin recepción: neto → cuenta del contrato (o override del renglón).
+            if ($contratoImputacionManual && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+                $cuentaManualId = OrdencompraContratoRutaFacturaSupport::cuentaDebeNetoManual(
+                    $comprobante->ordencompras,
+                    (int) ($linea->cuentacontabledebe_id ?? 0),
+                    $fechaFacturaYmd
+                );
+                if ($cuentaManualId <= 0) {
+                    throw new RuntimeException(
+                        'El contrato imputa el neto con una cuenta del contrato. '
+                        .'Indique la cuenta en el contrato o en el concepto «'.($concepto?->nombre ?? $linea->concepto_ivacompra_id).'».'
+                    );
+                }
+                $lineasDebe[] = [
+                    'cuentacontable_id' => $cuentaManualId,
+                    'importe' => $monto,
+                    'centrocosto_id' => $centrocostoId,
+                    'observacion' => $descLineaErp,
+                ];
+
+                continue;
+            }
+
             // OC anticipada sin COM: neto → anticipo (Capex / sin Capex); impuestos siguen por concepto.
             if ($facturaAnticipada && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
                 $lineasDebe[] = [
@@ -249,6 +289,22 @@ class ComprobanteProveedorAsientoService
                 'centrocosto_id' => $centrocostoId,
                 'observacion' => $descLineaErp,
             ];
+        }
+
+        if ($contratoImputacionArticulos && $totalNetoConceptos > 0) {
+            $oc = $comprobante->ordencompras;
+            if (! $oc) {
+                throw new RuntimeException(
+                    'El contrato imputa el neto con las cuentas de los artículos de la OC, pero el comprobante no tiene orden de compra.'
+                );
+            }
+            $lineasDebe = array_merge($lineasDebe, OrdencompraContratoRutaFacturaSupport::lineasDebeNetoDesdeArticulosOc(
+                $oc,
+                $totalNetoConceptos,
+                (int) ($comprobante->empresa_id ?? 0),
+                $centrocostoId,
+                $descLineaErp
+            ));
         }
 
         if ($usaProvisionCom) {

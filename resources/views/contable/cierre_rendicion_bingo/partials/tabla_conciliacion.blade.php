@@ -132,7 +132,7 @@
             </tr>
         @endforelse
         @if (! empty($dias) && $totales !== [])
-            <tr class="font-weight-bold" style="background:#f5f5f5;">
+            <tr class="font-weight-bold" style="background:#D6EAF8;">
                 @foreach ($columnas as $col)
                     @php
                         $key = (string) ($col['key'] ?? '');

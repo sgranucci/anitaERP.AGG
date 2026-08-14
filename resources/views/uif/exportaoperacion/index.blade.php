@@ -30,15 +30,20 @@ Exportación de Clientes UIF
         @endif
         <div class="card card-info">
             <div class="card-header">
-                <h3 class="card-title">Exportación de Clientes UIF</h3>
+                <h3 class="card-title">Informe de datos de clientes UIF</h3>
                 <div class="card-tools">
-                    <a href="{{ route('crear_exporta_operacion') }}" class="btn btn-outline-secondary btn-sm">
-                        <i class="fa fa-fw fa-arrow-left"></i> Nueva consulta
+                    @include('includes.uif.boton-manual')
+                    <a href="{{ route('crear_exporta_operacion') }}" class="btn btn-outline-info btn-sm">
+                        <i class="fa fa-fw fa-reply-all"></i> Nueva consulta
                     </a>
                     @if (can('exportar-operacion-uif', false))
                         <a href="{{ route('exporta_cliente_uif_excel', ['periodo' => $periodo, 'limiteinformeuif' => $limiteinformeuif, 'empresa_id' => $empresaId]) }}"
                            class="btn btn-success btn-sm">
-                            <i class="fa fa-fw fa-file-excel-o"></i> Excel reportables
+                            <i class="fa fa-fw fa-file-excel-o"></i> Excel
+                        </a>
+                        <a href="{{ route('exporta_cliente_uif_pdf', ['periodo' => $periodo, 'limiteinformeuif' => $limiteinformeuif, 'empresa_id' => $empresaId]) }}"
+                           class="btn btn-danger btn-sm">
+                            <i class="fa fa-fw fa-file-pdf-o"></i> PDF
                         </a>
                         <a href="{{ route('exporta_cliente_uif', ['periodo' => $periodo, 'limiteinformeuif' => $limiteinformeuif, 'empresa_id' => $empresaId]) }}"
                            class="btn btn-primary btn-sm">
@@ -98,8 +103,8 @@ Exportación de Clientes UIF
                 @endif
             </div>
             <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover" id="tabla-data">
-                    <thead>
+                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
+                    <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th class="width10">ID</th>
                             <th>Nombre</th>

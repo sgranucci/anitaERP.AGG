@@ -24,7 +24,10 @@ final class OrdencompraCondicionesContratacionGenerator
             $mon = optional($c->monedas)->abreviatura ?? '';
             $monto = number_format((float) $c->monto, 2, ',', '.');
             $vto = $c->fechavencimiento ? date('d/m/Y', strtotime((string) $c->fechavencimiento)) : '—';
-            $lineas = ["Comprobante a venir tipo «{$tipo}» por {$mon} {$monto}, vencimiento referencia {$vto}."];
+            $estadoEtiqueta = \App\Support\Compras\OrdencompraComprobanteEstados::etiqueta(
+                (string) ($c->estado ?? \App\Support\Compras\OrdencompraComprobanteEstados::PENDIENTE)
+            );
+            $lineas = ["Comprobante a venir tipo «{$tipo}» por {$mon} {$monto}, vencimiento referencia {$vto} ({$estadoEtiqueta})."];
 
             $cuotas = $c->ordencompra_comprobante_cuotas ?? [];
             if (count($cuotas) === 0) {

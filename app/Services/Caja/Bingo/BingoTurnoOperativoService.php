@@ -289,6 +289,33 @@ final class BingoTurnoOperativoService
     }
 
     /**
+     * Persiste cartones/conceptos de la planilla sin cerrar el turno (borrador).
+     *
+     * @param  array<string, mixed>  $datos
+     */
+    public function guardarBorradorRendicion(TurnoOperativoBingo $turno, array $datos): TurnoOperativoBingo
+    {
+        if ($turno->estado !== TurnoOperativoBingo::ESTADO_HABILITADO) {
+            throw new InvalidArgumentException('Solo puede guardar borrador con el turno habilitado.');
+        }
+
+        if ($turno->cierre_en !== null) {
+            throw new InvalidArgumentException('El turno ya tiene cierre definitivo.');
+        }
+
+        $cartones = is_array($datos['cartones'] ?? null) ? $datos['cartones'] : [];
+        $conceptosPayload = $this->normalizarPayloadConceptosGuardado($datos);
+
+        $turno->update([
+            'cartones_rendicion_json' => $cartones !== [] ? $cartones : null,
+            'conceptos_rendicion_json' => $conceptosPayload !== [] ? $conceptosPayload : null,
+            'observacion_cierre' => $this->limpiarObservacion($datos['observacion_cierre'] ?? null),
+        ]);
+
+        return $turno->fresh(['turno', 'jornada', 'usuarioHabilitado']);
+    }
+
+    /**
      * @param  array<string, mixed>  $datos
      */
     public function actualizarRendicion(TurnoOperativoBingo $turno, array $datos): TurnoOperativoBingo

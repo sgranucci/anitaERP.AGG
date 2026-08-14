@@ -10,6 +10,31 @@
     $diasAviso = old('contrato_dias_aviso', $ocContrato->contrato_dias_aviso ?? '');
     $responsableId = (int) old('contrato_responsable_id', $ocContrato->contrato_responsable_id ?? 0);
     $diasAvisoDefault = (string) config('compras.contratos_vencimiento.dias_aviso', '60,30,15');
+    $requiereRecepcionOld = old('contrato_requiere_recepcion');
+    if ($requiereRecepcionOld === null) {
+        $requiereRecepcion = $ocContrato
+            ? (bool) ($ocContrato->contrato_requiere_recepcion ?? true)
+            : true;
+    } else {
+        $requiereRecepcion = (string) $requiereRecepcionOld === '1' || $requiereRecepcionOld === 1 || $requiereRecepcionOld === true;
+    }
+    $imputacionContable = old(
+        'contrato_imputacion_contable',
+        $ocContrato->contrato_imputacion_contable ?? \App\Support\Compras\OrdencompraContratoRutaFacturaSupport::IMPUTACION_ARTICULOS
+    );
+    $imputacionContable = \App\Support\Compras\OrdencompraContratoRutaFacturaSupport::normalizarImputacion($imputacionContable);
+    $cuentaContratoId = (int) old('contrato_cuentacontable_id', $ocContrato->contrato_cuentacontable_id ?? 0);
+    $cuentaContrato = $ocContrato->contrato_cuentacontables ?? null;
+    $cuentaContratoCodigo = old('contrato_cuentacontable_codigo', $cuentaContrato->codigo ?? '');
+    $cuentaContratoNombre = old('contrato_cuentacontable_nombre', $cuentaContrato->nombre ?? '');
+    if ($cuentaContratoId > 0 && ($cuentaContratoCodigo === '' || $cuentaContratoCodigo === null)) {
+        $ctaContrato = \App\Models\Contable\Cuentacontable::query()->find($cuentaContratoId);
+        $cuentaContratoCodigo = $ctaContrato->codigo ?? '';
+        $cuentaContratoNombre = $ctaContrato->nombre ?? '';
+    }
+    $puedeAbrirAbmCuentaContrato = can('editar-cuentas-contables', false) || can('listar-cuentas-contables', false);
+    $mostrarCuentaContrato = $esContrato && ! $requiereRecepcion
+        && $imputacionContable === \App\Support\Compras\OrdencompraContratoRutaFacturaSupport::IMPUTACION_MANUAL;
 @endphp
 
 <div class="card card-outline card-info mb-3">
@@ -30,7 +55,93 @@
             para notificar la no renovaci&oacute;n y cuando el consumo alcanza el porcentaje configurado del tope.
             El consumo se toma de las recepciones confirmadas y, para lo que no pasa por recepci&oacute;n
             (abonos, honorarios), de las facturas del proveedor.
+            La <strong>ruta de facturaci&oacute;n</strong> (con o sin COM) y el origen de la
+            <strong>cuenta contable</strong> se usan al cargar facturas de este contrato.
         </p>
+
+        <div class="form-group row">
+            <label class="col-lg-4 control-label text-right pr-2">Recepci&oacute;n para facturar</label>
+            <div class="col-lg-8">
+                <div class="custom-control custom-radio">
+                    <input type="radio" id="contrato_requiere_recepcion_si" name="contrato_requiere_recepcion"
+                        class="custom-control-input" value="1"
+                        {{ $requiereRecepcion ? 'checked' : '' }} {{ $soloLectura ? 'disabled' : '' }}>
+                    <label class="custom-control-label" for="contrato_requiere_recepcion_si">
+                        Obligatoria &mdash; las facturas se cargan contra recepci&oacute;n COM
+                    </label>
+                </div>
+                <div class="custom-control custom-radio mt-1">
+                    <input type="radio" id="contrato_requiere_recepcion_no" name="contrato_requiere_recepcion"
+                        class="custom-control-input" value="0"
+                        {{ ! $requiereRecepcion ? 'checked' : '' }} {{ $soloLectura ? 'disabled' : '' }}>
+                    <label class="custom-control-label" for="contrato_requiere_recepcion_no">
+                        No requiere recepci&oacute;n &mdash; se factura el contrato sin COM (abonos, honorarios)
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-group row" id="oc-contrato-imputacion" style="{{ $requiereRecepcion ? 'display:none;' : '' }}">
+            <label class="col-lg-4 control-label text-right pr-2">Cuenta contable de las facturas</label>
+            <div class="col-lg-8">
+                <div class="custom-control custom-radio">
+                    <input type="radio" id="contrato_imputacion_articulos" name="contrato_imputacion_contable"
+                        class="custom-control-input" value="{{ \App\Support\Compras\OrdencompraContratoRutaFacturaSupport::IMPUTACION_ARTICULOS }}"
+                        {{ $imputacionContable === \App\Support\Compras\OrdencompraContratoRutaFacturaSupport::IMPUTACION_ARTICULOS ? 'checked' : '' }}
+                        {{ $soloLectura ? 'disabled' : '' }}>
+                    <label class="custom-control-label" for="contrato_imputacion_articulos">
+                        De los art&iacute;culos de la orden de compra
+                    </label>
+                </div>
+                <div class="custom-control custom-radio mt-1">
+                    <input type="radio" id="contrato_imputacion_manual" name="contrato_imputacion_contable"
+                        class="custom-control-input" value="{{ \App\Support\Compras\OrdencompraContratoRutaFacturaSupport::IMPUTACION_MANUAL }}"
+                        {{ $imputacionContable === \App\Support\Compras\OrdencompraContratoRutaFacturaSupport::IMPUTACION_MANUAL ? 'checked' : '' }}
+                        {{ $soloLectura ? 'disabled' : '' }}>
+                    <label class="custom-control-label" for="contrato_imputacion_manual">
+                        Cuenta indicada en este contrato
+                    </label>
+                </div>
+                <small class="form-text text-muted">
+                    Solo aplica si la ruta es sin recepci&oacute;n. El neto de la factura usa esa cuenta;
+                    IVA y percepciones siguen el concepto de IVA compra.
+                </small>
+            </div>
+        </div>
+
+        <div class="form-group row" id="oc-contrato-cuenta-imputar" style="{{ $mostrarCuentaContrato ? '' : 'display:none;' }}">
+            <label class="col-lg-4 control-label text-right pr-2 requerido">Cuenta a imputar</label>
+            <div class="col-lg-8">
+                <div class="tm-cuentacontable-campo d-flex flex-nowrap align-items-center" style="gap:4px;">
+                    <input type="hidden" class="cuentacontable_id" name="contrato_cuentacontable_id" id="contrato_cuentacontable_id"
+                        value="{{ $cuentaContratoId > 0 ? $cuentaContratoId : '' }}">
+                    @if (! $soloLectura)
+                        <button type="button" title="Consulta cuenta contable" class="btn-accion-tabla consultacuentacontable tooltipsC flex-shrink-0">
+                            <i class="fa fa-search text-primary"></i>
+                        </button>
+                    @endif
+                    @if ($puedeAbrirAbmCuentaContrato)
+                        <a href="{{ $cuentaContratoId > 0 ? route('editar_cuentacontable', ['id' => $cuentaContratoId, 'origen' => 'modal_consulta', 'vista' => 'consulta']) : '#' }}"
+                           target="_blank" rel="noopener"
+                           class="btn-accion-tabla btn-link-editar-cuentacontable tooltipsC flex-shrink-0 {{ $cuentaContratoId > 0 ? '' : 'd-none' }}"
+                           title="Consultar cuenta contable en ABM">
+                            <i class="fa fa-edit"></i>
+                        </a>
+                    @endif
+                    <input type="text" class="codigocuentacontable form-control" id="contrato_cuentacontable_codigo"
+                        name="contrato_cuentacontable_codigo"
+                        value="{{ $cuentaContratoCodigo }}" placeholder="C&oacute;d." autocomplete="off"
+                        style="width:6.85rem;flex-shrink:0;" {{ $soloLectura ? 'readonly' : '' }}>
+                    <input type="text" class="nombrecuentacontable form-control" id="contrato_cuentacontable_nombre"
+                        name="contrato_cuentacontable_nombre"
+                        value="{{ $cuentaContratoNombre }}" placeholder="Descripci&oacute;n" readonly
+                        style="min-width:0;flex:1 1 auto;">
+                </div>
+                <small class="form-text text-muted">
+                    Cuenta DEBE del neto de cada factura de este contrato. C&oacute;digo + Enter o lupa.
+                </small>
+            </div>
+        </div>
 
         <div class="form-group row align-items-end">
             <label for="contrato_vigencia_desde" class="col-lg-4 control-label text-right pr-2">Vigencia</label>

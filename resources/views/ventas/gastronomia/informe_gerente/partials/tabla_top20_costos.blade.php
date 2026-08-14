@@ -68,7 +68,7 @@
                 </td>
             </tr>
         @empty
-            <tr><td colspan="8" class="text-center text-muted">Sin ventas en la jornada.</td></tr>
+            <tr><td colspan="8" class="text-center text-muted">Sin ventas en el período.</td></tr>
         @endforelse
     </tbody>
 </table>

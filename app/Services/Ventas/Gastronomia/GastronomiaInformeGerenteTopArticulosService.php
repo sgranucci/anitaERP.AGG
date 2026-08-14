@@ -8,7 +8,7 @@ use App\Support\Ventas\Gastronomia\GastronomiaStkpreAnitaSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Top artículos del día para informe gerente con precio de venta y costos Anita (stkpre).
+ * Top artículos del período para informe gerente con precio de venta y costos Anita (stkpre).
  */
 final class GastronomiaInformeGerenteTopArticulosService
 {
@@ -26,12 +26,13 @@ final class GastronomiaInformeGerenteTopArticulosService
      *   error:?string
      * }
      */
-    public function top20DelDiaConCostos(int $empresaId, string $fechaJornada): array
+    public function top20DelPeriodoConCostos(int $empresaId, string $fechaDesde, string $fechaHasta): array
     {
-        $listas = GastronomiaInformeGerenteCostoListaSupport::listasDesdeFechaJornada($fechaJornada);
-        $top = $this->articulosVendidosQuery->topPorJornada(
+        $listas = GastronomiaInformeGerenteCostoListaSupport::listasDesdeFechaJornada($fechaHasta);
+        $top = $this->articulosVendidosQuery->topPorRango(
             $empresaId,
-            $fechaJornada,
+            $fechaDesde,
+            $fechaHasta,
             'cantidad',
             self::TOP_LIMIT,
         );
@@ -60,7 +61,8 @@ final class GastronomiaInformeGerenteTopArticulosService
             $error = $e->getMessage();
             Log::warning('gastronomia.informe_gerente.top_articulos_costo', [
                 'empresa_id' => $empresaId,
-                'fecha_jornada' => $fechaJornada,
+                'fecha_desde' => $fechaDesde,
+                'fecha_hasta' => $fechaHasta,
                 'exception' => $e,
             ]);
         }
@@ -101,5 +103,14 @@ final class GastronomiaInformeGerenteTopArticulosService
             'listas' => $listas,
             'error' => $error,
         ];
+    }
+
+    /**
+     * @deprecated Usar top20DelPeriodoConCostos
+     * @return array{filas:list<array<string,mixed>>,listas:array<string,mixed>,error:?string}
+     */
+    public function top20DelDiaConCostos(int $empresaId, string $fechaJornada): array
+    {
+        return $this->top20DelPeriodoConCostos($empresaId, $fechaJornada, $fechaJornada);
     }
 }

@@ -1,6 +1,6 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-    Exporta Operaciones UIF
+    Informe de datos de clientes UIF
 @endsection
 
 @section("scripts")
@@ -33,10 +33,13 @@ $(function () {
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-info">
             <div class="card-header">
-                <h3 class="card-title">Datos Exportación de Operaciones UIF</h3>
-				@include('includes.configurar-salida')
+                <h3 class="card-title">Informe de datos de clientes UIF (por mes)</h3>
+                <div class="card-tools">
+                    @include('includes.uif.boton-manual')
+                    @include('includes.configurar-salida')
+                </div>
             </div>
             <form action="{{route('generar_exporta_operacion')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
                 @csrf @method("post")
@@ -47,7 +50,7 @@ $(function () {
                     <div class="row">
                         <div class="col-lg-3"></div>
                         <div class="col-lg-6">
-							<input type="submit" name="extension" id="extension" class="btn-sm btn-info" value="Exporta Operaciones"></input>
+							<input type="submit" name="extension" id="extension" class="btn btn-info btn-sm" value="Consultar">
                         </div>
                     </div>
                 </div>

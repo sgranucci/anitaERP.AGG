@@ -44,10 +44,13 @@ class ComprobanteProveedorCondicionPagoDesdeOcService
                 ->find($ordencompraComprobanteId);
         }
 
+        // Sin id explícito: próximo comprobante a venir aún no facturado (por vencimiento).
         if (! $ocComprobante) {
             $ocComprobante = Ordencompra_Comprobante::query()
                 ->with('ordencompra_comprobante_cuotas')
                 ->where('ordencompra_id', $ordencompra->id)
+                ->pendientesDeFacturar()
+                ->orderBy('fechavencimiento')
                 ->orderBy('id')
                 ->first();
         }

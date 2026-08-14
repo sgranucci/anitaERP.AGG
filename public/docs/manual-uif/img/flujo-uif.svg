@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="220" viewBox="0 0 960 220">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <style>
+      .box{fill:#1e293b;stroke:#3b82f6;stroke-width:2;rx:12}
+      .t{fill:#e2e8f0;font-family:Inter,Segoe UI,sans-serif;font-size:13px;font-weight:600}
+      .s{fill:#94a3b8;font-family:Inter,Segoe UI,sans-serif;font-size:11px}
+      .arrow{stroke:#64748b;stroke-width:2;fill:none;marker-end:url(#m)}
+    </style>
+    <marker id="m" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#64748b"/></marker>
+  </defs>
+  <rect width="960" height="220" fill="#0f172a"/>
+  <text x="24" y="28" fill="url(#g)" font-family="Inter,sans-serif" font-size="16" font-weight="700">Circuito UIF</text>
+  <rect class="box" x="24" y="56" width="130" height="72"/><text class="t" x="40" y="88">1. Cliente</text><text class="s" x="40" y="108">Identificar</text>
+  <path class="arrow" d="M162 92 H190"/>
+  <rect class="box" x="198" y="56" width="130" height="72"/><text class="t" x="214" y="88">2. Premio</text><text class="s" x="214" y="108">Registrar</text>
+  <path class="arrow" d="M336 92 H364"/>
+  <rect class="box" x="372" y="56" width="130" height="72"/><text class="t" x="388" y="88">3. Control</text><text class="s" x="388" y="108">Congelados</text>
+  <path class="arrow" d="M510 92 H538"/>
+  <rect class="box" x="546" y="56" width="140" height="72"/><text class="t" x="562" y="88">4. Informe</text><text class="s" x="562" y="108">Mes / importe</text>
+  <path class="arrow" d="M694 92 H722"/>
+  <rect class="box" x="730" y="56" width="140" height="72"/><text class="t" x="746" y="88">5. Exportar</text><text class="s" x="746" y="108">Excel · PDF · XML</text>
+  <text class="s" x="24" y="180">6. Conciliación Wigos (paralelo): planillas Titos / PM → libro unificado</text>
+</svg>

@@ -37,6 +37,8 @@ class ValidacionComprobante_Proveedor extends FormRequest
             'concepto_ivacompra_ids.*' => 'nullable|integer',
             'montos' => 'nullable|array',
             'montos.*' => 'nullable|numeric',
+            'cuentacontabledebe_ids' => 'nullable|array',
+            'cuentacontabledebe_ids.*' => 'nullable|integer',
         ];
     }
 }

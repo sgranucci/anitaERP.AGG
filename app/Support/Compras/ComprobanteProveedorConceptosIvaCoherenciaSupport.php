@@ -22,12 +22,13 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
     /**
      * @param  list<int|string|null>  $conceptoIds
      * @param  list<int|float|string|null>  $montos
-     * @return list<array{concepto_ivacompra_id: int, monto: float}>
+     * @param  list<int|string|null>  $cuentaDebeIds
+     * @return list<array<string, mixed>>
      */
-    public static function lineasDesdeArrays(array $conceptoIds, array $montos): array
+    public static function lineasDesdeArrays(array $conceptoIds, array $montos, array $cuentaDebeIds = []): array
     {
         $lineas = [];
-        $max = max(count($conceptoIds), count($montos));
+        $max = max(count($conceptoIds), count($montos), count($cuentaDebeIds));
 
         for ($i = 0; $i < $max; $i++) {
             $conceptoId = (int) ($conceptoIds[$i] ?? 0);
@@ -35,10 +36,15 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
             if ($conceptoId <= 0 || abs($monto) < 0.0001) {
                 continue;
             }
-            $lineas[] = [
+            $linea = [
                 'concepto_ivacompra_id' => $conceptoId,
                 'monto' => $monto,
             ];
+            if ($cuentaDebeIds !== []) {
+                $cuentaId = (int) ($cuentaDebeIds[$i] ?? 0);
+                $linea['cuentacontabledebe_id'] = $cuentaId > 0 ? $cuentaId : null;
+            }
+            $lineas[] = $linea;
         }
 
         return $lineas;

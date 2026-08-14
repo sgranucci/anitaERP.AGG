@@ -30,7 +30,7 @@
         .cabecera .lbl { background: #f0f0f0; font-weight: bold; font-size: 10px; }
         .cabecera td:not(.lbl) { font-size: 10px; }
         table.cabecera td { padding: 4px 6px; vertical-align: middle; }
-        .num { text-align: right; white-space: nowrap; }
+        .num { text-align: right; white-space: nowrap; overflow: hidden; overflow-wrap: normal; word-wrap: normal; }
         .cen { text-align: center; }
         .muted { color: #444; font-size: 8px; }
         .pdf-cabecera { width: 100%; margin-bottom: 6px; page-break-inside: avoid; }
@@ -68,9 +68,10 @@
         .items th { font-size: 10px; padding: 3px 4px; }
         .items td { font-size: 10px; padding: 3px 4px; }
         .items .items-col-idx { font-size: 9px; padding: 3px 2px !important; text-align: center; }
-        .items .items-col-cant { font-size: 9.5px; padding: 3px 3px !important; }
-        .items .mcot { font-size: 9.5px; line-height: 1.15; text-align: center; }
-        .items .items-subt { text-align: right; white-space: nowrap; }
+        .items .items-col-cant { font-size: 9.5px; padding: 3px 3px !important; overflow: hidden; }
+        .items .items-col-punit { font-size: 9.5px; padding: 3px 3px !important; overflow: hidden; }
+        .items .mcot { font-size: 9.5px; line-height: 1.15; text-align: center; overflow: hidden; }
+        .items .items-subt { text-align: right; white-space: nowrap; overflow: hidden; }
         table.pdf-detalle-fila { table-layout: fixed; width: 100%; }
         .pdf-detalle-fila tr td { vertical-align: middle; }
         .pdf-detalle-fila .lbl { width: 10%; font-size: 10px; padding: 5px 8px !important; text-align: center; }
@@ -112,6 +113,7 @@
         .pdf-oc-flujo-compacto .items td { font-size: 10px !important; padding: 3px 4px !important; }
         .pdf-oc-flujo-compacto .items .items-col-idx { font-size: 9px !important; padding: 3px 2px !important; }
         .pdf-oc-flujo-compacto .items .items-col-cant { font-size: 9.5px !important; }
+        .pdf-oc-flujo-compacto .items .items-col-punit { font-size: 9.5px !important; }
         .pdf-oc-flujo-compacto .items .mcot { font-size: 9.5px !important; line-height: 1.15; }
         .pdf-oc-flujo-compacto .item-leyenda { font-size: 9px !important; padding: 4px 6px !important; }
         .pdf-oc-flujo-compacto .item-leyenda .item-leyenda-detalle { font-size: 10px !important; line-height: 1.3; }
@@ -270,13 +272,13 @@
             <tr>
                 <th class="cen items-col-idx" style="width:3%;">#</th>
                 <th style="width:{{ $ocMostrarPesoPdf ? '6%' : '7%' }};">SKU</th>
-                <th style="width:{{ $ocMostrarPesoPdf ? '28%' : '34%' }};">Descripción</th>
-                <th class="num items-col-cant" style="width:6%;">Cant.</th>
+                <th style="width:{{ $ocMostrarPesoPdf ? '26%' : '32%' }};">Descripción</th>
+                <th class="num items-col-cant" style="width:7%;">Cant.</th>
                 @if ($ocMostrarPesoPdf)
                     <th class="num" style="width:6%;">Peso u.</th>
                     <th class="num" style="width:6%;">Peso tot.</th>
                 @endif
-                <th class="num" style="width:8%;">P.unit.</th>
+                <th class="num items-col-punit" style="width:9%;">P.unit.</th>
                 <th class="cen" style="width:8%;">Mon./cot.</th>
                 <th class="cen" style="width:{{ $ocMostrarPesoPdf ? '12%' : '14%' }};">CC dest.</th>
                 <th class="num" style="width:{{ $ocMostrarPesoPdf ? '17%' : '20%' }};">Subt.</th>
@@ -338,7 +340,7 @@
                         <td class="num">{{ $pesoUnitPdf > 0 ? number_format($pesoUnitPdf, 3, ',', '.') : '—' }}</td>
                         <td class="num">{{ $pesoTotPdf > 0 ? number_format($pesoTotPdf, 3, ',', '.') : '—' }}</td>
                     @endif
-                    <td class="num">@if ($monAb !== '' && $monAb !== '—'){{ $monAb }} @endif{{ number_format((float) $linea->precio, 3, ',', '.') }}</td>
+                    <td class="num items-col-punit">{{ number_format((float) $linea->precio, 3, ',', '.') }}</td>
                     <td class="mcot cen">{{ $monAb }}<br>{{ number_format($cot, 3, ',', '.') }}</td>
                     <td class="cen">{{ $ccEtiqueta }}</td>
                     <td class="num items-subt">@if ($monOcItems !== ''){{ $monOcItems }} @endif{{ number_format($sub, 2, ',', '.') }}</td>

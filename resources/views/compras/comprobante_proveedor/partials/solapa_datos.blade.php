@@ -13,6 +13,32 @@
                     <span class="badge badge-secondary">{{ $data->ordencompras->sector_legajocompras->nombre }}</span>
                 </div>
                 @endif
+                @php
+                    $cpPol = $com_politica ?? [];
+                @endphp
+                @if ($cpPol['contrato_vigente'] ?? false)
+                <div class="small mt-2">
+                    <span class="badge badge-info">Contrato vigente</span>
+                    @if ($cpPol['contrato_requiere_recepcion'] ?? false)
+                        <span class="badge badge-warning">Recepción obligatoria</span>
+                    @else
+                        <span class="badge badge-secondary">Sin recepción</span>
+                        @if (($cpPol['contrato_imputacion'] ?? '') === \App\Support\Compras\OrdencompraContratoRutaFacturaSupport::IMPUTACION_ARTICULOS)
+                            <span class="badge badge-light border">Cuenta de artículos OC</span>
+                        @elseif (($cpPol['contrato_imputacion'] ?? '') === \App\Support\Compras\OrdencompraContratoRutaFacturaSupport::IMPUTACION_MANUAL)
+                            @php
+                                $ctaContratoFactura = $data->ordencompras->contrato_cuentacontables ?? null;
+                                $ctaContratoTxt = trim(($ctaContratoFactura->codigo ?? '').' '.($ctaContratoFactura->nombre ?? ''));
+                            @endphp
+                            <span class="badge badge-light border">Cuenta del contrato{{ $ctaContratoTxt !== '' ? ': '.$ctaContratoTxt : '' }}</span>
+                        @endif
+                    @endif
+                </div>
+                @elseif ($cpPol['contrato_fuera_de_vigencia'] ?? false)
+                <div class="alert alert-warning py-1 px-2 mt-2 mb-0 small">
+                    El contrato de esta OC no está vigente. Se aplica el flujo estándar de la empresa.
+                </div>
+                @endif
             </div>
             <div class="d-flex flex-wrap" style="gap:6px;">
                 @if (can('editar-ordencompra', false) || can('listar-ordencompra', false))
@@ -103,14 +129,39 @@
                     $comPolitica = $com_politica ?? [];
                     $permiteAnticipada = (bool) ($comPolitica['permite_factura_anticipada'] ?? false);
                     $bloqueaSinCom = (bool) ($comPolitica['bloquea_sin_com'] ?? false);
+                    $contratoVigente = (bool) ($comPolitica['contrato_vigente'] ?? false);
+                    $contratoRequiereRecepcion = (bool) ($comPolitica['contrato_requiere_recepcion'] ?? false);
+                    $contratoImputacion = (string) ($comPolitica['contrato_imputacion'] ?? '');
+                    $contratoFueraVigencia = (bool) ($comPolitica['contrato_fuera_de_vigencia'] ?? false);
                     $modoActual = old('modo_carga', $data->modo_carga ?? '');
-                    if ($comObligatoria) {
+                    if ($contratoVigente && $contratoRequiereRecepcion) {
+                        $modoActual = \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
+                    } elseif ($contratoVigente && ! $contratoRequiereRecepcion) {
+                        $modoActual = \App\Support\Compras\ComprobanteProveedorModoCarga::SIN_RECEPCION;
+                    } elseif ($comObligatoria) {
                         $modoActual = \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
                     } elseif ($permiteAnticipada) {
                         $modoActual = \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_OC;
                     }
                 @endphp
-                @if ($comObligatoria)
+                @if ($contratoVigente && $contratoRequiereRecepcion)
+                    <input type="hidden" name="modo_carga" id="modo_carga" value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION }}">
+                    <input type="text" class="form-control" readonly
+                        value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::etiqueta(\App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) }}">
+                    <small class="form-text text-muted">Fijado por el contrato vigente: recepción COM obligatoria.</small>
+                @elseif ($contratoVigente && ! $contratoRequiereRecepcion)
+                    <input type="hidden" name="modo_carga" id="modo_carga" value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::SIN_RECEPCION }}">
+                    <input type="text" class="form-control" readonly
+                        value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::etiqueta(\App\Support\Compras\ComprobanteProveedorModoCarga::SIN_RECEPCION) }}">
+                    <small class="form-text text-muted">
+                        Fijado por el contrato vigente: factura sin recepción.
+                        @if ($contratoImputacion === \App\Support\Compras\OrdencompraContratoRutaFacturaSupport::IMPUTACION_ARTICULOS)
+                            El neto se imputa con las cuentas de los artículos de la OC.
+                        @elseif ($contratoImputacion === \App\Support\Compras\OrdencompraContratoRutaFacturaSupport::IMPUTACION_MANUAL)
+                            Indique la cuenta DEBE del neto en cada renglón.
+                        @endif
+                    </small>
+                @elseif ($comObligatoria)
                     <input type="hidden" name="modo_carga" id="modo_carga" value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION }}">
                     <input type="text" class="form-control" readonly
                         value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::etiqueta(\App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) }}">

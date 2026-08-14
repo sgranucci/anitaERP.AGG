@@ -3,7 +3,7 @@
 namespace App\Services\Ventas\Gastronomia;
 
 use App\Queries\Ventas\GastronomiaInformeGerenteQuery;
-use App\Services\Ventas\Gastronomia\GastronomiaCierreJornadaProcesoService;
+use App\Support\Ventas\GastronomiaInformeGerenteFiltros;
 use App\Support\Ventas\Gastronomia\GastronomiaInformeGerenteWaitrySupport;
 use Carbon\Carbon;
 
@@ -20,38 +20,60 @@ final class GastronomiaInformeGerenteService
     ) {}
 
     /**
+     * @param  array{empresa_id?:int,fecha_desde?:string,fecha_hasta?:string}|null  $filtros
      * @return array<string, mixed>
      */
-    public function generar(int $empresaId, string $fechaJornada): array
+    public function generar(int $empresaId, string $fechaDesde, ?string $fechaHasta = null, ?array $filtros = null): array
     {
-        $fecha = $this->normalizarFecha($fechaJornada);
-
-        $topCantidad = $this->query->top10PorCantidad($empresaId, $fecha);
-        $topValor = $this->query->top10PorValor($empresaId, $fecha);
-        $topMesCantidad = $this->query->top10MesPorCantidad($empresaId, $fecha);
-        $porTurno = $this->query->ventasPorTurno($empresaId, $fecha);
-        $porPv = $this->query->ventasPorPuntoVenta($empresaId, $fecha);
-        $waitrySinFacturar = $this->cierreJornadaProcesoService
-            ->waitryPagadoSinFacturarParaInformeGerente($empresaId, $fecha);
-        if ($waitrySinFacturar !== null) {
-            $porPv = GastronomiaInformeGerenteWaitrySupport::aplicarAVentasPorPuntoventa($porPv, $waitrySinFacturar);
+        $desde = $this->normalizarFecha($fechaDesde);
+        $hasta = $this->normalizarFecha($fechaHasta ?? $fechaDesde);
+        if ($desde > $hasta) {
+            [$desde, $hasta] = [$hasta, $desde];
         }
-        $descuentos = $this->query->facturasPorDescuento($empresaId, $fecha);
-        $top20ArticulosCosto = $this->topArticulosService->top20DelDiaConCostos($empresaId, $fecha);
-        $recepciones = $this->recepcionesAnita->resumen($empresaId, $fecha);
 
-        $totalJornada = $this->query->totalVentasJornada($empresaId, $fecha);
-        if ($waitrySinFacturar !== null) {
-            $totalJornada = round($totalJornada + (float) ($waitrySinFacturar['total'] ?? 0), 2);
+        $topCantidad = $this->query->top10PorCantidad($empresaId, $desde, $hasta);
+        $topValor = $this->query->top10PorValor($empresaId, $desde, $hasta);
+        $topMesCantidad = $this->query->top10MesPorCantidad($empresaId, $hasta);
+        $porTurno = $this->query->ventasPorTurno($empresaId, $desde, $hasta);
+        $porPv = $this->query->ventasPorPuntoVenta($empresaId, $desde, $hasta);
+
+        // Waitry sin facturar solo aplica a un día con jornada abierta.
+        $waitrySinFacturar = null;
+        if ($desde === $hasta) {
+            $waitrySinFacturar = $this->cierreJornadaProcesoService
+                ->waitryPagadoSinFacturarParaInformeGerente($empresaId, $desde);
+            if ($waitrySinFacturar !== null) {
+                $porPv = GastronomiaInformeGerenteWaitrySupport::aplicarAVentasPorPuntoventa($porPv, $waitrySinFacturar);
+            }
         }
-        $fechaCarbon = Carbon::parse($fecha);
+
+        $descuentos = $this->query->facturasPorDescuento($empresaId, $desde, $hasta);
+        $top20ArticulosCosto = $this->topArticulosService->top20DelPeriodoConCostos($empresaId, $desde, $hasta);
+        $recepciones = $this->recepcionesAnita->resumen($empresaId, $desde, $hasta);
+
+        $totalPeriodo = $this->query->totalVentasPeriodo($empresaId, $desde, $hasta);
+        if ($waitrySinFacturar !== null) {
+            $totalPeriodo = round($totalPeriodo + (float) ($waitrySinFacturar['total'] ?? 0), 2);
+        }
+
+        $hastaCarbon = Carbon::parse($hasta);
+        $periodoLabel = GastronomiaInformeGerenteFiltros::formatearPeriodoTexto([
+            'fecha_desde' => $desde,
+            'fecha_hasta' => $hasta,
+        ]);
+        $esUnSoloDia = $desde === $hasta;
 
         return [
             'empresa_id' => $empresaId,
-            'fecha_jornada' => $fecha,
-            'fecha_jornada_label' => $fechaCarbon->format('d/m/Y'),
-            'mes_jornada_label' => $this->etiquetaMes($fechaCarbon),
-            'total_ventas_jornada' => $totalJornada,
+            'fecha_desde' => $desde,
+            'fecha_hasta' => $hasta,
+            'fecha_jornada' => $hasta, // compat vistas/JS antiguos
+            'fecha_jornada_label' => $periodoLabel,
+            'periodo_label' => $periodoLabel,
+            'es_un_solo_dia' => $esUnSoloDia,
+            'mes_jornada_label' => $this->etiquetaMes($hastaCarbon),
+            'total_ventas_jornada' => $totalPeriodo,
+            'total_ventas_periodo' => $totalPeriodo,
             'waitry_sin_facturar' => $waitrySinFacturar,
             'top10_cantidad' => $topCantidad,
             'top10_valor' => $topValor,
@@ -70,6 +92,11 @@ final class GastronomiaInformeGerenteService
                 'recepciones_mes' => $this->pieRecepcionesPorProveedor($recepciones['mes'] ?? []),
                 'articulos_dia' => $this->barDesdeTop10($topCantidad, 'cantidad'),
                 'articulos_mes' => $this->barDesdeTop10($topMesCantidad, 'cantidad'),
+            ],
+            'filtros' => $filtros ?? [
+                'empresa_id' => $empresaId,
+                'fecha_desde' => $desde,
+                'fecha_hasta' => $hasta,
             ],
         ];
     }

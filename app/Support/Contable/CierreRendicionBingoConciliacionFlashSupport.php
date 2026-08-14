@@ -5,6 +5,7 @@ namespace App\Support\Contable;
 use App\Models\Caja\Bingo\RendicionBingoCaja;
 use App\Models\Caja\Flash\FlashCaja;
 use App\Models\Configuracion\Empresa;
+use App\Support\Caja\Bingo\BingoPozoAcumuladoSupport;
 use App\Support\Contable\Efe\EfeAnitaBridgeReader;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
@@ -66,12 +67,16 @@ final class CierreRendicionBingoConciliacionFlashSupport
             );
             $acum = is_array($totalesDia['acum_concepto'] ?? null) ? $totalesDia['acum_concepto'] : [];
             $recaudacion = round((float) ($totalesDia['tot_recaudacion'] ?? 0), 2);
-            $pozoAc = CierreRendicionBingoTotalesSupport::evolSiPozoAc(
-                $pozoAc,
-                $recaudacion,
-                $concbIndex,
-                $acum,
-            );
+
+            // p-vtabingo un_dia: solo evoluciona si fl_imp_dia (hubo rendición del día).
+            if ($rendicionesDia->isNotEmpty()) {
+                $pozoAc = CierreRendicionBingoTotalesSupport::evolSiPozoAc(
+                    $pozoAc,
+                    $recaudacion,
+                    $concbIndex,
+                    $acum,
+                );
+            }
 
             if ($fechaStr < $desde) {
                 continue;
@@ -168,7 +173,7 @@ final class CierreRendicionBingoConciliacionFlashSupport
     }
 
     /**
-     * @return array<string, array{venta: float, resultado: float, cartones: int}>
+     * @return array<string, array{venta: float, resultado: float}>
      */
     private function cargarFlashPorFecha(int $empresaId, string $desde, string $hasta): array
     {
@@ -177,7 +182,7 @@ final class CierreRendicionBingoConciliacionFlashSupport
             ->where('empresa_id', $empresaId)
             ->whereDate('fecha', '>=', $desde)
             ->whereDate('fecha', '<=', $hasta)
-            ->get(['fecha', 'bingo_cant_carton', 'bingo_total_venta', 'bingo_resultado'])
+            ->get(['fecha', 'bingo_total_venta', 'bingo_resultado'])
             ->each(function (FlashCaja $flash) use (&$out) {
                 $fecha = $flash->fecha?->format('Y-m-d');
                 if ($fecha === null || $fecha === '') {
@@ -186,7 +191,6 @@ final class CierreRendicionBingoConciliacionFlashSupport
                 $out[$fecha] = [
                     'venta' => round((float) ($flash->bingo_total_venta ?? 0), 2),
                     'resultado' => round((float) ($flash->bingo_resultado ?? 0), 2),
-                    'cartones' => (int) ($flash->bingo_cant_carton ?? 0),
                 ];
             });
 
@@ -197,6 +201,14 @@ final class CierreRendicionBingoConciliacionFlashSupport
      * @param  Collection<int, RendicionBingoCaja>  $rendiciones
      * @param  array<int, array<string, mixed>>  $concbIndex
      */
+    /**
+     * Semilla pozo AC al inicio del mes / período (p-vtabingo POZOAC_calcula_pozo_acum).
+     * Orden: config ERP por empresa → opcional Anita pozoacum → 0.
+     * Luego, si el informe no arranca el 1º, evoluciona solo días con rendición hasta el día previo.
+     *
+     * @param  Collection<int, RendicionBingoCaja>  $rendiciones
+     * @param  array<int, array<string, mixed>>  $concbIndex
+     */
     private function pozoAcInicial(
         int $empresaId,
         string $inicioMes,
@@ -204,7 +216,7 @@ final class CierreRendicionBingoConciliacionFlashSupport
         Collection $rendiciones,
         array $concbIndex,
     ): float {
-        $pozoAc = $this->leerPozoAcumAnita($empresaId, $inicioMes);
+        $pozoAc = $this->leerPozoAcumSemilla($empresaId, $inicioMes);
 
         if ($inicioMes >= $desde) {
             return $pozoAc;
@@ -216,6 +228,9 @@ final class CierreRendicionBingoConciliacionFlashSupport
             $rendicionesDia = $rendiciones->filter(
                 fn (RendicionBingoCaja $r) => CierreRendicionBingoGrupoSupport::fechaDiaDesdeRendicion($r) === $fechaStr,
             );
+            if ($rendicionesDia->isEmpty()) {
+                continue;
+            }
             $totalesDia = CierreRendicionBingoTotalesSupport::calcular(
                 new EloquentCollection($rendicionesDia->values()->all()),
                 $empresaId,
@@ -233,6 +248,22 @@ final class CierreRendicionBingoConciliacionFlashSupport
         return $pozoAc;
     }
 
+    private function leerPozoAcumSemilla(int $empresaId, string $inicioMes): float
+    {
+        $desdeTabla = BingoPozoAcumuladoSupport::semillaAlInicioDe($empresaId, $inicioMes);
+        if (abs($desdeTabla) > 0.0001) {
+            return $desdeTabla;
+        }
+
+        // semillaAlInicioDe ya contempla config; si quedó 0, opcional Anita.
+        if (filter_var(config('bingo.cierre_rendicion_contable.pozo_acumulado_desde_anita', false), FILTER_VALIDATE_BOOLEAN)) {
+            return $this->leerPozoAcumAnita($empresaId, $inicioMes);
+        }
+
+        return $desdeTabla;
+    }
+
+    /** Fallback legacy: pozoacum Anita (solo si el flag está activo). */
     private function leerPozoAcumAnita(int $empresaId, string $fecha): float
     {
         try {
@@ -261,7 +292,7 @@ final class CierreRendicionBingoConciliacionFlashSupport
     /**
      * @param  Collection<int, RendicionBingoCaja>  $rendicionesDia
      * @param  array<string, mixed>  $totalesDia
-     * @param  array<string, array{venta: float, resultado: float, cartones: int}>  $flashPorFecha
+     * @param  array<string, array{venta: float, resultado: float}>  $flashPorFecha
      * @param  array<int, array<string, mixed>>  $concbIndex
      * @param  list<array<string, mixed>>  $columnas
      * @return array<string, mixed>
@@ -278,12 +309,10 @@ final class CierreRendicionBingoConciliacionFlashSupport
     ): array {
         $recaudacion = round((float) ($totalesDia['tot_recaudacion'] ?? 0), 2);
         $resultado = round((float) ($totalesDia['tot_resultado_flash'] ?? 0), 2);
-        $cartones = (int) ($totalesDia['tot_cartones'] ?? 0);
         $acum = is_array($totalesDia['acum_concepto'] ?? null) ? $totalesDia['acum_concepto'] : [];
 
         $flashVenta = round((float) ($flashPorFecha[$fechaDia]['venta'] ?? 0), 2);
         $flashResultado = round((float) ($flashPorFecha[$fechaDia]['resultado'] ?? 0), 2);
-        $flashCartones = (int) ($flashPorFecha[$fechaDia]['cartones'] ?? 0);
 
         $difVenta = round($recaudacion - $flashVenta, 2);
         $difResultado = round($resultado - $flashResultado, 2);
@@ -320,8 +349,6 @@ final class CierreRendicionBingoConciliacionFlashSupport
         $valores['tot_recaudacion'] = $recaudacion;
         $valores['flash_venta'] = $flashVenta;
         $valores['dif_venta'] = $difVenta;
-        $valores['tot_cartones'] = $cartones;
-        $valores['flash_cartones'] = $flashCartones;
         $valores['tot_resultado_flash'] = $resultado;
         $valores['flash_resultado'] = $flashResultado;
         $valores['dif_resultado'] = $difResultado;
@@ -352,11 +379,9 @@ final class CierreRendicionBingoConciliacionFlashSupport
                 $valores['c'.$concepto.'_real'] = $real;
                 $valores['c'.$concepto.'_asegurado'] = round($pagado - $real, 2);
             } elseif ($tipo === CierreRendicionBingoConceptoTipos::PAGO) {
-                $valores['c'.$concepto.'_real'] = CierreRendicionBingoTotalesSupport::importePagoConcepto(
-                    $meta,
-                    $acum,
-                    $recaudacion,
-                );
+                // Listado p-vtabingo: solo real de rendpremio (NOIMPCERO). El % de
+                // recaudación se usa en canones del asiento, no en la grilla diaria.
+                $valores['c'.$concepto.'_real'] = $real;
             }
         }
 
@@ -387,8 +412,6 @@ final class CierreRendicionBingoConciliacionFlashSupport
             $this->grupoSimple('Recaudación', 'tot_recaudacion', 'numero', 'rendicion', true),
             $this->grupoSimple('Flash venta', 'flash_venta', 'numero', 'flash', true),
             $this->grupoSimple('Dif. recaudo', 'dif_venta', 'numero', 'flash', true),
-            $this->grupoSimple('Cartones', 'tot_cartones', 'entero', 'rendicion', true),
-            $this->grupoSimple('Flash cartones', 'flash_cartones', 'entero', 'flash', true),
             $this->grupoSimple('Resultado', 'tot_resultado_flash', 'numero', 'rendicion', true),
             $this->grupoSimple('Flash resultado', 'flash_resultado', 'numero', 'flash', true),
             $this->grupoSimple('Dif. resultado', 'dif_resultado', 'numero', 'flash', true),

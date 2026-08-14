@@ -126,8 +126,131 @@
         $('#jornada_historial').on('change', function () {
             var v = $(this).val();
             if (v) {
-                $('#fecha_jornada').val(v);
+                $('#fecha_desde').val(v);
+                $('#fecha_hasta').val(v);
             }
+        });
+
+        var overlay = document.getElementById('informe-gerente-overlay');
+        var exportSafetyTimer = null;
+
+        function mostrarOverlay(titulo, subtitulo) {
+            if (!overlay) {
+                return;
+            }
+            if (titulo) {
+                var t = document.getElementById('informe-gerente-overlay-titulo');
+                if (t) {
+                    t.textContent = titulo;
+                }
+            }
+            if (subtitulo) {
+                var s = document.getElementById('informe-gerente-overlay-subtitulo');
+                if (s) {
+                    s.textContent = subtitulo;
+                }
+            }
+            overlay.classList.remove('d-none');
+            overlay.style.display = 'flex';
+            overlay.setAttribute('aria-hidden', 'false');
+        }
+        function ocultarOverlay() {
+            if (!overlay) {
+                return;
+            }
+            if (exportSafetyTimer) {
+                clearTimeout(exportSafetyTimer);
+                exportSafetyTimer = null;
+            }
+            overlay.classList.add('d-none');
+            overlay.style.display = '';
+            overlay.setAttribute('aria-hidden', 'true');
+        }
+        window.addEventListener('pageshow', ocultarOverlay);
+        window.addEventListener('pagehide', ocultarOverlay);
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') {
+                ocultarOverlay();
+            }
+        });
+
+        $('#form-informe-gerente').on('submit', function () {
+            var form = this;
+            if (typeof form.checkValidity === 'function' && !form.checkValidity()) {
+                return;
+            }
+            mostrarOverlay(
+                'Generando informe…',
+                'Puede demorar según el período. No cierre la página.'
+            );
+        });
+
+        // Descargas no navegan: el overlay no se oculta solo. Usar fetch+blob.
+        $(document).on('click', 'a[href*="listar-gastronomia-informe-gerente"]', function (e) {
+            var href = $(this).attr('href');
+            if (!href || href === '#') {
+                return;
+            }
+            e.preventDefault();
+
+            mostrarOverlay(
+                'Exportando…',
+                'El archivo se descarga al terminar. Pulse Esc para cerrar este aviso.'
+            );
+            exportSafetyTimer = setTimeout(ocultarOverlay, 180000);
+
+            fetch(href, {
+                method: 'GET',
+                credentials: 'same-origin',
+                headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            })
+                .then(function (res) {
+                    if (!res.ok) {
+                        return res.text().then(function (body) {
+                            var msg = 'HTTP ' + res.status;
+                            if (body && body.indexOf('ZipArchive') !== -1) {
+                                msg = 'Error al armar el archivo (permisos temporales).';
+                            } else if (body && body.length < 400) {
+                                msg = body.replace(/<[^>]+>/g, ' ').trim() || msg;
+                            }
+                            throw new Error(msg);
+                        });
+                    }
+                    var cd = res.headers.get('Content-Disposition') || '';
+                    var name = 'informe_gerente_gastronomia';
+                    var m = /filename\*=UTF-8''([^;]+)|filename=\"?([^\";]+)\"?/i.exec(cd);
+                    if (m) {
+                        name = decodeURIComponent((m[1] || m[2] || name).trim());
+                    } else if (/PPTX/i.test(href)) {
+                        name += '.pptx';
+                    } else if (/EXCEL/i.test(href)) {
+                        name += '.xlsx';
+                    } else if (/CSV/i.test(href)) {
+                        name += '.csv';
+                    } else if (/PDF/i.test(href)) {
+                        name += '.pdf';
+                    }
+                    return res.blob().then(function (blob) {
+                        return { blob: blob, name: name };
+                    });
+                })
+                .then(function (data) {
+                    var url = window.URL.createObjectURL(data.blob);
+                    var a = document.createElement('a');
+                    a.href = url;
+                    a.download = data.name;
+                    document.body.appendChild(a);
+                    a.click();
+                    a.remove();
+                    setTimeout(function () {
+                        window.URL.revokeObjectURL(url);
+                    }, 1500);
+                })
+                .catch(function (err) {
+                    var msg = (err && err.message) ? err.message : String(err);
+                    window.alert('No se pudo exportar el informe.\n' + msg);
+                })
+                .finally(ocultarOverlay);
         });
 
         var cfg = window.INFORME_GERENTE_GASTRONOMIA || {};

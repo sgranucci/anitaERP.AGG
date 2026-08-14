@@ -6,7 +6,6 @@ use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\FromView;
-use Maatwebsite\Excel\Concerns\ShouldAutoSize;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
 use Maatwebsite\Excel\Concerns\WithEvents;
@@ -19,7 +18,7 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
-class CierreRendicionBingoConciliacionFlashExport implements FromView, ShouldAutoSize, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
+class CierreRendicionBingoConciliacionFlashExport implements FromView, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
     private bool $hayFilaLogos = false;
 
@@ -33,6 +32,32 @@ class CierreRendicionBingoConciliacionFlashExport implements FromView, ShouldAut
 
     /** @var list<string> */
     private array $rutasLogosExcel = [];
+
+    /**
+     * Anchos mínimos por clave (Excel muestra ##### si no alcanzan).
+     *
+     * @var array<string, float>
+     */
+    private const ANCHO_POR_CLAVE = [
+        'fecha_fmt' => 12,
+        'estado' => 8,
+        'cantidad_rendiciones' => 8,
+        'tot_recaudacion' => 16,
+        'flash_venta' => 15,
+        'dif_venta' => 15,
+        'tot_resultado_flash' => 15,
+        'flash_resultado' => 15,
+        'dif_resultado' => 15,
+        'tot_pozo' => 14,
+        'tot_pantalla' => 14,
+        'tot_si_pozo_ac' => 15,
+        'tot_efectivo' => 15,
+        'tot_dif_caja' => 14,
+        'tot_f_fijo' => 13,
+        'tot_pago_hospital' => 14,
+        'tot_vta_acumulada' => 17,
+        'estado_cierre' => 12,
+    ];
 
     /**
      * @param  array<string, mixed>  $resultado
@@ -145,14 +170,37 @@ class CierreRendicionBingoConciliacionFlashExport implements FromView, ShouldAut
     {
         $widths = [];
         $columnas = $this->resultado['columnas'] ?? [];
+        $titulosGrupo = [];
+        foreach ($this->resultado['grupos_columnas'] ?? [] as $grupo) {
+            $cols = $grupo['columnas'] ?? [];
+            if (count($cols) === 1) {
+                $titulosGrupo[(string) ($cols[0]['key'] ?? '')] = (string) ($grupo['titulo'] ?? '');
+            }
+        }
+
         foreach (array_values($columnas) as $i => $col) {
+            $key = (string) ($col['key'] ?? '');
             $tipo = (string) ($col['tipo'] ?? 'numero');
-            $ancho = match ($tipo) {
-                'texto' => 12,
-                'entero' => 8,
-                default => 12,
+            $titulo = $titulosGrupo[$key] ?? '';
+            $subtitulo = (string) ($col['subtitulo'] ?? '');
+            $largoRotulo = max(mb_strlen($titulo), mb_strlen($subtitulo));
+
+            $base = self::ANCHO_POR_CLAVE[$key] ?? match ($tipo) {
+                'texto' => 12.0,
+                'entero' => 9.0,
+                default => 13.0,
             };
-            $widths[Coordinate::stringFromColumnIndex($i + 1)] = $ancho;
+
+            // Cabeceras largas (Bingo 47%, Municipalidad, Evol. SI…) + importes ###.###.###,##
+            $ancho = max($base, min(20.0, $largoRotulo + 2.5));
+            if ($tipo === 'numero') {
+                $ancho = max($ancho, 14.0);
+            }
+            if (str_starts_with($key, 'c') && str_contains($key, '_')) {
+                $ancho = max($ancho, 13.0);
+            }
+
+            $widths[Coordinate::stringFromColumnIndex($i + 1)] = round($ancho, 1);
         }
 
         return $widths;
@@ -199,27 +247,36 @@ class CierreRendicionBingoConciliacionFlashExport implements FromView, ShouldAut
                     }
                 }
 
-                $sheet->mergeCells('A'.$this->filaTituloExcel.':'.$colUltima.($this->filaTituloExcel + 2));
+                // El HTML ya trae colspan en meta y en cabeceras de grupo: no re-mergear
+                // (merge vertical A{titulo}:A{titulo+2} pisa A2/A3/A4 y Excel marca el xlsx como corrupto).
                 $sheet->getStyle('A'.$this->filaTituloExcel)->getFont()->setName('Arial')->setSize(14)->setBold(true);
                 $sheet->getStyle('A'.$this->filaTituloExcel)->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+                $sheet->getRowDimension($this->filaTituloExcel)->setRowHeight(28);
 
                 $filaSub = $this->filaCabecerasExcel + 1;
-                $colIdx = 1;
-                foreach ($this->resultado['grupos_columnas'] ?? [] as $grupo) {
-                    $span = count($grupo['columnas'] ?? []);
-                    if ($span > 1) {
-                        $desde = Coordinate::stringFromColumnIndex($colIdx);
-                        $hasta = Coordinate::stringFromColumnIndex($colIdx + $span - 1);
-                        $sheet->mergeCells($desde.$this->filaCabecerasExcel.':'.$hasta.$this->filaCabecerasExcel);
-                    }
-                    $colIdx += max(1, $span);
-                }
-
                 $rangoCab = 'A'.$this->filaCabecerasExcel.':'.$colUltima.$filaSub;
                 $sheet->getStyle($rangoCab)->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB('85C1E9');
                 $sheet->getStyle($rangoCab)->getFont()->setBold(true)->getColor()->setRGB('17202A');
                 $sheet->getStyle($rangoCab)->getAlignment()->setWrapText(true)->setHorizontal(Alignment::HORIZONTAL_CENTER);
                 $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+
+                $ultimaFila = (int) $sheet->getHighestRow();
+                if ($ultimaFila >= $this->filaPrimeraDatosExcel
+                    && strcasecmp(trim((string) $sheet->getCell('A'.$ultimaFila)->getValue()), 'Total') === 0) {
+                    $rangoTotal = 'A'.$ultimaFila.':'.$colUltima.$ultimaFila;
+                    $sheet->getStyle($rangoTotal)->applyFromArray([
+                        'font' => [
+                            'bold' => true,
+                            'name' => 'Arial',
+                            'size' => 9,
+                            'color' => ['rgb' => '17202A'],
+                        ],
+                        'fill' => [
+                            'fillType' => Fill::FILL_SOLID,
+                            'color' => ['rgb' => 'D6EAF8'],
+                        ],
+                    ]);
+                }
             },
         ];
     }

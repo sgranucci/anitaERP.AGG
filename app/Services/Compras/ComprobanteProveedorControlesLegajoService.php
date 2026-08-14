@@ -6,6 +6,7 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Ordencompra;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Services\Stock\RecepcionProveedorCambioCotizacionService;
+use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorControlesConfigSupport;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
@@ -13,6 +14,7 @@ use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorLineasFacturaSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
+use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 
 /**
  * Controles de negocio al cargar factura de proveedor vinculada a legajo (OC + COM).
@@ -80,19 +82,39 @@ class ComprobanteProveedorControlesLegajoService
         }
 
         $tieneComDisponibles = $this->tieneComDisponiblesEnLegajo($ordencompra, $excluirComprobanteId);
-        $politica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica($ordencompra, $tieneComDisponibles);
+        $politica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica(
+            $ordencompra,
+            $tieneComDisponibles,
+            $fechaComprobanteYmd
+        );
 
         if ($politica['bloquea_sin_com']) {
             $resultado['ok'] = false;
-            $resultado['errores'][] = 'Esta empresa exige el flujo OC/COM/factura: no hay recepción COM disponible '
-                .'y la orden no es anticipada. Debe confirmar una COM con provisión o marcar la OC como anticipada.';
+            if ($politica['contrato_vigente'] && ($politica['contrato_requiere_recepcion'] ?? false)) {
+                $resultado['errores'][] = 'El contrato vigente de esta OC exige recepción COM obligatoria. '
+                    .'Confirme una COM con provisión antes de cargar la factura.';
+            } else {
+                $resultado['errores'][] = 'Esta empresa exige el flujo OC/COM/factura: no hay recepción COM disponible '
+                    .'y la orden no es anticipada. Debe confirmar una COM con provisión o marcar la OC como anticipada.';
+            }
 
             return $resultado;
         }
 
         if ($politica['debe_asignar_com'] && $modoCarga !== ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) {
             $resultado['ok'] = false;
-            $resultado['errores'][] = 'El legajo tiene recepciones COM disponibles: el modo de carga debe ser «Factura contra recepción (COM)».';
+            $resultado['errores'][] = ($politica['contrato_vigente'] ?? false)
+                ? 'El contrato vigente exige factura contra recepción (COM).'
+                : 'El legajo tiene recepciones COM disponibles: el modo de carga debe ser «Factura contra recepción (COM)».';
+
+            return $resultado;
+        }
+
+        if ($politica['contrato_vigente']
+            && ! ($politica['contrato_requiere_recepcion'] ?? true)
+            && $modoCarga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) {
+            $resultado['ok'] = false;
+            $resultado['errores'][] = 'El contrato vigente de esta OC no requiere recepción: use el modo «Gasto sin recepción».';
 
             return $resultado;
         }
@@ -107,6 +129,8 @@ class ComprobanteProveedorControlesLegajoService
         }
 
         if ($modoCarga !== ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) {
+            $this->validarImputacionContratoSinRecepcion($resultado, $politica, $ordencompra, $conceptos);
+
             return $resultado;
         }
 
@@ -348,6 +372,69 @@ class ComprobanteProveedorControlesLegajoService
         }
 
         return collect();
+    }
+
+    /**
+     * @param  array{ok: bool, avisos: list<string>, errores: list<string>}  $resultado
+     * @param  array<string, mixed>  $politica
+     * @param  iterable<object>  $conceptos
+     */
+    private function validarImputacionContratoSinRecepcion(
+        array &$resultado,
+        array $politica,
+        Ordencompra $ordencompra,
+        iterable $conceptos,
+    ): void {
+        if (! ($politica['contrato_vigente'] ?? false) || ($politica['contrato_requiere_recepcion'] ?? true)) {
+            return;
+        }
+
+        $imputacion = (string) ($politica['contrato_imputacion'] ?? '');
+        if ($imputacion === OrdencompraContratoRutaFacturaSupport::IMPUTACION_ARTICULOS) {
+            $ordencompra->loadMissing(['ordencompra_articulos.articulos.articulo_cuentacontables']);
+            if ($ordencompra->ordencompra_articulos->isEmpty()) {
+                $resultado['ok'] = false;
+                $resultado['errores'][] = 'El contrato imputa el neto con las cuentas de los artículos de la OC, '
+                    .'pero la orden no tiene renglones. Cargue artículos o indique una cuenta en el contrato.';
+            }
+
+            return;
+        }
+
+        if ($imputacion !== OrdencompraContratoRutaFacturaSupport::IMPUTACION_MANUAL) {
+            return;
+        }
+
+        $cuentaContratoId = OrdencompraContratoRutaFacturaSupport::cuentaManualId($ordencompra);
+        if ($cuentaContratoId <= 0) {
+            $resultado['ok'] = false;
+            $resultado['errores'][] = 'El contrato imputa el neto con una cuenta del contrato, '
+                .'pero la OC no tiene cuenta contable cargada. Edite el contrato e indique la cuenta a imputar.';
+
+            return;
+        }
+
+        foreach ($conceptos as $linea) {
+            $concepto = $linea->concepto_ivacompras ?? null;
+            $tipo = (string) ($concepto->tipoconcepto ?? '');
+            if (! ComprobanteProveedorConceptoIvaTipos::esNeto($tipo)) {
+                continue;
+            }
+            $monto = round(abs((float) ($linea->monto ?? 0)), 2);
+            if ($monto <= 0) {
+                continue;
+            }
+            $cuentaId = OrdencompraContratoRutaFacturaSupport::cuentaDebeNetoManual(
+                $ordencompra,
+                (int) ($linea->cuentacontabledebe_id ?? 0)
+            );
+            if ($cuentaId <= 0) {
+                $resultado['ok'] = false;
+                $resultado['errores'][] = 'Falta la cuenta DEBE del neto en el concepto «'.($concepto->nombre ?? 'neto').'».';
+
+                return;
+            }
+        }
     }
 
     private function tieneComDisponiblesEnLegajo(Ordencompra $ordencompra, ?int $excluirComprobanteId): bool

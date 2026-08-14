@@ -41,6 +41,7 @@ use App\Support\Uif\ClientePremioUifListadoFiltros; ?>
             <div class="card-header">
                 <h3 class="card-title">Premios UIF</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.uif.boton-manual')
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-cliente-premio-uif',
                         'filtroValor' => $filtros['valor'] ?? '',

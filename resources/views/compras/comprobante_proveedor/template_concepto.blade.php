@@ -17,6 +17,12 @@
         <td>
             <input type="text" inputmode="decimal" name="montos[]" class="form-control form-control-sm monto js-monto-ar text-right" value="" />
         </td>
+        <td class="align-middle cp-celda-cuenta-debe d-none">
+            @include('compras.comprobante_proveedor.partials.celda_cuenta_debe_concepto', [
+                'cuentaIdCelda' => 0,
+                'puedeAbrirAbmCuenta' => can('editar-cuentas-contables', false) || can('listar-cuentas-contables', false),
+            ])
+        </td>
         <td class="text-center align-middle cp-celda-aviso-concepto">
             <span class="cp-aviso-concepto-cuenta text-muted" title=""></span>
         </td>

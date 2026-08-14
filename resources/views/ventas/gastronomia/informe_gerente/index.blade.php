@@ -43,14 +43,37 @@
             <div class="card-body">
                 @include('ventas.gastronomia.informe_gerente.partials.filtros_cabecera')
 
+                @include('includes.proceso_overlay_aviso', [
+                    'overlayId' => 'informe-gerente-overlay',
+                    'tituloId' => 'informe-gerente-overlay-titulo',
+                    'subtituloId' => 'informe-gerente-overlay-subtitulo',
+                    'titulo' => 'Generando informe…',
+                    'subtitulo' => 'Puede demorar según el período. Pulse Esc para cerrar este aviso.',
+                ])
+
                 @if ($empresa_id <= 0)
-                    <div class="alert alert-info">Seleccione empresa y fecha de jornada para generar el informe.</div>
+                    <div class="alert alert-info">Seleccione empresa y rango de fechas de jornada para generar el informe.</div>
                 @elseif ($informe === null)
                     <div class="alert alert-warning">No se pudo generar el informe.</div>
                 @else
+                    <div class="mb-3">
+                        @include('includes.exportar-tabla-queryparams', [
+                            'ruta' => 'listar_gastronomia_informe_gerente',
+                            'queryparams' => $filtrosQuery ?? [],
+                        ])
+                        @php
+                            $pptParams = array_filter($filtrosQuery ?? [], fn ($v) => $v !== null && $v !== '');
+                            $pptSuffix = count($pptParams) ? '?'.http_build_query($pptParams) : '';
+                        @endphp
+                        <a href="{{ route('listar_gastronomia_informe_gerente', ['formato' => 'PPTX']).$pptSuffix }}"
+                           class="btn btn-app bg-orange">
+                            <i class="fas fa-file-powerpoint"></i> PowerPoint
+                        </a>
+                    </div>
+
                     <div class="alert alert-secondary py-2">
-                        <strong>Jornada {{ $informe['fecha_jornada_label'] }}</strong>
-                        — Total ventas (neto): <strong>${{ number_format($informe['total_ventas_jornada'], 2, ',', '.') }}</strong>
+                        <strong>Período {{ $informe['periodo_label'] ?? $informe['fecha_jornada_label'] }}</strong>
+                        — Total ventas (neto): <strong>${{ number_format($informe['total_ventas_periodo'] ?? $informe['total_ventas_jornada'], 2, ',', '.') }}</strong>
                         @if ($jornada_registro)
                             — Estado jornada: {{ $jornada_registro->estado }}
                         @endif
@@ -88,7 +111,7 @@
                         <div class="col-lg-6 mb-3">
                             <div class="card card-outline card-info h-100">
                                 <div class="card-header py-2">
-                                    <strong>Top 10 artículos vendidos — cantidad (día)</strong>
+                                    <strong>Top 10 artículos vendidos — cantidad (período)</strong>
                                 </div>
                                 <div class="card-body">
                                     <div class="informe-gerente-chart-wrap informe-gerente-chart-wrap--bar">
@@ -125,7 +148,7 @@
                         </div>
                         <div class="col-lg-4 mb-3">
                             <div class="card card-outline card-success h-100">
-                                <div class="card-header py-2"><strong>Ventas por punto de venta (día)</strong></div>
+                                <div class="card-header py-2"><strong>Ventas por punto de venta (período)</strong></div>
                                 <div class="card-body">
                                     <div class="informe-gerente-chart-wrap">
                                         <canvas id="chart-ventas-pv"></canvas>
@@ -170,13 +193,17 @@
                         $recDisponible = ! empty($informe['recepciones']['disponible']);
                         $recCentroCosto = $informe['recepciones']['centro_costo_codigo'] ?? null;
                         $recEtiquetaCc = $recCentroCosto ? ' · CC '.$recCentroCosto : '';
+                        $recFuente = $informe['recepciones']['fuente'] ?? 'erp';
+                        $recFuenteLabel = $recFuente === 'erp'
+                            ? 'ERP'
+                            : ($recFuente === 'hibrido' ? 'ERP + Anita (fechas antiguas)' : 'Anita');
                     @endphp
 
                     <div class="row">
                         <div class="col-lg-6 mb-3">
                             <div class="card card-outline card-secondary h-100">
                                 <div class="card-header py-2">
-                                    <strong>Recepciones del día — importe por proveedor</strong>
+                                    <strong>Recepciones del período — importe por proveedor</strong>
                                     @if ($recCentroCosto)
                                         <span class="badge badge-light border ml-1">CC {{ $recCentroCosto }}</span>
                                     @endif
@@ -231,8 +258,8 @@
                         <div class="col-lg-6 mb-3">
                             <div class="card card-outline card-secondary">
                                 <div class="card-header py-2">
-                                    <strong>Recepciones del día</strong>
-                                    <span class="float-right small text-muted">Anita (recepmae / recepmov){{ $recEtiquetaCc }}</span>
+                                    <strong>Recepciones del período</strong>
+                                    <span class="float-right small text-muted">{{ $recFuenteLabel }}{{ $recEtiquetaCc }}</span>
                                 </div>
                                 <div class="card-body p-0 informe-gerente-tabla-scroll">
                                     @include('ventas.gastronomia.informe_gerente.partials.tabla_recepciones', [
@@ -247,7 +274,7 @@
                             <div class="card card-outline card-secondary">
                                 <div class="card-header py-2">
                                     <strong>Recepciones acumuladas del mes</strong>
-                                    <span class="float-right small text-muted">Anita{{ $recEtiquetaCc }}</span>
+                                    <span class="float-right small text-muted">{{ $recFuenteLabel ?? 'ERP' }}{{ $recEtiquetaCc }}</span>
                                 </div>
                                 <div class="card-body p-0 informe-gerente-tabla-scroll">
                                     @include('ventas.gastronomia.informe_gerente.partials.tabla_recepciones', [
@@ -269,7 +296,7 @@
                         <div class="col-12 mb-3">
                             <div class="card card-outline card-info">
                                 <div class="card-header py-2">
-                                    <strong>Top 20 artículos más vendidos del día — precio y costo Anita</strong>
+                                    <strong>Top 20 artículos más vendidos del período — precio y costo Anita</strong>
                                     @if (!empty($top20Listas['lista_anterior']) && !empty($top20Listas['lista_actual']))
                                         <span class="float-right small text-muted">
                                             stkpre · listas {{ $top20Listas['lista_anterior'] }} ({{ $top20Listas['mes_anterior_label'] ?? '' }})

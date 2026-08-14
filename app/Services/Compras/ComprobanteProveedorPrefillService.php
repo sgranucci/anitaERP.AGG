@@ -9,6 +9,7 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ConceptoIvacompraConsultaSupport;
@@ -106,7 +107,10 @@ class ComprobanteProveedorPrefillService
         $fecharecepcion = null;
 
         $modoCarga = $ordencompra
-            ? ComprobanteProveedorModoCarga::ASIGNA_OC
+            ? ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido(
+                ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica($ordencompra, false, $fechacomprobante),
+                ComprobanteProveedorModoCarga::ASIGNA_OC
+            )
             : ComprobanteProveedorModoCarga::SIN_RECEPCION;
 
         $monedaId = $this->resolverMonedaIdDesdePrecarga($precarga, $ordencompra);
@@ -299,7 +303,10 @@ class ComprobanteProveedorPrefillService
             'ordencompra_id' => $ordencompra->id,
             'fechacomprobante' => $fecha,
             'fechaiva' => $this->fechaIvaDefaultAlta(),
-            'modo_carga' => ComprobanteProveedorModoCarga::ASIGNA_OC,
+            'modo_carga' => ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido(
+                ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica($ordencompra, false, $fecha),
+                ComprobanteProveedorModoCarga::ASIGNA_OC
+            ),
             'estado' => ComprobanteProveedorEstados::BORRADOR,
             'subtotal' => 0,
             'total' => 0,

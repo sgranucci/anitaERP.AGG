@@ -8,6 +8,7 @@
 
     var apiCalcular = app.getAttribute('data-api-calcular') || '';
     var apiGuardar = app.getAttribute('data-api-guardar') || '';
+    var apiGuardarBorrador = app.getAttribute('data-api-guardar-borrador') || '';
     var csrf = app.getAttribute('data-csrf') || '';
     var empresaId = parseInt(app.getAttribute('data-empresa-id') || '0', 10) || 0;
     var turnoId = parseInt(app.getAttribute('data-turno-id') || '0', 10) || 0;
@@ -53,6 +54,14 @@
         return montos;
     }
 
+    function payloadPlanilla() {
+        return {
+            cartones: recolectarCartones(),
+            montos_manuales: recolectarMontosManuales(),
+            observacion: document.getElementById('rend_observacion')?.value || '',
+        };
+    }
+
     function postJson(url, body) {
         return fetch(url, {
             method: 'POST',
@@ -69,6 +78,22 @@
                 return { ok: r.ok, data: data };
             });
         });
+    }
+
+    function mostrarError(msg) {
+        if (window.Swal && Swal.fire) {
+            Swal.fire({ icon: 'error', title: 'Error', text: msg });
+        } else {
+            window.alert(msg);
+        }
+    }
+
+    function mostrarOk(titulo, texto) {
+        if (window.Swal && Swal.fire) {
+            return Swal.fire({ icon: 'success', title: titulo, text: texto });
+        }
+        window.alert(texto || titulo);
+        return Promise.resolve();
     }
 
     function renderConceptos(calculo) {
@@ -164,19 +189,47 @@
         });
     });
 
+    var btnBorrador = document.getElementById('btn-guardar-borrador-rendicion-bingo');
+    if (btnBorrador && apiGuardarBorrador) {
+        btnBorrador.addEventListener('click', function () {
+            btnBorrador.disabled = true;
+            postJson(apiGuardarBorrador, payloadPlanilla()).then(function (res) {
+                btnBorrador.disabled = false;
+                if (res.ok && res.data && res.data.ok) {
+                    var badge = document.getElementById('badge-borrador-rendicion');
+                    if (badge) {
+                        badge.classList.remove('d-none');
+                    }
+                    mostrarOk('Borrador guardado', res.data.mensaje || 'El turno sigue abierto.');
+                    return;
+                }
+                mostrarError((res.data && res.data.error) || 'No se pudo guardar el borrador.');
+            }).catch(function () {
+                btnBorrador.disabled = false;
+                mostrarError('Error de comunicación al guardar el borrador.');
+            });
+        });
+    }
+
     var btnGuardar = document.getElementById('btn-guardar-rendicion-bingo');
     if (btnGuardar) {
         btnGuardar.addEventListener('click', function () {
-            var payload = {
-                cartones: recolectarCartones(),
-                montos_manuales: recolectarMontosManuales(),
-                observacion: document.getElementById('rend_observacion')?.value || '',
-            };
+            var payload = payloadPlanilla();
 
             if (modoEdicion && turnoId > 0) {
                 payload.turno_operativo_id = turnoId;
             }
 
+            if (!modoEdicion) {
+                var okCierre = window.confirm(
+                    '¿Cerrar el turno con esta rendición?\n\nEl turno quedará cerrado. La jornada no se cierra.'
+                );
+                if (!okCierre) {
+                    return;
+                }
+            }
+
+            btnGuardar.disabled = true;
             postJson(apiGuardar, payload).then(function (res) {
                 if (res.ok && res.data && res.data.ok) {
                     var pdfUrl = res.data.url_comprobante_pdf || '';
@@ -186,26 +239,19 @@
                     var url = modoEdicion
                         ? (app.getAttribute('data-url-cierres') || '')
                         : (app.getAttribute('data-url-habilitacion') || '');
-                    if (window.Swal && Swal.fire) {
-                        Swal.fire({
-                            icon: 'success',
-                            title: modoEdicion ? 'Rendición actualizada' : 'Turno cerrado',
-                            text: res.data.mensaje || 'Presente la rendición en Caja → Rendiciones bingo.',
-                        }).then(function () {
-                            window.location.href = url || window.location.pathname;
-                        });
-                    } else {
-                        window.alert(res.data.mensaje || 'Guardado.');
+                    mostrarOk(
+                        modoEdicion ? 'Rendición actualizada' : 'Turno cerrado',
+                        res.data.mensaje || 'Presente la rendición en Caja → Rendiciones bingo.'
+                    ).then(function () {
                         window.location.href = url || window.location.pathname;
-                    }
+                    });
                     return;
                 }
-                var msg = (res.data && res.data.error) || 'No se pudo guardar la rendición.';
-                if (window.Swal && Swal.fire) {
-                    Swal.fire({ icon: 'error', title: 'Error', text: msg });
-                } else {
-                    window.alert(msg);
-                }
+                btnGuardar.disabled = false;
+                mostrarError((res.data && res.data.error) || 'No se pudo guardar la rendición.');
+            }).catch(function () {
+                btnGuardar.disabled = false;
+                mostrarError('Error de comunicación al guardar la rendición.');
             });
         });
     }

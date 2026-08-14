@@ -29,7 +29,7 @@
             </tr>
         @endif
         @if ($filas === [] && ($sin['cantidad'] ?? 0) === 0)
-            <tr><td colspan="4" class="text-center text-muted">Sin facturas en la jornada.</td></tr>
+            <tr><td colspan="4" class="text-center text-muted">Sin facturas en el período.</td></tr>
         @endif
     </tbody>
 </table>

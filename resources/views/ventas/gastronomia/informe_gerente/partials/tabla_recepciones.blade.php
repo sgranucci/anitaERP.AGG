@@ -1,15 +1,19 @@
 @php
     $mostrarError = ! empty($error) && empty($solo_si_error ?? false);
     $filas = $bloque['filas'] ?? [];
+    $metaFuente = $recepciones_meta['fuente'] ?? 'erp';
     $metaSistema = $recepciones_meta['sistema_anita'] ?? null;
     $metaEmpresa = $recepciones_meta['empresa_anita'] ?? null;
     $metaCentroCosto = $recepciones_meta['centro_costo_codigo'] ?? null;
+    $fuenteLabel = $metaFuente === 'erp'
+        ? 'ERP'
+        : ($metaFuente === 'hibrido' ? 'ERP + Anita' : 'Anita');
 @endphp
 @if ($mostrarError)
     <div class="p-3 text-warning small">
-        <strong>Anita:</strong> {{ $error }}
+        <strong>Recepciones:</strong> {{ $error }}
         @if ($metaSistema)
-            <br><span class="text-muted">Base: {{ $metaSistema }}@if($metaEmpresa) · empresa Anita {{ $metaEmpresa }}@endif</span>
+            <br><span class="text-muted">Fallback Anita · base {{ $metaSistema }}@if($metaEmpresa) · empresa {{ $metaEmpresa }}@endif</span>
         @endif
     </div>
 @elseif (! empty($error) && ! empty($solo_si_error))
@@ -18,11 +22,14 @@
 <div class="px-3 py-2 small border-bottom bg-light">
     Comprobantes: <strong>{{ $bloque['cantidad_comprobantes'] ?? 0 }}</strong>
     — Importe: <strong>${{ number_format($bloque['importe_total'] ?? 0, 2, ',', '.') }}</strong>
-    @if (! empty($recepciones_meta['sistema_anita']) && empty($error))
+    @if (empty($error))
         <span class="text-muted d-block d-md-inline mt-1 mt-md-0">
-            Anita · base {{ $recepciones_meta['sistema_anita'] }}
-            @if (! empty($recepciones_meta['empresa_anita']))
-                · empresa {{ $recepciones_meta['empresa_anita'] }}
+            {{ $fuenteLabel }}
+            @if ($metaFuente !== 'erp' && ! empty($metaSistema))
+                · base {{ $metaSistema }}
+            @endif
+            @if ($metaFuente !== 'erp' && ! empty($metaEmpresa))
+                · empresa {{ $metaEmpresa }}
             @endif
             @if (! empty($metaCentroCosto))
                 · CC {{ $metaCentroCosto }}

@@ -5,6 +5,7 @@ namespace App\Models\Compras;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Moneda;
 use App\Models\Contable\Centrocosto;
+use App\Models\Contable\Cuentacontable;
 use App\Models\Seguridad\Usuario;
 use App\Models\Ventas\Transporte;
 use Illuminate\Database\Eloquent\Model;
@@ -42,12 +43,14 @@ class Ordencompra extends Model
         'condiciones_contratacion', 'creousuario_id',
         'es_contrato', 'contrato_vigencia_desde', 'contrato_vigencia_hasta', 'contrato_monto_tope',
         'contrato_moneda_id', 'contrato_auto_renovable', 'contrato_dias_preaviso', 'contrato_dias_aviso',
-        'contrato_responsable_id',
+        'contrato_responsable_id', 'contrato_requiere_recepcion', 'contrato_imputacion_contable',
+        'contrato_cuentacontable_id',
     ];
 
     protected $casts = [
         'es_contrato' => 'boolean',
         'contrato_auto_renovable' => 'boolean',
+        'contrato_requiere_recepcion' => 'boolean',
         'contrato_vigencia_desde' => 'date',
         'contrato_vigencia_hasta' => 'date',
         'contrato_monto_tope' => 'float',
@@ -96,7 +99,9 @@ class Ordencompra extends Model
 
     public function ordencompra_comprobantes()
     {
-        return $this->hasMany(Ordencompra_Comprobante::class, 'ordencompra_id');
+        return $this->hasMany(Ordencompra_Comprobante::class, 'ordencompra_id')
+            ->orderBy('fechavencimiento')
+            ->orderBy('id');
     }
 
     public function ordencompra_historias()
@@ -147,6 +152,11 @@ class Ordencompra extends Model
     public function contrato_monedas()
     {
         return $this->belongsTo(Moneda::class, 'contrato_moneda_id');
+    }
+
+    public function contrato_cuentacontables()
+    {
+        return $this->belongsTo(Cuentacontable::class, 'contrato_cuentacontable_id');
     }
 
     public function contrato_avisos()

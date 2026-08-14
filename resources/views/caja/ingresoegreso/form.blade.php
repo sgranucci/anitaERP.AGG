@@ -42,21 +42,22 @@
                 monto <strong>positivo</strong> en la cuenta que recibe y <strong>negativo</strong> en la que entrega.
                 Debe y Haber de caja, y el asiento contable, deben quedar balanceados.
             </div>
-            <div class="form-group row" id="div-proveedor" style="display: none">
-                <label for="proveedor" class="col-lg-3 control-label text-right pr-2">Proveedor</label>
-                <div class="col-lg-7">
-                    <div class="input-group">
-                        <input type="text" class="form-control proveedor_id" id="proveedor_id" name="proveedor_id" value="{{ $data->proveedor_id ?? '' }}">
-                        <input type="text" class="form-control proveedor" id="proveedor" name="proveedor" value="{{ optional($data->proveedores)->nombre ?? '' }}" readonly>
-                        <div class="input-group-append">
-                            <button type="button" title="Consulta proveedores" class="btn btn-outline-secondary consultaproveedor tooltipsC">
-                                <i class="fa fa-search text-primary"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <input type="hidden" name="nombreproveedor" id="nombreproveedor" class="form-control" value="{{ old('nombreproveedor', optional($data->proveedores)->nombre ?? '') }}">
-                </div>
-            </div>
+            @php
+                $proveedorModelIe = $data->proveedores ?? null;
+                $proveedorIdIe = old('proveedor_id', $data->proveedor_id ?? '');
+                if ($proveedorIdIe && (int) $proveedorIdIe !== (int) optional($proveedorModelIe)->id) {
+                    $proveedorModelIe = \App\Models\Compras\Proveedor::query()->find($proveedorIdIe);
+                }
+            @endphp
+            @include('includes.compras.campo_proveedor_consulta', [
+                'proveedor_id' => $proveedorIdIe,
+                'codigo_proveedor' => old('codigoproveedor', optional($proveedorModelIe)->codigo ?? ''),
+                'nombre_proveedor' => old('nombreproveedor', optional($proveedorModelIe)->nombre ?? ''),
+                'col_label' => 'col-lg-3 control-label text-right pr-2',
+                'col_input' => 'col-lg-7',
+                'requerido' => false,
+                'estilo_contenedor' => 'display: none',
+            ])
         </div>
         <div class="col-sm-6">
             <div class="form-group row">

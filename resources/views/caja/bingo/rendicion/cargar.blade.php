@@ -46,6 +46,7 @@
 <div class="row" id="bingo-rendicion-app"
      data-api-calcular="{{ route('bingo_rendicion_api_calcular') }}"
      data-api-guardar="{{ route('bingo_rendicion_api_guardar') }}"
+     data-api-guardar-borrador="{{ route('bingo_rendicion_api_guardar_borrador') }}"
      data-url-habilitacion="{{ route('bingo_habilitacion_turno', ['empresa_id' => $empresa_id]) }}"
      data-url-cierres="{{ route('bingo_cierres_turno', ['empresa_id' => $empresa_id]) }}"
      data-csrf="{{ csrf_token() }}"
@@ -61,7 +62,7 @@
                     @if (! empty($modo_edicion))
                         Editar rendición — turno #{{ (int) ($turno_id ?? 0) }} · <code>{{ $identificador_pc }}</code>
                     @else
-                        Cierre de turno con rendición — terminal <code>{{ $identificador_pc }}</code>
+                        Rendición de turno — terminal <code>{{ $identificador_pc }}</code>
                     @endif
                 </h3>
                 <div class="card-tools">
@@ -98,6 +99,11 @@
                         · {{ $turno->usuarioHabilitado?->nombre }}
                         @if (! empty($modo_edicion))
                             <span class="badge badge-warning ml-2">Pendiente de presentar en caja</span>
+                        @endif
+                        @if (! empty($datos['tiene_borrador']))
+                            <span class="badge badge-primary ml-2" id="badge-borrador-rendicion">Borrador guardado</span>
+                        @else
+                            <span class="badge badge-primary ml-2 d-none" id="badge-borrador-rendicion">Borrador guardado</span>
                         @endif
                         @if ($datos['rendicion_presentada'])
                             <span class="badge badge-success ml-2">Ya presentada en caja</span>
@@ -209,12 +215,28 @@
                                 <label for="rend_observacion">Observación</label>
                                 <textarea class="form-control" id="rend_observacion" rows="2" maxlength="200">{{ $datos['observacion_cierre'] ?? '' }}</textarea>
                             </div>
+                            @if (empty($modo_edicion))
+                                <button type="button" class="btn btn-primary mr-2" id="btn-guardar-borrador-rendicion-bingo">
+                                    <i class="fa fa-save"></i>
+                                    Guardar borrador
+                                </button>
+                            @endif
                             <button type="button" class="btn btn-success" id="btn-guardar-rendicion-bingo">
-                                <i class="fa fa-save"></i>
-                                {{ ! empty($modo_edicion) ? 'Guardar cambios' : 'Cerrar turno con rendición' }}
+                                <i class="fa fa-lock"></i>
+                                @if (! empty($modo_edicion))
+                                    Guardar cambios
+                                @else
+                                    Cerrar turno con rendición
+                                @endif
                             </button>
                             <p class="text-muted small mt-2 mb-0">
-                                Presente la rendición después en Caja &rarr; Rendiciones bingo.
+                                @if (empty($modo_edicion))
+                                    <strong>Guardar borrador</strong> deja el turno abierto para seguir cargando.
+                                    <strong>Cerrar turno con rendición</strong> finaliza el turno (la jornada no se cierra).
+                                    Después presente en Caja &rarr; Rendiciones bingo.
+                                @else
+                                    Presente la rendición después en Caja &rarr; Rendiciones bingo.
+                                @endif
                             </p>
                         </div>
                     @endif

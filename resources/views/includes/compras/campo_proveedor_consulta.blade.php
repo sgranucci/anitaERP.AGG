@@ -6,8 +6,9 @@
     $colInput = $col_input ?? 'col-lg-8';
     $labelRequerido = ! empty($requerido);
     $mostrarAyuda = $mostrar_ayuda ?? true;
+    $estiloContenedor = $estilo_contenedor ?? '';
 @endphp
-<div class="form-group row align-items-center" id="div-proveedor">
+<div class="form-group row align-items-center" id="div-proveedor"@if ($estiloContenedor !== '') style="{{ $estiloContenedor }}"@endif>
     <label for="codigoproveedor" class="{{ $colLabel }} col-form-label{{ $labelRequerido ? ' requerido' : '' }}">Proveedor</label>
     <div class="{{ $colInput }}">
         <input type="hidden" id="proveedor_id" name="proveedor_id" class="proveedor_id"

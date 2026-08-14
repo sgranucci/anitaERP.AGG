@@ -80,7 +80,7 @@ use App\Support\Listado\QueryRetornoListado;
                             <td>{{ $row->id }}</td>
                             <td><small>{{ $row->empresas->nombre ?? '' }}</small></td>
                             <td><small>{{ $row->proveedores->nombre ?? '' }}</small></td>
-                            <td><small>{{ $row->tipotransaccion_compras->nombre ?? '' }}</small></td>
+                            <td><small>{{ trim(($row->tipotransaccion_compras->abreviatura ?? '').' '.($row->tipotransaccion_compras->nombre ?? '')) }}</small></td>
                             <td><small>{{ $row->letra }}{{ $row->sucursal }}-{{ $row->numerocomprobante }}</small></td>
                             <td><small>{{ $row->fechacomprobante ? $row->fechacomprobante->format('d/m/Y') : '' }}</small></td>
                             <td><small>{{ number_format((float) $row->total, 2, ',', '.') }}</small></td>

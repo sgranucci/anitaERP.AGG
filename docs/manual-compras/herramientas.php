@@ -371,10 +371,60 @@ return [
             'permiso' => 'crear-ordencompra / editar-ordencompra',
         ],
         [
+            'herramienta' => 'Recepción para facturar',
+            'ubicacion' => 'Bloque Contrato',
+            'accion' => 'Obligatoria (factura contra COM) o no requiere recepción (abonos, honorarios). Fija la ruta de la factura mientras el contrato esté vigente.',
+            'permiso' => 'crear-ordencompra / editar-ordencompra',
+        ],
+        [
+            'herramienta' => 'Cuenta contable de las facturas',
+            'ubicacion' => 'Bloque Contrato (solo si no requiere recepción)',
+            'accion' => 'De los artículos de la OC, o cuenta indicada en este contrato. Aplica al neto; IVA y percepciones siguen el concepto de IVA compra.',
+            'permiso' => 'crear-ordencompra / editar-ordencompra',
+        ],
+        [
+            'herramienta' => 'Cuenta a imputar',
+            'ubicacion' => 'Bloque Contrato (si la imputación no es por artículos)',
+            'accion' => 'Código + Enter o lupa para indicar la cuenta DEBE del neto de todas las facturas del contrato. Obligatoria. Debe ser de la misma empresa de la OC.',
+            'permiso' => 'crear-ordencompra / editar-ordencompra',
+        ],
+        [
             'herramienta' => 'Estado actual',
             'ubicacion' => 'Pie del bloque Contrato',
             'accion' => 'Muestra consumido, porcentaje del tope, vencimiento y origen del consumo (recepción / factura).',
             'permiso' => 'listar-ordencompra',
+        ],
+    ],
+    'contrato_factura' => [
+        [
+            'herramienta' => 'Con OC (número de 6 dígitos)',
+            'ubicacion' => 'Compras → Comprobantes de proveedor → Cargar factura',
+            'accion' => 'Abre la factura vinculada a la orden. Si hay contrato vigente, fija el modo de carga y la imputación del neto.',
+            'permiso' => 'crear-comprobante-proveedor',
+        ],
+        [
+            'herramienta' => 'Modo de carga (fijo por contrato)',
+            'ubicacion' => 'Solapa Datos principales de la factura',
+            'accion' => 'Con recepción obligatoria queda en factura contra COM; sin recepción queda en gasto sin recepción. No se puede cambiar mientras el contrato esté vigente.',
+            'permiso' => 'crear-comprobante-proveedor / editar-comprobante-proveedor',
+        ],
+        [
+            'herramienta' => 'Solapa Recepciones COM',
+            'ubicacion' => 'Factura contra COM',
+            'accion' => 'Solo aparece si el contrato exige recepción. Hay que elegir la COM con provisión antes de grabar.',
+            'permiso' => 'crear-comprobante-proveedor / editar-comprobante-proveedor',
+        ],
+        [
+            'herramienta' => 'Cuenta DEBE del neto',
+            'ubicacion' => 'Solapa Conceptos de IVA (ruta sin recepción y cuenta del contrato)',
+            'accion' => 'Queda precargada con la cuenta del contrato. Código + Enter o lupa para cambiarla en esa factura. Obligatoria en renglones de neto si el contrato no tiene cuenta.',
+            'permiso' => 'crear-comprobante-proveedor / editar-comprobante-proveedor',
+        ],
+        [
+            'herramienta' => 'Badges del contrato',
+            'ubicacion' => 'Bloque de la OC en la factura',
+            'accion' => 'Muestra si el contrato está vigente, si exige COM y de dónde sale la cuenta del neto.',
+            'permiso' => 'crear-comprobante-proveedor / editar-comprobante-proveedor',
         ],
     ],
     'contrato_reporte' => [

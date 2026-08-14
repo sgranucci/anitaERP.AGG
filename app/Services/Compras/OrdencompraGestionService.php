@@ -11,6 +11,7 @@ use App\Models\Compras\Requisicion;
 use App\Models\Compras\Requisicion_Articulo;
 use App\Models\Compras\Requisicion_Estado;
 use App\Models\Compras\Sector_Legajocompra;
+use App\Models\Contable\Cuentacontable;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Repositories\Compras\Ordencompra_ArchivoRepositoryInterface;
 use App\Repositories\Compras\Ordencompra_ArticuloRepositoryInterface;
@@ -24,6 +25,8 @@ use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\ImpuestoService;
 use App\Services\Configuracion\OcArbolTriggerDispatcherService;
 use App\Support\Compras\OrdencompraCondicionPagoDefaultSupport;
+use App\Support\Compras\OrdencompraComprobanteEstados;
+use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Stock\SurmarSupport;
 use App\Support\Compras\OrdencompraCondicionesContratacionGenerator;
 use App\Support\Compras\OrdencompraDescuentoSupport;
@@ -361,6 +364,12 @@ class OrdencompraGestionService
         $payload = $request->all();
 
         try {
+            $this->validarContratoImputacion($payload);
+        } catch (\InvalidArgumentException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        try {
             $this->asegurarComprobanteDesdeProveedor($payload);
             $this->validarComprobantesCuotas($payload);
         } catch (\InvalidArgumentException $e) {
@@ -484,6 +493,11 @@ class OrdencompraGestionService
             return ['mensaje' => 'error', 'errores' => $v->errors()->first()];
         }
         $payload = $request->all();
+        try {
+            $this->validarContratoImputacion($payload);
+        } catch (\InvalidArgumentException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
         try {
             $this->asegurarComprobanteDesdeProveedor($payload);
             $this->validarComprobantesCuotas($payload);
@@ -928,11 +942,24 @@ class OrdencompraGestionService
                 'contrato_dias_preaviso' => null,
                 'contrato_dias_aviso' => null,
                 'contrato_responsable_id' => null,
+                'contrato_requiere_recepcion' => true,
+                'contrato_imputacion_contable' => null,
+                'contrato_cuentacontable_id' => null,
             ];
         }
 
         $autoRenovable = filter_var($payload['contrato_auto_renovable'] ?? false, FILTER_VALIDATE_BOOLEAN);
         $diasAviso = trim((string) ($payload['contrato_dias_aviso'] ?? ''));
+        $requiereRecepcion = filter_var($payload['contrato_requiere_recepcion'] ?? true, FILTER_VALIDATE_BOOLEAN);
+        $imputacion = OrdencompraContratoRutaFacturaSupport::normalizarImputacion(
+            $payload['contrato_imputacion_contable'] ?? null
+        );
+        $cuentaId = ! empty($payload['contrato_cuentacontable_id'])
+            ? (int) $payload['contrato_cuentacontable_id']
+            : 0;
+        if ($requiereRecepcion || $imputacion !== OrdencompraContratoRutaFacturaSupport::IMPUTACION_MANUAL) {
+            $cuentaId = 0;
+        }
 
         return [
             'es_contrato' => true,
@@ -950,7 +977,52 @@ class OrdencompraGestionService
             'contrato_responsable_id' => ! empty($payload['contrato_responsable_id'])
                 ? (int) $payload['contrato_responsable_id']
                 : null,
+            'contrato_requiere_recepcion' => $requiereRecepcion,
+            'contrato_imputacion_contable' => $requiereRecepcion ? null : $imputacion,
+            'contrato_cuentacontable_id' => $cuentaId > 0 ? $cuentaId : null,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    private function validarContratoImputacion(array $payload): void
+    {
+        $esContrato = filter_var($payload['es_contrato'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        if (! $esContrato) {
+            return;
+        }
+
+        $requiereRecepcion = filter_var($payload['contrato_requiere_recepcion'] ?? true, FILTER_VALIDATE_BOOLEAN);
+        if ($requiereRecepcion) {
+            return;
+        }
+
+        $imputacion = OrdencompraContratoRutaFacturaSupport::normalizarImputacion(
+            $payload['contrato_imputacion_contable'] ?? null
+        );
+        if ($imputacion !== OrdencompraContratoRutaFacturaSupport::IMPUTACION_MANUAL) {
+            return;
+        }
+
+        $cuentaId = (int) ($payload['contrato_cuentacontable_id'] ?? 0);
+        if ($cuentaId <= 0) {
+            throw new \InvalidArgumentException(
+                'El contrato imputa el neto con una cuenta del contrato. Indique la cuenta contable a imputar.'
+            );
+        }
+
+        $cuenta = Cuentacontable::query()->find($cuentaId);
+        if (! $cuenta) {
+            throw new \InvalidArgumentException('La cuenta contable del contrato no existe.');
+        }
+
+        $empresaId = (int) ($payload['empresa_id'] ?? 0);
+        if ($empresaId > 0 && (int) ($cuenta->empresa_id ?? 0) !== $empresaId) {
+            throw new \InvalidArgumentException(
+                'La cuenta contable del contrato debe pertenecer a la misma empresa de la orden de compra.'
+            );
+        }
     }
 
     /**
@@ -985,6 +1057,9 @@ class OrdencompraGestionService
             'contrato_dias_preaviso' => 'nullable|integer|min:0|max:365',
             'contrato_dias_aviso' => ['nullable', 'string', 'max:60', 'regex:/^\s*\d{1,3}(\s*,\s*\d{1,3})*\s*$/'],
             'contrato_responsable_id' => 'nullable|integer|exists:usuario,id',
+            'contrato_requiere_recepcion' => 'nullable|boolean',
+            'contrato_imputacion_contable' => 'nullable|string|in:articulos,manual',
+            'contrato_cuentacontable_id' => 'nullable|integer|exists:cuentacontable,id',
         ];
     }
 
@@ -1311,6 +1386,9 @@ class OrdencompraGestionService
                 'detalle' => $c['detalle'] ?? null,
                 'cantidadcuota' => isset($c['cantidadcuota']) ? (int) $c['cantidadcuota'] : null,
                 'condicionpago_id' => ! empty($c['condicionpago_id']) ? (int) $c['condicionpago_id'] : null,
+                'estado' => OrdencompraComprobanteEstados::normalizar(
+                    isset($c['estado']) ? (string) $c['estado'] : null
+                ),
                 'creousuario_id' => $creousuarioId,
             ]);
 

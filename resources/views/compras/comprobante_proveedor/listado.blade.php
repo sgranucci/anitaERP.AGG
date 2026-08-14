@@ -87,7 +87,7 @@
                 <td>{{ $row->id }}</td>
                 <td>{{ $row->empresas->nombre ?? '' }}</td>
                 <td>{{ $row->proveedores->nombre ?? '' }}</td>
-                <td>{{ $row->tipotransaccion_compras->nombre ?? '' }}</td>
+                <td>{{ trim(($row->tipotransaccion_compras->abreviatura ?? '').' '.($row->tipotransaccion_compras->nombre ?? '')) }}</td>
                 <td>{{ $row->letra }}{{ $row->sucursal }}-{{ $row->numerocomprobante }}</td>
                 <td>{{ $row->fechacomprobante ? $row->fechacomprobante->format('d/m/Y') : '' }}</td>
                 <td>{{ number_format((float) $row->total, 2, ',', '.') }}</td>

@@ -109,6 +109,42 @@ final class RendicionBingoCajaService
     }
 
     /**
+     * Guarda la planilla (cartones / premios) sin cerrar el turno ni la jornada.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    public function guardarBorradorTerminal(string $identificadorPc, array $payload): TurnoOperativoBingo
+    {
+        $turno = $this->turnoOperativoService->turnoHabilitadoEnPc($identificadorPc);
+        if ($turno === null) {
+            throw new InvalidArgumentException('No hay turno habilitado en esta terminal.');
+        }
+
+        if ($turno->estado !== TurnoOperativoBingo::ESTADO_HABILITADO) {
+            throw new InvalidArgumentException('El turno ya está cerrado. Use la edición de rendición.');
+        }
+
+        $empresaId = (int) $turno->empresa_id;
+        $lineasRaw = is_array($payload['cartones'] ?? null) ? $payload['cartones'] : [];
+        $montosManuales = is_array($payload['montos_manuales'] ?? null) ? $payload['montos_manuales'] : [];
+        $lineas = $this->normalizarLineasCartones($empresaId, $lineasRaw);
+        $calculo = BingoRendicionCalculoSupport::calcular(
+            $lineas,
+            $this->conceptosActivos($empresaId),
+            $montosManuales,
+        );
+        $observacion = trim((string) ($payload['observacion'] ?? ''));
+        $lineasGuardar = $this->sanitizarLineasCartonesParaGuardar($empresaId, $lineasRaw);
+
+        return $this->turnoOperativoService->guardarBorradorRendicion($turno, [
+            'cartones' => $lineasGuardar,
+            'conceptos' => $this->armarPayloadConceptos($calculo['lineas_concepto'], $montosManuales),
+            'montos_manuales' => $montosManuales,
+            'observacion_cierre' => $observacion,
+        ]);
+    }
+
+    /**
      * Actualiza cartones/conceptos de un turno ya cerrado, pendiente de presentar en caja.
      *
      * @param  array<string, mixed>  $payload
@@ -621,6 +657,13 @@ final class RendicionBingoCajaService
             $montosManuales,
         );
 
+        $tieneBorrador = ! $modoEdicion
+            && $turno->estado === TurnoOperativoBingo::ESTADO_HABILITADO
+            && (
+                ! empty($turno->cartones_rendicion_json)
+                || ! empty($turno->conceptos_rendicion_json)
+            );
+
         return [
             'turno' => $turno,
             'identificador_pc' => $identificadorPc,
@@ -629,6 +672,7 @@ final class RendicionBingoCajaService
             'calculo' => $calculo,
             'rendicion_presentada' => (bool) $turno->rendicion_presentada,
             'modo_edicion' => $modoEdicion,
+            'tiene_borrador' => $tieneBorrador,
             'observacion_cierre' => (string) ($turno->observacion_cierre ?? ''),
         ];
     }

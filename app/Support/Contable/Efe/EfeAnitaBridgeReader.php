@@ -110,7 +110,8 @@ class EfeAnitaBridgeReader
         return $this->listar(
             'caja',
             'concbingo',
-            'concb_concepto,concb_desc,concb_tipo_conc,concb_porcentaje,concb_cta_contable,concb_contrapartida',
+            // Informix: columna real es concb_contrap (el .def C usa alias concb_contrapartida).
+            'concb_concepto,concb_desc,concb_tipo_conc,concb_porcentaje,concb_cta_contable,concb_contrap',
             '',
             $errores,
             'concbingo-cierre-bingo',
@@ -194,6 +195,151 @@ class EfeAnitaBridgeReader
             .' AND penvp_fecha<='.$fechaHasta,
             $errores,
             'pendmovp-efe',
+        );
+    }
+
+    /**
+     * Cabeceras gastronomía / estacionamiento (rendgastro).
+     *
+     * @return list<object>
+     */
+    public function listarRendgastro(int $empresaId, int $fechaDesde, int $fechaHasta): array
+    {
+        $errores = [];
+
+        return $this->listar(
+            'caja',
+            'rendgastro',
+            'rendg_nro_oper,rendg_tipo_oper,rendg_fecha,rendg_empresa,rendg_sucursal,rendg_total_z,rendg_tot_nc,rendg_tot_redondeo,rendg_dif_caja,rendg_ab_pago,rendg_turno',
+            ' WHERE rendg_empresa='.$empresaId
+            .' AND rendg_fecha>='.$fechaDesde
+            .' AND rendg_fecha<='.$fechaHasta,
+            $errores,
+            'rendgastro-efe',
+        );
+    }
+
+    /**
+     * Valores rendidos (rendvalor) del período.
+     *
+     * @return list<object>
+     */
+    public function listarRendvalor(int $fechaDesde, int $fechaHasta): array
+    {
+        $errores = [];
+
+        return $this->listar(
+            'caja',
+            'rendvalor',
+            'rendv_nro_oper,rendv_tipo_oper,rendv_codigo,rendv_total,rendv_fecha,rendv_cotizacion',
+            ' WHERE rendv_fecha>='.$fechaDesde
+            .' AND rendv_fecha<='.$fechaHasta,
+            $errores,
+            'rendvalor-efe',
+        );
+    }
+
+    /**
+     * Catálogo de valores (valormae) de la empresa.
+     *
+     * @return list<object>
+     */
+    public function listarValormae(int $empresaId): array
+    {
+        $errores = [];
+
+        return $this->listar(
+            'caja',
+            'valormae',
+            'valm_codigo,valm_desc,valm_tipo_valor,valm_empresa',
+            ' WHERE valm_empresa='.$empresaId,
+            $errores,
+            'valormae-efe',
+        );
+    }
+
+    /**
+     * Conceptos de apertura de gasto (apgasto).
+     *
+     * @return list<object>
+     */
+    public function listarApgasto(): array
+    {
+        $errores = [];
+
+        return $this->listar(
+            'caja',
+            'apgasto',
+            'apg_concepto,apg_desc',
+            '',
+            $errores,
+            'apgasto-efe',
+        );
+    }
+
+    /**
+     * Apertura de gastos por operación de máquinas (rendmapgasto).
+     *
+     * @return list<object>
+     */
+    public function listarRendmapgasto(int $nroOperDesde, int $nroOperHasta): array
+    {
+        $errores = [];
+        $colOper = (string) config('rendicion_maquina_anita.gasto_col_nro_oper', 'renmap_nro_oper');
+        $colOrden = (string) config('rendicion_maquina_anita.gasto_col_orden', 'renmap_orden');
+        $colCodigo = (string) config('rendicion_maquina_anita.gasto_col_codigo', 'renmap_codigo');
+        $colImporte = (string) config('rendicion_maquina_anita.gasto_col_importe', 'renmap_importe');
+
+        return $this->listar(
+            'caja',
+            (string) config('rendicion_maquina_anita.tabla_gasto', 'rendmapgasto'),
+            $colOper.','.$colOrden.','.$colCodigo.','.$colImporte,
+            ' WHERE '.$colOper.'>='.$nroOperDesde
+            .' AND '.$colOper.'<='.$nroOperHasta,
+            $errores,
+            'rendmapgasto-efe',
+        );
+    }
+
+    /**
+     * Remesas del período (tabla remesas).
+     *
+     * @return list<object>
+     */
+    public function listarRemesas(int $empresaId, int $fechaDesde, int $fechaHasta): array
+    {
+        $errores = [];
+
+        return $this->listar(
+            'caja',
+            'remesas',
+            'reme_empresa,reme_nro_remesa,reme_fecha,reme_importe,reme_cod_valor,reme_tipo_valor,reme_cotizacion',
+            ' WHERE reme_empresa='.$empresaId
+            .' AND reme_fecha>='.$fechaDesde
+            .' AND reme_fecha<='.$fechaHasta,
+            $errores,
+            'remesas-efe',
+        );
+    }
+
+    /**
+     * Cabeceras de remesa (rememae) — destino / moneda.
+     *
+     * @return list<object>
+     */
+    public function listarRememae(int $empresaId, int $fechaDesde, int $fechaHasta): array
+    {
+        $errores = [];
+
+        return $this->listar(
+            'caja',
+            'rememae',
+            'remem_nro_remesa,remem_destino,remem_empresa,remem_fecha,remem_importe,remem_cod_mon,remem_cotizacion,remem_tipo_remesa',
+            ' WHERE remem_empresa='.$empresaId
+            .' AND remem_fecha>='.$fechaDesde
+            .' AND remem_fecha<='.$fechaHasta,
+            $errores,
+            'rememae-efe',
         );
     }
 

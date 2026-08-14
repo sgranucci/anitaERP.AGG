@@ -104,6 +104,25 @@ class GastronomiaArticulosVendidosQuery
     }
 
     /**
+     * Top N artículos vendidos en un rango de fechas de jornada.
+     *
+     * @return list<array{articulo_id:int,sku:string,descripcion:string,cantidad:float,importe:float}>
+     */
+    public function topPorRango(
+        int $empresaId,
+        string $fechaDesde,
+        string $fechaHasta,
+        string $orden = 'cantidad',
+        int $limit = 10,
+    ): array {
+        if ($empresaId <= 0) {
+            return [];
+        }
+
+        return $this->topPorRangoJornada($empresaId, $fechaDesde, $fechaHasta, $orden, $limit);
+    }
+
+    /**
      * @return list<array{articulo_id:int,sku:string,descripcion:string,cantidad:float,importe:float}>
      */
     private function topPorRangoJornada(

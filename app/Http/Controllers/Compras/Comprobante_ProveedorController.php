@@ -719,17 +719,25 @@ class Comprobante_ProveedorController extends Controller
             'bloquea_sin_com' => false,
         ];
         if ($data) {
-            $data->loadMissing(['ordencompras.sector_legajocompras']);
+            $data->loadMissing(['ordencompras.sector_legajocompras', 'ordencompras.contrato_cuentacontables']);
             $oc = $data->ordencompras;
             $tieneCom = $recepcionesDisponibles->isNotEmpty();
-            $comPolitica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica($oc, $tieneCom);
+            $fechaPolitica = null;
+            if ($data->fechacomprobante instanceof \DateTimeInterface) {
+                $fechaPolitica = $data->fechacomprobante->format('Y-m-d');
+            } elseif (filled($data->fechacomprobante ?? null)) {
+                $fechaPolitica = substr((string) $data->fechacomprobante, 0, 10);
+            }
+            $comPolitica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica($oc, $tieneCom, $fechaPolitica);
             $comObligatoria = (bool) ($comPolitica['debe_asignar_com'] ?? false);
 
             $modoSugerido = ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido(
                 $comPolitica,
                 (string) ($data->modo_carga ?? '')
             );
-            if ($comObligatoria || ($comPolitica['permite_factura_anticipada'] ?? false)) {
+            if ($comObligatoria
+                || ($comPolitica['permite_factura_anticipada'] ?? false)
+                || ($comPolitica['contrato_vigente'] ?? false)) {
                 $data->modo_carga = $modoSugerido;
             }
         }
@@ -800,11 +808,14 @@ class Comprobante_ProveedorController extends Controller
             'tiene_pagos' => $tienePagos,
             'bloqueado_edicion' => $bloqueadoEdicion,
             'puede_actualizar' => $puedeActualizar,
-            'mostrarSolapaCom' => $comObligatoria
-                || count($recepcionesSeleccionadas) > 0
-                || ($comPolitica['permite_factura_anticipada'] ?? false)
-                || ($comPolitica['bloquea_sin_com'] ?? false)
-                || (string) ($data->modo_carga ?? '') === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION,
+            'mostrarSolapaCom' => ! (($comPolitica['contrato_vigente'] ?? false) && ! ($comPolitica['contrato_requiere_recepcion'] ?? true))
+                && (
+                    $comObligatoria
+                    || count($recepcionesSeleccionadas) > 0
+                    || ($comPolitica['permite_factura_anticipada'] ?? false)
+                    || ($comPolitica['bloquea_sin_com'] ?? false)
+                    || (string) ($data->modo_carga ?? '') === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION
+                ),
             // Match SKU/precio off en AGG: ocultar solapa vacía; mostrar si hay líneas (OCR) o flags activos.
             'mostrarSolapaArticulos' => $this->mostrarSolapaArticulosFormulario(
                 (int) ($data->empresa_id ?? 0),

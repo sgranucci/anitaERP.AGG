@@ -1,7 +1,13 @@
 @php
     $conceptosListaOld = old('concepto_ivacompra_ids');
     $montosOld = old('montos', []);
+    $cuentasDebeOld = old('cuentacontabledebe_ids', []);
     $mostrarPreviewAsiento = (bool) ($mostrarSolapaAsiento ?? false);
+    $cpImputacionManual = (($com_politica['contrato_vigente'] ?? false)
+        && ! ($com_politica['contrato_requiere_recepcion'] ?? true)
+        && ($com_politica['contrato_imputacion'] ?? '') === \App\Support\Compras\OrdencompraContratoRutaFacturaSupport::IMPUTACION_MANUAL);
+    $cpCuentaContratoId = (int) ($com_politica['contrato_cuentacontable_id'] ?? 0);
+    $puedeAbrirAbmCuenta = can('editar-cuentas-contables', false) || can('listar-cuentas-contables', false);
 @endphp
 
 <div class="row">
@@ -11,6 +17,10 @@
             Agregue uno o más renglones. Código + Enter o <kbd>F1</kbd>/lupa para consultar.
             El modal lista solo conceptos configurados para el <strong>tipo de comprobante</strong> seleccionado.
             En el monto, <kbd>Enter</kbd> valida coherencia y actualiza la vista previa del asiento.
+            @if ($cpImputacionManual)
+                El contrato exige <strong>cuenta DEBE</strong> del neto: se toma de la cuenta cargada en el contrato
+            (puede cambiarse en el renglón).
+            @endif
         </p>
 
         <div id="cp-conceptos-iva-coherencia-banner" class="alert alert-danger py-2 mb-3 d-none" role="alert"></div>
@@ -21,8 +31,11 @@
             <table class="table table-bordered table-sm mb-2" id="concepto-table">
                 <thead style="background-color:#85C1E9;color:#17202A;">
                     <tr>
-                        <th style="width:48%;">Concepto</th>
-                        <th style="width:22%;" class="text-right">Monto</th>
+                        <th style="width:{{ $cpImputacionManual ? '36%' : '48%' }};">Concepto</th>
+                        <th style="width:18%;" class="text-right">Monto</th>
+                        @if ($cpImputacionManual)
+                        <th style="width:28%;">Cuenta DEBE</th>
+                        @endif
                         <th style="width:8%;" class="text-center" title="Cuenta contable DEBE en el maestro">Cta.</th>
                         <th style="width:8%;"></th>
                     </tr>
@@ -36,6 +49,7 @@
                                 $codigo = $concepto->codigo ?? '';
                                 $nombre = $concepto->nombre ?? '';
                                 $montoVal = $montosOld[$idx] ?? '';
+                                $cuentaDebeOldId = (int) ($cuentasDebeOld[$idx] ?? 0);
                             @endphp
                             <tr class="item-concepto">
                                 <td>
@@ -57,6 +71,14 @@
                                         class="form-control form-control-sm monto js-monto-ar text-right"
                                         value="{{ filled($montoVal) ? number_format((float) $montoVal, 2, ',', '.') : '' }}">
                                 </td>
+                                @if ($cpImputacionManual)
+                                <td class="align-middle cp-celda-cuenta-debe">
+                                    @include('compras.comprobante_proveedor.partials.celda_cuenta_debe_concepto', [
+                                        'cuentaIdCelda' => $cuentaDebeOldId > 0 ? $cuentaDebeOldId : $cpCuentaContratoId,
+                                        'puedeAbrirAbmCuenta' => $puedeAbrirAbmCuenta,
+                                    ])
+                                </td>
+                                @endif
                                 <td class="text-center align-middle cp-celda-aviso-concepto">
                                     <span class="cp-aviso-concepto-cuenta text-muted" title=""></span>
                                 </td>
@@ -94,6 +116,14 @@
                                         class="form-control form-control-sm monto js-monto-ar text-right"
                                         value="{{ number_format((float) ($renglon->monto ?? 0), 2, ',', '.') }}">
                                 </td>
+                                @if ($cpImputacionManual)
+                                <td class="align-middle cp-celda-cuenta-debe">
+                                    @include('compras.comprobante_proveedor.partials.celda_cuenta_debe_concepto', [
+                                        'cuentaIdCelda' => (int) ($renglon->cuentacontabledebe_id ?? 0) ?: $cpCuentaContratoId,
+                                        'puedeAbrirAbmCuenta' => $puedeAbrirAbmCuenta,
+                                    ])
+                                </td>
+                                @endif
                                 <td class="text-center align-middle cp-celda-aviso-concepto">
                                     <span class="cp-aviso-concepto-cuenta text-muted" title=""></span>
                                 </td>

@@ -45,6 +45,7 @@ window.descargarExcelConciliacionUrl = @json(session('descargar_excel_conciliaci
             <div class="card-header">
                 <h3 class="card-title">Conciliación final Wigos por período</h3>
                 <div class="card-tools">
+                    @include('includes.uif.boton-manual')
                     @if ($totalUnificadoGlobal > 0 && $puedeExportar)
                         <a href="{{ route('listar_conciliacion_wigos_uif', ['formato' => 'GLOBAL']).$suffixExportGlobal }}"
                            class="btn btn-app bg-primary" title="Libro global BSA + KSA + RSA (como Prueba global)">

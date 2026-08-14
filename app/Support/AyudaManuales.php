@@ -83,6 +83,13 @@ class AyudaManuales
                 'disponible' => true,
             ],
             [
+                'modulo' => 'UIF — Clientes, premios e informes',
+                'bajada' => 'Clientes y premios, informe mensual Excel/PDF/XML, congelados, conciliación Wigos y tablas maestras.',
+                'url' => route('manual_uif'),
+                'icono' => 'fa-id-card',
+                'disponible' => true,
+            ],
+            [
                 'modulo' => 'Plataforma IA (SAP-aligned)',
                 'bajada' => 'Skills, Document AI, panel, gobernanza, HITL, RAG de manuales, MCP, permisos y runbook operativo.',
                 'url' => route('manual_ia'),

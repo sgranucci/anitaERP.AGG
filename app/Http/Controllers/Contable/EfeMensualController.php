@@ -28,7 +28,7 @@ class EfeMensualController extends Controller
 
     public function index(Request $request)
     {
-        can('listar-asiento');
+        $this->assertPuedeEfeMensual();
 
         $empresaQuery = $this->empresaRepository->allFiltrado();
         $monedaQuery = $this->monedaRepository->all();
@@ -104,7 +104,7 @@ class EfeMensualController extends Controller
 
     public function exportar(Request $request, string $formato)
     {
-        can('listar-asiento');
+        $this->assertPuedeEfeMensual();
 
         MayorConceptoRuntimeSupport::elevarLimites();
 
@@ -225,5 +225,18 @@ class EfeMensualController extends Controller
         if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
             abort(403, 'No tiene acceso a la empresa seleccionada.');
         }
+    }
+
+    /**
+     * Contaduría: listar-efe-mensual (o listar-asiento histórico).
+     * Tesorería usa caja/posicion-financiera (listar-posicion-financiera), no este EFE.
+     */
+    private function assertPuedeEfeMensual(): void
+    {
+        if (can('listar-efe-mensual', false) || can('listar-asiento', false)) {
+            return;
+        }
+
+        can('listar-efe-mensual');
     }
 }

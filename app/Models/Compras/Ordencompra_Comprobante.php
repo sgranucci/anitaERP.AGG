@@ -3,6 +3,9 @@
 namespace App\Models\Compras;
 
 use App\Models\Configuracion\Moneda;
+use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\OrdencompraComprobanteEstados;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 
 class Ordencompra_Comprobante extends Model
@@ -11,7 +14,11 @@ class Ordencompra_Comprobante extends Model
 
     protected $fillable = [
         'ordencompra_id', 'tipocomprobante', 'fechavencimiento', 'monto', 'moneda_id', 'cotizacion', 'detalle',
-        'cantidadcuota', 'condicionpago_id', 'creousuario_id',
+        'cantidadcuota', 'condicionpago_id', 'estado', 'creousuario_id',
+    ];
+
+    protected $attributes = [
+        'estado' => OrdencompraComprobanteEstados::PENDIENTE,
     ];
 
     public function ordencompras()
@@ -31,6 +38,25 @@ class Ordencompra_Comprobante extends Model
 
     public function ordencompra_comprobante_cuotas()
     {
-        return $this->hasMany(Ordencompra_Comprobante_Cuota::class, 'ordencompra_comprobante_id');
+        return $this->hasMany(Ordencompra_Comprobante_Cuota::class, 'ordencompra_comprobante_id')
+            ->orderBy('fechavencimiento')
+            ->orderBy('id');
+    }
+
+    public function comprobante_proveedores()
+    {
+        return $this->hasMany(Comprobante_Proveedor::class, 'ordencompra_comprobante_id');
+    }
+
+    /**
+     * Comprobantes a venir aún disponibles para cargar factura.
+     */
+    public function scopePendientesDeFacturar(Builder $query): Builder
+    {
+        return $query
+            ->where('estado', OrdencompraComprobanteEstados::PENDIENTE)
+            ->whereDoesntHave('comprobante_proveedores', function (Builder $q) {
+                $q->where('estado', '!=', ComprobanteProveedorEstados::ANULADO);
+            });
     }
 }

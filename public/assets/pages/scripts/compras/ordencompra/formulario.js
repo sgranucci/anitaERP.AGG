@@ -1123,13 +1123,56 @@ $(function () {
 		return suf;
 	}
 
+	function ocEtiquetaEstadoComprobante(estado) {
+		var e = String(estado || 'PENDIENTE').toUpperCase();
+		if (e === 'CARGADO') {
+			return 'Ya cargado';
+		}
+		return 'Pendiente';
+	}
+
+	/** Fecha ASC: usados/históricos arriba; a igual fecha, CARGADO antes que PENDIENTE. */
+	function ocOrdenarComprobantesPorFecha() {
+		ocComprobantesState.sort(function (a, b) {
+			var fa = String((a && a.fechavencimiento) || '').substring(0, 10);
+			var fb = String((b && b.fechavencimiento) || '').substring(0, 10);
+			if (fa !== fb) {
+				if (!fa) {
+					return 1;
+				}
+				if (!fb) {
+					return -1;
+				}
+				return fa < fb ? -1 : 1;
+			}
+			var ea = String((a && a.estado) || 'PENDIENTE').toUpperCase();
+			var eb = String((b && b.estado) || 'PENDIENTE').toUpperCase();
+			if (ea === 'CARGADO' && eb !== 'CARGADO') {
+				return -1;
+			}
+			if (eb === 'CARGADO' && ea !== 'CARGADO') {
+				return 1;
+			}
+			return 0;
+		});
+	}
+
 	function ocRenderTablaComprobantes() {
+		ocOrdenarComprobantesPorFecha();
 		var $b = $('#oc_tabla_comprobantes_body').empty();
 		ocComprobantesState.forEach(function (c, idx) {
 			var nCuotas = (c.cuotas && c.cuotas.length) ? c.cuotas.length : 0;
+			var estado = String(c.estado || 'PENDIENTE').toUpperCase();
 			var $tr = $('<tr/>');
+			if (estado === 'CARGADO') {
+				$tr.addClass('table-secondary');
+			}
 			$tr.append('<td>' + (idx + 1) + '</td>');
 			$tr.append('<td>' + $('<div>').text(c.tipocomprobante || '').html() + '</td>');
+			var $tdEst = $('<td/>');
+			var badgeClass = estado === 'CARGADO' ? 'badge badge-secondary' : 'badge badge-info';
+			$tdEst.append($('<span/>').addClass(badgeClass).text(ocEtiquetaEstadoComprobante(estado)));
+			$tr.append($tdEst);
 			$tr.append('<td>' + $('<div>').text(c.fechavencimiento || '').html() + '</td>');
 			$tr.append('<td class="text-right">' + (c.monto != null ? Number(c.monto).toFixed(2) : '') + '</td>');
 			$tr.append('<td>' + $('<div>').text(ocMonedaAbrev(c.moneda_id)).html() + '</td>');
@@ -1197,6 +1240,9 @@ $(function () {
 			obj.condicionpago_id = prev.condicionpago_id != null ? prev.condicionpago_id : null;
 			obj.cantidadcuota = prev.cantidadcuota != null ? prev.cantidadcuota : null;
 			obj.cotizacion = prev.cotizacion != null ? prev.cotizacion : null;
+			obj.estado = prev.estado != null ? prev.estado : 'PENDIENTE';
+		} else {
+			obj.estado = 'PENDIENTE';
 		}
 		var finalIdx;
 		if (idx < 0) {
@@ -1631,8 +1677,8 @@ $(function () {
 
 	if ($('#comprobantes_json').length) {
 		ocParseComprobantesFromHidden();
-		ocSyncComprobantesToHidden();
 		ocRenderTablaComprobantes();
+		ocSyncComprobantesToHidden();
 	}
 
 	// Al abrir el formulario con un proveedor ya elegido (crear con requisición/plantilla o editar
@@ -2823,8 +2869,13 @@ $(function () {
 		if (!autoRenovable) {
 			$('#contrato_dias_preaviso').val('');
 		}
+
+		var requiereRecepcion = $('#contrato_requiere_recepcion_si').is(':checked');
+		$('#oc-contrato-imputacion').toggle(esContrato && !requiereRecepcion);
+		var imputacionManual = $('#contrato_imputacion_manual').is(':checked');
+		$('#oc-contrato-cuenta-imputar').toggle(esContrato && !requiereRecepcion && imputacionManual);
 	}
 
-	$(document).on('change', '#es_contrato, #contrato_auto_renovable', ocSincronizarBloqueContrato);
+	$(document).on('change', '#es_contrato, #contrato_auto_renovable, input[name="contrato_requiere_recepcion"], input[name="contrato_imputacion_contable"]', ocSincronizarBloqueContrato);
 	ocSincronizarBloqueContrato();
 });

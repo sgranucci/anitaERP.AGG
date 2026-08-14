@@ -27,6 +27,16 @@ final class ComprobanteProveedorFacturaAnticipadaSupport
             return false;
         }
 
+        $fecha = null;
+        if ($comprobante->fechacomprobante instanceof \DateTimeInterface) {
+            $fecha = $comprobante->fechacomprobante->format('Y-m-d');
+        } elseif (filled($comprobante->fechacomprobante ?? null)) {
+            $fecha = substr((string) $comprobante->fechacomprobante, 0, 10);
+        }
+        if (OrdencompraContratoRutaFacturaSupport::aplicaSinRecepcion($oc, $fecha)) {
+            return false;
+        }
+
         return ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($oc);
     }
 

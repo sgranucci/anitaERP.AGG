@@ -7,13 +7,12 @@ use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\TurnoGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
-use App\Support\Ventas\GastronomiaTurnoOperativoTotalesSupport;
 use App\Support\Ventas\GastronomiaVentaComprobanteSignoSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Datos del informe gerente gastronomía (ventas ERP en fecha de jornada).
+ * Datos del informe gerente gastronomía (ventas ERP en rango de fechas de jornada).
  * Totales y top artículos usan signo del comprobante (tipotransaccion.signo), no saldo de stock.
  */
 final class GastronomiaInformeGerenteQuery
@@ -25,34 +24,35 @@ final class GastronomiaInformeGerenteQuery
     /**
      * @return list<array{articulo_id:int,sku:string,descripcion:string,cantidad:float,importe:float}>
      */
-    public function top10PorCantidad(int $empresaId, string $fechaJornada): array
+    public function top10PorCantidad(int $empresaId, string $fechaDesde, string $fechaHasta): array
     {
-        return $this->articulosVendidosQuery->topPorJornada($empresaId, $fechaJornada, 'cantidad', 10);
+        return $this->articulosVendidosQuery->topPorRango($empresaId, $fechaDesde, $fechaHasta, 'cantidad', 10);
     }
 
     /**
      * @return list<array{articulo_id:int,sku:string,descripcion:string,cantidad:float,importe:float}>
      */
-    public function top10PorValor(int $empresaId, string $fechaJornada): array
+    public function top10PorValor(int $empresaId, string $fechaDesde, string $fechaHasta): array
     {
-        return $this->articulosVendidosQuery->topPorJornada($empresaId, $fechaJornada, 'importe', 10);
+        return $this->articulosVendidosQuery->topPorRango($empresaId, $fechaDesde, $fechaHasta, 'importe', 10);
     }
 
     /**
+     * Top del mes calendario de la fecha de referencia (hasta del rango).
+     *
      * @return list<array{articulo_id:int,sku:string,descripcion:string,cantidad:float,importe:float}>
      */
-    public function top10MesPorCantidad(int $empresaId, string $fechaJornada): array
+    public function top10MesPorCantidad(int $empresaId, string $fechaReferenciaYmd): array
     {
-        return $this->articulosVendidosQuery->topPorMes($empresaId, $fechaJornada, 'cantidad', 10);
+        return $this->articulosVendidosQuery->topPorMes($empresaId, $fechaReferenciaYmd, 'cantidad', 10);
     }
 
     /**
      * @return list<array{turno_id:int,etiqueta:string,total:float,cantidad:int}>
      */
-    public function ventasPorTurno(int $empresaId, string $fechaJornada): array
+    public function ventasPorTurno(int $empresaId, string $fechaDesde, string $fechaHasta): array
     {
-        $jornadaId = $this->jornadaId($empresaId, $fechaJornada);
-        $ventanas = $this->ventanasTurnoOperativo($empresaId, $jornadaId);
+        $ventanas = $this->ventanasTurnoOperativoRango($empresaId, $fechaDesde, $fechaHasta);
 
         $emisiones = DB::table('venta_gastronomia_emision as vge')
             ->join('venta as v', 'v.id', '=', 'vge.venta_id')
@@ -60,7 +60,8 @@ final class GastronomiaInformeGerenteQuery
             ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
             ->whereNull('v.deleted_at')
             ->where('pv.empresa_id', $empresaId)
-            ->whereDate('v.fechajornada', $fechaJornada)
+            ->whereDate('v.fechajornada', '>=', $fechaDesde)
+            ->whereDate('v.fechajornada', '<=', $fechaHasta)
             ->select([
                 'v.id as venta_id',
                 'v.created_at',
@@ -68,7 +69,6 @@ final class GastronomiaInformeGerenteQuery
                 DB::raw(GastronomiaVentaComprobanteSignoSupport::sqlTotalComprobante().' as total'),
             ])
             ->get();
-
         $porTurno = [];
         $sinTurno = ['turno_id' => 0, 'etiqueta' => 'Sin turno asignado', 'total' => 0.0, 'cantidad' => 0];
 
@@ -119,7 +119,7 @@ final class GastronomiaInformeGerenteQuery
      *   cantidad_notas_credito:int
      * }>
      */
-    public function ventasPorPuntoVenta(int $empresaId, string $fechaJornada): array
+    public function ventasPorPuntoVenta(int $empresaId, string $fechaDesde, string $fechaHasta): array
     {
         $pvIds = ConfiguracionPuntoventaGastronomia::query()
             ->where('empresa_id', $empresaId)
@@ -136,21 +136,40 @@ final class GastronomiaInformeGerenteQuery
                 ->orderBy('codigo')
                 ->get(['id', 'codigo', 'nombre']);
 
+        $agregados = collect();
+        if ($pvIds->isNotEmpty()) {
+            $signoResta = GastronomiaVentaComprobanteSignoSupport::SIGNO_RESTA;
+            $agregados = DB::table('venta_gastronomia_emision as vge')
+                ->join('venta as v', 'v.id', '=', 'vge.venta_id')
+                ->join('tipotransaccion as tt', 'tt.id', '=', 'v.tipotransaccion_id')
+                ->whereNull('v.deleted_at')
+                ->whereIn('v.puntoventa_id', $pvIds->all())
+                ->whereDate('v.fechajornada', '>=', $fechaDesde)
+                ->whereDate('v.fechajornada', '<=', $fechaHasta)
+                ->groupBy('v.puntoventa_id')
+                ->select([
+                    'v.puntoventa_id',
+                    DB::raw('COALESCE(SUM('.GastronomiaVentaComprobanteSignoSupport::sqlTotalComprobante().'), 0) as total'),
+                    DB::raw('COALESCE(SUM(CASE WHEN tt.signo = '.$signoResta.' THEN 0 ELSE ABS(v.total) END), 0) as total_facturas'),
+                    DB::raw('SUM(CASE WHEN tt.signo = '.$signoResta.' THEN 0 ELSE 1 END) as cantidad_facturas'),
+                    DB::raw('SUM(CASE WHEN tt.signo = '.$signoResta.' THEN 1 ELSE 0 END) as cantidad_notas_credito'),
+                ])
+                ->get()
+                ->keyBy(fn ($row) => (int) $row->puntoventa_id);
+        }
+
         $filas = [];
         foreach ($pvs as $pv) {
-            $totales = GastronomiaTurnoOperativoTotalesSupport::totalesDiaPorPuntoventa(
-                (int) $pv->id,
-                $empresaId,
-                $fechaJornada,
-            );
+            $pvId = (int) $pv->id;
+            $totales = $agregados->get($pvId);
             $filas[] = [
-                'puntoventa_id' => (int) $pv->id,
+                'puntoventa_id' => $pvId,
                 'codigo' => trim((string) $pv->codigo),
                 'nombre' => trim((string) $pv->nombre),
-                'total' => round((float) ($totales['total_ventas'] ?? 0), 2),
-                'total_facturas' => round((float) ($totales['total_facturas'] ?? 0), 2),
-                'cantidad_facturas' => (int) ($totales['cantidad_facturas'] ?? 0),
-                'cantidad_notas_credito' => (int) ($totales['cantidad_notas_credito'] ?? 0),
+                'total' => round((float) ($totales->total ?? 0), 2),
+                'total_facturas' => round((float) ($totales->total_facturas ?? 0), 2),
+                'cantidad_facturas' => (int) ($totales->cantidad_facturas ?? 0),
+                'cantidad_notas_credito' => (int) ($totales->cantidad_notas_credito ?? 0),
             ];
         }
 
@@ -165,7 +184,7 @@ final class GastronomiaInformeGerenteQuery
      *   sin_descuento:array{cantidad:int,importe:float}
      * }
      */
-    public function facturasPorDescuento(int $empresaId, string $fechaJornada): array
+    public function facturasPorDescuento(int $empresaId, string $fechaDesde, string $fechaHasta): array
     {
         $rows = DB::table('venta_gastronomia_emision as vge')
             ->join('venta as v', 'v.id', '=', 'vge.venta_id')
@@ -176,7 +195,8 @@ final class GastronomiaInformeGerenteQuery
             ->whereNull('v.deleted_at')
             ->whereNull('vge.venta_factura_origen_id')
             ->where('pv.empresa_id', $empresaId)
-            ->whereDate('v.fechajornada', $fechaJornada)
+            ->whereDate('v.fechajornada', '>=', $fechaDesde)
+            ->whereDate('v.fechajornada', '<=', $fechaHasta)
             ->select([
                 'dg.id as descuento_id',
                 'dg.codigo as descuento_codigo',
@@ -186,7 +206,6 @@ final class GastronomiaInformeGerenteQuery
             ])
             ->groupBy('dg.id', 'dg.codigo', 'dg.nombre')
             ->get();
-
         $filas = [];
         $sinDescuento = ['cantidad' => 0, 'importe' => 0.0];
 
@@ -218,7 +237,7 @@ final class GastronomiaInformeGerenteQuery
         ];
     }
 
-    public function totalVentasJornada(int $empresaId, string $fechaJornada): float
+    public function totalVentasPeriodo(int $empresaId, string $fechaDesde, string $fechaHasta): float
     {
         $row = DB::table('venta_gastronomia_emision as vge')
             ->join('venta as v', 'v.id', '=', 'vge.venta_id')
@@ -226,34 +245,36 @@ final class GastronomiaInformeGerenteQuery
             ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
             ->whereNull('v.deleted_at')
             ->where('pv.empresa_id', $empresaId)
-            ->whereDate('v.fechajornada', $fechaJornada)
+            ->whereDate('v.fechajornada', '>=', $fechaDesde)
+            ->whereDate('v.fechajornada', '<=', $fechaHasta)
             ->selectRaw('COALESCE(SUM('.GastronomiaVentaComprobanteSignoSupport::sqlTotalComprobante().'), 0) as total')
             ->first();
 
         return round((float) ($row->total ?? 0), 2);
     }
 
-    private function jornadaId(int $empresaId, string $fechaJornada): int
-    {
-        return (int) (JornadaGastronomia::query()
-            ->where('empresa_id', $empresaId)
-            ->whereDate('fecha_jornada', $fechaJornada)
-            ->orderByDesc('id')
-            ->value('id') ?? 0);
-    }
-
     /**
      * @return Collection<int, object>
      */
-    private function ventanasTurnoOperativo(int $empresaId, int $jornadaId): Collection
+    private function ventanasTurnoOperativoRango(int $empresaId, string $fechaDesde, string $fechaHasta): Collection
     {
-        if ($jornadaId <= 0) {
+        $jornadaIds = JornadaGastronomia::query()
+            ->where('empresa_id', $empresaId)
+            ->whereDate('fecha_jornada', '>=', $fechaDesde)
+            ->whereDate('fecha_jornada', '<=', $fechaHasta)
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->filter(fn (int $id) => $id > 0)
+            ->values()
+            ->all();
+
+        if ($jornadaIds === []) {
             return collect();
         }
 
         return TurnoOperativoGastronomia::query()
             ->where('empresa_id', $empresaId)
-            ->where('jornada_gastronomia_id', $jornadaId)
+            ->whereIn('jornada_gastronomia_id', $jornadaIds)
             ->whereNotNull('habilitacion_en')
             ->get([
                 'turno_gastronomia_id',

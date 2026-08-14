@@ -72,7 +72,7 @@
     </thead>
     <tbody>
         @forelse ($filas as $f)
-            @php $estiloTotal = ! empty($f['es_total']) ? 'background:#f5f5f5;font-weight:bold;' : ''; @endphp
+            @php $estiloTotal = ! empty($f['es_total']) ? 'background:#D6EAF8;font-weight:bold;' : ''; @endphp
             <tr style="{{ $estiloTotal }}">
                 @foreach ($columnas as $col)
                     @php

@@ -16,6 +16,7 @@ Cada manual del ERP sigue el mismo patrón para incluir **capturas reales** de l
 | Solicitudes de pago | `config/manual_solicitudpago.php` | `public/docs/manual-solicitudpago/img/` | `php artisan manual:capturar-solicitudpago-interno` |
 | Propuesta de pagos / Tesorería AP | `config/manual_propuesta_pago.php` | `public/docs/manual-propuesta-pago/img/` | (SVG de respaldo; captura PNG a definir) |
 | Contable (cierres/aperturas) | `config/manual_contable.php` | `public/docs/manual-contable/img/` | `php artisan manual:capturar-contable-interno` |
+| UIF (clientes / premios / informe) | `config/manual_uif.php` | `public/docs/manual-uif/img/` | `php artisan manual:capturar-uif-interno` |
 | Reportes contables definibles | `config/manual_reporte_definible.php` | `public/docs/manual-reporte-definible/img/` | (SVG de circuitos/wireframes; captura PNG a definir) |
 
 ## Cómo vincular una captura a un capítulo
@@ -57,6 +58,7 @@ php docs/manual-recepcion-movstock/generar.php
 php docs/manual-solicitudpago/generar.php
 php docs/manual-propuesta-pago/generar.php
 php docs/manual-contable/generar.php
+php docs/manual-uif/generar.php
 ```
 
 Capturas Contable:
@@ -64,6 +66,13 @@ Capturas Contable:
 ```bash
 php artisan manual:capturar-contable-interno --usuario=admin
 php docs/manual-contable/generar.php
+```
+
+Capturas UIF:
+
+```bash
+php artisan manual:capturar-uif-interno --usuario=admin
+php docs/manual-uif/generar.php
 ```
 
 Reportes contables definibles (diagramas SVG incluidos; PNG de pantallas opcionales):

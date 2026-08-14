@@ -1299,7 +1299,13 @@ var montoPendienteSp = 0;
 					if (esTransferenciaIngresoEgreso()) {
 						$('#ordenservicio_id').val('');
 						$('#conceptogasto_id').val('');
-						$('#proveedor_id').val('');
+						if (typeof limpiarProveedorEnPantalla === 'function') {
+							limpiarProveedorEnPantalla();
+						} else {
+							$('#proveedor_id').val('');
+							$('#codigoproveedor').val('');
+							$('#nombreproveedor').val('');
+						}
 					}
 				}
 			}

@@ -16,37 +16,154 @@
 @endif
 <script>
 (function () {
+    var TITULO_CONSULTA = 'Armando conciliación…';
+    var SUBTITULO_CONSULTA = 'Puede demorar según el período. No cierre la página.';
+    var TITULO_EXPORT = 'Generando exportación…';
+
     function overlayEl() {
         return document.getElementById('bingo-conc-overlay');
     }
-    function mostrar() {
+    function setTextos(titulo, subtitulo) {
+        var t = document.getElementById('bingo-conc-titulo');
+        var s = document.getElementById('bingo-conc-subtitulo');
+        if (t && titulo) {
+            t.textContent = titulo;
+        }
+        if (s && subtitulo) {
+            s.textContent = subtitulo;
+        }
+    }
+    function mostrar(titulo, subtitulo) {
         var overlay = overlayEl();
-        if (! overlay) return;
+        if (! overlay) {
+            return;
+        }
+        setTextos(titulo || TITULO_CONSULTA, subtitulo || SUBTITULO_CONSULTA);
         overlay.classList.remove('d-none');
         overlay.style.display = 'flex';
         overlay.setAttribute('aria-hidden', 'false');
     }
     function ocultar() {
         var overlay = overlayEl();
-        if (! overlay) return;
+        if (! overlay) {
+            return;
+        }
         overlay.classList.add('d-none');
         overlay.style.display = '';
         overlay.setAttribute('aria-hidden', 'true');
+        setTextos(TITULO_CONSULTA, SUBTITULO_CONSULTA);
+        if (window.__bingoConcExportHideTimer) {
+            clearTimeout(window.__bingoConcExportHideTimer);
+            window.__bingoConcExportHideTimer = null;
+        }
     }
+
+    function esUrlExportConciliacion(href) {
+        var lower = String(href || '').toLowerCase();
+        return lower.indexOf('listar-cierre-rendiciones-bingo-conciliacion-flash') !== -1;
+    }
+
+    /**
+     * Descarga nativa (iframe): Maatwebsite stream completo.
+     * El fetch+blob a veces guardaba HTML/JSON de error como .xlsx (Excel “vacío” / corrupto).
+     */
+    function descargarExportacion(href) {
+        var lower = String(href).toLowerCase();
+        var formato = 'archivo';
+        if (lower.indexOf('/excel') !== -1) {
+            formato = 'Excel';
+        } else if (lower.indexOf('/pdf') !== -1) {
+            formato = 'PDF';
+        } else if (lower.indexOf('/csv') !== -1) {
+            formato = 'CSV';
+        }
+
+        mostrar(
+            TITULO_EXPORT,
+            'Generando ' + formato + '… Puede demorar según el período. No cierre la página.'
+        );
+
+        var prev = document.getElementById('bingo-conc-export-frame');
+        if (prev && prev.parentNode) {
+            prev.parentNode.removeChild(prev);
+        }
+        var iframe = document.createElement('iframe');
+        iframe.id = 'bingo-conc-export-frame';
+        iframe.style.display = 'none';
+        iframe.setAttribute('aria-hidden', 'true');
+        iframe.src = href;
+        document.body.appendChild(iframe);
+
+        function cleanupFrame() {
+            var el = document.getElementById('bingo-conc-export-frame');
+            if (el && el.parentNode) {
+                el.parentNode.removeChild(el);
+            }
+        }
+
+        // Al volver el foco (diálogo de guardar / Excel), sacar el banner.
+        function onFocus() {
+            window.setTimeout(function () {
+                ocultar();
+                cleanupFrame();
+                window.removeEventListener('focus', onFocus);
+                document.removeEventListener('visibilitychange', onVis);
+            }, 400);
+        }
+        function onVis() {
+            if (document.visibilityState === 'visible') {
+                onFocus();
+            }
+        }
+        window.addEventListener('focus', onFocus);
+        document.addEventListener('visibilitychange', onVis);
+
+        if (window.__bingoConcExportHideTimer) {
+            clearTimeout(window.__bingoConcExportHideTimer);
+        }
+        // Red de seguridad: no dejar el banner eterno si el download no dispara focus.
+        window.__bingoConcExportHideTimer = setTimeout(function () {
+            ocultar();
+            cleanupFrame();
+            window.removeEventListener('focus', onFocus);
+            document.removeEventListener('visibilitychange', onVis);
+        }, 90000);
+    }
+
     document.addEventListener('DOMContentLoaded', function () {
         var form = document.getElementById('form-conciliacion-bingo');
         if (form) {
             form.addEventListener('submit', function () {
                 if (form.checkValidity()) {
-                    mostrar();
+                    mostrar(TITULO_CONSULTA, SUBTITULO_CONSULTA);
                 }
             });
         }
-        document.querySelectorAll('a[href*="listar-cierre-rendiciones-bingo-conciliacion-flash"]').forEach(function (a) {
-            a.addEventListener('click', function () { mostrar(); });
-        });
     });
+
+    document.addEventListener('click', function (event) {
+        var enlace = event.target && event.target.closest
+            ? event.target.closest('a[href]')
+            : null;
+        if (! enlace || enlace.target === '_blank' || enlace.hasAttribute('download')) {
+            return;
+        }
+        // Usar URL absoluta (enlace.href): getAttribute a veces rompe el path con carpeta pública.
+        var href = enlace.href || enlace.getAttribute('href') || '';
+        if (! esUrlExportConciliacion(href)) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        descargarExportacion(href);
+    }, true);
+
     window.addEventListener('pageshow', ocultar);
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            ocultar();
+        }
+    });
 })();
 </script>
 @endsection

@@ -66,13 +66,19 @@ final class ComprobanteProveedorAsientoPreviewSupport
         $comprobante->setRelation(
             'ordencompras',
             $ocId > 0
-                ? Ordencompra::query()->with('ordencompra_articulos')->find($ocId)
+                ? Ordencompra::query()->with([
+                    'ordencompra_articulos.articulos.articulo_cuentacontables',
+                ])->find($ocId)
                 : null
         );
 
         $comprobante->setRelation(
             'comprobante_proveedor_conceptos',
-            $this->construirConceptosDesdeRequest($request)
+            $this->construirConceptosDesdeRequest(
+                $request,
+                $comprobante->ordencompras,
+                $this->fechaYmd($comprobante->fechacomprobante ?? null)
+            )
         );
 
         $this->sincronizarTotalesDesdeConceptos($comprobante);
@@ -130,6 +136,20 @@ final class ComprobanteProveedorAsientoPreviewSupport
         $modoAsignaRecepcion = $comprobante->modo_carga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
         $usaProvisionCom = $modoAsignaRecepcion
             && ComprobanteProveedorComContabilidadSupport::generaAsientoCom((int) ($comprobante->empresa_id ?? 0));
+        $fechaFacturaYmd = null;
+        if ($comprobante->fechacomprobante instanceof \DateTimeInterface) {
+            $fechaFacturaYmd = $comprobante->fechacomprobante->format('Y-m-d');
+        } elseif (filled($comprobante->fechacomprobante ?? null)) {
+            $fechaFacturaYmd = substr((string) $comprobante->fechacomprobante, 0, 10);
+        }
+        $contratoImputacionArticulos = OrdencompraContratoRutaFacturaSupport::imputacionArticulos(
+            $comprobante->ordencompras,
+            $fechaFacturaYmd
+        ) && ! $modoAsignaRecepcion;
+        $contratoImputacionManual = OrdencompraContratoRutaFacturaSupport::imputacionManual(
+            $comprobante->ordencompras,
+            $fechaFacturaYmd
+        ) && ! $modoAsignaRecepcion;
 
         // MN/ME: OC si hay; sin OC → moneda del comprobante.
         $resMoneda = ProveedorCuentaContableMonedaSupport::resolverMonedaParaCuentaProveedor($comprobante);
@@ -221,6 +241,28 @@ final class ComprobanteProveedorAsientoPreviewSupport
                 continue;
             }
 
+            if ($contratoImputacionArticulos && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+                continue;
+            }
+
+            if ($contratoImputacionManual && ComprobanteProveedorConceptoIvaTipos::esNeto($tipoConcepto)) {
+                $cuentaManualId = OrdencompraContratoRutaFacturaSupport::cuentaDebeNetoManual(
+                    $comprobante->ordencompras,
+                    (int) ($linea->cuentacontabledebe_id ?? 0),
+                    $fechaFacturaYmd
+                );
+                if ($cuentaManualId <= 0) {
+                    $avisos[] = [
+                        'tipo' => 'contrato_neto_sin_cuenta_manual',
+                        'concepto_ivacompra_id' => (int) $concepto->id,
+                        'nombre' => (string) $concepto->nombre,
+                        'mensaje' => 'El contrato imputa el neto con una cuenta del contrato. Indique la cuenta en el contrato o en el concepto «'.$concepto->nombre.'».',
+                    ];
+                }
+
+                continue;
+            }
+
             $empresaId = (int) ($comprobante->empresa_id ?? 0);
             $cuentaId = (int) ($concepto->cuentacontableDebeIdParaEmpresa($empresaId));
             if ($cuentaId <= 0) {
@@ -267,14 +309,19 @@ final class ComprobanteProveedorAsientoPreviewSupport
     }
 
     /** @return Collection<int, Comprobante_Proveedor_Concepto> */
-    private function construirConceptosDesdeRequest(Request $request): Collection
-    {
+    private function construirConceptosDesdeRequest(
+        Request $request,
+        ?Ordencompra $ordencompra = null,
+        ?string $fechaYmd = null,
+    ): Collection {
         $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::lineasDesdeArrays(
             $request->input('concepto_ivacompra_ids', []),
             $request->input('montos', []),
+            $request->input('cuentacontabledebe_ids', []),
         );
 
         $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineas);
+        $lineas = OrdencompraContratoRutaFacturaSupport::rellenarCuentaManualEnLineas($ordencompra, $lineas, $fechaYmd);
 
         $conceptos = collect();
         if ($lineas === []) {
@@ -296,6 +343,9 @@ final class ComprobanteProveedorAsientoPreviewSupport
                 'concepto_ivacompra_id' => $conceptoId,
                 'monto' => (float) ($linea['monto'] ?? 0),
                 'orden' => $i + 1,
+                'cuentacontabledebe_id' => ! empty($linea['cuentacontabledebe_id'])
+                    ? (int) $linea['cuentacontabledebe_id']
+                    : null,
             ]);
             $modelo->setRelation('concepto_ivacompras', $conceptosPorId->get($conceptoId));
             $conceptos->push($modelo);
@@ -335,5 +385,18 @@ final class ComprobanteProveedorAsientoPreviewSupport
         }
 
         return $vinculos;
+    }
+
+    private function fechaYmd(mixed $valor): ?string
+    {
+        if ($valor instanceof \DateTimeInterface) {
+            return $valor->format('Y-m-d');
+        }
+        $txt = trim((string) $valor);
+        if ($txt === '') {
+            return null;
+        }
+
+        return strlen($txt) >= 10 ? substr($txt, 0, 10) : $txt;
     }
 }

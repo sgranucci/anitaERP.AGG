@@ -96,6 +96,30 @@ class RendicionBingoTerminalController extends Controller
         return response()->json(['ok' => true, 'calculo' => $calculo]);
     }
 
+    public function apiGuardarBorrador(Request $request)
+    {
+        can('crear-rendicion-bingo-caja');
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        if ($empresaId > 0) {
+            $this->assertEmpresaPermitida($empresaId);
+        }
+
+        try {
+            $pc = BingoIdentificadorPc::resolver($request);
+            $turno = $this->service->guardarBorradorTerminal($pc, $request->all());
+            $this->assertEmpresaPermitida((int) $turno->empresa_id);
+
+            return response()->json([
+                'ok' => true,
+                'turno_operativo_id' => (int) $turno->id,
+                'mensaje' => 'Borrador guardado. El turno sigue abierto; puede seguir cargando y cerrarlo cuando termine.',
+            ]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+    }
+
     public function apiGuardar(Request $request)
     {
         can('crear-rendicion-bingo-caja');
@@ -108,15 +132,15 @@ class RendicionBingoTerminalController extends Controller
                 $this->assertEmpresaPermitida((int) $turnoModel->empresa_id);
                 $turno = $this->service->guardarEdicionTurnoCerrado($turnoId, $request->all());
 
-            return response()->json([
-                'ok' => true,
-                'turno_operativo_id' => (int) $turno->id,
-                'mensaje' => 'Rendición actualizada. Presente en Caja → Rendiciones bingo cuando esté lista.',
-                'url_comprobante_pdf' => route('bingo_cierre_turno_comprobante_cierre', [
-                    'id' => $turno->id,
-                    'inline' => 1,
-                ]),
-            ]);
+                return response()->json([
+                    'ok' => true,
+                    'turno_operativo_id' => (int) $turno->id,
+                    'mensaje' => 'Rendición actualizada. Presente en Caja → Rendiciones bingo cuando esté lista.',
+                    'url_comprobante_pdf' => route('bingo_cierre_turno_comprobante_cierre', [
+                        'id' => $turno->id,
+                        'inline' => 1,
+                    ]),
+                ]);
             }
 
             $pc = BingoIdentificadorPc::resolver($request);

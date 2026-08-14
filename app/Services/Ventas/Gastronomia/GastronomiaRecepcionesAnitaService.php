@@ -5,11 +5,15 @@ namespace App\Services\Ventas\Gastronomia;
 use App\ApiAnita;
 use App\Models\Compras\Proveedor;
 use App\Models\Configuracion\Empresa;
+use App\Models\Contable\Centrocosto;
+use App\Models\Stock\Recepcion_Proveedor;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Recepciones de mercadería (recepmae / recepmov) vía bridge Anita (acc=list).
+ * Recepciones del informe gerente: prioriza ERP (recepcion_proveedor).
+ * Anita (recepmae/recepmov) solo como fallback para fechas anteriores al corte ERP.
  */
 final class GastronomiaRecepcionesAnitaService
 {
@@ -23,6 +27,7 @@ final class GastronomiaRecepcionesAnitaService
      * @return array{
      *   disponible:bool,
      *   error:?string,
+     *   fuente?:string,
      *   sistema_anita?:string,
      *   empresa_anita?:int,
      *   centro_costo_codigo?:?int,
@@ -30,41 +35,94 @@ final class GastronomiaRecepcionesAnitaService
      *   mes:array{cantidad_comprobantes:int,importe_total:float,filas:list<array<string,mixed>>}
      * }
      */
-    public function resumen(int $empresaId, string $fechaJornadaYmd): array
+    public function resumen(int $empresaId, string $fechaDesdeYmd, ?string $fechaHastaYmd = null): array
     {
         $vacio = [
             'disponible' => false,
             'error' => null,
+            'fuente' => 'erp',
             'dia' => ['cantidad_comprobantes' => 0, 'importe_total' => 0.0, 'filas' => []],
             'mes' => ['cantidad_comprobantes' => 0, 'importe_total' => 0.0, 'filas' => []],
         ];
 
-        $empresaAnita = $this->codigoEmpresaAnita($empresaId);
-        if ($empresaAnita <= 0) {
-            $vacio['error'] = 'Empresa sin código Anita configurado.';
-
-            return $vacio;
-        }
+        $fechaHastaYmd = $fechaHastaYmd ?? $fechaDesdeYmd;
 
         try {
-            $fecha = Carbon::parse($fechaJornadaYmd);
+            $fechaDesde = Carbon::parse($fechaDesdeYmd)->startOfDay();
+            $fechaHasta = Carbon::parse($fechaHastaYmd)->startOfDay();
         } catch (\Throwable) {
             $vacio['error'] = 'Fecha de jornada inválida.';
 
             return $vacio;
         }
 
-        $fechaDia = (int) $fecha->format('Ymd');
-        $fechaMesDesde = (int) $fecha->copy()->startOfMonth()->format('Ymd');
-        $fechaMesHasta = (int) $fecha->copy()->endOfMonth()->format('Ymd');
-        $sistema = trim((string) config('gastronomia.recepciones_anita_sistema', 'compras')) ?: 'compras';
+        if ($fechaDesde->gt($fechaHasta)) {
+            [$fechaDesde, $fechaHasta] = [$fechaHasta, $fechaDesde];
+        }
+
+        $mesDesde = $fechaHasta->copy()->startOfMonth();
+        $mesHasta = $fechaHasta->copy()->endOfMonth();
         $centroCostoCodigo = $this->codigoCentroCostoRecepciones();
+        $centroCostoId = $this->resolverCentroCostoId($centroCostoCodigo);
+        $erpDesde = $this->fechaCorteErp();
+
+        $periodoUsaAnita = $fechaDesde->lt($erpDesde);
+        $mesUsaAnita = $mesDesde->lt($erpDesde);
 
         try {
-            $filasDia = $this->consultarAgregado($empresaAnita, $fechaDia, $fechaDia, $sistema, $centroCostoCodigo);
-            $filasMes = $this->consultarAgregado($empresaAnita, $fechaMesDesde, $fechaMesHasta, $sistema, $centroCostoCodigo);
+            if (! $periodoUsaAnita && ! $mesUsaAnita) {
+                return [
+                    'disponible' => true,
+                    'error' => null,
+                    'fuente' => 'erp',
+                    'centro_costo_codigo' => $centroCostoCodigo,
+                    'dia' => $this->consultarErp(
+                        $empresaId,
+                        $fechaDesde->toDateString(),
+                        $fechaHasta->toDateString(),
+                        $centroCostoId,
+                    ),
+                    'mes' => $this->consultarErp(
+                        $empresaId,
+                        $mesDesde->toDateString(),
+                        $mesHasta->toDateString(),
+                        $centroCostoId,
+                    ),
+                ];
+            }
+
+            // Período y/o mes cruzan fechas sin datos ERP → Anita en el tramo viejo + ERP en el nuevo.
+            $dia = $this->resumenRangoHibrido(
+                $empresaId,
+                $fechaDesde,
+                $fechaHasta,
+                $erpDesde,
+                $centroCostoId,
+                $centroCostoCodigo,
+            );
+            $mes = $this->resumenRangoHibrido(
+                $empresaId,
+                $mesDesde,
+                $mesHasta,
+                $erpDesde,
+                $centroCostoId,
+                $centroCostoCodigo,
+            );
+
+            $empresaAnita = $this->codigoEmpresaAnita($empresaId);
+
+            return [
+                'disponible' => true,
+                'error' => null,
+                'fuente' => 'hibrido',
+                'sistema_anita' => trim((string) config('gastronomia.recepciones_anita_sistema', 'compras')) ?: 'compras',
+                'empresa_anita' => $empresaAnita > 0 ? $empresaAnita : null,
+                'centro_costo_codigo' => $centroCostoCodigo,
+                'dia' => $dia,
+                'mes' => $mes,
+            ];
         } catch (\Throwable $e) {
-            Log::warning('gastronomia.informe_gerente.recepciones_anita', [
+            Log::warning('gastronomia.informe_gerente.recepciones', [
                 'empresa_id' => $empresaId,
                 'mensaje' => $e->getMessage(),
             ]);
@@ -72,21 +130,303 @@ final class GastronomiaRecepcionesAnitaService
 
             return $vacio;
         }
+    }
 
+    /**
+     * @return array{cantidad_comprobantes:int,importe_total:float,filas:list<array<string,mixed>>}
+     */
+    private function resumenRangoHibrido(
+        int $empresaId,
+        Carbon $desde,
+        Carbon $hasta,
+        Carbon $erpDesde,
+        ?int $centroCostoId,
+        ?int $centroCostoCodigo,
+    ): array {
+        $filas = [];
+
+        if ($desde->lt($erpDesde)) {
+            $anitaHasta = $hasta->lt($erpDesde)
+                ? $hasta
+                : $erpDesde->copy()->subDay();
+            if ($anitaHasta->gte($desde)) {
+                $filas = array_merge(
+                    $filas,
+                    $this->consultarAnitaAgregado(
+                        $empresaId,
+                        (int) $desde->format('Ymd'),
+                        (int) $anitaHasta->format('Ymd'),
+                        $centroCostoCodigo,
+                    ),
+                );
+            }
+        }
+
+        if ($hasta->gte($erpDesde)) {
+            $erpRangoDesde = $desde->gte($erpDesde) ? $desde : $erpDesde;
+            $bloqueErp = $this->consultarErp(
+                $empresaId,
+                $erpRangoDesde->toDateString(),
+                $hasta->toDateString(),
+                $centroCostoId,
+            );
+            foreach ($bloqueErp['filas'] as $fila) {
+                $filas[] = $this->filaVistaAAgregado($fila);
+            }
+        }
+
+        usort($filas, function (array $a, array $b): int {
+            $cmp = ((int) ($b['recm_fecha'] ?? 0) <=> (int) ($a['recm_fecha'] ?? 0));
+            if ($cmp !== 0) {
+                return $cmp;
+            }
+
+            return strcmp((string) ($a['recm_proveedor'] ?? ''), (string) ($b['recm_proveedor'] ?? ''));
+        });
+
+        return $this->armarBloque($filas);
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     * @return array<string, mixed>
+     */
+    private function filaVistaAAgregado(array $fila): array
+    {
+        $fechaLabel = (string) ($fila['fecha'] ?? '');
+        $fechaInt = 0;
+        if (preg_match('/^(\d{2})\/(\d{2})\/(\d{4})$/', $fechaLabel, $m)) {
+            $fechaInt = (int) ($m[3].$m[2].$m[1]);
+        }
+
+        return [
+            'recm_proveedor' => (string) ($fila['proveedor'] ?? ''),
+            'recm_tipo' => (string) ($fila['anita_tipo'] ?? ''),
+            'recm_letra' => (string) ($fila['anita_letra'] ?? ''),
+            'recm_sucursal' => (int) ($fila['anita_sucursal'] ?? 0),
+            'recm_nro' => (int) ($fila['anita_nro'] ?? ($fila['numerorecepcion'] ?? 0)),
+            'recm_fecha' => $fechaInt,
+            'recm_estado' => (string) ($fila['estado'] ?? ''),
+            'cantidad_lineas' => (int) ($fila['cantidad_lineas'] ?? 0),
+            'importe' => (float) ($fila['importe'] ?? 0),
+            'proveedor_nombre' => (string) ($fila['proveedor_nombre'] ?? ''),
+            'comprobante_label' => (string) ($fila['comprobante'] ?? ''),
+        ];
+    }
+
+    /**
+     * @return array{cantidad_comprobantes:int,importe_total:float,filas:list<array<string,mixed>>}
+     */
+    private function consultarErp(
+        int $empresaId,
+        string $fechaDesde,
+        string $fechaHasta,
+        ?int $centroCostoId,
+    ): array {
+        if ($empresaId <= 0) {
+            return ['cantidad_comprobantes' => 0, 'importe_total' => 0.0, 'filas' => []];
+        }
+
+        $query = Recepcion_Proveedor::query()
+            ->with([
+                'proveedores:id,codigo,nombre,fantasia',
+                'recepcion_proveedor_articulos:id,recepcion_proveedor_id,cantidad,precio,centrocosto_id',
+            ])
+            ->where('empresa_id', $empresaId)
+            ->where('estado', Recepcion_Proveedor::ESTADO_CONFIRMADA)
+            ->whereDate('fecha', '>=', $fechaDesde)
+            ->whereDate('fecha', '<=', $fechaHasta);
+
+        if ($centroCostoId !== null && $centroCostoId > 0) {
+            $query->where(function ($q) use ($centroCostoId) {
+                $q->where('centrocosto_id', $centroCostoId)
+                    ->orWhereHas(
+                        'recepcion_proveedor_articulos',
+                        fn ($a) => $a->where('centrocosto_id', $centroCostoId),
+                    );
+            });
+        }
+
+        $recepciones = $query
+            ->orderByDesc('fecha')
+            ->orderByDesc('id')
+            ->get([
+                'id',
+                'tipo',
+                'proveedor_id',
+                'fecha',
+                'numerorecepcion',
+                'estado',
+                'moneda_id',
+                'cotizacion',
+                'centrocosto_id',
+                'anita_tipo',
+                'anita_letra',
+                'anita_sucursal',
+                'anita_nro',
+            ]);
+
+        $filas = [];
+        $importeTotal = 0.0;
+
+        foreach ($recepciones as $rec) {
+            $signo = ((string) $rec->tipo === Recepcion_Proveedor::TIPO_DEVOLUCION) ? -1.0 : 1.0;
+            $importe = 0.0;
+            $cantidadLineas = 0;
+            $headerCcOk = $centroCostoId === null
+                || $centroCostoId <= 0
+                || (int) ($rec->centrocosto_id ?? 0) === $centroCostoId;
+
+            foreach ($rec->recepcion_proveedor_articulos as $linea) {
+                if (! $headerCcOk) {
+                    if ((int) ($linea->centrocosto_id ?? 0) !== $centroCostoId) {
+                        continue;
+                    }
+                }
+                $cantidadLineas++;
+                $importe += (float) $linea->cantidad * (float) $linea->precio;
+            }
+
+            if ($cantidadLineas <= 0) {
+                continue;
+            }
+
+            $cotizacion = (float) ($rec->cotizacion ?? 0);
+            $monedaId = (int) ($rec->moneda_id ?? 1);
+            if ($monedaId > 1 && $cotizacion > 1.0001) {
+                $importe *= $cotizacion;
+            }
+
+            $importe = round($signo * $importe, 2);
+            $importeTotal = round($importeTotal + $importe, 2);
+
+            $proveedor = $rec->proveedores;
+            $codigoProv = trim((string) ($proveedor->codigo ?? ''));
+            $nombreProv = trim((string) ($proveedor->nombre ?? ''));
+            if ($nombreProv === '') {
+                $nombreProv = trim((string) ($proveedor->fantasia ?? ''));
+            }
+            if ($nombreProv === '') {
+                $nombreProv = $codigoProv !== '' ? $codigoProv : 'Sin proveedor';
+            }
+
+            $anitaTipo = trim((string) ($rec->anita_tipo ?? ''));
+            $anitaLetra = trim((string) ($rec->anita_letra ?? ''));
+            $anitaSuc = (int) ($rec->anita_sucursal ?? 0);
+            $anitaNro = (int) ($rec->anita_nro ?? 0);
+            $nroErp = (int) ($rec->numerorecepcion ?? 0);
+
+            if ($anitaTipo !== '' || $anitaNro > 0) {
+                $comprobante = trim(sprintf(
+                    '%s %s %d-%d',
+                    $anitaTipo,
+                    $anitaLetra,
+                    $anitaSuc,
+                    $anitaNro > 0 ? $anitaNro : $nroErp,
+                ));
+            } else {
+                $comprobante = 'COM ERP '.$nroErp;
+            }
+
+            $filas[] = [
+                'proveedor' => $codigoProv,
+                'proveedor_nombre' => $nombreProv,
+                'comprobante' => $comprobante,
+                'fecha' => $rec->fecha?->format('d/m/Y') ?? '—',
+                'estado' => (string) ($rec->estado ?? ''),
+                'cantidad_lineas' => $cantidadLineas,
+                'importe' => $importe,
+                'anita_tipo' => $anitaTipo,
+                'anita_letra' => $anitaLetra,
+                'anita_sucursal' => $anitaSuc,
+                'anita_nro' => $anitaNro > 0 ? $anitaNro : $nroErp,
+                'numerorecepcion' => $nroErp,
+            ];
+        }
+
+        return [
+            'cantidad_comprobantes' => count($filas),
+            'importe_total' => $importeTotal,
+            'filas' => $filas,
+        ];
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function consultarAnitaAgregado(
+        int $empresaId,
+        int $fechaDesde,
+        int $fechaHasta,
+        ?int $centroCostoCodigo,
+    ): array {
+        $empresaAnita = $this->codigoEmpresaAnita($empresaId);
+        if ($empresaAnita <= 0) {
+            throw new \RuntimeException('Empresa sin código Anita configurado (fallback recepciones antiguas).');
+        }
+
+        $sistema = trim((string) config('gastronomia.recepciones_anita_sistema', 'compras')) ?: 'compras';
+        $filas = $this->consultarAgregadoAnita(
+            $empresaAnita,
+            $fechaDesde,
+            $fechaHasta,
+            $sistema,
+            $centroCostoCodigo,
+        );
         $mapaNombres = $this->mapaNombresProveedor(
-            $this->codigosProveedorDesdeAgregado($filasDia, $filasMes),
+            $this->codigosProveedorDesdeAgregado($filas),
             $sistema,
         );
 
-        return [
-            'disponible' => true,
-            'error' => null,
-            'sistema_anita' => $sistema,
-            'empresa_anita' => $empresaAnita,
-            'centro_costo_codigo' => $centroCostoCodigo,
-            'dia' => $this->armarBloque($filasDia, $mapaNombres),
-            'mes' => $this->armarBloque($filasMes, $mapaNombres),
-        ];
+        foreach ($filas as &$fila) {
+            $codigo = (string) ($fila['recm_proveedor'] ?? '');
+            $fila['proveedor_nombre'] = $this->nombreProveedor($codigo, $mapaNombres);
+        }
+        unset($fila);
+
+        return $filas;
+    }
+
+    private function fechaCorteErp(): Carbon
+    {
+        $cfg = trim((string) config('gastronomia.recepciones_erp_desde', ''));
+        if ($cfg !== '') {
+            try {
+                return Carbon::parse($cfg)->startOfDay();
+            } catch (\Throwable) {
+                // sigue al mínimo de tabla
+            }
+        }
+
+        $min = DB::table('recepcion_proveedor')->min('fecha');
+        if ($min) {
+            try {
+                return Carbon::parse((string) $min)->startOfDay();
+            } catch (\Throwable) {
+                // fallback fijo
+            }
+        }
+
+        return Carbon::parse('2025-01-01')->startOfDay();
+    }
+
+    private function resolverCentroCostoId(?int $codigo): ?int
+    {
+        if ($codigo === null || $codigo <= 0) {
+            return null;
+        }
+
+        $variantes = array_values(array_unique([
+            (string) $codigo,
+            str_pad((string) $codigo, 2, '0', STR_PAD_LEFT),
+            ltrim((string) $codigo, '0') ?: '0',
+        ]));
+
+        $id = Centrocosto::query()
+            ->whereIn('codigo', $variantes)
+            ->value('id');
+
+        return $id ? (int) $id : null;
     }
 
     private function codigoEmpresaAnita(int $empresaId): int
@@ -111,7 +451,7 @@ final class GastronomiaRecepcionesAnitaService
     /**
      * @return list<array<string, mixed>>
      */
-    private function consultarAgregado(
+    private function consultarAgregadoAnita(
         int $empresaAnita,
         int $fechaDesde,
         int $fechaHasta,
@@ -161,17 +501,7 @@ final class GastronomiaRecepcionesAnitaService
             $porClave[$clave]['recm_estado'] = trim((string) ($this->campo($arr, 'recm_estado') ?? ''));
         }
 
-        $filas = array_values($porClave);
-        usort($filas, function (array $a, array $b): int {
-            $cmp = ($b['recm_fecha'] <=> $a['recm_fecha']);
-            if ($cmp !== 0) {
-                return $cmp;
-            }
-
-            return strcmp((string) $a['recm_proveedor'], (string) $b['recm_proveedor']);
-        });
-
-        return $filas;
+        return array_values($porClave);
     }
 
     /**
@@ -288,7 +618,7 @@ final class GastronomiaRecepcionesAnitaService
 
     /**
      * @param  list<string>  $codigosAnita
-     * @return array<string, string> código Anita → nombre
+     * @return array<string, string>
      */
     private function mapaNombresProveedor(array $codigosAnita, string $sistema): array
     {
@@ -332,67 +662,6 @@ final class GastronomiaRecepcionesAnitaService
             }
         }
 
-        $pendientes = array_values(array_filter(
-            $codigosAnita,
-            fn (string $c) => ! isset($mapa[$c]),
-        ));
-
-        if ($pendientes !== []) {
-            $mapa = array_merge($mapa, $this->mapaNombresProveedorAnita($pendientes, $sistema));
-        }
-
-        return $mapa;
-    }
-
-    /**
-     * @param  list<string>  $codigosAnita
-     * @return array<string, string>
-     */
-    private function mapaNombresProveedorAnita(array $codigosAnita, string $sistema): array
-    {
-        if ($codigosAnita === []) {
-            return [];
-        }
-
-        $quoted = array_map(
-            fn (string $c) => "'".addslashes(trim($c))."'",
-            $codigosAnita,
-        );
-        $where = ' WHERE prom_proveedor IN ('.implode(', ', $quoted).') ';
-
-        try {
-            $rows = $this->listarAnita([
-                'tabla' => 'promae',
-                'campos' => 'prom_proveedor, prom_nombre, prom_fantasia',
-                'whereArmado' => $where,
-                'orderBy' => 'prom_proveedor',
-                'sistema' => $sistema,
-            ]);
-        } catch (\Throwable $e) {
-            Log::debug('gastronomia.recepciones_anita.promae_nombres', [
-                'mensaje' => $e->getMessage(),
-            ]);
-
-            return [];
-        }
-
-        /** @var array<string, string> $mapa */
-        $mapa = [];
-        foreach ($rows as $row) {
-            $arr = $row instanceof \stdClass ? get_object_vars($row) : (array) $row;
-            $codigo = trim((string) ($this->campo($arr, 'prom_proveedor') ?? ''));
-            if ($codigo === '') {
-                continue;
-            }
-            $nombre = trim((string) ($this->campo($arr, 'prom_nombre') ?? ''));
-            if ($nombre === '') {
-                $nombre = trim((string) ($this->campo($arr, 'prom_fantasia') ?? ''));
-            }
-            if ($nombre !== '') {
-                $mapa[$codigo] = $nombre;
-            }
-        }
-
         return $mapa;
     }
 
@@ -415,10 +684,9 @@ final class GastronomiaRecepcionesAnitaService
 
     /**
      * @param  list<array<string, mixed>>  $filas
-     * @param  array<string, string>  $mapaNombres
      * @return array{cantidad_comprobantes:int,importe_total:float,filas:list<array<string,mixed>>}
      */
-    private function armarBloque(array $filas, array $mapaNombres = []): array
+    private function armarBloque(array $filas): array
     {
         $out = [];
         $importeTotal = 0.0;
@@ -428,16 +696,25 @@ final class GastronomiaRecepcionesAnitaService
             $importeTotal = round($importeTotal + $importe, 2);
             $fechaInt = (int) ($row['recm_fecha'] ?? 0);
             $codigoProveedor = (string) ($row['recm_proveedor'] ?? '');
-            $out[] = [
-                'proveedor' => $codigoProveedor,
-                'proveedor_nombre' => $this->nombreProveedor($codigoProveedor, $mapaNombres),
-                'comprobante' => trim(sprintf(
+            $comprobante = trim((string) ($row['comprobante_label'] ?? ''));
+            if ($comprobante === '') {
+                $comprobante = trim(sprintf(
                     '%s %s %d-%d',
                     (string) ($row['recm_tipo'] ?? ''),
                     (string) ($row['recm_letra'] ?? ''),
                     (int) ($row['recm_sucursal'] ?? 0),
                     (int) ($row['recm_nro'] ?? 0),
-                )),
+                ));
+            }
+            $nombre = trim((string) ($row['proveedor_nombre'] ?? ''));
+            if ($nombre === '') {
+                $nombre = $codigoProveedor !== '' ? $codigoProveedor : 'Sin proveedor';
+            }
+
+            $out[] = [
+                'proveedor' => $codigoProveedor,
+                'proveedor_nombre' => $nombre,
+                'comprobante' => $comprobante,
                 'fecha' => $this->fechaIntALabel($fechaInt),
                 'estado' => (string) ($row['recm_estado'] ?? ''),
                 'cantidad_lineas' => (int) ($row['cantidad_lineas'] ?? 0),

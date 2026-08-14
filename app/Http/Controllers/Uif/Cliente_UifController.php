@@ -639,6 +639,73 @@ class Cliente_UifController extends Controller
             ->download($nombreBase.'.xlsx');
     }
 
+    public function exportaOperacionPdf($periodo, $limiteinformeuif, $empresaId)
+    {
+        can('exportar-operacion-uif');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $parametros = $this->resolverParametrosExportacionUif($periodo, $limiteinformeuif, $empresaId);
+
+        if ($parametros instanceof \Illuminate\Http\RedirectResponse) {
+            return $parametros;
+        }
+
+        [
+            'periodo' => $periodo,
+            'limiteinformeuif' => $limiteinformeuif,
+            'empresa_id' => $empresaId,
+            'empresaInforme' => $empresaInforme,
+        ] = $parametros;
+
+        $premios = $this->cliente_uifService->generaExportaOperacion($periodo, $limiteinformeuif, $empresaId);
+
+        if ($premios->isEmpty()) {
+            return redirect()
+                ->route('listado_exporta_operacion_uif', [
+                    'periodo' => $periodo,
+                    'limiteinformeuif' => $limiteinformeuif,
+                    'empresa_id' => $empresaId,
+                ])
+                ->with('mensaje_error', 'No hay premios reportables para exportar a PDF.');
+        }
+
+        $titulo = ClienteUifInformeReportablesSupport::tituloInformeExcel($periodo, $empresaInforme);
+        $subtituloFiltros = sprintf(
+            'Empresa: %s | Periodo: %s | Importe mayor a: %s',
+            $empresaInforme,
+            $periodo,
+            number_format((float) $limiteinformeuif, 2, ',', '.')
+        );
+
+        $view = \View::make('uif.exportaoperacion.listado', [
+            'premios' => $premios,
+            'periodo' => $periodo,
+            'empresaInforme' => $empresaInforme,
+            'titulo' => $titulo,
+            'subtituloFiltros' => $subtituloFiltros,
+        ])->render();
+
+        $path = storage_path('pdf/listados');
+        if (! is_dir($path)) {
+            @mkdir($path, 0775, true);
+        }
+
+        $nombreBase = ClienteUifInformeReportablesSupport::nombreArchivoReportables($periodo, $empresaInforme);
+        $nombrePdf = preg_replace('/[^\w\- ]+/u', '', $nombreBase).'.pdf';
+        $nombrePdf = trim(str_replace(' ', '_', $nombrePdf), '_');
+        if ($nombrePdf === '' || $nombrePdf === '.pdf') {
+            $nombrePdf = 'informe_datos_clientes_uif.pdf';
+        }
+
+        $pdf = \App::make('dompdf.wrapper');
+        $pdf->setPaper('legal', 'landscape');
+        $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombrePdf);
+
+        return response()->download($path.'/'.$nombrePdf);
+    }
+
     public function descargarXmlZip($periodo, $limiteinformeuif, $empresaId)
     {
         can('exportar-operacion-uif');

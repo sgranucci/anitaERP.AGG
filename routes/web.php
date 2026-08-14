@@ -2010,6 +2010,7 @@ Route::get('ventas/gastronomia/facturas-dia/{ventaId}/cuentacaja-por-codigo/{cod
 Route::put('ventas/gastronomia/facturas-dia/{ventaId}/medios-pago', 'Ventas\GastronomiaFacturasDiaController@actualizarMediosPago')->name('gastronomia_facturas_dia_actualizar_medios_pago');
 
 Route::get('ventas/gastronomia/informe-gerente', 'Ventas\GastronomiaInformeGerenteController@index')->name('gastronomia_informe_gerente')->middleware('modo.consulta');
+Route::get('ventas/listar-gastronomia-informe-gerente/{formato}', 'Ventas\GastronomiaInformeGerenteController@exportar')->name('listar_gastronomia_informe_gerente');
 Route::get('ventas/gastronomia/articulos-vendidos', 'Ventas\GastronomiaArticulosVendidosController@index')->name('gastronomia_articulos_vendidos')->middleware('modo.consulta');
 Route::get('ventas/gastronomia/insumos-tipoarticulo-reporte', 'Ventas\GastronomiaInsumosTipoarticuloReporteController@index')->name('gastronomia_insumos_tipoarticulo_reporte')->middleware('modo.consulta');
 Route::get('ventas/listar-gastronomia-insumos-tipoarticulo/{formato}', 'Ventas\GastronomiaInsumosTipoarticuloReporteController@exportar')->name('listar_gastronomia_insumos_tipoarticulo');
@@ -2638,6 +2639,9 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::delete('caja/remesa/{id}', 'Caja\RemesaController@anular')->name('anular_remesa');
     Route::post('caja/remesa/api/lineas-empresa', 'Caja\RemesaController@apiLineasEmpresa')->name('remesa_api_lineas_empresa');
 
+    Route::get('caja/posicion-financiera', 'Caja\PosicionFinancieraController@index')->name('posicion_financiera');
+    Route::get('caja/listar-posicion-financiera/{formato}', 'Caja\PosicionFinancieraController@exportar')->name('listar_posicion_financiera');
+
     Route::get('caja/cotizacion-tesoreria', 'Caja\CotizacionTesoreriaController@index')->name('cotizacion_tesoreria');
     Route::get('caja/lista-cotizacion-tesoreria/{formato?}/{busqueda?}', 'Caja\CotizacionTesoreriaController@listar')->name('lista_cotizacion_tesoreria');
     Route::get('caja/cotizacion-tesoreria/crear', 'Caja\CotizacionTesoreriaController@crear')->name('crear_cotizacion_tesoreria');
@@ -2685,6 +2689,7 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::get('caja/bingo/rendicion/cargar', 'Caja\Bingo\RendicionBingoTerminalController@cargar')->name('bingo_rendicion_cargar');
     Route::get('caja/bingo/rendicion/editar/{turno}', 'Caja\Bingo\RendicionBingoTerminalController@editar')->name('bingo_rendicion_editar');
     Route::post('caja/bingo/rendicion/api/calcular', 'Caja\Bingo\RendicionBingoTerminalController@apiCalcular')->name('bingo_rendicion_api_calcular');
+    Route::post('caja/bingo/rendicion/api/guardar-borrador', 'Caja\Bingo\RendicionBingoTerminalController@apiGuardarBorrador')->name('bingo_rendicion_api_guardar_borrador');
     Route::post('caja/bingo/rendicion/api/guardar', 'Caja\Bingo\RendicionBingoTerminalController@apiGuardar')->name('bingo_rendicion_api_guardar');
 
     Route::get('caja/bingo/cierres-turno', 'Caja\Bingo\CierreTurnoBingoController@index')->name('bingo_cierres_turno')->middleware('modo.consulta');
@@ -3340,6 +3345,13 @@ Route::get('compras/ordencompra/visualizar/{id}/{hash}', 'Compras\OrdencompraCon
 Route::get('ayuda', 'AyudaController@index')->name('ayuda');
 
 /*
+ * Manual de usuario — Módulo UIF
+ */
+Route::get('uif/manual', 'Uif\ManualUifController@index')->name('manual_uif');
+Route::get('uif/manual/descargar-pdf', 'Uif\ManualUifController@descargarPdf')->name('manual_uif_pdf');
+Route::get('uif/manual/descargar-word', 'Uif\ManualUifController@descargarWord')->name('manual_uif_word');
+
+/*
  * Manual de usuario — Módulo Compras
  */
 Route::get('compras/manual', 'Compras\ManualComprasController@index')->name('manual_compras');
@@ -3875,6 +3887,7 @@ Route::middleware('uif.pc_configurada')->group(function () {
     Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}/{empresa_id}', 'Uif\Cliente_UifController@listadoExportaOperacion')->name('listado_exporta_operacion_uif');
     Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}/{empresa_id}/xml', 'Uif\Cliente_UifController@exportaOperacion')->name('exporta_cliente_uif');
     Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}/{empresa_id}/excel', 'Uif\Cliente_UifController@exportaOperacionExcel')->name('exporta_cliente_uif_excel');
+    Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}/{empresa_id}/pdf', 'Uif\Cliente_UifController@exportaOperacionPdf')->name('exporta_cliente_uif_pdf');
     Route::get('uif/exportaoperacion/{periodo}/{limiteinformeuif}/{empresa_id}/xml-zip', 'Uif\Cliente_UifController@descargarXmlZip')->name('descargar_cliente_uif_xml_zip');
 
     Route::get('uif/conciliacion-wigos', 'Uif\UifConciliacionWigosController@index')->name('conciliacion_wigos_uif');

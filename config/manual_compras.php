@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'version' => '1.4',
+    'version' => '1.6',
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Módulo de Compras',
 
@@ -64,12 +64,12 @@ return [
         'contrato_reporte' => [
             'archivo' => 'contrato-vencimiento.png',
             'titulo' => 'Reporte de contratos y OC abiertas por vencer',
-            'seccion' => '12. Avisos y seguimiento de contratos',
+            'seccion' => '13. Avisos y seguimiento de contratos',
         ],
         'circuito' => [
             'archivo' => 'circuito-documental.svg',
             'titulo' => 'Circuito documental de compras',
-            'seccion' => '13. Circuito documental integrado',
+            'seccion' => '14. Circuito documental integrado',
         ],
     ],
 ];

@@ -9,6 +9,7 @@ use App\Models\Compras\Comprobante_Proveedor_Cuota;
 use App\Models\Compras\Comprobante_Proveedor_Estado;
 use App\Models\Compras\Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Ordencompra;
+use App\Models\Compras\Ordencompra_Comprobante;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Models\Compras\Proveedor;
 use App\Repositories\Compras\Comprobante_Proveedor_ArchivoRepositoryInterface;
@@ -28,6 +29,8 @@ use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
+use App\Support\Compras\OrdencompraComprobanteEstados;
+use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use App\Support\Stock\ArticuloSkuMatchSupport;
@@ -105,6 +108,7 @@ class ComprobanteProveedorPersistenciaService
                 : null
         );
         $this->archivoRepository->sincronizarDesdeRequest($request, (int) $comprobante->id);
+        $this->marcarOrdencompraComprobanteCargado($comprobante);
 
         return $comprobante->fresh([
             'comprobante_proveedor_conceptos',
@@ -196,6 +200,8 @@ class ComprobanteProveedorPersistenciaService
                 $this->ultimosAvisosControles[] = 'Quedó en borrador: no se pudo re-contabilizar ('.$e->getMessage().'). Contabilice manualmente.';
             }
         }
+
+        $this->marcarOrdencompraComprobanteCargado($comprobante);
 
         return $comprobante->fresh([
             'comprobante_proveedor_conceptos',
@@ -344,6 +350,7 @@ class ComprobanteProveedorPersistenciaService
         $this->registrarEstadoInicial($comprobante);
         $this->vincularArchivoPrecarga($comprobante);
         $this->marcarPrecargaGenerada($precargaId);
+        $this->marcarOrdencompraComprobanteCargado($comprobante);
 
         return $comprobante->fresh([
             'comprobante_proveedor_recepciones',
@@ -462,8 +469,20 @@ class ComprobanteProveedorPersistenciaService
         $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::lineasDesdeArrays(
             $request->input('concepto_ivacompra_ids', []),
             $request->input('montos', []),
+            $request->input('cuentacontabledebe_ids', []),
         );
         $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineas);
+        $fechaYmd = null;
+        if ($comprobante->fechacomprobante instanceof \DateTimeInterface) {
+            $fechaYmd = $comprobante->fechacomprobante->format('Y-m-d');
+        } elseif (filled($comprobante->fechacomprobante ?? null)) {
+            $fechaYmd = substr((string) $comprobante->fechacomprobante, 0, 10);
+        }
+        $oc = $comprobante->ordencompras
+            ?? ((int) ($comprobante->ordencompra_id ?? 0) > 0
+                ? Ordencompra::query()->find((int) $comprobante->ordencompra_id)
+                : null);
+        $lineas = OrdencompraContratoRutaFacturaSupport::rellenarCuentaManualEnLineas($oc, $lineas, $fechaYmd);
 
             foreach ($lineas as $i => $linea) {
             $conceptoId = (int) ($linea['concepto_ivacompra_id'] ?? 0);
@@ -481,6 +500,9 @@ class ComprobanteProveedorPersistenciaService
                 'concepto_ivacompra_id' => $concepto->id,
                 'orden' => $i + 1,
                 'monto' => $linea['monto'] ?? 0,
+                'cuentacontabledebe_id' => ! empty($linea['cuentacontabledebe_id'])
+                    ? (int) $linea['cuentacontabledebe_id']
+                    : null,
             ]);
         }
     }
@@ -656,13 +678,17 @@ class ComprobanteProveedorPersistenciaService
         $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::lineasDesdeArrays(
             $request->input('concepto_ivacompra_ids', []),
             $request->input('montos', []),
+            $request->input('cuentacontabledebe_ids', []),
         );
+        $fechaYmd = substr((string) ($payload['fechacomprobante'] ?? ''), 0, 10) ?: null;
+        $lineas = OrdencompraContratoRutaFacturaSupport::rellenarCuentaManualEnLineas($ordencompra, $lineas, $fechaYmd);
         $conceptos = collect($lineas)->map(function (array $linea) {
             $concepto = $this->conceptoIvacompraRepository->find((int) ($linea['concepto_ivacompra_id'] ?? 0));
 
             return (object) [
                 'concepto_ivacompra_id' => (int) ($linea['concepto_ivacompra_id'] ?? 0),
                 'monto' => $linea['monto'] ?? 0,
+                'cuentacontabledebe_id' => (int) ($linea['cuentacontabledebe_id'] ?? 0) ?: null,
                 'concepto_ivacompras' => $concepto,
             ];
         });
@@ -684,7 +710,11 @@ class ComprobanteProveedorPersistenciaService
                     $excluirComprobanteId,
                 )->isNotEmpty();
             }
-            $politica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica($ordencompra, $tieneCom);
+            $politica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica(
+                $ordencompra,
+                $tieneCom,
+                (string) ($payload['fechacomprobante'] ?? now()->format('Y-m-d'))
+            );
             $modo = ComprobanteProveedorFlujoOcComFacSupport::modoCargaSugerido($politica, $modo);
             $payload['modo_carga'] = $modo;
         }
@@ -780,6 +810,23 @@ class ComprobanteProveedorPersistenciaService
             'ruta_externa' => $precarga->rutaalmacenamiento,
             'precarga_comprobante_proveedor_id' => $precarga->id,
         ]);
+    }
+
+    /**
+     * Al vincular una factura a un comprobante a venir de la OC, lo marca como ya cargado
+     * para que no se vuelva a ofrecer en el prefill.
+     */
+    private function marcarOrdencompraComprobanteCargado(Comprobante_Proveedor $comprobante): void
+    {
+        $ocCompId = (int) ($comprobante->ordencompra_comprobante_id ?? 0);
+        if ($ocCompId <= 0) {
+            return;
+        }
+
+        Ordencompra_Comprobante::query()
+            ->whereKey($ocCompId)
+            ->where('estado', '!=', OrdencompraComprobanteEstados::CARGADO)
+            ->update(['estado' => OrdencompraComprobanteEstados::CARGADO]);
     }
 
     private function marcarPrecargaGenerada(?int $precargaId): void

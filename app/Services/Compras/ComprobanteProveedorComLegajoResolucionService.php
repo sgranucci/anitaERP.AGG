@@ -10,6 +10,7 @@ use App\Models\Stock\Recepcion_Proveedor;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
+use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Auth;
 
@@ -95,6 +96,18 @@ class ComprobanteProveedorComLegajoResolucionService
     public function aplicarAlPrefill(array $prefill, Precarga_Comprobante_Proveedor $precarga, ?Ordencompra $ordencompra): array
     {
         $resolucion = $this->resolverDesdePrecarga($precarga, $ordencompra);
+
+        $fechaFactura = null;
+        if ($precarga->fechafactura) {
+            $fechaFactura = \Carbon\Carbon::parse($precarga->fechafactura)->format('Y-m-d');
+        }
+        if (OrdencompraContratoRutaFacturaSupport::aplicaSinRecepcion($ordencompra, $fechaFactura)) {
+            /** @var \App\Models\Compras\Comprobante_Proveedor $data */
+            $data = $prefill['data'];
+            $data->modo_carga = ComprobanteProveedorModoCarga::SIN_RECEPCION;
+
+            return $prefill;
+        }
 
         if ($resolucion['recepciones_disponibles']->isEmpty()) {
             return $prefill;

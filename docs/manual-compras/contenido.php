@@ -7,7 +7,7 @@
 return [
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Módulo de Compras',
-    'version' => '1.3',
+    'version' => '1.6',
     'fecha' => null,
     'empresa' => null,
     'url_base' => null,
@@ -234,9 +234,9 @@ return [
                 ['titulo' => 'Bloque Contrato / OC abierta en la orden de compra', 'clave' => 'contrato_bloque_oc'],
             ],
             'parrafos' => [
-                'Una OC abierta es la que no se agota con una entrega: abonos, honorarios profesionales, servicios recurrentes, mantenimientos, alquileres, licencias. En lugar de crear un documento distinto, la propia orden de compra se marca como contrato y se le cargan la vigencia, el monto contratado y el responsable. El ERP vigila esos datos y avisa antes del vencimiento, con el mismo criterio que los acuerdos marco de SAP o los purchase agreements de Oracle.',
-                'Se marca en el formulario de la orden de compra (compras/ordencompra/crear o editar) tildando la casilla "Contrato / OC abierta" en el bloque del mismo nombre. Recién al tildarla se despliegan los campos de vigencia, tope y avisos; una OC común no muestra nada de esto.',
-                'Cargar la vigencia es lo mínimo indispensable: sin fecha de fin no hay aviso de vencimiento posible. El monto contratado es opcional, pero es lo que habilita el control de consumo.',
+                'Una OC abierta es la que no se agota con una entrega: abonos, honorarios profesionales, servicios recurrentes, mantenimientos, alquileres, licencias. En lugar de crear un documento distinto, la propia orden de compra se marca como contrato y se le cargan la vigencia, el monto contratado, el responsable y la ruta con la que se van a cargar las facturas. El ERP vigila esos datos y avisa antes del vencimiento, con el mismo criterio que los acuerdos marco de SAP o los purchase agreements de Oracle.',
+                'Se marca en el formulario de la orden de compra (compras/ordencompra/crear o editar) tildando la casilla "Contrato / OC abierta" en el bloque del mismo nombre. Recién al tildarla se despliegan los campos de vigencia, tope, avisos y ruta de facturación; una OC común no muestra nada de esto.',
+                'Cargar la vigencia es lo mínimo indispensable: sin fecha de fin no hay aviso de vencimiento posible. El monto contratado es opcional, pero es lo que habilita el control de consumo. La recepción para facturar y la cuenta contable definen cómo se carga cada factura de ese contrato (capítulo 12).',
             ],
             'items' => [
                 'Vigencia desde / hasta: período del contrato. La fecha "hasta" es la que dispara los avisos de vencimiento.',
@@ -245,6 +245,8 @@ return [
                 'Se renueva automáticamente + Días de preaviso para no renovar: si el contrato se renueva solo, lo accionable no es el fin de vigencia sino la fecha límite para notificar que NO se renueva (fin de vigencia menos los días de preaviso). Pasada esa fecha el contrato se renueva por otro período.',
                 'Días de aviso: umbrales propios de este contrato, separados por coma (por ejemplo 90,45). Vacío usa el default del sistema (60,30,15). Cada umbral avisa una sola vez.',
                 'Responsable: usuario dueño del contrato. Recibe siempre los avisos de sus contratos, además de los destinatarios generales configurados.',
+                'Recepción para facturar: Obligatoria (las facturas se cargan contra recepción COM) o No requiere recepción (se factura el contrato sin COM: abonos, honorarios, servicios). Este dato fija la ruta del formulario de factura mientras el contrato esté vigente.',
+                'Cuenta contable de las facturas: solo aparece si la ruta es sin recepción. Puede tomarse de los artículos de la OC o de una cuenta indicada en el propio contrato. Si elige "Cuenta indicada en este contrato", aparece el campo Cuenta a imputar (código + Enter o lupa). El IVA y las percepciones siguen siempre el concepto de IVA compra; lo que cambia es la cuenta DEBE del neto.',
                 'Estado actual: debajo del bloque, la OC muestra el consumo acumulado, el porcentaje del tope, el vencimiento y de dónde salió el consumo (recepción, factura o ambos).',
             ],
             'tabla' => [
@@ -270,7 +272,52 @@ return [
             ],
         ],
         [
-            'titulo' => '12. Avisos y seguimiento de contratos',
+            'titulo' => '12. Carga de facturas de un contrato',
+            'herramientas_grupos' => [
+                ['titulo' => 'Factura de proveedor vinculada a un contrato', 'clave' => 'contrato_factura'],
+            ],
+            'parrafos' => [
+                'Cuando una orden de compra tiene un contrato vigente, el ERP no deja elegir libremente cómo cargar la factura: usa la ruta y la imputación definidas en el contrato. Eso evita facturar un abono como si fuera mercadería (exigiendo una COM que nunca va a existir) o, al revés, saltarse la recepción en un contrato que sí la necesita.',
+                'El punto de entrada es Compras → Comprobantes de proveedor → Cargar factura, opción "Con OC". Se ingresa el número de orden (6 dígitos, como en Anita). Si esa OC es un contrato vigente a la fecha del comprobante, el formulario abre ya fijado: modo de carga, solapa de recepciones COM y origen de la cuenta del neto.',
+                'Vigente significa que la fecha de la factura cae dentro de "Vigencia desde / hasta" (si alguna de las dos fechas está vacía, ese extremo no restringe). Si el contrato todavía no empezó o ya venció, la factura sigue el flujo estándar de la empresa y el formulario avisa que el contrato no está vigente.',
+            ],
+            'items' => [
+                'Contrato con recepción obligatoria: el modo queda en "Factura contra recepción (COM)". Hay que confirmar una recepción con provisión antes de grabar la factura. Sin COM, el sistema bloquea la carga.',
+                'Contrato sin recepción: el modo queda en "Gasto sin recepción". No se pide COM aunque la empresa tenga flujo estricto OC/COM/factura, y no se trata como factura anticipada.',
+                'Imputación desde artículos de la OC: el neto de la factura se contabiliza en las cuentas de compras/gastos de los renglones de la orden, prorrateadas por el importe de cada ítem. La OC tiene que tener artículos con cuenta cargada.',
+                'Imputación con cuenta del contrato: en el bloque Contrato hay que cargar la cuenta a imputar. Esa cuenta se usa como DEBE del neto en cada factura (queda precargada en la solapa de conceptos y se puede cambiar en el renglón si hace falta). IVA y percepciones siguen la cuenta del concepto de IVA compra.',
+                'En la cabecera de la factura, junto al número de OC, se muestran badges: Contrato vigente, Recepción obligatoria o Sin recepción, y el origen de la cuenta (artículos OC o cuenta del contrato, con código y nombre).',
+                'La misma regla aplica si la factura entra por precarga (agente, API o PDF con IA) y la OC resuelta es un contrato vigente: el modo y la imputación se toman del contrato, no de la COM que pudiera haber en el legajo.',
+            ],
+            'tabla' => [
+                'caption' => 'Ruta de la factura según el contrato vigente',
+                'headers' => ['Qué dice el contrato', 'Modo de la factura', 'De dónde sale la cuenta del neto'],
+                'rows' => [
+                    [
+                        'Recepción obligatoria',
+                        'Factura contra recepción (COM). Sin COM no se puede grabar.',
+                        'De las recepciones COM (provisión y cuentas de los artículos recibidos).',
+                    ],
+                    [
+                        'Sin recepción + cuenta de los artículos de la OC',
+                        'Gasto sin recepción. No se pide COM.',
+                        'Cuentas de compras/gastos de los artículos de la OC, prorrateadas por importe.',
+                    ],
+                    [
+                        'Sin recepción + cuenta indicada en el contrato',
+                        'Gasto sin recepción. No se pide COM.',
+                        'La cuenta cargada en el contrato (Cuenta a imputar). Queda precargada en cada factura; se puede cambiar en el renglón de neto.',
+                    ],
+                    [
+                        'Contrato fuera de vigencia, o OC que no es contrato',
+                        'Flujo estándar de la empresa (COM si hay recepciones, factura anticipada si la OC es anticipada, o gasto sin recepción).',
+                        'Según ese flujo: COM, anticipo o cuenta del concepto de IVA compra.',
+                    ],
+                ],
+            ],
+        ],
+        [
+            'titulo' => '13. Avisos y seguimiento de contratos',
             'captura_id' => 'contrato_reporte',
             'herramientas_grupos' => [
                 ['titulo' => 'Reporte de contratos y OC abiertas por vencer', 'clave' => 'contrato_reporte'],
@@ -317,15 +364,15 @@ return [
             ],
         ],
         [
-            'titulo' => '13. Circuito documental integrado',
+            'titulo' => '14. Circuito documental integrado',
             'parrafos' => [
                 'El flujo estándar de compras es: Tablas maestras → Proveedor → Requisición (PENDIENTE) → EN COMPRAS (carga presupuestos) → Árbol de aprobación → APROBADA → Orden(es) de compra → Aprobación OC → CUMPLIDA/CERRADA.',
                 'Las listas de precio de proveedor alimentan precios de referencia en requisiciones y OC. Los presupuestos documentan la cotización seleccionada.',
-                'Las OC marcadas como contrato no siguen ese cierre: quedan vigentes durante todo el período contratado y se van consumiendo con recepciones y facturas sucesivas, hasta que se renuevan o se cierran (ver capítulos 11 y 12).',
+                'Las OC marcadas como contrato no siguen ese cierre: quedan vigentes durante todo el período contratado y se van consumiendo con recepciones y facturas sucesivas, hasta que se renuevan o se cierran (ver capítulos 11, 12 y 13). La ruta de cada factura (con o sin COM, y de dónde sale la cuenta del neto) la fija el contrato, no el flujo general de la empresa.',
             ],
         ],
         [
-            'titulo' => '14. Integración con sistema Anita',
+            'titulo' => '15. Integración con sistema Anita',
             'parrafos' => [
                 'En entornos migrados, el ERP sincroniza datos históricos desde Anita (Informix) en el primer acceso a ciertos listados vacíos:',
             ],
@@ -337,7 +384,7 @@ return [
             ],
         ],
         [
-            'titulo' => '15. Resolución de problemas frecuentes',
+            'titulo' => '16. Resolución de problemas frecuentes',
             'items' => [
                 'No veo el menú de Compras: verifique rol activo y asignación Menú-Rol con el administrador.',
                 'No puedo editar una requisición: confirme estado (solo PENDIENTE o EN COMPRAS) y permiso/oficina de compra.',
@@ -348,10 +395,15 @@ return [
                 'No recibí el mail del contrato: cada umbral avisa una sola vez, así que si el aviso de 60 días ya salió no se repite hasta los 30. Confirme además que su usuario esté como responsable del contrato o como destinatario del evento en Configuración → Avisos por módulo.',
                 'El consumo del contrato no coincide con lo facturado: el consumo toma primero las recepciones confirmadas y suma las facturas sin recepción vinculada. Compare las columnas Recibido, Facturado y Consumido del reporte: la diferencia suele ser mercadería recibida y todavía no facturada.',
                 'El consumo quedó en cero con recepciones cargadas: revise que las líneas de la recepción tengan precio. Si la OC no tenía precio, la recepción se valoriza en cero y el consumo recién aparece cuando llega la factura.',
+                'No puedo cargar la factura de un abono / honorario: el contrato vigente probablemente tiene "Recepción para facturar" en Obligatoria. Edite la OC, márquela en "No requiere recepción" y elija de dónde sale la cuenta (artículos de la OC o cuenta del contrato).',
+                'La factura pide COM aunque el contrato es un servicio: misma causa: recepción obligatoria en el contrato, o el contrato no está vigente a la fecha del comprobante (en ese caso rige el flujo de la empresa).',
+                'Al grabar pide la cuenta del contrato: el contrato está en sin recepción con cuenta indicada en el contrato, pero esa cuenta no está cargada. Edite la OC, elija "Cuenta indicada en este contrato" y complete Cuenta a imputar.',
+                'Al grabar pide la cuenta DEBE del neto: complete la columna Cuenta DEBE en los renglones de neto, o cargue la cuenta en el contrato para que se precargue sola.',
+                'Al contabilizar falta la cuenta de un artículo de la OC: el contrato imputa el neto con las cuentas de los ítems. Abra el artículo y cargue la cuenta de compras o gastos de la empresa, o cambie la imputación del contrato a cuenta indicada en el contrato.',
             ],
         ],
         [
-            'titulo' => '16. Soporte',
+            'titulo' => '17. Soporte',
             'parrafos' => [
                 'Para incidencias técnicas, solicitud de permisos o capacitación adicional, contacte al administrador del sistema o al área de Sistemas de su organización.',
                 'Conserve este manual en formato digital (Word/PDF) para consulta de usuarios finales y personal de Compras.',

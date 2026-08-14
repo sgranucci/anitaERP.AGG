@@ -17,6 +17,7 @@
             <div class="card-header">
                 <h3 class="card-title">Clientes Congelados</h3>
                 <div class="card-tools">
+                    @include('includes.uif.boton-manual')
                     <a href="{{route('crear_importacion_cliente_congelado_uif')}}" class="btn btn-outline-secondary btn-sm">
                        	@if (can('importar-cliente-congelado-uif', false))
                         	<i class="fa fa-fw fa-file-excel"></i> Importa clientes congelados

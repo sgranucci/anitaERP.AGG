@@ -77,8 +77,57 @@ $(function () {
         return $('#modo_carga').val() === 'ASIGNA_RECEPCION';
     }
 
+    function contratoImputacionManual() {
+        return String($form.attr('data-contrato-imputacion') || '') === 'manual'
+            && String($form.attr('data-contrato-vigente') || '') === '1'
+            && String($form.attr('data-contrato-requiere-recepcion') || '') !== '1';
+    }
+
+    function contratoImputacionArticulos() {
+        return String($form.attr('data-contrato-imputacion') || '') === 'articulos'
+            && String($form.attr('data-contrato-vigente') || '') === '1'
+            && String($form.attr('data-contrato-requiere-recepcion') || '') !== '1';
+    }
+
+    function contratoCuentaManualDatos() {
+        return {
+            id: parseInt($form.attr('data-contrato-cuentacontable-id') || '0', 10) || 0,
+            codigo: String($form.attr('data-contrato-cuentacontable-codigo') || ''),
+            nombre: String($form.attr('data-contrato-cuentacontable-nombre') || '')
+        };
+    }
+
+    function aplicarCuentaContratoEnFila($row, forzar) {
+        if (!contratoImputacionManual()) {
+            return;
+        }
+        var $campo = $row.find('.cp-celda-cuenta-debe');
+        $campo.removeClass('d-none');
+        var datos = contratoCuentaManualDatos();
+        if (datos.id <= 0) {
+            return;
+        }
+        var actual = parseInt($campo.find('.cuentacontable_id').val() || '0', 10) || 0;
+        if (!forzar && actual > 0) {
+            return;
+        }
+        $campo.find('.cuentacontable_id').val(String(datos.id));
+        $campo.find('.codigocuentacontable').val(datos.codigo);
+        $campo.find('.nombrecuentacontable').val(datos.nombre);
+        if (typeof actualizarLinkEditarCuentaContable === 'function') {
+            actualizarLinkEditarCuentaContable($campo, datos.id);
+        }
+    }
+
     function conceptoRequiereCuentaDebe(tipoConcepto) {
-        if (esModoAsignaRecepcion() && TIPOS_NETO.indexOf(String(tipoConcepto || '')) >= 0) {
+        var esNeto = TIPOS_NETO.indexOf(String(tipoConcepto || '')) >= 0;
+        if (esModoAsignaRecepcion() && esNeto) {
+            return false;
+        }
+        if (contratoImputacionArticulos() && esNeto) {
+            return false;
+        }
+        if (contratoImputacionManual() && esNeto) {
             return false;
         }
         return true;
@@ -172,6 +221,25 @@ $(function () {
             }
 
             var meta = conceptosMeta[conceptoId] || {};
+            var esNeto = TIPOS_NETO.indexOf(String(meta.tipoconcepto || '')) >= 0;
+            if (contratoImputacionArticulos() && esNeto) {
+                $aviso.addClass('text-muted').text('OC').attr('title', 'Neto: cuenta de los artículos de la OC');
+                return;
+            }
+            if (contratoImputacionManual() && esNeto) {
+                var cuentaManual = parseInt($row.find('.cp-celda-cuenta-debe .cuentacontable_id').val() || '0', 10) || 0;
+                if (cuentaManual <= 0) {
+                    cuentaManual = contratoCuentaManualDatos().id;
+                }
+                if (cuentaManual <= 0) {
+                    $row.addClass('table-warning');
+                    $aviso.addClass('text-danger fa fa-exclamation-triangle')
+                        .attr('title', 'Falta la cuenta DEBE del neto (indicarla en el contrato o en este renglón)');
+                } else {
+                    $aviso.addClass('text-success fa fa-check').attr('title', 'Cuenta DEBE del contrato / renglón');
+                }
+                return;
+            }
             if (!conceptoRequiereCuentaDebe(meta.tipoconcepto)) {
                 $aviso.addClass('text-muted').text('—').attr('title', 'Neto: revierte provisión COM');
                 return;
@@ -316,6 +384,7 @@ $(function () {
             return p.name !== '_method'
                 && p.name !== 'montos[]'
                 && p.name !== 'concepto_ivacompra_ids[]'
+                && p.name !== 'cuentacontabledebe_ids[]'
                 && p.name !== 'total'
                 && p.name !== 'subtotal';
         });
@@ -328,6 +397,8 @@ $(function () {
             var monto = parseMonto($row.find('.monto').val() || '0');
             params.push({ name: 'concepto_ivacompra_ids[]', value: String(conceptoId > 0 ? conceptoId : '') });
             params.push({ name: 'montos[]', value: conceptoId > 0 ? String(monto) : '' });
+            var cuentaDebeId = parseInt($row.find('.cp-celda-cuenta-debe .cuentacontable_id').val() || '0', 10) || 0;
+            params.push({ name: 'cuentacontabledebe_ids[]', value: cuentaDebeId > 0 ? String(cuentaDebeId) : '' });
             if (conceptoId <= 0 || Math.abs(monto) < 0.0001) {
                 return;
             }
@@ -448,6 +519,12 @@ $(function () {
         e.preventDefault();
         var renglon = $('#template-renglon-concepto').html();
         var $nuevo = $(renglon);
+        if (contratoImputacionManual()) {
+            aplicarCuentaContratoEnFila($nuevo, true);
+        } else {
+            $nuevo.find('.cp-celda-cuenta-debe').addClass('d-none');
+            $nuevo.find('.cp-celda-cuenta-debe .cuentacontable_id').val('');
+        }
         $('#tbody-concepto-table').append($nuevo);
         formatearInputMontoEn($nuevo);
         setTimeout(function () {
@@ -700,7 +777,8 @@ $(function () {
         window.refrescarPreviewAsiento(true);
     });
 
-    $(document).on('change', '#tbody-concepto-table .concepto_ivacompra_id, #tbody-concepto-table .monto', function () {
+    $(document).on('change', '#tbody-concepto-table .concepto_ivacompra_id, #tbody-concepto-table .monto, #tbody-concepto-table .cp-celda-cuenta-debe .cuentacontable_id', function () {
+        marcarAvisosConceptosLocales();
         programarPreviewAsiento();
     });
 
@@ -745,6 +823,12 @@ $(function () {
             montoTxt = formatearMontoConcepto(parseFloat(monto) || 0);
         }
         $row.find('.monto').val(montoTxt);
+        if (contratoImputacionManual()) {
+            aplicarCuentaContratoEnFila($row, true);
+        } else {
+            $row.find('.cp-celda-cuenta-debe').addClass('d-none');
+            $row.find('.cp-celda-cuenta-debe .cuentacontable_id').val('');
+        }
         if (id > 0 && concepto) {
             conceptosMeta[id] = {
                 tipoconcepto: String(concepto.tipoconcepto || ''),
@@ -885,6 +969,35 @@ $(function () {
             mostrarSolapa('#cp-solapa-conceptos');
             marcarTabActivo('cp-boton-conceptos');
             alert(coherencia.errores.join('\n'));
+            return;
+        }
+        if (contratoImputacionManual()) {
+            var faltaCuenta = false;
+            $('#tbody-concepto-table tr.item-concepto').each(function () {
+                var $row = $(this);
+                var conceptoId = parseInt($row.find('.concepto_ivacompra_id').val() || '0', 10);
+                var monto = parseMonto($row.find('.monto').val() || '0');
+                if (conceptoId <= 0 || monto <= 0) {
+                    return;
+                }
+                var meta = conceptosMeta[conceptoId] || {};
+                if (TIPOS_NETO.indexOf(String(meta.tipoconcepto || '')) < 0) {
+                    return;
+                }
+                var cuentaId = parseInt($row.find('.cp-celda-cuenta-debe .cuentacontable_id').val() || '0', 10) || 0;
+                if (cuentaId <= 0) {
+                    cuentaId = contratoCuentaManualDatos().id;
+                }
+                if (cuentaId <= 0) {
+                    faltaCuenta = true;
+                }
+            });
+            if (faltaCuenta) {
+                e.preventDefault();
+                mostrarSolapa('#cp-solapa-conceptos');
+                marcarTabActivo('cp-boton-conceptos');
+                alert('El contrato exige una cuenta contable del neto. Cárguela en el contrato o en el renglón de neto.');
+            }
         }
     });
 

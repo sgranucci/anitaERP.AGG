@@ -34,14 +34,26 @@ class ComprobanteProveedorCuentacorrienteService
         $monedaFacturaId = (int) ($comprobante->moneda_id ?: 1);
         $cotizacionFactura = (float) ($comprobante->cotizacion ?: 1);
 
+        $cantidadCuotas = $comprobante->comprobante_proveedor_cuotas->count();
+
         foreach ($comprobante->comprobante_proveedor_cuotas as $cuota) {
             if ($cuota->proveedor_cuentacorriente_id) {
                 continue;
             }
 
             $montoCuota = (float) ($cuota->monto ?? 0);
+            // Fallback al total de la factura solo con una cuota sin monto (alta incompleta).
+            // Con varias cuotas, monto 0 = pagada/anulada/refinanciada: no genera deuda.
             if (abs($montoCuota) < 0.0001) {
-                $montoCuota = (float) ($comprobante->total ?? 0);
+                if ($cantidadCuotas === 1) {
+                    $montoCuota = (float) ($comprobante->total ?? 0);
+                } else {
+                    continue;
+                }
+            }
+
+            if (abs($montoCuota) < 0.0001) {
+                continue;
             }
 
             $cc = $this->cuentacorrienteRepository->create([

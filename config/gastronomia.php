@@ -804,14 +804,21 @@ return [
 
     /**
      * Base Informix para recepciones (recepmae / recepmov) en informe gerente.
+     * Solo se usa como fallback para fechas anteriores a recepciones_erp_desde.
      */
     'recepciones_anita_sistema' => env('GASTRONOMIA_RECEPCIONES_ANITA_SISTEMA', 'compras'),
 
     /**
-     * Centro de costo (recv_ccosto en recepmov) para filtrar recepciones del informe gerente.
+     * Centro de costo (recv_ccosto Anita / centrocosto.codigo ERP) para filtrar recepciones del informe gerente.
      * Vacío = sin filtro por CC.
      */
     'recepciones_centro_costo_codigo' => env('GASTRONOMIA_RECEPCIONES_CENTRO_COSTO_CODIGO', '85'),
+
+    /**
+     * Desde esta fecha el informe gerente lee recepciones del ERP (recepcion_proveedor).
+     * Fechas anteriores usan Anita bridge. Vacío = mínimo de fecha en recepcion_proveedor.
+     */
+    'recepciones_erp_desde' => env('GASTRONOMIA_RECEPCIONES_ERP_DESDE', '2025-01-02'),
 
     /**
      * Informe gerente: base de listas Anita stkpre para costo (5000 + mes). Ej. junio → 5006, mayo → 5005.

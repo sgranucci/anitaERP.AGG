@@ -87,7 +87,13 @@
                 data-contabilizado="{{ ! empty($bloqueado_edicion) ? '1' : '0' }}"
                 data-preview-url="{{ ($esEdicion && ($data->id ?? null)) ? route('preview_asiento_comprobante_proveedor', ['id' => $data->id]) : route('preview_asiento_comprobante_proveedor_nuevo') }}"
                 data-puede-editar-concepto-iva="{{ can('editar-concepto-iva-compra', false) ? '1' : '0' }}"
-                data-url-editar-concepto-iva="{{ url('compras/concepto_ivacompra/__ID__/editar') }}">
+                data-url-editar-concepto-iva="{{ url('compras/concepto_ivacompra/__ID__/editar') }}"
+                data-contrato-vigente="{{ ($com_politica['contrato_vigente'] ?? false) ? '1' : '0' }}"
+                data-contrato-requiere-recepcion="{{ ($com_politica['contrato_requiere_recepcion'] ?? false) ? '1' : '0' }}"
+                data-contrato-imputacion="{{ $com_politica['contrato_imputacion'] ?? '' }}"
+                data-contrato-cuentacontable-id="{{ (int) ($com_politica['contrato_cuentacontable_id'] ?? 0) }}"
+                data-contrato-cuentacontable-codigo="{{ optional($data->ordencompras->contrato_cuentacontables ?? null)->codigo ?? '' }}"
+                data-contrato-cuentacontable-nombre="{{ optional($data->ordencompras->contrato_cuentacontables ?? null)->nombre ?? '' }}">
                 @csrf
                 @if ($esEdicion)
                     @method('PUT')
@@ -335,6 +341,7 @@
 @include('includes.compras.modalconsultaproveedor')
 @include('includes.compras.modalconsultaconcepto_ivacompra')
 @include('includes.compras.modalconsultatipotransaccioncompra')
+@include('includes.contable.modalconsultacuentacontable')
 @if ($mostrarSolapaArticulos ?? false)
 @include('includes.stock.modalconsultaarticulo')
 @endif
