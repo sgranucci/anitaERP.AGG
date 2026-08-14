@@ -67,9 +67,9 @@ final class ConciliacionBancariaPendienteSupport
             return true;
         }
 
-        // Solo transferencias/créditos chicos (evita impuestos u otros créditos sueltos).
+        // Contaduría (MAYO): TRF / CABAL / títulos. CRED.INT no entra en carátula
+        // (quedan como pendientes operativos; en Macro KSA inflaban ~60k vs Excel).
         $esTransferencia = str_contains($concepto, 'TRF')
-            || str_contains($concepto, 'CRED.INT')
             || str_contains($concepto, 'CR.TITULOS');
         if (! $esTransferencia) {
             return false;

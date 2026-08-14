@@ -2614,6 +2614,34 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::put('caja/apertura-gasto/{id}', 'Caja\AperturaGastoController@actualizar')->name('actualizar_apertura_gasto');
     Route::delete('caja/apertura-gasto/{id}', 'Caja\AperturaGastoController@eliminar')->name('eliminar_apertura_gasto');
 
+    Route::get('caja/concepto-perdida', 'Caja\ConceptoPerdidaController@index')->name('concepto_perdida');
+    Route::get('caja/lista-concepto-perdida/{formato?}/{busqueda?}', 'Caja\ConceptoPerdidaController@listar')->name('lista_concepto_perdida');
+    Route::get('caja/concepto-perdida/crear', 'Caja\ConceptoPerdidaController@crear')->name('crear_concepto_perdida');
+    Route::post('caja/concepto-perdida', 'Caja\ConceptoPerdidaController@guardar')->name('guardar_concepto_perdida');
+    Route::get('caja/concepto-perdida/{id}/editar', 'Caja\ConceptoPerdidaController@editar')->name('editar_concepto_perdida');
+    Route::put('caja/concepto-perdida/{id}', 'Caja\ConceptoPerdidaController@actualizar')->name('actualizar_concepto_perdida');
+    Route::delete('caja/concepto-perdida/{id}', 'Caja\ConceptoPerdidaController@eliminar')->name('eliminar_concepto_perdida');
+
+    Route::get('caja/imputacion-perdida', 'Caja\ImputacionPerdidaController@index')->name('imputacion_perdida');
+    Route::get('caja/lista-imputacion-perdida/{formato?}/{busqueda?}', 'Caja\ImputacionPerdidaController@listar')->name('lista_imputacion_perdida');
+    Route::get('caja/imputacion-perdida/crear', 'Caja\ImputacionPerdidaController@crear')->name('crear_imputacion_perdida');
+    Route::post('caja/imputacion-perdida', 'Caja\ImputacionPerdidaController@guardar')->name('guardar_imputacion_perdida');
+    Route::get('caja/imputacion-perdida/replicar-cuentas/{empresa_id}/{cuentacontable_id}', 'Caja\ImputacionPerdidaController@replicarCuentasPorEmpresa')
+        ->name('replicar_cuentas_imputacion_perdida');
+    Route::get('caja/imputacion-perdida/{id}/editar', 'Caja\ImputacionPerdidaController@editar')->name('editar_imputacion_perdida');
+    Route::put('caja/imputacion-perdida/{id}', 'Caja\ImputacionPerdidaController@actualizar')->name('actualizar_imputacion_perdida');
+    Route::delete('caja/imputacion-perdida/{id}', 'Caja\ImputacionPerdidaController@eliminar')->name('eliminar_imputacion_perdida');
+
+    Route::get('caja/perdida-personal', 'Caja\PerdidaPersonalController@index')->name('perdida_personal');
+    Route::get('caja/lista-perdida-personal/{formato?}/{busqueda?}', 'Caja\PerdidaPersonalController@listar')->name('lista_perdida_personal');
+    Route::get('caja/perdida-personal/crear', 'Caja\PerdidaPersonalController@crear')->name('crear_perdida_personal');
+    Route::post('caja/perdida-personal', 'Caja\PerdidaPersonalController@guardar')->name('guardar_perdida_personal');
+    Route::get('caja/perdida-personal/empleados-empresa', 'Caja\PerdidaPersonalController@empleadosPorEmpresa')
+        ->name('empleados_empresa_perdida_personal');
+    Route::get('caja/perdida-personal/{id}/editar', 'Caja\PerdidaPersonalController@editar')->name('editar_perdida_personal');
+    Route::put('caja/perdida-personal/{id}', 'Caja\PerdidaPersonalController@actualizar')->name('actualizar_perdida_personal');
+    Route::delete('caja/perdida-personal/{id}', 'Caja\PerdidaPersonalController@eliminar')->name('eliminar_perdida_personal');
+
     Route::get('caja/rendicion-maquina', 'Caja\RendicionMaquinaController@index')->name('rendicion_maquina');
     Route::get('caja/lista-rendicion-maquina/{formato?}/{busqueda?}', 'Caja\RendicionMaquinaController@listar')->name('lista_rendicion_maquina');
     Route::get('caja/rendicion-maquina/crear', 'Caja\RendicionMaquinaController@crear')->name('crear_rendicion_maquina');

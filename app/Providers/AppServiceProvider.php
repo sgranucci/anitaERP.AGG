@@ -448,6 +448,21 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Caja\ConceptoPerdidaRepositoryInterface',
+            'App\Repositories\Caja\ConceptoPerdidaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Caja\ImputacionPerdidaRepositoryInterface',
+            'App\Repositories\Caja\ImputacionPerdidaRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Caja\PerdidaPersonalRepositoryInterface',
+            'App\Repositories\Caja\PerdidaPersonalRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Caja\RendicionMaquinaRepositoryInterface',
             'App\Repositories\Caja\RendicionMaquinaRepository',
         );

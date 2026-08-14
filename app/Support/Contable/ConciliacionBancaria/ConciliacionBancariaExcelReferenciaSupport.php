@@ -30,7 +30,7 @@ final class ConciliacionBancariaExcelReferenciaSupport
         }
 
         try {
-            $libro = IOFactory::load($ruta);
+            $libro = self::cargarLibroReferencia($ruta);
         } catch (Throwable $e) {
             throw new RuntimeException('Error abriendo Excel de referencia: '.$e->getMessage(), 0, $e);
         }
@@ -41,6 +41,10 @@ final class ConciliacionBancariaExcelReferenciaSupport
             $vals = self::extraerDesdeHoja($libro, 'MAYO');
             $fuente = 'MAYO';
         }
+
+        // Algunas carátulas dejan "pendientes soporte" en 0 aunque el saldo ajustado
+        // ya descuenta el TOTAL de MAYO (caso Rebisco mayo/2026).
+        $vals = self::completarPendientesBancoDesdeIdentidad($vals);
 
         return [
             'archivo' => basename($ruta),
@@ -131,7 +135,7 @@ final class ConciliacionBancariaExcelReferenciaSupport
             $textos = [];
             $numeros = [];
             for ($c = 1; $c <= 12; $c++) {
-                $v = $hoja->getCellByColumnAndRow($c, $r)->getCalculatedValue();
+                $v = self::valorCelda($hoja->getCellByColumnAndRow($c, $r));
                 if ($v === null || $v === '') {
                     continue;
                 }
@@ -145,7 +149,8 @@ final class ConciliacionBancariaExcelReferenciaSupport
                 continue;
             }
             $blob = implode(' | ', $textos);
-            $num = $numeros[count($numeros) - 1];
+            // Contaduría a veces deja un "1" de nota al lado del importe (KSA/RSA).
+            $num = self::importeSignificativoDeFila($numeros);
 
             if (str_contains($blob, 'saldo del banco segun extracto')
                 || (str_contains($blob, 'saldo del banco al') && str_contains($blob, 'extracto'))) {
@@ -153,7 +158,9 @@ final class ConciliacionBancariaExcelReferenciaSupport
             } elseif (str_contains($blob, 'cheques emitidos') && (str_contains($blob, 'no acredit') || str_contains($blob, 'no ingresaron'))) {
                 $out['cheques_no_acreditados'] ??= $num;
             } elseif (str_contains($blob, 'pendiente a conciliar por soporte')
-                || str_contains($blob, 'movimientos pendiente a conciliar')) {
+                || str_contains($blob, 'movimientos pendiente a conciliar')
+                || str_contains($blob, 'acreditacion no registradas')
+                || str_contains($blob, 'movimientos pendiente a conciliar por soporte')) {
                 $out['movimientos_pendientes_banco'] ??= $num;
             } elseif (str_contains($blob, 'saldo del banco al') && ! str_contains($blob, 'extracto') && ! str_contains($blob, 'segun')) {
                 // Carátula: línea "Saldo del Banco al DD.MM.YY" = ajustado
@@ -189,7 +196,7 @@ final class ConciliacionBancariaExcelReferenciaSupport
             $blob = '';
             $nums = [];
             for ($c = 1; $c <= 12; $c++) {
-                $v = $hoja->getCellByColumnAndRow($c, $r)->getCalculatedValue();
+                $v = self::valorCelda($hoja->getCellByColumnAndRow($c, $r));
                 if ($v === null || $v === '') {
                     continue;
                 }
@@ -231,24 +238,24 @@ final class ConciliacionBancariaExcelReferenciaSupport
             throw new RuntimeException('No se puede leer el Excel de referencia: '.$ruta);
         }
 
-        $libro = IOFactory::load($ruta);
+        $libro = self::cargarLibroReferencia($ruta);
         $cheques = [];
         $sumaCh = 0.0;
 
-        $hoja = $libro->getSheetByName('Pendientes');
+        $hoja = self::hojaPorNombres($libro, ['Pendientes', 'PENDIENTES']);
         if ($hoja !== null) {
             $max = (int) $hoja->getHighestRow();
             for ($r = 6; $r <= $max; $r++) {
-                $tip = trim((string) $hoja->getCellByColumnAndRow(1, $r)->getCalculatedValue());
+                $tip = trim((string) self::valorCelda($hoja->getCellByColumnAndRow(1, $r)));
                 if ($tip === '' || strcasecmp($tip, 'Tip') === 0 || str_starts_with(mb_strtolower($tip), 'total')) {
                     continue;
                 }
-                $numero = self::soloDigitos((string) $hoja->getCellByColumnAndRow(2, $r)->getCalculatedValue());
-                $fechaEmision = self::celdaFechaAYmd($hoja->getCellByColumnAndRow(4, $r)->getCalculatedValue());
-                $fechaCheque = self::celdaFechaAYmd($hoja->getCellByColumnAndRow(5, $r)->getCalculatedValue());
-                $detalle = trim((string) $hoja->getCellByColumnAndRow(8, $r)->getCalculatedValue());
-                $deb = self::floatOrNull($hoja->getCellByColumnAndRow(9, $r)->getCalculatedValue()) ?? 0.0;
-                $cred = self::floatOrNull($hoja->getCellByColumnAndRow(10, $r)->getCalculatedValue()) ?? 0.0;
+                $numero = self::soloDigitos((string) self::valorCelda($hoja->getCellByColumnAndRow(2, $r)));
+                $fechaEmision = self::celdaFechaAYmd(self::valorCelda($hoja->getCellByColumnAndRow(4, $r)));
+                $fechaCheque = self::celdaFechaAYmd(self::valorCelda($hoja->getCellByColumnAndRow(5, $r)));
+                $detalle = trim((string) self::valorCelda($hoja->getCellByColumnAndRow(8, $r)));
+                $deb = self::floatOrNull(self::valorCelda($hoja->getCellByColumnAndRow(9, $r))) ?? 0.0;
+                $cred = self::floatOrNull(self::valorCelda($hoja->getCellByColumnAndRow(10, $r))) ?? 0.0;
                 $importe = $cred > 0 ? $cred : -$deb;
                 if ($numero === '' && abs($importe) < 0.005) {
                     continue;
@@ -270,11 +277,11 @@ final class ConciliacionBancariaExcelReferenciaSupport
         $hojaMayo = $libro->getSheetByName('MAYO');
         if ($hojaMayo !== null) {
             $enBloque = false;
-            $max = min(80, (int) $hojaMayo->getHighestRow());
+            $max = min(120, (int) $hojaMayo->getHighestRow());
             for ($r = 1; $r <= $max; $r++) {
                 $blob = '';
                 for ($c = 1; $c <= 8; $c++) {
-                    $v = $hojaMayo->getCellByColumnAndRow($c, $r)->getCalculatedValue();
+                    $v = self::valorCelda($hojaMayo->getCellByColumnAndRow($c, $r));
                     if (is_string($v)) {
                         $blob .= ' '.self::normTexto($v);
                     }
@@ -286,41 +293,18 @@ final class ConciliacionBancariaExcelReferenciaSupport
                 if (! $enBloque) {
                     continue;
                 }
-                if (str_contains($blob, 'saldo contable') || str_contains($blob, 'partidas conciliatorias')) {
+                if (str_contains($blob, 'saldo contable')
+                    || str_contains($blob, 'partidas conciliatorias')
+                    || str_contains($blob, 'movimientos pendientes de registracion')) {
                     break;
                 }
-                // Layout MAYO Contaduría: B=Fecha, C=Ref, D=Codigo, E=Concepto, G=Importe
-                $fecha = $hojaMayo->getCellByColumnAndRow(2, $r)->getCalculatedValue();
-                $ref = $hojaMayo->getCellByColumnAndRow(3, $r)->getCalculatedValue();
-                $concepto = trim((string) $hojaMayo->getCellByColumnAndRow(5, $r)->getCalculatedValue());
-                $importe = self::floatOrNull($hojaMayo->getCellByColumnAndRow(7, $r)->getCalculatedValue());
-                if ($importe === null || abs($importe) < 0.005) {
+                // BSA: B=Fecha…G=Importe. KSA/RSA: A=Fecha, B=Ref, C=Cod, D=Concepto, E=Importe.
+                $fila = self::filaMayoPendienteBanco($hojaMayo, $r);
+                if ($fila === null) {
                     continue;
                 }
-                if ($concepto === '' || str_contains(self::normTexto($concepto), 'gastos bancarios')) {
-                    continue;
-                }
-                $refS = is_scalar($ref) ? (string) $ref : '';
-                $fechaS = null;
-                if ($fecha instanceof \DateTimeInterface) {
-                    $fechaS = $fecha->format('Y-m-d');
-                } elseif (is_numeric($fecha)) {
-                    try {
-                        $fechaS = \PhpOffice\PhpSpreadsheet\Shared\Date::excelToDateTimeObject((float) $fecha)->format('Y-m-d');
-                    } catch (\Throwable) {
-                        $fechaS = null;
-                    }
-                } elseif (is_string($fecha) && $fecha !== '') {
-                    $ts = strtotime($fecha);
-                    $fechaS = $ts ? date('Y-m-d', $ts) : null;
-                }
-                $bancoPend[] = [
-                    'fecha' => $fechaS,
-                    'referencia' => $refS,
-                    'concepto' => $concepto,
-                    'importe' => round($importe, 2),
-                ];
-                $sumaB += $importe;
+                $bancoPend[] = $fila;
+                $sumaB += $fila['importe'];
             }
         }
 
@@ -345,7 +329,7 @@ final class ConciliacionBancariaExcelReferenciaSupport
         }
 
         try {
-            $libro = IOFactory::load($ruta);
+            $libro = self::cargarLibroReferencia($ruta);
         } catch (Throwable $e) {
             throw new RuntimeException('Error abriendo Excel de referencia: '.$e->getMessage(), 0, $e);
         }
@@ -358,7 +342,7 @@ final class ConciliacionBancariaExcelReferenciaSupport
         $out = [];
         $max = (int) $hoja->getHighestRow();
         for ($r = 1; $r <= $max; $r++) {
-            $codRaw = $hoja->getCellByColumnAndRow(3, $r)->getCalculatedValue();
+            $codRaw = self::valorCelda($hoja->getCellByColumnAndRow(3, $r));
             if (! is_numeric($codRaw)) {
                 continue;
             }
@@ -366,15 +350,15 @@ final class ConciliacionBancariaExcelReferenciaSupport
             if ($codigo <= 0) {
                 continue;
             }
-            $importe = self::floatOrNull($hoja->getCellByColumnAndRow(5, $r)->getCalculatedValue());
+            $importe = self::floatOrNull(self::valorCelda($hoja->getCellByColumnAndRow(5, $r)));
             if ($importe === null || abs($importe) < 0.005) {
                 continue;
             }
-            $fecha = self::celdaFechaAYmd($hoja->getCellByColumnAndRow(1, $r)->getCalculatedValue());
+            $fecha = self::celdaFechaAYmd(self::valorCelda($hoja->getCellByColumnAndRow(1, $r)));
             if ($fecha === null) {
                 continue;
             }
-            $concepto = trim((string) $hoja->getCellByColumnAndRow(4, $r)->getCalculatedValue());
+            $concepto = trim((string) self::valorCelda($hoja->getCellByColumnAndRow(4, $r)));
             $clave = ConciliacionBancariaCodificacionSupport::claveOverrideSaldo($fecha, $importe, $concepto);
             // Primera aparición gana (evitar pisar si hay colisión rara).
             $out[$clave] ??= $codigo;
@@ -388,6 +372,161 @@ final class ConciliacionBancariaExcelReferenciaSupport
         $d = preg_replace('/\D/', '', $valor) ?? '';
 
         return ltrim($d, '0') !== '' ? ltrim($d, '0') : ($d !== '' ? '0' : '');
+    }
+
+    /**
+     * Evita OOM en Excels Contaduría con hojas fantasma (EXTRACTO NUEVO ~1M filas).
+     */
+    private static function cargarLibroReferencia(string $ruta)
+    {
+        $reader = IOFactory::createReaderForFile($ruta);
+        if (method_exists($reader, 'setReadDataOnly')) {
+            $reader->setReadDataOnly(true);
+        }
+        if (method_exists($reader, 'setLoadSheetsOnly')) {
+            $reader->setLoadSheetsOnly([
+                'CARATULA',
+                'Saldo',
+                'MAYO',
+                'Pendientes',
+                'PENDIENTES',
+                'EXTRACTO',
+                'Extracto.',
+                'ING-GTOS DIARIOS',
+            ]);
+        }
+
+        return $reader->load($ruta);
+    }
+
+    /**
+     * @param  list<string>  $nombres
+     */
+    private static function hojaPorNombres($libro, array $nombres)
+    {
+        foreach ($nombres as $nombre) {
+            $hoja = $libro->getSheetByName($nombre);
+            if ($hoja !== null) {
+                return $hoja;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<float>  $numeros
+     */
+    private static function importeSignificativoDeFila(array $numeros): float
+    {
+        // Ignora marcas de nota (1) / flags chicos al lado del importe Contaduría.
+        $candidatos = array_values(array_filter(
+            $numeros,
+            static fn (float $n) => abs($n) >= 10.0
+        ));
+        if ($candidatos === []) {
+            $candidatos = $numeros;
+        }
+        if ($candidatos === []) {
+            return 0.0;
+        }
+        usort($candidatos, static fn (float $a, float $b) => abs($b) <=> abs($a));
+
+        return $candidatos[0];
+    }
+
+    /**
+     * @return array{fecha: string|null, referencia: string, concepto: string, importe: float}|null
+     */
+    private static function filaMayoPendienteBanco($hoja, int $r): ?array
+    {
+        $layouts = [
+            // BSA (columnas corridas)
+            ['fecha' => 2, 'ref' => 3, 'concepto' => 5, 'importe' => 7],
+            // KSA / RSA
+            ['fecha' => 1, 'ref' => 2, 'concepto' => 4, 'importe' => 5],
+        ];
+
+        foreach ($layouts as $layout) {
+            $concepto = trim((string) self::valorCelda($hoja->getCellByColumnAndRow($layout['concepto'], $r)));
+            $importe = self::floatOrNull(self::valorCelda($hoja->getCellByColumnAndRow($layout['importe'], $r)));
+            if ($importe === null || abs($importe) < 0.005) {
+                continue;
+            }
+            if ($concepto === '' || str_contains(self::normTexto($concepto), 'gastos bancarios')) {
+                continue;
+            }
+            if (is_numeric($concepto)) {
+                continue;
+            }
+            $fecha = self::valorCelda($hoja->getCellByColumnAndRow($layout['fecha'], $r));
+            $ref = self::valorCelda($hoja->getCellByColumnAndRow($layout['ref'], $r));
+            $fechaS = self::celdaFechaAYmd($fecha);
+            if ($fechaS === null && ! ($fecha instanceof \DateTimeInterface) && ! is_numeric($fecha)) {
+                // Layout incorrecto (p.ej. "34.075.628" como fecha).
+                continue;
+            }
+
+            return [
+                'fecha' => $fechaS,
+                'referencia' => is_scalar($ref) ? (string) $ref : '',
+                'concepto' => $concepto,
+                'importe' => round($importe, 2),
+            ];
+        }
+
+        return null;
+    }
+
+    /**
+     * Identidad Contaduría: ajustado = extracto + cheques + pendientes_banco.
+     *
+     * @param  array<string, float|null>  $vals
+     * @return array<string, float|null>
+     */
+    private static function completarPendientesBancoDesdeIdentidad(array $vals): array
+    {
+        $extracto = self::floatOrNull($vals['saldo_banco_extracto'] ?? null);
+        $cheques = self::floatOrNull($vals['cheques_no_acreditados'] ?? null);
+        $ajustado = self::floatOrNull($vals['saldo_banco_ajustado'] ?? null);
+        $pend = self::floatOrNull($vals['movimientos_pendientes_banco'] ?? null);
+
+        if ($extracto === null || $cheques === null || $ajustado === null) {
+            return $vals;
+        }
+
+        $implicito = round($ajustado - $extracto - $cheques, 2);
+        if ($pend === null || (abs($pend) < 0.005 && abs($implicito) >= 0.005)) {
+            $vals['movimientos_pendientes_banco'] = $implicito;
+        }
+
+        return $vals;
+    }
+
+    /**
+     * Prefiere valor cacheado del Excel cuando la fórmula no resuelve (#REF! al cargar hojas parciales).
+     */
+    private static function valorCelda($cell): mixed
+    {
+        $calc = $cell->getCalculatedValue();
+        if (is_string($calc) && (str_starts_with($calc, '#') || $calc === '')) {
+            $calc = null;
+        }
+        if ($calc !== null && $calc !== '') {
+            return $calc;
+        }
+        if (method_exists($cell, 'getOldCalculatedValue')) {
+            $old = $cell->getOldCalculatedValue();
+            if ($old !== null && $old !== '' && !(is_string($old) && str_starts_with($old, '#'))) {
+                return $old;
+            }
+        }
+        $raw = $cell->getValue();
+        if (is_string($raw) && str_starts_with($raw, '=')) {
+            return null;
+        }
+
+        return $raw;
     }
 
     private static function floatOrNull(mixed $v): ?float
