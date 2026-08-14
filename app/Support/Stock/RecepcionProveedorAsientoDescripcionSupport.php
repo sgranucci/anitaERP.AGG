@@ -24,7 +24,7 @@ final class RecepcionProveedorAsientoDescripcionSupport
     {
         $com = (int) ($recepcion->numerorecepcion ?? 0);
         $nombreProveedor = self::nombreProveedor($recepcion);
-        $base = 'Rec. #'.$com.' ';
+        $base = $com.' ';
         $espacioNombre = self::LONGITUD_CTAV_DESC_MOV - strlen($base);
         $nombreRecortado = $espacioNombre > 0
             ? self::truncarTexto($nombreProveedor, $espacioNombre)

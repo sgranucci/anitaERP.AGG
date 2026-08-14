@@ -487,6 +487,24 @@ function mayorPlanoSincronizarHiddenCentrocostos() {
     $('#mpc_centrocostos_codigo').val(codigos.join(','));
 }
 
+function mayorPlanoHayFiltroCentrocosto() {
+    if (Object.keys(mayorPlanoCentrocostosSel).length) {
+        return true;
+    }
+
+    return String($('#cc_desde').val() || '').trim() !== ''
+        || String($('#cc_hasta').val() || '').trim() !== '';
+}
+
+function mayorPlanoAplicarIncluirSinCcAutomatico() {
+    var $chk = $('#incluir_sin_cc');
+    if (!$chk.length || String($('#incluir_sin_cc_manual').val() || '0') === '1') {
+        return;
+    }
+
+    $chk.prop('checked', !mayorPlanoHayFiltroCentrocosto());
+}
+
 function mayorPlanoRenderCentrocostos() {
     var $tbody = $('#mpc-tbody-cc-seleccionados');
     if (!$tbody.length) {
@@ -507,6 +525,7 @@ function mayorPlanoRenderCentrocostos() {
         });
     $tbody.html(html);
     mayorPlanoSincronizarHiddenCentrocostos();
+    mayorPlanoAplicarIncluirSinCcAutomatico();
 }
 
 function mayorPlanoAgregarCentrocosto(codigo, nombre) {
@@ -586,5 +605,12 @@ $(function () {
             $campo.find('input').val('');
         }
     });
-    $('#form-mayor-plano-cuenta').on('submit.mpcCc', mayorPlanoSincronizarHiddenCentrocostos);
+    $(document).on('change.mpcCc blur.mpcCc', '#cc_desde, #cc_hasta', mayorPlanoAplicarIncluirSinCcAutomatico);
+    $(document).on('change.mpcCc', '#incluir_sin_cc', function () {
+        $('#incluir_sin_cc_manual').val('1');
+    });
+    $('#form-mayor-plano-cuenta').on('submit.mpcCc', function () {
+        mayorPlanoSincronizarHiddenCentrocostos();
+        mayorPlanoAplicarIncluirSinCcAutomatico();
+    });
 });

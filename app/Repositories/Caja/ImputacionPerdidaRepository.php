@@ -8,6 +8,7 @@ use App\Models\Caja\ImputacionPerdidaEmpresa;
 use App\Models\Contable\Cuentacontable;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Caja\ImputacionPerdidaListadoFiltros;
+use App\Support\Solicitudpago\ConceptoSolicitudpagoCuentaEmpresaSupport;
 use DB;
 use Exception;
 use InvalidArgumentException;
@@ -399,55 +400,56 @@ class ImputacionPerdidaRepository implements ImputacionPerdidaRepositoryInterfac
     }
 
     /**
+     * Anita trae una sola cuenta; se replica a cada empresa operativa que tenga
+     * ese código en el plan (no BUDGET / TEMPORAL / BYSON: sin usuarios en
+     * usuario_empresa — ver ConceptoSolicitudpagoCuentaEmpresaSupport).
+     *
      * @return array<string, mixed>|null
      */
     private function convierteDatosDeAnita(object $row): ?array
     {
         $codigoCta = (int) preg_replace('/\D+/', '', (string) ($row->impp_cta_contable ?? '0'));
-
-        $cuenta = $this->resolverCuentacontablePorCodigoAnita($codigoCta, null);
-        if ($cuenta === null) {
+        if ($codigoCta <= 0) {
             return null;
         }
 
-        $empresaId = (int) $cuenta->empresa_id;
-        if ($empresaId <= 0) {
+        $empresasOperativas = ConceptoSolicitudpagoCuentaEmpresaSupport::idsConUsuariosAsignados();
+        if ($empresasOperativas === []) {
             return null;
         }
 
-        $lineas = [[
-            'empresa_id' => $empresaId,
-            'cuentacontable_id' => (int) $cuenta->id,
-        ]];
+        $codigoStr = (string) $codigoCta;
+        $cuentas = Cuentacontable::query()
+            ->select('id', 'codigo', 'empresa_id')
+            ->whereIn('empresa_id', $empresasOperativas)
+            ->where(function ($q) use ($codigoStr, $codigoCta) {
+                $q->where('codigo', $codigoStr)
+                    ->orWhere('codigo', $codigoCta);
+            })
+            ->orderBy('empresa_id')
+            ->orderBy('id')
+            ->get();
 
-        $codigoCuentaStr = (string) ($cuenta->codigo ?? '');
-        if ($codigoCuentaStr !== '') {
-            foreach ($this->empresaRepository->all() as $empresa) {
-                $otraEmpresaId = (int) $empresa->id;
-                if ($otraEmpresaId <= 0 || $otraEmpresaId === $empresaId) {
-                    continue;
-                }
+        if ($cuentas->isEmpty()) {
+            return null;
+        }
 
-                $cuentaOtra = Cuentacontable::query()
-                    ->select('id', 'codigo', 'empresa_id')
-                    ->where('empresa_id', $otraEmpresaId)
-                    ->where(function ($q) use ($codigoCuentaStr, $codigoCta) {
-                        $q->where('codigo', $codigoCuentaStr)
-                            ->orWhere('codigo', $codigoCta)
-                            ->orWhere('codigo', (string) $codigoCta);
-                    })
-                    ->orderBy('id')
-                    ->first();
-
-                if ($cuentaOtra === null) {
-                    continue;
-                }
-
-                $lineas[] = [
-                    'empresa_id' => $otraEmpresaId,
-                    'cuentacontable_id' => (int) $cuentaOtra->id,
-                ];
+        $vistos = [];
+        $lineas = [];
+        foreach ($cuentas as $cuenta) {
+            $empresaId = (int) $cuenta->empresa_id;
+            if ($empresaId <= 0 || isset($vistos[$empresaId])) {
+                continue;
             }
+            $vistos[$empresaId] = true;
+            $lineas[] = [
+                'empresa_id' => $empresaId,
+                'cuentacontable_id' => (int) $cuenta->id,
+            ];
+        }
+
+        if ($lineas === []) {
+            return null;
         }
 
         return [
@@ -457,24 +459,64 @@ class ImputacionPerdidaRepository implements ImputacionPerdidaRepositoryInterfac
         ];
     }
 
-    private function resolverCuentacontablePorCodigoAnita(int $codigoAnita, ?int $empresaId): ?Cuentacontable
+    /**
+     * Reaplica cuentas por empresa operativa desde Anita (corrige sync previo
+     * que incluía BUDGET / TEMPORAL).
+     *
+     * @return array{actualizados:int, errores:list<string>}
+     */
+    public function refrescarLineasEmpresaDesdeAnita(): array
     {
-        if ($codigoAnita <= 0) {
-            return null;
+        $ret = ['actualizados' => 0, 'errores' => []];
+
+        $apiAnita = new ApiAnita();
+        $dataAnita = json_decode($apiAnita->apiCall([
+            'acc' => 'list',
+            'tabla' => $this->tablaAnita(),
+            'sistema' => $this->sistemaAnita(),
+            'campos' => implode(', ', [
+                'impp_codigo',
+                'impp_desc',
+                'impp_cta_contable',
+            ]),
+        ]));
+
+        if (! is_array($dataAnita)) {
+            $ret['errores'][] = 'Anita no devolvió datos válidos para impperd.';
+
+            return $ret;
         }
 
-        $query = Cuentacontable::query()->select('id', 'codigo', 'empresa_id');
+        foreach ($dataAnita as $row) {
+            $codigoLocal = (int) ($row->{$this->keyFieldAnita} ?? 0);
+            if ($codigoLocal <= 0) {
+                continue;
+            }
 
-        $query->where(function ($q) use ($codigoAnita) {
-            $q->where('codigo', (string) $codigoAnita)
-                ->orWhere('codigo', $codigoAnita);
-        });
+            $registro = $this->model->newQuery()->where('codigo', $codigoLocal)->first();
+            if ($registro === null) {
+                continue;
+            }
 
-        if ($empresaId !== null && $empresaId > 0) {
-            $query->where('empresa_id', $empresaId);
+            $payload = $this->convierteDatosDeAnita($row);
+            if ($payload === null) {
+                $ret['errores'][] = "Imputación Anita {$codigoLocal}: sin cuentas en empresas operativas.";
+
+                continue;
+            }
+
+            try {
+                DB::beginTransaction();
+                $this->sincronizarLineasEmpresa((int) $registro->id, $payload['lineas']);
+                DB::commit();
+                $ret['actualizados']++;
+            } catch (\Throwable $e) {
+                DB::rollBack();
+                $ret['errores'][] = "Imputación Anita {$codigoLocal}: ".$e->getMessage();
+            }
         }
 
-        return $query->orderBy('id')->first();
+        return $ret;
     }
 
     private function codigoCuentacontableParaAnita(int $cuentacontableId): int

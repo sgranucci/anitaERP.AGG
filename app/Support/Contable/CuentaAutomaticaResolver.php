@@ -8,13 +8,22 @@ use RuntimeException;
 
 /**
  * Resuelve cuentas de patás fijas del sistema: override módulo → catálogo central → env.
+ * Conceptos con `multiple` leen la tabla detalle (lista de cuentas).
  */
 final class CuentaAutomaticaResolver
 {
     private const TABLA_CENTRAL = 'contabilidad_cuenta_automatica';
 
+    private const TABLA_DETALLE = 'contabilidad_cuenta_automatica_detalle';
+
     public static function resolverId(int $empresaId, string $clave): ?int
     {
+        if (CuentaAutomaticaClaves::esMultiple($clave)) {
+            $ids = self::resolverIds($empresaId, $clave);
+
+            return $ids[0] ?? null;
+        }
+
         if ($empresaId <= 0) {
             return null;
         }
@@ -32,6 +41,51 @@ final class CuentaAutomaticaResolver
         return self::envFallback($clave);
     }
 
+    /**
+     * Lista de cuentas del catálogo para claves multi-cuenta (sin override de módulo).
+     *
+     * @return list<int>
+     */
+    public static function resolverIds(int $empresaId, string $clave): array
+    {
+        if ($empresaId <= 0 || $clave === '') {
+            return [];
+        }
+
+        if (! CuentaAutomaticaClaves::esMultiple($clave)) {
+            $id = self::resolverId($empresaId, $clave);
+
+            return $id !== null && $id > 0 ? [$id] : [];
+        }
+
+        if (! Schema::hasTable(self::TABLA_DETALLE)) {
+            // Compatibilidad: si aún no corrió la migración, usa la fila simple.
+            $legacy = self::central($empresaId, $clave);
+
+            return $legacy !== null ? [$legacy] : [];
+        }
+
+        $ids = DB::table(self::TABLA_DETALLE)
+            ->where('empresa_id', $empresaId)
+            ->where('clave', $clave)
+            ->orderBy('id')
+            ->pluck('cuentacontable_id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($ids !== []) {
+            return $ids;
+        }
+
+        // Fallback: fila simple del catálogo (pre-migración o sin detalle).
+        $legacy = self::central($empresaId, $clave);
+
+        return $legacy !== null ? [$legacy] : [];
+    }
+
     public static function resolverIdObligatorio(int $empresaId, string $clave, string $mensaje): int
     {
         $id = self::resolverId($empresaId, $clave);
@@ -44,6 +98,7 @@ final class CuentaAutomaticaResolver
 
     /**
      * Valor almacenado en el catálogo central (sin override de módulo).
+     * En claves múltiples: primera cuenta del detalle.
      */
     public static function centralId(int $empresaId, string $clave): ?int
     {
@@ -51,11 +106,15 @@ final class CuentaAutomaticaResolver
             return null;
         }
 
+        if (CuentaAutomaticaClaves::esMultiple($clave)) {
+            return self::resolverIds($empresaId, $clave)[0] ?? null;
+        }
+
         return self::central($empresaId, $clave) ?? self::envFallback($clave);
     }
 
     /**
-     * @return array<string, ?int> clave => cuentacontable_id efectivo
+     * @return array<string, ?int> clave => cuentacontable_id efectivo (primera si múltiple)
      */
     public static function mapaEfectivoParaEmpresa(int $empresaId): array
     {

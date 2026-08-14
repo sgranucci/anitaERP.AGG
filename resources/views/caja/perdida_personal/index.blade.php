@@ -29,7 +29,7 @@
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => PerdidaPersonalListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
                         'limpiarUrl' => route('perdida_personal'),
-                        'placeholder' => 'B&uacute;squeda r&aacute;pida (tolera errores de tipeo)&hellip;',
+                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
                         'toggleTarget' => '#panel-filtros-perdida-personal',
                         'toggleId' => 'btn-toggle-filtros-perdida-personal',
                         'inputId' => 'filtro_valor',
@@ -60,7 +60,7 @@
                             <th>Turno</th>
                             <th class="text-right">Importe</th>
                             <th>Estado</th>
-                            <th class="width80" data-orderable="false"></th>
+                            <th class="width120 text-nowrap" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -87,7 +87,7 @@
                             <td>{{ $data->turno_label }}</td>
                             <td class="text-right">{{ number_format((float) $data->importe, 2, ',', '.') }}</td>
                             <td>{{ $data->estado_label }}</td>
-                            <td>
+                            <td class="text-nowrap">
                                 @if (can('editar-perdida-personal', false))
                                     <a href="{{ route('editar_perdida_personal', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                         <i class="fa fa-edit"></i>

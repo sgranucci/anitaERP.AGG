@@ -26,6 +26,7 @@ class RecepcionProveedorAsientoDescripcionCtamovService
      *     dry_run?: bool,
      *     incluir_importadas?: bool,
      *     solo_anita?: bool,
+     *     fecha_desde?: string|null,
      * }  $opciones
      * @return array{
      *     candidatas: int,
@@ -40,22 +41,9 @@ class RecepcionProveedorAsientoDescripcionCtamovService
     {
         $dryRun = (bool) ($opciones['dry_run'] ?? false);
         $soloAnita = (bool) ($opciones['solo_anita'] ?? false);
-        $incluirImportadas = (bool) ($opciones['incluir_importadas'] ?? false);
         $limite = isset($opciones['limite']) ? (int) $opciones['limite'] : null;
-        $idFiltro = isset($opciones['id']) ? (int) $opciones['id'] : null;
 
-        $query = Recepcion_Proveedor::query()
-            ->where('estado', RecepcionProveedorEstados::CONFIRMADA)
-            ->where('asiento_id', '>', 0)
-            ->orderBy('id');
-
-        if (! $incluirImportadas) {
-            $query->where('origen_carga', '!=', 'ANITA_IMPORT');
-        }
-
-        if ($idFiltro !== null && $idFiltro > 0) {
-            $query->where('id', $idFiltro);
-        }
+        $query = $this->queryCandidatas($opciones)->orderBy('id');
 
         if ($limite !== null && $limite > 0) {
             $query->limit($limite);
@@ -107,8 +95,32 @@ class RecepcionProveedorAsientoDescripcionCtamovService
         return $stats;
     }
 
-    public function contarCandidatas(bool $incluirImportadas = false, ?int $id = null): int
+    /**
+     * @param  array{
+     *     id?: int|null,
+     *     incluir_importadas?: bool,
+     *     fecha_desde?: string|null,
+     * }  $opciones
+     */
+    public function contarCandidatas(array $opciones = []): int
     {
+        return (int) $this->queryCandidatas($opciones)->count();
+    }
+
+    /**
+     * @param  array{
+     *     id?: int|null,
+     *     incluir_importadas?: bool,
+     *     fecha_desde?: string|null,
+     * }  $opciones
+     * @return \Illuminate\Database\Eloquent\Builder<\App\Models\Stock\Recepcion_Proveedor>
+     */
+    private function queryCandidatas(array $opciones = [])
+    {
+        $incluirImportadas = (bool) ($opciones['incluir_importadas'] ?? false);
+        $idFiltro = isset($opciones['id']) ? (int) $opciones['id'] : null;
+        $fechaDesde = isset($opciones['fecha_desde']) ? trim((string) $opciones['fecha_desde']) : '';
+
         $query = Recepcion_Proveedor::query()
             ->where('estado', RecepcionProveedorEstados::CONFIRMADA)
             ->where('asiento_id', '>', 0);
@@ -117,11 +129,15 @@ class RecepcionProveedorAsientoDescripcionCtamovService
             $query->where('origen_carga', '!=', 'ANITA_IMPORT');
         }
 
-        if ($id !== null && $id > 0) {
-            $query->where('id', $id);
+        if ($idFiltro !== null && $idFiltro > 0) {
+            $query->where('id', $idFiltro);
         }
 
-        return (int) $query->count();
+        if ($fechaDesde !== '') {
+            $query->whereDate('fecha', '>=', $fechaDesde);
+        }
+
+        return $query;
     }
 
     /**
@@ -194,6 +210,10 @@ class RecepcionProveedorAsientoDescripcionCtamovService
 
         if ($necesitaErp && ! $soloAnita) {
             $this->actualizarDescripcionesErp($asientoId, $descripcionErp, $descripcionCtamov);
+            // El payload a ctamov se arma desde el asiento en memoria: sin refrescar la relación,
+            // Anita se reescribe con las leyendas viejas.
+            $recepcion->unsetRelation('asientos');
+            $recepcion->load('asientos.asiento_movimientos');
         }
 
         $preview = $this->asientoService->previewAsientoContable($recepcion);

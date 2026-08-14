@@ -39,6 +39,7 @@ use App\Support\Stock\MovimientoStockPreferenciasUsuario;
 use App\Support\Stock\MovimientoStockVisibilidadSupport;
 use App\Support\Stock\NpuBajaConsultaSupport;
 use App\Support\Stock\TransferenciaBienUsoSupport;
+use App\Support\Stock\TransferenciaMercaderiaLineaContableSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Articulo;
@@ -264,6 +265,7 @@ class MovimientoStockController extends Controller
                 if (! ($resultado['ok'] ?? false)) {
                     throw new \Exception($resultado['mensaje'] ?? 'No se pudo registrar la transferencia.');
                 }
+                $tipoStockId = (int) ($resultado['tipotransaccion_stock_id'] ?? $tipoStockId);
 
                 $surmarFlash = $this->procesarSurmarTrasTransferencia($request, $tipoStockId, $resultado);
                 MovimientoStockPreferenciasUsuario::persistirTipoTransaccion($tipoStockId);
@@ -745,6 +747,42 @@ class MovimientoStockController extends Controller
         ]);
     }
 
+    public function sugerirTipoTransferenciaContable(Request $request): JsonResponse
+    {
+        if (! MovimientoSurmarPermisoSupport::puedeCrear(false)
+            && ! MovimientoSurmarPermisoSupport::puedeEditar(false)) {
+            return response()->json(['ok' => false, 'mensaje' => 'No tiene permisos para esta consulta.'], 403);
+        }
+
+        $articuloId = (int) $request->query('articulo_id', 0);
+        $empresaId = (int) $request->query('empresa_id', 0);
+        if ($articuloId <= 0 || $empresaId <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Artículo o empresa no indicados.'], 422);
+        }
+
+        $articulo = Articulo::query()
+            ->with('articulo_cuentacontables')
+            ->find($articuloId);
+        if ($articulo === null) {
+            return response()->json(['ok' => false, 'mensaje' => 'Artículo no encontrado.'], 404);
+        }
+
+        $tipoTrcont = $this->tipotransaccionStockRepository
+            ->all(['T'], ['A'])
+            ->first(static fn ($tipo): bool => strtoupper(trim((string) ($tipo->abreviatura ?? ''))) === 'TRCONT'
+                && (bool) ($tipo->maneja_contabilidad ?? false));
+
+        return response()->json([
+            'ok' => true,
+            'es_contabilizable' => TransferenciaMercaderiaLineaContableSupport::esContabilizable(
+                $articulo,
+                $empresaId
+            ),
+            'familia' => TransferenciaMercaderiaLineaContableSupport::resolverFamilia($articulo, $empresaId),
+            'tipo_trcont' => $tipoTrcont === null ? null : $this->payloadTipoTransaccionStock($tipoTrcont),
+        ]);
+    }
+
     public function resolverNpuBaja(Request $request): JsonResponse
     {
         if (! MovimientoSurmarPermisoSupport::puedeCrear(false) && ! MovimientoSurmarPermisoSupport::puedeEditar(false)) {
@@ -1000,11 +1038,29 @@ class MovimientoStockController extends Controller
                 'tipotransaccion_stock_id' => (int) $request->input('tipotransaccion_stock_id'),
                 'centrocosto_destino_id' => (int) $request->input('centrocosto_destino_id'),
                 'usuario_destino_id' => (int) $request->input('usuario_destino_id'),
+                'seleccion_automatica_trcont' => true,
                 'enviar_aviso' => $request->has('enviar_aviso') ? $request->input('enviar_aviso') : null,
                 'observacion' => trim((string) $request->input('leyenda', '')),
             ],
             $lineas
         );
+    }
+
+    private function payloadTipoTransaccionStock(Tipotransaccion_Stock $tipo): array
+    {
+        return [
+            'id' => (int) $tipo->id,
+            'nombre' => (string) $tipo->nombre,
+            'abreviatura' => (string) $tipo->abreviatura,
+            'operacion' => (string) $tipo->operacion,
+            'maneja_contabilidad' => (bool) $tipo->maneja_contabilidad,
+            'origen_bien_uso' => (bool) $tipo->origen_bien_uso,
+            'destino_bien_uso' => (bool) $tipo->destino_bien_uso,
+            'requiere_aprobacion' => (bool) $tipo->requiere_aprobacion,
+            'aviso_opcional' => (bool) $tipo->aviso_opcional,
+            'baja_npu' => (bool) $tipo->baja_npu,
+            'alta_npu' => (bool) $tipo->alta_npu,
+        ];
     }
 
     private function esModoSurmar(?Request $request = null): bool

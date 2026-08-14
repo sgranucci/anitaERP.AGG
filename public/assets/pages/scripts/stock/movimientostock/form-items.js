@@ -74,6 +74,37 @@
         });
     };
 
+    function msAplicarTipoTransferenciaContableSiCorresponde($tr, articuloId) {
+        var url = window.movimientoStockSugerirTipoTransferenciaContableUrl || '';
+        var empresaId = parseInt($('#empresa_id').val(), 10) || 0;
+        var meta = typeof window.msTipoTransaccionMeta === 'function'
+            ? window.msTipoTransaccionMeta()
+            : {};
+        if ($('#movimientostockid').length
+            || !url
+            || empresaId <= 0
+            || parseInt(articuloId, 10) <= 0
+            || String(meta.abreviatura || '').trim().toUpperCase() !== 'TRA') {
+            return;
+        }
+
+        $.get(url, {
+            articulo_id: articuloId,
+            empresa_id: empresaId
+        }).done(function (resp) {
+            if (String(msFilaArticuloId($tr)) !== String(articuloId)
+                || !resp
+                || !resp.ok
+                || !resp.es_contabilizable
+                || !resp.tipo_trcont) {
+                return;
+            }
+            if (typeof window.msAplicarTipotransaccionStockEnCampo === 'function') {
+                window.msAplicarTipotransaccionStockEnCampo(resp.tipo_trcont);
+            }
+        });
+    }
+
     window.msRefrescarPreciosTodasLasFilas = function () {
         if (msEsModoFerli()) {
             return;
@@ -119,6 +150,7 @@
         $tr.find('.codigoarticulo').val(dataArticulo.sku || '');
         $tr.find('.descripcionarticulo').val(dataArticulo.descripcion || dataArticulo.nombre || '');
         $tr.find('.articulo_id_previo').val(articuloId > 0 ? articuloId : '');
+        msAplicarTipoTransferenciaContableSiCorresponde($tr, articuloId);
 
         if (typeof actualizarLinkEditarArticulo === 'function') {
             actualizarLinkEditarArticulo($tr, articuloId);

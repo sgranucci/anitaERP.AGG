@@ -71,9 +71,12 @@ class MayorPlanoCuentaListadoFiltros
             'cc_desde' => trim((string) $request->input('cc_desde', '')),
             'cc_hasta' => trim((string) $request->input('cc_hasta', '')),
             'agrupar_por_cc' => $request->boolean('agrupar_por_cc'),
-            'incluir_sin_cc' => $request->has('incluir_sin_cc')
+            // Sin decisión explícita del usuario el valor queda en null: el support lo resuelve
+            // como "excluir sin CC" cuando hay filtro de centros de costo.
+            'incluir_sin_cc' => $request->boolean('incluir_sin_cc_manual')
                 ? $request->boolean('incluir_sin_cc')
                 : null,
+            'incluir_sin_cc_manual' => $request->boolean('incluir_sin_cc_manual'),
             'filtro_texto' => trim((string) $request->input('filtro_texto', '')),
         ];
     }
@@ -186,6 +189,7 @@ class MayorPlanoCuentaListadoFiltros
 
         if (array_key_exists('incluir_sin_cc', $filtros) && $filtros['incluir_sin_cc'] !== null) {
             $out['incluir_sin_cc'] = $filtros['incluir_sin_cc'] ? 1 : 0;
+            $out['incluir_sin_cc_manual'] = 1;
         }
 
         $texto = trim((string) ($filtros['filtro_texto'] ?? ''));

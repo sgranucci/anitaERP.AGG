@@ -281,20 +281,6 @@ class TransferenciaMercaderiaController extends Controller
             return response()->json(['ok' => false, 'mensaje' => 'Artículo no indicado.'], 422);
         }
 
-        $tipo = $tipoId > 0
-            ? $this->tipotransaccionStockRepository->find($tipoId)
-            : null;
-
-        if ($tipo === null || ! TransferenciaMercaderiaAprobacionSupport::manejaContabilidad($tipo)) {
-            return response()->json([
-                'ok' => true,
-                'permitido' => true,
-                'contabilidad_activa' => false,
-                'familia' => TransferenciaMercaderiaLineaContableSupport::FAMILIA_NO_CONTABILIZABLE,
-                'motivo' => '',
-            ]);
-        }
-
         if ($empresaId <= 0) {
             return response()->json(['ok' => false, 'mensaje' => 'Seleccione empresa.'], 422);
         }
@@ -307,6 +293,28 @@ class TransferenciaMercaderiaController extends Controller
             return response()->json(['ok' => false, 'mensaje' => 'Artículo no encontrado.'], 422);
         }
 
+        $tipo = $tipoId > 0
+            ? $this->tipotransaccionStockRepository->find($tipoId)
+            : null;
+        $tipoTrcont = $this->tipotransaccionStockRepository
+            ->all(['T'], ['A'])
+            ->first(static fn ($item): bool => strtoupper(trim((string) ($item->abreviatura ?? ''))) === 'TRCONT'
+                && (bool) ($item->maneja_contabilidad ?? false));
+        $familia = TransferenciaMercaderiaLineaContableSupport::resolverFamilia($articulo, $empresaId);
+        $esContabilizable = $familia !== TransferenciaMercaderiaLineaContableSupport::FAMILIA_NO_CONTABILIZABLE;
+
+        if ($tipo === null || ! TransferenciaMercaderiaAprobacionSupport::manejaContabilidad($tipo)) {
+            return response()->json([
+                'ok' => true,
+                'permitido' => true,
+                'contabilidad_activa' => false,
+                'es_contabilizable' => $esContabilizable,
+                'familia' => $familia,
+                'motivo' => '',
+                'tipo_trcont_id' => $tipoTrcont?->id,
+            ]);
+        }
+
         $resultado = TransferenciaMercaderiaLineaContableSupport::validarLinea(
             $articulo,
             $empresaId,
@@ -316,9 +324,11 @@ class TransferenciaMercaderiaController extends Controller
         return response()->json([
             'ok' => true,
             'contabilidad_activa' => true,
+            'es_contabilizable' => $esContabilizable,
             'permitido' => $resultado['permitido'],
             'familia' => $resultado['familia'],
             'motivo' => $resultado['motivo'],
+            'tipo_trcont_id' => $tipoTrcont?->id,
             'deposito_recepcion_id' => $resultado['deposito_recepcion_id'],
             'deposito_recepcion_codigo' => $resultado['deposito_recepcion_codigo'],
         ]);
@@ -339,8 +349,7 @@ class TransferenciaMercaderiaController extends Controller
             }
         }
 
-        $resultado = $this->transferenciaService->grabarTransferencia(
-            $request->only([
+        $cabecera = $request->only([
                 'empresa_id',
                 'deposito_salida_id',
                 'deposito_entrada_id',
@@ -352,7 +361,11 @@ class TransferenciaMercaderiaController extends Controller
                 'centrocosto_destino_id',
                 'enviar_aviso',
                 'observacion',
-            ]),
+            ]);
+        $cabecera['seleccion_automatica_trcont'] = true;
+
+        $resultado = $this->transferenciaService->grabarTransferencia(
+            $cabecera,
             $lineas
         );
 

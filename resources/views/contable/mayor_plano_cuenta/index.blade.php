@@ -17,21 +17,39 @@
     togglePeriodo();
 
     var form = document.getElementById('form-mayor-plano-cuenta');
+    var overlay = document.getElementById('mayor-plano-cuenta-overlay');
+    function ocultarOverlay() {
+        if (!overlay) {
+            return;
+        }
+        overlay.classList.add('d-none');
+        overlay.style.display = '';
+        overlay.setAttribute('aria-hidden', 'true');
+    }
     if (form) {
         form.addEventListener('submit', function () {
+            if (!form.checkValidity()) {
+                return;
+            }
             var btn = document.getElementById('btn-consultar');
             if (btn) {
                 btn.disabled = true;
-                btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Procesando… (puede tardar varios minutos)';
+                btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Procesando…';
+            }
+            if (overlay) {
+                overlay.classList.remove('d-none');
+                overlay.style.display = 'flex';
+                overlay.setAttribute('aria-hidden', 'false');
             }
         });
     }
+    window.addEventListener('pageshow', ocultarOverlay);
 })();
 </script>
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/contable/mayor_plano_cuenta/filtro.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/mayor_plano_cuenta/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/mayor_plano_cuenta/filtro.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 @endsection
 
@@ -50,9 +68,23 @@
             </div>
             <form method="get" action="{{ route('mayor_plano_cuenta') }}" id="form-mayor-plano-cuenta" class="mb-0">
                 <div class="card-body pb-2">
-                    <p class="text-muted small mb-3">
-                        Mayor analítico por cuenta (motor Anita l-mayor). Permite consolidar varias empresas.
-                        Los links a orden de compra sincronizan desde Anita bridge si aún no están en AnitaERP.
+                    <style>
+                        .mpc-seleccion-scroll {
+                            max-height: 145px;
+                            overflow-y: auto;
+                        }
+                        .mpc-panel-parametros .form-group:last-child {
+                            margin-bottom: 0;
+                        }
+                        @media (max-width: 991.98px) {
+                            .mpc-seleccion-scroll {
+                                max-height: 210px;
+                            }
+                        }
+                    </style>
+
+                    <p class="text-muted small mb-2">
+                        Defina el período y combine cuentas puntuales o por rango. Los centros de costo pueden filtrar el mayor sin cambiar su clasificación.
                     </p>
 
                     @include('includes.reportes.asignacion_empresas_checkboxes', [
@@ -64,9 +96,16 @@
                         'col_label' => 'col-lg-2 text-right',
                     ])
 
-                    <div class="form-group row">
-                        <label class="col-lg-2 control-label text-right requerido">Período</label>
-                        <div class="col-lg-9">
+                    <div class="card card-outline card-secondary mpc-panel-parametros mb-3">
+                        <div class="card-header py-2">
+                            <h3 class="card-title font-weight-bold">
+                                <i class="fa fa-sliders-h mr-1"></i> Par&aacute;metros generales
+                            </h3>
+                        </div>
+                        <div class="card-body py-2">
+                            <div class="row">
+                                <div class="col-lg-4 border-lg-right mb-2 mb-lg-0">
+                                    <label class="small font-weight-bold requerido d-block mb-1">Per&iacute;odo</label>
                             <div class="form-check form-check-inline">
                                 <input class="form-check-input" type="radio" name="modo_periodo" id="modo_mes" value="mes"
                                     {{ ($filtros['modo_periodo'] ?? 'mes') === 'mes' ? 'checked' : '' }}>
@@ -77,14 +116,9 @@
                                     {{ ($filtros['modo_periodo'] ?? '') === 'rango' ? 'checked' : '' }}>
                                 <label class="form-check-label" for="modo_rango">Rango de fechas</label>
                             </div>
-                        </div>
-                    </div>
 
-                    <div id="panel-mes" class="form-group row">
-                        <label class="col-lg-2 control-label text-right requerido">Mes / Año</label>
-                        <div class="col-lg-9">
-                            <div class="row">
-                                <div class="col-md-3">
+                                    <div id="panel-mes" class="form-row mt-2">
+                                <div class="col-6">
                                     <select name="mes" class="form-control">
                                         @for ($m = 1; $m <= 12; $m++)
                                             <option value="{{ $m }}" @selected((int) ($filtros['mes'] ?? $mes_actual) === $m)>
@@ -93,33 +127,27 @@
                                         @endfor
                                     </select>
                                 </div>
-                                <div class="col-md-3">
+                                <div class="col-6">
                                     <input type="number" name="anio" class="form-control" min="2000" max="2100"
                                         value="{{ $filtros['anio'] ?? $anio_actual }}">
                                 </div>
                             </div>
-                        </div>
-                    </div>
 
-                    <div id="panel-rango" class="form-group row" style="display:none;">
-                        <label class="col-lg-2 control-label text-right requerido">Desde / Hasta</label>
-                        <div class="col-lg-9">
-                            <div class="row">
-                                <div class="col-md-3">
+                                    <div id="panel-rango" class="form-row mt-2" style="display:none;">
+                                <div class="col-6">
                                     <input type="date" name="fecha_desde" class="form-control"
                                         value="{{ $filtros['fecha_desde'] ?? '' }}">
                                 </div>
-                                <div class="col-md-3">
+                                <div class="col-6">
                                     <input type="date" name="fecha_hasta" class="form-control"
                                         value="{{ $filtros['fecha_hasta'] ?? '' }}">
                                 </div>
                             </div>
-                        </div>
-                    </div>
+                                </div>
 
-                    <div class="form-group row">
-                        <label for="moneda_id" class="col-lg-2 control-label text-right requerido">Expresar en</label>
-                        <div class="col-lg-4">
+                                <div class="col-lg-4 border-lg-right mb-2 mb-lg-0">
+                                    <div class="form-group mb-2">
+                                        <label for="moneda_id" class="small font-weight-bold requerido mb-1">Expresar en</label>
                             <select name="moneda_id" id="moneda_id" class="form-control" required>
                                 @foreach ($moneda_query as $mon)
                                     <option value="{{ $mon->id }}" @selected((int) ($filtros['moneda_id'] ?? 1) === (int) $mon->id)>
@@ -127,63 +155,71 @@
                                     </option>
                                 @endforeach
                             </select>
-                        </div>
-                    </div>
+                                    </div>
+                                    <div class="form-group">
+                                        <label for="modo_inclusion_asientos" class="small font-weight-bold mb-1">Asientos de cierre</label>
+                                        <select name="modo_inclusion_asientos" id="modo_inclusion_asientos" class="form-control">
+                                            <option value="sin_cierre_ni_inflacion" @selected(($filtros['modo_inclusion_asientos'] ?? '') === 'sin_cierre_ni_inflacion')>
+                                                Excluir cierre e inflaci&oacute;n
+                                            </option>
+                                            <option value="sin_cierre" @selected(($filtros['modo_inclusion_asientos'] ?? '') === 'sin_cierre')>Excluir solo cierre</option>
+                                            <option value="sin_inflacion" @selected(($filtros['modo_inclusion_asientos'] ?? '') === 'sin_inflacion')>Excluir solo inflaci&oacute;n</option>
+                                            <option value="todos" @selected(($filtros['modo_inclusion_asientos'] ?? '') === 'todos')>Incluir todos</option>
+                                        </select>
+                                    </div>
+                                </div>
 
-                    @include('contable.mayor_plano_cuenta.partials.campo_consulta_cuentas', [
-                        'filtros' => $filtros ?? [],
-                        'cuentas_iniciales' => $cuentas_iniciales ?? [],
-                        'cuenta_desde_meta' => $cuenta_desde_meta ?? ['codigo' => '', 'nombre' => ''],
-                        'cuenta_hasta_meta' => $cuenta_hasta_meta ?? ['codigo' => '', 'nombre' => ''],
-                    ])
-
-                    @include('contable.mayor_plano_cuenta.partials.campo_consulta_centrocostos', [
-                        'filtros' => $filtros ?? [],
-                        'centrocostos_iniciales' => $centrocostos_iniciales ?? [],
-                        'cc_desde_meta' => $cc_desde_meta ?? ['codigo' => '', 'nombre' => ''],
-                        'cc_hasta_meta' => $cc_hasta_meta ?? ['codigo' => '', 'nombre' => ''],
-                    ])
-
-                    <div class="form-group row">
-                        <label for="modo_inclusion_asientos" class="col-lg-2 control-label text-right">Asientos cierre</label>
-                        <div class="col-lg-4">
-                            <select name="modo_inclusion_asientos" id="modo_inclusion_asientos" class="form-control">
-                                <option value="sin_cierre_ni_inflacion" @selected(($filtros['modo_inclusion_asientos'] ?? '') === 'sin_cierre_ni_inflacion')>
-                                    Excluir cierre e inflación
-                                </option>
-                                <option value="sin_cierre" @selected(($filtros['modo_inclusion_asientos'] ?? '') === 'sin_cierre')>Excluir solo cierre</option>
-                                <option value="sin_inflacion" @selected(($filtros['modo_inclusion_asientos'] ?? '') === 'sin_inflacion')>Excluir solo inflación</option>
-                                <option value="todos" @selected(($filtros['modo_inclusion_asientos'] ?? '') === 'todos')>Incluir todos</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="form-group row mb-0">
-                        <label class="col-lg-2 control-label text-right">Opciones</label>
-                        <div class="col-lg-9">
-                            <div class="form-check">
-                                <input class="form-check-input" type="checkbox" name="solo_moneda_origen" id="solo_moneda_origen" value="1"
-                                    @checked(! empty($filtros['solo_moneda_origen']))>
-                                <label class="form-check-label" for="solo_moneda_origen">
-                                    Solo movimientos en moneda origen
-                                </label>
-                            </div>
-                            <div class="form-check">
-                                <input type="hidden" name="incluye_subdiario" value="0">
-                                <input class="form-check-input" type="checkbox" name="incluye_subdiario" id="incluye_subdiario" value="1"
-                                    @checked($filtros['incluye_subdiario'] ?? true)>
-                                <label class="form-check-label" for="incluye_subdiario">
-                                    Incluir movimientos de subdiario
-                                </label>
+                                <div class="col-lg-4">
+                                    <label class="small font-weight-bold d-block mb-2">Origen de movimientos</label>
+                                    <div class="form-check mb-2">
+                                        <input class="form-check-input" type="checkbox" name="solo_moneda_origen" id="solo_moneda_origen" value="1"
+                                            @checked(! empty($filtros['solo_moneda_origen']))>
+                                        <label class="form-check-label" for="solo_moneda_origen">
+                                            Solo movimientos en moneda origen
+                                        </label>
+                                    </div>
+                                    <div class="form-check">
+                                        <input type="hidden" name="incluye_subdiario" value="0">
+                                        <input class="form-check-input" type="checkbox" name="incluye_subdiario" id="incluye_subdiario" value="1"
+                                            @checked($filtros['incluye_subdiario'] ?? true)>
+                                        <label class="form-check-label" for="incluye_subdiario">
+                                            Incluir movimientos de subdiario
+                                        </label>
+                                    </div>
+                                    <small class="text-muted d-block mt-2">
+                                        El subdiario completa las imputaciones que no existen en ctamov.
+                                    </small>
+                                </div>
                             </div>
                         </div>
                     </div>
 
-                    <div class="form-group row mb-0 mt-3">
-                        <div class="col-lg-2"></div>
-                        <div class="col-lg-10">
+                    <div class="row align-items-stretch mb-3">
+                        <div class="col-lg-6 mb-3 mb-lg-0">
+                            @include('contable.mayor_plano_cuenta.partials.campo_consulta_cuentas', [
+                                'filtros' => $filtros ?? [],
+                                'cuentas_iniciales' => $cuentas_iniciales ?? [],
+                                'cuenta_desde_meta' => $cuenta_desde_meta ?? ['codigo' => '', 'nombre' => ''],
+                                'cuenta_hasta_meta' => $cuenta_hasta_meta ?? ['codigo' => '', 'nombre' => ''],
+                            ])
+                        </div>
+                        <div class="col-lg-6">
+                            @include('contable.mayor_plano_cuenta.partials.campo_consulta_centrocostos', [
+                                'filtros' => $filtros ?? [],
+                                'centrocostos_iniciales' => $centrocostos_iniciales ?? [],
+                                'cc_desde_meta' => $cc_desde_meta ?? ['codigo' => '', 'nombre' => ''],
+                                'cc_hasta_meta' => $cc_hasta_meta ?? ['codigo' => '', 'nombre' => ''],
+                            ])
+                        </div>
+                    </div>
+
+                    <div class="d-flex flex-wrap align-items-center justify-content-between">
+                        <small class="text-muted mb-2 mb-md-0">
+                            <i class="fa fa-keyboard"></i> Puede usar F1 en los c&oacute;digos para abrir la consulta.
+                        </small>
+                        <div>
                             <input type="hidden" name="consultar" value="1">
-                            <button type="submit" class="btn btn-primary btn-sm" id="btn-consultar">
+                            <button type="submit" class="btn btn-primary" id="btn-consultar">
                                 <i class="fa fa-search"></i> Consultar
                             </button>
                         </div>
@@ -342,6 +378,13 @@
         </div>
     </div>
 </div>
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'mayor-plano-cuenta-overlay',
+    'tituloId' => 'mayor-plano-cuenta-overlay-titulo',
+    'subtituloId' => 'mayor-plano-cuenta-overlay-subtitulo',
+    'titulo' => 'Calculando el mayor…',
+    'subtitulo' => 'Puede demorar según el período y las empresas seleccionadas. No cierre la página.',
+])
 @include('includes.contable.modalconsultacuentacontable')
 @include('includes.contable.modalconsultacentrocosto')
 @endsection

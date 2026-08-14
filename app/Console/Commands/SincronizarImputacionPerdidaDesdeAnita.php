@@ -8,7 +8,8 @@ use Illuminate\Console\Command;
 class SincronizarImputacionPerdidaDesdeAnita extends Command
 {
     protected $signature = 'caja:sincronizar-imputacion-perdida-anita
-                            {--codigo= : Importar solo un código impp_codigo Anita}';
+                            {--codigo= : Importar solo un código impp_codigo Anita}
+                            {--refrescar-lineas : Reaplica cuentas solo a empresas operativas (quita BUDGET/TEMPORAL)}';
 
     protected $description = 'Importa imputaciones de pérdida desde Anita (impperd) que no existen en imputacion_perdida.';
 
@@ -18,6 +19,15 @@ class SincronizarImputacionPerdidaDesdeAnita extends Command
         $codigo = ($codigoOpt !== null && $codigoOpt !== '') ? (int) $codigoOpt : null;
 
         try {
+            if ($this->option('refrescar-lineas')) {
+                $this->info('Refrescando cuentas por empresa operativa desde Anita (impperd)…');
+                $retLineas = $repository->refrescarLineasEmpresaDesdeAnita();
+                $this->info("Actualizados: {$retLineas['actualizados']}.");
+                foreach ($retLineas['errores'] as $err) {
+                    $this->warn($err);
+                }
+            }
+
             if ($codigo !== null && $codigo > 0) {
                 $this->info("Importando imputación Anita impp_codigo={$codigo}…");
             } else {

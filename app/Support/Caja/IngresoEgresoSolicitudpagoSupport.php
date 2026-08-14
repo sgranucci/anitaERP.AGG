@@ -103,7 +103,8 @@ class IngresoEgresoSolicitudpagoSupport
             $empresaAsiento,
             $monedaId,
             $cotizacion,
-            $signoOperacion
+            $signoOperacion,
+            self::centrocostoPiernaFinanciera($lineas)
         );
         if ($lineasCaja === []) {
             return $lineas;
@@ -126,7 +127,8 @@ class IngresoEgresoSolicitudpagoSupport
         int $empresaId,
         int $monedaId,
         float|int|string $cotizacion,
-        int $signoOperacion = -1
+        int $signoOperacion = -1,
+        int $centrocostoId = 0
     ): array {
         $signo = $signoOperacion < 0 ? -1 : 1;
         $lineas = [];
@@ -176,7 +178,7 @@ class IngresoEgresoSolicitudpagoSupport
                 'nombre' => $cuenta->nombre,
                 'moneda_id' => $monedaMov > 0 ? $monedaMov : $monedaId,
                 'cotizacion' => $cotizMov,
-                'centrocosto_id' => 0,
+                'centrocosto_id' => $centrocostoId,
                 'debe' => $dh === 'D' ? $monto : '',
                 'haber' => $dh === 'H' ? $monto : '',
                 'observacion' => '',
@@ -185,6 +187,31 @@ class IngresoEgresoSolicitudpagoSupport
         }
 
         return $lineas;
+    }
+
+    /**
+     * Centro de costo a usar en la pierna financiera del pago: el que trae la SP
+     * en su cuenta de caja/banco (o cualquiera de sus imputaciones).
+     *
+     * @param  list<array<string, mixed>>  $lineasSolicitud
+     */
+    private static function centrocostoPiernaFinanciera(array $lineasSolicitud): int
+    {
+        $fallback = 0;
+        foreach ($lineasSolicitud as $linea) {
+            $cc = (int) ($linea['centrocosto_id'] ?? 0);
+            if ($cc <= 0) {
+                continue;
+            }
+            if (self::esCodigoCajaBanco((string) ($linea['codigo'] ?? ''))) {
+                return $cc;
+            }
+            if ($fallback <= 0) {
+                $fallback = $cc;
+            }
+        }
+
+        return $fallback;
     }
 
     /**

@@ -10,8 +10,6 @@ return new class extends Migration
 
     private const MENU_PADRE_NOMBRE = 'Pérdidas de personal';
 
-    private const MENU_REF_ROLES_URL = 'caja/usocuentacaja';
-
     /** @var list<array{url:string, nombre:string, icono:string, permisos:list<array{nombre:string, slug:string}>}> */
     private const MENUS_HIJO = [
         [
@@ -52,8 +50,13 @@ return new class extends Migration
         ],
     ];
 
-    /** Administrador + perfiles tesorería. */
-    private const ROLES_TESORERIA = [
+    /**
+     * Solo Administrador + Tesorería + Capital Humano.
+     * No heredar roles de caja/usocuentacaja (trae Contaduría/Finanzas).
+     *
+     * @var list<string>
+     */
+    private const ROLES_PERMITIDOS = [
         'administrador',
         'Op-tesoreria',
         'op-Tesoreria Operativa',
@@ -64,6 +67,9 @@ return new class extends Migration
         'Sup-tesoreria',
         'Sup-Tesoreria',
         'Sup-tesorería',
+        'enc-Capital Humano',
+        'op-Capital Humano',
+        'ger-capitalhumano',
     ];
 
     public function up(): void
@@ -71,17 +77,16 @@ return new class extends Migration
         $cajaId = $this->resolverMenuCajaId();
         $padreId = $this->upsertMenuPadre($cajaId);
         $ordenBase = (int) (DB::table('menu')->where('menu_id', $padreId)->max('orden') ?? 0);
-        $refMenuId = (int) (DB::table('menu')->where('url', self::MENU_REF_ROLES_URL)->value('id') ?? 0);
 
         $menuHijos = [];
         foreach (self::MENUS_HIJO as $idx => $menu) {
             $orden = $ordenBase + $idx + 1;
             $menuId = $this->upsertMenu($menu['url'], $menu['nombre'], $padreId, $orden, $menu['icono']);
-            $this->upsertPermisos($menu['permisos'], $menuId, $refMenuId, $padreId);
+            $this->upsertPermisos($menu['permisos'], $menuId);
             $menuHijos[] = ['id' => $menuId, 'permisos' => $menu['permisos']];
         }
 
-        $this->asignarRolesTesoreria($padreId, $menuHijos);
+        $this->asignarRolesPermitidos($padreId, $menuHijos);
 
         SuitecrmPermiso::flushCachePermisos();
     }
@@ -170,17 +175,13 @@ return new class extends Migration
     /**
      * @param  array<int, array{nombre:string, slug:string}>  $slugs
      */
-    private function upsertPermisos(array $slugs, int $menuId, int $refMenuId, int $padreMenuId): void
+    private function upsertPermisos(array $slugs, int $menuId): void
     {
-        $rolIdsMenuRef = $refMenuId > 0
-            ? DB::table('menu_rol')->where('menu_id', $refMenuId)->pluck('rol_id')->unique()->all()
-            : [];
-
         foreach ($slugs as $row) {
             $permisoId = (int) (DB::table('permiso')->where('slug', $row['slug'])->value('id') ?? 0);
 
             if ($permisoId === 0) {
-                $permisoId = (int) DB::table('permiso')->insertGetId([
+                DB::table('permiso')->insert([
                     'nombre' => $row['nombre'],
                     'slug' => $row['slug'],
                     'menu_id' => $menuId,
@@ -194,26 +195,15 @@ return new class extends Migration
                     'updated_at' => now(),
                 ]);
             }
-
-            foreach ($rolIdsMenuRef as $rolId) {
-                $this->vincularMenuPermisoRol($menuId, $permisoId, (int) $rolId);
-            }
-        }
-
-        foreach ($rolIdsMenuRef as $rolId) {
-            $rid = (int) $rolId;
-            if ($padreMenuId > 0 && ! DB::table('menu_rol')->where('menu_id', $padreMenuId)->where('rol_id', $rid)->exists()) {
-                DB::table('menu_rol')->insert(['menu_id' => $padreMenuId, 'rol_id' => $rid]);
-            }
         }
     }
 
     /**
      * @param  list<array{id:int, permisos:list<array{nombre:string, slug:string}>}>  $menuHijos
      */
-    private function asignarRolesTesoreria(int $padreMenuId, array $menuHijos): void
+    private function asignarRolesPermitidos(int $padreMenuId, array $menuHijos): void
     {
-        $rolIds = DB::table('rol')->whereIn('nombre', self::ROLES_TESORERIA)->pluck('id')->all();
+        $rolIds = DB::table('rol')->whereIn('nombre', self::ROLES_PERMITIDOS)->pluck('id')->all();
 
         foreach ($rolIds as $rolId) {
             $rid = (int) $rolId;

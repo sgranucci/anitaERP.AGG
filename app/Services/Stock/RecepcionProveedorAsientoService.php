@@ -136,6 +136,18 @@ class RecepcionProveedorAsientoService
             ->orderBy('id')
             ->get(['id', 'numeroasiento']);
 
+		// La FK recepcion_proveedor.asiento_id es RESTRICT. Desvincular antes:
+		// AsientoObserver borra primero los movimientos y, si la cabecera sigue
+		// referenciada, MySQL rechaza el delete y deja un asiento vacío (COM 166308).
+		$asientoIds = $asientos->pluck('id')->map(static fn ($id) => (int) $id)->all();
+		if ($asientoIds !== []) {
+			Recepcion_Proveedor::query()
+				->whereKey((int) $recepcion->id)
+				->whereIn('asiento_id', $asientoIds)
+				->update(['asiento_id' => null]);
+			$recepcion->asiento_id = null;
+		}
+
         foreach ($asientos as $asiento) {
             try {
                 $this->asientoRepository->delete((int) $asiento->id);

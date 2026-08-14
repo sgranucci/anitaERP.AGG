@@ -145,40 +145,74 @@ class PerdidaPersonalController extends Controller
         abort(404);
     }
 
-    /**
-     * Empleados de sueldos por empresa (empleado + supervisor selects).
-     *
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function empleadosPorEmpresa(Request $request)
+    public function consultarCatalogo(Request $request)
     {
-        if (! can('crear-perdida-personal', false)
-            && ! can('editar-perdida-personal', false)
-            && ! can('actualizar-perdida-personal', false)
-            && ! can('listar-perdida-personal', false)) {
-            abort(403);
+        $this->assertPuedeConsultarCatalogos();
+
+        $tipo = (string) $request->query('tipo', '');
+        $empresaId = (int) $request->query('empresa_id', 0);
+        $consulta = trim((string) $request->query('consulta', ''));
+
+        $query = $this->queryCatalogo($tipo, $empresaId);
+        if ($consulta !== '') {
+            $query->where(function ($q) use ($tipo, $consulta) {
+                $q->where('nombre', 'like', '%'.$consulta.'%');
+                if ($tipo === 'empleado') {
+                    $q->orWhere('legajo', 'like', '%'.$consulta.'%')
+                        ->orWhere('documento', 'like', '%'.$consulta.'%');
+                } else {
+                    $q->orWhere('codigo', 'like', '%'.$consulta.'%');
+                }
+            });
         }
 
-        $empresaId = (int) $request->input('empresa_id', 0);
-        if ($empresaId <= 0 || ! $this->empresaRepository->empresaIdPermitida($empresaId)) {
-            return response()->json([]);
-        }
-
-        $empleados = Empleado_Sueldos::query()
-            ->select(['id', 'legajo', 'nombre'])
-            ->where('empresa_id', $empresaId)
-            ->orderBy('legajo')
-            ->limit(2000)
+        $campoCodigo = $tipo === 'empleado' ? 'legajo' : 'codigo';
+        $filas = $query
+            ->orderBy($campoCodigo)
+            ->limit(100)
             ->get()
-            ->map(fn ($e) => [
-                'id' => (int) $e->id,
-                'legajo' => (int) $e->legajo,
-                'nombre' => (string) $e->nombre,
+            ->map(fn ($fila) => [
+                'id' => (int) $fila->id,
+                'codigo' => (string) $fila->{$campoCodigo},
+                'nombre' => (string) $fila->nombre,
+                'consultar_url' => $this->urlConsultaAbmCatalogo($tipo, (int) $fila->id),
             ])
-            ->values()
-            ->all();
+            ->values();
 
-        return response()->json($empleados);
+        return response()->json(['data' => $filas]);
+    }
+
+    public function resolverCatalogo(Request $request)
+    {
+        $this->assertPuedeConsultarCatalogos();
+
+        $tipo = (string) $request->query('tipo', '');
+        $empresaId = (int) $request->query('empresa_id', 0);
+        $valor = trim((string) $request->query('valor', ''));
+        if ($valor === '') {
+            return response()->json(['ok' => false]);
+        }
+
+        $campoCodigo = $tipo === 'empleado' ? 'legajo' : 'codigo';
+        $fila = $this->queryCatalogo($tipo, $empresaId)
+            ->where($campoCodigo, $valor)
+            ->orderBy('id')
+            ->first();
+
+        if ($fila === null) {
+            return response()->json([
+                'ok' => false,
+                'mensaje' => 'No se encontró el registro indicado.',
+            ]);
+        }
+
+        return response()->json([
+            'ok' => true,
+            'id' => (int) $fila->id,
+            'codigo' => (string) $fila->{$campoCodigo},
+            'nombre' => (string) $fila->nombre,
+            'consultar_url' => $this->urlConsultaAbmCatalogo($tipo, (int) $fila->id),
+        ]);
     }
 
     /**
@@ -187,26 +221,107 @@ class PerdidaPersonalController extends Controller
     private function datosFormulario(PerdidaPersonal $data): array
     {
         $empresaId = (int) old('empresa_id', $data->empresa_id ?? 0);
-        $empleados = collect();
-        if ($empresaId > 0 && $this->empresaRepository->empresaIdPermitida($empresaId)) {
-            $empleados = Empleado_Sueldos::query()
-                ->select(['id', 'legajo', 'nombre'])
-                ->where('empresa_id', $empresaId)
-                ->orderBy('legajo')
-                ->limit(2000)
-                ->get();
-        }
+        $centrocostoId = (int) old('centrocosto_id', $data->centrocosto_id ?? 0);
+        $imputacionId = (int) old('imputacion_perdida_id', $data->imputacion_perdida_id ?? 0);
+        $conceptoId = (int) old('concepto_perdida_id', $data->concepto_perdida_id ?? 0);
+        $empleadoId = (int) old('empleado_sueldos_id', $data->empleado_sueldos_id ?? 0);
+        $supervisorId = (int) old('supervisor_empleado_sueldos_id', $data->supervisor_empleado_sueldos_id ?? 0);
 
         return [
             'empresa_query' => $this->empresaRepository->allFiltrado(),
-            'conceptos' => ConceptoPerdida::query()->orderBy('codigo')->get(),
-            'imputaciones' => ImputacionPerdida::query()->orderBy('codigo')->get(),
-            'centroscosto' => Centrocosto::query()->orderBy('codigo')->get(['id', 'codigo', 'nombre']),
-            'empleados' => $empleados,
+            'centrocostoSeleccionado' => $centrocostoId > 0
+                ? Centrocosto::query()->select('id', 'codigo', 'nombre')->find($centrocostoId)
+                : null,
+            'imputacionSeleccionada' => $imputacionId > 0
+                ? ImputacionPerdida::query()->select('id', 'codigo', 'nombre')->find($imputacionId)
+                : null,
+            'conceptoSeleccionado' => $conceptoId > 0
+                ? ConceptoPerdida::query()->select('id', 'codigo', 'nombre')->find($conceptoId)
+                : null,
+            'empleadoSeleccionado' => $this->empleadoSeleccionado($empleadoId, $empresaId),
+            'supervisorSeleccionado' => $this->empleadoSeleccionado($supervisorId, $empresaId),
             'turno_enum' => PerdidaPersonal::$enumTurno,
             'estado_enum' => PerdidaPersonal::$enumEstado,
             'conceptos_con_maquina' => PerdidaPersonal::CONCEPTOS_CON_MAQUINA,
         ];
+    }
+
+    private function queryCatalogo(string $tipo, int $empresaId)
+    {
+        if ($tipo === 'concepto') {
+            return ConceptoPerdida::query()->select('id', 'codigo', 'nombre');
+        }
+
+        if ($empresaId <= 0 || ! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            abort(403);
+        }
+
+        if ($tipo === 'imputacion') {
+            return ImputacionPerdida::query()
+                ->select('imputacion_perdida.id', 'imputacion_perdida.codigo', 'imputacion_perdida.nombre')
+                ->whereHas('empresas', fn ($q) => $q->where('empresa_id', $empresaId));
+        }
+
+        if ($tipo === 'empleado') {
+            return Empleado_Sueldos::query()
+                ->select('id', 'legajo', 'nombre', 'documento')
+                ->where('empresa_id', $empresaId);
+        }
+
+        abort(404);
+    }
+
+    private function empleadoSeleccionado(int $id, int $empresaId): ?Empleado_Sueldos
+    {
+        if ($id <= 0 || $empresaId <= 0) {
+            return null;
+        }
+
+        return Empleado_Sueldos::query()
+            ->select('id', 'legajo', 'nombre', 'empresa_id')
+            ->where('empresa_id', $empresaId)
+            ->find($id);
+    }
+
+    private function urlConsultaAbmCatalogo(string $tipo, int $id): ?string
+    {
+        if ($tipo === 'concepto' && can('editar-concepto-perdida', false)) {
+            return route('editar_concepto_perdida', [
+                'id' => $id,
+                'origen' => 'modal_consulta',
+                'vista' => 'consulta',
+            ]);
+        }
+
+        if ($tipo === 'imputacion' && can('editar-imputacion-perdida', false)) {
+            return route('editar_imputacion_perdida', [
+                'id' => $id,
+                'origen' => 'modal_consulta',
+                'vista' => 'consulta',
+            ]);
+        }
+
+        if ($tipo === 'empleado' && can('editar-empleado-sueldos', false)) {
+            return route('editar_empleado_sueldos', ['id' => $id]);
+        }
+
+        return null;
+    }
+
+    private function assertPuedeConsultarCatalogos(): void
+    {
+        foreach ([
+            'crear-perdida-personal',
+            'editar-perdida-personal',
+            'actualizar-perdida-personal',
+            'listar-perdida-personal',
+        ] as $permiso) {
+            if (can($permiso, false)) {
+                return;
+            }
+        }
+
+        abort(403);
     }
 
     /**

@@ -27,6 +27,7 @@ class ComprobanteProveedorListadoFiltros
         'letra' => ['column' => 'comprobante_proveedor.letra', 'type' => 'texto', 'label' => 'Letra'],
         'sucursal' => ['column' => 'comprobante_proveedor.sucursal', 'type' => 'entero', 'label' => 'Sucursal'],
         'numerocomprobante' => ['column' => 'comprobante_proveedor.numerocomprobante', 'type' => 'entero', 'label' => 'Número comprobante'],
+        'numeroordencompra' => ['column' => 'ordencompra.numeroordencompra', 'type' => 'entero', 'label' => 'Nº orden de compra'],
         'fechacomprobante' => ['column' => 'comprobante_proveedor.fechacomprobante', 'type' => 'fecha', 'label' => 'Fecha comprobante'],
         'total' => ['column' => 'comprobante_proveedor.total', 'type' => 'texto', 'label' => 'Total'],
         'estado' => ['column' => 'comprobante_proveedor.estado', 'type' => 'texto', 'label' => 'Estado'],
@@ -264,7 +265,8 @@ class ComprobanteProveedorListadoFiltros
             if ($id !== false) {
                 $q->orWhere('comprobante_proveedor.id', (int) $id)
                     ->orWhere('comprobante_proveedor.sucursal', (int) $id)
-                    ->orWhere('comprobante_proveedor.numerocomprobante', (int) $id);
+                    ->orWhere('comprobante_proveedor.numerocomprobante', (int) $id)
+                    ->orWhere('ordencompra.numeroordencompra', (int) $id);
             }
 
             foreach (self::columnasTextoBusquedaGlobal() as $col) {

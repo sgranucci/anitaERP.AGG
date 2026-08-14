@@ -3,7 +3,9 @@
 namespace App\Http\Requests;
 
 use App\Models\Caja\ConceptoPerdida;
+use App\Models\Caja\ImputacionPerdida;
 use App\Models\Caja\PerdidaPersonal;
+use App\Models\Sueldos\Empleado_Sueldos;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -48,17 +50,45 @@ class ValidacionPerdidaPersonal extends FormRequest
     {
         $validator->after(function (Validator $validator) {
             $conceptoId = (int) $this->input('concepto_perdida_id', 0);
-            if ($conceptoId <= 0) {
-                return;
+            if ($conceptoId > 0) {
+                $codigo = (int) ConceptoPerdida::query()->whereKey($conceptoId)->value('codigo');
+                if (in_array($codigo, PerdidaPersonal::CONCEPTOS_CON_MAQUINA, true)) {
+                    $maquina = trim((string) $this->input('maquina', ''));
+                    if ($maquina === '') {
+                        $validator->errors()->add(
+                            'maquina',
+                            'La máquina es obligatoria para el concepto '.$codigo.'.'
+                        );
+                    }
+                }
             }
 
-            $codigo = (int) ConceptoPerdida::query()->whereKey($conceptoId)->value('codigo');
-            if (in_array($codigo, PerdidaPersonal::CONCEPTOS_CON_MAQUINA, true)) {
-                $maquina = trim((string) $this->input('maquina', ''));
-                if ($maquina === '') {
+            $empresaId = (int) $this->input('empresa_id', 0);
+            $imputacionId = (int) $this->input('imputacion_perdida_id', 0);
+            if ($empresaId > 0 && $imputacionId > 0
+                && ! ImputacionPerdida::query()
+                    ->whereKey($imputacionId)
+                    ->whereHas('empresas', fn ($q) => $q->where('empresa_id', $empresaId))
+                    ->exists()) {
+                $validator->errors()->add(
+                    'imputacion_perdida_id',
+                    'La imputación no está configurada para la empresa seleccionada.'
+                );
+            }
+
+            foreach ([
+                'empleado_sueldos_id' => 'El empleado',
+                'supervisor_empleado_sueldos_id' => 'El supervisor',
+            ] as $campo => $etiqueta) {
+                $empleadoId = (int) $this->input($campo, 0);
+                if ($empresaId > 0 && $empleadoId > 0
+                    && ! Empleado_Sueldos::query()
+                        ->whereKey($empleadoId)
+                        ->where('empresa_id', $empresaId)
+                        ->exists()) {
                     $validator->errors()->add(
-                        'maquina',
-                        'La máquina es obligatoria para el concepto '.$codigo.'.'
+                        $campo,
+                        $etiqueta.' no pertenece a la empresa seleccionada.'
                     );
                 }
             }

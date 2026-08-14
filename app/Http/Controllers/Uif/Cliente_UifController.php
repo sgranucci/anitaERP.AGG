@@ -266,6 +266,8 @@ class Cliente_UifController extends Controller
         $soloSolapaPremios = $ocultarVolver && $request->query('uif_tab') === '3';
 
 		$data = $this->cliente_uifRepository->find($id);
+        $this->cliente_uifRepository->sincronizarArchivosAnitaSiCorresponde($data);
+        $data->load('cliente_archivos_uif');
         try {
             ClienteUifOrigenPcSupport::assertClienteOperableEnPc($data, $request);
         } catch (\RuntimeException $e) {

@@ -2,16 +2,7 @@
     use App\Models\Caja\PerdidaPersonal;
     $esEdicion = isset($data->id) && $data->id;
     $empresaIdSel = old('empresa_id', $data->empresa_id ?? null);
-    $empleadoIdSel = (int) old('empleado_sueldos_id', $data->empleado_sueldos_id ?? 0);
-    $supervisorIdSel = (int) old('supervisor_empleado_sueldos_id', $data->supervisor_empleado_sueldos_id ?? 0);
-    $conceptoIdSel = (int) old('concepto_perdida_id', $data->concepto_perdida_id ?? 0);
-    $conceptoCodigoSel = 0;
-    foreach ($conceptos ?? [] as $c) {
-        if ((int) $c->id === $conceptoIdSel) {
-            $conceptoCodigoSel = (int) $c->codigo;
-            break;
-        }
-    }
+    $conceptoCodigoSel = (int) ($conceptoSeleccionado->codigo ?? 0);
     $maquinaHabilitada = in_array($conceptoCodigoSel, $conceptos_con_maquina ?? PerdidaPersonal::CONCEPTOS_CON_MAQUINA, true);
 @endphp
 
@@ -44,65 +35,48 @@
     </div>
 </div>
 
-<div class="form-group row">
-    <label for="centrocosto_id" class="col-lg-3 control-label text-right pr-2 requerido">Centro de costo</label>
-    <div class="col-lg-6">
-        <select name="centrocosto_id" id="centrocosto_id" class="form-control" required>
-            <option value="">-- Elija centro de costo --</option>
-            @foreach($centroscosto ?? [] as $cc)
-                <option value="{{ $cc->id }}"
-                    @selected((int) $cc->id === (int) old('centrocosto_id', $data->centrocosto_id ?? 0))>
-                    {{ $cc->codigo }} — {{ $cc->nombre }}
-                </option>
-            @endforeach
-        </select>
-    </div>
-</div>
+@include('contable.partials.campo_consulta_centrocosto', [
+    'prefix' => 'perdida_personal',
+    'layout' => 'form_row',
+    'inputName' => 'centrocosto_id',
+    'inputId' => 'centrocosto_id',
+    'centrocostoId' => $centrocostoSeleccionado->id ?? '',
+    'codigo' => $centrocostoSeleccionado->codigo ?? '',
+    'descripcion' => $centrocostoSeleccionado->nombre ?? '',
+    'col_label' => 'col-lg-3',
+    'col_input' => 'col-lg-6',
+    'required' => true,
+])
 
-<div class="form-group row">
-    <label for="imputacion_perdida_id" class="col-lg-3 control-label text-right pr-2 requerido">Imputaci&oacute;n</label>
-    <div class="col-lg-6">
-        <select name="imputacion_perdida_id" id="imputacion_perdida_id" class="form-control" required>
-            <option value="">-- Elija imputaci&oacute;n --</option>
-            @foreach($imputaciones ?? [] as $imp)
-                <option value="{{ $imp->id }}"
-                    @selected((int) $imp->id === (int) old('imputacion_perdida_id', $data->imputacion_perdida_id ?? 0))>
-                    {{ $imp->codigo }} — {{ $imp->nombre }}
-                </option>
-            @endforeach
-        </select>
-    </div>
-</div>
+@include('caja.perdida_personal.partials.campo_consulta_catalogo', [
+    'tipo' => 'imputacion',
+    'label' => 'Imputaci&oacute;n',
+    'inputName' => 'imputacion_perdida_id',
+    'inputId' => 'imputacion_perdida_id',
+    'registroId' => $imputacionSeleccionada->id ?? 0,
+    'codigo' => $imputacionSeleccionada->codigo ?? '',
+    'descripcion' => $imputacionSeleccionada->nombre ?? '',
+])
 
-<div class="form-group row">
-    <label for="empleado_sueldos_id" class="col-lg-3 control-label text-right pr-2 requerido">Empleado</label>
-    <div class="col-lg-6">
-        <select name="empleado_sueldos_id" id="empleado_sueldos_id" class="form-control" required>
-            <option value="">-- Elija empleado --</option>
-            @foreach($empleados ?? [] as $emp)
-                <option value="{{ $emp->id }}"
-                    @selected((int) $emp->id === $empleadoIdSel)>
-                    {{ $emp->legajo }} — {{ $emp->nombre }}
-                </option>
-            @endforeach
-        </select>
-    </div>
-</div>
+@include('caja.perdida_personal.partials.campo_consulta_catalogo', [
+    'tipo' => 'empleado',
+    'label' => 'Empleado',
+    'inputName' => 'empleado_sueldos_id',
+    'inputId' => 'empleado_sueldos_id',
+    'registroId' => $empleadoSeleccionado->id ?? 0,
+    'codigo' => $empleadoSeleccionado->legajo ?? '',
+    'descripcion' => $empleadoSeleccionado->nombre ?? '',
+])
 
-<div class="form-group row">
-    <label for="supervisor_empleado_sueldos_id" class="col-lg-3 control-label text-right pr-2 requerido">Supervisor</label>
-    <div class="col-lg-6">
-        <select name="supervisor_empleado_sueldos_id" id="supervisor_empleado_sueldos_id" class="form-control" required>
-            <option value="">-- Elija supervisor --</option>
-            @foreach($empleados ?? [] as $emp)
-                <option value="{{ $emp->id }}"
-                    @selected((int) $emp->id === $supervisorIdSel)>
-                    {{ $emp->legajo }} — {{ $emp->nombre }}
-                </option>
-            @endforeach
-        </select>
-    </div>
-</div>
+@include('caja.perdida_personal.partials.campo_consulta_catalogo', [
+    'tipo' => 'empleado',
+    'label' => 'Supervisor',
+    'inputName' => 'supervisor_empleado_sueldos_id',
+    'inputId' => 'supervisor_empleado_sueldos_id',
+    'registroId' => $supervisorSeleccionado->id ?? 0,
+    'codigo' => $supervisorSeleccionado->legajo ?? '',
+    'descripcion' => $supervisorSeleccionado->nombre ?? '',
+])
 
 <div class="form-group row">
     <label for="turno" class="col-lg-3 control-label text-right pr-2 requerido">Turno</label>
@@ -119,21 +93,15 @@
     </div>
 </div>
 
-<div class="form-group row">
-    <label for="concepto_perdida_id" class="col-lg-3 control-label text-right pr-2 requerido">Concepto</label>
-    <div class="col-lg-6">
-        <select name="concepto_perdida_id" id="concepto_perdida_id" class="form-control" required>
-            <option value="">-- Elija concepto --</option>
-            @foreach($conceptos ?? [] as $con)
-                <option value="{{ $con->id }}"
-                        data-codigo="{{ $con->codigo }}"
-                    @selected((int) $con->id === $conceptoIdSel)>
-                    {{ $con->codigo }} — {{ $con->nombre }}
-                </option>
-            @endforeach
-        </select>
-    </div>
-</div>
+@include('caja.perdida_personal.partials.campo_consulta_catalogo', [
+    'tipo' => 'concepto',
+    'label' => 'Concepto',
+    'inputName' => 'concepto_perdida_id',
+    'inputId' => 'concepto_perdida_id',
+    'registroId' => $conceptoSeleccionado->id ?? 0,
+    'codigo' => $conceptoSeleccionado->codigo ?? '',
+    'descripcion' => $conceptoSeleccionado->nombre ?? '',
+])
 
 <div class="form-group row">
     <label for="maquina" class="col-lg-3 control-label text-right pr-2">M&aacute;quina</label>

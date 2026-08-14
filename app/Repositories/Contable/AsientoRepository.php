@@ -617,14 +617,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 	private function guardarAnita($request) 
 	{
 		// Graba asiento
-		if (! isset($request['cuentacontable_ids'])) {
-			return 'Success';
-		}
-
-		AsientoBalanceSupport::assertBalanceadoDesdePayload(
-			is_array($request) ? $request : (array) $request,
-			'asiento (Anita ctamov)'
-		);
+		$this->assertPayloadCtamovGrabable($request);
 
 		$apiAnita = new ApiAnita();
 
@@ -694,7 +687,15 @@ class AsientoRepository implements AsientoRepositoryInterface
 		else
 			$qMovimiento = 0;
 
+		if ($qMovimiento <= 0) {
+			throw new \RuntimeException(
+				'No se puede sincronizar ctamov: el asiento no tiene cuentas contables válidas.'
+			);
+		}
+
 		$lineasInsertadas = 0;
+		$debeEsperado = 0.0;
+		$haberEsperado = 0.0;
 
 		try {
 			for ($i_movimiento=0; $i_movimiento < $qMovimiento; $i_movimiento++) 
@@ -727,7 +728,9 @@ class AsientoRepository implements AsientoRepositoryInterface
 				if ($cuenta)
 					$cuentacontable = $cuenta->codigo;
 				else
-					$cuentacontable = NULL;
+					throw new \RuntimeException(
+						'No se puede sincronizar ctamov: cuenta contable inexistente en la línea '.($i_movimiento + 1).'.'
+					);
 
 				// Select CC vacío no viaja en el POST: usar hidden centrocosto_id_previo.
 				$centrocostoIdLin = $centrocostos[$i_movimiento] ?? $centrocostosPrev[$i_movimiento] ?? 0;
@@ -806,6 +809,65 @@ class AsientoRepository implements AsientoRepositoryInterface
 					$data['path_sistema'] = $this->path_sistema;	
         		$apiAnita->apiCallEscritura($data, 'asiento_ctamov_insert');
 				$lineasInsertadas++;
+				if ($d_h === 'D') {
+					$debeEsperado += abs((float) $monto);
+				} else {
+					$haberEsperado += abs((float) $monto);
+				}
+			}
+
+			if ($lineasInsertadas <= 0) {
+				throw new \RuntimeException(
+					'No se puede sincronizar ctamov: no se insertó ninguna línea.'
+				);
+			}
+
+			// El bridge puede responder sin error y no persistir nada. Leer de vuelta
+			// evita confirmar el asiento ERP con ctamov vacío (incidente TM#467).
+			$dataVerificacion = [
+				'acc' => 'list',
+				'tabla' => $this->tableAnita[0],
+				'sistema' => 'contab',
+				'campos' => 'ctav_nro_linea,ctav_d_h,ctav_importe,ctav_desc_mov',
+				'whereArmado' => " WHERE ctav_empresa = '".$codigoEmpresa
+					."' AND ctav_nro_asiento = '".(string) $request['numeroasiento']."'",
+				'orderBy' => 'ctav_nro_linea',
+			];
+			if (isset($this->path_sistema)) {
+				$dataVerificacion['path_sistema'] = $this->path_sistema;
+			}
+			$respuestaVerificacion = $apiAnita->apiCall($dataVerificacion);
+			$verificacion = ApiAnita::parsearRespuestaLista((string) $respuestaVerificacion);
+			if ($verificacion['error_lectura'] !== null) {
+				throw new \RuntimeException(
+					'No se pudo verificar ctamov después de grabar: '.$verificacion['error_lectura']
+				);
+			}
+
+			$filasVerificadas = $verificacion['filas'];
+			$debeVerificado = 0.0;
+			$haberVerificado = 0.0;
+			foreach ($filasVerificadas as $fila) {
+				$importe = abs((float) ($fila->ctav_importe ?? 0));
+				if (strtoupper(trim((string) ($fila->ctav_d_h ?? ''))) === 'D') {
+					$debeVerificado += $importe;
+				} else {
+					$haberVerificado += $importe;
+				}
+			}
+
+			if (count($filasVerificadas) !== $lineasInsertadas
+				|| abs($debeVerificado - $debeEsperado) >= 0.01
+				|| abs($haberVerificado - $haberEsperado) >= 0.01) {
+				throw new \RuntimeException(sprintf(
+					'Verificación ctamov fallida: esperado %d líneas D %.2f H %.2f; leído %d líneas D %.2f H %.2f.',
+					$lineasInsertadas,
+					$debeEsperado,
+					$haberEsperado,
+					count($filasVerificadas),
+					$debeVerificado,
+					$haberVerificado
+				));
 			}
 		} catch (\Throwable $e) {
 			// Sin TX Informix: si falló a mitad, borrar lo ya insertado para no dejar ctamov desbalanceado.
@@ -829,8 +891,54 @@ class AsientoRepository implements AsientoRepositoryInterface
 		return 'Success';
 	}
 
+	private function assertPayloadCtamovGrabable(array $request): void
+	{
+		if (! isset($request['cuentacontable_ids'])
+			|| ! is_array($request['cuentacontable_ids'])
+			|| $request['cuentacontable_ids'] === []) {
+			throw new \RuntimeException(
+				'No se puede sincronizar ctamov: el asiento no tiene líneas contables.'
+			);
+		}
+
+		$debes = $request['debes'] ?? [];
+		$haberes = $request['haberes'] ?? [];
+		$lineasConImporte = 0;
+
+		foreach ($request['cuentacontable_ids'] as $i => $cuentaId) {
+			if ((int) $cuentaId <= 0) {
+				throw new \RuntimeException(
+					'No se puede sincronizar ctamov: cuenta contable inválida en la línea '.($i + 1).'.'
+				);
+			}
+			if (! $this->cuentacontableRepository->findPorId((int) $cuentaId)) {
+				throw new \RuntimeException(
+					'No se puede sincronizar ctamov: cuenta contable inexistente en la línea '.($i + 1).'.'
+				);
+			}
+
+			if ((float) ($debes[$i] ?? 0) > 0 || (float) ($haberes[$i] ?? 0) > 0) {
+				$lineasConImporte++;
+			}
+		}
+
+		if ($lineasConImporte <= 0) {
+			throw new \RuntimeException(
+				'No se puede sincronizar ctamov: ninguna línea tiene importe.'
+			);
+		}
+
+		AsientoBalanceSupport::assertBalanceadoDesdePayload(
+			$request,
+			'asiento (Anita ctamov)'
+		);
+	}
+
 	private function actualizarAnita($request) 
 	{
+		// Validar antes del delete: un payload vacío nunca debe borrar el ctamov vigente.
+		$this->assertPayloadCtamovGrabable(is_array($request) ? $request : (array) $request);
+
 		$empresa = $this->empresaRepository->findPorId($request['empresa_id']);
 		if ($empresa)
 			$codigoEmpresa = $empresa->codigo;

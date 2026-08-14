@@ -26,6 +26,7 @@ use App\Support\Compras\ComprobanteProveedorArchivoPathSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorControlesConfigSupport;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
+use App\Support\Compras\ComprobanteProveedorDuplicadoException;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\ComprobanteProveedorListadoFiltros;
@@ -187,11 +188,13 @@ class Comprobante_ProveedorController extends Controller
 
         try {
             $comprobante = $this->persistenciaService->crearDesdeRequest($request);
+        } catch (ComprobanteProveedorDuplicadoException $e) {
+            return $this->respuestaComprobanteDuplicado($e);
         } catch (\Throwable $e) {
             return redirect()
                 ->back()
                 ->withInput()
-                ->with('errores', ['No se pudo guardar el comprobante: '.$e->getMessage()]);
+                ->with('errores', [$this->mensajeErrorPersistencia('No se pudo guardar el comprobante', $e)]);
         }
 
         $mensaje = 'Comprobante de proveedor guardado en borrador.';
@@ -244,11 +247,13 @@ class Comprobante_ProveedorController extends Controller
 
         try {
             $this->persistenciaService->actualizarDesdeRequest($request, $id);
+        } catch (ComprobanteProveedorDuplicadoException $e) {
+            return $this->respuestaComprobanteDuplicado($e, quedarseEnFormulario: true);
         } catch (\Throwable $e) {
             return redirect()
                 ->back()
                 ->withInput()
-                ->with('errores', ['No se pudo actualizar el comprobante: '.$e->getMessage()]);
+                ->with('errores', [$this->mensajeErrorPersistencia('No se pudo actualizar el comprobante', $e)]);
         }
 
         $mensaje = 'Comprobante de proveedor actualizado.';
@@ -620,6 +625,32 @@ class Comprobante_ProveedorController extends Controller
     }
 
     /** @param array<string, mixed> $prefill */
+    private function respuestaComprobanteDuplicado(
+        ComprobanteProveedorDuplicadoException $e,
+        bool $quedarseEnFormulario = false,
+    ) {
+        if (! $quedarseEnFormulario && $e->puedeAbrirEdicion()) {
+            return redirect()
+                ->route('editar_comprobante_proveedor', ['id' => $e->comprobanteId()])
+                ->with('errores', [$e->getMessage()]);
+        }
+
+        return redirect()
+            ->back()
+            ->withInput()
+            ->with('errores', [$e->getMessage()]);
+    }
+
+    private function mensajeErrorPersistencia(string $prefijo, \Throwable $e): string
+    {
+        if (str_contains($e->getMessage(), 'SQLSTATE') || str_contains($e->getMessage(), 'Duplicate entry')) {
+            return $prefijo.'. Ya existe un comprobante con la misma identificación fiscal '
+                .'(empresa, tipo, letra, sucursal, número y CUIT). Buscalo en el listado de Cuentas a pagar.';
+        }
+
+        return $prefijo.': '.$e->getMessage();
+    }
+
     private function datosFormulario(array $prefill): array
     {
         $data = $prefill['data'] ?? null;

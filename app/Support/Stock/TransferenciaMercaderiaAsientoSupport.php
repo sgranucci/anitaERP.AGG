@@ -25,6 +25,7 @@ final class TransferenciaMercaderiaAsientoSupport
     public static function armarPreview(
         Transferencia_Mercaderia $transferencia,
         TipoasientoRepositoryInterface $tipoasientoRepository,
+        bool $omitirValidacionDeposito = false,
     ): array {
         $transferencia->loadMissing([
             'articulos.articuloOrigen.articulo_cuentacontables',
@@ -77,6 +78,7 @@ final class TransferenciaMercaderiaAsientoSupport
         $totalMovimiento = 0.0;
 
         $depositoOrigenId = (int) ($transferencia->deposito_origen_id ?? 0);
+        $fechaTransferencia = $transferencia->fecha?->format('Y-m-d');
 
         foreach ($transferencia->articulos as $linea) {
             $articulo = $linea->articuloOrigen;
@@ -85,7 +87,13 @@ final class TransferenciaMercaderiaAsientoSupport
             }
 
             if ($depositoOrigenId > 0
-                && ! TransferenciaMercaderiaLineaContableSupport::lineaGeneraAsiento($articulo, $empresaId, $depositoOrigenId)) {
+                && ! TransferenciaMercaderiaLineaContableSupport::lineaGeneraAsiento(
+                    $articulo,
+                    $empresaId,
+                    $depositoOrigenId,
+                    $fechaTransferencia,
+                    $omitirValidacionDeposito
+                )) {
                 continue;
             }
 
@@ -111,8 +119,14 @@ final class TransferenciaMercaderiaAsientoSupport
             }
             $totalMovimiento += $importe;
 
-            $cuentaGastoId = self::resolverCuentaGastoId($articulo, $empresaId);
-            $cuentaContrapartidaId = (int) ($articulo->cuentacontablecompra_id ?? 0);
+            $cuentaGastoId = TransferenciaMercaderiaLineaContableSupport::resolverCuentaGastoId(
+                $articulo,
+                $empresaId
+            );
+            $cuentaContrapartidaId = TransferenciaMercaderiaLineaContableSupport::resolverCuentaCompraId(
+                $articulo,
+                $empresaId
+            );
             $ccCompraId = (int) ($articulo->centrocostocompra_id ?? 0);
 
             if ($cuentaGastoId <= 0 || $cuentaContrapartidaId <= 0) {
@@ -196,19 +210,6 @@ final class TransferenciaMercaderiaAsientoSupport
         ];
     }
 
-    private static function resolverCuentaGastoId(Articulo $articulo, int $empresaId): int
-    {
-        $cuentaGrid = $articulo->articulo_cuentacontables
-            ?->first(fn ($row) => (int) $row->empresa_id === $empresaId
-                && strtoupper((string) $row->tipoimputacion) === 'GASTOS');
-
-        if ($cuentaGrid && (int) $cuentaGrid->cuentacontable_id > 0) {
-            return (int) $cuentaGrid->cuentacontable_id;
-        }
-
-        return (int) ($articulo->cuentacontablecompra_id ?? 0);
-    }
-
     private static function resolverTipoAsientoStock(TipoasientoRepositoryInterface $repo): Tipoasiento
     {
         $tipo = $repo->findPorAbreviatura('STK') ?? $repo->findPorAbreviatura('COM');
@@ -220,6 +221,14 @@ final class TransferenciaMercaderiaAsientoSupport
             'nombre' => 'Stock',
             'abreviatura' => 'STK',
         ]);
+    }
+
+    /**
+     * @return array{tipo: string, letra: string, sucursal: int, nro: int}
+     */
+    public static function claveComprobanteDesdeCodigo(string $codigo): array
+    {
+        return self::parsearClaveComprobante($codigo);
     }
 
     /**

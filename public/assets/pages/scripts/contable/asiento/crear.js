@@ -724,18 +724,25 @@
 					return;
 				}
 				if (data.mensaje === 'pendiente') {
+					if (data.url_impresion_asiento) {
+						window.open(data.url_impresion_asiento, '_blank', 'noopener');
+					}
 					alert("Asiento guardado en estado PENDIENTE (Nº "+data.numeroasiento+"). Contaduría fue notificada para su aprobación.");
 					window.location.href = carpetaBase+'/contable/asiento';
 					return;
 				}
-				if (data.mensaje == 'ok')
+				if (data.mensaje == 'ok') {
+					if (data.url_impresion_asiento) {
+						window.open(data.url_impresion_asiento, '_blank', 'noopener');
+					}
 					alert("Se grabó el asiento con éxito");
-				else if (data.errores)
+					window.location.href = carpetaBase+'/contable/asiento';
+					return;
+				}
+				if (data.errores)
 					alert("Error: "+data.errores);
 				else
 					alert("Error de grabacion");
-				if (data.mensaje == 'ok')
-					window.location.href = carpetaBase+'/contable/asiento';
 			},
 			error: function (r) {
 				alert("Error del servidor");

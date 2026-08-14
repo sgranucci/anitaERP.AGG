@@ -184,6 +184,15 @@ class ModuloAvisoController extends Controller
             ]);
         }
 
+        if ($modulo === 'compras' && $codigo === 'ordencompra_contrato_sin_com') {
+            return array_merge($comunes, [
+                '{id}', '{numero}', '{empresa}', '{proveedor}', '{centrocosto}',
+                '{detalle}', '{tratamiento}', '{imputacion}', '{cuenta_contable}',
+                '{responsable}', '{vigencia_desde}', '{vigencia_hasta}',
+                '{usuario_cambio}', '{fecha_cambio}',
+            ]);
+        }
+
         return array_merge($comunes, ['{numero}', '{solicitante}', '{empresa}', '{centro_costo}', '{fecha}']);
     }
 }

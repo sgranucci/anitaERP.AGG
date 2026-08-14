@@ -5,7 +5,7 @@ Cuentas automáticas del sistema
 
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/contable/cuentacontable/consulta.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/contable/cuenta_automatica/editar.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/cuenta_automatica/editar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/cuenta_automatica/editar.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -26,6 +26,7 @@ Cuentas automáticas del sistema
                         Recepci&oacute;n proveedores y cierre Waitry pueden tener override en su propia configuraci&oacute;n;
                         si existe override de m&oacute;dulo, el proceso usa esa cuenta (no la de este cat&aacute;logo).
                         Solo se listan empresas activas (asignadas a al menos un usuario).
+                        El concepto <strong>Stock — transferencias</strong> admite varias cuentas de compra para TRCONT.
                     </p>
                     @include('includes.form-empresa-asignada', [
                         'empresa_query' => $empresa_query,
@@ -63,4 +64,14 @@ Cuentas automáticas del sistema
     </div>
 </div>
 @include('includes.contable.modalconsultacuentacontable')
+<template id="cuenta-auto-multi-template">
+    @include('contable.cuenta_automatica.partials.fila_multiple_renglon', [
+        'clave' => '__CLAVE__',
+        'cuenta' => [
+            'cuentacontable_id' => 0,
+            'codigo' => '',
+            'nombre' => '',
+        ],
+    ])
+</template>
 @endsection

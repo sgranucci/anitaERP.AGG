@@ -70,13 +70,14 @@
         <thead>
             <tr>
                 <th style="width: 5%;">ID</th>
-                <th style="width: 12%;">Empresa</th>
-                <th style="width: 16%;">Proveedor</th>
-                <th style="width: 10%;">Tipo</th>
-                <th style="width: 10%;">Número</th>
-                <th style="width: 8%;">Fecha</th>
+                <th style="width: 11%;">Empresa</th>
+                <th style="width: 14%;">Proveedor</th>
+                <th style="width: 9%;">Tipo</th>
+                <th style="width: 9%;">Número</th>
+                <th style="width: 7%;">OC</th>
+                <th style="width: 7%;">Fecha</th>
                 <th style="width: 8%;">Total</th>
-                <th style="width: 10%;">Estado</th>
+                <th style="width: 9%;">Estado</th>
                 <th style="width: 10%;">Origen</th>
                 <th style="width: 11%;">Modo carga</th>
             </tr>
@@ -89,6 +90,7 @@
                 <td>{{ $row->proveedores->nombre ?? '' }}</td>
                 <td>{{ trim(($row->tipotransaccion_compras->abreviatura ?? '').' '.($row->tipotransaccion_compras->nombre ?? '')) }}</td>
                 <td>{{ $row->letra }}{{ $row->sucursal }}-{{ $row->numerocomprobante }}</td>
+                <td>{{ $row->ordencompras->numeroordencompra ?? '' }}</td>
                 <td>{{ $row->fechacomprobante ? $row->fechacomprobante->format('d/m/Y') : '' }}</td>
                 <td>{{ number_format((float) $row->total, 2, ',', '.') }}</td>
                 <td>{{ $row->estado }}</td>

@@ -69,6 +69,32 @@ Configuración de asientos contables
                         <label>Texto introductorio en el mail al aprobador</label>
                         <textarea class="form-control" name="mail_texto_aprobacion" rows="3" maxlength="5000">{{ old('mail_texto_aprobacion', $config->mail_texto_aprobacion) }}</textarea>
                     </div>
+
+                    <hr>
+                    <h5>Impresión al dar de alta</h5>
+                    <div class="form-group">
+                        <label for="formato_impresion_alta">Formato de salida automática</label>
+                        @php
+                            $formatoImpresionAlta = old(
+                                'formato_impresion_alta',
+                                $config->formatoImpresionAltaNormalizado()
+                            );
+                        @endphp
+                        <select class="form-control" name="formato_impresion_alta" id="formato_impresion_alta" required>
+                            <option value="excel" @if ($formatoImpresionAlta === 'excel') selected @endif>
+                                Excel
+                            </option>
+                            <option value="pdf" @if ($formatoImpresionAlta === 'pdf') selected @endif>
+                                PDF
+                            </option>
+                            <option value="ninguno" @if ($formatoImpresionAlta === 'ninguno') selected @endif>
+                                Ninguno (no abrir nada)
+                            </option>
+                        </select>
+                        <small class="form-text text-muted">
+                            Al grabar un asiento nuevo se abre automáticamente este formato en otra pestaña.
+                        </small>
+                    </div>
                 </div>
                 <div class="card-footer">
                     @include('includes.boton-form-editar')

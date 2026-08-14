@@ -10,6 +10,10 @@ use Illuminate\Database\Eloquent\Model;
  */
 class Configuracion_AsientoContable extends Model
 {
+    public const FORMATO_IMPRESION_PDF = 'pdf';
+    public const FORMATO_IMPRESION_EXCEL = 'excel';
+    public const FORMATO_IMPRESION_NINGUNO = 'ninguno';
+
     protected $table = 'configuracion_asiento_contable';
 
     protected $fillable = [
@@ -19,6 +23,7 @@ class Configuracion_AsientoContable extends Model
         'horas_validez_token',
         'mail_asunto_aprobacion',
         'mail_texto_aprobacion',
+        'formato_impresion_alta',
         'mail_asunto_aprobado_solicitante',
         'mail_asunto_rechazado_solicitante',
     ];
@@ -28,6 +33,16 @@ class Configuracion_AsientoContable extends Model
         'horas_validez_token' => 'integer',
     ];
 
+    /** @return list<string> */
+    public static function formatosImpresionAlta(): array
+    {
+        return [
+            self::FORMATO_IMPRESION_PDF,
+            self::FORMATO_IMPRESION_EXCEL,
+            self::FORMATO_IMPRESION_NINGUNO,
+        ];
+    }
+
     public static function vigente(): self
     {
         $config = self::query()->orderBy('id')->first();
@@ -36,6 +51,33 @@ class Configuracion_AsientoContable extends Model
         }
 
         return self::create([]);
+    }
+
+    public function formatoImpresionAltaNormalizado(): string
+    {
+        $formato = strtolower(trim((string) ($this->formato_impresion_alta ?? self::FORMATO_IMPRESION_EXCEL)));
+
+        return in_array($formato, self::formatosImpresionAlta(), true)
+            ? $formato
+            : self::FORMATO_IMPRESION_EXCEL;
+    }
+
+    public function urlImpresionAlta(int $asientoId): ?string
+    {
+        if ($asientoId <= 0) {
+            return null;
+        }
+
+        return match ($this->formatoImpresionAltaNormalizado()) {
+            self::FORMATO_IMPRESION_PDF => route('imprimir_pdf_asiento', [
+                'id' => $asientoId,
+                'inline' => 1,
+            ]),
+            self::FORMATO_IMPRESION_EXCEL => route('imprimir_excel_asiento', [
+                'id' => $asientoId,
+            ]),
+            default => null,
+        };
     }
 
     /** @return list<string> */

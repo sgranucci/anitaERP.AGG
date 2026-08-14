@@ -187,7 +187,7 @@ class Cliente_UifService
 
 			$actualizarRiesgo = ! esCajeroUifSinSupervisor();
 
-			Self::actualiza($data, $id, $request, $actualizarRiesgo);
+			Self::actualiza($data, $id, $request, $actualizarRiesgo, $existente);
 
 			$this->clienteUifSexoAprendizajeService->registrarDesdeCliente(
 				trim((string) $request->input('nombre')),
@@ -208,7 +208,7 @@ class Cliente_UifService
 	/**
 	 * @param  bool  $actualizarRiesgo  Falso para cajero UIF: la solapa de riesgo la gestiona solo el supervisor.
 	 */
-	private function actualiza($data, $id, $request, $actualizarRiesgo = true)
+	private function actualiza($data, $id, $request, $actualizarRiesgo = true, $clienteExistente = null)
 	{
 		// Graba cliente_uif
 		$cliente_uif = $this->cliente_uifRepository->update($data, $id);
@@ -217,6 +217,12 @@ class Cliente_UifService
 			throw new Exception('Error en grabacion cliente');
 
 		$this->cliente_archivo_uifRepository->update($request, $id);
+
+		// El update de archivos borra y recrea desde el form; reimporta del montaje Anita
+		// para no perder NOSIS/DDJJ que existian en disco pero no estaban en el form.
+		if ($clienteExistente instanceof Cliente_Uif) {
+			$this->cliente_uifRepository->sincronizarArchivosAnitaSiCorresponde($clienteExistente);
+		}
 
 		if ($actualizarRiesgo) {
 			$this->cliente_riesgo_uifRepository->update($data, $id);

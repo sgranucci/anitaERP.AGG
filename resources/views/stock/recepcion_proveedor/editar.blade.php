@@ -124,15 +124,6 @@ Recepción {{ $recepcion->numerorecepcion }}
                         <i class="fa fa-undo"></i> Devolución a proveedor
                     </a>
                     @endif
-                    @if($recepcion->estado === 'CONFIRMADA' && can('anular-recepcion-proveedor', false))
-                    <form action="{{ route('anular_recepcion_proveedor', $recepcion->id) }}" method="POST" class="d-inline mr-2 mb-2"
-                          onsubmit="return confirm('¿Anular recepción? Revierte stock, asiento (ctamov) y registros Anita (recepmae/recepmov/recpunica).');">
-                        @csrf
-                        <button type="submit" class="btn btn-outline-danger">
-                            <i class="fa fa-ban"></i> Anular recepción
-                        </button>
-                    </form>
-                    @endif
                     @endif
                 </div>
             </div>

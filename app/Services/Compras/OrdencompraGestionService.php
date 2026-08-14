@@ -23,6 +23,7 @@ use App\Repositories\Compras\RequisicionRepositoryInterface;
 use App\Services\Compras\Surmar\OrdencompraSurmarAnitaBridgeService;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\ImpuestoService;
+use App\Services\Configuracion\ModuloAvisoService;
 use App\Services\Configuracion\OcArbolTriggerDispatcherService;
 use App\Support\Compras\OrdencompraCondicionPagoDefaultSupport;
 use App\Support\Compras\OrdencompraComprobanteEstados;
@@ -63,6 +64,7 @@ class OrdencompraGestionService
         private CotizacionQueryInterface $cotizacionQuery,
         private ImpuestoService $impuestoService,
         private OrdencompraLegajoFacturaPdfService $legajoFacturaPdfService,
+        private ModuloAvisoService $moduloAvisoService,
     ) {}
 
     public function idSectorCompras(): ?int
@@ -478,6 +480,10 @@ class OrdencompraGestionService
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
 
+        if ($oc) {
+            $this->avisarContratoSinComSiAplica((int) $oc->id);
+        }
+
         return ['mensaje' => 'ok', 'id' => $oc ? $oc->id : null];
     }
 
@@ -487,6 +493,7 @@ class OrdencompraGestionService
         if (! in_array($existente->estadoordencompra, [OrdencompraEstados::PENDIENTE, OrdencompraEstados::SUSPENDIDA], true)) {
             return ['mensaje' => 'error', 'errores' => 'Solo se puede editar en estado PENDIENTE o SUSPENDIDA.'];
         }
+        $contratoAnterior = $this->snapshotContratoSinCom($existente);
 
         $v = Validator::make($request->all(), $this->reglasCabecera());
         if ($v->fails()) {
@@ -603,6 +610,8 @@ class OrdencompraGestionService
 
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
+
+        $this->avisarContratoSinComSiAplica($id, $contratoAnterior);
 
         return ['mensaje' => 'ok'];
     }
@@ -1362,22 +1371,36 @@ class OrdencompraGestionService
         }
     }
 
+    /**
+     * Upsert de comprobantes a venir y cuotas. No hace delete-all/recreate:
+     * las facturas de proveedor referencian ordencompra_comprobante_id y
+     * ordencompra_comprobante_cuota_id (FK RESTRICT).
+     *
+     * @param  array<string, mixed>  $payload
+     */
     private function sincronizarComprobantesCuotas(int $ordencompraId, array $payload, int $creousuarioId): void
     {
         $lista = $this->listaComprobantesDesdePayload($payload);
 
-        $idsComp = Ordencompra_Comprobante::where('ordencompra_id', $ordencompraId)->pluck('id');
-        if ($idsComp->isNotEmpty()) {
-            Ordencompra_Comprobante_Cuota::whereIn('ordencompra_comprobante_id', $idsComp)->delete();
-        }
-        Ordencompra_Comprobante::where('ordencompra_id', $ordencompraId)->delete();
+        $existentes = Ordencompra_Comprobante::query()
+            ->where('ordencompra_id', $ordencompraId)
+            ->with(['ordencompra_comprobante_cuotas' => static function ($q) {
+                $q->orderBy('id');
+            }])
+            ->orderBy('id')
+            ->get();
+
+        $porId = $existentes->keyBy('id');
+        /** @var list<Ordencompra_Comprobante> $sinAsignar */
+        $sinAsignar = $existentes->values()->all();
+        $idsCompKeep = [];
 
         foreach ($lista as $c) {
             if (! is_array($c)) {
                 continue;
             }
-            $comp = Ordencompra_Comprobante::create([
-                'ordencompra_id' => $ordencompraId,
+
+            $attrs = [
                 'tipocomprobante' => (string) ($c['tipocomprobante'] ?? 'FACTURA'),
                 'fechavencimiento' => (string) ($c['fechavencimiento'] ?? date('Y-m-d')),
                 'monto' => (float) ($c['monto'] ?? 0),
@@ -1389,28 +1412,180 @@ class OrdencompraGestionService
                 'estado' => OrdencompraComprobanteEstados::normalizar(
                     isset($c['estado']) ? (string) $c['estado'] : null
                 ),
-                'creousuario_id' => $creousuarioId,
-            ]);
+            ];
 
-            $cuotas = $c['cuotas'] ?? [];
-            if (! is_array($cuotas)) {
+            $compIdPayload = (int) ($c['id'] ?? 0);
+            $comp = null;
+            if ($compIdPayload > 0 && $porId->has($compIdPayload)) {
+                $comp = $porId->get($compIdPayload);
+                $comp->fill($attrs)->save();
+                $sinAsignar = array_values(array_filter(
+                    $sinAsignar,
+                    static fn (Ordencompra_Comprobante $x) => (int) $x->id !== $compIdPayload
+                ));
+            } elseif ($sinAsignar !== []) {
+                // Fallback: payload sin id (pantallas viejas) → reutilizar por orden de id.
+                $comp = array_shift($sinAsignar);
+                $comp->fill($attrs)->save();
+            } else {
+                $comp = Ordencompra_Comprobante::create(array_merge($attrs, [
+                    'ordencompra_id' => $ordencompraId,
+                    'creousuario_id' => $creousuarioId,
+                ]));
+            }
+
+            $idsCompKeep[] = (int) $comp->id;
+            $this->sincronizarCuotasDeComprobante($comp, $c['cuotas'] ?? [], $creousuarioId);
+        }
+
+        $idsCompBorrar = $existentes
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->diff($idsCompKeep)
+            ->values()
+            ->all();
+
+        if ($idsCompBorrar !== []) {
+            $this->assertComprobantesOcEliminables($idsCompBorrar);
+            $cuotasBorrar = Ordencompra_Comprobante_Cuota::query()
+                ->whereIn('ordencompra_comprobante_id', $idsCompBorrar)
+                ->pluck('id')
+                ->map(static fn ($id) => (int) $id)
+                ->all();
+            $this->assertCuotasOcEliminables($cuotasBorrar);
+            if ($cuotasBorrar !== []) {
+                Ordencompra_Comprobante_Cuota::query()->whereIn('id', $cuotasBorrar)->delete();
+            }
+            Ordencompra_Comprobante::query()->whereIn('id', $idsCompBorrar)->delete();
+        }
+    }
+
+    /**
+     * @param  mixed  $cuotasPayload
+     */
+    private function sincronizarCuotasDeComprobante(
+        Ordencompra_Comprobante $comp,
+        mixed $cuotasPayload,
+        int $creousuarioId
+    ): void {
+        $cuotas = is_array($cuotasPayload) ? $cuotasPayload : [];
+        $existentes = $comp->ordencompra_comprobante_cuotas
+            ? $comp->ordencompra_comprobante_cuotas->sortBy('id')->values()
+            : Ordencompra_Comprobante_Cuota::query()
+                ->where('ordencompra_comprobante_id', $comp->id)
+                ->orderBy('id')
+                ->get();
+
+        $porId = $existentes->keyBy('id');
+        /** @var list<Ordencompra_Comprobante_Cuota> $sinAsignar */
+        $sinAsignar = $existentes->values()->all();
+        $idsKeep = [];
+
+        foreach ($cuotas as $q) {
+            if (! is_array($q)) {
                 continue;
             }
-            foreach ($cuotas as $q) {
-                if (! is_array($q)) {
-                    continue;
-                }
-                Ordencompra_Comprobante_Cuota::create([
-                    'ordencompra_comprobante_id' => $comp->id,
-                    'fechavencimiento' => (string) ($q['fechavencimiento'] ?? $comp->fechavencimiento),
-                    'monto' => (float) ($q['monto'] ?? 0),
-                    'moneda_id' => (int) ($q['moneda_id'] ?? $comp->moneda_id),
-                    'cotizacion' => isset($q['cotizacion']) ? (float) $q['cotizacion'] : null,
-                    'formapago_id' => max(1, (int) ($q['formapago_id'] ?? 1)),
-                    'detalle' => $q['detalle'] ?? null,
+
+            $attrs = [
+                'fechavencimiento' => (string) ($q['fechavencimiento'] ?? $comp->fechavencimiento),
+                'monto' => (float) ($q['monto'] ?? 0),
+                'moneda_id' => (int) ($q['moneda_id'] ?? $comp->moneda_id),
+                'cotizacion' => isset($q['cotizacion']) ? (float) $q['cotizacion'] : null,
+                'formapago_id' => max(1, (int) ($q['formapago_id'] ?? 1)),
+                'detalle' => $q['detalle'] ?? null,
+            ];
+
+            $cuotaIdPayload = (int) ($q['id'] ?? 0);
+            $cuota = null;
+            if ($cuotaIdPayload > 0 && $porId->has($cuotaIdPayload)) {
+                $cuota = $porId->get($cuotaIdPayload);
+                $cuota->fill($attrs)->save();
+                $sinAsignar = array_values(array_filter(
+                    $sinAsignar,
+                    static fn (Ordencompra_Comprobante_Cuota $x) => (int) $x->id !== $cuotaIdPayload
+                ));
+            } elseif ($sinAsignar !== []) {
+                $cuota = array_shift($sinAsignar);
+                $cuota->fill($attrs)->save();
+            } else {
+                $cuota = Ordencompra_Comprobante_Cuota::create(array_merge($attrs, [
+                    'ordencompra_comprobante_id' => (int) $comp->id,
                     'creousuario_id' => $creousuarioId,
-                ]);
+                ]));
             }
+
+            $idsKeep[] = (int) $cuota->id;
+        }
+
+        $idsBorrar = $existentes
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->diff($idsKeep)
+            ->values()
+            ->all();
+
+        if ($idsBorrar !== []) {
+            $this->assertCuotasOcEliminables($idsBorrar);
+            Ordencompra_Comprobante_Cuota::query()->whereIn('id', $idsBorrar)->delete();
+        }
+    }
+
+    /**
+     * @param  list<int>  $cuotaIds
+     *
+     * @throws \InvalidArgumentException
+     */
+    private function assertCuotasOcEliminables(array $cuotaIds): void
+    {
+        $cuotaIds = array_values(array_filter(array_map('intval', $cuotaIds), static fn (int $id) => $id > 0));
+        if ($cuotaIds === []) {
+            return;
+        }
+
+        $referidas = DB::table('comprobante_proveedor_cuota')
+            ->whereIn('ordencompra_comprobante_cuota_id', $cuotaIds)
+            ->distinct()
+            ->pluck('comprobante_proveedor_id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn (int $id) => $id > 0)
+            ->values()
+            ->all();
+
+        if ($referidas !== []) {
+            throw new \InvalidArgumentException(
+                'No se pueden eliminar o regenerar cuotas de la OC que ya están vinculadas a facturas de proveedor (ids '
+                .implode(', ', $referidas)
+                .'). Modifique fechas/montos/forma de pago sobre las cuotas existentes, o anule/elimine la factura vinculada.'
+            );
+        }
+    }
+
+    /**
+     * @param  list<int>  $comprobanteIds
+     *
+     * @throws \InvalidArgumentException
+     */
+    private function assertComprobantesOcEliminables(array $comprobanteIds): void
+    {
+        $comprobanteIds = array_values(array_filter(array_map('intval', $comprobanteIds), static fn (int $id) => $id > 0));
+        if ($comprobanteIds === []) {
+            return;
+        }
+
+        $referidos = DB::table('comprobante_proveedor')
+            ->whereIn('ordencompra_comprobante_id', $comprobanteIds)
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn (int $id) => $id > 0)
+            ->values()
+            ->all();
+
+        if ($referidos !== []) {
+            throw new \InvalidArgumentException(
+                'No se pueden eliminar comprobantes a venir de la OC que ya están vinculados a facturas de proveedor (ids '
+                .implode(', ', $referidos)
+                .').'
+            );
         }
     }
 
@@ -1623,5 +1798,76 @@ class OrdencompraGestionService
     private function usaEscrituraAnitaSurmar(Ordencompra $oc): bool
     {
         return SurmarSupport::esEmpresaSurmar((int) ($oc->empresa_id ?? 0));
+    }
+
+    /**
+     * @return array{
+     *     es_contrato: bool,
+     *     requiere_recepcion: bool,
+     *     imputacion: string|null,
+     *     cuentacontable_id: int
+     * }
+     */
+    private function snapshotContratoSinCom(Ordencompra $oc): array
+    {
+        $esContrato = (bool) ($oc->es_contrato ?? false);
+        $requiereRecepcion = $esContrato
+            ? (bool) ($oc->contrato_requiere_recepcion ?? true)
+            : true;
+        $imputacion = null;
+        $cuentaId = 0;
+        if ($esContrato && ! $requiereRecepcion) {
+            $imputacion = OrdencompraContratoRutaFacturaSupport::normalizarImputacion(
+                $oc->contrato_imputacion_contable ?? null
+            );
+            if ($imputacion === OrdencompraContratoRutaFacturaSupport::IMPUTACION_MANUAL) {
+                $cuentaId = (int) ($oc->contrato_cuentacontable_id ?? 0);
+            }
+        }
+
+        return [
+            'es_contrato' => $esContrato,
+            'requiere_recepcion' => $requiereRecepcion,
+            'imputacion' => $imputacion,
+            'cuentacontable_id' => $cuentaId,
+        ];
+    }
+
+    /**
+     * @param  array{
+     *     es_contrato: bool,
+     *     requiere_recepcion: bool,
+     *     imputacion: string|null,
+     *     cuentacontable_id: int
+     * }|null  $anterior
+     */
+    private function avisarContratoSinComSiAplica(int $ordencompraId, ?array $anterior = null): void
+    {
+        $oc = Ordencompra::query()->find($ordencompraId);
+        if (! $oc) {
+            return;
+        }
+
+        $actual = $this->snapshotContratoSinCom($oc);
+        if (! $actual['es_contrato'] || $actual['requiere_recepcion']) {
+            return;
+        }
+
+        // Alta: avisa siempre. Actualización: solo si entra a sin COM o cambia imputación/cuenta.
+        if ($anterior !== null) {
+            $antesSinCom = $anterior['es_contrato'] && ! $anterior['requiere_recepcion'];
+            $cambioRutaOImputacion = ! $antesSinCom
+                || ($anterior['imputacion'] ?? null) !== ($actual['imputacion'] ?? null)
+                || (int) ($anterior['cuentacontable_id'] ?? 0) !== (int) ($actual['cuentacontable_id'] ?? 0);
+            if (! $cambioRutaOImputacion) {
+                return;
+            }
+        }
+
+        $this->moduloAvisoService->enviar(
+            'compras',
+            'ordencompra_contrato_sin_com',
+            $ordencompraId
+        );
     }
 }

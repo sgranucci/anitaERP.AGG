@@ -1338,6 +1338,7 @@ Route::get('stock/movimientostock/{id}/editar', 'Stock\MovimientoStockController
 Route::match(['get', 'post'], 'stock/movimientostock/preview-asiento', 'Stock\MovimientoStockController@previewAsientoContable')->name('preview_asiento_movimientostock_nuevo');
 Route::match(['get', 'post'], 'stock/movimientostock/preview-conversion-formula', 'Stock\MovimientoStockController@previewConversionFormula')->name('preview_conversion_formula_movimientostock');
 Route::get('stock/movimientostock/api/saldo-articulo', 'Stock\MovimientoStockController@saldoArticuloDeposito')->name('movimientostock_saldo_articulo');
+Route::get('stock/movimientostock/api/sugerir-tipo-transferencia-contable', 'Stock\MovimientoStockController@sugerirTipoTransferenciaContable')->name('movimientostock_sugerir_tipo_transferencia_contable');
 Route::get('stock/movimientostock/api/precio-linea', 'Stock\MovimientoStockController@precioLineaArticulo')->name('movimientostock_precio_linea');
 Route::post('stock/movimientostock/api/resolver-etiqueta-surmar', 'Stock\MovimientoStockController@resolverEtiquetaSurmar')->name('movimientostock_resolver_etiqueta_surmar');
 Route::post('stock/movimientostock/api/zpl-etiquetas-surmar', 'Stock\MovimientoStockController@zplEtiquetasSurmarBatch')->name('movimientostock_zpl_etiquetas_surmar');
@@ -2649,11 +2650,17 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::get('caja/lista-perdida-personal/{formato?}/{busqueda?}', 'Caja\PerdidaPersonalController@listar')->name('lista_perdida_personal');
     Route::get('caja/perdida-personal/crear', 'Caja\PerdidaPersonalController@crear')->name('crear_perdida_personal');
     Route::post('caja/perdida-personal', 'Caja\PerdidaPersonalController@guardar')->name('guardar_perdida_personal');
-    Route::get('caja/perdida-personal/empleados-empresa', 'Caja\PerdidaPersonalController@empleadosPorEmpresa')
-        ->name('empleados_empresa_perdida_personal');
+    Route::get('caja/perdida-personal/catalogos/consulta', 'Caja\PerdidaPersonalController@consultarCatalogo')
+        ->name('consultar_catalogo_perdida_personal');
+    Route::get('caja/perdida-personal/catalogos/resolver', 'Caja\PerdidaPersonalController@resolverCatalogo')
+        ->name('resolver_catalogo_perdida_personal');
     Route::get('caja/perdida-personal/{id}/editar', 'Caja\PerdidaPersonalController@editar')->name('editar_perdida_personal');
     Route::put('caja/perdida-personal/{id}', 'Caja\PerdidaPersonalController@actualizar')->name('actualizar_perdida_personal');
     Route::delete('caja/perdida-personal/{id}', 'Caja\PerdidaPersonalController@eliminar')->name('eliminar_perdida_personal');
+
+    Route::get('caja/perdida-personal-reporte', 'Caja\PerdidaPersonalReporteController@index')->name('perdida_personal_reporte');
+    Route::get('caja/listar-perdida-personal-reporte/{formato}', 'Caja\PerdidaPersonalReporteController@exportar')
+        ->name('listar_perdida_personal_reporte');
 
     Route::get('caja/rendicion-maquina', 'Caja\RendicionMaquinaController@index')->name('rendicion_maquina');
     Route::get('caja/lista-rendicion-maquina/{formato?}/{busqueda?}', 'Caja\RendicionMaquinaController@listar')->name('lista_rendicion_maquina');
@@ -4145,6 +4152,18 @@ Route::put('sueldos/fallocaja/{id}', 'Sueldos\Fallocaja_SueldosController@actual
 Route::delete('sueldos/fallocaja/{id}', 'Sueldos\Fallocaja_SueldosController@eliminar')->name('eliminar_fallocaja_sueldos');
 
 /*
+ * Descuentos por fallos (Anita p-dtofallo.c) y cta. cte. (l-fallo.c).
+ */
+Route::get('sueldos/dtofallo', 'Sueldos\DtoFallo_SueldosController@index')->name('consultar_dtofallo_sueldos');
+Route::post('sueldos/dtofallo/generar', 'Sueldos\DtoFallo_SueldosController@generar')->name('generar_dtofallo_sueldos');
+Route::get('sueldos/dtofallo/{id}', 'Sueldos\DtoFallo_SueldosController@ver')->name('ver_dtofallo_sueldos');
+Route::post('sueldos/dtofallo/{id}/anular', 'Sueldos\DtoFallo_SueldosController@anular')->name('anular_dtofallo_sueldos');
+
+Route::get('sueldos/fallo-reporte', 'Sueldos\FalloReporte_SueldosController@index')->name('fallo_reporte_sueldos');
+Route::get('sueldos/listar-fallo-reporte/{formato}', 'Sueldos\FalloReporte_SueldosController@exportar')
+    ->name('listar_fallo_reporte_sueldos');
+
+/*
  * Agrupamientos de sueldos (Anita sueldos / agrupamiento). CRUD pesado: paginado + filtros + export.
  * Sync solo llenado inicial; CRUD vive en el ERP.
  */
@@ -4433,6 +4452,8 @@ Route::get('sueldos/empleado/{empleado}/novedades', 'Sueldos\Empleado_NovedadSue
 Route::post('sueldos/empleado/{empleado}/novedades', 'Sueldos\Empleado_NovedadSueldosController@guardar')->name('guardar_novedad_empleado_sueldos');
 Route::put('sueldos/novedad-empleado/{id}', 'Sueldos\Empleado_NovedadSueldosController@actualizar')->name('actualizar_novedad_empleado_sueldos');
 Route::delete('sueldos/novedad-empleado/{id}', 'Sueldos\Empleado_NovedadSueldosController@eliminar')->name('eliminar_novedad_empleado_sueldos');
+
+Route::get('sueldos/empleado/{empleado}/fallos', 'Sueldos\Empleado_FalloSueldosController@panel')->name('fallos_empleado_sueldos');
 
 /*
  * Indumentaria del empleado (solapa): dotación/saldos, entrega con descuento de stock + asiento,

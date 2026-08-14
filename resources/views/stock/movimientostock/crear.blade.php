@@ -9,6 +9,7 @@
     window.movimientoStockPreviewConversionFormulaUrl = @json(route('preview_conversion_formula_movimientostock'));
     window.movimientoStockSaldoOrigenUrl = @json(route('movimientostock_saldo_articulo'));
     window.movimientoStockPrecioLineaUrl = @json(route('movimientostock_precio_linea'));
+    window.movimientoStockSugerirTipoTransferenciaContableUrl = @json(route('movimientostock_sugerir_tipo_transferencia_contable'));
     window.movimientoStockResolverNpuUrl = @json(route('movimientostock_resolver_npu_baja'));
     window.movimientoStockConsultaNpuUrl = @json(route('movimientostock_consulta_npu_baja'));
     window.msColoresOpciones = @json(($color_query ?? collect())->map(fn ($c) => ['id' => (int) $c->id, 'nombre' => $c->nombre])->values());

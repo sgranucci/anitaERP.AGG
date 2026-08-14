@@ -94,7 +94,21 @@ class ComprobanteProveedorPersistenciaService
 
         $this->ejecutarControlesDesdeRequest($request, $payload, null);
 
-        $comprobante = $this->comprobanteRepository->create($payload);
+        try {
+            $comprobante = $this->comprobanteRepository->create($payload);
+        } catch (Throwable $e) {
+            ComprobanteProveedorUnicidadSupport::relevarViolacionUnicidad(
+                $e,
+                (int) $payload['empresa_id'],
+                (int) $payload['tipotransaccion_compra_id'],
+                (string) $payload['letra'],
+                (int) $payload['sucursal'],
+                (int) $payload['numerocomprobante'],
+                (int) $payload['proveedor_id'],
+                null,
+            );
+            throw $e;
+        }
 
         $this->sincronizarConceptos($request, $comprobante);
         $this->sincronizarArticulos($request, $comprobante);
@@ -176,7 +190,22 @@ class ComprobanteProveedorPersistenciaService
 
         $this->ejecutarControlesDesdeRequest($request, $payload, $id);
 
-        $this->comprobanteRepository->update($payload, $id);
+        try {
+            $this->comprobanteRepository->update($payload, $id);
+        } catch (Throwable $e) {
+            ComprobanteProveedorUnicidadSupport::relevarViolacionUnicidad(
+                $e,
+                (int) $payload['empresa_id'],
+                (int) $payload['tipotransaccion_compra_id'],
+                (string) $payload['letra'],
+                (int) $payload['sucursal'],
+                (int) $payload['numerocomprobante'],
+                (int) $payload['proveedor_id'],
+                null,
+                $id,
+            );
+            throw $e;
+        }
 
         $comprobante = $this->comprobanteRepository->find($id);
         $this->conceptoRepository->deletePorComprobanteProveedor($id);
@@ -321,7 +350,21 @@ class ComprobanteProveedorPersistenciaService
             $this->aplicarResultadoCompliance($resultadoCompliance);
         }
 
-        $comprobante = $this->comprobanteRepository->create($payload);
+        try {
+            $comprobante = $this->comprobanteRepository->create($payload);
+        } catch (Throwable $e) {
+            ComprobanteProveedorUnicidadSupport::relevarViolacionUnicidad(
+                $e,
+                (int) $payload['empresa_id'],
+                (int) $payload['tipotransaccion_compra_id'],
+                (string) $payload['letra'],
+                (int) $payload['sucursal'],
+                (int) $payload['numerocomprobante'],
+                isset($payload['proveedor_id']) ? (int) $payload['proveedor_id'] : null,
+                $payload['proveedor_documento_eventual'] ?? null,
+            );
+            throw $e;
+        }
 
         foreach ($prefill['conceptos'] as $i => $concepto) {
             $this->conceptoRepository->create([

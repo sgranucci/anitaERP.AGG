@@ -16,6 +16,21 @@ function limpiarCuentaCampo($campo) {
     $campo.find('.nombrecuentacontable').val('');
 }
 
+function reindexarNombreMulti($renglon, clave) {
+    $renglon.find('.cuentacontable_id').attr('name', 'cuentas_multiples[' + clave + '][]');
+}
+
+function clonarRenglonMulti(clave) {
+    var tpl = document.getElementById('cuenta-auto-multi-template');
+    if (!tpl) {
+        return null;
+    }
+    var html = tpl.innerHTML.replace(/__CLAVE__/g, clave);
+    var $row = $(html);
+    reindexarNombreMulti($row, clave);
+    return $row;
+}
+
 function activaEventosConsultaCuentaContableAutomatica() {
     $(document).off('change.cuentaauto', '.tm-cuenta-campo .codigocuentacontable').on('change.cuentaauto', '.tm-cuenta-campo .codigocuentacontable', function (event) {
         event.preventDefault();
@@ -71,6 +86,27 @@ function activaEventosConsultaCuentaContableAutomatica() {
         }
 
         $('#consultacuentaModal').modal('hide');
+    });
+
+    $(document).off('click.cuentaauto', '.cuenta-auto-multi-agregar').on('click.cuentaauto', '.cuenta-auto-multi-agregar', function () {
+        var clave = $(this).data('clave');
+        var $body = $('.cuenta-auto-multi-body[data-clave="' + clave + '"]');
+        var $row = clonarRenglonMulti(clave);
+        if (!$row || !$body.length) {
+            return;
+        }
+        $body.append($row);
+        $row.find('.codigocuentacontable').trigger('focus');
+    });
+
+    $(document).off('click.cuentaauto', '.cuenta-auto-multi-quitar').on('click.cuentaauto', '.cuenta-auto-multi-quitar', function () {
+        var $body = $(this).closest('tbody');
+        var $row = $(this).closest('tr');
+        if ($body.find('tr').length <= 1) {
+            limpiarCuentaCampo($row);
+            return;
+        }
+        $row.remove();
     });
 }
 

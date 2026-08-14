@@ -6,6 +6,7 @@ use App\Models\Stock\Articulo;
 use App\Models\Stock\Depmae;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
+use App\Support\Contable\CuentacontableEmpresaResolverSupport;
 
 /**
  * Clasificación y validación contable de líneas en transferencias TRCONT.
@@ -24,13 +25,15 @@ final class TransferenciaMercaderiaLineaContableSupport
             return self::FAMILIA_TITO;
         }
 
-        $cuentaOtrosActivosId = (int) (CuentaAutomaticaResolver::resolverId(
+        $cuentaOtrosActivosIds = CuentaAutomaticaResolver::resolverIds(
             $empresaId,
             CuentaAutomaticaClaves::STOCK_TRANSFERENCIA_OTROS_ACTIVOS
-        ) ?? 0);
+        );
+        $cuentaCompraId = self::resolverCuentaCompraId($articulo, $empresaId);
 
-        if ($cuentaOtrosActivosId > 0
-            && (int) ($articulo->cuentacontablecompra_id ?? 0) === $cuentaOtrosActivosId) {
+        if ($cuentaCompraId > 0
+            && $cuentaOtrosActivosIds !== []
+            && in_array($cuentaCompraId, $cuentaOtrosActivosIds, true)) {
             return self::FAMILIA_OTROS_ACTIVOS;
         }
 
@@ -42,9 +45,48 @@ final class TransferenciaMercaderiaLineaContableSupport
         return self::resolverFamilia($articulo, $empresaId) !== self::FAMILIA_NO_CONTABILIZABLE;
     }
 
-    public static function lineaGeneraAsiento(Articulo $articulo, int $empresaId, int $depositoOrigenId): bool
+    /**
+     * La selección automática de TRCONT mira solamente la configuración contable
+     * del artículo. Precio y depósito se validan luego, al armar la transferencia.
+     *
+     * @param  list<int>  $articuloIds
+     */
+    public static function todosContabilizables(array $articuloIds, int $empresaId): bool
     {
-        $resultado = self::validarLinea($articulo, $empresaId, $depositoOrigenId);
+        $articuloIds = array_values(array_unique(array_filter(
+            array_map('intval', $articuloIds),
+            static fn (int $id): bool => $id > 0
+        )));
+        if ($empresaId <= 0 || $articuloIds === []) {
+            return false;
+        }
+
+        $articulos = Articulo::query()
+            ->with('articulo_cuentacontables')
+            ->whereIn('id', $articuloIds)
+            ->get();
+
+        return $articulos->count() === count($articuloIds)
+            && $articulos->every(
+                static fn (Articulo $articulo): bool => self::esContabilizable($articulo, $empresaId)
+            );
+    }
+
+    public static function lineaGeneraAsiento(
+        Articulo $articulo,
+        int $empresaId,
+        int $depositoOrigenId,
+        ?string $fechaHasta = null,
+        bool $omitirValidacionDeposito = false,
+    ): bool
+    {
+        $resultado = self::validarLinea(
+            $articulo,
+            $empresaId,
+            $depositoOrigenId,
+            $fechaHasta,
+            $omitirValidacionDeposito
+        );
 
         return $resultado['permitido'];
     }
@@ -58,7 +100,13 @@ final class TransferenciaMercaderiaLineaContableSupport
      *     deposito_recepcion_codigo: ?string
      * }
      */
-    public static function validarLinea(Articulo $articulo, int $empresaId, int $depositoOrigenId): array
+    public static function validarLinea(
+        Articulo $articulo,
+        int $empresaId,
+        int $depositoOrigenId,
+        ?string $fechaHasta = null,
+        bool $omitirValidacionDeposito = false,
+    ): array
     {
         $sku = trim((string) ($articulo->sku ?? ''));
         $familia = self::resolverFamilia($articulo, $empresaId);
@@ -71,7 +119,7 @@ final class TransferenciaMercaderiaLineaContableSupport
             );
         }
 
-        if ($depositoOrigenId <= 0) {
+        if (! $omitirValidacionDeposito && $depositoOrigenId <= 0) {
             return self::resultado(
                 false,
                 $familia,
@@ -79,39 +127,47 @@ final class TransferenciaMercaderiaLineaContableSupport
             );
         }
 
-        $recepcion = TransferenciaMercaderiaDepositoRecepcionSupport::resolver((int) $articulo->id, $empresaId);
-        $depositoRecepcionId = $recepcion['deposito_id'];
-        $depositoRecepcion = $depositoRecepcionId > 0
-            ? Depmae::query()->find($depositoRecepcionId)
-            : null;
-        $depositoRecepcionCodigo = $depositoRecepcion ? (string) ($depositoRecepcion->codigo ?? '') : null;
-
-        if ($depositoRecepcionId === null || $depositoRecepcionId <= 0) {
-            return self::resultado(
-                false,
-                $familia,
-                'Artículo '.$sku.': no tiene recepción de compra confirmada para determinar depósito.',
-                null,
-                $depositoRecepcionCodigo
+        $depositoRecepcionId = null;
+        $depositoRecepcionCodigo = null;
+        if (! $omitirValidacionDeposito) {
+            $recepcion = TransferenciaMercaderiaDepositoRecepcionSupport::resolver(
+                (int) $articulo->id,
+                $empresaId,
+                $fechaHasta
             );
-        }
+            $depositoRecepcionId = $recepcion['deposito_id'];
+            $depositoRecepcion = $depositoRecepcionId > 0
+                ? Depmae::query()->find($depositoRecepcionId)
+                : null;
+            $depositoRecepcionCodigo = $depositoRecepcion ? (string) ($depositoRecepcion->codigo ?? '') : null;
 
-        if ($depositoOrigenId !== $depositoRecepcionId) {
-            $etiquetaDep = $depositoRecepcion
-                ? Depmae::etiquetaDesdePartes(
-                    (string) ($depositoRecepcion->codigo ?? ''),
-                    (string) ($depositoRecepcion->nombre ?? ''),
-                    (int) $depositoRecepcion->id
-                )
-                : '#'.$depositoRecepcionId;
+            if ($depositoRecepcionId === null || $depositoRecepcionId <= 0) {
+                return self::resultado(
+                    false,
+                    $familia,
+                    'Artículo '.$sku.': no tiene recepción de compra confirmada para determinar depósito.',
+                    null,
+                    $depositoRecepcionCodigo
+                );
+            }
 
-            return self::resultado(
-                false,
-                $familia,
-                'Artículo '.$sku.': el depósito de salida debe coincidir con el de la última recepción de compra ('.$etiquetaDep.').',
-                $depositoRecepcionId,
-                $depositoRecepcionCodigo
-            );
+            if ($depositoOrigenId !== $depositoRecepcionId) {
+                $etiquetaDep = $depositoRecepcion
+                    ? Depmae::etiquetaDesdePartes(
+                        (string) ($depositoRecepcion->codigo ?? ''),
+                        (string) ($depositoRecepcion->nombre ?? ''),
+                        (int) $depositoRecepcion->id
+                    )
+                    : '#'.$depositoRecepcionId;
+
+                return self::resultado(
+                    false,
+                    $familia,
+                    'Artículo '.$sku.': el depósito de salida debe coincidir con el de la última recepción de compra ('.$etiquetaDep.').',
+                    $depositoRecepcionId,
+                    $depositoRecepcionCodigo
+                );
+            }
         }
 
         $precio = ArticuloPrecioTransferenciaContableSupport::resolverPrecioUnitario($articulo);
@@ -130,7 +186,7 @@ final class TransferenciaMercaderiaLineaContableSupport
         }
 
         $cuentaGastoId = self::resolverCuentaGastoId($articulo, $empresaId);
-        $cuentaCompraId = (int) ($articulo->cuentacontablecompra_id ?? 0);
+        $cuentaCompraId = self::resolverCuentaCompraId($articulo, $empresaId);
         if ($cuentaGastoId <= 0 || $cuentaCompraId <= 0) {
             return self::resultado(
                 false,
@@ -167,6 +223,8 @@ final class TransferenciaMercaderiaLineaContableSupport
         array $articuloIds,
         int $depositoOrigenId,
         int $empresaId,
+        ?string $fechaHasta = null,
+        bool $omitirValidacionDeposito = false,
     ): void {
         $articuloIds = array_values(array_unique(array_filter(array_map('intval', $articuloIds), static fn ($id) => $id > 0)));
         if ($articuloIds === []) {
@@ -198,7 +256,13 @@ final class TransferenciaMercaderiaLineaContableSupport
                 continue;
             }
 
-            $resultado = self::validarLinea($articulo, $empresaId, $depositoOrigenId);
+            $resultado = self::validarLinea(
+                $articulo,
+                $empresaId,
+                $depositoOrigenId,
+                $fechaHasta,
+                $omitirValidacionDeposito
+            );
             if ($resultado['permitido']) {
                 $validas++;
 
@@ -224,17 +288,31 @@ final class TransferenciaMercaderiaLineaContableSupport
         }
     }
 
-    private static function resolverCuentaGastoId(Articulo $articulo, int $empresaId): int
+    public static function resolverCuentaGastoId(Articulo $articulo, int $empresaId): int
     {
         $cuentaGrid = $articulo->articulo_cuentacontables
             ?->first(fn ($row) => (int) $row->empresa_id === $empresaId
                 && strtoupper((string) $row->tipoimputacion) === 'GASTOS');
 
-        if ($cuentaGrid && (int) $cuentaGrid->cuentacontable_id > 0) {
-            return (int) $cuentaGrid->cuentacontable_id;
-        }
+        $cuentaId = (int) ($cuentaGrid?->cuentacontable_id ?? $articulo->cuentacontablecompra_id ?? 0);
 
-        return (int) ($articulo->cuentacontablecompra_id ?? 0);
+        return (int) (CuentacontableEmpresaResolverSupport::resolverIdDesdeId(
+            $cuentaId,
+            $empresaId
+        ) ?? 0);
+    }
+
+    public static function resolverCuentaCompraId(Articulo $articulo, int $empresaId): int
+    {
+        $cuentaGrid = $articulo->articulo_cuentacontables
+            ?->first(fn ($row) => (int) $row->empresa_id === $empresaId
+                && strtoupper((string) $row->tipoimputacion) === 'COMPRAS');
+        $cuentaId = (int) ($cuentaGrid?->cuentacontable_id ?? $articulo->cuentacontablecompra_id ?? 0);
+
+        return (int) (CuentacontableEmpresaResolverSupport::resolverIdDesdeId(
+            $cuentaId,
+            $empresaId
+        ) ?? 0);
     }
 
     /**

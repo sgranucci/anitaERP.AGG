@@ -112,7 +112,7 @@ final class CuentaAutomaticaClaves
     /** Cheques recibidos de terceros en ingreso/egreso y cobranzas. */
     public const CAJA_VALORES_A_DEPOSITAR = 'caja.valores_a_depositar';
 
-    /** Cuenta compra «Otros activos» en transferencias contables (TRCONT). */
+    /** Cuentas compra «Otros activos» (u homologables) en transferencias contables (TRCONT). */
     public const STOCK_TRANSFERENCIA_OTROS_ACTIVOS = 'stock.transferencia_otros_activos';
 
     /**
@@ -121,7 +121,8 @@ final class CuentaAutomaticaClaves
      *   descripcion: string,
      *   modulo_tabla: ?string,
      *   modulo_columna: ?string,
-     *   env_config: ?string
+     *   env_config: ?string,
+     *   multiple?: bool
      * }>
      */
     public static function catalogo(): array
@@ -487,10 +488,11 @@ final class CuentaAutomaticaClaves
             ],
             self::STOCK_TRANSFERENCIA_OTROS_ACTIVOS => [
                 'grupo' => 'Stock — transferencias',
-                'descripcion' => 'Otros activos (cuenta compra en TRCONT, ej. 117010001)',
+                'descripcion' => 'Cuentas de compra que habilitan TRCONT (Otros activos / homologables)',
                 'modulo_tabla' => null,
                 'modulo_columna' => null,
                 'env_config' => null,
+                'multiple' => true,
             ],
         ];
     }
@@ -499,5 +501,23 @@ final class CuentaAutomaticaClaves
     public static function todasLasClaves(): array
     {
         return array_keys(self::catalogo());
+    }
+
+    public static function esMultiple(string $clave): bool
+    {
+        return (bool) (self::catalogo()[$clave]['multiple'] ?? false);
+    }
+
+    /** @return list<string> */
+    public static function clavesMultiples(): array
+    {
+        $out = [];
+        foreach (self::catalogo() as $clave => $meta) {
+            if (! empty($meta['multiple'])) {
+                $out[] = $clave;
+            }
+        }
+
+        return $out;
     }
 }

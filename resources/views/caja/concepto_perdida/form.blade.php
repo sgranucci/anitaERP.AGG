@@ -1,7 +1,7 @@
 <div class="form-group row">
     <label for="codigo" class="col-lg-3 control-label text-right pr-2 requerido">C&oacute;digo</label>
     <div class="col-lg-3">
-        <input type="number" name="codigo" id="codigo" class="form-control text-right" min="1" step="1"
+        <input type="text" name="codigo" id="codigo" class="form-control text-left" inputmode="numeric"
                value="{{ old('codigo', $data->codigo ?? '') }}"
                @if(isset($data->id)) readonly @else required @endif/>
         <small class="form-text text-muted">Concepto Anita (concp_concepto).</small>

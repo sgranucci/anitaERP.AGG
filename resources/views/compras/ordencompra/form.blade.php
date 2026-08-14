@@ -46,6 +46,7 @@
                 ->values();
             foreach ($cuotasOrdenadas as $q) {
                 $cuotas[] = [
+                    'id' => (int) $q->id,
                     'fechavencimiento' => $ocComprobanteFechaJson($q->fechavencimiento),
                     'monto' => (float) $q->monto,
                     'moneda_id' => (int) $q->moneda_id,
@@ -55,6 +56,7 @@
                 ];
             }
             $comprobantesPayload[] = [
+                'id' => (int) $c->id,
                 'tipocomprobante' => $c->tipocomprobante,
                 'fechavencimiento' => $ocComprobanteFechaJson($c->fechavencimiento),
                 'monto' => (float) $c->monto,

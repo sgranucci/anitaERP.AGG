@@ -238,6 +238,26 @@ class TransferenciaMercaderiaService
         }
 
         $tipoTransferencia = $this->tipotransaccionStockRepository->find($tipotransaccionId);
+        $seleccionAutomaticaTrcont = filter_var(
+            $cabecera['seleccion_automatica_trcont'] ?? false,
+            FILTER_VALIDATE_BOOLEAN
+        );
+        if ($seleccionAutomaticaTrcont
+            && strtoupper(trim((string) ($tipoTransferencia->abreviatura ?? ''))) === 'TRA'
+            && TransferenciaMercaderiaLineaContableSupport::todosContabilizables(
+                array_column($lineas, 'articulo_id'),
+                $empresaId
+            )) {
+            $tipoTrcont = $this->tipotransaccionStockRepository
+                ->all(['T'], ['A'])
+                ->first(static fn ($tipo): bool => strtoupper(trim((string) ($tipo->abreviatura ?? ''))) === 'TRCONT'
+                    && (bool) ($tipo->maneja_contabilidad ?? false));
+            if ($tipoTrcont !== null) {
+                $tipoTransferencia = $tipoTrcont;
+                $tipotransaccionId = (int) $tipoTrcont->id;
+                $cabecera['tipotransaccion_stock_id'] = $tipotransaccionId;
+            }
+        }
         try {
             $this->validarTipoTransferencia($tipoTransferencia);
         } catch (\Throwable $e) {
@@ -410,7 +430,8 @@ class TransferenciaMercaderiaService
                 TransferenciaMercaderiaLineaContableSupport::assertLineasValidasParaTrcont(
                     array_column($lineas, 'articulo_id'),
                     $depositoSalidaId,
-                    $empresaId
+                    $empresaId,
+                    $fecha
                 );
             } catch (\Throwable $e) {
                 return ['ok' => false, 'mensaje' => $e->getMessage()];
@@ -537,6 +558,7 @@ class TransferenciaMercaderiaService
                     'mensaje' => $mensaje,
                     'codigo' => $codigoBase,
                     'transferencia_id' => (int) $transferencia->id,
+                    'tipotransaccion_stock_id' => (int) $tipoTransferencia->id,
                     'requiere_aprobacion' => $requiereAprobacion,
                 ];
             });

@@ -133,7 +133,22 @@ final class ComprobanteProveedorUnicidadSupport
         );
 
         if ($duplicado !== null) {
-            throw new RuntimeException(self::mensajeDuplicado($duplicado, $codigoAfip));
+            throw ComprobanteProveedorDuplicadoException::desdeExistente($duplicado, $codigoAfip);
+        }
+
+        // El índice único de MySQL incluye soft-deleted; el filtro AFIP solo ve no eliminados.
+        $duplicadoClave = self::findDuplicadoPorClaveUnica(
+            $empresaId,
+            $tipotransaccionCompraId,
+            $letra,
+            $sucursal,
+            $numerocomprobante,
+            $cuit,
+            $excluirComprobanteId,
+            incluirEliminados: true,
+        );
+        if ($duplicadoClave !== null) {
+            throw ComprobanteProveedorDuplicadoException::desdeExistente($duplicadoClave, $codigoAfip);
         }
 
         $duplicadoPrecarga = self::findDuplicadoPrecargaPorAfip(
@@ -294,6 +309,99 @@ final class ComprobanteProveedorUnicidadSupport
             $cuitDigitos,
             $excluirComprobanteId,
         );
+    }
+
+    /**
+     * Misma clave que el índice único uq_comprobante_proveedor_por_cuit
+     * (empresa + tipo interno + letra + sucursal + número + CUIT).
+     */
+    public static function findDuplicadoPorClaveUnica(
+        int $empresaId,
+        int $tipotransaccionCompraId,
+        string $letra,
+        int $sucursal,
+        int $numerocomprobante,
+        string $cuitDigitos,
+        ?int $excluirComprobanteId = null,
+        bool $incluirEliminados = false,
+    ): ?Comprobante_Proveedor {
+        $cuitDigitos = self::normalizarCuitDigitos($cuitDigitos);
+        if ($cuitDigitos === '' || $tipotransaccionCompraId <= 0) {
+            return null;
+        }
+
+        $letra = strtoupper(substr(trim($letra), 0, 1));
+
+        $query = $incluirEliminados
+            ? Comprobante_Proveedor::withTrashed()
+            : Comprobante_Proveedor::query();
+
+        $query->with(['tipotransaccion_compras', 'proveedores'])
+            ->where('empresa_id', $empresaId)
+            ->where('tipotransaccion_compra_id', $tipotransaccionCompraId)
+            ->where('letra', $letra)
+            ->where('sucursal', $sucursal)
+            ->where('numerocomprobante', $numerocomprobante)
+            ->where('identificacion_proveedor_cuit', $cuitDigitos);
+
+        if ($excluirComprobanteId !== null && $excluirComprobanteId > 0) {
+            $query->where('id', '!=', $excluirComprobanteId);
+        }
+
+        return $query->orderByDesc('id')->first();
+    }
+
+    /**
+     * Convierte violación de índice único (carrera / soft-delete) en mensaje de negocio.
+     *
+     * @throws ComprobanteProveedorDuplicadoException
+     */
+    public static function relevarViolacionUnicidad(
+        \Throwable $e,
+        int $empresaId,
+        int $tipotransaccionCompraId,
+        string $letra,
+        int $sucursal,
+        int $numerocomprobante,
+        ?int $proveedorId,
+        ?string $documentoEventual = null,
+        ?int $excluirComprobanteId = null,
+    ): void {
+        if (! self::esViolacionUnicidadFiscal($e)) {
+            return;
+        }
+
+        $cuit = self::resolverCuitDigitos($proveedorId, $documentoEventual);
+        $dup = self::findDuplicadoPorClaveUnica(
+            $empresaId,
+            $tipotransaccionCompraId,
+            $letra,
+            $sucursal,
+            $numerocomprobante,
+            $cuit,
+            $excluirComprobanteId,
+            incluirEliminados: true,
+        );
+
+        if ($dup !== null) {
+            throw ComprobanteProveedorDuplicadoException::desdeExistente(
+                $dup,
+                self::codigoAfipDesdeTipoId($tipotransaccionCompraId),
+            );
+        }
+
+        throw new RuntimeException(
+            'Ya existe un comprobante con la misma empresa, tipo, letra, sucursal, número y CUIT. '
+            .'Buscalo en Cuentas a pagar (puede estar en borrador o eliminado).'
+        );
+    }
+
+    public static function esViolacionUnicidadFiscal(\Throwable $e): bool
+    {
+        $msg = $e->getMessage();
+
+        return str_contains($msg, 'uq_comprobante_proveedor_por_cuit')
+            || (str_contains($msg, 'Duplicate entry') && str_contains($msg, 'comprobante_proveedor'));
     }
 
     public static function findDuplicadoPrecargaPorAfip(
@@ -477,29 +585,39 @@ final class ComprobanteProveedorUnicidadSupport
 
         $afip = $codigoAfip ?? self::normalizarCodigoAfip((string) ($existente->tipotransaccion_compras?->codigoafip ?? ''));
         $afipLabel = $afip !== '' ? str_pad($afip, 2, '0', STR_PAD_LEFT) : '??';
+        $abrev = strtoupper((string) ($existente->tipotransaccion_compras?->abreviatura ?? 'FAC'));
         $comprobante = trim(sprintf(
-            'AFIP %s %s %s-%s',
-            $afipLabel,
+            '%s %s %s-%s (AFIP %s)',
+            $abrev,
             strtoupper((string) $existente->letra),
             $existente->sucursal,
             $existente->numerocomprobante,
+            $afipLabel,
         ));
-
-        $modulo = match ($existente->origen_entrada) {
-            ComprobanteProveedorOrigenEntrada::INGRESO_EGRESO => 'ingresos y egresos',
-            default => 'cuentas a pagar',
-        };
 
         $cuit = self::cuitDesdeComprobante($existente);
         $cuitFmt = $cuit !== '' ? self::formatearCuit($cuit) : 'sin CUIT';
+        $estado = strtoupper(trim((string) ($existente->estado ?? '')));
+        $origen = ComprobanteProveedorOrigenEntrada::etiqueta((string) ($existente->origen_entrada ?? ''));
+
+        if ($existente->trashed()) {
+            return sprintf(
+                'Ya existió el comprobante #%d (%s, CUIT %s), hoy eliminado. '
+                .'La misma identificación fiscal no se puede volver a dar de alta mientras ese registro conserve la clave única.',
+                $existente->id,
+                $comprobante,
+                $cuitFmt,
+            );
+        }
 
         return sprintf(
-            'Comprobante duplicado: ya existe %s para el CUIT %s (registro #%d en %s, origen %s). No se puede cargar dos veces desde distintos orígenes.',
+            'Ya existe el comprobante #%d (%s, CUIT %s, estado %s, origen %s). '
+            .'No se puede cargar dos veces: abrí ese registro para continuar o contabilizar.',
+            $existente->id,
             $comprobante,
             $cuitFmt,
-            $existente->id,
-            $modulo,
-            ComprobanteProveedorOrigenEntrada::etiqueta((string) ($existente->origen_entrada ?? '')),
+            $estado !== '' ? $estado : 'sin estado',
+            $origen,
         );
     }
 

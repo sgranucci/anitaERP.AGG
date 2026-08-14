@@ -9,10 +9,13 @@ use App\Repositories\Configuracion\TipodocumentoRepositoryInterface;
 use App\Services\Uif\ClientePremioUifFotoTesoreria;
 use App\Services\Uif\ClienteUifFotoDocumento;
 use App\Services\Uif\JuegoUifDesdeAnitaResolver;
+use App\Support\Uif\ClienteUifArchivoStorage;
 use App\Support\Uif\ClienteUifListadoFiltros;
+use App\Support\Uif\ClienteUifOrigenPcSupport;
 use Auth;
 use Exception;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Throwable;
 
 class Cliente_UifRepository implements Cliente_UifRepositoryInterface
 {
@@ -138,6 +141,26 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
     public function hayRegistrosClienteUifLocales(): bool
     {
         return $this->model->newQuery()->exists();
+    }
+
+    public function sincronizarArchivosAnitaSiCorresponde(Cliente_Uif $cliente): void
+    {
+        $clienteId = (int) ($cliente->id ?? 0);
+        $inro = (int) ($cliente->inroclienteid ?? 0);
+        if ($clienteId <= 0 || $inro <= 0) {
+            return;
+        }
+
+        $origen = ClienteUifOrigenPcSupport::origenDeCliente($cliente) ?? 'biyemas';
+
+        try {
+            ClienteUifArchivoStorage::withOrigen($origen, function () use ($clienteId, $inro) {
+                $this->cliente_archivo_uifRepository->traerArchivosDeAnita($clienteId, $inro);
+            });
+        } catch (Throwable $e) {
+            // No bloquear la edición si el montaje Anita no responde; el banner sigue indicando faltantes.
+            report($e);
+        }
     }
 
     public function create(array $data)

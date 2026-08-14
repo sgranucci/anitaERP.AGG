@@ -67,6 +67,7 @@ use App\Support\Listado\QueryRetornoListado;
                             <th>Proveedor</th>
                             <th>Tipo</th>
                             <th>Número</th>
+                            <th>OC</th>
                             <th>Fecha</th>
                             <th>Total</th>
                             <th>Estado</th>
@@ -76,12 +77,28 @@ use App\Support\Listado\QueryRetornoListado;
                     </thead>
                     <tbody>
                         @foreach ($datas as $row)
+                        @php
+                            $numeroOc = $row->ordencompras->numeroordencompra ?? null;
+                            $ordencompraId = (int) ($row->ordencompra_id ?? 0);
+                        @endphp
                         <tr>
                             <td>{{ $row->id }}</td>
                             <td><small>{{ $row->empresas->nombre ?? '' }}</small></td>
                             <td><small>{{ $row->proveedores->nombre ?? '' }}</small></td>
                             <td><small>{{ trim(($row->tipotransaccion_compras->abreviatura ?? '').' '.($row->tipotransaccion_compras->nombre ?? '')) }}</small></td>
                             <td><small>{{ $row->letra }}{{ $row->sucursal }}-{{ $row->numerocomprobante }}</small></td>
+                            <td>
+                                @if ($numeroOc !== null && $numeroOc !== '')
+                                    @if ($ordencompraId > 0 && can('editar-ordencompra', false))
+                                        <a href="{{ route('editar_ordencompra', ['id' => $ordencompraId, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                                           class="text-primary" target="_blank" rel="noopener" title="Consultar orden de compra">
+                                            <small>{{ $numeroOc }}</small>
+                                        </a>
+                                    @else
+                                        <small>{{ $numeroOc }}</small>
+                                    @endif
+                                @endif
+                            </td>
                             <td><small>{{ $row->fechacomprobante ? $row->fechacomprobante->format('d/m/Y') : '' }}</small></td>
                             <td><small>{{ number_format((float) $row->total, 2, ',', '.') }}</small></td>
                             <td><small>{{ $row->estado }}</small></td>

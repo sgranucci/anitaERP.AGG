@@ -15,4 +15,13 @@ return [
      */
     'recibo_base_modo' => env('SUELDOS_RECIBO_BASE_MODO', 'sin_valor'),
 
+    /**
+     * Proceso p-dtofallo: concepto de liquidación para cuotas de descuento por fallo.
+     * Código Anita/ERP (ej. 192 = DESCUENTO PREMIO FALLO CAJA). 0 = no genera novedad.
+     */
+    'concepto_descuento_fallo_codigo' => (int) env('SUELDOS_CONCEPTO_DTO_FALLO', 192),
+
+    /** Cuotas mensuales del plan de descuento (Anita: MESES_A_DESCONTAR = 10). */
+    'meses_descuento_fallo' => (int) env('SUELDOS_MESES_DTO_FALLO', 10),
+
 ];

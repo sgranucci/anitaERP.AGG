@@ -172,10 +172,11 @@ var totalHaberAsiento = 0;
     	});
     }
 
+	// Devuelve la promesa del $.get para que el llamador pueda esperar el alta de los CC.
 	function completarCentroCostoAsiento(ptrcodigo, cuentacontable_id, centrocosto_id){
 		let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontablecentrocosto/'+cuentacontable_id;
 
-		$.get(url_cta, function(data){
+		return $.get(url_cta, function(data){
 			if (data === "No maneja centro de costo")
 			{
 				$(ptrcodigo).parents("tr").find('.centrocostoasiento').empty();
@@ -217,7 +218,7 @@ var totalHaberAsiento = 0;
 			{
 				let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontableporcodigo/'+empresa_id+'/'+codigo_nuevo;
 
-				$.get(url_cta, function(data){
+				return $.get(url_cta, function(data){
 					$(codigo).parents("tr").find('.cuentacontable_id').val(data.id);
 					$(codigo).parents("tr").find(".cuentacontable_id_previa").val(data.id);
 					$(codigo).parents("tr").find(".nombrecuentacontable").val(data.nombre);
@@ -245,7 +246,7 @@ var totalHaberAsiento = 0;
 	function completarCentroCosto(ptrcodigo, cuentacontable_id, centrocosto_id){
 		let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontablecentrocosto/'+cuentacontable_id;
 
-		$.get(url_cta, function(data){
+		return $.get(url_cta, function(data){
 			if (data === "No maneja centro de costo")
 			{
 				$(ptrcodigo).parents("tr").find('.centrocostoasiento').empty();

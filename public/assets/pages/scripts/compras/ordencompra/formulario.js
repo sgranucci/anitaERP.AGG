@@ -1236,6 +1236,9 @@ $(function () {
 		};
 		if (idx >= 0 && ocComprobantesState[idx]) {
 			var prev = ocComprobantesState[idx];
+			if (prev.id) {
+				obj.id = prev.id;
+			}
 			obj.cuotas = prev.cuotas ? prev.cuotas.slice() : [];
 			obj.condicionpago_id = prev.condicionpago_id != null ? prev.condicionpago_id : null;
 			obj.cantidadcuota = prev.cantidadcuota != null ? prev.cantidadcuota : null;
@@ -1282,6 +1285,20 @@ $(function () {
 			return 0;
 		}
 		return Math.round(n * 100) / 100;
+	}
+
+	/** Reusa id de cuota por posición al regenerar, para no romper FK con facturas. */
+	function ocPreservarIdsCuotasPrevias(prevCuotas, nuevas) {
+		var prev = Array.isArray(prevCuotas) ? prevCuotas : [];
+		return (nuevas || []).map(function (q, i) {
+			var out = Object.assign({}, q);
+			if (prev[i] && prev[i].id) {
+				out.id = prev[i].id;
+			} else {
+				delete out.id;
+			}
+			return out;
+		});
 	}
 
 	(function ocInitTotalesReferenciaDesdeDom() {
@@ -1371,9 +1388,12 @@ $(function () {
 				cuotas[cuotas.length - 1].monto = ocRound2Money(cuotas[cuotas.length - 1].monto + dif);
 			}
 			if (ocComprobantesState[idx]) {
-				ocComprobantesState[idx].cuotas = cuotas;
+				ocComprobantesState[idx].cuotas = ocPreservarIdsCuotasPrevias(
+					ocComprobantesState[idx].cuotas,
+					cuotas
+				);
 				ocComprobantesState[idx].condicionpago_id = cp;
-				ocComprobantesState[idx].cantidadcuota = cuotas.length;
+				ocComprobantesState[idx].cantidadcuota = ocComprobantesState[idx].cuotas.length;
 			}
 			ocSyncComprobantesToHidden();
 			ocRenderTablaComprobantes();
@@ -1484,6 +1504,9 @@ $(function () {
 		var abrevEsc = $('<div/>').text(abrevTxt).html();
 		(cuotas || []).forEach(function (q, i) {
 			var $tr = $('<tr/>').attr('data-row', i);
+			if (q && q.id) {
+				$tr.attr('data-cuota-id', String(q.id));
+			}
 			$tr.append('<td class="align-middle">' + (i + 1) + '</td>');
 			$tr.append('<td><input type="date" class="form-control form-control-sm oc-inp-fv" value="' + String(q.fechavencimiento || '').substring(0, 10) + '"/></td>');
 			$tr.append('<td><input type="number" step="0.01" class="form-control form-control-sm oc-inp-monto" value="' + (q.monto != null ? q.monto : '') + '"/></td>');
@@ -1510,7 +1533,7 @@ $(function () {
 		var out = [];
 		$('#oc_cuotas_tbody tr').each(function () {
 			var $tr = $(this);
-			out.push({
+			var row = {
 				fechavencimiento: $tr.find('.oc-inp-fv').val() || '',
 				monto: parseFloat($tr.find('.oc-inp-monto').val()) || 0,
 				moneda_id: parseInt($tr.find('.oc-inp-moneda').val(), 10) || 1,
@@ -1523,7 +1546,12 @@ $(function () {
 					return v > 0 ? v : ocPrimerFormapagoId();
 				})(),
 				detalle: $tr.find('.oc-inp-det').val() || ''
-			});
+			};
+			var cuotaId = parseInt($tr.attr('data-cuota-id'), 10);
+			if (cuotaId > 0) {
+				row.id = cuotaId;
+			}
+			out.push(row);
 		});
 		return out;
 	}
@@ -1757,6 +1785,7 @@ $(function () {
 					}
 				});
 				if (ocComprobantesState[idx]) {
+					cuotas = ocPreservarIdsCuotasPrevias(ocComprobantesState[idx].cuotas, cuotas);
 					ocComprobantesState[idx].cuotas = cuotas;
 					ocComprobantesState[idx].condicionpago_id = cp;
 				}
@@ -1803,10 +1832,10 @@ $(function () {
 					detalle: ocDetalleCuotaLineaDesdeComp(c, 'Cuota ' + (i + 1))
 				});
 			}
-			c.cuotas = cuotas;
+			c.cuotas = ocPreservarIdsCuotasPrevias(c.cuotas, cuotas);
 			c.condicionpago_id = null;
 			ocSyncComprobantesToHidden();
-			ocRenderCuotasTbody(cuotas);
+			ocRenderCuotasTbody(c.cuotas);
 		});
 	});
 
@@ -1851,10 +1880,10 @@ $(function () {
 					detalle: ocDetalleCuotaLineaDesdeComp(c, 'Cuota ' + (i + 1))
 				});
 			}
-			c.cuotas = cuotas;
+			c.cuotas = ocPreservarIdsCuotasPrevias(c.cuotas, cuotas);
 			c.condicionpago_id = null;
 			ocSyncComprobantesToHidden();
-			ocRenderCuotasTbody(cuotas);
+			ocRenderCuotasTbody(c.cuotas);
 		});
 	});
 

@@ -79,7 +79,8 @@ class Comprobante_ProveedorRepository implements Comprobante_ProveedorRepository
             ->leftJoin('empresa', 'empresa.id', '=', 'comprobante_proveedor.empresa_id')
             ->leftJoin('proveedor', 'proveedor.id', '=', 'comprobante_proveedor.proveedor_id')
             ->leftJoin('tipotransaccion_compra', 'tipotransaccion_compra.id', '=', 'comprobante_proveedor.tipotransaccion_compra_id')
-            ->with(['empresas', 'proveedores', 'tipotransaccion_compras'])
+            ->leftJoin('ordencompra', 'ordencompra.id', '=', 'comprobante_proveedor.ordencompra_id')
+            ->with(['empresas', 'proveedores', 'tipotransaccion_compras', 'ordencompras:id,numeroordencompra'])
             ->orderByDesc('comprobante_proveedor.id');
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'comprobante_proveedor.empresa_id');

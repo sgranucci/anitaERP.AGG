@@ -16,6 +16,7 @@ use App\Queries\Contable\AsientoQueryInterface;
 use App\Exports\Contable\AsientoDetalleExport;
 use App\Exports\Contable\AsientoExport;
 use App\Models\Contable\Asiento;
+use App\Models\Contable\Configuracion_AsientoContable;
 use App\Services\Contable\AsientoAprobacionService;
 use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Contable\AsientoCuentaUsuarioSupport;
@@ -161,7 +162,7 @@ class AsientoController extends Controller
         return redirect()->route('asiento', AsientoListadoFiltros::paraQueryString($filtros));
     }
 
-    public function imprimirPdf($id)
+    public function imprimirPdf(Request $request, $id)
     {
         if (! can('listar-asiento', false) && ! can('editar-asiento', false)) {
             return redirect()->route('inicio')->with('mensaje', 'No tienes permisos para imprimir el asiento');
@@ -176,6 +177,10 @@ class AsientoController extends Controller
         $pdf->loadHTML($html);
 
         $nombreArchivo = 'Asiento_'.preg_replace('/[^\w\-]+/', '_', (string) $data->numeroasiento).'.pdf';
+
+        if ($request->boolean('inline')) {
+            return $pdf->stream($nombreArchivo);
+        }
 
         return $pdf->download($nombreArchivo);
     }
@@ -299,15 +304,26 @@ class AsientoController extends Controller
             return response()->json(['errores' => $e->getMessage()]);
         }
 
+        $urlImpresion = null;
+        if (can('listar-asiento', false) || can('editar-asiento', false)) {
+            $urlImpresion = Configuracion_AsientoContable::vigente()->urlImpresionAlta((int) $asiento->id);
+        }
+
         if ($evaluacion['requiere_aprobacion']) {
             return response()->json([
                 'mensaje' => 'pendiente',
                 'asiento_id' => $asiento->id,
                 'numeroasiento' => $asiento->numeroasiento,
+                'url_impresion_asiento' => $urlImpresion,
             ]);
         }
 
-        return response()->json(['mensaje' => 'ok']);
+        return response()->json([
+            'mensaje' => 'ok',
+            'asiento_id' => $asiento->id,
+            'numeroasiento' => $asiento->numeroasiento,
+            'url_impresion_asiento' => $urlImpresion,
+        ]);
 	}
 
     public function validarCuentasUsuario(Request $request)

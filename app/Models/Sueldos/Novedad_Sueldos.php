@@ -34,6 +34,7 @@ class Novedad_Sueldos extends Model implements Auditable
         'periodo',
         'origen',
         'ausencia_id',
+        'dtofallo_id',
         'usuario_id',
         'observacion',
     ];
@@ -52,6 +53,7 @@ class Novedad_Sueldos extends Model implements Auditable
         'nro_interno' => 'integer',
         'periodo' => 'integer',
         'ausencia_id' => 'integer',
+        'dtofallo_id' => 'integer',
         'usuario_id' => 'integer',
     ];
 
@@ -89,6 +91,11 @@ class Novedad_Sueldos extends Model implements Auditable
     public function ausencia(): BelongsTo
     {
         return $this->belongsTo(Empleado_Ausencia_Sueldos::class, 'ausencia_id');
+    }
+
+    public function dtofallo(): BelongsTo
+    {
+        return $this->belongsTo(Dtofallo_Sueldos::class, 'dtofallo_id');
     }
 
     public function estadoLabel(): string

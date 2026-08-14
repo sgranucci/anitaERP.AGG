@@ -1104,7 +1104,9 @@ var montoPendienteSp = 0;
 						);
 					});
 
-					// Rellena select de moneda y centros de costo (respeta CC de la SP)
+					// Rellena select de moneda y centros de costo (respeta CC de la SP).
+					// Los CC llegan por AJAX: se juntan las promesas para no validar antes.
+					var promesasCentroCosto = [];
 					$("#cuenta-asiento-table .item-cuenta-asiento").each(function() {
 						armaSelectMoneda(this);
 
@@ -1113,23 +1115,25 @@ var montoPendienteSp = 0;
 						var cuentaId = parseInt($tr.find(".cuentacontable_id").val() || '0', 10) || 0;
 						var ccPrevio = parseInt($tr.find(".centrocostoasiento_id_previo").val() || '0', 10) || 0;
 						if (cuentaId > 0 && typeof completarCentroCostoAsiento === 'function') {
-							completarCentroCostoAsiento(codigoPtr, cuentaId, ccPrevio);
+							promesasCentroCosto.push(completarCentroCostoAsiento(codigoPtr, cuentaId, ccPrevio));
 						} else if (cuentaId > 0 && typeof completarCentroCosto === 'function') {
-							completarCentroCosto(codigoPtr, cuentaId, ccPrevio);
+							promesasCentroCosto.push(completarCentroCosto(codigoPtr, cuentaId, ccPrevio));
 						} else {
-							leeCentroCostoAsiento(codigoPtr);
+							promesasCentroCosto.push(leeCentroCostoAsiento(codigoPtr));
 						}
 					});
 
-					// Suma totales del asiento
-					sumaMontoAsiento();
+					$.when.apply($, promesasCentroCosto).always(function () {
+						// Suma totales del asiento
+						sumaMontoAsiento();
 
-					totalDebeAsiento = parseTotalAsientoCampo($("#totaldebeasiento").val());
-					totalHaberAsiento = parseTotalAsientoCampo($("#totalhaberasiento").val());
-					flModificaAsiento = false;
-					if (callback) {
-						callback(true);
-					}
+						totalDebeAsiento = parseTotalAsientoCampo($("#totaldebeasiento").val());
+						totalHaberAsiento = parseTotalAsientoCampo($("#totalhaberasiento").val());
+						flModificaAsiento = false;
+						if (callback) {
+							callback(true);
+						}
+					});
 				}
 				else {
 					alert("Error en generación del asiento contable");

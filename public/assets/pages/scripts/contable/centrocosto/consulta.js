@@ -76,14 +76,46 @@ function aplicarCentrocostoEnCampo($ctx, data) {
         return;
     }
     $ctx.find('.centrocosto_id').val(data.id || '').trigger('change');
-    $ctx.find('.codigocentrocosto').val(data.codigo || '');
+    $ctx.find('.codigocentrocosto').val(data.codigo || '').removeData('ccValorInvalido');
     $ctx.find('.descripcioncentrocosto').val(data.nombre || data.descripcion || '');
     actualizarLinkEditarCentrocosto($ctx, data.id);
+}
+
+/** Deja el foco en el código para corregir sin repetir el aviso. */
+function avisarCentrocostoInvalido($input, cod, mensaje) {
+    if ($input.length) {
+        $input.data('ccValorInvalido', cod);
+    }
+    if (mensaje) {
+        alert(mensaje);
+    }
+    setTimeout(function () {
+        if (!$input.length) {
+            return;
+        }
+        $input.trigger('focus');
+        if ($input.get(0) && typeof $input.get(0).select === 'function') {
+            $input.get(0).select();
+        }
+    }, 0);
 }
 
 function leerCentrocostoPorCodigo(codigo, ptrrenglon, onDone) {
     var cod = (codigo || '').trim();
     var $ctx = $(ptrrenglon).closest('.tm-centrocosto-campo');
+    var $input = $ctx.length ? $ctx.find('.codigocentrocosto').first() : $(ptrrenglon);
+
+    if ($input.data('ccResolviendo')) {
+        return;
+    }
+    if (cod && $input.data('ccValorInvalido') === cod) {
+        if (typeof onDone === 'function') {
+            onDone(null);
+        }
+        return;
+    }
+    $input.removeData('ccValorInvalido');
+
     if (!cod) {
         if ($ctx.length) {
             $ctx.find('.centrocosto_id').val('').trigger('change');
@@ -101,13 +133,14 @@ function leerCentrocostoPorCodigo(codigo, ptrrenglon, onDone) {
         $ctx.find('.descripcioncentrocosto').val('');
     }
 
+    $input.data('ccResolviendo', true);
     $.getJSON(carpetaBase + '/contable/centrocosto/resolvercentrocosto', { valor: cod })
         .done(function (data) {
             if (!data || !data.ok) {
                 if ($ctx.length) {
                     $ctx.find('.codigocentrocosto').val(cod);
                 }
-                alert(data && data.mensaje ? data.mensaje : 'Centro de costo no encontrado');
+                avisarCentrocostoInvalido($input, cod, data && data.mensaje ? data.mensaje : 'Centro de costo no encontrado');
                 if (typeof onDone === 'function') {
                     onDone(null);
                 }
@@ -123,9 +156,13 @@ function leerCentrocostoPorCodigo(codigo, ptrrenglon, onDone) {
             if ($ctx.length) {
                 $ctx.find('.codigocentrocosto').val(cod);
             }
+            avisarCentrocostoInvalido($input, cod, '');
             if (typeof onDone === 'function') {
                 onDone(null);
             }
+        })
+        .always(function () {
+            $input.removeData('ccResolviendo');
         });
 }
 
@@ -207,6 +244,12 @@ function activa_eventos_consultacentrocosto() {
         });
 
     $(document)
+        .off('input.ccConsultaCod', '.tm-centrocosto-campo .codigocentrocosto')
+        .on('input.ccConsultaCod', '.tm-centrocosto-campo .codigocentrocosto', function () {
+            $(this).removeData('ccValorInvalido');
+        });
+
+    $(document)
         .off('change.ccConsultaCod blur.ccConsultaCod', '.tm-centrocosto-campo .codigocentrocosto')
         .on('change.ccConsultaCod blur.ccConsultaCod', '.tm-centrocosto-campo .codigocentrocosto', function () {
             leerCentrocostoPorCodigo($(this).val(), this);
@@ -223,6 +266,8 @@ function activa_eventos_consultacentrocosto() {
             if (e.key === 'Enter' || e.code === 'Enter' || e.keyCode === 13 || e.which === 13) {
                 e.preventDefault();
                 e.stopPropagation();
+                var inputCodigo = this;
+                $(this).removeData('ccValorInvalido');
                 leerCentrocostoPorCodigo($(this).val(), this, function (data) {
                     if (!data || !data.id) {
                         return;
@@ -230,6 +275,10 @@ function activa_eventos_consultacentrocosto() {
                     var $modalArbol = $('#modalRequisicionCentrocostoRetomeArbol');
                     if ($modalArbol.hasClass('show') || $modalArbol.hasClass('in')) {
                         $('#requisicionCentrocostoRetomeArbolConfirmar').focus();
+                        return;
+                    }
+                    if (typeof window.afterCentrocostoEnterOk === 'function') {
+                        window.afterCentrocostoEnterOk(data, inputCodigo);
                     }
                 });
             }

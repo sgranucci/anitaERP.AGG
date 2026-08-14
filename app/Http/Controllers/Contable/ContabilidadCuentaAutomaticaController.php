@@ -6,10 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionContabilidadCuentaAutomatica;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Contable\Contabilidad_CuentaAutomatica;
+use App\Models\Contable\Contabilidad_CuentaAutomaticaDetalle;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Contable\ContabilidadCuentaAutomaticaSeedService;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
+use Illuminate\Support\Facades\DB;
 
 class ContabilidadCuentaAutomaticaController extends Controller
 {
@@ -53,32 +55,97 @@ class ContabilidadCuentaAutomaticaController extends Controller
         }
 
         $cuentas = $request->validated('cuentas') ?? [];
+        $cuentasMultiples = $request->validated('cuentas_multiples') ?? [];
 
-        foreach (CuentaAutomaticaClaves::todasLasClaves() as $clave) {
-            $cuentaId = isset($cuentas[$clave]) ? (int) $cuentas[$clave] : null;
-            if ($cuentaId !== null && $cuentaId <= 0) {
-                $cuentaId = null;
-            }
+        try {
+            DB::transaction(function () use ($empresaId, $cuentas, $cuentasMultiples) {
+                foreach (CuentaAutomaticaClaves::todasLasClaves() as $clave) {
+                    if (CuentaAutomaticaClaves::esMultiple($clave)) {
+                        $this->sincronizarCuentasMultiples(
+                            $empresaId,
+                            $clave,
+                            $cuentasMultiples[$clave] ?? []
+                        );
 
-            if ($cuentaId !== null) {
-                $existe = Cuentacontable::query()
-                    ->where('id', $cuentaId)
-                    ->where('empresa_id', $empresaId)
-                    ->exists();
-                if (! $existe) {
-                    return redirect(self::RUTA_INDEX.'?empresa_id='.$empresaId)
-                        ->with('errores', ['La cuenta '.$clave.' no existe o no pertenece a la empresa.']);
+                        continue;
+                    }
+
+                    $cuentaId = isset($cuentas[$clave]) ? (int) $cuentas[$clave] : null;
+                    if ($cuentaId !== null && $cuentaId <= 0) {
+                        $cuentaId = null;
+                    }
+
+                    if ($cuentaId !== null) {
+                        $existe = Cuentacontable::query()
+                            ->where('id', $cuentaId)
+                            ->where('empresa_id', $empresaId)
+                            ->exists();
+                        if (! $existe) {
+                            throw new \RuntimeException(
+                                'La cuenta '.$clave.' no existe o no pertenece a la empresa.'
+                            );
+                        }
+                    }
+
+                    Contabilidad_CuentaAutomatica::query()->updateOrCreate(
+                        ['empresa_id' => $empresaId, 'clave' => $clave],
+                        ['cuentacontable_id' => $cuentaId],
+                    );
                 }
-            }
-
-            Contabilidad_CuentaAutomatica::query()->updateOrCreate(
-                ['empresa_id' => $empresaId, 'clave' => $clave],
-                ['cuentacontable_id' => $cuentaId],
-            );
+            });
+        } catch (\Throwable $e) {
+            return redirect(self::RUTA_INDEX.'?empresa_id='.$empresaId)
+                ->with('errores', [$e->getMessage()]);
         }
 
         return redirect(self::RUTA_INDEX.'?empresa_id='.$empresaId)
             ->with('mensaje', 'Cuentas automáticas guardadas.');
+    }
+
+    /**
+     * @param  list<int|string|null>  $cuentaIds
+     */
+    private function sincronizarCuentasMultiples(int $empresaId, string $clave, array $cuentaIds): void
+    {
+        $ids = [];
+        foreach ($cuentaIds as $raw) {
+            $id = (int) $raw;
+            if ($id <= 0) {
+                continue;
+            }
+            $ids[$id] = $id;
+        }
+        $ids = array_values($ids);
+
+        foreach ($ids as $cuentaId) {
+            $existe = Cuentacontable::query()
+                ->where('id', $cuentaId)
+                ->where('empresa_id', $empresaId)
+                ->exists();
+            if (! $existe) {
+                throw new \RuntimeException(
+                    'Una cuenta de '.$clave.' no existe o no pertenece a la empresa.'
+                );
+            }
+        }
+
+        Contabilidad_CuentaAutomatica::query()->updateOrCreate(
+            ['empresa_id' => $empresaId, 'clave' => $clave],
+            ['cuentacontable_id' => $ids[0] ?? null],
+        );
+
+        Contabilidad_CuentaAutomaticaDetalle::query()
+            ->where('empresa_id', $empresaId)
+            ->where('clave', $clave)
+            ->delete();
+
+        foreach ($ids as $cuentaId) {
+            Contabilidad_CuentaAutomaticaDetalle::query()->create([
+                'empresa_id' => $empresaId,
+                'clave' => $clave,
+                'cuentacontable_id' => $cuentaId,
+            ]);
+        }
     }
 
     /**
@@ -91,13 +158,69 @@ class ContabilidadCuentaAutomaticaController extends Controller
             ->get()
             ->keyBy('clave');
 
+        $detallesPorClave = Contabilidad_CuentaAutomaticaDetalle::query()
+            ->with('cuentacontables:id,codigo,nombre,empresa_id')
+            ->where('empresa_id', $empresaId)
+            ->orderBy('id')
+            ->get()
+            ->groupBy('clave');
+
         $filas = [];
         foreach (CuentaAutomaticaClaves::catalogo() as $clave => $meta) {
+            $multiple = ! empty($meta['multiple']);
             $row = $centralRows->get($clave);
-            $displayCentralId = self::intOrNull($row?->cuentacontable_id);
-            $efectivoId = CuentaAutomaticaResolver::resolverId($empresaId, $clave);
             $overrideModulo = CuentaAutomaticaResolver::tieneOverrideModulo($empresaId, $clave);
 
+            if ($multiple) {
+                $cuentas = [];
+                foreach ($detallesPorClave->get($clave, collect()) as $detalle) {
+                    $cuenta = $detalle->cuentacontables;
+                    if ($cuenta === null || (int) ($cuenta->empresa_id ?? 0) !== $empresaId) {
+                        continue;
+                    }
+                    $cuentas[] = [
+                        'cuentacontable_id' => (int) $cuenta->id,
+                        'codigo' => (string) ($cuenta->codigo ?? ''),
+                        'nombre' => (string) ($cuenta->nombre ?? ''),
+                    ];
+                }
+
+                // Fallback a fila simple si aún no hay detalle.
+                if ($cuentas === []) {
+                    $legacyId = self::intOrNull($row?->cuentacontable_id);
+                    if ($legacyId !== null) {
+                        $cuentaLegacy = Cuentacontable::query()
+                            ->where('id', $legacyId)
+                            ->where('empresa_id', $empresaId)
+                            ->first();
+                        if ($cuentaLegacy !== null) {
+                            $cuentas[] = [
+                                'cuentacontable_id' => (int) $cuentaLegacy->id,
+                                'codigo' => (string) ($cuentaLegacy->codigo ?? ''),
+                                'nombre' => (string) ($cuentaLegacy->nombre ?? ''),
+                            ];
+                        }
+                    }
+                }
+
+                $filas[] = [
+                    'clave' => $clave,
+                    'grupo' => $meta['grupo'],
+                    'descripcion' => $meta['descripcion'],
+                    'multiple' => true,
+                    'cuentas' => $cuentas,
+                    'cuentacontable_id' => $cuentas[0]['cuentacontable_id'] ?? null,
+                    'codigo' => $cuentas[0]['codigo'] ?? '',
+                    'nombre' => $cuentas[0]['nombre'] ?? '',
+                    'efectivo_id' => $cuentas[0]['cuentacontable_id'] ?? null,
+                    'override_modulo' => $overrideModulo,
+                ];
+
+                continue;
+            }
+
+            $displayCentralId = self::intOrNull($row?->cuentacontable_id);
+            $efectivoId = CuentaAutomaticaResolver::resolverId($empresaId, $clave);
             $cuentaCentral = $displayCentralId
                 ? Cuentacontable::query()->where('id', $displayCentralId)->where('empresa_id', $empresaId)->first()
                 : null;
@@ -106,6 +229,8 @@ class ContabilidadCuentaAutomaticaController extends Controller
                 'clave' => $clave,
                 'grupo' => $meta['grupo'],
                 'descripcion' => $meta['descripcion'],
+                'multiple' => false,
+                'cuentas' => [],
                 'cuentacontable_id' => $displayCentralId,
                 'codigo' => $cuentaCentral?->codigo ?? '',
                 'nombre' => $cuentaCentral?->nombre ?? '',

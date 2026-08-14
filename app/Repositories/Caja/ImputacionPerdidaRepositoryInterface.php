@@ -24,4 +24,9 @@ interface ImputacionPerdidaRepositoryInterface
      * @return array{en_anita: int, importados: int, omitidos: int, errores: list<string>}
      */
     public function sincronizarConAnita(?int $codigo = null): array;
+
+    /**
+     * @return array{actualizados: int, errores: list<string>}
+     */
+    public function refrescarLineasEmpresaDesdeAnita(): array;
 }

@@ -29,7 +29,7 @@
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => ImputacionPerdidaListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
                         'limpiarUrl' => route('imputacion_perdida'),
-                        'placeholder' => 'B&uacute;squeda r&aacute;pida (tolera errores de tipeo)&hellip;',
+                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
                         'toggleTarget' => '#panel-filtros-imputacion-perdida',
                         'toggleId' => 'btn-toggle-filtros-imputacion-perdida',
                         'inputId' => 'filtro_valor',
@@ -55,7 +55,7 @@
                             <th class="width80">C&oacute;digo</th>
                             <th>Nombre</th>
                             <th>Empresas / cuentas</th>
-                            <th class="width80" data-orderable="false"></th>
+                            <th class="width120 text-nowrap" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -76,7 +76,7 @@
                                     <span class="text-muted">Sin empresas</span>
                                 @endforelse
                             </td>
-                            <td>
+                            <td class="text-nowrap">
                                 @if (can('editar-imputacion-perdida', false))
                                     <a href="{{ route('editar_imputacion_perdida', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                         <i class="fa fa-edit"></i>

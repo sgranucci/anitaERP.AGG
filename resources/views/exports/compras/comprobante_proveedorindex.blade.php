@@ -27,13 +27,13 @@
 @endphp
 <table>
     @if ($reservarFilaLogoExcel ?? false)
-    <tr><td colspan="10" style="height: 52px;">&#160;</td></tr>
+    <tr><td colspan="11" style="height: 52px;">&#160;</td></tr>
     @endif
     <tr>
-        <td colspan="10"><strong style="font-size: 16pt;">Listado de comprobantes de proveedor</strong></td>
+        <td colspan="11"><strong style="font-size: 16pt;">Listado de comprobantes de proveedor</strong></td>
     </tr>
     <tr>
-        <td colspan="10"><strong>{{ $subtitulo }}</strong></td>
+        <td colspan="11"><strong>{{ $subtitulo }}</strong></td>
     </tr>
     <thead>
         <tr>
@@ -42,6 +42,7 @@
             <th>Proveedor</th>
             <th>Tipo</th>
             <th>N&uacute;mero</th>
+            <th>OC</th>
             <th>Fecha</th>
             <th>Total</th>
             <th>Estado</th>
@@ -57,6 +58,7 @@
             <td>{{ $row->proveedores->nombre ?? '' }}</td>
             <td>{{ trim(($row->tipotransaccion_compras->abreviatura ?? '').' '.($row->tipotransaccion_compras->nombre ?? '')) }}</td>
             <td>{{ $row->letra }}{{ $row->sucursal }}-{{ $row->numerocomprobante }}</td>
+            <td>{{ $row->ordencompras->numeroordencompra ?? '' }}</td>
             <td>{{ $row->fechacomprobante ? $row->fechacomprobante->format('d/m/Y') : '' }}</td>
             <td>{{ $fmtMonto($row->total) }}</td>
             <td>{{ $row->estado }}</td>

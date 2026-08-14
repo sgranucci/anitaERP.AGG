@@ -16,7 +16,7 @@ class ContabilidadCuentaAutomaticaSeedService
     private const CODIGO_SUGERIDO_POR_CLAVE = [
         CuentaAutomaticaClaves::CAJA_CHEQUES_DIFERIDOS => '211010013',
         CuentaAutomaticaClaves::CAJA_VALORES_A_DEPOSITAR => '111040000',
-        CuentaAutomaticaClaves::STOCK_TRANSFERENCIA_OTROS_ACTIVOS => '117010001',
+        // stock.transferencia_otros_activos: multi-cuenta; se configura en Contable → Cuentas automáticas.
         CuentaAutomaticaClaves::CIERRE_ESTACIONAMIENTO_VENTAS => '415010003',
         CuentaAutomaticaClaves::CIERRE_ESTACIONAMIENTO_DIFERENCIA_CAJA => '521280004',
         CuentaAutomaticaClaves::CIERRE_VENDING_VENTAS => '414010001',

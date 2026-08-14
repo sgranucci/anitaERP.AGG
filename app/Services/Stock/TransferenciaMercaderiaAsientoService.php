@@ -10,6 +10,7 @@ use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\MovimientoStockCuadreContableSupport;
 use App\Support\Stock\TransferenciaMercaderiaAsientoSupport;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -78,7 +79,11 @@ class TransferenciaMercaderiaAsientoService
         return $this->generarDesdeTransferencia($transferencia);
     }
 
-    public function generarDesdeTransferencia(Transferencia_Mercaderia $transferencia): int
+    public function generarDesdeTransferencia(
+        Transferencia_Mercaderia $transferencia,
+        ?string $fechaAsiento = null,
+        bool $omitirValidacionDeposito = false,
+    ): int
     {
         $transferencia->loadMissing([
             'articulos.articuloOrigen.articulo_cuentacontables',
@@ -88,17 +93,23 @@ class TransferenciaMercaderiaAsientoService
             'tipotransaccion_stock',
         ]);
 
+        $fechaContable = $fechaAsiento !== null
+            ? Carbon::parse($fechaAsiento)->format('Y-m-d')
+            : ($transferencia->fecha?->format('Y-m-d') ?? now()->format('Y-m-d'));
+
         PeriodoContableCierreSupport::assertOperacionPermitida(
             (int) $transferencia->empresa_id,
-            $transferencia->fecha?->format('Y-m-d') ?? now()->format('Y-m-d'),
+            $fechaContable,
             PeriodoContableCierreSupport::ALCANCE_TRANSFERENCIA
         );
 
         $preview = TransferenciaMercaderiaAsientoSupport::armarPreview(
             $transferencia,
-            $this->tipoasientoRepository
+            $this->tipoasientoRepository,
+            $omitirValidacionDeposito
         );
         MovimientoStockCuadreContableSupport::assertPreview($preview);
+        $preview['payload_asiento']['fecha'] = $fechaContable;
 
         if ($preview['advertencias'] !== []) {
             Log::info('TransferenciaMercaderiaAsiento: advertencias de precio/cuentas', [
@@ -144,7 +155,8 @@ class TransferenciaMercaderiaAsientoService
     }
 
     /**
-     * @param  array<string, mixed>|null  $preview
+     * @param  array<string, mixed>|null  $preview preview de alta/regeneración; null = armar desde asiento ERP
+     *        (obligatorio en reversiones: armarPreview revalida depósito de recepción y falla).
      */
     public function sincronizarCtamovAnitaTransferencia(Transferencia_Mercaderia $transferencia, ?array $preview = null): void
     {
@@ -157,20 +169,36 @@ class TransferenciaMercaderiaAsientoService
             throw new \RuntimeException('La transferencia no tiene asiento contable asociado.');
         }
 
-        $transferencia->loadMissing('asientos');
+        $transferencia->loadMissing(['asientos.asiento_movimientos', 'tipotransaccion_stock']);
         $asiento = $transferencia->asientos;
         if (! $asiento) {
             throw new \RuntimeException('No se encontró el asiento id '.$asientoId.' de la transferencia.');
         }
 
-        $preview ??= TransferenciaMercaderiaAsientoSupport::armarPreview(
-            $transferencia->loadMissing([
-                'articulos.articuloOrigen.articulo_cuentacontables',
-                'tipotransaccion_stock',
-            ]),
-            $this->tipoasientoRepository
-        );
-        $payload = $preview['payload_asiento'];
+        $esReverso = (int) ($transferencia->transferencia_origen_id ?? 0) > 0;
+
+        if ($preview !== null) {
+            $payload = $preview['payload_asiento'];
+        } elseif ($esReverso || $asiento->asiento_movimientos->isNotEmpty()) {
+            // Reversión / re-sync: usar movimientos ya grabados en ERP.
+            // No llamar armarPreview: en reverso el depósito origen es el destino original
+            // y falla la regla "debe coincidir con última recepción" (incidente TM#443).
+            $payload = $this->asientoRepository->armarPayloadAnitaDesdeModelo($asiento);
+            $payload = array_merge(
+                $payload,
+                TransferenciaMercaderiaAsientoSupport::claveComprobanteDesdeCodigo((string) ($transferencia->codigo ?? '')),
+                ['sistema_ctav' => 'S']
+            );
+        } else {
+            $preview = TransferenciaMercaderiaAsientoSupport::armarPreview(
+                $transferencia->loadMissing([
+                    'articulos.articuloOrigen.articulo_cuentacontables',
+                    'tipotransaccion_stock',
+                ]),
+                $this->tipoasientoRepository
+            );
+            $payload = $preview['payload_asiento'];
+        }
 
         $fechaAsiento = $asiento->fecha;
         if ($fechaAsiento instanceof \DateTimeInterface) {

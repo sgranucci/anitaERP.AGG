@@ -7,8 +7,13 @@
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
 <script>
     window.perdidaPersonalConceptosMaquina = @json($conceptos_con_maquina ?? [6, 8]);
-    window.perdidaPersonalEmpleadosUrl = @json(route('empleados_empresa_perdida_personal'));
+    window.perdidaPersonalCatalogosUrls = {
+        consulta: @json(route('consultar_catalogo_perdida_personal')),
+        resolver: @json(route('resolver_catalogo_perdida_personal'))
+    };
 </script>
+<script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/perdida_personal/consulta_catalogos.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/perdida_personal/form.js') }}" type="text/javascript"></script>
 @endsection
 
@@ -46,4 +51,6 @@
         </div>
     </div>
 </div>
+@include('includes.contable.modalconsultacentrocosto')
+@include('includes.caja.modalconsultacatalogoperdidapersonal')
 @endsection

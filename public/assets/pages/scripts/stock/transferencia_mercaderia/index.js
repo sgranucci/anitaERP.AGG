@@ -174,12 +174,12 @@
     };
 
     function validarLineaContableAsync(articuloId) {
-        if (!tipoManejaContabilidad() || !window.TM_URLS.validarLineaContable) {
+        if (!window.TM_URLS.validarLineaContable) {
             return $.Deferred()
                 .resolve({ ok: true, permitido: true, contabilidad_activa: false })
                 .promise();
         }
-        if (tipoOrigenBienUso()) {
+        if (tipoManejaContabilidad() && tipoOrigenBienUso()) {
             return $.Deferred()
                 .resolve({
                     ok: true,
@@ -196,6 +196,20 @@
             empresa_id: empresaId(),
             tipotransaccion_stock_id: tipotransaccionStockId(),
         });
+    }
+
+    function aplicarTipoTrcontSiCorresponde(resp) {
+        var tipoTrcontId = parseInt(resp && resp.tipo_trcont_id, 10) || 0;
+        if (!resp || !resp.es_contabilizable || tipoManejaContabilidad() || tipoTrcontId <= 0) {
+            return false;
+        }
+        var $tipo = $('#tipotransaccion_stock_id');
+        if (!$tipo.find('option[value="' + tipoTrcontId + '"]').length) {
+            return false;
+        }
+        $tipo.val(String(tipoTrcontId)).trigger('change');
+        setEstado('Artículo contabilizable: se seleccionó TRCONT automáticamente.');
+        return true;
     }
 
     function todasLineasContablesValidas() {
@@ -440,18 +454,20 @@
             return;
         }
 
-        if (tipoManejaContabilidad() && !tipoOrigenBienUso()) {
+        if (!tipoOrigenBienUso()) {
             validarLineaContableAsync(f.articulo_id)
                 .done(function (resp) {
-                    if (resp.contabilidad_activa && !resp.permitido) {
-                        var msgContable = resp.motivo || 'Línea no válida para TRCONT.';
-                        setEstado(msgContable, true);
-                        mostrarAlertaBanner(msgContable, 'Artículo no válido para TRCONT');
-                        return;
+                    if (aplicarTipoTrcontSiCorresponde(resp)) {
+                        validarLineaContableAsync(f.articulo_id)
+                            .done(function (respTrcont) {
+                                procesarValidacionFilaManual(f, respTrcont);
+                            })
+                            .fail(function () {
+                                setEstado('Error al validar línea contable.', true);
+                            });
+                    } else {
+                        procesarValidacionFilaManual(f, resp);
                     }
-                    f.contable_valido = !resp.contabilidad_activa || !!resp.permitido;
-                    f.familia_contable = resp.familia || '';
-                    agregarFilaManualConfirmado(f);
                 })
                 .fail(function () {
                     setEstado('Error al validar línea contable.', true);
@@ -461,6 +477,30 @@
 
         f.contable_valido = true;
         agregarFilaManualConfirmado(f);
+    }
+
+    function procesarValidacionFilaManual(f, resp) {
+        if (resp.contabilidad_activa && !resp.permitido) {
+            var msgContable = resp.motivo || 'Línea no válida para TRCONT.';
+            setEstado(msgContable, true);
+            mostrarAlertaBanner(msgContable, 'Artículo no válido para TRCONT');
+            return;
+        }
+        f.contable_valido = !resp.contabilidad_activa || !!resp.permitido;
+        f.familia_contable = resp.familia || '';
+        agregarFilaManualConfirmado(f);
+    }
+
+    function evaluarTipoAutomaticoFila($card) {
+        if (tipoManejaContabilidad() || tipoOrigenBienUso()) {
+            return;
+        }
+        var cantidad = parseFloat($card.find('.tm-cant').val()) || 0;
+        var articuloId = parseInt($card.attr('data-articulo-id'), 10) || 0;
+        if (cantidad <= 0 || articuloId <= 0) {
+            return;
+        }
+        validarLineaContableAsync(articuloId).done(aplicarTipoTrcontSiCorresponde);
     }
 
     function agregarFilaManualConfirmado(f) {
@@ -818,6 +858,9 @@
         $('#tm_btn_transferir').on('click', grabarTransferencia);
         $('#tm_filtro_desc').on('input', aplicarFiltro);
         $(document).on('input change', '.tm-cant', actualizarBotonTransferir);
+        $(document).on('change', '.tm-cant', function () {
+            evaluarTipoAutomaticoFila($(this).closest('.tm-item'));
+        });
 
         $('#tipotransaccion_stock_id').on('change input', function () {
             guardarPreferencias();

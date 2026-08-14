@@ -16,26 +16,26 @@ final class TransferenciaMercaderiaDepositoRecepcionSupport
     /**
      * @return array{deposito_id: ?int, origen: ?string}
      */
-    public static function resolver(int $articuloId, int $empresaId): array
+    public static function resolver(int $articuloId, int $empresaId, ?string $fechaHasta = null): array
     {
         if ($articuloId <= 0 || $empresaId <= 0) {
             return ['deposito_id' => null, 'origen' => null];
         }
 
-        $resultado = self::resolverDesdeEmpresa($articuloId, $empresaId);
+        $resultado = self::resolverDesdeEmpresa($articuloId, $empresaId, $fechaHasta);
         if ($resultado['deposito_id'] !== null) {
             return $resultado;
         }
 
-        return self::resolverCrossEmpresa($articuloId, $empresaId);
+        return self::resolverCrossEmpresa($articuloId, $empresaId, $fechaHasta);
     }
 
     /**
      * @return array{deposito_id: ?int, origen: ?string}
      */
-    private static function resolverDesdeEmpresa(int $articuloId, int $empresaId): array
+    private static function resolverDesdeEmpresa(int $articuloId, int $empresaId, ?string $fechaHasta): array
     {
-        $fila = self::ultimaRecepcionFila($articuloId, $empresaId);
+        $fila = self::ultimaRecepcionFila($articuloId, $empresaId, $fechaHasta);
         if ($fila === null) {
             return ['deposito_id' => null, 'origen' => null];
         }
@@ -46,9 +46,9 @@ final class TransferenciaMercaderiaDepositoRecepcionSupport
     /**
      * @return array{deposito_id: ?int, origen: ?string}
      */
-    private static function resolverCrossEmpresa(int $articuloId, int $empresaId): array
+    private static function resolverCrossEmpresa(int $articuloId, int $empresaId, ?string $fechaHasta): array
     {
-        $fila = self::ultimaRecepcionFila($articuloId, null);
+        $fila = self::ultimaRecepcionFila($articuloId, null, $fechaHasta);
         if ($fila === null) {
             return ['deposito_id' => null, 'origen' => null];
         }
@@ -76,7 +76,11 @@ final class TransferenciaMercaderiaDepositoRecepcionSupport
         ];
     }
 
-    private static function ultimaRecepcionFila(int $articuloId, ?int $empresaId): ?object
+    private static function ultimaRecepcionFila(
+        int $articuloId,
+        ?int $empresaId,
+        ?string $fechaHasta
+    ): ?object
     {
         $query = DB::table('recepcion_proveedor_articulo as rpa')
             ->join('recepcion_proveedor as rp', 'rp.id', '=', 'rpa.recepcion_proveedor_id')
@@ -87,6 +91,9 @@ final class TransferenciaMercaderiaDepositoRecepcionSupport
 
         if ($empresaId !== null) {
             $query->where('rp.empresa_id', $empresaId);
+        }
+        if ($fechaHasta !== null && trim($fechaHasta) !== '') {
+            $query->whereDate('rp.fecha', '<=', $fechaHasta);
         }
 
         return $query

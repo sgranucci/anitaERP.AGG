@@ -32,15 +32,16 @@ class RecepcionProveedorAsientoDescripcionSupportTest extends TestCase
         $desc = RecepcionProveedorAsientoDescripcionSupport::descripcionCtamovAnita($recepcion);
 
         $this->assertLessThanOrEqual(30, strlen($desc));
-        $this->assertStringStartsWith('Rec  164406 ', $desc);
+        $this->assertStringStartsWith('164406 ', $desc);
         $this->assertStringContainsString('Proveedor Largo', $desc);
+        $this->assertStringNotContainsString('Rec', $desc);
     }
 
     public function test_sanitizar_ctamov_quita_caracteres_especiales(): void
     {
         $this->assertSame(
-            'Rec 164406',
-            RecepcionProveedorAsientoDescripcionSupport::sanitizarCtamov('Rec. #164406')
+            '164406',
+            RecepcionProveedorAsientoDescripcionSupport::sanitizarCtamov('164406')
         );
     }
 }

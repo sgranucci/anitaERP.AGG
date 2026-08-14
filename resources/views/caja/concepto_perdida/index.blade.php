@@ -29,7 +29,7 @@
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => ConceptoPerdidaListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
                         'limpiarUrl' => route('concepto_perdida'),
-                        'placeholder' => 'B&uacute;squeda r&aacute;pida (tolera errores de tipeo)&hellip;',
+                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
                         'toggleTarget' => '#panel-filtros-concepto-perdida',
                         'toggleId' => 'btn-toggle-filtros-concepto-perdida',
                         'inputId' => 'filtro_valor',
@@ -54,7 +54,7 @@
                             <th class="width20">ID</th>
                             <th class="width80">C&oacute;digo</th>
                             <th>Nombre</th>
-                            <th class="width80" data-orderable="false"></th>
+                            <th class="width120 text-nowrap" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -63,7 +63,7 @@
                             <td>{{ $data->id }}</td>
                             <td>{{ $data->codigo }}</td>
                             <td>{{ $data->nombre }}</td>
-                            <td>
+                            <td class="text-nowrap">
                                 @if (can('editar-concepto-perdida', false))
                                     <a href="{{ route('editar_concepto_perdida', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                         <i class="fa fa-edit"></i>

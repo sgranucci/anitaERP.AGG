@@ -9,75 +9,55 @@
         return [6, 8];
     }
 
-    function tokenCsrf() {
-        var $t = $('input[name="_token"]').first();
-        return $t.length ? $t.val() : '';
-    }
-
-    function urlEmpleados() {
-        var base = window.perdidaPersonalEmpleadosUrl || '';
-        if (base) {
-            return base;
+    /**
+     * Tras Enter (o elegir en modal) en un campo de consulta, pasa el foco
+     * al siguiente input/select editable del formulario.
+     */
+    function focusSiguienteCampoPerdidaPersonal(desde) {
+        var $desde = $(desde);
+        if (!$desde.length) {
+            return;
         }
-        var carpeta = (typeof window.carpetaBase !== 'undefined' && window.carpetaBase)
-            ? String(window.carpetaBase).replace(/\/$/, '')
-            : '';
-        return carpeta + '/caja/perdida-personal/empleados-empresa';
-    }
-
-    function leerEmpresaId() {
-        var $el = $('#empresa_id');
-        if (!$el.length) {
-            return 0;
+        var $form = $desde.closest('#form-general');
+        if (!$form.length) {
+            $form = $desde.closest('form');
         }
-        return parseInt($el.val(), 10) || 0;
-    }
-
-    function rellenarSelectEmpleados($select, items, selectedId) {
-        var html = '<option value="">-- Elija --</option>';
-        (items || []).forEach(function (item) {
-            var sel = (selectedId && parseInt(item.id, 10) === parseInt(selectedId, 10)) ? ' selected' : '';
-            html += '<option value="' + item.id + '"' + sel + '>'
-                + item.legajo + ' — ' + $('<div>').text(item.nombre || '').html()
-                + '</option>';
-        });
-        $select.html(html);
-    }
-
-    function cargarEmpleados(limpiarSeleccion) {
-        var empresaId = leerEmpresaId();
-        var $emp = $('#empleado_sueldos_id');
-        var $sup = $('#supervisor_empleado_sueldos_id');
-        if (!$emp.length || !$sup.length) {
+        if (!$form.length) {
             return;
         }
 
-        var prevEmp = limpiarSeleccion ? 0 : ($emp.val() || 0);
-        var prevSup = limpiarSeleccion ? 0 : ($sup.val() || 0);
+        var $focusables = $form
+            .find('input, select, textarea')
+            .filter(function () {
+                var $el = $(this);
+                if (!$el.is(':visible')) {
+                    return false;
+                }
+                if ($el.is(':disabled') || $el.prop('readonly')) {
+                    return false;
+                }
+                var type = String($el.attr('type') || '').toLowerCase();
+                if (type === 'hidden' || type === 'submit' || type === 'button' || type === 'reset') {
+                    return false;
+                }
+                return true;
+            });
 
-        if (empresaId <= 0) {
-            rellenarSelectEmpleados($emp, [], 0);
-            rellenarSelectEmpleados($sup, [], 0);
+        var idx = $focusables.index($desde);
+        if (idx < 0 || idx >= $focusables.length - 1) {
             return;
         }
 
-        $.ajax({
-            url: urlEmpleados(),
-            method: 'GET',
-            dataType: 'json',
-            data: {
-                empresa_id: empresaId,
-                _token: tokenCsrf()
+        setTimeout(function () {
+            var $next = $focusables.eq(idx + 1);
+            $next.trigger('focus');
+            if ($next.is('input:not([type=checkbox]):not([type=radio]), textarea')) {
+                $next.trigger('select');
             }
-        }).done(function (data) {
-            var items = Array.isArray(data) ? data : [];
-            rellenarSelectEmpleados($emp, items, prevEmp);
-            rellenarSelectEmpleados($sup, items, prevSup);
-        }).fail(function () {
-            rellenarSelectEmpleados($emp, [], 0);
-            rellenarSelectEmpleados($sup, [], 0);
-        });
+        }, 0);
     }
+
+    window.focusSiguienteCampoPerdidaPersonal = focusSiguienteCampoPerdidaPersonal;
 
     function actualizarMaquina() {
         var $concepto = $('#concepto_perdida_id');
@@ -85,7 +65,7 @@
         if (!$concepto.length || !$maq.length) {
             return;
         }
-        var codigo = parseInt($concepto.find('option:selected').attr('data-codigo') || '0', 10);
+        var codigo = parseInt($concepto.attr('data-codigo') || $concepto.data('codigo') || '0', 10);
         var requiere = conceptosConMaquina().indexOf(codigo) !== -1;
         if (requiere) {
             $maq.prop('disabled', false);
@@ -102,8 +82,21 @@
             return;
         }
 
+        // Centro de costo: Enter exitoso → siguiente campo (hook desde consulta.js)
+        window.afterCentrocostoEnterOk = function (data, input) {
+            if (!data || !data.id || !input) {
+                return;
+            }
+            if (!$(input).closest('#form-general').length) {
+                return;
+            }
+            focusSiguienteCampoPerdidaPersonal(input);
+        };
+
         $(document).on('change', '#empresa_id', function () {
-            cargarEmpleados(true);
+            if (typeof window.limpiarCatalogosPerdidaPersonalPorEmpresa === 'function') {
+                window.limpiarCatalogosPerdidaPersonalPorEmpresa();
+            }
         });
 
         $('#concepto_perdida_id').on('change', function () {

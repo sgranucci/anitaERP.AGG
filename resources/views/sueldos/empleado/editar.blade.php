@@ -22,6 +22,9 @@
 @if (can('listar-novedad-sueldos', false) || can('editar-empleado-sueldos', false))
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/novedades.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/novedades.js')) ?: time() }}"></script>
 @endif
+@if (can('editar-empleado-sueldos', false))
+<script src="{{ asset('assets/pages/scripts/sueldos/empleado/fallos.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/fallos.js')) ?: time() }}"></script>
+@endif
 @if (can('listar-siradig-sueldos', false))
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/siradig.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/siradig.js')) ?: time() }}"></script>
 @endif
@@ -75,6 +78,7 @@
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-familiares" role="tab"><i class="fa fa-users"></i> Familiares (Ganancias)</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-planes-cuota" role="tab"><i class="fa fa-hand-holding-usd"></i> Préstamos / Cuotas</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-novedades" role="tab"><i class="fa fa-bolt"></i> Novedades</a></li>
+                        <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-fallos" role="tab"><i class="fa fa-balance-scale"></i> Fallos</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-siradig" role="tab"><i class="fa fa-file-invoice-dollar"></i> SiRADIG (F572)</a></li>
                     </ul>
                 </div>
@@ -114,6 +118,7 @@
                     <div class="tab-pane fade" id="tab-familiares" role="tabpanel"></div>
                     <div class="tab-pane fade" id="tab-planes-cuota" role="tabpanel"></div>
                     <div class="tab-pane fade" id="tab-novedades" role="tabpanel"></div>
+                    <div class="tab-pane fade" id="tab-fallos" role="tabpanel"></div>
                     <div class="tab-pane fade" id="tab-siradig" role="tabpanel"></div>
                 </div>
 
@@ -142,6 +147,10 @@
                 <div id="host-novedades" class="pt-3 d-none"
                      data-url="{{ route('novedades_empleado_sueldos', ['empleado' => $data->id]) }}">
                     <div class="text-center text-muted py-4"><i class="fa fa-spinner fa-spin"></i> Cargando novedades…</div>
+                </div>
+                <div id="host-fallos" class="pt-3 d-none"
+                     data-url="{{ route('fallos_empleado_sueldos', ['empleado' => $data->id]) }}">
+                    <div class="text-center text-muted py-4"><i class="fa fa-spinner fa-spin"></i> Cargando fallos…</div>
                 </div>
                 @if (can('listar-siradig-sueldos', false))
                 <div id="host-siradig" class="pt-3 d-none"
@@ -220,6 +229,7 @@
             ['tab-familiares', 'host-familiares'],
             ['tab-planes-cuota', 'host-planes-cuota'],
             ['tab-novedades', 'host-novedades'],
+            ['tab-fallos', 'host-fallos'],
             ['tab-siradig', 'host-siradig']
         ];
         map.forEach(function (pair) {

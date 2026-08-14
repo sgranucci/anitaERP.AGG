@@ -571,66 +571,11 @@ class RecepcionProveedorService
     {
         $recepcion = $this->repository->find($id);
 
-        if ($recepcion->estado !== RecepcionProveedorEstados::CONFIRMADA) {
-            throw new \RuntimeException('Solo se puede anular una recepción CONFIRMADA.');
-        }
-
-        $tieneDevoluciones = Recepcion_Proveedor::query()
-            ->where('recepcion_referencia_id', $recepcion->id)
-            ->where('estado', RecepcionProveedorEstados::CONFIRMADA)
-            ->exists();
-
-        if ($tieneDevoluciones) {
-            throw new \RuntimeException('No se puede anular: existen devoluciones confirmadas contra esta recepción.');
-        }
-
-        return DB::transaction(function () use ($recepcion, $motivo) {
-            $this->assertPeriodoContableRecepcion(
-                (int) $recepcion->empresa_id,
-                (string) ($recepcion->fecha?->format('Y-m-d') ?? '')
-            );
-
-            $estadoAnterior = $recepcion->estado;
-
-            $recepcion->recepcion_proveedor_articulos()->update(['articulo_movimiento_id' => null]);
-
-            if ($recepcion->movimientostock_id) {
-                $this->movimientoStockService->borraMovimientoStock((int) $recepcion->movimientostock_id);
-            }
-
-            $this->asientoService->anularAsiento($recepcion);
-
-            $this->anitaBridge->anularRecepcion($recepcion->fresh([
-                'proveedores', 'empresas', 'ordencompras',
-                'recepcion_proveedor_articulos.articulos',
-                'recepcion_proveedor_partes_unicas.recepcion_proveedor_articulos.articulos',
-            ]));
-
-            $recepcion->recepcion_proveedor_partes_unicas()->delete();
-
-            $recepcion->update([
-                'estado' => RecepcionProveedorEstados::ANULADA,
-                'movimientostock_id' => null,
-                'asiento_id' => null,
-            ]);
-
-            $this->logEstado(
-                $recepcion,
-                $estadoAnterior,
-                RecepcionProveedorEstados::ANULADA,
-                $motivo ?: 'Anulación de recepción'
-            );
-
-            if ((int) ($recepcion->ordencompra_id ?? 0) > 0) {
-                $this->ordencompraRecepcionCumplimientoService->sincronizarEstadoCabecera(
-                    (int) $recepcion->ordencompra_id,
-                    (int) (Auth::id() ?? 0),
-                    'Anulación recepción COM '.(int) $recepcion->numerorecepcion
-                );
-            }
-
-            return $recepcion->fresh();
-        });
+        throw new \RuntimeException(
+            $recepcion->estado === RecepcionProveedorEstados::CONFIRMADA
+                ? 'No se permite anular una recepción confirmada. Registre una devolución a proveedor.'
+                : 'No se permite anular recepciones. Los borradores se eliminan desde la acción correspondiente.'
+        );
     }
 
     /** @param array<string, mixed> $data */

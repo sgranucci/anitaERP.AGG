@@ -203,6 +203,10 @@ class CentrocostoController extends Controller
             'listar-mayor-plano-cuenta',
             'ver-configuracion-indumentaria',
             'editar-configuracion-indumentaria',
+            'crear-perdida-personal',
+            'editar-perdida-personal',
+            'actualizar-perdida-personal',
+            'listar-perdida-personal',
         ] as $permiso) {
             if (can($permiso, false)) {
                 return true;
