@@ -69,7 +69,8 @@ return new class extends Migration
 
                 $update = ['tiempo_insumido_total' => round($sum, 2)];
 
-                if ((string) ($ticket->estado_ticket ?? '') === 'Finalizado') {
+                // estado_ticket no es columna de ticket: el estado vive en ticket_estado.
+                if ($this->ticketEstaFinalizado((int) $ticket->id)) {
                     $sello = $this->resolverSelloHistorico((int) $ticket->id);
                     if ($sello !== null) {
                         $update['fecha_resolucion'] = $sello['fecha'];
@@ -80,6 +81,25 @@ return new class extends Migration
                 DB::table('ticket')->where('id', $ticket->id)->update($update);
             }
         });
+    }
+
+    private function ticketEstaFinalizado(int $ticketId): bool
+    {
+        if (Schema::hasTable('ticket_estado')) {
+            return DB::table('ticket_estado')
+                ->where('ticket_id', $ticketId)
+                ->where('estado', 'Finalizado')
+                ->whereNull('deleted_at')
+                ->exists();
+        }
+
+        if (Schema::hasColumn('ticket', 'estado_ticket')) {
+            $estado = DB::table('ticket')->where('id', $ticketId)->value('estado_ticket');
+
+            return (string) ($estado ?? '') === 'Finalizado';
+        }
+
+        return false;
     }
 
     /**

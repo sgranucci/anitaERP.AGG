@@ -17,16 +17,29 @@ return new class extends Migration
             return;
         }
 
-        DB::table('ticket')
-            ->where('estado_ticket', 'Finalizado')
+        // estado_ticket no es columna de ticket: el estado vive en ticket_estado.
+        $query = DB::table('ticket')
             ->whereNotNull('fecha_resolucion')
             ->where(function ($q) {
                 $q->whereNull('hora_resolucion')
                     ->orWhere('hora_resolucion', '00:00:00')
                     ->orWhere('hora_resolucion', '00:00');
             })
-            ->orderBy('id')
-            ->chunkById(200, function ($tickets) {
+            ->orderBy('id');
+
+        if (Schema::hasTable('ticket_estado')) {
+            $query->whereExists(function ($q) {
+                $q->selectRaw('1')
+                    ->from('ticket_estado')
+                    ->whereColumn('ticket_estado.ticket_id', 'ticket.id')
+                    ->where('ticket_estado.estado', 'Finalizado')
+                    ->whereNull('ticket_estado.deleted_at');
+            });
+        } elseif (Schema::hasColumn('ticket', 'estado_ticket')) {
+            $query->where('estado_ticket', 'Finalizado');
+        }
+
+        $query->chunkById(200, function ($tickets) {
                 foreach ($tickets as $ticket) {
                     $fecha = Carbon::parse($ticket->fecha_resolucion)->toDateString();
                     $hora = $this->horaDesdeTarea((int) $ticket->id, $fecha);

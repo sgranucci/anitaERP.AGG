@@ -4450,6 +4450,7 @@ Route::delete('sueldos/art/{id}', 'Sueldos\Art_SueldosController@eliminar')->nam
  */
 Route::get('ventas/importar-pedido-anita', 'Ventas\PedidoImportarAnitaController@index')->name('importar_pedido_anita');
 Route::post('ventas/importar-pedido-anita', 'Ventas\PedidoImportarAnitaController@importar')->name('ejecutar_importar_pedido_anita');
+Route::post('ventas/pedido/importar-anita', 'Ventas\PedidoImportarAnitaController@importarDesdeIndex')->name('pedido_importar_anita_index');
 
 /*
  * Abasto

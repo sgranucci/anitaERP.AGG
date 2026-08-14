@@ -80,4 +80,55 @@ class PedidoImportarAnitaController extends Controller
 
         return $redirect;
     }
+
+    /**
+     * Importación rápida desde el index de pedidos (modal).
+     * Redirige al listado con la misma fecha/reparto filtrados.
+     */
+    public function importarDesdeIndex(Request $request)
+    {
+        can('ejecutar-importar-pedido-anita');
+
+        if (! PedidoImportarDesdeAnitaService::esElBierzo()) {
+            abort(404);
+        }
+
+        $fecha = trim((string) $request->input('fecha_entrega', ''));
+        if ($fecha === '' || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+            $fecha = date('Y-m-d');
+        }
+
+        $request->merge([
+            'fecha_entrega_desde' => $fecha,
+            'fecha_entrega_hasta' => $fecha,
+            'filtro_reparto' => trim((string) $request->input('filtro_reparto', '')),
+        ]);
+
+        $filtros = ListadoRepartoFechaEntregaSupport::resolverDesdeRequest($request);
+        $resumen = $this->service->importar($filtros, (int) (auth()->id() ?: 0));
+
+        $mensaje = sprintf(
+            'Importación Anita: %d creados, %d actualizados, %d con error (total %d).',
+            $resumen['creados'],
+            $resumen['actualizados'],
+            $resumen['errores'],
+            $resumen['total']
+        );
+
+        $query = ListadoRepartoFechaEntregaSupport::paraQueryString($filtros);
+        $redirect = redirect()
+            ->route('pedido', $query)
+            ->with('mensaje', $mensaje);
+
+        if ($resumen['errores'] > 0) {
+            $errores = collect($resumen['detalle'])
+                ->filter(static fn ($d) => ($d['estado'] ?? '') === 'error')
+                ->take(15)
+                ->map(static fn ($d) => ($d['codigo'] ?? '').': '.($d['mensaje'] ?? 'error'))
+                ->implode(' | ');
+            $redirect->with('mensaje_error', $errores !== '' ? $errores : 'Hubo errores en la importación.');
+        }
+
+        return $redirect;
+    }
 }

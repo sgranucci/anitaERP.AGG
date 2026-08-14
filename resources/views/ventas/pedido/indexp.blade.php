@@ -11,6 +11,9 @@ Pedidos de Clientes
 <script src="{{ asset('assets/pages/scripts/configuracion/configurar_salida.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/proceso-overlay.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/imprimir.js') }}" type="text/javascript"></script>
+@if (\App\Services\Ventas\PedidoImportarDesdeAnitaService::esElBierzo() && can('ejecutar-importar-pedido-anita', false))
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/importar_anita_index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/importar_anita_index.js')) ?: time() }}" type="text/javascript"></script>
+@endif
 
 <script>
 window.seteoSalidaPrograma = @json(\App\Support\Configuracion\SeteoSalidaProgramaSupport::VENTAS_PEDIDO);
@@ -51,6 +54,15 @@ function eliminarPedido(event) {
                         'nuevoRegistroUrl' => route('crear_pedido', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-pedidos',
                     ])
+                    @if (\App\Services\Ventas\PedidoImportarDesdeAnitaService::esElBierzo() && can('ejecutar-importar-pedido-anita', false))
+                        <button type="button"
+                                class="btn btn-outline-light btn-sm ml-1"
+                                data-toggle="modal"
+                                data-target="#modalImportarPedidoAnita"
+                                title="Importar pedidos Anita por fecha de entrega y repartos">
+                            <i class="fa fa-fw fa-download"></i> Importar Anita
+                        </button>
+                    @endif
                     @if (can('cierre-de-pedidos', false))
                         <a href="{{ route('cerrar_pedido') }}" class="btn btn-danger btn-sm ml-1">
                             <i class="fa fa-fw fa-times-circle"></i> Cierre de pedidos
@@ -171,5 +183,8 @@ function eliminarPedido(event) {
 {{ $pedidos->appends($filtrosQuery ?? [])->links() }}
 
 @include('includes.proceso-overlay-pedido')
+@if (\App\Services\Ventas\PedidoImportarDesdeAnitaService::esElBierzo() && can('ejecutar-importar-pedido-anita', false))
+    @include('ventas.pedido.partials.modal_importar_anita')
+@endif
 
 @endsection
