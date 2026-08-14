@@ -6,6 +6,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Contable\MayorConcepto\MayorConceptoMonedaConverter;
 use App\Support\Contable\MayorConceptoListadoFiltros;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaComprobanteEnricher;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCentrocostoFiltroSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaOrdencompraEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaProcesador;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaProveedorEnricher;
@@ -37,6 +38,12 @@ class MayorPlanoCuentaReporteService
         [$fechaDesde, $fechaHasta] = $this->resolverRangoYmd($filtros);
         $empresaIds = array_values(array_filter(array_map('intval', $filtros['empresa_ids'] ?? []), fn (int $id) => $id > 0));
         $consolidar = (bool) ($filtros['consolidar_empresas'] ?? true);
+        $centrocostoFiltro = new MayorPlanoCuentaCentrocostoFiltroSupport(
+            $filtros['centrocostos_codigo'] ?? '',
+            (string) ($filtros['cc_desde'] ?? ''),
+            (string) ($filtros['cc_hasta'] ?? ''),
+            $filtros['incluir_sin_cc'] ?? null,
+        );
 
         $parametrosComunes = [
             $fechaDesde,
@@ -49,6 +56,8 @@ class MayorPlanoCuentaReporteService
             (string) ($filtros['modo_inclusion_asientos'] ?? 'sin_cierre_ni_inflacion'),
             $this->monedaConverter,
             array_values(array_filter(array_map('intval', $filtros['cuentas'] ?? []), fn (int $c) => $c > 0)),
+            $centrocostoFiltro,
+            (bool) ($filtros['agrupar_por_cc'] ?? false),
         ];
 
         if ($consolidar || count($empresaIds) <= 1) {
@@ -133,6 +142,23 @@ class MayorPlanoCuentaReporteService
     {
         $resumen = [];
         foreach ($resultado['secciones'] ?? [] as $seccion) {
+            if (($seccion['grupos_cc'] ?? []) !== []) {
+                foreach ($seccion['grupos_cc'] as $grupoCc) {
+                    $resumen[] = [
+                        'cuenta' => (int) ($seccion['cuenta'] ?? 0),
+                        'cuenta_codigo' => $seccion['cuenta_codigo'] ?? '',
+                        'cuenta_nombre' => $seccion['cuenta_nombre'] ?? '',
+                        'centrocosto_codigo' => $grupoCc['centrocosto_codigo'] ?? '',
+                        'centrocosto_nombre' => $grupoCc['centrocosto_nombre'] ?? '',
+                        'saldo_inicial' => (float) ($grupoCc['saldo_inicial'] ?? 0),
+                        'total_debe' => (float) ($grupoCc['total_debe'] ?? 0),
+                        'total_haber' => (float) ($grupoCc['total_haber'] ?? 0),
+                        'cantidad_lineas' => (int) ($grupoCc['cantidad_lineas'] ?? 0),
+                    ];
+                }
+                continue;
+            }
+
             $resumen[] = [
                 'cuenta' => (int) ($seccion['cuenta'] ?? 0),
                 'cuenta_codigo' => $seccion['cuenta_codigo'] ?? '',
@@ -148,6 +174,53 @@ class MayorPlanoCuentaReporteService
             $resumen,
             $resultado['parametros']['empresa_ids'] ?? [],
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultado
+     * @return list<array<string, mixed>>
+     */
+    public function resumenPorCentrocosto(array $resultado): array
+    {
+        $acumulado = [];
+        foreach ($resultado['secciones'] ?? [] as $seccion) {
+            foreach ($seccion['grupos_cc'] ?? [] as $grupoCc) {
+                $codigo = trim((string) ($grupoCc['centrocosto_codigo'] ?? ''));
+                $clave = $codigo !== '' ? $codigo : '__SIN_CC__';
+                if (! isset($acumulado[$clave])) {
+                    $acumulado[$clave] = [
+                        'centrocosto_codigo' => $codigo,
+                        'centrocosto_nombre' => $grupoCc['centrocosto_nombre'] ?? '',
+                        'saldo_inicial' => 0.0,
+                        'total_debe' => 0.0,
+                        'total_haber' => 0.0,
+                        'cantidad_lineas' => 0,
+                        'cuentas' => [],
+                    ];
+                }
+                $acumulado[$clave]['saldo_inicial'] += (float) ($grupoCc['saldo_inicial'] ?? 0);
+                $acumulado[$clave]['total_debe'] += (float) ($grupoCc['total_debe'] ?? 0);
+                $acumulado[$clave]['total_haber'] += (float) ($grupoCc['total_haber'] ?? 0);
+                $acumulado[$clave]['cantidad_lineas'] += (int) ($grupoCc['cantidad_lineas'] ?? 0);
+                $acumulado[$clave]['cuentas'][(int) ($seccion['cuenta'] ?? 0)] = true;
+            }
+        }
+
+        $resumen = array_values(array_map(static function (array $row): array {
+            $row['cantidad_cuentas'] = count($row['cuentas']);
+            unset($row['cuentas']);
+            $row['saldo_inicial'] = round((float) $row['saldo_inicial'], 2);
+            $row['total_debe'] = round((float) $row['total_debe'], 2);
+            $row['total_haber'] = round((float) $row['total_haber'], 2);
+
+            return $row;
+        }, $acumulado));
+        usort($resumen, static fn (array $a, array $b): int => strnatcasecmp(
+            (string) ($a['centrocosto_codigo'] ?? ''),
+            (string) ($b['centrocosto_codigo'] ?? ''),
+        ));
+
+        return $resumen;
     }
 
     /**
@@ -184,7 +257,46 @@ class MayorPlanoCuentaReporteService
                 'nombreempresa' => $nombreEmpresa,
             ];
 
-            if ((float) ($seccion['saldo_inicial'] ?? 0) !== 0.0 || ($seccion['cantidad_lineas'] ?? 0) === 0) {
+            $gruposCc = $seccion['grupos_cc'] ?? [];
+            if ($gruposCc !== []) {
+                foreach ($gruposCc as $grupoCc) {
+                    $filas[] = [
+                        'tipo_fila' => 'header_cc',
+                        'cuenta' => $cuenta,
+                        'cuenta_codigo' => $seccion['cuenta_codigo'] ?? '',
+                        'cuenta_nombre' => $seccion['cuenta_nombre'] ?? '',
+                        'centrocosto_codigo' => $grupoCc['centrocosto_codigo'] ?? '',
+                        'centrocosto_nombre' => $grupoCc['centrocosto_nombre'] ?? '',
+                        'nombreempresa' => $nombreEmpresa,
+                    ];
+                    if ((float) ($grupoCc['saldo_inicial'] ?? 0) !== 0.0 || ($grupoCc['cantidad_lineas'] ?? 0) === 0) {
+                        $filas[] = [
+                            'tipo_fila' => 'saldo_inicial',
+                            'cuenta' => $cuenta,
+                            'cuenta_codigo' => $seccion['cuenta_codigo'] ?? '',
+                            'cuenta_nombre' => $seccion['cuenta_nombre'] ?? '',
+                            'centrocosto_codigo' => $grupoCc['centrocosto_codigo'] ?? '',
+                            'centrocosto_nombre' => $grupoCc['centrocosto_nombre'] ?? '',
+                            'saldo_ejercicio' => (float) ($grupoCc['saldo_ejercicio_inicial'] ?? $grupoCc['saldo_inicial'] ?? 0),
+                            'nombreempresa' => $nombreEmpresa,
+                        ];
+                    }
+                    foreach ($grupoCc['lineas'] ?? [] as $ln) {
+                        $filas[] = $ln;
+                    }
+                    if (($grupoCc['total_debe'] ?? 0) > 0 || ($grupoCc['total_haber'] ?? 0) > 0) {
+                        $filas[] = [
+                            'tipo_fila' => 'total_cc',
+                            'cuenta' => $cuenta,
+                            'centrocosto_codigo' => $grupoCc['centrocosto_codigo'] ?? '',
+                            'centrocosto_nombre' => $grupoCc['centrocosto_nombre'] ?? '',
+                            'debe' => (float) ($grupoCc['total_debe'] ?? 0),
+                            'haber' => (float) ($grupoCc['total_haber'] ?? 0),
+                            'nombreempresa' => $nombreEmpresa,
+                        ];
+                    }
+                }
+            } elseif ((float) ($seccion['saldo_inicial'] ?? 0) !== 0.0 || ($seccion['cantidad_lineas'] ?? 0) === 0) {
                 $filas[] = [
                     'tipo_fila' => 'saldo_inicial',
                     'cuenta' => $cuenta,
@@ -195,8 +307,10 @@ class MayorPlanoCuentaReporteService
                 ];
             }
 
-            foreach ($seccion['lineas'] ?? [] as $ln) {
-                $filas[] = $ln;
+            if ($gruposCc === []) {
+                foreach ($seccion['lineas'] ?? [] as $ln) {
+                    $filas[] = $ln;
+                }
             }
 
             if ($conTotales && (($seccion['total_debe'] ?? 0) > 0 || ($seccion['total_haber'] ?? 0) > 0)) {
@@ -334,6 +448,20 @@ class MayorPlanoCuentaReporteService
             'sin_inflacion' => 'No incluye asiento de aj. x inflación',
             default => 'No incluye asientos de cierre ni de aj. x inflación',
         };
+    }
+
+    /** @param array<string, mixed> $filtros */
+    public function formatearCentrocostosTexto(array $filtros): string
+    {
+        $filtro = new MayorPlanoCuentaCentrocostoFiltroSupport(
+            $filtros['centrocostos_codigo'] ?? '',
+            (string) ($filtros['cc_desde'] ?? ''),
+            (string) ($filtros['cc_hasta'] ?? ''),
+            $filtros['incluir_sin_cc'] ?? null,
+        );
+        $texto = $filtro->metaTexto();
+
+        return ! empty($filtros['agrupar_por_cc']) ? $texto.' · agrupado por CC' : $texto;
     }
 
     /**

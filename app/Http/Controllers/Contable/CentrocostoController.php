@@ -200,6 +200,7 @@ class CentrocostoController extends Controller
             'crear-movimientos-de-stock',
             'editar-movimientos-de-stock',
             'listar-movimientos-de-stock',
+            'listar-mayor-plano-cuenta',
             'ver-configuracion-indumentaria',
             'editar-configuracion-indumentaria',
         ] as $permiso) {

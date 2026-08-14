@@ -193,8 +193,18 @@ final class ComprobanteProveedorPdfIaService
             ];
         }
 
+        $tipoParaCoherencia = $tipoAbreviatura !== ''
+            ? $this->comprobanteService->leeTipoTransaccionCompraPorAbreviatura($tipoAbreviatura)
+            : null;
+        $conceptosPermitidos = $tipoParaCoherencia
+            ? ComprobanteProveedorConceptosIvaCoherenciaSupport::idsPermitidosDesdeTipoTransaccion($tipoParaCoherencia)
+            : [];
+
         $lineasConcepto = ComprobanteProveedorConceptosIvaCoherenciaSupport::enriquecerCodigosAnita(
-            ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineasConcepto)
+            ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar(
+                $lineasConcepto,
+                $conceptosPermitidos
+            )
         );
 
         [$letra, $sucursal, $numeroFactura] = $this->resolverLetraSucursalNumero($resuelto);
@@ -424,7 +434,17 @@ final class ComprobanteProveedorPdfIaService
 
         // 3) Match contra conceptos de la OC usando nombre_ia (alias).
         $conceptosAsignados = $this->conceptoMatcher->matchear($listaConceptos['conceptos'], $lineasIa);
-        $conceptosAsignados = $this->aplicarCoherenciaIvaAConceptosAsignados($conceptosAsignados);
+        $conceptosPermitidos = [];
+        foreach ($listaConceptos['conceptos'] as $conceptoLista) {
+            $id = (int) ($conceptoLista['concepto_ivacompra_id'] ?? 0);
+            if ($id > 0) {
+                $conceptosPermitidos[] = $id;
+            }
+        }
+        $conceptosAsignados = $this->aplicarCoherenciaIvaAConceptosAsignados(
+            $conceptosAsignados,
+            $conceptosPermitidos
+        );
 
         $totalAsignado = round(array_sum(array_column($conceptosAsignados, 'importe')), 2);
         $totalFactura = $this->parsearImporte($extraido['total'] ?? null) ?? 0.0;
@@ -879,10 +899,13 @@ final class ComprobanteProveedorPdfIaService
      * Abre gravados por alícuota y valida IVA↔neto sobre los conceptos matcheados por IA.
      *
      * @param  list<array{id_concepto: int|string, importe: float, descripcion_ia?: string, concepto_nombre?: string}>  $conceptosAsignados
+     * @param  list<int>  $conceptoIdsPermitidos  Conceptos de la lista OC / tipo comprobante
      * @return list<array{id_concepto: int|string, importe: float, descripcion_ia: string, concepto_nombre: string}>
      */
-    private function aplicarCoherenciaIvaAConceptosAsignados(array $conceptosAsignados): array
-    {
+    private function aplicarCoherenciaIvaAConceptosAsignados(
+        array $conceptosAsignados,
+        array $conceptoIdsPermitidos = [],
+    ): array {
         $lineas = [];
         foreach ($conceptosAsignados as $linea) {
             $codigoAnita = $linea['id_concepto'] ?? null;
@@ -904,7 +927,10 @@ final class ComprobanteProveedorPdfIaService
         }
 
         $lineas = ComprobanteProveedorConceptosIvaCoherenciaSupport::enriquecerCodigosAnita(
-            ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineas)
+            ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar(
+                $lineas,
+                $conceptoIdsPermitidos
+            )
         );
 
         $resultado = [];

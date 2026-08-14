@@ -30,6 +30,7 @@
 </script>
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/mayor_plano_cuenta/filtro.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 @endsection
@@ -136,6 +137,13 @@
                         'cuenta_hasta_meta' => $cuenta_hasta_meta ?? ['codigo' => '', 'nombre' => ''],
                     ])
 
+                    @include('contable.mayor_plano_cuenta.partials.campo_consulta_centrocostos', [
+                        'filtros' => $filtros ?? [],
+                        'centrocostos_iniciales' => $centrocostos_iniciales ?? [],
+                        'cc_desde_meta' => $cc_desde_meta ?? ['codigo' => '', 'nombre' => ''],
+                        'cc_hasta_meta' => $cc_hasta_meta ?? ['codigo' => '', 'nombre' => ''],
+                    ])
+
                     <div class="form-group row">
                         <label for="modo_inclusion_asientos" class="col-lg-2 control-label text-right">Asientos cierre</label>
                         <div class="col-lg-4">
@@ -213,6 +221,7 @@
                         </p>
                         <p class="mb-0 small text-muted">
                             {{ $inclusion_asientos_texto }}
+                            · {{ $centrocostos_texto }}
                             · {{ $tot['stats']['ctamov_filas'] ?? 0 }} ctamov
                             · {{ $tot['stats']['subdiario_filas'] ?? 0 }} subdiario
                         </p>
@@ -235,7 +244,7 @@
                             </div>
                             <div class="col-md-4">
                                 <input type="text" name="filtro_texto" id="filtro_texto" class="form-control form-control-sm"
-                                    placeholder="Cuenta, comprobante, descripción, OC…"
+                                    placeholder="Cuenta, centro de costo, comprobante, descripción, OC…"
                                     value="{{ $filtros['filtro_texto'] ?? '' }}">
                             </div>
                             <div class="col-auto">
@@ -278,6 +287,7 @@
 
                     @include('contable.mayor_plano_cuenta.partials.resumen_totales', [
                         'resumen' => $resumen ?? [],
+                        'resumen_cc' => $resumen_cc ?? [],
                         'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
                     ])
 
@@ -333,4 +343,5 @@
     </div>
 </div>
 @include('includes.contable.modalconsultacuentacontable')
+@include('includes.contable.modalconsultacentrocosto')
 @endsection

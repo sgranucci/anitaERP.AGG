@@ -476,7 +476,8 @@ class IngresoEgresoService
 					$monedaId,
 					$cotizacion,
 					is_array($datosCaja) ? $datosCaja : [],
-					$empresa_id
+					$empresa_id,
+					(int) $signo
 				);
 				if ($asientoSp !== []) {
 					return ['mensaje' => 'ok', 'asiento' => $asientoSp];

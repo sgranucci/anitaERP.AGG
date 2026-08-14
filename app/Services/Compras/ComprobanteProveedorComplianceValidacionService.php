@@ -325,12 +325,8 @@ class ComprobanteProveedorComplianceValidacionService
                 continue;
             }
 
-            $tipo = (string) ($concepto->tipoconcepto ?? '');
-            $nombre = strtoupper((string) ($concepto->nombre ?? ''));
-            $esPercepcionIibb = in_array($tipo, ['P', 'B'], true)
-                && (str_contains($nombre, 'IIBB') || str_contains($nombre, 'INGRESOS BRUTOS') || (bool) $concepto->retieneIIBB);
-
-            if (! $esPercepcionIibb) {
+            // Solo tipoconcepto B (Importe percepciones IIBB). P = Perc. IVA; S = SIRCREB.
+            if (! ComprobanteProveedorConceptoIvaTipos::esPercepcionIibb((string) ($concepto->tipoconcepto ?? ''))) {
                 continue;
             }
 

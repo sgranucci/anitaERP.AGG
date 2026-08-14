@@ -1,5 +1,6 @@
 var mayorPlanoCuentaCampoActivo = null;
 var mayorPlanoCuentasSel = {};
+var mayorPlanoCentrocostosSel = {};
 
 function mayorPlanoNormalizarCodigoCuenta(valor) {
     return String(valor || '').replace(/\D/g, '');
@@ -479,6 +480,111 @@ function mayorPlanoOnKeydownF1Capture(e) {
     mayorPlanoAbrirModalConsultaCuenta($campo);
 }
 
+function mayorPlanoSincronizarHiddenCentrocostos() {
+    var codigos = Object.keys(mayorPlanoCentrocostosSel).sort(function (a, b) {
+        return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+    });
+    $('#mpc_centrocostos_codigo').val(codigos.join(','));
+}
+
+function mayorPlanoRenderCentrocostos() {
+    var $tbody = $('#mpc-tbody-cc-seleccionados');
+    if (!$tbody.length) {
+        return;
+    }
+    var html = '';
+    Object.keys(mayorPlanoCentrocostosSel)
+        .sort(function (a, b) {
+            return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
+        })
+        .forEach(function (codigo) {
+            var item = mayorPlanoCentrocostosSel[codigo] || {};
+            html += '<tr data-codigo="' + $('<div>').text(codigo).html() + '">'
+                + '<td>' + $('<div>').text(codigo).html() + '</td>'
+                + '<td>' + $('<div>').text(item.nombre || '').html() + '</td>'
+                + '<td class="text-center"><button type="button" class="btn btn-outline-danger btn-xs mpc-btn-quitar-cc" title="Quitar">'
+                + '<i class="fa fa-times"></i></button></td></tr>';
+        });
+    $tbody.html(html);
+    mayorPlanoSincronizarHiddenCentrocostos();
+}
+
+function mayorPlanoAgregarCentrocosto(codigo, nombre) {
+    codigo = String(codigo || '').trim();
+    if (!codigo || mayorPlanoCentrocostosSel[codigo]) {
+        return false;
+    }
+    mayorPlanoCentrocostosSel[codigo] = { nombre: nombre || '' };
+    mayorPlanoRenderCentrocostos();
+    return true;
+}
+
+function mayorPlanoCargarCentrocostosDesdeDom() {
+    mayorPlanoCentrocostosSel = {};
+    $('#mpc-tbody-cc-seleccionados tr').each(function () {
+        var codigo = String($(this).attr('data-codigo') || '').trim();
+        if (codigo) {
+            mayorPlanoCentrocostosSel[codigo] = { nombre: $(this).find('td').eq(1).text().trim() };
+        }
+    });
+    if (!Object.keys(mayorPlanoCentrocostosSel).length) {
+        String($('#mpc_centrocostos_codigo').val() || '').split(',').forEach(function (codigo) {
+            codigo = codigo.trim();
+            if (codigo) {
+                mayorPlanoCentrocostosSel[codigo] = { nombre: '' };
+            }
+        });
+    }
+    mayorPlanoRenderCentrocostos();
+}
+
+function mayorPlanoAgregarCcDesdeCampo() {
+    var $campo = $('.mpc-cc-puntual').first();
+    var codigo = String($campo.find('.codigocentrocosto').val() || '').trim();
+    if (!codigo) {
+        alert('Ingrese un c\u00f3digo de centro de costo');
+        return;
+    }
+    var nombre = String($campo.find('.descripcioncentrocosto').val() || '').trim();
+    if (nombre) {
+        if (!mayorPlanoAgregarCentrocosto(codigo, nombre)) {
+            alert('El centro de costo ya est\u00e1 en la lista');
+        } else {
+            $campo.find('input').val('');
+        }
+        return;
+    }
+    leerCentrocostoPorCodigo(codigo, $campo.find('.codigocentrocosto').get(0), function (data) {
+        if (data && mayorPlanoAgregarCentrocosto(data.codigo, data.nombre)) {
+            $campo.find('input').val('');
+        }
+    });
+}
+
 $(function () {
     activaEventosMayorPlanoCuentaFiltro();
+    mayorPlanoCargarCentrocostosDesdeDom();
+
+    $(document).on('click.mpcCc', '#mpc-btn-agregar-cc', function (e) {
+        e.preventDefault();
+        mayorPlanoAgregarCcDesdeCampo();
+    });
+    $(document).on('click.mpcCc', '.mpc-btn-quitar-cc', function (e) {
+        e.preventDefault();
+        delete mayorPlanoCentrocostosSel[String($(this).closest('tr').attr('data-codigo') || '')];
+        mayorPlanoRenderCentrocostos();
+    });
+    $(document).on('click.mpcCc', '.eligeconsultacentrocosto', function () {
+        var $campo = ptrCentrocosto_id && ptrCentrocosto_id.length
+            ? ptrCentrocosto_id.closest('.mpc-cc-puntual')
+            : $();
+        if (!$campo.length) {
+            return;
+        }
+        var $tr = $(this).closest('tr');
+        if (mayorPlanoAgregarCentrocosto($tr.find('.codigo').text().trim(), $tr.find('.nombre').text().trim())) {
+            $campo.find('input').val('');
+        }
+    });
+    $('#form-mayor-plano-cuenta').on('submit.mpcCc', mayorPlanoSincronizarHiddenCentrocostos);
 });

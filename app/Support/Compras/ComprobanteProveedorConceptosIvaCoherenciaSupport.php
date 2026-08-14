@@ -13,7 +13,10 @@ use RuntimeException;
  * Si hay 2+ alícuotas de IVA y el neto viene unificado (sin tasa o en una sola alícuota),
  * abre gravados a partir de los importes de IVA (fuente de verdad). Si la suma teórica
  * no cuadra con el neto original, reparte la diferencia entre los gravados; nunca ajusta IVA.
- * Tolerancia de cuadre IVA↔neto tras el ajuste: $0,90.
+ *
+ * Si el agente manda el neto en un concepto que no es G (p. ej. «No gravado» código 1 /
+ * monotributo) junto con IVA liquidado, se descarta esa línea y se recrea el gravado
+ * correcto: neto = IVA / (tasa/100). Tolerancia de cuadre IVA↔neto tras el ajuste: $0,90.
  */
 final class ComprobanteProveedorConceptosIvaCoherenciaSupport
 {
@@ -52,13 +55,19 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
 
     /**
      * @param  list<array<string, mixed>>  $lineas
+     * @param  list<int>  $conceptoIdsPermitidos  IDs de concepto_ivacompra del tipo de
+     *                                           comprobante (lista OC / listaConcepto).
+     *                                           Si viene informada, el gravado reparado
+     *                                           se elige solo de esa lista.
      * @return list<array<string, mixed>>
      */
-    public static function normalizarYValidar(array $lineas): array
+    public static function normalizarYValidar(array $lineas, array $conceptoIdsPermitidos = []): array
     {
         if ($lineas === []) {
             return [];
         }
+
+        $conceptoIdsPermitidos = self::normalizarIdsPermitidos($conceptoIdsPermitidos);
 
         $conceptos = self::cargarConceptos($lineas);
         $estado = self::analizar($lineas, $conceptos);
@@ -68,7 +77,7 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
         }
 
         if (self::necesitaAperturaGravados($estado)) {
-            $lineas = self::abrirGravadosDesdeIva($lineas, $conceptos, $estado);
+            $lineas = self::abrirGravadosDesdeIva($lineas, $conceptos, $estado, $conceptoIdsPermitidos);
             $conceptos = self::cargarConceptos($lineas);
             $estado = self::analizar($lineas, $conceptos);
         }
@@ -76,6 +85,44 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
         self::assertCoherenciaIvaNeto($estado);
 
         return $lineas;
+    }
+
+    /**
+     * IDs de conceptos IVA habilitados en un tipo de transacción compra (FGA, FIB, …).
+     *
+     * @param  object{tipotransaccion_compra_concepto_ivacompras?: iterable<mixed>}  $tipoTransaccion
+     * @return list<int>
+     */
+    public static function idsPermitidosDesdeTipoTransaccion(object $tipoTransaccion): array
+    {
+        $ids = [];
+        $relaciones = $tipoTransaccion->tipotransaccion_compra_concepto_ivacompras ?? [];
+        foreach ($relaciones as $rel) {
+            $concepto = $rel->concepto_ivacompras ?? null;
+            $id = (int) ($concepto->id ?? 0);
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+
+        return array_values($ids);
+    }
+
+    /**
+     * @param  list<int|string>  $ids
+     * @return list<int>
+     */
+    private static function normalizarIdsPermitidos(array $ids): array
+    {
+        $out = [];
+        foreach ($ids as $id) {
+            $id = (int) $id;
+            if ($id > 0) {
+                $out[$id] = $id;
+            }
+        }
+
+        return array_values($out);
     }
 
     /**
@@ -246,10 +293,17 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
      * @param  array<string, mixed>  $estado
      * @return list<array<string, mixed>>
      */
-    private static function abrirGravadosDesdeIva(array $lineas, Collection $conceptos, array $estado): array
-    {
+    /**
+     * @param  list<int>  $conceptoIdsPermitidos
+     */
+    private static function abrirGravadosDesdeIva(
+        array $lineas,
+        Collection $conceptos,
+        array $estado,
+        array $conceptoIdsPermitidos = [],
+    ): array {
         $ivaPorTasa = (array) ($estado['iva_por_tasa'] ?? []);
-        $netoTotal = (float) ($estado['neto_total'] ?? 0);
+        $netoTotalG = (float) ($estado['neto_total'] ?? 0);
 
         $netoTeorico = [];
         $sumaTeorica = 0.0;
@@ -268,37 +322,70 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
             return $lineas;
         }
 
+        // Sin neto tipo G el agente suele haber puesto el importe en E/N/etc. (ej. código 1).
+        // No repartir hacia 0: el IVA es fuente de verdad → neto = IVA/(tasa/100).
+        $netoOriginalParaReparto = $netoTotalG > 0 ? $netoTotalG : $sumaTeorica;
+
         $netoDescompuesto = self::repartirDiferenciaEntreGravados(
             $netoTeorico,
             $sumaTeorica,
-            $netoTotal,
+            $netoOriginalParaReparto,
         );
 
-        $semillaGravado = self::resolverSemillaGravado($lineas, $conceptos);
-        $preferidosPorTasa = self::preferidosGravadoPorTasa($lineas, $conceptos);
+        $semillaGravado = self::resolverSemillaGravado($lineas, $conceptos, $conceptoIdsPermitidos);
+        $preferidosPorTasa = self::preferidosGravadoPorTasa($lineas, $conceptos, $conceptoIdsPermitidos);
 
         $gravadosPorTasa = self::resolverConceptosGravadoPorTasa(
             array_keys($netoDescompuesto),
             $conceptos,
             $preferidosPorTasa,
             $semillaGravado,
+            $conceptoIdsPermitidos,
         );
 
+        $quitarMalClasificados = $netoTotalG <= 0;
         $lineasFiltradas = [];
         foreach ($lineas as $linea) {
             $conceptoId = (int) ($linea['concepto_ivacompra_id'] ?? 0);
             $concepto = $conceptos->get($conceptoId);
-            if ($concepto && strtoupper((string) ($concepto->tipoconcepto ?? '')) === 'G') {
+            $tipo = strtoupper((string) ($concepto->tipoconcepto ?? ''));
+
+            // Se recrean todos los G desde el IVA.
+            if ($concepto && $tipo === 'G') {
                 continue;
             }
+
+            // Neto mal ubicado (No gravado / monotributo / etc.): quitar si el importe
+            // coincide con el neto teórico de alguna alícuota (o con la suma).
+            if (
+                $quitarMalClasificados
+                && $concepto
+                && $tipo !== 'I'
+                && self::montoCoincideConNetoTeorico(
+                    abs((float) ($linea['monto'] ?? 0)),
+                    $netoTeorico,
+                    $sumaTeorica,
+                )
+            ) {
+                continue;
+            }
+
             $lineasFiltradas[] = $linea;
         }
 
         foreach ($netoDescompuesto as $tasaKey => $neto) {
+            if ($neto <= 0) {
+                continue;
+            }
+
             $conceptoGravado = $gravadosPorTasa[$tasaKey] ?? null;
             if ($conceptoGravado === null) {
+                $alcance = $conceptoIdsPermitidos !== []
+                    ? ' en la lista del tipo de comprobante / OC'
+                    : '';
                 throw new RuntimeException(
-                    'No se encontró concepto de neto gravado para alícuota '.self::etiquetaTasa((float) $tasaKey).'.'
+                    'No se encontró concepto de neto gravado para alícuota '
+                    .self::etiquetaTasa((float) $tasaKey).$alcance.'.'
                 );
             }
 
@@ -328,6 +415,27 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
         }
 
         return $lineasFiltradas;
+    }
+
+    /**
+     * @param  array<string, float>  $netoTeorico
+     */
+    private static function montoCoincideConNetoTeorico(
+        float $monto,
+        array $netoTeorico,
+        float $sumaTeorica,
+    ): bool {
+        if ($monto <= 0) {
+            return false;
+        }
+
+        foreach ($netoTeorico as $neto) {
+            if (abs($monto - (float) $neto) <= self::TOLERANCIA) {
+                return true;
+            }
+        }
+
+        return abs($monto - $sumaTeorica) <= self::TOLERANCIA;
     }
 
     /**
@@ -369,15 +477,25 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
     /**
      * @param  list<array<string, mixed>>  $lineas
      * @param  Collection<int, Concepto_Ivacompra>  $conceptos
+     * @param  list<int>  $conceptoIdsPermitidos
      */
-    private static function resolverSemillaGravado(array $lineas, Collection $conceptos): ?Concepto_Ivacompra
-    {
+    private static function resolverSemillaGravado(
+        array $lineas,
+        Collection $conceptos,
+        array $conceptoIdsPermitidos = [],
+    ): ?Concepto_Ivacompra {
+        $permitidos = array_fill_keys($conceptoIdsPermitidos, true);
+        $hayPermitidos = $permitidos !== [];
         $mejor = null;
         $mejorMonto = -1.0;
 
         foreach ($lineas as $linea) {
-            $concepto = $conceptos->get((int) ($linea['concepto_ivacompra_id'] ?? 0));
+            $conceptoId = (int) ($linea['concepto_ivacompra_id'] ?? 0);
+            $concepto = $conceptos->get($conceptoId);
             if (! $concepto || strtoupper((string) ($concepto->tipoconcepto ?? '')) !== 'G') {
+                continue;
+            }
+            if ($hayPermitidos && ! isset($permitidos[$conceptoId])) {
                 continue;
             }
             $monto = abs((float) ($linea['monto'] ?? 0));
@@ -393,15 +511,25 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
     /**
      * @param  list<array<string, mixed>>  $lineas
      * @param  Collection<int, Concepto_Ivacompra>  $conceptos
+     * @param  list<int>  $conceptoIdsPermitidos
      * @return array<string, Concepto_Ivacompra>
      */
-    private static function preferidosGravadoPorTasa(array $lineas, Collection $conceptos): array
-    {
+    private static function preferidosGravadoPorTasa(
+        array $lineas,
+        Collection $conceptos,
+        array $conceptoIdsPermitidos = [],
+    ): array {
+        $permitidos = array_fill_keys($conceptoIdsPermitidos, true);
+        $hayPermitidos = $permitidos !== [];
         $preferidos = [];
 
         foreach ($lineas as $linea) {
-            $concepto = $conceptos->get((int) ($linea['concepto_ivacompra_id'] ?? 0));
+            $conceptoId = (int) ($linea['concepto_ivacompra_id'] ?? 0);
+            $concepto = $conceptos->get($conceptoId);
             if (! $concepto || strtoupper((string) ($concepto->tipoconcepto ?? '')) !== 'G') {
+                continue;
+            }
+            if ($hayPermitidos && ! isset($permitidos[$conceptoId])) {
                 continue;
             }
             $tasa = self::tasaConcepto($concepto);
@@ -421,6 +549,7 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
      * @param  list<string>  $tasasKeys
      * @param  Collection<int, Concepto_Ivacompra>  $conceptosUsados
      * @param  array<string, Concepto_Ivacompra>  $preferidosPorTasa
+     * @param  list<int>  $conceptoIdsPermitidos
      * @return array<string, Concepto_Ivacompra>
      */
     private static function resolverConceptosGravadoPorTasa(
@@ -428,15 +557,24 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
         Collection $conceptosUsados,
         array $preferidosPorTasa = [],
         ?Concepto_Ivacompra $semilla = null,
+        array $conceptoIdsPermitidos = [],
     ): array {
+        $permitidos = array_fill_keys($conceptoIdsPermitidos, true);
+        $hayPermitidos = $permitidos !== [];
         $resultado = [];
 
         foreach ($tasasKeys as $tasaKey) {
             if (isset($preferidosPorTasa[$tasaKey])) {
-                $resultado[$tasaKey] = $preferidosPorTasa[$tasaKey];
-                continue;
+                $pref = $preferidosPorTasa[$tasaKey];
+                if (! $hayPermitidos || isset($permitidos[(int) $pref->id])) {
+                    $resultado[$tasaKey] = $pref;
+                    continue;
+                }
             }
             foreach ($conceptosUsados as $concepto) {
+                if ($hayPermitidos && ! isset($permitidos[(int) $concepto->id])) {
+                    continue;
+                }
                 if (strtoupper((string) ($concepto->tipoconcepto ?? '')) !== 'G') {
                     continue;
                 }
@@ -450,13 +588,30 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
         $faltantes = array_diff($tasasKeys, array_keys($resultado));
         if ($faltantes !== []) {
             $tasasFaltantes = array_map(static fn (string $k): float => (float) $k, $faltantes);
-            $extra = Concepto_Ivacompra::query()
+            $query = Concepto_Ivacompra::query()
                 ->with('impuestos')
                 ->where('tipoconcepto', 'G')
                 ->whereHas('impuestos', static function ($q) use ($tasasFaltantes): void {
                     $q->whereIn('valor', $tasasFaltantes);
-                })
-                ->orderByRaw("CASE WHEN nombre LIKE 'Gravado%' THEN 0 ELSE 1 END")
+                });
+
+            if ($hayPermitidos) {
+                // Solo conceptos del tipo de comprobante / lista de la OC.
+                $query->whereIn('id', array_keys($permitidos));
+            }
+
+            $extra = $query
+                // Preferir gravados “de factura” (bienes/servicios/locación/uso) sobre
+                // financieros / descuentos / comisiones (evita código 54 ante 50).
+                ->orderByRaw("CASE
+                    WHEN nombre LIKE 'Gravado Bienes%' OR nombre LIKE 'Gravado Bien %' THEN 0
+                    WHEN nombre LIKE 'Gravado Servic%' THEN 1
+                    WHEN nombre LIKE 'Gravado Locacion%' THEN 2
+                    WHEN nombre LIKE 'Gravado Bs%' THEN 3
+                    WHEN nombre LIKE 'Gravado%' THEN 4
+                    ELSE 5
+                END")
+                ->orderBy('codigo')
                 ->orderBy('id')
                 ->get();
 

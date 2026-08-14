@@ -2,6 +2,7 @@
 
 namespace App\Support\Contable;
 
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCentrocostoFiltroSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -47,6 +48,9 @@ class MayorPlanoCuentaListadoFiltros
         }
 
         $cuentas = self::parsearCuentasCsv((string) $request->input('cuentas', ''));
+        $centrocostos = MayorPlanoCuentaCentrocostoFiltroSupport::parsearCodigos(
+            $request->input('centrocostos_codigo', ''),
+        );
 
         return [
             'empresa_ids' => $empresaIds,
@@ -63,6 +67,13 @@ class MayorPlanoCuentaListadoFiltros
             'cuenta_desde' => $cuentaDesde,
             'cuenta_hasta' => $cuentaHasta,
             'cuentas' => $cuentas,
+            'centrocostos_codigo' => implode(',', $centrocostos),
+            'cc_desde' => trim((string) $request->input('cc_desde', '')),
+            'cc_hasta' => trim((string) $request->input('cc_hasta', '')),
+            'agrupar_por_cc' => $request->boolean('agrupar_por_cc'),
+            'incluir_sin_cc' => $request->has('incluir_sin_cc')
+                ? $request->boolean('incluir_sin_cc')
+                : null,
             'filtro_texto' => trim((string) $request->input('filtro_texto', '')),
         ];
     }
@@ -155,6 +166,28 @@ class MayorPlanoCuentaListadoFiltros
             $out['cuentas'] = implode(',', $cuentas);
         }
 
+        $centrocostos = MayorPlanoCuentaCentrocostoFiltroSupport::parsearCodigos(
+            $filtros['centrocostos_codigo'] ?? '',
+        );
+        if ($centrocostos !== []) {
+            $out['centrocostos_codigo'] = implode(',', $centrocostos);
+        }
+
+        foreach (['cc_desde', 'cc_hasta'] as $campoCc) {
+            $valorCc = trim((string) ($filtros[$campoCc] ?? ''));
+            if ($valorCc !== '') {
+                $out[$campoCc] = $valorCc;
+            }
+        }
+
+        if (! empty($filtros['agrupar_por_cc'])) {
+            $out['agrupar_por_cc'] = 1;
+        }
+
+        if (array_key_exists('incluir_sin_cc', $filtros) && $filtros['incluir_sin_cc'] !== null) {
+            $out['incluir_sin_cc'] = $filtros['incluir_sin_cc'] ? 1 : 0;
+        }
+
         $texto = trim((string) ($filtros['filtro_texto'] ?? ''));
         if ($texto !== '') {
             $out['filtro_texto'] = $texto;
@@ -225,6 +258,8 @@ class MayorPlanoCuentaListadoFiltros
                 (string) ($fila['nro_oc'] ?? ''),
                 $fila['moneda_abrev'] ?? '',
                 $fila['nombreempresa'] ?? '',
+                $fila['centrocosto_codigo'] ?? '',
+                $fila['centrocosto_nombre'] ?? '',
             ];
 
             $blob = mb_strtolower(implode(' ', $campos));

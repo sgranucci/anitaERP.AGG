@@ -23,10 +23,14 @@
     </div>
 </div>
 
+@php
+    // Resuelto antes: @json() de Blade no soporta 3 parámetros de ruta inline.
+    $rdDrillUrlAsiento = route('editar_asiento', ['id' => '__ID__', 'origen' => 'modal_consulta', 'vista' => 'consulta']);
+@endphp
 <script>
 window.rdDrill = {
     url: @json($drill_url),
-    urlAsiento: @json(route('editar_asiento', ['id' => '__ID__', 'origen' => 'modal_consulta', 'vista' => 'consulta'])),
+    urlAsiento: @json($rdDrillUrlAsiento),
     puedeVerAsiento: @json(can('editar-asiento', false) || can('listar-asiento', false))
 };
 </script>

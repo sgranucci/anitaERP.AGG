@@ -88,6 +88,7 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
             $this->reporteService->formatearEmpresasTexto($this->filtros)
             .' · '.$this->reporteService->formatearPeriodoTexto($this->filtros)
             .' · '.$this->reporteService->formatearInclusionAsientosTexto($this->filtros)
+            .' · '.$this->reporteService->formatearCentrocostosTexto($this->filtros)
         );
 
         $this->calcularFilasEncabezado($subtitulo, $totales);
@@ -128,7 +129,7 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
 
     private function colUltima(): string
     {
-        return $this->multiempresa ? 'P' : 'O';
+        return $this->multiempresa ? 'Q' : 'P';
     }
 
     public function columnFormats(): array
@@ -138,12 +139,13 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
             'A' => NumberFormat::FORMAT_TEXT,
             'B' => NumberFormat::FORMAT_TEXT,
             'H' => NumberFormat::FORMAT_TEXT,
-            'J' => ExcelFormatoNumero::codigoColumna($formato, 4),
-            'K' => ExcelFormatoNumero::codigoColumna($formato, 2),
+            'I' => NumberFormat::FORMAT_TEXT,
+            'K' => ExcelFormatoNumero::codigoColumna($formato, 4),
             'L' => ExcelFormatoNumero::codigoColumna($formato, 2),
             'M' => ExcelFormatoNumero::codigoColumna($formato, 2),
             'N' => ExcelFormatoNumero::codigoColumna($formato, 2),
             'O' => ExcelFormatoNumero::codigoColumna($formato, 2),
+            'P' => ExcelFormatoNumero::codigoColumna($formato, 2),
         ];
 
         // Resumen (mismas columnas A–E numéricas cuando aplica): formato en AfterSheet por rango.
@@ -168,17 +170,18 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
             'E' => 9,   // Emisor
             'F' => 13,  // CUIT
             'G' => 32,  // Descripción mov.
-            'H' => 11,  // O.Compra
-            'I' => 5,   // Mon
-            'J' => 11,  // Cotiz.
-            'K' => 13,  // Mon. Ref.
-            'L' => 16,  // Debe
-            'M' => 16,  // Haber
-            'N' => 16,  // Saldo del mes
-            'O' => 18,  // Saldo ejerc.
+            'H' => 20,  // Centro de costo
+            'I' => 11,  // O.Compra
+            'J' => 5,   // Mon
+            'K' => 11,  // Cotiz.
+            'L' => 13,  // Mon. Ref.
+            'M' => 16,  // Debe
+            'N' => 16,  // Haber
+            'O' => 16,  // Saldo del mes
+            'P' => 18,  // Saldo ejerc.
         ];
         if ($this->multiempresa) {
-            $widths['P'] = 8;
+            $widths['Q'] = 8;
         }
 
         return $widths;
@@ -327,7 +330,7 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
         }
 
         $desde = max(1, $this->filaPrimeraDatosExcel);
-        foreach (['J', 'K', 'L', 'M', 'N', 'O'] as $col) {
+        foreach (['K', 'L', 'M', 'N', 'O', 'P'] as $col) {
             $sheet->getStyle($col.$desde.':'.$col.$highestRow)->applyFromArray([
                 'alignment' => [
                     'horizontal' => Alignment::HORIZONTAL_RIGHT,
@@ -377,7 +380,11 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
                 $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloEmpresa);
             } elseif (str_starts_with($valor, 'Cuenta:')) {
                 $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloCuenta);
+            } elseif (str_starts_with($valor, 'Centro de costo:')) {
+                $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloCuenta);
             } elseif (str_starts_with($valor, 'Total cuenta')) {
+                $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloTotal);
+            } elseif (str_starts_with($valor, 'Total centro de costo')) {
                 $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloTotal);
             } elseif ($valor === 'Saldo Inicial') {
                 $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloSaldo);

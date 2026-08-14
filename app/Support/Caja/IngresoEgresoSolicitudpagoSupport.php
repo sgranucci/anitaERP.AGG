@@ -53,6 +53,9 @@ class IngresoEgresoSolicitudpagoSupport
      * Si hay cuentas de caja del pago, la pierna caja/banco (111xxx) se toma
      * de la cuenta financiera, no de la plantilla del concepto/SP.
      *
+     * $signoOperacion: mismo criterio que IE sin SP (+1 ingreso / −1 egreso-OPP).
+     * Los montos de caja en pantalla suelen venir en valor absoluto; se firman acá.
+     *
      * @param  list<object>  $datosCaja
      * @return list<array<string, mixed>>
      */
@@ -61,7 +64,8 @@ class IngresoEgresoSolicitudpagoSupport
         int $monedaId,
         float|int|string $cotizacion,
         array $datosCaja = [],
-        int $empresaId = 0
+        int $empresaId = 0,
+        int $signoOperacion = -1
     ): array {
         $sp->loadMissing(['cuentas.cuentacontables']);
 
@@ -84,7 +88,7 @@ class IngresoEgresoSolicitudpagoSupport
                 'codigo' => $cuenta->codigo,
                 'nombre' => $cuenta->nombre,
                 'moneda_id' => $monedaId > 0 ? $monedaId : (int) ($sp->moneda_id ?? 0),
-                'cotizacion' => $cotizacion === '' || $cotizacion === null ? 1 : $cotizacion,
+                'cotizacion' => self::cotizacionParaMoneda($monedaId > 0 ? $monedaId : (int) ($sp->moneda_id ?? 0), $cotizacion),
                 'centrocosto_id' => (int) ($cta->centrocosto_id ?? 0),
                 'debe' => $dh === 'D' ? $monto : '',
                 'haber' => $dh === 'H' ? $monto : '',
@@ -94,7 +98,13 @@ class IngresoEgresoSolicitudpagoSupport
         }
 
         $empresaAsiento = $empresaId > 0 ? $empresaId : (int) ($sp->empresa_id ?? 0);
-        $lineasCaja = self::lineasDesdeCuentacaja($datosCaja, $empresaAsiento, $monedaId, $cotizacion);
+        $lineasCaja = self::lineasDesdeCuentacaja(
+            $datosCaja,
+            $empresaAsiento,
+            $monedaId,
+            $cotizacion,
+            $signoOperacion
+        );
         if ($lineasCaja === []) {
             return $lineas;
         }
@@ -115,13 +125,16 @@ class IngresoEgresoSolicitudpagoSupport
         array $datosCaja,
         int $empresaId,
         int $monedaId,
-        float|int|string $cotizacion
+        float|int|string $cotizacion,
+        int $signoOperacion = -1
     ): array {
+        $signo = $signoOperacion < 0 ? -1 : 1;
         $lineas = [];
         foreach ($datosCaja as $movimiento) {
             $cajaId = (int) ($movimiento->cuentacaja_ids ?? $movimiento->cuentacaja_id ?? 0);
-            $importe = (float) ($movimiento->montos ?? $movimiento->monto ?? 0);
-            if ($cajaId <= 0 || abs($importe) < 0.01) {
+            $importeOriginal = (float) ($movimiento->montos ?? $movimiento->monto ?? 0);
+            $importeAbs = abs($importeOriginal);
+            if ($cajaId <= 0 || $importeAbs < 0.01) {
                 continue;
             }
 
@@ -147,16 +160,22 @@ class IngresoEgresoSolicitudpagoSupport
             }
 
             $monedaMov = (int) ($movimiento->moneda_ids ?? $monedaId);
-            $cotizMov = $movimiento->cotizaciones ?? $cotizacion;
-            $dh = $importe < 0 ? 'H' : 'D';
-            $monto = round(abs($importe), 2);
+            $cotizMov = self::cotizacionParaMoneda(
+                $monedaMov > 0 ? $monedaMov : $monedaId,
+                $movimiento->cotizaciones ?? $cotizacion
+            );
+            // Tipo de egreso (OPP/EGR): la pantalla carga el monto en positivo,
+            // la pierna financiera siempre va al Haber. TRA/ingresos respetan el signo.
+            $importeFirmado = $signo < 0 ? -$importeAbs : $importeOriginal;
+            $dh = $importeFirmado < 0 ? 'H' : 'D';
+            $monto = round($importeAbs, 2);
 
             $lineas[] = [
                 'cuentacontable_id' => $cuentaId,
                 'codigo' => $cuenta->codigo,
                 'nombre' => $cuenta->nombre,
                 'moneda_id' => $monedaMov > 0 ? $monedaMov : $monedaId,
-                'cotizacion' => $cotizMov === '' || $cotizMov === null ? 1 : $cotizMov,
+                'cotizacion' => $cotizMov,
                 'centrocosto_id' => 0,
                 'debe' => $dh === 'D' ? $monto : '',
                 'haber' => $dh === 'H' ? $monto : '',
@@ -166,6 +185,22 @@ class IngresoEgresoSolicitudpagoSupport
         }
 
         return $lineas;
+    }
+
+    /**
+     * Moneda local: cotización 1. Evita que leercotizacion (que para id=1 devuelve USD)
+     * deje 1515 en la pierna en pesos y rompa controles posteriores.
+     */
+    private static function cotizacionParaMoneda(int $monedaId, float|int|string|null $cotizacion): float|int|string
+    {
+        if ($monedaId <= 1) {
+            return 1;
+        }
+        if ($cotizacion === '' || $cotizacion === null) {
+            return 1;
+        }
+
+        return $cotizacion;
     }
 
     public static function esCodigoCajaBanco(string $codigo): bool

@@ -2,6 +2,7 @@
 
 namespace App\Support\Compras\PrecargaProveedor;
 
+use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use RuntimeException;
 
 /**
@@ -80,6 +81,9 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
 
             $tipoConcepto = strtoupper((string) ($candidato['tipoconcepto'] ?? ''));
             if ($tipoConcepto === '0' || $tipoConcepto === '') {
+                continue;
+            }
+            if (! $this->tipoConceptoCompatibleConLinea($tipoLinea, $tipoConcepto)) {
                 continue;
             }
 
@@ -209,12 +213,13 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
     private function scorePorTipoLinea(string $tipoLinea, string $tipoConcepto): int
     {
         $mapa = [
+            // Primero los tipos específicos: "percepcion_iva" también contiene "iva".
+            'percepcion_iva' => [ComprobanteProveedorConceptoIvaTipos::PERCEPCION_IVA => 55],
+            'percepcion_iibb' => [ComprobanteProveedorConceptoIvaTipos::PERCEPCION_IIBB => 60],
             'iva' => ['I' => 50, 'P' => 15],
             'neto' => ['G' => 50, 'N' => 40, 'E' => 25],
             'exento' => ['E' => 80, 'N' => 35, 'G' => -40, 'I' => -50, 'P' => -50],
             'no_gravado' => ['N' => 50, 'G' => 25, 'E' => 30],
-            'percepcion_iva' => ['P' => 55, 'I' => 15],
-            'percepcion_iibb' => ['B' => 60, 'P' => 10],
             'percepcion_ganancias' => ['P' => 40, 'B' => 15],
             'interno' => ['T' => 55, 'N' => 15],
             'otro_tributo' => ['T' => 35, 'P' => 25, 'B' => 20, 'M' => 25],
@@ -234,6 +239,23 @@ final class ComprobanteProveedorPdfIaConceptoMatcherSupport
         }
 
         return 0;
+    }
+
+    /**
+     * Las percepciones detectadas explícitamente no pueden degradar a otro tipo
+     * por similitud de nombre o por falta de un candidato con buen puntaje.
+     */
+    private function tipoConceptoCompatibleConLinea(string $tipoLinea, string $tipoConcepto): bool
+    {
+        if (str_contains($tipoLinea, 'percepcion_iibb')) {
+            return $tipoConcepto === ComprobanteProveedorConceptoIvaTipos::PERCEPCION_IIBB;
+        }
+
+        if (str_contains($tipoLinea, 'percepcion_iva')) {
+            return $tipoConcepto === ComprobanteProveedorConceptoIvaTipos::PERCEPCION_IVA;
+        }
+
+        return true;
     }
 
     /**

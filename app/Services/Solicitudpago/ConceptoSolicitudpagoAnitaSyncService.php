@@ -110,6 +110,42 @@ class ConceptoSolicitudpagoAnitaSyncService
     }
 
     /**
+     * Resincroniza únicamente las cuentas de los conceptos ya existentes.
+     *
+     * @return array{conceptos:int,cuentas:int}
+     */
+    public function sincronizarCuentas(): array
+    {
+        ini_set('max_execution_time', '600');
+
+        $api = new ApiAnita();
+        $cuentas = $this->agruparPorConcepto(
+            $this->listarTabla($api, 'concsolcta', 'csolc_id, csolc_empresa, csolc_cuenta, csolc_ccosto, csolc_d_h'),
+            'csolc_id'
+        );
+        $mapaEmpresas = Empresa::query()->pluck('id', 'codigo')->all();
+        $mapaCcosto = Centrocosto::query()->pluck('id', 'codigo')->all();
+        $conceptos = 0;
+
+        DB::transaction(function () use ($cuentas, $mapaEmpresas, $mapaCcosto, &$conceptos) {
+            foreach ($cuentas as $codigo => $filas) {
+                $concepto = Concepto_Solicitudpago::query()->where('codigo', $codigo)->first();
+                if ($concepto === null) {
+                    continue;
+                }
+
+                $this->reemplazarCuentas($concepto, $filas, $mapaEmpresas, $mapaCcosto);
+                $conceptos++;
+            }
+        });
+
+        return [
+            'conceptos' => $conceptos,
+            'cuentas' => Concepto_Solicitudpago_Cuenta::query()->count(),
+        ];
+    }
+
+    /**
      * @return list<object>
      */
     private function listarTabla(ApiAnita $api, string $tabla, string $campos): array
@@ -245,35 +281,48 @@ class ConceptoSolicitudpagoAnitaSyncService
                 $dh = 'D';
             }
 
-            // Anita empresa 0 = cuenta genérica: solo empresas con usuarios asignados
-            // (Biyemas/Kandiko/Rebisco). Budget/Temporal no operan SP.
             $cuentasMatch = Cuentacontable::query()
                 ->where(function ($q) use ($codigoAnita, $codigoCuenta) {
                     $q->where('codigo', $codigoAnita)
                         ->orWhere('codigo', $codigoCuenta)
                         ->orWhereRaw(SqlDialectSupport::castEntero('codigo').' = ?', [(int) $codigoAnita]);
-                });
+                })
+                ->orderBy('id')
+                ->get(['id', 'empresa_id']);
 
             if ($empresaCodigo > 0) {
                 $empresaId = $mapaEmpresas[$empresaCodigo] ?? null;
                 if ($empresaId === null || ! ConceptoSolicitudpagoCuentaEmpresaSupport::esOperativa((int) $empresaId)) {
                     continue;
                 }
-                $cuentasMatch->where('empresa_id', $empresaId);
+                $empresasDestino = [(int) $empresaId];
             } else {
-                $idsOperativas = ConceptoSolicitudpagoCuentaEmpresaSupport::idsConUsuariosAsignados();
-                if ($idsOperativas === []) {
-                    continue;
-                }
-                $cuentasMatch->whereIn('empresa_id', $idsOperativas);
+                // Anita empresa 0 = cuenta genérica para cada empresa operativa.
+                $empresasDestino = ConceptoSolicitudpagoCuentaEmpresaSupport::idsConUsuariosAsignados();
             }
 
-            foreach ($cuentasMatch->get(['id', 'empresa_id']) as $cuenta) {
-                $empresaId = (int) $cuenta->empresa_id;
-                if ($empresaId <= 0) {
+            foreach ($empresasDestino as $empresaId) {
+                $cuenta = $cuentasMatch->first(
+                    static fn (Cuentacontable $item) => (int) $item->empresa_id === $empresaId
+                );
+
+                // Una relación genérica puede mencionar un código que no exista en el
+                // plan de una empresa. Se conserva una sola cuenta canónica del mismo
+                // código para no perder esa pierna del asiento.
+                if ($cuenta === null && $empresaCodigo === 0) {
+                    $cuenta = $cuentasMatch->first(
+                        static fn (Cuentacontable $item) => ConceptoSolicitudpagoCuentaEmpresaSupport::esOperativa(
+                            (int) $item->empresa_id
+                        )
+                    ) ?? $cuentasMatch->first();
+                }
+                if ($cuenta === null) {
                     continue;
                 }
-                $clave = $empresaId.'-'.$cuenta->id;
+
+                // Deduplicar por empresa + código contable, aunque el maestro tenga
+                // accidentalmente más de un ID para el mismo código.
+                $clave = $empresaId.'-'.(int) $codigoAnita;
                 if (isset($vistos[$clave])) {
                     continue;
                 }

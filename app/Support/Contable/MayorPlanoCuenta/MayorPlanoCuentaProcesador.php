@@ -18,6 +18,9 @@ class MayorPlanoCuentaProcesador
     /** @var array<int, string> */
     private array $nombresEmpresa = [];
 
+    /** @var array<string, string> */
+    private array $nombresCentrocosto = [];
+
     public function __construct(
         private readonly MayorPlanoCuentaAnitaBridgeReader $reader = new MayorPlanoCuentaAnitaBridgeReader(),
         private readonly MayorPlanoCuentaErpAsientoReader $erpReader = new MayorPlanoCuentaErpAsientoReader(),
@@ -41,6 +44,8 @@ class MayorPlanoCuentaProcesador
         string $modoInclusionAsientos,
         MayorConceptoMonedaConverter $monedaConverter,
         array $cuentas = [],
+        ?MayorPlanoCuentaCentrocostoFiltroSupport $centrocostoFiltro = null,
+        bool $agruparPorCc = false,
     ): array {
         $empresaIds = array_values(array_filter(array_map('intval', $empresaIds), fn (int $id) => $id > 0));
         if ($empresaIds === []) {
@@ -49,6 +54,7 @@ class MayorPlanoCuentaProcesador
 
         $cuentas = array_values(array_unique(array_filter(array_map('intval', $cuentas), fn (int $c) => $c > 0)));
         sort($cuentas);
+        $centrocostoFiltro ??= new MayorPlanoCuentaCentrocostoFiltroSupport();
 
         $t0 = microtime(true);
         $this->precargarNombres($empresaIds);
@@ -85,6 +91,7 @@ class MayorPlanoCuentaProcesador
             $soloMonedaOrigen,
             $incluyeSubdiario,
             $modoInclusionAsientos,
+            $centrocostoFiltro->tieneFiltro() || $agruparPorCc,
         );
         $saldosInicialesPorCuenta = $planSaldo['por_codigo'];
         $omitirCargaSaldoErpCompleto = (bool) ($planSaldo['usar_saldos_mes'] ?? false);
@@ -143,6 +150,7 @@ class MayorPlanoCuentaProcesador
             $cuentaDesde,
             $cuentaHasta,
             $cuentas,
+            $centrocostoFiltro,
         );
 
         $movimientos = $resolverOc->aplicarAMovimientos($movimientos);
@@ -169,7 +177,7 @@ class MayorPlanoCuentaProcesador
         $totalLineas = 0;
 
         foreach ($cuentasSeccion as $cuenta) {
-            $seccion = $this->procesarCuenta(
+            $argumentosCuenta = [
                 $cuenta,
                 $movimientos,
                 $fechaDesde,
@@ -180,7 +188,10 @@ class MayorPlanoCuentaProcesador
                 $soloMonedaOrigen,
                 $modoInclusionAsientos,
                 $saldosInicialesPorCuenta[$cuenta] ?? null,
-            );
+            ];
+            $seccion = $agruparPorCc
+                ? $this->procesarCuentaAgrupada(...$argumentosCuenta)
+                : $this->procesarCuenta(...$argumentosCuenta);
 
             if ($seccion === null) {
                 continue;
@@ -221,6 +232,10 @@ class MayorPlanoCuentaProcesador
                 'solo_moneda_origen' => $soloMonedaOrigen,
                 'incluye_subdiario' => $incluyeSubdiario,
                 'modo_inclusion_asientos' => $modoInclusionAsientos,
+                'centrocostos_codigo' => $centrocostoFiltro->codigos(),
+                'centrocostos_meta' => $centrocostoFiltro->metaTexto(),
+                'agrupar_por_cc' => $agruparPorCc,
+                'incluir_sin_cc' => $centrocostoFiltro->incluirSinCc(),
                 'fuente_erp_hasta' => (int) ($datos['fuente_erp_hasta'] ?? 0),
                 'tramo_erp_desde' => (int) ($datos['tramo_erp_desde'] ?? 0),
                 'tramo_erp_hasta' => (int) ($datos['tramo_erp_hasta'] ?? 0),
@@ -429,6 +444,7 @@ class MayorPlanoCuentaProcesador
         bool $soloMonedaOrigen,
         bool $incluyeSubdiario,
         string $modoInclusionAsientos,
+        bool $requiereGranoCentrocosto,
     ): array {
         $vacio = [
             'usar_saldos_mes' => false,
@@ -439,7 +455,8 @@ class MayorPlanoCuentaProcesador
             'advertencias' => [],
         ];
 
-        if ($cutoffErp <= 0 || $fechaDesde > $cutoffErp || $fechaSaldoDesde <= 0) {
+        if ($requiereGranoCentrocosto
+            || $cutoffErp <= 0 || $fechaDesde > $cutoffErp || $fechaSaldoDesde <= 0) {
             return $vacio;
         }
 
@@ -525,6 +542,7 @@ class MayorPlanoCuentaProcesador
     {
         $this->nombresCuenta = [];
         $this->nombresEmpresa = [];
+        $this->nombresCentrocosto = [];
 
         foreach ($empresaIds as $empresaId) {
             $nombreEmp = DB::table('empresa')->where('id', $empresaId)->value('nombre');
@@ -542,6 +560,13 @@ class MayorPlanoCuentaProcesador
                         'nombre' => (string) $c->nombre,
                     ];
                 }
+            }
+        }
+
+        foreach (DB::table('centrocosto')->get(['codigo', 'nombre']) as $cc) {
+            $codigo = $this->normalizarCodigoCentrocosto($cc->codigo ?? null);
+            if ($codigo !== '') {
+                $this->nombresCentrocosto[$codigo] = trim((string) ($cc->nombre ?? ''));
             }
         }
     }
@@ -563,12 +588,14 @@ class MayorPlanoCuentaProcesador
         int $cuentaDesde,
         int $cuentaHasta,
         array $cuentas = [],
+        ?MayorPlanoCuentaCentrocostoFiltroSupport $centrocostoFiltro = null,
     ): array {
         $movs = [];
+        $centrocostoFiltro ??= new MayorPlanoCuentaCentrocostoFiltroSupport();
 
         foreach ($ctamov as $linea) {
             $mov = $this->desdeCtamov($linea, $leyendasPago);
-            if ($mov !== null && $this->movimientoAplica($mov, $monedaConverter, $monedaReporteId, $soloMonedaOrigen, $modoInclusionAsientos, $cuentaDesde, $cuentaHasta, $cuentas)) {
+            if ($mov !== null && $this->movimientoAplica($mov, $monedaConverter, $monedaReporteId, $soloMonedaOrigen, $modoInclusionAsientos, $cuentaDesde, $cuentaHasta, $cuentas, $centrocostoFiltro)) {
                 $movs[] = $mov;
             }
         }
@@ -586,6 +613,7 @@ class MayorPlanoCuentaProcesador
                     $cuentaDesde,
                     $cuentaHasta,
                     $cuentas,
+                    $centrocostoFiltro,
                 ),
             );
         }
@@ -606,6 +634,7 @@ class MayorPlanoCuentaProcesador
         int $cuentaDesde,
         int $cuentaHasta,
         array $cuentas = [],
+        ?MayorPlanoCuentaCentrocostoFiltroSupport $centrocostoFiltro = null,
     ): bool {
         $cuenta = (int) ($mov['cuenta'] ?? 0);
         if ($cuenta <= 0) {
@@ -624,6 +653,11 @@ class MayorPlanoCuentaProcesador
             (string) ($mov['tipo_asiento'] ?? ''),
             $modoInclusionAsientos,
         )) {
+            return false;
+        }
+
+        $centrocostoFiltro ??= new MayorPlanoCuentaCentrocostoFiltroSupport();
+        if (! $centrocostoFiltro->pasaFiltro($mov['centrocosto_codigo'] ?? null)) {
             return false;
         }
 
@@ -682,8 +716,10 @@ class MayorPlanoCuentaProcesador
         int $cuentaDesde,
         int $cuentaHasta,
         array $cuentas = [],
+        ?MayorPlanoCuentaCentrocostoFiltroSupport $centrocostoFiltro = null,
     ): array {
         $movs = [];
+        $centrocostoFiltro ??= new MayorPlanoCuentaCentrocostoFiltroSupport();
 
         foreach (['cuenta', 'contrapartida'] as $pasada) {
             foreach ($this->agruparSubdiario($subdiario, $pasada) as $grupo) {
@@ -691,7 +727,7 @@ class MayorPlanoCuentaProcesador
                 if ($mov === null) {
                     continue;
                 }
-                if ($this->movimientoAplica($mov, $monedaConverter, $monedaReporteId, $soloMonedaOrigen, $modoInclusionAsientos, $cuentaDesde, $cuentaHasta, $cuentas)) {
+                if ($this->movimientoAplica($mov, $monedaConverter, $monedaReporteId, $soloMonedaOrigen, $modoInclusionAsientos, $cuentaDesde, $cuentaHasta, $cuentas, $centrocostoFiltro)) {
                     $movs[] = $mov;
                 }
             }
@@ -702,17 +738,18 @@ class MayorPlanoCuentaProcesador
 
     /**
      * @param  list<object>  $subdiario
-     * @return list<array{lineas: list<object>, cuenta: int, dh: string, pasada: string}>
+     * @return list<array{lineas: list<object>, cuenta: int, dh: string, pasada: string, centrocosto_codigo: string}>
      */
     private function agruparSubdiario(array $subdiario, string $pasada): array
     {
-        /** @var array<string, array{lineas: list<object>, cuenta: int, dh: string, pasada: string}> $grupos */
+        /** @var array<string, array{lineas: list<object>, cuenta: int, dh: string, pasada: string, centrocosto_codigo: string}> $grupos */
         $grupos = [];
 
         foreach ($subdiario as $linea) {
             if ($pasada === 'cuenta') {
                 $cuenta = (int) ($linea->subd_cuenta ?? 0);
                 $dh = strtoupper(trim((string) ($linea->subd_tipo_mov ?? 'D')));
+                $centrocostoCodigo = $this->normalizarCodigoCentrocosto($linea->subd_ccosto_cta ?? null);
             } else {
                 $cuenta = (int) ($linea->subd_contrapartida ?? 0);
                 if ($cuenta <= 0) {
@@ -720,6 +757,7 @@ class MayorPlanoCuentaProcesador
                 }
                 $tipoMov = strtoupper(trim((string) ($linea->subd_tipo_mov ?? 'D')));
                 $dh = $tipoMov === 'D' ? 'H' : 'D';
+                $centrocostoCodigo = $this->normalizarCodigoCentrocosto($linea->subd_ccosto_con ?? null);
             }
 
             if ($cuenta <= 0) {
@@ -729,7 +767,7 @@ class MayorPlanoCuentaProcesador
             $empresa = (int) ($linea->subd_empresa ?? 0);
             $fecha = (int) ($linea->subd_fecha ?? 0);
             $nroOp = (int) ($linea->subd_nro_operacion ?? 0);
-            $clave = $empresa.'|'.$cuenta.'|'.$fecha.'|'.$nroOp.'|'.$dh;
+            $clave = $empresa.'|'.$cuenta.'|'.$fecha.'|'.$nroOp.'|'.$dh.'|'.$centrocostoCodigo;
 
             if (! isset($grupos[$clave])) {
                 $grupos[$clave] = [
@@ -737,6 +775,7 @@ class MayorPlanoCuentaProcesador
                     'cuenta' => $cuenta,
                     'dh' => $dh,
                     'pasada' => $pasada,
+                    'centrocosto_codigo' => $centrocostoCodigo,
                 ];
             }
 
@@ -747,7 +786,7 @@ class MayorPlanoCuentaProcesador
     }
 
     /**
-     * @param  array{lineas: list<object>, cuenta: int, dh: string, pasada: string}  $grupo
+     * @param  array{lineas: list<object>, cuenta: int, dh: string, pasada: string, centrocosto_codigo: string}  $grupo
      * @return array<string, mixed>|null
      */
     private function movimientoDesdeGrupoSubdiario(
@@ -809,6 +848,7 @@ class MayorPlanoCuentaProcesador
             'origen' => 'subdiario',
             'empresa_id' => (int) ($lineaRef->subd_empresa ?? 0),
             'cuenta' => (int) $grupo['cuenta'],
+            'centrocosto_codigo' => (string) ($grupo['centrocosto_codigo'] ?? ''),
             'fecha' => $fecha,
             'nro_asiento' => (int) ($lineaRef->subd_nro_operacion ?? 0),
             'nro_linea' => $pasada === 'cuenta' ? 1 : 2,
@@ -865,6 +905,7 @@ class MayorPlanoCuentaProcesador
             'origen' => 'ctamov',
             'empresa_id' => (int) ($linea->ctav_empresa ?? 0),
             'cuenta' => $cuenta,
+            'centrocosto_codigo' => $this->normalizarCodigoCentrocosto($linea->ctav_ccosto ?? null),
             'fecha' => $fecha,
             'nro_asiento' => (int) ($linea->ctav_nro_asiento ?? 0),
             'nro_linea' => (int) ($linea->ctav_nro_linea ?? 0),
@@ -938,10 +979,13 @@ class MayorPlanoCuentaProcesador
         bool $soloMonedaOrigen,
         string $modoInclusionAsientos,
         ?float $saldoInicialPrecalculado = null,
+        ?string $centrocostoCodigoFiltro = null,
     ): ?array {
         $lineasCuenta = array_values(array_filter(
             $movimientos,
-            fn (array $m) => (int) ($m['cuenta'] ?? 0) === $cuenta,
+            fn (array $m) => (int) ($m['cuenta'] ?? 0) === $cuenta
+                && ($centrocostoCodigoFiltro === null
+                    || trim((string) ($m['centrocosto_codigo'] ?? '')) === $centrocostoCodigoFiltro),
         ));
 
         if ($lineasCuenta === [] && $saldoInicialPrecalculado === null) {
@@ -1037,6 +1081,7 @@ class MayorPlanoCuentaProcesador
             }
 
             $nroAsiento = (int) ($mov['nro_asiento'] ?? 0);
+            $centrocostoCodigo = trim((string) ($mov['centrocosto_codigo'] ?? ''));
             $lineasDetalle[] = [
                 'tipo_fila' => 'detalle',
                 'empresa_id' => (int) ($mov['empresa_id'] ?? 0),
@@ -1044,6 +1089,8 @@ class MayorPlanoCuentaProcesador
                 'cuenta' => $cuenta,
                 'cuenta_codigo' => MayorPlanoCuentaSupport::formatearCodigoCuenta($cuenta),
                 'cuenta_nombre' => $this->nombresCuenta[$cuenta]['nombre'] ?? MayorPlanoCuentaSupport::formatearCodigoCuenta($cuenta),
+                'centrocosto_codigo' => $centrocostoCodigo,
+                'centrocosto_nombre' => $this->nombresCentrocosto[$centrocostoCodigo] ?? '',
                 'fecha' => $fecha,
                 'fecha_fmt' => MayorPlanoCuentaSupport::formatearFecha($fecha),
                 'nro_asiento' => $nroAsiento,
@@ -1085,6 +1132,93 @@ class MayorPlanoCuentaProcesador
             'total_debe' => round($totalDebe, 2),
             'total_haber' => round($totalHaber, 2),
             'cantidad_lineas' => count($lineasDetalle),
+            'centrocosto_codigo' => $centrocostoCodigoFiltro ?? '',
+            'centrocosto_nombre' => $this->nombresCentrocosto[$centrocostoCodigoFiltro ?? ''] ?? '',
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $movimientos
+     * @return array<string, mixed>|null
+     */
+    private function procesarCuentaAgrupada(
+        int $cuenta,
+        array $movimientos,
+        int $fechaDesde,
+        int $fechaHasta,
+        int $fechaSaldoDesde,
+        MayorConceptoMonedaConverter $monedaConverter,
+        int $monedaReporteId,
+        bool $soloMonedaOrigen,
+        string $modoInclusionAsientos,
+        ?float $saldoInicialPrecalculado = null,
+    ): ?array {
+        $codigos = [];
+        foreach ($movimientos as $mov) {
+            if ((int) ($mov['cuenta'] ?? 0) !== $cuenta) {
+                continue;
+            }
+            $codigo = trim((string) ($mov['centrocosto_codigo'] ?? ''));
+            $codigos[$codigo] = $codigo;
+        }
+
+        $codigos = array_values($codigos);
+        usort($codigos, static function (string $a, string $b): int {
+            if ($a === '' || $b === '') {
+                return $a === $b ? 0 : ($a === '' ? -1 : 1);
+            }
+
+            return strnatcasecmp($a, $b);
+        });
+
+        $grupos = [];
+        $lineas = [];
+        $saldoInicial = 0.0;
+        $totalDebe = 0.0;
+        $totalHaber = 0.0;
+        $cantidadLineas = 0;
+
+        foreach ($codigos as $codigo) {
+            $grupo = $this->procesarCuenta(
+                $cuenta,
+                $movimientos,
+                $fechaDesde,
+                $fechaHasta,
+                $fechaSaldoDesde,
+                $monedaConverter,
+                $monedaReporteId,
+                $soloMonedaOrigen,
+                $modoInclusionAsientos,
+                null,
+                $codigo,
+            );
+            if ($grupo === null) {
+                continue;
+            }
+
+            $grupos[] = $grupo;
+            $lineas = array_merge($lineas, $grupo['lineas'] ?? []);
+            $saldoInicial += (float) ($grupo['saldo_inicial'] ?? 0);
+            $totalDebe += (float) ($grupo['total_debe'] ?? 0);
+            $totalHaber += (float) ($grupo['total_haber'] ?? 0);
+            $cantidadLineas += (int) ($grupo['cantidad_lineas'] ?? 0);
+        }
+
+        if ($grupos === []) {
+            return null;
+        }
+
+        return [
+            'cuenta' => $cuenta,
+            'cuenta_codigo' => MayorPlanoCuentaSupport::formatearCodigoCuenta($cuenta),
+            'cuenta_nombre' => $this->nombresCuenta[$cuenta]['nombre'] ?? MayorPlanoCuentaSupport::formatearCodigoCuenta($cuenta),
+            'saldo_inicial' => round($saldoInicial, 2),
+            'saldo_ejercicio_inicial' => round($saldoInicial, 2),
+            'lineas' => $lineas,
+            'grupos_cc' => $grupos,
+            'total_debe' => round($totalDebe, 2),
+            'total_haber' => round($totalHaber, 2),
+            'cantidad_lineas' => $cantidadLineas,
         ];
     }
 
@@ -1096,6 +1230,16 @@ class MayorPlanoCuentaProcesador
         [, , $delta] = $this->calcularDebeHaberDelta($mov, $monedaConverter, $monedaReporteId);
 
         return $delta;
+    }
+
+    private function normalizarCodigoCentrocosto(mixed $codigo): string
+    {
+        $codigo = trim((string) $codigo);
+        if ($codigo !== '' && ctype_digit($codigo)) {
+            $codigo = (string) ((int) $codigo);
+        }
+
+        return $codigo === '0' ? '' : $codigo;
     }
 
     /**

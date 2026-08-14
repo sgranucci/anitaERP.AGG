@@ -14,7 +14,8 @@
     $puedeVerOc = $puede_ver_ordencompra ?? false;
     $puedeVerProveedor = $puede_ver_proveedor ?? false;
     $mostrarEmpresa = $multiempresa ?? false;
-    $colSpanBase = $mostrarEmpresa ? 12 : 11;
+    $totalColumnas = $mostrarEmpresa ? 17 : 16;
+    $colSpanAntesImportes = 12;
 @endphp
 <thead>
     <tr>
@@ -25,6 +26,7 @@
         <th>Emisor</th>
         <th>CUIT</th>
         <th>Descripción mov.</th>
+        <th>Centro de costo</th>
         <th>O.Compra</th>
         <th>Mon</th>
         <th class="text-right">Cotiz.</th>
@@ -46,14 +48,14 @@
         @endphp
         @if ($tipoFila === 'header_empresa')
             <tr class="font-weight-bold" style="background-color: #fff3cd;">
-                <td colspan="{{ $mostrarEmpresa ? 16 : 15 }}">
+                <td colspan="{{ $totalColumnas }}">
                     <i class="far fa-building mr-1"></i>
                     Empresa: {{ $fila['nombreempresa'] ?? '' }}
                 </td>
             </tr>
         @elseif ($tipoFila === 'header_cuenta')
             <tr class="font-weight-bold" style="background-color: #d6eaf8;">
-                <td colspan="{{ $mostrarEmpresa ? 16 : 15 }}">
+                <td colspan="{{ $totalColumnas }}">
                     Cuenta:
                     @if ($puedeVerCuenta && (int) ($fila['cuentacontable_id'] ?? 0) > 0)
                         <a href="{{ route('editar_cuentacontable', ['id' => $fila['cuentacontable_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
@@ -66,20 +68,32 @@
                     {{ $fila['cuenta_nombre'] ?? '' }}
                 </td>
             </tr>
+        @elseif ($tipoFila === 'header_cc')
+            <tr class="font-weight-bold" style="background-color: #e8f8f5;">
+                <td colspan="{{ $totalColumnas }}">
+                    Centro de costo:
+                    {{ ($fila['centrocosto_codigo'] ?? '') !== '' ? $fila['centrocosto_codigo'] : 'Sin CC' }}
+                    @if (! empty($fila['centrocosto_nombre']))
+                        — {{ $fila['centrocosto_nombre'] }}
+                    @endif
+                </td>
+            </tr>
         @elseif ($tipoFila === 'saldo_inicial')
             <tr style="background-color: #f8f9fa;">
                 <td>Saldo Inicial</td>
-                <td colspan="{{ $colSpanBase }}"></td>
+                <td colspan="14"></td>
                 <td class="text-right">{{ $formatearMonto($fila['saldo_ejercicio'] ?? null, true) }}</td>
                 @if ($mostrarEmpresa)
                     <td></td>
                 @endif
             </tr>
-        @elseif ($tipoFila === 'total_cuenta')
+        @elseif ($tipoFila === 'total_cuenta' || $tipoFila === 'total_cc')
             <tr class="font-weight-bold" style="background-color: #e9ecef; border-top: 1px solid #adb5bd;">
-                <td colspan="{{ $colSpanBase }}" class="text-right">
-                    Total cuenta
-                    @if ($puedeVerCuenta && (int) ($fila['cuentacontable_id'] ?? 0) > 0)
+                <td colspan="{{ $colSpanAntesImportes }}" class="text-right">
+                    {{ $tipoFila === 'total_cc' ? 'Total centro de costo' : 'Total cuenta' }}
+                    @if ($tipoFila === 'total_cc')
+                        {{ ($fila['centrocosto_codigo'] ?? '') !== '' ? $fila['centrocosto_codigo'] : 'Sin CC' }}
+                    @elseif ($puedeVerCuenta && (int) ($fila['cuentacontable_id'] ?? 0) > 0)
                         <a href="{{ route('editar_cuentacontable', ['id' => $fila['cuentacontable_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
                            target="_blank" rel="noopener" class="text-primary">
                             {{ $fila['cuenta_codigo'] ?? '' }}
@@ -216,6 +230,12 @@
                 <td>{{ $fila['cuit'] ?? '' }}</td>
                 <td>{{ $fila['descripcion'] ?? '' }}</td>
                 <td>
+                    {{ ($fila['centrocosto_codigo'] ?? '') !== '' ? $fila['centrocosto_codigo'] : 'Sin CC' }}
+                    @if (! empty($fila['centrocosto_nombre']))
+                        — {{ $fila['centrocosto_nombre'] }}
+                    @endif
+                </td>
+                <td>
                     @php
                         $nroOcFila = (int) ($fila['nro_oc'] ?? 0);
                         $ocIdFila = (int) ($fila['ordencompra_id'] ?? 0);
@@ -252,7 +272,7 @@
         @endif
     @empty
         <tr>
-            <td colspan="{{ $mostrarEmpresa ? 16 : 15 }}" class="text-center text-muted py-4">
+            <td colspan="{{ $totalColumnas }}" class="text-center text-muted py-4">
                 No se generaron movimientos para el período seleccionado.
             </td>
         </tr>

@@ -41,6 +41,13 @@
 @endsection
 
 @section('scripts')
+@php
+    // @json() de Blade parte los argumentos por comas: rutas con 3 parámetros
+    // o arrays literales con 3 claves deben resolverse antes en variables.
+    $rdUrlActualizarColumna = route('actualizar_columna_layout_reporte_definible', ['id' => $data->id, 'layoutId' => '__LID__', 'columnaId' => '__CID__']);
+    $rdUrlEliminarColumna = route('eliminar_columna_layout_reporte_definible', ['id' => $data->id, 'layoutId' => '__LID__', 'columnaId' => '__CID__']);
+    $rdLayoutsPayload = $layouts_payload ?? ['sistema' => [], 'informe' => [], 'layout_default_id' => null, 'tipos_columna' => []];
+@endphp
 <script>
 window.rdConfig = {
     reporteId: {{ (int) $data->id }},
@@ -64,8 +71,8 @@ window.rdConfig = {
         eliminarLayout: @json(route('eliminar_layout_reporte_definible', ['id' => $data->id, 'layoutId' => '__LID__'])),
         defaultLayout: @json(route('default_layout_reporte_definible', ['id' => $data->id, 'layoutId' => '__LID__'])),
         agregarColumna: @json(route('guardar_columna_layout_reporte_definible', ['id' => $data->id, 'layoutId' => '__LID__'])),
-        actualizarColumna: @json(route('actualizar_columna_layout_reporte_definible', ['id' => $data->id, 'layoutId' => '__LID__', 'columnaId' => '__CID__'])),
-        eliminarColumna: @json(route('eliminar_columna_layout_reporte_definible', ['id' => $data->id, 'layoutId' => '__LID__', 'columnaId' => '__CID__'])),
+        actualizarColumna: @json($rdUrlActualizarColumna),
+        eliminarColumna: @json($rdUrlEliminarColumna),
         reordenarColumnas: @json(route('reordenar_columnas_layout_reporte_definible', ['id' => $data->id, 'layoutId' => '__LID__'])),
         eliReglas: @json(route('eli_reglas_reporte_definible', ['id' => $data->id])),
         guardarEliRegla: @json(route('guardar_eli_regla_reporte_definible', ['id' => $data->id])),
@@ -92,7 +99,7 @@ window.rdConfig = {
     puedeActualizar: @json((bool) $puede_actualizar),
     rubroInicial: {{ (int) request('rubro', 0) }},
     empresaIds: @json($empresa_query->pluck('id')->map(fn($v)=>(int)$v)->values()),
-    layoutsPayload: @json($layouts_payload ?? ['sistema' => [], 'informe' => [], 'layout_default_id' => null, 'tipos_columna' => []]),
+    layoutsPayload: @json($rdLayoutsPayload),
     eliReglas: @json($eli_reglas ?? []),
     participaciones: @json($participaciones ?? []),
     alertas: @json($alertas_payload ?? []),

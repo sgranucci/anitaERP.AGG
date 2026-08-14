@@ -17,6 +17,7 @@ use App\Support\Compras\ApiPrecargaProveedorLogger;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorOcCuitMensajeSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorResolucionSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorTipoItemSupport;
 use DB;
@@ -113,11 +114,13 @@ class ApiController extends Controller
             if ($cuitOrdenCompra != $cuitProveedor)
             {
                 $status = 404;
-                $message = "OC no corresponde con el CUIT indicado";
+                $message = app(PrecargaProveedorOcCuitMensajeSupport::class)
+                    ->mensaje($numeroOc, $cuitOrdenCompra, $cuitProveedor);
                 $flError = true;
                 $log->warning('lista_concepto.cuit_no_coincide', [
                     'cuit_proveedor' => $cuitProveedor,
                     'cuit_orden_compra' => $cuitOrdenCompra,
+                    'numero_oc' => $numeroOc,
                     'status' => $status,
                 ]);
             }
@@ -206,7 +209,10 @@ class ApiController extends Controller
                                 $conceptos[] = [
                                     'id_concepto' => $concepto->concepto_ivacompras->codigo,
                                     'nombre' => $concepto->concepto_ivacompras->nombre,
-                                    'descripcion_ai' => $concepto->concepto_ivacompras->nombre_ia ?? $concepto->concepto_ivacompras->nombre
+                                    'descripcion_ai' => $concepto->concepto_ivacompras->nombre_ia ?? $concepto->concepto_ivacompras->nombre,
+                                    // Código canónico de Concepto_Ivacompra::$enumTipoConcepto.
+                                    // Permite al conector distinguir P (Perc. IVA), B (Perc. IIBB) y S (SIRCREB).
+                                    'tipoconcepto' => (string) ($concepto->concepto_ivacompras->tipoconcepto ?? ''),
                                 ];
                             }
                         }
@@ -504,8 +510,14 @@ class ApiController extends Controller
         }
 
         try {
+            $conceptosPermitidos = ComprobanteProveedorConceptosIvaCoherenciaSupport::idsPermitidosDesdeTipoTransaccion(
+                $comprobante
+            );
             $lineasConcepto = ComprobanteProveedorConceptosIvaCoherenciaSupport::enriquecerCodigosAnita(
-                ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar($lineasConcepto)
+                ComprobanteProveedorConceptosIvaCoherenciaSupport::normalizarYValidar(
+                    $lineasConcepto,
+                    $conceptosPermitidos
+                )
             );
         } catch (\RuntimeException $e) {
             $log->warning('recibe_comprobante.coherencia_iva_error', [

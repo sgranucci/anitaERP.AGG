@@ -5,10 +5,14 @@
 
 @section('scripts')
 <script src="{{asset('assets/pages/scripts/admin/index.js')}}" type="text/javascript"></script>
-<script src="{{asset('assets/pages/scripts/admin/listado-filtros.js')}}" type="text/javascript"></script>
+<script src="{{asset('assets/pages/scripts/includes/listado-filtros.js')}}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
+@php
+    $limpiarUrl = route('reporte_definible');
+    $tieneCriteriosListado = \App\Support\Contable\ReporteDefinibleListadoFiltros::tieneCriteriosAplicados($filtros ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         <div class="card card-info">
@@ -16,15 +20,27 @@
                 <h3 class="card-title">
                     <i class="fa fa-sitemap"></i> Reportes contables definibles
                 </h3>
-                <div class="card-tools">
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-reporte-definible',
-                        'nuevoRegistroUrl' => $puede_crear ? route('crear_reporte_definible') : null,
-                        'nuevoRegistroCan' => $puede_crear,
+                        'filtroValor' => $filtros['filtro_valor'] ?? '',
+                        'tieneCriterios' => $tieneCriteriosListado,
+                        'limpiarUrl' => $limpiarUrl,
+                        'placeholder' => 'Búsqueda rápida (nombre, código, título…)',
+                        'toggleTarget' => '#panel-filtros-reporte-definible',
+                        'toggleId' => 'btn-toggle-filtros-reporte-definible',
+                        'inputId' => 'filtro_valor',
+                        'nuevoRegistroUrl' => route('crear_reporte_definible'),
+                        'nuevoRegistroCan' => 'crear-reporte-definible',
                         'nuevoRegistroLabel' => 'Nuevo informe',
                     ])
                 </div>
             </div>
+            <form method="get" action="{{ route('reporte_definible') }}" id="form-filtros-reporte-definible" class="mb-0">
+                @include('contable.reporte_definible.partials.filtros_listado', [
+                    'limpiarUrl' => $limpiarUrl,
+                ])
+            </form>
             <div class="card-body">
                 @include('includes.mensaje')
                 @if (session('advertencias_import'))
@@ -83,8 +99,6 @@
                     'ruta' => 'lista_reporte_definible',
                     'queryparams' => $filtrosQuery ?? [],
                 ])
-
-                @include('contable.reporte_definible.partials.filtros_listado')
 
                 <div class="table-responsive">
                     <table id="tabla-paginada" class="table table-hover table-sm">
@@ -164,7 +178,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="8" class="text-center text-muted py-4">
+                                    <td colspan="9" class="text-center text-muted py-4">
                                         No hay informes. Cree uno nuevo o impórtelos desde Anita.
                                     </td>
                                 </tr>

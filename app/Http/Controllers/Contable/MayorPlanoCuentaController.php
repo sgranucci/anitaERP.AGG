@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Contable\MayorPlanoCuentaReporteService;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCentrocostoFiltroSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaRuntimeSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
@@ -52,6 +53,7 @@ class MayorPlanoCuentaController extends Controller
         $consultado = false;
         $filas = null;
         $resumen = [];
+        $resumenCc = [];
         $totales = null;
         $erroresBridge = [];
         $resultado = null;
@@ -70,6 +72,7 @@ class MayorPlanoCuentaController extends Controller
         if ($consultado && $resultado !== null) {
             $totales = $this->armarTotalesDesdeResultado($resultado);
             $resumen = $this->reporteService->resumenPorCuenta($resultado);
+            $resumenCc = $this->reporteService->resumenPorCentrocosto($resultado);
             $erroresBridge = $resultado['errores_bridge'] ?? [];
             $perPage = max(10, min(200, (int) $request->input('per_page', 50)));
             $filasAplanadas = $this->reporteService->aplanarFilas($resultado, $filtros, false);
@@ -95,15 +98,22 @@ class MayorPlanoCuentaController extends Controller
             'consultado' => $consultado,
             'filas' => $filas,
             'resumen' => $resumen,
+            'resumen_cc' => $resumenCc,
             'totales' => $totales,
             'errores_bridge' => $erroresBridge,
             'moneda' => $moneda,
             'cuenta_desde_meta' => $this->metaCuentaFiltro((int) ($filtros['cuenta_desde'] ?? 0), $empresaRefId),
             'cuenta_hasta_meta' => $this->metaCuentaFiltro((int) ($filtros['cuenta_hasta'] ?? 0), $empresaRefId),
             'cuentas_iniciales' => $this->metaCuentasParticulares($filtros['cuentas'] ?? [], $empresaRefId),
+            'cc_desde_meta' => $this->metaCentrocostoFiltro((string) ($filtros['cc_desde'] ?? '')),
+            'cc_hasta_meta' => $this->metaCentrocostoFiltro((string) ($filtros['cc_hasta'] ?? '')),
+            'centrocostos_iniciales' => $this->metaCentrocostosParticulares(
+                (string) ($filtros['centrocostos_codigo'] ?? ''),
+            ),
             'periodo_texto' => $this->reporteService->formatearPeriodoTexto($filtros),
             'empresas_texto' => $this->reporteService->formatearEmpresasTexto($filtros),
             'inclusion_asientos_texto' => $this->reporteService->formatearInclusionAsientosTexto($filtros),
+            'centrocostos_texto' => $this->reporteService->formatearCentrocostosTexto($filtros),
             'mes_actual' => (int) date('n'),
             'anio_actual' => (int) date('Y'),
             'puede_ver_asiento' => can('listar-asiento', false) || can('editar-asiento', false),
@@ -277,8 +287,8 @@ class MayorPlanoCuentaController extends Controller
     {
         $userId = (int) (auth()->id() ?? 0);
 
-        // v3: Mon.Referencia complementaria a la moneda del reporte (no a la del asiento).
-        return 'mayor_plano_cuenta_v3_'.$userId.'_'.MayorPlanoCuentaListadoFiltros::firma($filtros);
+        // v4: filtro y clasificación por centro de costo.
+        return 'mayor_plano_cuenta_v4_'.$userId.'_'.MayorPlanoCuentaListadoFiltros::firma($filtros);
     }
 
     /**
@@ -319,6 +329,7 @@ class MayorPlanoCuentaController extends Controller
         }
 
         $partes[] = $this->reporteService->formatearInclusionAsientosTexto($filtros);
+        $partes[] = $this->reporteService->formatearCentrocostosTexto($filtros);
 
         if (! empty($filtros['solo_moneda_origen'])) {
             $partes[] = 'Solo moneda origen';
@@ -395,6 +406,35 @@ class MayorPlanoCuentaController extends Controller
         }
 
         return $out;
+    }
+
+    /** @return array{codigo: string, nombre: string} */
+    private function metaCentrocostoFiltro(string $codigo): array
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '') {
+            return ['codigo' => '', 'nombre' => ''];
+        }
+
+        $nombre = DB::table('centrocosto')->where('codigo', $codigo)->value('nombre');
+
+        return ['codigo' => $codigo, 'nombre' => $nombre ? (string) $nombre : ''];
+    }
+
+    /** @return list<array{codigo: string, nombre: string}> */
+    private function metaCentrocostosParticulares(string $codigos): array
+    {
+        $lista = MayorPlanoCuentaCentrocostoFiltroSupport::parsearCodigos($codigos);
+        if ($lista === []) {
+            return [];
+        }
+
+        $nombres = DB::table('centrocosto')->whereIn('codigo', $lista)->pluck('nombre', 'codigo')->all();
+
+        return array_map(static fn (string $codigo): array => [
+            'codigo' => $codigo,
+            'nombre' => isset($nombres[$codigo]) ? (string) $nombres[$codigo] : '',
+        ], $lista);
     }
 
     /**

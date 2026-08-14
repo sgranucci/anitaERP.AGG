@@ -245,12 +245,27 @@ var montoPendienteSp = 0;
 			// Valida montos asiento
 			sumaMontoAsiento();
 
-			totalDebeAsiento = parseTotalAsientoCampo($("#totaldebeasiento").val());
-			totalHaberAsiento = parseTotalAsientoCampo($("#totalhaberasiento").val());
-
-			if (Math.abs(totalDebeAsiento - totalHaberAsiento) > 0.02 || totalDebeAsiento < 0.02)
+			if (!asientoIeBalanceado())
 			{
-				alert('Problemas en el asiento, no coincide el debe con el haber');
+				// Pago SP: el asiento pudo generarse antes de completar la cuenta de caja.
+				// Se regenera una vez con los datos actuales y se vuelve a validar.
+				if (esPagoSolicitudPagoIe()) {
+					flModificaAsiento = true;
+					generaAsientoContable(function (ok) {
+						if (!ok) {
+							return;
+						}
+						sumaMontoAsiento();
+						if (!validarBalanceAsientoIe()) {
+							muestraVentanaAsiento();
+							return;
+						}
+						continuarGrabacionTrasValidaciones();
+					});
+					return;
+				}
+
+				validarBalanceAsientoIe();
 				flError = true;
 				muestraVentanaAsiento();
 			}
@@ -1324,6 +1339,27 @@ var montoPendienteSp = 0;
 		}
 		var op = $('#tipotransaccion_caja_id option:selected').data('operacion');
 		return String(op || '').toUpperCase() === 'T';
+	}
+
+	function esPagoSolicitudPagoIe()
+	{
+		return parseInt($('#solicitudpago_id').val() || '0', 10) > 0;
+	}
+
+	function asientoIeBalanceado()
+	{
+		totalDebeAsiento = parseTotalAsientoCampo($("#totaldebeasiento").val());
+		totalHaberAsiento = parseTotalAsientoCampo($("#totalhaberasiento").val());
+		return !(Math.abs(totalDebeAsiento - totalHaberAsiento) > 0.02 || totalDebeAsiento < 0.02);
+	}
+
+	function validarBalanceAsientoIe()
+	{
+		if (!asientoIeBalanceado()) {
+			alert('Problemas en el asiento, no coincide el debe con el haber');
+			return false;
+		}
+		return true;
 	}
 
 	function totalOperacionCajaActualIe()

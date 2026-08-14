@@ -1033,6 +1033,19 @@ Route::get('contable/listar-cc-vs-mayor-anita/{formato}', 'Contable\CcVsMayorAni
 Route::get('contable/sumas-saldos', 'Contable\SumasSaldosController@index')->name('sumas_saldos');
 Route::get('contable/listar-sumas-saldos/{formato}', 'Contable\SumasSaldosController@exportar')->name('listar_sumas_saldos');
 
+Route::get('contable/ajuste-inflacion', 'Contable\AjusteInflacionController@index')->name('ajuste_inflacion');
+Route::post('contable/ajuste-inflacion/inicializar', 'Contable\AjusteInflacionController@inicializar')->name('inicializar_ajuste_inflacion');
+Route::post('contable/ajuste-inflacion/configuracion', 'Contable\AjusteInflacionController@guardarConfiguracion')->name('configurar_ajuste_inflacion');
+Route::post('contable/ajuste-inflacion/cuentas', 'Contable\AjusteInflacionController@agregarCuenta')->name('agregar_cuenta_ajuste_inflacion');
+Route::delete('contable/ajuste-inflacion/cuentas/{id}', 'Contable\AjusteInflacionController@quitarCuenta')->name('quitar_cuenta_ajuste_inflacion');
+Route::post('contable/ajuste-inflacion/indices', 'Contable\AjusteInflacionController@guardarIndice')->name('guardar_indice_ajuste_inflacion');
+Route::post('contable/ajuste-inflacion/indices/importar', 'Contable\AjusteInflacionController@importarIndices')->name('importar_indices_ajuste_inflacion');
+Route::post('contable/ajuste-inflacion/simular', 'Contable\AjusteInflacionController@simular')->name('simular_ajuste_inflacion');
+Route::post('contable/ajuste-inflacion/{id}/confirmar', 'Contable\AjusteInflacionController@confirmar')->name('confirmar_ajuste_inflacion');
+Route::post('contable/ajuste-inflacion/{id}/anular', 'Contable\AjusteInflacionController@anular')->name('anular_ajuste_inflacion');
+Route::get('contable/ajuste-inflacion/{id}/papel-trabajo.pdf', 'Contable\AjusteInflacionController@exportarPdf')->name('exportar_pdf_ajuste_inflacion');
+Route::get('contable/ajuste-inflacion/{id}/papel-trabajo.csv', 'Contable\AjusteInflacionController@exportarCsv')->name('exportar_csv_ajuste_inflacion');
+
 Route::get('contable/reporte-definible', 'Contable\ReporteDefinibleController@index')->name('reporte_definible');
 Route::get('contable/lista-reporte-definible/{formato?}/{busqueda?}', 'Contable\ReporteDefinibleController@listar')->name('lista_reporte_definible');
 Route::get('contable/reporte-definible/crear', 'Contable\ReporteDefinibleController@crear')->name('crear_reporte_definible');
