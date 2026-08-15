@@ -129,6 +129,12 @@ class MayorPlanoCuentaOrdencompraResolver
         $emisor = trim((string) ($mov['emisor'] ?? ''));
         $existente = (int) ($mov['nro_oc'] ?? 0);
 
+        // El tramo ERP ya fue importado: no volver a Anita por cada comprobante.
+        // Las FK locales se completan luego en los enrichers del reporte.
+        if (! empty($mov['origen_erp']) || (int) ($mov['erp_asiento_id'] ?? 0) > 0) {
+            return $existente;
+        }
+
         $desdeAplicped = 0;
 
         // No usar aplp_orden (es renglón). Solo refs/documentos COM.

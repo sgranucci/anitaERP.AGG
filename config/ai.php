@@ -44,7 +44,7 @@ return [
 
         'ollama' => [
             'url' => rtrim((string) env('AI_OLLAMA_URL', env('COMPROBANTE_PROVEEDOR_PDF_IA_OLLAMA_URL', 'http://127.0.0.1:11434')), '/'),
-            'model' => env('AI_OLLAMA_MODEL', 'qwen2.5:14b-instruct'),
+            'model' => env('AI_OLLAMA_MODEL', 'qwen2.5:7b-instruct'),
             'timeout' => (int) env('AI_OLLAMA_TIMEOUT', 180),
             'temperature' => (float) env('AI_OLLAMA_TEMPERATURE', 0.05),
             'max_tokens' => (int) env('AI_OLLAMA_MAX_TOKENS', 4096),

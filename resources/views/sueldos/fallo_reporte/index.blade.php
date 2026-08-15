@@ -4,6 +4,16 @@
     Cta. cte. fallos
 @endsection
 
+@section('scripts')
+<script>
+window.empleadoSueldosConsultaUrls = {
+    buscar: @json(route('consulta_operativa_empleado_sueldos')),
+    resolver: @json(route('resolver_operativo_empleado_sueldos'))
+};
+</script>
+<script src="{{ asset('assets/pages/scripts/sueldos/empleado/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/consulta.js')) ?: time() }}"></script>
+@endsection
+
 @section('contenido')
 <div class="row">
     <div class="col-lg-12">
@@ -25,7 +35,7 @@
                     <div class="form-row">
                         <div class="form-group col-md-3">
                             <label class="small mb-1">Empresa</label>
-                            <select name="empresa_id" class="form-control form-control-sm" required>
+                            <select name="empresa_id" id="fallo_reporte_empresa_id" class="form-control form-control-sm" required>
                                 <option value="">-- Elija --</option>
                                 @foreach ($empresa_query as $emp)
                                     <option value="{{ $emp->id }}" @selected((int)($filtros['empresa_id'] ?? 0) === (int)$emp->id)>
@@ -49,34 +59,52 @@
                                 <option value="totales" @selected(($filtros['modo'] ?? '') === 'totales')>Totales x empleado</option>
                             </select>
                         </div>
-                        <div class="form-group col-md-1">
-                            <label class="small mb-1">Leg. dsd</label>
-                            <input type="number" name="legajo_desde" class="form-control form-control-sm" value="{{ $filtros['legajo_desde'] }}">
+                        <div class="col-md-4 mb-3">
+                            @include('sueldos.partials.campo_consulta_empleado_sueldos', [
+                                'prefix' => 'fallo_reporte_legajo_desde',
+                                'inputName' => 'legajo_desde',
+                                'legajo' => $filtros['legajo_desde'],
+                                'label' => 'Empleado desde',
+                                'nextFocus' => '#fallo_reporte_legajo_hasta_legajo',
+                            ])
                         </div>
-                        <div class="form-group col-md-1">
-                            <label class="small mb-1">Leg. hst</label>
-                            <input type="number" name="legajo_hasta" class="form-control form-control-sm" value="{{ $filtros['legajo_hasta'] }}">
+                        <div class="col-md-4 mb-3">
+                            @include('sueldos.partials.campo_consulta_empleado_sueldos', [
+                                'prefix' => 'fallo_reporte_legajo_hasta',
+                                'inputName' => 'legajo_hasta',
+                                'legajo' => $filtros['legajo_hasta'],
+                                'label' => 'Empleado hasta',
+                                'nextFocus' => '#fallo_reporte_consultar',
+                            ])
                         </div>
-                        <div class="form-group col-md-1 d-flex align-items-end">
-                            <button class="btn btn-primary btn-sm btn-block" type="submit"><i class="fa fa-search"></i></button>
+                        <div class="form-group col-md-3 d-flex align-items-end">
+                            <button class="btn btn-primary btn-sm mr-2" id="fallo_reporte_consultar" type="submit">
+                                <i class="fa fa-search"></i> Consultar
+                            </button>
+                            <a href="{{ route('fallo_reporte_sueldos') }}" class="btn btn-outline-secondary btn-sm"
+                               title="Limpiar filtros">
+                                <i class="fa fa-eraser"></i> Limpiar
+                            </a>
                         </div>
                     </div>
                 </form>
 
                 @if ($consultado && $resultado)
-                    <div class="mb-2 d-flex justify-content-between flex-wrap">
-                        <div class="small text-muted">
-                            {{ $resultado['subtitulo'] }} ·
-                            {{ $resultado['total_empleados'] }} emp. ·
-                            Debe $ {{ number_format($resultado['total_debe'], 2, ',', '.') }} ·
-                            Haber $ {{ number_format($resultado['total_haber'], 2, ',', '.') }} ·
-                            Saldo $ {{ number_format($resultado['total_saldo'], 2, ',', '.') }}
-                        </div>
+                    <div class="small text-muted mb-2">
+                        {{ $resultado['subtitulo'] }} ·
+                        {{ $resultado['total_empleados'] }} emp. ·
+                        Debe $ {{ number_format($resultado['total_debe'], 2, ',', '.') }} ·
+                        Haber $ {{ number_format($resultado['total_haber'], 2, ',', '.') }} ·
+                        Saldo $ {{ number_format($resultado['total_saldo'], 2, ',', '.') }}
+                    </div>
+
+                    <div class="mb-3">
                         @include('includes.exportar-tabla-queryparams', [
                             'ruta' => 'listar_fallo_reporte_sueldos',
                             'queryparams' => $filtrosQuery,
                         ])
                     </div>
+
                     @include('sueldos.fallo_reporte.partials.tabla_datos', ['filas' => $filasPaginadas])
                     <div class="mt-2">{{ $filasPaginadas->links() }}</div>
                 @endif
@@ -84,4 +112,5 @@
         </div>
     </div>
 </div>
+@include('includes.sueldos.modalconsultaempleado_sueldos')
 @endsection

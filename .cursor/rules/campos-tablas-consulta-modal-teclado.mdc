@@ -1,0 +1,45 @@
+---
+description: Campos que referencian tablas maestras usan código, descripción y modal con teclado
+alwaysApply: true
+---
+
+# Datos de tablas: consulta por código y modal
+
+En formularios y filtros, toda referencia a una tabla maestra (empleado, artículo, depósito, usuario, concepto, cuenta, centro de costo, etc.) debe usar el componente de consulta compartido del recurso.
+
+## UX obligatoria
+
+- Guardar el ID real en hidden cuando el proceso lo necesite.
+- Mostrar un input editable de código/legajo y una descripción readonly.
+- **F1** sobre el código y la **lupa** abren el mismo modal.
+- **Enter** resuelve el código; si es válido, avanza al siguiente campo.
+- **Tab** conserva la navegación nativa.
+- El modal permite **Elegir** y **Consultar** el ABM en otra pestaña.
+- Enter en el buscador del modal elige la primera fila.
+- Un valor inválido queda enfocado para corregirlo, sin bucles de alertas.
+
+## Avisos de error y modal (causa de pantalla bloqueada)
+
+- Abrir el modal dispara `blur` del código: **no** resolver ni avisar mientras el modal está abriéndose o abierto.
+- Antes de un `alert()`, **cerrar** el modal y avisar en `setTimeout(..., 0)`; un alert sobre la transición de Bootstrap deja el backdrop huérfano y el body con `modal-open`.
+- Resolver en `blur` sin alerta; alertar solo en Enter o al elegir del modal.
+- Marcar el valor inválido (`data-*`) y limpiarlo en `input` para no repetir el aviso.
+- Ante bloqueo, usar `window.liberarPantallaModalesBloqueados()` (`public/assets/js/funciones.js`).
+
+## Implementación
+
+- Reutilizar partial, modal, JS y endpoints existentes del recurso.
+- Si no existen, crear el componente compartido en `resources/views/{modulo}/partials`, `resources/views/includes/{modulo}` y `public/assets/pages/scripts/{modulo}`.
+- La consulta y resolución backend deben vivir en el repository/support canónico, con permisos y filtros de empresa/estado.
+- En rangos, usar dos componentes (“desde” y “hasta”); Enter en “desde” avanza a “hasta”.
+
+## No aplica
+
+- Enumeraciones pequeñas y cerradas (estado, turno, tipo, orden) pueden seguir como `<select>`.
+- Fechas, importes, porcentajes y texto libre siguen como inputs normales.
+
+## Prohibido
+
+- `<select>` masivo con registros de una tabla maestra.
+- Duplicar consultas SQL o modales cuando ya existe un componente compartido.
+- Implementar lupa sin F1/Enter o Enter que envíe el formulario accidentalmente.

@@ -61,6 +61,37 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
         return $this->findOrFail($id);
     }
 
+    public function findOperativoPorLegajo(int $legajo, ?int $empresaId = null)
+    {
+        $query = $this->queryOperativaParaConsulta($empresaId)
+            ->where('empleado_sueldos.legajo', $legajo);
+
+        return $query->first();
+    }
+
+    public function consultaOperativa(string $texto = '', ?int $empresaId = null, int $limite = 100)
+    {
+        $query = $this->queryOperativaParaConsulta($empresaId);
+        $texto = trim($texto);
+
+        if ($texto !== '') {
+            $query->where(function ($q) use ($texto) {
+                $q->where('empleado_sueldos.nombre', 'like', '%'.$texto.'%')
+                    ->orWhere('empleado_sueldos.documento', 'like', '%'.$texto.'%')
+                    ->orWhere('empleado_sueldos.cuil', 'like', '%'.$texto.'%');
+
+                if (ctype_digit($texto)) {
+                    $q->orWhere('empleado_sueldos.legajo', (int) $texto);
+                }
+            });
+        }
+
+        return $query
+            ->orderBy('empleado_sueldos.legajo')
+            ->limit(max(1, min($limite, 200)))
+            ->get();
+    }
+
     public function proximoLegajo(int $empresaId): int
     {
         $max = (int) $this->model->newQuery()
@@ -68,6 +99,34 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             ->max('legajo');
 
         return $max + 1;
+    }
+
+    private function queryOperativaParaConsulta(?int $empresaId = null)
+    {
+        $query = $this->model->newQuery()
+            ->select([
+                'empleado_sueldos.id',
+                'empleado_sueldos.empresa_id',
+                'empleado_sueldos.legajo',
+                'empleado_sueldos.nombre',
+                'empleado_sueldos.documento',
+                'empleado_sueldos.cuil',
+                'empleado_sueldos.estado',
+            ])
+            ->where(function ($q) {
+                $q->whereNull('empleado_sueldos.estado')
+                    ->orWhere('empleado_sueldos.estado', '!=', EmpleadoEstados::BAJA);
+            });
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'empleado_sueldos.empresa_id');
+        if ($empresaId !== null && $empresaId > 0) {
+            if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+                abort(403, 'Empresa no permitida.');
+            }
+            $query->where('empleado_sueldos.empresa_id', $empresaId);
+        }
+
+        return $query;
     }
 
     /**

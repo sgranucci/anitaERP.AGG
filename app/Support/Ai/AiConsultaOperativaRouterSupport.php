@@ -23,6 +23,7 @@ final class AiConsultaOperativaRouterSupport
     public static function interpretar(string $pregunta): array
     {
         $texto = trim(preg_replace('/\s+/u', ' ', $pregunta) ?? '');
+        $texto = self::normalizarTyposNl($texto);
         if ($texto === '') {
             return [
                 'ok' => false,
@@ -241,13 +242,21 @@ final class AiConsultaOperativaRouterSupport
         }
 
         // Mayor / analitico (antes que OC genérica: «mayor de la OC …»)
+        // Acepta NL sin la palabra «cuenta»: «mayor de caja y bancos …»
         $pideMayor = self::contieneAlguno($norm, [
-            'mayor de la cuenta', 'mayor de cuenta', 'mayor cuenta', 'mayor analitico', 'mayor analítico',
+            'mayor de la cuenta', 'mayor de cuenta', 'mayor cuenta', 'mayor analitico',
             'mayor de la oc', 'mayor de oc', 'mayor oc', 'mayor de la orden', 'movimientos del mayor',
             'mayor filtrado', 'mayor con centro', 'mayor centro de costo',
-        ]) || (str_contains($norm, 'mayor') && self::contieneAlguno($norm, [
-            'cuenta', 'oc', 'orden de compra', 'centro de costo', 'cc ',
-        ]) && ! str_contains($norm, 'corriente'));
+            'mayor de caja', 'mayor caja', 'mayor de bancos', 'mayor bancos',
+        ]) || (
+            preg_match('/\bmayor\b/u', $norm) === 1
+            && self::contieneAlguno($norm, [
+                'cuenta', 'oc', 'orden de compra', 'centro de costo', 'cc ',
+                'caja', 'banco',
+            ])
+            && ! str_contains($norm, 'corriente')
+            && ! preg_match('/\bmayores?\s+proveedores?\b/u', $norm)
+        );
 
         if ($pideMayor) {
             $params = self::extraerParamsPeriodoYExtras($texto, $norm);
@@ -261,9 +270,10 @@ final class AiConsultaOperativaRouterSupport
                 return [
                     'ok' => false,
                     'needs_clarification' => true,
-                    'clarification' => 'Indique cuenta, OC o centro de costo (ej.: «mayor cuenta caja y bancos empresa biyemas julio» o «mayor de la OC 221022»).',
+                    'clarification' => 'Indique cuenta, OC o centro de costo (ej.: «mayor de caja y bancos empresa biyemas julio» o «mayor de la OC 221022»).',
                     'error' => 'Falta criterio de mayor (cuenta / OC / CC).',
                     'sugerencias' => [
+                        'mayor de caja y bancos empresa biyemas julio',
                         'mayor de la cuenta caja y bancos este mes',
                         'mayor cuenta 211010004 empresa biyemas de julio',
                         'mayor de la OC 221022',
@@ -619,6 +629,7 @@ final class AiConsultaOperativaRouterSupport
             'saldo del proveedor 475 de julio',
             'saldo del cliente 10025 este mes',
             'mayor de la cuenta 211010004 de julio',
+            'mayor de caja y bancos empresa biyemas julio',
             'mayor cuenta caja y bancos empresa biyemas este mes',
             'mayor cuenta 214010013 CC 85 este mes',
             'mayor de la OC 221022',
@@ -850,26 +861,78 @@ final class AiConsultaOperativaRouterSupport
         return $params;
     }
 
-    /** Nombre de cuenta tras «cuenta …» hasta un delimitador (empresa, mes, CC, etc.). */
+    /**
+     * Nombre de cuenta tras «cuenta …» o «mayor (de la) …» hasta un delimitador
+     * (empresa, mes, CC, etc.). Ej.: «mayor de caja y bancos julio».
+     */
     private static function extraerNombreCuenta(string $texto): ?string
     {
         $stop = self::patronStopFraseMaestro();
-        if (preg_match('/cuenta\s+(?:contable\s+)?(?![0-9]{4,12}\b)(.+?)(?=\s+(?:'.$stop.')|$)/ui', $texto, $m) !== 1) {
+        $patrones = [
+            '/cuenta\s+(?:contable\s+)?(?![0-9]{4,12}\b)(.+?)(?=\s+(?:'.$stop.')|$)/ui',
+            // «mayor de caja y bancos …» / «mayor cuenta caja …» (sin código numérico)
+            '/\bmayor\s+(?:de\s+(?:la\s+)?)?(?:cuenta\s+(?:contable\s+)?)?(?![0-9]{4,12}\b)(.+?)(?=\s+(?:'.$stop.')|$)/ui',
+        ];
+        $nombre = null;
+        foreach ($patrones as $patron) {
+            if (preg_match($patron, $texto, $m) === 1) {
+                $nombre = trim($m[1], " \t.,;:#");
+                break;
+            }
+        }
+        if ($nombre === null || $nombre === '') {
             return null;
         }
-        $nombre = trim($m[1], " \t.,;:#");
         $nombre = preg_replace('/^(de\s+la|de\s+el|del|de|la|el)\s+/ui', '', $nombre) ?? $nombre;
         $nombre = trim((string) $nombre);
         if ($nombre === '' || mb_strlen($nombre) < 3) {
             return null;
         }
-        // Evitar capturar solo stopwords residuales
+        // Evitar capturar solo stopwords residuales o filtros del mayor
         $norm = mb_strtolower($nombre, 'UTF-8');
-        if (in_array($norm, ['contable', 'analitico', 'analítico', 'mayor', 'saldo'], true)) {
+        $norm = strtr($norm, [
+            'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' => 'u', 'ü' => 'u', 'ñ' => 'n',
+        ]);
+        if (in_array($norm, [
+            'contable', 'analitico', 'mayor', 'saldo',
+            'filtrado', 'con centro', 'centro de costo', 'oc', 'orden', 'orden de compra',
+        ], true)) {
+            return null;
+        }
+        // No tomar «la OC 221022» como nombre de cuenta
+        if (preg_match('/^(la\s+)?oc\b/u', $norm) === 1 || preg_match('/^orden\b/u', $norm) === 1) {
             return null;
         }
 
         return $nombre;
+    }
+
+    /** Typos frecuentes del chat operativo (antes de reglas / LLM). */
+    private static function normalizarTyposNl(string $texto): string
+    {
+        $mapa = [
+            '/\bempesa\b/ui' => 'empresa',
+            '/\bempresas\b/ui' => 'empresa',
+            '/\bbiyema\b/ui' => 'biyemas',
+            '/\bmes\s+de\s+julio\b/ui' => 'julio',
+            '/\bmes\s+de\s+agosto\b/ui' => 'agosto',
+            '/\bmes\s+de\s+septiembre\b/ui' => 'septiembre',
+            '/\bmes\s+de\s+setiembre\b/ui' => 'setiembre',
+            '/\bmes\s+de\s+octubre\b/ui' => 'octubre',
+            '/\bmes\s+de\s+noviembre\b/ui' => 'noviembre',
+            '/\bmes\s+de\s+diciembre\b/ui' => 'diciembre',
+            '/\bmes\s+de\s+enero\b/ui' => 'enero',
+            '/\bmes\s+de\s+febrero\b/ui' => 'febrero',
+            '/\bmes\s+de\s+marzo\b/ui' => 'marzo',
+            '/\bmes\s+de\s+abril\b/ui' => 'abril',
+            '/\bmes\s+de\s+mayo\b/ui' => 'mayo',
+            '/\bmes\s+de\s+junio\b/ui' => 'junio',
+        ];
+        foreach ($mapa as $patron => $repl) {
+            $texto = preg_replace($patron, $repl, $texto) ?? $texto;
+        }
+
+        return trim(preg_replace('/\s+/u', ' ', $texto) ?? $texto);
     }
 
     /** Delimitadores comunes al extraer frases de maestro en NL. */

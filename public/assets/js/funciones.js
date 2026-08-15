@@ -347,6 +347,43 @@ function activarSolapa(tabId) {
     document.getElementById(tabId).style.display = 'block';
 }
 
+/*
+ * Modales de consulta: un alert() disparado durante la transición de Bootstrap
+ * puede dejar el backdrop huérfano y el body con "modal-open", con la pantalla
+ * bloqueada aunque no haya modal visible. Esto lo libera.
+ */
+function liberarPantallaModalesBloqueados() {
+    var visibles = document.querySelectorAll('.modal.show, .modal.in').length;
+    var $backdrops = $('.modal-backdrop');
+
+    if (visibles === 0) {
+        $backdrops.remove();
+        $('body').removeClass('modal-open').css('padding-right', '');
+        return;
+    }
+
+    if ($backdrops.length > visibles) {
+        $backdrops.slice(0, $backdrops.length - visibles).remove();
+    }
+    $('body').addClass('modal-open');
+}
+
+window.liberarPantallaModalesBloqueados = liberarPantallaModalesBloqueados;
+
+$(document).on('hidden.bs.modal', function () {
+    setTimeout(liberarPantallaModalesBloqueados, 0);
+});
+
+// Autocuración: si el usuario intenta operar con la pantalla bloqueada sin modal visible.
+$(document).on('mousedown', function () {
+    if (!document.body.classList.contains('modal-open')) {
+        return;
+    }
+    if (document.querySelectorAll('.modal.show, .modal.in').length === 0) {
+        liberarPantallaModalesBloqueados();
+    }
+});
+
 function formatarCUIT(input) {
     // 1. Eliminar todo lo que no sea número
     let value = input.value.replace(/\D/g, '');

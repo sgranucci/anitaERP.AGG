@@ -98,6 +98,7 @@ class ImportarAsientosAnitaCommand extends Command
                 ['A crear (asientos)', (string) $r['a_crear']],
                 ['A crear (líneas mov.)', (string) $r['lineas_a_crear']],
                 ['Creados', (string) $r['creados']],
+                ['Duplicados coincidentes: metadatos Anita completados', (string) ($r['metadatos_anita_actualizados'] ?? 0)],
                 ['Duplicados total', (string) $r['duplicados']],
                 ['Duplicados → dejar', (string) $r['duplicados_dejar']],
                 ['Duplicados → reemplazar', (string) $r['duplicados_reemplazar']],

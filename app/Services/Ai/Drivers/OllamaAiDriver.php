@@ -56,13 +56,27 @@ final class OllamaAiDriver implements AiDriverInterface
             $latencia = (int) round((microtime(true) - $inicio) * 1000);
 
             if (! $response->successful()) {
+                $bodySnippet = mb_substr($response->body(), 0, 500);
+                $detalle = null;
+                $jsonErr = $response->json();
+                if (is_array($jsonErr) && ! empty($jsonErr['error'])) {
+                    $detalle = (string) $jsonErr['error'];
+                }
                 Log::channel($this->logChannel())->warning('ai.ollama_error', [
                     'status' => $response->status(),
-                    'body' => mb_substr($response->body(), 0, 500),
+                    'body' => $bodySnippet,
+                    'model' => $model,
                     'meta' => $prompt->meta,
                 ]);
 
-                return AiResult::fallo('Ollama respondió '.$response->status(), $this->nombre(), $model, $latencia);
+                $msg = 'Ollama respondió '.$response->status();
+                if ($detalle !== null && $detalle !== '') {
+                    $msg .= ': '.$detalle;
+                } else {
+                    $msg .= ' (modelo '.$model.')';
+                }
+
+                return AiResult::fallo($msg, $this->nombre(), $model, $latencia);
             }
 
             $body = $response->json();

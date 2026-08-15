@@ -251,6 +251,25 @@ function mayorPlanoAgregarCuentaDesdeCampo() {
     });
 }
 
+/** Consultar sin haber pulsado Agregar: el código tipeado se suma a la lista. */
+function mayorPlanoAdoptarCuentaPuntualPendiente() {
+    var $campo = $('.mpc-cuenta-puntual').first();
+    if (!$campo.length) {
+        return;
+    }
+
+    var codigo = mayorPlanoNormalizarCodigoCuenta($campo.find('.codigocuentacontable').val());
+    if (!codigo) {
+        return;
+    }
+
+    mayorPlanoAgregarCuenta({
+        codigo: codigo,
+        nombre: String($campo.find('.nombrecuentacontable').val() || '').trim(),
+    });
+    mayorPlanoLimpiarCampoCuenta($campo);
+}
+
 /** Si el texto parece un código de cuenta (dígitos/guiones), busca sin formato. */
 function mayorPlanoTextoConsultaModal(valor) {
     var trimmed = String(valor || '').trim();
@@ -428,6 +447,7 @@ function activaEventosMayorPlanoCuentaFiltro() {
     $('#form-mayor-plano-cuenta')
         .off('submit.mpc')
         .on('submit.mpc', function () {
+            mayorPlanoAdoptarCuentaPuntualPendiente();
             mayorPlanoSincronizarHiddenCuentas();
         });
 
@@ -557,6 +577,22 @@ function mayorPlanoCargarCentrocostosDesdeDom() {
     mayorPlanoRenderCentrocostos();
 }
 
+/** Consultar sin haber pulsado Agregar: el CC tipeado se suma a la lista. */
+function mayorPlanoAdoptarCcPuntualPendiente() {
+    var $campo = $('.mpc-cc-puntual').first();
+    if (!$campo.length) {
+        return;
+    }
+
+    var codigo = String($campo.find('.codigocentrocosto').val() || '').trim();
+    if (!codigo) {
+        return;
+    }
+
+    mayorPlanoAgregarCentrocosto(codigo, String($campo.find('.descripcioncentrocosto').val() || '').trim());
+    $campo.find('input').val('');
+}
+
 function mayorPlanoAgregarCcDesdeCampo() {
     var $campo = $('.mpc-cc-puntual').first();
     var codigo = String($campo.find('.codigocentrocosto').val() || '').trim();
@@ -610,6 +646,7 @@ $(function () {
         $('#incluir_sin_cc_manual').val('1');
     });
     $('#form-mayor-plano-cuenta').on('submit.mpcCc', function () {
+        mayorPlanoAdoptarCcPuntualPendiente();
         mayorPlanoSincronizarHiddenCentrocostos();
         mayorPlanoAplicarIncluirSinCcAutomatico();
     });

@@ -34,6 +34,8 @@ class Asiento extends Model implements Auditable
                             'jornada_gastronomia_id', 'rendicion_estacionamiento_caja_id', 'transferencia_mercaderia_id',
                             'ordencompra_id', 'recepcionproveedor_id',
                             'comprobante_proveedor_id', 'observacion',
+                            'anita_origen', 'anita_sistema', 'anita_tipo', 'anita_letra',
+                            'anita_sucursal', 'anita_nro', 'anita_emisor',
                             'usuario_id', 'estado_aprobacion', 'cuentas_no_autorizadas',
                             'aprobador_id', 'aprobado_el', 'rechazado_el', 'motivo_rechazo'];
 

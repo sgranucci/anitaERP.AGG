@@ -491,8 +491,10 @@ class MayorPlanoCuentaReporteService
             return $filas;
         }
 
+        // Las filas del reader ERP ya traen asiento_id: solo se resuelve por número
+        // el tramo leído de Anita.
         $numerosAsiento = array_values(array_unique(array_filter(array_map(
-            fn (array $f) => (int) ($f['nro_asiento'] ?? 0),
+            fn (array $f) => (int) ($f['asiento_id'] ?? 0) > 0 ? 0 : (int) ($f['nro_asiento'] ?? 0),
             $filas,
         ), fn (int $n) => $n > 0)));
 
@@ -545,9 +547,13 @@ class MayorPlanoCuentaReporteService
             }
 
             $nro = (int) ($fila['nro_asiento'] ?? 0);
-            $filas[$idx]['asiento_id'] = ($empresaId > 0 && $nro > 0)
-                ? (int) ($asientosPorEmpresaNumero[$empresaId.'|'.$nro] ?? 0)
-                : 0;
+            $asientoIdErp = (int) ($fila['asiento_id'] ?? 0);
+            if ($asientoIdErp <= 0) {
+                $asientoIdErp = ($empresaId > 0 && $nro > 0)
+                    ? (int) ($asientosPorEmpresaNumero[$empresaId.'|'.$nro] ?? 0)
+                    : 0;
+            }
+            $filas[$idx]['asiento_id'] = $asientoIdErp;
             $filas[$idx]['cuentacontable_id'] = ($empresaId > 0 && $codigo > 0)
                 ? (int) ($cuentasPorEmpresaCodigo[$empresaId.'|'.$codigo] ?? 0)
                 : 0;

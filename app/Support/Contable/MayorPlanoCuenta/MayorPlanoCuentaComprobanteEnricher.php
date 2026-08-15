@@ -17,8 +17,10 @@ class MayorPlanoCuentaComprobanteEnricher
      */
     public function enriquecer(array $filas): array
     {
+        // Las filas del reader ERP ya traen las FK del asiento: solo se consultan
+        // los asientos del tramo leído de Anita.
         $asientoIds = array_values(array_unique(array_filter(array_map(
-            fn (array $f) => (int) ($f['asiento_id'] ?? 0),
+            fn (array $f) => is_array($f['asiento_fks'] ?? null) ? 0 : (int) ($f['asiento_id'] ?? 0),
             $filas,
         ), fn (int $n) => $n > 0)));
 
@@ -40,39 +42,34 @@ class MayorPlanoCuentaComprobanteEnricher
             'ordencompra_id_asiento' => 0,
         ];
 
-        if ($asientoIds === []) {
-            foreach ($filas as $idx => $fila) {
-                if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
-                    continue;
-                }
-                foreach ($fksVacias as $k => $v) {
-                    $filas[$idx][$k] = $v;
+        $mapa = collect();
+        if ($asientoIds !== []) {
+            $cols = ['id'];
+            foreach (AsientoOrigenProcesoSupport::columnasFk() as $fk) {
+                if (Schema::hasColumn('asiento', $fk)) {
+                    $cols[] = $fk;
                 }
             }
 
-            return $filas;
+            $mapa = DB::table('asiento')
+                ->whereIn('id', $asientoIds)
+                ->get($cols)
+                ->keyBy('id');
         }
-
-        $cols = ['id'];
-        foreach (AsientoOrigenProcesoSupport::columnasFk() as $fk) {
-            if (Schema::hasColumn('asiento', $fk)) {
-                $cols[] = $fk;
-            }
-        }
-
-        $mapa = DB::table('asiento')
-            ->whereIn('id', $asientoIds)
-            ->get($cols)
-            ->keyBy('id');
 
         $remesaIds = [];
         $solicitudpagoIds = [];
-        foreach ($mapa as $row) {
-            $rid = (int) ($row->remesa_id ?? 0);
+        foreach ($filas as $fila) {
+            if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
+                continue;
+            }
+
+            $fks = $this->fksDeFila($fila, $mapa);
+            $rid = (int) ($fks['remesa_id'] ?? 0);
             if ($rid > 0) {
                 $remesaIds[$rid] = $rid;
             }
-            $spid = (int) ($row->solicitudpago_id ?? 0);
+            $spid = (int) ($fks['solicitudpago_id'] ?? 0);
             if ($spid > 0) {
                 $solicitudpagoIds[$spid] = $spid;
             }
@@ -99,26 +96,25 @@ class MayorPlanoCuentaComprobanteEnricher
                 continue;
             }
 
-            $asientoId = (int) ($fila['asiento_id'] ?? 0);
-            $row = $asientoId > 0 ? $mapa->get($asientoId) : null;
+            $fks = $this->fksDeFila($fila, $mapa);
 
-            $filas[$idx]['comprobante_proveedor_id'] = (int) ($row->comprobante_proveedor_id ?? 0);
-            $filas[$idx]['venta_id'] = (int) ($row->venta_id ?? 0);
-            $remesaId = (int) ($row->remesa_id ?? 0);
+            $filas[$idx]['comprobante_proveedor_id'] = (int) ($fks['comprobante_proveedor_id'] ?? 0);
+            $filas[$idx]['venta_id'] = (int) ($fks['venta_id'] ?? 0);
+            $remesaId = (int) ($fks['remesa_id'] ?? 0);
             $filas[$idx]['remesa_id'] = $remesaId;
             $filas[$idx]['remesa_numero'] = (int) ($numerosRemesa[$remesaId] ?? 0);
-            $filas[$idx]['jornada_gastronomia_id'] = (int) ($row->jornada_gastronomia_id ?? 0);
-            $filas[$idx]['rendicion_estacionamiento_caja_id'] = (int) ($row->rendicion_estacionamiento_caja_id ?? 0);
-            $filas[$idx]['transferencia_mercaderia_id'] = (int) ($row->transferencia_mercaderia_id ?? 0);
-            $filas[$idx]['caja_movimiento_id'] = (int) ($row->caja_movimiento_id ?? 0);
-            $spId = (int) ($row->solicitudpago_id ?? 0);
+            $filas[$idx]['jornada_gastronomia_id'] = (int) ($fks['jornada_gastronomia_id'] ?? 0);
+            $filas[$idx]['rendicion_estacionamiento_caja_id'] = (int) ($fks['rendicion_estacionamiento_caja_id'] ?? 0);
+            $filas[$idx]['transferencia_mercaderia_id'] = (int) ($fks['transferencia_mercaderia_id'] ?? 0);
+            $filas[$idx]['caja_movimiento_id'] = (int) ($fks['caja_movimiento_id'] ?? 0);
+            $spId = (int) ($fks['solicitudpago_id'] ?? 0);
             $filas[$idx]['solicitudpago_id'] = $spId;
             $filas[$idx]['solicitudpago_codigo'] = (string) ($codigosSp[$spId] ?? '');
-            $filas[$idx]['cobranza_id'] = (int) ($row->cobranza_id ?? 0);
-            $filas[$idx]['pagoproveedor_id'] = (int) ($row->pagoproveedor_id ?? 0);
-            $filas[$idx]['recepcionproveedor_id'] = (int) ($row->recepcionproveedor_id ?? 0);
-            $filas[$idx]['movimientostock_id'] = (int) ($row->movimientostock_id ?? 0);
-            $ocAsiento = (int) ($row->ordencompra_id ?? 0);
+            $filas[$idx]['cobranza_id'] = (int) ($fks['cobranza_id'] ?? 0);
+            $filas[$idx]['pagoproveedor_id'] = (int) ($fks['pagoproveedor_id'] ?? 0);
+            $filas[$idx]['recepcionproveedor_id'] = (int) ($fks['recepcionproveedor_id'] ?? 0);
+            $filas[$idx]['movimientostock_id'] = (int) ($fks['movimientostock_id'] ?? 0);
+            $ocAsiento = (int) ($fks['ordencompra_id'] ?? 0);
             $filas[$idx]['ordencompra_id_asiento'] = $ocAsiento;
             // Preferir siempre la FK del asiento ERP: aplp_orden/ctav mal resueltos
             // pueden haber cargado un nro_oc de renglón (1, 2, 3…) con id de OC antigua.
@@ -135,6 +131,25 @@ class MayorPlanoCuentaComprobanteEnricher
         }
 
         return $filas;
+    }
+
+    /**
+     * FK del asiento: las trae la fila (reader ERP) o se leen del asiento consultado (Anita).
+     *
+     * @param  array<string, mixed>  $fila
+     * @param  \Illuminate\Support\Collection<int, object>  $mapa
+     * @return array<string, int>
+     */
+    private function fksDeFila(array $fila, $mapa): array
+    {
+        if (is_array($fila['asiento_fks'] ?? null)) {
+            return $fila['asiento_fks'];
+        }
+
+        $asientoId = (int) ($fila['asiento_id'] ?? 0);
+        $row = $asientoId > 0 ? $mapa->get($asientoId) : null;
+
+        return $row !== null ? array_map('intval', (array) $row) : [];
     }
 
     /**

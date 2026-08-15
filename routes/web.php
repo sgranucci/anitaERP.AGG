@@ -4390,6 +4390,10 @@ Route::get('sueldos/indumentaria/listar-solicitudes/{formato?}', 'Sueldos\Solici
  * Alta provisoria con aviso/autorización; baja/reincorporación con historia.
  */
 Route::get('sueldos/empleado', 'Sueldos\Empleado_SueldosController@index')->name('consultar_empleado_sueldos');
+Route::get('sueldos/empleado-consulta/buscar', 'Sueldos\EmpleadoConsulta_SueldosController@consultar')
+    ->name('consulta_operativa_empleado_sueldos');
+Route::get('sueldos/empleado-consulta/resolver', 'Sueldos\EmpleadoConsulta_SueldosController@resolver')
+    ->name('resolver_operativo_empleado_sueldos');
 Route::get('sueldos/listaempleado/{formato?}/{busqueda?}', 'Sueldos\Empleado_SueldosController@listar')->name('lista_empleado_sueldos');
 Route::get('sueldos/empleado/crear', 'Sueldos\Empleado_SueldosController@crear')->name('crear_empleado_sueldos');
 Route::post('sueldos/empleado/sincronizar-anita', 'Sueldos\Empleado_SueldosController@sincronizarAnita')->name('sincronizar_empleado_sueldos_anita');

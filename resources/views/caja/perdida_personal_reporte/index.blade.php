@@ -86,22 +86,27 @@
                             <input type="number" name="legajo_hasta" class="form-control form-control-sm"
                                    value="{{ $filtros['legajo_hasta'] }}">
                         </div>
-                        <div class="form-group col-md-2 d-flex align-items-end">
-                            <button type="submit" class="btn btn-primary btn-sm btn-block">
+                        <div class="form-group col-md-3 d-flex align-items-end">
+                            <button type="submit" class="btn btn-primary btn-sm mr-2">
                                 <i class="fa fa-search"></i> Consultar
                             </button>
+                            <a href="{{ route('perdida_personal_reporte') }}" class="btn btn-outline-secondary btn-sm"
+                               title="Limpiar filtros">
+                                <i class="fa fa-eraser"></i> Limpiar
+                            </a>
                         </div>
                     </div>
                 </form>
 
                 @if ($consultado && $resultado)
-                    <div class="mb-2 d-flex flex-wrap justify-content-between align-items-center">
-                        <div class="small text-muted">
-                            {{ $resultado['subtitulo'] }} ·
-                            {{ $resultado['total_empleados'] }} empleado(s) ·
-                            {{ $resultado['total_registros'] }} movimiento(s) ·
-                            Total $ {{ number_format($resultado['total_importe'], 2, ',', '.') }}
-                        </div>
+                    <div class="small text-muted mb-2">
+                        {{ $resultado['subtitulo'] }} ·
+                        {{ $resultado['total_empleados'] }} empleado(s) ·
+                        {{ $resultado['total_registros'] }} movimiento(s) ·
+                        Total $ {{ number_format($resultado['total_importe'], 2, ',', '.') }}
+                    </div>
+
+                    <div class="mb-3">
                         @include('includes.exportar-tabla-queryparams', [
                             'ruta' => 'listar_perdida_personal_reporte',
                             'queryparams' => $filtrosQuery,

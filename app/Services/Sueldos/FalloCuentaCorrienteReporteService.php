@@ -42,8 +42,12 @@ class FalloCuentaCorrienteReporteService
         $hasta = Carbon::parse((string) ($filtros['fecha_hasta'] ?? date('Y-m-d')))->endOfDay();
         $orden = (string) ($filtros['orden'] ?? self::ORDEN_LEGAJO);
         $modo = (string) ($filtros['modo'] ?? self::MODO_MOVIMIENTOS);
-        $legajoDesde = max(1, (int) ($filtros['legajo_desde'] ?? 1));
-        $legajoHasta = max($legajoDesde, (int) ($filtros['legajo_hasta'] ?? 99999999));
+        $legajoDesdeRaw = $filtros['legajo_desde'] ?? '';
+        $legajoHastaRaw = $filtros['legajo_hasta'] ?? '';
+        $legajoDesde = trim((string) $legajoDesdeRaw) === '' ? 1 : max(1, (int) $legajoDesdeRaw);
+        $legajoHasta = trim((string) $legajoHastaRaw) === ''
+            ? 99999999
+            : max($legajoDesde, (int) $legajoHastaRaw);
 
         $empleadosQ = Empleado_Sueldos::query()
             ->with(['categoria', 'agrupamiento', 'lugartrabajo'])

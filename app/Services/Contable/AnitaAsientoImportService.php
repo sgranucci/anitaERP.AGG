@@ -4,15 +4,16 @@ declare(strict_types=1);
 
 namespace App\Services\Contable;
 
+use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Asiento;
 use App\Models\Contable\Asiento_Movimiento;
 use App\Models\Contable\Tipoasiento;
-use App\Models\Configuracion\Empresa;
+use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
-use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Support\Contable\Anita\AnitaAsientoImportBridgeReader;
 use App\Support\Contable\Anita\AnitaSubdiarioMayorSupport;
+use App\Support\Contable\AsientoAnitaMetadatosSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -70,8 +71,7 @@ final class AnitaAsientoImportService
         private readonly CuentacontableRepositoryInterface $cuentacontableRepository,
         private readonly CentrocostoRepositoryInterface $centrocostoRepository,
         private readonly MonedaRepositoryInterface $monedaRepository,
-    ) {
-    }
+    ) {}
 
     /**
      * @param  list<int>  $empresasAnita
@@ -129,6 +129,7 @@ final class AnitaAsientoImportService
                     $msg = "Empresa Anita {$empAnita} sin mapeo ERP (codigo)";
                     $resumen['errores'][] = $msg;
                     $this->log($logger, $msg);
+
                     continue;
                 }
 
@@ -322,6 +323,7 @@ final class AnitaAsientoImportService
                 'con_fk_proceso' => false,
                 'lineas' => count($asientoPlan['movimientos']),
                 'suma_monto' => $this->sumaMontos($asientoPlan['movimientos']),
+                'anita_origen' => $asientoPlan['anita_origen'] ?? null,
                 'importado_ahora' => true,
             ];
 
@@ -349,6 +351,16 @@ final class AnitaAsientoImportService
 
         if ($analisis['decision'] === 'dejar') {
             $out['duplicados_dejar']++;
+            if (! $dryRun
+                && empty($existente['con_fk_proceso'])
+                && trim((string) ($existente['anita_origen'] ?? '')) === ''
+            ) {
+                DB::table('asiento')
+                    ->where('id', (int) $existente['id'])
+                    ->update($this->metadatosAnitaDesdePlan($asientoPlan));
+                $out['metadatos_anita_actualizados']++;
+                $existentes[$nro]['anita_origen'] = $asientoPlan['anita_origen'] ?? null;
+            }
 
             return;
         }
@@ -357,7 +369,11 @@ final class AnitaAsientoImportService
         $out['duplicados_reemplazar']++;
         $aplicar = $anitaVerdad || $reemplazarDiferentes;
         if (! $dryRun && $aplicar) {
-            $this->reemplazarExistente((int) $existente['id'], $asientoPlan);
+            $this->reemplazarExistente(
+                (int) $existente['id'],
+                $asientoPlan,
+                empty($existente['con_fk_proceso']),
+            );
             $out['reemplazados']++;
             $existentes[$nro] = [
                 'id' => (int) $existente['id'],
@@ -367,6 +383,9 @@ final class AnitaAsientoImportService
                 'lineas' => count($asientoPlan['movimientos']),
                 'suma_monto' => $this->sumaMontos($asientoPlan['movimientos']),
                 'firma_movimientos' => $this->firmaMovimientos($asientoPlan['movimientos']),
+                'anita_origen' => empty($existente['con_fk_proceso'])
+                    ? ($asientoPlan['anita_origen'] ?? null)
+                    : ($existente['anita_origen'] ?? null),
                 'importado_ahora' => true,
             ];
         }
@@ -456,7 +475,7 @@ final class AnitaAsientoImportService
     private function persistirNuevo(array $plan): void
     {
         DB::transaction(function () use ($plan) {
-            $asiento = Asiento::query()->create([
+            $asiento = Asiento::query()->create(array_merge([
                 'empresa_id' => $plan['empresa_id'],
                 'tipoasiento_id' => $plan['tipoasiento_id'],
                 'numeroasiento' => $plan['numeroasiento'],
@@ -464,7 +483,7 @@ final class AnitaAsientoImportService
                 'observacion' => $plan['observacion'],
                 'usuario_id' => $plan['usuario_id'],
                 'estado_aprobacion' => Asiento::ESTADO_APROBACION_CONFIRMADO,
-            ]);
+            ], $this->metadatosAnitaDesdePlan($plan)));
 
             foreach ($plan['movimientos'] as $mov) {
                 Asiento_Movimiento::query()->create([
@@ -483,7 +502,7 @@ final class AnitaAsientoImportService
     /**
      * @param  array<string, mixed>  $plan
      */
-    private function reemplazarExistente(int $asientoId, array $plan): void
+    private function reemplazarExistente(int $asientoId, array $plan, bool $persistirMetadatosAnita): void
     {
         DB::transaction(function () use ($asientoId, $plan) {
             // Borrado y update fila por fila: el delete/update masivo no dispara los observers y
@@ -497,13 +516,17 @@ final class AnitaAsientoImportService
             if ($asiento === null) {
                 return;
             }
-            $asiento->update([
+            $cabecera = [
                 'tipoasiento_id' => $plan['tipoasiento_id'],
                 'fecha' => $plan['fecha'],
                 'observacion' => $plan['observacion'],
                 'usuario_id' => $plan['usuario_id'],
                 'estado_aprobacion' => Asiento::ESTADO_APROBACION_CONFIRMADO,
-            ]);
+            ];
+            if ($persistirMetadatosAnita) {
+                $cabecera = array_merge($cabecera, $this->metadatosAnitaDesdePlan($plan));
+            }
+            $asiento->update($cabecera);
 
             foreach ($plan['movimientos'] as $mov) {
                 Asiento_Movimiento::query()->create([
@@ -517,6 +540,23 @@ final class AnitaAsientoImportService
                 ]);
             }
         });
+    }
+
+    /**
+     * @param  array<string, mixed>  $plan
+     * @return array<string, mixed>
+     */
+    private function metadatosAnitaDesdePlan(array $plan): array
+    {
+        return [
+            'anita_origen' => $plan['anita_origen'] ?? null,
+            'anita_sistema' => $plan['anita_sistema'] ?? null,
+            'anita_tipo' => $plan['anita_tipo'] ?? null,
+            'anita_letra' => $plan['anita_letra'] ?? null,
+            'anita_sucursal' => $plan['anita_sucursal'] ?? null,
+            'anita_nro' => $plan['anita_nro'] ?? null,
+            'anita_emisor' => $plan['anita_emisor'] ?? null,
+        ];
     }
 
     /**
@@ -560,6 +600,7 @@ final class AnitaAsientoImportService
             $imp = AnitaSubdiarioMayorSupport::imputacionLineaCtamov($linea);
             if ($imp === null) {
                 $out['lineas_sin_importe']++;
+
                 continue;
             }
 
@@ -600,6 +641,15 @@ final class AnitaAsientoImportService
             'numeroasiento' => $nro,
             'fecha' => $this->ymdAIso((int) ($primera->ctav_fecha ?? 0)),
             'observacion' => mb_substr($obs !== '' ? $obs : 'Import Anita ctamov', 0, 255),
+            'anita_origen' => $esResumenSinDetalle
+                ? AsientoAnitaMetadatosSupport::ORIGEN_CTAMOV_RESUMEN
+                : AsientoAnitaMetadatosSupport::ORIGEN_CTAMOV,
+            'anita_sistema' => strtoupper(trim((string) ($primera->ctav_sistema ?? ''))),
+            'anita_tipo' => strtoupper(trim((string) ($primera->ctav_tipo ?? ''))) ?: null,
+            'anita_letra' => trim((string) ($primera->ctav_letra ?? ' ')) ?: ' ',
+            'anita_sucursal' => (int) ($primera->ctav_sucursal ?? 0),
+            'anita_nro' => (int) ($primera->ctav_nro ?? 0) ?: null,
+            'anita_emisor' => null,
             'usuario_id' => $usuarioId,
             'movimientos' => $movimientos,
         ];
@@ -671,6 +721,13 @@ final class AnitaAsientoImportService
         }
 
         $tag = ! empty($primera->subd_origen_subhist) ? self::TAG_SUBHIST : self::TAG_SUBDIARIO;
+        $emisor = '';
+        foreach ($lineas as $linea) {
+            $emisor = trim((string) ($linea->subd_emisor ?? ''));
+            if ($emisor !== '') {
+                break;
+            }
+        }
         $obs = trim(implode(' ', array_filter([
             $tag,
             $sistema,
@@ -686,6 +743,15 @@ final class AnitaAsientoImportService
             'numeroasiento' => $nro,
             'fecha' => $this->ymdAIso((int) ($primera->subd_fecha ?? 0)),
             'observacion' => mb_substr($obs !== '' ? $obs : $tag.' Import Anita', 0, 255),
+            'anita_origen' => ! empty($primera->subd_origen_subhist)
+                ? AsientoAnitaMetadatosSupport::ORIGEN_SUBHIST
+                : AsientoAnitaMetadatosSupport::ORIGEN_SUBDIARIO,
+            'anita_sistema' => $sistema,
+            'anita_tipo' => strtoupper(trim((string) ($primera->subd_tipo ?? ''))) ?: null,
+            'anita_letra' => trim((string) ($primera->subd_letra ?? ' ')) ?: ' ',
+            'anita_sucursal' => (int) ($primera->subd_sucursal ?? 0),
+            'anita_nro' => (int) ($primera->subd_nro ?? 0) ?: null,
+            'anita_emisor' => $emisor !== '' ? $emisor : null,
             'usuario_id' => $usuarioId,
             'movimientos' => $movimientos,
         ];
@@ -832,7 +898,7 @@ final class AnitaAsientoImportService
                     'caja_movimiento_id', 'remesa_id', 'jornada_gastronomia_id',
                     'rendicion_estacionamiento_caja_id', 'transferencia_mercaderia_id',
                     'ordencompra_id', 'recepcionproveedor_id', 'comprobante_proveedor_id',
-                    'pagoproveedor_id',
+                    'pagoproveedor_id', 'anita_origen',
                 ]);
 
             foreach ($asientos as $asiento) {
@@ -868,6 +934,7 @@ final class AnitaAsientoImportService
                     'numeroasiento' => $nro,
                     'fecha' => Carbon::parse($asiento->fecha)->format('Y-m-d'),
                     'con_fk_proceso' => $conFk,
+                    'anita_origen' => $asiento->anita_origen,
                     'lineas' => count($movs),
                     'suma_monto' => round($suma, 4),
                     'firma_movimientos' => $this->firmaMovimientos($movs),
@@ -1014,6 +1081,7 @@ final class AnitaAsientoImportService
             'lineas_a_crear' => 0,
             'creados' => 0,
             'reemplazados' => 0,
+            'metadatos_anita_actualizados' => 0,
             'duplicados' => 0,
             'duplicados_dejar' => 0,
             'duplicados_reemplazar' => 0,
@@ -1038,7 +1106,7 @@ final class AnitaAsientoImportService
         foreach ([
             'ctamov_filas_leidas', 'subdiario_filas_leidas', 'subhist_filas_leidas',
             'ctamov_excluidos_cierre', 'ctamov_excluidos_lineas', 'ctamov_resumen_sin_detalle',
-            'a_crear', 'lineas_a_crear', 'creados', 'reemplazados',
+            'a_crear', 'lineas_a_crear', 'creados', 'reemplazados', 'metadatos_anita_actualizados',
             'duplicados', 'duplicados_dejar', 'duplicados_reemplazar',
             'omitidos_sin_numero', 'omitidos_sin_tipo', 'omitidos_sin_movimientos',
             'lineas_sin_importe',

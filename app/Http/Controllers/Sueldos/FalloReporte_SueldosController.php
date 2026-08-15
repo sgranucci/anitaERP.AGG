@@ -99,6 +99,8 @@ class FalloReporte_SueldosController extends Controller
     private function filtrosDesdeRequest(Request $request, $empresaQuery = null): array
     {
         $empresaId = (int) $request->input('empresa_id', 0);
+        $legajoDesde = trim((string) $request->input('legajo_desde', ''));
+        $legajoHasta = trim((string) $request->input('legajo_hasta', ''));
         if ($empresaId <= 0 && $empresaQuery !== null && $empresaQuery->count() === 1) {
             $empresaId = (int) $empresaQuery->first()->id;
         }
@@ -109,8 +111,8 @@ class FalloReporte_SueldosController extends Controller
             'fecha_hasta' => (string) $request->input('fecha_hasta', date('Y-m-d')),
             'orden' => $request->input('orden') === 'alfabetico' ? 'alfabetico' : 'legajo',
             'modo' => $request->input('modo') === 'totales' ? 'totales' : 'movimientos',
-            'legajo_desde' => (int) $request->input('legajo_desde', 1),
-            'legajo_hasta' => (int) $request->input('legajo_hasta', 99999999),
+            'legajo_desde' => $legajoDesde === '' ? '' : (int) $legajoDesde,
+            'legajo_hasta' => $legajoHasta === '' ? '' : (int) $legajoHasta,
         ];
     }
 }

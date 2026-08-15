@@ -8,6 +8,10 @@ interface Empleado_SueldosRepositoryInterface extends RepositoryInterface
 
     public function findOperativo(int $id);
 
+    public function findOperativoPorLegajo(int $legajo, ?int $empresaId = null);
+
+    public function consultaOperativa(string $texto = '', ?int $empresaId = null, int $limite = 100);
+
     public function proximoLegajo(int $empresaId): int;
 
     /**

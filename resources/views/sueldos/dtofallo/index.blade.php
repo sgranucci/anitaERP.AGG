@@ -4,6 +4,16 @@
     Descuentos por fallos
 @endsection
 
+@section('scripts')
+<script>
+window.empleadoSueldosConsultaUrls = {
+    buscar: @json(route('consulta_operativa_empleado_sueldos')),
+    resolver: @json(route('resolver_operativo_empleado_sueldos'))
+};
+</script>
+<script src="{{ asset('assets/pages/scripts/sueldos/empleado/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/consulta.js')) ?: time() }}"></script>
+@endsection
+
 @section('contenido')
 <div class="row">
     <div class="col-lg-12">
@@ -37,7 +47,7 @@
                     <div class="form-row">
                         <div class="form-group col-md-3">
                             <label class="small mb-1">Empresa</label>
-                            <select name="empresa_id" class="form-control form-control-sm" required>
+                            <select name="empresa_id" id="dtofallo_empresa_id" class="form-control form-control-sm" required>
                                 @foreach ($empresa_query as $emp)
                                     <option value="{{ $emp->id }}" @selected((int)old('empresa_id', $defaults['empresa_id']) === (int)$emp->id)>
                                         {{ $emp->nombre }}
@@ -60,15 +70,23 @@
                             <input type="date" name="fecha_fallo_hasta" class="form-control form-control-sm"
                                    value="{{ old('fecha_fallo_hasta', $defaults['fecha_fallo_hasta']) }}" required>
                         </div>
-                        <div class="form-group col-md-1">
-                            <label class="small mb-1">Leg. desde</label>
-                            <input type="number" name="legajo_desde" class="form-control form-control-sm"
-                                   value="{{ old('legajo_desde', $defaults['legajo_desde']) }}">
+                        <div class="col-md-4 mb-3">
+                            @include('sueldos.partials.campo_consulta_empleado_sueldos', [
+                                'prefix' => 'dtofallo_legajo_desde',
+                                'inputName' => 'legajo_desde',
+                                'legajo' => old('legajo_desde', $defaults['legajo_desde']),
+                                'label' => 'Empleado desde',
+                                'nextFocus' => '#dtofallo_legajo_hasta_legajo',
+                            ])
                         </div>
-                        <div class="form-group col-md-1">
-                            <label class="small mb-1">Leg. hasta</label>
-                            <input type="number" name="legajo_hasta" class="form-control form-control-sm"
-                                   value="{{ old('legajo_hasta', $defaults['legajo_hasta']) }}">
+                        <div class="col-md-4 mb-3">
+                            @include('sueldos.partials.campo_consulta_empleado_sueldos', [
+                                'prefix' => 'dtofallo_legajo_hasta',
+                                'inputName' => 'legajo_hasta',
+                                'legajo' => old('legajo_hasta', $defaults['legajo_hasta']),
+                                'label' => 'Empleado hasta',
+                                'nextFocus' => '#generar_novedades',
+                            ])
                         </div>
                         <div class="form-group col-md-3 d-flex align-items-end">
                             <div class="custom-control custom-checkbox mr-3">
@@ -77,10 +95,14 @@
                                        @checked(old('generar_novedades', $defaults['generar_novedades']))>
                                 <label class="custom-control-label" for="generar_novedades">Generar novedades</label>
                             </div>
-                            <button type="submit" class="btn btn-success btn-sm"
+                            <button type="submit" class="btn btn-success btn-sm mr-2"
                                     onclick="return confirm('¿Generar descuentos por fallos con estos filtros?');">
                                 <i class="fa fa-cogs"></i> Generar
                             </button>
+                            <a href="{{ route('consultar_dtofallo_sueldos') }}" class="btn btn-outline-secondary btn-sm"
+                               title="Limpiar filtros">
+                                <i class="fa fa-eraser"></i> Limpiar
+                            </a>
                         </div>
                     </div>
                 </form>
@@ -154,4 +176,5 @@
         </div>
     </div>
 </div>
+@include('includes.sueldos.modalconsultaempleado_sueldos')
 @endsection

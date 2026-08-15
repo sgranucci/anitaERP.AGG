@@ -45,8 +45,8 @@ class DtoFallo_SueldosController extends Controller
                 'periodo_descuento' => (int) date('Ym'),
                 'fecha_fallo_desde' => date('Y-m-01'),
                 'fecha_fallo_hasta' => date('Y-m-d'),
-                'legajo_desde' => 1,
-                'legajo_hasta' => 99999999,
+                'legajo_desde' => '',
+                'legajo_hasta' => '',
                 'generar_novedades' => 1,
             ],
         ]);
