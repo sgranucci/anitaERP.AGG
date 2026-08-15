@@ -274,9 +274,11 @@ class RecepcionProveedorSurmarService
 
         $pesos = $this->resolverPesosLinea($data);
         $lote = $this->resolverLoteLinea($recepcion, $data);
+        // Fecha impresa / base de vto = día de emisión (no fecha de OC ni cabecera vieja).
+        $fechaEmision = now();
         $fechaVto = SurmarEtiquetaFechaVtoSupport::resolver(
             isset($data['fecha_vto']) ? (string) $data['fecha_vto'] : null,
-            $recepcion->fecha,
+            $fechaEmision,
             (int) ($articulo->vencimientoendia ?? 0)
         );
         $separa = $this->resolverSepara($data, $articulo, $ocLinea);
@@ -294,7 +296,7 @@ class RecepcionProveedorSurmarService
             : $this->proximaApertura($recepcion->id, $ocArtId, $articuloId);
 
         return DB::transaction(function () use (
-            $recepcion, $articulo, $data, $ocLinea, $pesos, $lote, $fechaVto, $separa, $cantUnid,
+            $recepcion, $articulo, $data, $ocLinea, $pesos, $lote, $fechaVto, $fechaEmision, $separa, $cantUnid,
             $cantPieza, $precio, $certificadoLinea, $nroEstablecimiento, $umdId, $nroApertura, $ocArtId, $articuloId
         ) {
             $result = $this->crearLineaYEtiqueta(
@@ -305,6 +307,7 @@ class RecepcionProveedorSurmarService
                 $pesos,
                 $lote,
                 $fechaVto,
+                $fechaEmision,
                 $separa,
                 $cantUnid,
                 $nroApertura,
@@ -349,9 +352,10 @@ class RecepcionProveedorSurmarService
         $articulo = Articulo::query()->whereKey($linea->articulo_id)->firstOrFail();
         $pesos = $this->resolverPesosLinea($data);
         $lote = $this->resolverLoteLinea($recepcion, $data);
+        $fechaEmision = now();
         $fechaVto = SurmarEtiquetaFechaVtoSupport::resolver(
             isset($data['fecha_vto']) ? (string) $data['fecha_vto'] : null,
-            $recepcion->fecha,
+            $fechaEmision,
             (int) ($articulo->vencimientoendia ?? 0)
         );
         $separa = $this->resolverSepara($data, $articulo, [
@@ -364,7 +368,7 @@ class RecepcionProveedorSurmarService
         $certificadoLinea = $certificadoCabecera !== '' ? $certificadoCabecera : $lote;
 
         return DB::transaction(function () use (
-            $recepcion, $linea, $articulo, $pesos, $lote, $fechaVto, $separa, $cantUnid,
+            $recepcion, $linea, $articulo, $pesos, $lote, $fechaVto, $fechaEmision, $separa, $cantUnid,
             $nroApertura, $cantPieza, $certificadoLinea
         ) {
             $linea->update([
@@ -390,6 +394,8 @@ class RecepcionProveedorSurmarService
             Stock_Etiqueta::query()->whereKey($etiquetaId)->update([
                 'lote_proveedor' => $lote,
                 'fecha_vto' => $fechaVto,
+                'fecha_emision' => $fechaEmision->format('Y-m-d'),
+                'hora_emision' => now()->format('H:i'),
                 'cant_pieza' => $cantPieza,
                 'peso_bruto' => $pesos['bruto'],
                 'peso_neto' => $pesos['neto'],
@@ -509,6 +515,7 @@ class RecepcionProveedorSurmarService
         array $pesos,
         string $lote,
         $fechaVto,
+        $fechaEmision,
         int $separa,
         int $cantUnid,
         int $nroApertura,
@@ -521,6 +528,9 @@ class RecepcionProveedorSurmarService
         $recepcion->loadMissing('proveedores');
         $ahora = now();
         $horaCarga = $ahora->format('H:i');
+        $fechaEmisionYmd = $fechaEmision instanceof \Carbon\CarbonInterface
+            ? $fechaEmision->format('Y-m-d')
+            : (string) ($fechaEmision ?: $ahora->toDateString());
         $orden = (int) (RecepcionProveedorArticuloSurmar::query()
             ->where('recepcion_proveedor_id', $recepcion->id)
             ->max('orden') ?? 0) + 1;
@@ -577,7 +587,7 @@ class RecepcionProveedorSurmarService
             'origen_linea_id' => $linea->id,
             'lote_proveedor' => $lote,
             'fecha_vto' => $fechaVto,
-            'fecha_emision' => $recepcion->fecha?->format('Y-m-d') ?? $ahora->toDateString(),
+            'fecha_emision' => $fechaEmisionYmd,
             'hora_emision' => $horaCarga,
             'cant_pieza' => $cantPieza,
             'peso_bruto' => $pesos['bruto'],

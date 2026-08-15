@@ -65,6 +65,8 @@ switch(strtoupper(config('app.empresa')))
             "TIPO_REMITO" => 'REM',
             "LETRA_REMITO" => 'R',
             "TIPO_REMITO_ID" => 9,
+            // Unidad enviada a Anita cuando el articulo no tiene unidadmedida_id en el ERP
+            "UNIDADMEDIDA_DEFAULT" => 'Kg',
             // Remito en stock: se resuelve por abreviatura TIPO_REMITO en tipotransaccion_stock
             "DEPOSITO_VENTA_ID" => 1,
             "NETEA_DESCUENTO_LINEA" => false, // false deja precio de lista en el renglon siempre y manda el descuento resultante al pie

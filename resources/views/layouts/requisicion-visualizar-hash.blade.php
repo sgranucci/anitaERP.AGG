@@ -24,7 +24,7 @@
             <span class="navbar-brand mb-0 h6 font-weight-bold text-secondary">Anita ERP — Consulta de requisición</span>
             <ul class="navbar-nav ml-auto">
                 <li class="nav-item">
-                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="window.close();" title="Cerrar esta solapa">
+                    <button type="button" class="btn btn-sm btn-outline-secondary" onclick="(function(){try{window.close();}catch(e){}setTimeout(function(){if(window.history.length>1){window.history.back();}else{alert('Cierre esta pestaña del navegador o use Atrás.');}},150);})();" title="Cerrar esta solapa">
                         <i class="fa fa-times"></i> Cerrar solapa
                     </button>
                 </li>

@@ -3,6 +3,8 @@
 namespace App\Services\Ventas\CotElectronico;
 
 use App\Models\Configuracion\Empresa;
+use App\Models\Ventas\Puntoventa;
+use App\Support\Ventas\ArbaCotProvinciaSupport;
 use Carbon\Carbon;
 
 class CotArchivoArbaService
@@ -43,7 +45,7 @@ class CotArchivoArbaService
             }
 
             $importe = (float) ($filaRemito['importe'] ?? 0);
-            $lineas[] = $this->registroRemito($filaRemito, $importe);
+            $lineas[] = $this->registroRemito($filaRemito, $importe, $empresa);
             foreach ($productos as $producto) {
                 $lineas[] = $this->registroProducto($producto);
             }
@@ -51,7 +53,8 @@ class CotArchivoArbaService
         }
 
         $lineas[] = '04|'.$cantidadRemitos;
-        $contenido = implode("\n", $lineas)."\n";
+        // ARBA exige CRLF; con solo LF el servlet no reconoce el registro 01 HEADER.
+        $contenido = implode("\r\n", $lineas)."\r\n";
 
         $dir = (string) config('arba_cot.storage_path');
         if (! is_dir($dir)) {
@@ -71,7 +74,7 @@ class CotArchivoArbaService
     /**
      * @param  array<string, mixed>  $filaRemito
      */
-    private function registroRemito(array $filaRemito, float $importe): string
+    private function registroRemito(array $filaRemito, float $importe, Empresa $empresa): string
     {
         $fechaRemito = Carbon::parse((string) ($filaRemito['fecha_remito'] ?? now()->toDateString()))->startOfDay();
         $fechaTxt = $fechaRemito->format('Ymd');
@@ -83,21 +86,26 @@ class CotArchivoArbaService
         $dest = is_array($filaRemito['destinatario'] ?? null) ? $filaRemito['destinatario'] : [];
         $esCf = (bool) ($dest['es_cf'] ?? false);
         $cuitDest = $this->soloDigitos((string) ($dest['cuit'] ?? ''));
-        $razonSocial = trim((string) ($dest['razon_social'] ?? $filaRemito['cliente_nombre'] ?? ''));
-        $destCalle = (string) ($dest['calle'] ?? 'S/N');
-        $destNumero = (string) ($dest['numero'] ?? '');
-        $destLocalidad = (string) ($dest['localidad'] ?? '');
-        $destProvincia = $this->abreviaturaProvincia((string) ($dest['provincia'] ?? 'B'));
+        $razonSocial = $this->truncar((string) ($dest['razon_social'] ?? $filaRemito['cliente_nombre'] ?? ''), 50);
+        // Diseño ARBA: NUMERO es N(5). Si COMPLE = S/N, NUMERO debe ser 0 o blanco.
+        // p-cot: calle = domicilio completo (MAYOR IRUSTA 2921), comple = S/N.
+        $destCalle = $this->calleCompletaAnita(
+            (string) ($dest['calle'] ?? ''),
+            (string) ($dest['numero'] ?? ''),
+        );
+        $destNumero = '0';
+        $destLocalidad = $this->truncar((string) ($dest['localidad'] ?? ''), 50);
+        $destProvincia = ArbaCotProvinciaSupport::codigo((string) ($dest['provincia'] ?? 'B'));
         $destCp = preg_replace('/\D+/', '', (string) ($dest['codigo_postal'] ?? '')) ?: '';
 
-        $origen = config('arba_cot.origen', []);
-        $origenCuit = $this->soloDigitos((string) ($origen['cuit'] ?: $this->cuitEmpresa(null)));
-        $origenRazon = (string) ($origen['razon_social'] ?: config('app.name'));
-        $origenCalle = (string) ($origen['calle'] ?: '');
-        $origenNumero = (string) ($origen['numero'] ?: 'S/N');
-        $origenLocalidad = (string) ($origen['localidad'] ?: '');
-        $origenProvincia = (string) ($origen['provincia'] ?: 'B');
-        $origenCp = preg_replace('/\D+/', '', (string) ($origen['codigo_postal'] ?? '')) ?: '';
+        $origen = $this->datosOrigen($empresa, $sucursal);
+        $origenCuit = $origen['cuit'];
+        $origenRazon = $origen['razon_social'];
+        $origenCalle = $origen['calle'];
+        $origenNumero = $origen['numero'];
+        $origenLocalidad = $origen['localidad'];
+        $origenProvincia = $origen['provincia'];
+        $origenCp = $origen['codigo_postal'];
 
         $patente = strtoupper(preg_replace('/[^A-Z0-9]/', '', (string) ($filaRemito['patente'] ?? '')));
         $cuitTransportista = $this->soloDigitos((string) ($filaRemito['cuit_chofer'] ?? ''));
@@ -229,11 +237,89 @@ class CotArchivoArbaService
         return preg_replace('/\D+/', '', $valor) ?? '';
     }
 
-    private function abreviaturaProvincia(?string $abreviatura): string
+    /**
+     * Origen como p-cot (sucursal / punto de venta), no el domicilio partido de empresa.
+     * En El Bierzo el PV tiene Bragado 6759 / BRAGADO / C (CABA) / 1407.
+     *
+     * @return array{cuit:string,razon_social:string,calle:string,numero:string,localidad:string,provincia:string,codigo_postal:string}
+     */
+    private function datosOrigen(Empresa $empresa, int $sucursalRemito): array
     {
-        $abreviatura = strtoupper(trim((string) $abreviatura));
+        $config = config('arba_cot.origen', []);
+        $puntoventa = $this->resolverPuntoventaOrigen($sucursalRemito);
+        $empresa->loadMissing(['provincia', 'localidad']);
 
-        return $abreviatura !== '' ? $abreviatura : 'B';
+        $origenExplicit = trim((string) ($config['calle'] ?? '')) !== '';
+        $cuit = $this->soloDigitos((string) ($config['cuit'] ?: $this->cuitEmpresa($empresa)));
+        $razon = trim((string) ($config['razon_social'] ?: $empresa->nombre ?: config('app.name')));
+        $calle = trim((string) ($origenExplicit ? $config['calle'] : ($puntoventa?->domicilio ?: $empresa->domicilio ?: 'S/N')));
+        $localidad = trim((string) (
+            ($origenExplicit && ($config['localidad'] ?? '') !== '')
+                ? $config['localidad']
+                : (optional($puntoventa?->localidades)->nombre
+                    ?: optional($empresa->localidad)->nombre
+                    ?: '')
+        ));
+        $provinciaPv = trim((string) (optional($puntoventa?->provincias)->abreviatura ?? ''));
+        $provincia = ArbaCotProvinciaSupport::codigo((string) (
+            ($origenExplicit && ($config['provincia'] ?? '') !== '')
+                ? $config['provincia']
+                : ($provinciaPv
+                    ?: optional($empresa->provincia)->abreviatura
+                    ?: 'C')
+        ));
+        $cp = preg_replace(
+            '/\D+/',
+            '',
+            (string) (
+                ($origenExplicit && ($config['codigo_postal'] ?? '') !== '')
+                    ? $config['codigo_postal']
+                    : ($puntoventa?->codigopostal ?: $empresa->codigopostal ?: '')
+            )
+        ) ?: '';
+
+        return [
+            'cuit' => $cuit,
+            'razon_social' => $this->truncar($razon, 50),
+            'calle' => $this->truncar($calle, 40),
+            'numero' => '0',
+            'localidad' => $this->truncar($localidad, 50),
+            'provincia' => $provincia,
+            'codigo_postal' => $cp,
+        ];
+    }
+
+    private function resolverPuntoventaOrigen(int $sucursalRemito): ?Puntoventa
+    {
+        $codigos = [];
+        if ($sucursalRemito > 0) {
+            $codigos[] = str_pad((string) $sucursalRemito, 5, '0', STR_PAD_LEFT);
+            $codigos[] = (string) $sucursalRemito;
+        }
+        $codigos[] = '00001';
+        $codigos[] = '1';
+
+        $filas = Puntoventa::query()
+            ->with(['localidades', 'provincias'])
+            ->whereIn('codigo', array_unique($codigos))
+            ->get();
+
+        return $filas->first(function (Puntoventa $pv) {
+            return trim((string) $pv->domicilio) !== ''
+                && trim((string) $pv->codigopostal) !== ''
+                && (int) ($pv->localidad_id ?? 0) > 0;
+        }) ?? $filas->first();
+    }
+
+    private function calleCompletaAnita(string $calle, string $numero): string
+    {
+        $calle = trim($calle);
+        $numero = trim($numero);
+        if ($numero !== '' && strtoupper($numero) !== 'S/N' && ! str_ends_with($calle, $numero)) {
+            $calle = trim($calle.' '.$numero);
+        }
+
+        return $this->truncar($calle !== '' ? $calle : 'S/N', 40);
     }
 
     private function truncar(string $texto, int $max): string

@@ -151,7 +151,7 @@ window.SURMAR_RECEPCION = {
                         @if ($oc)
                             @if ($puedeConsultarOc)
                                 <a href="{{ route('editar_ordencompra', ['id' => $oc->id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
-                                   class="text-primary" target="_blank" rel="noopener">{{ $oc->numeroordencompra }}</a>
+                                   class="text-primary" target="_blank">{{ $oc->numeroordencompra }}</a>
                             @else
                                 {{ $oc->numeroordencompra }}
                             @endif

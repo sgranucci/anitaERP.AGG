@@ -7,9 +7,12 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\FacturaListadoFiltros;
 use Auth;
 use App\ApiAnita;
+use Illuminate\Support\Facades\Log;
+use RuntimeException;
 
 class VentaRepository implements VentaRepositoryInterface
 {
@@ -140,6 +143,28 @@ class VentaRepository implements VentaRepositoryInterface
 
     public function traeUltimoNumeroRemito($tipo, $letra, $sucursal)
     {
+        // El Bierzo numera como a-remito/a-comprob: compemis resuelve la clave
+        // y numerador contiene el ultimo numero reservado. No usar MAX(pendmae):
+        // el remito puede originarse al facturar sin existir aun en pendmae.
+        if (EntornoEmpresaSupport::esElBierzo()) {
+            try {
+                return $this->leerUltimoNumeradorCompemisEstricto(
+                    (string) $tipo,
+                    (string) $letra,
+                    (string) (int) $sucursal,
+                ) + 1;
+            } catch (\Throwable $e) {
+                Log::error('ventas.remito.numerador_anita_no_disponible', [
+                    'tipo' => $tipo,
+                    'letra' => $letra,
+                    'sucursal' => $sucursal,
+                    'error' => $e->getMessage(),
+                ]);
+
+                return 'error';
+            }
+        }
+
         // Lee numerador desde anita
 		$apiAnita = new ApiAnita();
         $data = array( 
@@ -255,6 +280,19 @@ class VentaRepository implements VentaRepositoryInterface
      */
     public function leerUltimoNumeradorCompemis(string $tipo, string $letra, string $sucursal, $path_sistema = null): int
     {
+        try {
+            return $this->leerUltimoNumeradorCompemisEstricto($tipo, $letra, $sucursal, $path_sistema);
+        } catch (\Throwable $e) {
+            return 0;
+        }
+    }
+
+    private function leerUltimoNumeradorCompemisEstricto(
+        string $tipo,
+        string $letra,
+        string $sucursal,
+        $path_sistema = null
+    ): int {
         $apiAnita = new ApiAnita();
         $data = [
             'acc' => 'list',
@@ -269,15 +307,22 @@ class VentaRepository implements VentaRepositoryInterface
         $rawCompe = $apiAnita->apiCallEscritura($data);
         $errCompe = ApiAnita::extraerMensajeError($rawCompe);
         if ($errCompe !== null) {
-            return 0;
+            throw new RuntimeException('Error al leer compemis: '.$errCompe);
         }
 
         $filaCompe = ApiAnita::primeraFilaLista((string) $rawCompe);
         if ($filaCompe === null || ! isset($filaCompe->compe_numero)) {
-            return 0;
+            throw new RuntimeException(
+                "No existe compemis para {$tipo} {$letra} sucursal {$sucursal}."
+            );
         }
 
-        $claveNumero = $filaCompe->compe_numero;
+        $claveNumero = (int) $filaCompe->compe_numero;
+        if ($claveNumero <= 0) {
+            throw new RuntimeException(
+                "compemis no tiene una clave de numerador valida para {$tipo} {$letra} sucursal {$sucursal}."
+            );
+        }
 
         $apiAnita = new ApiAnita();
         $data = [
@@ -291,13 +336,14 @@ class VentaRepository implements VentaRepositoryInterface
         }
 
         $rawNumerador = $apiAnita->apiCallEscritura($data);
-        if (ApiAnita::extraerMensajeError($rawNumerador) !== null) {
-            return 0;
+        $errNumerador = ApiAnita::extraerMensajeError($rawNumerador);
+        if ($errNumerador !== null) {
+            throw new RuntimeException('Error al leer numerador: '.$errNumerador);
         }
 
         $filaNumerador = ApiAnita::primeraFilaLista((string) $rawNumerador);
         if ($filaNumerador === null || ! isset($filaNumerador->num_ult_numero)) {
-            return 0;
+            throw new RuntimeException("No existe numerador Anita con clave {$claveNumero}.");
         }
 
         return max(0, (int) $filaNumerador->num_ult_numero);

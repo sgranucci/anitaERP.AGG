@@ -215,23 +215,19 @@ class ArbaCotPresentacionService
             ];
         }
 
-        $timeout = (int) config('arba_cot.timeout_segundos', 120);
+        $enviado = $this->postArchivoMultipart(
+            $config['url'],
+            $config['usuario'],
+            $config['password'],
+            $rutaArchivo,
+            $nombreArchivo,
+        );
 
-        $response = Http::timeout($timeout)
-            ->asMultipart()
-            ->attach('file', file_get_contents($rutaArchivo), $nombreArchivo)
-            ->post($config['url'], [
-                'user' => $config['usuario'],
-                'password' => $config['password'],
-            ]);
-
-        $xmlBody = $response->body();
-
-        if (! $response->successful()) {
+        if ($enviado['error'] !== null) {
             return [
                 'ok' => false,
-                'xml' => $xmlBody,
-                'error_general' => 'HTTP '.$response->status().': '.$this->extraerMensajeError($xmlBody),
+                'xml' => $enviado['body'],
+                'error_general' => $enviado['error'],
                 'cuit_empresa' => null,
                 'numero_comprobante' => null,
                 'nombre_archivo' => null,
@@ -240,7 +236,67 @@ class ArbaCotPresentacionService
             ];
         }
 
-        return $this->parsearRespuestaXml($xmlBody);
+        return $this->parsearRespuestaXml((string) $enviado['body']);
+    }
+
+    /**
+     * POST multipart con CURLFile. El Http client de Laravel manda Expect: 100-continue
+     * y el servlet de ARBA a veces recibe el archivo vacío → "No hay registro 01= HEADER".
+     *
+     * @return array{body:?string,error:?string}
+     */
+    private function postArchivoMultipart(
+        string $url,
+        string $usuario,
+        string $password,
+        string $rutaArchivo,
+        string $nombreArchivo,
+    ): array {
+        $timeout = (int) config('arba_cot.timeout_segundos', 120);
+        $archivo = new \CURLFile($rutaArchivo, 'text/plain', $nombreArchivo);
+
+        $ch = curl_init($url);
+        curl_setopt_array($ch, [
+            CURLOPT_POST => true,
+            CURLOPT_POSTFIELDS => [
+                'user' => $usuario,
+                'password' => $password,
+                'file' => $archivo,
+            ],
+            CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_TIMEOUT => $timeout,
+            CURLOPT_CONNECTTIMEOUT => 30,
+            CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_POSTREDIR => 3,
+            CURLOPT_HTTPHEADER => ['Expect:'],
+        ]);
+
+        $body = curl_exec($ch);
+        $errno = curl_errno($ch);
+        $errorCurl = curl_error($ch);
+        $httpStatus = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        curl_close($ch);
+
+        if ($errno !== 0) {
+            return [
+                'body' => is_string($body) ? $body : null,
+                'error' => 'No se pudo conectar con ARBA: '.$errorCurl,
+            ];
+        }
+
+        if ($httpStatus < 200 || $httpStatus >= 300) {
+            $xmlBody = is_string($body) ? $body : '';
+
+            return [
+                'body' => $xmlBody,
+                'error' => 'HTTP '.$httpStatus.': '.$this->extraerMensajeError($xmlBody),
+            ];
+        }
+
+        return [
+            'body' => is_string($body) ? $body : '',
+            'error' => null,
+        ];
     }
 
     /**

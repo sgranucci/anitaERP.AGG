@@ -48,6 +48,7 @@ use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
 use App\Models\Stock\Categoria;
 use App\Models\Stock\Linea;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
 use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use App\Models\Stock\Talle;
@@ -865,6 +866,13 @@ class FacturacionService
 						$numeroremito = $this->ventaRepository->traeUltimoNumeroRemito('REM','R',$puntoventaremito->codigo);
 					else	
 						$numeroremito = 0;
+				}
+
+				if ($numeroremito === 'error') {
+					return [
+						'error' => 'Error numerador remito',
+						'mensaje' => 'El punto de venta de remito no tiene numerador configurado en Anita.',
+					];
 				}
 
 				// Procesa Factura electronica
@@ -4746,7 +4754,12 @@ class FacturacionService
 		// Numera el remito
 		if (isset($puntoventaremito) && !$this->flGrabaComprobanteDividido)
 		{
-			if ($this->ventaRepository->numeraAnita('REM', 'R', $puntoventaremito) == 'Error')
+			$resultadoNumeradorRemito = $this->ventaRepository->numeraAnita('REM', 'R', $puntoventaremito);
+			if (
+				(EntornoEmpresaSupport::esElBierzo()
+					&& (! is_int($resultadoNumeradorRemito) || $resultadoNumeradorRemito <= 0))
+				|| (! EntornoEmpresaSupport::esElBierzo() && $resultadoNumeradorRemito == 'Error')
+			)
 				return ['error' => 'Error numerador remito', 'mensaje' => 'No pudo numerar remito'];
 		}
 
@@ -6386,6 +6399,11 @@ class FacturacionService
 
 		$numeroRemito = $this->ventaRepository->traeUltimoNumeroRemito(config('facturacion.TIPO_REMITO'),
 						config('facturacion.LETRA_REMITO'), $puntoVentaRemito);
+		if ($numeroRemito === 'error') {
+			return [
+				'error' => 'El punto de venta de remito no tiene numerador configurado en Anita.',
+			];
+		}
 
 		$articulos_id = [];
 		$skus = [];
@@ -6418,7 +6436,10 @@ class FacturacionService
 
 	        // Si el precio tiene iva incluido lo netea
 			if ($item['incluyeimpuesto'] == '1')
-				$precio = $item['preciosindescuento'] / (1 + ($tasa/100));
+			{
+				$tasa = (float) (Impuesto::find($item['impuesto_id'])->valor ?? 0);
+				$precio = $item['preciosindescuento'] / (1 + ($tasa / 100));
+			}
 			else	
 				$precio = $item['preciosindescuento'];
 
@@ -6491,6 +6512,21 @@ class FacturacionService
 		$data['omitir_validacion_saldo'] = true;
 
 		$this->movimientoStockService->guardaMovimientoStock($data, 'create');
+
+		// Este flujo (reparto 101) crea el REM físico antes de la factura dividida.
+		// La factura de Villa omite la numeración del remito, por lo que se reserva acá.
+		if (EntornoEmpresaSupport::esElBierzo()) {
+			$resultadoNumeradorRemito = $this->ventaRepository->numeraAnita(
+				config('facturacion.TIPO_REMITO'),
+				config('facturacion.LETRA_REMITO'),
+				$puntoVentaRemito,
+			);
+			if (! is_int($resultadoNumeradorRemito) || $resultadoNumeradorRemito !== (int) $numeroRemito) {
+				return [
+					'error' => 'No pudo actualizar el numerador del remito en Anita.',
+				];
+			}
+		}
 
 		// Remito ERP solo (flujo pedido Bierzo / reparto 101). No gastronomía ni estacionamiento.
 		$persistRemito = app(\App\Services\Ventas\RemitoService::class)->persistirDesdeFactura([

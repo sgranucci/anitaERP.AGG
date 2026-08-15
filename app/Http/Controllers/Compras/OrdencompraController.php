@@ -244,7 +244,18 @@ class OrdencompraController extends Controller
 
     public function soloConsulta($id)
     {
-        return $this->visualizar($id, null);
+        if (! can('listar-ordencompra', false) && ! can('editar-ordencompra', false)) {
+            can('listar-ordencompra');
+        }
+
+        // Consulta logueada: layout ERP normal (no portal hash). El layout hash
+        // solo aplica a visualizar por enlace de mail; ahí window.close() no sirve
+        // porque se navega en la misma pestaña desde el listado.
+        $request = request();
+        $request->query->set('origen', 'modal_consulta');
+        $request->query->set('vista', 'consulta');
+
+        return $this->formularioOrdencompra((int) $id, true, null, $request, false);
     }
 
     public function visualizar($id, $hash = null)
@@ -263,7 +274,9 @@ class OrdencompraController extends Controller
             return redirect()->route('inicio')->with('mensaje', 'No tiene permisos para visualizar la orden de compra');
         }
 
-        return $this->formularioOrdencompra((int) $id, true, null);
+        $accesoHash = is_string($hash) && $hash !== '';
+
+        return $this->formularioOrdencompra((int) $id, true, null, null, $accesoHash);
     }
 
     public function buscarRequisicionesAprobadas(Request $request)
@@ -988,8 +1001,13 @@ class OrdencompraController extends Controller
         ]);
     }
 
-    private function formularioOrdencompra(?int $id, bool $soloLectura, ?int $wizardRequisicionId = null, ?Request $request = null)
-    {
+    private function formularioOrdencompra(
+        ?int $id,
+        bool $soloLectura,
+        ?int $wizardRequisicionId = null,
+        ?Request $request = null,
+        bool $accesoVisualizacionPorHash = false,
+    ) {
         $request = $request ?? request();
         $data = null;
         if ($id !== null) {
@@ -1015,7 +1033,8 @@ class OrdencompraController extends Controller
             ['valor' => 'NOTA_DEBITO', 'nombre' => 'Nota de débito'],
         ];
         $visualizar = $soloLectura;
-        $acceso_visualizacion_por_hash = $soloLectura;
+        // Portal mail/hash: layout reducido. Solo consulta logueada usa layout ERP.
+        $acceso_visualizacion_por_hash = $accesoVisualizacionPorHash;
         $soloConsulta = $request->query('origen') === 'modal_consulta';
         $ocultarVolver = $soloConsulta;
         $puedeActualizarOrdencompra = can('actualizar-ordencompra', false);

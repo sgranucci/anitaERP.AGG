@@ -254,7 +254,8 @@
             e.preventDefault();
             var r = $(this).closest('tr').data('oc');
             if (r && r.url_consulta) {
-                window.open(r.url_consulta, '_blank', 'noopener,noreferrer');
+                // Sin noopener: permite que «Cerrar solapa» cierre la pestaña.
+                window.open(r.url_consulta, '_blank');
             }
         });
 

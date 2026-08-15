@@ -1,7 +1,10 @@
 @php
     use App\Support\Stock\RecepcionProveedorSurmarListadoFiltros;
 @endphp
-<div class="collapse {{ RecepcionProveedorSurmarListadoFiltros::tieneCriteriosAplicados($filtros ?? []) ? 'show' : '' }}" id="panel-filtros-recepcion-surmar">
+<div class="collapse {{ RecepcionProveedorSurmarListadoFiltros::tieneCriteriosAplicados($filtros ?? []) ? 'show' : '' }}"
+     id="panel-filtros-recepcion-surmar"
+     data-listado-filtros-panel>
+    <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
     <div class="card-body border-top">
         <div class="form-row align-items-end">
             <div class="form-group col-md-3 mb-2">
@@ -15,7 +18,8 @@
             </div>
             <div class="form-group col-md-3 mb-2">
                 <label class="control-label" for="filtro_valor_panel">Valor</label>
-                <input type="text" name="filtro_valor" id="filtro_valor_panel" class="form-control form-control-sm" form="form-filtros-recepcion-surmar" value="{{ $filtros['filtro_valor'] ?? '' }}">
+                {{-- Sin name: el name="filtro_valor" vive en la toolbar; se sincroniza por JS antes del submit. --}}
+                <input type="text" id="filtro_valor_panel" class="form-control form-control-sm" value="{{ $filtros['filtro_valor'] ?? '' }}">
             </div>
             <div class="form-group col-md-2 mb-2">
                 <label class="control-label" for="estado">Estado</label>
@@ -35,7 +39,7 @@
                 </select>
             </div>
             <div class="form-group col-md-2 mb-2">
-                <button type="submit" class="btn btn-primary btn-sm btn-block">Aplicar filtros</button>
+                <button type="submit" class="btn btn-primary btn-sm btn-block" data-aplicar-filtros-panel="1">Aplicar filtros</button>
             </div>
         </div>
         @include('includes.listado.filtros_aviso_activos', [

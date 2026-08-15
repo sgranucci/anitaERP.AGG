@@ -12,6 +12,7 @@ use App\Models\Ventas\Transporte;
 use App\Queries\Ventas\ClienteQueryInterface;
 use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Repositories\Ventas\TransporteRepositoryInterface;
+use App\Support\Ventas\PedidoReferenciaAnitaSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use Carbon\Carbon;
@@ -248,6 +249,12 @@ class PedidoRepository implements PedidoRepositoryInterface
 		$this->setCamposAnita($request, $cliente, $tipo, $letra, $sucursal, $nro, $fechapedido, $fechaentrega, $transporte,
 								$vendedor, $zonavta, $descuento, $fechahoy, $horahoy);
 
+		// penm_sucursal_fact / penm_nro_fact / penm_subzona son numericos en Informix
+		$referenciaPedido = PedidoReferenciaAnitaSupport::desdeCodigoPedido($request['numerofactura'] ?? null);
+		$sucursalFactura = (int) ($request['sucursalfactura'] ?? 0) ?: $referenciaPedido['sucursalfactura'];
+		$numeroFactura = $referenciaPedido['numerofactura'];
+		$subzona = (int) ($request['subzona'] ?? 0);
+
 		$data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
             'campos' => ' 
     			penm_cliente,
@@ -313,8 +320,8 @@ class PedidoRepository implements PedidoRepositoryInterface
 				'".($request['leyenda']??' ')."',
 				'".$request['tipofactura']."', 
 				'".$request['letrafactura']."', 
-				'".$request['sucursalfactura']."', 
-				'".$request['numerofactura']."', 
+				'".$sucursalFactura."', 
+				'".$numeroFactura."', 
     			'".($request['descuentointegrado']??' ')."',
 				'".'0'."',".
 				(strtoupper(config('app.empresa')) == "EL BIERZO" ?
@@ -325,7 +332,7 @@ class PedidoRepository implements PedidoRepositoryInterface
 				'".$request['totalcaja']."',
 				'".$request['totalkilo']."',
 				'".$request['totalpieza']."',
-				'".$request['subzona']."',
+				'".$subzona."',
 				'".$request['oblea']."',
 				'".$request['cantidadmodificada']."',
 				'".$request['usuarioalta']."' " : " ")
@@ -341,6 +348,12 @@ class PedidoRepository implements PedidoRepositoryInterface
 			$incluyeImpuesto = 'S';
 			if ($request['incluyeimpuestos'][$i] == '2')
 				$incluyeImpuesto = 'N';
+
+			// Articulos sin categoria / unidad / impuesto cargados en el ERP no deben cortar el remito
+			$agrupacion = str_pad((string) ($articulo->categorias->codigo ?? ''), 4, "0", STR_PAD_LEFT);
+			$unidadMedida = trim((string) ($articulo->unidadesdemedidas->abreviatura
+				?? config('facturacion.UNIDADMEDIDA_DEFAULT', 'Kg')));
+			$tipoIva = (int) ($articulo->impuestos->codigo ?? 0);
 
 			$data = array( 'tabla' => 'pendmov', 
 				'sistema' => 'ventas', 
@@ -386,8 +399,8 @@ class PedidoRepository implements PedidoRepositoryInterface
 					'".$request['items'][$i]."',
 					'".str_pad($request['skus'][$i], 13, "0", STR_PAD_LEFT)."',
 					'".$articulo->descripcion."',
-					'".str_pad($articulo->categorias->codigo, 4, "0", STR_PAD_LEFT)."',
-					'".$articulo->unidadesdemedidas->abreviatura."',
+					'".$agrupacion."',
+					'".$unidadMedida."',
 					'".$request['cantidades'][$i]."',
 					'0',
 					'".$request['cantidades'][$i]."',
@@ -395,7 +408,7 @@ class PedidoRepository implements PedidoRepositoryInterface
 					'".$request['precios'][$i]."',
 					'".$request['descuentos'][$i]."',
 					'1',
-					'".$articulo->impuestos->codigo."',
+					'".$tipoIva."',
 					'".$fechapedido."', 
 					'".$incluyeImpuesto."',
 					'".$request['monedas_id'][$i]."',

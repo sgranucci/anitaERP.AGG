@@ -69,6 +69,40 @@
         return;
     }
 
+    // Cerrar solapa: window.close() solo funciona si la pestaña la abrió un script.
+    // Si el navegador lo bloquea (navegación misma pestaña / target=_blank+noopener),
+    // volver atrás al listado/origen.
+    window.cerrarSolapaConsulta = function () {
+        try {
+            window.close();
+        } catch (e) {}
+        setTimeout(function () {
+            try {
+                if (window.history.length > 1) {
+                    window.history.back();
+                    return;
+                }
+            } catch (e2) {}
+            alert('No se pudo cerrar la solapa automáticamente. Cierre esta pestaña del navegador o use Atrás.');
+        }, 150);
+    };
+
+    document.addEventListener('click', function (e) {
+        var el = e.target;
+        if (!el) return;
+        if (el.closest) {
+            el = el.closest('button, a');
+        }
+        if (!el) return;
+        var onclick = el.getAttribute && el.getAttribute('onclick');
+        if (!onclick || onclick.indexOf('window.close') === -1) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        window.cerrarSolapaConsulta();
+    }, true);
+
     function debeIgnorarAnchor(a) {
         if (!a || a.tagName !== 'A') return true;
         var href = a.getAttribute('href');

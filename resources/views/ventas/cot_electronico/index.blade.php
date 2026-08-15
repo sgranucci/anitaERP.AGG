@@ -227,7 +227,7 @@
                                                         <span class="text-muted">—</span>
                                                     @endif
                                                 </td>
-                                                <td>{{ $remito['numero_remito'] }}</td>
+                                                <td>{{ $remito['tipo'] ?? 'REM' }} {{ $remito['letra'] ?? 'R' }} {{ $remito['sucursal'] ?? '' }} {{ $remito['numero_remito'] }}</td>
                                                 <td>{{ $remito['fecha_factura'] ?? '' }}</td>
                                                 <td>{{ $remito['cliente_codigo'] }} {{ $remito['cliente_nombre'] }}</td>
                                                 <td>{{ $remito['transporte_codigo'] }} {{ $remito['transporte_nombre'] }}</td>

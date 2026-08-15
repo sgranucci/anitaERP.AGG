@@ -412,6 +412,31 @@
             color: #6c757d;
             margin-left: 0.15rem;
         }
+        /* Con peso + entregas (El Bierzo) la col. Cant. queda angosta y Chrome clippea el number. */
+        #tabla-articulos-ordencompra .cantidad-linea,
+        #tabla-articulos-ordencompra .precio-linea,
+        #tabla-articulos-ordencompra .oc-peso-unitario,
+        #tabla-articulos-ordencompra .oc-peso-total {
+            min-width: 4.5rem;
+            text-align: right;
+            color: #212529;
+            -webkit-text-fill-color: #212529;
+        }
+        #tabla-articulos-ordencompra .cantidad-linea::-webkit-inner-spin-button,
+        #tabla-articulos-ordencompra .cantidad-linea::-webkit-outer-spin-button,
+        #tabla-articulos-ordencompra .precio-linea::-webkit-inner-spin-button,
+        #tabla-articulos-ordencompra .precio-linea::-webkit-outer-spin-button,
+        #tabla-articulos-ordencompra .oc-peso-unitario::-webkit-inner-spin-button,
+        #tabla-articulos-ordencompra .oc-peso-unitario::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        #tabla-articulos-ordencompra .cantidad-linea,
+        #tabla-articulos-ordencompra .precio-linea,
+        #tabla-articulos-ordencompra .oc-peso-unitario {
+            -moz-appearance: textfield;
+            appearance: textfield;
+        }
     </style>
     @php
         $modoStockColorTalleInicial = old('modo_stock_color_talle', '');
@@ -453,6 +478,7 @@
         Este comprobante usa stock por color y talle: todas las líneas deben tener color y talle.
     </div>
     <input type="hidden" name="modo_stock_color_talle" id="modo_stock_color_talle" value="{{ $modoStockColorTalleInicial }}">
+    <div class="table-responsive">
     <table class="table table-sm table-bordered" id="tabla-articulos-ordencompra"
         data-oc-cc-destino-default="{{ $centrocostoDefaultDestino }}"
         data-oc-moneda-peso-id="{{ $ocMonedaPesoId }}"
@@ -857,6 +883,7 @@
             @endforeach
         </tbody>
     </table>
+    </div>
     @if (!$soloLectura)
         <button type="button" class="btn btn-danger btn-sm" id="agrega_renglon_ordencompra_articulo">+ Agregar renglón</button>
     @endif

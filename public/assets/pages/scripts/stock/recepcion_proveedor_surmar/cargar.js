@@ -45,7 +45,7 @@
         $('#btn-etiq-guardar').prop('disabled', false);
         actualizarBadgeProceso();
         actualizarPreviewLocal();
-        setTimeout(function () { $('#etiq_bruto').trigger('focus').select(); }, 200);
+        setTimeout(function () { $('#etiq_piezas').trigger('focus').select(); }, 200);
     }
 
     function sincronizarPesosAlFormulario() {
@@ -111,14 +111,26 @@
     }
 
     function calcularFechaVtoDesdeArticulo(vencimientoEnDias) {
-        return addDaysYmd(cfg.fechaRecepcion, vencimientoEnDias);
+        // Misma base que el backend: día de emisión (hoy), no fecha de cabecera/OC.
+        return addDaysYmd(fechaHoyYmd(), vencimientoEnDias);
+    }
+
+    function fechaHoyYmd() {
+        var d = new Date();
+        var mm = String(d.getMonth() + 1).padStart(2, '0');
+        var dd = String(d.getDate()).padStart(2, '0');
+        return d.getFullYear() + '-' + mm + '-' + dd;
+    }
+
+    function fechaHoyDmY() {
+        var ymd = fechaHoyYmd();
+        var p = ymd.split('-');
+        return p[2] + '/' + p[1] + '/' + p[0];
     }
 
     function fechaRecepcionDmY() {
-        var ymd = cfg.fechaRecepcion || '';
-        if (!ymd || ymd.indexOf('-') < 0) return '';
-        var p = ymd.split('-');
-        return p[2] + '/' + p[1] + '/' + p[0];
+        // Compat: preview de etiqueta usa fecha del día (emisión).
+        return fechaHoyDmY();
     }
 
     function recalcularPesoNetoCampos($bruto, $tara, $neto) {
@@ -284,7 +296,7 @@
             }
             if (cfg.puedeConsultarOc && cfg.urls && cfg.urls.consultarOc) {
                 $acc.append(
-                    $('<a class="btn btn-info btn-xs js-consultar-oc" target="_blank" rel="noopener"/>')
+                    $('<a class="btn btn-info btn-xs js-consultar-oc" target="_blank"/>')
                         .attr('href', cfg.urls.consultarOc)
                         .attr('title', 'Ver orden de compra')
                         .html('<i class="fa fa-file-text-o"></i> Ver OC')
@@ -845,7 +857,7 @@
             cant_pieza: fmt($('#etiq_piezas').val()),
             peso_promedio: prom || '—',
             linea_separa: abrev + ': ' + cantUnid + ' - Nro.: ' + nro,
-            fecha: fechaRecepcionDmY(),
+            fecha: fechaHoyDmY(),
             fecha_vto: vtoFmt,
             lote: lote ? (lote + '/' + nro) : String(nro)
         });
@@ -898,11 +910,8 @@
         actualizarPreviewLocal();
         $('#modalEtiquetaProveedorSurmar').modal('show');
         setTimeout(function () {
-            if (Number($('#etiq_bruto').val()) > 0 || Number($('#etiq_neto').val()) > 0) {
-                $('#etiq_cant_unid').trigger('focus').select();
-            } else {
-                $('#etiq_bruto').trigger('focus');
-            }
+            // Alta rápida sin datos previos: foco en piezas (luego Enter → bruto → … → Imprime).
+            $('#etiq_piezas').trigger('focus').select();
         }, 300);
     }
 

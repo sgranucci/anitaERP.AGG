@@ -248,7 +248,9 @@ class MovimientoStockSurmarEtiquetaService
 
         $depositoForm = (int) ($data['deposito_id'] ?? $lineasProducto->first()->deposito_id ?? 0);
         $loteCab = $this->resolverLote($data, (int) $movimiento->id);
+        // Fecha de movimiento para consumos / DES; la etiqueta impresa usa fecha del día.
         $fecha = (string) ($movimiento->fecha ?? $data['fecha'] ?? now()->toDateString());
+        $fechaEmisionEtiqueta = now()->toDateString();
 
         foreach ($lineasProducto->values() as $idx => $linea) {
             $ids = $porLinea[$idx] ?? [];
@@ -277,7 +279,7 @@ class MovimientoStockSurmarEtiquetaService
             $depositoForm,
             $origenTipo,
             $loteCab,
-            $fecha,
+            $fechaEmisionEtiqueta,
             $stats,
         );
 
@@ -325,6 +327,7 @@ class MovimientoStockSurmarEtiquetaService
         $depDestino = (int) ($transferencia->deposito_destino_id ?? $data['deposito_entrada_id'] ?? 0);
         $loteCab = $this->resolverLote($data, $entradaId);
         $fecha = (string) ($data['fecha'] ?? now()->toDateString());
+        $fechaEmisionEtiqueta = now()->toDateString();
 
         foreach ($lineasSalida->values() as $idx => $lineaSalida) {
             $ids = $porLinea[$idx] ?? [];
@@ -352,7 +355,7 @@ class MovimientoStockSurmarEtiquetaService
             $depDestino,
             SurmarSupport::ORIGEN_TRA,
             $loteCab,
-            $fecha,
+            $fechaEmisionEtiqueta,
             $stats,
         );
 

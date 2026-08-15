@@ -8,16 +8,19 @@ use App\Models\Stock\Articulo;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\CotRemitoEnvio;
 use App\Models\Ventas\Remito;
+use App\Support\Ventas\ArbaCotProvinciaSupport;
 use App\Support\Ventas\RemitoEstadosSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Listado COT alineado a p-cot.c:
- * 1) Anita comprob (comp_remito > 0 + comp_transporte = reparto), salvo si ya hay REM físico.
- * 2) Anita pendmae tipo REM del día por penm_expreso (reparto), excluye penm_ref_tipo = 'Z  '.
- * 3) Remitos anitaERP que no estén ya cubiertos por Anita (misma clave REM|letra|sucursal|numero).
+ * Listado COT alineado a p-cot.c, con cruce por número (no por sucursal 1):
+ * 1) Anita pendmae tipo REM del día (penm_expreso = reparto), excluye penm_ref_tipo = 'Z  '.
+ * 2) Remitos anitaERP del día / reparto que no estén ya en pendmae.
+ * 3) Anita comprob (comp_remito > 0 + comp_transporte = reparto) solo si no hay REM físico
+ *    ni remito ERP con el mismo tipo+letra+número (p-cot buscaba solo sucursal 1; acá
+ *    REM R 99 N cubre la factura con comp_remito = N).
  */
 class CotRemitoConsultaService
 {
@@ -50,29 +53,21 @@ class CotRemitoConsultaService
             fn ($r) => (int) preg_replace('/\D+/', '', (string) ($r['codigo'] ?? ''))
         );
 
-        $filas = [];
-        $claves = [];
-
-        // 1 y 2: Anita bridge (mientras haya datos allí), como p-cot.c
-        foreach ($this->listarDesdeAnita($fecha, $codigosReparto, $repartosPorCodigo) as $fila) {
-            $clave = (string) ($fila['clave'] ?? '');
-            if ($clave === '' || isset($claves[$clave])) {
-                continue;
+        $anita = $this->listarDesdeAnita($fecha, $codigosReparto, $repartosPorCodigo);
+        $pendmae = [];
+        $comprob = [];
+        foreach ($anita as $fila) {
+            if (($fila['origen'] ?? '') === 'anita_pendmae') {
+                $pendmae[] = $fila;
+            } else {
+                $comprob[] = $fila;
             }
-            $claves[$clave] = true;
-            $filas[] = $fila;
         }
 
-        // 3: remitos anitaERP que no están en Anita
-        foreach ($this->listarDesdeRemitoErp($fecha, $transporteIds, $repartosPorId) as $fila) {
-            $clave = (string) ($fila['clave'] ?? '');
-            if ($clave === '' || isset($claves[$clave])) {
-                continue;
-            }
-            $claves[$clave] = true;
-            $filas[] = $fila;
-        }
+        $erp = $this->listarDesdeRemitoErp($fecha, $transporteIds, $repartosPorId);
 
+        // Físico primero: pendmae > ERP > factura Anita (sucursal 1 no debe tapar REM R 99 N).
+        $filas = $this->fusionarRemitosSinDuplicar([$pendmae, $erp, $comprob]);
         usort($filas, fn ($a, $b) => ($a['numero_remito'] <=> $b['numero_remito']));
 
         return $filas;
@@ -91,29 +86,25 @@ class CotRemitoConsultaService
 
         $fechaAnita = (int) $fecha->format('Ymd');
         $remitosPendmae = $this->cargarPendmaeRemDelDia($fechaAnita, $codigosReparto);
-        $clavesPendmae = [];
+        $numerosPendmae = [];
         foreach ($remitosPendmae as $penm) {
-            $clavesPendmae[$this->claveRemito(
-                'REM',
-                trim((string) ($penm->penm_letra ?? 'R')) ?: 'R',
-                (int) ($penm->penm_sucursal ?? 1),
-                (int) ($penm->penm_nro ?? 0),
-            )] = true;
+            $numeroPendmae = (int) ($penm->penm_nro ?? 0);
+            if ($numeroPendmae > 0) {
+                $numerosPendmae[$numeroPendmae] = true;
+            }
         }
 
         $filas = [];
 
-        // p-cot: primero facturas con remito en comprob
+        // Facturas con remito en comprob: solo si no hay REM físico con ese número
+        // (cualquier sucursal; p-cot buscaba solo sucursal 1).
         foreach ($this->cargarComprobConRemito($fechaAnita, $codigosReparto) as $comp) {
             $numeroRemito = (int) ($comp->comp_remito ?? 0);
             if ($numeroRemito <= 0) {
                 continue;
             }
 
-            // p-cot un_comprobante: si existe REM R suc=1 nro=comp_remito en pendmae, lo saltea
-            // (el físico se lista después). Misma clave para deduplicar.
-            $claveFisica = $this->claveRemito('REM', 'R', 1, $numeroRemito);
-            if (isset($clavesPendmae[$claveFisica])) {
+            if (isset($numerosPendmae[$numeroRemito])) {
                 continue;
             }
 
@@ -622,7 +613,7 @@ class CotRemitoConsultaService
             'calle' => $parte['calle'],
             'numero' => $parte['numero'],
             'localidad' => (string) (optional($cliente->localidades)->nombre ?? ''),
-            'provincia' => strtoupper(trim((string) (optional($cliente->provincias)->abreviatura ?? 'B'))) ?: 'B',
+            'provincia' => ArbaCotProvinciaSupport::codigo((string) (optional($cliente->provincias)->abreviatura ?? 'B')),
             'codigo_postal' => preg_replace('/\D+/', '', (string) ($cliente->codigopostal ?? '')) ?: '',
         ];
     }
@@ -645,6 +636,50 @@ class CotRemitoConsultaService
     private function claveRemito(string $tipo, string $letra, int $sucursal, int $numero): string
     {
         return implode('|', [$tipo, $letra, $sucursal, $numero]);
+    }
+
+    /**
+     * Identidad de negocio del remito: tipo + letra + número.
+     * La sucursal no entra: la factura Anita fuerza sucursal 1 y el físico puede ser 99.
+     *
+     * @param  array<string, mixed>  $fila
+     */
+    private function claveLogicaRemito(array $fila): string
+    {
+        $tipo = trim((string) ($fila['tipo'] ?? 'REM')) ?: 'REM';
+        $letra = trim((string) ($fila['letra'] ?? 'R')) ?: 'R';
+        $numero = (int) ($fila['numero_remito'] ?? 0);
+        if ($numero <= 0) {
+            return '';
+        }
+
+        return implode('|', [$tipo, $letra, $numero]);
+    }
+
+    /**
+     * @param  list<list<array<string, mixed>>>  $lotes
+     * @return list<array<string, mixed>>
+     */
+    private function fusionarRemitosSinDuplicar(array $lotes): array
+    {
+        $filas = [];
+        $claves = [];
+        $clavesLogicas = [];
+
+        foreach ($lotes as $lote) {
+            foreach ($lote as $fila) {
+                $clave = (string) ($fila['clave'] ?? '');
+                $logica = $this->claveLogicaRemito($fila);
+                if ($clave === '' || $logica === '' || isset($claves[$clave]) || isset($clavesLogicas[$logica])) {
+                    continue;
+                }
+                $claves[$clave] = true;
+                $clavesLogicas[$logica] = true;
+                $filas[] = $fila;
+            }
+        }
+
+        return $filas;
     }
 
     private function buscarEnvioExitosoPrevio(
@@ -921,8 +956,9 @@ class CotRemitoConsultaService
     private function acumularProducto(array &$productos, Articulo $articulo, string $sku, float $cantidad): void
     {
         $codigoNomenclador = trim((string) ($articulo->nomenclador ?? ''));
-        if ($codigoNomenclador === '') {
-            $codigoNomenclador = '1';
+        if ($codigoNomenclador === '' || $codigoNomenclador === '1') {
+            // p-cot usa stkm_cod_nomenclador (6). En Bierzo los fiambres van 160100.
+            $codigoNomenclador = '160100';
         }
         $codigoUmd = trim((string) ($articulo->unidadmedidanomenclador ?? ''));
         if ($codigoUmd === '') {

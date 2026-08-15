@@ -71,7 +71,7 @@ window.SURMAR_RECEPCION_CREAR = {
                                     <a href="#"
                                        id="btn-consultar-oc-recepcion-surmar"
                                        class="btn btn-sm btn-info flex-shrink-0 d-none"
-                                       target="_blank" rel="noopener"
+                                       target="_blank"
                                        title="Consultar orden de compra">
                                         <i class="fa fa-file-text-o"></i> Consultar OC
                                     </a>
