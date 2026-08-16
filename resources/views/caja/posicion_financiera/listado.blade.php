@@ -8,6 +8,7 @@
         ];
     });
     $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($coleccionLogos);
+    $dias = $dias ?? [];
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -16,7 +17,7 @@
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <title>Posición financiera</title>
     <style>
-        body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 8px; color: #1a1a1a; }
+        body { font-family: DejaVu Sans, Helvetica, Arial, sans-serif; font-size: 6px; color: #1a1a1a; }
         table.data {
             font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
             border-collapse: collapse;
@@ -25,33 +26,39 @@
         table.data td, table.data th {
             border: 1px solid #cccccc;
             text-align: left;
-            padding: 4px;
+            padding: 2px 3px;
             vertical-align: top;
         }
         table.data tbody tr:nth-child(even) { background-color: #f5f5f5; }
         table.data thead tr { background-color: #85C1E9; }
         table.data th {
-            font-size: 8px;
+            font-size: 6px;
             font-weight: bold;
             color: #17202A;
+            text-align: right;
         }
-        .listado-header { width: 100%; margin-bottom: 10px; border-bottom: 2px solid #333; padding-bottom: 6px; }
+        table.data th.posfin-concepto { text-align: left; }
+        table.data td.posfin-concepto { white-space: nowrap; }
+        table.data td.posfin-dia,
+        table.data td.posfin-total-col { text-align: right; }
+        table.data tr.posfin-titulo td { background-color: #D6EAF8; font-weight: bold; }
+        table.data tr.posfin-total { font-weight: bold; }
+        .listado-header { width: 100%; margin-bottom: 8px; border-bottom: 2px solid #333; padding-bottom: 6px; }
         .listado-header td { vertical-align: middle; border: none; }
-        .meta { font-size: 8px; color: #444; margin-top: 4px; }
+        .meta { font-size: 7px; color: #444; margin-top: 3px; }
         .num { text-align: right; }
-        .total { font-weight: bold; }
     </style>
 </head>
 <body>
     <table class="listado-header">
         <tr>
-            <td style="width: 35%;">
+            <td style="width: 28%;">
                 @foreach ($logosCabecera as $logo)
-                    <img src="{{ $logo['uri'] }}" alt="{{ $logo['nombre'] }}" style="max-height: 56px; max-width: 180px; margin-right: 10px; margin-bottom: 4px; vertical-align: middle;">
+                    <img src="{{ $logo['uri'] }}" alt="{{ $logo['nombre'] }}" style="max-height: 48px; max-width: 160px; margin-right: 8px; margin-bottom: 4px; vertical-align: middle;">
                 @endforeach
             </td>
-            <td style="width: 65%; text-align: center;">
-                <h2 style="margin: 0; font-size: 18px; font-weight: bold;">Posición financiera</h2>
+            <td style="width: 72%; text-align: center;">
+                <h2 style="margin: 0; font-size: 14px; font-weight: bold;">Posición financiera</h2>
                 <div class="meta">Generado {{ date('d/m/Y H:i') }}</div>
                 @if (($periodo_texto ?? '') !== '' || $empresa)
                     <div class="meta">
@@ -63,32 +70,15 @@
                         @endif
                     </div>
                 @endif
-                <div class="meta">{{ count($filas) }} conceptos</div>
+                <div class="meta">{{ count($filas) }} conceptos · una columna por día</div>
             </td>
         </tr>
     </table>
 
-    <table class="data">
-        <thead>
-            <tr>
-                <th style="width: 70%;">Concepto</th>
-                <th style="width: 30%;" class="num">Importe</th>
-            </tr>
-        </thead>
-        <tbody>
-            @foreach ($filas as $fila)
-                @php
-                    $etiqueta = (string) ($fila['etiqueta'] ?? '');
-                    $valor = (float) ($fila['valor'] ?? 0);
-                    $e = mb_strtolower(trim($etiqueta));
-                    $resaltar = str_starts_with($e, 'total') || in_array($e, ['saldo inicial', 'saldo final'], true);
-                @endphp
-                <tr @class(['total' => $resaltar])>
-                    <td>{{ $etiqueta }}</td>
-                    <td class="num">{{ number_format($valor, 2, ',', '.') }}</td>
-                </tr>
-            @endforeach
-        </tbody>
-    </table>
+    @include('caja.posicion_financiera.partials.tabla_datos', [
+        'filas' => $filas,
+        'dias' => $dias,
+        'modo' => 'pdf',
+    ])
 </body>
 </html>

@@ -36,6 +36,9 @@ class PerdidaPersonal extends Model implements Auditable
     /** Códigos de concepto Anita que habilitan carga de máquina. */
     public const CONCEPTOS_CON_MAQUINA = [6, 8];
 
+    /** Imputación preseleccionada en el alta (impperd: Pérdidas de personal). */
+    public const IMPUTACION_DEFAULT_CODIGO = 4;
+
     protected $table = 'perdida_personal';
 
     protected $fillable = [

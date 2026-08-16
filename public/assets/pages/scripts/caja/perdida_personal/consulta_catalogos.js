@@ -74,13 +74,41 @@
         return $('<div>').text(valor == null ? '' : String(valor)).html();
     }
 
+    function filtroEmpleado() {
+        var $filtro = $('#filtroEmpleadoCatalogoPerdidaPersonal');
+        if (!$filtro.length) {
+            return 'activos';
+        }
+        return String($filtro.val() || 'activos');
+    }
+
+    function prepararFiltroEmpleado(tipo) {
+        var $wrap = $('#filtroEmpleadoCatalogoPerdidaPersonalWrap');
+        var $filtro = $('#filtroEmpleadoCatalogoPerdidaPersonal');
+        if (tipo === 'empleado') {
+            $wrap.removeClass('d-none');
+            $filtro.val('activos');
+            return;
+        }
+        $wrap.addClass('d-none');
+        $filtro.val('activos');
+    }
+
     function renderFilas(filas) {
         filasActuales = Array.isArray(filas) ? filas : [];
         var html = '';
         filasActuales.forEach(function (fila, indice) {
             html += '<tr>';
             html += '<td>' + textoSeguro(fila.codigo) + '</td>';
-            html += '<td>' + textoSeguro(fila.nombre) + '</td>';
+            html += '<td>' + textoSeguro(fila.nombre);
+            if (fila.de_baja) {
+                html += ' <span class="badge badge-danger">Baja';
+                if (fila.fecha_egreso) {
+                    html += ' ' + textoSeguro(fila.fecha_egreso);
+                }
+                html += '</span>';
+            }
+            html += '</td>';
             html += '<td class="text-nowrap">';
             html += '<button type="button" class="btn btn-warning btn-sm elegir-catalogo-perdida" data-indice="'
                 + indice + '">Elegir</button>';
@@ -100,11 +128,15 @@
         if (!$campoActivo.length) {
             return;
         }
-        $.getJSON(endpoint('consulta'), {
+        var params = {
             tipo: tipoCampo($campoActivo),
             empresa_id: empresaId(),
             consulta: consulta || ''
-        }).done(function (respuesta) {
+        };
+        if (params.tipo === 'empleado') {
+            params.filtro_empleado = filtroEmpleado();
+        }
+        $.getJSON(endpoint('consulta'), params).done(function (respuesta) {
             renderFilas(respuesta && respuesta.data ? respuesta.data : []);
         }).fail(function () {
             renderFilas([]);
@@ -123,6 +155,7 @@
         var tipo = tipoCampo($campo);
         $('#consultaCatalogoPerdidaPersonalModalLabel').text(tituloTipo(tipo));
         $('#consultaCatalogoPerdidaPersonal').val('');
+        prepararFiltroEmpleado(tipo);
         buscar('');
         $('#consultaCatalogoPerdidaPersonalModal').modal('show');
     }
@@ -205,6 +238,26 @@
         });
     };
 
+    window.aplicarImputacionDefaultPerdidaPersonal = function () {
+        var codigo = parseInt(window.perdidaPersonalImputacionDefault || '4', 10);
+        var $campo = $('.tm-perdida-catalogo-campo[data-tipo="imputacion"]').first();
+        if (!$campo.length || !codigo) {
+            return;
+        }
+        if (requiereEmpresa($campo) && empresaId() <= 0) {
+            return;
+        }
+        $.getJSON(endpoint('resolver'), {
+            tipo: 'imputacion',
+            empresa_id: empresaId(),
+            valor: String(codigo)
+        }).done(function (respuesta) {
+            if (respuesta && respuesta.ok) {
+                aplicarCampo($campo, respuesta);
+            }
+        });
+    };
+
     $(document)
         .on('click', '.consulta-perdida-catalogo', function (e) {
             e.preventDefault();
@@ -233,6 +286,9 @@
         })
         .on('keyup', '#consultaCatalogoPerdidaPersonal', function () {
             buscar(String($(this).val() || '').trim());
+        })
+        .on('change', '#filtroEmpleadoCatalogoPerdidaPersonal', function () {
+            buscar(String($('#consultaCatalogoPerdidaPersonal').val() || '').trim());
         })
         .on('click', '.elegir-catalogo-perdida', function () {
             var fila = filasActuales[parseInt($(this).data('indice'), 10)];

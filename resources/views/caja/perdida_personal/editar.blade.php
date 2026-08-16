@@ -7,6 +7,7 @@
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
 <script>
     window.perdidaPersonalConceptosMaquina = @json($conceptos_con_maquina ?? [6, 8]);
+    window.perdidaPersonalImputacionDefault = @json((int) ($imputacion_default_codigo ?? 4));
     window.perdidaPersonalCatalogosUrls = {
         consulta: @json(route('consultar_catalogo_perdida_personal')),
         resolver: @json(route('resolver_catalogo_perdida_personal'))

@@ -15,6 +15,8 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Caja\PerdidaPersonalListadoFiltros;
 use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\QueryRetornoListado;
+use App\Support\Sueldos\EmpleadoEstados;
+use App\Support\Sueldos\EmpleadoVigenciaSupport;
 use Illuminate\Http\Request;
 
 class PerdidaPersonalController extends Controller
@@ -152,8 +154,14 @@ class PerdidaPersonalController extends Controller
         $tipo = (string) $request->query('tipo', '');
         $empresaId = (int) $request->query('empresa_id', 0);
         $consulta = trim((string) $request->query('consulta', ''));
+        $filtroEmpleado = EmpleadoVigenciaSupport::normalizar(
+            (string) $request->query('filtro_empleado', EmpleadoVigenciaSupport::FILTRO_ACTIVOS),
+        );
 
         $query = $this->queryCatalogo($tipo, $empresaId);
+        if ($tipo === 'empleado') {
+            EmpleadoVigenciaSupport::aplicar($query, $filtroEmpleado);
+        }
         if ($consulta !== '') {
             $query->where(function ($q) use ($tipo, $consulta) {
                 $q->where('nombre', 'like', '%'.$consulta.'%');
@@ -171,12 +179,7 @@ class PerdidaPersonalController extends Controller
             ->orderBy($campoCodigo)
             ->limit(100)
             ->get()
-            ->map(fn ($fila) => [
-                'id' => (int) $fila->id,
-                'codigo' => (string) $fila->{$campoCodigo},
-                'nombre' => (string) $fila->nombre,
-                'consultar_url' => $this->urlConsultaAbmCatalogo($tipo, (int) $fila->id),
-            ])
+            ->map(fn ($fila) => $this->serializarFilaCatalogo($tipo, $fila, $campoCodigo))
             ->values();
 
         return response()->json(['data' => $filas]);
@@ -220,21 +223,33 @@ class PerdidaPersonalController extends Controller
      */
     private function datosFormulario(PerdidaPersonal $data): array
     {
+        $empresaQuery = $this->empresaRepository->allFiltrado();
         $empresaId = (int) old('empresa_id', $data->empresa_id ?? 0);
+        if ($empresaId <= 0 && ! $data->id && $empresaQuery->count() === 1) {
+            $empresaId = (int) $empresaQuery->first()->id;
+        }
         $centrocostoId = (int) old('centrocosto_id', $data->centrocosto_id ?? 0);
         $imputacionId = (int) old('imputacion_perdida_id', $data->imputacion_perdida_id ?? 0);
         $conceptoId = (int) old('concepto_perdida_id', $data->concepto_perdida_id ?? 0);
         $empleadoId = (int) old('empleado_sueldos_id', $data->empleado_sueldos_id ?? 0);
         $supervisorId = (int) old('supervisor_empleado_sueldos_id', $data->supervisor_empleado_sueldos_id ?? 0);
 
+        $imputacionSeleccionada = $imputacionId > 0
+            ? ImputacionPerdida::query()->select('id', 'codigo', 'nombre')->find($imputacionId)
+            : null;
+        if ($imputacionSeleccionada === null && ! $data->id) {
+            $imputacionSeleccionada = ImputacionPerdida::paraCodigoYEmpresa(
+                PerdidaPersonal::IMPUTACION_DEFAULT_CODIGO,
+                $empresaId > 0 ? $empresaId : null,
+            );
+        }
+
         return [
-            'empresa_query' => $this->empresaRepository->allFiltrado(),
+            'empresa_query' => $empresaQuery,
             'centrocostoSeleccionado' => $centrocostoId > 0
                 ? Centrocosto::query()->select('id', 'codigo', 'nombre')->find($centrocostoId)
                 : null,
-            'imputacionSeleccionada' => $imputacionId > 0
-                ? ImputacionPerdida::query()->select('id', 'codigo', 'nombre')->find($imputacionId)
-                : null,
+            'imputacionSeleccionada' => $imputacionSeleccionada,
             'conceptoSeleccionado' => $conceptoId > 0
                 ? ConceptoPerdida::query()->select('id', 'codigo', 'nombre')->find($conceptoId)
                 : null,
@@ -243,6 +258,7 @@ class PerdidaPersonalController extends Controller
             'turno_enum' => PerdidaPersonal::$enumTurno,
             'estado_enum' => PerdidaPersonal::$enumEstado,
             'conceptos_con_maquina' => PerdidaPersonal::CONCEPTOS_CON_MAQUINA,
+            'imputacion_default_codigo' => PerdidaPersonal::IMPUTACION_DEFAULT_CODIGO,
         ];
     }
 
@@ -264,11 +280,36 @@ class PerdidaPersonalController extends Controller
 
         if ($tipo === 'empleado') {
             return Empleado_Sueldos::query()
-                ->select('id', 'legajo', 'nombre', 'documento')
+                ->select('id', 'legajo', 'nombre', 'documento', 'estado', 'fecha_egreso')
                 ->where('empresa_id', $empresaId);
         }
 
         abort(404);
+    }
+
+    /**
+     * @param  object  $fila
+     * @return array<string, mixed>
+     */
+    private function serializarFilaCatalogo(string $tipo, $fila, string $campoCodigo): array
+    {
+        $datos = [
+            'id' => (int) $fila->id,
+            'codigo' => (string) $fila->{$campoCodigo},
+            'nombre' => (string) $fila->nombre,
+            'consultar_url' => $this->urlConsultaAbmCatalogo($tipo, (int) $fila->id),
+        ];
+
+        if ($tipo === 'empleado') {
+            $fechaEgreso = $fila->fecha_egreso
+                ? $fila->fecha_egreso->format('d/m/Y')
+                : '';
+            $datos['estado'] = (string) ($fila->estado ?? '');
+            $datos['fecha_egreso'] = $fechaEgreso;
+            $datos['de_baja'] = EmpleadoEstados::esBaja($fila->estado ?? null);
+        }
+
+        return $datos;
     }
 
     private function empleadoSeleccionado(int $id, int $empresaId): ?Empleado_Sueldos

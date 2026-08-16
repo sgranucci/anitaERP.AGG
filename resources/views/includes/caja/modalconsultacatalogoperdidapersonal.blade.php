@@ -10,11 +10,20 @@
                 </button>
             </div>
             <div class="modal-body">
-                <div class="form-group row">
-                    <label for="consultaCatalogoPerdidaPersonal" class="col-form-label">Buscar:</label>
-                    <input type="text" id="consultaCatalogoPerdidaPersonal"
-                           class="form-control form-control-sm"
-                           placeholder="C&oacute;digo o descripci&oacute;n" autocomplete="off">
+                <div class="form-group row align-items-end">
+                    <div class="col-md-7">
+                        <label for="consultaCatalogoPerdidaPersonal" class="col-form-label">Buscar:</label>
+                        <input type="text" id="consultaCatalogoPerdidaPersonal"
+                               class="form-control form-control-sm"
+                               placeholder="C&oacute;digo o descripci&oacute;n" autocomplete="off">
+                    </div>
+                    <div class="col-md-5 d-none" id="filtroEmpleadoCatalogoPerdidaPersonalWrap">
+                        <label for="filtroEmpleadoCatalogoPerdidaPersonal" class="col-form-label">Vigencia:</label>
+                        <select id="filtroEmpleadoCatalogoPerdidaPersonal" class="form-control form-control-sm">
+                            <option value="activos" selected>Activos a hoy</option>
+                            <option value="bajas">Dados de baja</option>
+                        </select>
+                    </div>
                 </div>
                 <table class="table table-striped table-bordered table-hover table-sm">
                     <thead style="background:#85C1E9;color:#17202A;">

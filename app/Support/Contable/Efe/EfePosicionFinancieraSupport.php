@@ -8,12 +8,15 @@ use Carbon\Carbon;
 /**
  * Posición financiera mensual (solapa «pos fin …») — port de l-posfinanc.c.
  *
- * Fuentes Anita (vía bridge, generadas desde el menú EFE de AnitaERP):
+ * Impresión Anita: una columna por día del mes + «Total mensual», cortada por
+ * unidad (bingo, gastronomía, estacionamiento, EGA, SHOW, máquinas) y luego
+ * apertura de medios / egresos / saldos. Kiosco está comentado en el .c.
+ * Vending no existe en l-posfinanc.c: se agrega como bloque ERP (PV Maquina N
+ * / sucursal ≥ 1000 / nombre vending) que antes se omitía.
+ *
+ * Fuentes Anita (vía bridge):
  * saldoposf, rendbingo/concbingo/rendpremio, rendmaquina, rendgastro, rendvalor,
  * valormae, remesas/rememae, apgasto/rendmapgasto.
- *
- * Clasificación gastro/estac por puntoventa ERP (nombre / códigos).
- * EGA, SHOW y Kiosco: omitidos (no viven en AnitaERP).
  */
 class EfePosicionFinancieraSupport
 {
@@ -47,12 +50,37 @@ class EfePosicionFinancieraSupport
 
     private const BLOQUE_ESTAC = 'estac';
 
+    private const BLOQUE_VENDING = 'vending';
+
     private const BLOQUE_MAQUINAS = 'maquinas';
+
+    private const BLOQUE_BINGO = 'bingo';
+
+    private const BLOQUE_EGA = 'ega';
+
+    private const BLOQUE_SHOW = 'show';
+
+    private const BLOQUE_MEDIOS = 'medios';
+
+    private const BLOQUE_EGRESOS = 'egresos';
+
+    private const BLOQUE_SALDOS = 'saldos';
 
     private const BLOQUE_OMITIR = 'omitir';
 
+    private const TIPO_CONCEPTO = 'concepto';
+
+    private const TIPO_TITULO = 'titulo';
+
+    private const TIPO_TOTAL = 'total';
+
+    private const TIPO_RELLENO_EFE = 'relleno_efe';
+
     /** @var array<int, string> */
     private array $clasificacionSucursalCache = [];
+
+    /** @var list<int> */
+    private array $dias = [];
 
     public function __construct(
         private readonly EfeAnitaBridgeReader $bridgeReader = new EfeAnitaBridgeReader(),
@@ -63,12 +91,15 @@ class EfePosicionFinancieraSupport
      * @param  array<string, mixed>  $filtros
      * @return array{
      *   totales_por_etiqueta: array<string, float>,
+     *   filas_ordenadas: list<array{etiqueta: string, valor: float, por_dia: array<int, float>, bloque: string, tipo_fila: string}>,
+     *   dias: list<int>,
      *   saldo_inicial: ?float,
      *   saldo_final: ?float,
      *   bingo: array<string, float>,
      *   premios_bingo: array<string, float>,
      *   gastronomia: array<string, float>,
      *   estacionamiento: array<string, float>,
+     *   vending: array<string, float>,
      *   maquinas: array<string, float>,
      *   apertura_medios: array<string, float>,
      *   egresos: array<string, float>,
@@ -87,32 +118,27 @@ class EfePosicionFinancieraSupport
 
         $inicioMes = Carbon::createFromDate($anio, $mes, 1);
         $finMes = $inicioMes->copy()->endOfMonth();
+        $this->dias = range(1, (int) $finMes->day);
         $fechaSaldoInicial = (int) $inicioMes->copy()->subDay()->format('Ymd');
         $fechaDesde = (int) $inicioMes->format('Ymd');
         $fechaHasta = (int) $finMes->format('Ymd');
 
         $errores = [];
-        /** @var list<array{etiqueta: string, valor: float}> $filasOrdenadas */
+        /** @var list<array{etiqueta: string, valor: float, por_dia: array<int, float>, bloque: string, tipo_fila: string}> $filasOrdenadas */
         $filasOrdenadas = [];
 
         $saldos = $this->bridgeReader->listarSaldoposf($empresaId, $fechaSaldoInicial, $fechaHasta);
         $saldoInicial = $this->saldoEnFecha($saldos, $fechaSaldoInicial);
-        $saldoFinal = $this->saldoEnFecha($saldos, $fechaHasta);
-        if ($saldoInicial !== null) {
-            $this->pushFila($filasOrdenadas, 'Saldo inicial', $saldoInicial);
-        }
+        $saldoFinalBridge = $this->saldoEnFecha($saldos, $fechaHasta);
 
-        $bingo = $this->agregarRendbingo(
-            $this->bridgeReader->listarRendbingo($empresaId, $fechaDesde, $fechaHasta),
-        );
+        $rendbingo = $this->bridgeReader->listarRendbingo($empresaId, $fechaDesde, $fechaHasta);
+        $bingo = $this->agregarRendbingo($rendbingo);
         $premios = $this->agregarPremiosBingo(
             $bingo,
             $this->bridgeReader->listarConcbingo(),
-            $this->bridgeReader->listarRendbingo($empresaId, $fechaDesde, $fechaHasta),
+            $rendbingo,
             $this->bridgeReader->listarRendpremio($fechaDesde, $fechaHasta),
         );
-        $this->pushMapa($filasOrdenadas, $bingo);
-        $this->pushMapa($filasOrdenadas, $premios);
 
         $valormae = $this->indexarValormae($this->bridgeReader->listarValormae($empresaId));
         $rendvalor = $this->bridgeReader->listarRendvalor($fechaDesde, $fechaHasta);
@@ -138,26 +164,19 @@ class EfePosicionFinancieraSupport
             'Total Estacionamiento',
             redondeoNegado: true,
         );
-        $this->pushMapa($filasOrdenadas, $gastronomia);
-        $this->pushMapa($filasOrdenadas, $estacionamiento);
-        // EGA / SHOW: no viven en AnitaERP — se publican en 0 (incl. sublíneas de la plantilla).
-        foreach (['EGA', 'SHOW'] as $bloqueOmitido) {
-            $this->pushFila($filasOrdenadas, $bloqueOmitido.' Z', 0.0);
-            foreach (['EFECTIVO', 'TK.CANJE SHOW', 'MERCADO PAGO', 'PASSLINE'] as $medioOmitido) {
-                // La plantilla Anita repite 3 veces cada medio.
-                for ($i = 0; $i < 3; $i++) {
-                    $this->pushFila($filasOrdenadas, $medioOmitido, 0.0);
-                }
-            }
-            $this->pushFila($filasOrdenadas, 'Notas de credito', 0.0);
-            $this->pushFila($filasOrdenadas, 'Diferencia abandono de pago', 0.0);
-            $this->pushFila($filasOrdenadas, 'Redondeo', 0.0);
-            $this->pushFila($filasOrdenadas, 'Diferencia de caja', 0.0);
-            $this->pushFila($filasOrdenadas, 'Total '.$bloqueOmitido, 0.0);
-        }
+        $vending = $this->agregarBloqueGastroEstac(
+            $cabGastro,
+            $valoresPorOper,
+            $valormae,
+            $empresaId,
+            self::BLOQUE_VENDING,
+            'VENDING Z',
+            'Total Vending',
+        );
 
         $filasMaquina = $this->bridgeReader->listarRendmaquina($empresaId, $fechaDesde, $fechaHasta);
         $opsMaquina = [];
+        $fechaPorOper = $this->fechasPorOperacion($cabGastro, $filasMaquina);
         foreach ($filasMaquina as $fila) {
             if ($this->incluirRendmaquina($fila)) {
                 $opsMaquina[(int) ($fila->rendm_nro_oper ?? 0)] = true;
@@ -171,26 +190,20 @@ class EfePosicionFinancieraSupport
             array_keys($opsMaquina),
             $valoresPorOper,
             $valormae,
+            $fechaPorOper,
         );
-        $maquinasGastos = $this->agregarGastosMaquina(array_keys($opsMaquina), $gastosPorOper, $apgastoDesc);
-        // Orden Anita: ventas, caja, medios valormae, vales, apgasto, variación/dif/tránsito, total.
-        $this->pushFila($filasOrdenadas, 'MAQUINAS VENTAS', (float) ($maquinasBase['MAQUINAS VENTAS'] ?? 0));
-        $this->pushFila($filasOrdenadas, 'MAQUINAS CAJA', (float) ($maquinasBase['MAQUINAS CAJA'] ?? 0));
-        $this->pushMapa($filasOrdenadas, $maquinasMedios);
-        $this->pushFila($filasOrdenadas, 'Vales fondo fijo', (float) ($maquinasBase['Vales fondo fijo'] ?? 0));
-        $this->pushFila($filasOrdenadas, 'Vales administracion', (float) ($maquinasBase['Vales administracion'] ?? 0));
-        $this->pushMapa($filasOrdenadas, $maquinasGastos);
-        $this->pushFila($filasOrdenadas, 'Variacion de FF', (float) ($maquinasBase['Variacion de FF'] ?? 0));
-        $this->pushFila($filasOrdenadas, 'Diferencia de caja', (float) ($maquinasBase['Diferencia de caja'] ?? 0));
-        $this->pushFila($filasOrdenadas, 'Caja en transito', (float) ($maquinasBase['Caja en transito'] ?? 0));
-        // Pago 24 omitido: columna Anita no disponible vía bridge.
-        $maquinas = array_merge($maquinasBase, $maquinasMedios, $maquinasGastos);
+        $maquinasGastos = $this->agregarGastosMaquina(
+            array_keys($opsMaquina),
+            $gastosPorOper,
+            $apgastoDesc,
+            $fechaPorOper,
+        );
         $descsMedio = [];
         foreach ($valormae as $meta) {
             $descsMedio[$meta['desc']] = true;
         }
-        $maquinas['Total maquinas'] = $this->totalMaquinas($maquinas, $descsMedio);
-        $this->pushFila($filasOrdenadas, 'Total maquinas', $maquinas['Total maquinas']);
+        $maquinas = array_merge($maquinasBase, $maquinasMedios, $maquinasGastos);
+        $maquinas['Total maquinas'] = $this->totalMaquinasPorDia($maquinas, $descsMedio);
 
         $apertura = $this->agregarAperturaMedios(
             $valoresPorOper,
@@ -198,74 +211,275 @@ class EfePosicionFinancieraSupport
             $cabGastro,
             $opsMaquina,
             $empresaId,
-            $fechaDesde,
-            $fechaHasta,
+            $rendbingo,
             $gastronomia,
+            $fechaPorOper,
         );
-        $this->pushMapa($filasOrdenadas, $apertura);
 
         $egresos = $this->agregarEgresos(
             $empresaId,
             $fechaDesde,
             $fechaHasta,
             $valormae,
-            $this->acumularAbiertosNoEfectivo($valoresPorOper, $valormae, $cabGastro, $opsMaquina, $empresaId),
+            $this->acumularAbiertosNoEfectivo(
+                $valoresPorOper,
+                $valormae,
+                $cabGastro,
+                $opsMaquina,
+                $empresaId,
+                $fechaPorOper,
+            ),
         );
-        $this->pushMapa($filasOrdenadas, $egresos);
 
-        if ($saldoFinal !== null) {
-            $this->pushFila($filasOrdenadas, 'Saldo final', $saldoFinal);
+        $saldoInicialPorDia = $this->vectorDias();
+        $saldoFinalPorDia = $this->vectorDias();
+        $saldoCorrido = (float) ($saldoInicial ?? 0);
+        $ingresosPorDia = $apertura['Total de Ingresos'] ?? $this->vectorDias();
+        $egresosPorDia = $egresos['Total de Egresos'] ?? $this->vectorDias();
+        foreach ($this->dias as $dia) {
+            $saldoInicialPorDia[$dia] = round($saldoCorrido, 2);
+            $saldoCorrido += (float) ($ingresosPorDia[$dia] ?? 0) - (float) ($egresosPorDia[$dia] ?? 0);
+            $saldoFinalPorDia[$dia] = round($saldoCorrido, 2);
         }
+        $saldoFinal = $saldoFinalPorDia[$finMes->day] ?? $saldoFinalBridge;
+
+        $this->pushFila($filasOrdenadas, 'Saldo inicial', $saldoInicialPorDia, self::BLOQUE_SALDOS, self::TIPO_TOTAL);
+
+        $this->pushTitulo($filasOrdenadas, 'Bingo', self::BLOQUE_BINGO);
+        $this->pushFila($filasOrdenadas, 'VENTA BINGO', $bingo['VENTA BINGO'] ?? $this->vectorDias(), self::BLOQUE_BINGO);
+        $this->pushMapa($filasOrdenadas, $premios, self::BLOQUE_BINGO);
+        foreach (['SOBRANTES', 'VALES', 'REDONDEO'] as $etiqBingo) {
+            $this->pushFila($filasOrdenadas, $etiqBingo, $bingo[$etiqBingo] ?? $this->vectorDias(), self::BLOQUE_BINGO);
+        }
+        $this->pushFila(
+            $filasOrdenadas,
+            'Total bingo',
+            $this->sumarMapas(array_merge(['VENTA BINGO' => $bingo['VENTA BINGO'] ?? $this->vectorDias()], $premios, [
+                'SOBRANTES' => $bingo['SOBRANTES'] ?? $this->vectorDias(),
+                'VALES' => $bingo['VALES'] ?? $this->vectorDias(),
+                'REDONDEO' => $bingo['REDONDEO'] ?? $this->vectorDias(),
+            ])),
+            self::BLOQUE_BINGO,
+            self::TIPO_TOTAL,
+        );
+
+        $this->pushTitulo($filasOrdenadas, 'Gastronomía', self::BLOQUE_GASTRO);
+        $this->pushMapa($filasOrdenadas, $gastronomia, self::BLOQUE_GASTRO, 'Total Gastronomia');
+
+        $this->pushTitulo($filasOrdenadas, 'Estacionamiento', self::BLOQUE_ESTAC);
+        $this->pushMapa($filasOrdenadas, $estacionamiento, self::BLOQUE_ESTAC, 'Total Estacionamiento');
+
+        $this->pushTitulo($filasOrdenadas, 'Vending', self::BLOQUE_VENDING);
+        $this->pushMapa($filasOrdenadas, $vending, self::BLOQUE_VENDING, 'Total Vending');
+
+        foreach (['EGA' => self::BLOQUE_EGA, 'SHOW' => self::BLOQUE_SHOW] as $bloqueOmitido => $claveBloque) {
+            $this->pushTitulo($filasOrdenadas, $bloqueOmitido, $claveBloque);
+            $this->pushFila($filasOrdenadas, $bloqueOmitido.' Z', $this->vectorDias(), $claveBloque);
+            foreach (['EFECTIVO', 'TK.CANJE SHOW', 'MERCADO PAGO', 'PASSLINE'] as $medioOmitido) {
+                $this->pushFila($filasOrdenadas, $medioOmitido, $this->vectorDias(), $claveBloque);
+                for ($i = 0; $i < 2; $i++) {
+                    $this->pushFila($filasOrdenadas, $medioOmitido, $this->vectorDias(), $claveBloque, self::TIPO_RELLENO_EFE);
+                }
+            }
+            $this->pushFila($filasOrdenadas, 'Notas de credito', $this->vectorDias(), $claveBloque);
+            $this->pushFila($filasOrdenadas, 'Diferencia abandono de pago', $this->vectorDias(), $claveBloque);
+            $this->pushFila($filasOrdenadas, 'Redondeo', $this->vectorDias(), $claveBloque);
+            $this->pushFila($filasOrdenadas, 'Diferencia de caja', $this->vectorDias(), $claveBloque);
+            $this->pushFila($filasOrdenadas, 'Total '.$bloqueOmitido, $this->vectorDias(), $claveBloque, self::TIPO_TOTAL);
+        }
+
+        $this->pushTitulo($filasOrdenadas, 'Máquinas', self::BLOQUE_MAQUINAS);
+        $this->pushFila($filasOrdenadas, 'MAQUINAS VENTAS', $maquinasBase['MAQUINAS VENTAS'] ?? $this->vectorDias(), self::BLOQUE_MAQUINAS);
+        $this->pushFila($filasOrdenadas, 'MAQUINAS CAJA', $maquinasBase['MAQUINAS CAJA'] ?? $this->vectorDias(), self::BLOQUE_MAQUINAS);
+        $this->pushMapa($filasOrdenadas, $maquinasMedios, self::BLOQUE_MAQUINAS);
+        $this->pushFila($filasOrdenadas, 'Vales fondo fijo', $maquinasBase['Vales fondo fijo'] ?? $this->vectorDias(), self::BLOQUE_MAQUINAS);
+        $this->pushFila($filasOrdenadas, 'Vales administracion', $maquinasBase['Vales administracion'] ?? $this->vectorDias(), self::BLOQUE_MAQUINAS);
+        $this->pushMapa($filasOrdenadas, $maquinasGastos, self::BLOQUE_MAQUINAS);
+        $this->pushFila($filasOrdenadas, 'Variacion de FF', $maquinasBase['Variacion de FF'] ?? $this->vectorDias(), self::BLOQUE_MAQUINAS);
+        $this->pushFila($filasOrdenadas, 'Diferencia de caja', $maquinasBase['Diferencia de caja'] ?? $this->vectorDias(), self::BLOQUE_MAQUINAS);
+        $this->pushFila($filasOrdenadas, 'Caja en transito', $maquinasBase['Caja en transito'] ?? $this->vectorDias(), self::BLOQUE_MAQUINAS);
+        $this->pushFila($filasOrdenadas, 'Total maquinas', $maquinas['Total maquinas'], self::BLOQUE_MAQUINAS, self::TIPO_TOTAL);
+
+        $this->pushTitulo($filasOrdenadas, 'Apertura de medios de cobro', self::BLOQUE_MEDIOS);
+        $this->pushMapa($filasOrdenadas, $apertura, self::BLOQUE_MEDIOS, 'Total de Ingresos');
+
+        $this->pushTitulo($filasOrdenadas, 'Egresos', self::BLOQUE_EGRESOS);
+        $this->pushMapa($filasOrdenadas, $egresos, self::BLOQUE_EGRESOS, 'Total de Egresos');
+
+        $this->pushFila($filasOrdenadas, 'Saldo final', $saldoFinalPorDia, self::BLOQUE_SALDOS, self::TIPO_TOTAL);
 
         $totales = $this->mapaUltimaEtiqueta($filasOrdenadas);
 
         return [
             'totales_por_etiqueta' => $totales,
             'filas_ordenadas' => $filasOrdenadas,
+            'dias' => $this->dias,
             'saldo_inicial' => $saldoInicial,
             'saldo_final' => $saldoFinal,
-            'bingo' => $bingo,
-            'premios_bingo' => $premios,
-            'gastronomia' => $gastronomia,
-            'estacionamiento' => $estacionamiento,
-            'maquinas' => $maquinas,
-            'apertura_medios' => $apertura,
-            'egresos' => $egresos,
+            'bingo' => $this->mapaTotales($bingo),
+            'premios_bingo' => $this->mapaTotales($premios),
+            'gastronomia' => $this->mapaTotales($gastronomia),
+            'estacionamiento' => $this->mapaTotales($estacionamiento),
+            'vending' => $this->mapaTotales($vending),
+            'maquinas' => $this->mapaTotales($maquinas),
+            'apertura_medios' => $this->mapaTotales($apertura),
+            'egresos' => $this->mapaTotales($egresos),
             'errores_bridge' => $errores,
         ];
     }
 
     /**
-     * @param  list<array{etiqueta: string, valor: float}>  $filas
+     * @param  list<array{etiqueta: string, valor: float, por_dia?: array<int, float>, bloque?: string, tipo_fila?: string}>  $filas
      */
-    private function pushFila(array &$filas, string $etiqueta, float $valor): void
-    {
-        $filas[] = ['etiqueta' => $etiqueta, 'valor' => round($valor, 2)];
+    private function pushFila(
+        array &$filas,
+        string $etiqueta,
+        array $porDia,
+        string $bloque,
+        string $tipoFila = self::TIPO_CONCEPTO,
+    ): void {
+        $porDia = $this->redondearVector($porDia);
+        $filas[] = [
+            'etiqueta' => $etiqueta,
+            'valor' => $this->totalVector($porDia),
+            'por_dia' => $porDia,
+            'bloque' => $bloque,
+            'tipo_fila' => $tipoFila,
+        ];
     }
 
     /**
-     * @param  list<array{etiqueta: string, valor: float}>  $filas
-     * @param  array<string, float>  $mapa
+     * @param  list<array{etiqueta: string, valor: float, por_dia?: array<int, float>, bloque?: string, tipo_fila?: string}>  $filas
      */
-    private function pushMapa(array &$filas, array $mapa): void
+    private function pushTitulo(array &$filas, string $etiqueta, string $bloque): void
     {
-        foreach ($mapa as $etiqueta => $valor) {
-            $this->pushFila($filas, $etiqueta, (float) $valor);
+        $filas[] = [
+            'etiqueta' => $etiqueta,
+            'valor' => 0.0,
+            'por_dia' => $this->vectorDias(),
+            'bloque' => $bloque,
+            'tipo_fila' => self::TIPO_TITULO,
+        ];
+    }
+
+    /**
+     * @param  list<array{etiqueta: string, valor: float, por_dia?: array<int, float>, bloque?: string, tipo_fila?: string}>  $filas
+     * @param  array<string, array<int, float>>  $mapa
+     */
+    private function pushMapa(array &$filas, array $mapa, string $bloque, ?string $etiquetaTotal = null): void
+    {
+        foreach ($mapa as $etiqueta => $porDia) {
+            $tipo = ($etiquetaTotal !== null && $etiqueta === $etiquetaTotal)
+                ? self::TIPO_TOTAL
+                : self::TIPO_CONCEPTO;
+            $this->pushFila($filas, $etiqueta, $porDia, $bloque, $tipo);
         }
     }
 
     /**
-     * @param  list<array{etiqueta: string, valor: float}>  $filas
+     * @param  list<array{etiqueta: string, valor: float, tipo_fila?: string}>  $filas
      * @return array<string, float>
      */
     private function mapaUltimaEtiqueta(array $filas): array
     {
         $totales = [];
         foreach ($filas as $fila) {
+            if (in_array($fila['tipo_fila'] ?? self::TIPO_CONCEPTO, [self::TIPO_TITULO, self::TIPO_RELLENO_EFE], true)) {
+                continue;
+            }
             $totales[$fila['etiqueta']] = $fila['valor'];
         }
 
         return $totales;
+    }
+
+    /**
+     * @param  array<string, array<int, float>>  $mapa
+     * @return array<string, float>
+     */
+    private function mapaTotales(array $mapa): array
+    {
+        $totales = [];
+        foreach ($mapa as $etiqueta => $porDia) {
+            $totales[$etiqueta] = $this->totalVector($porDia);
+        }
+
+        return $totales;
+    }
+
+    /**
+     * @return array<int, float>
+     */
+    private function vectorDias(): array
+    {
+        $vector = [];
+        foreach ($this->dias as $dia) {
+            $vector[$dia] = 0.0;
+        }
+
+        return $vector;
+    }
+
+    /**
+     * @param  array<int, float>  $porDia
+     * @return array<int, float>
+     */
+    private function redondearVector(array $porDia): array
+    {
+        $out = $this->vectorDias();
+        foreach ($porDia as $dia => $valor) {
+            $out[(int) $dia] = round((float) $valor, 2);
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<int, float>  $porDia
+     */
+    private function totalVector(array $porDia): float
+    {
+        return round(array_sum($porDia), 2);
+    }
+
+    /**
+     * @param  array<string, array<int, float>>  $mapas
+     * @return array<int, float>
+     */
+    private function sumarMapas(array $mapas): array
+    {
+        $out = $this->vectorDias();
+        foreach ($mapas as $porDia) {
+            foreach ($this->dias as $dia) {
+                $out[$dia] = round($out[$dia] + (float) ($porDia[$dia] ?? 0), 2);
+            }
+        }
+
+        return $out;
+    }
+
+    private function diaDeYmd(int $ymd): int
+    {
+        $dia = (int) ($ymd % 100);
+        if ($dia < 1 || $dia > 31) {
+            return 1;
+        }
+
+        return $dia;
+    }
+
+    /**
+     * @param  array<string, array<int, float>>  $mapa
+     */
+    private function sumarEn(array &$mapa, string $etiqueta, int $dia, float $importe): void
+    {
+        if (! isset($mapa[$etiqueta])) {
+            $mapa[$etiqueta] = $this->vectorDias();
+        }
+        if (! isset($mapa[$etiqueta][$dia])) {
+            $mapa[$etiqueta][$dia] = 0.0;
+        }
+        $mapa[$etiqueta][$dia] = round($mapa[$etiqueta][$dia] + $importe, 2);
     }
 
     /**
@@ -284,33 +498,34 @@ class EfePosicionFinancieraSupport
 
     /**
      * @param  list<object>  $filas
-     * @return array<string, float>
+     * @return array<string, array<int, float>>
      */
     private function agregarRendbingo(array $filas): array
     {
         $totales = [
-            'VENTA BINGO' => 0.0,
-            'SOBRANTES' => 0.0,
-            'VALES' => 0.0,
-            'REDONDEO' => 0.0,
+            'VENTA BINGO' => $this->vectorDias(),
+            'SOBRANTES' => $this->vectorDias(),
+            'VALES' => $this->vectorDias(),
+            'REDONDEO' => $this->vectorDias(),
         ];
 
         foreach ($filas as $fila) {
-            $totales['VENTA BINGO'] += (float) ($fila->rendb_total_carton ?? 0);
-            $totales['SOBRANTES'] += (float) ($fila->rendb_sobrante ?? 0);
-            $totales['VALES'] += (float) ($fila->rendb_vales ?? 0);
-            $totales['REDONDEO'] += (float) ($fila->rendb_redondeo ?? 0);
+            $dia = $this->diaDeYmd((int) ($fila->rendb_fecha ?? 0));
+            $this->sumarEn($totales, 'VENTA BINGO', $dia, (float) ($fila->rendb_total_carton ?? 0));
+            $this->sumarEn($totales, 'SOBRANTES', $dia, (float) ($fila->rendb_sobrante ?? 0));
+            $this->sumarEn($totales, 'VALES', $dia, (float) ($fila->rendb_vales ?? 0));
+            $this->sumarEn($totales, 'REDONDEO', $dia, (float) ($fila->rendb_redondeo ?? 0));
         }
 
-        return array_map(fn (float $v) => round($v, 2), $totales);
+        return $totales;
     }
 
     /**
-     * @param  array<string, float>  $bingoBase
+     * @param  array<string, array<int, float>>  $bingoBase
      * @param  list<object>  $concbingo
      * @param  list<object>  $rendbingo
      * @param  list<object>  $rendpremio
-     * @return array<string, float>
+     * @return array<string, array<int, float>>
      */
     private function agregarPremiosBingo(
         array $bingoBase,
@@ -319,7 +534,7 @@ class EfePosicionFinancieraSupport
         array $rendpremio,
     ): array {
         $totales = [];
-        $ventaBingo = (float) ($bingoBase['VENTA BINGO'] ?? 0);
+        $ventaPorDia = $bingoBase['VENTA BINGO'] ?? $this->vectorDias();
 
         $mapConcb = [];
         foreach ($concbingo as $row) {
@@ -334,14 +549,21 @@ class EfePosicionFinancieraSupport
             }
 
             $pct = (float) ($row->concb_porcentaje ?? 0);
-            if ($ventaBingo > 0 && $pct > 0) {
-                $totales[$desc] = round(-$ventaBingo * ($pct / 100), 2);
+            if ($pct <= 0) {
+                continue;
+            }
+            foreach ($this->dias as $dia) {
+                $ventaDia = (float) ($ventaPorDia[$dia] ?? 0);
+                if ($ventaDia > 0) {
+                    $this->sumarEn($totales, $desc, $dia, -1 * $ventaDia * ($pct / 100));
+                }
             }
         }
 
         $opsRendb = [];
         foreach ($rendbingo as $row) {
-            $opsRendb[(int) ($row->rendb_nro_oper ?? 0).'|'.trim((string) ($row->rendb_tipo_oper ?? ''))] = true;
+            $clave = (int) ($row->rendb_nro_oper ?? 0).'|'.trim((string) ($row->rendb_tipo_oper ?? ''));
+            $opsRendb[$clave] = (int) ($row->rendb_fecha ?? 0);
         }
 
         foreach ($rendpremio as $row) {
@@ -375,7 +597,11 @@ class EfePosicionFinancieraSupport
                 continue;
             }
 
-            $totales[$desc] = round(($totales[$desc] ?? 0) - $importe, 2);
+            $fecha = (int) ($opsRendb[$claveOp] ?? 0);
+            if ($fecha <= 0) {
+                $fecha = (int) ($row->rendp_fecha ?? 0);
+            }
+            $this->sumarEn($totales, $desc, $this->diaDeYmd($fecha), -1 * $importe);
         }
 
         return $totales;
@@ -385,7 +611,7 @@ class EfePosicionFinancieraSupport
      * @param  list<object>  $cabeceras
      * @param  array<int, list<object>>  $valoresPorOper
      * @param  array<int, array{desc: string, tipo: string}>  $valormae
-     * @return array<string, float>
+     * @return array<string, array<int, float>>
      */
     private function agregarBloqueGastroEstac(
         array $cabeceras,
@@ -397,13 +623,17 @@ class EfePosicionFinancieraSupport
         string $etiquetaTotal,
         bool $redondeoNegado = false,
     ): array {
-        $z = 0.0;
-        $nc = 0.0;
-        $abPago = 0.0;
-        $redondeo = 0.0;
-        $difCaja = 0.0;
-        /** @var array<int, float> $mediosPorCodigo */
-        $mediosPorCodigo = [];
+        $totales = [
+            $etiquetaZ => $this->vectorDias(),
+        ];
+        foreach ($valormae as $meta) {
+            $totales[$meta['desc']] = $this->vectorDias();
+        }
+        $totales['Notas de credito'] = $this->vectorDias();
+        $totales['Diferencia abandono de pago'] = $this->vectorDias();
+        $totales['Redondeo'] = $this->vectorDias();
+        $totales['Diferencia de caja'] = $this->vectorDias();
+        $totales[$etiquetaTotal] = $this->vectorDias();
 
         foreach ($cabeceras as $fila) {
             $sucursal = (int) ($fila->rendg_sucursal ?? 0);
@@ -411,56 +641,57 @@ class EfePosicionFinancieraSupport
                 continue;
             }
 
+            $dia = $this->diaDeYmd((int) ($fila->rendg_fecha ?? 0));
             $nroOper = (int) ($fila->rendg_nro_oper ?? 0);
-            $z += (float) ($fila->rendg_total_z ?? 0);
-            $nc += (float) ($fila->rendg_tot_nc ?? 0);
-            $abPago += (float) ($fila->rendg_ab_pago ?? 0);
+            $this->sumarEn($totales, $etiquetaZ, $dia, (float) ($fila->rendg_total_z ?? 0));
+            $this->sumarEn($totales, 'Notas de credito', $dia, (float) ($fila->rendg_tot_nc ?? 0));
+            $this->sumarEn($totales, 'Diferencia abandono de pago', $dia, (float) ($fila->rendg_ab_pago ?? 0));
             $red = (float) ($fila->rendg_tot_redondeo ?? 0);
-            $redondeo += $redondeoNegado ? -$red : $red;
-            $difCaja += -1 * (float) ($fila->rendg_dif_caja ?? 0);
+            $this->sumarEn($totales, 'Redondeo', $dia, $redondeoNegado ? -$red : $red);
+            $this->sumarEn($totales, 'Diferencia de caja', $dia, -1 * (float) ($fila->rendg_dif_caja ?? 0));
 
             foreach ($valoresPorOper[$nroOper] ?? [] as $valor) {
                 $codigo = (int) ($valor->rendv_codigo ?? 0);
                 if (! isset($valormae[$codigo])) {
                     continue;
                 }
-                $mediosPorCodigo[$codigo] = ($mediosPorCodigo[$codigo] ?? 0)
-                    + $this->importeValorPesos($valor, $valormae[$codigo]['tipo']);
+                $this->sumarEn(
+                    $totales,
+                    $valormae[$codigo]['desc'],
+                    $dia,
+                    $this->importeValorPesos($valor, $valormae[$codigo]['tipo']),
+                );
             }
         }
 
-        // Orden Anita: Z → valormae → NC / abandono / redondeo / dif caja → Total.
-        $totales = [$etiquetaZ => round($z, 2)];
-        $totalSinZ = 0.0;
-        foreach ($valormae as $codigo => $meta) {
-            $importe = round($mediosPorCodigo[$codigo] ?? 0, 2);
-            $totales[$meta['desc']] = $importe;
-            $totalSinZ += $importe;
+        foreach ($this->dias as $dia) {
+            $totalSinZ = 0.0;
+            foreach ($totales as $etiqueta => $porDia) {
+                if ($etiqueta === $etiquetaZ || $etiqueta === $etiquetaTotal) {
+                    continue;
+                }
+                $totalSinZ += (float) ($porDia[$dia] ?? 0);
+            }
+            $totales[$etiquetaTotal][$dia] = round($totalSinZ, 2);
         }
-        $totales['Notas de credito'] = round($nc, 2);
-        $totales['Diferencia abandono de pago'] = round($abPago, 2);
-        $totales['Redondeo'] = round($redondeo, 2);
-        $totales['Diferencia de caja'] = round($difCaja, 2);
-        $totalSinZ += $nc + $abPago + $redondeo + $difCaja;
-        $totales[$etiquetaTotal] = round($totalSinZ, 2);
 
         return $totales;
     }
 
     /**
      * @param  list<object>  $filas
-     * @return array<string, float>
+     * @return array<string, array<int, float>>
      */
     private function agregarRendmaquina(array $filas): array
     {
         $totales = [
-            'MAQUINAS VENTAS' => 0.0,
-            'MAQUINAS CAJA' => 0.0,
-            'Vales fondo fijo' => 0.0,
-            'Vales administracion' => 0.0,
-            'Variacion de FF' => 0.0,
-            'Diferencia de caja' => 0.0,
-            'Caja en transito' => 0.0,
+            'MAQUINAS VENTAS' => $this->vectorDias(),
+            'MAQUINAS CAJA' => $this->vectorDias(),
+            'Vales fondo fijo' => $this->vectorDias(),
+            'Vales administracion' => $this->vectorDias(),
+            'Variacion de FF' => $this->vectorDias(),
+            'Diferencia de caja' => $this->vectorDias(),
+            'Caja en transito' => $this->vectorDias(),
         ];
 
         foreach ($filas as $fila) {
@@ -468,18 +699,18 @@ class EfePosicionFinancieraSupport
                 continue;
             }
 
+            $dia = $this->diaDeYmd((int) ($fila->rendm_fecha ?? 0));
             $venta = $this->ventaMaquinasDesdeFila($fila);
             $deposito = (float) ($fila->rendm_deposito ?? 0);
             $difCajaRaw = (float) ($fila->rendm_dif_caja ?? 0);
             $variacionFf = (float) ($fila->rendm_variacion_ff ?? 0);
 
-            $totales['MAQUINAS VENTAS'] += $venta;
-            $totales['MAQUINAS CAJA'] += $deposito;
-            $totales['Vales administracion'] += (float) ($fila->rendm_vales ?? 0);
-            $totales['Vales fondo fijo'] += (float) ($fila->rendm_reintegros ?? 0);
-            $totales['Variacion de FF'] += $variacionFf;
-            $totales['Diferencia de caja'] += $difCajaRaw + $variacionFf;
-            // Pago 24 (rendm_vta_ant_gastro): columna no expuesta hoy en el bridge.
+            $this->sumarEn($totales, 'MAQUINAS VENTAS', $dia, $venta);
+            $this->sumarEn($totales, 'MAQUINAS CAJA', $dia, $deposito);
+            $this->sumarEn($totales, 'Vales administracion', $dia, (float) ($fila->rendm_vales ?? 0));
+            $this->sumarEn($totales, 'Vales fondo fijo', $dia, (float) ($fila->rendm_reintegros ?? 0));
+            $this->sumarEn($totales, 'Variacion de FF', $dia, $variacionFf);
+            $this->sumarEn($totales, 'Diferencia de caja', $dia, $difCajaRaw + $variacionFf);
 
             if ($venta > $deposito) {
                 $cajaTransito = ($venta + $difCajaRaw) - $deposito;
@@ -487,33 +718,45 @@ class EfePosicionFinancieraSupport
                 $cajaTransito = $deposito - ($venta + $difCajaRaw);
                 $cajaTransito *= -1;
             }
-            $totales['Caja en transito'] += $cajaTransito;
+            $this->sumarEn($totales, 'Caja en transito', $dia, $cajaTransito);
         }
 
-        return array_map(fn (float $v) => round($v, 2), $totales);
+        return $totales;
     }
 
     /**
      * @param  list<int>  $nrosOper
      * @param  array<int, list<object>>  $valoresPorOper
      * @param  array<int, array{desc: string, tipo: string}>  $valormae
-     * @return array<string, float>
+     * @param  array<int, int>  $fechaPorOper
+     * @return array<string, array<int, float>>
      */
-    private function agregarMediosPorOperaciones(array $nrosOper, array $valoresPorOper, array $valormae): array
-    {
+    private function agregarMediosPorOperaciones(
+        array $nrosOper,
+        array $valoresPorOper,
+        array $valormae,
+        array $fechaPorOper,
+    ): array {
         $totales = [];
         foreach ($nrosOper as $nroOper) {
+            $diaOper = $this->diaDeYmd((int) ($fechaPorOper[$nroOper] ?? 0));
             foreach ($valoresPorOper[$nroOper] ?? [] as $valor) {
                 $codigo = (int) ($valor->rendv_codigo ?? 0);
                 if (! isset($valormae[$codigo])) {
                     continue;
                 }
-                // Canje gastro (15) no se imprime en bloque máquinas (l-posfinanc.c).
                 if ($codigo === 15) {
                     continue;
                 }
-                $desc = $valormae[$codigo]['desc'];
-                $totales[$desc] = round(($totales[$desc] ?? 0) + $this->importeValorPesos($valor, $valormae[$codigo]['tipo']), 2);
+                $dia = (int) ($valor->rendv_fecha ?? 0) > 0
+                    ? $this->diaDeYmd((int) $valor->rendv_fecha)
+                    : $diaOper;
+                $this->sumarEn(
+                    $totales,
+                    $valormae[$codigo]['desc'],
+                    $dia,
+                    $this->importeValorPesos($valor, $valormae[$codigo]['tipo']),
+                );
             }
         }
 
@@ -524,18 +767,24 @@ class EfePosicionFinancieraSupport
      * @param  list<int>  $nrosOper
      * @param  array<int, array<int, float>>  $gastosPorOper
      * @param  array<int, string>  $apgastoDesc
-     * @return array<string, float>
+     * @param  array<int, int>  $fechaPorOper
+     * @return array<string, array<int, float>>
      */
-    private function agregarGastosMaquina(array $nrosOper, array $gastosPorOper, array $apgastoDesc): array
-    {
+    private function agregarGastosMaquina(
+        array $nrosOper,
+        array $gastosPorOper,
+        array $apgastoDesc,
+        array $fechaPorOper,
+    ): array {
         $totales = [];
         foreach ($nrosOper as $nroOper) {
+            $dia = $this->diaDeYmd((int) ($fechaPorOper[$nroOper] ?? 0));
             foreach ($gastosPorOper[$nroOper] ?? [] as $concepto => $importe) {
                 if (abs($importe) <= 0.0001) {
                     continue;
                 }
                 $desc = $apgastoDesc[$concepto] ?? ('Apertura gasto '.$concepto);
-                $totales[$desc] = round(($totales[$desc] ?? 0) + $importe, 2);
+                $this->sumarEn($totales, $desc, $dia, $importe);
             }
         }
 
@@ -543,30 +792,34 @@ class EfePosicionFinancieraSupport
     }
 
     /**
-     * @param  array<string, float>  $maquinas
+     * @param  array<string, array<int, float>>  $maquinas
      * @param  array<string, true>  $descsMedio
+     * @return array<int, float>
      */
-    private function totalMaquinas(array $maquinas, array $descsMedio): float
+    private function totalMaquinasPorDia(array $maquinas, array $descsMedio): array
     {
-        // l-posfinanc.c: depósito − vales − reintegros − apertura de gastos (no resta medios rendvalor).
-        $caja = (float) ($maquinas['MAQUINAS CAJA'] ?? 0);
-        $restar = (float) ($maquinas['Vales fondo fijo'] ?? 0)
-            + (float) ($maquinas['Vales administracion'] ?? 0);
+        $out = $this->vectorDias();
+        foreach ($this->dias as $dia) {
+            $caja = (float) (($maquinas['MAQUINAS CAJA'][$dia] ?? 0));
+            $restar = (float) (($maquinas['Vales fondo fijo'][$dia] ?? 0))
+                + (float) (($maquinas['Vales administracion'][$dia] ?? 0));
 
-        foreach ($maquinas as $etiqueta => $importe) {
-            if (in_array($etiqueta, [
-                'MAQUINAS VENTAS', 'MAQUINAS CAJA', 'Vales fondo fijo', 'Vales administracion',
-                'Diferencia de caja', 'Caja en transito', 'Variacion de FF', 'Total maquinas',
-            ], true)) {
-                continue;
+            foreach ($maquinas as $etiqueta => $porDia) {
+                if (in_array($etiqueta, [
+                    'MAQUINAS VENTAS', 'MAQUINAS CAJA', 'Vales fondo fijo', 'Vales administracion',
+                    'Diferencia de caja', 'Caja en transito', 'Variacion de FF', 'Total maquinas',
+                ], true)) {
+                    continue;
+                }
+                if (isset($descsMedio[$etiqueta])) {
+                    continue;
+                }
+                $restar += (float) ($porDia[$dia] ?? 0);
             }
-            if (isset($descsMedio[$etiqueta])) {
-                continue;
-            }
-            $restar += (float) $importe;
+            $out[$dia] = round($caja - $restar, 2);
         }
 
-        return round($caja - $restar, 2);
+        return $out;
     }
 
     /**
@@ -574,8 +827,10 @@ class EfePosicionFinancieraSupport
      * @param  array<int, array{desc: string, tipo: string}>  $valormae
      * @param  list<object>  $cabGastro
      * @param  array<int, true>  $opsMaquina
-     * @param  array<string, float>  $gastronomia
-     * @return array<string, float>
+     * @param  list<object>  $rendbingo
+     * @param  array<string, array<int, float>>  $gastronomia
+     * @param  array<int, int>  $fechaPorOper
+     * @return array<string, array<int, float>>
      */
     private function agregarAperturaMedios(
         array $valoresPorOper,
@@ -583,42 +838,46 @@ class EfePosicionFinancieraSupport
         array $cabGastro,
         array $opsMaquina,
         int $empresaId,
-        int $fechaDesde,
-        int $fechaHasta,
+        array $rendbingo,
         array $gastronomia,
+        array $fechaPorOper,
     ): array {
         $porTipo = [];
         $ops = $opsMaquina;
         foreach ($cabGastro as $fila) {
             $bloque = $this->clasificarSucursal($empresaId, (int) ($fila->rendg_sucursal ?? 0));
-            if ($bloque === self::BLOQUE_GASTRO || $bloque === self::BLOQUE_ESTAC) {
+            if (in_array($bloque, [self::BLOQUE_GASTRO, self::BLOQUE_ESTAC, self::BLOQUE_VENDING], true)) {
                 $ops[(int) ($fila->rendg_nro_oper ?? 0)] = true;
             }
         }
 
         foreach ($ops as $nroOper => $_) {
+            $diaOper = $this->diaDeYmd((int) ($fechaPorOper[$nroOper] ?? 0));
             foreach ($valoresPorOper[$nroOper] ?? [] as $valor) {
                 $codigo = (int) ($valor->rendv_codigo ?? 0);
                 if (! isset($valormae[$codigo])) {
                     continue;
                 }
                 $tipo = $valormae[$codigo]['tipo'];
-                $porTipo[$tipo] = ($porTipo[$tipo] ?? 0) + $this->importeValorPesos($valor, $tipo);
+                $dia = (int) ($valor->rendv_fecha ?? 0) > 0
+                    ? $this->diaDeYmd((int) $valor->rendv_fecha)
+                    : $diaOper;
+                $this->sumarEn($porTipo, $tipo, $dia, $this->importeValorPesos($valor, $tipo));
             }
         }
 
-        // Bingo → efectivo pesos (carton + sobrante + vales).
-        foreach ($this->bridgeReader->listarRendbingo($empresaId, $fechaDesde, $fechaHasta) as $fila) {
+        foreach ($rendbingo as $fila) {
             $importe = (float) ($fila->rendb_total_carton ?? 0)
                 + (float) ($fila->rendb_sobrante ?? 0)
                 + (float) ($fila->rendb_vales ?? 0);
-            $porTipo[self::VALM_EFE_PESOS] = ($porTipo[self::VALM_EFE_PESOS] ?? 0) + $importe;
+            $this->sumarEn($porTipo, self::VALM_EFE_PESOS, $this->diaDeYmd((int) ($fila->rendb_fecha ?? 0)), $importe);
         }
 
-        // Ajuste Anita: tickets − canje gastronomía.
-        $canjeGastro = (float) ($gastronomia['Tk.Canje Gastronomia'] ?? 0);
+        $canjeGastro = $gastronomia['Tk.Canje Gastronomia'] ?? $this->vectorDias();
         if (isset($porTipo['4'])) {
-            $porTipo['4'] -= $canjeGastro;
+            foreach ($this->dias as $dia) {
+                $porTipo['4'][$dia] = round(($porTipo['4'][$dia] ?? 0) - (float) ($canjeGastro[$dia] ?? 0), 2);
+            }
         }
 
         $etiquetasTipo = [
@@ -637,24 +896,29 @@ class EfePosicionFinancieraSupport
         ];
 
         $totales = [];
-        $totalIngresos = 0.0;
-        foreach ($porTipo as $tipo => $importe) {
+        $totalIngresos = $this->vectorDias();
+        foreach ($porTipo as $tipo => $porDia) {
             $etiqueta = $etiquetasTipo[$tipo] ?? 'Varios';
-            $totales[$etiqueta] = round(($totales[$etiqueta] ?? 0) + $importe, 2);
-            $totalIngresos += $importe;
+            foreach ($this->dias as $dia) {
+                $importe = (float) ($porDia[$dia] ?? 0);
+                $this->sumarEn($totales, $etiqueta, $dia, $importe);
+                $totalIngresos[$dia] = round(($totalIngresos[$dia] ?? 0) + $importe, 2);
+            }
         }
 
-        $totales['Canje Gastronomia'] = round($canjeGastro, 2);
-        // Canje se informa aparte; el total Anita suma VAL_total (ya neto de canje en tickets) + canje línea.
-        $totales['Total de Ingresos'] = round($totalIngresos + $canjeGastro, 2);
+        $totales['Canje Gastronomia'] = $this->redondearVector($canjeGastro);
+        foreach ($this->dias as $dia) {
+            $totalIngresos[$dia] = round(($totalIngresos[$dia] ?? 0) + (float) ($canjeGastro[$dia] ?? 0), 2);
+        }
+        $totales['Total de Ingresos'] = $this->redondearVector($totalIngresos);
 
         return $totales;
     }
 
     /**
      * @param  array<int, array{desc: string, tipo: string}>  $valormae
-     * @param  array<string, float>  $abiertosNoEfectivo
-     * @return array<string, float>
+     * @param  array<string, array<int, float>>  $abiertosNoEfectivo
+     * @return array<string, array<int, float>>
      */
     private function agregarEgresos(
         int $empresaId,
@@ -664,20 +928,20 @@ class EfePosicionFinancieraSupport
         array $abiertosNoEfectivo,
     ): array {
         $totales = [
-            'Pesos Maco' => 0.0,
-            'Pesos Banco Macro' => 0.0,
-            'Pesos Banco Frances' => 0.0,
-            'Pesos Banco Provincia' => 0.0,
-            'Pesos Caja de seguridad' => 0.0,
-            'Dolares Maco' => 0.0,
-            'Dolares Banco Macro' => 0.0,
-            'Dolares Caja de seguridad' => 0.0,
-            'Euros Maco' => 0.0,
-            'Euros Banco Frances' => 0.0,
-            'Euros Caja de seguridad' => 0.0,
-            'Caudales en u$s' => 0.0,
-            'Caudales en Euros' => 0.0,
-            'Caudales en cripto' => 0.0,
+            'Pesos Maco' => $this->vectorDias(),
+            'Pesos Banco Macro' => $this->vectorDias(),
+            'Pesos Banco Frances' => $this->vectorDias(),
+            'Pesos Banco Provincia' => $this->vectorDias(),
+            'Pesos Caja de seguridad' => $this->vectorDias(),
+            'Dolares Maco' => $this->vectorDias(),
+            'Dolares Banco Macro' => $this->vectorDias(),
+            'Dolares Caja de seguridad' => $this->vectorDias(),
+            'Euros Maco' => $this->vectorDias(),
+            'Euros Banco Frances' => $this->vectorDias(),
+            'Euros Caja de seguridad' => $this->vectorDias(),
+            'Caudales en u$s' => $this->vectorDias(),
+            'Caudales en Euros' => $this->vectorDias(),
+            'Caudales en cripto' => $this->vectorDias(),
         ];
 
         $remesas = $this->bridgeReader->listarRemesas($empresaId, $fechaDesde, $fechaHasta);
@@ -694,6 +958,7 @@ class EfePosicionFinancieraSupport
                 continue;
             }
 
+            $dia = $this->diaDeYmd((int) ($fila->reme_fecha ?? 0));
             $codigoValor = (int) ($fila->reme_cod_valor ?? 0);
             $tipo = $valormae[$codigoValor]['tipo'] ?? trim((string) ($fila->reme_tipo_valor ?? self::VALM_EFE_PESOS));
             $importe = (float) ($fila->reme_importe ?? 0);
@@ -703,36 +968,42 @@ class EfePosicionFinancieraSupport
                 : $importe;
 
             if ($tipo === self::VALM_EFE_DOLAR) {
-                $totales['Caudales en u$s'] += $importe;
-                $totales[$this->etiquetaEgresoDolar($destino)] = ($totales[$this->etiquetaEgresoDolar($destino)] ?? 0) + $importe;
-                $totales[$valormae[$codigoValor]['desc'] ?? 'Efectivo dolares'] =
-                    ($totales[$valormae[$codigoValor]['desc'] ?? 'Efectivo dolares'] ?? 0) + $importePesos;
+                $this->sumarEn($totales, 'Caudales en u$s', $dia, $importe);
+                $this->sumarEn($totales, $this->etiquetaEgresoDolar($destino), $dia, $importe);
+                $this->sumarEn(
+                    $totales,
+                    $valormae[$codigoValor]['desc'] ?? 'Efectivo dolares',
+                    $dia,
+                    $importePesos,
+                );
             } elseif ($tipo === self::VALM_EFE_EURO) {
-                $totales['Caudales en Euros'] += $importe;
-                $totales[$this->etiquetaEgresoEuro($destino)] = ($totales[$this->etiquetaEgresoEuro($destino)] ?? 0) + $importe;
+                $this->sumarEn($totales, 'Caudales en Euros', $dia, $importe);
+                $this->sumarEn($totales, $this->etiquetaEgresoEuro($destino), $dia, $importe);
             } elseif ($tipo === self::VALM_EFE_CRIPTO) {
-                $totales['Caudales en cripto'] += $importe;
+                $this->sumarEn($totales, 'Caudales en cripto', $dia, $importe);
             } else {
-                $totales[$this->etiquetaEgresoPesos($destino)] =
-                    ($totales[$this->etiquetaEgresoPesos($destino)] ?? 0) + $importePesos;
+                $this->sumarEn($totales, $this->etiquetaEgresoPesos($destino), $dia, $importePesos);
             }
         }
 
-        $totalEgresos = 0.0;
-        foreach ($abiertosNoEfectivo as $desc => $importe) {
-            // Entran al Total de Egresos pero no se reimprimen (ya salieron en gastro/máquinas).
-            $totalEgresos += $importe;
+        $totalEgresos = $this->vectorDias();
+        foreach ($abiertosNoEfectivo as $porDia) {
+            foreach ($this->dias as $dia) {
+                $totalEgresos[$dia] = round(($totalEgresos[$dia] ?? 0) + (float) ($porDia[$dia] ?? 0), 2);
+            }
         }
 
-        foreach ($totales as $etiqueta => $importe) {
+        foreach ($totales as $etiqueta => $porDia) {
             if (str_starts_with($etiqueta, 'Caudales') || $etiqueta === 'Total de Egresos') {
                 continue;
             }
-            $totalEgresos += $importe;
+            foreach ($this->dias as $dia) {
+                $totalEgresos[$dia] = round(($totalEgresos[$dia] ?? 0) + (float) ($porDia[$dia] ?? 0), 2);
+            }
         }
-        $totales['Total de Egresos'] = round($totalEgresos, 2);
+        $totales['Total de Egresos'] = $this->redondearVector($totalEgresos);
 
-        return array_map(fn (float $v) => round($v, 2), $totales);
+        return $totales;
     }
 
     /**
@@ -740,7 +1011,8 @@ class EfePosicionFinancieraSupport
      * @param  array<int, array{desc: string, tipo: string}>  $valormae
      * @param  list<object>  $cabGastro
      * @param  array<int, true>  $opsMaquina
-     * @return array<string, float>
+     * @param  array<int, int>  $fechaPorOper
+     * @return array<string, array<int, float>>
      */
     private function acumularAbiertosNoEfectivo(
         array $valoresPorOper,
@@ -748,17 +1020,19 @@ class EfePosicionFinancieraSupport
         array $cabGastro,
         array $opsMaquina,
         int $empresaId,
+        array $fechaPorOper,
     ): array {
         $ops = $opsMaquina;
         foreach ($cabGastro as $fila) {
             $bloque = $this->clasificarSucursal($empresaId, (int) ($fila->rendg_sucursal ?? 0));
-            if ($bloque === self::BLOQUE_GASTRO || $bloque === self::BLOQUE_ESTAC) {
+            if (in_array($bloque, [self::BLOQUE_GASTRO, self::BLOQUE_ESTAC, self::BLOQUE_VENDING], true)) {
                 $ops[(int) ($fila->rendg_nro_oper ?? 0)] = true;
             }
         }
 
         $totales = [];
         foreach ($ops as $nroOper => $_) {
+            $diaOper = $this->diaDeYmd((int) ($fechaPorOper[$nroOper] ?? 0));
             foreach ($valoresPorOper[$nroOper] ?? [] as $valor) {
                 $codigo = (int) ($valor->rendv_codigo ?? 0);
                 if (! isset($valormae[$codigo])) {
@@ -768,16 +1042,17 @@ class EfePosicionFinancieraSupport
                 if ($this->esTipoEfectivo($tipo)) {
                     continue;
                 }
-                // Transf. Check MS (código 8): no suma en Total de Egresos del listado Contaduría BSA.
                 if ($codigo === 8) {
                     continue;
                 }
-                $desc = $valormae[$codigo]['desc'];
-                $totales[$desc] = ($totales[$desc] ?? 0) + $this->importeValorPesos($valor, $tipo);
+                $dia = (int) ($valor->rendv_fecha ?? 0) > 0
+                    ? $this->diaDeYmd((int) $valor->rendv_fecha)
+                    : $diaOper;
+                $this->sumarEn($totales, $valormae[$codigo]['desc'], $dia, $this->importeValorPesos($valor, $tipo));
             }
         }
 
-        return array_map(fn (float $v) => round($v, 2), $totales);
+        return $totales;
     }
 
     private function etiquetaEgresoPesos(string $destino): string
@@ -857,19 +1132,21 @@ class EfePosicionFinancieraSupport
             return $this->clasificacionSucursalCache[$key] = self::BLOQUE_ESTAC;
         }
 
-        // EGA / SHOW / máquinas vending u otros no GASTRONOMIA.
         if ($nombre !== '') {
             $esShow = str_contains($nombre, 'show');
             $esEgaPuro = str_contains($nombre, 'ega') && ! str_contains($nombre, 'gastro');
-            $esMaquinaNumerada = (bool) preg_match('/maquina\s*\d+/', $nombre) || $sucursal >= 1000;
-            if ($esShow || $esEgaPuro || $esMaquinaNumerada) {
+            if ($esShow || $esEgaPuro) {
                 return $this->clasificacionSucursalCache[$key] = self::BLOQUE_OMITIR;
             }
+            if (str_contains($nombre, 'vending')
+                || (bool) preg_match('/maquina\s*\d+/', $nombre)
+                || $sucursal >= 1000) {
+                return $this->clasificacionSucursalCache[$key] = self::BLOQUE_VENDING;
+            }
         } elseif ($sucursal >= 1000) {
-            return $this->clasificacionSucursalCache[$key] = self::BLOQUE_OMITIR;
+            return $this->clasificacionSucursalCache[$key] = self::BLOQUE_VENDING;
         }
 
-        // Fallback Anita: PV 13/72/73/74 = estacionamiento BSA.
         if (in_array($sucursal, [13, 72, 73, 74], true)) {
             return $this->clasificacionSucursalCache[$key] = self::BLOQUE_ESTAC;
         }
@@ -880,7 +1157,7 @@ class EfePosicionFinancieraSupport
     private function nombrePuntoventa(int $empresaId, int $sucursal): string
     {
         $codigo = str_pad((string) $sucursal, 5, '0', STR_PAD_LEFT);
-            $pv = Puntoventa::query()
+        $pv = Puntoventa::query()
             ->where('empresa_id', $empresaId)
             ->where(function ($q) use ($sucursal, $codigo) {
                 $q->where('codigo', $codigo)
@@ -926,6 +1203,30 @@ class EfePosicionFinancieraSupport
                 continue;
             }
             $map[$nro][] = $fila;
+        }
+
+        return $map;
+    }
+
+    /**
+     * @param  list<object>  $cabGastro
+     * @param  list<object>  $filasMaquina
+     * @return array<int, int>
+     */
+    private function fechasPorOperacion(array $cabGastro, array $filasMaquina): array
+    {
+        $map = [];
+        foreach ($cabGastro as $fila) {
+            $nro = (int) ($fila->rendg_nro_oper ?? 0);
+            if ($nro > 0) {
+                $map[$nro] = (int) ($fila->rendg_fecha ?? 0);
+            }
+        }
+        foreach ($filasMaquina as $fila) {
+            $nro = (int) ($fila->rendm_nro_oper ?? 0);
+            if ($nro > 0) {
+                $map[$nro] = (int) ($fila->rendm_fecha ?? 0);
+            }
         }
 
         return $map;
@@ -1016,13 +1317,15 @@ class EfePosicionFinancieraSupport
      * @param  list<string>  $errores
      * @return array{
      *   totales_por_etiqueta: array<string, float>,
-     *   filas_ordenadas: list<array{etiqueta: string, valor: float}>,
+     *   filas_ordenadas: list<array{etiqueta: string, valor: float, por_dia: array<int, float>, bloque: string, tipo_fila: string}>,
+     *   dias: list<int>,
      *   saldo_inicial: ?float,
      *   saldo_final: ?float,
      *   bingo: array<string, float>,
      *   premios_bingo: array<string, float>,
      *   gastronomia: array<string, float>,
      *   estacionamiento: array<string, float>,
+     *   vending: array<string, float>,
      *   maquinas: array<string, float>,
      *   apertura_medios: array<string, float>,
      *   egresos: array<string, float>,
@@ -1034,12 +1337,14 @@ class EfePosicionFinancieraSupport
         return [
             'totales_por_etiqueta' => [],
             'filas_ordenadas' => [],
+            'dias' => [],
             'saldo_inicial' => null,
             'saldo_final' => null,
             'bingo' => [],
             'premios_bingo' => [],
             'gastronomia' => [],
             'estacionamiento' => [],
+            'vending' => [],
             'maquinas' => [],
             'apertura_medios' => [],
             'egresos' => [],

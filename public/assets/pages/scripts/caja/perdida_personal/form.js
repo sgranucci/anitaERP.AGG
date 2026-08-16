@@ -62,15 +62,18 @@
     function actualizarMaquina() {
         var $concepto = $('#concepto_perdida_id');
         var $maq = $('#maquina');
+        var $fila = $('#perdida-personal-campo-maquina');
         if (!$concepto.length || !$maq.length) {
             return;
         }
         var codigo = parseInt($concepto.attr('data-codigo') || $concepto.data('codigo') || '0', 10);
         var requiere = conceptosConMaquina().indexOf(codigo) !== -1;
         if (requiere) {
+            $fila.removeClass('d-none');
             $maq.prop('disabled', false);
             $maq.attr('required', 'required');
         } else {
+            $fila.addClass('d-none');
             $maq.prop('disabled', true);
             $maq.removeAttr('required');
             $maq.val('');
@@ -97,6 +100,10 @@
             if (typeof window.limpiarCatalogosPerdidaPersonalPorEmpresa === 'function') {
                 window.limpiarCatalogosPerdidaPersonalPorEmpresa();
             }
+            if (typeof window.aplicarImputacionDefaultPerdidaPersonal === 'function') {
+                window.aplicarImputacionDefaultPerdidaPersonal();
+            }
+            actualizarMaquina();
         });
 
         $('#concepto_perdida_id').on('change', function () {

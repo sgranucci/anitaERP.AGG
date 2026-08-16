@@ -14,6 +14,7 @@ use Maatwebsite\Excel\Concerns\WithStyles;
 use Maatwebsite\Excel\Concerns\WithTitle;
 use Maatwebsite\Excel\Events\AfterSheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 use PhpOffice\PhpSpreadsheet\Worksheet\Drawing;
 use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
@@ -21,8 +22,11 @@ class PosicionFinancieraExport implements FromView, ShouldAutoSize, WithColumnWi
 {
     use Exportable;
 
-    /** @var list<array{etiqueta: string, valor: float}> */
+    /** @var list<array{etiqueta: string, valor: float, por_dia?: array<int, float>}> */
     private array $filas = [];
+
+    /** @var list<int> */
+    private array $dias = [];
 
     private mixed $empresa = null;
 
@@ -32,21 +36,25 @@ class PosicionFinancieraExport implements FromView, ShouldAutoSize, WithColumnWi
 
     private bool $hayFilaLogos = false;
 
-    private int $filaCabecerasExcel = 2;
+    private int $filaCabecerasExcel = 4;
 
-    private int $filaPrimeraDatosExcel = 3;
+    private int $filaPrimeraDatosExcel = 5;
 
     private int $filaTituloExcel = 1;
+
+    private int $filasMeta = 3;
 
     /** @var list<string> */
     private array $rutasLogosExcel = [];
 
     /**
-     * @param  list<array{etiqueta: string, valor: float}>  $filas
+     * @param  list<array{etiqueta: string, valor: float, por_dia?: array<int, float>}>  $filas
+     * @param  list<int>  $dias
      */
-    public function parametros(array $filas, mixed $empresa, string $periodoTexto, bool $csv = false): self
+    public function parametros(array $filas, array $dias, mixed $empresa, string $periodoTexto, bool $csv = false): self
     {
         $this->filas = $filas;
+        $this->dias = $dias;
         $this->empresa = $empresa;
         $this->periodoTexto = $periodoTexto;
         $this->csv = $csv;
@@ -68,12 +76,15 @@ class PosicionFinancieraExport implements FromView, ShouldAutoSize, WithColumnWi
 
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($coleccion);
         $this->hayFilaLogos = ! $this->csv && count($this->rutasLogosExcel) > 0;
-        $this->filaTituloExcel = $this->hayFilaLogos ? 2 : 1;
-        $this->filaCabecerasExcel = $this->hayFilaLogos ? 3 : 2;
+        $this->filasMeta = 3;
+        $offsetLogo = $this->hayFilaLogos ? 1 : 0;
+        $this->filaTituloExcel = $offsetLogo + 1;
+        $this->filaCabecerasExcel = $offsetLogo + $this->filasMeta + 1;
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
 
         return view('exports.caja.posicion_financieraindex', [
             'filas' => $this->filas,
+            'dias' => $this->dias,
             'empresa' => $this->empresa,
             'periodo_texto' => $this->periodoTexto,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
@@ -87,10 +98,13 @@ class PosicionFinancieraExport implements FromView, ShouldAutoSize, WithColumnWi
 
     public function columnWidths(): array
     {
-        return [
-            'A' => 42,
-            'B' => 18,
-        ];
+        $anchos = ['A' => 36];
+        $ultima = 1 + count($this->dias) + 1;
+        for ($i = 2; $i <= $ultima; $i++) {
+            $anchos[$this->colLetra($i)] = 12;
+        }
+
+        return $anchos;
     }
 
     public function styles(Worksheet $sheet): array
@@ -103,7 +117,7 @@ class PosicionFinancieraExport implements FromView, ShouldAutoSize, WithColumnWi
         return [
             AfterSheet::class => function (AfterSheet $event) {
                 $sheet = $event->sheet->getDelegate();
-                $ultimaCol = 'B';
+                $ultimaCol = $this->colLetra(1 + count($this->dias) + 1);
 
                 if ($this->hayFilaLogos) {
                     $sheet->getRowDimension(1)->setRowHeight(54);
@@ -122,12 +136,22 @@ class PosicionFinancieraExport implements FromView, ShouldAutoSize, WithColumnWi
                     }
                 }
 
-                $sheet->mergeCells('A'.$this->filaTituloExcel.':'.$ultimaCol.$this->filaTituloExcel);
+                for ($i = 0; $i < $this->filasMeta; $i++) {
+                    $filaMeta = $this->filaTituloExcel + $i;
+                    $sheet->mergeCells('A'.$filaMeta.':'.$ultimaCol.$filaMeta);
+                }
+
                 $sheet->getStyle('A'.$this->filaTituloExcel)->applyFromArray([
                     'font' => ['name' => 'Arial', 'size' => 16, 'bold' => true, 'color' => ['rgb' => '17202A']],
                     'alignment' => ['horizontal' => Alignment::HORIZONTAL_LEFT, 'vertical' => Alignment::VERTICAL_CENTER],
                 ]);
                 $sheet->getRowDimension($this->filaTituloExcel)->setRowHeight(28);
+
+                for ($i = 1; $i < $this->filasMeta; $i++) {
+                    $sheet->getStyle('A'.($this->filaTituloExcel + $i))->applyFromArray([
+                        'font' => ['name' => 'Arial', 'size' => 10, 'bold' => true, 'color' => ['rgb' => '444444']],
+                    ]);
+                }
 
                 $sheet->getStyle('A'.$this->filaCabecerasExcel.':'.$ultimaCol.$this->filaCabecerasExcel)->applyFromArray([
                     'font' => ['name' => 'Arial', 'size' => 11, 'bold' => true, 'color' => ['rgb' => '17202A']],
@@ -137,8 +161,27 @@ class PosicionFinancieraExport implements FromView, ShouldAutoSize, WithColumnWi
                     ],
                 ]);
 
-                $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+                $ultimaFila = $sheet->getHighestRow();
+                if ($ultimaFila >= $this->filaPrimeraDatosExcel) {
+                    $sheet->getStyle('B'.$this->filaPrimeraDatosExcel.':'.$ultimaCol.$ultimaFila)
+                        ->getNumberFormat()
+                        ->setFormatCode(NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1);
+                }
+
+                $sheet->freezePane('B'.$this->filaPrimeraDatosExcel);
             },
         ];
+    }
+
+    private function colLetra(int $index): string
+    {
+        $letra = '';
+        while ($index > 0) {
+            $mod = ($index - 1) % 26;
+            $letra = chr(65 + $mod).$letra;
+            $index = intdiv($index - 1, 26);
+        }
+
+        return $letra;
     }
 }

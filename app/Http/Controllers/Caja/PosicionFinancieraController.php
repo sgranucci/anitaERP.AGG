@@ -45,6 +45,7 @@ class PosicionFinancieraController extends Controller
 
         $consultado = false;
         $filas = [];
+        $dias = [];
         $saldoInicial = null;
         $saldoFinal = null;
         $erroresBridge = [];
@@ -52,6 +53,7 @@ class PosicionFinancieraController extends Controller
         if ($request->boolean('consultar') && EfeMensualListadoFiltros::tieneCriteriosAplicados($filtros)) {
             $resultado = $this->posicionFinancieraSupport->generar($filtros);
             $filas = $resultado['filas_ordenadas'] ?? [];
+            $dias = $resultado['dias'] ?? [];
             $saldoInicial = $resultado['saldo_inicial'] ?? null;
             $saldoFinal = $resultado['saldo_final'] ?? null;
             $erroresBridge = $resultado['errores_bridge'] ?? [];
@@ -71,6 +73,7 @@ class PosicionFinancieraController extends Controller
             'filtrosQuery' => $filtrosQuery,
             'consultado' => $consultado,
             'filas' => $filas,
+            'dias' => $dias,
             'saldo_inicial' => $saldoInicial,
             'saldo_final' => $saldoFinal,
             'errores_bridge' => $erroresBridge,
@@ -97,6 +100,7 @@ class PosicionFinancieraController extends Controller
 
         $resultado = $this->posicionFinancieraSupport->generar($filtros);
         $filas = $resultado['filas_ordenadas'] ?? [];
+        $dias = $resultado['dias'] ?? [];
         $empresa = $this->empresaRepository->find((int) ($filtros['empresa_id'] ?? 0));
         $periodo = $this->periodoTexto($filtros);
         $formato = strtoupper($formato);
@@ -109,9 +113,9 @@ class PosicionFinancieraController extends Controller
         $baseNombre = 'posicion_financiera_'.$slugEmpresa.'_'.$anio.$mes;
 
         return match ($formato) {
-            'PDF' => $this->exportarPdf($filas, $empresa, $periodo, $baseNombre),
+            'PDF' => $this->exportarPdf($filas, $dias, $empresa, $periodo, $baseNombre),
             'EXCEL', 'CSV' => Excel::download(
-                (new PosicionFinancieraExport)->parametros($filas, $empresa, $periodo, $formato === 'CSV'),
+                (new PosicionFinancieraExport)->parametros($filas, $dias, $empresa, $periodo, $formato === 'CSV'),
                 $baseNombre.($formato === 'CSV' ? '.csv' : '.xlsx')
             ),
             default => redirect()->route('posicion_financiera', array_merge(
@@ -122,15 +126,17 @@ class PosicionFinancieraController extends Controller
     }
 
     /**
-     * @param  list<array{etiqueta: string, valor: float}>  $filas
+     * @param  list<array{etiqueta: string, valor: float, por_dia?: array<int, float>}>  $filas
+     * @param  list<int>  $dias
      */
-    private function exportarPdf(array $filas, $empresa, string $periodo, string $baseNombre)
+    private function exportarPdf(array $filas, array $dias, $empresa, string $periodo, string $baseNombre)
     {
         $pdf = Pdf::loadView('caja.posicion_financiera.listado', [
             'filas' => $filas,
+            'dias' => $dias,
             'empresa' => $empresa,
             'periodo_texto' => $periodo,
-        ])->setPaper('legal', 'portrait');
+        ])->setPaper('legal', 'landscape');
 
         $dir = storage_path('pdf/listados');
         if (! is_dir($dir)) {

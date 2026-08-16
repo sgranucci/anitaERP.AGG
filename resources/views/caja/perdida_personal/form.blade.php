@@ -17,7 +17,7 @@
 <div class="form-group row">
     <label for="numero" class="col-lg-3 control-label text-right pr-2">N&uacute;mero</label>
     <div class="col-lg-3">
-        <input type="number" name="numero" id="numero" class="form-control text-right" min="1" step="1"
+        <input type="text" name="numero" id="numero" class="form-control text-left" autocomplete="off"
                value="{{ old('numero', $data->numero ?? '') }}"
                @if($esEdicion) readonly @endif
                placeholder="{{ $esEdicion ? '' : 'Vacío = automático Anita' }}"/>
@@ -103,7 +103,7 @@
     'descripcion' => $conceptoSeleccionado->nombre ?? '',
 ])
 
-<div class="form-group row">
+<div class="form-group row{{ $maquinaHabilitada ? '' : ' d-none' }}" id="perdida-personal-campo-maquina">
     <label for="maquina" class="col-lg-3 control-label text-right pr-2">M&aacute;quina</label>
     <div class="col-lg-3">
         <input type="text" name="maquina" id="maquina" class="form-control" maxlength="10"

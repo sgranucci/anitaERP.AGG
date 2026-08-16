@@ -3,25 +3,109 @@
     Posición financiera
 @endsection
 
+@section('styles')
+<style>
+    .posfin-wrap { overflow-x: auto; }
+    .posfin-tabla { font-size: 12px; white-space: nowrap; }
+    .posfin-tabla th.posfin-concepto,
+    .posfin-tabla td.posfin-concepto {
+        position: sticky;
+        left: 0;
+        z-index: 2;
+        min-width: 200px;
+        background: #fff;
+    }
+    .posfin-tabla thead th.posfin-concepto {
+        z-index: 3;
+        background: #85C1E9;
+    }
+    .posfin-tabla th.posfin-dia,
+    .posfin-tabla td.posfin-dia,
+    .posfin-tabla th.posfin-total-col,
+    .posfin-tabla td.posfin-total-col {
+        min-width: 72px;
+    }
+    .posfin-tabla tr.posfin-titulo td {
+        background: #D6EAF8;
+        color: #1B4F72;
+        font-weight: 600;
+    }
+    .posfin-tabla tr.posfin-total td.posfin-concepto {
+        background: #f5f5f5;
+    }
+</style>
+@endsection
+
 @section('scripts')
 <script>
 (function () {
+    var OVERLAY_ID = 'posfin-procesando-overlay';
+    var TITULO_ID = 'posfin-procesando-titulo';
+    var SUBTITULO_ID = 'posfin-procesando-subtitulo';
+
+    function mostrarOverlay(titulo, subtitulo) {
+        var overlay = document.getElementById(OVERLAY_ID);
+        if (! overlay) {
+            return;
+        }
+        var tituloEl = document.getElementById(TITULO_ID);
+        var subtituloEl = document.getElementById(SUBTITULO_ID);
+        if (tituloEl && titulo) {
+            tituloEl.textContent = titulo;
+        }
+        if (subtituloEl && subtitulo) {
+            subtituloEl.textContent = subtitulo;
+        }
+        overlay.classList.remove('d-none');
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+    }
+
+    function ocultarOverlay() {
+        var overlay = document.getElementById(OVERLAY_ID);
+        if (! overlay) {
+            return;
+        }
+        overlay.classList.add('d-none');
+        overlay.style.display = '';
+        overlay.setAttribute('aria-hidden', 'true');
+    }
+
     var form = document.getElementById('form-posicion-financiera');
     if (form) {
         form.addEventListener('submit', function () {
+            if (! form.checkValidity()) {
+                return;
+            }
             var btn = document.getElementById('btn-consultar');
             if (btn) {
                 btn.disabled = true;
                 btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Procesando…';
             }
+            mostrarOverlay('Calculando posición financiera…', 'Puede demorar según el período. No cierre la página.');
         });
     }
+
+    document.querySelectorAll('a[href*="listar-posicion-financiera"]').forEach(function (link) {
+        link.addEventListener('click', function () {
+            mostrarOverlay('Generando exportación…', 'El PDF o Excel puede tardar según el volumen.');
+        });
+    });
+
+    window.addEventListener('pageshow', ocultarOverlay);
 })();
 </script>
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'posfin-procesando-overlay',
+    'tituloId' => 'posfin-procesando-titulo',
+    'subtituloId' => 'posfin-procesando-subtitulo',
+    'titulo' => 'Calculando…',
+    'subtitulo' => 'Puede demorar según el período. No cierre la página.',
+])
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -37,8 +121,8 @@
             <form method="get" action="{{ route('posicion_financiera') }}" id="form-posicion-financiera" class="mb-0">
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
-                        Resumen de posición financiera del mes (bingo, gastronomía, estacionamiento, máquinas, medios y egresos).
-                        No incluye el Estado de flujo mensual (EFE) completo de Contable.
+                        Posición financiera del mes con una columna por día, cortada por unidad de negocio
+                        (bingo, gastronomía, estacionamiento, vending y máquinas), más apertura de medios y egresos.
                     </p>
 
                     @include('includes.form-empresa-asignada', [
@@ -50,7 +134,7 @@
                     ])
 
                     <div class="form-group row mb-0">
-                        <label class="col-lg-2 control-label requerido">Mes / Año</label>
+                        <label class="col-lg-2 control-label text-right pr-2 requerido">Mes / Año</label>
                         <div class="col-lg-9">
                             <div class="row">
                                 <div class="col-md-3">
@@ -106,40 +190,12 @@
                         ])
                     </div>
                 </div>
-                <div class="card-body table-responsive p-0">
-                    @php
-                        $esTotal = static function (string $etiqueta): bool {
-                            $e = mb_strtolower(trim($etiqueta));
-
-                            return str_starts_with($e, 'total')
-                                || in_array($e, ['saldo inicial', 'saldo final'], true);
-                        };
-                    @endphp
-                    <table class="table table-sm table-bordered table-hover mb-0" id="tabla-paginada">
-                        <thead style="background:#85C1E9;color:#17202A;">
-                            <tr>
-                                <th style="width:70%;">Concepto</th>
-                                <th class="text-right" style="width:30%;">Importe</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            @forelse ($filas as $fila)
-                                @php
-                                    $etiqueta = (string) ($fila['etiqueta'] ?? '');
-                                    $valor = (float) ($fila['valor'] ?? 0);
-                                    $resaltar = $esTotal($etiqueta);
-                                @endphp
-                                <tr @class(['font-weight-bold' => $resaltar, 'table-light' => $resaltar])>
-                                    <td>{{ $etiqueta }}</td>
-                                    <td class="text-right">{{ number_format($valor, 2, ',', '.') }}</td>
-                                </tr>
-                            @empty
-                                <tr>
-                                    <td colspan="2" class="text-center text-muted py-4">Sin datos para el período.</td>
-                                </tr>
-                            @endforelse
-                        </tbody>
-                    </table>
+                <div class="card-body table-responsive p-0 posfin-wrap">
+                    @include('caja.posicion_financiera.partials.tabla_datos', [
+                        'filas' => $filas,
+                        'dias' => $dias ?? [],
+                        'modo' => 'pantalla',
+                    ])
                 </div>
                 @if (count($filas) > 0)
                     <div class="card-footer clearfix small text-muted">

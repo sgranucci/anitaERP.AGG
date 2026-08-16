@@ -32,6 +32,19 @@ class ImputacionPerdida extends Model implements Auditable
         return $this->hasMany(PerdidaPersonal::class, 'imputacion_perdida_id');
     }
 
+    public static function paraCodigoYEmpresa(int $codigo, ?int $empresaId = null): ?self
+    {
+        $query = static::query()
+            ->select('id', 'codigo', 'nombre')
+            ->where('codigo', $codigo);
+
+        if ($empresaId !== null && $empresaId > 0) {
+            $query->whereHas('empresas', fn ($q) => $q->where('empresa_id', $empresaId));
+        }
+
+        return $query->first();
+    }
+
     public function getEmpresasResumenAttribute(): string
     {
         if (! $this->relationLoaded('empresas')) {

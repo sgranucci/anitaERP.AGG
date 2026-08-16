@@ -5,7 +5,7 @@ namespace App\Services\Caja;
 use App\Models\Caja\ConceptoPerdida;
 use App\Models\Caja\PerdidaPersonal;
 use App\Models\Sueldos\Empleado_Sueldos;
-use App\Support\Sueldos\EmpleadoEstados;
+use App\Support\Sueldos\EmpleadoVigenciaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
@@ -77,20 +77,7 @@ class PerdidaPersonalReporteService
 
         $query->whereHas('empleado', function ($q) use ($legajoDesde, $legajoHasta, $filtroEmp, $hasta) {
             $q->whereBetween('legajo', [$legajoDesde > 0 ? $legajoDesde : 1, $legajoHasta]);
-            if ($filtroEmp === self::FILTRO_ACTIVOS) {
-                $q->where(function ($qq) use ($hasta) {
-                    $qq->whereNull('estado')
-                        ->orWhere('estado', '!=', EmpleadoEstados::BAJA)
-                        ->orWhere(function ($q2) use ($hasta) {
-                            $q2->where('estado', EmpleadoEstados::BAJA)
-                                ->whereDate('fecha_egreso', '>', $hasta->toDateString());
-                        });
-                });
-            } elseif ($filtroEmp === self::FILTRO_BAJAS) {
-                $q->where('estado', EmpleadoEstados::BAJA)
-                    ->whereNotNull('fecha_egreso')
-                    ->whereDate('fecha_egreso', '<=', $hasta->toDateString());
-            }
+            EmpleadoVigenciaSupport::aplicar($q, $filtroEmp, $hasta);
         });
 
         /** @var Collection<int, PerdidaPersonal> $perdidas */
