@@ -3,10 +3,15 @@
 namespace App\Models\Ventas;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Categoria;
 use App\Models\Stock\Combinacion;
+use App\Models\Stock\Linea;
+use App\Models\Stock\Listaprecio;
 use App\Models\Stock\Modulo;
 use App\Models\Stock\Lote;
+use App\Models\Stock\Subcategoria;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Condicionventa;
 use App\Models\Ventas\Vendedor;

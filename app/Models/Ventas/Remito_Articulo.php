@@ -4,7 +4,9 @@ namespace App\Models\Ventas;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Listaprecio;
 use App\Models\Stock\Lote;
 use App\Traits\Ventas\Remito_ArticuloTrait;
 use OwenIt\Auditing\Contracts\Auditable;

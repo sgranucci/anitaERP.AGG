@@ -6,7 +6,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use OwenIt\Auditing\Contracts\Auditable;
+use App\Models\Configuracion\Impuesto;
+use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Combinacion;
+use App\Models\Stock\Modulo;
 
 class Venta_Emision extends Model implements Auditable
 {

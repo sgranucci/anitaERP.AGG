@@ -3,7 +3,9 @@
 namespace App\Models\Ventas;
 
 use Illuminate\Database\Eloquent\Model;
+use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Listaprecio;
 use App\Models\Stock\Lote;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Condicionventa;

@@ -156,6 +156,21 @@ class Localidad extends Model
 	public function guardarAnita($request, $id) {
         $apiAnita = new ApiAnita();
 
+        // Si el código ya existe en Anita (desfasaje sync), actualizar en lugar de insertar.
+        $consulta = [
+            'acc' => 'list',
+            'tabla' => $this->table,
+            'sistema' => 'shared',
+            'campos' => $this->keyFieldAnita,
+            'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request->codigo."' ",
+        ];
+        $existenteAnita = json_decode($apiAnita->apiCall($consulta));
+        if (is_array($existenteAnita) && count($existenteAnita) > 0) {
+            $this->actualizarAnita($request, $id);
+
+            return;
+        }
+
         $provincia = Provincia::select('codigo')->where('id', $request->provincia_id)->first();
 
         $codigoprovincia = '0';
@@ -216,11 +231,14 @@ class Localidad extends Model
 	}
 
 	public function eliminarAnita($id) {
+        $localidad = self::find($id);
+        $codigo = $localidad?->codigo ?? $id;
+
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'delete', 
                     'sistema' => 'shared',
 					'tabla' => $this->table,
-					'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request->codigo."' " );
+					'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$codigo."' " );
         $apiAnita->apiCallEscritura($data);
 	}
 }
