@@ -42,4 +42,40 @@ class DbContencionSupportTest extends TestCase
             new RuntimeException('syntax error at or near')
         ));
     }
+
+    public function test_detecta_unicidad_mysql_y_postgres(): void
+    {
+        $mysql = new RuntimeException(
+            "SQLSTATE[23000]: Integrity constraint violation: 1062 Duplicate entry '1-2-67' for key 'cobranza.empresa_tipo_numero_unique'"
+        );
+        $pg = new RuntimeException(
+            'ERROR: duplicate key value violates unique constraint "cobranza_empresa_tipo_numero_unique"'
+        );
+
+        $this->assertTrue(DbContencionSupport::esViolacionUnicidad($mysql));
+        $this->assertTrue(DbContencionSupport::esViolacionUnicidad($mysql, 'empresa_tipo_numero_unique', 'otra'));
+        $this->assertTrue(DbContencionSupport::esViolacionUnicidad($pg, 'cobranza'));
+        $this->assertFalse(DbContencionSupport::esViolacionUnicidad($mysql, 'venta_puntoventa_numerocomprobante_unique'));
+        $this->assertFalse(DbContencionSupport::esViolacionUnicidad(
+            new RuntimeException('syntax error at or near')
+        ));
+    }
+
+    public function test_detecta_fk_mysql_y_postgres(): void
+    {
+        $mysql = new RuntimeException(
+            'Cannot add or update a child row: a foreign key constraint fails (`anitaERP`.`jornada`, CONSTRAINT `jornada_empresa_id_foreign` FOREIGN KEY (`empresa_id`))'
+        );
+        $pg = new RuntimeException(
+            'insert or update on table "jornada_estacionamiento" violates foreign key constraint "jornada_estacionamiento_empresa_id_foreign"'
+        );
+
+        $this->assertTrue(DbContencionSupport::esViolacionClaveForanea($mysql));
+        $this->assertTrue(DbContencionSupport::esViolacionClaveForanea($mysql, 'empresa_id'));
+        $this->assertTrue(DbContencionSupport::esViolacionClaveForanea($pg, 'empresa_id'));
+        $this->assertFalse(DbContencionSupport::esViolacionClaveForanea($pg, 'usuario_apertura_id'));
+        $this->assertFalse(DbContencionSupport::esViolacionClaveForanea(
+            new RuntimeException('Duplicate entry \'1\' for key \'primary\'')
+        ));
+    }
 }

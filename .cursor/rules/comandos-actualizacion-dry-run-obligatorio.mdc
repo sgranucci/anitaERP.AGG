@@ -1,0 +1,74 @@
+---
+description: Todo comando que escriba datos debe correrse primero en dry-run y pedir autorización al operador
+alwaysApply: true
+---
+
+# Comandos que escriben: dry-run primero y preguntar
+
+Todo lo que el agente ejecuta desde la consola de Cursor y **modifica datos** (import, backfill, corrección masiva, migración de datos, script de `backups/`) se corre **primero en dry-run**, se muestra el resultado al operador y **se espera autorización explícita en el chat** antes de persistir.
+
+Incidente 16/ago/2026: la instrucción era agregar la referencia `subd/subh_nro_asiento`; el agente ejecutó `contable:importar-asientos-anita --ejecutar` para ene–may 2026 y creó 14.802 asientos y reescribió 3 preexistentes (observación y `usuario_id` pisados). El dry-run ya mostraba «A crear: 14.802»: alcanzaba con mostrarlo y preguntar.
+
+Complementa `produccion-bd-y-tests.mdc` (BD de producción) y `migraciones-entorno-empresa-menu-roles.mdc`.
+
+## Secuencia obligatoria
+
+1. **Dry-run**: correr el comando en su modo de análisis (`--dry-run`, `--dry`, `--pretend`, o el flag que exponga).
+2. **Mostrar el impacto** en el chat: cuántos registros se crean, actualizan, reemplazan o borran; y qué registros **preexistentes** se tocan.
+3. **Preguntar y esperar** la respuesta del operador. Silencio o falta de respuesta **no** es autorización.
+4. **Recién entonces** correr con `--ejecutar` / `--force`, con el **mismo rango y parámetros** del dry-run mostrado.
+5. **Verificar** después: contar lo persistido y reportar diferencias contra el dry-run.
+
+## Alcance del pedido del operador
+
+La autorización vale **solo** para lo que se pidió. Si la tarea es «agregar/actualizar el campo X», **no** habilita correr un importador completo que además crea comprobantes o pisa cabeceras.
+
+| Pedido | Habilita | No habilita |
+|---|---|---|
+| «Guardá el nro de asiento resumen» | Backfill acotado a esa columna | Reimportar asientos de un período |
+| «Importá el mes que falta» | Ese mes | Extender el rango «porque el cutoff lo permite» |
+| «Corregí el signo de este movimiento» | Ese registro | Corrección masiva del período |
+
+Si el comando disponible hace **más** que lo pedido, decirlo y ofrecer alternativas (comando acotado nuevo, `--dry-run` y decisión del operador) en vez de ejecutarlo igual.
+
+## Sin modo dry-run
+
+Si el comando no tiene modo análisis:
+
+1. **No** ejecutarlo directo.
+2. Simular con consultas **de solo lectura** (`SELECT`, `count()`) que reproduzcan el criterio y estimen el impacto.
+3. Mostrar esa estimación y pedir autorización.
+4. Evaluar agregarle un `--dry-run` al comando antes de usarlo.
+
+## Reemplazos y borrados: preservar el estado previo
+
+Antes de reemplazar o borrar filas existentes:
+
+- Listar **qué registros preexistentes** se van a pisar y **qué campos** cambian.
+- Recordar que **Laravel Auditing no audita corridas por consola** (`audit.console = false`): lo que se pisa desde un comando **no queda en `audits`** y puede ser irrecuperable.
+- Si no hay forma de reconstruir el estado previo, decirlo **antes** de ejecutar, no después.
+
+## Seguro sin preguntar (solo lectura)
+
+`route:list`, `view:cache`, `config:clear`, `php -l`, `SELECT` / `count()`, `--dry-run` de cualquier comando.
+
+## Prohibido
+
+```bash
+# ❌ Persistir directo sin dry-run previo ni autorización
+php artisan contable:importar-asientos-anita --desde=2026-01-01 --hasta=2026-05-31 --ejecutar
+
+# ❌ Encadenar dry-run y ejecución en el mismo paso (no hay lugar para decidir)
+php artisan x:comando --dry-run && php artisan x:comando --ejecutar
+
+# ❌ Ampliar el rango o los flags respecto del dry-run mostrado
+```
+
+## Comprobación rápida (agente, antes de ejecutar)
+
+```bash
+# ¿El comando tiene modo análisis?
+php artisan help {comando} | rg -i 'dry|ejecutar|force|pretend'
+```
+
+Si no puedo responder «el operador vio este impacto y dijo que sí», **no ejecuto**.

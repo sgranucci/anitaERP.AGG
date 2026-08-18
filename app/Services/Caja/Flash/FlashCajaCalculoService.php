@@ -51,6 +51,25 @@ final class FlashCajaCalculoService
     }
 
     /**
+     * Quita metadatos de cálculo (desglose, impuestos, bloque) que no van a flash_caja.
+     *
+     * @param  array<string, mixed>  $calculado
+     * @return array<string, mixed>
+     */
+    public static function payloadPersistible(array $calculado): array
+    {
+        unset(
+            $calculado['advertencias_wigos'],
+            $calculado['desglose_wigos'],
+            $calculado['impuestos_rendicion'],
+            $calculado['bloque_calculado'],
+            $calculado['detalle_erp'],
+        );
+
+        return $calculado;
+    }
+
+    /**
      * Calcula solo lo necesario para el campo del modal «origen y movimientos».
      * Evita disparar Wigos + ERP completo cuando se abre AyB/estac/vending/bingo.
      *

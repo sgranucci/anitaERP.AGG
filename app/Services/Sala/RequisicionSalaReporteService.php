@@ -206,7 +206,7 @@ class RequisicionSalaReporteService
                 'rs.detalle as leyenda_cabecera',
                 'a.sku',
                 'a.descripcion as articulo_descripcion',
-                DB::raw('COALESCE(NULLIF(ap.codigo_articulo_proveedor, ""), NULLIF(a.skualternativo, ""), "") as articulo_proveedor'),
+                DB::raw("COALESCE(NULLIF(ap.codigo_articulo_proveedor, ''), NULLIF(a.skualternativo, ''), '') as articulo_proveedor"),
                 'cc.codigo as centrocosto_codigo',
                 'u.nombre as solicitante_nombre',
                 'tl.nombre as tecnico_nombre',

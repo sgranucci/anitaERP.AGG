@@ -24,7 +24,35 @@ $manual = app(ManualGastronomiaService::class);
 $contenido = $manual->meta();
 $capturas = config('manual_gastronomia.capturas', []);
 
-$baseName = 'Manual_Usuario_AnitaERP_Modulo_Gastronomia';
+$soloHuecosArca = in_array('--huecos-arca', $argv ?? [], true);
+if ($soloHuecosArca) {
+    $seccionHuecos = collect($contenido['secciones'])
+        ->first(fn (array $seccion): bool => str_contains((string) ($seccion['titulo'] ?? ''), 'Habilitación de turno y cierres'));
+    if (! is_array($seccionHuecos)) {
+        throw new RuntimeException('No se encontró la sección de control de huecos ARCA.');
+    }
+
+    $contenido['subtitulo'] = 'Anita ERP — Control de huecos ARCA en Gastronomía';
+    $contenido['secciones'] = [
+        [
+            'titulo' => 'Guía rápida para Gastronomía',
+            'parrafos' => [
+                'Esta guía explica qué debe hacer el operador cuando el cierre de turno detecta números de factura faltantes. El aviso no significa por sí solo que una venta se haya perdido: el sistema consulta ARCA al confirmar el cierre y separa comprobantes recuperables, números inexistentes y problemas de conexión.',
+                'Objetivo: cerrar el turno sin inventar comprobantes, recuperar únicamente las facturas que ARCA confirma como autorizadas y dejar trazabilidad para la revisión de la mañana.',
+            ],
+            'items' => [
+                'No emitir notas de crédito manuales para cubrir un hueco.',
+                'Revisar el detalle completo del modal antes de usar «Corregir lote confirmado».',
+                'Si ARCA no responde o falta una cuenta de referencia, cerrar sin sanear y escalar el pendiente.',
+            ],
+        ],
+        $seccionHuecos,
+    ];
+}
+
+$baseName = $soloHuecosArca
+    ? 'Manual_Usuario_AnitaERP_Control_Huecos_ARCA'
+    : 'Manual_Usuario_AnitaERP_Modulo_Gastronomia';
 $docxPath = $outDir . '/' . $baseName . '.docx';
 $pdfPath = $outDir . '/' . $baseName . '.pdf';
 $htmlPath = $outDir . '/' . $baseName . '_preview.html';

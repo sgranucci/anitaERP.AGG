@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -51,8 +52,14 @@ return new class extends Migration
             });
         }
 
-        DB::statement('ALTER TABLE lista_precio_estacionamiento_item MODIFY fecha_vigencia DATE NOT NULL');
-        DB::statement('ALTER TABLE lista_precio_estacionamiento_item MODIFY usuarioultcambio_id BIGINT UNSIGNED NOT NULL');
+        MigrationDialectSupport::statementPorDriver(
+            'ALTER TABLE lista_precio_estacionamiento_item MODIFY fecha_vigencia DATE NOT NULL',
+            'ALTER TABLE lista_precio_estacionamiento_item ALTER COLUMN fecha_vigencia SET NOT NULL'
+        );
+        MigrationDialectSupport::statementPorDriver(
+            'ALTER TABLE lista_precio_estacionamiento_item MODIFY usuarioultcambio_id BIGINT UNSIGNED NOT NULL',
+            'ALTER TABLE lista_precio_estacionamiento_item ALTER COLUMN usuarioultcambio_id SET NOT NULL'
+        );
 
         Schema::table('lista_precio_estacionamiento_item', function (Blueprint $table) {
             $table->foreign('usuarioultcambio_id', 'fk_lp_est_item_usuario')
@@ -116,7 +123,10 @@ return new class extends Migration
             }
         }
 
-        DB::statement('ALTER TABLE lista_precio_estacionamiento MODIFY fecha_vigencia DATE NOT NULL');
+        MigrationDialectSupport::statementPorDriver(
+            'ALTER TABLE lista_precio_estacionamiento MODIFY fecha_vigencia DATE NOT NULL',
+            'ALTER TABLE lista_precio_estacionamiento ALTER COLUMN fecha_vigencia SET NOT NULL'
+        );
 
         Schema::table('lista_precio_estacionamiento', function (Blueprint $table) {
             $table->unique(
@@ -138,24 +148,17 @@ return new class extends Migration
 
     private function foreignKeyExists(string $table, string $name): bool
     {
-        $db = DB::getDatabaseName();
+        foreach (Schema::getForeignKeys($table) as $fk) {
+            if (($fk['name'] ?? '') === $name) {
+                return true;
+            }
+        }
 
-        return (int) DB::table('information_schema.TABLE_CONSTRAINTS')
-            ->where('CONSTRAINT_SCHEMA', $db)
-            ->where('TABLE_NAME', $table)
-            ->where('CONSTRAINT_NAME', $name)
-            ->where('CONSTRAINT_TYPE', 'FOREIGN KEY')
-            ->count() > 0;
+        return false;
     }
 
     private function indexExists(string $table, string $name): bool
     {
-        $db = DB::getDatabaseName();
-
-        return (int) DB::table('information_schema.STATISTICS')
-            ->where('TABLE_SCHEMA', $db)
-            ->where('TABLE_NAME', $table)
-            ->where('INDEX_NAME', $name)
-            ->count() > 0;
+        return Schema::hasIndex($table, $name);
     }
 };

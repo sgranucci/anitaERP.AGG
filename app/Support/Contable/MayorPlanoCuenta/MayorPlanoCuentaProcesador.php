@@ -256,6 +256,8 @@ class MayorPlanoCuentaProcesador
                 'ctamov_filas' => count($datos['ctamov'] ?? []),
                 'subdiario_filas' => count($datos['subdiario'] ?? []),
                 'erp_asientos_filas' => (int) ($datos['timings']['erp_asientos_filas'] ?? 0),
+                'erp_asientos_movimientos_origen' => (int) ($datos['timings']['erp_asientos_movimientos_origen'] ?? 0),
+                'erp_asientos_grupos' => (int) ($datos['timings']['erp_asientos_grupos'] ?? 0),
                 'pago_filas' => count($pago),
                 'pago_leyendas_indexadas' => $leyendasPago->cantidadClaves(),
                 'saldo_mes_cuentas' => count($saldosInicialesPorCuenta),

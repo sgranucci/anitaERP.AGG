@@ -242,7 +242,7 @@ class ViandaConsumoColumnasReporteService
                 'l.articulo_id',
                 DB::raw('MAX(l.sku) as sku'),
                 DB::raw('MAX(l.descripcion) as descripcion'),
-                DB::raw('MAX(COALESCE(l.tipoarticulo_nombre, "")) as tipoarticulo_nombre'),
+                DB::raw("MAX(COALESCE(l.tipoarticulo_nombre, '')) as tipoarticulo_nombre"),
                 DB::raw('MAX(art.tipoarticulo_id) as tipoarticulo_id'),
                 'vc.centrocosto_id',
                 DB::raw('MAX(cc.codigo) as centrocosto_codigo'),

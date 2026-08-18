@@ -244,7 +244,9 @@ final class CierreRendicionBingoAsientoSupport
             $debes[] = $debe > 0.0001 ? $debe : '';
             $haberes[] = $haber > 0.0001 ? $haber : '';
             $monedaIds[] = 1;
-            $centrocostoIds[] = null;
+            $centrocostoIds[] = CierreRendicionBingoCentrocostoSupport::resolverCentrocostoIdParaCuentacontableOError(
+                $cuentaId,
+            );
             $cotizaciones[] = 1.;
             $observaciones[] = $leyenda;
         }

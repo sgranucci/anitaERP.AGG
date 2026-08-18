@@ -1,6 +1,7 @@
 <?php
 
 use App\Support\SuitecrmPermiso;
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -93,12 +94,7 @@ return new class extends Migration
         }
 
         if (Schema::hasColumn('cliente', 'tipoempresa_cliente_id')) {
-            $fkExists = collect(DB::select("
-                SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
-                WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'cliente' AND CONSTRAINT_NAME = 'fk_cliente_tipoempresa_cliente'
-            "))->isNotEmpty();
-
-            if (! $fkExists) {
+            if (! MigrationDialectSupport::tieneForeignKey('cliente', 'fk_cliente_tipoempresa_cliente')) {
                 Schema::table('cliente', function (Blueprint $table) {
                     $table->foreign('tipoempresa_cliente_id', 'fk_cliente_tipoempresa_cliente')
                         ->references('id')

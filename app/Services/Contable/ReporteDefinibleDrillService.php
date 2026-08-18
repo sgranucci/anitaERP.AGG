@@ -6,9 +6,11 @@ namespace App\Services\Contable;
 
 use App\Models\Contable\Cuentacontable;
 use App\Repositories\Contable\ReporteContableRepository;
+use App\Support\Contable\AsientoOrigenProcesoSupport;
 use App\Support\Contable\CuentacontableSaldoMesSupport;
 use App\Support\Contable\ReporteDefinible\ReporteDefinibleProcesador;
 use App\Support\Contable\ReporteDefinible\ReporteDefinibleSaldoReader;
+use App\Support\Navegacion\ModoConsultaUrlSupport;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -128,6 +130,7 @@ class ReporteDefinibleDrillService
                 'e.nombre as empresa', 't.abreviatura as tipo', 'am.monto', 'am.moneda_id', 'am.observacion as detalle',
                 'a.ordencompra_id', 'a.venta_id', 'a.comprobante_proveedor_id', 'a.recepcionproveedor_id',
                 'a.movimientostock_id', 'a.cobranza_id', 'a.pagoproveedor_id',
+                'a.remesa_id', 'a.solicitudpago_id', 'a.caja_movimiento_id',
             ]);
 
         $truncado = $filas->count() > self::LIMITE_ASIENTOS;
@@ -166,28 +169,56 @@ class ReporteDefinibleDrillService
     /**
      * Documento de origen del asiento: el ERP guarda una FK por tipo de comprobante.
      *
-     * @return array{tipo: string, id: int}|null
+     * @return array{tipo: string, id: int, url: string|null}|null
      */
     private function origenDocumento(object $fila): ?array
     {
-        $mapa = [
-            'ordencompra_id' => 'Orden de compra',
-            'comprobante_proveedor_id' => 'Comprobante proveedor',
-            'recepcionproveedor_id' => 'Recepción proveedor',
-            'venta_id' => 'Venta',
-            'cobranza_id' => 'Cobranza',
-            'pagoproveedor_id' => 'Pago proveedor',
-            'movimientostock_id' => 'Movimiento de stock',
-        ];
-
-        foreach ($mapa as $campo => $etiqueta) {
+        foreach (AsientoOrigenProcesoSupport::FKS as $campo => $meta) {
             $valor = (int) ($fila->{$campo} ?? 0);
-            if ($valor > 0) {
-                return ['tipo' => $etiqueta, 'id' => $valor];
+            if ($valor <= 0) {
+                continue;
             }
+
+            return [
+                'tipo' => (string) ($meta['label'] ?? $campo),
+                'id' => $valor,
+                'url' => $this->urlOrigenConsulta((string) ($meta['route'] ?? ''), $valor, $meta['permiso'] ?? []),
+            ];
         }
 
         return null;
+    }
+
+    /**
+     * @param  list<string>  $permisos
+     */
+    private function urlOrigenConsulta(string $routeName, int $id, array $permisos): ?string
+    {
+        if ($routeName === '' || $id <= 0) {
+            return null;
+        }
+        if ($permisos !== []) {
+            $ok = false;
+            foreach ($permisos as $permiso) {
+                if (can($permiso, false)) {
+                    $ok = true;
+                    break;
+                }
+            }
+            if (! $ok) {
+                return null;
+            }
+        }
+        try {
+            $ruta = app('router')->getRoutes()->getByName($routeName);
+            if ($ruta === null || ! str_contains($ruta->uri(), '{id}')) {
+                return null;
+            }
+
+            return ModoConsultaUrlSupport::route($routeName, ['id' => $id]);
+        } catch (\Throwable) {
+            return null;
+        }
     }
 
     /**

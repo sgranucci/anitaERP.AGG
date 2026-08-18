@@ -92,6 +92,13 @@ class FlashCaja extends Model implements Auditable
         return $this->belongsTo(Usuario::class, 'actualizousuario_id');
     }
 
+    /** True si un usuario del ERP lo creó o editó (ABM), no el cron ni el import Anita. */
+    public function fueCargadoPorUsuario(): bool
+    {
+        return (int) ($this->creousuario_id ?? 0) > 0
+            || (int) ($this->actualizousuario_id ?? 0) > 0;
+    }
+
     public function getTotalGamingAttribute(): float
     {
         return round(

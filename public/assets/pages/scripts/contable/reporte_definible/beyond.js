@@ -342,15 +342,23 @@
             });
         }
 
-        var btnAcc = $('rd-btn-sync-acceso');
-        if (btnAcc) {
-            btnAcc.addEventListener('click', function () {
-                var raw = ($('rd-acceso-ids') || {}).value || '';
-                var ids = raw.split(/[\s,;]+/).map(Number).filter(function (n) { return n > 0; });
-                postJson(cfg.urls.syncAccesos, { usuario_ids: ids })
-                    .then(function () { notify('Accesos actualizados'); })
-                    .catch(function (e) { notify(e.message, 'error'); });
+        var jq = window.jQuery;
+        if (jq) {
+            var tabs = jq('.tabs-activas a[data-toggle="tab"]');
+            tabs.on('shown.bs.tab', function (e) {
+                var href = jq(e.target).attr('href');
+                if (href && href.charAt(0) === '#') {
+                    if (window.history && history.replaceState) {
+                        history.replaceState(null, '', href);
+                    }
+                }
             });
+            if (location.hash) {
+                var tabHash = tabs.filter('[href="' + location.hash + '"]');
+                if (tabHash.length) {
+                    tabHash.tab('show');
+                }
+            }
         }
         var selTipo = $('rd-alerta-tipo');
         function toggleCamposEcuacion() {

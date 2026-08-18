@@ -548,7 +548,7 @@ class PropuestaPagoService
             ->where('proveedor_cuentacorriente.empresa_id', $empresaId)
             ->whereNull('proveedor_cuentacorriente.deleted_at')
             ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
-            ->havingRaw('abs('.SqlDialectSupport::coalesce('aplicado', '0').') < abs(proveedor_cuentacorriente.total)');
+            ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());
 
         if ($desde) {
             $query->where(function ($q) use ($desde) {

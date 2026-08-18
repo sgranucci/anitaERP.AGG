@@ -87,13 +87,13 @@ class CapexQuery implements CapexQueryInterface
                                 ->join('usuario', 'usuario.id', '=', 'capex.creousuario_id')
                                 ->with('capex_partidas');
 
-        $capexs->whereIn('empresa_id', $empresas);
+        $capexs->whereIn('capex.empresa_id', $empresas);
 
         if (CapexListadoFiltros::tieneCriteriosAplicados($filtros)) {
             CapexListadoFiltros::aplicar($capexs, $filtros);
         }
 
-        $capexs->orderBy('id', 'desc');
+        $capexs->orderBy('capex.id', 'desc');
 
         if (isset($flPaginando)) {
             if ($flPaginando) {

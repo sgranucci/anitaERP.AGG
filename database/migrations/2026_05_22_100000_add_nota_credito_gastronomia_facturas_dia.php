@@ -44,7 +44,7 @@ return new class extends Migration
         $permisoId = (int) (DB::table('permiso')->where('slug', $slug)->value('id') ?? 0);
         if ($permisoId === 0) {
             $permisoId = (int) DB::table('permiso')->insertGetId([
-                'nombre' => 'Generar nota de crédito (facturas del día gastronomía)',
+                'nombre' => 'Generar NC gastronomía (facturas del día)',
                 'slug' => $slug,
                 'menu_id' => $menuId,
                 'created_at' => now(),

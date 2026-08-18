@@ -3,6 +3,7 @@
 namespace App\Support\Uif;
 
 use App\Models\Uif\Cliente_Uif;
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
 use Carbon\Carbon;
@@ -698,32 +699,32 @@ class ClienteUifListadoFiltros
 
         $desde = self::parsearFecha($valor);
         $hasta = self::parsearFecha($valorHasta);
-        $sub = self::SQL_ULTIMO_PREMIO_FECHA;
+        $fecha = SqlDialectSupport::fecha(self::SQL_ULTIMO_PREMIO_FECHA);
 
         switch ($operador) {
             case 'desde':
                 if ($desde) {
-                    $query->whereRaw("DATE({$sub}) >= ?", [$desde]);
+                    $query->whereRaw("{$fecha} >= ?", [$desde]);
                 }
                 break;
             case 'hasta':
                 if ($desde) {
-                    $query->whereRaw("DATE({$sub}) <= ?", [$desde]);
+                    $query->whereRaw("{$fecha} <= ?", [$desde]);
                 }
                 break;
             case 'entre':
                 if ($desde && $hasta) {
-                    $query->whereRaw("DATE({$sub}) >= ? AND DATE({$sub}) <= ?", [$desde, $hasta]);
+                    $query->whereRaw("{$fecha} >= ? AND {$fecha} <= ?", [$desde, $hasta]);
                 } elseif ($desde) {
-                    $query->whereRaw("DATE({$sub}) >= ?", [$desde]);
+                    $query->whereRaw("{$fecha} >= ?", [$desde]);
                 } elseif ($hasta) {
-                    $query->whereRaw("DATE({$sub}) <= ?", [$hasta]);
+                    $query->whereRaw("{$fecha} <= ?", [$hasta]);
                 }
                 break;
             case 'igual':
             default:
                 if ($desde) {
-                    $query->whereRaw("DATE({$sub}) = ?", [$desde]);
+                    $query->whereRaw("{$fecha} = ?", [$desde]);
                 }
                 break;
         }

@@ -24,7 +24,7 @@ class ReporteDefinibleCoberturaSupport
      *   pct: float,
      *   huerfanas: list<array{codigo: int, codigo_fmt: string, nombre: string}>,
      *   huerfanas_total: int,
-     *   duplicadas: list<array{codigo: int, codigo_fmt: string, rubros: list<string>}>,
+     *   duplicadas: list<array{codigo: int, codigo_fmt: string, nombre: string, rubros: list<string>}>,
      *   sin_cuenta_erp: list<array{codigo: int, codigo_fmt: string, rubro: string}>
      * }
      */
@@ -87,8 +87,9 @@ class ReporteDefinibleCoberturaSupport
             $rubrosUnicos = array_values(array_unique($rubros));
             if (count($rubrosUnicos) > 1) {
                 $duplicadas[] = [
-                    'codigo' => $codigo,
-                    'codigo_fmt' => MayorPlanoCuentaSupport::formatearCodigoCuenta($codigo),
+                    'codigo' => (int) $codigo,
+                    'codigo_fmt' => MayorPlanoCuentaSupport::formatearCodigoCuenta((int) $codigo),
+                    'nombre' => (string) ($planPorCodigo[(int) $codigo]['nombre'] ?? ''),
                     'rubros' => $rubrosUnicos,
                 ];
             }

@@ -22,8 +22,25 @@
     <a href="{{ route('preview_recibo_liquidacion_sueldos', ['id' => $liqId, 'reciboId' => $reciboId, 'multiempresa' => empty($multiempresa) ? 1 : 0]) }}">
         {{ !empty($multiempresa) ? 'Ver solo esta empresa' : 'Incluir otras empresas' }}
     </a>
-    <a href="{{ route('resultado_liquidacion_sueldos', ['id' => $liqId]) }}">Volver al resultado</a>
+    <a href="{{ route('resultado_liquidacion_sueldos', ['id' => $liqId]) }}" id="btn-cerrar-preview-recibo">Cerrar y volver</a>
 </div>
+<script>
+(function () {
+    var btn = document.getElementById('btn-cerrar-preview-recibo');
+    if (!btn) return;
+    btn.addEventListener('click', function (ev) {
+        try {
+            if (window.opener && !window.opener.closed) {
+                ev.preventDefault();
+                window.opener.focus();
+                window.close();
+            }
+        } catch (err) {
+            // same-origin fallido: deja navegar al resultado
+        }
+    });
+})();
+</script>
 @endif
 
 @foreach ($bloques as $idx => $d)

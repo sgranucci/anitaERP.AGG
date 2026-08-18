@@ -324,6 +324,7 @@ final class AnitaAsientoImportService
                 'lineas' => count($asientoPlan['movimientos']),
                 'suma_monto' => $this->sumaMontos($asientoPlan['movimientos']),
                 'anita_origen' => $asientoPlan['anita_origen'] ?? null,
+                'anita_nro_asiento' => $asientoPlan['anita_nro_asiento'] ?? null,
                 'importado_ahora' => true,
             ];
 
@@ -351,15 +352,25 @@ final class AnitaAsientoImportService
 
         if ($analisis['decision'] === 'dejar') {
             $out['duplicados_dejar']++;
-            if (! $dryRun
-                && empty($existente['con_fk_proceso'])
-                && trim((string) ($existente['anita_origen'] ?? '')) === ''
-            ) {
+            $origenExistente = trim((string) ($existente['anita_origen'] ?? ''));
+            $completarMetadatos = empty($existente['con_fk_proceso']) && $origenExistente === '';
+            $completarNroAsiento = (int) ($asientoPlan['anita_nro_asiento'] ?? 0) > 0
+                && (int) ($existente['anita_nro_asiento'] ?? 0) <= 0
+                && ($completarMetadatos || AsientoAnitaMetadatosSupport::esDetalle($origenExistente));
+            if (! $dryRun && ($completarMetadatos || $completarNroAsiento)) {
+                $cambios = $completarMetadatos
+                    ? $this->metadatosAnitaDesdePlan($asientoPlan)
+                    : ['anita_nro_asiento' => (int) $asientoPlan['anita_nro_asiento']];
                 DB::table('asiento')
                     ->where('id', (int) $existente['id'])
-                    ->update($this->metadatosAnitaDesdePlan($asientoPlan));
+                    ->update($cambios);
                 $out['metadatos_anita_actualizados']++;
-                $existentes[$nro]['anita_origen'] = $asientoPlan['anita_origen'] ?? null;
+                if ($completarMetadatos) {
+                    $existentes[$nro]['anita_origen'] = $asientoPlan['anita_origen'] ?? null;
+                }
+                if ($completarNroAsiento) {
+                    $existentes[$nro]['anita_nro_asiento'] = $asientoPlan['anita_nro_asiento'];
+                }
             }
 
             return;
@@ -386,6 +397,9 @@ final class AnitaAsientoImportService
                 'anita_origen' => empty($existente['con_fk_proceso'])
                     ? ($asientoPlan['anita_origen'] ?? null)
                     : ($existente['anita_origen'] ?? null),
+                'anita_nro_asiento' => empty($existente['con_fk_proceso'])
+                    ? ($asientoPlan['anita_nro_asiento'] ?? null)
+                    : ($existente['anita_nro_asiento'] ?? null),
                 'importado_ahora' => true,
             ];
         }
@@ -504,7 +518,7 @@ final class AnitaAsientoImportService
      */
     private function reemplazarExistente(int $asientoId, array $plan, bool $persistirMetadatosAnita): void
     {
-        DB::transaction(function () use ($asientoId, $plan) {
+        DB::transaction(function () use ($asientoId, $plan, $persistirMetadatosAnita) {
             // Borrado y update fila por fila: el delete/update masivo no dispara los observers y
             // dejaba cuentacontable_saldo_mes sumando dos veces el asiento reimportado.
             Asiento_Movimiento::query()
@@ -550,6 +564,7 @@ final class AnitaAsientoImportService
     {
         return [
             'anita_origen' => $plan['anita_origen'] ?? null,
+            'anita_nro_asiento' => $plan['anita_nro_asiento'] ?? null,
             'anita_sistema' => $plan['anita_sistema'] ?? null,
             'anita_tipo' => $plan['anita_tipo'] ?? null,
             'anita_letra' => $plan['anita_letra'] ?? null,
@@ -746,6 +761,7 @@ final class AnitaAsientoImportService
             'anita_origen' => ! empty($primera->subd_origen_subhist)
                 ? AsientoAnitaMetadatosSupport::ORIGEN_SUBHIST
                 : AsientoAnitaMetadatosSupport::ORIGEN_SUBDIARIO,
+            'anita_nro_asiento' => (int) ($primera->subd_nro_asiento ?? 0) ?: null,
             'anita_sistema' => $sistema,
             'anita_tipo' => strtoupper(trim((string) ($primera->subd_tipo ?? ''))) ?: null,
             'anita_letra' => trim((string) ($primera->subd_letra ?? ' ')) ?: ' ',
@@ -898,7 +914,7 @@ final class AnitaAsientoImportService
                     'caja_movimiento_id', 'remesa_id', 'jornada_gastronomia_id',
                     'rendicion_estacionamiento_caja_id', 'transferencia_mercaderia_id',
                     'ordencompra_id', 'recepcionproveedor_id', 'comprobante_proveedor_id',
-                    'pagoproveedor_id', 'anita_origen',
+                    'pagoproveedor_id', 'anita_origen', 'anita_nro_asiento',
                 ]);
 
             foreach ($asientos as $asiento) {
@@ -935,6 +951,7 @@ final class AnitaAsientoImportService
                     'fecha' => Carbon::parse($asiento->fecha)->format('Y-m-d'),
                     'con_fk_proceso' => $conFk,
                     'anita_origen' => $asiento->anita_origen,
+                    'anita_nro_asiento' => $asiento->anita_nro_asiento,
                     'lineas' => count($movs),
                     'suma_monto' => round($suma, 4),
                     'firma_movimientos' => $this->firmaMovimientos($movs),

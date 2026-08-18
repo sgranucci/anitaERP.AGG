@@ -344,7 +344,7 @@ class PropuestaPagoClearingBancarioSupport
             ->where(function ($q) {
                 $q->where('debit_credit_type', 'D')
                     ->orWhere('debit_credit_type', 'Debit')
-                    ->orWhereRaw('UPPER(COALESCE(debit_credit_type,"")) LIKE ?', ['D%']);
+                    ->orWhereRaw("UPPER(COALESCE(debit_credit_type, '')) LIKE ?", ['D%']);
             })
             ->when($usadosMov !== [], fn ($q) => $q->whereNotIn('id', $usadosMov))
             ->orderByDesc('process_date')

@@ -155,6 +155,15 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/contable-reporte-definible-distribucion.log'))
             ->when(fn () => (bool) config('contable.reporte_definible.distribucion.habilitada', true));
 
+        // Cada suscripción de Sueldos define su frecuencia y horario. El comando
+        // mantiene un snapshot auditable y segmenta destinatarios sin mezclar nóminas.
+        $schedule->command('sueldos:distribuir-reportes-definibles', ['--ejecutar' => true])
+            ->hourly()
+            ->runInBackground()
+            ->withoutOverlapping(120)
+            ->appendOutputTo(storage_path('logs/sueldos-reporte-definible-distribucion.log'))
+            ->when(fn () => (bool) config('sueldos.reporte_definible.distribucion.habilitada', true));
+
         $schedule->command('gastronomia:auditoria-anita-diaria')
             ->dailyAt((string) config('gastronomia.auditoria_anita_diaria.hora', '06:30'))
             ->runInBackground()
@@ -313,6 +322,14 @@ class Kernel extends ConsoleKernel
                 ->appendOutputTo(storage_path('logs/solicitudpago-generar-cuotas-schedule.log'))
                 ->when(fn () => (bool) config('solicitudpago.generar_cuotas.habilitado', false));
         }
+
+        // Flash 14:30 de la jornada de ayer (cerrada). Omite empresa si un usuario ya la cargó.
+        $schedule->command('flash:calcular-diario')
+            ->dailyAt((string) config('caja.flash_calculo_diario.hora', '14:30'))
+            ->runInBackground()
+            ->withoutOverlapping(45)
+            ->appendOutputTo(storage_path('logs/flash-calculo-diario-schedule.log'))
+            ->when(fn () => (bool) config('caja.flash_calculo_diario.habilitado', false));
     }
 
     /**

@@ -8,6 +8,7 @@ use App\Models\Compras\Requisicion_Estado;
 use App\Models\Compras\Sector_Legajocompra;
 use App\Models\Sala\RequisicionSalaEstado;
 use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
+use App\Support\Configuracion\ArbolaprobacionListadoFiltros;
 use App\Support\Compras\OrdencompraEstados;
 use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
@@ -68,13 +69,24 @@ class ArbolaprobacionController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function index()
+    public function index(Request $request)
     {
         can('lista-arbol-de-aprobacion');
 
-        $datas = $this->arbolaprobacionRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $empresaDefault = optional($empresa_query->first())->id;
+        $filtros = ArbolaprobacionListadoFiltros::resolverDesdeRequest(
+            $request,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
+        $datas = $this->arbolaprobacionRepository->leeArbolaprobacion($filtros);
 
-        return view('configuracion.arbolaprobacion.index', compact('datas'));
+        return view('configuracion.arbolaprobacion.index', [
+            'datas' => $datas,
+            'filtros' => $filtros,
+            'filtrosQuery' => ArbolaprobacionListadoFiltros::paraQueryString($filtros),
+            'empresa_query' => $empresa_query,
+        ]);
     }
 
     /**

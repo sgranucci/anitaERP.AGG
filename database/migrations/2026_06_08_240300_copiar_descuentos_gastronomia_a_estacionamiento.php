@@ -1,5 +1,7 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -16,10 +18,11 @@ return new class extends Migration
             return;
         }
 
+        $castCodigo = SqlDialectSupport::castEntero('codigo');
         $filas = DB::table('descuento_gastronomia')
-            ->whereRaw('CAST(codigo AS UNSIGNED) > 100')
-            ->whereRaw('CAST(codigo AS UNSIGNED) <= 117')
-            ->orderByRaw('CAST(codigo AS UNSIGNED)')
+            ->whereRaw($castCodigo.' > 100')
+            ->whereRaw($castCodigo.' <= 117')
+            ->orderByRaw($castCodigo)
             ->get();
 
         $nuevoId = 1;
@@ -49,7 +52,7 @@ return new class extends Migration
 
         $maxId = (int) DB::table('descuento_estacionamiento')->max('id');
         if ($maxId > 0) {
-            DB::statement('ALTER TABLE descuento_estacionamiento AUTO_INCREMENT = '.($maxId + 1));
+            MigrationDialectSupport::reiniciarAutoincrement('descuento_estacionamiento', 'id', $maxId + 1);
         }
     }
 
@@ -59,9 +62,10 @@ return new class extends Migration
             return;
         }
 
+        $castCodigo = SqlDialectSupport::castEntero('codigo');
         $codigos = DB::table('descuento_gastronomia')
-            ->whereRaw('CAST(codigo AS UNSIGNED) > 100')
-            ->whereRaw('CAST(codigo AS UNSIGNED) <= 117')
+            ->whereRaw($castCodigo.' > 100')
+            ->whereRaw($castCodigo.' <= 117')
             ->pluck('codigo')
             ->all();
 
@@ -71,6 +75,6 @@ return new class extends Migration
 
         $maxId = (int) DB::table('descuento_estacionamiento')->max('id');
         $next = $maxId > 0 ? $maxId + 1 : 1;
-        DB::statement('ALTER TABLE descuento_estacionamiento AUTO_INCREMENT = '.$next);
+        MigrationDialectSupport::reiniciarAutoincrement('descuento_estacionamiento', 'id', $next);
     }
 };

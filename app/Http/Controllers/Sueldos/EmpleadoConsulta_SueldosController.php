@@ -78,8 +78,8 @@ class EmpleadoConsulta_SueldosController extends Controller
     {
         $permitido = can('listar-empleado-sueldos', false)
             || can('editar-empleado-sueldos', false)
-            || can('listar-dtofallo-sueldos', false)
-            || can('crear-dtofallo-sueldos', false)
+            || can('listar-descuento-fallo-sueldos', false)
+            || can('crear-descuento-fallo-sueldos', false)
             || can('listar-fallo-reporte-sueldos', false)
             || can('listar-perdida-personal-reporte', false);
 

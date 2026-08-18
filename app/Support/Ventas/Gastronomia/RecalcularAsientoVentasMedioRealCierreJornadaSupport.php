@@ -40,7 +40,11 @@ final class RecalcularAsientoVentasMedioRealCierreJornadaSupport
      *
      * @return array<string, mixed>|null null si no hay asiento grabado para esa jornada
      */
-    public function actualizarSiExiste(int $empresaId, string $fechaJornada): ?array
+    public function actualizarSiExiste(
+        int $empresaId,
+        string $fechaJornada,
+        bool $sincronizarAnita = true,
+    ): ?array
     {
         if ($empresaId <= 0 || $fechaJornada === '') {
             return null;
@@ -91,8 +95,10 @@ final class RecalcularAsientoVentasMedioRealCierreJornadaSupport
         $this->asientoMovimientoRepository->update($payload, $asientoId);
 
         $asiento->refresh()->load(['asiento_movimientos.monedas']);
-        $anitaPayload = $this->asientoRepository->armarPayloadAnitaDesdeModelo($asiento);
-        $this->asientoRepository->sincronizarCtamovAnita($anitaPayload);
+        if ($sincronizarAnita) {
+            $anitaPayload = $this->asientoRepository->armarPayloadAnitaDesdeModelo($asiento);
+            $this->asientoRepository->sincronizarCtamovAnita($anitaPayload);
+        }
 
         Log::info('gastronomia.recalcular_asiento_ventas_medio_real.ok', [
             'empresa_id' => $empresaId,
@@ -102,6 +108,7 @@ final class RecalcularAsientoVentasMedioRealCierreJornadaSupport
             'debe' => $debe,
             'haber' => $haber,
             'lineas' => count($payloadLineas['cuentacontable_ids']),
+            'anita_sincronizado' => $sincronizarAnita,
         ]);
 
         return [

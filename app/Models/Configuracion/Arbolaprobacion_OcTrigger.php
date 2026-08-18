@@ -6,9 +6,11 @@ use App\Models\Compras\Sector_Legajocompra;
 use App\Models\Contable\Centrocosto;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use OwenIt\Auditing\Contracts\Auditable;
 
-class Arbolaprobacion_OcTrigger extends Model
+class Arbolaprobacion_OcTrigger extends Model implements Auditable
 {
+    use \OwenIt\Auditing\Auditable;
     use SoftDeletes;
 
     protected $table = 'arbolaprobacion_oc_trigger';

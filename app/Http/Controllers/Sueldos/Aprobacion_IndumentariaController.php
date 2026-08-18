@@ -30,7 +30,7 @@ class Aprobacion_IndumentariaController extends Controller
         $niveles = Aprobacion_Indumentaria_Nivel_Sueldos::query()
             ->with('usuario:id,nombre,usuario')
             ->where('empresa_id', $empresaId)
-            ->orderByRaw('agrupamiento_id IS NULL DESC')
+            ->orderByRaw('(agrupamiento_id IS NULL) DESC')
             ->orderBy('agrupamiento_id')
             ->orderBy('nivel')->orderBy('orden')
             ->get();

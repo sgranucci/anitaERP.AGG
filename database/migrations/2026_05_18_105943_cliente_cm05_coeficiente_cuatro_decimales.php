@@ -1,7 +1,7 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Support\Facades\DB;
 
 class ClienteCm05CoeficienteCuatroDecimales extends Migration
 {
@@ -12,7 +12,10 @@ class ClienteCm05CoeficienteCuatroDecimales extends Migration
      */
     public function up()
     {
-        DB::statement('ALTER TABLE `cliente_cm05` MODIFY `coeficiente` DECIMAL(10,4) NULL');
+        MigrationDialectSupport::statementPorDriver(
+            'ALTER TABLE `cliente_cm05` MODIFY `coeficiente` DECIMAL(10,4) NULL',
+            'ALTER TABLE cliente_cm05 ALTER COLUMN coeficiente TYPE DECIMAL(10,4) USING coeficiente::DECIMAL(10,4)'
+        );
     }
 
     /**
@@ -22,6 +25,9 @@ class ClienteCm05CoeficienteCuatroDecimales extends Migration
      */
     public function down()
     {
-        DB::statement('ALTER TABLE `cliente_cm05` MODIFY `coeficiente` DOUBLE NULL');
+        MigrationDialectSupport::statementPorDriver(
+            'ALTER TABLE `cliente_cm05` MODIFY `coeficiente` DOUBLE NULL',
+            'ALTER TABLE cliente_cm05 ALTER COLUMN coeficiente TYPE DOUBLE PRECISION USING coeficiente::DOUBLE PRECISION'
+        );
     }
 }

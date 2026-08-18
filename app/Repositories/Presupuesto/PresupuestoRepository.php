@@ -3,6 +3,7 @@
 namespace App\Repositories\Presupuesto;
 
 use App\Models\Presupuesto\Presupuesto;
+use App\Support\Configuracion\AnitaSyncIndexSupport;
 use App\Support\Presupuesto\PresupuestoListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Repositories\Presupuesto\Presupuesto_EscenarioRepositoryInterface;
@@ -49,7 +50,7 @@ class PresupuestoRepository implements PresupuestoRepositoryInterface
         }
 
         $hayPresupuesto = $this->model->first();
-        if (! $hayPresupuesto) {
+        if (! $hayPresupuesto && AnitaSyncIndexSupport::autoImportHabilitado()) {
             self::sincronizarConAnita();
         }
 

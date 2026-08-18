@@ -50,7 +50,7 @@ return new class extends Migration
             ->select('puntoventa_id', 'numerocomprobante', DB::raw('COUNT(*) as total'))
             ->whereNull('deleted_at')
             ->groupBy('puntoventa_id', 'numerocomprobante')
-            ->having('total', '>', 1)
+            ->havingRaw('COUNT(*) > 1')
             ->get();
 
         foreach ($grupos as $grupo) {
@@ -117,12 +117,6 @@ return new class extends Migration
 
     private function indexExists(string $table, string $index): bool
     {
-        $rows = DB::select(
-            'SELECT 1 FROM information_schema.statistics
-             WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? LIMIT 1',
-            [$table, $index]
-        );
-
-        return $rows !== [];
+        return \App\Support\Database\MigrationDialectSupport::tieneIndice($table, $index);
     }
 };

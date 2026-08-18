@@ -34,28 +34,54 @@ final class GastronomiaFacturacionService
      * @param  array<string, mixed>  $payload  Datos de emisión (tipotransaccion, PV, ítems, receptor ARCA, etc.)
      * @return array{factura?:string,error?:string,sin_cobranza?:bool,factura_cortesia_total?:bool}
      */
-    public function emitirComprobante(array $payload, CuentaGastronomia $cuenta): array
+    public function emitirComprobante(
+        array $payload,
+        CuentaGastronomia $cuenta,
+        bool $preservarFechasExplicitas = false,
+    ): array
     {
         $cuenta->loadMissing(['lineas', 'descuentoGastronomia']);
 
-        $contextoDescuento = $this->evaluarDescuentoCabecera(
-            $cuenta,
-            $payload['articulo_ids'] ?? [],
-            $payload['cantidades'] ?? [],
-            $payload['precios'] ?? [],
-        );
+        if (! empty($payload['_omitir_descuento_cuenta'])) {
+            unset($payload['_omitir_descuento_cuenta']);
+            $contextoDescuento = [
+                'descuentopie' => (float) ($payload['descuentopie'] ?? 0),
+                'descuentoimportepie' => (float) ($payload['descuentoimportepie'] ?? 0),
+                'factura_cortesia_total' => false,
+                'sin_cobranza' => false,
+            ];
+        } else {
+            $contextoDescuento = $this->evaluarDescuentoCabecera(
+                $cuenta,
+                $payload['articulo_ids'] ?? [],
+                $payload['cantidades'] ?? [],
+                $payload['precios'] ?? [],
+            );
 
-        $payload['descuentopie'] = $contextoDescuento['descuentopie'];
-        $payload['descuentoimportepie'] = $contextoDescuento['descuentoimportepie'];
+            $payload['descuentopie'] = $contextoDescuento['descuentopie'];
+            $payload['descuentoimportepie'] = $contextoDescuento['descuentoimportepie'];
 
-        if ($contextoDescuento['factura_cortesia_total']) {
-            $payload = $this->aplicarReglasCortesiaEnPayload($payload);
+            if ($contextoDescuento['factura_cortesia_total']) {
+                $payload = $this->aplicarReglasCortesiaEnPayload($payload);
+            }
         }
 
-        try {
-            $payload = $this->jornadaService->aplicarFechasAlPayload($payload, (int) $cuenta->empresa_id);
-        } catch (InvalidArgumentException $e) {
-            return ['error' => $e->getMessage(), 'mensaje' => $e->getMessage()];
+        if ($preservarFechasExplicitas) {
+            $fechaFactura = trim((string) ($payload['fechafactura'] ?? ''));
+            $fechaJornada = trim((string) ($payload['fechajornada'] ?? ''));
+            if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaFactura)
+                || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaJornada)) {
+                return [
+                    'error' => 'La emisión con fechas explícitas requiere fechafactura y fechajornada válidas.',
+                    'mensaje' => 'La emisión con fechas explícitas requiere fechafactura y fechajornada válidas.',
+                ];
+            }
+        } else {
+            try {
+                $payload = $this->jornadaService->aplicarFechasAlPayload($payload, (int) $cuenta->empresa_id);
+            } catch (InvalidArgumentException $e) {
+                return ['error' => $e->getMessage(), 'mensaje' => $e->getMessage()];
+            }
         }
 
         $opciones = $this->opcionesEmisionGastronomia();
@@ -63,6 +89,10 @@ final class GastronomiaFacturacionService
         if (! empty($payload['_omitir_numera_anita_fin'])) {
             $opciones['omitir_numera_anita_fin'] = true;
             unset($payload['_omitir_numera_anita_fin']);
+        }
+        if (! empty($payload['_omitir_sincronizacion_anita'])) {
+            $opciones['omitir_sincronizacion_anita'] = true;
+            unset($payload['_omitir_sincronizacion_anita']);
         }
         $payload['opciones_emision'] = $opciones;
         $payload = $this->asegurarVentaReceptorSinClienteMaestro($payload, $cuenta);

@@ -4,6 +4,7 @@ namespace App\Exports\Sueldos;
 
 use App\Repositories\Sueldos\Liquidacion_SueldosRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Sueldos\LiquidacionConfidencialSeguridadSupport;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -23,7 +24,7 @@ class LiquidacionSueldosListadoExport implements FromView, ShouldAutoSize, WithC
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'H';
+    private const COL_ULTIMA = 'I';
 
     private Liquidacion_SueldosRepositoryInterface $repository;
 
@@ -52,6 +53,7 @@ class LiquidacionSueldosListadoExport implements FromView, ShouldAutoSize, WithC
     {
         if ($this->flDesdeIndex) {
             $datas = $this->repository->leeLiquidacion($this->filtros, false);
+            LiquidacionConfidencialSeguridadSupport::aplicarTotalesVisiblesColeccion($datas);
 
             $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($datas);
             $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
@@ -85,6 +87,7 @@ class LiquidacionSueldosListadoExport implements FromView, ShouldAutoSize, WithC
                 'B' => NumberFormat::FORMAT_TEXT,
                 'E' => NumberFormat::FORMAT_TEXT,
                 'H' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1,
+                'I' => NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1,
             ];
         }
 
@@ -125,6 +128,7 @@ class LiquidacionSueldosListadoExport implements FromView, ShouldAutoSize, WithC
                 'F' => 16,
                 'G' => 14,
                 'H' => 16,
+                'I' => 16,
             ];
         }
 

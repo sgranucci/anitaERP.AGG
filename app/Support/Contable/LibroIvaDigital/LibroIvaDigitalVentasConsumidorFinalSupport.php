@@ -121,7 +121,7 @@ final class LibroIvaDigitalVentasConsumidorFinalSupport
             'codigo_documento' => '99',
             'numero_identificacion' => '0',
             'nombre' => stripos((string) $venta->nombre, 'GLOBAL') !== false
-                ? 'VENTA GLOBAL DIARIA'
+                ? '-VENTA GLOBAL DIARIA-'
                 : '-CONSUMIDOR FINAL-',
         ];
     }

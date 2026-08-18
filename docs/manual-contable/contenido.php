@@ -7,7 +7,7 @@
 return [
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Módulo Contable · Cierres y aperturas de período',
-    'version' => '1.0',
+    'version' => '1.2',
     'fecha' => null,
     'empresa' => null,
     'url_base' => null,
@@ -18,6 +18,7 @@ return [
                 'Este manual describe las pantallas de Cierre de período y Aperturas programadas del Módulo Contable en Anita ERP. Están pensadas para que Contaduría bloquee, por empresa y por módulo de negocio, las fechas contables que ya no deben modificarse, y para habilitar excepciones temporales cuando haga falta.',
                 'Menú: Módulo Contable → Aprobaciones y períodos → Cierre de período / Aperturas programadas. Las acciones visibles dependen de los permisos de su usuario.',
                 'Desde el Centro de ayuda o el botón Manual de la pantalla de cierre puede volver a este documento en cualquier momento.',
+                'Este documento cubre solo cierres y aperturas de período. Los asientos de cierre de rendiciones (máquinas, bingo, estacionamiento, vending) tienen manual propio: Contaduría — Cierres de rendiciones. Los estados financieros definibles tienen el Manual de Reportes contables definibles.',
             ],
             'items' => [
                 'El cierre puede ser general (todos los módulos) o por módulo (cobranzas, caja, stock, facturación, etc.).',
@@ -38,7 +39,7 @@ return [
                     ['Cierre de período', 'Registro que bloquea operaciones con fecha anterior o igual a la “fecha hasta”.'],
                     ['Fecha de cierre (fecha hasta)', 'Última fecha incluida en el bloqueo (inclusive). Es editable al programar.'],
                     ['Fecha de ejecución', 'Día en que el sistema (o usted) aplica el cierre programado.'],
-                    ['Hora de ejecución', 'Hora del día. Por defecto 24:00 = fin del día. Vacío también = 24:00.'],
+                    ['Hora de ejecución', 'Hora del día. En pantalla 24:00 significa «fin de día»; el job la traduce a CONTABLE_CIERRE_HORA_FIN_DIA (default 23:50). Vacío = mismo fin de día.'],
                     ['Alcance / módulo', 'Ámbito del cierre: general o un proceso (cobranza, caja, stock, facturación…).'],
                     ['Cierre general', 'Bloquea todos los módulos y congela el snapshot de saldos contables.'],
                     ['Agenda del mes', 'Grilla para programar cierres del mes en curso (o del mes elegido).'],
@@ -97,7 +98,7 @@ return [
                 'headers' => ['Campo / acción', 'Qué hace'],
                 'rows' => [
                     ['Fecha ejecución', 'Día en que se aplica el cierre (automático o manual).'],
-                    ['Hora', 'HH:MM o 24:00 (fin de día). Vacío = 24:00.'],
+                    ['Hora', 'HH:MM o 24:00 (fin de día → CONTABLE_CIERRE_HORA_FIN_DIA, default 23:50). Vacío = fin de día.'],
                     ['Fecha cierre', 'Tope contable inclusive (editable).'],
                     ['Observación', 'Texto libre que queda en el cierre al ejecutarse.'],
                     ['Guardar (disquete)', 'Deja la fila programada en estado pendiente.'],
@@ -109,7 +110,7 @@ return [
                 ],
             ],
             'parrafos2' => [
-                'El job automático del servidor revisa periódicamente las programaciones pendientes y las aplica cuando ya pasó la fecha y la hora configuradas (con 24:00 = fin de ese día).',
+                'El job automático del servidor revisa periódicamente las programaciones pendientes y las aplica cuando ya pasó la fecha y la hora configuradas. Si indicó 24:00 (o dejó vacío), usa la hora de fin de día configurada en el servidor (CONTABLE_CIERRE_HORA_FIN_DIA, típicamente 23:50).',
             ],
         ],
         [
@@ -166,7 +167,7 @@ return [
             'parrafos' => [
                 '¿Por qué no puedo grabar una factura de julio el 2 de agosto? Porque el módulo Facturación está cerrado hasta 31/07 y la fecha de jornada cae en julio.',
                 '¿Puedo cambiar la fecha de cierre de 31/07 a 30/07? Sí, al programar o reprogramar (si aún no está ejecutado).',
-                '¿Qué pasa si programo ejecución el 5/08 a las 24:00? El job aplica el cierre al final de ese día. Antes puede usar Aplicar ahora si la fecha ya es ≤ hoy.',
+                '¿Qué pasa si programo ejecución el 5/08 a las 24:00? El job aplica el cierre al fin de ese día (hora efectiva CONTABLE_CIERRE_HORA_FIN_DIA, default 23:50). Antes puede usar Aplicar ahora si la fecha ya es ≤ hoy.',
                 '¿Cerrar todos ahora cierra cada fila de la agenda? Registra un cierre general que bloquea todos los módulos; las filas de agenda por módulo son independientes.',
             ],
         ],

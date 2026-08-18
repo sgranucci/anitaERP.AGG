@@ -88,7 +88,7 @@ final class GastronomiaControlCorrelatividadAnitaErpService
             );
 
             $ordenadas = $ventasErp->sortBy(fn (Venta $v) => (string) $v->codigo)->values();
-            $huecosPv = $this->detectarHuecosCorrelativos($ordenadas);
+            $huecosPv = $this->detectarHuecosCorrelativos($ordenadas, $pvId);
             foreach ($huecosPv as $row) {
                 $row['pv_codigo'] = $pvCodigo;
                 $row['empresa_id'] = $empresaId;
@@ -394,17 +394,35 @@ final class GastronomiaControlCorrelatividadAnitaErpService
      * @param  Collection<int, Venta>  $ordenadas
      * @return list<array{desde:int,hasta:int,faltantes:string,cantidad:int}>
      */
-    private function detectarHuecosCorrelativos(Collection $ordenadas): array
+    private function detectarHuecosCorrelativos(Collection $ordenadas, int $puntoventaId): array
     {
-        $numeros = [];
-        foreach ($ordenadas as $venta) {
-            $n = (int) ($venta->numerocomprobante ?? 0);
-            if ($n > 0) {
-                $numeros[] = $n;
+        $huecos = [];
+
+        foreach ($ordenadas->groupBy(fn (Venta $venta): int => (int) $venta->tipotransaccion_id) as $tipoId => $ventasTipo) {
+            $numerosCircuito = GastronomiaNumeracionHuecosSupport::normalizarNumeros(
+                $ventasTipo->pluck('numerocomprobante'),
+            );
+            if (count($numerosCircuito) < 2) {
+                continue;
+            }
+
+            $numerosCompartidos = Venta::query()
+                ->where('puntoventa_id', $puntoventaId)
+                ->where('tipotransaccion_id', (int) $tipoId)
+                ->whereNull('deleted_at')
+                ->whereBetween('numerocomprobante', [min($numerosCircuito), max($numerosCircuito)])
+                ->pluck('numerocomprobante');
+
+            foreach (GastronomiaNumeracionHuecosSupport::detectarHuecosSecuenciaCompartida(
+                $numerosCircuito,
+                $numerosCompartidos,
+            ) as $row) {
+                $row['tipotransaccion_id'] = (int) $tipoId;
+                $huecos[] = $row;
             }
         }
 
-        return GastronomiaNumeracionHuecosSupport::detectarHuecosSecuencia($numeros);
+        return $huecos;
     }
 
     /**

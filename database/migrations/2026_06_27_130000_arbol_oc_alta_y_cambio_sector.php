@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -21,9 +22,20 @@ return new class extends Migration
 
         if (Schema::hasColumn('arbolaprobacion', 'oc_gastronomia_centrocosto_id')
             && ! Schema::hasColumn('arbolaprobacion', 'oc_sector_cambio_centrocosto_id')) {
-            DB::statement('ALTER TABLE arbolaprobacion DROP FOREIGN KEY fk_arbolaprobacion_oc_gastro_cc');
-            DB::statement('ALTER TABLE arbolaprobacion CHANGE oc_gastronomia_centrocosto_id oc_sector_cambio_centrocosto_id BIGINT UNSIGNED NULL');
-            DB::statement('ALTER TABLE arbolaprobacion ADD CONSTRAINT fk_arbolaprobacion_oc_sector_cambio_cc FOREIGN KEY (oc_sector_cambio_centrocosto_id) REFERENCES centrocosto(id) ON DELETE SET NULL');
+            MigrationDialectSupport::statementPorDriver(
+                'ALTER TABLE arbolaprobacion DROP FOREIGN KEY fk_arbolaprobacion_oc_gastro_cc',
+                'ALTER TABLE arbolaprobacion DROP CONSTRAINT IF EXISTS fk_arbolaprobacion_oc_gastro_cc'
+            );
+            MigrationDialectSupport::renombrarColumna(
+                'arbolaprobacion',
+                'oc_gastronomia_centrocosto_id',
+                'oc_sector_cambio_centrocosto_id',
+                'BIGINT UNSIGNED NULL'
+            );
+            MigrationDialectSupport::statementPorDriver(
+                'ALTER TABLE arbolaprobacion ADD CONSTRAINT fk_arbolaprobacion_oc_sector_cambio_cc FOREIGN KEY (oc_sector_cambio_centrocosto_id) REFERENCES centrocosto(id) ON DELETE SET NULL',
+                'ALTER TABLE arbolaprobacion ADD CONSTRAINT fk_arbolaprobacion_oc_sector_cambio_cc FOREIGN KEY (oc_sector_cambio_centrocosto_id) REFERENCES centrocosto(id) ON DELETE SET NULL'
+            );
         }
 
         Schema::table('arbolaprobacion', function (Blueprint $table) {

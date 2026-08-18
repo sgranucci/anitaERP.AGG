@@ -26,6 +26,19 @@ return [
     'reclasificar_cheques_diferidos_hora' => env('CAJA_RECLASIFICAR_CHEQUES_DIFERIDOS_HORA', '06:30'),
 
     /*
+     * Flash automático (Wigos + ERP) a las 14:30 sobre la jornada de ayer (cerrada).
+     * Omite la empresa si un usuario ya cargó flash_caja para esa fecha en el ABM.
+     */
+    'flash_calculo_diario' => [
+        'habilitado' => filter_var(env('FLASH_CAJA_CALCULO_DIARIO_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('FLASH_CAJA_CALCULO_DIARIO_HORA', '14:30'),
+        'empresas_ids' => array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) env('FLASH_CAJA_CALCULO_DIARIO_EMPRESAS_IDS', '1,2,3'))
+        ), fn (int $id) => $id > 0)),
+    ],
+
+    /*
      * Clientes VIP caja (Anita base_admin.clivip). Solo importación; no create/update/delete hacia Anita.
      * Reutiliza bridge por empresa de tickettarj/gastronomía (mismo host Informix).
      */

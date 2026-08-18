@@ -10,6 +10,8 @@
     var apiTurnos = app.getAttribute('data-api-turnos') || '';
     var apiEstado = app.getAttribute('data-api-estado') || '';
     var apiCerrar = app.getAttribute('data-api-cerrar') || '';
+    var apiDiagnosticarHuecosArca = app.getAttribute('data-api-diagnosticar-huecos-arca') || '';
+    var apiEjecutarSaneamientoHuecosArca = app.getAttribute('data-api-ejecutar-saneamiento-huecos-arca') || '';
     var apiConciliacion = app.getAttribute('data-api-conciliacion') || '';
     var apiConciliacionMedio = app.getAttribute('data-api-conciliacion-medio') || '';
     var apiConciliacionNc = app.getAttribute('data-api-conciliacion-nc') || '';
@@ -468,20 +470,35 @@
             }
         }
 
-        postJson(apiCerrar, payload).then(function (res) {
-            if (res.ok && res.data.ok) {
-                alert(res.data.mensaje || 'Turno cerrado.');
-                if (res.data.url_comprobante_pdf) {
-                    window.open(res.data.url_comprobante_pdf, '_blank', 'noopener');
+        function enviarCierre() {
+            postJson(apiCerrar, payload).then(function (res) {
+                if (res.ok && res.data.ok) {
+                    alert(res.data.mensaje || 'Turno cerrado.');
+                    if (res.data.url_comprobante_pdf) {
+                        window.open(res.data.url_comprobante_pdf, '_blank', 'noopener');
+                    }
+                    if (window.jQuery) {
+                        window.jQuery('#modal-cierre-turno-central').modal('hide');
+                    }
+                    cargarTurnos();
+                } else {
+                    alert(res.data.error || 'No se pudo cerrar el turno.');
                 }
-                if (window.jQuery) {
-                    window.jQuery('#modal-cierre-turno-central').modal('hide');
-                }
-                cargarTurnos();
-            } else {
-                alert(res.data.error || 'No se pudo cerrar el turno.');
-            }
-        });
+            });
+        }
+
+        if (window.GastronomiaSaneamientoHuecosArca && apiDiagnosticarHuecosArca && apiEjecutarSaneamientoHuecosArca) {
+            window.GastronomiaSaneamientoHuecosArca.interceptarCierre({
+                apiDiagnosticar: apiDiagnosticarHuecosArca,
+                apiEjecutar: apiEjecutarSaneamientoHuecosArca,
+                estado: estadoActual,
+                cantidadHuecosEstado: (estadoActual.huecos_arca_pendientes || {}).cantidad || 0,
+                payloadExtra: { turno_operativo_id: turnoSeleccionadoId },
+                onContinuarCierre: enviarCierre,
+            });
+        } else {
+            enviarCierre();
+        }
     }
 
     var btnGrilla = document.getElementById('btn-grilla-central');

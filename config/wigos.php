@@ -37,9 +37,9 @@ return [
 
     /**
      * Timeout del subproceso PHP para calcDatosFlashTurno (turno M: spDropDiario + tickets).
-     * Biyemas ~35–45s; login_timeout+15 (20s) corta el SP y el flash queda en cero.
+     * Biyemas suele ~35–45s; bajo carga spTicketsDrop pagos puede pasar 90s.
      */
-    'flash_process_timeout' => max(30, (int) env('WIGOS_FLASH_PROCESS_TIMEOUT', 90)),
+    'flash_process_timeout' => max(30, (int) env('WIGOS_FLASH_PROCESS_TIMEOUT', 180)),
 
     'appname' => env('WIGOS_APPNAME', 'AnitaERP-Gastronomia-Wigos'),
 

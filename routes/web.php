@@ -946,8 +946,8 @@ Route::delete('contable/bien-uso/{id}', 'Contable\BienUsoController@eliminar')->
 Route::get('contable/cuentacontable', 'Contable\CuentacontableController@index')->name('cuentacontable');
 Route::get('contable/cuentacontable/crear', 'Contable\CuentacontableController@crear')->name('crear_cuentacontable');
 Route::post('contable/cuentacontable', 'Contable\CuentacontableController@guardar')->name('guardar_cuentacontable');
-Route::get('contable/cuentacontable/{id}/editar', 'Contable\CuentacontableController@editar')->name('editar_cuentacontable');
-Route::put('contable/cuentacontable/{id}', 'Contable\CuentacontableController@actualizar')->name('actualizar_cuentacontable');
+Route::get('contable/cuentacontable/{id}/editar', 'Contable\CuentacontableController@editar')->name('editar_cuentacontable')->middleware('modo.consulta');
+Route::put('contable/cuentacontable/{id}', 'Contable\CuentacontableController@actualizar')->name('actualizar_cuentacontable')->middleware('modo.consulta');
 Route::get('contable/cuentacontable/{id}/eliminar', 'Contable\CuentacontableController@eliminar')->name('eliminar_cuentacontable');
 Route::post('contable/cuentacontable/guardarorden', 'Contable\CuentacontableController@guardarOrden')->name('guardar_orden_contable');
 
@@ -977,8 +977,8 @@ Route::get('contable/asiento/crearimportacion', 'Contable\AsientoImportControlle
 Route::post('contable/asiento/importar/preview', 'Contable\AsientoImportController@preview')->name('asiento_import_preview');
 Route::post('contable/asiento/importar', 'Contable\AsientoImportController@importar')->name('importar_asiento');
 Route::post('contable/asiento', 'Contable\AsientoController@guardar')->name('guardar_asiento');
-Route::get('contable/asiento/{id}/editar', 'Contable\AsientoController@editar')->name('editar_asiento');
-Route::put('contable/actualizarasiento/{id}', 'Contable\AsientoController@actualizar')->name('actualizar_asiento');
+Route::get('contable/asiento/{id}/editar', 'Contable\AsientoController@editar')->name('editar_asiento')->middleware('modo.consulta');
+Route::put('contable/actualizarasiento/{id}', 'Contable\AsientoController@actualizar')->name('actualizar_asiento')->middleware('modo.consulta');
 Route::delete('contable/asiento/{id}', 'Contable\AsientoController@eliminar')->name('eliminar_asiento');
 Route::get('contable/listaasiento/{formato?}/{busqueda?}', 'Contable\AsientoController@listar')->name('lista_asiento');
 Route::get('contable/asiento/{id}/imprimir-pdf', 'Contable\AsientoController@imprimirPdf')->name('imprimir_pdf_asiento');
@@ -1026,8 +1026,8 @@ Route::delete('contable/suss-config/{id}', 'Contable\SussConfigController@elimin
 Route::get('contable/efe-mensual', 'Contable\EfeMensualController@index')->name('efe_mensual');
 Route::get('contable/listar-efe-mensual/{formato}', 'Contable\EfeMensualController@exportar')->name('listar_efe_mensual');
 
-Route::get('contable/mayor-plano-cuenta', 'Contable\MayorPlanoCuentaController@index')->name('mayor_plano_cuenta');
-Route::get('contable/listar-mayor-plano-cuenta/{formato}', 'Contable\MayorPlanoCuentaController@exportar')->name('listar_mayor_plano_cuenta');
+Route::get('contable/mayor-plano-cuenta', 'Contable\MayorPlanoCuentaController@index')->name('mayor_plano_cuenta')->middleware('modo.consulta');
+Route::get('contable/listar-mayor-plano-cuenta/{formato}', 'Contable\MayorPlanoCuentaController@exportar')->name('listar_mayor_plano_cuenta')->middleware('modo.consulta');
 Route::get('contable/cc-vs-mayor-anita', 'Contable\CcVsMayorAnitaController@index')->name('cc_vs_mayor_anita');
 Route::get('contable/listar-cc-vs-mayor-anita/{formato}', 'Contable\CcVsMayorAnitaController@exportar')->name('listar_cc_vs_mayor_anita');
 Route::get('contable/sumas-saldos', 'Contable\SumasSaldosController@index')->name('sumas_saldos');
@@ -1062,16 +1062,16 @@ Route::delete('contable/reporte-definible-conjunto/{id}', 'Contable\ReporteDefin
 Route::post('contable/reporte-definible-conjunto/{id}/cuentas', 'Contable\ReporteDefinibleConjuntoController@guardarCuenta')->name('guardar_cuenta_reporte_definible_conjunto');
 Route::delete('contable/reporte-definible-conjunto/{id}/cuentas/{cuentaId}', 'Contable\ReporteDefinibleConjuntoController@eliminarCuenta')->name('eliminar_cuenta_reporte_definible_conjunto');
 Route::get('contable/reporte-definible/{id}/preview', 'Contable\ReporteDefinibleController@preview')->name('preview_reporte_definible');
-Route::get('contable/reporte-definible/{id}/paridad-anita', 'Contable\ReporteDefinibleController@paridadAnita')->name('paridad_anita_reporte_definible');
+Route::get('contable/reporte-definible/{id}/paridad-anita', 'Contable\ReporteDefinibleController@paridadAnita')->name('paridad_anita_reporte_definible')->middleware('modo.consulta');
 Route::get('contable/listar-paridad-reporte-definible/{id}/{formato?}', 'Contable\ReporteDefinibleController@exportarParidadAnita')->name('listar_paridad_reporte_definible');
 Route::get('contable/reporte-definible/{id}/drill', 'Contable\ReporteDefinibleController@drillJson')->name('drill_reporte_definible');
 Route::post('contable/reporte-definible/{id}/publicar-resultado', 'Contable\ReporteDefinibleController@publicarResultado')->name('publicar_resultado_reporte_definible');
-Route::get('contable/reporte-definible/{id}/publicaciones', 'Contable\ReporteDefinibleController@publicaciones')->name('publicaciones_reporte_definible');
-Route::get('contable/reporte-definible/{id}/publicaciones/{publicacionId}', 'Contable\ReporteDefinibleController@verPublicacion')->name('ver_publicacion_reporte_definible');
+Route::get('contable/reporte-definible/{id}/publicaciones', 'Contable\ReporteDefinibleController@publicaciones')->name('publicaciones_reporte_definible')->middleware('modo.consulta');
+Route::get('contable/reporte-definible/{id}/publicaciones/{publicacionId}', 'Contable\ReporteDefinibleController@verPublicacion')->name('ver_publicacion_reporte_definible')->middleware('modo.consulta');
 Route::post('contable/reporte-definible/{id}/publicar-version', 'Contable\ReporteDefinibleController@publicarVersion')->name('publicar_version_reporte_definible');
 Route::post('contable/reporte-definible/{id}/restaurar-version/{versionId}', 'Contable\ReporteDefinibleController@restaurarVersion')->name('restaurar_version_reporte_definible');
 Route::post('contable/reporte-definible/desde-plantilla', 'Contable\ReporteDefinibleController@crearDesdePlantilla')->name('crear_desde_plantilla_reporte_definible');
-Route::get('contable/reporte-definible/{id}/editar', 'Contable\ReporteDefinibleController@editar')->name('editar_reporte_definible');
+Route::get('contable/reporte-definible/{id}/editar', 'Contable\ReporteDefinibleController@editar')->name('editar_reporte_definible')->middleware('modo.consulta');
 Route::put('contable/reporte-definible/{id}', 'Contable\ReporteDefinibleController@actualizar')->name('actualizar_reporte_definible');
 Route::delete('contable/reporte-definible/{id}', 'Contable\ReporteDefinibleController@eliminar')->name('eliminar_reporte_definible');
 Route::post('contable/reporte-definible/{id}/copiar', 'Contable\ReporteDefinibleController@copiar')->name('copiar_reporte_definible');
@@ -1200,6 +1200,14 @@ Route::post('contable/cierre-periodo/programado/{id}/cancelar', 'Contable\Period
 Route::get('contable/manual', 'Contable\ManualContableController@index')->name('manual_contable');
 Route::get('contable/manual/descargar-pdf', 'Contable\ManualContableController@descargarPdf')->name('manual_contable_pdf');
 Route::get('contable/manual/descargar-word', 'Contable\ManualContableController@descargarWord')->name('manual_contable_word');
+
+Route::get('contable/manual-cierres-rendiciones', 'Contable\ManualCierresRendicionesController@index')->name('manual_cierres_rendiciones');
+Route::get('contable/manual-cierres-rendiciones/descargar-pdf', 'Contable\ManualCierresRendicionesController@descargarPdf')->name('manual_cierres_rendiciones_pdf');
+Route::get('contable/manual-cierres-rendiciones/descargar-word', 'Contable\ManualCierresRendicionesController@descargarWord')->name('manual_cierres_rendiciones_word');
+
+Route::get('contable/reporte-definible/manual', 'Contable\ManualReporteDefinibleController@index')->name('manual_reporte_definible');
+Route::get('contable/reporte-definible/manual/descargar-pdf', 'Contable\ManualReporteDefinibleController@descargarPdf')->name('manual_reporte_definible_pdf');
+Route::get('contable/reporte-definible/manual/descargar-word', 'Contable\ManualReporteDefinibleController@descargarWord')->name('manual_reporte_definible_word');
 
 Route::get('contable/apertura-periodo', 'Contable\AperturaPeriodoContableController@index')->name('apertura_periodo_contable');
 Route::post('contable/apertura-periodo/solicitar', 'Contable\AperturaPeriodoContableController@solicitar')->name('solicitar_apertura_periodo_contable');
@@ -1973,6 +1981,8 @@ Route::post('ventas/gastronomia/habilitacion-turno/api/habilitar', 'Ventas\Habil
 Route::post('ventas/gastronomia/habilitacion-turno/api/actualizar-monto-habilitacion', 'Ventas\HabilitacionTurnoGastronomiaController@apiActualizarMontoHabilitacion')->name('gastronomia_habilitacion_turno_api_actualizar_monto_habilitacion');
 Route::post('ventas/gastronomia/habilitacion-turno/api/cierre-parcial', 'Ventas\HabilitacionTurnoGastronomiaController@apiCierreParcial')->name('gastronomia_habilitacion_turno_api_cierre_parcial');
 Route::post('ventas/gastronomia/habilitacion-turno/api/cerrar', 'Ventas\HabilitacionTurnoGastronomiaController@apiCerrar')->name('gastronomia_habilitacion_turno_api_cerrar');
+Route::post('ventas/gastronomia/habilitacion-turno/api/diagnosticar-huecos-arca', 'Ventas\HabilitacionTurnoGastronomiaController@apiDiagnosticarHuecosArca')->name('gastronomia_habilitacion_turno_api_diagnosticar_huecos_arca');
+Route::post('ventas/gastronomia/habilitacion-turno/api/ejecutar-saneamiento-huecos-arca', 'Ventas\HabilitacionTurnoGastronomiaController@apiEjecutarSaneamientoHuecosArca')->name('gastronomia_habilitacion_turno_api_ejecutar_saneamiento_huecos_arca');
 Route::post('ventas/gastronomia/habilitacion-turno/api/anular-cierre', 'Ventas\HabilitacionTurnoGastronomiaController@apiAnularCierre')->name('gastronomia_habilitacion_turno_api_anular_cierre');
 Route::get('ventas/gastronomia/habilitacion-turno/api/conciliacion-turno', 'Ventas\HabilitacionTurnoGastronomiaController@apiConciliacionTurno')->name('gastronomia_habilitacion_turno_api_conciliacion_turno');
 Route::get('ventas/gastronomia/habilitacion-turno/api/explicar-diferencias-conciliacion', 'Ventas\HabilitacionTurnoGastronomiaController@apiExplicarDiferenciasConciliacion')->name('gastronomia_habilitacion_turno_api_explicar_diferencias');
@@ -2689,6 +2699,9 @@ Route::middleware('bingo.habilitado')->group(function () {
 
     Route::get('caja/posicion-financiera', 'Caja\PosicionFinancieraController@index')->name('posicion_financiera');
     Route::get('caja/listar-posicion-financiera/{formato}', 'Caja\PosicionFinancieraController@exportar')->name('listar_posicion_financiera');
+    Route::get('caja/posicion-financiera/auditoria', 'Caja\PosicionFinancieraController@auditoria')->name('posicion_financiera_auditoria');
+    Route::post('caja/posicion-financiera/confirmar-saldo', 'Caja\PosicionFinancieraController@confirmarSaldo')->name('posicion_financiera_confirmar_saldo');
+    Route::delete('caja/posicion-financiera/saldo/{id}', 'Caja\PosicionFinancieraController@anularSaldo')->name('posicion_financiera_anular_saldo');
 
     Route::get('caja/cotizacion-tesoreria', 'Caja\CotizacionTesoreriaController@index')->name('cotizacion_tesoreria');
     Route::get('caja/lista-cotizacion-tesoreria/{formato?}/{busqueda?}', 'Caja\CotizacionTesoreriaController@listar')->name('lista_cotizacion_tesoreria');
@@ -3432,6 +3445,14 @@ Route::get('stock/manual-recepcion-movstock', 'Stock\ManualRecepcionMovstockCont
 Route::get('stock/manual-recepcion-movstock/descargar-pdf', 'Stock\ManualRecepcionMovstockController@descargarPdf')->name('manual_recepcion_movstock_pdf');
 Route::get('stock/manual-recepcion-movstock/descargar-word', 'Stock\ManualRecepcionMovstockController@descargarWord')->name('manual_recepcion_movstock_word');
 
+Route::get('stock/manual-stock-gastronomia', 'Stock\ManualStockGastronomiaController@index')->name('manual_stock_gastronomia');
+Route::get('stock/manual-stock-gastronomia/descargar-pdf', 'Stock\ManualStockGastronomiaController@descargarPdf')->name('manual_stock_gastronomia_pdf');
+Route::get('stock/manual-stock-gastronomia/descargar-word', 'Stock\ManualStockGastronomiaController@descargarWord')->name('manual_stock_gastronomia_word');
+
+Route::get('caja/manual', 'Caja\ManualCajaController@index')->name('manual_caja');
+Route::get('caja/manual/descargar-pdf', 'Caja\ManualCajaController@descargarPdf')->name('manual_caja_pdf');
+Route::get('caja/manual/descargar-word', 'Caja\ManualCajaController@descargarWord')->name('manual_caja_word');
+
 /*
  * Manual de usuario — Solicitudes de pago
  */
@@ -4154,10 +4175,10 @@ Route::delete('sueldos/fallocaja/{id}', 'Sueldos\Fallocaja_SueldosController@eli
 /*
  * Descuentos por fallos (Anita p-dtofallo.c) y cta. cte. (l-fallo.c).
  */
-Route::get('sueldos/dtofallo', 'Sueldos\DtoFallo_SueldosController@index')->name('consultar_dtofallo_sueldos');
-Route::post('sueldos/dtofallo/generar', 'Sueldos\DtoFallo_SueldosController@generar')->name('generar_dtofallo_sueldos');
-Route::get('sueldos/dtofallo/{id}', 'Sueldos\DtoFallo_SueldosController@ver')->name('ver_dtofallo_sueldos');
-Route::post('sueldos/dtofallo/{id}/anular', 'Sueldos\DtoFallo_SueldosController@anular')->name('anular_dtofallo_sueldos');
+Route::get('sueldos/descuento-fallo', 'Sueldos\DescuentoFallo_SueldosController@index')->name('consultar_descuento_fallo_sueldos');
+Route::post('sueldos/descuento-fallo/generar', 'Sueldos\DescuentoFallo_SueldosController@generar')->name('generar_descuento_fallo_sueldos');
+Route::get('sueldos/descuento-fallo/{id}', 'Sueldos\DescuentoFallo_SueldosController@ver')->name('ver_descuento_fallo_sueldos');
+Route::post('sueldos/descuento-fallo/{id}/anular', 'Sueldos\DescuentoFallo_SueldosController@anular')->name('anular_descuento_fallo_sueldos');
 
 Route::get('sueldos/fallo-reporte', 'Sueldos\FalloReporte_SueldosController@index')->name('fallo_reporte_sueldos');
 Route::get('sueldos/listar-fallo-reporte/{formato}', 'Sueldos\FalloReporte_SueldosController@exportar')
@@ -4220,6 +4241,9 @@ Route::get('sueldos/liquidacion', 'Sueldos\Liquidacion_SueldosController@index')
 Route::get('sueldos/listaliquidacion/{formato?}/{busqueda?}', 'Sueldos\Liquidacion_SueldosController@listar')->name('lista_liquidacion_sueldos');
 Route::post('sueldos/liquidacion/sincronizar-anita', 'Sueldos\Liquidacion_SueldosController@sincronizarAnita')->name('sincronizar_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/crear', 'Sueldos\Liquidacion_SueldosController@crear')->name('crear_liquidacion_sueldos');
+Route::post('sueldos/liquidacion/consultaliquidacion', 'Sueldos\Liquidacion_SueldosController@consultaLiquidacion')->name('consulta_liquidacion_sueldos');
+Route::get('sueldos/liquidacion/leerpornumero/{numero}', 'Sueldos\Liquidacion_SueldosController@leeUnLiquidacionPorNumero')->name('leer_liquidacion_sueldos_por_numero');
+Route::get('sueldos/liquidacion/leer/{id}', 'Sueldos\Liquidacion_SueldosController@leeLiquidacion')->name('leer_liquidacion_sueldos');
 Route::post('sueldos/liquidacion', 'Sueldos\Liquidacion_SueldosController@guardar')->name('guardar_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/{id}/editar', 'Sueldos\Liquidacion_SueldosController@editar')->name('editar_liquidacion_sueldos');
 Route::put('sueldos/liquidacion/{id}', 'Sueldos\Liquidacion_SueldosController@actualizar')->name('actualizar_liquidacion_sueldos');
@@ -4228,6 +4252,9 @@ Route::post('sueldos/liquidacion/{id}/calcular', 'Sueldos\Liquidacion_SueldosCon
 Route::get('sueldos/liquidacion/{id}/resultado', 'Sueldos\Liquidacion_SueldosController@resultado')->name('resultado_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/{id}/recibo/{reciboId}', 'Sueldos\Liquidacion_SueldosController@reciboPreview')->name('preview_recibo_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/{id}/recibo/{reciboId}/pdf', 'Sueldos\Liquidacion_SueldosController@reciboPdf')->name('pdf_recibo_liquidacion_sueldos');
+Route::get('sueldos/liquidacion/{id}/recibos/pdf', 'Sueldos\Liquidacion_SueldosController@recibosPdf')->name('pdf_recibos_liquidacion_sueldos');
+Route::post('sueldos/liquidacion/{id}/confidencial/analizar', 'Sueldos\Liquidacion_SueldosController@analizarConfidencial')->name('analizar_confidencial_liquidacion_sueldos');
+Route::post('sueldos/liquidacion/{id}/confidencial/ejecutar', 'Sueldos\Liquidacion_SueldosController@ejecutarConfidencial')->name('ejecutar_confidencial_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/{id}/trazar/{empleadoId}', 'Sueldos\Liquidacion_SueldosController@trazar')->name('trazar_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/{id}/novedades', 'Sueldos\Novedad_SueldosController@liquidacion')->name('novedades_liquidacion_sueldos');
 Route::delete('sueldos/liquidacion/{id}', 'Sueldos\Liquidacion_SueldosController@eliminar')->name('eliminar_liquidacion_sueldos');
@@ -4341,6 +4368,55 @@ Route::delete('sueldos/tipo-ausencia/{id}', 'Sueldos\Tipo_Ausencia_SueldosContro
 Route::get('sueldos/saldo-vacaciones', 'Sueldos\SaldoVacaciones_SueldosController@index')->name('saldo_vacaciones_sueldos');
 Route::get('sueldos/listar-saldo-vacaciones/{formato}', 'Sueldos\SaldoVacaciones_SueldosController@exportar')->name('listar_saldo_vacaciones_sueldos');
 Route::post('sueldos/saldo-vacaciones/recalcular', 'Sueldos\SaldoVacaciones_SueldosController@recalcular')->name('recalcular_saldo_vacaciones_sueldos');
+
+/*
+ * Listados definibles de sueldos (Anita listmae/listcol/listcon).
+ */
+Route::get('sueldos/reporte-definible', 'Sueldos\ReporteSueldosDefinibleController@index')->name('reporte_sueldos_definible');
+Route::get('sueldos/lista-reporte-sueldos-definible/{formato?}/{busqueda?}', 'Sueldos\ReporteSueldosDefinibleController@listar')->name('lista_reporte_sueldos_definible');
+Route::get('sueldos/reporte-definible/crear', 'Sueldos\ReporteSueldosDefinibleController@crear')->name('crear_reporte_sueldos_definible');
+Route::post('sueldos/reporte-definible/consulta-asociado', 'Sueldos\ReporteSueldosDefinibleController@consultaAsociado')->name('consulta_asociado_reporte_sueldos_definible');
+Route::get('sueldos/reporte-definible/leer-asociado/{tipo}/{codigo}', 'Sueldos\ReporteSueldosDefinibleController@leerAsociado')->name('leer_asociado_reporte_sueldos_definible');
+Route::post('sueldos/reporte-definible', 'Sueldos\ReporteSueldosDefinibleController@guardar')->name('guardar_reporte_sueldos_definible');
+Route::post('sueldos/reporte-definible/importar-anita', 'Sueldos\ReporteSueldosDefinibleController@importarAnita')->name('importar_reporte_sueldos_definible_anita');
+Route::post('sueldos/reporte-definible/desde-plantilla', 'Sueldos\ReporteSueldosDefinibleController@crearDesdePlantilla')->name('crear_desde_plantilla_reporte_sueldos_definible');
+Route::get('sueldos/reporte-definible/manual', 'Sueldos\ReporteSueldosDefinibleController@manual')->name('manual_reporte_sueldos_definible');
+Route::get('sueldos/reporte-definible/ejecutar/{id?}', 'Sueldos\ReporteSueldosDefinibleController@ejecutar')->name('ejecutar_reporte_sueldos_definible');
+Route::get('sueldos/listar-paridad-reporte-sueldos-definible/{id}/{formato?}', 'Sueldos\ReporteSueldosDefinibleController@exportarParidadAnita')->name('listar_paridad_reporte_sueldos_definible');
+Route::post('sueldos/reporte-definible/{id}/encolar', 'Sueldos\ReporteSueldosDefinibleController@encolar')->name('encolar_reporte_sueldos_definible');
+Route::get('sueldos/listar-reporte-sueldos-definible/{id}/{formato}', 'Sueldos\ReporteSueldosDefinibleController@exportar')->name('listar_reporte_sueldos_definible');
+Route::get('sueldos/reporte-definible/{id}/preview-estructura', 'Sueldos\ReporteSueldosDefinibleController@previewEstructura')->name('preview_estructura_reporte_sueldos_definible');
+Route::get('sueldos/reporte-definible/{id}/paridad', 'Sueldos\ReporteSueldosDefinibleController@paridadAnita')->name('paridad_reporte_sueldos_definible');
+Route::post('sueldos/reporte-definible/{id}/paridad/certificar', 'Sueldos\ReporteSueldosDefinibleController@certificarParidadAnita')->name('certificar_paridad_reporte_sueldos_definible');
+Route::get('sueldos/reporte-definible/{id}/paridad/acta/{certificacionId}', 'Sueldos\ReporteSueldosDefinibleController@actaCertificacionParidad')->name('acta_paridad_reporte_sueldos_definible');
+Route::get('sueldos/reporte-definible/{id}/drill', 'Sueldos\ReporteSueldosDefinibleController@drillJson')->name('drill_reporte_sueldos_definible');
+Route::get('sueldos/reporte-definible/{id}/editar', 'Sueldos\ReporteSueldosDefinibleController@editar')->name('editar_reporte_sueldos_definible');
+Route::get('sueldos/reporte-definible/{id}/dashboard', 'Sueldos\ReporteSueldosDefinibleDashboardController@show')->name('dashboard_reporte_sueldos_definible');
+Route::post('sueldos/reporte-definible/{id}/dashboard', 'Sueldos\ReporteSueldosDefinibleDashboardController@guardar')->name('guardar_dashboard_reporte_sueldos_definible');
+Route::post('sueldos/reporte-definible/{id}/pivot', 'Sueldos\ReporteSueldosDefinibleDashboardController@pivot')->name('pivot_reporte_sueldos_definible');
+Route::get('sueldos/reporte-definible/{id}/pivot/{uuid}', 'Sueldos\ReporteSueldosDefinibleDashboardController@pivotEstado')->name('estado_pivot_reporte_sueldos_definible');
+Route::post('sueldos/reporte-definible/{id}/publicar-dataset/{datasetId}', 'Sueldos\ReporteSueldosDefinibleController@publicarDataset')->name('publicar_dataset_reporte_sueldos_definible');
+
+Route::get('admin/api-tokens', 'Admin\ApiTokenUsuarioController@index')->name('api_token_usuario');
+Route::post('admin/api-tokens', 'Admin\ApiTokenUsuarioController@store')->name('crear_api_token_usuario');
+Route::delete('admin/api-tokens/{tokenId}', 'Admin\ApiTokenUsuarioController@destroy')->name('revocar_api_token_usuario');
+Route::put('sueldos/reporte-definible/{id}', 'Sueldos\ReporteSueldosDefinibleController@actualizar')->name('actualizar_reporte_sueldos_definible');
+Route::delete('sueldos/reporte-definible/{id}', 'Sueldos\ReporteSueldosDefinibleController@eliminar')->name('eliminar_reporte_sueldos_definible');
+Route::post('sueldos/reporte-definible/{id}/copiar', 'Sueldos\ReporteSueldosDefinibleController@copiar')->name('copiar_reporte_sueldos_definible');
+Route::post('sueldos/reporte-definible/{id}/columna', 'Sueldos\ReporteSueldosDefinibleController@guardarColumna')->name('guardar_columna_reporte_sueldos_definible');
+Route::delete('sueldos/reporte-definible/{id}/columna/{columnaId}', 'Sueldos\ReporteSueldosDefinibleController@eliminarColumna')->name('eliminar_columna_reporte_sueldos_definible');
+Route::post('sueldos/reporte-definible/{id}/publicar-version', 'Sueldos\ReporteSueldosDefinibleController@publicarVersion')->name('publicar_version_reporte_sueldos_definible');
+Route::post('sueldos/reporte-definible/{id}/restaurar-version/{versionId}', 'Sueldos\ReporteSueldosDefinibleController@restaurarVersion')->name('restaurar_version_reporte_sueldos_definible');
+Route::post('sueldos/reporte-definible/{id}/acl', 'Sueldos\ReporteSueldosDefinibleController@guardarAcl')->name('guardar_acl_reporte_sueldos_definible');
+Route::post('sueldos/reporte-definible/{id}/suscripcion', 'Sueldos\ReporteSueldosDefinibleController@guardarSuscripcion')->name('guardar_suscripcion_reporte_sueldos_definible');
+Route::post('sueldos/reporte-definible/{id}/suscripcion/{suscripcionId}/probar', 'Sueldos\ReporteSueldosDefinibleController@probarSuscripcion')->name('probar_suscripcion_reporte_sueldos_definible');
+Route::delete('sueldos/reporte-definible/{id}/suscripcion/{suscripcionId}', 'Sueldos\ReporteSueldosDefinibleController@eliminarSuscripcion')->name('eliminar_suscripcion_reporte_sueldos_definible');
+Route::post('sueldos/reporte-definible/{id}/suscripcion/{suscripcionId}/destinatario', 'Sueldos\ReporteSueldosDefinibleController@guardarDestinatarioSuscripcion')->name('guardar_destinatario_suscripcion_reporte_sueldos_definible');
+Route::delete('sueldos/reporte-definible/{id}/suscripcion/{suscripcionId}/destinatario/{destinatarioId}', 'Sueldos\ReporteSueldosDefinibleController@eliminarDestinatarioSuscripcion')->name('eliminar_destinatario_suscripcion_reporte_sueldos_definible');
+Route::post('sueldos/reporte-definible/{id}/alerta', 'Sueldos\ReporteSueldosDefinibleController@guardarAlerta')->name('guardar_alerta_reporte_sueldos_definible');
+Route::delete('sueldos/reporte-definible/{id}/alerta/{alertaId}', 'Sueldos\ReporteSueldosDefinibleController@eliminarAlerta')->name('eliminar_alerta_reporte_sueldos_definible');
+Route::post('sueldos/reporte-definible/{id}/variante', 'Sueldos\ReporteSueldosDefinibleController@guardarVariante')->name('guardar_variante_reporte_sueldos_definible');
+Route::delete('sueldos/reporte-definible/{id}/variante/{varianteId}', 'Sueldos\ReporteSueldosDefinibleController@eliminarVariante')->name('eliminar_variante_reporte_sueldos_definible');
 
 /*
  * Indumentaria: ABM de prendas + matriz de variantes (color × talle → SKU).

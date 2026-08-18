@@ -9,6 +9,7 @@ use App\Models\Stock\Articulo_Saldo_Deposito;
 use App\Models\Stock\Depmae;
 use App\Support\Compras\ArticuloProveedorOperativoSupport;
 use App\Support\Compras\OrdencompraEstados;
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Stock\ArticuloUsoInsumoSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Carbon\Carbon;
@@ -464,13 +465,7 @@ final class PedidoConsumoSectorProyeccionSupport
         }
 
         if ($soloSabados) {
-            // Portable-ish: DAYOFWEEK MySQL (1=domingo … 7=sábado) → 7; SQLite strftime '%w' = 6.
-            $driver = DB::connection()->getDriverName();
-            if ($driver === 'sqlite') {
-                $q->whereRaw("strftime('%w', am.fecha) = '6'");
-            } else {
-                $q->whereRaw('DAYOFWEEK(am.fecha) = 7');
-            }
+            $q->whereRaw(SqlDialectSupport::esSabado('am.fecha'));
         }
 
         $rows = $q->groupBy('am.articulo_id')

@@ -97,4 +97,19 @@ Casilla `PRECARGA_MAIL_USUARIO` · label `PRECARGA_MAIL_CARPETA`.
 - [ ] A7 paridad API vs IA en al menos un NC y un ND reales
 - [ ] Portal card mail visible; ≥1 precarga origen Mail
 - [ ] Inbox personal no procesa basura
-- [ ] G2 proyección pedido consumo con CC + depósito reales
+- [x] G2 proyección pedido consumo con CC + depósito reales
+
+## Corte de verificación — 16/08/2026
+
+- **A3**: NC real confirmada por el pipeline (`docu_0000361656.pdf`) y persistida como precarga 233, tipo `CIB`, OC 221022, origen `PORTAL`.
+- **A4**: detección ND validada con entradas de texto; falta un PDF ND real disponible para cerrar el caso integral.
+- **A5–A6**: pasaron los códigos AFIP NC 003/008/013 y ND 002/007/012.
+- **A7**: paridad exacta API/agente para OC 221022: `FIB` (15 conceptos), `CIB` (13) y `DIB` (13).
+- **A8/B2**: el preview compone «Nota de crédito/débito → C*/D*»; existe NC real del portal.
+- **C1–C8 bloqueado (16/08 noche)**: casilla apuntada a `AnitaERP@grupoagg.com` (misma de SMTP; `PRECARGA_MAIL_PASSWORD` vacío → `MAIL_PASSWORD`). Dry-run falló con `NO AUTHENTICATE failed` en IMAP `outlook.office365.com:993`. Schedule sigue con `PRECARGA_MAIL_INGESTA_HABILITADA=false`. No hay precargas `MAIL`.
+- **D**: existen 22 eventos pendientes y 1 resuelto. KPIs visibles: 862 decisiones, 840 pendientes y 11 errores. No se cambiaron estados durante esta verificación.
+- **E**: router y grounding validados para manual, mayor cuenta+CC, mayor por OC, KPIs, OC vencidas y RQ sin OC. Los mayores no tuvieron movimientos en el rango consultado. Rutas del manual presentes y vistas Blade compiladas.
+- **Permisos**: FAB para administrador, Compras, Contaduría, Impuestos y Logística; acceso contable solo para administrador, Contaduría e Impuestos.
+- **F1–F3**: endpoints MCP validados en controller: token válido → HTTP 200 con 9 tools; token inválido → HTTP 401. Con autorización del operador, F3 ejecutó `consultar_contexto_operativo_nl` («cómo cargo una OC»), resolvió `consultar_manual` y creó exactamente una decisión (`ai_decision.id=871`), sin documentos operativos.
+- **G1/G2/G3/G5**: depósito obligatorio validado; proyección real CC 85/depósito 8 generó 80 líneas de compra. Con depósito origen 1862, el split dio 75 líneas compra + 5 sala. Hooks de evento/sábados/lead time/buffer reflejados en `_meta`.
+- **Escrituras no ejecutadas**: el operador decidió dejar pendiente D1 (evento 2: 40 anomalías altas de conciliación) y no crear la requisición real de G4.

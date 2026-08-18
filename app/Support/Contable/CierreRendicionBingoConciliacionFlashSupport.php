@@ -379,9 +379,13 @@ final class CierreRendicionBingoConciliacionFlashSupport
                 $valores['c'.$concepto.'_real'] = $real;
                 $valores['c'.$concepto.'_asegurado'] = round($pagado - $real, 2);
             } elseif ($tipo === CierreRendicionBingoConceptoTipos::PAGO) {
-                // Listado p-vtabingo: solo real de rendpremio (NOIMPCERO). El % de
-                // recaudación se usa en canones del asiento, no en la grilla diaria.
-                $valores['c'.$concepto.'_real'] = $real;
+                // Sin premio cargado (habitual en Municipalidad/Lotería): misma base
+                // que el asiento de canones — % sobre recaudación del día.
+                $valores['c'.$concepto.'_real'] = CierreRendicionBingoTotalesSupport::importePagoConcepto(
+                    $meta,
+                    $acum,
+                    $recaudacion,
+                );
             }
         }
 

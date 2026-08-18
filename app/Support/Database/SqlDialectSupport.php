@@ -33,6 +33,54 @@ final class SqlDialectSupport
         return 'CAST('.$columna.' AS '.$tipo.')';
     }
 
+    /**
+     * CAST a texto (filtros LIKE / TRIM sobre numéricos o fechas).
+     * MySQL: CHAR — PostgreSQL: TEXT.
+     */
+    public static function castTexto(string $columna, ?string $connection = null): string
+    {
+        $tipo = self::esPostgres($connection) ? 'TEXT' : 'CHAR';
+
+        return 'CAST('.$columna.' AS '.$tipo.')';
+    }
+
+    /**
+     * Texto o vacío: CAST + COALESCE(..., '').
+     * Evita CONCAT(entero, '') que PostgreSQL rechaza (MySQL casteaba implícito).
+     */
+    public static function textoOVacio(string $columna, ?string $connection = null): string
+    {
+        return 'COALESCE('.self::castTexto($columna, $connection).", '')";
+    }
+
+    /**
+     * Columna coincide con regex (usar con binding `?`).
+     * MySQL: col REGEXP ? — PostgreSQL: col ~ ?
+     * El patrón debe ser POSIX simple compatible (ej. ^[0-9]+$).
+     */
+    public static function coincideRegex(string $columna, ?string $connection = null): string
+    {
+        return self::esPostgres($connection)
+            ? $columna.' ~ ?'
+            : $columna.' REGEXP ?';
+    }
+
+    /**
+     * Igualdad sensible a mayúsculas/minúsculas (y bytes en MySQL).
+     * MySQL collations ci: BINARY a = BINARY b — PostgreSQL: a = b (ya case-sensitive).
+     */
+    public static function igualdadCaseSensitive(
+        string $columnaIzq,
+        string $columnaDer,
+        ?string $connection = null
+    ): string {
+        if (self::esPostgres($connection)) {
+            return $columnaIzq.' = '.$columnaDer;
+        }
+
+        return 'BINARY '.$columnaIzq.' = BINARY '.$columnaDer;
+    }
+
     /** Expresión ORDER BY por código numérico ascendente. */
     public static function ordenCodigoAsc(string $columna, ?string $connection = null): string
     {
@@ -228,5 +276,41 @@ final class SqlDialectSupport
         $pos = self::posicion($haystackExpr, $literal, $connection);
 
         return 'SUBSTRING('.$haystackExpr.', '.$pos.' + '.$offsetTrasLiteral.', '.$longitud.')';
+    }
+
+    /**
+     * Condición: la fecha cae en sábado.
+     * MySQL: DAYOFWEEK = 7 — PostgreSQL: DOW = 6 — SQLite: strftime %w = 6.
+     */
+    public static function esSabado(string $columna, ?string $connection = null): string
+    {
+        $driver = self::driver($connection);
+
+        return match ($driver) {
+            'pgsql' => 'EXTRACT(DOW FROM '.$columna.') = 6',
+            'sqlite' => "strftime('%w', ".$columna.") = '6'",
+            default => 'DAYOFWEEK('.$columna.') = 7',
+        };
+    }
+
+    /**
+     * Condición WHERE portable: saldo de CC proveedor aún no cancelado del todo.
+     * Evita HAVING sobre alias de subquery (MySQL lo permite sin GROUP BY; PG no).
+     */
+    public static function sqlSaldoPendienteProveedorCc(): string
+    {
+        return 'ABS(COALESCE((SELECT SUM(total) FROM proveedor_cuentacorriente_aplicacion'
+            .' WHERE proveedor_cuentacorriente_id = proveedor_cuentacorriente.id), 0))'
+            .' < ABS(proveedor_cuentacorriente.total)';
+    }
+
+    /**
+     * Condición WHERE portable: saldo de CC cliente aún no cancelado del todo.
+     */
+    public static function sqlSaldoPendienteClienteCc(): string
+    {
+        return 'ABS(COALESCE((SELECT SUM(total) FROM cliente_cuentacorriente_aplicacion'
+            .' WHERE cliente_cuentacorriente_id = cliente_cuentacorriente.id), 0))'
+            .' < ABS(cliente_cuentacorriente.total)';
     }
 }

@@ -206,7 +206,7 @@ class Caja_MovimientoQuery implements Caja_MovimientoQueryInterface
                 $clausulaLike, $clausulaIgual) {
                 $query->where($clausulaLike)->orWhere($clausulaIgual);
             })
-            ->orderBy('id', 'DESC');
+            ->orderBy('caja_movimiento_cuentacaja.id', 'DESC');
 
         if (isset($flPaginando))
         {

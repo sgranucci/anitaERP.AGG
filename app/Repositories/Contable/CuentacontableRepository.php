@@ -11,6 +11,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Caja\ConceptogastoRepositoryInterface;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
+use App\Support\Configuracion\AnitaSyncIndexSupport;
 use Auth;
 use Exception;
 
@@ -48,8 +49,9 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
     {
         $hay_cuentacontable = Cuentacontable::first();
 
-        if (!$hay_cuentacontable)
+        if (! $hay_cuentacontable && AnitaSyncIndexSupport::autoImportHabilitado()) {
             self::sincronizarConAnita();
+        }
 
         $empresa_query = $this->empresaRepository->allFiltrado();
 

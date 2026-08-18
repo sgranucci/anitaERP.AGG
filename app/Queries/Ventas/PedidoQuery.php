@@ -32,7 +32,7 @@ class PedidoQuery implements PedidoQueryInterface
         ini_set('max_execution_time', '0');
 
         $pedidos = $this->model->with('clientes:id,nombre')->with('mventas:id,nombre')
-                                ->orderBy('id','desc')
+                                ->orderBy('pedido.id','desc')
                                 ->with('pedido_combinaciones')
                                 ->with('pedido_articulos')
                                 ->get();
@@ -46,7 +46,7 @@ class PedidoQuery implements PedidoQueryInterface
 
         return $this->queryPedidoIndexListado($busqueda, $estado, $reparto, $fechaentrega)
             ->with('pedido_articulos')
-            ->orderBy('id', 'desc')
+            ->orderBy('pedido.id', 'desc')
             ->paginate(10);
     }
 
@@ -57,7 +57,7 @@ class PedidoQuery implements PedidoQueryInterface
 
         return $this->queryPedidoIndexListado($busqueda, $estado, $reparto, $fechaentrega)
             ->with('pedido_articulos')
-            ->orderBy('id', 'desc')
+            ->orderBy('pedido.id', 'desc')
             ->get();
     }
 
@@ -67,7 +67,7 @@ class PedidoQuery implements PedidoQueryInterface
         ini_set('max_execution_time', '0');
 
         return $this->queryPedidoIndexListado($busqueda, $estado, $reparto, $fechaentrega)
-            ->orderBy('id', 'desc')
+            ->orderBy('pedido.id', 'desc')
             ->cursor();
     }
 

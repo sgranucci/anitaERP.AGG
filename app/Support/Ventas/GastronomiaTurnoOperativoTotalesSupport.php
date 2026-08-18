@@ -19,6 +19,12 @@ final class GastronomiaTurnoOperativoTotalesSupport
 {
     private const TOLERANCIA_CONCILIACION = 0.02;
 
+    /** @var list<string> */
+    private const ORIGENES_AJUSTE_FISCAL_RETROACTIVO = [
+        'recuperacion_arca',
+        'recuperacion_arca_ajuste',
+    ];
+
     /**
      * Las notas de crédito gastronomía se discriminan como un bloque aparte de los medios
      * de pago tradicionales: `por_medio_pago` contiene únicamente las cobranzas de
@@ -106,11 +112,12 @@ final class GastronomiaTurnoOperativoTotalesSupport
 
         foreach ($emisiones as $em) {
             $venta = $em->venta;
-            if (! $venta?->created_at) {
+            $fechaImputacion = self::fechaImputacionTurno($em);
+            if ($fechaImputacion === null) {
                 continue;
             }
 
-            $ts = $venta->created_at;
+            $ts = $fechaImputacion;
             $cubierta = false;
             foreach ($ventanas as $ventana) {
                 if ($ts < $ventana->habilitacion_en) {
@@ -480,10 +487,18 @@ final class GastronomiaTurnoOperativoTotalesSupport
                             $legacy->whereNull('fechajornada')
                                 ->whereDate('fecha', $fechaJornada);
                         });
-                })
-                    ->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId))
+                })->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId));
+            })
+            ->where(function ($alcance) use ($desdeInclusive, $hastaInclusive) {
+                $alcance->whereHas('venta', fn ($v) => $v
                     ->where('created_at', '>=', $desdeInclusive)
-                    ->where('created_at', '<=', $hastaInclusive);
+                    ->where('created_at', '<=', $hastaInclusive))
+                    ->orWhere(function ($ajuste) use ($desdeInclusive, $hastaInclusive) {
+                        $ajuste->whereIn('origen_pos', self::ORIGENES_AJUSTE_FISCAL_RETROACTIVO)
+                            ->whereHas('cuenta', fn ($cuenta) => $cuenta
+                                ->where('created_at', '>=', $desdeInclusive)
+                                ->where('created_at', '<=', $hastaInclusive));
+                    });
             })
             ->with([
                 'venta.cobranzasDirectas',
@@ -842,19 +857,50 @@ final class GastronomiaTurnoOperativoTotalesSupport
                                 ->whereDate('fecha', $fechaJornada);
                         });
                 })->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId));
-                if ($desdeHabilitacion !== null) {
-                    $v->where('created_at', '>=', $desdeHabilitacion);
-                }
-                if ($hastaInclusive !== null) {
-                    $v->where('created_at', '<=', $hastaInclusive);
-                }
             })
+            ->when(
+                $desdeHabilitacion !== null || $hastaInclusive !== null,
+                function ($query) use ($desdeHabilitacion, $hastaInclusive) {
+                    $query->where(function ($alcance) use ($desdeHabilitacion, $hastaInclusive) {
+                        $alcance->whereHas('venta', function ($venta) use ($desdeHabilitacion, $hastaInclusive) {
+                            if ($desdeHabilitacion !== null) {
+                                $venta->where('created_at', '>=', $desdeHabilitacion);
+                            }
+                            if ($hastaInclusive !== null) {
+                                $venta->where('created_at', '<=', $hastaInclusive);
+                            }
+                        })->orWhere(function ($ajuste) use ($desdeHabilitacion, $hastaInclusive) {
+                            $ajuste->whereIn('origen_pos', self::ORIGENES_AJUSTE_FISCAL_RETROACTIVO)
+                                ->whereHas('cuenta', function ($cuenta) use ($desdeHabilitacion, $hastaInclusive) {
+                                    if ($desdeHabilitacion !== null) {
+                                        $cuenta->where('created_at', '>=', $desdeHabilitacion);
+                                    }
+                                    if ($hastaInclusive !== null) {
+                                        $cuenta->where('created_at', '<=', $hastaInclusive);
+                                    }
+                                });
+                        });
+                    });
+                },
+            )
             ->with([
                 'venta.cobranzasDirectas',
                 'venta.caja_movimientos.cobranzas',
                 'cuenta.mozo',
             ])
             ->get();
+    }
+
+    private static function fechaImputacionTurno(VentaGastronomiaEmision $emision): ?Carbon
+    {
+        if (in_array((string) $emision->origen_pos, self::ORIGENES_AJUSTE_FISCAL_RETROACTIVO, true)
+            && $emision->cuenta?->created_at !== null) {
+            return Carbon::parse($emision->cuenta->created_at);
+        }
+
+        return $emision->venta?->created_at !== null
+            ? Carbon::parse($emision->venta->created_at)
+            : null;
     }
 
     private static function esInvitacionSinCobranza(float $montoVenta, float $montoCobrado, float $importeMinimo): bool

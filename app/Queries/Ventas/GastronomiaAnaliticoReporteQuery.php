@@ -2,6 +2,7 @@
 
 namespace App\Queries\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Stock\ArticuloUsoDescartableSupport;
 use App\Support\Stock\ArticuloUsoInsumoSupport;
@@ -38,12 +39,14 @@ final class GastronomiaAnaliticoReporteQuery
 
     private static function clienteExpr(): string
     {
-        return "COALESCE(
-            NULLIF(TRIM(cli_fact.nombre), ''),
-            NULLIF(TRIM(cli_int.nombre), ''),
-            NULLIF(TRIM(CONCAT(COALESCE(cv.nombre, ''), ' ', COALESCE(cv.apellido, ''))), ''),
-            ''
-        )";
+        $nombreVisitante = 'TRIM(CONCAT('.SqlDialectSupport::textoOVacio('cv.nombre').", ' ', ".SqlDialectSupport::textoOVacio('cv.apellido').'))';
+
+        return 'COALESCE('
+            ."NULLIF(TRIM(cli_fact.nombre), ''), "
+            ."NULLIF(TRIM(cli_int.nombre), ''), "
+            .'NULLIF('.$nombreVisitante.", ''), "
+            ."''"
+            .')';
     }
 
     /**
@@ -261,7 +264,7 @@ final class GastronomiaAnaliticoReporteQuery
             'nombre_mozo' => 'm.nombre',
             'legajo_mozo' => 'm.codigo',
             'tipo_comprobante' => "COALESCE(tt.abreviatura, tt.nombre)",
-            'numero_comprobante' => "CAST(v.numerocomprobante AS CHAR)",
+            'numero_comprobante' => SqlDialectSupport::castTexto('v.numerocomprobante'),
             'punto_venta' => 'pv.codigo',
             'cliente' => self::clienteExpr(),
             'tipo_descuento' => 'dg.nombre',
@@ -271,7 +274,7 @@ final class GastronomiaAnaliticoReporteQuery
         };
 
         if ($operador === 'vacio') {
-            $query->whereRaw('('.$columna.') IS NULL OR TRIM(CAST(('.$columna.') AS CHAR)) = \'\'');
+            $query->whereRaw('('.$columna.') IS NULL OR TRIM('.SqlDialectSupport::castTexto('('.$columna.')').') = \'\'');
 
             return;
         }
@@ -280,7 +283,7 @@ final class GastronomiaAnaliticoReporteQuery
             return;
         }
 
-        $expr = 'LOWER(CAST(('.$columna.') AS CHAR))';
+        $expr = SqlDialectSupport::lower(SqlDialectSupport::castTexto('('.$columna.')'));
         $bus = Str::lower($valor);
 
         if ($operador === 'igual') {
@@ -330,7 +333,7 @@ final class GastronomiaAnaliticoReporteQuery
             return;
         }
 
-        $expr = 'LOWER(CAST(('.$columna.') AS CHAR))';
+        $expr = SqlDialectSupport::lower(SqlDialectSupport::castTexto('('.$columna.')'));
         $query->orWhere(function (Builder $w) use ($expr, $pref, $suf) {
             $w->whereRaw($expr.' LIKE ?', ['%'.CoincidenciaFlexibleTexto::escapeLike($pref).'%'])
                 ->whereRaw($expr.' LIKE ?', ['%'.CoincidenciaFlexibleTexto::escapeLike($suf).'%']);

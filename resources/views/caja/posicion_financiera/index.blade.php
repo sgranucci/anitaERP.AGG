@@ -33,6 +33,35 @@
     .posfin-tabla tr.posfin-total td.posfin-concepto {
         background: #f5f5f5;
     }
+    .posfin-tabla tr.posfin-informativo td,
+    .posfin-tabla tr.posfin-informativo td.posfin-concepto {
+        background: #FFF3CD !important;
+        color: #664D03;
+    }
+    .posfin-informativo-aviso {
+        font-size: 10px;
+        font-weight: 700;
+        text-transform: uppercase;
+    }
+    .posfin-auditoria-link {
+        color: inherit;
+        text-decoration: none;
+        border-bottom: 1px dotted #7FB3D5;
+        padding: 1px 2px;
+        border-radius: 3px;
+        transition: background-color .12s ease-in-out, color .12s ease-in-out;
+    }
+    .posfin-auditoria-link:hover,
+    .posfin-auditoria-link:focus {
+        color: #154360;
+        background: #D6EAF8;
+        border-bottom-color: #154360;
+        text-decoration: none;
+    }
+    .posfin-tabla tr.posfin-informativo .posfin-auditoria-link:hover {
+        color: #664D03;
+        background: #FDEBD0;
+    }
 </style>
 @endsection
 
@@ -86,9 +115,174 @@
         });
     }
 
-    document.querySelectorAll('a[href*="listar-posicion-financiera"]').forEach(function (link) {
-        link.addEventListener('click', function () {
-            mostrarOverlay('Generando exportación…', 'El PDF o Excel puede tardar según el volumen.');
+    /**
+     * Export PDF/Excel/CSV: la descarga no navega. Fetch + blob para ocultar
+     * el banner ni bien termina (mismo patrón que mayor-concepto / sumas-saldos).
+     */
+    function nombreArchivoDesdeContentDisposition(disposition, fallback) {
+        if (! disposition) {
+            return fallback;
+        }
+        var match = /filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;]+)/i.exec(disposition);
+        if (! match) {
+            return fallback;
+        }
+        var raw = (match[1] || match[2] || match[3] || '').trim();
+        try {
+            return decodeURIComponent(raw.replace(/['"]/g, ''));
+        } catch (e) {
+            return raw.replace(/['"]/g, '') || fallback;
+        }
+    }
+
+    function dispararDescargaBlob(blob, filename) {
+        var url = window.URL.createObjectURL(blob);
+        var a = document.createElement('a');
+        a.href = url;
+        a.download = filename || 'posicion_financiera';
+        a.style.display = 'none';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        window.setTimeout(function () {
+            window.URL.revokeObjectURL(url);
+        }, 1500);
+    }
+
+    function descargarExportacionPosfin(href) {
+        var lower = String(href).toLowerCase();
+        var formato = 'archivo';
+        if (lower.indexOf('/excel') !== -1) {
+            formato = 'Excel';
+        } else if (lower.indexOf('/pdf') !== -1) {
+            formato = 'PDF';
+        } else if (lower.indexOf('/csv') !== -1) {
+            formato = 'CSV';
+        }
+
+        mostrarOverlay('Generando exportación…', 'Generando ' + formato + '… Puede tardar según el volumen. No cierre la página.');
+
+        if (window.__posfinExportAbort) {
+            try { window.__posfinExportAbort.abort(); } catch (e) {}
+        }
+        var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        window.__posfinExportAbort = controller;
+
+        if (window.__posfinExportHideTimer) {
+            clearTimeout(window.__posfinExportHideTimer);
+        }
+        window.__posfinExportHideTimer = setTimeout(function () {
+            ocultarOverlay();
+        }, 600000);
+
+        fetch(href, {
+            method: 'GET',
+            credentials: 'same-origin',
+            signal: controller ? controller.signal : undefined,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': '*/*',
+            },
+        }).then(function (res) {
+            if (res.status === 419) {
+                throw new Error('Sesión expirada. Recargue la página (F5) e intente de nuevo.');
+            }
+            if (res.redirected && res.url && res.url.indexOf('listar-posicion-financiera') === -1) {
+                throw new Error('No se pudo generar la exportación. Verifique los filtros y vuelva a consultar.');
+            }
+            if (! res.ok) {
+                throw new Error('Error HTTP ' + res.status + ' al exportar.');
+            }
+            var fallback = 'posicion_financiera';
+            if (formato === 'Excel') {
+                fallback += '.xlsx';
+            } else if (formato === 'PDF') {
+                fallback += '.pdf';
+            } else if (formato === 'CSV') {
+                fallback += '.csv';
+            }
+            var filename = nombreArchivoDesdeContentDisposition(
+                res.headers.get('Content-Disposition'),
+                fallback
+            );
+            return res.blob().then(function (blob) {
+                return { blob: blob, filename: filename };
+            });
+        }).then(function (pack) {
+            if (! pack || ! pack.blob || pack.blob.size === 0) {
+                throw new Error('La exportación vino vacía. Reintente.');
+            }
+            if (pack.blob.type && pack.blob.type.indexOf('text/html') !== -1) {
+                throw new Error('La sesión o el permiso fallaron al exportar. Recargue e intente de nuevo.');
+            }
+            dispararDescargaBlob(pack.blob, pack.filename);
+            ocultarOverlay();
+        }).catch(function (err) {
+            if (err && err.name === 'AbortError') {
+                ocultarOverlay();
+                return;
+            }
+            ocultarOverlay();
+            window.alert(err && err.message ? err.message : 'No se pudo descargar la exportación.');
+        }).finally(function () {
+            if (window.__posfinExportHideTimer) {
+                clearTimeout(window.__posfinExportHideTimer);
+                window.__posfinExportHideTimer = null;
+            }
+            window.__posfinExportAbort = null;
+        });
+    }
+
+    document.addEventListener('click', function (event) {
+        var enlace = event.target && event.target.closest
+            ? event.target.closest('a[href]')
+            : null;
+        if (! enlace || enlace.target === '_blank' || enlace.hasAttribute('download')) {
+            return;
+        }
+        var href = enlace.href || enlace.getAttribute('href') || '';
+        if (String(href).toLowerCase().indexOf('listar-posicion-financiera') === -1) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        descargarExportacionPosfin(href);
+    }, true);
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            ocultarOverlay();
+        }
+    });
+
+    document.addEventListener('click', function (event) {
+        var link = event.target.closest('.posfin-auditoria-link');
+        if (! link) {
+            return;
+        }
+        event.preventDefault();
+
+        var contenido = document.getElementById('posfin-auditoria-contenido');
+        if (! contenido) {
+            window.location.href = link.href;
+            return;
+        }
+
+        contenido.innerHTML = '<div class="text-center py-5"><i class="fa fa-spinner fa-spin fa-2x text-info"></i><div class="mt-2">Buscando orígenes…</div></div>';
+        $('#modal-posfin-auditoria').modal('show');
+
+        fetch(link.href, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        }).then(function (response) {
+            if (! response.ok) {
+                throw new Error('No se pudo cargar la auditoría.');
+            }
+            return response.text();
+        }).then(function (html) {
+            contenido.innerHTML = html;
+        }).catch(function (error) {
+            contenido.innerHTML = '<div class="alert alert-danger mb-0">' + error.message + '</div>';
         });
     });
 
@@ -113,6 +307,7 @@
             <div class="card-header">
                 <h3 class="card-title">Posición financiera</h3>
                 <div class="card-tools">
+                    @include('includes.caja.boton-manual')
                     <a href="{{ route('posicion_financiera') }}" class="btn btn-outline-secondary btn-sm" title="Limpiar filtros">
                         <i class="fa fa-eraser"></i> Limpiar
                     </a>
@@ -184,6 +379,35 @@
                         @endif
                     </h3>
                     <div class="card-tools">
+                        @php
+                            $periodoFinalizado = \Carbon\Carbon::createFromDate(
+                                (int) ($filtros['anio'] ?? 0),
+                                (int) ($filtros['mes'] ?? 0),
+                                1
+                            )->endOfMonth()->isBefore(\Carbon\Carbon::today());
+                        @endphp
+                        @if ($saldo_confirmado)
+                            <span class="badge badge-success mr-2" title="Saldo final confirmado">
+                                <i class="fa fa-lock"></i> Cierre confirmado
+                            </span>
+                            @if (can('anular-saldo-posicion-financiera', false))
+                                <button type="button" class="btn btn-outline-danger btn-sm mr-2"
+                                        data-toggle="modal" data-target="#modal-anular-saldo-posfin">
+                                    <i class="fa fa-unlock"></i> Anular cierre
+                                </button>
+                            @endif
+                        @elseif ($periodoFinalizado && can('confirmar-saldo-posicion-financiera', false))
+                            <form method="post" action="{{ route('posicion_financiera_confirmar_saldo') }}" class="d-inline">
+                                @csrf
+                                @foreach (($filtrosQuery ?? []) as $clave => $valor)
+                                    <input type="hidden" name="{{ $clave }}" value="{{ $valor }}">
+                                @endforeach
+                                <button type="submit" class="btn btn-outline-success btn-sm mr-2"
+                                        onclick="return confirm('¿Confirmar el saldo final de este período?');">
+                                    <i class="fa fa-lock"></i> Confirmar saldo
+                                </button>
+                            </form>
+                        @endif
                         @include('includes.exportar-tabla-queryparams', [
                             'ruta' => 'listar_posicion_financiera',
                             'queryparams' => $filtrosQuery ?? [],
@@ -195,6 +419,8 @@
                         'filas' => $filas,
                         'dias' => $dias ?? [],
                         'modo' => 'pantalla',
+                        'auditoriaUrl' => route('posicion_financiera_auditoria'),
+                        'auditoriaQuery' => $filtrosQuery ?? [],
                     ])
                 </div>
                 @if (count($filas) > 0)
@@ -202,12 +428,63 @@
                         {{ count($filas) }} conceptos
                         @if ($saldo_inicial !== null)
                             · Saldo inicial {{ number_format((float) $saldo_inicial, 2, ',', '.') }}
+                            ({{ ($saldo_inicial_origen ?? '') === 'erp' ? 'cierre ERP' : 'semilla Anita' }})
                         @endif
                         @if ($saldo_final !== null)
                             · Saldo final {{ number_format((float) $saldo_final, 2, ',', '.') }}
                         @endif
+                        @if ($saldo_confirmado)
+                            · Confirmado {{ optional($saldo_confirmado->confirmado_at)->format('d/m/Y H:i') }}
+                            @if ($saldo_confirmado->confirmadoPor)
+                                por {{ $saldo_confirmado->confirmadoPor->nombre }}
+                            @endif
+                        @endif
                     </div>
                 @endif
+            </div>
+
+            @if ($saldo_confirmado && can('anular-saldo-posicion-financiera', false))
+                <div class="modal fade" id="modal-anular-saldo-posfin" tabindex="-1" role="dialog" aria-hidden="true">
+                    <div class="modal-dialog" role="document">
+                        <div class="modal-content">
+                            <form method="post" action="{{ route('posicion_financiera_anular_saldo', $saldo_confirmado->id) }}">
+                                @csrf
+                                @method('delete')
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Anular cierre de posición financiera</h5>
+                                    <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                                        <span aria-hidden="true">&times;</span>
+                                    </button>
+                                </div>
+                                <div class="modal-body">
+                                    <label for="posfin-motivo-anulacion">Motivo</label>
+                                    <textarea id="posfin-motivo-anulacion" name="motivo" class="form-control" required maxlength="255"></textarea>
+                                </div>
+                                <div class="modal-footer">
+                                    <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cancelar</button>
+                                    <button type="submit" class="btn btn-danger">Anular cierre</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            @endif
+
+            <div class="modal fade" id="modal-posfin-auditoria" tabindex="-1" role="dialog" aria-hidden="true">
+                <div class="modal-dialog modal-xl" role="document">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title"><i class="fa fa-search-plus"></i> Auditoría del importe</h5>
+                            <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar">
+                                <span aria-hidden="true">&times;</span>
+                            </button>
+                        </div>
+                        <div class="modal-body" id="posfin-auditoria-contenido"></div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-outline-secondary" data-dismiss="modal">Cerrar</button>
+                        </div>
+                    </div>
+                </div>
             </div>
         @endif
     </div>

@@ -57,6 +57,26 @@ class EfeAnitaBridgeReader
     }
 
     /**
+     * Saldos históricos anteriores al inicio solicitado.
+     *
+     * @return list<object>
+     */
+    public function listarSaldoposfAnteriores(int $empresaId, int $fechaExclusiva): array
+    {
+        $errores = [];
+
+        return $this->listar(
+            'caja',
+            'saldoposf',
+            'salpf_fecha,salpf_saldo,salpf_empresa',
+            ' WHERE salpf_empresa='.$empresaId
+            .' AND salpf_fecha<'.$fechaExclusiva,
+            $errores,
+            'saldoposf-anterior-efe',
+        );
+    }
+
+    /**
      * Rendiciones bingo del período (rendbingo).
      *
      * @return list<object>
@@ -89,7 +109,7 @@ class EfeAnitaBridgeReader
         return $this->listar(
             'caja',
             'rendmaquina',
-            'rendm_nro_oper,rendm_fecha,rendm_empresa,rendm_turno,rendm_venta_ficha,rendm_drop_billete,rendm_billem_rod,rendm_pago_manual,rendm_tito,rendm_hopper,rendm_venta_ruleta,rendm_drop_ruleta,rendm_billem_rul,rendm_salida_rul,rendm_tito_ruleta,rendm_deposito,rendm_vales,rendm_reintegros,rendm_dif_caja,rendm_variacion_ff,rendm_transfer',
+            'rendm_nro_oper,rendm_fecha,rendm_empresa,rendm_turno,rendm_venta_ficha,rendm_drop_billete,rendm_billem_rod,rendm_pago_manual,rendm_tito,rendm_hopper,rendm_venta_ruleta,rendm_drop_ruleta,rendm_billem_rul,rendm_salida_rul,rendm_tito_ruleta,rendm_deposito,rendm_vales,rendm_reintegros,rendm_dif_caja,rendm_variacion_ff,rendm_transfer,rendm_vtaant_gast,rendm_sobrantes,rendm_canje_gastro',
             ' WHERE rendm_empresa='.$empresaId
             .' AND rendm_fecha>='.$fechaDesde
             .' AND rendm_fecha<='.$fechaHasta,

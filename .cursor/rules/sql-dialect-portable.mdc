@@ -11,9 +11,9 @@ Raw SQL nuevo en `app/` debe ser portable. Ver `docs/arquitectura/portabilidad-b
 ## Obligatorio en código nuevo o al tocar un hotspot
 
 1. Preferir Query Builder / Eloquent sin raw.
-2. Si hace falta expresión dialectal → **solo** `SqlDialectSupport` (cast, orden código, hora, anio, anioMes, fecha, periodoAnioMes, periodoAnioSemanaIso, coalesce, ordenPorLista, aFecha, posicion, parteDelimitada, textoTrasLiteral, lower).
-3. Deadlocks / lock wait → **`DbContencionSupport`** (no detectar solo mensajes MySQL a mano).
-4. No escribir `CAST(… AS UNSIGNED)`, `HOUR(`, `DATE(`, `YEAR(…)*100+MONTH`, `IFNULL(`, `FIELD(`, `DATE_FORMAT(`, `STR_TO_DATE(`, `LOCATE(`, `SUBSTRING_INDEX(` sueltos en PRs nuevos.
+2. Si hace falta expresión dialectal → **solo** `SqlDialectSupport` (cast, orden código, hora, anio, anioMes, fecha, periodoAnioMes, periodoAnioSemanaIso, coalesce, ordenPorLista, aFecha, posicion, parteDelimitada, textoTrasLiteral, lower, coincideRegex, esSabado, igualdadCaseSensitive, textoOVacio).
+3. Deadlocks / lock wait **y** violaciones UNIQUE/FK → **`DbContencionSupport`** (`esErrorReintentable`, `esViolacionUnicidad`, `esViolacionClaveForanea`). No detectar solo mensajes MySQL (`1062`, `Duplicate entry`, `FOREIGN KEY`) a mano.
+4. No escribir `CAST(… AS UNSIGNED)`, `HOUR(`, `DATE(`, `YEAR(…)*100+MONTH`, `IFNULL(`, `FIELD(`, `DATE_FORMAT(`, `STR_TO_DATE(`, `LOCATE(`, `SUBSTRING_INDEX(`, `BINARY col =` sueltos en PRs nuevos.
 
 ## Ejemplo
 

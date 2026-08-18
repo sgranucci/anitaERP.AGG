@@ -37,4 +37,14 @@ final class VentaNumerocomprobanteUnicidadSupportTest extends TestCase
 
         $this->assertFalse(VentaNumerocomprobanteUnicidadSupport::esViolacionNumerocomprobante($e));
     }
+
+    public function test_detecta_violacion_postgres_por_nombre_indice(): void
+    {
+        $e = new \RuntimeException(
+            'ERROR: duplicate key value violates unique constraint "'
+            .VentaNumerocomprobanteUnicidadSupport::UNIQUE_INDEX.'"'
+        );
+
+        $this->assertTrue(VentaNumerocomprobanteUnicidadSupport::esViolacionNumerocomprobante($e));
+    }
 }

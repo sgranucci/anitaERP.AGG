@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Contable;
 use App\Exports\Contable\ReporteDefinibleExport;
 use App\Exports\Contable\ReporteDefinibleParidadExport;
 use App\Http\Controllers\Controller;
+use App\Repositories\Admin\UsuarioRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Contable\ReporteContableRepository;
@@ -63,6 +64,7 @@ class ReporteDefinibleController extends Controller
         private readonly ReporteDefinibleDistribucionService $distribucionService,
         private readonly EmpresaRepositoryInterface $empresaRepository,
         private readonly MonedaRepositoryInterface $monedaRepository,
+        private readonly UsuarioRepositoryInterface $usuarioRepository,
     ) {
         $this->middleware('auth');
     }
@@ -158,7 +160,14 @@ class ReporteDefinibleController extends Controller
             'layouts_payload' => $this->layoutSupport->payloadUi((int) $id),
             'eli_reglas' => $this->eliminacionSupport->payloadUi((int) $id),
             'participaciones' => $this->participacionSupport->payloadUi((int) $id),
-            'accesos' => $this->aclSupport->payloadUi((int) $id),
+            'aclUsuarios' => $this->aclSupport->usuarioIds((int) $id),
+            'usuariosAcl' => $this->usuarioRepository->listadoOperativoParaSelector(
+                null,
+                null,
+                ['id', 'nombre', 'email', 'usuario'],
+                soloConEmail: false,
+                with: []
+            ),
             'alertas_payload' => $this->alertaSupport->payloadUi((int) $id),
             'tipos_alerta' => \App\Models\Contable\ReporteContableAlerta::tipos(),
             'notas_payload' => $this->notaSupport->payloadUi((int) $id),
@@ -1269,16 +1278,26 @@ class ReporteDefinibleController extends Controller
     {
         can('actualizar-reporte-definible');
         $this->assertAclInforme((int) $id);
-        $data = $request->validate([
-            'usuario_ids' => 'nullable|array',
-            'usuario_ids.*' => 'integer|min:1',
-        ]);
-        $this->aclSupport->syncUsuarios((int) $id, $data['usuario_ids'] ?? []);
+        $ids = $request->input('usuario_ids', []);
+        if (! is_array($ids)) {
+            $ids = [];
+        }
+        $this->aclSupport->syncUsuarios(
+            (int) $id,
+            $this->usuarioRepository->filtrarIdsOperativos($ids)
+        );
 
-        return response()->json([
-            'ok' => true,
-            'accesos' => $this->aclSupport->payloadUi((int) $id),
-        ]);
+        if ($request->wantsJson()) {
+            return response()->json([
+                'ok' => true,
+                'accesos' => $this->aclSupport->payloadUi((int) $id),
+            ]);
+        }
+
+        return redirect()
+            ->route('editar_reporte_definible', ['id' => $id])
+            ->with('mensaje', 'Accesos actualizados.')
+            ->withFragment('tab-acceso');
     }
 
     public function variantesJson($id)

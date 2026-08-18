@@ -31,6 +31,7 @@ use App\Services\Compras\OrdencompraGestionService;
 use App\Services\Compras\RequisicionArticuloCambioService;
 use App\Services\Compras\RequisicionService;
 use App\Services\Configuracion\ArbolaprobacionService;
+use App\Support\Configuracion\AnitaSyncIndexSupport;
 use App\Support\Compras\RequisicionLineasOcSupport;
 use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
 use App\Support\Compras\RequisicionListadoFiltros;
@@ -97,7 +98,7 @@ class RequisicionController extends Controller
         // $this->requisicionService->sincronizarConAnita();
         $hay_requisiciones = $this->requisicionQuery->first();
 
-        if (! $hay_requisiciones) {
+        if (! $hay_requisiciones && AnitaSyncIndexSupport::autoImportHabilitado()) {
             $this->requisicionService->sincronizarConAnita();
         }
 

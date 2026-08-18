@@ -32,6 +32,7 @@
     };
 </script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/totales_turno_render.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/totales_turno_render.js')) }}"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/gastronomia/saneamiento_huecos_arca.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/saneamiento_huecos_arca.js')) }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/cierre_turno_central.js') }}?v={{ filemtime(public_path('assets/pages/scripts/ventas/gastronomia/cierre_turno_central.js')) }}" type="text/javascript"></script>
 @endsection
 
@@ -40,6 +41,8 @@
      data-api-turnos="{{ route('gastronomia_cierre_turno_central_api_turnos') }}"
      data-api-estado="{{ route('gastronomia_cierre_turno_central_api_estado_turno') }}"
      data-api-cerrar="{{ route('gastronomia_cierre_turno_central_api_cerrar') }}"
+     data-api-diagnosticar-huecos-arca="{{ route('gastronomia_habilitacion_turno_api_diagnosticar_huecos_arca') }}"
+     data-api-ejecutar-saneamiento-huecos-arca="{{ route('gastronomia_habilitacion_turno_api_ejecutar_saneamiento_huecos_arca') }}"
      data-api-conciliacion="{{ route('gastronomia_cierre_turno_central_api_conciliacion_turno') }}"
      data-api-conciliacion-medio="{{ route('gastronomia_cierre_turno_central_api_conciliacion_medio') }}"
      data-api-conciliacion-nc="{{ route('gastronomia_cierre_turno_central_api_conciliacion_notas_credito') }}"
@@ -161,4 +164,5 @@
 </div>
 
 @include('ventas.gastronomia.cierre_turno_central.partials.modal_conciliacion')
+@include('ventas.gastronomia.partials.modal_saneamiento_huecos_arca')
 @endsection

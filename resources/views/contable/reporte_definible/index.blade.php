@@ -21,6 +21,7 @@
                     <i class="fa fa-sitemap"></i> Reportes contables definibles
                 </h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.contable.boton-manual-reporte-definible')
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-reporte-definible',
                         'filtroValor' => $filtros['filtro_valor'] ?? '',

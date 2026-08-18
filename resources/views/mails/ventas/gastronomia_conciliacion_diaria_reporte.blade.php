@@ -54,6 +54,21 @@
     <p style="color:#28a745; font-weight:bold;">Sin huecos en numeración en el rango.</p>
 @endif
 
+@php
+    $cantPendArca = 0;
+    foreach ($informe['empresas'] ?? [] as $empPend) {
+        foreach ($empPend['dias'] ?? [] as $diaPend) {
+            $cantPendArca += (int) (($diaPend['huecos_arca_pendientes']['cantidad'] ?? 0));
+        }
+    }
+@endphp
+@if ($cantPendArca > 0)
+    <p style="color:#dc3545; font-weight:bold;">
+        Hay {{ $cantPendArca }} hueco(s) ARCA pendiente(s) de saneamiento (cierre con ARCA caído o lote no ejecutado).
+        Comando: <code>php artisan gastronomia:sanear-huecos-arca --empresa=… --fecha-jornada=… --dry-run</code>
+    </p>
+@endif
+
 <p style="margin:16px 0 8px 0;">
     Adjunto Excel (y CSV) por circuito: <strong>GASTRO</strong> (sal&oacute;n), <strong>ESTACIONAMIENTO</strong> (PV ERP vs rendgastro), <strong>VENDING</strong> (rendiciones ERP vs rendgastro), <strong>FLASH</strong> (caja Informix: flash_ayb incluye vending mientras Anita no lo discrimine; flash_estac vs rendgastro; jornada anterior a la auditada).
 </p>
@@ -139,7 +154,11 @@
                             <td align="right">{{ $fmt($fila['total_flash'] ?? 0) }}</td>
                             <td align="right">{{ isset($fila['diff_rendg_flash']) ? $fmt($fila['diff_rendg_flash']) : '—' }}</td>
                         @else
-                            <td align="right">{{ $fmt($fila['ventas_anita'] ?? 0) }}</td>
+                            <td align="right">
+                                {{ ! empty($fila['ventas_solo_erp']) || ! array_key_exists('ventas_anita', $fila) || $fila['ventas_anita'] === null
+                                    ? '—'
+                                    : $fmt($fila['ventas_anita']) }}
+                            </td>
                             @php $rendgCol = $fila['rendgastro_neto'] ?? $fila['rendgastro_z'] ?? null; @endphp
                             <td align="right">{{ $rendgCol !== null ? $fmt($rendgCol) : '—' }}</td>
                             <td align="right">{{ isset($fila['diff_erp_rendg']) ? $fmt($fila['diff_erp_rendg']) : '—' }}</td>

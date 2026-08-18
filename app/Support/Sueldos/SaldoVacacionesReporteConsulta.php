@@ -37,7 +37,7 @@ class SaldoVacacionesReporteConsulta
             ->leftJoinSub($sub, 'cuota', fn ($join) => $join->on('cuota.empleado_id', '=', 'empleado_sueldos.id'))
             ->leftJoin('empresa', 'empresa.id', '=', 'empleado_sueldos.empresa_id')
             ->select('empleado_sueldos.*')
-            ->selectRaw('COALESCE(empresa.nombre, "") as empresa_nombre')
+            ->selectRaw("COALESCE(empresa.nombre, '') as empresa_nombre")
             ->selectRaw('COALESCE(cuota.devengado, 0) as devengado')
             ->selectRaw('COALESCE(cuota.consumido, 0) as consumido')
             ->selectRaw('COALESCE(cuota.saldo, 0) as saldo');
@@ -73,7 +73,9 @@ class SaldoVacacionesReporteConsulta
         }
 
         if (! empty($filtros['solo_con_saldo'])) {
-            $query->having('saldo', '>', 0);
+            // whereRaw (no HAVING): el saldo ya viene agregado en el subquery `cuota`.
+            // HAVING sobre alias sin GROUP BY es MySQL-only.
+            $query->whereRaw('COALESCE(cuota.saldo, 0) > 0');
         }
 
         $query->orderBy('empleado_sueldos.empresa_id')

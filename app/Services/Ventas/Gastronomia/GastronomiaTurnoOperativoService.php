@@ -160,6 +160,9 @@ final class GastronomiaTurnoOperativoService
             'errores_cierre' => $activo !== null
                 ? $this->erroresAntesDeCerrar($activo)
                 : [],
+            'huecos_arca_pendientes' => $activo !== null
+                ? \App\Support\Ventas\Gastronomia\GastronomiaTurnoHuecosArcaSupport::resumenParaEstado($activo)
+                : ['cantidad' => 0, 'puntoventa_codigo' => null, 'preview' => []],
             'cuentas_sin_facturar' => $activo !== null
                 ? $this->contarCuentasAbiertasConItemsEnTerminal($activo)
                 : 0,

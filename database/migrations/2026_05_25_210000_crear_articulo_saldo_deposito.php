@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -32,9 +33,6 @@ return new class extends Migration
 
                 $table->unique(['articulo_id', 'deposito_id'], 'uk_artsalddep_articulo_deposito');
                 $table->index('deposito_id', 'ix_artsalddep_deposito');
-
-                $table->charset = 'utf8mb4';
-                $table->collation = 'utf8mb4_spanish_ci';
             });
         }
 
@@ -45,7 +43,10 @@ return new class extends Migration
 
     private function reconstruirSaldos(): void
     {
-        DB::statement('SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode, "ONLY_FULL_GROUP_BY", ""))');
+        // Solo MySQL: el GROUP BY de esta query ya es compatible con ONLY_FULL_GROUP_BY.
+        if (MigrationDialectSupport::esMysql()) {
+            DB::statement('SET SESSION sql_mode = (SELECT REPLACE(@@sql_mode, "ONLY_FULL_GROUP_BY", ""))');
+        }
 
         DB::table('articulo_saldo_deposito')->truncate();
 

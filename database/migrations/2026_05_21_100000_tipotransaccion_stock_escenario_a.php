@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -19,8 +20,6 @@ return new class extends Migration
                 $table->string('estado', 1);
                 $table->timestamps();
                 $table->softDeletes();
-                $table->charset = 'utf8mb4';
-                $table->collation = 'utf8mb4_spanish_ci';
             });
         }
 
@@ -161,14 +160,7 @@ return new class extends Migration
 
     private function foreignKeyExists(string $table, string $foreignName): bool
     {
-        $database = Schema::getConnection()->getDatabaseName();
-
-        return DB::table('information_schema.TABLE_CONSTRAINTS')
-            ->where('CONSTRAINT_SCHEMA', $database)
-            ->where('TABLE_NAME', $table)
-            ->where('CONSTRAINT_NAME', $foreignName)
-            ->where('CONSTRAINT_TYPE', 'FOREIGN KEY')
-            ->exists();
+        return MigrationDialectSupport::tieneForeignKey($table, $foreignName);
     }
 
     public function down(): void

@@ -6,7 +6,7 @@
 return [
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Módulo de Gastronomía',
-    'version' => '1.1',
+    'version' => '1.3',
     'fecha' => null,
     'empresa' => null,
     'url_base' => null,
@@ -19,6 +19,7 @@ return [
                 'La configuración previa (mesas, mozos, puntos de venta gastronómicos, turnos maestros, descuentos, áreas de comanda, tótems Waitry) se administra en Ventas → Gastronomía → Tablas. Sin esa configuración, el proceso de facturación no podrá resolver la terminal ni los datos operativos.',
                 'En el despliegue AGG están activas las integraciones Waitry (kioscos/tótems, conciliación Informe Z al cierre de jornada) y Wigos (canjes de premios por cupón y canje diario de fidelidad por tarjeta). Ver capítulo dedicado.',
                 'Los canjes para clientes VIP (equipo Marketing) tienen manual propio: menú Canjes o enlace desde el índice de ayuda (Manual Canjes Marketing).',
+                'El manejo de stock gastronómico (fórmulas, insumos, depósitos de venta/insumos y tipos de movimiento) está en el manual Stock — Gastronomía, fórmulas e insumos (Centro de ayuda).',
             ],
         ],
         [
@@ -91,13 +92,42 @@ return [
             'parrafos' => [
                 'Cada terminal con configuración de punto de venta gastronómico debe habilitar un turno operativo antes de facturar (salvo modo caja directo).',
                 'El panel de estado muestra turno activo, totales acumulados, cuentas pendientes (abiertas con ítems, vacías, cerradas sin facturar) y accesos a conciliación por medio de pago, notas de crédito e invitaciones.',
+                'Al pedir el cierre definitivo, el sistema revisa rápidamente la numeración FAC del punto de venta dentro de la ventana del turno. Esta revisión usa solamente datos del ERP y no consulta ARCA mientras la pantalla se actualiza; por eso no vuelve lento el trabajo normal.',
+                'Si encuentra números faltantes, abre el modal «Saneamiento fiscal ARCA». Recién en ese momento consulta cada número en ARCA. Un comprobante autorizado y ausente en ERP se ofrece como recuperable; un número que ARCA informa inexistente no se toca.',
+                'Si ARCA responde, el operador ve el detalle completo antes de confirmar. «Corregir lote confirmado» recupera todas las FAC autorizadas, emite una sola NC consolidada por el mismo total y continúa el cierre. La corrección no mueve stock ni replica esas ventas a Anita; la cobranza y devolución en efectivo se compensan y el neto queda en cero.',
+                'Si ARCA no responde, el cierre NO se bloquea. Use «Cerrar turno sin sanear». El sistema guarda cada número como pendiente con empresa, jornada, punto de venta, turno y error de conexión. Pendiente significa «requiere revisión posterior»; no significa caja abierta, cierre incompleto ni comprobante rechazado.',
+                'A la mañana, la conciliación diaria envía al correo configurado el bloque «HUECOS ARCA PENDIENTES». El reporte avisa, pero no ejecuta correcciones fiscales automáticamente. El administrador o soporte autorizado debe revisar el dry-run y recién entonces decidir si ejecuta el comando; si el diagnóstico no es concluyente, debe escalar el caso en lugar de forzarlo.',
             ],
             'items' => [
                 'Habilitar: elija turno maestro (desde ventas/turno-gastronomia), confirme monto de habilitación de caja si el negocio lo exige.',
                 'Cierre parcial: registra un arqueo intermedio (número de parcial incremental). Imprime comprobante PDF. El turno sigue habilitado para seguir facturando.',
                 'Cierre definitivo: cierra el turno en la terminal. En el último turno del día bloquea si hay cuentas abiertas con consumos. Permite ingresar montos contados por medio de pago y observaciones.',
+                'Aviso amarillo de huecos: es preventivo. Termine de cargar el arqueo y presione cerrar; el modal hará el diagnóstico fiscal.',
+                'Botón «Corregir lote confirmado»: usar cuando el modal muestra FAC recuperables, importes, NC consolidada y ninguna fila «Sin cuenta referencia».',
+                'Botón «Cerrar turno sin sanear»: usar si ARCA está indisponible, si el número no existe en ARCA o si el modal no puede reconstruir el lote. El caso queda visible en la auditoría diaria.',
+                'No emitir una NC manual para estos números: el saneamiento automático necesita conservar el vínculo entre todas las FAC y la NC consolidada.',
                 'Anular último cierre de turno: operación administrativa (permiso anular-cierre-turno-gastronomia). Solo en la misma PC, jornada abierta, sin rendición en caja y siendo el último cierre de esa terminal.',
                 'Informe por mozo PDF: desde la pantalla de habilitación, exporta ventas del turno desglosadas por mozo.',
+            ],
+            'tabla' => [
+                'caption' => 'Qué hacer ante el modal Saneamiento fiscal ARCA',
+                'headers' => ['Lo que muestra', 'Qué significa', 'Acción del operador'],
+                'rows' => [
+                    ['FAC recuperable + importe', 'ARCA la autorizó, pero falta en ERP.', 'Revisar el lote y presionar «Corregir lote confirmado».'],
+                    ['Inexistente en ARCA', 'Es un hueco real o pertenece a otro circuito; no hay comprobante fiscal para recuperar.', 'Presionar «Cerrar turno sin sanear». No emitir NC.'],
+                    ['ARCA no respondió / error de red', 'No se pudo saber en ese momento si el número fue autorizado.', 'Presionar «Cerrar turno sin sanear». El pendiente se revisa en la auditoría de la mañana.'],
+                    ['Sin cuenta referencia', 'El sistema no pudo identificar con seguridad la cuenta/venta gemela para reconstruir los ítems.', 'Cerrar sin sanear y escalar al administrador; no corregir manualmente.'],
+                ],
+            ],
+            'tabla2' => [
+                'caption' => 'Circuito de la mañana para pendientes ARCA',
+                'headers' => ['Responsable', 'Paso', 'Resultado esperado'],
+                'rows' => [
+                    ['Auditoría automática', 'El reporte diario lista «HUECOS ARCA PENDIENTES» con PV, número, estado y último error.', 'El caso no se pierde aunque el turno se haya cerrado.'],
+                    ['Administrador / soporte autorizado', 'Primero ejecutar: php artisan gastronomia:sanear-huecos-arca --empresa=ID --fecha-jornada=AAAA-MM-DD --pv=00003 --dry-run', 'Diagnóstico sin escrituras.'],
+                    ['Administrador / soporte autorizado', 'Si el dry-run confirma recuperables: repetir con --usuario=ID --ejecutar', 'Recupera FAC, genera una NC consolidada, vincula el lote y actualiza Z.'],
+                    ['Administrador / soporte autorizado', 'Si ARCA sigue caído, el número es inexistente o falta cuenta referencia, avisar a Administración/IT y no forzar el comando.', 'El pendiente continúa abierto para la siguiente revisión.'],
+                ],
             ],
         ],
         [
@@ -159,6 +189,7 @@ return [
             'parrafos' => [
                 'Si al cerrar turno o jornada quedan cuentas abiertas con consumos, el sistema bloquea y dirige a Saneamiento de turnos.',
                 'Saneamiento es una herramienta administrativa: diagnostica por terminal, permite cerrar cuentas sin facturar (con confirmación CERRAR-N), cierre remoto de turnos, extensión de horarios de cierre y creación retroactiva de turnos para cuadrar facturas huérfanas.',
+                'Esta pantalla resuelve cuentas operativas pendientes. No es el saneamiento fiscal de huecos ARCA: ese aparece automáticamente al cerrar el turno y está explicado en el capítulo 5.',
             ],
             'items' => [
                 'Cuentas abiertas con ítems (badge naranja): bloquean cierre del último turno del día y cierre de jornada.',
@@ -264,6 +295,7 @@ return [
             'herramientas_clave' => 'configuracion_pv',
             'parrafos' => [
                 'Antes del primer día de operación, el administrador debe completar las tablas maestras. Todas siguen el patrón ABM estándar del ERP (listado, crear, editar).',
+                'En la configuración del punto de venta gastronomía son obligatorios el depósito de artículos facturados y el depósito de insumos: al emitir, el sistema baja el ítem vendido del primero y explota la fórmula contra el segundo. El detalle operativo está en el manual Stock gastronómico.',
             ],
             'tabla' => [
                 'caption' => 'Tablas maestras gastronomía',
@@ -282,7 +314,28 @@ return [
             ],
         ],
         [
-            'titulo' => '15. Permisos principales',
+            'titulo' => '15. Stock gastronómico (resumen)',
+            'parrafos' => [
+                'Al facturar una cuenta, si el tipo de transacción afecta stock, Anita ERP registra: (1) salida del artículo facturado en el depósito de venta de la terminal; (2) si el artículo tiene fórmula activa, salida de cada insumo (y subfórmula) en el depósito de insumos, proporcional a la cantidad vendida y a los opcionales elegidos.',
+                'Las fórmulas se arman en Stock → Fórmula artículo. Cada línea puede apuntar a un artículo de compra distinto del insumo de producción (referencia de compra). El costo de última compra alimenta costos y transferencias.',
+                'Una nota de crédito de gastronomía revierte esos movimientos. El saneamiento fiscal ARCA de huecos (NC consolidada) no mueve stock.',
+            ],
+            'items' => [
+                'Manual completo: Centro de ayuda → Stock — Gastronomía, fórmulas e insumos (ruta stock/manual-stock-gastronomia).',
+                'Reporte de insumos por tipo de artículo: ventas/gastronomia/insumos-tipoarticulo-reporte.',
+                'Desde Artículos vendidos puede abrir los movimientos de stock generados por cada factura.',
+            ],
+            'tabla' => [
+                'caption' => 'Depósitos por terminal',
+                'headers' => ['Campo en config PV', 'Qué descuenta'],
+                'rows' => [
+                    ['Depósito venta', 'Artículo facturado (SKU de carta)'],
+                    ['Depósito insumos', 'Ingredientes de la fórmula (y opcionales)'],
+                ],
+            ],
+        ],
+        [
+            'titulo' => '16. Permisos principales',
             'parrafos' => [
                 'Los ítems de menú y botones visibles dependen del rol. El encargado de gastronomía suele tener permisos de gestión; cajero/mozo los de facturación y consulta.',
             ],

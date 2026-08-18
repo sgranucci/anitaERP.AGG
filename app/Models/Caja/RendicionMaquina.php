@@ -5,6 +5,7 @@ namespace App\Models\Caja;
 use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Asiento;
 use App\Models\Seguridad\Usuario;
+use App\Models\Ventas\Venta;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -54,6 +55,7 @@ class RendicionMaquina extends Model implements Auditable
         'dif_caja',
         'anita_sincronizado_en',
         'asiento_id',
+        'venta_id',
         'asientos_cierre_ids_json',
         'cierre_contable_en',
         'cierre_contable_usuario_id',
@@ -135,6 +137,11 @@ class RendicionMaquina extends Model implements Auditable
     public function asiento()
     {
         return $this->belongsTo(Asiento::class, 'asiento_id');
+    }
+
+    public function venta()
+    {
+        return $this->belongsTo(Venta::class, 'venta_id');
     }
 
     public function cierreContableUsuario()

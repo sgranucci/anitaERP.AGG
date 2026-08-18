@@ -137,28 +137,44 @@ return new class extends Migration
         }
 
         if (Schema::hasTable('transferencia_mercaderia') && Schema::hasColumn('transferencia_mercaderia', 'asiento_id')) {
-            DB::statement('
-                UPDATE asiento a
-                INNER JOIN transferencia_mercaderia tm ON tm.asiento_id = a.id
-                SET a.transferencia_mercaderia_id = tm.id
-                WHERE a.transferencia_mercaderia_id IS NULL
-                  AND tm.asiento_id IS NOT NULL
-            ');
+            \App\Support\Database\MigrationDialectSupport::statementPorDriver(
+                'UPDATE asiento a
+                 INNER JOIN transferencia_mercaderia tm ON tm.asiento_id = a.id
+                 SET a.transferencia_mercaderia_id = tm.id
+                 WHERE a.transferencia_mercaderia_id IS NULL
+                   AND tm.asiento_id IS NOT NULL',
+                'UPDATE asiento AS a
+                 SET transferencia_mercaderia_id = tm.id
+                 FROM transferencia_mercaderia AS tm
+                 WHERE tm.asiento_id = a.id
+                   AND a.transferencia_mercaderia_id IS NULL
+                   AND tm.asiento_id IS NOT NULL'
+            );
         }
 
         if (Schema::hasTable('rendicion_estacionamiento_caja') && Schema::hasColumn('rendicion_estacionamiento_caja', 'asiento_id')) {
             // Grupo: varias rendiciones → un asiento; tomar MIN(id) como representativa.
-            DB::statement('
-                UPDATE asiento a
-                INNER JOIN (
-                    SELECT asiento_id, MIN(id) AS rendicion_id
-                    FROM rendicion_estacionamiento_caja
-                    WHERE asiento_id IS NOT NULL
-                    GROUP BY asiento_id
-                ) r ON r.asiento_id = a.id
-                SET a.rendicion_estacionamiento_caja_id = r.rendicion_id
-                WHERE a.rendicion_estacionamiento_caja_id IS NULL
-            ');
+            \App\Support\Database\MigrationDialectSupport::statementPorDriver(
+                'UPDATE asiento a
+                 INNER JOIN (
+                     SELECT asiento_id, MIN(id) AS rendicion_id
+                     FROM rendicion_estacionamiento_caja
+                     WHERE asiento_id IS NOT NULL
+                     GROUP BY asiento_id
+                 ) r ON r.asiento_id = a.id
+                 SET a.rendicion_estacionamiento_caja_id = r.rendicion_id
+                 WHERE a.rendicion_estacionamiento_caja_id IS NULL',
+                'UPDATE asiento AS a
+                 SET rendicion_estacionamiento_caja_id = r.rendicion_id
+                 FROM (
+                     SELECT asiento_id, MIN(id) AS rendicion_id
+                     FROM rendicion_estacionamiento_caja
+                     WHERE asiento_id IS NOT NULL
+                     GROUP BY asiento_id
+                 ) AS r
+                 WHERE r.asiento_id = a.id
+                   AND a.rendicion_estacionamiento_caja_id IS NULL'
+            );
         }
 
         if (! Schema::hasTable('gastronomia_cierre_jornada_proceso_snapshot')) {

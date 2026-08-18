@@ -11,6 +11,8 @@
     var apiActualizarMontoHabilitacion = app.getAttribute('data-api-actualizar-monto-habilitacion') || '';
     var apiCierreParcial = app.getAttribute('data-api-cierre-parcial') || '';
     var apiCerrar = app.getAttribute('data-api-cerrar') || '';
+    var apiDiagnosticarHuecosArca = app.getAttribute('data-api-diagnosticar-huecos-arca') || '';
+    var apiEjecutarSaneamientoHuecosArca = app.getAttribute('data-api-ejecutar-saneamiento-huecos-arca') || '';
     var apiAnularCierre = app.getAttribute('data-api-anular-cierre') || '';
     var apiConciliacionTurno = app.getAttribute('data-api-conciliacion-turno') || '';
     var apiExplicarDiferencias = app.getAttribute('data-api-explicar-diferencias-conciliacion') || '';
@@ -489,6 +491,23 @@
             } else {
                 erroresBox.classList.add('d-none');
                 erroresBox.innerHTML = '';
+            }
+        }
+
+        var huecosBox = document.getElementById('aviso-huecos-arca-turno');
+        if (huecosBox) {
+            var huecos = estado.huecos_arca_pendientes || {};
+            var cantH = Number(huecos.cantidad || 0);
+            if (cantH > 0) {
+                huecosBox.classList.remove('d-none');
+                var prev = (huecos.preview || []).map(function (p) { return p.numero; }).join(', ');
+                huecosBox.innerHTML = 'Hay <strong>' + cantH + '</strong> hueco(s) de numeración FAC'
+                    + (huecos.puntoventa_codigo ? ' en PV ' + huecos.puntoventa_codigo : '')
+                    + (prev ? ' (ej. ' + prev + ')' : '')
+                    + '. Al cerrar se ofrecerá saneamiento fiscal ARCA.';
+            } else {
+                huecosBox.classList.add('d-none');
+                huecosBox.innerHTML = '';
             }
         }
 
@@ -1270,17 +1289,37 @@
                         payloadCierre.medios_contado = mediosContado;
                     }
                 }
-                postJson(apiCerrar, payloadCierre).then(function (res) {
-                    if (res.data.ok) {
-                        alert(res.data.mensaje || 'Turno cerrado');
-                        if (res.data.url_comprobante_pdf) {
-                            window.open(res.data.url_comprobante_pdf, '_blank', 'noopener');
+                function enviarCierre() {
+                    postJson(apiCerrar, payloadCierre).then(function (res) {
+                        if (res.data.ok) {
+                            alert(res.data.mensaje || 'Turno cerrado');
+                            if (res.data.url_comprobante_pdf) {
+                                window.open(res.data.url_comprobante_pdf, '_blank', 'noopener');
+                            }
+                            cargarEstado();
+                        } else {
+                            alert(res.data.error || 'Error');
                         }
-                        cargarEstado();
-                    } else {
-                        alert(res.data.error || 'Error');
-                    }
-                });
+                    });
+                }
+                if (window.GastronomiaSaneamientoHuecosArca && apiDiagnosticarHuecosArca && apiEjecutarSaneamientoHuecosArca) {
+                    window.GastronomiaSaneamientoHuecosArca.interceptarCierre({
+                        apiDiagnosticar: apiDiagnosticarHuecosArca,
+                        apiEjecutar: apiEjecutarSaneamientoHuecosArca,
+                        estado: estadoActual,
+                        cantidadHuecosEstado: (estadoActual && estadoActual.huecos_arca_pendientes)
+                            ? estadoActual.huecos_arca_pendientes.cantidad
+                            : 0,
+                        payloadExtra: {
+                            turno_operativo_id: estadoActual && estadoActual.turno_operativo_id
+                                ? estadoActual.turno_operativo_id
+                                : null,
+                        },
+                        onContinuarCierre: enviarCierre,
+                    });
+                } else {
+                    enviarCierre();
+                }
             });
         }
     }

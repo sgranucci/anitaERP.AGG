@@ -4,9 +4,39 @@ namespace App\Support\Contable\MayorPlanoCuenta;
 
 /**
  * Lee export CSV/Excel de Anita l-mayor (mayor analítico por cuenta).
+ *
+ * Soporta:
+ * - delimitador `;` (histórico) o `,` (export actual)
+ * - con o sin columna TAS (tipo asiento sistema) tras la fecha
  */
 class MayorPlanoCuentaAnitaCsvReader
 {
+    /**
+     * Índices de columnas de detalle (0-based) una vez detectado el layout.
+     *
+     * @var array{
+     *   nro_asiento: int,
+     *   tipo_comp: int,
+     *   comprobante: int,
+     *   emisor: int,
+     *   cuit: int,
+     *   descripcion: int,
+     *   nro_oc: int,
+     *   moneda: int,
+     *   cotizacion: int,
+     *   mon_referencia: int,
+     *   debe: int,
+     *   haber: int,
+     *   saldo_mes: int,
+     *   saldo_ejercicio: int,
+     *   empresa: int,
+     *   tas: int|null
+     * }
+     */
+    private array $cols = [];
+
+    private string $delimiter = ';';
+
     /**
      * @return array{
      *   metadata: array<string, string>,
@@ -34,25 +64,33 @@ class MayorPlanoCuentaAnitaCsvReader
         $cuentaCodigoActual = '';
         $cuentaNombreActual = '';
         $numLinea = 0;
+        $layoutListo = false;
 
         while (($raw = fgets($handle)) !== false) {
             $numLinea++;
+            $raw = $this->limpiarCsvLine($raw);
+
             if ($numLinea <= 5) {
-                $metadata['linea_'.$numLinea] = trim($this->limpiarCsvLine($raw));
+                $metadata['linea_'.$numLinea] = trim($raw);
 
                 continue;
             }
 
-            $cols = str_getcsv($this->limpiarCsvLine($raw), ';', '"');
-            if ($numLinea === 6) {
+            if (! $layoutListo) {
+                $this->detectarLayout($raw);
+                $layoutListo = true;
+                // La fila 6 suele ser el encabezado de columnas.
+                if ($this->pareceEncabezadoColumnas($raw)) {
+                    continue;
+                }
+            }
+
+            $cols = str_getcsv(rtrim($raw, "\r\n"), $this->delimiter, '"');
+            if ($cols === [] || (count($cols) === 1 && trim((string) $cols[0]) === '')) {
                 continue;
             }
 
-            if ($cols === [] || (count($cols) === 1 && trim($cols[0]) === '')) {
-                continue;
-            }
-
-            $col0 = trim($cols[0] ?? '');
+            $col0 = trim((string) ($cols[0] ?? ''));
 
             if (str_starts_with($col0, 'Cuenta:')) {
                 [$cuentaCodigoActual, $cuentaNombreActual, $cuentaActual] = $this->parsearHeaderCuenta($col0);
@@ -61,7 +99,8 @@ class MayorPlanoCuentaAnitaCsvReader
             }
 
             if (str_starts_with($col0, 'Saldo Inicial')) {
-                $saldoEj = $this->parsearMonto($cols[14] ?? $cols[13] ?? '');
+                $idxSaldo = $this->cols['saldo_ejercicio'];
+                $saldoEj = $this->parsearMonto((string) ($cols[$idxSaldo] ?? $cols[$idxSaldo - 1] ?? ''));
                 $saldosIniciales[] = [
                     'cuenta' => $cuentaActual,
                     'cuenta_codigo' => $cuentaCodigoActual,
@@ -72,26 +111,33 @@ class MayorPlanoCuentaAnitaCsvReader
                 continue;
             }
 
-            if (str_starts_with($col0, 'Total ')) {
+            if (str_starts_with($col0, 'Total cuenta')) {
                 $totalesCuenta[] = [
                     'cuenta' => $cuentaActual,
                     'cuenta_codigo' => $cuentaCodigoActual,
                     'texto' => $col0,
-                    'debe' => $this->parsearMonto($cols[11] ?? ''),
-                    'haber' => $this->parsearMonto($cols[12] ?? ''),
+                    'debe' => $this->parsearMonto((string) ($cols[$this->cols['debe']] ?? '')),
+                    'haber' => $this->parsearMonto((string) ($cols[$this->cols['haber']] ?? '')),
                 ];
 
                 continue;
             }
 
-            $fecha = trim($col0);
+            if (str_starts_with($col0, 'Total general')) {
+                $metadata['total_general_debe'] = (string) $this->parsearMonto((string) ($cols[$this->cols['debe']] ?? ''));
+                $metadata['total_general_haber'] = (string) $this->parsearMonto((string) ($cols[$this->cols['haber']] ?? ''));
+
+                continue;
+            }
+
+            $fecha = $col0;
             if ($fecha === '' || ! preg_match('/^\d{2}\/\d{2}\/\d{2}$/', $fecha)) {
                 continue;
             }
 
-            $nroAsiento = (int) preg_replace('/\D/', '', trim($cols[1] ?? ''));
-            $debe = $this->parsearMonto($cols[11] ?? '');
-            $haber = $this->parsearMonto($cols[12] ?? '');
+            $nroAsiento = (int) preg_replace('/\D/', '', trim((string) ($cols[$this->cols['nro_asiento']] ?? '')));
+            $debe = $this->parsearMonto((string) ($cols[$this->cols['debe']] ?? ''));
+            $haber = $this->parsearMonto((string) ($cols[$this->cols['haber']] ?? ''));
 
             $lineas[] = [
                 'cuenta' => $cuentaActual,
@@ -99,21 +145,24 @@ class MayorPlanoCuentaAnitaCsvReader
                 'cuenta_nombre' => $cuentaNombreActual,
                 'fecha_fmt' => $fecha,
                 'fecha' => $this->fechaDdMmYyAymd($fecha),
+                'tas' => $this->cols['tas'] !== null
+                    ? trim((string) ($cols[$this->cols['tas']] ?? ''))
+                    : '',
                 'nro_asiento' => $nroAsiento,
-                'tipo_comp' => trim($cols[2] ?? ''),
-                'comprobante' => trim($cols[3] ?? ''),
-                'emisor' => trim($cols[4] ?? ''),
-                'cuit' => trim($cols[5] ?? ''),
-                'descripcion' => trim($cols[6] ?? ''),
-                'nro_oc' => (int) preg_replace('/\D/', '', trim($cols[7] ?? '')),
-                'moneda_abrev' => trim($cols[8] ?? ''),
-                'cotizacion' => $this->parsearMonto($cols[9] ?? '', true),
-                'mon_referencia' => $this->parsearMonto($cols[10] ?? ''),
+                'tipo_comp' => trim((string) ($cols[$this->cols['tipo_comp']] ?? '')),
+                'comprobante' => trim((string) ($cols[$this->cols['comprobante']] ?? '')),
+                'emisor' => trim((string) ($cols[$this->cols['emisor']] ?? '')),
+                'cuit' => trim((string) ($cols[$this->cols['cuit']] ?? '')),
+                'descripcion' => trim((string) ($cols[$this->cols['descripcion']] ?? '')),
+                'nro_oc' => (int) preg_replace('/\D/', '', trim((string) ($cols[$this->cols['nro_oc']] ?? ''))),
+                'moneda_abrev' => trim((string) ($cols[$this->cols['moneda']] ?? '')),
+                'cotizacion' => $this->parsearMonto((string) ($cols[$this->cols['cotizacion']] ?? ''), true),
+                'mon_referencia' => $this->parsearMonto((string) ($cols[$this->cols['mon_referencia']] ?? '')),
                 'debe' => $debe,
                 'haber' => $haber,
-                'saldo_mes' => $this->parsearMonto($cols[13] ?? ''),
-                'saldo_ejercicio' => $this->parsearMonto($cols[14] ?? ''),
-                'empresa_id' => (int) preg_replace('/\D/', '', trim($cols[15] ?? '1')),
+                'saldo_mes' => $this->parsearMonto((string) ($cols[$this->cols['saldo_mes']] ?? '')),
+                'saldo_ejercicio' => $this->parsearMonto((string) ($cols[$this->cols['saldo_ejercicio']] ?? '')),
+                'empresa_id' => (int) preg_replace('/\D/', '', trim((string) ($cols[$this->cols['empresa']] ?? '1'))),
             ];
         }
 
@@ -125,6 +174,80 @@ class MayorPlanoCuentaAnitaCsvReader
             'totales_cuenta' => $totalesCuenta,
             'saldos_iniciales' => $saldosIniciales,
         ];
+    }
+
+    private function detectarLayout(string $rawHeaderOrFirstData): void
+    {
+        $coma = substr_count($rawHeaderOrFirstData, ',');
+        $puntoYComa = substr_count($rawHeaderOrFirstData, ';');
+        $this->delimiter = $puntoYComa > $coma ? ';' : ',';
+
+        $cols = str_getcsv(rtrim($rawHeaderOrFirstData, "\r\n"), $this->delimiter, '"');
+        $headers = array_map(static fn ($c) => mb_strtoupper(trim((string) $c)), $cols);
+
+        $tieneTas = false;
+        foreach ($headers as $h) {
+            if ($h === 'TAS' || str_contains($h, 'TAS')) {
+                $tieneTas = true;
+                break;
+            }
+        }
+
+        // Si no hay encabezado claro, inferir por cantidad de columnas de una fila dato.
+        if (! $this->pareceEncabezadoColumnas($rawHeaderOrFirstData)) {
+            // Layout con TAS: Fecha,TAS,N.Asi.,Tip,... = 17 cols típicas
+            // Sin TAS: 16 cols.
+            $tieneTas = count($cols) >= 17;
+        }
+
+        if ($tieneTas) {
+            // Fecha | TAS | N.Asi. | Tip | Comprobante | Emisor | CUIT | Desc | OC | Mon | Cot | Mon.Ref | Debe | Haber | Saldo mes | Saldo ej | Empr
+            $this->cols = [
+                'tas' => 1,
+                'nro_asiento' => 2,
+                'tipo_comp' => 3,
+                'comprobante' => 4,
+                'emisor' => 5,
+                'cuit' => 6,
+                'descripcion' => 7,
+                'nro_oc' => 8,
+                'moneda' => 9,
+                'cotizacion' => 10,
+                'mon_referencia' => 11,
+                'debe' => 12,
+                'haber' => 13,
+                'saldo_mes' => 14,
+                'saldo_ejercicio' => 15,
+                'empresa' => 16,
+            ];
+        } else {
+            // Fecha | N.Asi. | Tip | Comprobante | Emisor | CUIT | Desc | OC | Mon | Cot | Mon.Ref | Debe | Haber | Saldo mes | Saldo ej | Empr
+            $this->cols = [
+                'tas' => null,
+                'nro_asiento' => 1,
+                'tipo_comp' => 2,
+                'comprobante' => 3,
+                'emisor' => 4,
+                'cuit' => 5,
+                'descripcion' => 6,
+                'nro_oc' => 7,
+                'moneda' => 8,
+                'cotizacion' => 9,
+                'mon_referencia' => 10,
+                'debe' => 11,
+                'haber' => 12,
+                'saldo_mes' => 13,
+                'saldo_ejercicio' => 14,
+                'empresa' => 15,
+            ];
+        }
+    }
+
+    private function pareceEncabezadoColumnas(string $raw): bool
+    {
+        $u = mb_strtoupper($raw);
+
+        return str_contains($u, 'N.ASI') || str_contains($u, 'NRO') || str_contains($u, 'DEBE');
     }
 
     private function limpiarCsvLine(string $line): string

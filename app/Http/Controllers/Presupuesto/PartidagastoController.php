@@ -15,6 +15,7 @@ use App\Services\Compras\OrdencompraService;
 use App\Models\Presupuesto\Partidagasto_Estado;
 use App\Models\Presupuesto\Partidagasto;
 use App\Queries\Presupuesto\PartidagastoQueryInterface;
+use App\Support\Configuracion\AnitaSyncIndexSupport;
 use App\Support\Presupuesto\PartidagastoListadoFiltros;
 use App\Support\Listado\QueryRetornoListado;
 use App\Exports\Presupuesto\PartidagastoExport;
@@ -71,8 +72,9 @@ class PartidagastoController extends Controller
 		
         $hay_partidagasto = $this->partidagastoQuery->first();
 
-        if (!$hay_partidagasto)
+        if (! $hay_partidagasto && AnitaSyncIndexSupport::autoImportHabilitado()) {
 			$this->partidagastoService->sincronizarConAnita();
+		}
 
         $filtros = PartidagastoListadoFiltros::resolverDesdeRequest($request);
 

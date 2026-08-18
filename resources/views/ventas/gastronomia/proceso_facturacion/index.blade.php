@@ -638,6 +638,8 @@
             estado: _gastroBase + '/ventas/gastronomia/api/turno-estado',
             cierreParcial: _gastroBase + '/ventas/gastronomia/api/cierre-parcial-turno',
             cerrar: _gastroBase + '/ventas/gastronomia/api/cerrar-turno',
+            diagnosticarHuecosArca: _gastroBase + '/ventas/gastronomia/habilitacion-turno/api/diagnosticar-huecos-arca',
+            ejecutarSaneamientoHuecosArca: _gastroBase + '/ventas/gastronomia/habilitacion-turno/api/ejecutar-saneamiento-huecos-arca',
         },
         waitryHabilitado: @json($waitry_habilitado_terminal ?? false),
         waitryTrasRespuesta: @json(config('gastronomia.waitry_tras_respuesta', true)),
@@ -670,6 +672,7 @@
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/proceso_facturacion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/proceso_facturacion.js')) ?: time() }}"></script>
 @if ($requiere_habilitacion_turno ?? true)
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/totales_turno_render.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/totales_turno_render.js')) }}"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/gastronomia/saneamiento_huecos_arca.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/saneamiento_huecos_arca.js')) }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/turno_operativo_pos.js') }}"></script>
 @endif
 @endsection
@@ -1254,6 +1257,7 @@
 
 @if ($requiere_habilitacion_turno ?? true)
     @include('ventas.gastronomia.proceso_facturacion.partials.modales_turno_operativo')
+    @include('ventas.gastronomia.partials.modal_saneamiento_huecos_arca')
 @endif
 
 <div class="modal fade" id="modal-gastro-canje-premio" tabindex="-1" role="dialog" aria-labelledby="modal-gastro-canje-premio-title" aria-hidden="true">

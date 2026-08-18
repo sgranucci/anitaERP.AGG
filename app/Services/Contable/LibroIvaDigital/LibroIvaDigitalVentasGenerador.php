@@ -6,6 +6,7 @@ use App\Models\Ventas\Venta;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalFormatoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasAgrupacionSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasAlicuotaSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasConsumidorFinalSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -156,7 +157,7 @@ class LibroIvaDigitalVentasGenerador
     {
         // RMV / IZV internos (Anita t_comp estado I): no van al libro IVA digital AFIP.
         $abrev = strtoupper(trim((string) ($venta->tipotransacciones->abreviatura ?? '')));
-        if (in_array($abrev, ['RMV', 'IZV'], true)) {
+        if (in_array($abrev, ['RMV', 'IZV', 'FBI', 'FSL'], true)) {
             return null;
         }
 
@@ -172,17 +173,19 @@ class LibroIvaDigitalVentasGenerador
             (float) $totales['importe_total'],
         );
 
-        $codigoOperacion = ' ';
-        if (! in_array($letra, ['B', 'C'], true)) {
-            if ($totales['cantidad_alicuotas'] === 0 && $totales['operaciones_exentas'] > 0) {
-                $codigoOperacion = 'E';
-            } elseif ($totales['cantidad_alicuotas'] === 0 && $totales['no_gravado'] > 0) {
-                $codigoOperacion = 'N';
-            }
-        }
+        $codigoOperacion = $letra === 'C'
+            ? ' '
+            : LibroIvaDigitalVentasAlicuotaSupport::codigoOperacionDesdeAlicuotas(
+                $totales['alicuotas'],
+                $totales,
+            );
 
         $signoRaw = (int) ($venta->tipotransacciones?->getRawOriginal('signo') ?? 1);
         $signo = $signoRaw < 0 ? -1 : 1;
+        $codigoMoneda = LibroIvaDigitalMapeosSupport::codigoMonedaAfip(
+            $venta->monedas->codigo ?? null,
+            $venta->monedas->nombre ?? null,
+        );
 
         $cabecera = [
             'fecha' => date('Ymd', strtotime((string) $venta->fecha)),
@@ -201,11 +204,11 @@ class LibroIvaDigitalVentasGenerador
             'percepciones_iibb' => $signo * $totales['percepciones_iibb'],
             'percepciones_municipales' => 0,
             'impuestos_internos' => $signo * $totales['impuestos_internos'],
-            'codigo_moneda' => LibroIvaDigitalMapeosSupport::codigoMonedaAfip(
-                $venta->monedas->codigo ?? null,
-                $venta->monedas->nombre ?? null,
+            'codigo_moneda' => $codigoMoneda,
+            'tipo_cambio' => LibroIvaDigitalMapeosSupport::tipoCambioArca(
+                $codigoMoneda,
+                (float) ($venta->cotizacion ?: 1),
             ),
-            'tipo_cambio' => (float) ($venta->cotizacion ?: 1),
             'cantidad_alicuotas' => $totales['cantidad_alicuotas'],
             'codigo_operacion' => $codigoOperacion,
             'otros_tributos' => 0,
@@ -224,7 +227,10 @@ class LibroIvaDigitalVentasGenerador
             ];
         }
 
-        return ['cabecera' => $cabecera, 'alicuotas' => $alicuotas];
+        return LibroIvaDigitalVentasAlicuotaSupport::asegurarRegistro([
+            'cabecera' => $cabecera,
+            'alicuotas' => $alicuotas,
+        ]);
     }
 
     /**
@@ -295,8 +301,9 @@ class LibroIvaDigitalVentasGenerador
             }
         }
 
-        if ($importeTotal <= 0) {
-            $importeTotal = abs((float) $venta->total);
+        $importeDocumento = abs((float) $venta->total);
+        if ($importeDocumento > 0) {
+            $importeTotal = $importeDocumento;
         }
 
         $filasAlicuota = [];
@@ -328,6 +335,7 @@ class LibroIvaDigitalVentasGenerador
             );
         }
 
+        $filasAlicuota = LibroIvaDigitalVentasAlicuotaSupport::asegurarFilasDesglose($letra, $filasAlicuota);
         $cantidadAlicuotas = $letra === 'C' ? 0 : count($filasAlicuota);
         $filasArchivo = $letra === 'C' ? [] : $filasAlicuota;
 

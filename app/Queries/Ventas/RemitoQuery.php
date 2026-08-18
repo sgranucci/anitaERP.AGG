@@ -26,7 +26,7 @@ class RemitoQuery implements RemitoQueryInterface
 
         return $this->queryRemitoIndexListado($busqueda, $estado, $reparto, $fechaentrega)
             ->with('remito_articulos')
-            ->orderBy('id', 'desc')
+            ->orderBy('remito.id', 'desc')
             ->paginate(10);
     }
 
@@ -37,7 +37,7 @@ class RemitoQuery implements RemitoQueryInterface
 
         return $this->queryRemitoIndexListado($busqueda, $estado, $reparto, $fechaentrega)
             ->with('remito_articulos')
-            ->orderBy('id', 'desc')
+            ->orderBy('remito.id', 'desc')
             ->get();
     }
 
@@ -47,7 +47,7 @@ class RemitoQuery implements RemitoQueryInterface
         ini_set('max_execution_time', '0');
 
         return $this->queryRemitoIndexListado($busqueda, $estado, $reparto, $fechaentrega)
-            ->orderBy('id', 'desc')
+            ->orderBy('remito.id', 'desc')
             ->cursor();
     }
 

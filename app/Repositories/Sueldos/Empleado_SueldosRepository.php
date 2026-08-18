@@ -550,6 +550,26 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             $feegr = VacacionFechaAnita::erpDesdeAnita($f->emp_fec_egr ?? 0);
             $estado = EmpleadoEstados::desdeFlagAnita($f->emp_flag_estado ?? null);
             $motivoId = $this->fk($maps['motivoegreso_id'], $f->emp_motivoegr ?? null);
+            $catCod = $this->normCodigo($f->emp_categoria ?? null);
+            $categoria = $catCod !== null ? ($categoriaPorCodigo[$catCod] ?? null) : null;
+
+            // Las bases 4..11 pueden ser excepciones individuales aun cuando la
+            // categoría use tabla (origen T). Conservar metadata también para
+            // empleados preexistentes permite completar bases faltantes al re-sync.
+            $meta[$key] = [
+                'origen' => $categoria['origen'] ?? null,
+                'feing' => $feing,
+                'bases' => [
+                    4 => $this->num($f->emp_base4 ?? null),
+                    5 => $this->num($f->emp_base5 ?? null),
+                    6 => $this->num($f->emp_base6 ?? null),
+                    7 => $this->num($f->emp_base7 ?? null),
+                    8 => $this->num($f->emp_base8 ?? null),
+                    9 => $this->num($f->emp_base9 ?? null),
+                    10 => $this->num($f->emp_base10 ?? null),
+                    11 => $this->num($f->emp_base11 ?? null),
+                ],
+            ];
 
             if (isset($existentes[$key])) {
                 $res['ya_existia']++;
@@ -581,9 +601,6 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                 continue;
             }
             $seen[$key] = true;
-
-            $catCod = $this->normCodigo($f->emp_categoria ?? null);
-            $categoria = $catCod !== null ? ($categoriaPorCodigo[$catCod] ?? null) : null;
 
             $insertRows[] = [
                 'empresa_id' => $empresaId,
@@ -637,21 +654,6 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
-
-            $meta[$key] = [
-                'origen' => $categoria['origen'] ?? null,
-                'feing' => $feing,
-                'bases' => [
-                    4 => $this->num($f->emp_base4 ?? null),
-                    5 => $this->num($f->emp_base5 ?? null),
-                    6 => $this->num($f->emp_base6 ?? null),
-                    7 => $this->num($f->emp_base7 ?? null),
-                    8 => $this->num($f->emp_base8 ?? null),
-                    9 => $this->num($f->emp_base9 ?? null),
-                    10 => $this->num($f->emp_base10 ?? null),
-                    11 => $this->num($f->emp_base11 ?? null),
-                ],
-            ];
         }
 
         foreach ($egresoUpdates as $empId => $patch) {
@@ -687,13 +689,21 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
     private function importarBasesInicial(array $meta, array $idPorKey, array $nombrebasePorCodigo, $now): int
     {
         $filas = [];
+        $empleadoIds = array_values(array_unique(array_map('intval', array_values($idPorKey))));
+        $nombrebaseIds = array_values(array_unique(array_map('intval', array_values($nombrebasePorCodigo))));
+        $existentes = [];
+        if ($empleadoIds !== [] && $nombrebaseIds !== []) {
+            foreach (DB::table('empleado_base_sueldos')
+                ->whereIn('empleado_id', $empleadoIds)
+                ->whereIn('nombrebase_id', $nombrebaseIds)
+                ->get(['empleado_id', 'nombrebase_id']) as $filaExistente) {
+                $existentes[(int) $filaExistente->empleado_id.':'.(int) $filaExistente->nombrebase_id] = true;
+            }
+        }
+
         foreach ($meta as $key => $m) {
             $empleadoId = $idPorKey[$key] ?? null;
             if ($empleadoId === null) {
-                continue;
-            }
-            // Solo empleados cuya categoría carga bases en el legajo (origen != 'T').
-            if (($m['origen'] ?? null) === 'T') {
                 continue;
             }
             $fecha = $m['feing'] ?? now()->toDateString();
@@ -703,6 +713,10 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                 }
                 $nbId = $nombrebasePorCodigo[(string) $cod] ?? null;
                 if ($nbId === null) {
+                    continue;
+                }
+                $par = (int) $empleadoId.':'.(int) $nbId;
+                if (isset($existentes[$par])) {
                     continue;
                 }
                 $filas[] = [
@@ -715,6 +729,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                     'created_at' => $now,
                     'updated_at' => $now,
                 ];
+                $existentes[$par] = true;
             }
         }
         foreach (array_chunk($filas, 500) as $chunk) {

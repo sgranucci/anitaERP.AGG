@@ -7,6 +7,7 @@ use App\Models\Ticket\Ticket_Estado;
 use App\Models\Ticket\Ticket_Tarea;
 use App\Repositories\Ticket\Tecnico_TicketRepositoryInterface;
 use App\Models\Admin\Permiso;
+use App\Support\Cache\PermisoCacheSupport;
 use App\Support\Ticket\TicketAlcanceCentrocostoSupport;
 use Auth;
 use DB;
@@ -63,9 +64,9 @@ class TicketQuery implements TicketQueryInterface
         $flUsuario = $flTecnico = $flSupervisor = $flEncargado = $flAdminSector = false;
 
         $rolId = session()->get('rol_id');
-        $permisos = cache()->tags('Permiso')->rememberForever("Permiso.rolid.$rolId", function () {
-                return Permiso::whereHas('roles', function ($query) {
-                    $query->where('rol_id', session()->get('rol_id'));
+        $permisos = PermisoCacheSupport::rememberSlugsPorRol($rolId, function () use ($rolId) {
+                return Permiso::whereHas('roles', function ($query) use ($rolId) {
+                    $query->where('rol.id', $rolId);
                 })->get()->pluck('slug')->toArray();
             });
         if (in_array('usuario-ticket', $permisos))         
@@ -210,9 +211,9 @@ class TicketQuery implements TicketQueryInterface
         $flUsuario = $flTecnico = $flSupervisor = $flEncargado = false;
 
         $rolId = session()->get('rol_id');
-        $permisos = cache()->tags('Permiso')->rememberForever("Permiso.rolid.$rolId", function () {
-            return Permiso::whereHas('roles', function ($query) {
-                $query->where('rol_id', session()->get('rol_id'));
+        $permisos = PermisoCacheSupport::rememberSlugsPorRol($rolId, function () use ($rolId) {
+            return Permiso::whereHas('roles', function ($query) use ($rolId) {
+                $query->where('rol.id', $rolId);
             })->get()->pluck('slug')->toArray();
         });
         if (in_array('usuario-ticket', $permisos)) {

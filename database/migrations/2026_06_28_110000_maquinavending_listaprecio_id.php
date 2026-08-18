@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -22,13 +23,7 @@ return new class extends Migration
 
         DB::table('maquinavending')->update(['listaprecio_id' => $listaprecioId]);
 
-        $fkExists = collect(DB::select(
-            "SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
-             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'maquinavending'
-             AND CONSTRAINT_NAME = 'fk_maquinavending_listaprecio' AND CONSTRAINT_TYPE = 'FOREIGN KEY'"
-        ))->isNotEmpty();
-
-        if (! $fkExists) {
+        if (! MigrationDialectSupport::tieneForeignKey('maquinavending', 'fk_maquinavending_listaprecio')) {
             Schema::table('maquinavending', function (Blueprint $table) {
                 $table->foreign('listaprecio_id', 'fk_maquinavending_listaprecio')
                     ->references('id')->on('listaprecio')

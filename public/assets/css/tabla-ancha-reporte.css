@@ -1,0 +1,141 @@
+/* Grilla de reporte ancho: cabecera fija, columnas ancladas, scroll horizontal arriba. */
+.tabla-ancha-grilla {
+    --tabla-ancha-c1: 5.2rem;
+    --tabla-ancha-c2: 14rem;
+    --tabla-ancha-der: 50px;
+}
+.tabla-ancha-toolbar {
+    position: sticky;
+    top: 0;
+    z-index: 12;
+    background: #fff;
+    padding: .4rem 0 .5rem;
+    border-bottom: 1px solid #dee2e6;
+    margin-bottom: .35rem;
+}
+.tabla-ancha-paginacion .pagination { margin-bottom: 0; }
+.tabla-ancha-paginacion .page-link { padding: .2rem .5rem; font-size: .8rem; }
+.tabla-ancha-scroll-top {
+    overflow-x: auto;
+    overflow-y: hidden;
+    height: 14px;
+    margin-bottom: 2px;
+}
+.tabla-ancha-scroll-top-inner { height: 1px; }
+.tabla-ancha-wrap {
+    overflow: auto;
+    max-height: calc(100vh - 240px);
+    max-width: 100%;
+    border: 1px solid #d5d8dc;
+}
+.tabla-ancha {
+    margin-bottom: 0;
+    border-collapse: separate;
+    border-spacing: 0;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    width: max-content;
+    min-width: 100%;
+}
+.tabla-ancha thead th {
+    position: sticky;
+    top: 0;
+    z-index: 4;
+    background: #85C1E9;
+    color: #17202A;
+    border-color: #7fb3d5;
+}
+.tabla-ancha .col-fija-1,
+.tabla-ancha .col-fija-2,
+.tabla-ancha .col-fija-der-1,
+.tabla-ancha .col-fija-der-2 {
+    position: sticky;
+    background: #fff;
+    background-clip: padding-box;
+    z-index: 5;
+}
+.tabla-ancha .col-fija-1 {
+    left: 0;
+    min-width: var(--tabla-ancha-c1);
+    width: var(--tabla-ancha-c1);
+}
+.tabla-ancha .col-fija-2 {
+    left: var(--tabla-ancha-c1);
+    min-width: var(--tabla-ancha-c2);
+    max-width: 22rem;
+    width: var(--tabla-ancha-c2);
+    white-space: normal;
+    box-shadow: 4px 0 8px -2px rgba(0, 0, 0, .12);
+    z-index: 6;
+}
+.tabla-ancha .col-fija-der-1 {
+    right: 0;
+    min-width: var(--tabla-ancha-der);
+    width: var(--tabla-ancha-der);
+    box-shadow: -4px 0 8px -2px rgba(0, 0, 0, .12);
+}
+.tabla-ancha .col-fija-der-2 {
+    right: var(--tabla-ancha-der);
+    min-width: var(--tabla-ancha-der);
+    width: var(--tabla-ancha-der);
+}
+.tabla-ancha thead .col-fija-1,
+.tabla-ancha thead .col-fija-2,
+.tabla-ancha thead .col-fija-der-1,
+.tabla-ancha thead .col-fija-der-2 {
+    z-index: 8;
+    background: #85C1E9 !important;
+    top: 0;
+}
+.tabla-ancha tbody tr:nth-of-type(odd) .col-fija-1,
+.tabla-ancha tbody tr:nth-of-type(odd) .col-fija-2,
+.tabla-ancha tbody tr:nth-of-type(odd) .col-fija-der-1,
+.tabla-ancha tbody tr:nth-of-type(odd) .col-fija-der-2 {
+    background: #f8f9fa;
+}
+.tabla-ancha tbody tr:hover .col-fija-1,
+.tabla-ancha tbody tr:hover .col-fija-2,
+.tabla-ancha tbody tr:hover .col-fija-der-1,
+.tabla-ancha tbody tr:hover .col-fija-der-2 {
+    background: #eaf2f8;
+}
+.tabla-ancha tfoot td {
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
+    background: #f5f5f5;
+    font-weight: 700;
+}
+.tabla-ancha tfoot .col-fija-1,
+.tabla-ancha tfoot .col-fija-2 {
+    z-index: 9;
+    background: #f5f5f5 !important;
+    bottom: 0;
+}
+
+/* Pocos períodos: no estirar a 100% (rubros a la izquierda, importes a la derecha). */
+.tabla-ancha-grilla.tabla-ancha--compacta .tabla-ancha {
+    min-width: 0;
+    width: auto;
+}
+.tabla-ancha-grilla.tabla-ancha--compacta .tabla-ancha-wrap {
+    overflow: visible;
+    max-height: none;
+}
+.tabla-ancha-grilla.tabla-ancha--compacta .col-fija-1,
+.tabla-ancha-grilla.tabla-ancha--compacta .col-fija-2,
+.tabla-ancha-grilla.tabla-ancha--compacta .col-fija-der-1,
+.tabla-ancha-grilla.tabla-ancha--compacta .col-fija-der-2 {
+    position: static;
+    box-shadow: none;
+    z-index: auto;
+    width: auto;
+    min-width: 0;
+    max-width: none;
+}
+.tabla-ancha-grilla.tabla-ancha--compacta thead .col-fija-1,
+.tabla-ancha-grilla.tabla-ancha--compacta thead .col-fija-2,
+.tabla-ancha-grilla.tabla-ancha--compacta thead .col-fija-der-1,
+.tabla-ancha-grilla.tabla-ancha--compacta thead .col-fija-der-2 {
+    z-index: auto;
+}

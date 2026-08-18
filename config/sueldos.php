@@ -19,9 +19,22 @@ return [
      * Proceso p-dtofallo: concepto de liquidación para cuotas de descuento por fallo.
      * Código Anita/ERP (ej. 192 = DESCUENTO PREMIO FALLO CAJA). 0 = no genera novedad.
      */
-    'concepto_descuento_fallo_codigo' => (int) env('SUELDOS_CONCEPTO_DTO_FALLO', 192),
+    'concepto_descuento_fallo_codigo' => (int) env('SUELDOS_CONCEPTO_DESCUENTO_FALLO', 192),
 
     /** Cuotas mensuales del plan de descuento (Anita: MESES_A_DESCONTAR = 10). */
-    'meses_descuento_fallo' => (int) env('SUELDOS_MESES_DTO_FALLO', 10),
+    'meses_descuento_fallo' => (int) env('SUELDOS_MESES_DESCUENTO_FALLO', 10),
 
+    /*
+     * Distribución automática de listados definibles (sueldos:distribuir-reportes-definibles).
+     * El scheduler corre cada hora; día/hora los define cada suscripción.
+     */
+    'reporte_definible' => [
+        'distribucion' => [
+            'habilitada' => env('SUELDOS_REPORTE_DEFINIBLE_DISTRIBUCION', true),
+        ],
+        'cola' => env('SUELDOS_REPORTE_DEFINIBLE_COLA', 'reports'),
+        'cola_mail' => env('SUELDOS_REPORTE_DEFINIBLE_COLA_MAIL', 'reports-mail'),
+        'job_tries' => (int) env('SUELDOS_REPORTE_DEFINIBLE_JOB_TRIES', 3),
+        'lease_minutos' => (int) env('SUELDOS_REPORTE_DEFINIBLE_LEASE_MINUTOS', 30),
+    ],
 ];

@@ -105,9 +105,9 @@ final class GastronomiaConciliacionPorPcSupport
                 'ventas_erp_cae' => $totalesSalon['ventas_erp_cae'],
                 'ventas_erp_caea' => $totalesSalon['ventas_erp_caea'],
                 'ventas_erp' => $totalesSalon['ventas_erp'],
-                'ventas_anita_cae' => $totalesSalon['ventas_anita_cae'],
-                'ventas_anita_caea' => $totalesSalon['ventas_anita_caea'],
-                'ventas_anita' => $totalesSalon['ventas_anita'],
+                'ventas_anita_cae' => $ventasSoloErp ? null : $totalesSalon['ventas_anita_cae'],
+                'ventas_anita_caea' => $ventasSoloErp ? null : $totalesSalon['ventas_anita_caea'],
+                'ventas_anita' => $ventasSoloErp ? null : $totalesSalon['ventas_anita'],
                 'rendgastro_z' => $jornadaAbierta ? null : $totalesSalon['rendgastro_z'],
                 'diff_erp_anita' => $totalesSalon['diff_erp_anita'],
                 'diff_erp_rendg' => $totalesSalon['diff_erp_rendg'],
@@ -214,12 +214,11 @@ final class GastronomiaConciliacionPorPcSupport
                 2,
             ),
             'ventas_erp' => $erpTotal,
-            'ventas_anita_cae' => (float) ($totalesSalon['ventas_anita_cae'] ?? 0),
-            'ventas_anita_caea' => round(
-                (float) ($totalesSalon['ventas_anita_caea'] ?? 0) + $anitaPost + $anitaAgreg,
-                2,
-            ),
-            'ventas_anita' => $anitaTotal,
+            'ventas_anita_cae' => $ventasSoloErp ? null : (float) ($totalesSalon['ventas_anita_cae'] ?? 0),
+            'ventas_anita_caea' => $ventasSoloErp
+                ? null
+                : round((float) ($totalesSalon['ventas_anita_caea'] ?? 0) + $anitaPost + $anitaAgreg, 2),
+            'ventas_anita' => $ventasSoloErp ? null : $anitaTotal,
             'rendgastro_z' => $rendgTotal,
             'diff_erp_anita' => $diffErpAnita,
             'diff_erp_rendg' => $diffErpRendg,
@@ -458,6 +457,7 @@ final class GastronomiaConciliacionPorPcSupport
             $identificadorPc = (string) ($pc['identificador_pc'] ?? '');
             $pvCae = (string) ($pc['pv_cae'] ?? '');
             $pvCaea = (string) ($pc['pv_caea'] ?? '—');
+            $ventasSoloErp = ! empty($pc['ventas_solo_erp']);
 
             $out[] = [
                 'tipo_fila' => 'pv_cae',
@@ -467,23 +467,28 @@ final class GastronomiaConciliacionPorPcSupport
                 'pv_cae' => $pvCae,
                 'pv_caea' => $pvCaea,
                 'ventas_erp' => (float) ($pc['ventas_erp_cae'] ?? 0),
-                'ventas_anita' => (float) ($pc['ventas_anita_cae'] ?? 0),
+                'ventas_anita' => $ventasSoloErp ? null : (float) ($pc['ventas_anita_cae'] ?? 0),
                 'ventas_erp_cae' => (float) ($pc['ventas_erp_cae'] ?? 0),
                 'ventas_erp_caea' => 0.0,
-                'ventas_anita_cae' => (float) ($pc['ventas_anita_cae'] ?? 0),
+                'ventas_anita_cae' => $ventasSoloErp ? null : (float) ($pc['ventas_anita_cae'] ?? 0),
                 'ventas_anita_caea' => 0.0,
                 'rendgastro_z' => null,
                 'rendgastro_z_cae' => null,
                 'rendgastro_caea' => null,
-                'diff_erp_anita' => round((float) ($pc['ventas_erp_cae'] ?? 0) - (float) ($pc['ventas_anita_cae'] ?? 0), 2),
+                'diff_erp_anita' => $ventasSoloErp
+                    ? null
+                    : round((float) ($pc['ventas_erp_cae'] ?? 0) - (float) ($pc['ventas_anita_cae'] ?? 0), 2),
                 'diff_erp_rendg' => null,
-                'estado' => $this->resolverEstadoSoloAnita(
-                    (float) ($pc['ventas_erp_cae'] ?? 0),
-                    (float) ($pc['ventas_anita_cae'] ?? 0),
-                    $tolerancia,
-                ),
+                'estado' => $ventasSoloErp
+                    ? '—'
+                    : $this->resolverEstadoSoloAnita(
+                        (float) ($pc['ventas_erp_cae'] ?? 0),
+                        (float) ($pc['ventas_anita_cae'] ?? 0),
+                        $tolerancia,
+                    ),
                 'cantidad_facturas_erp' => (int) ($pc['cantidad_facturas_erp_cae'] ?? 0),
                 'jornada_abierta' => (bool) ($pc['jornada_abierta'] ?? false),
+                'ventas_solo_erp' => $ventasSoloErp,
             ];
 
             if ($pvCaea !== '—') {
@@ -495,23 +500,28 @@ final class GastronomiaConciliacionPorPcSupport
                     'pv_cae' => $pvCae,
                     'pv_caea' => $pvCaea,
                     'ventas_erp' => (float) ($pc['ventas_erp_caea'] ?? 0),
-                    'ventas_anita' => (float) ($pc['ventas_anita_caea'] ?? 0),
+                    'ventas_anita' => $ventasSoloErp ? null : (float) ($pc['ventas_anita_caea'] ?? 0),
                     'ventas_erp_cae' => 0.0,
                     'ventas_erp_caea' => (float) ($pc['ventas_erp_caea'] ?? 0),
                     'ventas_anita_cae' => 0.0,
-                    'ventas_anita_caea' => (float) ($pc['ventas_anita_caea'] ?? 0),
+                    'ventas_anita_caea' => $ventasSoloErp ? null : (float) ($pc['ventas_anita_caea'] ?? 0),
                     'rendgastro_z' => null,
                     'rendgastro_z_cae' => null,
                     'rendgastro_caea' => ($pc['rendgastro_caea'] ?? null),
-                    'diff_erp_anita' => round((float) ($pc['ventas_erp_caea'] ?? 0) - (float) ($pc['ventas_anita_caea'] ?? 0), 2),
+                    'diff_erp_anita' => $ventasSoloErp
+                        ? null
+                        : round((float) ($pc['ventas_erp_caea'] ?? 0) - (float) ($pc['ventas_anita_caea'] ?? 0), 2),
                     'diff_erp_rendg' => null,
-                    'estado' => $this->resolverEstadoSoloAnita(
-                        (float) ($pc['ventas_erp_caea'] ?? 0),
-                        (float) ($pc['ventas_anita_caea'] ?? 0),
-                        $tolerancia,
-                    ),
+                    'estado' => $ventasSoloErp
+                        ? '—'
+                        : $this->resolverEstadoSoloAnita(
+                            (float) ($pc['ventas_erp_caea'] ?? 0),
+                            (float) ($pc['ventas_anita_caea'] ?? 0),
+                            $tolerancia,
+                        ),
                     'cantidad_facturas_erp' => (int) ($pc['cantidad_facturas_erp_caea'] ?? 0),
                     'jornada_abierta' => (bool) ($pc['jornada_abierta'] ?? false),
+                    'ventas_solo_erp' => $ventasSoloErp,
                 ];
             }
 

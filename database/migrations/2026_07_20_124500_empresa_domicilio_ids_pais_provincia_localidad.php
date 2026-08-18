@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -98,23 +99,16 @@ class EmpresaDomicilioIdsPaisProvinciaLocalidad extends Migration
 
     private function asegurarForeignKeys(): void
     {
-        $existentes = collect(DB::select(
-            "SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
-             WHERE TABLE_SCHEMA = DATABASE()
-               AND TABLE_NAME = 'empresa'
-               AND CONSTRAINT_TYPE = 'FOREIGN KEY'"
-        ))->pluck('CONSTRAINT_NAME')->all();
-
-        Schema::table('empresa', function (Blueprint $table) use ($existentes) {
-            if (! in_array('fk_empresa_pais', $existentes, true) && Schema::hasColumn('empresa', 'pais_id')) {
+        Schema::table('empresa', function (Blueprint $table) {
+            if (! MigrationDialectSupport::tieneForeignKey('empresa', 'fk_empresa_pais') && Schema::hasColumn('empresa', 'pais_id')) {
                 $table->foreign('pais_id', 'fk_empresa_pais')
                     ->references('id')->on('pais')->onDelete('restrict')->onUpdate('restrict');
             }
-            if (! in_array('fk_empresa_provincia', $existentes, true) && Schema::hasColumn('empresa', 'provincia_id')) {
+            if (! MigrationDialectSupport::tieneForeignKey('empresa', 'fk_empresa_provincia') && Schema::hasColumn('empresa', 'provincia_id')) {
                 $table->foreign('provincia_id', 'fk_empresa_provincia')
                     ->references('id')->on('provincia')->onDelete('restrict')->onUpdate('restrict');
             }
-            if (! in_array('fk_empresa_localidad', $existentes, true) && Schema::hasColumn('empresa', 'localidad_id')) {
+            if (! MigrationDialectSupport::tieneForeignKey('empresa', 'fk_empresa_localidad') && Schema::hasColumn('empresa', 'localidad_id')) {
                 $table->foreign('localidad_id', 'fk_empresa_localidad')
                     ->references('id')->on('localidad')->onDelete('restrict')->onUpdate('restrict');
             }

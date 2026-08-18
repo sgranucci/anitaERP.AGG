@@ -21,7 +21,7 @@ return new class extends Migration
             ->whereNotNull('codigo_articulo_proveedor')
             ->where('codigo_articulo_proveedor', '!=', '')
             ->groupBy('proveedor_id', 'codigo_articulo_proveedor')
-            ->having('total', '>', 1)
+            ->havingRaw('COUNT(*) > 1')
             ->get();
 
         foreach ($duplicados as $dup) {

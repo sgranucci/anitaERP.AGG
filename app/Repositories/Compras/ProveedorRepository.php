@@ -2236,7 +2236,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
         ProveedorListadoFiltros::aplicar($proveedor, $filtros);
 
-		$proveedor = $proveedor->orderby('id', 'DESC');
+		$proveedor = $proveedor->orderBy('proveedor.id', 'DESC');
 
         if (isset($flPaginando)) {
             if ($flPaginando) {

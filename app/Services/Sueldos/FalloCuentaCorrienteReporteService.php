@@ -3,16 +3,16 @@
 namespace App\Services\Sueldos;
 
 use App\Models\Caja\PerdidaPersonal;
-use App\Models\Sueldos\Dtofallo_Sueldos;
+use App\Models\Sueldos\DescuentoFallo_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
-use App\Support\Sueldos\DtoFalloTipoOper;
+use App\Support\Sueldos\DescuentoFalloTipoOperacion;
 use App\Support\Sueldos\EmpleadoEstados;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
 
 /**
  * Cuenta corriente de fallos (Anita: l-fallo.c).
- * Combina faltantes (perdida_personal conceptos Faltante*) con dtofallo.
+ * Combina faltantes con los descuentos por fallo generados en Sueldos.
  */
 class FalloCuentaCorrienteReporteService
 {
@@ -77,7 +77,7 @@ class FalloCuentaCorrienteReporteService
             ->get()
             ->groupBy('empleado_sueldos_id');
 
-        $dtos = Dtofallo_Sueldos::query()
+        $descuentosFallo = DescuentoFallo_Sueldos::query()
             ->whereIn('empleado_sueldos_id', $empIds)
             ->whereBetween('fecha', [$desde->toDateString(), $hasta->toDateString()])
             ->orderBy('fecha')
@@ -102,16 +102,16 @@ class FalloCuentaCorrienteReporteService
                     'origen' => 'perdida',
                 ];
             }
-            foreach ($dtos->get($empleado->id, collect()) as $d) {
-                $esHaber = DtoFalloTipoOper::esHaber((string) $d->tipo_oper);
+            foreach ($descuentosFallo->get($empleado->id, collect()) as $d) {
+                $esHaber = DescuentoFalloTipoOperacion::esHaber((string) $d->tipo_operacion);
                 $movs[] = [
                     'fecha' => $d->fecha?->format('Y-m-d'),
                     'fecha_fmt' => $d->fecha?->format('d/m/Y') ?? '',
-                    'concepto' => DtoFalloTipoOper::etiqueta($d->tipo_oper),
+                    'concepto' => DescuentoFalloTipoOperacion::etiqueta($d->tipo_operacion),
                     'debe' => $esHaber ? 0.0 : round((float) $d->importe, 2),
                     'haber' => $esHaber ? round((float) $d->importe, 2) : 0.0,
                     'observacion' => (string) ($d->observacion ?? ''),
-                    'origen' => 'dtofallo',
+                    'origen' => 'descuento_fallo',
                 ];
             }
 
@@ -168,7 +168,7 @@ class FalloCuentaCorrienteReporteService
     }
 
     /**
-     * Panel del padrón: pérdidas + dtofallo + saldo del legajo.
+     * Panel del padrón: pérdidas + descuentos por fallo + saldo del legajo.
      *
      * @return array<string, mixed>
      */
@@ -191,7 +191,7 @@ class FalloCuentaCorrienteReporteService
             'orden' => self::ORDEN_LEGAJO,
         ]);
 
-        $cierres = Dtofallo_Sueldos::query()
+        $cierres = DescuentoFallo_Sueldos::query()
             ->with('cierre')
             ->where('empleado_sueldos_id', $empleado->id)
             ->whereBetween('fecha', [$desde->toDateString(), $hasta->toDateString()])

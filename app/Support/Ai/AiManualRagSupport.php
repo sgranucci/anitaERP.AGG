@@ -306,12 +306,18 @@ final class AiManualRagSupport
             'manual-compras' => 'manual_compras',
             'manual-stock' => 'manual_stock',
             'manual-recepcion-movstock' => 'manual_recepcion_movstock',
+            'manual-stock-gastronomia' => 'manual_stock_gastronomia',
             'manual-gastronomia' => 'manual_gastronomia',
             'manual-ventas' => 'manual_ventas',
             'manual-vending' => 'manual_vending',
             'manual-canjes-marketing' => 'manual_canjes_marketing',
             'manual-solicitudpago' => 'manual_solicitudpago',
+            'manual-caja' => 'manual_caja',
             'manual-contable' => 'manual_contable',
+            'manual-cierres-rendiciones' => 'manual_cierres_rendiciones',
+            'manual-reporte-definible' => 'manual_reporte_definible',
+            'manual-propuesta-pago' => 'manual_propuesta_pago',
+            'manual-uif' => 'manual_uif',
             'manual-ia' => 'manual_ia',
         ];
         $name = $map[$manualDir] ?? null;

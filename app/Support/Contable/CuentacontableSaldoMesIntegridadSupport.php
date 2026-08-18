@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Contable;
 
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -153,7 +154,7 @@ class CuentacontableSaldoMesIntegridadSupport
         $asientos = DB::table('asiento_movimiento as am')
             ->join('asiento as a', 'a.id', '=', 'am.asiento_id')
             ->where('a.empresa_id', $empresaId)
-            ->whereRaw('(year(a.fecha) * 100 + month(a.fecha)) = ?', [$periodo])
+            ->whereRaw(SqlDialectSupport::anioMes('a.fecha').' = ?', [$periodo])
             ->whereNotNull('am.cuentacontable_id')
             ->groupBy('am.cuentacontable_id')
             ->selectRaw('am.cuentacontable_id, sum(am.monto) valor')
@@ -229,21 +230,22 @@ class CuentacontableSaldoMesIntegridadSupport
      */
     private function agregadoAsientos(array $empresaIds, ?int $periodoDesde, ?int $periodoHasta): array
     {
+        $anioMes = SqlDialectSupport::anioMes('a.fecha');
         $query = DB::table('asiento_movimiento as am')
             ->join('asiento as a', 'a.id', '=', 'am.asiento_id')
             ->whereNotNull('am.cuentacontable_id')
             ->whereNotNull('am.moneda_id')
-            ->groupByRaw('a.empresa_id, (year(a.fecha) * 100 + month(a.fecha)), am.moneda_id')
-            ->selectRaw('a.empresa_id, (year(a.fecha) * 100 + month(a.fecha)) anio_mes, am.moneda_id, sum(am.monto) valor');
+            ->groupByRaw('a.empresa_id, '.$anioMes.', am.moneda_id')
+            ->selectRaw('a.empresa_id, '.$anioMes.' as anio_mes, am.moneda_id, sum(am.monto) valor');
 
         if ($empresaIds !== []) {
             $query->whereIn('a.empresa_id', $empresaIds);
         }
         if ($periodoDesde !== null) {
-            $query->whereRaw('(year(a.fecha) * 100 + month(a.fecha)) >= ?', [$periodoDesde]);
+            $query->whereRaw($anioMes.' >= ?', [$periodoDesde]);
         }
         if ($periodoHasta !== null) {
-            $query->whereRaw('(year(a.fecha) * 100 + month(a.fecha)) <= ?', [$periodoHasta]);
+            $query->whereRaw($anioMes.' <= ?', [$periodoHasta]);
         }
 
         $out = [];

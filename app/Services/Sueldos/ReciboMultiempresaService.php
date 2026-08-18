@@ -6,6 +6,7 @@ use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Liquidacion_Recibo_Sueldos;
 use App\Models\Sueldos\Liquidacion_Sueldos;
 use App\Support\Sueldos\LiquidacionAlcanceRecibo;
+use App\Support\Sueldos\LiquidacionConfidencialSeguridadSupport;
 use Illuminate\Support\Collection;
 
 /**
@@ -51,24 +52,86 @@ class ReciboMultiempresaService
      */
     public function recibosHermanos(Liquidacion_Recibo_Sueldos $recibo): Collection
     {
-        $recibo->loadMissing('liquidacion');
-        $liq = $recibo->liquidacion;
-        if (! $liq || ! $recibo->legajo) {
+        $mapa = $this->hermanosPorRecibos(collect([$recibo]));
+
+        return $mapa->get($recibo->id, collect());
+    }
+
+    /**
+     * Precarga hermanos para una página/lote de recibos (una consulta).
+     *
+     * @param  Collection<int, Liquidacion_Recibo_Sueldos>  $recibos
+     * @return Collection<int, Collection<int, Liquidacion_Recibo_Sueldos>> keyed by recibo_id
+     */
+    public function hermanosPorRecibos(Collection $recibos): Collection
+    {
+        if ($recibos->isEmpty()) {
             return collect();
         }
 
-        return Liquidacion_Recibo_Sueldos::query()
-            ->with(['liquidacion.empresa', 'detalles'])
-            ->where('legajo', $recibo->legajo)
-            ->where('id', '!=', $recibo->id)
-            ->whereHas('liquidacion', function ($q) use ($liq) {
-                $q->where('periodo', $liq->periodo)
-                    ->where('tipo', $liq->tipo)
-                    ->where('empresa_id', '!=', $liq->empresa_id)
+        // Asegura relación liquidacion aunque venga Support\Collection.
+        if (method_exists($recibos, 'loadMissing')) {
+            $recibos->loadMissing('liquidacion');
+        } else {
+            $recibos->each(function (Liquidacion_Recibo_Sueldos $r) {
+                $r->loadMissing('liquidacion');
+            });
+        }
+
+        $legajos = $recibos->pluck('legajo')->filter()->unique()->values()->all();
+        if ($legajos === []) {
+            return collect();
+        }
+
+        $periodos = $recibos->map(fn ($r) => (string) optional($r->liquidacion)->periodo)->unique()->filter()->values();
+        $tipos = $recibos->map(fn ($r) => (string) optional($r->liquidacion)->tipo)->unique()->filter()->values();
+
+        $query = Liquidacion_Recibo_Sueldos::query()
+            ->with(['liquidacion.empresa', 'empleado', 'detalles'])
+            ->whereIn('legajo', $legajos)
+            ->whereNotIn('id', $recibos->pluck('id')->all())
+            ->whereHas('liquidacion', function ($q) use ($periodos, $tipos) {
+                $q->whereIn('periodo', $periodos->all())
+                    ->whereIn('tipo', $tipos->all())
                     ->where('estado', '!=', 'anulada');
-            })
-            ->orderBy('id')
-            ->get();
+                LiquidacionConfidencialSeguridadSupport::aplicarFiltroEmpresaQuery($q, 'empresa_id');
+            });
+
+        LiquidacionConfidencialSeguridadSupport::aplicarVisibilidadRecibos($query);
+
+        $candidatos = $query->get();
+
+        $out = collect();
+        foreach ($recibos as $base) {
+            $liq = $base->liquidacion;
+            if (! $liq || ! $base->legajo) {
+                $out->put($base->id, collect());
+
+                continue;
+            }
+            $hermanos = $candidatos
+                ->filter(function (Liquidacion_Recibo_Sueldos $h) use ($base, $liq) {
+                    $hl = $h->liquidacion;
+                    if (! $hl) {
+                        return false;
+                    }
+
+                    return (int) $h->legajo === (int) $base->legajo
+                        && (string) $hl->periodo === (string) $liq->periodo
+                        && (string) $hl->tipo === (string) $liq->tipo
+                        && (int) $hl->empresa_id !== (int) $liq->empresa_id;
+                })
+                ->sortBy([
+                    fn ($h) => (int) optional($h->liquidacion)->empresa_id,
+                    fn ($h) => (int) optional($h->liquidacion)->numero,
+                    fn ($h) => (int) $h->numero_recibo,
+                    fn ($h) => (int) $h->id,
+                ])
+                ->values();
+            $out->put($base->id, $hermanos);
+        }
+
+        return $out;
     }
 
     /**
@@ -98,4 +161,42 @@ class ReciboMultiempresaService
         return $cadena->merge($this->recibosHermanos($recibo))->values();
     }
 
+    /**
+     * Cadenas para un lote, con deduplicación global por recibo_id.
+     *
+     * @param  Collection<int, Liquidacion_Recibo_Sueldos>  $recibos
+     * @return Collection<int, Collection<int, Liquidacion_Recibo_Sueldos>>
+     */
+    public function cadenasPorRecibos(Collection $recibos, bool $multiempresa): Collection
+    {
+        $hermanos = $multiempresa ? $this->hermanosPorRecibos($recibos) : collect();
+        $emitidos = [];
+        $cadenas = collect();
+
+        $ordenados = $recibos->sortBy([
+            fn ($r) => (int) $r->numero_recibo,
+            fn ($r) => (int) $r->id,
+        ])->values();
+
+        foreach ($ordenados as $base) {
+            $cadena = collect([$base]);
+            if ($multiempresa) {
+                $cadena = $cadena->merge($hermanos->get($base->id, collect()));
+            }
+            $cadena = $cadena->filter(function ($r) use (&$emitidos) {
+                if (isset($emitidos[$r->id])) {
+                    return false;
+                }
+                $emitidos[$r->id] = true;
+
+                return true;
+            })->values();
+
+            if ($cadena->isNotEmpty()) {
+                $cadenas->put($base->id, $cadena);
+            }
+        }
+
+        return $cadenas;
+    }
 }

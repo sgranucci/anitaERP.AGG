@@ -75,10 +75,9 @@
         var infoFbi = document.getElementById('modal-preview-fbi-info');
         if (infoFbi) {
             var monto = preview.fbi_monto || 0;
-            var pv = preview.puntoventa_fbi || '';
             if (monto > 0) {
-                infoFbi.textContent = 'Se emitirá FBI exenta letra B por $ '
-                    + formatoNumero(monto) + ' (PV ' + pv + ').';
+                infoFbi.textContent = 'Se emitirá FBI B (100% exento) en ventas ERP por $ '
+                    + formatoNumero(monto) + ' (PV ' + (preview.puntoventa_fbi || '') + ').';
                 infoFbi.classList.remove('d-none');
             } else {
                 infoFbi.classList.add('d-none');

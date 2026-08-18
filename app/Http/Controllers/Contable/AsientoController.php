@@ -18,6 +18,7 @@ use App\Exports\Contable\AsientoExport;
 use App\Models\Contable\Asiento;
 use App\Models\Contable\Configuracion_AsientoContable;
 use App\Services\Contable\AsientoAprobacionService;
+use App\Support\Configuracion\AnitaSyncIndexSupport;
 use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Contable\AsientoCuentaUsuarioSupport;
 use App\Support\Contable\AsientoListadoFiltros;
@@ -77,8 +78,9 @@ class AsientoController extends Controller
 		
         $hayAsientos = $this->asientoQuery->first();
 
-		if (!$hayAsientos)
+		if (! $hayAsientos && AnitaSyncIndexSupport::autoImportHabilitado()) {
 			$this->asientoRepository->sincronizarConAnita();
+		}
 
         $filtros = $this->resolverFiltrosListado($request);
         // Memoria de filtros: si el request trae filtros los usa y persiste; si vuelve

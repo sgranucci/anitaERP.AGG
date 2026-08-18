@@ -48,6 +48,7 @@
             <div class="card-header">
                 <h3 class="card-title">Cierre M&aacute;quinas</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.contable.boton-manual-cierres-rendiciones')
                     @if (can('listar-cierre-rendicion-maquina-contable', false))
                         <button type="button" class="btn btn-sm btn-warning mr-2 mb-1" id="btn-abrir-pendientes-cierre"
                                 title="Ver jornadas pendientes de cierre contable">
@@ -94,7 +95,7 @@
                 ])
                 <p class="small text-muted px-3 pt-2 mb-0">
                     Un cierre diario por <strong>empresa + fecha jornada</strong>.
-                    Genera FSL exenta (PV por empresa en config) y asientos MAQ como Anita legacy.
+                    Genera FSL exenta en ventas ERP (PV por empresa) y asientos MAQ → ctamov Anita.
                     Use <i class="fa fa-chevron-down"></i> para consultar las rendiciones del d&iacute;a (PDF).
                 </p>
                 <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
@@ -210,7 +211,7 @@
         'rutaListado' => route('cierre_rendicion_maquina_contable'),
         'estadoPendiente' => \App\Support\Contable\CierreRendicionMaquinaListadoFiltros::ESTADO_PENDIENTE,
         'permisoEjecutar' => 'ejecutar-cierre-rendicion-maquina-contable',
-        'textoIntro' => 'Jornadas de m&aacute;quinas (turno C) sin cierre contable. Un cierre diario genera <strong>FSL + asientos MAQ</strong>. El cierre debe ser <strong>correlativo por fecha</strong>.',
+        'textoIntro' => 'Jornadas de m&aacute;quinas (turno C) sin cierre contable. Un cierre diario genera <strong>FSL en ventas ERP + asientos MAQ/ctamov</strong>. El cierre debe ser <strong>correlativo por fecha</strong>.',
         'mostrarPuntoventa' => false,
         'mostrarFacturado' => false,
         'labelTurnos' => 'Rendiciones',

@@ -3,6 +3,8 @@
 namespace App\Support\Contable;
 
 use App\Models\Contable\Cuentacontable;
+use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Builder;
 use RuntimeException;
 
 /**
@@ -36,6 +38,32 @@ final class CierreRendicionBingoConfigSupport
         $pv = (int) ($map[$empresaId] ?? $map[(string) $empresaId] ?? 0);
 
         return $pv > 0 ? $pv : 39;
+    }
+
+    /**
+     * Primera jornada que el ERP exige cerrar correlativamente (antes = Anita).
+     */
+    public static function correlatividadDesde(): ?string
+    {
+        $raw = trim((string) config('bingo.cierre_rendicion_contable.correlatividad_desde', ''));
+        if ($raw === '') {
+            return null;
+        }
+
+        return Carbon::parse($raw)->toDateString();
+    }
+
+    /**
+     * @param  Builder<\App\Models\Caja\Bingo\RendicionBingoCaja>  $query
+     */
+    public static function aplicarPisoCorrelatividad(Builder $query): void
+    {
+        $desde = self::correlatividadDesde();
+        if ($desde === null) {
+            return;
+        }
+
+        $query->whereDate('rendicion_bingo_caja.fecha_jornada', '>=', $desde);
     }
 
     /**

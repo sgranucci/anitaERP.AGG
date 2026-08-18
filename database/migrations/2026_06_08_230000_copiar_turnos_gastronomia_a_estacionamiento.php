@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -39,7 +40,7 @@ return new class extends Migration
 
         $maxId = (int) DB::table('turno_estacionamiento')->max('id');
         if ($maxId > 0) {
-            DB::statement('ALTER TABLE turno_estacionamiento AUTO_INCREMENT = '.($maxId + 1));
+            MigrationDialectSupport::reiniciarAutoincrement('turno_estacionamiento', 'id', $maxId + 1);
         }
     }
 

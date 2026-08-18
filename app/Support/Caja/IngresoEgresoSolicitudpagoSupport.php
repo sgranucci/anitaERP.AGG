@@ -33,10 +33,7 @@ class IngresoEgresoSolicitudpagoSupport
             return $tipoId;
         }
 
-        $abrev = strtoupper(trim((string) config(
-            'caja.ingresoegreso_sp_tipotransaccion_abreviatura',
-            'OPP'
-        )));
+        $abrev = self::abreviaturaTipoPago();
         if ($abrev === '') {
             return 0;
         }
@@ -46,6 +43,64 @@ class IngresoEgresoSolicitudpagoSupport
             ->first();
 
         return $tipo ? (int) $tipo->id : 0;
+    }
+
+    public static function abreviaturaTipoPago(): string
+    {
+        $abrev = strtoupper(trim((string) config(
+            'caja.ingresoegreso_sp_tipotransaccion_abreviatura',
+            'OPP'
+        )));
+
+        return $abrev !== '' ? $abrev : 'OPP';
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    public static function solicitudpagoIdDesdeData(array $data): int
+    {
+        $raw = $data['solicitudpago_id'] ?? 0;
+        $spId = (int) $raw;
+        if ($spId <= 0 && is_string($raw) && $raw !== '') {
+            $decoded = json_decode($raw);
+            $spId = (int) ($decoded ?? 0);
+        }
+
+        return $spId;
+    }
+
+    /**
+     * Pago desde SP: el comprobante Anita (pago/tesmov/ctamov) cierra siempre OPP,
+     * aunque el usuario haya elegido COB u otro tipo en pantalla.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public static function aplicarPagoDesdeSolicitud(array &$data): void
+    {
+        $spId = self::solicitudpagoIdDesdeData($data);
+        if ($spId <= 0) {
+            return;
+        }
+
+        $data['solicitudpago_id'] = $spId;
+
+        $tipoId = self::tipotransaccionCajaIdPorConfig();
+        if ($tipoId <= 0) {
+            throw new InvalidArgumentException(
+                'No hay tipo de transacción '.self::abreviaturaTipoPago()
+                .' configurado para pagar solicitudes de pago.'
+            );
+        }
+        $data['tipotransaccion_caja_id'] = $tipoId;
+
+        $proveedorId = (int) ($data['proveedor_id'] ?? 0);
+        if ($proveedorId <= 0) {
+            $sp = Solicitudpago::query()->find($spId);
+            if ($sp && (int) ($sp->proveedor_id ?? 0) > 0) {
+                $data['proveedor_id'] = (int) $sp->proveedor_id;
+            }
+        }
     }
 
     /**

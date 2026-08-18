@@ -5,28 +5,31 @@ namespace App\Http\Controllers\Sueldos;
 use App\Exports\Sueldos\LiquidacionSueldosListadoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionLiquidacion_Sueldos;
+use App\Models\Seguridad\Usuario;
 use App\Models\Sueldos\Empleado_Sueldos;
-use App\Models\Sueldos\Liquidacion_Recibo_Sueldos;
 use App\Models\Sueldos\Liquidacion_Sueldos;
 use App\Models\Sueldos\Motivoegreso_Sueldos;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Sueldos\Liquidacion_SueldosRepositoryInterface;
 use App\Services\Sueldos\AnitaLiquidacionNovedadSyncService;
+use App\Services\Sueldos\ImportarAuxconfLiquidacionService;
 use App\Services\Sueldos\LiquidacionCalculadorService;
 use App\Services\Sueldos\PlanCuotaLiquidacionService;
 use App\Services\Sueldos\ReciboAnexoIIIArmadorService;
+use App\Services\Sueldos\ReciboLotePdfService;
 use App\Services\Sueldos\ReciboMultiempresaService;
 use App\Support\Sueldos\Formula\FormulaException;
+use App\Support\Sueldos\LiquidacionConfidencialSeguridadSupport;
 use App\Support\Sueldos\LiquidacionSueldosListadoFiltros;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Session;
 
 class Liquidacion_SueldosController extends Controller
 {
     public function __construct(
         private Liquidacion_SueldosRepositoryInterface $repository,
         private EmpresaRepositoryInterface $empresaRepository,
-    ) {
-    }
+    ) {}
 
     /**
      * Trae maeliq (master) + novedades Anita. Default: empresa 1, fecha_liq >= 20260700.
@@ -55,6 +58,8 @@ class Liquidacion_SueldosController extends Controller
             .' · números '.implode(', ', $liq['numeros'] ?: ['—'])
             .' · novedades en alcance '.$nov['en_anita']
             .' · importadas '.$nov['importados']
+            .' · actualizadas '.($nov['actualizados'] ?? 0)
+            .' · eliminadas '.($nov['eliminados'] ?? 0)
             .' · omitidas '.$nov['omitidos'];
 
         $errores = array_merge($liq['errores'] ?? [], $nov['errores'] ?? []);
@@ -73,6 +78,7 @@ class Liquidacion_SueldosController extends Controller
 
         $filtros = LiquidacionSueldosListadoFiltros::resolverDesdeRequest($request);
         $datas = $this->repository->leeLiquidacion($filtros, true);
+        LiquidacionConfidencialSeguridadSupport::aplicarTotalesVisiblesColeccion($datas);
 
         return view('sueldos.liquidacion.index', [
             'datas' => $datas,
@@ -95,6 +101,7 @@ class Liquidacion_SueldosController extends Controller
         switch ($formato) {
             case 'PDF':
                 $datas = $this->repository->leeLiquidacion($filtros, false);
+                LiquidacionConfidencialSeguridadSupport::aplicarTotalesVisiblesColeccion($datas);
 
                 $view = \View::make('sueldos.liquidacion.listado', compact('datas'))->render();
                 $path = storage_path('pdf/listados');
@@ -146,6 +153,7 @@ class Liquidacion_SueldosController extends Controller
     {
         can('editar-liquidacion-sueldos');
         $data = $this->repository->findOrFail($id);
+        LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($data);
 
         if (! $data->esEditable()) {
             return redirect('sueldos/liquidacion')
@@ -164,6 +172,7 @@ class Liquidacion_SueldosController extends Controller
         can('actualizar-liquidacion-sueldos');
 
         $data = $this->repository->findOrFail($id);
+        LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($data);
         if (! $data->esEditable()) {
             return redirect('sueldos/liquidacion')
                 ->with('error', 'La corrida no puede editarse en su estado actual.');
@@ -181,6 +190,7 @@ class Liquidacion_SueldosController extends Controller
 
         if ($request->ajax()) {
             $data = $this->repository->findOrFail($id);
+            LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($data);
             if (! $data->esEditable()) {
                 return response()->json(['mensaje' => 'ng', 'error' => 'Solo se pueden eliminar corridas en borrador/calculadas.'], 422);
             }
@@ -204,6 +214,7 @@ class Liquidacion_SueldosController extends Controller
 
         $destino = (string) $request->input('estado');
         $liq = $this->repository->findOrFail($id);
+        LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($liq);
 
         $permitidas = [
             'revisada' => ['calculada'],
@@ -248,6 +259,7 @@ class Liquidacion_SueldosController extends Controller
         can('editar-liquidacion-sueldos');
 
         $liq = $this->repository->findOrFail($id);
+        LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($liq);
         if (! $liq->esEditable()) {
             return redirect('sueldos/liquidacion')
                 ->with('error', 'La corrida está '.strtolower($liq->estadoLabel()).' y no puede recalcularse.');
@@ -285,19 +297,28 @@ class Liquidacion_SueldosController extends Controller
     /**
      * Resultado de la corrida: recibos generados con su detalle.
      */
-    public function resultado(Request $request, $id)
+    public function resultado(Request $request, ReciboMultiempresaService $multi, $id)
     {
         can('listar-liquidacion-sueldos');
 
         $liq = $this->repository->findOrFail($id);
-        $recibos = $liq->recibos()
-            ->with(['detalles'])
-            ->orderBy('numero_recibo')
-            ->paginate(25);
+        LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($liq);
+
+        $query = $liq->recibos()
+            ->with(['detalles', 'empleado:id,confidencial,nombre']);
+        LiquidacionConfidencialSeguridadSupport::aplicarVisibilidadRecibos($query);
+        $recibos = $query->orderBy('numero_recibo')->paginate(25);
+
+        $hermanosPorRecibo = $multi->hermanosPorRecibos($recibos->getCollection());
+        $totalesVisibles = LiquidacionConfidencialSeguridadSupport::totalesVisiblesCorrida($liq);
 
         return view('sueldos.liquidacion.resultado', [
             'liq' => $liq,
             'recibos' => $recibos,
+            'hermanosPorRecibo' => $hermanosPorRecibo,
+            'totalesVisibles' => $totalesVisibles,
+            'puedeImportarConfidencial' => LiquidacionConfidencialSeguridadSupport::puedeImportarConfidencial()
+                && $liq->esEditable(),
         ]);
     }
 
@@ -314,8 +335,9 @@ class Liquidacion_SueldosController extends Controller
     ) {
         can('listar-liquidacion-sueldos');
 
-        $recibo = $this->reciboDeCorrida($id, $reciboId);
+        $recibo = LiquidacionConfidencialSeguridadSupport::reciboVisibleDeCorrida((int) $id, (int) $reciboId);
         $liq = $recibo->liquidacion ?? $this->repository->findOrFail($id);
+        LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($liq);
         $emitirMulti = $multi->emitirMultiempresa(
             $liq,
             $request->has('multiempresa') ? $request->boolean('multiempresa') : null
@@ -352,8 +374,9 @@ class Liquidacion_SueldosController extends Controller
     ) {
         can('listar-liquidacion-sueldos');
 
-        $recibo = $this->reciboDeCorrida($id, $reciboId);
+        $recibo = LiquidacionConfidencialSeguridadSupport::reciboVisibleDeCorrida((int) $id, (int) $reciboId);
         $liq = $recibo->liquidacion ?? $this->repository->findOrFail($id);
+        LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($liq);
         $emitirMulti = $multi->emitirMultiempresa(
             $liq,
             $request->has('multiempresa') ? $request->boolean('multiempresa') : null
@@ -384,12 +407,104 @@ class Liquidacion_SueldosController extends Controller
         return $pdf->stream($nombre);
     }
 
-    private function reciboDeCorrida($liquidacionId, $reciboId): Liquidacion_Recibo_Sueldos
+    /**
+     * PDF batch de todos los recibos visibles de la corrida.
+     */
+    public function recibosPdf(Request $request, ReciboLotePdfService $pdfService, $id)
     {
-        return Liquidacion_Recibo_Sueldos::query()
-            ->where('liquidacion_id', (int) $liquidacionId)
-            ->where('id', (int) $reciboId)
-            ->firstOrFail();
+        can('listar-liquidacion-sueldos');
+
+        $liq = $this->repository->findOrFail($id);
+        LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($liq);
+        $multiempresa = $request->boolean('multiempresa');
+
+        try {
+            $out = $pdfService->generar($liq, $multiempresa);
+        } catch (\Throwable $e) {
+            if ($request->ajax() || $request->expectsJson()) {
+                return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+            }
+
+            return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
+                ->with('error', $e->getMessage());
+        }
+
+        return response()
+            ->download($out['ruta'], $out['nombre'], ['Content-Type' => 'application/pdf'])
+            ->deleteFileAfterSend(true);
+    }
+
+    /**
+     * Analiza importación de nómina confidencial (dry-run JSON).
+     */
+    public function analizarConfidencial(Request $request, ImportarAuxconfLiquidacionService $import, $id)
+    {
+        can('importar-liquidacion-confidencial-sueldos');
+
+        $liq = $this->repository->findOrFail($id);
+        LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($liq);
+
+        try {
+            $plan = $import->analizar($liq, (string) $request->input('fuente', 'auto'));
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        Session::put('liq_confidencial_plan_'.$liq->id, [
+            'plan_hash' => $plan['plan_hash'],
+            'fuente' => $plan['fuente'],
+            'empresa_anita' => $plan['empresa_anita'],
+        ]);
+
+        // No enviar lineas_dto al browser (volumen/PII).
+        $visible = $plan;
+        $visible['detalle'] = array_map(static function ($d) {
+            return [
+                'legajo' => $d['legajo'],
+                'accion' => $d['accion'],
+                'lineas' => $d['lineas'],
+                'neto' => $d['neto'],
+            ];
+        }, $plan['detalle'] ?? []);
+
+        return response()->json(['ok' => true, 'plan' => $visible]);
+    }
+
+    /**
+     * Ejecuta importación confidencial confirmando el hash del dry-run.
+     */
+    public function ejecutarConfidencial(Request $request, ImportarAuxconfLiquidacionService $import, $id)
+    {
+        can('importar-liquidacion-confidencial-sueldos');
+
+        $liq = $this->repository->findOrFail($id);
+        LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($liq);
+
+        $hash = (string) $request->input('plan_hash', '');
+        $ses = Session::get('liq_confidencial_plan_'.$liq->id);
+        if (! is_array($ses) || ($ses['plan_hash'] ?? '') !== $hash || $hash === '') {
+            return response()->json(['ok' => false, 'mensaje' => 'Debe analizar primero y confirmar el mismo plan.'], 422);
+        }
+
+        /** @var Usuario|null $usuario */
+        $usuario = auth()->user();
+        if (! $usuario instanceof Usuario) {
+            return response()->json(['ok' => false, 'mensaje' => 'Usuario no autenticado.'], 401);
+        }
+
+        try {
+            $plan = $import->analizar($liq, (string) ($ses['fuente'] ?? 'auto'), (int) ($ses['empresa_anita'] ?? 0) ?: null);
+            if (($plan['plan_hash'] ?? '') !== $hash) {
+                throw new \RuntimeException('El plan cambió desde el análisis. Vuelva a analizar antes de confirmar.');
+            }
+            $resultado = $import->ejecutar($liq, $plan, $usuario, $request->boolean('eliminar_ausentes'));
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        Session::forget('liq_confidencial_plan_'.$liq->id);
+
+        return response()->json(['ok' => true, 'resultado' => $resultado]);
     }
 
     /**
@@ -400,15 +515,137 @@ class Liquidacion_SueldosController extends Controller
         can('listar-liquidacion-sueldos');
 
         $liq = $this->repository->findOrFail($id);
-        $emp = Empleado_Sueldos::findOrFail($empleadoId);
+        LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($liq);
+        $emp = Empleado_Sueldos::query()
+            ->where('id', $empleadoId)
+            ->where('empresa_id', $liq->empresa_id)
+            ->firstOrFail();
+        if ((bool) $emp->confidencial && ! LiquidacionConfidencialSeguridadSupport::puedeVerConfidencial()) {
+            abort(404);
+        }
 
-        $pasos = $calculador->trazarEmpleado($liq, $emp);
+        $traza = $calculador->trazarEmpleadoCompleto($liq, $emp);
 
         return view('sueldos.liquidacion.trazar', [
             'liq' => $liq,
             'empleado' => $emp,
-            'pasos' => $pasos,
+            'pasos' => $traza['pasos'] ?? [],
+            'traza' => $traza,
         ]);
+    }
+
+    /**
+     * Permisos para elegir liquidación en formularios operativos (reporte definible, etc.).
+     */
+    private function puedeConsultarLiquidacionOperativa(): bool
+    {
+        return can('listar-liquidacion-sueldos', false)
+            || can('editar-liquidacion-sueldos', false)
+            || can('crear-liquidacion-sueldos', false)
+            || can('listar-reporte-sueldos-definible', false)
+            || can('editar-reporte-sueldos-definible', false)
+            || can('actualizar-reporte-sueldos-definible', false)
+            || can('crear-reporte-sueldos-definible', false)
+            || can('ejecutar-reporte-sueldos-definible', false);
+    }
+
+    public function consultaLiquidacion(Request $request)
+    {
+        if (! $this->puedeConsultarLiquidacionOperativa()) {
+            abort(403);
+        }
+
+        $consulta = (string) ($request->input('consulta') ?? '');
+        $empresaId = $request->filled('empresa_id') ? (int) $request->input('empresa_id') : null;
+        $data = $this->repository->listadoParaConsulta($consulta, $empresaId);
+        $puedeAbrirAbm = can('editar-liquidacion-sueldos', false) || can('listar-liquidacion-sueldos', false);
+
+        $output = ['data' => ''];
+        if ($data->isEmpty()) {
+            $output['data'] = '<tr><td colspan="6">Sin resultados</td></tr>';
+        } else {
+            foreach ($data as $row) {
+                $tipoLabel = Liquidacion_Sueldos::TIPOS[$row->tipo] ?? (string) $row->tipo;
+                $estadoLabel = Liquidacion_Sueldos::ESTADOS[$row->estado] ?? (string) $row->estado;
+                $desc = trim((string) ($row->descripcion ?? ''));
+                $nombre = trim(($row->periodo ?? '').($desc !== '' ? ' · '.$desc : '').' ('.$estadoLabel.')');
+                $output['data'] .= '<tr>';
+                $output['data'] .= '<td class="liquidacion_id">'.e($row->id).'</td>';
+                $output['data'] .= '<td class="numeroliquidacion">'.e($row->numero).'</td>';
+                $output['data'] .= '<td class="descripcionliquidacion">'.e($nombre).'</td>';
+                $output['data'] .= '<td class="tipoliquidacion">'.e($tipoLabel).'</td>';
+                $output['data'] .= '<td class="empresaliquidacion">'.e(optional($row->empresa)->nombre ?? '').'</td>';
+                $output['data'] .= '<td class="text-nowrap">';
+                $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultaliquidacion_sueldos">Elegir</a>';
+                if ($puedeAbrirAbm) {
+                    $url = route('editar_liquidacion_sueldos', [
+                        'id' => $row->id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ]);
+                    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+                }
+                $output['data'] .= '</td>';
+                $output['data'] .= '</tr>';
+            }
+        }
+
+        return response()->json($output);
+    }
+
+    public function leeUnLiquidacionPorNumero($numero, Request $request)
+    {
+        if (! $this->puedeConsultarLiquidacionOperativa()) {
+            abort(403);
+        }
+
+        $numeroInt = (int) preg_replace('/\D+/', '', (string) $numero);
+        $empresaId = $request->filled('empresa_id') ? (int) $request->input('empresa_id') : null;
+        $liq = $this->repository->findPorNumero($numeroInt, $empresaId);
+        if ($liq === null) {
+            return response()->json(['error' => 'Liquidación no encontrada'], 404);
+        }
+
+        return response()->json($this->payloadLiquidacionOperativa($liq));
+    }
+
+    public function leeLiquidacion($id, Request $request)
+    {
+        if (! $this->puedeConsultarLiquidacionOperativa()) {
+            abort(403);
+        }
+
+        $empresaId = $request->filled('empresa_id') ? (int) $request->input('empresa_id') : null;
+        $liq = $this->repository->findParaConsulta((int) $id, $empresaId);
+        if ($liq === null) {
+            return response()->json(['error' => 'Liquidación no encontrada'], 404);
+        }
+
+        return response()->json($this->payloadLiquidacionOperativa($liq));
+    }
+
+    /**
+     * @return array{id:int,numero:int,descripcion:string,periodo:?string,tipo:?string,tipo_label:string,estado:?string,estado_label:string,empresa_id:?int,empresa:?string}
+     */
+    private function payloadLiquidacionOperativa($liq): array
+    {
+        $estadoLabel = Liquidacion_Sueldos::ESTADOS[$liq->estado] ?? (string) ($liq->estado ?? '');
+        $tipoLabel = Liquidacion_Sueldos::TIPOS[$liq->tipo] ?? (string) ($liq->tipo ?? '');
+        $desc = trim((string) ($liq->descripcion ?? ''));
+        $nombre = trim(($liq->periodo ?? '').($desc !== '' ? ' · '.$desc : '').($estadoLabel !== '' ? ' ('.$estadoLabel.')' : ''));
+
+        return [
+            'id' => (int) $liq->id,
+            'numero' => (int) $liq->numero,
+            'descripcion' => $nombre !== '' ? $nombre : (string) ($liq->descripcion ?? ''),
+            'periodo' => $liq->periodo,
+            'tipo' => $liq->tipo,
+            'tipo_label' => $tipoLabel,
+            'estado' => $liq->estado,
+            'estado_label' => $estadoLabel,
+            'empresa_id' => $liq->empresa_id ? (int) $liq->empresa_id : null,
+            'empresa' => optional($liq->empresa)->nombre,
+        ];
     }
 
     private function empresas()

@@ -111,14 +111,29 @@ class VacacionEscalaAntiguedad
      */
     public static function aniosDesdeAntiguedadAnterior(?string $antiguedadAnterior): int
     {
+        return self::componentesAntiguedadAnterior($antiguedadAnterior)['anios'];
+    }
+
+    /**
+     * Convierte la duración Anita "aa-mm-dd" sin perder meses ni días.
+     *
+     * @return array{anios: int, meses: int, dias: int}
+     */
+    public static function componentesAntiguedadAnterior(?string $antiguedadAnterior): array
+    {
+        $vacio = ['anios' => 0, 'meses' => 0, 'dias' => 0];
         if ($antiguedadAnterior === null || trim($antiguedadAnterior) === '') {
-            return 0;
+            return $vacio;
         }
         $partes = preg_split('/[-\/]/', trim($antiguedadAnterior));
         if (! is_array($partes) || $partes === []) {
-            return 0;
+            return $vacio;
         }
 
-        return max(0, (int) $partes[0]);
+        return [
+            'anios' => max(0, (int) ($partes[0] ?? 0)),
+            'meses' => max(0, (int) ($partes[1] ?? 0)),
+            'dias' => max(0, (int) ($partes[2] ?? 0)),
+        ];
     }
 }

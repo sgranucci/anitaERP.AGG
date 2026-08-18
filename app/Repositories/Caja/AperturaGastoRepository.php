@@ -9,6 +9,7 @@ use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Caja\AperturaGastoListadoFiltros;
+use App\Support\Configuracion\AnitaSyncIndexSupport;
 use DB;
 use Exception;
 use InvalidArgumentException;
@@ -28,7 +29,7 @@ class AperturaGastoRepository implements AperturaGastoRepositoryInterface
      */
     public function leeAperturaGasto($filtros, bool $paginar = false)
     {
-        if (! $this->model->newQuery()->exists()) {
+        if (! $this->model->newQuery()->exists() && AnitaSyncIndexSupport::autoImportHabilitado()) {
             $this->sincronizarConAnita();
         }
 

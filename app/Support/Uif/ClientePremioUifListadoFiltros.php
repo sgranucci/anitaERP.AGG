@@ -2,6 +2,7 @@
 
 namespace App\Support\Uif;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
 use Illuminate\Database\Eloquent\Builder;
@@ -342,7 +343,7 @@ class ClientePremioUifListadoFiltros
                 }
             }
             $q->orWhere('cliente_premio_uif.monto', 'like', $like)
-                ->orWhereRaw('CAST(cliente_premio_uif.fechaentrega AS CHAR) LIKE ?', [$like]);
+                ->orWhereRaw(SqlDialectSupport::castTexto('cliente_premio_uif.fechaentrega').' LIKE ?', [$like]);
         });
     }
 

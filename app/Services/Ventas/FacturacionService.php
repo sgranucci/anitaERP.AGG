@@ -2258,8 +2258,10 @@ class FacturacionService
 					// Arma comprobantes asociados
 					$comprobantesAsociados = [];
 
-					$fechaAsignacion = Carbon::parse($fechaFactura);
-					$fechaAsignacion->modify('first day of this month');
+					[$fechaAsignacionDesdeYmd, $fechaAsignacionHastaYmd] = $this->resolverFechasAsignacionPeriodoAsoc(
+						$data,
+						$fechaFactura,
+					);
 					
 					// Lee moneda
 					$moneda = Moneda::find($moneda_id);
@@ -2306,8 +2308,8 @@ class FacturacionService
 							'tributos' => $tributos,
 							'impuestos' => $impuestos,
 							'comprobantesasociados' => $comprobantesAsociados,
-							'fechaasignaciondesde' => date('Ymd', strtotime($fechaAsignacion)),
-							'fechaasignacionhasta' => date('Ymd', strtotime($fechaFactura)),
+							'fechaasignaciondesde' => $fechaAsignacionDesdeYmd,
+							'fechaasignacionhasta' => $fechaAsignacionHastaYmd,
 							'pais' => $cliente->paises?->codigo ?? '',
 							'nombrecliente' => $arcaNombre,
 							'domicilio' => $arcaDomicilio,
@@ -2680,8 +2682,10 @@ class FacturacionService
 					// Arma comprobantes asociados
 					$comprobantesAsociados = [];
 
-					$fechaAsignacion = Carbon::parse($fechaFactura);
-					$fechaAsignacion->modify('first day of this month');
+					[$fechaAsignacionDesdeYmd, $fechaAsignacionHastaYmd] = $this->resolverFechasAsignacionPeriodoAsoc(
+						$data,
+						$fechaFactura,
+					);
 					
 					// Lee moneda
 					$moneda = Moneda::find($moneda_id);
@@ -2712,8 +2716,8 @@ class FacturacionService
 							'tributos' => $tributos,
 							'impuestos' => $impuestos,
 							'comprobantesasociados' => $comprobantesAsociados,
-							'fechaasignaciondesde' => date('Ymd', strtotime($fechaAsignacion)),
-							'fechaasignacionhasta' => date('Ymd', strtotime($fechaFactura)),
+							'fechaasignaciondesde' => $fechaAsignacionDesdeYmd,
+							'fechaasignacionhasta' => $fechaAsignacionHastaYmd,
 							'pais' => $cliente->paises?->codigo ?? '',
 							'nombrecliente' => $cliente->nombre,
 							'domicilio' => $cliente->domicilio,
@@ -4764,6 +4768,48 @@ class FacturacionService
 		}
 
 		return ['Success'];
+	}
+
+	/**
+	 * PeriodoAsoc ARCA: por defecto 1º del mes → fecha factura.
+	 * Permite override explícito (lote saneamiento: FchDesde=FchHasta=Ymd jornada).
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @return array{0:string,1:string}  Ymd, Ymd
+	 */
+	private function resolverFechasAsignacionPeriodoAsoc(array $data, string $fechaFactura): array
+	{
+		$desde = $data['fechaasignaciondesde'] ?? null;
+		$hasta = $data['fechaasignacionhasta'] ?? null;
+
+		$norm = static function ($v): ?string {
+			if ($v === null || $v === '') {
+				return null;
+			}
+			$s = trim((string) $v);
+			if (preg_match('/^\d{8}$/', $s)) {
+				return $s;
+			}
+			if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $s)) {
+				return str_replace('-', '', $s);
+			}
+
+			return null;
+		};
+
+		$desdeYmd = $norm($desde);
+		$hastaYmd = $norm($hasta);
+		if ($desdeYmd !== null && $hastaYmd !== null) {
+			return [$desdeYmd, $hastaYmd];
+		}
+
+		$fechaAsignacion = Carbon::parse($fechaFactura);
+		$fechaAsignacion->modify('first day of this month');
+
+		return [
+			date('Ymd', strtotime($fechaAsignacion)),
+			date('Ymd', strtotime($fechaFactura)),
+		];
 	}
 
 	private function calculaCondicionVenta($fecha, $total, $condicionventa_id) : array

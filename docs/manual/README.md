@@ -1,88 +1,78 @@
 # Manuales de usuario — capturas de pantalla
 
-Cada manual del ERP sigue el mismo patrón para incluir **capturas reales** de las pantallas (preferencia PNG; SVG solo para diagramas).
+Cada manual del ERP sigue el mismo patrón para incluir capturas de las pantallas (**PNG mockups 1280×760** como estándar; **SVG** solo para diagramas de flujo/circuitos).
+
+## Estándar de pantallas (mockups GD)
+
+```bash
+# Regenerar todas las pantallas de los manuales activos
+php artisan manual:generar-mockups all
+
+# Un manual
+php artisan manual:generar-mockups gastronomia
+
+# Solo auditar (dimensiones, faltantes, PDF-como-PNG, duplicados)
+php artisan manual:generar-mockups all --qa
+
+# Verificar que cada clave de config tiene escena (salvo diagramas)
+php artisan manual:generar-mockups all --check-escenas
+```
+
+Motor: `App\Support\Manuales\ManualMockupGdSupport`  
+Escenas por módulo: `App\Support\Manuales\Escenas\*Escenas`  
+Inventario: `App\Support\Manuales\ManualMockupCatalogo`
+
+Los diagramas (`flujo-*`, `circuito-*`, etc.) se conservan en SVG y **no** se sobrescriben. Si existe un PNG homónimo de un diagrama, el pipeline lo prioriza: no dejar PNG basura sobre diagramas.
 
 ## Estructura
 
-| Manual | Config | Imágenes | Comando de captura |
-|--------|--------|----------|-------------------|
-| Compras | `config/manual_compras.php` | `public/docs/manual-compras/img/` | `php artisan manual:capturar-compras-interno` |
-| Stock (recuento) | `config/manual_stock.php` | `public/docs/manual-stock/img/` | `php artisan manual:capturar-stock-interno` |
-| Stock (recepción + movimientos) | `config/manual_recepcion_movstock.php` | `public/docs/manual-recepcion-movstock/img/` | `php artisan manual:capturar-recepcion-movstock-interno` |
-| Gastronomía | `config/manual_gastronomia.php` | `public/docs/manual-gastronomia/img/` | `php artisan manual:capturar-gastronomia-interno` |
-| Ventas (pedidos) | `config/manual_ventas.php` | `public/docs/manual-ventas/img/` | `php artisan manual:capturar-ventas-interno` |
-| Canjes marketing | `config/manual_canjes_marketing.php` | `public/docs/manual-canjes-marketing/img/` | `php artisan manual:capturar-canjes-marketing-interno` |
-| Vending | `config/manual_vending.php` | `public/docs/manual-vending/img/` | `php artisan manual:capturar-vending-interno` |
-| Solicitudes de pago | `config/manual_solicitudpago.php` | `public/docs/manual-solicitudpago/img/` | `php artisan manual:capturar-solicitudpago-interno` |
-| Propuesta de pagos / Tesorería AP | `config/manual_propuesta_pago.php` | `public/docs/manual-propuesta-pago/img/` | (SVG de respaldo; captura PNG a definir) |
-| Contable (cierres/aperturas) | `config/manual_contable.php` | `public/docs/manual-contable/img/` | `php artisan manual:capturar-contable-interno` |
-| UIF (clientes / premios / informe) | `config/manual_uif.php` | `public/docs/manual-uif/img/` | `php artisan manual:capturar-uif-interno` |
-| Reportes contables definibles | `config/manual_reporte_definible.php` | `public/docs/manual-reporte-definible/img/` | (SVG de circuitos/wireframes; captura PNG a definir) |
+| Manual | Config | Imágenes | Mockups |
+|--------|--------|----------|---------|
+| Compras | `config/manual_compras.php` | `public/docs/manual-compras/img/` | `manual:generar-mockups compras` |
+| Stock (recuento) | `config/manual_stock.php` | `public/docs/manual-stock/img/` | `manual:generar-mockups stock` |
+| Stock (recepción + movimientos) | `config/manual_recepcion_movstock.php` | `public/docs/manual-recepcion-movstock/img/` | `manual:generar-mockups recepcion-movstock` |
+| Stock (gastronomía / fórmulas / insumos) | `config/manual_stock_gastronomia.php` | `public/docs/manual-stock-gastronomia/img/` | `manual:generar-mockups stock-gastronomia` |
+| Gastronomía | `config/manual_gastronomia.php` | `public/docs/manual-gastronomia/img/` | `manual:generar-mockups gastronomia` |
+| Ventas (pedidos) | `config/manual_ventas.php` | `public/docs/manual-ventas/img/` | `manual:generar-mockups ventas` |
+| Canjes marketing | `config/manual_canjes_marketing.php` | `public/docs/manual-canjes-marketing/img/` | `manual:generar-mockups canjes-marketing` |
+| Vending | `config/manual_vending.php` | `public/docs/manual-vending/img/` | `manual:generar-mockups vending` |
+| Caja (Flash, posición, máquinas, bingo) | `config/manual_caja.php` | `public/docs/manual-caja/img/` | `manual:generar-mockups caja` |
+| Solicitudes de pago | `config/manual_solicitudpago.php` | `public/docs/manual-solicitudpago/img/` | `manual:generar-mockups solicitudpago` |
+| Propuesta de pagos / Tesorería AP | `config/manual_propuesta_pago.php` | `public/docs/manual-propuesta-pago/img/` | `manual:generar-mockups propuesta-pago` |
+| Contable (cierres/aperturas) | `config/manual_contable.php` | `public/docs/manual-contable/img/` | `manual:generar-mockups contable` |
+| Contaduría (cierres de rendiciones) | `config/manual_cierres_rendiciones.php` | `public/docs/manual-cierres-rendiciones/img/` | `manual:generar-mockups cierres-rendiciones` |
+| UIF | `config/manual_uif.php` | `public/docs/manual-uif/img/` | `manual:generar-mockups uif` |
+| Reportes contables definibles | `config/manual_reporte_definible.php` | `public/docs/manual-reporte-definible/img/` | `manual:generar-mockups reporte-definible` |
+
+Manual IA: sin capturas de pantalla activas (no generar mockups artificiales).
 
 ## Cómo vincular una captura a un capítulo
 
-1. En `config/manual_*.php`, agregar entrada en `capturas`:
+1. En `config/manual_*.php`, agregar entrada en `capturas`.
+2. Agregar la escena en `App\Support\Manuales\Escenas\{Manual}Escenas` (o marcarla como diagrama en `ManualMockupCatalogo::clavesDiagrama`).
+3. En `docs/manual-*/contenido.php`: `'captura_id' => 'mi_pantalla'`.
+4. El pipeline prioriza **PNG** sobre SVG si existen ambos con el mismo basename.
 
-```php
-'mi_pantalla' => [
-    'archivo' => 'mi-pantalla.png',
-    'titulo' => 'Leyenda bajo la imagen',
-    'seccion' => '4. Título exacto del capítulo', // o usar captura_id en contenido.php
-],
-```
-
-2. En `docs/manual-*/contenido.php`, en la sección correspondiente:
-
-```php
-'captura_id' => 'mi_pantalla',
-```
-
-3. La vista del manual incluye `@include('manual.partials.capturas-seccion', …)` — prioriza **PNG** sobre SVG si existen ambos.
-
-## Generar capturas (servidor)
-
-Requisitos: **Ghostscript** (`gs`) y usuario ERP con permisos de las pantallas.
+## Regenerar PDF / Word / preview
 
 ```bash
-# Ejemplo: gastronomía (empresa con PV configurado)
-php artisan manual:capturar-gastronomia-interno --usuario=admin
-
-# Canjes marketing
-php artisan manual:capturar-canjes-marketing-interno --usuario=admin
-
-# Regenerar PDF/Word del manual
 php docs/manual-gastronomia/generar.php
+php docs/manual-compras/generar.php
+php docs/manual-stock/generar.php
+php docs/manual-recepcion-movstock/generar.php
+php docs/manual-stock-gastronomia/generar.php
+php docs/manual-ventas/generar.php
 php docs/manual-canjes-marketing/generar.php
 php docs/manual-vending/generar.php
-php docs/manual-recepcion-movstock/generar.php
+php docs/manual-caja/generar.php
 php docs/manual-solicitudpago/generar.php
 php docs/manual-propuesta-pago/generar.php
 php docs/manual-contable/generar.php
+php docs/manual-cierres-rendiciones/generar.php
 php docs/manual-uif/generar.php
-```
-
-Capturas Contable:
-
-```bash
-php artisan manual:capturar-contable-interno --usuario=admin
-php docs/manual-contable/generar.php
-```
-
-Capturas UIF:
-
-```bash
-php artisan manual:capturar-uif-interno --usuario=admin
-php docs/manual-uif/generar.php
-```
-
-Reportes contables definibles (diagramas SVG incluidos; PNG de pantallas opcionales):
-
-```bash
 php docs/manual-reporte-definible/generar.php
 ```
 
-Alternativa Compras/Stock con navegador: `python3 docs/manual-compras/capturar_playwright.py` (requiere Chromium).
+## Legacy (DomPDF + Ghostscript)
 
-## Placeholder SVG
-
-Si aún no se corrió el comando, el manual muestra el **SVG** de respaldo (diagramas o wireframes). Tras capturar, el PNG reemplaza al SVG automáticamente.
+Los comandos `manual:capturar-*-interno` quedan como alternativa histórica; la calidad operativa de pantallas es la de `manual:generar-mockups`.

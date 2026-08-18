@@ -3,6 +3,7 @@
 namespace App\Repositories\Sueldos;
 
 use App\Models\Sueldos\Liquidacion_Sueldos;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Sueldos\LiquidacionSueldosListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
@@ -14,14 +15,19 @@ class Liquidacion_SueldosRepository implements Liquidacion_SueldosRepositoryInte
 {
     protected $model;
 
-    public function __construct(Liquidacion_Sueldos $model)
-    {
+    public function __construct(
+        Liquidacion_Sueldos $model,
+        private EmpresaRepositoryInterface $empresaRepository,
+    ) {
         $this->model = $model;
     }
 
     public function all()
     {
-        return $this->model->newQuery()->orderByDesc('periodo')->orderByDesc('numero')->get();
+        $query = $this->model->newQuery()->orderByDesc('periodo')->orderByDesc('numero');
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'liquidacion_sueldos.empresa_id');
+
+        return $query->get();
     }
 
     /**
@@ -42,6 +48,8 @@ class Liquidacion_SueldosRepository implements Liquidacion_SueldosRepositoryInte
         $query = $this->model->newQuery()
             ->select('liquidacion_sueldos.*')
             ->with(['empresa:id,nombre', 'usuario:id,nombre']);
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'liquidacion_sueldos.empresa_id');
 
         if (LiquidacionSueldosListadoFiltros::tieneCriteriosAplicados($filtros)) {
             LiquidacionSueldosListadoFiltros::aplicar($query, $filtros);
@@ -64,6 +72,91 @@ class Liquidacion_SueldosRepository implements Liquidacion_SueldosRepositoryInte
     public function proximoNumero(int $empresaId): int
     {
         return (int) ($this->model->newQuery()->where('empresa_id', $empresaId)->max('numero') ?? 0) + 1;
+    }
+
+    /**
+     * Modal de consulta operativa: busca por número, descripción, período o estado.
+     *
+     * @return \Illuminate\Support\Collection<int, Liquidacion_Sueldos>
+     */
+    public function listadoParaConsulta(string $consulta = '', ?int $empresaId = null)
+    {
+        $query = $this->model->newQuery()
+            ->with(['empresa:id,nombre'])
+            ->orderByDesc('periodo')
+            ->orderByDesc('numero')
+            ->limit(80);
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'liquidacion_sueldos.empresa_id');
+
+        if ($empresaId !== null && $empresaId > 0) {
+            $query->where('empresa_id', $empresaId);
+        }
+
+        $texto = trim($consulta);
+        if ($texto !== '') {
+            $query->where(function ($q) use ($texto) {
+                if (ctype_digit($texto)) {
+                    $q->orWhere('numero', (int) $texto)
+                        ->orWhere('id', (int) $texto)
+                        ->orWhere('periodo', 'like', '%'.$texto.'%');
+                }
+                $q->orWhere('descripcion', 'like', '%'.$texto.'%')
+                    ->orWhere('estado', 'like', '%'.$texto.'%')
+                    ->orWhere('tipo', 'like', '%'.$texto.'%')
+                    ->orWhere('periodo', 'like', '%'.$texto.'%');
+            });
+        }
+
+        return $query->get([
+            'id',
+            'empresa_id',
+            'numero',
+            'descripcion',
+            'tipo',
+            'periodo',
+            'estado',
+            'fecha_liquidacion',
+        ]);
+    }
+
+    public function findPorNumero(int $numero, ?int $empresaId = null): ?Liquidacion_Sueldos
+    {
+        if ($numero <= 0) {
+            return null;
+        }
+
+        $query = $this->model->newQuery()
+            ->with(['empresa:id,nombre'])
+            ->where('numero', $numero)
+            ->orderByDesc('id');
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'liquidacion_sueldos.empresa_id');
+
+        if ($empresaId !== null && $empresaId > 0) {
+            $query->where('empresa_id', $empresaId);
+        }
+
+        return $query->first();
+    }
+
+    public function findParaConsulta(int $id, ?int $empresaId = null): ?Liquidacion_Sueldos
+    {
+        if ($id <= 0) {
+            return null;
+        }
+
+        $query = $this->model->newQuery()
+            ->with(['empresa:id,nombre'])
+            ->whereKey($id);
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'liquidacion_sueldos.empresa_id');
+
+        if ($empresaId !== null && $empresaId > 0) {
+            $query->where('empresa_id', $empresaId);
+        }
+
+        return $query->first();
     }
 
     public function create(array $data)

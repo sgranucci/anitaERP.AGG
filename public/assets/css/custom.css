@@ -21,6 +21,32 @@ label.requerido:after{
     pointer-events: none;
 }
 
+/* AdminLTE fuerza color:#fff en los <a> del header de cards con fondo sólido
+   (card-info, card-primary, etc.). Los botones que en hover se rellenan de un
+   color claro quedaban con texto blanco sobre fondo blanco. */
+.card:not(.card-outline) > .card-header .btn-outline-light:hover,
+.card:not(.card-outline) > .card-header .btn-outline-light:focus,
+.card:not(.card-outline) > .card-header .btn-outline-light:active,
+.card:not(.card-outline) > .card-header .btn-outline-light.active,
+.card:not(.card-outline) > .card-header .btn-outline-warning:hover,
+.card:not(.card-outline) > .card-header .btn-outline-warning:focus,
+.card:not(.card-outline) > .card-header .btn-outline-warning:active,
+.card:not(.card-outline) > .card-header .btn-light,
+.card:not(.card-outline) > .card-header .btn-light:hover,
+.card:not(.card-outline) > .card-header .btn-light:focus,
+.card:not(.card-outline) > .card-header .btn-warning,
+.card:not(.card-outline) > .card-header .btn-warning:hover,
+.card:not(.card-outline) > .card-header .btn-warning:focus,
+.card:not(.card-outline) > .card-header .btn-default,
+.card:not(.card-outline) > .card-header .btn-default:hover,
+.card:not(.card-outline) > .card-header .btn-default:focus {
+    color: #17202a;
+}
+.card:not(.card-outline) > .card-header .btn:focus,
+.card:not(.card-outline) > .card-header .btn.focus {
+    box-shadow: 0 0 0 0.2rem rgba(255, 255, 255, 0.45);
+}
+
 /* Columna de acciones visible sin scroll horizontal en tablas anchas. */
 .tabla-acciones-fijas th.col-acciones-tabla,
 .tabla-acciones-fijas td.col-acciones-tabla {

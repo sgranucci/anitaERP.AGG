@@ -1553,6 +1553,9 @@ var montoPendienteSp = 0;
 	 */
 	function initModoUsoIe()
 	{
+		if (esPagoSolicitudPagoIe()) {
+			return;
+		}
 		var $root = $('#ie-modo-uso');
 		if (!$root.length) {
 			return;

@@ -9,6 +9,7 @@ use App\Support\Contable\CuentacontableSaldoMesSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\SumasSaldos\SumasSaldosProcesador;
 use App\Support\Contable\SumasSaldosListadoFiltros;
+use App\Support\Navegacion\ModoConsultaUrlSupport;
 
 /**
  * Ejecuta un reporte definible sobre saldos anitaERP.
@@ -1451,7 +1452,7 @@ class ReporteDefinibleProcesador
             return null;
         }
 
-        $params = [
+        $params = array_merge([
             'consultar' => 1,
             'modo_periodo' => 'rango',
             'fecha_desde' => $fd,
@@ -1460,7 +1461,7 @@ class ReporteDefinibleProcesador
             'cuenta_hasta' => $hasta,
             'modo_inclusion_asientos' => $filtros['modo_inclusion_asientos'] ?? 'sin_cierre_ni_inflacion',
             'moneda_id' => $filtros['moneda_id'] ?? 1,
-        ];
+        ], ModoConsultaUrlSupport::QUERY);
         foreach ($empresaIds as $id) {
             $params['empresa_ids'][] = $id;
         }

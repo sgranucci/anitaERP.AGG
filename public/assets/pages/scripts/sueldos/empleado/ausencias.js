@@ -2,6 +2,7 @@
     'use strict';
 
     var cargado = false;
+    var seccionesAbiertas = {};
 
     function token() {
         return $('#form-general input[name="_token"]').val() || $('meta[name="csrf-token"]').attr('content') || '';
@@ -22,11 +23,34 @@
         setTimeout(function () { $box.alert('close'); }, 4000);
     }
 
+    function recordarSecciones() {
+        host().find('#ausencias-panel .collapse[id]').each(function () {
+            seccionesAbiertas[this.id] = $(this).hasClass('show');
+        });
+    }
+
+    // El panel se re-renderiza entero por AJAX: sin esto las secciones vuelven al estado inicial.
+    function restaurarSecciones() {
+        Object.keys(seccionesAbiertas).forEach(function (id) {
+            var $seccion = host().find('#' + id);
+            if (!$seccion.length) {
+                return;
+            }
+            var abierta = seccionesAbiertas[id];
+            $seccion.toggleClass('show', abierta);
+            host().find('[data-target="#' + id + '"]')
+                .toggleClass('collapsed', !abierta)
+                .attr('aria-expanded', abierta ? 'true' : 'false');
+        });
+    }
+
     function pintar(resp) {
         if (resp && resp.html) {
             var $panel = host().find('#ausencias-panel');
             if ($panel.length) {
+                recordarSecciones();
                 $panel.replaceWith(resp.html);
+                restaurarSecciones();
             } else {
                 host().html(resp.html);
             }
@@ -201,9 +225,18 @@
         $('#ausencia_obs').val(a.observacion || '');
         $('#ausencia-form-titulo').text('Editar ausencia #' + a.id);
         $('#btn-cancelar-ausencia').removeClass('d-none');
-        var $form = $('#form-ausencia');
-        if ($form.length) {
-            $('html, body').animate({ scrollTop: $form.offset().top - 120 }, 250);
+
+        var enfocarForm = function () {
+            var $form = $('#form-ausencia');
+            if ($form.length) {
+                $('html, body').animate({ scrollTop: $form.offset().top - 120 }, 250);
+            }
+        };
+        var $seccionForm = $('#ausencias-seccion-form');
+        if ($seccionForm.length && !$seccionForm.hasClass('show')) {
+            $seccionForm.one('shown.bs.collapse', enfocarForm).collapse('show');
+        } else {
+            enfocarForm();
         }
     });
 

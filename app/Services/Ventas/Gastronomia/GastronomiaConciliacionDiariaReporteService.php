@@ -20,6 +20,7 @@ use App\Support\Ventas\Gastronomia\GastronomiaConciliacionGastroTotalDiaSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionRendgAsientosDiaSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaControlFlashSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionVendingRendgSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaVentasSoloErpSupport;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaAnitaRendgastroSupport;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
@@ -132,7 +133,8 @@ final class GastronomiaConciliacionDiariaReporteService
             $indiceAnitaBulk = null;
             $cacheManifest = null;
 
-            if ($usarCache) {
+            $rangoSoloErp = GastronomiaVentasSoloErpSupport::esJornada($empresaId, $desde);
+            if ($usarCache && ! $rangoSoloErp) {
                 $cacheManifest = $this->resolverIndiceAnitaBulk(
                     $empresaId,
                     $desde,
@@ -529,6 +531,10 @@ final class GastronomiaConciliacionDiariaReporteService
                 if (is_array($huecos) && (int) ($huecos['huecos_corr_erp'] ?? 0) > 0) {
                     return true;
                 }
+                $pendArca = $dia['huecos_arca_pendientes'] ?? null;
+                if (is_array($pendArca) && (int) ($pendArca['cantidad'] ?? 0) > 0) {
+                    return true;
+                }
             }
             $huecosRango = $empresa['huecos_rango'] ?? null;
             if (is_array($huecosRango) && ($huecosRango['hay_huecos'] ?? false) === true) {
@@ -886,6 +892,7 @@ final class GastronomiaConciliacionDiariaReporteService
         return [
             'fecha_jornada' => $fechaJornada,
             'jornada_abierta' => $jornadaAbierta,
+            'ventas_solo_erp' => GastronomiaVentasSoloErpSupport::esJornada($empresaId, $fechaJornada),
             'filas' => $filas,
             'totales' => $totales,
             'post_cierre_caea' => $postCierre,
@@ -897,6 +904,38 @@ final class GastronomiaConciliacionDiariaReporteService
             'control_flash' => $controlFlash,
             'conciliacion_medios' => $conciliacionMedios,
             'huecos_numeracion' => $this->huecosNumeracionService->resumenJornadaEmpresa($empresaId, $fechaJornada),
+            'huecos_arca_pendientes' => $this->resumenHuecosArcaPendientes($empresaId, $fechaJornada),
+        ];
+    }
+
+    /**
+     * @return array{cantidad:int,filas:list<array<string,mixed>>}
+     */
+    private function resumenHuecosArcaPendientes(int $empresaId, string $fechaJornada): array
+    {
+        $filas = \App\Models\Ventas\GastronomiaHuecoArcaPendiente::query()
+            ->with('puntoventa:id,codigo')
+            ->where('empresa_id', $empresaId)
+            ->whereDate('fecha_jornada', $fechaJornada)
+            ->whereIn('estado', [
+                \App\Models\Ventas\GastronomiaHuecoArcaPendiente::ESTADO_PENDIENTE,
+                \App\Models\Ventas\GastronomiaHuecoArcaPendiente::ESTADO_ARCA_INDISPONIBLE,
+                \App\Models\Ventas\GastronomiaHuecoArcaPendiente::ESTADO_RECUPERABLE,
+            ])
+            ->orderBy('numero_comprobante')
+            ->get()
+            ->map(static fn ($p) => [
+                'id' => (int) $p->id,
+                'pv' => (string) ($p->puntoventa?->codigo ?? ''),
+                'numero' => (int) $p->numero_comprobante,
+                'estado' => (string) $p->estado,
+                'ultimo_error' => (string) ($p->ultimo_error ?? ''),
+            ])
+            ->all();
+
+        return [
+            'cantidad' => count($filas),
+            'filas' => $filas,
         ];
     }
 
@@ -1194,9 +1233,9 @@ final class GastronomiaConciliacionDiariaReporteService
             $fila['ventas_erp_cae'] ?? 0,
             $fila['ventas_erp_caea'] ?? 0,
             $fila['ventas_erp'] ?? 0,
-            $fila['ventas_anita_cae'] ?? 0,
-            $fila['ventas_anita_caea'] ?? 0,
-            $fila['ventas_anita'] ?? 0,
+            array_key_exists('ventas_anita_cae', $fila) ? $fila['ventas_anita_cae'] : 0,
+            array_key_exists('ventas_anita_caea', $fila) ? $fila['ventas_anita_caea'] : 0,
+            array_key_exists('ventas_anita', $fila) ? $fila['ventas_anita'] : 0,
             $rendgZPortadora,
             $rendgCaea,
             $rendgTotal,

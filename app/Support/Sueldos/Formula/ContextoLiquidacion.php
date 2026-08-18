@@ -7,6 +7,7 @@ use App\Models\Sueldos\Liquidacion_Sueldos;
 use App\Support\Sueldos\AntiguedadTablaResolver;
 use App\Support\Sueldos\CategoriaOrigenBases;
 use App\Support\Sueldos\NovedadSueldosVigencia;
+use App\Support\Sueldos\VacacionEscalaAntiguedad;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -259,12 +260,22 @@ class ContextoLiquidacion implements EntornoFormula
      */
     private function calcularAntiguedad(Empleado_Sueldos $emp, Carbon $ref): array
     {
+        $anterior = VacacionEscalaAntiguedad::componentesAntiguedadAnterior(
+            $emp->antiguedad_anterior
+        );
         if (! $emp->fecha_ingreso) {
-            return [(int) $emp->antiguedad_anterior, (int) $emp->antiguedad_anterior * 12];
+            $meses = $anterior['anios'] * 12 + $anterior['meses'];
+
+            return [intdiv($meses, 12), $meses];
         }
         $ingreso = $emp->fecha_ingreso instanceof Carbon ? $emp->fecha_ingreso : Carbon::parse($emp->fecha_ingreso);
-        $anteriorAnios = (int) $emp->antiguedad_anterior;
-        $meses = $ingreso->diffInMonths($ref) + $anteriorAnios * 12;
+        // Anita guarda antigüedad reconocida como duración aa-mm-dd. Restarla a
+        // la fecha de ingreso preserva los acarreos de meses/días antes de medir.
+        $ingresoComputable = $ingreso->copy()
+            ->subYears($anterior['anios'])
+            ->subMonths($anterior['meses'])
+            ->subDays($anterior['dias']);
+        $meses = (int) $ingresoComputable->diffInMonths($ref);
 
         return [intdiv($meses, 12), $meses];
     }
@@ -759,6 +770,7 @@ class ContextoLiquidacion implements EntornoFormula
             case 'cantidad_asignacion':
             case 'importe_asignacion':
             case 'tabla_empleado':
+                return 0.0;
             case 'descuento_bruto':
                 // Anita DTBR(concepto): factor del haber si no se liquidó ya en el período.
                 return $this->descuentoBruto((int) ($args[0] ?? 0));

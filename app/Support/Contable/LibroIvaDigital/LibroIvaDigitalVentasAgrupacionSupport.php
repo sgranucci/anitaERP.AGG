@@ -74,7 +74,11 @@ final class LibroIvaDigitalVentasAgrupacionSupport
         $cabecera['numero_hasta'] = $numeroHasta;
         $cabecera['codigo_documento'] = '99';
         $cabecera['numero_identificacion'] = '0';
-        $cabecera['nombre_comprador'] = 'VENTA GLOBAL DIARIA';
+        $cabecera['nombre_comprador'] = '-VENTA GLOBAL DIARIA-';
+
+        foreach (['importe_total', 'no_integra_neto', 'operaciones_exentas', 'percepciones_nacionales', 'percepciones_iibb', 'impuestos_internos'] as $campo) {
+            $cabecera[$campo] = round((float) ($cabecera[$campo] ?? 0), 2);
+        }
 
         $alicuotas = [];
         foreach ($alicuotasPorCodigo as $row) {
@@ -93,9 +97,10 @@ final class LibroIvaDigitalVentasAgrupacionSupport
             (string) ($b['alicuota_iva'] ?? ''),
         ));
 
-        $cabecera['cantidad_alicuotas'] = count($alicuotas);
-
-        return ['cabecera' => $cabecera, 'alicuotas' => $alicuotas];
+        return LibroIvaDigitalVentasAlicuotaSupport::asegurarRegistro([
+            'cabecera' => $cabecera,
+            'alicuotas' => $alicuotas,
+        ]);
     }
 
     /**
@@ -106,9 +111,9 @@ final class LibroIvaDigitalVentasAgrupacionSupport
     {
         $registro['cabecera']['codigo_documento'] = '99';
         $registro['cabecera']['numero_identificacion'] = '0';
-        $registro['cabecera']['nombre_comprador'] = 'VENTA GLOBAL DIARIA';
+        $registro['cabecera']['nombre_comprador'] = '-VENTA GLOBAL DIARIA-';
 
-        return $registro;
+        return LibroIvaDigitalVentasAlicuotaSupport::asegurarRegistro($registro);
     }
 
     /**

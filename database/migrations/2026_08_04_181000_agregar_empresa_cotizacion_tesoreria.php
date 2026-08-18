@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +26,10 @@ return new class extends Migration
 
         DB::table('cotizacion_tesoreria')->whereNull('empresa_id')->update(['empresa_id' => 1]);
 
-        DB::statement('ALTER TABLE cotizacion_tesoreria MODIFY empresa_id INT UNSIGNED NOT NULL DEFAULT 1');
+        MigrationDialectSupport::statementPorDriver(
+            'ALTER TABLE cotizacion_tesoreria MODIFY empresa_id INT UNSIGNED NOT NULL DEFAULT 1',
+            'ALTER TABLE cotizacion_tesoreria ALTER COLUMN empresa_id SET NOT NULL, ALTER COLUMN empresa_id SET DEFAULT 1'
+        );
 
         $this->dropIndexIfExists('cotizacion_tesoreria', 'uq_cotizacion_tesoreria_fecha');
         $this->dropIndexIfExists('cotizacion_tesoreria', 'uq_cotizacion_tesoreria_fecha_anita');
@@ -73,24 +77,11 @@ return new class extends Migration
 
     private function dropIndexIfExists(string $tabla, string $indice): void
     {
-        if (! $this->indexExists($tabla, $indice)) {
-            return;
-        }
-
-        // Unique e index se dropean igual en MySQL con DROP INDEX
-        DB::statement('ALTER TABLE `'.$tabla.'` DROP INDEX `'.$indice.'`');
+        MigrationDialectSupport::dropIndiceOUnique($tabla, $indice);
     }
 
     private function indexExists(string $tabla, string $indice): bool
     {
-        $db = Schema::getConnection()->getDatabaseName();
-        $row = DB::selectOne(
-            'SELECT 1 AS ok FROM information_schema.statistics
-             WHERE table_schema = ? AND table_name = ? AND index_name = ?
-             LIMIT 1',
-            [$db, $tabla, $indice]
-        );
-
-        return $row !== null;
+        return Schema::hasIndex($tabla, $indice);
     }
 };

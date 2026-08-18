@@ -32,7 +32,7 @@ class NovedadSueldosCatalogo
 
     public const ORIGEN_SYNC_ANITA = 'sync_anita';
 
-    public const ORIGEN_DTOFALLO = 'dtofallo';
+    public const ORIGEN_DESCUENTO_FALLO = 'descuento_fallo';
 
     /** @var array<string, string> */
     public const ORIGENES = [
@@ -42,7 +42,7 @@ class NovedadSueldosCatalogo
         self::ORIGEN_RELOJ => 'Reloj / control horario',
         self::ORIGEN_PLAN_CUOTA => 'Plan de cuotas',
         self::ORIGEN_SYNC_ANITA => 'Sync Anita',
-        self::ORIGEN_DTOFALLO => 'Descuento por fallo',
+        self::ORIGEN_DESCUENTO_FALLO => 'Descuento por fallo',
     ];
 
     public static function etiquetaEstado(?string $estado): string

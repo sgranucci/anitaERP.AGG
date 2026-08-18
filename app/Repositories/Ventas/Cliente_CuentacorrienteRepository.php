@@ -123,7 +123,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
             ->whereNull('cliente_cuentacorriente.deleted_at')
             ->whereNotNull('cliente_cuentacorriente.venta_id')
             ->whereNull('cliente_cuentacorriente.cobranza_id')
-            ->havingRaw('abs('.SqlDialectSupport::coalesce('aplicado', '0').') < abs(cliente_cuentacorriente.total)');
+            ->whereRaw(SqlDialectSupport::sqlSaldoPendienteClienteCc());
 
         if ($busqueda !== '') {
             $query->where(function ($q) use ($busqueda) {
@@ -165,7 +165,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
             ->whereNull('cliente_cuentacorriente.deleted_at')
             ->whereNotNull('cliente_cuentacorriente.venta_id')
             ->whereNull('cliente_cuentacorriente.cobranza_id')
-            ->havingRaw('abs('.SqlDialectSupport::coalesce('aplicado', '0').') < abs(cliente_cuentacorriente.total)')
+            ->whereRaw(SqlDialectSupport::sqlSaldoPendienteClienteCc())
             ->get();
 
         $total = 0.0;
@@ -222,7 +222,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
                                                         ->selectRaw('SUM(total)')
                                                         ->whereColumn('cliente_cuentacorriente_id', 'cliente_cuentacorriente.id')
                                                 ])
-                                                ->havingRaw('abs(aplicado) < abs(cliente_cuentacorriente.total) or aplicado is null')
+                                                ->whereRaw(SqlDialectSupport::sqlSaldoPendienteClienteCc())
                                                 ->where('cliente_cuentacorriente.deleted_at', null);
 
         if (isset($venta_id))

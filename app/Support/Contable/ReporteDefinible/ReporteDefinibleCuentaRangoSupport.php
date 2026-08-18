@@ -2,6 +2,7 @@
 
 namespace App\Support\Contable\ReporteDefinible;
 
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -24,10 +25,11 @@ class ReporteDefinibleCuentaRangoSupport
             [$desde, $hasta] = [$hasta, $desde];
         }
 
+        $cast = SqlDialectSupport::castEntero('codigo');
         $codigos = DB::table('cuentacontable')
             ->where('tipocuenta', 1)
-            ->whereRaw('CAST(codigo AS UNSIGNED) BETWEEN ? AND ?', [$desde, $hasta])
-            ->orderByRaw('CAST(codigo AS UNSIGNED)')
+            ->whereRaw($cast.' BETWEEN ? AND ?', [$desde, $hasta])
+            ->orderByRaw($cast)
             ->pluck('codigo')
             ->map(fn ($c) => (int) $c)
             ->unique()

@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -46,7 +47,10 @@ return new class extends Migration
         }
 
         if ($ccSistemas > 0) {
-            DB::statement('ALTER TABLE bien_uso MODIFY centrocosto_id BIGINT UNSIGNED NOT NULL');
+            MigrationDialectSupport::statementPorDriver(
+                'ALTER TABLE bien_uso MODIFY centrocosto_id BIGINT UNSIGNED NOT NULL',
+                'ALTER TABLE bien_uso ALTER COLUMN centrocosto_id SET NOT NULL'
+            );
         }
 
         if (! $this->tieneForeignKey('bien_uso', 'fk_bien_uso_centrocosto')) {
@@ -137,19 +141,17 @@ return new class extends Migration
 
     private function tieneIndice(string $tabla, string $nombreIndice): bool
     {
-        $indices = DB::select('SHOW INDEX FROM '.$tabla.' WHERE Key_name = ?', [$nombreIndice]);
-
-        return count($indices) > 0;
+        return Schema::hasIndex($tabla, $nombreIndice);
     }
 
     private function tieneForeignKey(string $tabla, string $nombreFk): bool
     {
-        $fks = DB::select(
-            'SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
-             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = ? AND CONSTRAINT_TYPE = ?',
-            [$tabla, $nombreFk, 'FOREIGN KEY']
-        );
+        foreach (Schema::getForeignKeys($tabla) as $fk) {
+            if (($fk['name'] ?? '') === $nombreFk) {
+                return true;
+            }
+        }
 
-        return count($fks) > 0;
+        return false;
     }
 };

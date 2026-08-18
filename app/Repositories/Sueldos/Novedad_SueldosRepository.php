@@ -118,7 +118,7 @@ class Novedad_SueldosRepository implements Novedad_SueldosRepositoryInterface
      * Nota: no pedir nov_fecha_vto en el list (el bridge Anita responde []).
      *
      * @param  array{empresa_id?: int, numeros_liquidacion?: list<int>}|null  $filtros
-     * @return array{en_anita: int, importados: int, omitidos: int, errores: list<string>}
+     * @return array{en_anita: int, importados: int, actualizados: int, eliminados: int, omitidos: int, errores: list<string>}
      */
     public function sincronizarConAnita(?array $filtros = null): array
     {
@@ -128,6 +128,8 @@ class Novedad_SueldosRepository implements Novedad_SueldosRepositoryInterface
         $resultado = [
             'en_anita' => 0,
             'importados' => 0,
+            'actualizados' => 0,
+            'eliminados' => 0,
             'omitidos' => 0,
             'errores' => [],
         ];
@@ -145,14 +147,20 @@ class Novedad_SueldosRepository implements Novedad_SueldosRepositoryInterface
 
         $api = new ApiAnita();
         // Campos verificados contra bridge (sin nov_fecha_vto).
-        $raw = $api->apiCall([
+        $payloadAnita = [
             'acc' => 'list',
             'sistema' => 'sueldos',
             'tabla' => $this->tablaAnita,
             'campos' => 'nov_empresa, nov_legajo, nov_concepto, nov_liquidacion,'
                 .' nov_valor1, nov_valor2, nov_estado, nov_nro_interno, nov_fecha_liq',
             'orderBy' => 'nov_empresa',
-        ]);
+        ];
+        if ($empresaFiltro > 0 && $numerosFiltro !== []) {
+            $payloadAnita['whereArmado'] = ' WHERE nov_empresa = '.$empresaFiltro
+                .' AND nov_liquidacion IN ('.implode(',', array_keys($numerosFiltro)).')';
+            $payloadAnita['orderBy'] = 'nov_legajo';
+        }
+        $raw = $api->apiCall($payloadAnita);
         $parsed = ApiAnita::parsearRespuestaLista(is_string($raw) ? $raw : null);
 
         if (! empty($parsed['error_lectura'])) {
@@ -178,7 +186,20 @@ class Novedad_SueldosRepository implements Novedad_SueldosRepositoryInterface
 
         $existentes = [];
         foreach (Novedad_Sueldos::query()
-            ->select('empresa_id', 'liquidacion_id', 'empleado_id', 'concepto_codigo', 'nro_interno')
+            ->select(
+                'id',
+                'empresa_id',
+                'liquidacion_id',
+                'empleado_id',
+                'concepto_id',
+                'concepto_codigo',
+                'valor1',
+                'valor2',
+                'estado',
+                'nro_interno',
+                'periodo',
+                'origen'
+            )
             ->get() as $n) {
             $existentes[$this->claveUnica(
                 (int) $n->empresa_id,
@@ -186,12 +207,13 @@ class Novedad_SueldosRepository implements Novedad_SueldosRepositoryInterface
                 (int) $n->empleado_id,
                 (int) $n->concepto_codigo,
                 (int) $n->nro_interno
-            )] = true;
+            )] = $n;
         }
 
         $ahora = now();
         $lote = [];
         $enAlcance = 0;
+        $clavesAnita = [];
 
         Novedad_Sueldos::withoutAuditing(function () use (
             $parsed,
@@ -204,6 +226,7 @@ class Novedad_SueldosRepository implements Novedad_SueldosRepositoryInterface
             &$resultado,
             &$lote,
             &$enAlcance,
+            &$clavesAnita,
             $ahora
         ) {
             foreach ($parsed['filas'] as $fila) {
@@ -251,8 +274,42 @@ class Novedad_SueldosRepository implements Novedad_SueldosRepositoryInterface
                     $conceptoCodigo,
                     $nroInterno
                 );
+                $estado = $this->mapEstadoAnita((string) ($fila->nov_estado ?? 'P'));
+                $valor1 = (float) ($fila->nov_valor1 ?? 0);
+                $valor2 = (float) ($fila->nov_valor2 ?? 0);
+                $clavesAnita[$clave] = true;
+
                 if (isset($existentes[$clave])) {
-                    $resultado['omitidos']++;
+                    $existente = $existentes[$clave];
+                    if ((string) $existente->origen !== NovedadSueldosCatalogo::ORIGEN_SYNC_ANITA) {
+                        // Una novedad manual/importada manda sobre el espejo de Anita.
+                        $resultado['omitidos']++;
+                        continue;
+                    }
+
+                    $cambios = [];
+                    if ((int) $existente->concepto_id !== $conceptoId) {
+                        $cambios['concepto_id'] = $conceptoId;
+                    }
+                    if (abs((float) $existente->valor1 - $valor1) > 0.00005) {
+                        $cambios['valor1'] = $valor1;
+                    }
+                    if (abs((float) $existente->valor2 - $valor2) > 0.00005) {
+                        $cambios['valor2'] = $valor2;
+                    }
+                    if ((string) $existente->estado !== $estado) {
+                        $cambios['estado'] = $estado;
+                    }
+                    if ((int) ($existente->periodo ?? 0) !== (int) ($periodo ?? 0)) {
+                        $cambios['periodo'] = $periodo;
+                    }
+                    if ($cambios !== []) {
+                        $cambios['updated_at'] = $ahora;
+                        DB::table('novedad_sueldos')->where('id', (int) $existente->id)->update($cambios);
+                        $resultado['actualizados']++;
+                    } else {
+                        $resultado['omitidos']++;
+                    }
                     continue;
                 }
 
@@ -262,9 +319,9 @@ class Novedad_SueldosRepository implements Novedad_SueldosRepositoryInterface
                     'empleado_id' => $empleadoId,
                     'concepto_id' => $conceptoId,
                     'concepto_codigo' => $conceptoCodigo,
-                    'valor1' => (float) ($fila->nov_valor1 ?? 0),
-                    'valor2' => (float) ($fila->nov_valor2 ?? 0),
-                    'estado' => $this->mapEstadoAnita((string) ($fila->nov_estado ?? 'P')),
+                    'valor1' => $valor1,
+                    'valor2' => $valor2,
+                    'estado' => $estado,
                     'fecha_vto' => null,
                     'nro_interno' => $nroInterno,
                     'periodo' => $periodo,
@@ -274,7 +331,10 @@ class Novedad_SueldosRepository implements Novedad_SueldosRepositoryInterface
                     'created_at' => $ahora,
                     'updated_at' => $ahora,
                 ];
-                $existentes[$clave] = true;
+                $existentes[$clave] = (object) [
+                    'id' => 0,
+                    'origen' => NovedadSueldosCatalogo::ORIGEN_SYNC_ANITA,
+                ];
                 $resultado['importados']++;
 
                 if (count($lote) >= 200) {
@@ -285,6 +345,41 @@ class Novedad_SueldosRepository implements Novedad_SueldosRepositoryInterface
 
             if ($lote !== []) {
                 DB::table('novedad_sueldos')->insert($lote);
+            }
+
+            // Solo una sincronización explícitamente acotada puede borrar el espejo:
+            // evita que un sync global o una respuesta parcial del bridge elimine datos.
+            if ($empresaFiltro > 0 && $numerosFiltro !== [] && $enAlcance > 0) {
+                $liquidacionIdsAlcance = collect($liquidaciones)
+                    ->filter(
+                        fn (array $liq, string $clave) => str_starts_with($clave, $empresaFiltro.':')
+                            && isset($numerosFiltro[(int) substr($clave, strrpos($clave, ':') + 1)])
+                    )
+                    ->pluck('id')
+                    ->map(fn ($id) => (int) $id)
+                    ->filter()
+                    ->values()
+                    ->all();
+
+                if ($liquidacionIdsAlcance !== []) {
+                    $staleIds = [];
+                    foreach ($existentes as $clave => $existente) {
+                        if ((int) ($existente->id ?? 0) <= 0
+                            || (string) ($existente->origen ?? '') !== NovedadSueldosCatalogo::ORIGEN_SYNC_ANITA
+                            || isset($clavesAnita[$clave])) {
+                            continue;
+                        }
+                        $partes = explode('|', $clave);
+                        $liquidacionIdClave = (int) ($partes[1] ?? 0);
+                        if (in_array($liquidacionIdClave, $liquidacionIdsAlcance, true)) {
+                            $staleIds[] = (int) $existente->id;
+                        }
+                    }
+                    if ($staleIds !== []) {
+                        DB::table('novedad_sueldos')->whereIn('id', $staleIds)->delete();
+                        $resultado['eliminados'] = count($staleIds);
+                    }
+                }
             }
         });
 

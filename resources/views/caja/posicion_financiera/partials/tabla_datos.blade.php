@@ -5,6 +5,8 @@
     $esExcel = $modo === 'excel';
     $esPdf = $modo === 'pdf';
     $envolverTabla = $envolverTabla ?? ! $esExcel;
+    $auditoriaUrl = $auditoriaUrl ?? null;
+    $auditoriaQuery = $auditoriaQuery ?? [];
     $colspan = 2 + count($dias);
     $formatear = static function (float $valor) use ($esExcel): string {
         if ($esExcel) {
@@ -39,28 +41,71 @@
                 $porDia = $fila['por_dia'] ?? [];
                 $valor = (float) ($fila['valor'] ?? 0);
                 $esTitulo = $tipoFila === 'titulo';
+                $esInformativo = $tipoFila === 'informativo';
+                // "Totalcoin…" empieza con "Total" pero no es un total: exigir
+                // palabra completa (Total / Total de … / Total Gastronomia, etc.).
+                $etiquetaNorm = mb_strtolower(trim($etiqueta));
                 $esTotal = $tipoFila === 'total'
-                    || str_starts_with(mb_strtolower(trim($etiqueta)), 'total')
-                    || in_array(mb_strtolower(trim($etiqueta)), ['saldo inicial', 'saldo final'], true);
+                    || preg_match('/^total(\s|$)/u', $etiquetaNorm) === 1
+                    || in_array($etiquetaNorm, ['saldo inicial', 'saldo final'], true);
             @endphp
             @if ($esTitulo)
                 <tr class="posfin-titulo font-weight-bold">
                     <td class="posfin-concepto" colspan="{{ $colspan }}">{{ $etiqueta }}</td>
                 </tr>
             @else
-                <tr @class(['font-weight-bold' => $esTotal, 'posfin-total' => $esTotal, 'table-light' => $esTotal && ! $esPdf && ! $esExcel])>
-                    <td class="posfin-concepto">{{ $etiqueta }}</td>
+                <tr
+                    @class([
+                        'font-weight-bold' => $esTotal || $esInformativo,
+                        'posfin-total' => $esTotal,
+                        'posfin-informativo' => $esInformativo,
+                        'table-light' => $esTotal && ! $esPdf && ! $esExcel,
+                        'table-warning' => $esInformativo && ! $esPdf && ! $esExcel,
+                    ])
+                    @if ($esInformativo)
+                        style="background-color:#FFF3CD;color:#664D03;"
+                    @endif
+                >
+                    <td class="posfin-concepto">
+                        {{ $etiqueta }}
+                        @if ($esInformativo)
+                            <br>
+                            <span class="posfin-informativo-aviso">INFORMATIVO · No interviene en ningún cálculo</span>
+                        @endif
+                    </td>
                     @foreach ($dias as $dia)
                         @php
                             $importeDia = (float) ($porDia[$dia] ?? 0);
                         @endphp
                         <td class="text-right posfin-dia">
                             @if (abs($importeDia) >= 0.005)
-                                {{ $formatear($importeDia) }}
+                                @if (! $esPdf && ! $esExcel && $auditoriaUrl)
+                                    <a href="{{ $auditoriaUrl.'?'.http_build_query(array_merge($auditoriaQuery, [
+                                        'dia' => $dia,
+                                        'bloque' => (string) ($fila['bloque'] ?? ''),
+                                        'etiqueta' => $etiqueta,
+                                    ])) }}"
+                                       class="posfin-auditoria-link"
+                                       title="Ver origen y composición de este importe">{{ $formatear($importeDia) }}</a>
+                                @else
+                                    {{ $formatear($importeDia) }}
+                                @endif
                             @endif
                         </td>
                     @endforeach
-                    <td class="text-right posfin-total-col">{{ $formatear($valor) }}</td>
+                    <td class="text-right posfin-total-col">
+                        @if (! $esPdf && ! $esExcel && $auditoriaUrl && abs($valor) >= 0.005)
+                            <a href="{{ $auditoriaUrl.'?'.http_build_query(array_merge($auditoriaQuery, [
+                                'dia' => 0,
+                                'bloque' => (string) ($fila['bloque'] ?? ''),
+                                'etiqueta' => $etiqueta,
+                            ])) }}"
+                               class="posfin-auditoria-link posfin-auditoria-link-total"
+                               title="Ver composición mensual de este importe">{{ $formatear($valor) }}</a>
+                        @else
+                            {{ $formatear($valor) }}
+                        @endif
+                    </td>
                 </tr>
             @endif
         @empty

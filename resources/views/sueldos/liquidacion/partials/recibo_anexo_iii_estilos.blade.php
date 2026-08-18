@@ -1,7 +1,12 @@
 @page { margin: 10mm 8mm; size: A4 portrait; }
 body { font-family: DejaVu Sans, sans-serif; font-size: 8px; color: #17202A; margin: 0; }
-.hdr { border-bottom: 1.5px solid #17202A; padding-bottom: 3px; margin-bottom: 4px; }
+table.hdr { width: 100%; border-collapse: collapse; border-bottom: 1.5px solid #17202A; margin-bottom: 4px; }
+table.hdr td { padding: 0 4px 4px 0; vertical-align: middle; }
+.hdr-logo { width: 18%; }
+.hdr-logo img { display: block; max-height: 42px; max-width: 125px; }
 .hdr-emp { font-size: 9px; font-weight: bold; }
+.hdr-anexo { width: 22%; text-align: right; font-size: 8px; }
+.hdr-anexo strong { font-size: 10px; }
 table.meta { width: 100%; border-collapse: collapse; margin-bottom: 3px; }
 table.meta th { text-align: left; font-size: 6.5px; color: #555; font-weight: normal; border-bottom: 0.5px solid #ccc; padding: 1px 2px; }
 table.meta td { font-size: 8px; padding: 1px 2px; vertical-align: top; }
@@ -15,6 +20,7 @@ table.conc td { padding: 1px 3px; border-bottom: 0.3px solid #eee; font-size: 7.
 .neto-box { font-size: 11px; font-weight: bold; margin: 6px 0 3px; }
 .pie-grid { width: 100%; margin-top: 6px; }
 .pie-grid td { vertical-align: top; }
+.torta-grafico { display: block; width: 110px; height: 110px; margin: 3px auto; }
 .comp-tbl { width: 100%; border-collapse: collapse; font-size: 7px; }
 .comp-tbl td { padding: 1px 3px; }
 .comp-tbl .lbl { color: #555; }

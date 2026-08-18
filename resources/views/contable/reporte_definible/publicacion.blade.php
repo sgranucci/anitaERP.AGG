@@ -4,13 +4,26 @@
 @endsection
 
 @section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}">
 <style>
 .rd-exec-row-rubro td { border-top: 1px solid #d5d8dc; }
 .rd-exec-row-rubro.negrita td { font-weight: 700; color: #1B4F72; }
 .rd-exec-row-cuenta td { color: #566573; font-size: 12.5px; }
 .rd-exec-indent { display: inline-block; }
-.rd-exec-importe { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rd-exec-importe, .rd-exec-col-importe { font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 7.5rem; }
+.rd-exec-row-rubro .col-fija-1,
+.rd-exec-row-rubro .col-fija-2,
+.rd-exec-row-rubro .col-fija-der-1,
+.rd-exec-row-rubro .col-fija-der-2 { background: #fff; }
+.rd-exec-row-cuenta .col-fija-1,
+.rd-exec-row-cuenta .col-fija-2,
+.rd-exec-row-cuenta .col-fija-der-1,
+.rd-exec-row-cuenta .col-fija-der-2 { background: #fff; }
 </style>
+@endsection
+
+@section('scripts')
+<script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}"></script>
 @endsection
 
 @section('contenido')

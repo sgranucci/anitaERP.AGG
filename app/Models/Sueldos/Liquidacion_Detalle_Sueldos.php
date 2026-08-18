@@ -32,6 +32,10 @@ class Liquidacion_Detalle_Sueldos extends Model implements Auditable
         'va_recibo',
         'concepto_afip',
         'leyenda',
+        'origen_tabla',
+        'origen_serial',
+        'origen_nro_interno',
+        'origen_clave',
     ];
 
     protected $casts = [
@@ -47,6 +51,8 @@ class Liquidacion_Detalle_Sueldos extends Model implements Auditable
         'importe' => 'decimal:2',
         'remunerativo' => 'boolean',
         'va_recibo' => 'boolean',
+        'origen_serial' => 'integer',
+        'origen_nro_interno' => 'integer',
     ];
 
     public const COLUMNAS = [

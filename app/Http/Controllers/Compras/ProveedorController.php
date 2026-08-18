@@ -36,6 +36,7 @@ use App\Repositories\Configuracion\CondicionIIBBRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
+use App\Support\Configuracion\AnitaSyncIndexSupport;
 use App\Repositories\Compras\OrdencompraRepositoryInterface;
 use App\Models\Compras\Sector_Legajocompra;
 use App\Support\Compras\OrdencompraEstados;
@@ -180,8 +181,7 @@ class ProveedorController extends Controller
 
         $hay_proveedores = $this->proveedorQuery->first();
 
-		if (!$hay_proveedores)
-		{
+		if (! $hay_proveedores && AnitaSyncIndexSupport::autoImportHabilitado()) {
 			$this->proveedorRepository->sincronizarConAnita();
 			$this->proveedor_archivoRepository->sincronizarConAnita();
 		}

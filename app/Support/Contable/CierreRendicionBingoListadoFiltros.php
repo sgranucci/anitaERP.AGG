@@ -158,6 +158,8 @@ final class CierreRendicionBingoListadoFiltros
                 $w->whereNull('rendicion_bingo_caja.asiento_id')
                     ->orWhere('rendicion_bingo_caja.asiento_id', 0);
             });
+            // Jornadas pre-ERP (Anita) no son pendientes de cierre contable.
+            CierreRendicionBingoConfigSupport::aplicarPisoCorrelatividad($query);
 
             return;
         }

@@ -331,15 +331,16 @@ class CierreRendicionMaquinaController extends Controller
         try {
             $resultado = $this->service->ejecutarCierreGrupo($empresaId, $fechaDia);
             $fsl = $resultado['fsl'];
-            $fslLabel = ($fsl['letra'] ?? 'B')
-                .str_pad((string) ($fsl['sucursal'] ?? 0), 4, '0', STR_PAD_LEFT)
-                .'-'
-                .str_pad((string) ($fsl['nro'] ?? 0), 8, '0', STR_PAD_LEFT);
+            $fslLabel = ($fsl['codigo'] ?? null)
+                ?: (($fsl['letra'] ?? 'B')
+                    .str_pad((string) ($fsl['sucursal'] ?? 0), 4, '0', STR_PAD_LEFT)
+                    .'-'
+                    .str_pad((string) ($fsl['nro'] ?? 0), 8, '0', STR_PAD_LEFT));
 
             return response()->json([
                 'ok' => true,
                 'mensaje' => 'Cierre contable registrado. Asiento '.$resultado['numeroasiento']
-                    .' + FSL '.$fslLabel.' ('.count($resultado['rendicion_ids']).' rendición/es).',
+                    .' + FSL '.$fslLabel.' en ventas ERP ('.count($resultado['rendicion_ids']).' rendición/es).',
                 'asiento_id' => $resultado['asiento_id'],
                 'numeroasiento' => $resultado['numeroasiento'],
                 'rendicion_ids' => $resultado['rendicion_ids'],

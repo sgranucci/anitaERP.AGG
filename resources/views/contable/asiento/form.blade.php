@@ -38,6 +38,18 @@
                         <input type="date" name="fecha" id="fecha" class="form-control" value="{{old('fecha', $data->fecha ?? date('Y-m-d'))}}">
                     </div>
                 </div>
+                @if ((int) ($data->anita_nro_asiento ?? 0) > 0)
+                    <div class="form-group row">
+                        <label for="anita_nro_asiento" class="col-lg-4 control-label text-right pr-2">
+                            Asiento resumen Anita
+                        </label>
+                        <div class="col-lg-5">
+                            <input type="text" id="anita_nro_asiento" class="form-control"
+                                   value="{{ $data->anita_nro_asiento }}" readonly>
+                            <small class="form-text text-muted">Referencia interna; no modifica el N° de asiento ERP.</small>
+                        </div>
+                    </div>
+                @endif
             </div>
         </div>
         <div class="form-group row mb-0">

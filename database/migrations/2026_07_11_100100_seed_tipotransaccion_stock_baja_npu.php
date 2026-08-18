@@ -12,7 +12,7 @@ return new class extends Migration
     private array $tipo = [
         'nombre' => 'Baja NPU - Rotura/No funcional',
         'abreviatura' => 'NPUBJ',
-        'signo' => 'R',
+        'signo' => -1,
         'operacion' => 'S',
     ];
 

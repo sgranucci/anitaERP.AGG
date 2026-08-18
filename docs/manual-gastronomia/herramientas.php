@@ -119,6 +119,36 @@ return [
             'permiso' => 'gestionar-habilitacion-turno-gastronomia',
         ],
         [
+            'herramienta' => 'Aviso de huecos ARCA',
+            'ubicacion' => 'Panel de cierre definitivo',
+            'accion' => 'Informa números FAC faltantes detectados en ERP. No consulta ARCA durante la actualización automática de pantalla.',
+            'permiso' => 'gestionar-habilitacion-turno-gastronomia',
+        ],
+        [
+            'herramienta' => 'Modal Saneamiento fiscal ARCA',
+            'ubicacion' => 'Al confirmar el cierre con huecos',
+            'accion' => 'Consulta ARCA solo en ese momento y separa FAC recuperables, números inexistentes y errores de conexión.',
+            'permiso' => 'cerrar-turno-operativo-gastronomia',
+        ],
+        [
+            'herramienta' => 'Corregir lote confirmado',
+            'ubicacion' => 'Pie del modal fiscal',
+            'accion' => 'Recupera N FAC, emite una NC consolidada con PeriodoAsoc de la jornada y deja efectivo neto cero, sin stock ni ventas Anita.',
+            'permiso' => 'cerrar-turno-operativo-gastronomia',
+        ],
+        [
+            'herramienta' => 'Cerrar turno sin sanear',
+            'ubicacion' => 'Pie del modal fiscal',
+            'accion' => 'Continúa el cierre cuando ARCA no responde o el lote no es recuperable. Guarda pendientes para la auditoría diaria.',
+            'permiso' => 'cerrar-turno-operativo-gastronomia',
+        ],
+        [
+            'herramienta' => 'Saneamiento del día siguiente',
+            'ubicacion' => 'Consola del servidor (administrador/soporte)',
+            'accion' => 'Ejecutar primero gastronomia:sanear-huecos-arca con --dry-run; usar --usuario=ID --ejecutar solo tras revisar el diagnóstico.',
+            'permiso' => 'Administrador / soporte autorizado',
+        ],
+        [
             'herramienta' => 'Comprobante parcial PDF',
             'ubicacion' => 'Tras confirmar cierre parcial',
             'accion' => 'Abre/descarga comprobante del parcial registrado.',

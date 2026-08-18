@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
@@ -12,13 +13,19 @@ return new class extends Migration
      */
     public function up(): void
     {
-        DB::statement('ALTER TABLE proveedor_formapago MODIFY tipocuentacaja_id BIGINT UNSIGNED NULL');
+        MigrationDialectSupport::statementPorDriver(
+            'ALTER TABLE proveedor_formapago MODIFY tipocuentacaja_id BIGINT UNSIGNED NULL',
+            'ALTER TABLE proveedor_formapago ALTER COLUMN tipocuentacaja_id DROP NOT NULL'
+        );
     }
 
     public function down(): void
     {
         // Al revertir, las filas sin tipo de cuenta quedarían inválidas; se limpian a CC (id 1) por defecto.
         DB::statement('UPDATE proveedor_formapago SET tipocuentacaja_id = 1 WHERE tipocuentacaja_id IS NULL');
-        DB::statement('ALTER TABLE proveedor_formapago MODIFY tipocuentacaja_id BIGINT UNSIGNED NOT NULL');
+        MigrationDialectSupport::statementPorDriver(
+            'ALTER TABLE proveedor_formapago MODIFY tipocuentacaja_id BIGINT UNSIGNED NOT NULL',
+            'ALTER TABLE proveedor_formapago ALTER COLUMN tipocuentacaja_id SET NOT NULL'
+        );
     }
 };

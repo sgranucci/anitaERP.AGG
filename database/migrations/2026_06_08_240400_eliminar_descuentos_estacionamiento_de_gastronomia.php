@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -15,9 +16,11 @@ return new class extends Migration
             return;
         }
 
+        $cast = MigrationDialectSupport::castEntero('codigo');
+
         DB::table('descuento_gastronomia')
-            ->whereRaw('CAST(codigo AS UNSIGNED) >= 110')
-            ->whereRaw('CAST(codigo AS UNSIGNED) <= 117')
+            ->whereRaw($cast.' >= 110')
+            ->whereRaw($cast.' <= 117')
             ->delete();
     }
 
@@ -27,10 +30,12 @@ return new class extends Migration
             return;
         }
 
+        $cast = MigrationDialectSupport::castEntero('codigo');
+
         $filas = DB::table('descuento_estacionamiento')
-            ->whereRaw('CAST(codigo AS UNSIGNED) >= 110')
-            ->whereRaw('CAST(codigo AS UNSIGNED) <= 117')
-            ->orderByRaw('CAST(codigo AS UNSIGNED)')
+            ->whereRaw($cast.' >= 110')
+            ->whereRaw($cast.' <= 117')
+            ->orderByRaw($cast)
             ->get();
 
         foreach ($filas as $fila) {

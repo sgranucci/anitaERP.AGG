@@ -23,7 +23,9 @@ return new class extends Migration
         });
 
         if ($this->indexExists('lista_precio_estacionamiento_item', 'uq_lp_est_item_lista_item')) {
-            DB::statement('ALTER TABLE lista_precio_estacionamiento_item DROP INDEX uq_lp_est_item_lista_item');
+            Schema::table('lista_precio_estacionamiento_item', function (Blueprint $table) {
+                $table->dropUnique('uq_lp_est_item_lista_item');
+            });
         }
 
         Schema::table('lista_precio_estacionamiento_item', function (Blueprint $table) {
@@ -63,24 +65,11 @@ return new class extends Migration
 
     private function foreignKeyExists(string $table, string $name): bool
     {
-        $db = DB::getDatabaseName();
-
-        return (int) DB::table('information_schema.TABLE_CONSTRAINTS')
-            ->where('CONSTRAINT_SCHEMA', $db)
-            ->where('TABLE_NAME', $table)
-            ->where('CONSTRAINT_NAME', $name)
-            ->where('CONSTRAINT_TYPE', 'FOREIGN KEY')
-            ->count() > 0;
+        return \App\Support\Database\MigrationDialectSupport::tieneForeignKey($table, $name);
     }
 
     private function indexExists(string $table, string $name): bool
     {
-        $db = DB::getDatabaseName();
-
-        return (int) DB::table('information_schema.STATISTICS')
-            ->where('TABLE_SCHEMA', $db)
-            ->where('TABLE_NAME', $table)
-            ->where('INDEX_NAME', $name)
-            ->count() > 0;
+        return \App\Support\Database\MigrationDialectSupport::tieneIndice($table, $name);
     }
 };

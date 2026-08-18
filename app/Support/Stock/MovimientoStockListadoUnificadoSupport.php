@@ -134,8 +134,6 @@ final class MovimientoStockListadoUnificadoSupport
             ->join('empresa', 'empresa.id', '=', 'tm.empresa_id')
             ->leftJoin('depmae as dep_o', 'dep_o.id', '=', 'tm.deposito_origen_id')
             ->leftJoin('depmae as dep_d', 'dep_d.id', '=', 'tm.deposito_destino_id')
-            ->leftJoin('bien_uso as bu_o', 'bu_o.id', '=', 'tm.bien_uso_origen_id')
-            ->leftJoin('bien_uso as bu_d', 'bu_d.id', '=', 'tm.bien_uso_destino_id')
             ->leftJoin('usuario as u_orig', 'u_orig.id', '=', 'tm.usuario_origen_id')
             ->whereNull('tm.deleted_at')
             ->select([
@@ -163,8 +161,9 @@ final class MovimientoStockListadoUnificadoSupport
                 'dep_d.nombre as deposito_destino_nombre',
                 'tm.deposito_origen_id as deposito_origen_id',
                 'tm.deposito_destino_id as deposito_destino_id',
-                DB::raw("TRIM(COALESCE(bu_o.uid, CONCAT(COALESCE(bu_o.codigo_inventario, ''), ' ', COALESCE(bu_o.hostname, '')))) as bien_uso_origen_etiqueta"),
-                DB::raw("TRIM(COALESCE(bu_d.uid, CONCAT(COALESCE(bu_d.codigo_inventario, ''), ' ', COALESCE(bu_d.hostname, '')))) as bien_uso_destino_etiqueta"),
+                // No seleccionar texto de bien_uso acá: utf8mb4_unicode_ci vs spanish_ci rompe el UNION (1271).
+                DB::raw('NULL as bien_uso_origen_etiqueta'),
+                DB::raw('NULL as bien_uso_destino_etiqueta'),
                 DB::raw('NULL as marca_nombre'),
                 'empresa.nombre as nombreempresa',
                 'tm.empresa_id as empresa_id_listado',

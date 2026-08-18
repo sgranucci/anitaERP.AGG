@@ -81,20 +81,23 @@ final class GastronomiaConciliacionPostCierreCaeaSupport
             $erpTotal += round((float) ($row->total ?? 0), 2);
         }
 
-        $cacheCabeceras = [];
-        $clavesExcluir = $this->exclusionEmisionSupport->clavesExcluirListaParaPuntoventa(
-            $empresaId,
-            $fechaJornada,
-            $pvCaeaId,
-            $indiceAnitaBulk,
-        );
-        $anitaTotal = $this->chequeoVentasService->totalFacturacionBrutaAnitaParaVentasIds(
-            $ventaIds,
-            $fechaJornada,
-            $cacheCabeceras,
-            $clavesExcluir,
-            $indiceAnitaBulk,
-        );
+        $anitaTotal = 0.0;
+        if (! GastronomiaVentasSoloErpSupport::esJornada($empresaId, $fechaJornada)) {
+            $cacheCabeceras = [];
+            $clavesExcluir = $this->exclusionEmisionSupport->clavesExcluirListaParaPuntoventa(
+                $empresaId,
+                $fechaJornada,
+                $pvCaeaId,
+                $indiceAnitaBulk,
+            );
+            $anitaTotal = $this->chequeoVentasService->totalFacturacionBrutaAnitaParaVentasIds(
+                $ventaIds,
+                $fechaJornada,
+                $cacheCabeceras,
+                $clavesExcluir,
+                $indiceAnitaBulk,
+            );
+        }
 
         $nroOperSnapshot = $this->nroOperSnapshotJornada((int) $jornada->id);
         $totalXSnapshot = $this->totalXSnapshotJornada((int) $jornada->id);

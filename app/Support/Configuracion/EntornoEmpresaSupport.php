@@ -23,6 +23,9 @@ final class EntornoEmpresaSupport
 
     public const IGUASSU = 'IGUASSU TRAVEL';
 
+    /** Laboratorio PostgreSQL aislado (`EMPRESA=LAB_PG`). No es un cliente productivo. */
+    public const LAB_PG = 'LAB_PG';
+
     public static function codigo(): string
     {
         return strtoupper(trim((string) config('app.empresa')));
@@ -53,5 +56,10 @@ final class EntornoEmpresaSupport
     public static function esElBierzo(): bool
     {
         return self::es(self::EL_BIERZO);
+    }
+
+    public static function esLabPostgres(): bool
+    {
+        return self::es(self::LAB_PG);
     }
 }

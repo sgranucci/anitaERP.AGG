@@ -118,6 +118,30 @@ class Sindicato_SueldosRepository implements Sindicato_SueldosRepositoryInterfac
     }
 
     /**
+     * @return \Illuminate\Support\Collection<int, Sindicato_Sueldos>
+     */
+    public function listadoParaConsulta(string $consulta = '')
+    {
+        $texto = trim($consulta);
+        $query = $this->model->newQuery()
+            ->select(['id', 'codigo', 'descripcion', 'numero'])
+            ->orderBy('codigo')
+            ->limit(80);
+
+        if ($texto !== '') {
+            $query->where(function ($q) use ($texto) {
+                if (ctype_digit($texto)) {
+                    $q->orWhere('codigo', (int) $texto);
+                }
+                $q->orWhere('descripcion', 'like', '%'.$texto.'%')
+                    ->orWhere('numero', 'like', '%'.$texto.'%');
+            });
+        }
+
+        return $query->get();
+    }
+
+    /**
      * @return array{en_anita: int, importados: int, omitidos: int, errores: list<string>}
      */
     public function sincronizarConAnita()

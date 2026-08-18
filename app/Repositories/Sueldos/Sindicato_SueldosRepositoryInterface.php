@@ -15,4 +15,9 @@ interface Sindicato_SueldosRepositoryInterface extends RepositoryInterface
     public function sincronizarConAnita();
 
     public function findPorCodigo(int $codigo);
+
+    /**
+     * @return \Illuminate\Support\Collection<int, \App\Models\Sueldos\Sindicato_Sueldos>
+     */
+    public function listadoParaConsulta(string $consulta = '');
 }

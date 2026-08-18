@@ -81,9 +81,7 @@ return new class extends Migration
 
     private function indexExists(string $table, string $indexName): bool
     {
-        $indexes = DB::select("SHOW INDEX FROM `{$table}` WHERE Key_name = ?", [$indexName]);
-
-        return $indexes !== [];
+        return \App\Support\Database\MigrationDialectSupport::tieneIndice($table, $indexName);
     }
 
     private function upsertPermiso(): int

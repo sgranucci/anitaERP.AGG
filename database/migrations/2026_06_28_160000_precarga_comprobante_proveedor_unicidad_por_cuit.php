@@ -23,7 +23,7 @@ return new class extends Migration
             WHERE identificacion_proveedor_cuit IS NOT NULL
               AND identificacion_proveedor_cuit != ''
             GROUP BY identificacion_proveedor_cuit, empresa_id, tipotransaccion_compra_id, letra, sucursal, numerocomprobante
-            HAVING cnt > 1
+            HAVING COUNT(*) > 1
             LIMIT 5
         ");
 
@@ -67,29 +67,26 @@ return new class extends Migration
 
     private function backfillCuitNormalizado(): void
     {
-        DB::statement("
-            UPDATE precarga_comprobante_proveedor pcp
-            INNER JOIN proveedor p ON p.id = pcp.proveedor_id
-            SET pcp.identificacion_proveedor_cuit = LEFT(
-                REPLACE(REPLACE(REPLACE(REPLACE(p.nroinscripcion, '-', ''), ' ', ''), '.', ''), '/', ''),
-                11
-            )
-            WHERE pcp.identificacion_proveedor_cuit IS NULL
-              AND CHAR_LENGTH(REPLACE(REPLACE(REPLACE(REPLACE(p.nroinscripcion, '-', ''), ' ', ''), '.', ''), '/', '')) = 11
-        ");
+        $cuitExpr = "LEFT(REPLACE(REPLACE(REPLACE(REPLACE(p.nroinscripcion, '-', ''), ' ', ''), '.', ''), '/', ''), 11)";
+        $cuitLen = "CHAR_LENGTH(REPLACE(REPLACE(REPLACE(REPLACE(p.nroinscripcion, '-', ''), ' ', ''), '.', ''), '/', ''))";
+
+        \App\Support\Database\MigrationDialectSupport::statementPorDriver(
+            "UPDATE precarga_comprobante_proveedor pcp
+             INNER JOIN proveedor p ON p.id = pcp.proveedor_id
+             SET pcp.identificacion_proveedor_cuit = {$cuitExpr}
+             WHERE pcp.identificacion_proveedor_cuit IS NULL
+               AND {$cuitLen} = 11",
+            "UPDATE precarga_comprobante_proveedor AS pcp
+             SET identificacion_proveedor_cuit = {$cuitExpr}
+             FROM proveedor AS p
+             WHERE p.id = pcp.proveedor_id
+               AND pcp.identificacion_proveedor_cuit IS NULL
+               AND {$cuitLen} = 11"
+        );
     }
 
     private function indexExists(string $table, string $name): bool
     {
-        $connection = Schema::getConnection();
-        $database = $connection->getDatabaseName();
-
-        $row = $connection->selectOne(
-            'SELECT INDEX_NAME FROM information_schema.STATISTICS
-             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME = ? LIMIT 1',
-            [$database, $table, $name],
-        );
-
-        return $row !== null;
+        return \App\Support\Database\MigrationDialectSupport::tieneIndice($table, $name);
     }
 };

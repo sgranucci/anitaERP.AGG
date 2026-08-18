@@ -5,6 +5,7 @@ namespace App\Repositories\Configuracion;
 use App\Models\Compras\Requisicion_Estado;
 use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Configuracion\Arbolaprobacion_Nivel;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 
@@ -34,7 +35,11 @@ class Arbolaprobacion_NivelRepository implements Arbolaprobacion_NivelRepository
 
     public function delete($arbolaprobacion_id)
     {
-        return $this->model->where('arbolaprobacion_id', $arbolaprobacion_id)->delete();
+        EloquentAuditDeleteSupport::each(
+            $this->model->newQuery()->where('arbolaprobacion_id', $arbolaprobacion_id)
+        );
+
+        return true;
     }
 
     public function find($id)
@@ -113,10 +118,24 @@ class Arbolaprobacion_NivelRepository implements Arbolaprobacion_NivelRepository
             $guardados[] = $creado->id;
         }
 
-        $this->model->where('arbolaprobacion_id', $arbolaprobacion_id)
-            ->whereNotIn('id', $guardados)
-            ->delete();
+        $this->borrarNivelesNoConservados((int) $arbolaprobacion_id, $guardados);
 
         return true;
+    }
+
+    /**
+     * @param  list<int>  $idsConservar
+     */
+    private function borrarNivelesNoConservados(int $arbolaprobacionId, array $idsConservar): void
+    {
+        if ($idsConservar === []) {
+            return;
+        }
+
+        EloquentAuditDeleteSupport::each(
+            $this->model->newQuery()
+                ->where('arbolaprobacion_id', $arbolaprobacionId)
+                ->whereNotIn('id', $idsConservar)
+        );
     }
 }

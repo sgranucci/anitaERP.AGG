@@ -3,6 +3,7 @@
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Database\Schema\Blueprint;
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 
 /**
@@ -34,10 +35,6 @@ return new class extends Migration
 
     private function indiceExiste(string $nombre): bool
     {
-        return DB::table('information_schema.statistics')
-            ->where('table_schema', DB::getDatabaseName())
-            ->where('table_name', 'usuario')
-            ->where('index_name', $nombre)
-            ->exists();
+        return MigrationDialectSupport::tieneIndice('usuario', $nombre);
     }
 };

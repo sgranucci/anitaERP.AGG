@@ -8,9 +8,7 @@
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/form.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/domicilio.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/domicilio.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/arca-padron.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/arca-padron.js')) ?: time() }}"></script>
-@if (! ($usaTabla ?? true))
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/bases.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/bases.js')) ?: time() }}"></script>
-@endif
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/set_conceptos.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/set_conceptos.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/formula_debugger.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/formula_debugger.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/liquidacion_preview.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/liquidacion_preview.js')) ?: time() }}"></script>
@@ -195,9 +193,7 @@
     }
 </style>
 
-@if (! ($usaTabla ?? true))
-    @include('sueldos.empleado.modal_vigencias_base')
-@endif
+@include('sueldos.empleado.modal_vigencias_base')
 @include('includes.sueldos.modalconsultaconcepto_sueldos')
 @include('compras.proveedor.arca-cuit-entry-modal')
 @include('compras.proveedor.arca-padron-modals')

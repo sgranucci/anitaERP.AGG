@@ -94,6 +94,10 @@ class LibroIvaDigitalComprasGenerador
             $letra,
         );
         $cuit = preg_replace('/\D+/', '', (string) ($cp->proveedores->nroinscripcion ?? $cp->proveedor_documento_eventual ?? '')) ?? '';
+        $codigoMoneda = LibroIvaDigitalMapeosSupport::codigoMonedaAfip(
+            $cp->monedas->codigo ?? null,
+            $cp->monedas->nombre ?? null,
+        );
 
         $cabecera = [
             'fecha' => date('Ymd', strtotime((string) ($cp->fechaiva ?: $cp->fechacomprobante))),
@@ -112,11 +116,11 @@ class LibroIvaDigitalComprasGenerador
             'percepciones_iibb' => $totales['perc_iibb'],
             'percepciones_municipales' => $totales['perc_municipal'],
             'impuestos_internos' => $totales['imp_interno'],
-            'codigo_moneda' => LibroIvaDigitalMapeosSupport::codigoMonedaAfip(
-                $cp->monedas->codigo ?? null,
-                $cp->monedas->nombre ?? null,
+            'codigo_moneda' => $codigoMoneda,
+            'tipo_cambio' => LibroIvaDigitalMapeosSupport::tipoCambioArca(
+                $codigoMoneda,
+                (float) ($cp->cotizacion ?: 1),
             ),
-            'tipo_cambio' => (float) ($cp->cotizacion ?: 1),
             'cantidad_alicuotas' => $totales['cantidad_alicuotas'],
             'codigo_operacion' => ' ',
             'credito_fiscal_computable' => $totales['credito_computable'],

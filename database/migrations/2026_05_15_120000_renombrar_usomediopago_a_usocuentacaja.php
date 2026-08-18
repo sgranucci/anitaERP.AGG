@@ -1,8 +1,8 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -22,7 +22,12 @@ return new class extends Migration
                 $table->dropForeign('fk_ccu_usomediopago');
             });
 
-            DB::statement('ALTER TABLE cuentacaja_usomediopago CHANGE usomediopago_id usocuentacaja_id BIGINT UNSIGNED NOT NULL');
+            MigrationDialectSupport::renombrarColumna(
+                'cuentacaja_usomediopago',
+                'usomediopago_id',
+                'usocuentacaja_id',
+                'BIGINT UNSIGNED NOT NULL'
+            );
 
             Schema::rename('cuentacaja_usomediopago', 'cuentacaja_usocuentacaja');
 
@@ -42,7 +47,12 @@ return new class extends Migration
 
             Schema::rename('cuentacaja_usocuentacaja', 'cuentacaja_usomediopago');
 
-            DB::statement('ALTER TABLE cuentacaja_usomediopago CHANGE usocuentacaja_id usomediopago_id BIGINT UNSIGNED NOT NULL');
+            MigrationDialectSupport::renombrarColumna(
+                'cuentacaja_usomediopago',
+                'usocuentacaja_id',
+                'usomediopago_id',
+                'BIGINT UNSIGNED NOT NULL'
+            );
 
             Schema::table('cuentacaja_usomediopago', function (Blueprint $table) {
                 $table->foreign('usomediopago_id', 'fk_ccu_usomediopago')

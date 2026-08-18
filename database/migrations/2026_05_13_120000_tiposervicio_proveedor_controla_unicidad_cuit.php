@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -42,7 +43,7 @@ return new class extends Migration
         }
 
         $maxId = (int) DB::table('tiposervicio_proveedor')->max('id');
-        DB::statement('ALTER TABLE tiposervicio_proveedor AUTO_INCREMENT = '.($maxId + 1));
+        MigrationDialectSupport::reiniciarAutoincrement('tiposervicio_proveedor', 'id', $maxId + 1);
     }
 
     /**

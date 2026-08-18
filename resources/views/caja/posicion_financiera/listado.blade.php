@@ -43,6 +43,12 @@
         table.data td.posfin-total-col { text-align: right; }
         table.data tr.posfin-titulo td { background-color: #D6EAF8; font-weight: bold; }
         table.data tr.posfin-total { font-weight: bold; }
+        table.data tr.posfin-informativo td {
+            background-color: #FFF3CD;
+            color: #664D03;
+            font-weight: bold;
+        }
+        .posfin-informativo-aviso { font-size: 5px; text-transform: uppercase; }
         .listado-header { width: 100%; margin-bottom: 8px; border-bottom: 2px solid #333; padding-bottom: 6px; }
         .listado-header td { vertical-align: middle; border: none; }
         .meta { font-size: 7px; color: #444; margin-top: 3px; }

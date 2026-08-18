@@ -283,18 +283,36 @@
                     payloadCierre.medios_contado = mediosContadoPos;
                 }
             }
-            postJson(G.rutasTurno.cerrar, payloadCierre).then(function (data) {
-                if (data.ok) {
-                    alert(data.mensaje || 'Turno cerrado');
-                    abrirComprobantePdf(data.url_comprobante_pdf);
-                    if (typeof jQuery !== 'undefined') {
-                        jQuery('#modal-cerrar-turno-pos').modal('hide');
+            function enviarCierrePos() {
+                postJson(G.rutasTurno.cerrar, payloadCierre).then(function (data) {
+                    if (data.ok) {
+                        alert(data.mensaje || 'Turno cerrado');
+                        abrirComprobantePdf(data.url_comprobante_pdf);
+                        if (typeof jQuery !== 'undefined') {
+                            jQuery('#modal-cerrar-turno-pos').modal('hide');
+                        }
+                        refrescarEstadoTurno();
+                    } else {
+                        alert(data.error || 'Error');
                     }
-                    refrescarEstadoTurno();
-                } else {
-                    alert(data.error || 'Error');
-                }
-            });
+                });
+            }
+            if (window.GastronomiaSaneamientoHuecosArca
+                && G.rutasTurno.diagnosticarHuecosArca
+                && G.rutasTurno.ejecutarSaneamientoHuecosArca) {
+                window.GastronomiaSaneamientoHuecosArca.interceptarCierre({
+                    apiDiagnosticar: G.rutasTurno.diagnosticarHuecosArca,
+                    apiEjecutar: G.rutasTurno.ejecutarSaneamientoHuecosArca,
+                    estado: estado,
+                    cantidadHuecosEstado: (estado.huecos_arca_pendientes || {}).cantidad || 0,
+                    payloadExtra: {
+                        turno_operativo_id: estado.turno_operativo_id || null,
+                    },
+                    onContinuarCierre: enviarCierrePos,
+                });
+            } else {
+                enviarCierrePos();
+            }
         });
     }
 

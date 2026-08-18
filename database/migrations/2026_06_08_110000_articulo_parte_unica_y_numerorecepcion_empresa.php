@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -20,8 +21,6 @@ return new class extends Migration
             $table->index(['articulo_id', 'numeroparte'], 'idx_articulo_parte_unica_art_nro');
             $table->foreign('articulo_id', 'fk_articulo_parte_unica_articulo')
                 ->references('id')->on('articulo')->onDelete('cascade');
-            $table->charset = 'utf8mb4';
-            $table->collation = 'utf8mb4_spanish_ci';
         });
 
         Schema::table('recepcion_proveedor_parte_unica', function (Blueprint $table) {
@@ -32,7 +31,10 @@ return new class extends Migration
 
         if (Schema::hasColumn('recepcion_proveedor', 'numerorecepcion')) {
             if ((int) DB::table('recepcion_proveedor')->count() === 0) {
-                DB::statement('ALTER TABLE recepcion_proveedor MODIFY numerorecepcion INT UNSIGNED NOT NULL');
+                MigrationDialectSupport::statementPorDriver(
+                    'ALTER TABLE recepcion_proveedor MODIFY numerorecepcion INT UNSIGNED NOT NULL',
+                    'ALTER TABLE recepcion_proveedor ALTER COLUMN numerorecepcion TYPE INTEGER USING NULLIF(regexp_replace(numerorecepcion::text, \'\\D\', \'\', \'g\'), \'\')::INTEGER'
+                );
             } else {
                 DB::table('recepcion_proveedor')->orderBy('id')->each(function ($row) {
                     $n = (int) preg_replace('/\D/', '', (string) $row->numerorecepcion);
@@ -41,7 +43,10 @@ return new class extends Migration
                     }
                     DB::table('recepcion_proveedor')->where('id', $row->id)->update(['numerorecepcion' => $n]);
                 });
-                DB::statement('ALTER TABLE recepcion_proveedor MODIFY numerorecepcion INT UNSIGNED NOT NULL');
+                MigrationDialectSupport::statementPorDriver(
+                    'ALTER TABLE recepcion_proveedor MODIFY numerorecepcion INT UNSIGNED NOT NULL',
+                    'ALTER TABLE recepcion_proveedor ALTER COLUMN numerorecepcion TYPE INTEGER USING numerorecepcion::INTEGER'
+                );
             }
         }
 
@@ -62,7 +67,10 @@ return new class extends Migration
             $table->dropIndex('idx_recep_prov_empresa');
         });
 
-        DB::statement('ALTER TABLE recepcion_proveedor MODIFY numerorecepcion VARCHAR(50) NOT NULL');
+        MigrationDialectSupport::statementPorDriver(
+            'ALTER TABLE recepcion_proveedor MODIFY numerorecepcion VARCHAR(50) NOT NULL',
+            'ALTER TABLE recepcion_proveedor ALTER COLUMN numerorecepcion TYPE VARCHAR(50) USING numerorecepcion::TEXT'
+        );
 
         Schema::table('recepcion_proveedor_parte_unica', function (Blueprint $table) {
             $table->dropIndex('idx_recep_parte_unica_numeroparte');
@@ -73,11 +81,6 @@ return new class extends Migration
 
     private function indexExists(string $table, string $index): bool
     {
-        $rows = DB::select(
-            'SELECT 1 FROM information_schema.statistics WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? LIMIT 1',
-            [$table, $index]
-        );
-
-        return $rows !== [];
+        return Schema::hasIndex($table, $index);
     }
 };

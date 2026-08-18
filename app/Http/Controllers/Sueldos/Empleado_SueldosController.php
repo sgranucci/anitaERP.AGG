@@ -415,8 +415,18 @@ class Empleado_SueldosController extends Controller
         $emp = $this->repository->findOrFail($id);
         $nb = $request->input('nombrebase_id') ? (int) $request->input('nombrebase_id') : null;
 
+        // Con bases por tabla de categoría, la grilla y el modal muestran las vigencias
+        // de la categoría (solo lectura); el empleado no tiene filas propias.
+        $usaTabla = $emp->categoria
+            ? CategoriaOrigenBases::usaTablaCategoria($emp->categoria->origen_bases)
+            : true;
+
+        $historial = $usaTabla && $emp->categoria_id
+            ? $this->categoriaBaseService->historial((int) $emp->categoria_id, $nb)
+            : $this->baseService->historial((int) $emp->id, $nb);
+
         return response()->json([
-            'historial' => $this->baseService->historial((int) $emp->id, $nb),
+            'historial' => $historial,
         ]);
     }
 

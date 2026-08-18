@@ -63,7 +63,7 @@ final class GastronomiaVentasArticulosReporteQuery
             ->selectRaw("SUM(CASE WHEN ({$tipoVenta}) = 'invitacion' THEN ABS({$cantidad}) ELSE 0 END) as cant_invitacion")
             ->selectRaw("SUM(CASE WHEN ({$tipoVenta}) = 'staff' THEN ABS({$cantidad}) ELSE 0 END) as cant_staff")
             ->groupBy('ve.articulo_id', 'a.sku', 'a.descripcion')
-            ->havingRaw('cant_total > 0.0001')
+            ->havingRaw("SUM(ABS({$cantidad})) > 0.0001")
             ->orderBy('a.sku')
             ->get();
 

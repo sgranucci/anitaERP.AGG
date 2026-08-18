@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -74,26 +75,23 @@ return new class extends Migration
             return;
         }
 
-        DB::statement(
+        MigrationDialectSupport::statementPorDriver(
             'UPDATE articulo_movimiento am
              LEFT JOIN '.$parentTable.' p ON p.id = am.'.$column.'
              SET am.'.$column.' = NULL
-             WHERE am.'.$column.' IS NOT NULL AND p.id IS NULL'
+             WHERE am.'.$column.' IS NOT NULL AND p.id IS NULL',
+            'UPDATE articulo_movimiento AS am
+             SET '.$column.' = NULL
+             WHERE am.'.$column.' IS NOT NULL
+               AND NOT EXISTS (
+                   SELECT 1 FROM '.$parentTable.' AS p WHERE p.id = am.'.$column.'
+               )'
         );
     }
 
     private function foreignKeyExists(string $constraint): bool
     {
-        $row = Schema::getConnection()->selectOne(
-            'SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
-             WHERE CONSTRAINT_SCHEMA = DATABASE()
-               AND TABLE_NAME = ?
-               AND CONSTRAINT_NAME = ?
-               AND CONSTRAINT_TYPE = ?',
-            ['articulo_movimiento', $constraint, 'FOREIGN KEY'],
-        );
-
-        return $row !== null;
+        return MigrationDialectSupport::tieneForeignKey('articulo_movimiento', $constraint);
     }
 
     private function addRestrictForeign(Blueprint $table, string $constraint, string $column): void

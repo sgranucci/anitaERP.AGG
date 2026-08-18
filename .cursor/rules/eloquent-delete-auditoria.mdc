@@ -1,0 +1,52 @@
+---
+description: Borrar modelos Auditable/SoftDeletes fila a fila; el delete masivo no deja audits
+alwaysApply: true
+---
+
+# Borrado Eloquent: auditoría (OwenIt)
+
+`audits` se escribe en el evento `deleted` del **modelo**. Un `delete()` / `update(['deleted_at' => …])` sobre el Query Builder **no dispara** ese evento: la fila se borra (o se soft-deletea) y no queda quién ni qué.
+
+Incidente 18/ago/2026: `Arbolaprobacion_NivelRepository` hizo `whereNotIn('id', $guardados)->delete()` al grabar REQUIS KANDIKO; el nivel 1 Gastronomía (id 261) quedó `deleted_at` sin fila en `audits`.
+
+Punto único: `App\Support\Database\EloquentAuditDeleteSupport`.
+
+## Obligatorio
+
+Modelos `Auditable` y/o `SoftDeletes` (árbol, asiento, y el resto del ERP):
+
+```php
+use App\Support\Database\EloquentAuditDeleteSupport;
+
+EloquentAuditDeleteSupport::each(
+    Arbolaprobacion_Nivel::query()
+        ->where('arbolaprobacion_id', $arbolId)
+        ->whereNotIn('id', $idsConservar)
+);
+```
+
+Referencia previa (observers de saldo): `AnitaAsientoImportService` borra `Asiento_Movimiento` con `get()->each(fn ($m) => $m->delete())`.
+
+`Model::destroy($id)` y `$modelo->delete()` sí auditan. `Builder::delete()` no.
+
+## Prohibido
+
+```php
+// ❌ Sin evento deleted → sin audit
+Arbolaprobacion_Nivel::query()->where('arbolaprobacion_id', $id)->delete();
+$query->whereNotIn('id', $guardados)->delete();
+$query->update(['deleted_at' => now(), 'updated_at' => now()]);
+```
+
+`DB::table('…')->delete()` tampoco: ni SoftDeletes ni audits.
+
+## Al sincronizar hijas (formulario ABM)
+
+Conservar IDs enviados; las que no vienen se borran **instancia a instancia** (no un `whereNotIn->delete()`). `whereNotIn('id', [])` en Laravel no matchea filas: no usarlo como “borrar todas”.
+
+## Comprobación rápida
+
+```bash
+rg "whereNotIn\\('id'.*\\)->delete\\(\\)|->update\\(\\['deleted_at'" app --glob '*.php'
+php -l app/Support/Database/EloquentAuditDeleteSupport.php
+```

@@ -1,19 +1,21 @@
-# Portabilidad de base de datos (decisión aplazada)
+# Portabilidad de base de datos (dual-driver + Crown PG por etapas)
 
-**Estado:** en curso (boy scout + capa dialecto) — cutover a Postgres sigue aplazado.  
+**Estado:** dual-driver listo (Fases 1–5 + boy scout 3.x). AGG sigue MySQL. Crown PG **agendado por etapas**.  
 **Fecha de registro:** 2026-07-27  
-**Última reactivación:** 2026-08-10  
+**Última actualización:** 2026-08-17  
 **Alcance:** motor operativo Laravel (anitaERP). No incluye Anita legacy ni otras BD externas (Wigos, SuiteCRM, etc.).
+
+**Estrategia Crown:** `docs/arquitectura/crown-postgres-estrategia.md` (Fase 6 ops + etapas de negocio A–J).
 
 ## 1. Decisión vigente
 
 | Tema | Decisión |
 |------|---------|
-| Motor actual / Crown (corto plazo) | **MySQL 8** (o MariaDB si el hosting lo impone; **unificar un solo motor** en todos los entornos) |
-| Migrar a PostgreSQL ahora | **No** |
-| Motivo “WAL” como justificación de Postgres | **No válido** — MySQL/InnoDB tiene redo log + binary log (PITR equivalente; ver `deploy/backup/`) |
-| Primer proyecto futuro | **Abstraer el acceso a BD** (dual-driver / portable), no el cutover a Postgres |
-| Cutover o instancia Postgres | Solo después de abstracción + requisito concreto (hosting, feature, política) |
+| Motor AGG (producción) | **MySQL 8** (o MariaDB unificado; **no** cutover AGG → Postgres) |
+| Crown | **Puede arrancar en PostgreSQL** — greenfield, por etapas (ver estrategia Crown) |
+| Motivo “WAL” como justificación de Postgres | **No válido** solo por WAL — MySQL ya tiene PITR; Crown PG es por política/plataforma/cliente |
+| Abstracción dual-driver | **Hecha** (helpers + lab migrate + smoke HTTP indexes) |
+| Cutover AGG | **No** |
 | Migraciones nuevas (desde ya) | **Portables** — regla `.cursor/rules/migraciones-portables-motor.mdc` |
 
 **Unificar MySQL vs MariaDB:** evitar mezclar MySQL 8 y MariaDB entre local/staging/prod (collations, dumps, binlog). Elegir uno y documentarlo en ops.
@@ -152,28 +154,30 @@ Usar como backlog: un ítem o un archivo hotspot por día/PR. Marcar al cerrar.
 APIs del helper (2.1): `castEntero`, `ordenCodigoAsc`, `hora`, `anio`, `anioMes`, `fecha`, `coalesce`, `ordenPorLista`, `lower` — ramas mysql/mariadb vs pgsql solo dentro de esa clase.
 
 Pilotos Fase 3 iniciales: `CamionRepository`, `DepmaeController`.  
-**2026-08-10:** cerrado `CAST(... AS UNSIGNED)` en `app/`; `HOUR`/`anioMes`; `DbContencionSupport`; `IFNULL`→`coalesce`; `FIELD`→`ordenPorLista`; bitácora `information_schema` con rama PG (`pg_class`).
+**2026-08-10:** cerrado `CAST(... AS UNSIGNED)` en `app/`; `HOUR`/`anioMes`; `DbContencionSupport`; `IFNULL`→`coalesce`; `FIELD`→`ordenPorLista`; bitácora `information_schema` con rama PG (`pg_class`).  
+**2026-08-17 (cont.):** literales SQL `""` → `''` (PG trata `"` como identificador); `ORDER BY col IS NULL` → `(col IS NULL)`; `TRUNCATE` vianda dual-driver; HAVING sobre alias (CC / vacaciones / gastro artículos) → `WHERE`/`havingRaw(COUNT|SUM…)`.
 
-#### Inventario Fase 1 (snapshot 2026-08-10, `app/` excl. helper)
+#### Inventario Fase 1 (snapshot 2026-08-17, `app/` excl. helper)
 
 | Patrón | Cantidad aprox. | Notas |
 |--------|-----------------|-------|
-| `CAST AS UNSIGNED` | 0 | Cerrado vía helper |
+| `CAST AS UNSIGNED` | 0 | Cerrado vía `castEntero` |
+| `CAST AS CHAR` | 0 | Cerrado vía `castTexto` |
 | `IFNULL` | 0 | Cerrado → `coalesce` |
 | `FIELD(` | 0 | Cerrado → `ordenPorLista` |
 | `information_schema` | encapsulado | Solo rama MySQL en `BitacoraAccesoDiscoSupport` |
 | `GROUP_CONCAT` / `FIND_IN_SET` | 0 en `app/` | — |
-| `DATE_FORMAT` / `Week` OT | **Hecho** | `periodoAnioMes` / `periodoAnioSemanaIso` (labels `YYYY-MM` / `YYYY-Www`) |
+| `DATE_FORMAT` / `Week` OT | **Hecho** | `periodoAnioMes` / `periodoAnioSemanaIso` |
 | `STR_TO_DATE` / `SUBSTRING_INDEX` / `LOCATE` | **Hecho** | IVA ventas conciliación vía helper |
-| `DATE(col)` SQL (gastro/caja/cierres) | **Hecho** | → `SqlDialectSupport::fecha` (11 archivos) |
+| `DATE(col)` SQL | **Hecho** | → `SqlDialectSupport::fecha` |
 
-#### Hotspots raw grandes (revisión 2026-08-10)
+#### Hotspots raw grandes (revisión 2026-08-10 / 17)
 
 | Archivo | Raw≈ | Hallazgo |
 |---------|------|----------|
 | `MovimientoStockListadoUnificadoSupport` | 35 | Ya portable (SUM/ABS/MIN) |
 | `GastronomiaArticulosVendidosQuery` | 31 | Ya portable (COALESCE/CONCAT) |
-| `GastronomiaAnaliticoReporteQuery` | 15 | Ya portable |
+| `GastronomiaAnaliticoReporteQuery` | 15 | Ya portable (+ `castTexto`) |
 | `ComprasKpisProcesoProductividadSupport` | 19 | Ya portable (CASE/MIN) |
 
 #### Fase 3 — Código incremental (el grueso; 1 archivo o módulo por día)
@@ -182,19 +186,20 @@ Regla boy scout: si tocás un módulo por otra feature, convertís su raw SQL al
 
 | # | Bloque | Archivos / carpetas típicas | Estado |
 |---|--------|-----------------------------|--------|
-| 3.1 | Contención + numeraciones | `DbContencionSupport`, numeraciones venta/cobranza/CAEA | **Parcial** |
-| 3.2 | Filtros listado | `CoincidenciaFlexibleTexto` ya usa `LOWER` portable | **OK básico** |
-| 3.3 | Stock / movimientos | casts + saldo depósito `coalesce` | **Parcial** |
-| 3.4 | Ventas pedidos / kilos / OT | `PedidoQuery`, kilos, `Ordentrabajo_TareaRepository` períodos | **Parcial** (OT períodos hechos) |
-| 3.5 | Gastronomía / IVA conciliación | hora + IVA + `DATE(fechajornada)` reportes | **Parcial** |
-| 3.6 | Estacionamiento / caja / cierres | `DATE` en bingo/máquina/estacionamiento + chequeos Anita | **Parcial** (`fecha()`) |
-| 3.7 | Contable / saldos | anioMes | **Parcial** |
+| 3.1 | Contención + numeraciones | `DbContencionSupport` UNIQUE/FK dual-driver; cobranza, venta nro, jornadas | **Hecho** (2026-08-17) |
+| 3.2 | Filtros listado | `CoincidenciaFlexibleTexto` → `SqlDialectSupport::lower` | **Hecho** |
+| 3.3 | Stock / movimientos | casts + saldo depósito `coalesce` + `textoOVacio` + LOWER filtros artículo | **Hecho** |
+| 3.4 | Ventas pedidos / kilos / OT | `PedidoQuery`/`RemitoQuery` `orderBy(tabla.id)`; kilos/OT/castEntero/`esSabado` | **Hecho** |
+| 3.5 | Gastronomía / IVA conciliación | hora + IVA + analítico `castTexto`/`textoOVacio` + canjes CS + jornada UNIQUE/FK | **Hecho** |
+| 3.6 | Estacionamiento / caja / cierres | `fecha()` + jornada UNIQUE/FK + `Caja_MovimientoQuery` `orderBy` calificado | **Hecho** |
+| 3.7 | Contable / saldos | anioMes + rangos cuenta `castEntero` | **Hecho** |
 | 3.8 | Compras / CC | IFNULL CC cliente/proveedor | **Hecho** (coalesce) |
-| 3.9 | `UNSIGNED` / `FIELD` / `IFNULL` | — | **Cerrado** en `app/` |
+| 3.9 | Dialectismos clásicos sueltos | `UNSIGNED` / `FIELD` / `IFNULL` / `CHAR` / `DATE` | **Cerrado** en `app/` |
 | 3.10 | Sueldos / ARCA orden listas | liquidación, cuotas, familiar, webservice | **Hecho** |
 | 3.11 | Bitácora meta tablas | `BitacoraAccesoDiscoSupport` | **Hecho** (dual-driver) |
+| 3.12 | UIF listados | `ClienteUifListadoFiltros` / premios | **Hecho** |
 
-**Siguiente foco sugerido:** boy scout al tocar módulos; o Fase 5 (CI Postgres + migrate vacío). Los dialectismos “clásicos” en `app/` están encapsulados.
+**Siguiente foco:** ejecutar Fase 6 + etapas A–J cuando Crown dé servidor — ver `crown-postgres-estrategia.md`. AGG no cambia de motor.
 
 #### Fase 4 — Migraciones (continua; ya empezó)
 
@@ -202,34 +207,36 @@ Regla boy scout: si tocás un módulo por otra feature, convertís su raw SQL al
 |---|-----------|-------------|--------|
 | 4.1 | Regla migraciones nuevas portables | `.cursor/rules/migraciones-portables-motor.mdc` | **Hecho** |
 | 4.2 | Cumplir la regla en **toda migración nueva** | `database/migrations/20xx_*.php` nuevas | **En curso** |
-| 4.3 | Al tocar una migración vieja por otro motivo: quitar charset/collation / `information_schema` si es barato | Solo el archivo que ya se edita | Oportunista |
+| 4.3 | Al tocar una migración vieja por otro motivo: quitar charset/collation / `information_schema` si es barato | Solo el archivo que ya se edita | Oportunista (+ muchas históricas parchadas en lab PG 2026-08) |
 | 4.4 | Documento de baseline PG (pgloader / schema dump) | `docs/arquitectura/` o `deploy/` | Cuando exista CI PG |
 
-**No** reescribir las ~1100 migraciones históricas en bloque.
+**No** reescribir las ~1100 migraciones históricas en bloque. El lab PG sí forzó parches puntuales vía `MigrationDialectSupport`.
 
 #### Fase 5 — CI dual-driver
 
-| # | Qué hacer | Qué se toca |
-|---|-----------|-------------|
-| 5.1 | Servicio Postgres en CI + `DB_CONNECTION=pgsql` | pipeline CI (GitHub Actions / local compose) |
-| 5.2 | Job `migrate` en PG vacío (o baseline) | mismo pipeline |
-| 5.3 | Smoke mínimo automatizado o checklist manual documentada | script o job |
+| # | Qué hacer | Qué se toca | Estado |
+|---|-----------|-------------|--------|
+| 5.1 | Servicio Postgres en CI + `DB_CONNECTION=pgsql` | pipeline CI (GitHub Actions / local compose) | **Hecho:** `.github/workflows/postgres-lab.yml` + `deploy/infra/postgres-lab/ci-run.sh`. Lab manual en `10.20.30.211`. |
+| 5.2 | Job `migrate` en PG vacío (o baseline) | mismo pipeline | **Hecho en lab** (2026-08-17): `migrate --force` con `EMPRESA=LAB_PG` → **1349** filas en `migrations`, **666** tablas `public`. Segunda corrida: *Nothing to migrate*. CI ejecuta lo mismo en vacío. |
+| 5.3 | Smoke mínimo automatizado o checklist manual documentada | script o job | **Hecho:** dialect + seed + HTTP (stock, caja cuentas, pedidos, compras OC/proveedor/requisición/factura, recepción, contable, canjes, capex/partida/presupuesto). Apertura-gasto queda bajo `bingo.habilitado` (no en lab). |
 
-#### Fase 6 — Ops Postgres (solo con go-ahead)
+#### Fase 6 — Ops Postgres (**agendada**; ejecutar al tener servidor Crown)
 
-| # | Qué hacer | Qué se toca |
-|---|-----------|-------------|
-| 6.1 | Install `pdo_pgsql`, `.env` ejemplo | servidor + `.env.example` |
-| 6.2 | Backup `pg_dump` + WAL archive | `deploy/backup/*` paralelo (no borrar MySQL) |
-| 6.3 | Restore drill documentado | `docs/` / `RESTORE-pgsql.md` |
+Detalle y checklist: `crown-postgres-estrategia.md` §3.
 
-#### Fase 7 — Go / no-go
+| # | Qué hacer | Estado |
+|---|-----------|--------|
+| 6.1–6.3 | PG 16 + `pdo_pgsql` + collation ICU es-ES | Agendado |
+| 6.4–6.5 | `.env` Crown + `.env.example` | Agendado |
+| 6.6–6.8 | `pg_dump`/WAL + restore drill + monitoreo | Agendado |
 
-| # | Qué hacer | Qué se toca |
-|---|-----------|-------------|
-| 7.1 | Criterios: Fase 5 verde + requisito real | decisión |
-| 7.2a | Si sí: cutover o instancia Crown PG | deploy + config |
-| 7.2b | Si no: cerrar épica — abstracción hecha, prod MySQL | este doc → estado “completado sin cutover” |
+#### Fase 7 — Go / no-go + etapas de negocio
+
+| # | Qué hacer | Estado |
+|---|-----------|--------|
+| 7.1 | Criterios go/no-go | Documentados en estrategia Crown §5 |
+| 7.2 | Etapas A–J (plataforma → maestros → … → go-live) | Agendadas; pruebas al implementar cada etapa |
+| 7.3 | AGG sin cutover | Vigente (dual-driver útil igual) |
 
 ### 5.3 Checklist técnico (referencia)
 
@@ -295,6 +302,7 @@ Usar cuando infra/cliente insista en Postgres solo por WAL:
 
 ## 9. Próximo paso
 
-1. Boy scout al tocar código (regla dialecto activa).  
-2. Opcional: Fase 5 — Postgres en CI + `migrate` en vacío.  
-3. No spike de Postgres en deploy real sin Fase 5 en verde.
+1. **Crown:** ejecutar `crown-postgres-estrategia.md` cuando haya servidor (Fase 6 → etapas A–J).  
+2. Fase 5 lab+CI listos; primer run verde en Actions cuando el workflow esté en el remoto.  
+3. Boy scout adicional solo si aparece SQL dialectal nuevo o falla una etapa Crown.  
+4. AGG: sin cambio de motor.

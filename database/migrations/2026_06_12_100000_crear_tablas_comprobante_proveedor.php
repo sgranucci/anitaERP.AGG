@@ -181,16 +181,7 @@ return new class extends Migration
 
     private function foreignKeyExists(string $table, string $name): bool
     {
-        $connection = Schema::getConnection();
-        $database = $connection->getDatabaseName();
-
-        $row = $connection->selectOne(
-            'SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
-             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND CONSTRAINT_NAME = ? AND CONSTRAINT_TYPE = ?',
-            [$database, $table, $name, 'FOREIGN KEY']
-        );
-
-        return $row !== null;
+        return \App\Support\Database\MigrationDialectSupport::tieneForeignKey($table, $name);
     }
 
     public function down(): void

@@ -9,6 +9,7 @@ use App\Models\Caja\Estacionamiento\JornadaEstacionamiento;
 use App\Models\Caja\Estacionamiento\TurnoOperativoEstacionamiento;
 use App\Models\Caja\Estacionamiento\VentaEstacionamientoEmision;
 use App\Repositories\Caja\Estacionamiento\JornadaEstacionamientoRepositoryInterface;
+use App\Support\Database\DbContencionSupport;
 use App\Support\Ventas\CaeaEmisionFechaCorrelatividadSupport;
 use Carbon\Carbon;
 use Illuminate\Database\QueryException;
@@ -593,9 +594,9 @@ final class JornadaEstacionamientoService
 
         $prev = $e->getPrevious();
         if ($prev instanceof QueryException) {
-            $sqlMsg = $prev->getMessage();
+            $sqlMsg = strtolower($prev->getMessage());
 
-            if (str_contains($sqlMsg, 'foreign key constraint') || str_contains($sqlMsg, 'FOREIGN KEY')) {
+            if (DbContencionSupport::esViolacionClaveForanea($prev)) {
                 if (str_contains($sqlMsg, 'empresa_id')) {
                     return 'La empresa seleccionada no existe en el sistema o no puede usarse para jornadas.';
                 }
@@ -606,7 +607,7 @@ final class JornadaEstacionamientoService
                 return 'No se pudo grabar la jornada por un dato referenciado inválido (restricción de base de datos).';
             }
 
-            if (str_contains($sqlMsg, 'Duplicate entry') || str_contains($sqlMsg, 'duplicate key')) {
+            if (DbContencionSupport::esViolacionUnicidad($prev)) {
                 return 'Ya existe un registro de jornada con esos datos. Consulte el historial o cierre la jornada anterior.';
             }
         }

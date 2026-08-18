@@ -168,6 +168,23 @@ class PosicionFinancieraExport implements FromView, ShouldAutoSize, WithColumnWi
                         ->setFormatCode(NumberFormat::FORMAT_NUMBER_COMMA_SEPARATED1);
                 }
 
+                foreach ($this->filas as $indice => $fila) {
+                    if (($fila['tipo_fila'] ?? '') !== 'informativo') {
+                        continue;
+                    }
+
+                    $filaExcel = $this->filaPrimeraDatosExcel + $indice;
+                    $sheet->getStyle('A'.$filaExcel.':'.$ultimaCol.$filaExcel)->applyFromArray([
+                        'font' => ['bold' => true, 'color' => ['rgb' => '664D03']],
+                        'fill' => [
+                            'fillType' => \PhpOffice\PhpSpreadsheet\Style\Fill::FILL_SOLID,
+                            'startColor' => ['rgb' => 'FFF3CD'],
+                        ],
+                    ]);
+                    $sheet->getStyle('A'.$filaExcel)->getAlignment()->setWrapText(true);
+                    $sheet->getRowDimension($filaExcel)->setRowHeight(30);
+                }
+
                 $sheet->freezePane('B'.$this->filaPrimeraDatosExcel);
             },
         ];

@@ -33,13 +33,13 @@ return [
     'estado_pendiente' => env('RENDICION_MAQUINA_ANITA_ESTADO_PENDIENTE', ' '),
 
     /**
-     * Columnas Informix rendmapgasto (prefijo histórico renmap_).
-     * Ajustables si el bridge reporta columnas distintas.
+     * Columnas Informix rendmapgasto verificadas en syscolumns:
+     * renmap_nro_oper, renmap_offset, renmap_concepto, renmap_valor.
      */
     'gasto_col_nro_oper' => env('RENDICION_MAQUINA_ANITA_GASTO_COL_NRO', 'renmap_nro_oper'),
-    'gasto_col_orden' => env('RENDICION_MAQUINA_ANITA_GASTO_COL_ORDEN', 'renmap_orden'),
-    'gasto_col_codigo' => env('RENDICION_MAQUINA_ANITA_GASTO_COL_CODIGO', 'renmap_codigo'),
-    'gasto_col_importe' => env('RENDICION_MAQUINA_ANITA_GASTO_COL_IMPORTE', 'renmap_importe'),
+    'gasto_col_orden' => env('RENDICION_MAQUINA_ANITA_GASTO_COL_ORDEN', 'renmap_offset'),
+    'gasto_col_codigo' => env('RENDICION_MAQUINA_ANITA_GASTO_COL_CODIGO', 'renmap_concepto'),
+    'gasto_col_importe' => env('RENDICION_MAQUINA_ANITA_GASTO_COL_IMPORTE', 'renmap_valor'),
 
     /** Caja Informix por defecto cuando no hay otra fuente. */
     'caja_id_default_por_empresa' => [

@@ -12,6 +12,7 @@ use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\TurnoOperativoGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Repositories\Ventas\JornadaGastronomiaRepositoryInterface;
+use App\Support\Database\DbContencionSupport;
 use App\Support\Database\EloquentActualizacionPorLotesSupport;
 use App\Support\Ventas\GastronomiaAutoDescarteVaciasSupport;
 use App\Support\Ventas\CaeaEmisionFechaCorrelatividadSupport;
@@ -836,9 +837,9 @@ final class GastronomiaJornadaService
 
         $prev = $e->getPrevious();
         if ($prev instanceof QueryException) {
-            $sqlMsg = $prev->getMessage();
+            $sqlMsg = strtolower($prev->getMessage());
 
-            if (str_contains($sqlMsg, 'foreign key constraint') || str_contains($sqlMsg, 'FOREIGN KEY')) {
+            if (DbContencionSupport::esViolacionClaveForanea($prev)) {
                 if (str_contains($sqlMsg, 'empresa_id')) {
                     return 'La empresa seleccionada no existe en el sistema o no puede usarse para jornadas.';
                 }
@@ -849,7 +850,7 @@ final class GastronomiaJornadaService
                 return 'No se pudo grabar la jornada por un dato referenciado inválido (restricción de base de datos).';
             }
 
-            if (str_contains($sqlMsg, 'Duplicate entry') || str_contains($sqlMsg, 'duplicate key')) {
+            if (DbContencionSupport::esViolacionUnicidad($prev)) {
                 return 'Ya existe un registro de jornada con esos datos. Consulte el historial o cierre la jornada anterior.';
             }
         }

@@ -24,7 +24,7 @@ return new class extends Migration
               AND identificacion_proveedor_cuit IS NOT NULL
               AND identificacion_proveedor_cuit != ''
             GROUP BY identificacion_proveedor_cuit, empresa_id, tipotransaccion_compra_id, letra, sucursal, numerocomprobante
-            HAVING cnt > 1
+            HAVING COUNT(*) > 1
             LIMIT 5
         ");
 
@@ -102,55 +102,51 @@ return new class extends Migration
 
     private function backfillCuitNormalizado(): void
     {
-        DB::statement("
-            UPDATE comprobante_proveedor cp
-            INNER JOIN proveedor p ON p.id = cp.proveedor_id
-            SET cp.identificacion_proveedor_cuit = LEFT(
-                REPLACE(REPLACE(REPLACE(REPLACE(p.nroinscripcion, '-', ''), ' ', ''), '.', ''), '/', ''),
-                11
-            )
-            WHERE cp.identificacion_proveedor_cuit IS NULL
-              AND cp.proveedor_id IS NOT NULL
-              AND CHAR_LENGTH(REPLACE(REPLACE(REPLACE(REPLACE(p.nroinscripcion, '-', ''), ' ', ''), '.', ''), '/', '')) = 11
-        ");
+        $cuitExprMysql = "LEFT(REPLACE(REPLACE(REPLACE(REPLACE(p.nroinscripcion, '-', ''), ' ', ''), '.', ''), '/', ''), 11)";
+        $cuitLenMysql = "CHAR_LENGTH(REPLACE(REPLACE(REPLACE(REPLACE(p.nroinscripcion, '-', ''), ' ', ''), '.', ''), '/', ''))";
+        $cuitExprPg = "LEFT(REPLACE(REPLACE(REPLACE(REPLACE(p.nroinscripcion, '-', ''), ' ', ''), '.', ''), '/', ''), 11)";
+        $cuitLenPg = "CHAR_LENGTH(REPLACE(REPLACE(REPLACE(REPLACE(p.nroinscripcion, '-', ''), ' ', ''), '.', ''), '/', ''))";
 
-        DB::statement("
-            UPDATE comprobante_proveedor cp
-            SET cp.identificacion_proveedor_cuit = LEFT(
-                REPLACE(REPLACE(REPLACE(cp.proveedor_documento_eventual, '-', ''), ' ', ''), '.', ''),
-                11
-            )
-            WHERE cp.identificacion_proveedor_cuit IS NULL
-              AND cp.proveedor_documento_eventual IS NOT NULL
-              AND CHAR_LENGTH(REPLACE(REPLACE(REPLACE(cp.proveedor_documento_eventual, '-', ''), ' ', ''), '.', '')) = 11
-        ");
+        \App\Support\Database\MigrationDialectSupport::statementPorDriver(
+            "UPDATE comprobante_proveedor cp
+             INNER JOIN proveedor p ON p.id = cp.proveedor_id
+             SET cp.identificacion_proveedor_cuit = {$cuitExprMysql}
+             WHERE cp.identificacion_proveedor_cuit IS NULL
+               AND cp.proveedor_id IS NOT NULL
+               AND {$cuitLenMysql} = 11",
+            "UPDATE comprobante_proveedor AS cp
+             SET identificacion_proveedor_cuit = {$cuitExprPg}
+             FROM proveedor AS p
+             WHERE p.id = cp.proveedor_id
+               AND cp.identificacion_proveedor_cuit IS NULL
+               AND cp.proveedor_id IS NOT NULL
+               AND {$cuitLenPg} = 11"
+        );
+
+        $eventualMysql = "LEFT(REPLACE(REPLACE(REPLACE(cp.proveedor_documento_eventual, '-', ''), ' ', ''), '.', ''), 11)";
+        $eventualLenMysql = "CHAR_LENGTH(REPLACE(REPLACE(REPLACE(cp.proveedor_documento_eventual, '-', ''), ' ', ''), '.', ''))";
+
+        \App\Support\Database\MigrationDialectSupport::statementPorDriver(
+            "UPDATE comprobante_proveedor cp
+             SET cp.identificacion_proveedor_cuit = {$eventualMysql}
+             WHERE cp.identificacion_proveedor_cuit IS NULL
+               AND cp.proveedor_documento_eventual IS NOT NULL
+               AND {$eventualLenMysql} = 11",
+            "UPDATE comprobante_proveedor AS cp
+             SET identificacion_proveedor_cuit = {$eventualMysql}
+             WHERE cp.identificacion_proveedor_cuit IS NULL
+               AND cp.proveedor_documento_eventual IS NOT NULL
+               AND {$eventualLenMysql} = 11"
+        );
     }
 
     private function indexExists(string $table, string $name): bool
     {
-        $connection = Schema::getConnection();
-        $database = $connection->getDatabaseName();
-
-        $row = $connection->selectOne(
-            'SELECT INDEX_NAME FROM information_schema.STATISTICS
-             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND INDEX_NAME = ? LIMIT 1',
-            [$database, $table, $name],
-        );
-
-        return $row !== null;
+        return \App\Support\Database\MigrationDialectSupport::tieneIndice($table, $name);
     }
 
     private function foreignKeyExists(string $table, string $name): bool
     {
-        $connection = Schema::getConnection();
-        $database = $connection->getDatabaseName();
-
-        $row = $connection->selectOne(
-            'SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
-             WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ? AND CONSTRAINT_NAME = ? AND CONSTRAINT_TYPE = ?',
-            [$database, $table, $name, 'FOREIGN KEY'],
-        );
-
-        return $row !== null;
+        return \App\Support\Database\MigrationDialectSupport::tieneForeignKey($table, $name);
     }
 };

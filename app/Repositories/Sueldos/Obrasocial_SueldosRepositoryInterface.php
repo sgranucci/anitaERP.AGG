@@ -15,4 +15,9 @@ interface Obrasocial_SueldosRepositoryInterface extends RepositoryInterface
     public function sincronizarConAnita();
 
     public function findPorCodigo(int $codigo);
+
+    /**
+     * @return \Illuminate\Support\Collection<int, \App\Models\Sueldos\Obrasocial_Sueldos>
+     */
+    public function listadoParaConsulta(string $consulta = '');
 }

@@ -34,6 +34,20 @@ class AyudaManuales
                 'disponible' => true,
             ],
             [
+                'modulo' => 'Stock — Gastronomía, fórmulas e insumos',
+                'bajada' => 'Fórmulas, referencias de compra, depósitos venta/insumos, descuento al facturar y tipos de movimiento.',
+                'url' => route('manual_stock_gastronomia'),
+                'icono' => 'fa-flask',
+                'disponible' => true,
+            ],
+            [
+                'modulo' => 'Caja — Posición financiera, Flash, máquinas y bingo',
+                'bajada' => 'Flujo de datos diario, origen de totales Flash, rendiciones de máquinas, pozo bingo y posición financiera.',
+                'url' => route('manual_caja'),
+                'icono' => 'fa-cash-register',
+                'disponible' => true,
+            ],
+            [
                 'modulo' => 'Canjes Marketing',
                 'bajada' => 'Clientes VIP, facturador de canjes en sala y listado de entregas para Marketing.',
                 'url' => route('manual_canjes_marketing'),
@@ -80,6 +94,20 @@ class AyudaManuales
                 'bajada' => 'Agenda mensual por módulo, cierre general, hora de ejecución, histórico y aperturas temporales.',
                 'url' => route('manual_contable'),
                 'icono' => 'fa-lock',
+                'disponible' => true,
+            ],
+            [
+                'modulo' => 'Contaduría — Cierres de rendiciones',
+                'bajada' => 'Asientos de máquinas, bingo, estacionamiento y vending: preview, cuentas, pozo acumulado y conciliación Flash.',
+                'url' => route('manual_cierres_rendiciones'),
+                'icono' => 'fa-balance-scale',
+                'disponible' => true,
+            ],
+            [
+                'modulo' => 'Contable — Reportes definibles',
+                'bajada' => 'Catálogo FSV, layouts, consolidación IC, ejecución, drill-down, publicación, distribución, notas y paridad Anita.',
+                'url' => route('manual_reporte_definible'),
+                'icono' => 'fa-chart-bar',
                 'disponible' => true,
             ],
             [

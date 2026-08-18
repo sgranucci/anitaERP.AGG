@@ -107,7 +107,7 @@ final class ViandaConsumoListadoFiltros
 
         return $query
             ->leftJoin('centrocosto as cc_orden_vianda', 'cc_orden_vianda.id', '=', 'vianda_consumo.centrocosto_id')
-            ->orderByRaw('cc_orden_vianda.nombre IS NULL')
+            ->orderByRaw('(cc_orden_vianda.nombre IS NULL)')
             ->orderBy('cc_orden_vianda.nombre')
             ->orderByDesc('vianda_consumo.fecha')
             ->orderByDesc('vianda_consumo.id')

@@ -8,7 +8,8 @@ use RuntimeException;
 use Throwable;
 
 /**
- * Reintentos ante deadlock / lock wait en MySQL/MariaDB y PostgreSQL.
+ * Reintentos ante deadlock / lock wait y detección de UNIQUE/FK
+ * (MySQL 1062/1451/1452 y PostgreSQL 23505/23503).
  *
  * Sustituye el uso directo de MysqlContencionSupport (alias de compatibilidad).
  * Ver docs/arquitectura/portabilidad-base-datos.md (Fase 2.2).
@@ -56,6 +57,82 @@ final class DbContencionSupport
             || str_contains($m, '55p03')
         ) {
             return true;
+        }
+
+        return false;
+    }
+
+    /**
+     * Violación de UNIQUE (MySQL 1062 / PostgreSQL 23505).
+     * $pistas opcional: alguna debe aparecer en el mensaje (índice o tabla).
+     */
+    public static function esViolacionUnicidad(Throwable $e, string ...$pistas): bool
+    {
+        [$sqlState, $driverCode, $mensaje] = self::partesErrorSql($e);
+
+        $esUnicidad = $sqlState === '23505'
+            || $driverCode === '1062'
+            || str_contains($mensaje, 'duplicate entry')
+            || str_contains($mensaje, 'duplicate key')
+            || str_contains($mensaje, 'unique constraint')
+            || str_contains($mensaje, 'unique violation');
+
+        if (! $esUnicidad) {
+            return false;
+        }
+
+        return self::coincidePistas($mensaje, ...$pistas);
+    }
+
+    /**
+     * Violación de FK (MySQL 1451/1452 / PostgreSQL 23503).
+     */
+    public static function esViolacionClaveForanea(Throwable $e, string ...$pistas): bool
+    {
+        [$sqlState, $driverCode, $mensaje] = self::partesErrorSql($e);
+
+        $esFk = $sqlState === '23503'
+            || in_array($driverCode, ['1451', '1452'], true)
+            || str_contains($mensaje, 'foreign key')
+            || str_contains($mensaje, 'violates foreign key constraint');
+
+        if (! $esFk) {
+            return false;
+        }
+
+        return self::coincidePistas($mensaje, ...$pistas);
+    }
+
+    /**
+     * @return array{0: ?string, 1: ?string, 2: string}
+     */
+    private static function partesErrorSql(Throwable $e): array
+    {
+        $sqlState = null;
+        $driverCode = null;
+        if ($e instanceof QueryException) {
+            $sqlState = isset($e->errorInfo[0]) ? (string) $e->errorInfo[0] : null;
+            $driverCode = isset($e->errorInfo[1]) ? (string) $e->errorInfo[1] : null;
+        }
+
+        $mensaje = strtolower($e instanceof QueryException
+            ? (string) ($e->errorInfo[2] ?? $e->getMessage())
+            : $e->getMessage());
+
+        return [$sqlState, $driverCode, $mensaje];
+    }
+
+    private static function coincidePistas(string $mensaje, string ...$pistas): bool
+    {
+        if ($pistas === []) {
+            return true;
+        }
+
+        foreach ($pistas as $pista) {
+            $pistaNorm = strtolower(trim($pista));
+            if ($pistaNorm !== '' && str_contains($mensaje, $pistaNorm)) {
+                return true;
+            }
         }
 
         return false;

@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'version' => '1.0',
+    'version' => '1.2',
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Módulo Contable · Cierres y aperturas de período',
 

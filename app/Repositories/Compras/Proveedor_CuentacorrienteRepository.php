@@ -125,7 +125,7 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
             ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
             ->whereNull('proveedor_cuentacorriente.deleted_at')
             ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
-            ->havingRaw('abs('.SqlDialectSupport::coalesce('aplicado', '0').') < abs(proveedor_cuentacorriente.total)');
+            ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());
 
         if ($busqueda !== '') {
             $query->where(function ($q) use ($busqueda) {
@@ -171,7 +171,7 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
             ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
             ->whereNull('proveedor_cuentacorriente.deleted_at')
             ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
-            ->havingRaw('abs('.SqlDialectSupport::coalesce('aplicado', '0').') < abs(proveedor_cuentacorriente.total)')
+            ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc())
             ->get();
 
         $total = 0.0;
@@ -229,7 +229,7 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
                     ->selectRaw('SUM(total)')
                     ->whereColumn('proveedor_cuentacorriente_id', 'proveedor_cuentacorriente.id'),
             ])
-            ->havingRaw('abs(aplicado) < abs(proveedor_cuentacorriente.total) or aplicado is null')
+            ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc())
             ->whereNull('proveedor_cuentacorriente.deleted_at');
 
         if ($comprobante_proveedor_id) {

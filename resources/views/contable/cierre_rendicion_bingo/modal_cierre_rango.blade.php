@@ -10,7 +10,7 @@
             <div class="modal-body" style="overflow-y:auto;">
                 <p class="text-muted small">
                     Cierra jornadas de bingo <strong>pendientes</strong> en el rango.
-                    Se genera <strong>un cierre diario por fecha jornada</strong> (FBI + asientos).
+                    Se genera <strong>un cierre diario por fecha jornada</strong> (FBI ventas ERP + asientos/ctamov).
                     El <strong>desde</strong> debe ser la jornada pendiente m&aacute;s antigua.
                 </p>
                 <div class="alert alert-warning py-2 small">

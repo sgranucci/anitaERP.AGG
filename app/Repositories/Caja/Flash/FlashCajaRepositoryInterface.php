@@ -20,7 +20,7 @@ interface FlashCajaRepositoryInterface
 
     public function findOrFail($id);
 
-    public function findPorEmpresaFecha(int $empresaId, string $fecha): ?\App\Models\Caja\Flash\FlashCaja;
+    public function findPorEmpresaFecha(int $empresaId, string $fecha, bool $forUpdate = false): ?\App\Models\Caja\Flash\FlashCaja;
 
     /**
      * @return \Illuminate\Support\Collection<int, \App\Models\Caja\Flash\FlashCaja>

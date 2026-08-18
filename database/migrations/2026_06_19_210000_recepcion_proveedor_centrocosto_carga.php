@@ -1,8 +1,8 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -17,12 +17,18 @@ return new class extends Migration
             }
         });
 
-        DB::statement('
-            UPDATE recepcion_proveedor rp
-            INNER JOIN usuario u ON u.id = rp.creousuario_id
-            SET rp.centrocosto_id = u.centrocosto_id
-            WHERE rp.centrocosto_id IS NULL AND u.centrocosto_id IS NOT NULL
-        ');
+        MigrationDialectSupport::statementPorDriver(
+            'UPDATE recepcion_proveedor rp
+             INNER JOIN usuario u ON u.id = rp.creousuario_id
+             SET rp.centrocosto_id = u.centrocosto_id
+             WHERE rp.centrocosto_id IS NULL AND u.centrocosto_id IS NOT NULL',
+            'UPDATE recepcion_proveedor AS rp
+             SET centrocosto_id = u.centrocosto_id
+             FROM usuario AS u
+             WHERE u.id = rp.creousuario_id
+               AND rp.centrocosto_id IS NULL
+               AND u.centrocosto_id IS NOT NULL'
+        );
     }
 
     public function down(): void

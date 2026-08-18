@@ -25,6 +25,21 @@ final class LibroIvaDigitalFormatoSupport
         return str_pad((string) $scaled, 10, '0', STR_PAD_LEFT);
     }
 
+    public static function parseImporte15(string $campo): float
+    {
+        $campo = substr($campo, 0, 15);
+        $neg = str_starts_with($campo, '-');
+        $digits = preg_replace('/\D+/', '', $campo) ?? '0';
+        $valor = ((int) $digits) / 100.0;
+
+        return $neg ? -$valor : $valor;
+    }
+
+    public static function parseTipoCambio10(string $campo): float
+    {
+        return ((int) substr($campo, 0, 10)) / 1_000_000;
+    }
+
     public static function numerico(int|string $valor, int $longitud): string
     {
         $digits = preg_replace('/\D+/', '', (string) $valor) ?? '';
@@ -72,7 +87,10 @@ final class LibroIvaDigitalFormatoSupport
             .self::importe15((float) ($campos['percepciones_municipales'] ?? 0))
             .self::importe15((float) ($campos['impuestos_internos'] ?? 0))
             .self::alfanumerico((string) ($campos['codigo_moneda'] ?? 'PES'), 3)
-            .self::tipoCambio10((float) ($campos['tipo_cambio'] ?? 1))
+            .self::tipoCambio10(LibroIvaDigitalMapeosSupport::tipoCambioArca(
+                (string) ($campos['codigo_moneda'] ?? 'PES'),
+                (float) ($campos['tipo_cambio'] ?? 1),
+            ))
             .self::numerico($campos['cantidad_alicuotas'] ?? 0, 1)
             .self::codigoOperacion($campos['codigo_operacion'] ?? null)
             .self::importe15((float) ($campos['otros_tributos'] ?? 0))
@@ -114,7 +132,10 @@ final class LibroIvaDigitalFormatoSupport
             .self::importe15((float) ($campos['percepciones_municipales'] ?? 0))
             .self::importe15((float) ($campos['impuestos_internos'] ?? 0))
             .self::alfanumerico((string) ($campos['codigo_moneda'] ?? 'PES'), 3)
-            .self::tipoCambio10((float) ($campos['tipo_cambio'] ?? 1))
+            .self::tipoCambio10(LibroIvaDigitalMapeosSupport::tipoCambioArca(
+                (string) ($campos['codigo_moneda'] ?? 'PES'),
+                (float) ($campos['tipo_cambio'] ?? 1),
+            ))
             .self::numerico($campos['cantidad_alicuotas'] ?? 0, 1)
             .self::codigoOperacion($campos['codigo_operacion'] ?? null)
             .self::importe15((float) ($campos['credito_fiscal_computable'] ?? 0))
@@ -167,7 +188,10 @@ final class LibroIvaDigitalFormatoSupport
             .self::numerico($campos['fecha_operacion'], 8)
             .self::importe15((float) $campos['monto_moneda_original'])
             .self::alfanumerico((string) ($campos['codigo_moneda'] ?? 'PES'), 3)
-            .self::tipoCambio10((float) ($campos['tipo_cambio'] ?? 1))
+            .self::tipoCambio10(LibroIvaDigitalMapeosSupport::tipoCambioArca(
+                (string) ($campos['codigo_moneda'] ?? 'PES'),
+                (float) ($campos['tipo_cambio'] ?? 1),
+            ))
             .self::numerico($campos['cuit_prestador'], 11)
             .self::alfanumerico((string) ($campos['nif_prestador'] ?? ''), 20)
             .self::alfanumerico((string) $campos['nombre_prestador'], 30)

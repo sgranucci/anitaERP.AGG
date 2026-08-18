@@ -1,8 +1,8 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -13,7 +13,10 @@ return new class extends Migration
     public function up(): void
     {
         // Amplía descuento: ahora puede ser % o monto según descuento_tipo.
-        DB::statement('ALTER TABLE ordencompra MODIFY descuento DECIMAL(18,4) NULL');
+        MigrationDialectSupport::statementPorDriver(
+            'ALTER TABLE ordencompra MODIFY descuento DECIMAL(18,4) NULL',
+            'ALTER TABLE ordencompra ALTER COLUMN descuento TYPE DECIMAL(18,4) USING descuento::DECIMAL(18,4)'
+        );
 
         Schema::table('ordencompra', function (Blueprint $table) {
             $table->string('descuento_tipo', 20)
@@ -31,6 +34,9 @@ return new class extends Migration
             $table->dropColumn('descuento_tipo');
         });
 
-        DB::statement('ALTER TABLE ordencompra MODIFY descuento DECIMAL(5,2) NULL');
+        MigrationDialectSupport::statementPorDriver(
+            'ALTER TABLE ordencompra MODIFY descuento DECIMAL(5,2) NULL',
+            'ALTER TABLE ordencompra ALTER COLUMN descuento TYPE DECIMAL(5,2) USING descuento::DECIMAL(5,2)'
+        );
     }
 };

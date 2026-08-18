@@ -8,6 +8,7 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
 use App\Support\Ventas\Gastronomia\GastronomiaNumeracionHuecosSupport;
+use App\Support\Ventas\Gastronomia\GastronomiaVentasSoloErpSupport;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 
@@ -34,16 +35,18 @@ final class GastronomiaAuditoriaHuecosNumeracionService
      */
     public function resumenJornadaEmpresa(int $empresaId, string $fechaJornada): array
     {
-        $resultado = $this->correlatividadService->ejecutar($fechaJornada, [$empresaId]);
-        $res = $resultado['resumen'] ?? [];
+        $huecos = $this->huecosErpJornadaEmpresa($empresaId, $fechaJornada, null);
+        $res = GastronomiaVentasSoloErpSupport::esJornada($empresaId, $fechaJornada)
+            ? []
+            : ($this->correlatividadService->ejecutar($fechaJornada, [$empresaId])['resumen'] ?? []);
 
         return [
             'fecha_jornada' => $fechaJornada,
-            'huecos_corr_erp' => (int) ($res['huecos_corr_erp'] ?? 0),
+            'huecos_corr_erp' => count($huecos),
             'solo_erp' => (int) ($res['solo_erp'] ?? 0),
             'solo_anita' => (int) ($res['solo_anita'] ?? 0),
             'dif_monto' => (int) ($res['dif_monto'] ?? 0),
-            'huecos' => $resultado['huecos'] ?? [],
+            'huecos' => $huecos,
         ];
     }
 
@@ -216,7 +219,12 @@ final class GastronomiaAuditoriaHuecosNumeracionService
         $huecos = [];
         foreach ($query->get() as $puntoventa) {
             $ventas = Venta::query()
-                ->select(['venta.id', 'venta.numerocomprobante', 'venta.codigo'])
+                ->select([
+                    'venta.id',
+                    'venta.numerocomprobante',
+                    'venta.codigo',
+                    'venta.tipotransaccion_id',
+                ])
                 ->where('puntoventa_id', (int) $puntoventa->id)
                 ->whereDate('fechajornada', $fechaJornada)
                 ->whereNull('deleted_at')
@@ -228,18 +236,30 @@ final class GastronomiaAuditoriaHuecosNumeracionService
                 continue;
             }
 
-            $ordenadas = $ventas->sortBy(fn (Venta $v) => (string) $v->codigo)->values();
-            $numeros = [];
-            foreach ($ordenadas as $venta) {
-                $n = (int) ($venta->numerocomprobante ?? 0);
-                if ($n > 0) {
-                    $numeros[] = $n;
+            foreach ($ventas->groupBy(fn (Venta $venta): int => (int) $venta->tipotransaccion_id) as $tipoId => $ventasTipo) {
+                $numerosCircuito = GastronomiaNumeracionHuecosSupport::normalizarNumeros(
+                    $ventasTipo->pluck('numerocomprobante'),
+                );
+                if (count($numerosCircuito) < 2) {
+                    continue;
                 }
-            }
-            foreach (GastronomiaNumeracionHuecosSupport::detectarHuecosSecuencia($numeros) as $row) {
-                $row['pv_codigo'] = (string) $puntoventa->codigo;
-                $row['empresa_id'] = $empresaId;
-                $huecos[] = $row;
+
+                $numerosCompartidos = Venta::query()
+                    ->where('puntoventa_id', (int) $puntoventa->id)
+                    ->where('tipotransaccion_id', (int) $tipoId)
+                    ->whereNull('deleted_at')
+                    ->whereBetween('numerocomprobante', [min($numerosCircuito), max($numerosCircuito)])
+                    ->pluck('numerocomprobante');
+
+                foreach (GastronomiaNumeracionHuecosSupport::detectarHuecosSecuenciaCompartida(
+                    $numerosCircuito,
+                    $numerosCompartidos,
+                ) as $row) {
+                    $row['pv_codigo'] = (string) $puntoventa->codigo;
+                    $row['empresa_id'] = $empresaId;
+                    $row['tipotransaccion_id'] = (int) $tipoId;
+                    $huecos[] = $row;
+                }
             }
         }
 

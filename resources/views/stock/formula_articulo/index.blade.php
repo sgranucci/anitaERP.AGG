@@ -65,6 +65,7 @@ $(document).ready(function () {
             <div class="card-header">
                 <h3 class="card-title">F&oacute;rmulas de art&iacute;culos</h3>
                 <div class="card-tools">
+                    @include('includes.stock.boton-manual-stock-gastronomia')
                     @if (can('crear-formula-articulo', false))
                     <a href="{{ route('crear_formula_articulo') }}" class="btn btn-outline-secondary btn-sm">
                         <i class="fa fa-fw fa-plus-circle"></i> Nuevo registro

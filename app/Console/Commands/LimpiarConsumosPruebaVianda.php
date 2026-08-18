@@ -105,6 +105,12 @@ class LimpiarConsumosPruebaVianda extends Command
             return;
         }
 
+        if (\App\Support\Database\SqlDialectSupport::esPostgres()) {
+            DB::statement('TRUNCATE TABLE vianda_consumo_linea, vianda_consumo RESTART IDENTITY CASCADE');
+
+            return;
+        }
+
         DB::statement('SET FOREIGN_KEY_CHECKS=0');
         DB::statement('TRUNCATE TABLE vianda_consumo_linea');
         DB::statement('TRUNCATE TABLE vianda_consumo');

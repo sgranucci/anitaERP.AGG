@@ -4,17 +4,27 @@
 @endsection
 
 @section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}">
 <style>
 .rd-exec-row-rubro td { border-top: 1px solid #d5d8dc; }
 .rd-exec-row-rubro.negrita td { font-weight: 700; color: #1B4F72; }
 .rd-exec-row-cuenta td { color: #566573; font-size: 12.5px; }
 .rd-exec-indent { display: inline-block; }
-.rd-exec-importe { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.rd-exec-importe, .rd-exec-col-importe { font-variant-numeric: tabular-nums; white-space: nowrap; min-width: 7.5rem; }
+.rd-exec-row-rubro .col-fija-1,
+.rd-exec-row-rubro .col-fija-2,
+.rd-exec-row-rubro .col-fija-der-1,
+.rd-exec-row-rubro .col-fija-der-2 { background: #fff; }
+.rd-exec-row-cuenta .col-fija-1,
+.rd-exec-row-cuenta .col-fija-2,
+.rd-exec-row-cuenta .col-fija-der-1,
+.rd-exec-row-cuenta .col-fija-der-2 { background: #fff; }
 </style>
 @endsection
 
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}"></script>
+<script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}"></script>
 <script>
 (function () {
     function toggleModo() {
@@ -454,43 +464,54 @@
                         </div>
                     @endif
 
+                    @php
+                        $rdExportQs = http_build_query(array_filter($filtrosQuery ?? [], fn ($v) => $v !== null && $v !== ''));
+                        $rdExportSuffix = $rdExportQs !== '' ? '?'.$rdExportQs : '';
+                    @endphp
+
                     @if ($reporte)
-                        <div class="d-flex justify-content-between align-items-center mb-2">
-                            <div>
+                        @php
+                            $rdUrlParidad = \App\Support\Navegacion\ModoConsultaUrlSupport::appendQueryToUrl(
+                                route('paridad_anita_reporte_definible', ['id' => $reporte->id]).$rdExportSuffix
+                            );
+                            $rdUrlPublicaciones = \App\Support\Navegacion\ModoConsultaUrlSupport::appendQueryToUrl(
+                                route('publicaciones_reporte_definible', ['id' => $reporte->id])
+                            );
+                        @endphp
+                        <div class="d-flex flex-wrap align-items-start justify-content-between mb-2">
+                            <div class="mb-2 mr-3">
                                 <h4 class="mb-0">{{ $reporte->titulo1 ?: $reporte->nombre }}</h4>
                                 @if ($reporte->titulo2)
                                     <div class="text-muted">{{ $reporte->titulo2 }}</div>
                                 @endif
                                 <div class="small text-muted">Período {{ $periodo_texto }} · Fuente {{ $resultado['fuente'] ?? '' }}</div>
                             </div>
-                            @php
-                                $rdExportQs = http_build_query(array_filter($filtrosQuery ?? [], fn ($v) => $v !== null && $v !== ''));
-                                $rdExportSuffix = $rdExportQs !== '' ? '?'.$rdExportQs : '';
-                            @endphp
-                            <a href="{{ route('listar_reporte_definible', ['id' => $reporte->id, 'formato' => 'PDF']).$rdExportSuffix }}" class="btn btn-app bg-danger">
-                                <i class="fas fa-file-pdf"></i> Pdf
-                            </a>
-                            <a href="{{ route('listar_reporte_definible', ['id' => $reporte->id, 'formato' => 'EXCEL']).$rdExportSuffix }}" class="btn btn-app bg-success">
-                                <i class="fas fa-file-excel"></i> Excel
-                            </a>
-                            <a href="{{ route('listar_reporte_definible', ['id' => $reporte->id, 'formato' => 'CSV']).$rdExportSuffix }}" class="btn btn-app bg-warning">
-                                <i class="fas fa-file-csv"></i> Csv
-                            </a>
-                            <a href="{{ route('paridad_anita_reporte_definible', ['id' => $reporte->id]).$rdExportSuffix }}"
-                               class="btn btn-app bg-info" target="_blank" rel="noopener"
-                               title="Comparar este informe contra ctamov + subdiario de Anita">
-                                <i class="fas fa-balance-scale"></i> Paridad Anita
-                            </a>
-                            @if (can('ejecutar-reporte-definible', false))
-                                <a href="#" class="btn btn-app bg-primary" data-toggle="modal" data-target="#rd-modal-publicar"
-                                   title="Congelar estos números para reimprimirlos idénticos">
-                                    <i class="fas fa-stamp"></i> Publicar
+                            <div class="d-flex flex-wrap align-items-start">
+                                <a href="{{ route('listar_reporte_definible', ['id' => $reporte->id, 'formato' => 'PDF']).$rdExportSuffix }}" class="btn btn-app bg-danger">
+                                    <i class="fas fa-file-pdf"></i> Pdf
                                 </a>
-                            @endif
-                            <a href="{{ route('publicaciones_reporte_definible', ['id' => $reporte->id]) }}"
-                               class="btn btn-app bg-secondary" title="Resultados ya publicados de este informe">
-                                <i class="fas fa-archive"></i> Publicados
-                            </a>
+                                <a href="{{ route('listar_reporte_definible', ['id' => $reporte->id, 'formato' => 'EXCEL']).$rdExportSuffix }}" class="btn btn-app bg-success">
+                                    <i class="fas fa-file-excel"></i> Excel
+                                </a>
+                                <a href="{{ route('listar_reporte_definible', ['id' => $reporte->id, 'formato' => 'CSV']).$rdExportSuffix }}" class="btn btn-app bg-warning">
+                                    <i class="fas fa-file-csv"></i> Csv
+                                </a>
+                                <a href="{{ $rdUrlParidad }}"
+                                   class="btn btn-app bg-info" target="_blank" rel="noopener"
+                                   title="Comparar este informe contra ctamov + subdiario de Anita">
+                                    <i class="fas fa-balance-scale"></i> Paridad Anita
+                                </a>
+                                @if (can('ejecutar-reporte-definible', false))
+                                    <a href="#" class="btn btn-app bg-primary" data-toggle="modal" data-target="#rd-modal-publicar"
+                                       title="Congelar estos números para reimprimirlos idénticos">
+                                        <i class="fas fa-stamp"></i> Publicar
+                                    </a>
+                                @endif
+                                <a href="{{ $rdUrlPublicaciones }}"
+                                   class="btn btn-app bg-secondary" title="Resultados ya publicados de este informe">
+                                    <i class="fas fa-archive"></i> Publicados
+                                </a>
+                            </div>
                         </div>
                     @endif
 
@@ -498,7 +519,7 @@
                         <div class="alert {{ $publicado_aviso['coincide'] ? 'alert-success' : 'alert-danger' }} py-2">
                             <i class="fa {{ $publicado_aviso['coincide'] ? 'fa-check-circle' : 'fa-exclamation-triangle' }}"></i>
                             {{ $publicado_aviso['mensaje'] }}
-                            <a href="{{ route('ver_publicacion_reporte_definible', ['id' => $reporte->id, 'publicacionId' => $publicado_aviso['publicacion']->id]) }}"
+                            <a href="{{ \App\Support\Navegacion\ModoConsultaUrlSupport::route('ver_publicacion_reporte_definible', ['id' => $reporte->id, 'publicacionId' => $publicado_aviso['publicacion']->id]) }}"
                                class="text-primary" target="_blank" rel="noopener">Ver lo publicado</a>
                         </div>
                     @endif
@@ -512,7 +533,9 @@
                     @include('contable.reporte_definible.partials.notas_pie', [
                         'notas' => $resultado['notas'] ?? [],
                         'notas_url_admin' => ($reporte && can('editar-reporte-definible', false))
-                            ? route('editar_reporte_definible', ['id' => $reporte->id]).'#tab-notas'
+                            ? \App\Support\Navegacion\ModoConsultaUrlSupport::appendQueryToUrl(
+                                route('editar_reporte_definible', ['id' => $reporte->id]).'#tab-notas'
+                            )
                             : null,
                     ])
                 @endif

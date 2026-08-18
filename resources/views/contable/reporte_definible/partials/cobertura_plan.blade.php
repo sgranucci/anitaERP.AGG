@@ -86,16 +86,17 @@
             <div class="card-body p-0" style="max-height:320px;overflow:auto">
                 <table class="table table-sm mb-0">
                     <thead style="background:#85C1E9;color:#17202A;">
-                        <tr><th>Código</th><th>Rubros</th></tr>
+                        <tr><th>Código</th><th>Nombre</th><th>Rubros</th></tr>
                     </thead>
                     <tbody>
                         @forelse ($c['duplicadas'] as $d)
                             <tr>
                                 <td>{{ $d['codigo_fmt'] }}</td>
+                                <td>{{ $d['nombre'] ?? '' }}</td>
                                 <td class="small">{{ implode(' · ', $d['rubros']) }}</td>
                             </tr>
                         @empty
-                            <tr><td colspan="2" class="text-muted text-center">Ninguna duplicada.</td></tr>
+                            <tr><td colspan="3" class="text-muted text-center">Ninguna duplicada.</td></tr>
                         @endforelse
                     </tbody>
                 </table>

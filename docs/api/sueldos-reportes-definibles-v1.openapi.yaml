@@ -1,0 +1,144 @@
+openapi: 3.0.3
+info:
+  title: anitaERP — Reportes definibles de sueldos (RaaS-light)
+  version: "1.0.0"
+  description: |
+    API Sanctum v1 para listados definibles de sueldos.
+    No incluye OData completo ni discovery RaaS Workday.
+servers:
+  - url: /api/v1/sueldos/reportes-definibles
+security:
+  - sanctumBearer: []
+components:
+  securitySchemes:
+    sanctumBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: Sanctum PAT
+  schemas:
+    Pagination:
+      type: object
+      properties:
+        page: { type: integer }
+        per_page: { type: integer }
+        total: { type: integer }
+    EjecucionEstado:
+      type: object
+      properties:
+        id: { type: integer }
+        uuid: { type: string }
+        reporte_id: { type: integer }
+        dataset_id: { type: integer, nullable: true }
+        estado: { type: string }
+        certificacion_id: { type: integer, nullable: true }
+        paridad_diferencia_maxima: { type: number, nullable: true }
+paths:
+  /:
+    get:
+      summary: Listar reportes activos
+      operationId: listReportes
+      responses:
+        "200":
+          description: OK
+  /{id}:
+    get:
+      summary: Detalle de reporte
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+  /{id}/datasets/{datasetId}:
+    get:
+      summary: Filas de dataset (paginado)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: datasetId
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: per_page
+          in: query
+          schema: { type: integer, default: 100, maximum: 1000 }
+      responses:
+        "200":
+          description: data + pagination
+  /ejecuciones/{id}:
+    get:
+      summary: Estado de ejecución (incluye certificación / paridad si hay meta)
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: EjecucionEstado
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/EjecucionEstado"
+  /{id}/webhooks:
+    get:
+      summary: Listar webhooks del reporte
+      security:
+        - sanctumBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: OK
+    post:
+      summary: Crear webhook (HMAC X-Anita-Signature)
+      description: Requiere ability webhooks:manage (o *).
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url, secret]
+              properties:
+                url: { type: string, format: uri }
+                secret: { type: string, minLength: 16 }
+                eventos:
+                  type: array
+                  items:
+                    type: string
+                    enum: [ejecucion.ok, ejecucion.error]
+                activo: { type: boolean }
+      responses:
+        "201":
+          description: Creado
+  /{id}/webhooks/{wid}:
+    delete:
+      summary: Eliminar webhook
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: integer }
+        - name: wid
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Eliminado

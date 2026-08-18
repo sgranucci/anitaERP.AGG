@@ -12,12 +12,13 @@ use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Support\Contable\CierreRendicionBingoAsientoSupport;
 use App\Support\Contable\CierreRendicionBingoConciliacionFlashSupport;
 use App\Support\Contable\CierreRendicionBingoConfigSupport;
-use App\Support\Contable\CierreRendicionBingoFbiAnitaSupport;
 use App\Support\Contable\CierreRendicionBingoGrupoSupport;
 use App\Support\Contable\CierreRendicionBingoListadoFiltros;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Caja\Bingo\BingoPozoAcumuladoSupport;
 use App\Support\Caja\Bingo\RendicionBingoCajaListadoFiltros;
+use App\Support\Ventas\BingoFbiTipoSupport;
+use App\Services\Ventas\CierreSalaExentaEmisionService;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -34,6 +35,7 @@ class CierreRendicionBingoService
         private readonly AsientoRepositoryInterface $asientoRepository,
         private readonly Asiento_MovimientoRepositoryInterface $asientoMovimientoRepository,
         private readonly TipoasientoRepositoryInterface $tipoasientoRepository,
+        private readonly CierreSalaExentaEmisionService $exentaEmisionService,
     ) {
     }
 
@@ -97,7 +99,7 @@ class CierreRendicionBingoService
         $this->assertCorrelatividadCierre($empresaId, $fechaDia);
 
         $config = CierreRendicionBingoConfigSupport::paraEmpresa($empresaId);
-        CierreRendicionBingoConfigSupport::exigirCompleta($config);
+        CierreRendicionBingoConfigSupport::exigirCompleta($config, $empresaId);
 
         $preview = CierreRendicionBingoAsientoSupport::generarPreviewGrupo(
             $rendiciones,
@@ -119,7 +121,7 @@ class CierreRendicionBingoService
      *   asiento_ids: list<int>,
      *   numeroasiento: string,
      *   rendicion_ids: list<int>,
-     *   fbi: array{tipo: string, letra: string, sucursal: int, nro: int, monto: float}
+     *   fbi: array{tipo: string, letra: string, sucursal: int, nro: int, monto: float, venta_id: int, codigo: string}
      * }
      */
     public function ejecutarCierreGrupo(int $empresaId, string $fechaDia): array
@@ -132,7 +134,7 @@ class CierreRendicionBingoService
         $this->assertCorrelatividadCierre($empresaId, $fechaDia);
 
         $config = CierreRendicionBingoConfigSupport::paraEmpresa($empresaId);
-        CierreRendicionBingoConfigSupport::exigirCompleta($config);
+        CierreRendicionBingoConfigSupport::exigirCompleta($config, $empresaId);
 
         $fecha = CierreRendicionBingoGrupoSupport::fechaAsientoDesdeGrupo($fechaDia);
 
@@ -158,9 +160,10 @@ class CierreRendicionBingoService
 
         $ids = $rendiciones->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
         $tipoAsientoId = $this->resolverTipoAsientoId();
+        $pvFbi = CierreRendicionBingoConfigSupport::puntoventaFbi($empresaId);
         $obsBase = CierreRendicionBingoAsientoSupport::DESCRIPCION_ASIENTO
             .' — '.Carbon::parse($fechaDia)->format('d/m/Y')
-            .' — PV FBI '.CierreRendicionBingoConfigSupport::puntoventaFbi($empresaId)
+            .' — PV FBI '.$pvFbi
             .' — rend. '.implode(', ', $ids);
 
         return DB::transaction(function () use (
@@ -172,6 +175,7 @@ class CierreRendicionBingoService
             $empresaId,
             $fechaDia,
             $ids,
+            $pvFbi,
         ) {
             $rendicionIds = $rendiciones->pluck('id')->map(fn ($id) => (int) $id)->all();
             $bloqueadas = RendicionBingoCaja::query()
@@ -185,12 +189,23 @@ class CierreRendicionBingoService
                         'La rendición #'.$rendicion->id.' ya fue cerrada contablemente.',
                     );
                 }
+                if ((int) ($rendicion->venta_id ?? 0) > 0) {
+                    throw new InvalidArgumentException(
+                        'La rendición #'.$rendicion->id.' ya tiene FBI vinculado (venta #'.$rendicion->venta_id.').',
+                    );
+                }
             }
 
-            $fbi = CierreRendicionBingoFbiAnitaSupport::emitirFbiExenta(
+            $fbi = $this->exentaEmisionService->emitir(
+                BingoFbiTipoSupport::tipo(),
+                BingoFbiTipoSupport::LETRA,
+                BingoFbiTipoSupport::nombreCliente(),
                 $empresaId,
                 $fechaDia,
                 (float) ($preview['fbi_monto'] ?? 0),
+                $pvFbi,
+                'FBI bingo '.Carbon::parse($fechaDia)->format('d/m/Y')
+                    .' — PV '.$pvFbi.' — rend. '.implode(', ', $ids),
             );
 
             $asientoIds = [];
@@ -204,7 +219,6 @@ class CierreRendicionBingoService
                     $fecha,
                     $obsBase.' — '.$leyenda,
                 );
-                // Bloque sin líneas netas (montos ~0): no crear asiento vacío.
                 if (($payload['cuentacontable_ids'] ?? []) === []) {
                     continue;
                 }
@@ -212,7 +226,7 @@ class CierreRendicionBingoService
 
                 $asiento = $this->asientoRepository->create($payload);
                 if ($asiento === 'Error' || $asiento === null) {
-                    throw new RuntimeException('Error al grabar asiento «'.$leyenda.'» en Anita (bridge ctamov).');
+                    throw new RuntimeException('Error al grabar asiento «'.$leyenda.'» en ERP/ctamov.');
                 }
 
                 $this->asientoMovimientoRepository->create($payload, $asiento->id);
@@ -230,13 +244,20 @@ class CierreRendicionBingoService
 
             $ahora = now();
             $usuarioId = Auth::id();
+            $estadoFac = (string) config('bingo.cierre_rendicion_contable.estado_facturado_anita', 'F');
             foreach ($bloqueadas as $rendicion) {
-                CierreRendicionBingoFbiAnitaSupport::marcarRendicionesFacturadas($rendicion, $fbi, $fechaDia);
                 $rendicion->update([
+                    'venta_id' => $fbi['venta_id'],
                     'asiento_id' => $asientoIds[0],
                     'asientos_cierre_ids_json' => $asientoIds,
                     'cierre_contable_en' => $ahora,
                     'cierre_contable_usuario_id' => $usuarioId,
+                    'factura_tipo' => $fbi['tipo'],
+                    'factura_letra' => $fbi['letra'],
+                    'factura_sucursal' => $fbi['sucursal'],
+                    'factura_nro' => $fbi['nro'],
+                    'factura_fecha' => $fechaDia,
+                    'estado_facturacion' => $estadoFac,
                 ]);
             }
 
@@ -310,19 +331,36 @@ class CierreRendicionBingoService
 
         DB::transaction(function () use ($rendiciones, $asientoIds, $empresaId, $fechaDia) {
             $rendicionIds = $rendiciones->pluck('id')->map(fn ($id) => (int) $id)->all();
-            RendicionBingoCaja::query()
+            $bloqueadas = RendicionBingoCaja::query()
                 ->whereIn('id', $rendicionIds)
                 ->lockForUpdate()
                 ->get();
 
+            $ventaIds = $bloqueadas
+                ->pluck('venta_id')
+                ->map(fn ($id) => (int) $id)
+                ->filter(fn ($id) => $id > 0)
+                ->unique()
+                ->values()
+                ->all();
+
             foreach ($asientoIds as $asientoId) {
                 $this->asientoRepository->delete($asientoId);
+            }
+
+            foreach ($ventaIds as $ventaId) {
+                $this->exentaEmisionService->anularSiExiste(
+                    $ventaId,
+                    fn ($tipo) => BingoFbiTipoSupport::esFbi($tipo),
+                    'FBI',
+                );
             }
 
             RendicionBingoCaja::query()
                 ->whereIn('id', $rendicionIds)
                 ->update([
                     'asiento_id' => null,
+                    'venta_id' => null,
                     'asientos_cierre_ids_json' => null,
                     'cierre_contable_en' => null,
                     'cierre_contable_usuario_id' => null,
@@ -450,6 +488,7 @@ class CierreRendicionBingoService
 
         CierreRendicionBingoConfigSupport::exigirCompleta(
             CierreRendicionBingoConfigSupport::paraEmpresa($empresaId),
+            $empresaId,
         );
 
         $this->assertCorrelatividadCierre($empresaId, $desde);
@@ -614,6 +653,15 @@ class CierreRendicionBingoService
     public function assertCorrelatividadCierre(int $empresaId, string $fechaDia): void
     {
         $fecha = Carbon::parse($fechaDia)->toDateString();
+        $piso = CierreRendicionBingoConfigSupport::correlatividadDesde();
+        if ($piso !== null && $fecha < $piso) {
+            throw new InvalidArgumentException(
+                'El cierre contable bingo ERP corre desde '
+                .Carbon::parse($piso)->format('d/m/Y')
+                .'. Las jornadas anteriores viven en Anita.',
+            );
+        }
+
         $anterior = $this->fechaPendienteMasAntiguaAnteriorA($empresaId, $fecha);
         if ($anterior === null) {
             return;

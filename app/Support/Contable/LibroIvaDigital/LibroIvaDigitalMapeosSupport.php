@@ -80,20 +80,32 @@ final class LibroIvaDigitalMapeosSupport
     public static function codigoMonedaAfip(?string $codigoMonedaErp, ?string $nombreMoneda = null): string
     {
         $codigo = strtoupper(trim((string) $codigoMonedaErp));
-        if (in_array($codigo, ['PES', 'DOL', '060', 'EUR'], true)) {
-            return $codigo === '060' ? 'EUR' : $codigo;
-        }
-        if ($codigo === '1' || stripos((string) $nombreMoneda, 'PES') !== false) {
+        if ($codigo === 'PES' || $codigo === '1' || stripos((string) $nombreMoneda, 'PES') !== false) {
             return 'PES';
         }
-        if ($codigo === '2' || stripos((string) $nombreMoneda, 'DOL') !== false) {
+        if ($codigo === 'DOL' || $codigo === '2' || stripos((string) $nombreMoneda, 'DOL') !== false) {
             return 'DOL';
         }
-        if ($codigo === '3' || stripos((string) $nombreMoneda, 'EURO') !== false) {
-            return 'EUR';
+        if (in_array($codigo, ['EUR', '060', '60', '3'], true) || stripos((string) $nombreMoneda, 'EURO') !== false) {
+            return '060';
         }
 
         return 'PES';
+    }
+
+    /**
+     * Campo 18 RG 4597: 4 enteros + 6 decimales.
+     * Con moneda PES ARCA exige tipo de cambio = 1 (error: "Tipo de cambio es debe ser 1").
+     */
+    public static function tipoCambioArca(string $codigoMoneda, float $cotizacion): float
+    {
+        if (strtoupper(trim($codigoMoneda)) === 'PES') {
+            return 1.0;
+        }
+
+        $tasa = abs($cotizacion);
+
+        return $tasa > 0.000001 ? $tasa : 1.0;
     }
 
     /**

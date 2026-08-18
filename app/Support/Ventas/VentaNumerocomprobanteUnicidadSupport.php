@@ -6,6 +6,7 @@ namespace App\Support\Ventas;
 
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
+use App\Support\Database\DbContencionSupport;
 use Throwable;
 
 /**
@@ -17,17 +18,12 @@ final class VentaNumerocomprobanteUnicidadSupport
 
     public static function esViolacionNumerocomprobante(Throwable $e): bool
     {
-        $mensaje = $e->getMessage();
-
-        if (str_contains($mensaje, self::UNIQUE_INDEX)) {
-            return true;
-        }
-
-        return str_contains($mensaje, 'Duplicate entry')
-            && (
-                str_contains($mensaje, 'numerocomprobante')
-                || str_contains($mensaje, 'puntoventa_numerocomprobante')
-            );
+        return DbContencionSupport::esViolacionUnicidad(
+            $e,
+            self::UNIQUE_INDEX,
+            'numerocomprobante',
+            'puntoventa_numerocomprobante',
+        );
     }
 
     /**

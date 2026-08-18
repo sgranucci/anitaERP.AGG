@@ -2,6 +2,7 @@
 
 namespace App\Support\Caja;
 
+use App\Support\Database\DbContencionSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Models\Caja\Caja_Movimiento;
 use App\Models\Caja\Cobranza;
@@ -185,10 +186,11 @@ final class CobranzaNumeracionTransaccion
 
     public static function esViolacionUnicidadNumeracion(Throwable $e): bool
     {
-        $msg = $e->getMessage();
-
-        return str_contains($msg, 'empresa_tipo_numero_unique')
-            || (str_contains($msg, '1062') && str_contains($msg, 'cobranza'));
+        return DbContencionSupport::esViolacionUnicidad(
+            $e,
+            'empresa_tipo_numero_unique',
+            'cobranza',
+        );
     }
 
     /**
@@ -212,7 +214,7 @@ final class CobranzaNumeracionTransaccion
         $valor = (clone $query)
             ->where('empresa_id', $empresaId)
             ->where('tipotransaccion_caja_id', $tipotransaccionCajaId)
-            ->whereRaw('numerotransaccion REGEXP ?', [self::PATRON_SOLO_DIGITOS])
+            ->whereRaw(SqlDialectSupport::coincideRegex('numerotransaccion'), [self::PATRON_SOLO_DIGITOS])
             ->selectRaw('MAX('.SqlDialectSupport::castEntero('numerotransaccion').') as max_nro')
             ->value('max_nro');
 
@@ -224,7 +226,7 @@ final class CobranzaNumeracionTransaccion
         Cobranza::query()
             ->where('empresa_id', $empresaId)
             ->where('tipotransaccion_caja_id', $tipotransaccionCajaId)
-            ->whereRaw('numerotransaccion REGEXP ?', [self::PATRON_SOLO_DIGITOS])
+            ->whereRaw(SqlDialectSupport::coincideRegex('numerotransaccion'), [self::PATRON_SOLO_DIGITOS])
             ->orderByDesc('id')
             ->lockForUpdate()
             ->limit(1)
@@ -233,7 +235,7 @@ final class CobranzaNumeracionTransaccion
         Caja_Movimiento::query()
             ->where('empresa_id', $empresaId)
             ->where('tipotransaccion_caja_id', $tipotransaccionCajaId)
-            ->whereRaw('numerotransaccion REGEXP ?', [self::PATRON_SOLO_DIGITOS])
+            ->whereRaw(SqlDialectSupport::coincideRegex('numerotransaccion'), [self::PATRON_SOLO_DIGITOS])
             ->orderByDesc('id')
             ->lockForUpdate()
             ->limit(1)

@@ -195,7 +195,7 @@ class MozoGastronomiaRepository implements MozoGastronomiaRepositoryInterface
     {
         return $this->model->newQuery()
             ->where('empresa_id', $empresaId)
-            ->whereRaw('codigo REGEXP ?', ['^[0-9]+$'])
+            ->whereRaw(SqlDialectSupport::coincideRegex('codigo'), ['^[0-9]+$'])
             ->whereRaw('CHAR_LENGTH(codigo) <= ?', [self::LONGITUD_MAXIMA_CODIGO_NUMERICO]);
     }
 }

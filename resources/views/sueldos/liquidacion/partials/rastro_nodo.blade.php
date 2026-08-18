@@ -6,6 +6,8 @@
         $valorTxt = (floor((float) $valor) == (float) $valor)
             ? number_format((float) $valor, 0, ',', '.')
             : number_format((float) $valor, 4, ',', '.');
+    } elseif (is_array($valor)) {
+        $valorTxt = json_encode($valor, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
     } else {
         $valorTxt = (string) $valor;
     }
@@ -18,7 +20,9 @@
     <code class="{{ $tipoColor }}">{{ $nodo['expr'] }}</code>
     <span class="text-muted">=</span>
     <strong>{{ $valorTxt }}</strong>
-    @if (! empty($nodo['detalle']))<span class="badge badge-light text-muted">{{ $nodo['detalle'] }}</span>@endif
+    @if (! empty($nodo['detalle']))
+        <span class="badge badge-light border text-muted">{{ $nodo['detalle'] }}</span>
+    @endif
     @if (! empty($nodo['hijos']))
         <ul>
             @foreach ($nodo['hijos'] as $hijo)

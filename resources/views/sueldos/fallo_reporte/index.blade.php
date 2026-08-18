@@ -22,9 +22,9 @@ window.empleadoSueldosConsultaUrls = {
             <div class="card-header">
                 <h3 class="card-title">Cuenta corriente de fallos</h3>
                 <div class="card-tools">
-                    @if (can('listar-dtofallo-sueldos', false))
-                        <a href="{{ route('consultar_dtofallo_sueldos') }}" class="btn btn-outline-info btn-sm">
-                            <i class="fa fa-cogs"></i> Proceso dto. fallo
+                    @if (can('listar-descuento-fallo-sueldos', false))
+                        <a href="{{ route('consultar_descuento_fallo_sueldos') }}" class="btn btn-outline-info btn-sm">
+                            <i class="fa fa-cogs"></i> Proceso de descuento por fallo
                         </a>
                     @endif
                 </div>

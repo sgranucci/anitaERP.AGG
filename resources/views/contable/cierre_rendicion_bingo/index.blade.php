@@ -89,7 +89,7 @@
                 ])
                 <p class="small text-muted px-3 pt-2 mb-0">
                     Un cierre diario por <strong>empresa + fecha jornada</strong>.
-                    Genera FBI exenta (PV por empresa en config) y asientos BIN como Anita legacy.
+                    Genera FBI exenta en ventas ERP (PV por empresa) y asientos BIN → ctamov Anita.
                     Use <i class="fa fa-chevron-down"></i> para consultar las rendiciones y cierres de turno (PDF).
                 </p>
                 <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
@@ -163,7 +163,7 @@
                             <td class="text-nowrap">
                                 @if (! empty($grupo['puede_cerrar']) && can('ejecutar-cierre-rendicion-bingo-contable', false))
                                     <button type="button" class="btn btn-success btn-sm js-cerrar-grupo"
-                                            title="Generar cierre contable + FBI">
+                                            title="Generar cierre contable + FBI ERP">
                                         <i class="fa fa-lock"></i>
                                     </button>
                                 @endif
@@ -205,7 +205,7 @@
         'rutaListado' => route('cierre_rendicion_bingo_contable'),
         'estadoPendiente' => \App\Support\Contable\CierreRendicionBingoListadoFiltros::ESTADO_PENDIENTE,
         'permisoEjecutar' => 'ejecutar-cierre-rendicion-bingo-contable',
-        'textoIntro' => 'Jornadas de bingo presentadas en caja sin cierre contable. Un cierre diario genera <strong>FBI + asientos</strong>. El cierre debe ser <strong>correlativo por fecha</strong>.',
+        'textoIntro' => 'Jornadas de bingo presentadas en caja sin cierre contable. Un cierre diario genera <strong>FBI en ventas ERP + asientos/ctamov</strong>. El cierre debe ser <strong>correlativo por fecha</strong>.',
         'mostrarPuntoventa' => false,
         'mostrarFacturado' => false,
         'labelTurnos' => 'Rendiciones',

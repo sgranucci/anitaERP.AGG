@@ -88,19 +88,11 @@ return new class extends Migration
 
     private function tieneIndice(string $tabla, string $nombreIndice): bool
     {
-        $indices = DB::select('SHOW INDEX FROM '.$tabla.' WHERE Key_name = ?', [$nombreIndice]);
-
-        return count($indices) > 0;
+        return \App\Support\Database\MigrationDialectSupport::tieneIndice($tabla, $nombreIndice);
     }
 
     private function tieneForeignKey(string $tabla, string $nombreFk): bool
     {
-        $fks = DB::select(
-            'SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
-             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = ? AND CONSTRAINT_TYPE = ?',
-            [$tabla, $nombreFk, 'FOREIGN KEY']
-        );
-
-        return count($fks) > 0;
+        return \App\Support\Database\MigrationDialectSupport::tieneForeignKey($tabla, $nombreFk);
     }
 };

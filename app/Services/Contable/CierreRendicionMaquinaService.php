@@ -12,10 +12,11 @@ use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Support\Contable\CierreRendicionMaquinaAsientoSupport;
 use App\Support\Contable\CierreRendicionMaquinaConciliacionFlashSupport;
 use App\Support\Contable\CierreRendicionMaquinaConfigSupport;
-use App\Support\Contable\CierreRendicionMaquinaFslAnitaSupport;
 use App\Support\Contable\CierreRendicionMaquinaGrupoSupport;
 use App\Support\Contable\CierreRendicionMaquinaListadoFiltros;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Ventas\MaquinaFslTipoSupport;
+use App\Services\Ventas\CierreSalaExentaEmisionService;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -32,6 +33,7 @@ class CierreRendicionMaquinaService
         private readonly AsientoRepositoryInterface $asientoRepository,
         private readonly Asiento_MovimientoRepositoryInterface $asientoMovimientoRepository,
         private readonly TipoasientoRepositoryInterface $tipoasientoRepository,
+        private readonly CierreSalaExentaEmisionService $exentaEmisionService,
     ) {
     }
 
@@ -93,7 +95,7 @@ class CierreRendicionMaquinaService
         $this->assertCorrelatividadCierre($empresaId, $fechaDia);
 
         $config = CierreRendicionMaquinaConfigSupport::paraEmpresa($empresaId);
-        CierreRendicionMaquinaConfigSupport::exigirCompleta($config);
+        CierreRendicionMaquinaConfigSupport::exigirCompleta($config, $empresaId);
 
         $preview = CierreRendicionMaquinaAsientoSupport::generarPreviewGrupo(
             $rendiciones,
@@ -128,7 +130,7 @@ class CierreRendicionMaquinaService
         $this->assertCorrelatividadCierre($empresaId, $fechaDia);
 
         $config = CierreRendicionMaquinaConfigSupport::paraEmpresa($empresaId);
-        CierreRendicionMaquinaConfigSupport::exigirCompleta($config);
+        CierreRendicionMaquinaConfigSupport::exigirCompleta($config, $empresaId);
 
         $fecha = CierreRendicionMaquinaGrupoSupport::fechaAsientoDesdeGrupo($fechaDia);
 
@@ -154,9 +156,10 @@ class CierreRendicionMaquinaService
 
         $ids = $rendiciones->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
         $tipoAsientoId = $this->resolverTipoAsientoId();
+        $pvFsl = CierreRendicionMaquinaConfigSupport::puntoventaFsl($empresaId);
         $obsBase = CierreRendicionMaquinaAsientoSupport::DESCRIPCION_ASIENTO
             .' — '.Carbon::parse($fechaDia)->format('d/m/Y')
-            .' — PV FSL '.CierreRendicionMaquinaConfigSupport::puntoventaFsl($empresaId)
+            .' — PV FSL '.$pvFsl
             .' — rend. '.implode(', ', $ids);
 
         return DB::transaction(function () use (
@@ -168,6 +171,7 @@ class CierreRendicionMaquinaService
             $empresaId,
             $fechaDia,
             $ids,
+            $pvFsl,
         ) {
             $rendicionIds = $rendiciones->pluck('id')->map(fn ($id) => (int) $id)->all();
             $bloqueadas = RendicionMaquina::query()
@@ -181,12 +185,23 @@ class CierreRendicionMaquinaService
                         'La rendición #'.$rendicion->id.' ya fue cerrada contablemente.',
                     );
                 }
+                if ((int) ($rendicion->venta_id ?? 0) > 0) {
+                    throw new InvalidArgumentException(
+                        'La rendición #'.$rendicion->id.' ya tiene FSL vinculado (venta #'.$rendicion->venta_id.').',
+                    );
+                }
             }
 
-            $fsl = CierreRendicionMaquinaFslAnitaSupport::emitirFslExenta(
+            $fsl = $this->exentaEmisionService->emitir(
+                MaquinaFslTipoSupport::tipo(),
+                MaquinaFslTipoSupport::LETRA,
+                MaquinaFslTipoSupport::nombreCliente(),
                 $empresaId,
                 $fechaDia,
                 (float) ($preview['fsl_monto'] ?? 0),
+                $pvFsl,
+                'FSL máquinas '.Carbon::parse($fechaDia)->format('d/m/Y')
+                    .' — PV '.$pvFsl.' — rend. '.implode(', ', $ids),
             );
 
             $asientoIds = [];
@@ -207,7 +222,7 @@ class CierreRendicionMaquinaService
 
                 $asiento = $this->asientoRepository->create($payload);
                 if ($asiento === 'Error' || $asiento === null) {
-                    throw new RuntimeException('Error al grabar asiento «'.$leyenda.'» en Anita (bridge ctamov).');
+                    throw new RuntimeException('Error al grabar asiento «'.$leyenda.'» en ERP/ctamov.');
                 }
 
                 $this->asientoMovimientoRepository->create($payload, $asiento->id);
@@ -225,13 +240,23 @@ class CierreRendicionMaquinaService
 
             $ahora = now();
             $usuarioId = Auth::id();
+            $estadoFac = (string) config(
+                'rendicion_maquina_anita.cierre_rendicion_contable.estado_facturado_anita',
+                'F',
+            );
             foreach ($bloqueadas as $rendicion) {
-                CierreRendicionMaquinaFslAnitaSupport::marcarRendicionesFacturadas($rendicion, $fsl, $fechaDia);
                 $rendicion->update([
+                    'venta_id' => $fsl['venta_id'],
                     'asiento_id' => $asientoIds[0],
                     'asientos_cierre_ids_json' => $asientoIds,
                     'cierre_contable_en' => $ahora,
                     'cierre_contable_usuario_id' => $usuarioId,
+                    'factura_tipo' => $fsl['tipo'],
+                    'factura_letra' => $fsl['letra'],
+                    'factura_sucursal' => $fsl['sucursal'],
+                    'factura_nro' => $fsl['nro'],
+                    'factura_fecha' => $fechaDia,
+                    'estado_facturacion' => $estadoFac,
                 ]);
             }
 
@@ -304,23 +329,36 @@ class CierreRendicionMaquinaService
 
         DB::transaction(function () use ($rendiciones, $asientoIds) {
             $rendicionIds = $rendiciones->pluck('id')->map(fn ($id) => (int) $id)->all();
-            RendicionMaquina::query()
+            $bloqueadas = RendicionMaquina::query()
                 ->whereIn('id', $rendicionIds)
                 ->lockForUpdate()
                 ->get();
+
+            $ventaIds = $bloqueadas
+                ->pluck('venta_id')
+                ->map(fn ($id) => (int) $id)
+                ->filter(fn ($id) => $id > 0)
+                ->unique()
+                ->values()
+                ->all();
 
             foreach ($asientoIds as $asientoId) {
                 $this->asientoRepository->delete($asientoId);
             }
 
-            foreach ($rendiciones as $rendicion) {
-                CierreRendicionMaquinaFslAnitaSupport::revertirFacturacionAnita($rendicion);
+            foreach ($ventaIds as $ventaId) {
+                $this->exentaEmisionService->anularSiExiste(
+                    $ventaId,
+                    fn ($tipo) => MaquinaFslTipoSupport::esFsl($tipo),
+                    'FSL',
+                );
             }
 
             RendicionMaquina::query()
                 ->whereIn('id', $rendicionIds)
                 ->update([
                     'asiento_id' => null,
+                    'venta_id' => null,
                     'asientos_cierre_ids_json' => null,
                     'cierre_contable_en' => null,
                     'cierre_contable_usuario_id' => null,
@@ -440,6 +478,7 @@ class CierreRendicionMaquinaService
 
         CierreRendicionMaquinaConfigSupport::exigirCompleta(
             CierreRendicionMaquinaConfigSupport::paraEmpresa($empresaId),
+            $empresaId,
         );
 
         $this->assertCorrelatividadCierre($empresaId, $desde);

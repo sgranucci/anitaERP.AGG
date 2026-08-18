@@ -101,6 +101,7 @@
 </script>
 <script src="{{ asset('assets/pages/scripts/admin/usuario/consulta.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/totales_turno_render.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/totales_turno_render.js')) }}"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/gastronomia/saneamiento_huecos_arca.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/saneamiento_huecos_arca.js')) }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/habilitacion_turno.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/habilitacion_turno.js')) }}" type="text/javascript"></script>
 @endsection
 
@@ -111,6 +112,8 @@
      data-api-actualizar-monto-habilitacion="{{ route('gastronomia_habilitacion_turno_api_actualizar_monto_habilitacion') }}"
      data-api-cierre-parcial="{{ url('ventas/gastronomia/habilitacion-turno/api/cierre-parcial') }}"
      data-api-cerrar="{{ url('ventas/gastronomia/habilitacion-turno/api/cerrar') }}"
+     data-api-diagnosticar-huecos-arca="{{ route('gastronomia_habilitacion_turno_api_diagnosticar_huecos_arca') }}"
+     data-api-ejecutar-saneamiento-huecos-arca="{{ route('gastronomia_habilitacion_turno_api_ejecutar_saneamiento_huecos_arca') }}"
      data-api-anular-cierre="{{ route('gastronomia_habilitacion_turno_api_anular_cierre') }}"
      data-api-conciliacion-turno="{{ url('ventas/gastronomia/habilitacion-turno/api/conciliacion-turno') }}"
      data-api-explicar-diferencias-conciliacion="{{ route('gastronomia_habilitacion_turno_api_explicar_diferencias') }}"
@@ -418,6 +421,7 @@
                                                     <textarea name="observacion_cierre" id="observacion_cierre" class="form-control" rows="2" maxlength="2000"></textarea>
                                                 </div>
                                                 <div id="errores-cierre-turno" class="alert alert-warning d-none"></div>
+                                                <div id="aviso-huecos-arca-turno" class="alert alert-warning d-none"></div>
                                                 <button type="submit" class="btn btn-danger" id="btn-submit-cerrar">
                                                     <i class="fa fa-lock"></i> Confirmar cierre definitivo
                                                 </button>
@@ -581,4 +585,6 @@
     </div>
 </div>
 @endif
+
+@include('ventas.gastronomia.partials.modal_saneamiento_huecos_arca')
 @endsection

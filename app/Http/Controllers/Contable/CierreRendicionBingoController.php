@@ -331,15 +331,16 @@ class CierreRendicionBingoController extends Controller
         try {
             $resultado = $this->service->ejecutarCierreGrupo($empresaId, $fechaDia);
             $fbi = $resultado['fbi'];
-            $fbiLabel = ($fbi['letra'] ?? 'B')
-                .str_pad((string) ($fbi['sucursal'] ?? 0), 4, '0', STR_PAD_LEFT)
-                .'-'
-                .str_pad((string) ($fbi['nro'] ?? 0), 8, '0', STR_PAD_LEFT);
+            $fbiLabel = ($fbi['codigo'] ?? null)
+                ?: (($fbi['letra'] ?? 'B')
+                    .str_pad((string) ($fbi['sucursal'] ?? 0), 4, '0', STR_PAD_LEFT)
+                    .'-'
+                    .str_pad((string) ($fbi['nro'] ?? 0), 8, '0', STR_PAD_LEFT));
 
             return response()->json([
                 'ok' => true,
                 'mensaje' => 'Cierre contable registrado. Asiento '.$resultado['numeroasiento']
-                    .' + FBI '.$fbiLabel.' ('.count($resultado['rendicion_ids']).' rendición/es).',
+                    .' + FBI '.$fbiLabel.' en ventas ERP ('.count($resultado['rendicion_ids']).' rendición/es).',
                 'asiento_id' => $resultado['asiento_id'],
                 'numeroasiento' => $resultado['numeroasiento'],
                 'rendicion_ids' => $resultado['rendicion_ids'],

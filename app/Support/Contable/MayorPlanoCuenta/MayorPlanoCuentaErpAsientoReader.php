@@ -71,6 +71,7 @@ final class MayorPlanoCuentaErpAsientoReader
             ->whereBetween('a.fecha', [$desdeIso, $hastaIso])
             ->orderBy('a.fecha')
             ->orderBy('a.numeroasiento')
+            ->orderBy('a.id')
             ->orderBy('am.id')
             ->select(array_merge([
                 'a.id as asiento_id',
@@ -80,6 +81,9 @@ final class MayorPlanoCuentaErpAsientoReader
                 'a.observacion as asiento_obs',
                 't.abreviatura as tipo_asiento',
                 'am.id as mov_id',
+                'am.cuentacontable_id',
+                'am.centrocosto_id',
+                'am.moneda_id',
                 'am.monto',
                 'am.cotizacion',
                 'am.observacion as mov_obs',
@@ -96,8 +100,24 @@ final class MayorPlanoCuentaErpAsientoReader
         }
 
         $linea = 0;
+        $movimientosOrigen = 0;
+        $gruposAsiento = [];
+        $asientoActualId = 0;
         $requiereEmisoresBridge = false;
         foreach ($query->cursor() as $row) {
+            $rowAsientoId = (int) $row->asiento_id;
+            if ($asientoActualId > 0 && $rowAsientoId !== $asientoActualId) {
+                $this->volcarGruposAsiento(
+                    $gruposAsiento,
+                    $ctamov,
+                    $linea,
+                    $requiereEmisoresBridge,
+                    $columnasFk,
+                );
+                $gruposAsiento = [];
+            }
+            $asientoActualId = $rowAsientoId;
+
             $cuenta = (int) preg_replace('/\D/', '', (string) $row->cuenta_codigo);
             if ($cuenta <= 0) {
                 continue;
@@ -117,54 +137,42 @@ final class MayorPlanoCuentaErpAsientoReader
                 continue;
             }
 
+            $movimientosOrigen++;
             $obsAsiento = trim((string) ($row->asiento_obs ?? ''));
             $comprobante = AsientoAnitaMetadatosSupport::desdeObservacion($obsAsiento);
             $origenPersistido = trim((string) ($row->anita_origen ?? ''));
             $origen = $origenPersistido !== '' ? $origenPersistido : $comprobante['origen'];
-            $esSub = AsientoAnitaMetadatosSupport::esDetalle($origen);
-            $emisorPersistido = trim((string) ($row->anita_emisor ?? ''));
-            if ($origenPersistido === '' && $esSub && $emisorPersistido === '') {
-                $requiereEmisoresBridge = true;
-            }
-            $linea++;
+            $esDetalleImportado = AsientoAnitaMetadatosSupport::esDetalle($origen);
 
-            $filaCtamov = (object) [
-                'ctav_empresa' => (int) $row->empresa_id,
-                'ctav_nro_asiento' => (int) $row->numeroasiento,
-                'ctav_nro_linea' => $linea,
-                'ctav_d_h' => $monto >= 0 ? 'D' : 'H',
-                'ctav_cuenta' => $cuenta,
-                'ctav_fecha' => (int) str_replace('-', '', substr((string) $row->fecha, 0, 10)),
-                'ctav_tipo' => trim((string) ($row->anita_tipo ?? '')) ?: $comprobante['tipo'],
-                'ctav_letra' => ($row->anita_letra ?? null) !== null
-                    ? (string) $row->anita_letra
-                    : $comprobante['letra'],
-                'ctav_sucursal' => ($row->anita_sucursal ?? null) !== null
-                    ? (int) $row->anita_sucursal
-                    : $comprobante['sucursal'],
-                'ctav_nro' => ($row->anita_nro ?? null) !== null
-                    ? (int) $row->anita_nro
-                    : $comprobante['nro'],
-                'ctav_importe' => abs($monto),
-                'ctav_desc_mov' => trim((string) ($row->mov_obs ?: $obsAsiento)),
-                'ctav_cod_mon' => (string) ($row->moneda_codigo ?? '1'),
-                'ctav_cotizacion' => (float) ($row->cotizacion ?? 1),
-                'ctav_tipo_asiento' => strtoupper(trim((string) ($row->tipo_asiento ?? ''))),
-                'ctav_balancea' => 'S',
-                'ctav_o_compra' => 0,
-                'ctav_ccosto' => (int) ($row->ccosto_codigo ?? 0),
-                'ctav_sistema' => trim((string) ($row->anita_sistema ?? '')) ?: $comprobante['sistema'],
-                'ctav_asi_mon_ref' => AnitaAsientoImportService::ASI_MON_REF_ORIGEN_ERP,
-                'erp_origen_subdiario' => $esSub,
-                'erp_asiento_obs' => $obsAsiento,
-                'erp_asiento_id' => (int) $row->asiento_id,
-                'erp_asiento_fks' => $this->fksDeFila($row, $columnasFk),
-            ];
-            if ($emisorPersistido !== '') {
-                $filaCtamov->erp_emisor_anita = $emisorPersistido;
+            $claveGrupo = $esDetalleImportado
+                ? implode('|', [
+                    $rowAsientoId,
+                    (int) $row->cuentacontable_id,
+                    (int) ($row->moneda_id ?? 0),
+                    (int) ($row->centrocosto_id ?? 0),
+                    $monto >= 0 ? 'D' : 'H',
+                ])
+                : 'mov|'.(int) $row->mov_id;
+            if (! isset($gruposAsiento[$claveGrupo])) {
+                $gruposAsiento[$claveGrupo] = [
+                    'row' => $row,
+                    'cuenta' => $cuenta,
+                    'monto' => 0.0,
+                    'observacion' => '',
+                ];
             }
-            $ctamov[] = $filaCtamov;
+            $gruposAsiento[$claveGrupo]['monto'] += $monto;
+            if ($gruposAsiento[$claveGrupo]['observacion'] === '') {
+                $gruposAsiento[$claveGrupo]['observacion'] = trim((string) ($row->mov_obs ?? ''));
+            }
         }
+        $this->volcarGruposAsiento(
+            $gruposAsiento,
+            $ctamov,
+            $linea,
+            $requiereEmisoresBridge,
+            $columnasFk,
+        );
 
         $subhistEmisores = 0;
         $cutoffErp = $this->fuenteErpHastaYmd();
@@ -205,10 +213,87 @@ final class MayorPlanoCuentaErpAsientoReader
             'timings' => [
                 'erp_asientos_ms' => round((microtime(true) - $t0) * 1000, 1),
                 'erp_asientos_filas' => count($ctamov),
+                'erp_asientos_movimientos_origen' => $movimientosOrigen,
+                'erp_asientos_grupos' => count($ctamov),
                 'erp_subhist_emisores_ms' => $timingSubhist ?? 0,
                 'erp_subhist_emisores_resueltos' => $subhistEmisores,
             ],
         ];
+    }
+
+    /**
+     * Solo el detalle importado de subdiario/subhist se resume como Anita: por
+     * asiento, cuenta, moneda y centro de costo. Los asientos contables nativos
+     * conservan cada renglón, porque observaciones distintas pueden expresar una
+     * discriminación deliberada. Debe y Haber permanecen como piernas separadas
+     * para no alterar los totales brutos del balance de sumas y saldos.
+     *
+     * @param  array<string, array{row: object, cuenta: int, monto: float, observacion: string}>  $grupos
+     * @param  list<object>  $ctamov
+     * @param  list<string>  $columnasFk
+     */
+    private function volcarGruposAsiento(
+        array $grupos,
+        array &$ctamov,
+        int &$linea,
+        bool &$requiereEmisoresBridge,
+        array $columnasFk,
+    ): void {
+        foreach ($grupos as $grupo) {
+            $monto = (float) $grupo['monto'];
+            if (abs($monto) < 0.00005) {
+                continue;
+            }
+
+            $row = $grupo['row'];
+            $obsAsiento = trim((string) ($row->asiento_obs ?? ''));
+            $comprobante = AsientoAnitaMetadatosSupport::desdeObservacion($obsAsiento);
+            $origenPersistido = trim((string) ($row->anita_origen ?? ''));
+            $origen = $origenPersistido !== '' ? $origenPersistido : $comprobante['origen'];
+            $esSub = AsientoAnitaMetadatosSupport::esDetalle($origen);
+            $emisorPersistido = trim((string) ($row->anita_emisor ?? ''));
+            if ($origenPersistido === '' && $esSub && $emisorPersistido === '') {
+                $requiereEmisoresBridge = true;
+            }
+            $linea++;
+
+            $filaCtamov = (object) [
+                'ctav_empresa' => (int) $row->empresa_id,
+                'ctav_nro_asiento' => (int) $row->numeroasiento,
+                'ctav_nro_linea' => $linea,
+                'ctav_d_h' => $monto >= 0 ? 'D' : 'H',
+                'ctav_cuenta' => (int) $grupo['cuenta'],
+                'ctav_fecha' => (int) str_replace('-', '', substr((string) $row->fecha, 0, 10)),
+                'ctav_tipo' => trim((string) ($row->anita_tipo ?? '')) ?: $comprobante['tipo'],
+                'ctav_letra' => ($row->anita_letra ?? null) !== null
+                    ? (string) $row->anita_letra
+                    : $comprobante['letra'],
+                'ctav_sucursal' => ($row->anita_sucursal ?? null) !== null
+                    ? (int) $row->anita_sucursal
+                    : $comprobante['sucursal'],
+                'ctav_nro' => ($row->anita_nro ?? null) !== null
+                    ? (int) $row->anita_nro
+                    : $comprobante['nro'],
+                'ctav_importe' => abs($monto),
+                'ctav_desc_mov' => $grupo['observacion'] !== '' ? $grupo['observacion'] : $obsAsiento,
+                'ctav_cod_mon' => (string) ($row->moneda_codigo ?? '1'),
+                'ctav_cotizacion' => (float) ($row->cotizacion ?? 1),
+                'ctav_tipo_asiento' => strtoupper(trim((string) ($row->tipo_asiento ?? ''))),
+                'ctav_balancea' => 'S',
+                'ctav_o_compra' => 0,
+                'ctav_ccosto' => (int) ($row->ccosto_codigo ?? 0),
+                'ctav_sistema' => trim((string) ($row->anita_sistema ?? '')) ?: $comprobante['sistema'],
+                'ctav_asi_mon_ref' => AnitaAsientoImportService::ASI_MON_REF_ORIGEN_ERP,
+                'erp_origen_subdiario' => $esSub,
+                'erp_asiento_obs' => $obsAsiento,
+                'erp_asiento_id' => (int) $row->asiento_id,
+                'erp_asiento_fks' => $this->fksDeFila($row, $columnasFk),
+            ];
+            if ($emisorPersistido !== '') {
+                $filaCtamov->erp_emisor_anita = $emisorPersistido;
+            }
+            $ctamov[] = $filaCtamov;
+        }
     }
 
     /**

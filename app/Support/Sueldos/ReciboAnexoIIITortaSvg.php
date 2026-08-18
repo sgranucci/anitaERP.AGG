@@ -65,6 +65,71 @@ class ReciboAnexoIIITortaSvg
             .'</svg>';
     }
 
+    /**
+     * Genera un PNG embebido porque DomPDF no incorpora de forma consistente
+     * gráficos SVG, ni inline ni como data URI.
+     *
+     * @param  array<string, float>  $valores
+     */
+    public static function dataUri(array $valores, int $size = 120): string
+    {
+        if (! function_exists('imagecreatetruecolor')) {
+            return 'data:image/svg+xml;base64,'.base64_encode(self::render($valores, $size));
+        }
+
+        $items = array_values(array_filter(
+            $valores,
+            static fn ($monto): bool => (float) $monto > 0.0001
+        ));
+        $imagen = imagecreatetruecolor($size, $size);
+        imageantialias($imagen, true);
+        $blanco = imagecolorallocate($imagen, 255, 255, 255);
+        imagefill($imagen, 0, 0, $blanco);
+
+        $total = array_sum($items);
+        if ($total > 0.0001) {
+            $inicio = -90.0;
+            foreach ($items as $indice => $valor) {
+                $barrido = ((float) $valor / $total) * 360.0;
+                [$rojo, $verde, $azul] = self::rgb(self::COLORES[$indice % count(self::COLORES)]);
+                $color = imagecolorallocate($imagen, $rojo, $verde, $azul);
+                imagefilledarc(
+                    $imagen,
+                    (int) round($size / 2),
+                    (int) round($size / 2),
+                    $size - 4,
+                    $size - 4,
+                    $inicio,
+                    $inicio + $barrido,
+                    $color,
+                    IMG_ARC_PIE
+                );
+                $inicio += $barrido;
+            }
+        }
+
+        ob_start();
+        imagepng($imagen);
+        $png = (string) ob_get_clean();
+        imagedestroy($imagen);
+
+        return 'data:image/png;base64,'.base64_encode($png);
+    }
+
+    /**
+     * @return array{int, int, int}
+     */
+    private static function rgb(string $hex): array
+    {
+        $hex = ltrim($hex, '#');
+
+        return [
+            hexdec(substr($hex, 0, 2)),
+            hexdec(substr($hex, 2, 2)),
+            hexdec(substr($hex, 4, 2)),
+        ];
+    }
+
     private static function slice(float $cx, float $cy, float $r, float $a0, float $a1, string $color): string
     {
         $x0 = $cx + $r * cos(deg2rad($a0));

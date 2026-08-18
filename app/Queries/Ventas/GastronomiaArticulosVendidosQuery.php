@@ -4,6 +4,7 @@ namespace App\Queries\Ventas;
 
 use App\Models\Ventas\JornadaGastronomia;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Stock\ArticuloUsoInsumoSupport;
 use App\Support\Stock\RecuentoMovimientosArticuloSupport;
@@ -35,6 +36,23 @@ class GastronomiaArticulosVendidosQuery
     private static function importeExpr(): string
     {
         return GastronomiaVentaComprobanteSignoSupport::sqlImporteLineaVenta();
+    }
+
+    private static function sqlEtiquetaPuntoventa(): string
+    {
+        return 'TRIM(CONCAT('.SqlDialectSupport::textoOVacio('pv.codigo').", ' ', ".SqlDialectSupport::textoOVacio('pv.nombre').'))';
+    }
+
+    private static function sqlEtiquetaDeposito(): string
+    {
+        return 'TRIM(CONCAT('
+            .SqlDialectSupport::textoOVacio('d.codigo').", ' ', "
+            .SqlDialectSupport::textoOVacio('d.nombre').', '
+            .'CASE WHEN '.self::DEPOSITO_INSUMO_JOIN.' IS NOT NULL'
+            .' AND '.self::DEPOSITO_INSUMO_JOIN.' <> COALESCE('.self::DEPOSITO_EXPR.', 0)'
+            .' THEN CONCAT(\' ins. \', '.SqlDialectSupport::textoOVacio('d_ing.codigo').", ' ', ".SqlDialectSupport::textoOVacio('d_ing.nombre').')'
+            .' ELSE \'\' END'
+            .'))';
     }
 
     private const DEPOSITO_EXPR = 'COALESCE(am_dep.deposito_id, am_dep_v.deposito_id, ve.deposito_id)';
@@ -383,7 +401,7 @@ class GastronomiaArticulosVendidosQuery
             ->selectRaw(self::DEPOSITO_INSUMO_EXPR.' as deposito_insumos_id')
             ->selectRaw(self::cantidadExpr().' as cantidad')
             ->selectRaw(self::importeExpr().' as importe')
-            ->selectRaw("TRIM(CONCAT(COALESCE(pv.codigo, ''), ' ', COALESCE(pv.nombre, ''))) as puntoventa_etiqueta");
+            ->selectRaw(self::sqlEtiquetaPuntoventa().' as puntoventa_etiqueta');
 
         $this->aplicarFiltrosEstructurales($query, $filtros);
 
@@ -497,7 +515,7 @@ class GastronomiaArticulosVendidosQuery
                 'd.codigo as deposito_codigo',
                 'd.nombre as deposito_nombre',
             ])
-            ->selectRaw("TRIM(CONCAT(COALESCE(pv.codigo, ''), ' ', COALESCE(pv.nombre, ''))) as puntoventa_etiqueta");
+            ->selectRaw(self::sqlEtiquetaPuntoventa().' as puntoventa_etiqueta');
 
         $depositoId = (int) ($filtros['deposito_id'] ?? 0);
         $filtrosEstructurales = $filtros;
@@ -807,14 +825,8 @@ class GastronomiaArticulosVendidosQuery
         $columna = match ($campo) {
             'sku' => 'a.sku',
             'descripcion' => 'a.descripcion',
-            'deposito' => "TRIM(CONCAT(
-                COALESCE(d.codigo, ''), ' ', COALESCE(d.nombre, ''),
-                CASE WHEN ".self::DEPOSITO_INSUMO_JOIN." IS NOT NULL
-                    AND ".self::DEPOSITO_INSUMO_JOIN." <> COALESCE(".self::DEPOSITO_EXPR.", 0)
-                    THEN CONCAT(' ins. ', COALESCE(d_ing.codigo, ''), ' ', COALESCE(d_ing.nombre, ''))
-                    ELSE '' END
-            ))",
-            'puntoventa' => "TRIM(CONCAT(COALESCE(pv.codigo, ''), ' ', COALESCE(pv.nombre, '')))",
+            'deposito' => self::sqlEtiquetaDeposito(),
+            'puntoventa' => self::sqlEtiquetaPuntoventa(),
             default => 'a.descripcion',
         };
 
@@ -828,7 +840,7 @@ class GastronomiaArticulosVendidosQuery
             return;
         }
 
-        $expr = 'LOWER('.$columna.')';
+        $expr = SqlDialectSupport::lower($columna);
         $bus = Str::lower($valor);
 
         if ($operador === 'igual') {
@@ -872,7 +884,7 @@ class GastronomiaArticulosVendidosQuery
             return;
         }
 
-        $expr = 'LOWER('.$columna.')';
+        $expr = SqlDialectSupport::lower($columna);
         $query->orWhere(function ($w) use ($expr, $pref, $suf) {
             $w->whereRaw($expr.' LIKE ?', ['%'.CoincidenciaFlexibleTexto::escapeLike($pref).'%'])
                 ->whereRaw($expr.' LIKE ?', ['%'.CoincidenciaFlexibleTexto::escapeLike($suf).'%']);

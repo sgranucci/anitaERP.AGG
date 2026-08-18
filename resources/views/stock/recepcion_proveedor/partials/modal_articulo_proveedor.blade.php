@@ -27,7 +27,7 @@
                                 <th>Descripci&oacute;n proveedor</th>
                                 <th>C&oacute;d. barra</th>
                                 <th>UM compra</th>
-                                <th class="text-right" title="Unidades de compra por 1 unidad de stock ERP">Coef.</th>
+                                <th class="text-right" title="Unidades de stock ERP por 1 unidad de compra">Coef.</th>
                                 <th title="Unidad de medida de stock del art&iacute;ulo en el ERP (destino de la conversi&oacute;n)">UM stock</th>
                             </tr>
                         </thead>

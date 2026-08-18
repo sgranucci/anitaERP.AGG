@@ -19,6 +19,11 @@ return new class extends Migration
             return;
         }
 
+        // Lab / install vacío: no hay empresas seed → no insertar PV con FK rota.
+        if (! DB::table('empresa')->where('id', 3)->exists()) {
+            return;
+        }
+
         $now = now();
         $atributos = [
             'nombre' => 'CAEA Rebisco',

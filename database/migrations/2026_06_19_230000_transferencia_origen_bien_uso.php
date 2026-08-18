@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -24,7 +25,10 @@ return new class extends Migration
         }
 
         if (Schema::hasColumn('transferencia_mercaderia', 'deposito_origen_id')) {
-            DB::statement('ALTER TABLE transferencia_mercaderia MODIFY deposito_origen_id BIGINT UNSIGNED NULL');
+            MigrationDialectSupport::statementPorDriver(
+                'ALTER TABLE transferencia_mercaderia MODIFY deposito_origen_id BIGINT UNSIGNED NULL',
+                'ALTER TABLE transferencia_mercaderia ALTER COLUMN deposito_origen_id DROP NOT NULL'
+            );
         }
 
         if (! Schema::hasTable('tipotransaccion_stock')) {

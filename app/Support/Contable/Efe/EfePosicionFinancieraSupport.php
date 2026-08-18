@@ -2,27 +2,51 @@
 
 namespace App\Support\Contable\Efe;
 
+use App\Models\Caja\Bingo\RendicionBingoCaja;
+use App\Models\Caja\Cuentacaja;
+use App\Models\Caja\Remesa;
+use App\Models\Caja\RendicionEstacionamientoCaja;
+use App\Models\Caja\RendicionGastronomiaCaja;
+use App\Models\Caja\RendicionMaquina;
 use App\Models\Ventas\Puntoventa;
+use App\Support\Caja\AnitaSync\RendicionEstacionamientoRendvalorCodigoSupport;
+use App\Support\Caja\AnitaSync\RendicionGastronomiaRendvalorCodigoSupport;
+use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
+use App\Support\Caja\PosicionFinancieraSaldoSupport;
+use App\Support\Caja\Remesa\RemesaSupport;
+use App\Support\Caja\RendicionMaquina\RendicionMaquinaTurno;
+use App\Support\Contable\CierreRendicionOrigenConsultaSupport;
 use Carbon\Carbon;
+use InvalidArgumentException;
+use RuntimeException;
 
 /**
  * Posición financiera mensual (solapa «pos fin …») — port de l-posfinanc.c.
  *
  * Impresión Anita: una columna por día del mes + «Total mensual», cortada por
- * unidad (bingo, gastronomía, estacionamiento, EGA, SHOW, máquinas) y luego
+ * unidad (bingo, gastronomía, estacionamiento, vending, máquinas) y luego
  * apertura de medios / egresos / saldos. Kiosco está comentado en el .c.
+ * EGA y SHOW no se imprimen (sucursales con esos nombres se omiten).
  * Vending no existe en l-posfinanc.c: se agrega como bloque ERP (PV Maquina N
  * / sucursal ≥ 1000 / nombre vending) que antes se omitía.
  *
- * Fuentes Anita (vía bridge):
- * saldoposf, rendbingo/concbingo/rendpremio, rendmaquina, rendgastro, rendvalor,
- * valormae, remesas/rememae, apgasto/rendmapgasto.
+ * Fuentes:
+ * - Hasta jul/2026: híbrido (Anita completa huecos; bingo Anita-first).
+ * - Desde ago/2026: todo anitaERP (bingo, gastro, estac, vending, apertura).
+ *   Anita solo si ese día no hay cierre C de máquinas o si falta la remesa.
+ * - Saldos: posicion_financiera_saldo ERP → saldoposf Anita.
+ * Sobrantes y canje de gastronomía de máquinas son solo informativos.
  */
 class EfePosicionFinancieraSupport
 {
     private const TURNOS_MAQUINA_EXCLUIDOS = ['M', 'T', 'N'];
 
     private const FECHA_CORTE_TURNO_MAQUINA = 20100300;
+
+    /** Desde este YYYYMM la posición se arma con anitaERP (Anita = máquinas/remesas faltantes). */
+    private const CORTE_FUENTE_ERP_YM = 202608;
+
+    private bool $fuenteErpPura = false;
 
     /** Destinos rememae (rememae.def). */
     private const REMEM_MACRO = '1';
@@ -56,10 +80,6 @@ class EfePosicionFinancieraSupport
 
     private const BLOQUE_BINGO = 'bingo';
 
-    private const BLOQUE_EGA = 'ega';
-
-    private const BLOQUE_SHOW = 'show';
-
     private const BLOQUE_MEDIOS = 'medios';
 
     private const BLOQUE_EGRESOS = 'egresos';
@@ -74,7 +94,10 @@ class EfePosicionFinancieraSupport
 
     private const TIPO_TOTAL = 'total';
 
-    private const TIPO_RELLENO_EFE = 'relleno_efe';
+    private const TIPO_INFORMATIVO = 'informativo';
+
+    /** Abre el ABM origen en modo consulta, sin menú, desde la auditoría. */
+    private const QUERY_CONSULTA = ['origen' => 'modal_consulta', 'vista' => 'consulta'];
 
     /** @var array<int, string> */
     private array $clasificacionSucursalCache = [];
@@ -84,6 +107,7 @@ class EfePosicionFinancieraSupport
 
     public function __construct(
         private readonly EfeAnitaBridgeReader $bridgeReader = new EfeAnitaBridgeReader(),
+        private readonly EfePosicionFinancieraFuenteErpSupport $fuenteErp = new EfePosicionFinancieraFuenteErpSupport(),
     ) {
     }
 
@@ -119,60 +143,192 @@ class EfePosicionFinancieraSupport
         $inicioMes = Carbon::createFromDate($anio, $mes, 1);
         $finMes = $inicioMes->copy()->endOfMonth();
         $this->dias = range(1, (int) $finMes->day);
-        $fechaSaldoInicial = (int) $inicioMes->copy()->subDay()->format('Ymd');
         $fechaDesde = (int) $inicioMes->format('Ymd');
         $fechaHasta = (int) $finMes->format('Ymd');
+        $this->fuenteErpPura = (($anio * 100) + $mes) >= self::CORTE_FUENTE_ERP_YM;
 
         $errores = [];
         /** @var list<array{etiqueta: string, valor: float, por_dia: array<int, float>, bloque: string, tipo_fila: string}> $filasOrdenadas */
         $filasOrdenadas = [];
 
-        $saldos = $this->bridgeReader->listarSaldoposf($empresaId, $fechaSaldoInicial, $fechaHasta);
-        $saldoInicial = $this->saldoEnFecha($saldos, $fechaSaldoInicial);
-        $saldoFinalBridge = $this->saldoEnFecha($saldos, $fechaHasta);
+        $saldoCierreErp = PosicionFinancieraSaldoSupport::ultimoConfirmadoAnterior(
+            $empresaId,
+            $inicioMes->toDateString(),
+        );
+        $saldoInicial = $saldoCierreErp !== null
+            ? round((float) $saldoCierreErp->saldo_final, 2)
+            : $this->ultimoSaldoAnterior(
+                $this->bridgeReader->listarSaldoposfAnteriores($empresaId, $fechaDesde),
+                $fechaDesde,
+            );
+        $saldoInicialOrigen = $saldoCierreErp !== null ? 'erp' : 'anita';
 
         $rendbingo = $this->bridgeReader->listarRendbingo($empresaId, $fechaDesde, $fechaHasta);
-        $bingo = $this->agregarRendbingo($rendbingo);
-        $premios = $this->agregarPremiosBingo(
-            $bingo,
-            $this->bridgeReader->listarConcbingo(),
+        $concbingo = $this->bridgeReader->listarConcbingo();
+        $rendpremio = $this->bridgeReader->listarRendpremio($fechaDesde, $fechaHasta);
+        $bingoAnita = $this->agregarRendbingo($rendbingo);
+        $premiosAnita = $this->agregarPremiosBingo(
+            $bingoAnita,
+            $concbingo,
             $rendbingo,
-            $this->bridgeReader->listarRendpremio($fechaDesde, $fechaHasta),
+            $rendpremio,
         );
+        $bingoErp = $this->fuenteErp->bingo($empresaId, $inicioMes, $finMes, $this->dias);
+        $diasBingoAnita = [];
+        foreach ($rendbingo as $filaBingoAnita) {
+            $diaAnita = $this->diaDeYmd((int) ($filaBingoAnita->rendb_fecha ?? 0));
+            if ($diaAnita > 0) {
+                $diasBingoAnita[$diaAnita] = true;
+            }
+        }
+        // Fechas ERP de bingo a veces no coinciden con Anita (misma venta en otro día):
+        // no pisar ni duplicar montos ya presentes en Anita del mes.
+        $diasBingoErp = $bingoErp['dias'];
+        foreach ($diasBingoErp as $diaErp => $_) {
+            $ventaErp = (float) ($bingoErp['base']['VENTA BINGO'][$diaErp] ?? 0);
+            if (abs($ventaErp) < 0.01) {
+                continue;
+            }
+            foreach ($bingoAnita['VENTA BINGO'] ?? [] as $diaAnita => $ventaAnita) {
+                if (abs((float) $ventaAnita - $ventaErp) < 0.01) {
+                    unset($diasBingoErp[$diaErp]);
+                    break;
+                }
+            }
+        }
+        $premiosErp = $this->normalizarEtiquetasPremiosBingo($bingoErp['premios']);
+        if ($this->fuenteErpPura) {
+            $bingo = $bingoErp['base'];
+            $premios = $premiosErp;
+        } else {
+            $bingo = $this->fuenteErp->mergePorDiaAnitaPrimero(
+                $bingoAnita,
+                $bingoErp['base'],
+                $diasBingoAnita,
+                $diasBingoErp,
+                $this->dias,
+            );
+            $premios = $this->fuenteErp->mergePorDiaAnitaPrimero(
+                $premiosAnita,
+                $premiosErp,
+                $diasBingoAnita,
+                $diasBingoErp,
+                $this->dias,
+            );
+        }
 
         $valormae = $this->indexarValormae($this->bridgeReader->listarValormae($empresaId));
         $rendvalor = $this->bridgeReader->listarRendvalor($fechaDesde, $fechaHasta);
         $valoresPorOper = $this->indexarRendvalorPorOper($rendvalor);
 
         $cabGastro = $this->bridgeReader->listarRendgastro($empresaId, $fechaDesde, $fechaHasta);
-        $gastronomia = $this->agregarBloqueGastroEstac(
+        $codigosUsoGastronomia = $this->codigosValormaePorUso(
+            $empresaId,
+            'Gastronomia',
+            RendicionGastronomiaRendvalorCodigoSupport::class,
+        );
+        $codigosUsoEstacionamiento = $this->codigosValormaePorUso(
+            $empresaId,
+            'Estacionamiento',
+            RendicionEstacionamientoRendvalorCodigoSupport::class,
+        );
+        $gastronomiaAnita = $this->agregarBloqueGastroEstac(
             $cabGastro,
             $valoresPorOper,
             $valormae,
+            $codigosUsoGastronomia,
             $empresaId,
             self::BLOQUE_GASTRO,
             'GASTRONOMIA Z',
             'Total Gastronomia',
         );
-        $estacionamiento = $this->agregarBloqueGastroEstac(
+        $estacionamientoAnita = $this->agregarBloqueGastroEstac(
             $cabGastro,
             $valoresPorOper,
             $valormae,
+            $codigosUsoEstacionamiento,
             $empresaId,
             self::BLOQUE_ESTAC,
             'ESTACIONAMIENTO Z',
             'Total Estacionamiento',
             redondeoNegado: true,
         );
-        $vending = $this->agregarBloqueGastroEstac(
+        $vendingAnita = $this->agregarBloqueGastroEstac(
             $cabGastro,
             $valoresPorOper,
             $valormae,
+            $codigosUsoGastronomia,
             $empresaId,
             self::BLOQUE_VENDING,
             'VENDING Z',
             'Total Vending',
         );
+
+        $clasificar = fn (int $emp, int $suc) => $this->clasificarSucursal($emp, $suc);
+        $gastroErp = $this->fuenteErp->gastroEstac(
+            $empresaId, $inicioMes, $finMes, $this->dias,
+            self::BLOQUE_GASTRO, 'GASTRONOMIA Z', 'Total Gastronomia',
+            $valormae, $codigosUsoGastronomia, $clasificar,
+        );
+        $estacErp = $this->fuenteErp->gastroEstac(
+            $empresaId, $inicioMes, $finMes, $this->dias,
+            self::BLOQUE_ESTAC, 'ESTACIONAMIENTO Z', 'Total Estacionamiento',
+            $valormae, $codigosUsoEstacionamiento, $clasificar,
+            redondeoNegado: true,
+        );
+        $vendingErp = $this->fuenteErp->gastroEstac(
+            $empresaId, $inicioMes, $finMes, $this->dias,
+            self::BLOQUE_VENDING, 'VENDING Z', 'Total Vending',
+            $valormae, $codigosUsoGastronomia, $clasificar,
+        );
+        if ($this->fuenteErpPura) {
+            $gastronomia = $this->fuenteErp->recalcularTotalBloque(
+                $gastroErp['filas'],
+                'GASTRONOMIA Z',
+                'Total Gastronomia',
+                $this->dias,
+            );
+            $estacionamiento = $this->fuenteErp->recalcularTotalBloque(
+                $estacErp['filas'],
+                'ESTACIONAMIENTO Z',
+                'Total Estacionamiento',
+                $this->dias,
+            );
+            $vending = $this->fuenteErp->recalcularTotalBloque(
+                $vendingErp['filas'],
+                'VENDING Z',
+                'Total Vending',
+                $this->dias,
+            );
+        } else {
+            $gastronomia = $this->fuenteErp->recalcularTotalBloque(
+                $this->fuenteErp->mergePorDiaCompletarHuecos(
+                    $gastronomiaAnita, $gastroErp['filas'], $gastroErp['dias'], $this->dias,
+                ),
+                'GASTRONOMIA Z',
+                'Total Gastronomia',
+                $this->dias,
+                $gastronomiaAnita,
+            );
+            $estacionamiento = $this->fuenteErp->recalcularTotalBloque(
+                $this->fuenteErp->mergePorDiaCompletarHuecos(
+                    $estacionamientoAnita, $estacErp['filas'], $estacErp['dias'], $this->dias,
+                ),
+                'ESTACIONAMIENTO Z',
+                'Total Estacionamiento',
+                $this->dias,
+                $estacionamientoAnita,
+            );
+            $vending = $this->fuenteErp->recalcularTotalBloque(
+                $this->fuenteErp->mergePorDiaCompletarHuecos(
+                    $vendingAnita, $vendingErp['filas'], $vendingErp['dias'], $this->dias,
+                ),
+                'VENDING Z',
+                'Total Vending',
+                $this->dias,
+                $vendingAnita,
+            );
+        }
 
         $filasMaquina = $this->bridgeReader->listarRendmaquina($empresaId, $fechaDesde, $fechaHasta);
         $opsMaquina = [];
@@ -183,52 +339,114 @@ class EfePosicionFinancieraSupport
             }
         }
         $apgastoDesc = $this->indexarApgasto($this->bridgeReader->listarApgasto());
+        if ($apgastoDesc === []) {
+            $apgastoDesc = $this->fuenteErp->apgastoDescDesdeErp();
+        }
         $gastosPorOper = $this->cargarGastosMaquina(array_keys($opsMaquina));
 
-        $maquinasBase = $this->agregarRendmaquina($filasMaquina);
-        $maquinasMedios = $this->agregarMediosPorOperaciones(
+        $maquinasBaseAnita = $this->agregarRendmaquina($filasMaquina);
+        $maquinasMediosAnita = $this->agregarMediosPorOperaciones(
             array_keys($opsMaquina),
             $valoresPorOper,
             $valormae,
             $fechaPorOper,
         );
-        $maquinasGastos = $this->agregarGastosMaquina(
+        $maquinasGastosAnita = $this->agregarGastosMaquina(
             array_keys($opsMaquina),
             $gastosPorOper,
             $apgastoDesc,
             $fechaPorOper,
         );
+        $maquinasErp = $this->fuenteErp->maquinasCompletas(
+            $empresaId, $inicioMes, $finMes, $this->dias, $valormae, $apgastoDesc,
+        );
+        $maquinasBase = $this->fuenteErp->mergePorDia(
+            $maquinasBaseAnita, $maquinasErp['base'], $maquinasErp['dias'], $this->dias,
+        );
+        // Antes del corte ERP: dif_caja ERP a veces viene corrupto; si Anita tiene
+        // el día C, preferir Anita en esas filas (no afectan Total maquinas).
+        if (! $this->fuenteErpPura) {
+            foreach ($maquinasErp['dias'] as $diaErp => $_) {
+                $cajaAnita = (float) ($maquinasBaseAnita['MAQUINAS CAJA'][$diaErp] ?? 0);
+                if (abs($cajaAnita) < 0.01) {
+                    continue;
+                }
+                $maquinasBase['Diferencia de caja'][$diaErp] = round(
+                    (float) ($maquinasBaseAnita['Diferencia de caja'][$diaErp] ?? 0),
+                    2,
+                );
+                $maquinasBase['Caja en transito'][$diaErp] = round(
+                    (float) ($maquinasBaseAnita['Caja en transito'][$diaErp] ?? 0),
+                    2,
+                );
+                $maquinasBase['MAQUINAS VENTAS'][$diaErp] = round(
+                    (float) ($maquinasBaseAnita['MAQUINAS VENTAS'][$diaErp] ?? 0),
+                    2,
+                );
+            }
+        }
+        $maquinasMedios = $this->fuenteErp->mergePorDia(
+            $maquinasMediosAnita, $maquinasErp['medios'], $maquinasErp['dias'], $this->dias,
+        );
+        $maquinasGastos = $this->fuenteErp->mergePorDia(
+            $maquinasGastosAnita, $maquinasErp['gastos'], $maquinasErp['dias'], $this->dias,
+        );
         $descsMedio = [];
         foreach ($valormae as $meta) {
             $descsMedio[$meta['desc']] = true;
         }
+        // Medios ERP (etiquetas Anita o fallback) no deben restarse del Total.
+        foreach (array_keys($maquinasErp['medios']) as $descMedioErp) {
+            $descsMedio[$descMedioErp] = true;
+        }
         $maquinas = array_merge($maquinasBase, $maquinasMedios, $maquinasGastos);
         $maquinas['Total maquinas'] = $this->totalMaquinasPorDia($maquinas, $descsMedio);
+        $maquinasInformativos = $this->informativosMaquinas($empresaId, $inicioMes, $finMes, $filasMaquina);
 
-        $apertura = $this->agregarAperturaMedios(
-            $valoresPorOper,
-            $valormae,
-            $cabGastro,
-            $opsMaquina,
-            $empresaId,
-            $rendbingo,
-            $gastronomia,
-            $fechaPorOper,
-        );
+        $apertura = $this->fuenteErpPura
+            ? $this->agregarAperturaMediosErpPuro(
+                $bingoErp,
+                $premios,
+                $gastronomia,
+                $estacionamiento,
+                $maquinasErp,
+                $maquinasMediosAnita,
+                $valormae,
+            )
+            : $this->agregarAperturaMedios(
+                $valoresPorOper,
+                $valormae,
+                $cabGastro,
+                $opsMaquina,
+                $empresaId,
+                $rendbingo,
+                $rendpremio,
+                $concbingo,
+                $gastronomia,
+                $fechaPorOper,
+            );
 
-        $egresos = $this->agregarEgresos(
-            $empresaId,
-            $fechaDesde,
-            $fechaHasta,
-            $valormae,
-            $this->acumularAbiertosNoEfectivo(
+        $abiertosNoEfectivo = $this->fuenteErpPura
+            ? $this->acumularAbiertosNoEfectivoErpPuro(
+                $gastronomia,
+                $estacionamiento,
+                $maquinasErp,
+                $maquinasMediosAnita,
+                $valormae,
+            )
+            : $this->acumularAbiertosNoEfectivo(
                 $valoresPorOper,
                 $valormae,
                 $cabGastro,
                 $opsMaquina,
                 $empresaId,
                 $fechaPorOper,
-            ),
+            );
+        $egresos = $this->agregarEgresos(
+            $empresaId,
+            $fechaDesde,
+            $fechaHasta,
+            $abiertosNoEfectivo,
         );
 
         $saldoInicialPorDia = $this->vectorDias();
@@ -241,7 +459,7 @@ class EfePosicionFinancieraSupport
             $saldoCorrido += (float) ($ingresosPorDia[$dia] ?? 0) - (float) ($egresosPorDia[$dia] ?? 0);
             $saldoFinalPorDia[$dia] = round($saldoCorrido, 2);
         }
-        $saldoFinal = $saldoFinalPorDia[$finMes->day] ?? $saldoFinalBridge;
+        $saldoFinal = $saldoFinalPorDia[$finMes->day] ?? $saldoInicial;
 
         $this->pushFila($filasOrdenadas, 'Saldo inicial', $saldoInicialPorDia, self::BLOQUE_SALDOS, self::TIPO_TOTAL);
 
@@ -254,11 +472,17 @@ class EfePosicionFinancieraSupport
         $this->pushFila(
             $filasOrdenadas,
             'Total bingo',
-            $this->sumarMapas(array_merge(['VENTA BINGO' => $bingo['VENTA BINGO'] ?? $this->vectorDias()], $premios, [
-                'SOBRANTES' => $bingo['SOBRANTES'] ?? $this->vectorDias(),
-                'VALES' => $bingo['VALES'] ?? $this->vectorDias(),
-                'REDONDEO' => $bingo['REDONDEO'] ?? $this->vectorDias(),
-            ])),
+            $this->sumarMapas(array_merge(
+                [
+                    $bingo['VENTA BINGO'] ?? $this->vectorDias(),
+                ],
+                array_values($premios),
+                [
+                    $bingo['SOBRANTES'] ?? $this->vectorDias(),
+                    $bingo['VALES'] ?? $this->vectorDias(),
+                    $bingo['REDONDEO'] ?? $this->vectorDias(),
+                ],
+            )),
             self::BLOQUE_BINGO,
             self::TIPO_TOTAL,
         );
@@ -272,22 +496,6 @@ class EfePosicionFinancieraSupport
         $this->pushTitulo($filasOrdenadas, 'Vending', self::BLOQUE_VENDING);
         $this->pushMapa($filasOrdenadas, $vending, self::BLOQUE_VENDING, 'Total Vending');
 
-        foreach (['EGA' => self::BLOQUE_EGA, 'SHOW' => self::BLOQUE_SHOW] as $bloqueOmitido => $claveBloque) {
-            $this->pushTitulo($filasOrdenadas, $bloqueOmitido, $claveBloque);
-            $this->pushFila($filasOrdenadas, $bloqueOmitido.' Z', $this->vectorDias(), $claveBloque);
-            foreach (['EFECTIVO', 'TK.CANJE SHOW', 'MERCADO PAGO', 'PASSLINE'] as $medioOmitido) {
-                $this->pushFila($filasOrdenadas, $medioOmitido, $this->vectorDias(), $claveBloque);
-                for ($i = 0; $i < 2; $i++) {
-                    $this->pushFila($filasOrdenadas, $medioOmitido, $this->vectorDias(), $claveBloque, self::TIPO_RELLENO_EFE);
-                }
-            }
-            $this->pushFila($filasOrdenadas, 'Notas de credito', $this->vectorDias(), $claveBloque);
-            $this->pushFila($filasOrdenadas, 'Diferencia abandono de pago', $this->vectorDias(), $claveBloque);
-            $this->pushFila($filasOrdenadas, 'Redondeo', $this->vectorDias(), $claveBloque);
-            $this->pushFila($filasOrdenadas, 'Diferencia de caja', $this->vectorDias(), $claveBloque);
-            $this->pushFila($filasOrdenadas, 'Total '.$bloqueOmitido, $this->vectorDias(), $claveBloque, self::TIPO_TOTAL);
-        }
-
         $this->pushTitulo($filasOrdenadas, 'Máquinas', self::BLOQUE_MAQUINAS);
         $this->pushFila($filasOrdenadas, 'MAQUINAS VENTAS', $maquinasBase['MAQUINAS VENTAS'] ?? $this->vectorDias(), self::BLOQUE_MAQUINAS);
         $this->pushFila($filasOrdenadas, 'MAQUINAS CAJA', $maquinasBase['MAQUINAS CAJA'] ?? $this->vectorDias(), self::BLOQUE_MAQUINAS);
@@ -298,7 +506,10 @@ class EfePosicionFinancieraSupport
         $this->pushFila($filasOrdenadas, 'Variacion de FF', $maquinasBase['Variacion de FF'] ?? $this->vectorDias(), self::BLOQUE_MAQUINAS);
         $this->pushFila($filasOrdenadas, 'Diferencia de caja', $maquinasBase['Diferencia de caja'] ?? $this->vectorDias(), self::BLOQUE_MAQUINAS);
         $this->pushFila($filasOrdenadas, 'Caja en transito', $maquinasBase['Caja en transito'] ?? $this->vectorDias(), self::BLOQUE_MAQUINAS);
+        $this->pushFila($filasOrdenadas, 'Pago 24', $maquinasBase['Pago 24'] ?? $this->vectorDias(), self::BLOQUE_MAQUINAS);
         $this->pushFila($filasOrdenadas, 'Total maquinas', $maquinas['Total maquinas'], self::BLOQUE_MAQUINAS, self::TIPO_TOTAL);
+        $this->pushFila($filasOrdenadas, 'Sobrantes', $maquinasInformativos['Sobrantes'], self::BLOQUE_MAQUINAS, self::TIPO_INFORMATIVO);
+        $this->pushFila($filasOrdenadas, 'Canje de gastronomía', $maquinasInformativos['Canje de gastronomía'], self::BLOQUE_MAQUINAS, self::TIPO_INFORMATIVO);
 
         $this->pushTitulo($filasOrdenadas, 'Apertura de medios de cobro', self::BLOQUE_MEDIOS);
         $this->pushMapa($filasOrdenadas, $apertura, self::BLOQUE_MEDIOS, 'Total de Ingresos');
@@ -316,6 +527,8 @@ class EfePosicionFinancieraSupport
             'dias' => $this->dias,
             'saldo_inicial' => $saldoInicial,
             'saldo_final' => $saldoFinal,
+            'saldo_inicial_origen' => $saldoInicialOrigen,
+            'saldo_cierre_anterior_id' => $saldoCierreErp?->id,
             'bingo' => $this->mapaTotales($bingo),
             'premios_bingo' => $this->mapaTotales($premios),
             'gastronomia' => $this->mapaTotales($gastronomia),
@@ -326,6 +539,658 @@ class EfePosicionFinancieraSupport
             'egresos' => $this->mapaTotales($egresos),
             'errores_bridge' => $errores,
         ];
+    }
+
+    /**
+     * Detalle de auditoría para una celda diaria de la posición financiera.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function auditarDato(array $filtros, int $dia, string $bloque, string $etiqueta): array
+    {
+        $resultado = $this->generar($filtros);
+        $filaSeleccionada = null;
+        foreach ($resultado['filas_ordenadas'] ?? [] as $fila) {
+            if (($fila['bloque'] ?? '') === $bloque && ($fila['etiqueta'] ?? '') === $etiqueta) {
+                $filaSeleccionada = $fila;
+                break;
+            }
+        }
+
+        if ($filaSeleccionada === null
+            || ($dia !== 0 && ! in_array($dia, $resultado['dias'] ?? [], true))) {
+            throw new InvalidArgumentException('No se encontró el dato solicitado para auditar.');
+        }
+
+        $componentes = $this->componentesAuditoria(
+            $resultado['filas_ordenadas'] ?? [],
+            $filaSeleccionada,
+            $dia,
+        );
+        if ($componentes === [] && $bloque === self::BLOQUE_BINGO) {
+            foreach ($this->bridgeReader->listarConcbingoExtendido() as $concepto) {
+                $tipo = trim((string) ($concepto->concb_tipo_conc ?? ''));
+                $porcentaje = (float) ($concepto->concb_porcentaje ?? 0);
+                if (trim((string) ($concepto->concb_desc ?? '')) !== $etiqueta
+                    || ! in_array($tipo, ['0', '1'], true)
+                    || $porcentaje <= 0) {
+                    continue;
+                }
+                foreach ($resultado['filas_ordenadas'] ?? [] as $fila) {
+                    if (($fila['etiqueta'] ?? '') === 'VENTA BINGO') {
+                        $componentes[] = [
+                            'etiqueta' => 'VENTA BINGO',
+                            'importe' => (float) ($fila['por_dia'][$dia] ?? 0),
+                            'operacion' => '× -'.rtrim(rtrim(number_format($porcentaje, 4, '.', ''), '0'), '.').'%',
+                        ];
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+        $fecha = $dia === 0
+            ? null
+            : Carbon::createFromDate(
+                (int) ($filtros['anio'] ?? 0),
+                (int) ($filtros['mes'] ?? 0),
+                $dia,
+            );
+
+        return [
+            'etiqueta' => $etiqueta,
+            'bloque' => $bloque,
+            'fecha' => $fecha?->format('d/m/Y')
+                ?? str_pad((string) ($filtros['mes'] ?? 0), 2, '0', STR_PAD_LEFT).'/'.(int) ($filtros['anio'] ?? 0).' · total mensual',
+            'fecha_ymd' => $fecha?->toDateString(),
+            'importe' => $dia === 0
+                ? (float) ($filaSeleccionada['valor'] ?? 0)
+                : (float) (($filaSeleccionada['por_dia'][$dia] ?? 0)),
+            'tipo_fila' => (string) ($filaSeleccionada['tipo_fila'] ?? self::TIPO_CONCEPTO),
+            'componentes' => $componentes,
+            'registros' => $fecha === null
+                ? []
+                : $this->registrosAuditoriaFuente(
+                    (int) ($filtros['empresa_id'] ?? 0),
+                    (int) $fecha->format('Ymd'),
+                    $bloque,
+                    $etiqueta,
+                ),
+            'fuentes' => $this->fuentesAuditoriaPorBloque($bloque, $etiqueta),
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     * @param  array<string, mixed>  $seleccionada
+     * @return list<array{etiqueta: string, importe: float, operacion: string}>
+     */
+    private function componentesAuditoria(array $filas, array $seleccionada, int $dia): array
+    {
+        $etiqueta = (string) ($seleccionada['etiqueta'] ?? '');
+        $bloque = (string) ($seleccionada['bloque'] ?? '');
+
+        if ($dia === 0) {
+            $componentes = [];
+            foreach ($seleccionada['por_dia'] ?? [] as $numeroDia => $importe) {
+                if (abs((float) $importe) < 0.005) {
+                    continue;
+                }
+                $componentes[] = [
+                    'etiqueta' => 'Día '.str_pad((string) $numeroDia, 2, '0', STR_PAD_LEFT),
+                    'importe' => (float) $importe,
+                    'operacion' => '+',
+                ];
+            }
+
+            return $componentes;
+        }
+
+        if ($etiqueta === 'Saldo final') {
+            $componentes = [];
+            foreach ([
+                'Saldo inicial' => '+',
+                'Total de Ingresos' => '+',
+                'Total de Egresos' => '-',
+            ] as $buscada => $operacion) {
+                foreach ($filas as $fila) {
+                    if (($fila['etiqueta'] ?? '') === $buscada) {
+                        $componentes[] = [
+                            'etiqueta' => $buscada,
+                            'importe' => (float) ($fila['por_dia'][$dia] ?? 0),
+                            'operacion' => $operacion,
+                        ];
+                        break;
+                    }
+                }
+            }
+
+            return $componentes;
+        }
+
+        if ($etiqueta === 'Total maquinas') {
+            $descsGasto = array_flip($this->indexarApgasto($this->bridgeReader->listarApgasto()));
+            $componentes = [];
+            foreach ($filas as $fila) {
+                if (($fila['bloque'] ?? '') !== self::BLOQUE_MAQUINAS) {
+                    continue;
+                }
+                $etiquetaFila = (string) ($fila['etiqueta'] ?? '');
+                $importe = (float) ($fila['por_dia'][$dia] ?? 0);
+                if ($etiquetaFila === 'MAQUINAS CAJA') {
+                    $componentes[] = [
+                        'etiqueta' => $etiquetaFila,
+                        'importe' => $importe,
+                        'operacion' => '+',
+                    ];
+
+                    continue;
+                }
+                $seResta = in_array($etiquetaFila, ['Vales fondo fijo', 'Vales administracion'], true)
+                    || isset($descsGasto[$etiquetaFila]);
+                if (! $seResta || abs($importe) < 0.005) {
+                    continue;
+                }
+                $componentes[] = [
+                    'etiqueta' => $etiquetaFila,
+                    'importe' => $importe,
+                    'operacion' => '-',
+                ];
+            }
+
+            if ($componentes !== []) {
+                return $componentes;
+            }
+        }
+
+        if (($seleccionada['tipo_fila'] ?? '') !== self::TIPO_TOTAL
+            && preg_match('/^total(\s|$)/u', mb_strtolower(trim($etiqueta))) !== 1) {
+            return [];
+        }
+
+        $componentes = [];
+        foreach ($filas as $fila) {
+            if (($fila['bloque'] ?? '') !== $bloque
+                || ($fila['tipo_fila'] ?? '') !== self::TIPO_CONCEPTO
+                || str_ends_with(mb_strtoupper(trim((string) ($fila['etiqueta'] ?? ''))), ' Z')) {
+                continue;
+            }
+            $importe = (float) ($fila['por_dia'][$dia] ?? 0);
+            if (abs($importe) < 0.005) {
+                continue;
+            }
+            $componentes[] = [
+                'etiqueta' => (string) $fila['etiqueta'],
+                'importe' => $importe,
+                'operacion' => '+',
+            ];
+        }
+
+        return $componentes;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function registrosAuditoriaFuente(int $empresaId, int $fechaYmd, string $bloque, string $etiqueta): array
+    {
+        if ($bloque === self::BLOQUE_SALDOS) {
+            $fecha = Carbon::createFromFormat('Ymd', (string) $fechaYmd);
+            $saldo = PosicionFinancieraSaldoSupport::ultimoConfirmadoAnterior($empresaId, $fecha->toDateString());
+
+            return $saldo === null ? [] : [[
+                'fuente' => 'posicion_financiera_saldo',
+                'referencia' => '#'.$saldo->id,
+                'detalle' => 'Cierre '.$saldo->fecha_cierre?->format('d/m/Y').' · '.$saldo->origen,
+                'importe' => (float) $saldo->saldo_final,
+            ]];
+        }
+
+        if ($bloque === self::BLOQUE_MAQUINAS && in_array($etiqueta, ['Sobrantes', 'Canje de gastronomía'], true)) {
+            $campo = $etiqueta === 'Sobrantes' ? 'sobrantes' : 'impuesto_pago';
+            $rendiciones = RendicionMaquina::query()
+                ->where('empresa_id', $empresaId)
+                ->whereDate('fecha', Carbon::createFromFormat('Ymd', (string) $fechaYmd)->toDateString())
+                ->where(function ($query) {
+                    $query->whereNull('estado')->orWhere('estado', '!=', RendicionMaquina::ESTADO_ANULADA);
+                })
+                ->orderBy('id')
+                ->get(['id', 'fecha', 'turno', 'inputs_json']);
+            $completo = $rendiciones->filter(function (RendicionMaquina $rendicion) {
+                try {
+                    return RendicionMaquinaTurno::normalizar((string) $rendicion->turno)
+                        === RendicionMaquinaTurno::COMPLETO;
+                } catch (InvalidArgumentException) {
+                    return false;
+                }
+            })->last();
+            if ($completo !== null) {
+                $rendiciones = collect([$completo]);
+            } else {
+                $rendiciones = $rendiciones->filter(function (RendicionMaquina $rendicion) {
+                    try {
+                        RendicionMaquinaTurno::normalizar((string) $rendicion->turno);
+
+                        return true;
+                    } catch (InvalidArgumentException) {
+                        return false;
+                    }
+                });
+            }
+
+            // Sin rendición ERP del día se sigue con rendmaquina de Anita.
+            if ($rendiciones->isNotEmpty()) {
+                return $rendiciones
+                    ->map(function (RendicionMaquina $rendicion) use ($campo) {
+                        $inputs = is_array($rendicion->inputs_json) ? $rendicion->inputs_json : [];
+
+                        return [
+                            'fuente' => 'rendicion_maquina ERP',
+                            'referencia' => '#'.$rendicion->id,
+                            'detalle' => 'Turno '.$rendicion->turno,
+                            'importe' => $this->valorInputRendicionMaquina($inputs, $campo),
+                            'url' => route('editar_rendicion_maquina', array_merge(
+                                ['id' => $rendicion->id],
+                                self::QUERY_CONSULTA,
+                            )),
+                        ];
+                    })
+                    ->all();
+            }
+        }
+
+        if ($bloque === self::BLOQUE_EGRESOS
+            && preg_match('/^(Pesos|Dolares|Euros) /', $etiqueta) === 1) {
+            $registros = [];
+            $firmasErp = [];
+            $remesasErp = Remesa::query()
+                ->with('lineasDestino.cuentacaja')
+                ->where('empresa_id', $empresaId)
+                ->whereDate('fecha', Carbon::createFromFormat('Ymd', (string) $fechaYmd)->toDateString())
+                ->where('tipo', RemesaSupport::TIPO_EXTERNA)
+                ->where('estado', RemesaSupport::ESTADO_CONFIRMADA)
+                ->orderBy('numero')
+                ->get();
+
+            foreach ($remesasErp as $remesa) {
+                foreach ($remesa->lineasDestino as $linea) {
+                    $cuenta = $linea->cuentacaja;
+                    $importe = round((float) ($linea->monto ?? 0), 2);
+                    if ($cuenta === null || $importe <= 0) {
+                        continue;
+                    }
+                    $codigoMoneda = CotizacionTesoreriaConsultaSupport::codigoAnitaDesdeMonedaId(
+                        (int) ($cuenta->moneda_id ?: 1),
+                    ) ?? 1;
+                    $destino = $this->destinoRememaeDesdeCuenta($cuenta);
+                    if ($this->etiquetaEgresoCuentaErp($cuenta, $destino, $codigoMoneda) !== $etiqueta) {
+                        continue;
+                    }
+                    $firmasErp[$this->firmaRemesa($fechaYmd, $destino, $codigoMoneda, $importe)] =
+                        ($firmasErp[$this->firmaRemesa($fechaYmd, $destino, $codigoMoneda, $importe)] ?? 0) + 1;
+                    $registros[] = [
+                        'fuente' => 'remesa ERP',
+                        'referencia' => '#'.$remesa->numero,
+                        'detalle' => (string) ($cuenta->nombre ?? 'Destino'),
+                        'importe' => $importe,
+                        'url' => route('editar_remesa', $remesa->id),
+                    ];
+                }
+            }
+
+            foreach ($this->bridgeReader->listarRememae($empresaId, $fechaYmd, $fechaYmd) as $fila) {
+                if (strtoupper(trim((string) ($fila->remem_tipo_remesa ?? ''))) !== RemesaSupport::TIPO_EXTERNA) {
+                    continue;
+                }
+                $destino = trim((string) ($fila->remem_destino ?? self::REMEM_MACO));
+                $codigoMoneda = (int) ($fila->remem_cod_mon ?? 1);
+                $importe = round((float) ($fila->remem_importe ?? 0), 2);
+                $etiquetaFila = $codigoMoneda === 2
+                    ? $this->etiquetaEgresoDolar($destino)
+                    : ($codigoMoneda === 3
+                        ? $this->etiquetaEgresoEuro($destino)
+                        : $this->etiquetaEgresoPesos($destino));
+                if ($destino === self::REMEM_PAGOFACIL || $etiquetaFila !== $etiqueta || $importe <= 0) {
+                    continue;
+                }
+                $firma = $this->firmaRemesa($fechaYmd, $destino, $codigoMoneda, $importe);
+                if (($firmasErp[$firma] ?? 0) > 0) {
+                    $firmasErp[$firma]--;
+                    continue;
+                }
+                $registros[] = [
+                    'fuente' => 'rememae Anita',
+                    'referencia' => '#'.(int) ($fila->remem_nro_remesa ?? 0),
+                    'detalle' => 'Destino '.$destino.' · moneda '.$codigoMoneda,
+                    'importe' => $importe,
+                ];
+            }
+
+            return array_slice($registros, 0, 100);
+        }
+
+        $valormae = $this->indexarValormae($this->bridgeReader->listarValormae($empresaId));
+        $operacionesPermitidas = $this->operacionesAuditoriaBloque($empresaId, $fechaYmd, $bloque);
+        $registros = [];
+        foreach ($this->bridgeReader->listarRendvalor($fechaYmd, $fechaYmd) as $valor) {
+            $codigo = (int) ($valor->rendv_codigo ?? 0);
+            $nroOper = (int) ($valor->rendv_nro_oper ?? 0);
+            if (($valormae[$codigo]['desc'] ?? '') !== $etiqueta
+                || ($operacionesPermitidas !== [] && ! isset($operacionesPermitidas[$nroOper]))) {
+                continue;
+            }
+            $registros[] = [
+                'fuente' => 'rendvalor Anita',
+                'referencia' => 'Oper. '.$nroOper,
+                'detalle' => 'Código '.$codigo.' · tipo '.($valormae[$codigo]['tipo'] ?? ''),
+                'importe' => $this->importeValorPesos($valor, (string) ($valormae[$codigo]['tipo'] ?? '')),
+                'url' => $this->urlRendicionErpPorOperacion($empresaId, $bloque, $nroOper),
+            ];
+        }
+
+        if ($registros !== []) {
+            return array_slice($registros, 0, 100);
+        }
+
+        if (in_array($bloque, [self::BLOQUE_GASTRO, self::BLOQUE_ESTAC, self::BLOQUE_VENDING], true)) {
+            foreach ($this->bridgeReader->listarRendgastro($empresaId, $fechaYmd, $fechaYmd) as $fila) {
+                if ($this->clasificarSucursal($empresaId, (int) ($fila->rendg_sucursal ?? 0)) !== $bloque) {
+                    continue;
+                }
+                $registros[] = [
+                    'fuente' => 'rendgastro Anita',
+                    'referencia' => 'Oper. '.(int) ($fila->rendg_nro_oper ?? 0),
+                    'detalle' => 'Sucursal '.(int) ($fila->rendg_sucursal ?? 0).' · turno '.($fila->rendg_turno ?? ''),
+                    'importe' => (float) ($fila->rendg_total_z ?? 0),
+                    'url' => $this->urlRendicionErpPorOperacion(
+                        $empresaId,
+                        $bloque,
+                        (int) ($fila->rendg_nro_oper ?? 0),
+                    ),
+                ];
+            }
+        } elseif ($bloque === self::BLOQUE_MAQUINAS) {
+            $filasMaquina = $this->bridgeReader->listarRendmaquina($empresaId, $fechaYmd, $fechaYmd);
+            $conceptoApgasto = array_flip($this->indexarApgasto($this->bridgeReader->listarApgasto()));
+            $gastosPorOper = [];
+            if (isset($conceptoApgasto[$etiqueta])) {
+                $operaciones = [];
+                foreach ($filasMaquina as $fila) {
+                    if ($this->incluirRendmaquina($fila)) {
+                        $operaciones[] = (int) ($fila->rendm_nro_oper ?? 0);
+                    }
+                }
+                $gastosPorOper = $this->cargarGastosMaquina($operaciones);
+            }
+
+            foreach ($filasMaquina as $fila) {
+                if (! $this->incluirRendmaquina($fila)) {
+                    continue;
+                }
+                $nroOper = (int) ($fila->rendm_nro_oper ?? 0);
+                $importe = isset($conceptoApgasto[$etiqueta])
+                    ? (float) ($gastosPorOper[$nroOper][$conceptoApgasto[$etiqueta]] ?? 0)
+                    : $this->importeAuditoriaRendmaquina($fila, $etiqueta);
+                $registros[] = [
+                    'fuente' => 'rendmaquina Anita',
+                    'referencia' => 'Oper. '.$nroOper,
+                    'detalle' => 'Turno '.($fila->rendm_turno ?? ''),
+                    'importe' => $importe,
+                    'url' => $this->urlRendicionMaquinaErp(
+                        $empresaId,
+                        (int) ($fila->rendm_fecha ?? 0),
+                        isset($fila->rendm_turno) ? (string) $fila->rendm_turno : null,
+                    ),
+                ];
+            }
+        } elseif ($bloque === self::BLOQUE_BINGO) {
+            $rendbingo = $this->bridgeReader->listarRendbingo($empresaId, $fechaYmd, $fechaYmd);
+            if (in_array($etiqueta, ['VENTA BINGO', 'SOBRANTES', 'VALES', 'REDONDEO'], true)) {
+                foreach ($rendbingo as $fila) {
+                    $importe = match ($etiqueta) {
+                        'VENTA BINGO' => (float) ($fila->rendb_total_carton ?? 0),
+                        'SOBRANTES' => (float) ($fila->rendb_sobrante ?? 0),
+                        'VALES' => (float) ($fila->rendb_vales ?? 0),
+                        'REDONDEO' => (float) ($fila->rendb_redondeo ?? 0),
+                    };
+                    $registros[] = [
+                        'fuente' => 'rendbingo Anita',
+                        'referencia' => 'Oper. '.(int) ($fila->rendb_nro_oper ?? 0),
+                        'detalle' => 'Turno '.($fila->rendb_turno ?? ''),
+                        'importe' => $importe,
+                        'url' => $this->urlRendicionErpPorOperacion(
+                            $empresaId,
+                            $bloque,
+                            (int) ($fila->rendb_nro_oper ?? 0),
+                        ),
+                    ];
+                }
+            } else {
+                $operaciones = [];
+                foreach ($rendbingo as $fila) {
+                    $operaciones[(int) ($fila->rendb_nro_oper ?? 0).'|'.trim((string) ($fila->rendb_tipo_oper ?? ''))] = true;
+                }
+                $conceptos = [];
+                foreach ($this->bridgeReader->listarConcbingoExtendido() as $concepto) {
+                    $conceptos[(int) ($concepto->concb_concepto ?? 0)] = $concepto;
+                }
+                foreach ($this->bridgeReader->listarRendpremio($fechaYmd, $fechaYmd) as $premio) {
+                    $clave = (int) ($premio->rendp_nro_oper ?? 0).'|'.trim((string) ($premio->rendp_tipo_oper ?? ''));
+                    $concepto = $conceptos[(int) ($premio->rendp_concepto ?? 0)] ?? null;
+                    if (! isset($operaciones[$clave])
+                        || trim((string) ($concepto->concb_desc ?? '')) !== $etiqueta) {
+                        continue;
+                    }
+                    $tipo = trim((string) ($concepto->concb_tipo_conc ?? ''));
+                    $importe = in_array($tipo, ['3', '4', '5'], true)
+                        ? (float) ($premio->rendp_real ?? 0)
+                        : (float) ($premio->rendp_pagado ?? 0);
+                    $registros[] = [
+                        'fuente' => 'rendpremio Anita',
+                        'referencia' => 'Oper. '.(int) ($premio->rendp_nro_oper ?? 0),
+                        'detalle' => 'Concepto '.(int) ($premio->rendp_concepto ?? 0),
+                        'importe' => -1 * $importe,
+                        'url' => $this->urlRendicionErpPorOperacion(
+                            $empresaId,
+                            $bloque,
+                            (int) ($premio->rendp_nro_oper ?? 0),
+                        ),
+                    ];
+                }
+            }
+        }
+
+        return array_slice($registros, 0, 100);
+    }
+
+    private function importeAuditoriaRendmaquina(object $fila, string $etiqueta): float
+    {
+        $venta = $this->ventaMaquinasDesdeFila($fila);
+        $deposito = (float) ($fila->rendm_deposito ?? 0);
+        $diferencia = (float) ($fila->rendm_dif_caja ?? 0);
+        $variacion = (float) ($fila->rendm_variacion_ff ?? 0);
+
+        return match ($etiqueta) {
+            'MAQUINAS VENTAS' => $venta,
+            'MAQUINAS CAJA', 'Total maquinas' => $deposito,
+            'Vales fondo fijo' => (float) ($fila->rendm_reintegros ?? 0),
+            'Vales administracion' => (float) ($fila->rendm_vales ?? 0),
+            'Variacion de FF' => $variacion,
+            'Diferencia de caja' => $diferencia + $variacion,
+            'Caja en transito' => $venta > $deposito
+                ? ($venta + $diferencia) - $deposito
+                : ($deposito - ($venta + $diferencia)) * -1,
+            'Pago 24' => (float) ($fila->rendm_vtaant_gast ?? 0),
+            'Sobrantes' => (float) ($fila->rendm_sobrantes ?? 0),
+            'Canje de gastronomía' => (float) ($fila->rendm_canje_gastro ?? 0),
+            default => $deposito,
+        };
+    }
+
+    /**
+     * Resuelve la rendición ERP que originó una operación Anita para poder
+     * abrirla desde la auditoría. Devuelve null si el usuario no tiene permiso
+     * o si esa rendición todavía no vive en el ERP.
+     */
+    private function urlRendicionErpPorOperacion(int $empresaId, string $bloque, int $nroOper): ?string
+    {
+        if ($nroOper <= 0) {
+            return null;
+        }
+
+        $bingo = fn (): ?string => CierreRendicionOrigenConsultaSupport::puedeVerPdfRendicionBingo()
+            ? $this->urlPorNroOperAnita(RendicionBingoCaja::class, $empresaId, $nroOper, 'imprimir_rendicion_bingo', ['inline' => 1])
+            : null;
+        $gastro = fn (): ?string => CierreRendicionOrigenConsultaSupport::puedeConsultarRendicionGastronomia()
+            ? $this->urlPorNroOperAnita(RendicionGastronomiaCaja::class, $empresaId, $nroOper, 'editar_rendiciongastronomia', self::QUERY_CONSULTA)
+            : null;
+        $estac = fn (): ?string => CierreRendicionOrigenConsultaSupport::puedeConsultarRendicionEstacionamiento()
+            ? $this->urlPorNroOperAnita(RendicionEstacionamientoCaja::class, $empresaId, $nroOper, 'editar_rendicionestacionamiento', self::QUERY_CONSULTA)
+            : null;
+        // Máquinas no entra acá: rendicion_maquina.nro_oper_anita guarda una
+        // secuencia propia del ERP, no el rendm_nro_oper de Anita.
+        $candidatos = match ($bloque) {
+            self::BLOQUE_BINGO => [$bingo],
+            self::BLOQUE_GASTRO, self::BLOQUE_VENDING => [$gastro],
+            self::BLOQUE_ESTAC => [$estac],
+            self::BLOQUE_MEDIOS, self::BLOQUE_EGRESOS => [$gastro, $estac, $bingo],
+            default => [],
+        };
+
+        foreach ($candidatos as $resolver) {
+            $url = $resolver();
+            if ($url !== null) {
+                return $url;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * La rendición de máquinas se ubica por empresa, fecha y turno porque su
+     * numeración de operación no coincide con la de Anita.
+     */
+    private function urlRendicionMaquinaErp(int $empresaId, int $fechaYmd, ?string $turno): ?string
+    {
+        if ($fechaYmd <= 0 || ! CierreRendicionOrigenConsultaSupport::puedeConsultarRendicionMaquina()) {
+            return null;
+        }
+
+        try {
+            $turnoNormalizado = RendicionMaquinaTurno::normalizar((string) $turno);
+        } catch (InvalidArgumentException) {
+            return null;
+        }
+
+        $id = (int) (RendicionMaquina::query()
+            ->where('empresa_id', $empresaId)
+            ->whereDate('fecha', Carbon::createFromFormat('Ymd', (string) $fechaYmd)->toDateString())
+            ->where('turno', $turnoNormalizado)
+            ->where(function ($query) {
+                $query->whereNull('estado')->orWhere('estado', '!=', RendicionMaquina::ESTADO_ANULADA);
+            })
+            ->orderByDesc('id')
+            ->value('id') ?? 0);
+
+        return $id > 0
+            ? route('editar_rendicion_maquina', array_merge(['id' => $id], self::QUERY_CONSULTA))
+            : null;
+    }
+
+    /**
+     * @param  class-string<\Illuminate\Database\Eloquent\Model>  $modelClass
+     * @param  array<string, mixed>  $extra
+     */
+    private function urlPorNroOperAnita(
+        string $modelClass,
+        int $empresaId,
+        int $nroOper,
+        string $ruta,
+        array $extra,
+    ): ?string {
+        $id = (int) ($modelClass::query()
+            ->where('empresa_id', $empresaId)
+            ->where('nro_oper_anita', $nroOper)
+            ->value('id') ?? 0);
+
+        return $id > 0 ? route($ruta, array_merge(['id' => $id], $extra)) : null;
+    }
+
+    /**
+     * @return array<int, true>
+     */
+    private function operacionesAuditoriaBloque(int $empresaId, int $fechaYmd, string $bloque): array
+    {
+        $operaciones = [];
+
+        if (in_array($bloque, [
+            self::BLOQUE_GASTRO,
+            self::BLOQUE_ESTAC,
+            self::BLOQUE_VENDING,
+            self::BLOQUE_MEDIOS,
+            self::BLOQUE_EGRESOS,
+        ], true)) {
+            foreach ($this->bridgeReader->listarRendgastro($empresaId, $fechaYmd, $fechaYmd) as $fila) {
+                $bloqueFila = $this->clasificarSucursal($empresaId, (int) ($fila->rendg_sucursal ?? 0));
+                if (in_array($bloque, [self::BLOQUE_MEDIOS, self::BLOQUE_EGRESOS], true)
+                    || $bloqueFila === $bloque) {
+                    $operaciones[(int) ($fila->rendg_nro_oper ?? 0)] = true;
+                }
+            }
+        }
+
+        if (in_array($bloque, [self::BLOQUE_MAQUINAS, self::BLOQUE_MEDIOS, self::BLOQUE_EGRESOS], true)) {
+            foreach ($this->bridgeReader->listarRendmaquina($empresaId, $fechaYmd, $fechaYmd) as $fila) {
+                if ($this->incluirRendmaquina($fila)) {
+                    $operaciones[(int) ($fila->rendm_nro_oper ?? 0)] = true;
+                }
+            }
+        }
+
+        if (in_array($bloque, [self::BLOQUE_BINGO, self::BLOQUE_MEDIOS, self::BLOQUE_EGRESOS], true)) {
+            foreach ($this->bridgeReader->listarRendbingo($empresaId, $fechaYmd, $fechaYmd) as $fila) {
+                $operaciones[(int) ($fila->rendb_nro_oper ?? 0)] = true;
+            }
+        }
+
+        unset($operaciones[0]);
+
+        return $operaciones;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function fuentesAuditoriaPorBloque(string $bloque, string $etiqueta): array
+    {
+        return match ($bloque) {
+            self::BLOQUE_BINGO => $this->fuenteErpPura
+                ? ['rendicion_bingo_caja ERP']
+                : [
+                    'rendbingo / concbingo / rendpremio Anita (prioridad por día)',
+                    'rendicion_bingo_caja ERP (solo días sin Anita)',
+                ],
+            self::BLOQUE_GASTRO, self::BLOQUE_ESTAC, self::BLOQUE_VENDING => $this->fuenteErpPura
+                ? ['rendicion_*_caja ERP']
+                : [
+                    'rendicion_*_caja ERP (días con turno) + huecos Anita (MEP, etc.)',
+                    'rendgastro / rendvalor / valormae Anita (días sin ERP)',
+                ],
+            self::BLOQUE_MAQUINAS => in_array($etiqueta, ['Sobrantes', 'Canje de gastronomía'], true)
+                ? ['rendicion_maquina ERP', 'rendmaquina Anita (días sin rendición ERP)']
+                : [
+                    'rendicion_maquina ERP turno C (días con cierre)',
+                    'rendmaquina / rendvalor / rendmapgasto Anita (días sin ERP)',
+                ],
+            self::BLOQUE_MEDIOS => $this->fuenteErpPura
+                ? ['rendiciones ERP (bingo/gastro/estac)', 'rendicion_maquina ERP o rendvalor Anita si no hay C']
+                : ['rendvalor', 'rendbingo'],
+            self::BLOQUE_EGRESOS => ['remesa ERP', 'rememae Anita (si falta la remesa)', 'medios no efectivos'],
+            self::BLOQUE_SALDOS => ['posicion_financiera_saldo ERP', 'saldoposf Anita (fallback)', 'fórmula diaria'],
+            default => [],
+        };
     }
 
     /**
@@ -384,7 +1249,11 @@ class EfePosicionFinancieraSupport
     {
         $totales = [];
         foreach ($filas as $fila) {
-            if (in_array($fila['tipo_fila'] ?? self::TIPO_CONCEPTO, [self::TIPO_TITULO, self::TIPO_RELLENO_EFE], true)) {
+            if (in_array(
+                $fila['tipo_fila'] ?? self::TIPO_CONCEPTO,
+                [self::TIPO_TITULO, self::TIPO_INFORMATIVO],
+                true
+            )) {
                 continue;
             }
             $totales[$fila['etiqueta']] = $fila['valor'];
@@ -485,21 +1354,90 @@ class EfePosicionFinancieraSupport
     /**
      * @param  list<object>  $filas
      */
-    private function saldoEnFecha(array $filas, int $fecha): ?float
+    private function ultimoSaldoAnterior(array $filas, int $fechaExclusiva): ?float
     {
+        $ultimo = null;
+        $ultimaFecha = 0;
         foreach ($filas as $fila) {
-            if ((int) ($fila->salpf_fecha ?? 0) === $fecha) {
-                return round((float) ($fila->salpf_saldo ?? 0), 2);
+            $fecha = (int) ($fila->salpf_fecha ?? 0);
+            if ($fecha <= 0 || $fecha >= $fechaExclusiva || $fecha <= $ultimaFecha) {
+                continue;
             }
+
+            $ultimaFecha = $fecha;
+            $ultimo = round((float) ($fila->salpf_saldo ?? 0), 2);
         }
 
-        return null;
+        return $ultimo;
     }
 
     /**
-     * @param  list<object>  $filas
+     * Resuelve los códigos rendvalor habilitados por la configuración operativa
+     * de cuentas de caja. Vending usa deliberadamente el uso Gastronomia.
+     *
+     * @param  class-string  $mapperClass
+     * @return array<int, true>
+     */
+    private function codigosValormaePorUso(int $empresaId, string $usoNombre, string $mapperClass): array
+    {
+        $cuentas = Cuentacaja::query()
+            ->paraEmpresa($empresaId)
+            ->whereHas('usocuentacajas', fn ($query) => $query->where('usocuentacaja.nombre', $usoNombre))
+            ->get();
+
+        $codigos = [];
+        foreach ($cuentas as $cuenta) {
+            if ($mapperClass::omitirEnRendvalorAnita($cuenta)) {
+                continue;
+            }
+
+            try {
+                $codigo = $mapperClass::codigoDesdeCuentacaja($empresaId, $cuenta);
+            } catch (RuntimeException) {
+                continue;
+            }
+
+            if ($codigo > 0) {
+                $codigos[$codigo] = true;
+            }
+        }
+
+        return $codigos;
+    }
+
+    /**
+     * Alinea nombres de conceptos ERP bingo a las etiquetas Anita (l-posfinanc).
+     *
+     * @param  array<string, array<int, float>>  $premios
      * @return array<string, array<int, float>>
      */
+    private function normalizarEtiquetasPremiosBingo(array $premios): array
+    {
+        $alias = [
+            'Línea 6%' => 'Linea 6%',
+            'Linea 6%' => 'Linea 6%',
+            'B.U.B 0,50% apertura' => 'Pago 0.5% pozo ac. dia ant.',
+            'B.U.B 0,50% cierre' => 'Pago 0.5% pozo ac. del dia',
+            'Premio 5%' => 'Premio 5% Pozo Ac.',
+        ];
+
+        $out = [];
+        foreach ($premios as $etiqueta => $porDia) {
+            $destino = $alias[$etiqueta] ?? $etiqueta;
+            if (! isset($out[$destino])) {
+                $out[$destino] = $this->vectorDias();
+            }
+            foreach ($this->dias as $dia) {
+                $out[$destino][$dia] = round(
+                    ($out[$destino][$dia] ?? 0) + (float) ($porDia[$dia] ?? 0),
+                    2,
+                );
+            }
+        }
+
+        return $out;
+    }
+
     private function agregarRendbingo(array $filas): array
     {
         $totales = [
@@ -579,7 +1517,8 @@ class EfePosicionFinancieraSupport
 
             $concb = $mapConcb[$conceptoId];
             $tipo = trim((string) ($concb->concb_tipo_conc ?? ''));
-            if ($tipo === '0') {
+            // Tipos 0/1 ya se calculan por % sobre cartones; no sumar de nuevo rendpremio.
+            if (in_array($tipo, ['0', '1'], true)) {
                 continue;
             }
 
@@ -611,12 +1550,14 @@ class EfePosicionFinancieraSupport
      * @param  list<object>  $cabeceras
      * @param  array<int, list<object>>  $valoresPorOper
      * @param  array<int, array{desc: string, tipo: string}>  $valormae
+     * @param  array<int, true>  $codigosValormaePermitidos
      * @return array<string, array<int, float>>
      */
     private function agregarBloqueGastroEstac(
         array $cabeceras,
         array $valoresPorOper,
         array $valormae,
+        array $codigosValormaePermitidos,
         int $empresaId,
         string $bloque,
         string $etiquetaZ,
@@ -626,7 +1567,10 @@ class EfePosicionFinancieraSupport
         $totales = [
             $etiquetaZ => $this->vectorDias(),
         ];
-        foreach ($valormae as $meta) {
+        foreach ($valormae as $codigo => $meta) {
+            if (! isset($codigosValormaePermitidos[$codigo])) {
+                continue;
+            }
             $totales[$meta['desc']] = $this->vectorDias();
         }
         $totales['Notas de credito'] = $this->vectorDias();
@@ -652,7 +1596,7 @@ class EfePosicionFinancieraSupport
 
             foreach ($valoresPorOper[$nroOper] ?? [] as $valor) {
                 $codigo = (int) ($valor->rendv_codigo ?? 0);
-                if (! isset($valormae[$codigo])) {
+                if (! isset($valormae[$codigo], $codigosValormaePermitidos[$codigo])) {
                     continue;
                 }
                 $this->sumarEn(
@@ -692,6 +1636,7 @@ class EfePosicionFinancieraSupport
             'Variacion de FF' => $this->vectorDias(),
             'Diferencia de caja' => $this->vectorDias(),
             'Caja en transito' => $this->vectorDias(),
+            'Pago 24' => $this->vectorDias(),
         ];
 
         foreach ($filas as $fila) {
@@ -719,9 +1664,153 @@ class EfePosicionFinancieraSupport
                 $cajaTransito *= -1;
             }
             $this->sumarEn($totales, 'Caja en transito', $dia, $cajaTransito);
+            $this->sumarEn($totales, 'Pago 24', $dia, (float) ($fila->rendm_vtaant_gast ?? 0));
         }
 
         return $totales;
+    }
+
+    /**
+     * Renglones exclusivamente informativos: ERP cuando el día ya está cargado,
+     * Anita para los días de agosto que todavía no se rindieron en el ERP.
+     *
+     * @param  list<object>  $filasMaquina
+     * @return array{'Sobrantes': array<int, float>, 'Canje de gastronomía': array<int, float>}
+     */
+    private function informativosMaquinas(int $empresaId, Carbon $desde, Carbon $hasta, array $filasMaquina): array
+    {
+        $erp = $this->informativosMaquinasErp($empresaId, $desde, $hasta);
+        $anita = $this->informativosMaquinasAnita($filasMaquina);
+
+        $resultado = [
+            'Sobrantes' => $this->vectorDias(),
+            'Canje de gastronomía' => $this->vectorDias(),
+        ];
+
+        foreach ($this->dias as $dia) {
+            $fuente = isset($erp['dias'][$dia]) ? $erp['filas'] : $anita;
+            foreach (array_keys($resultado) as $etiqueta) {
+                $resultado[$etiqueta][$dia] = round((float) ($fuente[$etiqueta][$dia] ?? 0), 2);
+            }
+        }
+
+        return $resultado;
+    }
+
+    /**
+     * Informativos tomados de rendmaquina (Anita): solo cierres del día,
+     * mismo criterio de turnos que el resto del bloque de máquinas.
+     *
+     * @param  list<object>  $filasMaquina
+     * @return array<string, array<int, float>>
+     */
+    private function informativosMaquinasAnita(array $filasMaquina): array
+    {
+        $totales = [
+            'Sobrantes' => $this->vectorDias(),
+            'Canje de gastronomía' => $this->vectorDias(),
+        ];
+
+        foreach ($filasMaquina as $fila) {
+            if (! $this->incluirRendmaquina($fila)) {
+                continue;
+            }
+
+            $dia = $this->diaDeYmd((int) ($fila->rendm_fecha ?? 0));
+            $this->sumarEn($totales, 'Sobrantes', $dia, (float) ($fila->rendm_sobrantes ?? 0));
+            $this->sumarEn($totales, 'Canje de gastronomía', $dia, (float) ($fila->rendm_canje_gastro ?? 0));
+        }
+
+        return $totales;
+    }
+
+    /**
+     * Renglones informativos desde el ERP.
+     *
+     * Por día se toma el cierre C, que ya consolida M/T/N. Si todavía no
+     * existe, se suman los turnos parciales disponibles para no duplicar.
+     *
+     * @return array{filas: array<string, array<int, float>>, dias: array<int, true>}
+     */
+    private function informativosMaquinasErp(int $empresaId, Carbon $desde, Carbon $hasta): array
+    {
+        $resultado = [
+            'Sobrantes' => $this->vectorDias(),
+            'Canje de gastronomía' => $this->vectorDias(),
+        ];
+
+        $rendiciones = RendicionMaquina::query()
+            ->where('empresa_id', $empresaId)
+            ->whereBetween('fecha', [$desde->toDateString(), $hasta->toDateString()])
+            ->where(function ($query) {
+                $query->whereNull('estado')
+                    ->orWhere('estado', '!=', RendicionMaquina::ESTADO_ANULADA);
+            })
+            ->orderBy('fecha')
+            ->orderBy('id')
+            ->get(['id', 'fecha', 'turno', 'inputs_json']);
+
+        /** @var array<int, array{parcial_sobrantes: float, parcial_canje: float, completo: ?array{sobrantes: float, canje: float}}> $porDia */
+        $porDia = [];
+        foreach ($rendiciones as $rendicion) {
+            $dia = (int) $rendicion->fecha?->day;
+            if (! in_array($dia, $this->dias, true)) {
+                continue;
+            }
+
+            try {
+                $turno = RendicionMaquinaTurno::normalizar((string) $rendicion->turno);
+            } catch (\InvalidArgumentException) {
+                continue;
+            }
+
+            if (! isset($porDia[$dia])) {
+                $porDia[$dia] = [
+                    'parcial_sobrantes' => 0.0,
+                    'parcial_canje' => 0.0,
+                    'completo' => null,
+                ];
+            }
+
+            $inputs = is_array($rendicion->inputs_json) ? $rendicion->inputs_json : [];
+            $sobrantes = $this->valorInputRendicionMaquina($inputs, 'sobrantes');
+            $canje = $this->valorInputRendicionMaquina($inputs, 'impuesto_pago');
+
+            if ($turno === RendicionMaquinaTurno::COMPLETO) {
+                $porDia[$dia]['completo'] = [
+                    'sobrantes' => $sobrantes,
+                    'canje' => $canje,
+                ];
+
+                continue;
+            }
+
+            $porDia[$dia]['parcial_sobrantes'] += $sobrantes;
+            $porDia[$dia]['parcial_canje'] += $canje;
+        }
+
+        $diasConErp = [];
+        foreach ($porDia as $dia => $datos) {
+            $resultado['Sobrantes'][$dia] = round(
+                (float) ($datos['completo']['sobrantes'] ?? $datos['parcial_sobrantes']),
+                2
+            );
+            $resultado['Canje de gastronomía'][$dia] = round(
+                (float) ($datos['completo']['canje'] ?? $datos['parcial_canje']),
+                2
+            );
+            $diasConErp[$dia] = true;
+        }
+
+        return ['filas' => $resultado, 'dias' => $diasConErp];
+    }
+
+    /**
+     * @param  array<string, mixed>  $inputs
+     */
+    private function valorInputRendicionMaquina(array $inputs, string $campo): float
+    {
+        return (float) ($inputs[$campo] ?? $inputs['inputs.'.$campo] ?? 0);
     }
 
     /**
@@ -776,7 +1865,12 @@ class EfePosicionFinancieraSupport
         array $apgastoDesc,
         array $fechaPorOper,
     ): array {
+        // l-posfinanc.c lista todos los conceptos de apgasto, con o sin movimiento.
         $totales = [];
+        foreach ($apgastoDesc as $desc) {
+            $totales[$desc] = $this->vectorDias();
+        }
+
         foreach ($nrosOper as $nroOper) {
             $dia = $this->diaDeYmd((int) ($fechaPorOper[$nroOper] ?? 0));
             foreach ($gastosPorOper[$nroOper] ?? [] as $concepto => $importe) {
@@ -807,7 +1901,8 @@ class EfePosicionFinancieraSupport
             foreach ($maquinas as $etiqueta => $porDia) {
                 if (in_array($etiqueta, [
                     'MAQUINAS VENTAS', 'MAQUINAS CAJA', 'Vales fondo fijo', 'Vales administracion',
-                    'Diferencia de caja', 'Caja en transito', 'Variacion de FF', 'Total maquinas',
+                    'Diferencia de caja', 'Caja en transito', 'Variacion de FF', 'Pago 24',
+                    'Total maquinas',
                 ], true)) {
                     continue;
                 }
@@ -828,6 +1923,8 @@ class EfePosicionFinancieraSupport
      * @param  list<object>  $cabGastro
      * @param  array<int, true>  $opsMaquina
      * @param  list<object>  $rendbingo
+     * @param  list<object>  $rendpremio
+     * @param  list<object>  $concbingo
      * @param  array<string, array<int, float>>  $gastronomia
      * @param  array<int, int>  $fechaPorOper
      * @return array<string, array<int, float>>
@@ -839,6 +1936,8 @@ class EfePosicionFinancieraSupport
         array $opsMaquina,
         int $empresaId,
         array $rendbingo,
+        array $rendpremio,
+        array $concbingo,
         array $gastronomia,
         array $fechaPorOper,
     ): array {
@@ -846,7 +1945,8 @@ class EfePosicionFinancieraSupport
         $ops = $opsMaquina;
         foreach ($cabGastro as $fila) {
             $bloque = $this->clasificarSucursal($empresaId, (int) ($fila->rendg_sucursal ?? 0));
-            if (in_array($bloque, [self::BLOQUE_GASTRO, self::BLOQUE_ESTAC, self::BLOQUE_VENDING], true)) {
+            // l-posfinanc.c: lee_rendvalor solo en gastro/estac/máquinas (no vending).
+            if (in_array($bloque, [self::BLOQUE_GASTRO, self::BLOQUE_ESTAC], true)) {
                 $ops[(int) ($fila->rendg_nro_oper ?? 0)] = true;
             }
         }
@@ -866,57 +1966,366 @@ class EfePosicionFinancieraSupport
             }
         }
 
+        $opsBingo = [];
+        $ventaBingoPorDia = $this->vectorDias();
         foreach ($rendbingo as $fila) {
             $importe = (float) ($fila->rendb_total_carton ?? 0)
                 + (float) ($fila->rendb_sobrante ?? 0)
                 + (float) ($fila->rendb_vales ?? 0);
-            $this->sumarEn($porTipo, self::VALM_EFE_PESOS, $this->diaDeYmd((int) ($fila->rendb_fecha ?? 0)), $importe);
+            $dia = $this->diaDeYmd((int) ($fila->rendb_fecha ?? 0));
+            $this->sumarEn($porTipo, self::VALM_EFE_PESOS, $dia, $importe);
+            $ventaBingoPorDia[$dia] = round(
+                ($ventaBingoPorDia[$dia] ?? 0) + (float) ($fila->rendb_total_carton ?? 0),
+                2,
+            );
+            $clave = (int) ($fila->rendb_nro_oper ?? 0).'|'.trim((string) ($fila->rendb_tipo_oper ?? ''));
+            $opsBingo[$clave] = (int) ($fila->rendb_fecha ?? 0);
+        }
+
+        // Efectivo apertura: resta premios bingo (l-posfinanc.c lee_premios).
+        // Los % sobre cartones (tipos 0/1) también bajan el efectivo aunque a veces
+        // no vengan en rendpremio del día.
+        $mapConcb = [];
+        foreach ($concbingo as $row) {
+            $mapConcb[(int) ($row->concb_concepto ?? 0)] = $row;
+            $tipoConc = trim((string) ($row->concb_tipo_conc ?? ''));
+            $pct = (float) ($row->concb_porcentaje ?? 0);
+            if (! in_array($tipoConc, ['0', '1'], true) || $pct <= 0) {
+                continue;
+            }
+            foreach ($this->dias as $dia) {
+                $venta = (float) ($ventaBingoPorDia[$dia] ?? 0);
+                if ($venta > 0) {
+                    $this->sumarEn(
+                        $porTipo,
+                        self::VALM_EFE_PESOS,
+                        $dia,
+                        -1 * $venta * ($pct / 100),
+                    );
+                }
+            }
+        }
+        foreach ($rendpremio as $row) {
+            $claveOp = (int) ($row->rendp_nro_oper ?? 0).'|'.trim((string) ($row->rendp_tipo_oper ?? ''));
+            if (! isset($opsBingo[$claveOp])) {
+                continue;
+            }
+            $conceptoId = (int) ($row->rendp_concepto ?? 0);
+            $concb = $mapConcb[$conceptoId] ?? null;
+            if ($concb === null) {
+                continue;
+            }
+            $tipo = trim((string) ($concb->concb_tipo_conc ?? ''));
+            // 0/1 ya restados por % sobre cartones. tipo 2 = CONCB_PORC_RECAUD (lee_premios lo salta).
+            if (in_array($tipo, ['0', '1', '2'], true)) {
+                continue;
+            }
+            $usaReal = in_array($tipo, ['3', '4', '5'], true);
+            $importe = $usaReal
+                ? (float) ($row->rendp_real ?? 0)
+                : (float) ($row->rendp_pagado ?? 0);
+            if ($importe <= 0) {
+                continue;
+            }
+            $fecha = (int) ($opsBingo[$claveOp] ?? 0);
+            if ($fecha <= 0) {
+                $fecha = (int) ($row->rendp_fecha ?? 0);
+            }
+            $this->sumarEn($porTipo, self::VALM_EFE_PESOS, $this->diaDeYmd($fecha), -1 * $importe);
         }
 
         $canjeGastro = $gastronomia['Tk.Canje Gastronomia'] ?? $this->vectorDias();
-        if (isset($porTipo['4'])) {
+
+        return $this->cerrarAperturaDesdePorTipo($porTipo, $canjeGastro, $valormae);
+    }
+
+    /**
+     * Apertura desde anitaERP: bingo/gastro/estac siempre ERP; máquinas ERP si hay
+     * cierre C ese día, si no rendvalor Anita.
+     *
+     * @param  array{base: array<string, array<int, float>>, premios?: array<string, array<int, float>>}  $bingoErp
+     * @param  array<string, array<int, float>>  $premios
+     * @param  array<string, array<int, float>>  $gastronomia
+     * @param  array<string, array<int, float>>  $estacionamiento
+     * @param  array{medios: array<string, array<int, float>>, dias: array<int, true>}  $maquinasErp
+     * @param  array<string, array<int, float>>  $maquinasMediosAnita
+     * @param  array<int, array{desc: string, tipo: string}>  $valormae
+     * @return array<string, array<int, float>>
+     */
+    private function agregarAperturaMediosErpPuro(
+        array $bingoErp,
+        array $premios,
+        array $gastronomia,
+        array $estacionamiento,
+        array $maquinasErp,
+        array $maquinasMediosAnita,
+        array $valormae,
+    ): array {
+        $porTipo = [];
+        $this->sumarMediosFilasEnPorTipo($porTipo, $gastronomia, $valormae);
+        $this->sumarMediosFilasEnPorTipo($porTipo, $estacionamiento, $valormae);
+
+        $diasMaquinaErp = $maquinasErp['dias'] ?? [];
+        $this->sumarMediosFilasEnPorTipo($porTipo, $maquinasErp['medios'] ?? [], $valormae, $diasMaquinaErp);
+        $this->sumarMediosFilasEnPorTipo(
+            $porTipo,
+            $maquinasMediosAnita,
+            $valormae,
+            null,
+            $diasMaquinaErp,
+        );
+
+        foreach (['VENTA BINGO', 'SOBRANTES', 'VALES'] as $etiqBingo) {
             foreach ($this->dias as $dia) {
-                $porTipo['4'][$dia] = round(($porTipo['4'][$dia] ?? 0) - (float) ($canjeGastro[$dia] ?? 0), 2);
+                $this->sumarEn(
+                    $porTipo,
+                    self::VALM_EFE_PESOS,
+                    $dia,
+                    (float) (($bingoErp['base'][$etiqBingo] ?? [])[$dia] ?? 0),
+                );
+            }
+        }
+        foreach ($premios as $porDiaPremio) {
+            foreach ($this->dias as $dia) {
+                $this->sumarEn($porTipo, self::VALM_EFE_PESOS, $dia, (float) ($porDiaPremio[$dia] ?? 0));
             }
         }
 
-        $etiquetasTipo = [
-            self::VALM_EFE_PESOS => 'Efectivo pesos',
-            self::VALM_EFE_DOLAR => 'Efectivo dolar',
-            self::VALM_EFE_EURO => 'Efectivo euros',
-            '3' => 'Tarjetas',
-            '4' => 'Tickets',
-            self::VALM_EFE_CRIPTO => 'Efectivo cripto USDT',
-            '5' => 'QR',
-            '6' => 'Varios',
-            '7' => 'Varios',
-            '9' => 'Varios',
-            'A' => 'Varios',
-            'B' => 'Varios',
+        $canjeGastro = $gastronomia['Tk.Canje Gastronomia'] ?? $this->vectorDias();
+
+        return $this->cerrarAperturaDesdePorTipo($porTipo, $canjeGastro, $valormae);
+    }
+
+    /**
+     * @param  array<string, array<int, float>>  $gastronomia
+     * @param  array<string, array<int, float>>  $estacionamiento
+     * @param  array{medios: array<string, array<int, float>>, dias: array<int, true>}  $maquinasErp
+     * @param  array<string, array<int, float>>  $maquinasMediosAnita
+     * @param  array<int, array{desc: string, tipo: string}>  $valormae
+     * @return array<string, array<int, float>>
+     */
+    private function acumularAbiertosNoEfectivoErpPuro(
+        array $gastronomia,
+        array $estacionamiento,
+        array $maquinasErp,
+        array $maquinasMediosAnita,
+        array $valormae,
+    ): array {
+        $totales = [];
+        $diasMaquinaErp = $maquinasErp['dias'] ?? [];
+        $this->sumarMediosNoEfectivoEnAbiertos($totales, $gastronomia, $valormae);
+        $this->sumarMediosNoEfectivoEnAbiertos($totales, $estacionamiento, $valormae);
+        $this->sumarMediosNoEfectivoEnAbiertos($totales, $maquinasErp['medios'] ?? [], $valormae, $diasMaquinaErp);
+        $this->sumarMediosNoEfectivoEnAbiertos($totales, $maquinasMediosAnita, $valormae, null, $diasMaquinaErp);
+
+        return $totales;
+    }
+
+    /**
+     * Replica l-posfinanc.c procesa_ingresos_por_medio_de_cobro.
+     *
+     * @param  array<string, array<int, float>>  $porTipo
+     * @param  array<int, float>  $canjeGastro
+     * @param  array<int, array{desc: string, tipo: string}>  $valormae
+     * @return array<string, array<int, float>>
+     */
+    private function cerrarAperturaDesdePorTipo(
+        array $porTipo,
+        array $canjeGastro,
+        array $valormae,
+    ): array {
+        $tiposOrden = [];
+        $vistos = [];
+        $codigosValm = array_keys($valormae);
+        sort($codigosValm, SORT_NUMERIC);
+        foreach ($codigosValm as $codValm) {
+            $tipoValm = (string) ($valormae[$codValm]['tipo'] ?? '');
+            if ($tipoValm === '' || isset($vistos[$tipoValm])) {
+                continue;
+            }
+            $vistos[$tipoValm] = true;
+            $tiposOrden[] = $tipoValm;
+        }
+        $switchCodigo = [
+            self::VALM_EFE_PESOS => 0,
+            self::VALM_EFE_DOLAR => 1,
+            self::VALM_EFE_EURO => 2,
+            '3' => 3,
+            '4' => 4,
+            self::VALM_EFE_CRIPTO => 9,
         ];
 
-        $totales = [];
+        $totales = [
+            'Efectivo pesos' => $this->vectorDias(),
+            'Efectivo dolar' => $this->vectorDias(),
+            'Efectivo euros' => $this->vectorDias(),
+            'Efectivo cripto USDT' => $this->vectorDias(),
+            'Tickets' => $this->vectorDias(),
+            'Varios' => $this->vectorDias(),
+            'Tarjetas' => $this->vectorDias(),
+            'QR' => $this->vectorDias(),
+        ];
         $totalIngresos = $this->vectorDias();
-        foreach ($porTipo as $tipo => $porDia) {
-            $etiqueta = $etiquetasTipo[$tipo] ?? 'Varios';
-            foreach ($this->dias as $dia) {
-                $importe = (float) ($porDia[$dia] ?? 0);
-                $this->sumarEn($totales, $etiqueta, $dia, $importe);
-                $totalIngresos[$dia] = round(($totalIngresos[$dia] ?? 0) + $importe, 2);
+        foreach ($this->dias as $dia) {
+            $canje = (float) ($canjeGastro[$dia] ?? 0);
+            $codigoLst = null;
+            $ajustado = [];
+            $ticketsCodigo4 = 0.0;
+            $sumaTotal = 0.0;
+            foreach ($tiposOrden as $tipoValm) {
+                if (isset($switchCodigo[$tipoValm])) {
+                    $codigoLst = $switchCodigo[$tipoValm];
+                }
+                $monto = (float) ($porTipo[$tipoValm][$dia] ?? 0);
+                if ($codigoLst === 4) {
+                    $monto -= $canje;
+                    $ticketsCodigo4 += $monto;
+                }
+                $ajustado[$tipoValm] = $monto;
+                $sumaTotal += $monto;
             }
+
+            $totales['Efectivo pesos'][$dia] = round((float) ($ajustado[self::VALM_EFE_PESOS] ?? 0), 2);
+            $totales['Efectivo dolar'][$dia] = round((float) ($ajustado[self::VALM_EFE_DOLAR] ?? 0), 2);
+            $totales['Efectivo euros'][$dia] = round((float) ($ajustado[self::VALM_EFE_EURO] ?? 0), 2);
+            $totales['Efectivo cripto USDT'][$dia] = round((float) ($ajustado[self::VALM_EFE_CRIPTO] ?? 0), 2);
+            $totales['Tarjetas'][$dia] = round((float) ($ajustado['3'] ?? 0), 2);
+            $totales['QR'][$dia] = round((float) ($ajustado['5'] ?? 0), 2);
+            $totales['Tickets'][$dia] = round($ticketsCodigo4, 2);
+            $totales['Varios'][$dia] = round(
+                (float) ($ajustado['7'] ?? 0)
+                + (float) ($ajustado['9'] ?? 0)
+                + (float) ($ajustado['A'] ?? 0)
+                + (float) ($ajustado['B'] ?? 0),
+                2,
+            );
+            $totalIngresos[$dia] = round($sumaTotal, 2);
         }
 
         $totales['Canje Gastronomia'] = $this->redondearVector($canjeGastro);
-        foreach ($this->dias as $dia) {
-            $totalIngresos[$dia] = round(($totalIngresos[$dia] ?? 0) + (float) ($canjeGastro[$dia] ?? 0), 2);
-        }
         $totales['Total de Ingresos'] = $this->redondearVector($totalIngresos);
 
         return $totales;
     }
 
     /**
+     * @param  array<string, array<int, float>>  $porTipo
+     * @param  array<string, array<int, float>>  $filas
      * @param  array<int, array{desc: string, tipo: string}>  $valormae
+     * @param  array<int, true>|null  $soloDias
+     * @param  array<int, true>|null  $exceptoDias
+     */
+    private function sumarMediosFilasEnPorTipo(
+        array &$porTipo,
+        array $filas,
+        array $valormae,
+        ?array $soloDias = null,
+        ?array $exceptoDias = null,
+    ): void {
+        $tipoPorDesc = $this->tipoValormaePorDescripcion($valormae);
+        foreach ($filas as $desc => $porDia) {
+            if ($this->esEtiquetaCabeceraBloqueGastro($desc)) {
+                continue;
+            }
+            $tipo = $tipoPorDesc[$desc] ?? null;
+            if ($tipo === null) {
+                continue;
+            }
+            foreach ($this->dias as $dia) {
+                if ($soloDias !== null && ! isset($soloDias[$dia])) {
+                    continue;
+                }
+                if ($exceptoDias !== null && isset($exceptoDias[$dia])) {
+                    continue;
+                }
+                $this->sumarEn($porTipo, $tipo, $dia, (float) ($porDia[$dia] ?? 0));
+            }
+        }
+    }
+
+    /**
+     * @param  array<string, array<int, float>>  $totales
+     * @param  array<string, array<int, float>>  $filas
+     * @param  array<int, array{desc: string, tipo: string}>  $valormae
+     * @param  array<int, true>|null  $soloDias
+     * @param  array<int, true>|null  $exceptoDias
+     */
+    private function sumarMediosNoEfectivoEnAbiertos(
+        array &$totales,
+        array $filas,
+        array $valormae,
+        ?array $soloDias = null,
+        ?array $exceptoDias = null,
+    ): void {
+        $metaPorDesc = [];
+        foreach ($valormae as $codigo => $meta) {
+            $desc = (string) ($meta['desc'] ?? '');
+            if ($desc === '' || isset($metaPorDesc[$desc])) {
+                continue;
+            }
+            $metaPorDesc[$desc] = ['codigo' => (int) $codigo, 'tipo' => (string) ($meta['tipo'] ?? '')];
+        }
+        foreach ($filas as $desc => $porDia) {
+            if ($this->esEtiquetaCabeceraBloqueGastro($desc)) {
+                continue;
+            }
+            $meta = $metaPorDesc[$desc] ?? null;
+            if ($meta === null) {
+                continue;
+            }
+            if ($this->esTipoEfectivo($meta['tipo']) || $meta['codigo'] === 8) {
+                continue;
+            }
+            foreach ($this->dias as $dia) {
+                if ($soloDias !== null && ! isset($soloDias[$dia])) {
+                    continue;
+                }
+                if ($exceptoDias !== null && isset($exceptoDias[$dia])) {
+                    continue;
+                }
+                $this->sumarEn($totales, $desc, $dia, (float) ($porDia[$dia] ?? 0));
+            }
+        }
+    }
+
+    /**
+     * @param  array<int, array{desc: string, tipo: string}>  $valormae
+     * @return array<string, string>
+     */
+    private function tipoValormaePorDescripcion(array $valormae): array
+    {
+        $map = [];
+        foreach ($valormae as $meta) {
+            $desc = (string) ($meta['desc'] ?? '');
+            if ($desc === '' || isset($map[$desc])) {
+                continue;
+            }
+            $map[$desc] = (string) ($meta['tipo'] ?? '');
+        }
+
+        return $map;
+    }
+
+    private function esEtiquetaCabeceraBloqueGastro(string $etiqueta): bool
+    {
+        return in_array($etiqueta, [
+            'GASTRONOMIA Z',
+            'Total Gastronomia',
+            'ESTACIONAMIENTO Z',
+            'Total Estacionamiento',
+            'VENDING Z',
+            'Total Vending',
+            'Notas de credito',
+            'Diferencia abandono de pago',
+            'Redondeo',
+            'Diferencia de caja',
+        ], true);
+    }
+
+    /**
+     * Para el componente remesas, ERP tiene prioridad y rememae completa el
+     * período sin duplicar las remesas que todavía viven en ambos.
+     *
      * @param  array<string, array<int, float>>  $abiertosNoEfectivo
      * @return array<string, array<int, float>>
      */
@@ -924,89 +2333,139 @@ class EfePosicionFinancieraSupport
         int $empresaId,
         int $fechaDesde,
         int $fechaHasta,
-        array $valormae,
         array $abiertosNoEfectivo,
     ): array {
-        $totales = [
-            'Pesos Maco' => $this->vectorDias(),
-            'Pesos Banco Macro' => $this->vectorDias(),
-            'Pesos Banco Frances' => $this->vectorDias(),
-            'Pesos Banco Provincia' => $this->vectorDias(),
-            'Pesos Caja de seguridad' => $this->vectorDias(),
-            'Dolares Maco' => $this->vectorDias(),
-            'Dolares Banco Macro' => $this->vectorDias(),
-            'Dolares Caja de seguridad' => $this->vectorDias(),
-            'Euros Maco' => $this->vectorDias(),
-            'Euros Banco Frances' => $this->vectorDias(),
-            'Euros Caja de seguridad' => $this->vectorDias(),
-            'Caudales en u$s' => $this->vectorDias(),
-            'Caudales en Euros' => $this->vectorDias(),
-            'Caudales en cripto' => $this->vectorDias(),
-        ];
-
-        $remesas = $this->bridgeReader->listarRemesas($empresaId, $fechaDesde, $fechaHasta);
-        $rememae = [];
-        foreach ($this->bridgeReader->listarRememae($empresaId, $fechaDesde, $fechaHasta) as $fila) {
-            $rememae[(int) ($fila->remem_nro_remesa ?? 0)] = $fila;
-        }
-
-        foreach ($remesas as $fila) {
-            $nro = (int) ($fila->reme_nro_remesa ?? 0);
-            $mae = $rememae[$nro] ?? null;
-            $destino = trim((string) ($mae->remem_destino ?? self::REMEM_MACO));
-            if ($destino === self::REMEM_PAGOFACIL) {
-                continue;
-            }
-
-            $dia = $this->diaDeYmd((int) ($fila->reme_fecha ?? 0));
-            $codigoValor = (int) ($fila->reme_cod_valor ?? 0);
-            $tipo = $valormae[$codigoValor]['tipo'] ?? trim((string) ($fila->reme_tipo_valor ?? self::VALM_EFE_PESOS));
-            $importe = (float) ($fila->reme_importe ?? 0);
-            $cotizacion = (float) ($fila->reme_cotizacion ?? 0);
-            $importePesos = $this->esTipoMe($tipo) && $cotizacion > 0
-                ? $importe * $cotizacion
-                : $importe;
-
-            if ($tipo === self::VALM_EFE_DOLAR) {
-                $this->sumarEn($totales, 'Caudales en u$s', $dia, $importe);
-                $this->sumarEn($totales, $this->etiquetaEgresoDolar($destino), $dia, $importe);
-                $this->sumarEn(
-                    $totales,
-                    $valormae[$codigoValor]['desc'] ?? 'Efectivo dolares',
-                    $dia,
-                    $importePesos,
-                );
-            } elseif ($tipo === self::VALM_EFE_EURO) {
-                $this->sumarEn($totales, 'Caudales en Euros', $dia, $importe);
-                $this->sumarEn($totales, $this->etiquetaEgresoEuro($destino), $dia, $importe);
-            } elseif ($tipo === self::VALM_EFE_CRIPTO) {
-                $this->sumarEn($totales, 'Caudales en cripto', $dia, $importe);
-            } else {
-                $this->sumarEn($totales, $this->etiquetaEgresoPesos($destino), $dia, $importePesos);
-            }
-        }
-
+        $totales = $abiertosNoEfectivo;
         $totalEgresos = $this->vectorDias();
         foreach ($abiertosNoEfectivo as $porDia) {
             foreach ($this->dias as $dia) {
-                $totalEgresos[$dia] = round(($totalEgresos[$dia] ?? 0) + (float) ($porDia[$dia] ?? 0), 2);
+                $totalEgresos[$dia] = round($totalEgresos[$dia] + (float) ($porDia[$dia] ?? 0), 2);
+            }
+        }
+        $firmasErp = [];
+        $desde = Carbon::createFromFormat('Ymd', (string) $fechaDesde)->toDateString();
+        $hasta = Carbon::createFromFormat('Ymd', (string) $fechaHasta)->toDateString();
+
+        $remesasErp = Remesa::query()
+            ->with(['lineasDestino.cuentacaja'])
+            ->where('empresa_id', $empresaId)
+            ->whereBetween('fecha', [$desde, $hasta])
+            ->where('tipo', RemesaSupport::TIPO_EXTERNA)
+            ->where('estado', RemesaSupport::ESTADO_CONFIRMADA)
+            ->orderBy('fecha')
+            ->orderBy('numero')
+            ->get(['id', 'fecha', 'numero']);
+
+        foreach ($remesasErp as $remesa) {
+            $fecha = $remesa->fecha?->toDateString() ?? '';
+            $fechaYmd = (int) str_replace('-', '', $fecha);
+            $dia = $this->diaDeYmd($fechaYmd);
+            foreach ($remesa->lineasDestino as $linea) {
+                $cuenta = $linea->cuentacaja;
+                $importe = round((float) ($linea->monto ?? 0), 2);
+                if ($cuenta === null || $importe <= 0) {
+                    continue;
+                }
+
+                $monedaId = (int) ($cuenta->moneda_id ?: 1);
+                $codigoMonedaAnita = CotizacionTesoreriaConsultaSupport::codigoAnitaDesdeMonedaId($monedaId) ?? 1;
+                $cotizacion = CotizacionTesoreriaConsultaSupport::ventaPorMonedaId($fecha, $monedaId, $empresaId);
+                if ($cotizacion === null || $cotizacion <= 0) {
+                    throw new RuntimeException('No hay cotización vigente para la remesa ERP '.$remesa->numero.'.');
+                }
+
+                $destino = $this->destinoRememaeDesdeCuenta($cuenta);
+                $etiqueta = $this->etiquetaEgresoCuentaErp($cuenta, $destino, $codigoMonedaAnita);
+                $this->sumarEn($totales, $etiqueta, $dia, $importe);
+                $totalEgresos[$dia] = round($totalEgresos[$dia] + ($importe * $cotizacion), 2);
+
+                $firma = $this->firmaRemesa($fechaYmd, $destino, $codigoMonedaAnita, $importe);
+                $firmasErp[$firma] = ($firmasErp[$firma] ?? 0) + 1;
             }
         }
 
-        foreach ($totales as $etiqueta => $porDia) {
-            if (str_starts_with($etiqueta, 'Caudales') || $etiqueta === 'Total de Egresos') {
+        foreach ($this->bridgeReader->listarRememae($empresaId, $fechaDesde, $fechaHasta) as $fila) {
+            if (strtoupper(trim((string) ($fila->remem_tipo_remesa ?? ''))) !== RemesaSupport::TIPO_EXTERNA) {
                 continue;
             }
-            foreach ($this->dias as $dia) {
-                $totalEgresos[$dia] = round(($totalEgresos[$dia] ?? 0) + (float) ($porDia[$dia] ?? 0), 2);
+
+            $destino = trim((string) ($fila->remem_destino ?? self::REMEM_MACO));
+            $importe = round((float) ($fila->remem_importe ?? 0), 2);
+            $fechaYmd = (int) ($fila->remem_fecha ?? 0);
+            $codigoMoneda = (int) ($fila->remem_cod_mon ?? 1);
+            if ($destino === self::REMEM_PAGOFACIL || $importe <= 0 || $fechaYmd <= 0) {
+                continue;
             }
+
+            $firma = $this->firmaRemesa($fechaYmd, $destino, $codigoMoneda, $importe);
+            if (($firmasErp[$firma] ?? 0) > 0) {
+                $firmasErp[$firma]--;
+
+                continue;
+            }
+
+            $cotizacion = $codigoMoneda === 1 ? 1.0 : (float) ($fila->remem_cotizacion ?? 0);
+            if ($cotizacion <= 0) {
+                throw new RuntimeException('No hay cotización válida para la remesa Anita '.($fila->remem_nro_remesa ?? '').'.');
+            }
+
+            $dia = $this->diaDeYmd($fechaYmd);
+            $etiqueta = $codigoMoneda === 2
+                ? $this->etiquetaEgresoDolar($destino)
+                : ($codigoMoneda === 3
+                    ? $this->etiquetaEgresoEuro($destino)
+                    : $this->etiquetaEgresoPesos($destino));
+            $this->sumarEn($totales, $etiqueta, $dia, $importe);
+            $totalEgresos[$dia] = round($totalEgresos[$dia] + ($importe * $cotizacion), 2);
         }
+
         $totales['Total de Egresos'] = $this->redondearVector($totalEgresos);
 
         return $totales;
     }
 
+    private function destinoRememaeDesdeCuenta(Cuentacaja $cuenta): string
+    {
+        $texto = mb_strtoupper(trim((string) $cuenta->codigo).' '.trim((string) $cuenta->nombre));
+
+        return match (true) {
+            str_contains($texto, 'PAGO FACIL') => self::REMEM_PAGOFACIL,
+            str_contains($texto, 'SEGURIDAD') => self::REMEM_CAJASEG,
+            str_contains($texto, 'PROVINCIA') => self::REMEM_PROVINCIA,
+            str_contains($texto, 'FRANCES'), str_contains($texto, 'BBVA') => self::REMEM_FRANCES,
+            str_contains($texto, 'MACRO') => self::REMEM_MACRO,
+            str_contains($texto, 'MACO'), str_contains($texto, 'GREEN ARMOR') => self::REMEM_MACO,
+            default => 'erp:'.$cuenta->id,
+        };
+    }
+
+    private function etiquetaEgresoCuentaErp(Cuentacaja $cuenta, string $destino, int $codigoMonedaAnita): string
+    {
+        if (! str_starts_with($destino, 'erp:')) {
+            return $codigoMonedaAnita === 2
+                ? $this->etiquetaEgresoDolar($destino)
+                : ($codigoMonedaAnita === 3
+                    ? $this->etiquetaEgresoEuro($destino)
+                    : $this->etiquetaEgresoPesos($destino));
+        }
+
+        return 'Remesa a '.$cuenta->etiquetaOperaciones();
+    }
+
+    private function firmaRemesa(int $fechaYmd, string $destino, int $codigoMoneda, float $importe): string
+    {
+        return implode('|', [
+            $fechaYmd,
+            $destino,
+            $codigoMoneda,
+            number_format($importe, 2, '.', ''),
+        ]);
+    }
+
     /**
+     * Medios no efectivos ya abiertos como ingreso. l-posfinanc.c los vuelve a
+     * exponer como egreso para que no incrementen la posición de efectivo.
+     *
      * @param  array<int, list<object>>  $valoresPorOper
      * @param  array<int, array{desc: string, tipo: string}>  $valormae
      * @param  list<object>  $cabGastro
@@ -1025,7 +2484,7 @@ class EfePosicionFinancieraSupport
         $ops = $opsMaquina;
         foreach ($cabGastro as $fila) {
             $bloque = $this->clasificarSucursal($empresaId, (int) ($fila->rendg_sucursal ?? 0));
-            if (in_array($bloque, [self::BLOQUE_GASTRO, self::BLOQUE_ESTAC, self::BLOQUE_VENDING], true)) {
+            if (in_array($bloque, [self::BLOQUE_GASTRO, self::BLOQUE_ESTAC], true)) {
                 $ops[(int) ($fila->rendg_nro_oper ?? 0)] = true;
             }
         }
@@ -1039,10 +2498,7 @@ class EfePosicionFinancieraSupport
                     continue;
                 }
                 $tipo = $valormae[$codigo]['tipo'];
-                if ($this->esTipoEfectivo($tipo)) {
-                    continue;
-                }
-                if ($codigo === 8) {
+                if ($this->esTipoEfectivo($tipo) || $codigo === 8) {
                     continue;
                 }
                 $dia = (int) ($valor->rendv_fecha ?? 0) > 0
@@ -1340,6 +2796,8 @@ class EfePosicionFinancieraSupport
             'dias' => [],
             'saldo_inicial' => null,
             'saldo_final' => null,
+            'saldo_inicial_origen' => null,
+            'saldo_cierre_anterior_id' => null,
             'bingo' => [],
             'premios_bingo' => [],
             'gastronomia' => [],

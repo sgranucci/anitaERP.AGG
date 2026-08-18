@@ -4,6 +4,7 @@ namespace App\Services\Sueldos;
 
 use App\Models\Sueldos\Concepto_Sueldos;
 use App\Models\Sueldos\Liquidacion_Recibo_Sueldos;
+use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Sueldos\NumeroALetrasEs;
 use App\Support\Sueldos\ReciboAnexoIIITortaSvg;
 use App\Support\Sueldos\ReciboBaseCalculoSupport;
@@ -15,6 +16,50 @@ use Carbon\Carbon;
  */
 class ReciboAnexoIIIArmadorService
 {
+    /**
+     * @param  \Illuminate\Support\Collection<int, Liquidacion_Recibo_Sueldos>  $recibos
+     * @return \Illuminate\Support\Collection<int, array<string, mixed>> keyed by recibo id
+     */
+    public function armarMuchos($recibos)
+    {
+        if (method_exists($recibos, 'loadMissing')) {
+            $recibos->loadMissing([
+                'detalles',
+                'liquidacion.empresa',
+                'empleado.obrasocial',
+                'empleado.categoria',
+                'empleado.lugartrabajo',
+                'empleado.sindicato',
+                'empleado.art',
+            ]);
+        } else {
+            foreach ($recibos as $recibo) {
+                $recibo->loadMissing([
+                    'detalles',
+                    'liquidacion.empresa',
+                    'empleado.obrasocial',
+                    'empleado.categoria',
+                    'empleado.lugartrabajo',
+                    'empleado.sindicato',
+                    'empleado.art',
+                ]);
+            }
+        }
+
+        $conceptoIds = $recibos->flatMap(fn ($r) => $r->detalles->pluck('concepto_id'))->filter()->unique()->values()->all();
+        $conceptos = Concepto_Sueldos::query()
+            ->whereIn('id', $conceptoIds)
+            ->get(['id', 'rubro_costo_laboral', 'unidad_medida', 'tipo'])
+            ->keyBy('id');
+
+        $out = collect();
+        foreach ($recibos as $recibo) {
+            $out->put($recibo->id, $this->armarConConceptos($recibo, $conceptos));
+        }
+
+        return $out;
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -30,15 +75,24 @@ class ReciboAnexoIIIArmadorService
             'empleado.art',
         ]);
 
-        $liq = $recibo->liquidacion;
-        $emp = $recibo->empleado;
-        $empresa = $liq?->empresa;
-
         $conceptoIds = $recibo->detalles->pluck('concepto_id')->filter()->unique()->all();
         $conceptos = Concepto_Sueldos::query()
             ->whereIn('id', $conceptoIds)
             ->get(['id', 'rubro_costo_laboral', 'unidad_medida', 'tipo'])
             ->keyBy('id');
+
+        return $this->armarConConceptos($recibo, $conceptos);
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Concepto_Sueldos>  $conceptos
+     * @return array<string, mixed>
+     */
+    private function armarConConceptos(Liquidacion_Recibo_Sueldos $recibo, $conceptos): array
+    {
+        $liq = $recibo->liquidacion;
+        $emp = $recibo->empleado;
+        $empresa = $liq?->empresa;
 
         $ce = [];
         $rem = [];
@@ -138,6 +192,7 @@ class ReciboAnexoIIIArmadorService
         ];
         $mes = (int) ($liq->periodo_mes ?? 0);
         $anio = (int) ($liq->periodo_anio ?? 0);
+        $logoEmpresa = EmpresaLogoArchivo::dataUriDesdeNombre($empresa?->nombre);
 
         $fechaIngreso = $recibo->fecha_ingreso
             ? Carbon::parse($recibo->fecha_ingreso)->format('d-m-Y')
@@ -154,6 +209,7 @@ class ReciboAnexoIIIArmadorService
                     ? $this->fmtCuit((string) $empresa->nroinscripcion)
                     : null,
             ]))),
+            'logo_empresa_uri' => $logoEmpresa['uri'] ?? null,
             'legajo' => $recibo->legajo,
             'documento' => $emp?->documento ?? $recibo->legajo,
             'apellido_nombre' => $recibo->apellido_nombre,
@@ -201,7 +257,7 @@ class ReciboAnexoIIIArmadorService
             'tot_os' => ($rubrosEmp[RubroCostoLaboral::OBRA_SOCIAL] ?? 0) + ($rubrosTra[RubroCostoLaboral::OBRA_SOCIAL] ?? 0),
             'tot_art' => $rubrosEmp[RubroCostoLaboral::ART] ?? 0,
             'tot_scvo' => $rubrosEmp[RubroCostoLaboral::SCVO] ?? 0,
-            'torta_svg' => ReciboAnexoIIITortaSvg::render($pieVals, 110),
+            'torta_uri' => ReciboAnexoIIITortaSvg::dataUri($pieVals, 110),
             'pie_leyenda' => $pieVals,
             'firma_nombre' => config('sueldos.recibo_firma_nombre', 'ERIKA PEREZ'),
             'firma_cargo' => config('sueldos.recibo_firma_cargo', 'CAPITAL HUMANO'),

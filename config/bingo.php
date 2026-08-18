@@ -125,6 +125,17 @@ return [
 
             return $map;
         })(),
+        /**
+         * Fallback CC (análogo dft_ccosto = suc_leyenda2) si la cuenta maneja CC
+         * y no hay vínculo en cuentacontable_centrocosto / ccosvalid.
+         */
+        'centrocosto_default' => env('BINGO_CIERRE_CENTROCOSTO_DEFAULT', ''),
         'conciliacion_flash_tolerancia' => (float) env('BINGO_CIERRE_FLASH_TOLERANCIA', 0.02),
+        /**
+         * Piso de correlatividad / pendientes de cierre contable ERP.
+         * Jornadas anteriores viven en Anita (no bloquean ni aparecen como pendientes de cierre).
+         * Vacío = sin piso (todas las pendientes cuentan).
+         */
+        'correlatividad_desde' => env('BINGO_CIERRE_CORRELATIVIDAD_DESDE', '2026-08-01'),
     ],
 ];

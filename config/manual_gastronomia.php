@@ -1,7 +1,7 @@
 <?php
 
 return [
-    'version' => '1.1',
+    'version' => '1.3',
     'titulo' => 'Manual de Usuario',
     'subtitulo' => 'Anita ERP — Módulo de Gastronomía',
 
@@ -23,6 +23,16 @@ return [
         'habilitacion_turno' => [
             'archivo' => 'habilitacion-turno.png',
             'titulo' => 'Habilitación de turno gastronomía',
+            'seccion' => '5. Habilitación de turno y cierres',
+        ],
+        'huecos_arca_recuperables' => [
+            'archivo' => 'huecos-arca-recuperables.png',
+            'titulo' => 'Modal de cierre: lote recuperable y NC consolidada',
+            'seccion' => '5. Habilitación de turno y cierres',
+        ],
+        'huecos_arca_sin_conexion' => [
+            'archivo' => 'huecos-arca-sin-conexion.png',
+            'titulo' => 'Modal de cierre: ARCA sin conexión y cierre no bloqueado',
             'seccion' => '5. Habilitación de turno y cierres',
         ],
         'proceso_facturacion' => [

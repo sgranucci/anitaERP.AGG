@@ -167,7 +167,7 @@ class GastronomiaConciliacionDiariaReporte extends Command
                             $fila['pv_codigo'] ?? '—',
                             $fila['tipo_pv'] ?? '',
                             $this->fmt($fila['ventas_erp'] ?? 0),
-                            $this->fmt($fila['ventas_anita'] ?? 0),
+                            $this->fmt($fila['ventas_anita'] ?? null),
                             (int) ($fila['cantidad_facturas_erp'] ?? 0),
                             $fila['estado'] ?? '—',
                         ));
@@ -180,7 +180,7 @@ class GastronomiaConciliacionDiariaReporte extends Command
                             $this->fmt($fila['ventas_erp'] ?? 0),
                             $this->fmt($fila['ventas_erp_cae'] ?? 0),
                             $this->fmt($fila['ventas_erp_caea'] ?? 0),
-                            $this->fmt($fila['ventas_anita'] ?? 0),
+                            $this->fmt($fila['ventas_anita'] ?? null),
                             $this->fmt($fila['rendgastro_z'] ?? null),
                             $this->fmtDiff($fila['diff_erp_rendg'] ?? null),
                             $fila['estado'] ?? '—',
@@ -199,7 +199,7 @@ class GastronomiaConciliacionDiariaReporte extends Command
                             '  %s: ERP neto $ %s | Anita $ %s | Rendg neto $ %s | Δ $ %s | %s',
                             $etiqueta,
                             $this->fmt($fila['ventas_erp'] ?? 0),
-                            $this->fmt($fila['ventas_anita'] ?? 0),
+                            $this->fmt($fila['ventas_anita'] ?? null),
                             $this->fmt($fila['rendgastro_z'] ?? null),
                             $this->fmtDiff($fila['diff_erp_rendg'] ?? null),
                             $fila['estado'] ?? '—',
@@ -212,7 +212,7 @@ class GastronomiaConciliacionDiariaReporte extends Command
                             '  Post-cierre CAEA (PV %s): ERP $ %s | Anita $ %s | Rendg CIERRE-WAITRY $ %s | %d fc | %s',
                             $fila['pv_caea'] ?? '—',
                             $this->fmt($fila['ventas_erp'] ?? 0),
-                            $this->fmt($fila['ventas_anita'] ?? 0),
+                            $this->fmt($fila['ventas_anita'] ?? null),
                             $this->fmt($fila['rendgastro_z'] ?? null),
                             (int) ($fila['cantidad_facturas_erp'] ?? 0),
                             $fila['estado'] ?? '—',
@@ -225,7 +225,7 @@ class GastronomiaConciliacionDiariaReporte extends Command
                             '  Agregados CAEA migrados (PV %s): ERP $ %s | Anita $ %s | Rendg %s $ %s | %d fc | %s',
                             $fila['pv_caea'] ?? '—',
                             $this->fmt($fila['ventas_erp'] ?? 0),
-                            $this->fmt($fila['ventas_anita'] ?? 0),
+                            $this->fmt($fila['ventas_anita'] ?? null),
                             $fila['identificador_pc'] ?? '—',
                             $this->fmt($fila['rendgastro_z'] ?? null),
                             (int) ($fila['cantidad_facturas_erp'] ?? 0),
@@ -394,6 +394,23 @@ class GastronomiaConciliacionDiariaReporte extends Command
                             $h['faltantes'] ?? '',
                             $h['desde'] ?? '',
                             $h['hasta'] ?? '',
+                        ));
+                    }
+                }
+
+                $pendArca = $dia['huecos_arca_pendientes'] ?? null;
+                if (is_array($pendArca) && (int) ($pendArca['cantidad'] ?? 0) > 0) {
+                    $this->warn(sprintf(
+                        '  <comment>HUECOS ARCA PENDIENTES</comment>: %d (usar gastronomia:sanear-huecos-arca)',
+                        (int) $pendArca['cantidad'],
+                    ));
+                    foreach (array_slice($pendArca['filas'] ?? [], 0, 8) as $p) {
+                        $this->line(sprintf(
+                            '    PV %s Nº %s [%s]%s',
+                            $p['pv'] ?? '—',
+                            $p['numero'] ?? '',
+                            $p['estado'] ?? '',
+                            ! empty($p['ultimo_error']) ? ' — '.$p['ultimo_error'] : '',
                         ));
                     }
                 }

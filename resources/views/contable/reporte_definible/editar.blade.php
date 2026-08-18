@@ -80,7 +80,6 @@ window.rdConfig = {
         eliminarEliRegla: @json(route('eliminar_eli_regla_reporte_definible', ['id' => $data->id, 'reglaId' => '__RID__'])),
         guardarParticipacion: @json(route('guardar_participacion_reporte_definible', ['id' => $data->id])),
         eliminarParticipacion: @json(route('eliminar_participacion_reporte_definible', ['id' => $data->id, 'partId' => '__PID__'])),
-        syncAccesos: @json(route('sync_accesos_reporte_definible', ['id' => $data->id])),
         guardarAlerta: @json(route('guardar_alerta_reporte_definible', ['id' => $data->id])),
         eliminarAlerta: @json(route('eliminar_alerta_reporte_definible', ['id' => $data->id, 'alertaId' => '__AID__'])),
         guardarSuscripcion: @json(route('guardar_suscripcion_reporte_definible', ['id' => $data->id])),
@@ -731,27 +730,36 @@ window.rdConfig = {
                     </div>
 
                     <div class="tab-pane fade" id="tab-acceso" role="tabpanel">
-                        <div class="rd-help-box">
-                            Sin usuarios listados = todos con permiso de menú pueden usar el informe.
-                            Si hay filas, solo esos usuarios (whitelist).
-                        </div>
-                        @if ($puede_actualizar)
-                            <div class="form-group">
-                                <label>Usuario IDs (coma o espacio)</label>
-                                <input type="text" id="rd-acceso-ids" class="form-control form-control-sm"
-                                       value="{{ collect($accesos ?? [])->pluck('usuario_id')->implode(',') }}"
-                                       placeholder="Ej. 12,34,56">
-                                <button type="button" class="btn btn-primary btn-sm mt-2" id="rd-btn-sync-acceso">Guardar accesos</button>
+                        <div class="card card-outline card-info">
+                            <div class="card-header py-2"><strong>ACL</strong></div>
+                            <div class="card-body">
+                                <p class="text-muted small mb-2">Sin usuarios = acceso libre (según permisos). Con usuarios = solo esos.</p>
+                                @if ($puede_actualizar)
+                                    <form method="post" action="{{ route('sync_accesos_reporte_definible', ['id' => $data->id]) }}">
+                                        @csrf
+                                        <select name="usuario_ids[]" id="rd-acceso-usuarios" class="form-control" multiple size="10">
+                                            @foreach ($usuariosAcl ?? [] as $u)
+                                                <option value="{{ $u->id }}" {{ in_array((int) $u->id, $aclUsuarios ?? [], true) ? 'selected' : '' }}>
+                                                    {{ $u->nombre }} ({{ $u->usuario }})
+                                                </option>
+                                            @endforeach
+                                        </select>
+                                        <p class="text-muted small mt-1 mb-0">Ctrl o Cmd para marcar varios. Vaciar la selección deja el informe abierto por rol.</p>
+                                        <button type="submit" class="btn btn-primary btn-sm mt-2">Guardar ACL</button>
+                                    </form>
+                                @elseif (count($aclUsuarios ?? []) === 0)
+                                    <p class="text-muted mb-0">Sin restricción (acceso abierto por rol).</p>
+                                @else
+                                    <ul class="small mb-0">
+                                        @foreach ($usuariosAcl ?? [] as $u)
+                                            @if (in_array((int) $u->id, $aclUsuarios ?? [], true))
+                                                <li>{{ $u->nombre }} ({{ $u->usuario }})</li>
+                                            @endif
+                                        @endforeach
+                                    </ul>
+                                @endif
                             </div>
-                        @endif
-                        <ul id="rd-acceso-lista" class="small">
-                            @forelse ($accesos ?? [] as $acc)
-                                <li>Usuario #{{ $acc['usuario_id'] ?? $acc->usuario_id ?? '' }}
-                                    {{ $acc['nombre'] ?? '' }}</li>
-                            @empty
-                                <li class="text-muted">Sin restricción (acceso abierto por rol).</li>
-                            @endforelse
-                        </ul>
+                        </div>
                     </div>
 
                     <div class="tab-pane fade" id="tab-alertas" role="tabpanel">

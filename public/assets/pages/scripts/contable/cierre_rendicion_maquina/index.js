@@ -75,10 +75,9 @@
         var infoFbi = document.getElementById('modal-preview-fsl-info');
         if (infoFbi) {
             var monto = preview.fsl_monto || 0;
-            var pv = preview.puntoventa_fsl || '';
             if (monto > 0) {
-                infoFbi.textContent = 'Se emitirá FSL exenta letra B por $ '
-                    + formatoNumero(monto) + ' (PV ' + pv + ').';
+                infoFbi.textContent = 'Se emitirá FSL B (100% exento) en ventas ERP por $ '
+                    + formatoNumero(monto) + ' (PV ' + (preview.puntoventa_fsl || '') + ').';
                 infoFbi.classList.remove('d-none');
             } else {
                 infoFbi.classList.add('d-none');

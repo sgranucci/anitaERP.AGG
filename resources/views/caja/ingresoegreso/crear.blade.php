@@ -83,9 +83,11 @@
                     <input type="hidden" class="caja_id" id="caja_id" name="caja_id" value="{{ $caja_id ?? '' }}">
                 @endif
                 <input type="hidden" class="origen" id="origen" name="origen" value="{{ $origen ?? '' }}">
-                @include('caja.ingresoegreso.partials.tabs_header')
+                    @include('caja.ingresoegreso.partials.tabs_header')
                 <div class="card-body">
-                    @include('caja.ingresoegreso.partials.modo_uso_selector')
+                    @if (empty($solicitudpagoOrigen))
+                        @include('caja.ingresoegreso.partials.modo_uso_selector')
+                    @endif
                     @include('caja.ingresoegreso.form')
                     @include('caja.ingresoegreso.form2')
                     @include('caja.ingresoegreso.form3')

@@ -115,8 +115,8 @@ final class IngresoEgresoAnitaTesmovSupport
                 continue;
             }
             $importe = round($importeAbs * $ctx['factor'], 2);
-            $cotizacion = (float) ($linea->cotizacion ?: 1);
             $monedaId = (int) ($linea->moneda_id ?: 1);
+            $cotizacion = self::cotizacionTesmov($monedaId, (float) ($linea->cotizacion ?: 1));
 
             self::insertAuxpagCuentaCaja($ctx, $codigoCuenta, $importe, $monedaId, $cotizacion);
             self::insertTesmovComprobante($ctx, $codigoCuenta, $importe, $monedaId, $cotizacion);
@@ -237,7 +237,8 @@ final class IngresoEgresoAnitaTesmovSupport
         foreach ($movimiento->caja_movimiento_cuentacajas as $linea) {
             $total += abs((float) $linea->monto);
             if ((float) ($linea->cotizacion ?: 0) > 0) {
-                $cotizacion = (float) $linea->cotizacion;
+                $monedaLin = (int) ($linea->moneda_id ?: 1);
+                $cotizacion = self::cotizacionTesmov($monedaLin, (float) $linea->cotizacion);
             }
         }
         foreach ($movimiento->cheques as $cheque) {
@@ -911,6 +912,15 @@ final class IngresoEgresoAnitaTesmovSupport
             ]);
             throw new \RuntimeException('Error al grabar '.$tabla.' Anita: '.$err);
         }
+    }
+
+    private static function cotizacionTesmov(int $monedaId, float $cotizacion): float
+    {
+        if ($monedaId <= 1) {
+            return 1.0;
+        }
+
+        return $cotizacion > 0 ? $cotizacion : 1.0;
     }
 
     private static function recortar(string $valor, int $max): string

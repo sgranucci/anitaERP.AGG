@@ -47,13 +47,14 @@
 		<thead>
 			<tr>
 				<th style="width: 6%;">N&deg;</th>
-				<th style="width: 20%;">Empresa</th>
-				<th style="width: 26%;">Descripci&oacute;n</th>
-				<th style="width: 14%;">Tipo</th>
+				<th style="width: 18%;">Empresa</th>
+				<th style="width: 22%;">Descripci&oacute;n</th>
+				<th style="width: 12%;">Tipo</th>
 				<th style="width: 8%;">Per&iacute;odo</th>
-				<th style="width: 10%;">Pago</th>
+				<th style="width: 9%;">Pago</th>
 				<th style="width: 8%;">Estado</th>
-				<th style="width: 8%;" class="text-right">Neto</th>
+				<th style="width: 8%;" class="text-right">No rem.</th>
+				<th style="width: 9%;" class="text-right">Neto</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -66,6 +67,7 @@
 					<td class="text-center">{{ $data->periodo_mes ? sprintf('%02d/%04d', $data->periodo_mes, $data->periodo_anio) : $data->periodo }}</td>
 					<td class="text-center">{{ optional($data->fecha_pago)->format('d/m/Y') }}</td>
 					<td>{{ $data->estadoLabel() }}</td>
+					<td class="text-right">{{ number_format((float) $data->total_no_remunerativo, 2, ',', '.') }}</td>
 					<td class="text-right">{{ number_format((float) $data->total_neto, 2, ',', '.') }}</td>
 				</tr>
 			@endforeach

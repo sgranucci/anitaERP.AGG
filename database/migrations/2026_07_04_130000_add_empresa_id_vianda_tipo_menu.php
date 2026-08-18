@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -24,18 +25,8 @@ return new class extends Migration
 
         DB::statement('UPDATE vianda_tipo_menu SET empresa_id = 1 WHERE empresa_id IS NULL OR empresa_id = 0');
 
-        $dbName = DB::getDatabaseName();
-        $hasIndex = fn (string $name): bool => DB::table('information_schema.statistics')
-            ->where('table_schema', $dbName)
-            ->where('table_name', 'vianda_tipo_menu')
-            ->where('index_name', $name)
-            ->exists();
-        $hasFk = fn (string $name): bool => DB::table('information_schema.table_constraints')
-            ->where('constraint_schema', $dbName)
-            ->where('table_name', 'vianda_tipo_menu')
-            ->where('constraint_name', $name)
-            ->where('constraint_type', 'FOREIGN KEY')
-            ->exists();
+        $hasIndex = fn (string $name): bool => MigrationDialectSupport::tieneIndice('vianda_tipo_menu', $name);
+        $hasFk = fn (string $name): bool => MigrationDialectSupport::tieneForeignKey('vianda_tipo_menu', $name);
 
         if ($hasIndex('uq_vianda_tipo_menu_codigo_anita')) {
             Schema::table('vianda_tipo_menu', function (Blueprint $table) {
@@ -60,18 +51,8 @@ return new class extends Migration
 
     public function down(): void
     {
-        $dbName = DB::getDatabaseName();
-        $hasIndex = fn (string $name): bool => DB::table('information_schema.statistics')
-            ->where('table_schema', $dbName)
-            ->where('table_name', 'vianda_tipo_menu')
-            ->where('index_name', $name)
-            ->exists();
-        $hasFk = fn (string $name): bool => DB::table('information_schema.table_constraints')
-            ->where('constraint_schema', $dbName)
-            ->where('table_name', 'vianda_tipo_menu')
-            ->where('constraint_name', $name)
-            ->where('constraint_type', 'FOREIGN KEY')
-            ->exists();
+        $hasIndex = fn (string $name): bool => MigrationDialectSupport::tieneIndice('vianda_tipo_menu', $name);
+        $hasFk = fn (string $name): bool => MigrationDialectSupport::tieneForeignKey('vianda_tipo_menu', $name);
 
         if ($hasFk('fk_vianda_tipo_menu_empresa')) {
             Schema::table('vianda_tipo_menu', function (Blueprint $table) {

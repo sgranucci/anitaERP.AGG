@@ -1,9 +1,9 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Facades\DB;
 
 return new class extends Migration
 {
@@ -20,7 +20,10 @@ return new class extends Migration
             $table->dropForeign('fk_arbolaprobacion_movimiento_destinatario_usuario');
         });
 
-        DB::statement('ALTER TABLE arbolaprobacion_movimiento MODIFY destinatariousuario_id BIGINT UNSIGNED NULL');
+        MigrationDialectSupport::statementPorDriver(
+            'ALTER TABLE arbolaprobacion_movimiento MODIFY destinatariousuario_id BIGINT UNSIGNED NULL',
+            'ALTER TABLE arbolaprobacion_movimiento ALTER COLUMN destinatariousuario_id DROP NOT NULL'
+        );
 
         Schema::table('arbolaprobacion_movimiento', function (Blueprint $table) {
             $table->foreign('destinatariousuario_id', 'fk_arbolaprobacion_movimiento_destinatario_usuario')

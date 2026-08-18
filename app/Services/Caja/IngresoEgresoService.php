@@ -101,9 +101,8 @@ class IngresoEgresoService
 
 		$this->validarComprobantesIvaContraCaja($request);
 
-		$data = $request->all();
-
 		try {
+			$data = $this->aplicarPagoSolicitudEnRequest($request);
 			IngresoEgresoTransferenciaSupport::assertBalanceado($data);
 			IngresoEgresoSolicitudpagoSupport::assertMontoCoincideConSolicitud($data);
 		} catch (InvalidArgumentException $e) {
@@ -215,9 +214,8 @@ class IngresoEgresoService
 
 		$this->validarComprobantesIvaContraCaja($request);
 
-		$data = $request->all();
-
 		try {
+			$data = $this->aplicarPagoSolicitudEnRequest($request);
 			IngresoEgresoTransferenciaSupport::assertBalanceado($data);
 			IngresoEgresoSolicitudpagoSupport::assertMontoCoincideConSolicitud($data);
 		} catch (InvalidArgumentException $e) {
@@ -258,6 +256,8 @@ class IngresoEgresoService
 
 	private function actualiza($data, $id, $request)
 	{
+		$movAntes = $this->caja_movimientoRepository->find($id);
+
 		// Graba movimiento de caja
 		$caja_movimiento = $this->caja_movimientoRepository->update($data, $id);
 
@@ -331,7 +331,7 @@ class IngresoEgresoService
 		}
 
 		$mov = $this->caja_movimientoRepository->find($id);
-		IngresoEgresoAnitaTesmovSupport::eliminarDesdeMovimiento($mov);
+		IngresoEgresoAnitaTesmovSupport::eliminarDesdeMovimiento($movAntes);
 		IngresoEgresoAnitaTesmovSupport::grabarDesdeMovimiento($mov);
 	}
 
@@ -419,20 +419,25 @@ class IngresoEgresoService
 
 	public function generaAsientoContable(array $data)
 	{
+		try {
+			IngresoEgresoSolicitudpagoSupport::aplicarPagoDesdeSolicitud($data);
+		} catch (InvalidArgumentException $e) {
+			return ['errores' => $e->getMessage()];
+		}
+
 		$datosCaja = json_decode($data['datoscaja'] ?? '[]') ?: [];
 		$datosContables = json_decode($data['datoscontables'] ?? '[]') ?: [];
 		$datosChequesEmitidos = json_decode($data['datoscheques_emitidos'] ?? '[]') ?: [];
 		$datosChequesRecibidos = json_decode($data['datoscheques_recibidos'] ?? '[]') ?: [];
 		$datosChequesReemplazo = json_decode($data['datoscheques_reemplazo'] ?? '[]') ?: [];
-		$tipotransaccion_caja_id = json_decode($data['tipotransaccion_caja_id'] ?? '0');
+		$tipotransaccion_caja_id = (int) ($data['tipotransaccion_caja_id'] ?? 0);
+		if ($tipotransaccion_caja_id <= 0) {
+			$tipotransaccion_caja_id = (int) json_decode((string) ($data['tipotransaccion_caja_id'] ?? '0'));
+		}
 		$conceptogasto_id = json_decode($data['conceptogasto_id'] ?? '0');
 		$empresa_id = (int) json_decode($data['empresa_id'] ?? '0');
 		$fechaOperacion = (string) ($data['fecha'] ?? date('Y-m-d'));
-		$solicitudpagoId = (int) ($data['solicitudpago_id'] ?? 0);
-		if ($solicitudpagoId <= 0 && isset($data['solicitudpago_id'])) {
-			$decodedSp = json_decode((string) $data['solicitudpago_id']);
-			$solicitudpagoId = (int) ($decodedSp ?? 0);
-		}
+		$solicitudpagoId = IngresoEgresoSolicitudpagoSupport::solicitudpagoIdDesdeData($data);
 
 		$tipotransaccion_caja = $this->tipotransaccion_cajaRepository->find($tipotransaccion_caja_id);
 		$signo = 1;
@@ -755,6 +760,14 @@ class IngresoEgresoService
 			$tipo = 'OPP';
 		}
 
+		$spId = IngresoEgresoSolicitudpagoSupport::solicitudpagoIdDesdeData($data);
+		if ($spId <= 0 && $movimiento) {
+			$spId = (int) ($movimiento->solicitudpago_id ?? 0);
+		}
+		if ($spId > 0) {
+			$tipo = IngresoEgresoSolicitudpagoSupport::abreviaturaTipoPago();
+		}
+
 		$nro = (int) ($data['numerotransaccion'] ?? ($movimiento->numerotransaccion ?? 0));
 
 		$empresaId = (int) ($data['empresa_id'] ?? ($movimiento->empresa_id ?? 0));
@@ -777,11 +790,6 @@ class IngresoEgresoService
 		$data['letra'] = $letra;
 		$data['sucursal'] = $sucursal;
 		$data['nro'] = $nro;
-
-		$spId = (int) ($data['solicitudpago_id'] ?? 0);
-		if ($spId <= 0 && $movimiento) {
-			$spId = (int) ($movimiento->solicitudpago_id ?? 0);
-		}
 		$data['solicitudpago_id'] = $spId > 0 ? $spId : null;
 
 		$detalle = (string) ($data['detalle'] ?? ($movimiento->detalle ?? ''));
@@ -858,6 +866,30 @@ class IngresoEgresoService
 			'monto' => $monto,
 			'empresa_id' => $data['empresa_id'] ?? null,
 		]);
+	}
+
+	/**
+	 * @param  \Illuminate\Http\Request  $request
+	 * @return array<string, mixed>
+	 */
+	private function aplicarPagoSolicitudEnRequest($request): array
+	{
+		$data = $request->all();
+		IngresoEgresoSolicitudpagoSupport::aplicarPagoDesdeSolicitud($data);
+		$merge = [];
+		foreach (['tipotransaccion_caja_id', 'proveedor_id', 'solicitudpago_id'] as $campo) {
+			if (array_key_exists($campo, $data)) {
+				$merge[$campo] = $data[$campo];
+			}
+		}
+		if ($merge !== []) {
+			$request->merge($merge);
+			foreach ($merge as $campo => $valor) {
+				$data[$campo] = $valor;
+			}
+		}
+
+		return $data;
 	}
 
 }

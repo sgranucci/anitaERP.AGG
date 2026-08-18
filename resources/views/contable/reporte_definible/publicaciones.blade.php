@@ -60,7 +60,7 @@
                                     <td>{{ $pub->usuario->nombre ?? '' }}</td>
                                     <td><code class="small">{{ substr((string) $pub->hash, 0, 12) }}</code></td>
                                     <td class="text-center">
-                                        <a href="{{ route('ver_publicacion_reporte_definible', ['id' => $reporte->id, 'publicacionId' => $pub->id]) }}"
+                                        <a href="{{ \App\Support\Navegacion\ModoConsultaUrlSupport::route('ver_publicacion_reporte_definible', ['id' => $reporte->id, 'publicacionId' => $pub->id]) }}"
                                            class="btn-accion-tabla tooltipsC" title="Ver el documento congelado"
                                            target="_blank" rel="noopener">
                                             <i class="fa fa-eye text-primary"></i>

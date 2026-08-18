@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -24,29 +25,48 @@ return new class extends Migration
             $table->unsignedBigInteger('id')->primary();
         });
 
-        DB::statement('
-            INSERT INTO '.self::TABLA_BACKUP.' (id)
-            SELECT acc.id
-            FROM articulo_cuentacontable acc
-            INNER JOIN (
-                SELECT articulo_id, empresa_id
-                FROM articulo_cuentacontable
-                GROUP BY articulo_id, empresa_id
-                HAVING COUNT(*) = 3
-                    AND SUM(tipoimputacion = "VENTAS") = 1
-                    AND SUM(tipoimputacion = "COMPRAS") = 1
-                    AND SUM(tipoimputacion = "IMPUESTOS INTERNOS") = 1
-                    AND SUM(tipoimputacion = "GASTOS") = 0
-            ) g ON g.articulo_id = acc.articulo_id AND g.empresa_id = acc.empresa_id
-            WHERE acc.tipoimputacion = "IMPUESTOS INTERNOS"
-        ');
+        MigrationDialectSupport::statementPorDriver(
+            'INSERT INTO '.self::TABLA_BACKUP.' (id)
+             SELECT acc.id
+             FROM articulo_cuentacontable acc
+             INNER JOIN (
+                 SELECT articulo_id, empresa_id
+                 FROM articulo_cuentacontable
+                 GROUP BY articulo_id, empresa_id
+                 HAVING COUNT(*) = 3
+                     AND SUM(tipoimputacion = \'VENTAS\') = 1
+                     AND SUM(tipoimputacion = \'COMPRAS\') = 1
+                     AND SUM(tipoimputacion = \'IMPUESTOS INTERNOS\') = 1
+                     AND SUM(tipoimputacion = \'GASTOS\') = 0
+             ) g ON g.articulo_id = acc.articulo_id AND g.empresa_id = acc.empresa_id
+             WHERE acc.tipoimputacion = \'IMPUESTOS INTERNOS\'',
+            'INSERT INTO '.self::TABLA_BACKUP.' (id)
+             SELECT acc.id
+             FROM articulo_cuentacontable acc
+             INNER JOIN (
+                 SELECT articulo_id, empresa_id
+                 FROM articulo_cuentacontable
+                 GROUP BY articulo_id, empresa_id
+                 HAVING COUNT(*) = 3
+                     AND COUNT(*) FILTER (WHERE tipoimputacion = \'VENTAS\') = 1
+                     AND COUNT(*) FILTER (WHERE tipoimputacion = \'COMPRAS\') = 1
+                     AND COUNT(*) FILTER (WHERE tipoimputacion = \'IMPUESTOS INTERNOS\') = 1
+                     AND COUNT(*) FILTER (WHERE tipoimputacion = \'GASTOS\') = 0
+             ) g ON g.articulo_id = acc.articulo_id AND g.empresa_id = acc.empresa_id
+             WHERE acc.tipoimputacion = \'IMPUESTOS INTERNOS\''
+        );
 
-        DB::table('articulo_cuentacontable as acc')
-            ->join(self::TABLA_BACKUP.' as b', 'b.id', '=', 'acc.id')
-            ->update([
-                'acc.tipoimputacion' => 'GASTOS',
-                'acc.updated_at' => now(),
-            ]);
+        MigrationDialectSupport::statementPorDriver(
+            'UPDATE articulo_cuentacontable AS acc
+             INNER JOIN '.self::TABLA_BACKUP.' AS b ON b.id = acc.id
+             SET acc.tipoimputacion = \'GASTOS\',
+                 acc.updated_at = NOW()',
+            'UPDATE articulo_cuentacontable AS acc
+             SET tipoimputacion = \'GASTOS\',
+                 updated_at = NOW()
+             FROM '.self::TABLA_BACKUP.' AS b
+             WHERE b.id = acc.id'
+        );
     }
 
     public function down(): void
@@ -55,12 +75,17 @@ return new class extends Migration
             return;
         }
 
-        DB::table('articulo_cuentacontable as acc')
-            ->join(self::TABLA_BACKUP.' as b', 'b.id', '=', 'acc.id')
-            ->update([
-                'acc.tipoimputacion' => 'IMPUESTOS INTERNOS',
-                'acc.updated_at' => now(),
-            ]);
+        MigrationDialectSupport::statementPorDriver(
+            'UPDATE articulo_cuentacontable AS acc
+             INNER JOIN '.self::TABLA_BACKUP.' AS b ON b.id = acc.id
+             SET acc.tipoimputacion = \'IMPUESTOS INTERNOS\',
+                 acc.updated_at = NOW()',
+            'UPDATE articulo_cuentacontable AS acc
+             SET tipoimputacion = \'IMPUESTOS INTERNOS\',
+                 updated_at = NOW()
+             FROM '.self::TABLA_BACKUP.' AS b
+             WHERE b.id = acc.id'
+        );
 
         Schema::dropIfExists(self::TABLA_BACKUP);
     }

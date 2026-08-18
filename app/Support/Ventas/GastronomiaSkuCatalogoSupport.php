@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas;
 
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -95,7 +96,10 @@ final class GastronomiaSkuCatalogoSupport
             return;
         }
 
-        $query->whereRaw('UPPER('.$columnaSku.') REGEXP ?', [self::patronRegexCatalogo($prefijo, $digitos)]);
+        $query->whereRaw(
+            SqlDialectSupport::coincideRegex('UPPER('.$columnaSku.')'),
+            [self::patronRegexCatalogo($prefijo, $digitos)]
+        );
     }
 
     /**

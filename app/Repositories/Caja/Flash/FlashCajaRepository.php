@@ -82,12 +82,17 @@ class FlashCajaRepository implements FlashCajaRepositoryInterface
         return $this->model->with(['empresa', 'creoUsuario', 'actualizoUsuario'])->findOrFail($id);
     }
 
-    public function findPorEmpresaFecha(int $empresaId, string $fecha): ?FlashCaja
+    public function findPorEmpresaFecha(int $empresaId, string $fecha, bool $forUpdate = false): ?FlashCaja
     {
-        return $this->model->newQuery()
+        $query = $this->model->newQuery()
             ->where('empresa_id', $empresaId)
-            ->whereDate('fecha', $fecha)
-            ->first();
+            ->whereDate('fecha', $fecha);
+
+        if ($forUpdate) {
+            $query->lockForUpdate();
+        }
+
+        return $query->first();
     }
 
     /**

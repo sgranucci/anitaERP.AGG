@@ -133,7 +133,11 @@ class Novedad_SueldosController extends Controller
         can('crear-novedad-sueldos');
 
         $r = $this->repository->sincronizarConAnita();
-        $msg = 'Anita: '.$r['en_anita'].' · Importadas: '.$r['importados'].' · Omitidas: '.$r['omitidos'];
+        $msg = 'Anita: '.$r['en_anita']
+            .' · Importadas: '.$r['importados']
+            .' · Actualizadas: '.($r['actualizados'] ?? 0)
+            .' · Eliminadas: '.($r['eliminados'] ?? 0)
+            .' · Omitidas: '.$r['omitidos'];
         if ($r['errores'] !== []) {
             $msg .= ' · Errores: '.implode('; ', array_slice($r['errores'], 0, 3));
         }

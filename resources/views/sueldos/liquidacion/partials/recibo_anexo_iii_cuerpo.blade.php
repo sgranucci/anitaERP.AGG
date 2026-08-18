@@ -8,9 +8,20 @@
         — {{ $d['empresa_linea'] }}
     </div>
 @endif
-<div class="hdr">
-    <div class="hdr-emp">{{ $d['empresa_linea'] }}</div>
-</div>
+<table class="hdr">
+    <tr>
+        @if (! empty($d['logo_empresa_uri']))
+            <td class="hdr-logo">
+                <img src="{{ $d['logo_empresa_uri'] }}" alt="Logo de la empresa">
+            </td>
+        @endif
+        <td class="hdr-emp">{{ $d['empresa_linea'] }}</td>
+        <td class="hdr-anexo">
+            RECIBO DE HABERES<br>
+            <strong>ANEXO III</strong>
+        </td>
+    </tr>
+</table>
 
 <table class="meta">
     <tr>
@@ -231,7 +242,7 @@
         </td>
         <td style="width:42%; text-align:center;">
             <div class="sec-title">Costo total empleador</div>
-            {!! $d['torta_svg'] !!}
+            <img class="torta-grafico" src="{{ $d['torta_uri'] }}" alt="Gráfico de composición del costo empleador">
             <table class="comp-tbl" style="margin:4px auto; width:90%;">
                 @foreach ($d['pie_leyenda'] as $lab => $val)
                     @if ((float)$val > 0)

@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -25,18 +26,8 @@ return new class extends Migration
         // Backfill: todo lo existente es Biyemas.
         DB::statement('UPDATE vianda_usuario SET empresa_id = 1 WHERE empresa_id IS NULL OR empresa_id = 0');
 
-        $dbName = DB::getDatabaseName();
-        $hasIndex = fn (string $name): bool => DB::table('information_schema.statistics')
-            ->where('table_schema', $dbName)
-            ->where('table_name', 'vianda_usuario')
-            ->where('index_name', $name)
-            ->exists();
-        $hasFk = fn (string $name): bool => DB::table('information_schema.table_constraints')
-            ->where('constraint_schema', $dbName)
-            ->where('table_name', 'vianda_usuario')
-            ->where('constraint_name', $name)
-            ->where('constraint_type', 'FOREIGN KEY')
-            ->exists();
+        $hasIndex = fn (string $name): bool => MigrationDialectSupport::tieneIndice('vianda_usuario', $name);
+        $hasFk = fn (string $name): bool => MigrationDialectSupport::tieneForeignKey('vianda_usuario', $name);
 
         // Unicidad por empresa: dropear el índice único global viejo y crear el compuesto.
         if ($hasIndex('uq_vianda_usuario_codigo')) {
@@ -63,18 +54,8 @@ return new class extends Migration
 
     public function down(): void
     {
-        $dbName = DB::getDatabaseName();
-        $hasIndex = fn (string $name): bool => DB::table('information_schema.statistics')
-            ->where('table_schema', $dbName)
-            ->where('table_name', 'vianda_usuario')
-            ->where('index_name', $name)
-            ->exists();
-        $hasFk = fn (string $name): bool => DB::table('information_schema.table_constraints')
-            ->where('constraint_schema', $dbName)
-            ->where('table_name', 'vianda_usuario')
-            ->where('constraint_name', $name)
-            ->where('constraint_type', 'FOREIGN KEY')
-            ->exists();
+        $hasIndex = fn (string $name): bool => MigrationDialectSupport::tieneIndice('vianda_usuario', $name);
+        $hasFk = fn (string $name): bool => MigrationDialectSupport::tieneForeignKey('vianda_usuario', $name);
 
         if ($hasFk('fk_vianda_usuario_empresa')) {
             Schema::table('vianda_usuario', function (Blueprint $table) {

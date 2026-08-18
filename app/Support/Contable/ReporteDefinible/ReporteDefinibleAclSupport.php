@@ -83,12 +83,26 @@ class ReporteDefinibleAclSupport
     }
 
     /**
-     * @return list<array{id: int, usuario_id: int}>
+     * @return list<int>
+     */
+    public function usuarioIds(int $reporteId): array
+    {
+        return UsuarioReporteContable::query()
+            ->where('reporte_contable_id', $reporteId)
+            ->orderBy('usuario_id')
+            ->pluck('usuario_id')
+            ->map(fn ($v) => (int) $v)
+            ->all();
+    }
+
+    /**
+     * @return list<array{id: int, usuario_id: int, nombre: string, usuario: string}>
      */
     public function payloadUi(int $reporteId): array
     {
         $out = [];
         $rows = UsuarioReporteContable::query()
+            ->with('usuario:id,nombre,usuario')
             ->where('reporte_contable_id', $reporteId)
             ->orderBy('usuario_id')
             ->get(['id', 'usuario_id']);
@@ -96,6 +110,8 @@ class ReporteDefinibleAclSupport
             $out[] = [
                 'id' => (int) $row->id,
                 'usuario_id' => (int) $row->usuario_id,
+                'nombre' => (string) ($row->usuario->nombre ?? ''),
+                'usuario' => (string) ($row->usuario->usuario ?? ''),
             ];
         }
 

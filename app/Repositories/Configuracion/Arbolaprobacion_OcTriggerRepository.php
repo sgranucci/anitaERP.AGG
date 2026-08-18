@@ -4,6 +4,7 @@ namespace App\Repositories\Configuracion;
 
 use App\Models\Configuracion\Arbolaprobacion_OcTrigger;
 use App\Support\Configuracion\OcArbolTriggerCatalog;
+use App\Support\Database\EloquentAuditDeleteSupport;
 
 class Arbolaprobacion_OcTriggerRepository implements Arbolaprobacion_OcTriggerRepositoryInterface
 {
@@ -15,7 +16,6 @@ class Arbolaprobacion_OcTriggerRepository implements Arbolaprobacion_OcTriggerRe
 
         $ids = $data['oc_trigger_ids'];
         $count = count($ids);
-        $now = now()->toDateTimeString();
         $guardados = [];
 
         for ($i = 0; $i < $count; $i++) {
@@ -69,10 +69,15 @@ class Arbolaprobacion_OcTriggerRepository implements Arbolaprobacion_OcTriggerRe
             $guardados[] = $creado->id;
         }
 
-        Arbolaprobacion_OcTrigger::query()
-            ->where('arbolaprobacion_id', $arbolaprobacionId)
-            ->whereNotIn('id', $guardados)
-            ->update(['deleted_at' => $now, 'updated_at' => $now]);
+        if ($guardados === []) {
+            return;
+        }
+
+        EloquentAuditDeleteSupport::each(
+            Arbolaprobacion_OcTrigger::query()
+                ->where('arbolaprobacion_id', $arbolaprobacionId)
+                ->whereNotIn('id', $guardados)
+        );
     }
 
     private function nullableInt(mixed $v): ?int

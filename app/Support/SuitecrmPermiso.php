@@ -2,6 +2,8 @@
 
 namespace App\Support;
 
+use App\Support\Cache\PermisoCacheSupport;
+
 /**
  * Permisos SuiteCRM con fallback a clientes (caché de permisos puede estar desactualizada).
  */
@@ -78,10 +80,6 @@ final class SuitecrmPermiso
 
     public static function flushCachePermisos(): void
     {
-        try {
-            cache()->tags('Permiso')->flush();
-        } catch (\Throwable) {
-            // Sin soporte de tags: no hacer flush global
-        }
+        PermisoCacheSupport::flush();
     }
 }

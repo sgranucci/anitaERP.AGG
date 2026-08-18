@@ -2,7 +2,6 @@
 
 namespace App\Services\Sueldos;
 
-use App\Support\Database\SqlDialectSupport;
 use App\Models\Sueldos\Acumulador_Sueldos;
 use App\Models\Sueldos\Concepto_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
@@ -10,17 +9,18 @@ use App\Models\Sueldos\Liquidacion_Acumulador_Sueldos;
 use App\Models\Sueldos\Liquidacion_Detalle_Sueldos;
 use App\Models\Sueldos\Liquidacion_Recibo_Sueldos;
 use App\Models\Sueldos\Liquidacion_Sueldos;
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Sueldos\ConceptoElegibilidadCatalogo;
 use App\Support\Sueldos\ConceptoTipo;
 use App\Support\Sueldos\EmpleadoEstados;
-use App\Support\Sueldos\NovedadSueldosCatalogo;
-use App\Support\Sueldos\NovedadSueldosVigencia;
-use App\Support\Sueldos\ReciboBaseCalculoSupport;
 use App\Support\Sueldos\Formula\ContextoLiquidacion;
 use App\Support\Sueldos\Formula\EvaluadorFormula;
 use App\Support\Sueldos\Formula\FormulaException;
 use App\Support\Sueldos\Formula\ParametroSueldosResolver;
 use App\Support\Sueldos\Formula\RastreadorFormula;
+use App\Support\Sueldos\NovedadSueldosCatalogo;
+use App\Support\Sueldos\NovedadSueldosVigencia;
+use App\Support\Sueldos\ReciboBaseCalculoSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -87,9 +87,17 @@ class LiquidacionCalculadorService
         }
 
         return DB::transaction(function () use ($liquidacion, $conceptos, $acumDefs, $overrides, $empleados, $parametros) {
-            // Limpia resultado previo de esta corrida.
-            Liquidacion_Detalle_Sueldos::where('liquidacion_id', $liquidacion->id)->delete();
-            Liquidacion_Recibo_Sueldos::where('liquidacion_id', $liquidacion->id)->delete();
+            // Conserva recibos importados (nómina confidencial); borra solo motor ERP.
+            $recibosImportados = Liquidacion_Recibo_Sueldos::query()
+                ->where('liquidacion_id', $liquidacion->id)
+                ->where('origen', Liquidacion_Recibo_Sueldos::ORIGEN_AUXCONF)
+                ->pluck('id');
+            Liquidacion_Detalle_Sueldos::where('liquidacion_id', $liquidacion->id)
+                ->when($recibosImportados->isNotEmpty(), fn ($q) => $q->whereNotIn('recibo_id', $recibosImportados))
+                ->delete();
+            Liquidacion_Recibo_Sueldos::where('liquidacion_id', $liquidacion->id)
+                ->when($recibosImportados->isNotEmpty(), fn ($q) => $q->whereNotIn('id', $recibosImportados))
+                ->delete();
             Liquidacion_Acumulador_Sueldos::where('liquidacion_id', $liquidacion->id)->delete();
 
             $periodoAnio = (int) ($liquidacion->periodo_anio ?: now()->year);
@@ -98,8 +106,22 @@ class LiquidacionCalculadorService
             $snapshots = [];
             $ahora = Carbon::now();
 
-            $numeroRecibo = 0;
+            $numeroRecibo = (int) Liquidacion_Recibo_Sueldos::query()
+                ->where('liquidacion_id', $liquidacion->id)
+                ->max('numero_recibo');
             $tot = ['rem' => 0.0, 'norem' => 0.0, 'desc' => 0.0, 'neto' => 0.0];
+            // Incluye totales de importados ya persistidos.
+            $aggImport = Liquidacion_Recibo_Sueldos::query()
+                ->where('liquidacion_id', $liquidacion->id)
+                ->where('origen', Liquidacion_Recibo_Sueldos::ORIGEN_AUXCONF)
+                ->selectRaw('COALESCE(SUM(total_remunerativo),0) rem, COALESCE(SUM(total_no_remunerativo),0) norem, COALESCE(SUM(total_descuentos),0) descuentos, COALESCE(SUM(neto_a_pagar),0) neto')
+                ->first();
+            if ($aggImport) {
+                $tot['rem'] = (float) $aggImport->rem;
+                $tot['norem'] = (float) $aggImport->norem;
+                $tot['desc'] = (float) $aggImport->descuentos;
+                $tot['neto'] = (float) $aggImport->neto;
+            }
             $planPendientes = [];
             $erroresFormula = [];
 
@@ -144,6 +166,8 @@ class LiquidacionCalculadorService
                     'redondeo' => 0,
                     'neto_a_pagar' => $rec['neto'],
                     'estado' => 'calculado',
+                    'origen' => Liquidacion_Recibo_Sueldos::ORIGEN_MOTOR,
+                    'confidencial' => false,
                 ]);
 
                 $nro = 0;
@@ -200,21 +224,18 @@ class LiquidacionCalculadorService
             // Cuotas de planes (préstamos) calculadas: quedan pendientes hasta cerrar.
             $this->planCuotas->reemplazarPendientes((int) $liquidacion->id, $planPendientes);
 
+            \App\Support\Sueldos\LiquidacionDetalleTotalesSupport::renumerarRecibos((int) $liquidacion->id);
+            \App\Support\Sueldos\LiquidacionDetalleTotalesSupport::recalcularCabecera($liquidacion->fresh());
+            $liquidacion->refresh();
             $liquidacion->update([
                 'estado' => 'calculada',
                 'fecha_calculo' => Carbon::now(),
-                'cantidad_recibos' => $numeroRecibo,
-                'total_remunerativo' => $tot['rem'],
-                'total_no_remunerativo' => $tot['norem'],
-                'total_bruto' => $tot['rem'] + $tot['norem'],
-                'total_descuentos' => $tot['desc'],
-                'total_neto' => $tot['neto'],
             ]);
 
             return [
-                'recibos' => $numeroRecibo,
-                'total_neto' => $tot['neto'],
-                'total_remunerativo' => $tot['rem'],
+                'recibos' => (int) $liquidacion->cantidad_recibos,
+                'total_neto' => (float) $liquidacion->total_neto,
+                'total_remunerativo' => (float) $liquidacion->total_remunerativo,
                 'sin_conceptos' => false,
                 'errores_formula' => $erroresFormula,
                 'errores_formula_count' => count($erroresFormula),
@@ -421,7 +442,7 @@ class LiquidacionCalculadorService
             ->where('periodo', $periodoYm)
             ->where('tipo', $tipo)
             ->whereIn('estado', array_merge(Liquidacion_Sueldos::ESTADOS_EDITABLES, ['cerrada', 'contabilizada', 'pagada']))
-            ->orderByRaw(SqlDialectSupport::ordenPorLista('estado', ['borrador','calculada','revisada','cerrada','contabilizada','pagada']))
+            ->orderByRaw(SqlDialectSupport::ordenPorLista('estado', ['borrador', 'calculada', 'revisada', 'cerrada', 'contabilizada', 'pagada']))
             ->orderByDesc('numero')
             ->first();
 
@@ -436,9 +457,10 @@ class LiquidacionCalculadorService
 
         $errores = [];
         $lineas = [];
+        $planPendientes = null;
         try {
             $lineas = $this->calcularEmpleado(
-                $ctx, $emp, $conceptos, $overrides, $liq, null,
+                $ctx, $emp, $conceptos, $overrides, $liq, $planPendientes,
                 $setInfo['meta'] ?? []
             );
         } catch (FormulaException $e) {
@@ -551,6 +573,16 @@ class LiquidacionCalculadorService
     }
 
     /**
+     * Traza completa para la pantalla de ejecución: pasos, set y contexto.
+     *
+     * @return array<string, mixed>
+     */
+    public function trazarEmpleadoCompleto(Liquidacion_Sueldos $liquidacion, Empleado_Sueldos $emp): array
+    {
+        return $this->depurarSobreLiquidacion($emp, $liquidacion);
+    }
+
+    /**
      * Debugger de fórmulas: preview por período/tipo (con o sin corrida abierta).
      *
      * @param  array{formula?: ?string, formula_cantidad?: ?string, formula_valor?: ?string}|null  $overridesFormula
@@ -574,7 +606,7 @@ class LiquidacionCalculadorService
             ->where('periodo', $periodoYm)
             ->where('tipo', $tipo)
             ->whereIn('estado', array_merge(Liquidacion_Sueldos::ESTADOS_EDITABLES, ['cerrada', 'contabilizada', 'pagada']))
-            ->orderByRaw(SqlDialectSupport::ordenPorLista('estado', ['borrador','calculada','revisada','cerrada','contabilizada','pagada']))
+            ->orderByRaw(SqlDialectSupport::ordenPorLista('estado', ['borrador', 'calculada', 'revisada', 'cerrada', 'contabilizada', 'pagada']))
             ->orderByDesc('numero')
             ->first();
 
@@ -907,13 +939,21 @@ class LiquidacionCalculadorService
                 continue;
             }
             switch ($l['tipo']) {
-                case 'remunerativo': $t['rem'] += $l['importe']; break;
-                case 'no_remunerativo': $t['norem'] += $l['importe']; break;
-                case 'asignacion': $t['asig'] += $l['importe']; break;
-                case 'descuento': $t['desc'] += $l['importe']; break;
-                case 'aporte': $t['desc'] += $l['importe']; $t['aportes'] += $l['importe']; break;
-                case 'retencion': $t['desc'] += $l['importe']; break;
-                case 'contribucion': $t['contrib'] += $l['importe']; break;
+                case 'remunerativo': $t['rem'] += $l['importe'];
+                    break;
+                case 'no_remunerativo': $t['norem'] += $l['importe'];
+                    break;
+                case 'asignacion': $t['asig'] += $l['importe'];
+                    break;
+                case 'descuento': $t['desc'] += $l['importe'];
+                    break;
+                case 'aporte': $t['desc'] += $l['importe'];
+                    $t['aportes'] += $l['importe'];
+                    break;
+                case 'retencion': $t['desc'] += $l['importe'];
+                    break;
+                case 'contribucion': $t['contrib'] += $l['importe'];
+                    break;
             }
         }
         $t['bruto'] = $t['rem'] + $t['norem'];
@@ -1019,13 +1059,16 @@ class LiquidacionCalculadorService
     {
         $query = Empleado_Sueldos::query()
             ->where('empresa_id', $liq->empresa_id)
+            ->where(function ($q) {
+                $q->whereNull('confidencial')->orWhere('confidencial', false);
+            })
             ->with(['categoria', 'motivoegreso'])
             ->orderBy('legajo');
 
         // Liquidacion final: empleados dados de baja (o con fecha de egreso) en el periodo.
         // El resto de corridas: solo activos.
         if ($liq->tipo === 'final') {
-            $query->where(function ($q) use ($liq) {
+            $query->where(function ($q) {
                 $q->where('estado', EmpleadoEstados::BAJA)
                     ->orWhereNotNull('fecha_egreso');
             });

@@ -19,10 +19,12 @@ use Illuminate\Support\Facades\Session;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Intervention\Image\Laravel\Facades\Image;
+use Laravel\Sanctum\HasApiTokens;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class Usuario extends Authenticatable implements Auditable
 {
+    use HasApiTokens;
     use Notifiable;
     use \OwenIt\Auditing\Auditable;
 

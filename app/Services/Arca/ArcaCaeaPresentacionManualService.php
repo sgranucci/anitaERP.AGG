@@ -8,6 +8,7 @@ use App\Models\Ventas\ArcaCaea;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
 use App\Services\Ventas\FacturaelectronicaService;
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Ventas\ArcaCaeaAnitaTipoAfipSupport;
 use App\Support\Ventas\ArcaCaeaInformeDatosDesdeAnitaSupport;
 use App\Support\Ventas\ArcaCaeaInformeDatosDesdeVentaSupport;
@@ -438,7 +439,7 @@ class ArcaCaeaPresentacionManualService
             ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
             ->join('tipotransaccion', 'tipotransaccion.id', '=', 'venta.tipotransaccion_id')
             ->where('puntoventa.empresa_id', $empresaId)
-            ->whereRaw('CAST(puntoventa.codigo AS UNSIGNED) = ?', [$ptoVta])
+            ->whereRaw(SqlDialectSupport::castEntero('puntoventa.codigo').' = ?', [$ptoVta])
             ->where('venta.numerocomprobante', $numero)
             ->where('puntoventa.modofacturacion', 'A')
             ->whereIn('puntoventa.webservice', ArcaPuntoventaWebserviceSupport::valoresWhereInSoapCaea())

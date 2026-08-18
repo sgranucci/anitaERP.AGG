@@ -1,0 +1,67 @@
+name: PostgreSQL lab
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 6 * * 1'
+  push:
+    paths:
+      - 'database/migrations/**'
+      - 'app/Support/Database/**'
+      - 'scripts/postgres-lab-*.php'
+      - 'deploy/infra/postgres-lab/**'
+      - '.github/workflows/postgres-lab.yml'
+
+concurrency:
+  group: postgres-lab-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  migrate-smoke:
+    name: migrate + smoke (+ seed)
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: mbstring, pdo, pgsql, xml, zip, gd, intl, bcmath
+          coverage: none
+
+      - name: Cache Composer
+        uses: actions/cache@v4
+        with:
+          path: vendor
+          key: composer-${{ runner.os }}-${{ hashFiles('composer.lock') }}
+          restore-keys: |
+            composer-${{ runner.os }}-
+
+      - name: Composer install
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Preparar laboratorio compose
+        run: |
+          set -euo pipefail
+          LAB=deploy/infra/postgres-lab
+          rm -rf "${LAB}/app"
+          ln -s "${GITHUB_WORKSPACE}" "${LAB}/app"
+          cp "${LAB}/.env.example" "${LAB}/.env"
+          PG_PASS="$(openssl rand -hex 16)"
+          APP_KEY="base64:$(openssl rand -base64 32 | tr -d '\n')"
+          sed -i \
+            -e "s|^POSTGRES_PASSWORD=.*|POSTGRES_PASSWORD=${PG_PASS}|" \
+            -e "s|^APP_KEY=.*|APP_KEY=${APP_KEY}|" \
+            "${LAB}/.env"
+          chmod +x "${LAB}/ci-run.sh"
+
+      - name: Migrate + smoke + seed
+        working-directory: deploy/infra/postgres-lab
+        env:
+          EMPRESA: LAB_PG
+          POSTGRES_LAB_CON_SEED: '1'
+        run: ./ci-run.sh

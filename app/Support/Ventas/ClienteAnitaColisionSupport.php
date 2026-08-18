@@ -86,7 +86,7 @@ final class ClienteAnitaColisionSupport
         $max = Cliente::query()
             ->whereNotNull('codigo')
             ->where('codigo', '!=', '')
-            ->whereRaw("codigo REGEXP '^[0-9]+$'")
+            ->whereRaw(SqlDialectSupport::coincideRegex('codigo'), ['^[0-9]+$'])
             ->max(DB::raw(SqlDialectSupport::castEntero('codigo')));
 
         return max(0, (int) $max);

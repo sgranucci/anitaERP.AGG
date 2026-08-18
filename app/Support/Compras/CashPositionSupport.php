@@ -43,7 +43,7 @@ class CashPositionSupport
             ->whereNull('proveedor_cuentacorriente.deleted_at')
             ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
             ->whereDate('fechavencimiento', '<=', $hoy)
-            ->havingRaw('abs('.SqlDialectSupport::coalesce('aplicado', '0').') < abs(proveedor_cuentacorriente.total)');
+            ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());
 
         if ($empresaId && $empresaId > 0) {
             $query->where('empresa_id', $empresaId);
@@ -110,7 +110,7 @@ class CashPositionSupport
             ->whereNull('proveedor_cuentacorriente.deleted_at')
             ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
             ->whereNotNull('proveedor_cuentacorriente.fechavencimiento')
-            ->havingRaw('abs('.SqlDialectSupport::coalesce('aplicado', '0').') < abs(proveedor_cuentacorriente.total)');
+            ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());
 
         if ($empresaId && $empresaId > 0) {
             $query->where('empresa_id', $empresaId);

@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -48,12 +49,7 @@ return new class extends Migration
 
     private function addForeignIfMissing(string $table, string $name, string $column, string $refTable): void
     {
-        $exists = DB::selectOne(
-            'SELECT CONSTRAINT_NAME AS n FROM information_schema.TABLE_CONSTRAINTS
-             WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND CONSTRAINT_NAME = ? AND CONSTRAINT_TYPE = ?',
-            [$table, $name, 'FOREIGN KEY']
-        );
-        if ($exists) {
+        if (MigrationDialectSupport::tieneForeignKey($table, $name)) {
             return;
         }
 

@@ -74,6 +74,7 @@
                             <th class="text-center" style="width:90px">Per&iacute;odo</th>
                             <th class="text-center" style="width:100px">Pago</th>
                             <th class="text-center" style="width:110px">Estado</th>
+                            <th class="text-right" style="width:110px">No rem.</th>
                             <th class="text-right" style="width:120px">Neto</th>
                             <th class="text-nowrap" style="width:120px" data-orderable="false"></th>
                         </tr>
@@ -93,6 +94,7 @@
                             <td class="text-center">
                                 <span class="badge badge-{{ $estadoBadge[$data->estado] ?? 'secondary' }}">{{ $data->estadoLabel() }}</span>
                             </td>
+                            <td class="text-right">{{ number_format((float) $data->total_no_remunerativo, 2, ',', '.') }}</td>
                             <td class="text-right">{{ number_format((float) $data->total_neto, 2, ',', '.') }}</td>
                             <td class="text-nowrap align-middle">
                                 @if (can('editar-liquidacion-sueldos', false) && $data->esEditable())

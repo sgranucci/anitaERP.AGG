@@ -41,12 +41,6 @@ return new class extends Migration
 
     private function indexExists(string $table, string $index): bool
     {
-        $rows = DB::select(
-            'SELECT 1 FROM information_schema.statistics
-             WHERE table_schema = DATABASE() AND table_name = ? AND index_name = ? LIMIT 1',
-            [$table, $index]
-        );
-
-        return $rows !== [];
+        return \App\Support\Database\MigrationDialectSupport::tieneIndice($table, $index);
     }
 };

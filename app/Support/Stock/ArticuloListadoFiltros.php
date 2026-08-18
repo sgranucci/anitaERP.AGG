@@ -2,6 +2,7 @@
 
 namespace App\Support\Stock;
 
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
 use Illuminate\Database\Eloquent\Builder;
@@ -562,7 +563,7 @@ class ArticuloListadoFiltros
 
     private static function expresionTextoMinusculas(string $column): string
     {
-        return 'LOWER('.$column.')';
+        return SqlDialectSupport::lower($column);
     }
 
     private static function normalizarTextoBusqueda(string $valor): string

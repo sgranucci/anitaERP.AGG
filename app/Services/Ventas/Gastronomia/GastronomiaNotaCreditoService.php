@@ -9,6 +9,7 @@ use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaGastronomiaEmision;
+use App\Models\Ventas\VentaGastronomiaNcOrigen;
 use App\Support\Ventas\Gastronomia\GastronomiaAnitaColaSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaFacturaItemsPayloadSupport;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
@@ -44,11 +45,32 @@ final class GastronomiaNotaCreditoService
 
     /**
      * @param  string  $leyendaUsuario  Leyenda manual ingresada en el modal; se graba como leyenda del comprobante NC.
+     * @param  array{
+     *   ajuste_fiscal?:bool,
+     *   fecha_factura?:string,
+     *   fecha_jornada?:string,
+     *   identificador_pc?:string,
+     *   omitir_stock?:bool,
+     *   omitir_impresion?:bool
+     * }  $opciones
      * @return array{ok:bool,venta_id?:int,factura?:string,mensaje?:string,error?:string}
      */
-    public function generarDesdeFactura(int $ventaFacturaId, ?Request $request = null, string $leyendaUsuario = ''): array
-    {
+    public function generarDesdeFactura(
+        int $ventaFacturaId,
+        ?Request $request = null,
+        string $leyendaUsuario = '',
+        array $opciones = [],
+    ): array {
         $profiler = GastronomiaEmisionProfiler::iniciarSiConfigurado();
+        $ajusteFiscal = ! empty($opciones['ajuste_fiscal']);
+        $fechaFacturaForzada = trim((string) ($opciones['fecha_factura'] ?? ''));
+        $fechaJornadaForzada = trim((string) ($opciones['fecha_jornada'] ?? ''));
+        if ($ajusteFiscal) {
+            if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaFacturaForzada)
+                || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaJornadaForzada)) {
+                return ['ok' => false, 'error' => 'El ajuste fiscal requiere fecha de comprobante y jornada válidas.'];
+            }
+        }
 
         $emision = VentaGastronomiaEmision::query()
             ->where('venta_id', $ventaFacturaId)
@@ -94,15 +116,23 @@ final class GastronomiaNotaCreditoService
         }
 
         $empresaId = (int) $cfg->empresa_id;
-        $identificadorPc = GastronomiaIdentificadorPc::resolver($request);
+        $identificadorPc = trim((string) ($opciones['identificador_pc'] ?? ''));
+        if ($identificadorPc === '') {
+            $identificadorPc = trim((string) ($emision->identificador_pc ?? ''));
+        }
+        if ($identificadorPc === '') {
+            $identificadorPc = GastronomiaIdentificadorPc::resolver($request);
+        }
 
-        try {
-            if (config('gastronomia.jornada_obligatoria', true)) {
-                $this->jornadaService->exigirJornadaAbierta($empresaId);
+        if (! $ajusteFiscal) {
+            try {
+                if (config('gastronomia.jornada_obligatoria', true)) {
+                    $this->jornadaService->exigirJornadaAbierta($empresaId);
+                }
+                $this->turnoOperativoService->exigirTurnoHabilitadoSiConfigurado($identificadorPc, $empresaId);
+            } catch (InvalidArgumentException $e) {
+                return ['ok' => false, 'error' => $e->getMessage()];
             }
-            $this->turnoOperativoService->exigirTurnoHabilitadoSiConfigurado($identificadorPc, $empresaId);
-        } catch (InvalidArgumentException $e) {
-            return ['ok' => false, 'error' => $e->getMessage()];
         }
 
         $tipoNcId = self::resolverTipotransaccionNotaCreditoId($cfg);
@@ -120,7 +150,15 @@ final class GastronomiaNotaCreditoService
         }
 
         $cuenta->loadMissing('lineas');
-        $payload = $this->armarPayloadNotaCredito($ventaOrigen, $tipoNcId, $cfg, $leyendaUsuario, $cuenta);
+        $payload = $this->armarPayloadNotaCredito(
+            $ventaOrigen,
+            $tipoNcId,
+            $cfg,
+            $leyendaUsuario,
+            $cuenta,
+            $ajusteFiscal ? $fechaFacturaForzada : null,
+            $ajusteFiscal ? $fechaJornadaForzada : null,
+        );
         $mediosPago = $this->armarMediosCobranzaDevolucion($ventaOrigen);
 
         $profiler?->marcar('preparacion_payload');
@@ -138,12 +176,18 @@ final class GastronomiaNotaCreditoService
                 $mediosPago,
                 $profiler,
                 $identificadorPc,
+                $ajusteFiscal,
+                $opciones,
             ) {
                 $ventaAnitaRevertir = null;
                 $vencaePendiente = null;
 
                 $profiler?->marcar('nc_emitir_comprobante_inicio');
-                $resultado = $this->facturacionGastronomiaService->emitirComprobante($payload, $cuenta);
+                $resultado = $this->facturacionGastronomiaService->emitirComprobante(
+                    $payload,
+                    $cuenta,
+                    $ajusteFiscal,
+                );
                 $profiler?->marcar('nc_emitir_comprobante_fin');
 
                 if (! empty($resultado['error'])) {
@@ -167,27 +211,31 @@ final class GastronomiaNotaCreditoService
                     $profiler?->marcar('nc_cobranza_fin');
                 }
 
-                $nombreTipo = (string) ($tipoNc->nombre ?? 'Nota de crédito');
-                $profiler?->marcar('nc_reverso_stock_inicio');
-                $this->consumoFormulaService->revertirMovimientosStockDesdeFactura(
-                    $ventaNc,
-                    $ventaOrigen,
-                    $cfg,
-                    $tipoNcId,
-                    $nombreTipo,
-                    (string) $payload['fechafactura'],
-                    (int) $ventaOrigen->moneda_id,
-                    (string) ($payload['fechajornada'] ?? $payload['fechafactura']),
-                );
-                $profiler?->marcar('nc_reverso_stock_fin');
+                if (empty($opciones['omitir_stock'])) {
+                    $nombreTipo = (string) ($tipoNc->nombre ?? 'Nota de crédito');
+                    $profiler?->marcar('nc_reverso_stock_inicio');
+                    $this->consumoFormulaService->revertirMovimientosStockDesdeFactura(
+                        $ventaNc,
+                        $ventaOrigen,
+                        $cfg,
+                        $tipoNcId,
+                        $nombreTipo,
+                        (string) $payload['fechafactura'],
+                        (int) $ventaOrigen->moneda_id,
+                        (string) ($payload['fechajornada'] ?? $payload['fechafactura']),
+                    );
+                    $profiler?->marcar('nc_reverso_stock_fin');
+                }
 
-                $profiler?->marcar('nc_anita_insumos_inicio');
-                $this->insumoStkmovAnitaService->replicarMovimientosInsumos(
-                    $ventaNc->fresh(),
-                    $cfg,
-                    (float) ($payload['descuentopie'] ?? 0),
-                );
-                $profiler?->marcar('nc_anita_insumos_fin');
+                if (! $ajusteFiscal) {
+                    $profiler?->marcar('nc_anita_insumos_inicio');
+                    $this->insumoStkmovAnitaService->replicarMovimientosInsumos(
+                        $ventaNc->fresh(),
+                        $cfg,
+                        (float) ($payload['descuentopie'] ?? 0),
+                    );
+                    $profiler?->marcar('nc_anita_insumos_fin');
+                }
 
                 if (! empty($resultado['cae_pendiente']) && is_array($resultado['cae_pendiente'])) {
                     $profiler?->marcar('nc_cae_diferido_inicio');
@@ -197,12 +245,12 @@ final class GastronomiaNotaCreditoService
 
                 VentaGastronomiaEmision::updateOrCreate(
                     ['venta_id' => $ventaNc->id],
-                    [
+                    array_merge([
                         'cuenta_gastronomia_id' => $cuenta->id,
                         'identificador_pc' => $identificadorPc,
                         'configuracion_puntoventa_gastronomia_id' => $cfg->id,
                         'venta_factura_origen_id' => $ventaFacturaId,
-                    ],
+                    ], $ajusteFiscal ? ['origen_pos' => 'recuperacion_arca_ajuste'] : []),
                 );
 
                 $ventaAnitaRevertir = null;
@@ -222,11 +270,16 @@ final class GastronomiaNotaCreditoService
             });
             $profiler?->marcar('despues_transaccion');
 
-            $this->completarAnitaDiferidoTrasNotaCredito($resultadoTx, $cfg);
+            if (! $ajusteFiscal) {
+                $this->completarAnitaDiferidoTrasNotaCredito($resultadoTx, $cfg);
+            }
 
-            $profiler?->marcar('nc_ticket_inicio');
-            $resultadoFinal = $this->aplicarImpresionTicketTrasNotaCredito($resultadoTx, $cfg, $cuenta);
-            $profiler?->marcar('nc_ticket_fin');
+            $resultadoFinal = $resultadoTx;
+            if (empty($opciones['omitir_impresion'])) {
+                $profiler?->marcar('nc_ticket_inicio');
+                $resultadoFinal = $this->aplicarImpresionTicketTrasNotaCredito($resultadoTx, $cfg, $cuenta);
+                $profiler?->marcar('nc_ticket_fin');
+            }
 
             GastronomiaEmisionProfiler::finalizar($profiler, [
                 'flujo' => 'nota_credito',
@@ -262,8 +315,277 @@ final class GastronomiaNotaCreditoService
         $id = VentaGastronomiaEmision::query()
             ->where('venta_factura_origen_id', $ventaFacturaId)
             ->value('venta_id');
+        if ($id !== null) {
+            return (int) $id;
+        }
+
+        $id = VentaGastronomiaNcOrigen::query()
+            ->where('venta_factura_id', $ventaFacturaId)
+            ->value('venta_nc_id');
 
         return $id !== null ? (int) $id : null;
+    }
+
+    /**
+     * Emite una NC consolidada por el total de varias FAC recuperadas (PeriodoAsoc = jornada).
+     *
+     * @param  list<int>  $ventaFacturaIds
+     * @param  array{
+     *   fecha_factura:string,
+     *   fecha_jornada:string,
+     *   identificador_pc?:string,
+     *   omitir_stock?:bool,
+     *   omitir_impresion?:bool
+     * }  $opciones
+     * @return array{ok:bool,venta_id?:int,factura?:string,mensaje?:string,error?:string}
+     */
+    public function generarLoteAjusteFiscal(array $ventaFacturaIds, string $leyendaUsuario, array $opciones): array
+    {
+        $ventaFacturaIds = array_values(array_unique(array_filter(array_map('intval', $ventaFacturaIds))));
+        if ($ventaFacturaIds === []) {
+            return ['ok' => false, 'error' => 'El lote no tiene facturas.'];
+        }
+
+        $fechaFactura = trim((string) ($opciones['fecha_factura'] ?? ''));
+        $fechaJornada = trim((string) ($opciones['fecha_jornada'] ?? ''));
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaFactura)
+            || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaJornada)) {
+            return ['ok' => false, 'error' => 'El lote fiscal requiere fecha de comprobante y jornada válidas.'];
+        }
+
+        foreach ($ventaFacturaIds as $facId) {
+            if (self::notaCreditoExistenteParaFactura($facId) !== null) {
+                return ['ok' => false, 'error' => 'Ya existe NC para la factura id '.$facId.'.'];
+            }
+        }
+
+        $primeraId = $ventaFacturaIds[0];
+        $emision = VentaGastronomiaEmision::query()
+            ->where('venta_id', $primeraId)
+            ->with([
+                'venta.clientes',
+                'venta.puntoventas',
+                'venta.venta_emisiones.articulos',
+                'venta.tipotransacciones',
+                'cuenta',
+                'configuracionPuntoventa',
+            ])
+            ->first();
+        if (! $emision || ! $emision->venta) {
+            return ['ok' => false, 'error' => 'La primera factura del lote no es emisión gastronomía.'];
+        }
+
+        $cfg = $emision->configuracionPuntoventa;
+        if (! $cfg) {
+            return ['ok' => false, 'error' => 'Sin configuración de PV gastronomía para el lote.'];
+        }
+
+        $cuenta = $emision->cuenta;
+        if (! $cuenta instanceof CuentaGastronomia) {
+            return ['ok' => false, 'error' => 'Sin cuenta gastronómica de referencia para el lote.'];
+        }
+
+        $tipoNcId = self::resolverTipotransaccionNotaCreditoId($cfg);
+        $tipoNc = Tipotransaccion::query()->find($tipoNcId);
+        if (! $tipoNc || $tipoNc->signo === 'S') {
+            return ['ok' => false, 'error' => 'Tipo de NC inválido.'];
+        }
+
+        $identificadorPc = trim((string) ($opciones['identificador_pc'] ?? $emision->identificador_pc ?? ''));
+        if ($identificadorPc === '') {
+            $identificadorPc = GastronomiaIdentificadorPc::resolver(null);
+        }
+
+        $ventas = Venta::query()
+            ->with(['venta_emisiones.articulos', 'cobranzasDirectas', 'caja_movimientos.cobranzas'])
+            ->whereIn('id', $ventaFacturaIds)
+            ->get()
+            ->keyBy('id');
+
+        $itemsMerged = [
+            'articulo_ids' => [],
+            'cantidades' => [],
+            'precios' => [],
+            'descripcionarticulos' => [],
+            'opcionales_por_item' => [],
+            'omitir_stkmov_anita_por_item' => [],
+            'impuesto_ids' => [],
+            'incluyeimpuestos' => [],
+        ];
+        $totalAbs = 0.0;
+        $codigos = [];
+        foreach ($ventaFacturaIds as $facId) {
+            $v = $ventas->get($facId);
+            if (! $v) {
+                return ['ok' => false, 'error' => 'Factura id '.$facId.' inexistente.'];
+            }
+            $totalAbs += abs((float) $v->total);
+            $codigos[] = (string) $v->codigo;
+            $part = GastronomiaFacturaItemsPayloadSupport::desdeVentaEmisiones($v);
+            $offset = count($itemsMerged['articulo_ids']);
+            foreach ($part['articulo_ids'] as $i => $artId) {
+                $itemsMerged['articulo_ids'][] = $artId;
+                $itemsMerged['cantidades'][] = $part['cantidades'][$i] ?? 0;
+                $itemsMerged['precios'][] = $part['precios'][$i] ?? 0;
+                $itemsMerged['descripcionarticulos'][] = $part['descripcionarticulos'][$i] ?? '';
+                $itemsMerged['omitir_stkmov_anita_por_item'][] = $part['omitir_stkmov_anita_por_item'][$i] ?? true;
+                $itemsMerged['impuesto_ids'][] = $part['impuesto_ids'][$i] ?? 0;
+                $itemsMerged['incluyeimpuestos'][] = $part['incluyeimpuestos'][$i] ?? 'S';
+                if (isset($part['opcionales_por_item'][$i])) {
+                    $itemsMerged['opcionales_por_item'][$offset + $i] = $part['opcionales_por_item'][$i];
+                }
+            }
+        }
+
+        $ventaOrigen = $emision->venta;
+        $ymdJornada = str_replace('-', '', $fechaJornada);
+        $leyendaNc = trim($leyendaUsuario);
+        if ($leyendaNc === '') {
+            $leyendaNc = 'NC lote saneamiento ARCA: '.implode(', ', $codigos);
+        }
+        if (mb_strlen($leyendaNc) > 255) {
+            $leyendaNc = mb_substr($leyendaNc, 0, 255);
+        }
+
+        $payload = [
+            'venta_id' => (int) $ventaOrigen->id,
+            'tipotransaccion_id' => $tipoNcId,
+            'puntoventa_id' => (int) $ventaOrigen->puntoventa_id,
+            'fechafactura' => $fechaFactura,
+            'fechajornada' => $fechaJornada,
+            'fechaasignaciondesde' => $ymdJornada,
+            'fechaasignacionhasta' => $ymdJornada,
+            'leyendafactura' => $leyendaNc,
+            'actividad_arca_id' => (int) ($ventaOrigen->actividad_arca_id ?? Actividad_Arca::query()->orderBy('id')->value('id') ?? 1),
+            'cliente_id' => (int) $ventaOrigen->cliente_id,
+            'moneda_id' => (int) $ventaOrigen->moneda_id,
+            'listaprecio_id' => (int) ($cfg->listaprecio_id ?? 1),
+            'descuentolinea' => 0.,
+            'descuentopie' => 0.,
+            'descuentoimportepie' => 0.,
+            'articulo_ids' => $itemsMerged['articulo_ids'],
+            'cantidades' => $itemsMerged['cantidades'],
+            'precios' => $itemsMerged['precios'],
+            'descripcionarticulos' => $itemsMerged['descripcionarticulos'],
+            'opcionales_por_item' => $itemsMerged['opcionales_por_item'],
+            'omitir_stkmov_anita_por_item' => $itemsMerged['omitir_stkmov_anita_por_item'],
+            '_omitir_sincronizacion_anita' => true,
+            '_omitir_descuento_cuenta' => true,
+        ];
+        if (self::tieneImpuestosExplicitos($itemsMerged['impuesto_ids'])) {
+            $payload['impuesto_ids'] = $itemsMerged['impuesto_ids'];
+            $payload['incluyeimpuestos'] = $itemsMerged['incluyeimpuestos'];
+        }
+        if (trim((string) ($ventaOrigen->nombre ?? '')) !== '' || trim((string) ($ventaOrigen->numerodocumento ?? '')) !== '') {
+            $payload['venta_receptor'] = [
+                'nombre' => $ventaOrigen->nombre,
+                'numerodocumento' => $ventaOrigen->numerodocumento,
+                'domicilio' => $ventaOrigen->domicilio,
+            ];
+            $payload['arca_receptor'] = array_filter([
+                'nombre' => $ventaOrigen->nombre,
+                'numerodocumento' => $ventaOrigen->numerodocumento,
+                'domicilio' => $ventaOrigen->domicilio,
+            ], fn ($v) => $v !== null && $v !== '');
+        }
+
+        $mediosPago = $this->armarMediosDevolucionEfectivoLote((int) $cfg->empresa_id, $totalAbs);
+
+        try {
+            $resultadoTx = DB::transaction(function () use (
+                $ventaFacturaIds,
+                $ventaOrigen,
+                $cuenta,
+                $cfg,
+                $tipoNc,
+                $payload,
+                $mediosPago,
+                $identificadorPc,
+                $primeraId,
+            ) {
+                $resultado = $this->facturacionGastronomiaService->emitirComprobante(
+                    $payload,
+                    $cuenta,
+                    true,
+                );
+                if (! empty($resultado['error'])) {
+                    throw new InvalidArgumentException((string) ($resultado['mensaje'] ?? $resultado['error']));
+                }
+
+                $ventaNc = $this->resolverVentaEmitida($ventaOrigen, $resultado);
+
+                if (! empty($mediosPago) && empty($resultado['sin_cobranza'])) {
+                    $this->cobranzaGastronomiaService->registrarCobranzaPos(
+                        $ventaNc->fresh(),
+                        $mediosPago,
+                        $cfg,
+                        esDevolucion: true,
+                    );
+                }
+
+                if (! empty($resultado['cae_pendiente']) && is_array($resultado['cae_pendiente'])) {
+                    $this->facturacionGastronomiaService->completarSolicitudCaePendiente($resultado['cae_pendiente']);
+                }
+
+                VentaGastronomiaEmision::updateOrCreate(
+                    ['venta_id' => $ventaNc->id],
+                    [
+                        'cuenta_gastronomia_id' => $cuenta->id,
+                        'identificador_pc' => $identificadorPc,
+                        'configuracion_puntoventa_gastronomia_id' => $cfg->id,
+                        'venta_factura_origen_id' => $primeraId,
+                        'origen_pos' => 'recuperacion_arca_ajuste',
+                    ],
+                );
+
+                foreach ($ventaFacturaIds as $facId) {
+                    VentaGastronomiaNcOrigen::query()->updateOrCreate(
+                        [
+                            'venta_nc_id' => $ventaNc->id,
+                            'venta_factura_id' => $facId,
+                        ],
+                        [],
+                    );
+                }
+
+                return [
+                    'ok' => true,
+                    'venta_id' => $ventaNc->id,
+                    'factura' => trim((string) ($resultado['factura'] ?? $ventaNc->codigo)),
+                    'mensaje' => 'Nota de crédito consolidada generada.',
+                    'importe_lote' => round(abs((float) $ventaNc->total), 2),
+                ];
+            });
+
+            return $resultadoTx;
+        } catch (Throwable $e) {
+            Log::error('gastronomia.nc_lote_ajuste.error', ['error' => $e->getMessage()]);
+
+            return ['ok' => false, 'error' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * @return list<array{cuentacaja_id:int,moneda_id:int,monto:float,cotizacion?:float,observacion?:string}>
+     */
+    private function armarMediosDevolucionEfectivoLote(int $empresaId, float $monto): array
+    {
+        $monto = round(abs($monto), 2);
+        if ($monto < 0.01) {
+            return [];
+        }
+        $cuentacajaId = (int) (\App\Support\Ventas\GastronomiaCuentacajaEfectivo::idParaEmpresa($empresaId) ?? 0);
+        if ($cuentacajaId <= 0) {
+            return [];
+        }
+
+        return [[
+            'cuentacaja_id' => $cuentacajaId,
+            'moneda_id' => 1,
+            'monto' => $monto,
+            'cotizacion' => 1.,
+            'observacion' => 'Devolución NC lote saneamiento ARCA',
+        ]];
     }
 
     public static function resolverTipotransaccionNotaCreditoId(ConfiguracionPuntoventaGastronomia $cfg): int
@@ -291,12 +613,14 @@ final class GastronomiaNotaCreditoService
         ConfiguracionPuntoventaGastronomia $cfg,
         string $leyendaUsuario = '',
         ?CuentaGastronomia $cuenta = null,
+        ?string $fechaFacturaForzada = null,
+        ?string $fechaJornadaForzada = null,
     ): array {
         $items = $cuenta instanceof CuentaGastronomia && $cuenta->lineas->isNotEmpty()
             ? GastronomiaFacturaItemsPayloadSupport::desdeCuenta($cuenta)
             : GastronomiaFacturaItemsPayloadSupport::desdeVentaEmisiones($ventaOrigen);
 
-        $fechaHoy = now()->format('Y-m-d');
+        $fechaHoy = $fechaFacturaForzada ?? now()->format('Y-m-d');
         $leyendaManual = trim($leyendaUsuario);
         $referenciaCompro = (string) ($ventaOrigen->codigo ?? $ventaOrigen->id);
         if ($leyendaManual !== '') {
@@ -352,6 +676,13 @@ final class GastronomiaNotaCreditoService
         }
 
         $empresaId = (int) ($ventaOrigen->empresa_id ?: $cfg->empresa_id);
+
+        if ($fechaFacturaForzada !== null && $fechaJornadaForzada !== null) {
+            $payload['fechafactura'] = $fechaFacturaForzada;
+            $payload['fechajornada'] = $fechaJornadaForzada;
+
+            return $payload;
+        }
 
         return $this->jornadaService->aplicarFechasAlPayload($payload, $empresaId);
     }

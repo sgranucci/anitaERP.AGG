@@ -2,6 +2,7 @@
 
 namespace App\Support\Listado;
 
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -35,7 +36,7 @@ class CoincidenciaFlexibleTexto
             return;
         }
 
-        $expr = 'LOWER('.$column.')';
+        $expr = SqlDialectSupport::lower($column);
         $callback = function ($w) use ($expr, $pref, $suf) {
             $w->whereRaw($expr.' LIKE ?', ['%'.self::escapeLike($pref).'%'])
                 ->whereRaw($expr.' LIKE ?', ['%'.self::escapeLike($suf).'%']);

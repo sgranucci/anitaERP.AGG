@@ -26,7 +26,7 @@ class RecepcionProveedorLimpiarAsientosHuerfanosCommand extends Command
             ->whereNotNull('recepcionproveedor_id')
             ->where('recepcionproveedor_id', '>', 0)
             ->groupBy('recepcionproveedor_id')
-            ->having('total', '>', 1);
+            ->havingRaw('COUNT(*) > 1');
 
         if ($idFiltro !== null && $idFiltro > 0) {
             $query->where('recepcionproveedor_id', $idFiltro);

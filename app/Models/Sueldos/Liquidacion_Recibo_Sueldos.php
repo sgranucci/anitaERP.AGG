@@ -44,6 +44,9 @@ class Liquidacion_Recibo_Sueldos extends Model implements Auditable
         'neto_a_pagar',
         'estado',
         'observacion',
+        'origen',
+        'confidencial',
+        'origen_fingerprint',
     ];
 
     protected $casts = [
@@ -71,7 +74,12 @@ class Liquidacion_Recibo_Sueldos extends Model implements Auditable
         'neto' => 'decimal:2',
         'redondeo' => 'decimal:2',
         'neto_a_pagar' => 'decimal:2',
+        'confidencial' => 'boolean',
     ];
+
+    public const ORIGEN_MOTOR = 'motor_erp';
+
+    public const ORIGEN_AUXCONF = 'anita_auxconf';
 
     public function liquidacion()
     {

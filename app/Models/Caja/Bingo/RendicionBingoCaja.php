@@ -6,6 +6,7 @@ use App\Models\Caja\Cuentacaja;
 use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Asiento;
 use App\Models\Seguridad\Usuario;
+use App\Models\Ventas\Venta;
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -41,6 +42,7 @@ class RendicionBingoCaja extends Model implements Auditable
         'observacion',
         'cerro_turno',
         'asiento_id',
+        'venta_id',
         'asientos_cierre_ids_json',
         'cierre_contable_en',
         'cierre_contable_usuario_id',
@@ -101,6 +103,11 @@ class RendicionBingoCaja extends Model implements Auditable
     public function asiento()
     {
         return $this->belongsTo(Asiento::class, 'asiento_id');
+    }
+
+    public function venta()
+    {
+        return $this->belongsTo(Venta::class, 'venta_id');
     }
 
     public function cierreContableUsuario()

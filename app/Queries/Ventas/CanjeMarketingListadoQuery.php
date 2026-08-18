@@ -3,6 +3,7 @@
 namespace App\Queries\Ventas;
 
 use App\Services\Stock\PrecioService;
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Stock\ArticuloUsoInsumoSupport;
 use App\Support\Ventas\CanjeMarketingListadoFiltros;
 use App\Support\Ventas\CanjeMarketingListadoListaprecioCmvSupport;
@@ -84,7 +85,10 @@ class CanjeMarketingListadoQuery
             ->leftJoin('mozo_gastronomia as m', 'm.id', '=', 'cme.mozo_gastronomia_id')
             ->leftJoin('configuracion_puntoventa_gastronomia as cfg', function ($join) {
                 $join->on('cfg.empresa_id', '=', 'cme.empresa_id')
-                    ->whereRaw('BINARY cfg.identificador_pc = BINARY cme.identificador_pc');
+                    ->whereRaw(SqlDialectSupport::igualdadCaseSensitive(
+                        'cfg.identificador_pc',
+                        'cme.identificador_pc'
+                    ));
             })
             ->leftJoin('ubicaciones_gastronomia as ug', 'ug.id', '=', 'cfg.ubicacion_id')
             ->leftJoin('empresa as e', 'e.id', '=', 'cme.empresa_id')

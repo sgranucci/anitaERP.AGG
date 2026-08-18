@@ -6,6 +6,7 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Tipotransaccion_Compra;
+use App\Support\Database\DbContencionSupport;
 use RuntimeException;
 
 /**
@@ -398,10 +399,11 @@ final class ComprobanteProveedorUnicidadSupport
 
     public static function esViolacionUnicidadFiscal(\Throwable $e): bool
     {
-        $msg = $e->getMessage();
-
-        return str_contains($msg, 'uq_comprobante_proveedor_por_cuit')
-            || (str_contains($msg, 'Duplicate entry') && str_contains($msg, 'comprobante_proveedor'));
+        return DbContencionSupport::esViolacionUnicidad(
+            $e,
+            'uq_comprobante_proveedor_por_cuit',
+            'comprobante_proveedor',
+        );
     }
 
     public static function findDuplicadoPrecargaPorAfip(

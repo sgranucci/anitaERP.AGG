@@ -23,7 +23,7 @@ class AnitaLiquidacionNovedadSyncService
     /**
      * @return array{
      *   liquidaciones: array{en_anita: int, importadas: int, actualizadas: int, omitidas: int, numeros: list<int>, errores: list<string>},
-     *   novedades: array{en_anita: int, importados: int, omitidos: int, errores: list<string>}
+     *   novedades: array{en_anita: int, importados: int, actualizados: int, eliminados: int, omitidos: int, errores: list<string>}
      * }
      */
     public function sincronizarEmpresaDesdeFechaLiq(int $empresaId, int $fechaLiqDesde): array
@@ -32,7 +32,14 @@ class AnitaLiquidacionNovedadSyncService
         ini_set('memory_limit', '-1');
 
         $liq = $this->sincronizarMaeliq($empresaId, $fechaLiqDesde);
-        $nov = ['en_anita' => 0, 'importados' => 0, 'omitidos' => 0, 'errores' => []];
+        $nov = [
+            'en_anita' => 0,
+            'importados' => 0,
+            'actualizados' => 0,
+            'eliminados' => 0,
+            'omitidos' => 0,
+            'errores' => [],
+        ];
 
         if ($liq['numeros'] !== []) {
             $nov = $this->novedades->sincronizarConAnita([

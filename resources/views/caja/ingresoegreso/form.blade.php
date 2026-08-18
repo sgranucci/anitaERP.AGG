@@ -25,6 +25,28 @@
             <div class="form-group row">
                 <label for="tipotransaccion_caja_id" class="col-lg-3 control-label text-right pr-2">Tipo de transacción</label>
                 <div class="col-lg-7">
+                    @php
+                        $pagoDesdeSp = ! empty($solicitudpagoOrigen)
+                            || (int) old('solicitudpago_id', $data->solicitudpago_id ?? request('solicitudpago_id')) > 0;
+                        $tipoSpForzadoId = $pagoDesdeSp
+                            ? \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorConfig()
+                            : 0;
+                        $tipoSpForzado = ($tipoSpForzadoId > 0 && isset($tipotransaccion_caja_query))
+                            ? $tipotransaccion_caja_query->firstWhere('id', $tipoSpForzadoId)
+                            : null;
+                    @endphp
+                    @if ($tipoSpForzado)
+                        <input type="hidden" name="tipotransaccion_caja_id" value="{{ $tipoSpForzado->id }}">
+                        <select id="tipotransaccion_caja_id" class="form-control" data-placeholder="Tipo de transacción"
+                                data-abreviatura="{{ $tipoSpForzado->abreviatura }}" disabled>
+                            <option value="{{ $tipoSpForzado->id }}"
+                                    data-abreviatura="{{ $tipoSpForzado->abreviatura }}"
+                                    data-operacion="{{ $tipoSpForzado->operacion }}"
+                                    data-signo="{{ $tipoSpForzado->signo }}"
+                                    selected="select">{{ $tipoSpForzado->nombre }}</option>
+                        </select>
+                        <small class="form-text text-muted">Pago desde solicitud: el comprobante se cierra siempre como {{ $tipoSpForzado->abreviatura }}.</small>
+                    @else
                     <select name="tipotransaccion_caja_id" id="tipotransaccion_caja_id" data-placeholder="Tipo de transacción" class="form-control required" data-fouc required>
                         <option value="">-- Seleccionar --</option>
                         @foreach($tipotransaccion_caja_query as $key => $value)
@@ -35,6 +57,7 @@
                             @endif
                         @endforeach
                     </select>
+                    @endif
                 </div>
             </div>
             <div id="aviso-transferencia-ie" class="alert alert-info py-2" style="display:none;">

@@ -24,6 +24,7 @@
                     </a>
                 </div>
             </div>
+            @include('configuracion.arbolaprobacion.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 <table class="table table-striped table-bordered table-hover" id="tabla-data">
                     <thead>

@@ -111,7 +111,13 @@
                 nro = '<a href="' + String(cfg.urlAsiento).replace('__ID__', a.asiento_id) + '" target="_blank" ' +
                     'rel="noopener" class="text-primary">' + nro + '</a>';
             }
-            var origen = a.origen ? escapar(a.origen.tipo) + ' #' + a.origen.id : '<span class="text-muted">—</span>';
+            var origen = '<span class="text-muted">—</span>';
+            if (a.origen) {
+                origen = escapar(a.origen.tipo) + ' #' + a.origen.id;
+                if (a.origen.url) {
+                    origen = '<a href="' + escapar(a.origen.url) + '" target="_blank" rel="noopener" class="text-primary">' + origen + '</a>';
+                }
+            }
             html += '<tr><td>' + fecha + '</td><td>' + nro + '</td><td>' + escapar(a.tipo) + '</td>' +
                 '<td>' + escapar(a.empresa) + '</td>' +
                 '<td class="text-right" style="font-variant-numeric:tabular-nums">' + fmt(a.monto) + '</td>' +

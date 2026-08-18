@@ -43,7 +43,12 @@ class Concepto_SueldosController extends Controller
             || can('crear-tipo-ausencia-sueldos', false)
             || can('editar-tipo-ausencia-sueldos', false)
             || can('actualizar-tipo-ausencia-sueldos', false)
-            || can('listar-tipo-ausencia-sueldos', false);
+            || can('listar-tipo-ausencia-sueldos', false)
+            || can('listar-reporte-sueldos-definible', false)
+            || can('editar-reporte-sueldos-definible', false)
+            || can('actualizar-reporte-sueldos-definible', false)
+            || can('crear-reporte-sueldos-definible', false)
+            || can('ejecutar-reporte-sueldos-definible', false);
     }
 
     public function index(Request $request)

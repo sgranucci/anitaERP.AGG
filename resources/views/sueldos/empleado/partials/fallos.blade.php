@@ -36,8 +36,8 @@
                 </a>
             @endif
             @if ($puedeVerProceso ?? false)
-                <a class="btn btn-outline-secondary btn-sm" href="{{ route('consultar_dtofallo_sueldos') }}" target="_blank" rel="noopener">
-                    Proceso dto.
+                <a class="btn btn-outline-secondary btn-sm" href="{{ route('consultar_descuento_fallo_sueldos') }}" target="_blank" rel="noopener">
+                    Proceso de descuento
                 </a>
             @endif
         </div>
@@ -91,7 +91,7 @@
         </table>
     </div>
 
-    <h6 class="mb-2">Ledger dtofallo (cuotas / sanciones del proceso)</h6>
+    <h6 class="mb-2">Registro de descuentos por fallo (cuotas / sanciones del proceso)</h6>
     <div class="table-responsive">
         <table class="table table-sm table-bordered mb-0">
             <thead style="background:#85C1E9;color:#17202A;">
@@ -111,7 +111,7 @@
                         <td>{{ $m->periodo }}</td>
                         <td>{{ $m->tipoLabel() }}</td>
                         <td class="text-right">{{ number_format((float)$m->importe, 2, ',', '.') }}</td>
-                        <td>{{ optional($m->cierre)->nro_cierre }}</td>
+                        <td>{{ optional($m->cierre)->numero_cierre }}</td>
                         <td>{{ $m->observacion }}</td>
                     </tr>
                 @empty

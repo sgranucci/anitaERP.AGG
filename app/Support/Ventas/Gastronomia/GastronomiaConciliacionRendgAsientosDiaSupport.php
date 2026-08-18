@@ -56,9 +56,13 @@ final class GastronomiaConciliacionRendgAsientosDiaSupport
         float $tolerancia,
         float $notasCreditoRendg = 0.0,
     ): array {
-        $rendgSalonBruto = ! $jornadaAbierta ? (float) ($totalesSalon['rendgastro_z'] ?? 0) : null;
         $ncRendg = ! $jornadaAbierta ? round($notasCreditoRendg, 2) : 0.0;
-        $rendgSalonNeto = $rendgSalonBruto !== null ? round($rendgSalonBruto - $ncRendg, 2) : null;
+        // Los totales de salón llegan ya netos desde la conciliación por PC
+        // (Z portadora − NC). Restar las NC otra vez duplicaba el descuento.
+        $rendgSalonNeto = ! $jornadaAbierta ? (float) ($totalesSalon['rendgastro_z'] ?? 0) : null;
+        $rendgSalonBruto = $rendgSalonNeto !== null
+            ? round($rendgSalonNeto + $ncRendg, 2)
+            : null;
 
         $rendgPost = ! $jornadaAbierta && ($postCierre['rendgastro_z'] ?? null) !== null
             ? (float) $postCierre['rendgastro_z']
@@ -91,7 +95,7 @@ final class GastronomiaConciliacionRendgAsientosDiaSupport
 
         $obs = [];
         if ($ncRendg > $tolerancia) {
-            $obs[] = 'NC rendg descontadas del salón: $ '.number_format($ncRendg, 2, ',', '.');
+            $obs[] = 'NC rendg incluidas en el neto del salón: $ '.number_format($ncRendg, 2, ',', '.');
         }
         if (($asientos['otros'] ?? []) !== []) {
             $obs[] = 'Otros asientos cierre (no facturación): '.count($asientos['otros']);

@@ -7,6 +7,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Ventas\TurnoGastronomiaRepositoryInterface;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
 use App\Services\Ventas\Gastronomia\GastronomiaJornadaService;
+use App\Services\Ventas\Gastronomia\GastronomiaSaneamientoHuecosArcaLoteService;
 use App\Services\Ventas\Gastronomia\GastronomiaTurnoOperativoService;
 use App\Support\Ventas\GastronomiaCierreTurnoReporteSupport;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
@@ -25,6 +26,7 @@ class HabilitacionTurnoGastronomiaController extends Controller
         private readonly TurnoGastronomiaRepositoryInterface $turnoGastronomiaRepository,
         private readonly GastronomiaCierreTurnoReporteSupport $reporteSupport,
         private readonly EmpresaRepositoryInterface $empresaRepository,
+        private readonly GastronomiaSaneamientoHuecosArcaLoteService $saneamientoHuecosArcaService,
     ) {
     }
 
@@ -624,6 +626,79 @@ class HabilitacionTurnoGastronomiaController extends Controller
         } catch (InvalidArgumentException $e) {
             return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
         }
+    }
+
+    public function apiDiagnosticarHuecosArca(Request $request)
+    {
+        can('cerrar-turno-operativo-gastronomia');
+
+        try {
+            $turno = $this->resolverTurnoParaSaneamientoHuecos($request);
+            $diag = $this->saneamientoHuecosArcaService->diagnosticar($turno);
+
+            return response()->json(['ok' => true, ...$diag]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    public function apiEjecutarSaneamientoHuecosArca(Request $request)
+    {
+        can('cerrar-turno-operativo-gastronomia');
+
+        try {
+            $turno = $this->resolverTurnoParaSaneamientoHuecos($request);
+            $numeros = $request->input('numeros');
+            $lista = is_array($numeros) ? array_map('intval', $numeros) : null;
+            $resultado = $this->saneamientoHuecosArcaService->ejecutar(
+                $turno,
+                $lista,
+                (bool) $request->boolean('dry_run'),
+                $request->input('fecha_nc'),
+            );
+
+            $status = ! empty($resultado['ok']) ? 200 : 422;
+
+            return response()->json($resultado, $status);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 422);
+        } catch (Throwable $e) {
+            return response()->json(['ok' => false, 'error' => $e->getMessage()], 500);
+        }
+    }
+
+    /**
+     * @return \App\Models\Ventas\TurnoOperativoGastronomia
+     */
+    private function resolverTurnoParaSaneamientoHuecos(Request $request)
+    {
+        $turnoId = (int) $request->input('turno_operativo_id', 0);
+        if ($turnoId > 0) {
+            $turno = \App\Models\Ventas\TurnoOperativoGastronomia::query()
+                ->with(['jornada', 'configuracionPuntoventa.puntoventaCae', 'configuracionPuntoventa.puntoventaCaea'])
+                ->find($turnoId);
+            if ($turno === null) {
+                throw new InvalidArgumentException('Turno operativo inexistente.');
+            }
+
+            return $turno;
+        }
+
+        $empresaId = $this->empresaOperativaDesdeRequest($request);
+        $cfg = $this->resolverConfiguracionParaRequest($request, $empresaId);
+        if ($cfg === null) {
+            throw new InvalidArgumentException('Sin configuración PV para esta terminal y empresa.');
+        }
+        $pc = GastronomiaIdentificadorPc::resolver($request);
+        $activo = $this->turnoOperativoService->turnoHabilitadoEnPc($pc);
+        if ($activo === null) {
+            throw new InvalidArgumentException('No hay turno habilitado en esta terminal.');
+        }
+        $activo->loadMissing(['jornada', 'configuracionPuntoventa.puntoventaCae', 'configuracionPuntoventa.puntoventaCaea']);
+
+        return $activo;
     }
 
     /**

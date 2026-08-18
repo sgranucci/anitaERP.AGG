@@ -4,12 +4,16 @@ namespace App\Http\Controllers\Caja;
 
 use App\Exports\Caja\PosicionFinancieraExport;
 use App\Http\Controllers\Controller;
+use App\Models\Caja\PosicionFinancieraSaldo;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Caja\PosicionFinancieraSaldoSupport;
 use App\Support\Contable\Efe\EfePosicionFinancieraSupport;
 use App\Support\Contable\EfeMensualListadoFiltros;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Barryvdh\DomPDF\Facade\Pdf;
+use Carbon\Carbon;
 use Illuminate\Http\Request;
+use InvalidArgumentException;
 use Maatwebsite\Excel\Facades\Excel;
 
 /**
@@ -48,6 +52,8 @@ class PosicionFinancieraController extends Controller
         $dias = [];
         $saldoInicial = null;
         $saldoFinal = null;
+        $saldoInicialOrigen = null;
+        $saldoConfirmado = null;
         $erroresBridge = [];
 
         if ($request->boolean('consultar') && EfeMensualListadoFiltros::tieneCriteriosAplicados($filtros)) {
@@ -56,7 +62,19 @@ class PosicionFinancieraController extends Controller
             $dias = $resultado['dias'] ?? [];
             $saldoInicial = $resultado['saldo_inicial'] ?? null;
             $saldoFinal = $resultado['saldo_final'] ?? null;
+            $saldoInicialOrigen = $resultado['saldo_inicial_origen'] ?? null;
             $erroresBridge = $resultado['errores_bridge'] ?? [];
+            $saldoConfirmado = PosicionFinancieraSaldo::query()
+                ->with(['confirmadoPor:id,nombre', 'anuladoPor:id,nombre'])
+                ->where('empresa_id', (int) ($filtros['empresa_id'] ?? 0))
+                ->whereDate('fecha_cierre', Carbon::createFromDate(
+                    (int) ($filtros['anio'] ?? 0),
+                    (int) ($filtros['mes'] ?? 0),
+                    1,
+                )->endOfMonth()->toDateString())
+                ->whereNull('anulado_at')
+                ->latest('id')
+                ->first();
             $consultado = true;
         }
 
@@ -76,12 +94,103 @@ class PosicionFinancieraController extends Controller
             'dias' => $dias,
             'saldo_inicial' => $saldoInicial,
             'saldo_final' => $saldoFinal,
+            'saldo_inicial_origen' => $saldoInicialOrigen,
+            'saldo_confirmado' => $saldoConfirmado,
             'errores_bridge' => $erroresBridge,
             'empresa' => $empresa,
             'periodo_texto' => $this->periodoTexto($filtros),
             'mes_actual' => (int) date('n'),
             'anio_actual' => (int) date('Y'),
         ]);
+    }
+
+    public function confirmarSaldo(Request $request)
+    {
+        can('confirmar-saldo-posicion-financiera');
+
+        $filtros = EfeMensualListadoFiltros::resolverDesdeRequest($request);
+        unset($filtros['solo_moneda_origen']);
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        $this->assertAccesoEmpresa($empresaId);
+
+        if (! EfeMensualListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            return redirect()->route('posicion_financiera')
+                ->with('error', 'Debe indicar empresa y período.');
+        }
+
+        try {
+            $resultado = $this->posicionFinancieraSupport->generar($filtros);
+            $fechaCierre = Carbon::createFromDate(
+                (int) $filtros['anio'],
+                (int) $filtros['mes'],
+                1,
+            )->endOfMonth();
+
+            PosicionFinancieraSaldoSupport::confirmar(
+                $empresaId,
+                $fechaCierre,
+                (float) ($resultado['saldo_inicial'] ?? 0),
+                (float) ($resultado['saldo_final'] ?? 0),
+                EfeMensualListadoFiltros::paraQueryString($filtros),
+                (int) auth()->id(),
+            );
+        } catch (InvalidArgumentException $e) {
+            return redirect()->route('posicion_financiera', array_merge(
+                EfeMensualListadoFiltros::paraQueryString($filtros),
+                ['consultar' => 1],
+            ))->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('posicion_financiera', array_merge(
+            EfeMensualListadoFiltros::paraQueryString($filtros),
+            ['consultar' => 1],
+        ))->with('mensaje', 'Saldo final del período confirmado.');
+    }
+
+    public function anularSaldo(Request $request, int $id)
+    {
+        can('anular-saldo-posicion-financiera');
+
+        $saldo = PosicionFinancieraSaldo::query()->findOrFail($id);
+        $this->assertAccesoEmpresa((int) $saldo->empresa_id);
+
+        try {
+            PosicionFinancieraSaldoSupport::anular(
+                $id,
+                (int) auth()->id(),
+                (string) $request->input('motivo'),
+            );
+        } catch (InvalidArgumentException $e) {
+            return back()->with('error', $e->getMessage());
+        }
+
+        return back()->with('mensaje', 'Saldo confirmado anulado. El período puede volver a confirmarse.');
+    }
+
+    public function auditoria(Request $request)
+    {
+        can('listar-posicion-financiera');
+
+        $filtros = EfeMensualListadoFiltros::resolverDesdeRequest($request);
+        unset($filtros['solo_moneda_origen']);
+        $this->assertAccesoEmpresa((int) ($filtros['empresa_id'] ?? 0));
+
+        $dia = (int) $request->input('dia');
+        $bloque = trim((string) $request->input('bloque'));
+        $etiqueta = trim((string) $request->input('etiqueta'));
+
+        try {
+            $auditoria = $this->posicionFinancieraSupport->auditarDato(
+                $filtros,
+                $dia,
+                $bloque,
+                $etiqueta,
+            );
+        } catch (InvalidArgumentException $e) {
+            abort(422, $e->getMessage());
+        }
+
+        return view('caja.posicion_financiera.partials.auditoria_dato', compact('auditoria'));
     }
 
     public function exportar(Request $request, string $formato)

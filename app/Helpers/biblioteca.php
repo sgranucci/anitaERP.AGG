@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Admin\Permiso;
+use App\Support\Cache\PermisoCacheSupport;
 use Illuminate\Support\Facades\Request;
 use Carbon\Carbon;
 
@@ -177,9 +178,9 @@ if (!function_exists('canUser')) {
             return true;
         } else {
             $rolId = session()->get('rol_id');
-            $permisos = cache()->tags('Permiso')->rememberForever("Permiso.rolid.$rolId", function () {
-                return Permiso::whereHas('roles', function ($query) {
-                    $query->where('rol_id', session()->get('rol_id'));
+            $permisos = PermisoCacheSupport::rememberSlugsPorRol($rolId, function () use ($rolId) {
+                return Permiso::whereHas('roles', function ($query) use ($rolId) {
+                    $query->where('rol.id', $rolId);
                 })->get()->pluck('slug')->toArray();
             });
 
@@ -200,9 +201,9 @@ if (!function_exists('canUser')) {
 function traePermisosUsuario()
 {
     $rolId = session()->get('rol_id');
-    $permisos = cache()->tags('Permiso')->rememberForever("Permiso.rolid.$rolId", function () {
-        return Permiso::whereHas('roles', function ($query) {
-            $query->where('rol_id', session()->get('rol_id'));
+    $permisos = PermisoCacheSupport::rememberSlugsPorRol($rolId, function () use ($rolId) {
+        return Permiso::whereHas('roles', function ($query) use ($rolId) {
+            $query->where('rol.id', $rolId);
         })->get()->pluck('slug')->toArray();
     });
 
@@ -412,9 +413,9 @@ function chequeaPermisoTicket()
     $flUsuario = $flTecnico = $flSupervisor = $flEncargado = false;
 
     $rolId = session()->get('rol_id');
-    $permisos = cache()->tags('Permiso')->rememberForever("Permiso.rolid.$rolId", function () {
-            return Permiso::whereHas('roles', function ($query) {
-                $query->where('rol_id', session()->get('rol_id'));
+    $permisos = PermisoCacheSupport::rememberSlugsPorRol($rolId, function () use ($rolId) {
+            return Permiso::whereHas('roles', function ($query) use ($rolId) {
+                $query->where('rol.id', $rolId);
             })->get()->pluck('slug')->toArray();
         });
     $permiso = '';

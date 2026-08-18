@@ -43,6 +43,11 @@ final class GastronomiaRecuperarComprobanteArcaService
     /**
      * @return array<string, mixed>
      */
+    /**
+     * @param  bool  $omitirAnitaVentas  Saneamiento fiscal: no replica cabecera venta Anita.
+     * @param  string|null  $identificadorPcForzado  PC del turno (emisión gastronomía).
+     * @param  string|null  $fechaJornadaForzada  Y-m-d operativa del turno.
+     */
     public function recuperar(
         int $empresaId,
         string $pvCodigo,
@@ -51,6 +56,9 @@ final class GastronomiaRecuperarComprobanteArcaService
         ?int $cuentaReferenciaId = null,
         ?int $ventaReferenciaId = null,
         bool $dryRun = false,
+        bool $omitirAnitaVentas = false,
+        ?string $identificadorPcForzado = null,
+        ?string $fechaJornadaForzada = null,
     ): array {
         $pvCodigo = str_pad(trim($pvCodigo), 5, '0', STR_PAD_LEFT);
         $empresa = Empresa::query()->findOrFail($empresaId);
@@ -88,6 +96,8 @@ final class GastronomiaRecuperarComprobanteArcaService
             $arca,
             $cuentaReferenciaId,
             $ventaReferenciaId,
+            $omitirAnitaVentas,
+            $fechaJornadaForzada,
         );
 
         if ($dryRun) {
@@ -102,11 +112,21 @@ final class GastronomiaRecuperarComprobanteArcaService
                     'fechajornada' => $payload['fechajornada'] ?? null,
                     'total_esperado_arca' => $arca['imp_total'],
                     'items' => count($payload['articulo_ids'] ?? []),
+                    'omitir_anita_ventas' => $omitirAnitaVentas,
                 ],
             ];
         }
 
-        return DB::transaction(function () use ($payload, $arca, $pv, $cuentaReferenciaId, $empresaId): array {
+        return DB::transaction(function () use (
+            $payload,
+            $arca,
+            $pv,
+            $tipo,
+            $cuentaReferenciaId,
+            $empresaId,
+            $omitirAnitaVentas,
+            $identificadorPcForzado,
+        ): array {
             $resultado = $this->facturacionService->generaComprobanteGeneral($payload);
             if (! empty($resultado['error'])) {
                 throw new RuntimeException((string) $resultado['error']);
@@ -139,17 +159,24 @@ final class GastronomiaRecuperarComprobanteArcaService
 
             $venta = Venta::query()->findOrFail($ventaId);
 
-            if (isset($resultado['anita_pendiente']) && is_array($resultado['anita_pendiente'])) {
-                $this->facturacionGastronomiaService->ejecutarAnitaPendienteGastronomia($resultado['anita_pendiente']);
-            } else {
-                $this->asegurarCabeceraAnita($venta->fresh(), $tipo);
+            if (! $omitirAnitaVentas) {
+                if (isset($resultado['anita_pendiente']) && is_array($resultado['anita_pendiente'])) {
+                    $this->facturacionGastronomiaService->ejecutarAnitaPendienteGastronomia($resultado['anita_pendiente']);
+                } else {
+                    $this->asegurarCabeceraAnita($venta->fresh(), $tipo);
+                }
+
+                if (is_array($vencaePendiente)) {
+                    $this->facturacionGastronomiaService->ejecutarVencaePendienteGastronomia($vencaePendiente);
+                }
             }
 
-            if (is_array($vencaePendiente)) {
-                $this->facturacionGastronomiaService->ejecutarVencaePendienteGastronomia($vencaePendiente);
-            }
-
-            $this->registrarEmisionRecuperacion($venta, $cuentaReferenciaId, $pv);
+            $this->registrarEmisionRecuperacion(
+                $venta,
+                $cuentaReferenciaId,
+                $empresaId,
+                $identificadorPcForzado,
+            );
 
             $cobranzaId = $this->generarCobranzaEfectivo($venta->fresh(), $empresaId, $cuentaReferenciaId, $esCortesia);
 
@@ -223,11 +250,16 @@ final class GastronomiaRecuperarComprobanteArcaService
         array $arca,
         ?int $cuentaReferenciaId,
         ?int $ventaReferenciaId,
+        bool $omitirAnitaVentas = false,
+        ?string $fechaJornadaForzada = null,
     ): array {
         $fechaFactura = $arca['fecha_comprobante'] !== '' ? $arca['fecha_comprobante'] : $arca['fecha_proceso'];
         if ($fechaFactura === '') {
             $fechaFactura = now()->format('Y-m-d');
         }
+        $fechaJornada = ($fechaJornadaForzada !== null && preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaJornadaForzada))
+            ? $fechaJornadaForzada
+            : $fechaFactura;
 
         $leyendaBase = 'Recuperación ARCA '.VentaNumeracionEmpresaSupport::formatearCodigoVenta(
             (string) $tipo->abreviatura,
@@ -252,7 +284,7 @@ final class GastronomiaRecuperarComprobanteArcaService
                 'tipotransaccion_id' => (int) $tipo->id,
                 'puntoventa_id' => (int) $pv->id,
                 'fechafactura' => $fechaFactura,
-                'fechajornada' => $fechaFactura,
+                'fechajornada' => $fechaJornada,
                 'leyendafactura' => $leyendaBase.' '.$this->leyendaCuenta($cuenta),
                 'actividad_arca_id' => (int) config('gastronomia.actividad_arca_id', 1),
                 'cliente_id' => (int) $receptor['cliente_id'],
@@ -287,20 +319,24 @@ final class GastronomiaRecuperarComprobanteArcaService
             }
         } elseif ($ventaReferenciaId !== null && $ventaReferenciaId > 0) {
             $payload = $this->payloadDesdeVentaReferencia($ventaReferenciaId, $pv, $tipo, $numeroComprobante, $fechaFactura, $leyendaBase);
+            $payload['fechajornada'] = $fechaJornada;
         } else {
             throw new InvalidArgumentException('Indique --cuenta o --venta-referencia para armar ítems.');
         }
+
+        $payload['fechajornada'] = $fechaJornada;
 
         $opciones = [
             'omitir_movimiento_stock' => true,
             'omitir_contabilidad' => ! config('gastronomia.genera_contabilidad_al_facturar', true),
             'omitir_cuenta_corriente' => true,
-            'omitir_sincronizacion_anita' => ! config('gastronomia.sincronizar_anita_al_facturar', true),
+            'omitir_sincronizacion_anita' => $omitirAnitaVentas
+                || ! config('gastronomia.sincronizar_anita_al_facturar', true),
             'anita_modo_minimo' => (bool) config('gastronomia.anita_modo_minimo', true),
             'omitir_stkmov_anita' => filter_var(config('gastronomia.anita_omitir_stkmov', true), FILTER_VALIDATE_BOOLEAN),
             'omitir_solicitud_arca_cae' => true,
             'omitir_numera_anita_fin' => true,
-            'fechajornada' => $fechaFactura,
+            'fechajornada' => $fechaJornada,
         ];
         $payload['opciones_emision'] = $opciones;
 
@@ -480,15 +516,31 @@ final class GastronomiaRecuperarComprobanteArcaService
         }
     }
 
-    private function registrarEmisionRecuperacion(Venta $venta, ?int $cuentaReferenciaId, Puntoventa $pv): void
-    {
+    private function registrarEmisionRecuperacion(
+        Venta $venta,
+        ?int $cuentaReferenciaId,
+        int $empresaId,
+        ?string $identificadorPcForzado = null,
+    ): void {
+        $cuenta = $cuentaReferenciaId !== null
+            ? CuentaGastronomia::query()->find($cuentaReferenciaId)
+            : null;
+        $cfg = $this->resolverConfiguracionPuntoventa($empresaId, $cuentaReferenciaId);
+
+        $pc = trim((string) ($identificadorPcForzado ?? ''));
+        if ($pc === '') {
+            $pc = trim((string) ($cuenta?->identificador_pc ?? '')) !== ''
+                ? (string) $cuenta->identificador_pc
+                : (string) $cfg->identificador_pc;
+        }
+
         VentaGastronomiaEmision::updateOrCreate(
             ['venta_id' => $venta->id],
             [
                 'cuenta_gastronomia_id' => $cuentaReferenciaId,
                 'origen_pos' => 'recuperacion_arca',
-                'identificador_pc' => 'recuperacion-arca',
-                'configuracion_puntoventa_gastronomia_id' => null,
+                'identificador_pc' => $pc,
+                'configuracion_puntoventa_gastronomia_id' => (int) $cfg->id,
             ],
         );
     }

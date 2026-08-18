@@ -1,8 +1,8 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
@@ -24,11 +24,18 @@ return new class extends Migration
         }
 
         if (Schema::hasTable('caja_movimiento') && Schema::hasColumn('caja_movimiento', 'venta_id')) {
-            DB::table('cobranza as c')
-                ->join('caja_movimiento as cm', 'cm.cobranza_id', '=', 'c.id')
-                ->whereNotNull('cm.venta_id')
-                ->whereNull('c.venta_id')
-                ->update(['c.venta_id' => DB::raw('cm.venta_id')]);
+            MigrationDialectSupport::statementPorDriver(
+                'UPDATE cobranza c
+                 INNER JOIN caja_movimiento cm ON cm.cobranza_id = c.id
+                 SET c.venta_id = cm.venta_id
+                 WHERE cm.venta_id IS NOT NULL AND c.venta_id IS NULL',
+                'UPDATE cobranza AS c
+                 SET venta_id = cm.venta_id
+                 FROM caja_movimiento AS cm
+                 WHERE cm.cobranza_id = c.id
+                   AND cm.venta_id IS NOT NULL
+                   AND c.venta_id IS NULL'
+            );
         }
     }
 

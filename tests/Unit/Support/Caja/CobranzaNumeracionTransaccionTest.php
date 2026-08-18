@@ -49,4 +49,13 @@ class CobranzaNumeracionTransaccionTest extends TestCase
 
         $this->assertTrue(CobranzaNumeracionTransaccion::esViolacionUnicidadNumeracion($e));
     }
+
+    public function test_detecta_violacion_unique_cobranza_postgres(): void
+    {
+        $e = new \Exception(
+            'ERROR: duplicate key value violates unique constraint "cobranza_empresa_tipo_numero_unique"'
+        );
+
+        $this->assertTrue(CobranzaNumeracionTransaccion::esViolacionUnicidadNumeracion($e));
+    }
 }

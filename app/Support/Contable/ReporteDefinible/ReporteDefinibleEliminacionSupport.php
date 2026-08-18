@@ -225,7 +225,7 @@ class ReporteDefinibleEliminacionSupport
                 $w->whereNull('reporte_contable_id')
                     ->orWhere('reporte_contable_id', $reporteId);
             })
-            ->orderByRaw('reporte_contable_id IS NULL DESC')
+            ->orderByRaw('(reporte_contable_id IS NULL) DESC')
             ->orderBy('orden')
             ->orderBy('id')
             ->get();

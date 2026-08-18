@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -38,17 +39,6 @@ return new class extends Migration
 
     private function dropIndexIfExists(string $table, string $index): void
     {
-        $db = DB::getDatabaseName();
-        $exists = DB::table('information_schema.statistics')
-            ->where('table_schema', $db)
-            ->where('table_name', $table)
-            ->where('index_name', $index)
-            ->exists();
-        if (! $exists) {
-            return;
-        }
-        Schema::table($table, function (Blueprint $blueprint) use ($index) {
-            $blueprint->dropIndex($index);
-        });
+        MigrationDialectSupport::dropIndiceOUnique($table, $index);
     }
 };

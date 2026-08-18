@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Database\MigrationDialectSupport;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
@@ -35,7 +36,12 @@ return new class extends Migration
 
         if (Schema::hasColumn('arbolaprobacion_nivel', 'requisicion_estado_al_aprobar')
             && ! Schema::hasColumn('arbolaprobacion_nivel', 'documento_estado_al_aprobar')) {
-            DB::statement('ALTER TABLE arbolaprobacion_nivel CHANGE requisicion_estado_al_aprobar documento_estado_al_aprobar VARCHAR(50) NULL');
+            MigrationDialectSupport::renombrarColumna(
+                'arbolaprobacion_nivel',
+                'requisicion_estado_al_aprobar',
+                'documento_estado_al_aprobar',
+                'VARCHAR(50) NULL'
+            );
         }
     }
 
@@ -43,7 +49,12 @@ return new class extends Migration
     {
         if (Schema::hasColumn('arbolaprobacion_nivel', 'documento_estado_al_aprobar')
             && ! Schema::hasColumn('arbolaprobacion_nivel', 'requisicion_estado_al_aprobar')) {
-            DB::statement('ALTER TABLE arbolaprobacion_nivel CHANGE documento_estado_al_aprobar requisicion_estado_al_aprobar VARCHAR(50) NULL');
+            MigrationDialectSupport::renombrarColumna(
+                'arbolaprobacion_nivel',
+                'documento_estado_al_aprobar',
+                'requisicion_estado_al_aprobar',
+                'VARCHAR(50) NULL'
+            );
         }
 
         Schema::table('ordencompra', function (Blueprint $table) {

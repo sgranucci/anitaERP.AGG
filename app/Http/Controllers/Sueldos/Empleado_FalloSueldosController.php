@@ -31,7 +31,7 @@ class Empleado_FalloSueldosController extends Controller
             'empleado' => $empleado,
             'resumen' => $resumen,
             'puedeVerReporte' => can('listar-fallo-reporte-sueldos', false),
-            'puedeVerProceso' => can('listar-dtofallo-sueldos', false),
+            'puedeVerProceso' => can('listar-descuento-fallo-sueldos', false),
         ])->render();
 
         return response()->json(['html' => $html]);
