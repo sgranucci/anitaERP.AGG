@@ -12,6 +12,8 @@
     var contextoAlta = null;
     /** @type {{total:number, actual:number, locked:boolean}|null} */
     var procesoEtiqueta = null;
+    /** @type {string|null} Campo a enfocar cuando el modal termina de abrir. */
+    var focoPendienteModalEtiqueta = null;
 
     function actualizarBadgeProceso() {
         var $b = $('#etiq_proceso_badge');
@@ -25,6 +27,26 @@
     function finProcesoEtiqueta() {
         procesoEtiqueta = null;
         actualizarBadgeProceso();
+    }
+
+    /**
+     * Bootstrap enfoca el propio modal en shown.bs.modal y pisa cualquier focus
+     * previo (por eso el foco "se iba" del campo con un setTimeout suelto).
+     * Si el modal aún no terminó de abrir, se deja pendiente y lo aplica el handler.
+     */
+    function enfocarCampoModalEtiqueta(selector) {
+        var $modal = $('#modalEtiquetaProveedorSurmar');
+
+        if (!$modal.hasClass('show')) {
+            focoPendienteModalEtiqueta = selector;
+            return;
+        }
+
+        focoPendienteModalEtiqueta = null;
+        var $campo = $(selector);
+        if ($campo.length) {
+            $campo.trigger('focus').select();
+        }
     }
 
     function prepararSiguienteUnidadEnModal(proxima) {
@@ -45,7 +67,7 @@
         $('#btn-etiq-guardar').prop('disabled', false);
         actualizarBadgeProceso();
         actualizarPreviewLocal();
-        setTimeout(function () { $('#etiq_piezas').trigger('focus').select(); }, 200);
+        enfocarCampoModalEtiqueta('#etiq_piezas');
     }
 
     function sincronizarPesosAlFormulario() {
@@ -908,11 +930,9 @@
         $('#btn-etiq-guardar').prop('disabled', false);
         actualizarBadgeProceso();
         actualizarPreviewLocal();
+        // Alta rápida sin datos previos: foco en piezas (luego Enter → bruto → … → Imprime).
+        enfocarCampoModalEtiqueta('#etiq_piezas');
         $('#modalEtiquetaProveedorSurmar').modal('show');
-        setTimeout(function () {
-            // Alta rápida sin datos previos: foco en piezas (luego Enter → bruto → … → Imprime).
-            $('#etiq_piezas').trigger('focus').select();
-        }, 300);
     }
 
     function abrirModalEdicion(linea, forzarImprimir) {
@@ -1459,7 +1479,18 @@
         $('#btn-etiq-actualizar-preview').on('click', actualizarPreviewLocal);
         $('#btn-etiq-guardar').on('click', function () { guardarDesdeModal(false); });
         $('#btn-etiq-guardar-imprimir').on('click', function () { guardarDesdeModal(true); });
+        $('#modalEtiquetaProveedorSurmar').on('shown.bs.modal', function () {
+            if (!focoPendienteModalEtiqueta) {
+                return;
+            }
+            var $campo = $(focoPendienteModalEtiqueta);
+            focoPendienteModalEtiqueta = null;
+            if ($campo.length) {
+                $campo.trigger('focus').select();
+            }
+        });
         $('#modalEtiquetaProveedorSurmar').on('hidden.bs.modal', function () {
+            focoPendienteModalEtiqueta = null;
             finProcesoEtiqueta();
         });
 

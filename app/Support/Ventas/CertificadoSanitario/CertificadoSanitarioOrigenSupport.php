@@ -120,10 +120,13 @@ final class CertificadoSanitarioOrigenSupport
     }
 
     /**
+     * SKUs de tercero que en Anita/ERP ya usaron amparo y esta línea no lo trae.
+     * No incluye jamones 9066: certa_cert_terc vacío; el elaborador va en codigoProducto.
+     *
      * @param  \Illuminate\Support\Collection<int, PedidoCertificadoLinea>  $lineas
-     * @return list<string> SKUs de tercero sin amparo
+     * @return list<string>
      */
-    public static function skusTerceroSinOrigen($lineas): array
+    public static function skusTerceroConAmparoFaltante($lineas): array
     {
         $faltan = [];
         foreach ($lineas as $l) {
@@ -133,10 +136,23 @@ final class CertificadoSanitarioOrigenSupport
             if (trim($l->certificadoOrigen) !== '') {
                 continue;
             }
+            $historico = self::resolverParaSku($l->sku, $l->prefijoSenasa);
+            if ($historico === '') {
+                continue;
+            }
             $faltan[] = $l->sku.' ('.$l->prefijoSenasa.'-'.$l->registroSenasa.')';
         }
 
         return array_values(array_unique($faltan));
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, PedidoCertificadoLinea>  $lineas
+     * @return list<string> SKUs de tercero sin amparo
+     */
+    public static function skusTerceroSinOrigen($lineas): array
+    {
+        return self::skusTerceroConAmparoFaltante($lineas);
     }
 
     private static function buscarEnErp(string $sku, string $prefijo): string

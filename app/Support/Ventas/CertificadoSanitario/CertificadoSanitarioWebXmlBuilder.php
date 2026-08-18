@@ -69,7 +69,7 @@ final class CertificadoSanitarioWebXmlBuilder
             $totalCajas += $cajas;
             $bruto = $neto + $cajas;
 
-            $codigoProducto = $this->codigoProducto($base);
+            $codigoProducto = self::codigoProducto($base);
             $fechaElab = $fecha->copy()->subDays(2);
             $fechaVto = $base->vencimientoEnDias > 0
                 ? $fechaElab->copy()->addDays($base->vencimientoEnDias)
@@ -203,11 +203,12 @@ final class CertificadoSanitarioWebXmlBuilder
         return trim($primera->localidadNombre.'-'.$primera->provinciaNombre, '-');
     }
 
-    private function codigoProducto(PedidoCertificadoLinea $l): string
+    public static function codigoProducto(PedidoCertificadoLinea $l): string
     {
         $registro = $l->registroSenasa !== '' ? $l->registroSenasa : '0';
-        if ($l->prefijoSenasa !== '') {
-            return $l->prefijoSenasa.'-'.$registro;
+        $prefijo = trim($l->prefijoSenasa);
+        if ($prefijo !== '') {
+            return $prefijo.'-'.$registro;
         }
 
         return ((int) config('senasa.establecimiento')).'-'.$registro;

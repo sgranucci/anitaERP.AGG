@@ -9,6 +9,7 @@ use App\Models\Ventas\CertificadoSanitarioArticulo;
 use App\Models\Ventas\CertificadoSanitarioCliente;
 use App\Models\Ventas\CertificadoSanitarioDestino;
 use App\Models\Ventas\Transporte;
+use App\Repositories\Stock\CodigosenasaRepositoryInterface;
 use App\Support\Ventas\CertificadoSanitarioListadoFiltros;
 use App\Support\Ventas\CertificadoSanitario\CertificadoSanitarioAnitaNumeracionSupport;
 use App\Support\Ventas\CertificadoSanitario\CertificadoSanitarioOrigenSupport;
@@ -31,6 +32,7 @@ class CertificadoSanitarioService
     public function __construct(
         private PedidoCertificadoSource $pedidoSource,
         private CertificadoSanitarioWebXmlBuilder $xmlBuilder,
+        private CodigosenasaRepositoryInterface $codigosenasaRepository,
     ) {
     }
 
@@ -155,12 +157,16 @@ class CertificadoSanitarioService
         $abre = (bool) ($input['abre_por_localidad'] ?? false);
         $generaWeb = array_key_exists('genera_web', $input) ? (bool) $input['genera_web'] : true;
 
+        $this->codigosenasaRepository->sincronizarConAnita();
+
         $lineas = $this->pedidoSource->listarLineas($input);
         if ($lineas->isEmpty()) {
             throw new RuntimeException('No hay pedidos con artículos SENASA para la fecha/filtros indicados.');
         }
 
-        $faltanOrigen = CertificadoSanitarioOrigenSupport::skusTerceroSinOrigen($lineas);
+        // 3353 (Lazzarano) lleva amparo en el XML; 9066 (jamón crudo) no:
+        // Anita deja certa_cert_terc vacío y el elaborador va en codigoProducto.
+        $faltanOrigen = CertificadoSanitarioOrigenSupport::skusTerceroConAmparoFaltante($lineas);
         if ($faltanOrigen !== []) {
             throw new RuntimeException(
                 'Productos de otro establecimiento sin certificado de origen (amparo). '
@@ -294,13 +300,17 @@ class CertificadoSanitarioService
     /**
      * Regenera XML WEB si el certificado se marcó para generar y el archivo no está en disco
      * (o el proceso web no puede leerlo: directorios 0700 creados desde CLI),
-     * o si faltan amparos de terceros en líneas SENASA.
+     * o si faltan amparos de terceros en líneas SENASA,
+     * o si el maestro SENASA cambió (jamones crudos 9066 / frío).
      */
     public function regenerarXmlsSiFaltan(CertificadoSanitario $cert): CertificadoSanitario
     {
         if (! $cert->genera_web) {
             return $cert;
         }
+
+        $this->codigosenasaRepository->sincronizarConAnita();
+        $cert->unsetRelation('articulos');
 
         $cert->loadMissing([
             'camion',
@@ -314,12 +324,6 @@ class CertificadoSanitarioService
         ]);
 
         $necesitaAmparo = $this->completarCertTerceroFaltantes($cert);
-        $xmlFalta = ! $this->xmlLegible($cert->xml_frio) && ! $this->xmlLegible($cert->xml_sin_frio);
-        $xmlSinTagOrigen = $this->xmlTerceroSinTagOrigen($cert);
-        if (! $necesitaAmparo && ! $xmlFalta && ! $xmlSinTagOrigen) {
-            return $cert;
-        }
-
         $lineas = $this->lineasDesdeCertificado($cert->fresh([
             'camion',
             'destinos',
@@ -331,6 +335,13 @@ class CertificadoSanitarioService
             'transporte',
         ]));
         if ($lineas->isEmpty()) {
+            return $cert;
+        }
+
+        $xmlFalta = ! $this->xmlLegible($cert->xml_frio) && ! $this->xmlLegible($cert->xml_sin_frio);
+        $xmlSinTagOrigen = $this->xmlTerceroSinTagOrigen($cert, $lineas);
+        $xmlMaestroViejo = $this->xmlDesactualizadoRespectoMaestro($cert, $lineas);
+        if (! $necesitaAmparo && ! $xmlFalta && ! $xmlSinTagOrigen && ! $xmlMaestroViejo) {
             return $cert;
         }
 
@@ -348,15 +359,15 @@ class CertificadoSanitarioService
     {
         $actualizo = false;
         foreach ($cert->articulos as $item) {
+            if (trim((string) ($item->cert_tercero ?? '')) !== '') {
+                continue;
+            }
             $prefijo = trim((string) ($item->articulo?->codigosenasas?->prefijo ?? ''));
             if (! CertificadoSanitarioOrigenSupport::esProductoTercero($prefijo)) {
                 continue;
             }
             $origen = CertificadoSanitarioOrigenSupport::resolverParaSku((string) $item->sku, $prefijo);
             if ($origen === '') {
-                continue;
-            }
-            if (trim((string) ($item->cert_tercero ?? '')) === $origen) {
                 continue;
             }
             $item->cert_tercero = $origen;
@@ -368,19 +379,16 @@ class CertificadoSanitarioService
     }
 
     /**
-     * XML ya generado antes del fix: tiene productos de tercero pero sin tag certificadoDeOrigen.
+     * XML ya generado antes del fix: hay líneas con amparo pero el XML no tiene el tag.
+     *
+     * @param  Collection<int, PedidoCertificadoLinea>  $lineas
      */
-    private function xmlTerceroSinTagOrigen(CertificadoSanitario $cert): bool
+    private function xmlTerceroSinTagOrigen(CertificadoSanitario $cert, Collection $lineas): bool
     {
-        $tieneTercero = false;
-        foreach ($cert->articulos as $item) {
-            $prefijo = trim((string) ($item->articulo?->codigosenasas?->prefijo ?? ''));
-            if (CertificadoSanitarioOrigenSupport::esProductoTercero($prefijo)) {
-                $tieneTercero = true;
-                break;
-            }
-        }
-        if (! $tieneTercero) {
+        $necesitaTag = $lineas->contains(
+            fn (PedidoCertificadoLinea $l) => trim($l->certificadoOrigen) !== ''
+        );
+        if (! $necesitaTag) {
             return false;
         }
 
@@ -390,6 +398,52 @@ class CertificadoSanitarioService
             }
             $contenido = (string) Storage::disk('local')->get($path);
             if ($contenido !== '' && ! str_contains($contenido, 'certificadoDeOrigen')) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Maestro SENASA (prefijo/registro/frío) distinto al que quedó grabado en el XML.
+     *
+     * @param  Collection<int, PedidoCertificadoLinea>  $lineas
+     */
+    private function xmlDesactualizadoRespectoMaestro(CertificadoSanitario $cert, Collection $lineas): bool
+    {
+        $hayFrio = $lineas->contains(
+            fn (PedidoCertificadoLinea $l) => Codigosenasa::codigoFrio($l->llevafrio) === 'S'
+        );
+        $haySinFrio = $lineas->contains(
+            fn (PedidoCertificadoLinea $l) => Codigosenasa::codigoFrio($l->llevafrio) === 'N'
+        );
+        if ($hayFrio && ! $this->xmlLegible($cert->xml_frio)) {
+            return true;
+        }
+        if ($haySinFrio && ! $this->xmlLegible($cert->xml_sin_frio)) {
+            return true;
+        }
+        if (! $haySinFrio && $this->xmlLegible($cert->xml_sin_frio)) {
+            return true;
+        }
+        if (! $hayFrio && $this->xmlLegible($cert->xml_frio)) {
+            return true;
+        }
+
+        $xmls = '';
+        foreach ([$cert->xml_frio, $cert->xml_sin_frio] as $path) {
+            if ($this->xmlLegible($path)) {
+                $xmls .= (string) Storage::disk('local')->get($path);
+            }
+        }
+        if ($xmls === '') {
+            return true;
+        }
+
+        foreach ($lineas as $l) {
+            $codigo = CertificadoSanitarioWebXmlBuilder::codigoProducto($l);
+            if ($codigo !== '' && ! str_contains($xmls, '>'.$codigo.'<')) {
                 return true;
             }
         }
@@ -464,6 +518,10 @@ class CertificadoSanitarioService
         $dir = $base.'/'.$cert->fecha->format('Y/m');
         $this->asegurarDirectorioXml($dir);
 
+        $viejos = [$cert->xml_frio, $cert->xml_sin_frio];
+        $cert->xml_frio = null;
+        $cert->xml_sin_frio = null;
+
         foreach (['S', 'N'] as $frio) {
             $contenido = $this->xmlBuilder->build($cert, $lineas, $frio, $cert->camion);
             if ($contenido === '') {
@@ -480,6 +538,15 @@ class CertificadoSanitarioService
             }
         }
         $cert->save();
+
+        foreach ($viejos as $viejo) {
+            if (! $viejo || $viejo === $cert->xml_frio || $viejo === $cert->xml_sin_frio) {
+                continue;
+            }
+            if (Storage::disk('local')->exists($viejo)) {
+                Storage::disk('local')->delete($viejo);
+            }
+        }
     }
 
     public function xmlLegible(?string $path): bool

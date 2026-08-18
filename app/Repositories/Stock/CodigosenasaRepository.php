@@ -5,7 +5,6 @@ namespace App\Repositories\Stock;
 use App\Models\Stock\Codigosenasa;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
-use Auth;
 
 class CodigosenasaRepository implements CodigosenasaRepositoryInterface
 {
@@ -89,24 +88,55 @@ class CodigosenasaRepository implements CodigosenasaRepositoryInterface
         return $codigosenasa;
     }
 
+    /** Evita listar Anita más de una vez por request (certificado sanitario). */
+    private static bool $sincronizadoEsteRequest = false;
+
     public function sincronizarConAnita(){
 		ini_set('max_execution_time', '300');
 
-        $apiAnita = new ApiAnita();
-        $data = array( 'acc' => 'list', 
-						'campos' => "$this->keyFieldAnita as $this->keyField, $this->keyFieldAnita", 
-						'tabla' => $this->tableAnita );
-        $dataAnita = json_decode($apiAnita->apiCall($data));
+        if (self::$sincronizadoEsteRequest) {
+            return;
+        }
+        self::$sincronizadoEsteRequest = true;
 
-        $datosLocal = Codigosenasa::all();
-        $datosLocalArray = [];
-        foreach ($datosLocal as $value) {
-            $datosLocalArray[] = $value->{$this->keyField};
+        $apiAnita = new ApiAnita();
+        $dataAnita = json_decode($apiAnita->apiCall([
+            'acc' => 'list',
+            'sistema' => 'ventas',
+            'tabla' => $this->tableAnita,
+            'campos' => 'cods_codigo,cods_desc,cods_registro,cods_envase,cods_frio,cods_prefijo',
+            'whereArmado' => ' WHERE 1=1 ',
+            'orderBy' => 'cods_codigo',
+            'limit' => 'FIRST 300',
+        ]));
+        if (! is_array($dataAnita) || $dataAnita === []) {
+            return;
         }
 
+        $locales = Codigosenasa::query()->get()->keyBy(function (Codigosenasa $row) {
+            return (string) (int) $row->codigo;
+        });
+
         foreach ($dataAnita as $value) {
-            if (!in_array(ltrim($value->{$this->keyField}, '0'), $datosLocalArray)) {
-                $this->traerRegistroDeAnita($value->{$this->keyFieldAnita});
+            $attrs = $this->atributosDesdeAnita($value);
+            if ($attrs === null) {
+                continue;
+            }
+            $clave = (string) (int) $attrs['codigo'];
+            $local = $locales->get($clave);
+            if (! $local) {
+                $this->model->create($attrs);
+                continue;
+            }
+            if ($this->necesitaActualizarDesdeAnita($local, $attrs)) {
+                $local->fill([
+                    'nombre' => $attrs['nombre'],
+                    'registro' => $attrs['registro'],
+                    'envasesenasa_id' => $attrs['envasesenasa_id'],
+                    'llevafrio' => $attrs['llevafrio'],
+                    'prefijo' => $attrs['prefijo'],
+                ]);
+                $local->save();
             }
         }
     }
@@ -129,27 +159,52 @@ class CodigosenasaRepository implements CodigosenasaRepositoryInterface
         );
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-		$usuario_id = Auth::user()->id;
-
-        if (count($dataAnita) > 0) {
-            $data = $dataAnita[0];
-
-            if ($data->cods_frio == 'S')
-                $llevaFrio = 'Lleva Frio';
-            else
-                $llevaFrio = 'No Lleva Frio';
-
-			$arr_campos = [
-				"nombre" => $data->cods_desc,
-                "registro" => $data->cods_registro,
-                "envasesenasa_id" => $data->cods_envase == 0 ? null : $data->cods_envase,
-                "llevafrio" => $llevaFrio,
-                "prefijo" => $data->cods_prefijo,
-                "codigo" => $data->cods_codigo,
-            	];
-	
-        	$codigosenasa = $this->model->create($arr_campos);
+        if (is_array($dataAnita) && count($dataAnita) > 0) {
+            $attrs = $this->atributosDesdeAnita($dataAnita[0]);
+            if ($attrs !== null) {
+                $this->model->create($attrs);
+            }
         }
+    }
+
+    /**
+     * @return array{nombre: string, registro: string, envasesenasa_id: int|null, llevafrio: string, prefijo: string, codigo: string}|null
+     */
+    private function atributosDesdeAnita(object|array $data): ?array
+    {
+        $data = (object) $data;
+        $codigo = trim((string) ($data->cods_codigo ?? ''));
+        $nombre = trim((string) ($data->cods_desc ?? ''));
+        $registro = trim((string) ($data->cods_registro ?? ''));
+        $prefijo = trim((string) ($data->cods_prefijo ?? ''));
+        if ($codigo === '' || ($nombre === '' && $registro === '' && $prefijo === '')) {
+            return null;
+        }
+
+        $envase = (int) ($data->cods_envase ?? 0);
+
+        return [
+            'nombre' => $nombre !== '' ? $nombre : $codigo,
+            'registro' => $registro,
+            'envasesenasa_id' => $envase > 0 ? $envase : null,
+            'llevafrio' => Codigosenasa::codigoFrio((string) ($data->cods_frio ?? 'N')) === 'S'
+                ? 'Lleva Frio'
+                : 'No Lleva Frio',
+            'prefijo' => $prefijo,
+            'codigo' => $codigo,
+        ];
+    }
+
+    /**
+     * @param  array{nombre: string, registro: string, envasesenasa_id: int|null, llevafrio: string, prefijo: string, codigo: string}  $attrs
+     */
+    private function necesitaActualizarDesdeAnita(Codigosenasa $local, array $attrs): bool
+    {
+        return trim((string) $local->registro) !== $attrs['registro']
+            || trim((string) $local->prefijo) !== $attrs['prefijo']
+            || Codigosenasa::codigoFrio((string) $local->llevafrio) !== Codigosenasa::codigoFrio($attrs['llevafrio'])
+            || (int) ($local->envasesenasa_id ?? 0) !== (int) ($attrs['envasesenasa_id'] ?? 0)
+            || trim((string) $local->nombre) !== $attrs['nombre'];
     }
 
 	public function guardarAnita($request) {
