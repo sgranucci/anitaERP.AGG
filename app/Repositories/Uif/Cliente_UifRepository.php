@@ -112,9 +112,9 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
             'pais_uif.nombre as nombrepais',
             'cliente_uif.telefono as telefono',
             'cliente_uif.email as email')
-            ->selectRaw('(SELECT cp.fechaentrega FROM cliente_premio_uif cp WHERE cp.cliente_uif_id = cliente_uif.id AND cp.deleted_at IS NULL ORDER BY cp.fechaentrega DESC, cp.id DESC LIMIT 1) as ultimo_premio_fecha')
-            ->selectRaw('(SELECT cp.monto FROM cliente_premio_uif cp WHERE cp.cliente_uif_id = cliente_uif.id AND cp.deleted_at IS NULL ORDER BY cp.fechaentrega DESC, cp.id DESC LIMIT 1) as ultimo_premio_monto')
-            ->selectRaw('(SELECT j.nombre FROM cliente_premio_uif cp INNER JOIN juego_uif j ON j.id = cp.juego_uif_id WHERE cp.cliente_uif_id = cliente_uif.id AND cp.deleted_at IS NULL ORDER BY cp.fechaentrega DESC, cp.id DESC LIMIT 1) as ultimo_premio_juego')
+            ->selectRaw('(SELECT cp.fechaentrega FROM cliente_premio_uif cp WHERE cp.cliente_uif_id = cliente_uif.id ORDER BY cp.fechaentrega DESC, cp.id DESC LIMIT 1) as ultimo_premio_fecha')
+            ->selectRaw('(SELECT cp.monto FROM cliente_premio_uif cp WHERE cp.cliente_uif_id = cliente_uif.id ORDER BY cp.fechaentrega DESC, cp.id DESC LIMIT 1) as ultimo_premio_monto')
+            ->selectRaw('(SELECT j.nombre FROM cliente_premio_uif cp INNER JOIN juego_uif j ON j.id = cp.juego_uif_id WHERE cp.cliente_uif_id = cliente_uif.id ORDER BY cp.fechaentrega DESC, cp.id DESC LIMIT 1) as ultimo_premio_juego')
             ->join('tipodocumento', 'tipodocumento.id', '=', 'cliente_uif.tipodocumento_id')
             ->join('localidad_uif', 'localidad_uif.id', '=', 'cliente_uif.localidad_uif_id')
             ->join('provincia_uif', 'provincia_uif.id', '=', 'cliente_uif.provincia_uif_id')

@@ -20,7 +20,7 @@ final class ComprobanteProveedorDuplicadoException extends RuntimeException
 
     public static function desdeExistente(Comprobante_Proveedor $existente, ?string $codigoAfip = null): self
     {
-        $eliminado = $existente->trashed();
+        $eliminado = false;
 
         return new self(
             ComprobanteProveedorUnicidadSupport::mensajeDuplicado($existente, $codigoAfip),

@@ -258,8 +258,7 @@ class ComprobanteProveedorRecepcionesSupport
     {
         $query = DB::table('comprobante_proveedor_recepcion as cpr')
             ->join('comprobante_proveedor as cp', 'cp.id', '=', 'cpr.comprobante_proveedor_id')
-            ->where('cp.estado', ComprobanteProveedorEstados::CONTABILIZADO)
-            ->whereNull('cp.deleted_at');
+            ->where('cp.estado', ComprobanteProveedorEstados::CONTABILIZADO);
 
         if ($excluirComprobanteId) {
             $query->where('cp.id', '!=', $excluirComprobanteId);

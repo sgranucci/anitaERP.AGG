@@ -4,13 +4,11 @@ namespace App\Models\Caja;
 
 use App\Models\Receptivo\Guia;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class Voucher_Guia extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
-    use SoftDeletes;
 
     protected $fillable = [
         'voucher_id', 'guia_id', 'tipocomision',

@@ -105,7 +105,6 @@ final class GastronomiaCaeaCorregirNumeracionDesfasadaService
             ->join('tipotransaccion as tt', 'tt.id', '=', 'venta.tipotransaccion_id')
             ->where('venta.puntoventa_id', $pv->id)
             ->whereHas('puntoventas', static fn ($q) => $q->where('empresa_id', $empresaId))
-            ->whereNull('venta.deleted_at')
             ->select(['venta.*', 'tt.codigo as tt_codigo'])
             ->orderBy('venta.fecha')
             ->orderBy('venta.id')

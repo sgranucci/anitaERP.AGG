@@ -29,7 +29,6 @@ class PropuestaPagoLoteBancarioSupport
         $ops = Pagoproveedor::query()
             ->with(['proveedores', 'pagoproveedor_retenciones'])
             ->where('propuesta_pago_id', $propuestaPagoId)
-            ->whereNull('deleted_at')
             ->whereNotIn('estado', ['REVERTIDA', 'BAJA'])
             ->orderBy('id')
             ->get()

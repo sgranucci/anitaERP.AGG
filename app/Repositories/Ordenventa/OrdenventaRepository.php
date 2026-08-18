@@ -94,7 +94,7 @@ class OrdenventaRepository implements OrdenventaRepositoryInterface
 	// Devuelve ultimo numero de ordenventa + 1
 	private function ultimaOrdenventa($empresa_id)
 	{
-		$ordenventa = $this->model->select('numeroordenventa')->where('empresa_id', $empresa_id)->where('deleted_at', null)
+		$ordenventa = $this->model->select('numeroordenventa')->where('empresa_id', $empresa_id)
 							->orderBy('numeroordenventa', 'desc')->first();
 		
 		$numeroordenventa = 0;

@@ -718,7 +718,6 @@ final class OrdencompraContratoVencimientoSupport
         $filas = DB::table('comprobante_proveedor as cp')
             ->join('ordencompra as oc', 'oc.id', '=', 'cp.ordencompra_id')
             ->whereIn('cp.ordencompra_id', $contratoIds)
-            ->whereNull('cp.deleted_at')
             ->whereIn('cp.estado', self::estadosFacturadoComputable())
             ->where(function ($q) {
                 $q->whereNull('oc.contrato_moneda_id')

@@ -5,7 +5,12 @@ declare(strict_types=1);
 namespace App\Services\Ventas\Gastronomia;
 
 use App\ApiAnita;
+use App\Models\Caja\Caja_Movimiento;
 use App\Models\Caja\Cobranza;
+use App\Models\Caja\Cobranza_Archivo;
+use App\Models\Caja\Cobranza_Comprobante;
+use App\Models\Caja\Cobranza_Estado;
+use App\Models\Caja\Cobranza_Retencion;
 use App\Models\Stock\Articulo;
 use App\Models\Configuracion\Impuesto;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
@@ -19,6 +24,7 @@ use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Models\Ventas\Venta_Emision;
 use App\Models\Ventas\Venta_Impuesto;
 use App\Repositories\Ventas\MozoGastronomiaRepositoryInterface;
+use App\Support\Caja\CajaMovimientoEloquentDeleteSupport;
 use App\Support\Caja\CobranzaNumeracionTransaccion;
 use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportBridgeSupport;
 use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportCacheReader;
@@ -28,6 +34,7 @@ use App\Support\Ventas\GastronomiaAnitaImport\GastronomiaAnitaImportMediosPagoSu
 use App\Support\Ventas\GastronomiaAnitaImportEmpresaSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport;
 use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -1224,7 +1231,6 @@ final class GastronomiaFacturaImportacionAnitaService
         $estado = strtoupper(trim((string) ($cobranza->estado ?? '')));
 
         return $cobranza->venta_id !== null
-            && $cobranza->deleted_at === null
             && $estado !== 'ANULADA';
     }
 
@@ -1245,23 +1251,20 @@ final class GastronomiaFacturaImportacionAnitaService
         }
 
         $estado = strtoupper(trim((string) ($cobranza->estado ?? '')));
-        $esHuerfana = $cobranza->venta_id === null || $cobranza->deleted_at !== null || $estado === 'ANULADA';
+        $esHuerfana = $cobranza->venta_id === null || $estado === 'ANULADA';
         if (! $esHuerfana) {
             throw new InvalidArgumentException('Cobranza activa existente para '.$codigoVenta.' (id '.$cobranza->id.').');
         }
 
-        $movIds = DB::table('caja_movimiento')->where('cobranza_id', $cobranza->id)->pluck('id');
-        if ($movIds->isNotEmpty()) {
-            DB::table('caja_movimiento_cuentacaja')->whereIn('caja_movimiento_id', $movIds)->delete();
-            DB::table('caja_movimiento_estado')->whereIn('caja_movimiento_id', $movIds)->delete();
-            DB::table('caja_movimiento')->whereIn('id', $movIds)->delete();
-        }
+        CajaMovimientoEloquentDeleteSupport::eliminarPorQuery(
+            Caja_Movimiento::query()->where('cobranza_id', $cobranza->id)
+        );
 
-        DB::table('cobranza_estado')->where('cobranza_id', $cobranza->id)->delete();
-        DB::table('cobranza_retencion')->where('cobranza_id', $cobranza->id)->delete();
-        DB::table('cobranza_archivo')->where('cobranza_id', $cobranza->id)->delete();
-        DB::table('cobranza_comprobante')->where('cobranza_id', $cobranza->id)->delete();
-        DB::table('cobranza')->where('id', $cobranza->id)->delete();
+        EloquentAuditDeleteSupport::each(Cobranza_Estado::query()->where('cobranza_id', $cobranza->id));
+        EloquentAuditDeleteSupport::each(Cobranza_Retencion::query()->where('cobranza_id', $cobranza->id));
+        EloquentAuditDeleteSupport::each(Cobranza_Archivo::query()->where('cobranza_id', $cobranza->id));
+        EloquentAuditDeleteSupport::each(Cobranza_Comprobante::query()->where('cobranza_id', $cobranza->id));
+        $cobranza->delete();
     }
 
     private function articuloCortesiaId(): int

@@ -207,7 +207,6 @@ final class IvaVentasReporteService
             : 'fechajornada';
 
         return Venta::query()
-            ->whereNull('deleted_at')
             ->whereHas('puntoventas', fn (Builder $q) => $q->where('empresa_id', $empresaId))
             ->whereDate($campoFecha, '>=', $filtros['fecha_desde'])
             ->whereDate($campoFecha, '<=', $filtros['fecha_hasta'])

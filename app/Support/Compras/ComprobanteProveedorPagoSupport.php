@@ -64,7 +64,6 @@ final class ComprobanteProveedorPagoSupport
 
         if (DB::table('pagoproveedor_comprobante')
             ->whereIn('proveedor_cuentacorriente_id', $ccIds)
-            ->whereNull('deleted_at')
             ->exists()) {
             return true;
         }

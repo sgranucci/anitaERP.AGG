@@ -121,7 +121,7 @@ final class RendicionMaquinaAnitaSyncService
 
     public function ultimoNroOperEnErp(): int
     {
-        return max(0, (int) (RendicionMaquina::withTrashed()
+        return max(0, (int) (RendicionMaquina::query()
             ->whereNotNull('nro_oper_anita')
             ->max('nro_oper_anita') ?? 0));
     }
@@ -132,7 +132,7 @@ final class RendicionMaquinaAnitaSyncService
      */
     public function ultimoNroOperSerieLocalEnErp(): int
     {
-        return max(0, (int) (RendicionMaquina::withTrashed()
+        return max(0, (int) (RendicionMaquina::query()
             ->whereNotNull('nro_oper_anita')
             ->whereNull('anita_sincronizado_en')
             ->max('nro_oper_anita') ?? 0));

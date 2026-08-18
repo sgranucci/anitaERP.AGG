@@ -93,7 +93,6 @@ final class GastronomiaAjustarComprobanteArcaDuplicado extends Command
             $ventaFactura = Venta::query()
                 ->where('puntoventa_id', $pv->id)
                 ->where('numerocomprobante', $numero)
-                ->whereNull('deleted_at')
                 ->first();
 
             if (! $ejecutar) {

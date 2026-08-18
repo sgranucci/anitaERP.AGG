@@ -3,7 +3,6 @@
 namespace App\Models\Configuracion;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use OwenIt\Auditing\Contracts\Auditable;
 use App\Models\Seguridad\Usuario;
 use App\Models\Contable\Centrocosto;
@@ -12,7 +11,6 @@ use App\Models\Configuracion\Moneda;
 class Arbolaprobacion_Nivel extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
-    use SoftDeletes;
     
     protected $fillable = [
                             'arbolaprobacion_id', 'nivel', 'centrocosto_id', 'usuario_id', 'usuario_orig_id', 'desdemonto', 'hastamonto', 'moneda_id',

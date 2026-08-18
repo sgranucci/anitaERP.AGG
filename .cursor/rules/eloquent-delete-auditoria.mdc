@@ -13,7 +13,7 @@ Punto único: `App\Support\Database\EloquentAuditDeleteSupport`.
 
 ## Obligatorio
 
-Modelos `Auditable` y/o `SoftDeletes` (árbol, asiento, y el resto del ERP):
+Modelos `Auditable` (y los pocos que aún tienen `SoftDeletes`):
 
 ```php
 use App\Support\Database\EloquentAuditDeleteSupport;

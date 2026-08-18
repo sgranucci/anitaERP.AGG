@@ -4,11 +4,9 @@ namespace App\Models\Compras;
 
 use App\Models\Configuracion\Moneda;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Pagoproveedor_Comprobante extends Model
 {
-    use SoftDeletes;
 
     protected $table = 'pagoproveedor_comprobante';
 

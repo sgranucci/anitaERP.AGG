@@ -163,7 +163,6 @@ final class RequisicionSeguimientoAprobacionSupport
             ->leftJoin('usuario', 'usuario.id', '=', 'arbolaprobacion_movimiento.destinatariousuario_id')
             ->whereIn('arbolaprobacion_movimiento.requisicion_id', $requisicionIds)
             ->where('arbolaprobacion_movimiento.estado', $estadoPendiente)
-            ->whereNull('arbolaprobacion_movimiento.deleted_at')
             ->orderBy('arbolaprobacion_movimiento.nivel')
             ->orderBy('arbolaprobacion_movimiento.id')
             ->get();
@@ -286,7 +285,6 @@ final class RequisicionSeguimientoAprobacionSupport
         $conMovimientoAlerta = Arbolaprobacion_Movimiento::query()
             ->whereIn('requisicion_id', $ids)
             ->where('estado', $estadoPendiente)
-            ->whereNull('deleted_at')
             ->where(function ($q) use ($limite) {
                 $q->where(function ($q2) use ($limite) {
                     $q2->whereNotNull('fechaenvio')
@@ -302,7 +300,6 @@ final class RequisicionSeguimientoAprobacionSupport
         $idsConPendiente = Arbolaprobacion_Movimiento::query()
             ->whereIn('requisicion_id', $ids)
             ->where('estado', $estadoPendiente)
-            ->whereNull('deleted_at')
             ->distinct()
             ->pluck('requisicion_id')
             ->map(fn ($id) => (int) $id)

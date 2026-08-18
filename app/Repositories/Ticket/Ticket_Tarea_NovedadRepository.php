@@ -3,6 +3,7 @@
 namespace App\Repositories\Ticket;
 
 use App\Models\Ticket\Ticket_Tarea_Novedad;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Carbon\Carbon;
 use Auth;
@@ -43,7 +44,9 @@ class Ticket_Tarea_NovedadRepository implements Ticket_Tarea_NovedadRepositoryIn
 
     public function delete($id)
     {
-        return $this->model->where('id', $id)->delete();
+        return EloquentAuditDeleteSupport::each(
+            $this->model->newQuery()->where('id', $id)
+        );
     }
 
     public function find($id)
@@ -80,7 +83,6 @@ class Ticket_Tarea_NovedadRepository implements Ticket_Tarea_NovedadRepositoryIn
 							'comentario',
 							'estado')
 					->where('ticket_tarea_id', $ticket_tarea_id)
-					->where('deleted_at', null)
 					->with('usuarios')
 					->get();
 	}
@@ -153,7 +155,9 @@ class Ticket_Tarea_NovedadRepository implements Ticket_Tarea_NovedadRepositoryIn
 		}
 		else
 		{
-			$ticket_tarea_novedad = $this->model->where('ticket_tarea_id', $id)->delete();
+			$ticket_tarea_novedad = EloquentAuditDeleteSupport::each(
+				$this->model->newQuery()->where('ticket_tarea_id', $id)
+			);
 		}
 
 		return $ticket_tarea_novedad;

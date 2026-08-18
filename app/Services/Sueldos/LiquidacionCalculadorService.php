@@ -9,6 +9,7 @@ use App\Models\Sueldos\Liquidacion_Acumulador_Sueldos;
 use App\Models\Sueldos\Liquidacion_Detalle_Sueldos;
 use App\Models\Sueldos\Liquidacion_Recibo_Sueldos;
 use App\Models\Sueldos\Liquidacion_Sueldos;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Sueldos\ConceptoElegibilidadCatalogo;
 use App\Support\Sueldos\ConceptoTipo;
@@ -92,12 +93,15 @@ class LiquidacionCalculadorService
                 ->where('liquidacion_id', $liquidacion->id)
                 ->where('origen', Liquidacion_Recibo_Sueldos::ORIGEN_AUXCONF)
                 ->pluck('id');
-            Liquidacion_Detalle_Sueldos::where('liquidacion_id', $liquidacion->id)
-                ->when($recibosImportados->isNotEmpty(), fn ($q) => $q->whereNotIn('recibo_id', $recibosImportados))
-                ->delete();
-            Liquidacion_Recibo_Sueldos::where('liquidacion_id', $liquidacion->id)
-                ->when($recibosImportados->isNotEmpty(), fn ($q) => $q->whereNotIn('id', $recibosImportados))
-                ->delete();
+            EloquentAuditDeleteSupport::exceptIds(
+                Liquidacion_Detalle_Sueldos::query()->where('liquidacion_id', $liquidacion->id),
+                $recibosImportados->all(),
+                'recibo_id'
+            );
+            EloquentAuditDeleteSupport::exceptIds(
+                Liquidacion_Recibo_Sueldos::query()->where('liquidacion_id', $liquidacion->id),
+                $recibosImportados->all()
+            );
             Liquidacion_Acumulador_Sueldos::where('liquidacion_id', $liquidacion->id)->delete();
 
             $periodoAnio = (int) ($liquidacion->periodo_anio ?: now()->year);

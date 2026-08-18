@@ -4,12 +4,10 @@ namespace App\Models\Stock;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 
 class Articulo_Movimiento_Talle extends Model
 {
-    //use SoftDeletes;
     protected $fillable = ['articulo_movimiento_id', 'pedido_combinacion_talle_id', 'talle_id', 'cantidad', 'precio'];
     protected $table = 'articulo_movimiento_talle';
 

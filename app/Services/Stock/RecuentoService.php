@@ -516,7 +516,6 @@ class RecuentoService
 
         $porMovimiento = DB::table('articulo_movimiento')
             ->where('deposito_id', $depositoId)
-            ->whereNull('deleted_at')
             ->distinct()
             ->pluck('articulo_id')
             ->map(fn ($id) => (int) $id);
@@ -749,7 +748,6 @@ class RecuentoService
             ->select('articulo_id', 'color_id', 'talle_id')
             ->selectRaw('SUM(cantidad) as total')
             ->where('deposito_id', $depositoId)
-            ->whereNull('deleted_at')
             ->groupBy('articulo_id', 'color_id', 'talle_id')
             ->havingRaw('ABS(SUM(cantidad)) > ?', [1e-9])
             ->get();

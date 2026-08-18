@@ -42,7 +42,6 @@ class GastronomiaInsumosTipoarticuloReporteQuery
             ->join('articulo as a', 'a.id', '=', 've.articulo_id')
             ->join('tipotransaccion as tt', 'tt.id', '=', 'v.tipotransaccion_id')
             ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
-            ->whereNull('v.deleted_at')
             ->where('a.tipoarticulo_id', $tipoarticuloId)
             ->whereDate('v.fechajornada', '>=', $desde)
             ->whereDate('v.fechajornada', '<=', $hasta);

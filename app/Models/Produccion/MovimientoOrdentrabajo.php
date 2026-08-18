@@ -3,7 +3,6 @@
 namespace App\Models\Produccion;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\Models\Ventas\Ordentrabajo;
@@ -14,7 +13,6 @@ use App\Traits\Produccion\MovimientoOrdenTrabajoTrait;
 
 class MovimientoOrdentrabajo extends Model
 {
-	use SoftDeletes;
 	use MovimientoOrdenTrabajoTrait;
 
     protected $fillable = ['ordentrabajo_id', 'ordentrabajo_tarea_id', 'tarea_id', 'operacion_id', 'empleado_id', 'fecha', 'estado', 'usuario_id'];

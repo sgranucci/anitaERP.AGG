@@ -130,8 +130,6 @@ class PagoproveedorRepository implements PagoproveedorRepositoryInterface
         $query = Pagoproveedor_Retencion::query()
             ->select('pagoproveedor_retencion.*')
             ->join('pagoproveedor', 'pagoproveedor.id', '=', 'pagoproveedor_retencion.pagoproveedor_id')
-            ->whereNull('pagoproveedor.deleted_at')
-            ->whereNull('pagoproveedor_retencion.deleted_at')
             ->where('pagoproveedor.proveedor_id', $proveedorId)
             ->whereIn('pagoproveedor.estado', PortalProveedorPagosListadoFiltros::estadosVisiblesPortal())
             ->with([

@@ -97,7 +97,6 @@ final class GastronomiaVentasArticulosReporteQuery
             ->join('articulo as a', 'a.id', '=', 've.articulo_id')
             ->leftJoin('cuenta_gastronomia as cg', 'cg.id', '=', 'vge.cuenta_gastronomia_id')
             ->leftJoin('descuento_gastronomia as dg', 'dg.id', '=', 'cg.descuento_gastronomia_id')
-            ->whereNull('v.deleted_at')
             ->whereNull('vge.venta_factura_origen_id');
 
         $this->aplicarExclusionInsumosYDescartables($query);

@@ -4,7 +4,6 @@ namespace App\Models\Stock;
 
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 /**
  * Cabecera de un préstamo de materiales entre depósitos.
@@ -15,7 +14,6 @@ use Illuminate\Database\Eloquent\SoftDeletes;
  */
 class Prestamo extends Model
 {
-    use SoftDeletes;
 
     public const ESTADO_BORRADOR = 'BORRADOR';
 

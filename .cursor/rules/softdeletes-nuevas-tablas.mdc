@@ -1,0 +1,29 @@
+---
+description: No usar SoftDeletes en tablas nuevas; baja física + audits
+alwaysApply: true
+---
+
+# SoftDeletes: no en tablas nuevas
+
+`deleted_at` en este ERP es confuso: el circuito no ve la fila, el SQL crudo sí (o al revés), y OwenIt no registra un `Builder::delete()`. Incidente 18/ago/2026: nivel Gastronomía REQUIS KANDIKO quedó blando sin `audits`.
+
+## Obligatorio en tablas / modelos nuevos
+
+- **No** `$table->softDeletes()` en migraciones nuevas.
+- **No** `use SoftDeletes` en el modelo.
+- Baja = `$modelo->delete()` o `EloquentAuditDeleteSupport::each($query)` (dispara `audits`).
+- Trazabilidad de quién borró: OwenIt, no una fila fantasma.
+
+## Qué sí puede quedar (histórico, no extender)
+
+Maestros con undelete real (cliente, proveedor, PV, tipos de transacción, cliente UIF). No copiar ese patrón a procesos, movimientos, asientos, árboles ni comprobante proveedor.
+
+## Al tocar un ABM con hijas (niveles, líneas)
+
+Borrar físico las que no vienen en el form. No “esconder” con `deleted_at`.
+
+`Arbolaprobacion_Nivel` ya no usa SoftDeletes (migración `2026_08_18_141300_quitar_softdeletes_arbolaprobacion_nivel`).
+`venta` / `venta_impuesto` / `asiento` / `asiento_movimiento` / `caja_movimiento` / `articulo_movimiento`: columna `deleted_at` eliminada (migraciones `2026_08_18_141800` y `2026_08_18_141900`).
+Procesos (ticket, rendición, voucher, OP, CC proveedor, TM, mov. stock, remito, recuento, préstamo, premio UIF, etc.): migración `2026_08_18_153000_quitar_softdeletes_procesos` (purga filas blandas + drop).
+Columnas `deleted_at` huérfanas (sin trait): migración `2026_08_18_153100_quitar_deleted_at_huerfano` (solo drop; no purgar — p. ej. `cobranza_archivo` / `ordenventa_archivo` siguen vivas para Eloquent).
+`comprobante_proveedor`: migración `2026_08_18_154000_quitar_softdeletes_comprobante_proveedor` (baja física + audits; unique fiscal sin `deleted_at`).

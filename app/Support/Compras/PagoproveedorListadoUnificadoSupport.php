@@ -73,7 +73,6 @@ final class PagoproveedorListadoUnificadoSupport
             ->leftJoin('empresa', 'empresa.id', '=', 'pp.empresa_id')
             ->leftJoin('proveedor', 'proveedor.id', '=', 'pp.proveedor_id')
             ->leftJoin('moneda', 'moneda.id', '=', 'pp.moneda_id')
-            ->whereNull('pp.deleted_at')
             ->select([
                 DB::raw("'".PagoproveedorListadoFila::ORIGEN_PAGOPROVEEDOR."' as origen"),
                 'pp.id as pk_id',
@@ -121,7 +120,6 @@ final class PagoproveedorListadoUnificadoSupport
             ->selectRaw(
                 'COALESCE(SUM(ABS(cmc.monto * CASE WHEN COALESCE(cmc.moneda_id, 1) > 1 THEN COALESCE(cmc.cotizacion, 1) ELSE 1 END)), 0) as monto_mn'
             )
-            ->whereNull('cmc.deleted_at')
             ->groupBy('cmc.caja_movimiento_id');
 
         $monedaLocalAbrev = addcslashes(
@@ -135,7 +133,6 @@ final class PagoproveedorListadoUnificadoSupport
             ->leftJoinSub($montoSub, 'monto_agg', function ($join) {
                 $join->on('monto_agg.caja_movimiento_id', '=', 'cm.id');
             })
-            ->whereNull('cm.deleted_at')
             ->whereNull('cm.pagoproveedor_id')
             ->select([
                 DB::raw("'".PagoproveedorListadoFila::ORIGEN_IE_OPP."' as origen"),

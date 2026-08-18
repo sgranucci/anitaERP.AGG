@@ -140,7 +140,6 @@ final class GastronomiaFacturacionAuditoriaCtamovSupport
         $asientos = DB::table('asiento as a')
             ->join('venta as v', 'v.id', '=', 'a.venta_id')
             ->whereIn('a.venta_id', $ventaIds)
-            ->whereNull('v.deleted_at')
             ->select('a.id', 'a.venta_id', 'a.numeroasiento')
             ->get();
 
@@ -214,7 +213,6 @@ final class GastronomiaFacturacionAuditoriaCtamovSupport
             ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
             ->where('v.puntoventa_id', $puntoventaId)
             ->where('pv.empresa_id', $empresaId)
-            ->whereNull('v.deleted_at')
             ->where(function ($q) use ($fechaJornada) {
                 $q->whereDate('v.fechajornada', $fechaJornada)
                     ->orWhere(function ($legacy) use ($fechaJornada) {

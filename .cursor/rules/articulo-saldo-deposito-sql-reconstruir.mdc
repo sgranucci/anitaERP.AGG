@@ -43,7 +43,7 @@ Implementación: `ReconstruirSaldosDeposito` → `Articulo_Saldo_DepositoReposit
 
 ```bash
 php artisan tinker --execute="
-echo DB::select('SELECT COUNT(*) c FROM articulo_saldo_deposito sd LEFT JOIN (SELECT articulo_id, deposito_id, SUM(cantidad) sum_mov FROM articulo_movimiento WHERE deleted_at IS NULL GROUP BY articulo_id, deposito_id) m ON m.articulo_id=sd.articulo_id AND m.deposito_id=sd.deposito_id WHERE ABS(sd.cantidad-COALESCE(m.sum_mov,0))>0.000001')[0]->c;
+echo DB::select('SELECT COUNT(*) c FROM articulo_saldo_deposito sd LEFT JOIN (SELECT articulo_id, deposito_id, SUM(cantidad) sum_mov FROM articulo_movimiento GROUP BY articulo_id, deposito_id) m ON m.articulo_id=sd.articulo_id AND m.deposito_id=sd.deposito_id WHERE ABS(sd.cantidad-COALESCE(m.sum_mov,0))>0.000001')[0]->c;
 "
 # Debe dar 0 tras reconstruir
 ```

@@ -43,7 +43,6 @@ class PedidoInterformingArbolIntegracionService
     {
         return Arbolaprobacion_Movimiento::query()
             ->where('pedido_id', $pedidoId)
-            ->whereNull('deleted_at')
             ->orderBy('nivel')
             ->orderBy('id')
             ->with('enviousuarios')

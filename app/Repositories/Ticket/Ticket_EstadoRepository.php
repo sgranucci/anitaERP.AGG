@@ -3,6 +3,7 @@
 namespace App\Repositories\Ticket;
 
 use App\Models\Ticket\Ticket_Estado;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Carbon\Carbon;
 use Auth;
@@ -47,7 +48,9 @@ class Ticket_EstadoRepository implements Ticket_EstadoRepositoryInterface
 
     public function delete($ticket_id, $codigo)
     {
-        return $this->model->where('ticket_id', $ticket_id)->delete();
+        return EloquentAuditDeleteSupport::each(
+            $this->model->newQuery()->where('ticket_id', $ticket_id)
+        );
     }
 
     public function find($id)
@@ -132,7 +135,9 @@ class Ticket_EstadoRepository implements Ticket_EstadoRepositoryInterface
 		}
 		else
 		{
-			$ticket_estado = $this->model->where('ticket_id', $id)->delete();
+			$ticket_estado = EloquentAuditDeleteSupport::each(
+				$this->model->newQuery()->where('ticket_id', $id)
+			);
 		}
 
 		return $ticket_estado;
@@ -147,7 +152,6 @@ class Ticket_EstadoRepository implements Ticket_EstadoRepositoryInterface
 							'usuario_id',
 							'observacion')
 					->where('ticket_id', $ticket_id)
-					->where('deleted_at', null)
 					->with('usuarios')
 					->get();
 	}

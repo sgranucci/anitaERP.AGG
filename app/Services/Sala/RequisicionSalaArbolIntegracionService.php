@@ -248,7 +248,6 @@ class RequisicionSalaArbolIntegracionService
     public function findPorRequisicionSala(int $id)
     {
         return Arbolaprobacion_Movimiento::where('requisicion_sala_id', $id)
-            ->whereNull('deleted_at')
             ->orderBy('nivel')
             ->get();
     }

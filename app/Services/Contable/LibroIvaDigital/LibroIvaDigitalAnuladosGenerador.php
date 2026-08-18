@@ -2,10 +2,8 @@
 
 namespace App\Services\Contable\LibroIvaDigital;
 
-use App\Models\Ventas\Venta;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalFormatoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
-use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasPeriodoSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use Illuminate\Support\Facades\DB;
 
@@ -35,37 +33,16 @@ class LibroIvaDigitalAnuladosGenerador
     }
 
     /**
+     * Ventas fiscales no se anulan con SoftDeletes (nunca hubo filas blandas).
+     * El archivo ARCA de anulados de ventas queda vacío; compras sí van por estado ANULADO.
+     *
      * @return list<string>
      */
     private function ventasAnuladas(int $empresaId, string $desde, string $hasta, bool $porFechaJornada): array
     {
-        $lineas = [];
+        unset($empresaId, $desde, $hasta, $porFechaJornada);
 
-        Venta::onlyTrashed()
-            ->with(['tipotransacciones', 'puntoventas'])
-            ->whereHas('puntoventas', fn ($q) => $q->where('empresa_id', $empresaId))
-            ->whereBetween('deleted_at', [$desde, $hasta])
-            ->whereNotNull('cae')
-            ->where('cae', '<>', '')
-            ->orderBy('fecha')
-            ->lazy(100)
-            ->each(function (Venta $venta) use (&$lineas, $porFechaJornada): void {
-                $letra = LibroIvaDigitalMapeosSupport::letraDesdeCodigoVenta((string) $venta->codigo);
-                $tipo = LibroIvaDigitalMapeosSupport::tipoComprobanteVentas(
-                    (string) ($venta->tipotransacciones->codigo ?? '001'),
-                    $letra,
-                    (string) ($venta->tipotransacciones->abreviatura ?? ''),
-                );
-                $lineas[] = LibroIvaDigitalFormatoSupport::registroComprobanteAnulado([
-                    'fecha_comprobante' => LibroIvaDigitalVentasPeriodoSupport::fechaDocumento($venta, $porFechaJornada),
-                    'tipo_comprobante' => $tipo,
-                    'punto_venta' => (int) ($venta->puntoventas->codigo ?? 0),
-                    'numero_comprobante' => (int) $venta->numerocomprobante,
-                    'fecha_anulacion' => date('Ymd', strtotime((string) $venta->deleted_at)),
-                ]);
-            });
-
-        return $lineas;
+        return [];
     }
 
     /**

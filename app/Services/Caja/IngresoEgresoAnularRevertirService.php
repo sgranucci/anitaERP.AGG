@@ -10,6 +10,7 @@ use App\Repositories\Caja\Caja_Movimiento_CuentacajaRepositoryInterface;
 use App\Repositories\Caja\Caja_Movimiento_EstadoRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Services\Solicitudpago\SolicitudpagoPagoDesdeCajaService;
+use App\Support\Caja\CajaMovimientoEloquentDeleteSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Caja\IngresoEgresoVisibilidadSupport;
 use App\Support\Contable\AsientoReversoSupport;
@@ -71,12 +72,8 @@ class IngresoEgresoAnularRevertirService
                 $cheque->delete();
             }
 
-            $movimiento->caja_movimiento_cuentacajas()->delete();
-            $movimiento->caja_movimiento_estados()->delete();
-            $movimiento->caja_movimiento_archivos()->delete();
-
             // No usar repo->delete: ya limpiamos Anita arriba.
-            Caja_Movimiento::query()->where('id', (int) $movimiento->id)->delete();
+            CajaMovimientoEloquentDeleteSupport::eliminarPorId((int) $movimiento->id);
 
             return [
                 'mensaje' => 'ok',

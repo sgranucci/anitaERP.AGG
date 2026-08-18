@@ -727,7 +727,6 @@ class ArbolReemplazoFirmanteService
         return Arbolaprobacion_Movimiento::query()
             ->whereIn('destinatariousuario_id', $usuarioIds)
             ->where('estado', $nombrePendiente)
-            ->whereNull('deleted_at')
             ->orderBy('id');
     }
 

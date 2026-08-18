@@ -3,6 +3,7 @@
 namespace App\Repositories\Ventas;
 
 use App\Models\Ventas\Remito_Articulo;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class Remito_ArticuloRepository implements Remito_ArticuloRepositoryInterface
@@ -38,7 +39,9 @@ class Remito_ArticuloRepository implements Remito_ArticuloRepositoryInterface
 
     public function deleteporremito($remito_id)
     {
-        return $this->model->where('remito_id', $remito_id)->delete();
+        return EloquentAuditDeleteSupport::each(
+            $this->model->newQuery()->where('remito_id', $remito_id)
+        );
     }
 
     public function find($id)

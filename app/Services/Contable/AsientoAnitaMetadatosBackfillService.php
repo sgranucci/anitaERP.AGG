@@ -254,7 +254,6 @@ final class AsientoAnitaMetadatosBackfillService
         DB::table('asiento')
             ->where('empresa_id', $empresaId)
             ->whereBetween('fecha', [$desde->format('Y-m-d'), $hasta->format('Y-m-d')])
-            ->whereNull('deleted_at')
             ->whereNull('anita_origen')
             ->select(['id', 'empresa_id', 'numeroasiento', 'fecha', 'observacion'])
             ->orderBy('id')

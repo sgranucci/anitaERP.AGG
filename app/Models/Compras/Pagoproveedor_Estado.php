@@ -4,11 +4,9 @@ namespace App\Models\Compras;
 
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Pagoproveedor_Estado extends Model
 {
-    use SoftDeletes;
 
     protected $table = 'pagoproveedor_estado';
 

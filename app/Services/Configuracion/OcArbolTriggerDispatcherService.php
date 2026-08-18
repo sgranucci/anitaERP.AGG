@@ -73,7 +73,6 @@ final class OcArbolTriggerDispatcherService
         $triggers = Arbolaprobacion_OcTrigger::query()
             ->where('arbolaprobacion_id', $arbol->id)
             ->where('activo', 'S')
-            ->whereNull('deleted_at')
             ->orderBy('prioridad')
             ->orderBy('id')
             ->get();

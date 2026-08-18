@@ -161,8 +161,7 @@ class LibroIvaDigitalVentasGenerador
         $query = Venta::query()
             ->select('venta.*')
             ->join('puntoventa as pv_lid', 'pv_lid.id', '=', 'venta.puntoventa_id')
-            ->where('pv_lid.empresa_id', $empresaId)
-            ->whereNull('venta.deleted_at');
+            ->where('pv_lid.empresa_id', $empresaId);
 
         LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroFecha($query, $desde, $hasta, $porFechaJornada);
         LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroCaeORmv($query);

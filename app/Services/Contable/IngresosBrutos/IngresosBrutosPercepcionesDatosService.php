@@ -162,7 +162,6 @@ final class IngresosBrutosPercepcionesDatosService
             ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
             ->where('puntoventa.empresa_id', $empresaId)
             ->whereBetween('venta.fecha', [$fechaDesde, $fechaHasta])
-            ->whereNull('venta.deleted_at')
             ->with(['venta_impuestos', 'clientes', 'tipotransacciones', 'puntoventas'])
             ->orderBy('venta.fecha')
             ->orderBy('venta.id')

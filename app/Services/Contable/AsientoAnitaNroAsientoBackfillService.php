@@ -109,7 +109,6 @@ final class AsientoAnitaNroAsientoBackfillService
             ->where('empresa_id', $empresaErpId)
             ->whereBetween('fecha', [$anio.'-01-01', $anio.'-12-31'])
             ->where('anita_origen', AsientoAnitaMetadatosSupport::ORIGEN_SUBHIST)
-            ->whereNull('deleted_at')
             ->select(['id', 'numeroasiento', 'anita_nro_asiento'])
             ->orderBy('id')
             ->chunkById(500, function ($asientos) use ($porOperacion, $persistir, &$resultado) {

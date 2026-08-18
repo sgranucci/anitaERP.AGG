@@ -3,12 +3,14 @@
 namespace App\Services\Ventas\Gastronomia;
 
 use App\Console\Commands\LimpiarVentasPruebaGastronomia;
+use App\Models\Contable\Asiento_Archivo;
 use App\Models\Ventas\GastronomiaCierreJornadaProcesoSnapshot;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\Venta;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Services\Stock\MovimientoStockService;
 use App\Services\Ventas\FacturacionService;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoFacturaRecuperacionSupport;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
@@ -214,7 +216,9 @@ final class GastronomiaCierreJornadaProcesoReversionService
 
     private function eliminarAsientoProceso(int $asientoId): void
     {
-        DB::table('asiento_archivo')->where('asiento_id', $asientoId)->delete();
+        EloquentAuditDeleteSupport::each(
+            Asiento_Archivo::query()->where('asiento_id', $asientoId)
+        );
         $this->asientoRepository->delete($asientoId);
     }
 

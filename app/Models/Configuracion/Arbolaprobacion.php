@@ -26,7 +26,6 @@ class Arbolaprobacion extends Model implements Auditable
     public function oc_triggers()
     {
         return $this->hasMany(Arbolaprobacion_OcTrigger::class, 'arbolaprobacion_id')
-            ->whereNull('deleted_at')
             ->orderBy('prioridad')
             ->orderBy('id');
     }

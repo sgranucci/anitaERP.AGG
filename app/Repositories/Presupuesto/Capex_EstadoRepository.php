@@ -3,6 +3,7 @@
 namespace App\Repositories\Presupuesto;
 
 use App\Models\Presupuesto\Capex_Estado;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Carbon\Carbon;
 use Auth;
@@ -47,7 +48,9 @@ class Capex_EstadoRepository implements Capex_EstadoRepositoryInterface
 
     public function delete($capex_id, $codigo)
     {
-        return $this->model->where('capex_id', $capex_id)->delete();
+        return EloquentAuditDeleteSupport::each(
+            $this->model->newQuery()->where('capex_id', $capex_id)
+        );
     }
 
     public function find($id)
@@ -132,7 +135,9 @@ class Capex_EstadoRepository implements Capex_EstadoRepositoryInterface
 		}
 		else
 		{
-			$capex_estado = $this->model->where('capex_id', $id)->delete();
+			$capex_estado = EloquentAuditDeleteSupport::each(
+				$this->model->newQuery()->where('capex_id', $id)
+			);
 		}
 
 		return $capex_estado;
@@ -147,7 +152,6 @@ class Capex_EstadoRepository implements Capex_EstadoRepositoryInterface
 							'usuario_id',
 							'observacion')
 					->where('capex_id', $capex_id)
-					->where('deleted_at', null)
 					->with('usuarios')
 					->get();
 	}

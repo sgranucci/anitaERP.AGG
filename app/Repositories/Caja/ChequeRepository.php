@@ -8,6 +8,7 @@ use App\Models\Caja\Estadocheque_Banco;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Configuracion\Empresa;
 use App\Support\Caja\ChequePropioImputacionSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Repositories\Caja\BancoRepositoryInterface;
 use App\Repositories\Caja\CuentacajaRepositoryInterface;
@@ -256,7 +257,9 @@ class ChequeRepository implements ChequeRepositoryInterface
 		}
 		else
 		{
-			$cheque = $this->model->where('cobranza_id', $id)->delete();
+			$cheque = EloquentAuditDeleteSupport::each(
+				$this->model->newQuery()->where('cobranza_id', $id)
+			);
 		}
 		return $cheque;
 	}
@@ -286,11 +289,12 @@ class ChequeRepository implements ChequeRepositoryInterface
         );
 
         if ($funcion === 'update') {
-            $this->model->query()
-                ->where('caja_movimiento_id', $cajaMovimientoId)
-                ->whereNull('cobranza_id')
-                ->whereNotIn('id', $idsPersistidos)
-                ->delete();
+            EloquentAuditDeleteSupport::exceptIds(
+                $this->model->query()
+                    ->where('caja_movimiento_id', $cajaMovimientoId)
+                    ->whereNull('cobranza_id'),
+                $idsPersistidos
+            );
         }
 
         return true;

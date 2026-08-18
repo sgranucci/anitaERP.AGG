@@ -3,6 +3,7 @@
 namespace App\Repositories\Sala;
 
 use App\Models\Sala\RequisicionSalaArchivo;
+use App\Support\Database\EloquentAuditDeleteSupport;
 
 class RequisicionSalaArchivoRepository implements RequisicionSalaArchivoRepositoryInterface
 {
@@ -45,7 +46,9 @@ class RequisicionSalaArchivoRepository implements RequisicionSalaArchivoReposito
         $nombresAntes = [];
         if ($funcion === 'update') {
             $nombresAntes = $this->model->where('requisicion_sala_id', $id)->pluck('nombrearchivo')->all();
-            $this->model->where('requisicion_sala_id', $id)->delete();
+            EloquentAuditDeleteSupport::each(
+                $this->model->newQuery()->where('requisicion_sala_id', $id)
+            );
         }
 
         $nombrearchivos = $request->file('nombrearchivos');

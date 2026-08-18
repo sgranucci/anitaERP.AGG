@@ -5,14 +5,9 @@ namespace App\Models\Compras;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Moneda;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Proveedor_Cuentacorriente extends Model
 {
-    use SoftDeletes;
-
-    protected $table = 'proveedor_cuentacorriente';
-
     protected $fillable = [
         'fecha', 'fechavencimiento', 'proveedor_id', 'total', 'moneda_id', 'cotizacion',
         'empresa_id', 'comprobante_proveedor_id', 'comprobante_proveedor_cuota_id',
@@ -22,7 +17,6 @@ class Proveedor_Cuentacorriente extends Model
     protected $casts = [
         'fecha' => 'date',
         'fechavencimiento' => 'date',
-        'deleted_at' => 'datetime',
     ];
 
     public function proveedores()

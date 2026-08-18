@@ -5,13 +5,11 @@ namespace App\Models\Caja;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use OwenIt\Auditing\Contracts\Auditable;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\Configuracion\Moneda;
 use Auth;
 
 class Rendicionreceptivo_Comision extends Model implements Auditable
 {
-    use SoftDeletes;
 	use \OwenIt\Auditing\Auditable;
 
     protected $fillable = [

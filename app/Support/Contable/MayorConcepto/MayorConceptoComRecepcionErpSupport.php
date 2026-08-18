@@ -83,7 +83,6 @@ class MayorConceptoComRecepcionErpSupport
         $movimientos = DB::table('asiento_movimiento as am')
             ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
             ->whereIn('am.asiento_id', array_keys($clavePorRecepcion))
-            ->whereNull('am.deleted_at')
             ->where('am.monto', '>', 0)
             ->get([
                 'am.asiento_id',

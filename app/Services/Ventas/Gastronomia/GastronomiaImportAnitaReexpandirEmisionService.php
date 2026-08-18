@@ -180,7 +180,6 @@ final class GastronomiaImportAnitaReexpandirEmisionService
             ->leftJoin('descuento_gastronomia as dg', 'dg.id', '=', 'cg.descuento_gastronomia_id')
             ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
             ->join('tipotransaccion as tt', 'tt.id', '=', 'v.tipotransaccion_id')
-            ->whereNull('v.deleted_at')
             ->where('pv.empresa_id', $empresaId)
             ->where('cg.origen_pos', 'import_anita')
             ->whereBetween('v.fechajornada', [$fechaDesde, $fechaHasta])

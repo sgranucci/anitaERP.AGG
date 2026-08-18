@@ -215,7 +215,6 @@ final class GastronomiaControlVentasCobranzasAnitaService
                 'puntoventa.empresa_id',
             ])
             ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
-            ->whereNull('venta.deleted_at')
             ->where('venta.created_at', '>=', $desde)
             ->where('venta.created_at', '<', $hasta)
             ->whereHas('gastronomiaEmision')

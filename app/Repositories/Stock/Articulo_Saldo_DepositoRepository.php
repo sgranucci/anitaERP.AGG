@@ -39,7 +39,6 @@ class Articulo_Saldo_DepositoRepository implements Articulo_Saldo_DepositoReposi
         $total = DB::table('articulo_movimiento')
             ->where('articulo_id', $articuloId)
             ->where('deposito_id', $depositoId)
-            ->whereNull('deleted_at')
             ->where('fecha', '<=', $fecha)
             ->sum('cantidad');
 
@@ -79,7 +78,6 @@ class Articulo_Saldo_DepositoRepository implements Articulo_Saldo_DepositoReposi
         $query = DB::table('articulo_movimiento')
             ->where('articulo_id', $articuloId)
             ->where('deposito_id', $depositoId)
-            ->whereNull('deleted_at')
             ->where('fecha', $operadorFecha, $fecha);
 
         if ($colorKey === ArticuloStockColorTalleSupport::SIN_VARIANTE) {
@@ -154,7 +152,6 @@ class Articulo_Saldo_DepositoRepository implements Articulo_Saldo_DepositoReposi
                         MAX(fecha) AS ultima")
                     ->whereNotNull('articulo_id')
                     ->where('deposito_id', $depositoId)
-                    ->whereNull('deleted_at')
                     ->groupByRaw("articulo_id, deposito_id, {$colorExpr}, {$talleExpr}")
                     ->get();
             } else {
@@ -167,7 +164,6 @@ class Articulo_Saldo_DepositoRepository implements Articulo_Saldo_DepositoReposi
                         MAX(fecha) AS ultima")
                     ->whereNotNull('articulo_id')
                     ->whereNotNull('deposito_id')
-                    ->whereNull('deleted_at')
                     ->groupByRaw("articulo_id, deposito_id, {$colorExpr}, {$talleExpr}")
                     ->get();
             }

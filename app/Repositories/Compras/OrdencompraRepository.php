@@ -483,8 +483,7 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
             ->whereNotExists(function ($sub) {
                 $sub->select(DB::raw(1))
                     ->from('comprobante_proveedor')
-                    ->whereColumn('comprobante_proveedor.precarga_comprobante_proveedor_id', 'precarga_comprobante_proveedor.id')
-                    ->whereNull('comprobante_proveedor.deleted_at');
+                    ->whereColumn('comprobante_proveedor.precarga_comprobante_proveedor_id', 'precarga_comprobante_proveedor.id');
             })
             ->orderByDesc('id')
             ->get([
@@ -634,8 +633,7 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
             ->whereNotExists(function ($sub) {
                 $sub->select(DB::raw(1))
                     ->from('comprobante_proveedor')
-                    ->whereColumn('comprobante_proveedor.precarga_comprobante_proveedor_id', 'precarga_comprobante_proveedor.id')
-                    ->whereNull('comprobante_proveedor.deleted_at');
+                    ->whereColumn('comprobante_proveedor.precarga_comprobante_proveedor_id', 'precarga_comprobante_proveedor.id');
             })
             ->selectRaw('numeroordencompra, COUNT(*) as cant')
             ->groupBy('numeroordencompra')
@@ -666,10 +664,6 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
             ->whereIn('cp.ordencompra_id', $ordencompraIds)
             ->whereIn('cp.estado', PortalProveedorOrdencompraListadoFiltros::estadosFacturaVisibles())
             ->whereIn('pp.estado', PortalProveedorPagosListadoFiltros::estadosVisiblesPortal())
-            ->whereNull('cp.deleted_at')
-            ->whereNull('cc.deleted_at')
-            ->whereNull('ppc.deleted_at')
-            ->whereNull('pp.deleted_at')
             ->selectRaw('cp.ordencompra_id, COUNT(DISTINCT pp.id) as cant')
             ->groupBy('cp.ordencompra_id')
             ->get();

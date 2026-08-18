@@ -26,7 +26,6 @@ class IngresoEgresoComprobanteIvaAsientoVinculoService
         $comprobantes = Comprobante_Proveedor::query()
             ->where('caja_movimiento_id', $cajaMovimientoId)
             ->where('origen_entrada', ComprobanteProveedorOrigenEntrada::INGRESO_EGRESO)
-            ->whereNull('deleted_at')
             ->with(['comprobante_proveedor_conceptos.concepto_ivacompras.concepto_ivacompra_empresas'])
             ->get();
 

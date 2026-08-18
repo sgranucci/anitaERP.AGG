@@ -47,7 +47,6 @@ $rows = DB::table('transferencia_mercaderia as tm')
     ->leftJoin('asiento as asi', 'asi.id', '=', 'tm.asiento_id')
     ->whereIn('tma.articulo_origen_id', $titoIds)
     ->whereBetween('tm.fecha', ['2026-07-01', '2026-07-31'])
-    ->whereNull('tm.deleted_at')
     ->where('tm.estado', 'CONFIRMADA')
     ->where('tt.maneja_contabilidad', 1)
     ->whereNotNull('tm.asiento_id')
@@ -73,7 +72,6 @@ foreach ($rows as $r) {
     $importeObj = round($cant * $precioObj, 2);
     $montoActual = (float) DB::table('asiento_movimiento')
         ->where('asiento_id', $r->asiento_id)
-        ->whereNull('deleted_at')
         ->where('monto', '>', 0)
         ->value('monto');
 
@@ -151,7 +149,6 @@ DB::transaction(function () use ($ajustes) {
             DB::table('articulo_movimiento')
                 ->where('movimientostock_id', $movId)
                 ->where('articulo_id', $aj['articulo_id'])
-                ->whereNull('deleted_at')
                 ->update([
                     'precio' => $precio,
                     'costo' => $precio,
@@ -161,7 +158,6 @@ DB::transaction(function () use ($ajustes) {
 
         $movs = DB::table('asiento_movimiento')
             ->where('asiento_id', $aj['asiento_id'])
-            ->whereNull('deleted_at')
             ->orderBy('id')
             ->get(['id', 'monto']);
 
@@ -209,7 +205,6 @@ foreach ($ajustes as $aj) {
     $pLin = (float) DB::table('transferencia_mercaderia_articulo')->where('id', $aj['linea_id'])->value('precio_costo_origen');
     $monto = (float) DB::table('asiento_movimiento')
         ->where('asiento_id', $aj['asiento_id'])
-        ->whereNull('deleted_at')
         ->where('monto', '>', 0)
         ->value('monto');
     $ok = abs($pLin - $aj['precio_objetivo']) < 0.000001 && abs($monto - $aj['importe_objetivo']) < 0.01;

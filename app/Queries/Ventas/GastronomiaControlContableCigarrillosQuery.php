@@ -47,7 +47,6 @@ class GastronomiaControlContableCigarrillosQuery
                     ->where('ve_menu.precio', '>', 0.0001);
             })
             ->join('articulo as am', 'am.id', '=', 've_menu.articulo_id')
-            ->whereNull('v.deleted_at')
             ->where('a.tipoarticulo_id', $tipoarticuloId)
             ->whereRaw('UPPER(am.descripcion) LIKE ?', ['%CIGARRILLO%'])
             ->whereDate('v.fechajornada', '>=', $desde)
@@ -95,7 +94,6 @@ class GastronomiaControlContableCigarrillosQuery
             ->join('articulo as a', 'a.id', '=', 've.articulo_id')
             ->join('tipotransaccion as tt', 'tt.id', '=', 'v.tipotransaccion_id')
             ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
-            ->whereNull('v.deleted_at')
             ->where('a.tipoarticulo_id', $tipoarticuloId)
             ->where('ve.precio', '>', 0.0001)
             ->whereDate('v.fechajornada', '>=', $desde)

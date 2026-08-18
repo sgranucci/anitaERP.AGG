@@ -286,7 +286,7 @@ final class EstacionamientoCorregirImpuestosFacturasService
 
         Venta_Impuesto::query()
             ->where('venta_id', $venta->id)
-            ->forceDelete();
+            ->delete();
 
         foreach ($conceptosTotales as $conc) {
             if (! is_array($conc) || (float) ($conc['importe'] ?? 0) == 0.) {

@@ -103,7 +103,6 @@ class TicketQuery implements TicketQueryInterface
                                     ->addSelect([
                                         'tecnico_id' => Ticket_Tarea::query()
                                             ->select('ticket_tarea.tecnico_id')
-                                            ->where('deleted_at', null)
                                             ->whereColumn('ticket_tarea.ticket_id', 'ticket.id')
                                             ->latest()
                                             ->take(1)
@@ -143,8 +142,6 @@ class TicketQuery implements TicketQueryInterface
         $columns[] = ['columna' => 'ticket.fecha',
                     'clausula' => '='];
         $count = count($columns);
-
-        $tickets->where('deleted_at', null);
 
         // Carga de Tickets — prioridad:
         // supervisor (sin filtro) > admin-ticket-sector (mismo CC del emisor)
@@ -259,7 +256,6 @@ class TicketQuery implements TicketQueryInterface
                     'tecnico_ticket.nombre as nombretecnico',
                     'tecnico_ticket.usuario_id as tecnico_usuario_id')
                     ->from('ticket_tarea')
-                    ->where('deleted_at', null)
                     ->join('tecnico_ticket', 'tecnico_ticket.id', '=', 'ticket_tarea.tecnico_id')
                     ->groupBy('ticket_tarea.ticket_id')
                     ->orderBy('ticket_tarea.id', 'desc');
@@ -273,8 +269,6 @@ class TicketQuery implements TicketQueryInterface
             ->leftJoin('subcategoria_ticket', 'subcategoria_ticket.id', '=', 'ticket.subcategoria_ticket_id')
             ->leftJoin('categoria_ticket', 'categoria_ticket.id', '=', 'subcategoria_ticket.categoria_ticket_id')
             ->with('ticket_tareas');
-
-        $tickets->where('deleted_at', null);
 
         $tecnicoUsuarioFiltro = (int) ($filtros['tecnico_usuario_id'] ?? 0);
         $sistemasAreaId = (int) config('ticket.administracion_sistemas_areadestino_id', 1);

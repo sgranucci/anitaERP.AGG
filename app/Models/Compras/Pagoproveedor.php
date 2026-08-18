@@ -12,11 +12,9 @@ use App\Models\Contable\Asiento;
 use App\Models\Seguridad\Usuario;
 use App\Traits\Compras\PagoproveedorEstadoTrait;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Pagoproveedor extends Model
 {
-    use SoftDeletes;
     use PagoproveedorEstadoTrait;
 
     protected $table = 'pagoproveedor';

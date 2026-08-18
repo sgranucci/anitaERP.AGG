@@ -18,6 +18,7 @@ use App\Support\Caja\RendicionMaquina\RendicionMaquinaValorQrPrecargaSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaValoresCuentacajaSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaVariables;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaWigosLeeOnlineSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
@@ -585,7 +586,7 @@ final class RendicionMaquinaService
     private function generarCodigo(int $empresaId, string $fecha, string $turno): string
     {
         $base = sprintf('RM-%d-%s-%s', $empresaId, str_replace('-', '', $fecha), $turno);
-        if (! RendicionMaquina::withTrashed()->where('codigo', $base)->exists()) {
+        if (! RendicionMaquina::query()->where('codigo', $base)->exists()) {
             return $base;
         }
 
@@ -615,8 +616,8 @@ final class RendicionMaquinaService
      */
     private function reemplazarDetalle(RendicionMaquina $rendicion, array $lineasValor, array $lineasGasto, int $empresaId): void
     {
-        $rendicion->valores()->delete();
-        $rendicion->gastos()->delete();
+        EloquentAuditDeleteSupport::each($rendicion->valores()->getQuery());
+        EloquentAuditDeleteSupport::each($rendicion->gastos()->getQuery());
 
         $fechaYmd = $rendicion->fecha?->format('Y-m-d') ?? date('Y-m-d');
         $lineasValor = RendicionMaquinaValoresCuentacajaSupport::enriquecerLineas(

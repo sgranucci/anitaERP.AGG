@@ -6,7 +6,6 @@ use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
 use Illuminate\Support\Str;
 use Intervention\Image\Laravel\Facades\Image;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\Configuracion\Moneda;
 use App\Models\Configuracion\Sala;
 use App\Models\Seguridad\Usuario;
@@ -17,7 +16,6 @@ use App\Traits\Uif\Cliente_Premio_UifTrait;
 
 class Cliente_Premio_Uif extends Model implements Auditable
 {
-    use SoftDeletes;
 	use \OwenIt\Auditing\Auditable;
 	use Cliente_Premio_UifTrait;
 

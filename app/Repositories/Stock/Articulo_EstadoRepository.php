@@ -3,6 +3,7 @@
 namespace App\Repositories\Stock;
 
 use App\Models\Stock\Articulo_Estado;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Carbon\Carbon;
 use Auth;
@@ -38,7 +39,9 @@ class Articulo_EstadoRepository implements Articulo_EstadoRepositoryInterface
 
     public function delete($articulo_id, $codigo)
     {
-        return $this->model->where('articulo_id', $articulo_id)->delete();
+        return EloquentAuditDeleteSupport::each(
+            $this->model->newQuery()->where('articulo_id', $articulo_id)
+        );
     }
 
     public function find($id)
@@ -125,7 +128,9 @@ class Articulo_EstadoRepository implements Articulo_EstadoRepositoryInterface
 		}
 		else
 		{
-			$articulo_estado = $this->model->where('articulo_id', $id)->delete();
+			$articulo_estado = EloquentAuditDeleteSupport::each(
+				$this->model->newQuery()->where('articulo_id', $id)
+			);
 		}
 
 		return $articulo_estado;
@@ -141,7 +146,6 @@ class Articulo_EstadoRepository implements Articulo_EstadoRepositoryInterface
 							'observacion',
 							'created_at')
 					->where('articulo_id', $articulo_id)
-					->where('deleted_at', null)
 					->with('usuarios')
 					->get();
 	}	

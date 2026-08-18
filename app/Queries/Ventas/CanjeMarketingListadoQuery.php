@@ -91,8 +91,7 @@ class CanjeMarketingListadoQuery
                     ));
             })
             ->leftJoin('ubicaciones_gastronomia as ug', 'ug.id', '=', 'cfg.ubicacion_id')
-            ->leftJoin('empresa as e', 'e.id', '=', 'cme.empresa_id')
-            ->whereNull('v.deleted_at');
+            ->leftJoin('empresa as e', 'e.id', '=', 'cme.empresa_id');
 
         $this->aplicarExclusionInsumos($query);
         $this->aplicarFiltrosEstructurales($query, $filtros);

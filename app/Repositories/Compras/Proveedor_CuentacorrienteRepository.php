@@ -78,8 +78,7 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
                 'monedas',
                 'empresas',
             ])
-            ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
-            ->whereNull('proveedor_cuentacorriente.deleted_at');
+            ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id);
 
         if ($busqueda !== '') {
             $query->where(function ($q) use ($busqueda) {
@@ -123,7 +122,6 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
                     ->whereColumn('proveedor_cuentacorriente_id', 'proveedor_cuentacorriente.id'),
             ])
             ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
-            ->whereNull('proveedor_cuentacorriente.deleted_at')
             ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());
 
@@ -155,7 +153,6 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
     {
         return (float) $this->model->query()
             ->where('proveedor_id', $proveedor_id)
-            ->whereNull('deleted_at')
             ->sum('total');
     }
 
@@ -169,7 +166,6 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
                     ->whereColumn('proveedor_cuentacorriente_id', 'proveedor_cuentacorriente.id'),
             ])
             ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
-            ->whereNull('proveedor_cuentacorriente.deleted_at')
             ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc())
             ->get();
@@ -190,7 +186,6 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
 
         return (float) $this->model->query()
             ->where('proveedor_id', $proveedor_id)
-            ->whereNull('deleted_at')
             ->where(function ($q) use ($primerRegistro) {
                 $q->where('fecha', '<', $primerRegistro->fecha)
                     ->orWhere(function ($q2) use ($primerRegistro) {
@@ -229,8 +224,7 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
                     ->selectRaw('SUM(total)')
                     ->whereColumn('proveedor_cuentacorriente_id', 'proveedor_cuentacorriente.id'),
             ])
-            ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc())
-            ->whereNull('proveedor_cuentacorriente.deleted_at');
+            ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());
 
         if ($comprobante_proveedor_id) {
             $cuentacorriente = $cuentacorriente->where('comprobante_proveedor.id', $comprobante_proveedor_id);

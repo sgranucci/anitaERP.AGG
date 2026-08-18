@@ -10,6 +10,7 @@ use App\Models\Solicitudpago\Solicitudpago_Cuota;
 use App\Models\Solicitudpago\Solicitudpago_Estado;
 use App\Services\Solicitudpago\SolicitudpagoAnitaEscrituraService;
 use App\Services\Solicitudpago\SolicitudpagoAnitaSyncService;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Solicitudpago\ConceptoSolicitudpagoFormaPago;
 use App\Support\Solicitudpago\SolicitudpagoArchivoStorageSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
@@ -292,7 +293,9 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
      */
     private function guardarCuentas(Solicitudpago $sp, array $data): void
     {
-        Solicitudpago_Cuenta::query()->where('solicitudpago_id', $sp->id)->delete();
+        EloquentAuditDeleteSupport::each(
+            Solicitudpago_Cuenta::query()->where('solicitudpago_id', $sp->id)
+        );
 
         $empresaIds = $data['empresa_ids'] ?? [];
         $cuentaIds = $data['cuentacontable_ids'] ?? [];
@@ -356,7 +359,9 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
             return;
         }
 
-        Solicitudpago_Cuota::query()->where('solicitudpago_id', $sp->id)->delete();
+        EloquentAuditDeleteSupport::each(
+            Solicitudpago_Cuota::query()->where('solicitudpago_id', $sp->id)
+        );
 
         $formaConcepto = null;
         $conceptoId = (int) ($data['concepto_solicitudpago_id'] ?? $sp->concepto_solicitudpago_id ?? 0);

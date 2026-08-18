@@ -3,7 +3,6 @@
 namespace App\Models\Ventas;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\Stock\Mventa;
 use App\Models\Seguridad\Usuario;
 use App\Traits\Ventas\RemitoTrait;
@@ -12,7 +11,6 @@ use OwenIt\Auditing\Contracts\Auditable;
 class Remito extends Model implements Auditable
 {
     use RemitoTrait;
-    use SoftDeletes;
     use \OwenIt\Auditing\Auditable;
 
     protected $fillable = [

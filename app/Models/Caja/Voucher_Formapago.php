@@ -5,14 +5,12 @@ namespace App\Models\Caja;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use OwenIt\Auditing\Contracts\Auditable;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\Receptivo\Reserva;
 use App\Models\Configuracion\Moneda;
 use Auth;
 
 class Voucher_Formapago extends Model implements Auditable
 {
-    use SoftDeletes;
 	use \OwenIt\Auditing\Auditable;
 
     protected $fillable = [

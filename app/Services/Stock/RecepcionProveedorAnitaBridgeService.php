@@ -1133,7 +1133,6 @@ class RecepcionProveedorAnitaBridgeService
 
         $debe = (float) Asiento_Movimiento::query()
             ->where('asiento_id', $asientoId)
-            ->whereNull('deleted_at')
             ->where('monto', '>', 0)
             ->sum('monto');
 

@@ -105,7 +105,6 @@ class OrdenventaQuery implements OrdenventaQueryInterface
                     'clausula' => '='];                    
         $count = count($columns);
 
-        $ordenventas->where('deleted_at', null);
         $ordenventas->whereIn('empresa_id', $empresas);
 
         $ordenventas->where(function ($query) use ($count, $busqueda, $columns, $usuario_id) {

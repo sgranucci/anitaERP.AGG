@@ -81,7 +81,6 @@ final class GastronomiaRecuperarComprobanteArcaService
         $existente = Venta::query()
             ->where('puntoventa_id', $pv->id)
             ->where('numerocomprobante', $numeroComprobante)
-            ->whereNull('deleted_at')
             ->first();
         if ($existente !== null) {
             throw new InvalidArgumentException(

@@ -28,7 +28,6 @@ final class BienUsoAsignacionSupport
         $filas = DB::table('articulo_movimiento as am')
             ->join('articulo as a', 'a.id', '=', 'am.articulo_id')
             ->where('am.bien_uso_id', $bienUsoId)
-            ->whereNull('am.deleted_at')
             ->groupBy('am.articulo_id', 'a.sku', 'a.descripcion')
             ->havingRaw('SUM(am.cantidad) > 0.000001')
             ->selectRaw('am.articulo_id, a.sku, a.descripcion, SUM(am.cantidad) as cantidad, MAX(am.fecha) as ultima_fecha')
@@ -108,7 +107,6 @@ final class BienUsoAsignacionSupport
             ->leftJoin('transferencia_mercaderia as tm_ent', 'tm_ent.movimientostock_entrada_id', '=', 'am.movimientostock_id')
             ->leftJoin('transferencia_mercaderia as tm_sal', 'tm_sal.movimientostock_salida_id', '=', 'am.movimientostock_id')
             ->whereNotNull('am.bien_uso_id')
-            ->whereNull('am.deleted_at')
             ->select([
                 'am.id',
                 'am.fecha',

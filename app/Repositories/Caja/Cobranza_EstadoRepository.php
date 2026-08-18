@@ -3,6 +3,7 @@
 namespace App\Repositories\Caja;
 
 use App\Models\Caja\Cobranza_Estado;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Carbon\Carbon;
 use Auth;
@@ -38,7 +39,9 @@ class Cobranza_EstadoRepository implements Cobranza_EstadoRepositoryInterface
 
     public function delete($cobranza_id, $codigo)
     {
-        return $this->model->where('cobranza_id', $cobranza_id)->delete();
+        return EloquentAuditDeleteSupport::each(
+            $this->model->newQuery()->where('cobranza_id', $cobranza_id)
+        );
     }
 
     public function find($id)
@@ -92,7 +95,9 @@ class Cobranza_EstadoRepository implements Cobranza_EstadoRepositoryInterface
 		}
 		else
 		{
-			$cobranza_estado = $this->model->where('cobranza_id', $id)->delete();
+			$cobranza_estado = EloquentAuditDeleteSupport::each(
+				$this->model->newQuery()->where('cobranza_id', $id)
+			);
 		}
 
 		return $cobranza_estado;
@@ -108,7 +113,6 @@ class Cobranza_EstadoRepository implements Cobranza_EstadoRepositoryInterface
 							'observacion',
 							'created_at')
 					->where('cobranza_id', $cobranza_id)
-					->where('deleted_at', null)
 					->with('usuarios')
 					->get();
 	}	

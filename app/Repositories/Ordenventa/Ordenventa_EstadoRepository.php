@@ -3,6 +3,7 @@
 namespace App\Repositories\Ordenventa;
 
 use App\Models\Ordenventa\Ordenventa_Estado;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Carbon\Carbon;
 use Auth;
@@ -47,7 +48,9 @@ class Ordenventa_EstadoRepository implements Ordenventa_EstadoRepositoryInterfac
 
     public function delete($ordenventa_id, $codigo)
     {
-        return $this->model->where('ordenventa_id', $ordenventa_id)->delete();
+        return EloquentAuditDeleteSupport::each(
+            $this->model->newQuery()->where('ordenventa_id', $ordenventa_id)
+        );
     }
 
     public function find($id)
@@ -132,7 +135,9 @@ class Ordenventa_EstadoRepository implements Ordenventa_EstadoRepositoryInterfac
 		}
 		else
 		{
-			$ordenventa_estado = $this->model->where('ordenventa_id', $id)->delete();
+			$ordenventa_estado = EloquentAuditDeleteSupport::each(
+				$this->model->newQuery()->where('ordenventa_id', $id)
+			);
 		}
 
 		return $ordenventa_estado;
@@ -147,7 +152,6 @@ class Ordenventa_EstadoRepository implements Ordenventa_EstadoRepositoryInterfac
 							'usuario_id',
 							'observacion')
 					->where('ordenventa_id', $ordenventa_id)
-					->where('deleted_at', null)
 					->with('usuarios')
 					->get();
 	}

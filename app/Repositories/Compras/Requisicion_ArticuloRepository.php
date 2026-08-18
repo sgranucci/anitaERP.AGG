@@ -3,6 +3,7 @@
 namespace App\Repositories\Compras;
 
 use App\Models\Compras\Requisicion_Articulo;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Stock\ArticuloStockColorTalleSupport;
 
 class Requisicion_ArticuloRepository implements Requisicion_ArticuloRepositoryInterface
@@ -22,7 +23,9 @@ class Requisicion_ArticuloRepository implements Requisicion_ArticuloRepositoryIn
     public function syncFromRequest(array $data, $requisicion_id)
     {
         if (! isset($data['articulo_ids']) || ! is_array($data['articulo_ids'])) {
-            $this->model->where('requisicion_id', $requisicion_id)->delete();
+            EloquentAuditDeleteSupport::each(
+                $this->model->newQuery()->where('requisicion_id', $requisicion_id)
+            );
 
             return;
         }
@@ -89,11 +92,10 @@ class Requisicion_ArticuloRepository implements Requisicion_ArticuloRepositoryIn
             }
         }
 
-        $queryEliminar = $this->model->where('requisicion_id', $requisicion_id);
-        if (! empty($idsAConservar)) {
-            $queryEliminar->whereNotIn('id', $idsAConservar);
-        }
-        $queryEliminar->delete();
+        EloquentAuditDeleteSupport::exceptIds(
+            $this->model->newQuery()->where('requisicion_id', $requisicion_id),
+            $idsAConservar
+        );
 
         foreach ($aActualizar as $id => $payload) {
             $registro = $this->model->where('id', $id)->where('requisicion_id', $requisicion_id)->first();

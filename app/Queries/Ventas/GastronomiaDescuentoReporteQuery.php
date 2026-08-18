@@ -171,7 +171,6 @@ final class GastronomiaDescuentoReporteQuery
             ->join('articulo as a', 'a.id', '=', 've.articulo_id')
             ->leftJoin('tipoarticulo as ta', 'ta.id', '=', 'a.tipoarticulo_id')
             ->leftJoin('cliente as cli', 'cli.id', '=', 'cg.cliente_interno_descuento_id')
-            ->whereNull('v.deleted_at')
             ->whereNull('vge.venta_factura_origen_id')
             ->whereNotNull('cg.descuento_gastronomia_id');
 

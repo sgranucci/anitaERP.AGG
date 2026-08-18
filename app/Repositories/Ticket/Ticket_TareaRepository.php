@@ -5,6 +5,7 @@ namespace App\Repositories\Ticket;
 use App\Models\Ticket\Ticket_Tarea;
 use App\Models\Ticket\Ticket_Estado;
 use App\Repositories\Ticket\Ticket_EstadoRepositoryInterface;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Carbon\Carbon;
 use Auth;
@@ -48,7 +49,9 @@ class Ticket_TareaRepository implements Ticket_TareaRepositoryInterface
 
     public function delete($ticket_id, $codigo)
     {
-        return $this->model->where('ticket_id', $ticket_id)->delete();
+        return EloquentAuditDeleteSupport::each(
+            $this->model->newQuery()->where('ticket_id', $ticket_id)
+        );
     }
 
     public function find($id)
@@ -164,7 +167,9 @@ class Ticket_TareaRepository implements Ticket_TareaRepositoryInterface
 		}
 		else
 		{
-			$ticket_tarea = $this->model->where('ticket_id', $id)->delete();
+			$ticket_tarea = EloquentAuditDeleteSupport::each(
+				$this->model->newQuery()->where('ticket_id', $id)
+			);
 		}
 
 		return ['ticket_tarea_ids' => $this->ticket_tarea_ids];
@@ -300,12 +305,14 @@ class Ticket_TareaRepository implements Ticket_TareaRepositoryInterface
 				}
 				// Si no existe la borra
 				if (!$flEncontro)
-					$this->model->delete($array_ticket_tarea_id[$i]);
+					$this->model->find($array_ticket_tarea_id[$i])?->delete();
 			}
 		}
 		else
 		{
-			$ticket_tarea = $this->model->where('ticket_id', $id)->delete();
+			$ticket_tarea = EloquentAuditDeleteSupport::each(
+				$this->model->newQuery()->where('ticket_id', $id)
+			);
 		}
 
 		return [

@@ -263,8 +263,7 @@ class VentaRepository implements VentaRepositoryInterface
     {
         $query = $this->model->select('venta.numerocomprobante')
             ->where('venta.tipotransaccion_id', $tipotransaccion_id)
-            ->where('venta.puntoventa_id', $puntoventa_id)
-            ->whereNull('venta.deleted_at');
+            ->where('venta.puntoventa_id', $puntoventa_id);
 
         if ($empresa_id !== null && $empresa_id > 0) {
             $query->whereHas('puntoventas', static function ($q) use ($empresa_id): void {
@@ -366,7 +365,6 @@ class VentaRepository implements VentaRepositoryInterface
                                 ->join('moneda', 'moneda.id', 'venta.moneda_id')
                                 ->with('cliente_cuentacorrientes')
                                 ->where('ordenventa_id', $ordenventa_id)
-                                ->where('venta.deleted_at', null)
                                 ->where('cliente_cuentacorriente.cobranza_id', null)
                                 ->orderBy('venta.fecha')->get();
     }

@@ -82,8 +82,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
 
         $query = $this->model->query()
             ->with(['ventas', 'cobranzas', 'monedas', 'empresas'])
-            ->where('cliente_cuentacorriente.cliente_id', $cliente_id)
-            ->whereNull('cliente_cuentacorriente.deleted_at');
+            ->where('cliente_cuentacorriente.cliente_id', $cliente_id);
 
         if ($busqueda !== '') {
             $query->where(function ($q) use ($busqueda) {
@@ -120,7 +119,6 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
                     ->whereColumn('cliente_cuentacorriente_id', 'cliente_cuentacorriente.id'),
             ])
             ->where('cliente_cuentacorriente.cliente_id', $cliente_id)
-            ->whereNull('cliente_cuentacorriente.deleted_at')
             ->whereNotNull('cliente_cuentacorriente.venta_id')
             ->whereNull('cliente_cuentacorriente.cobranza_id')
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteClienteCc());
@@ -148,7 +146,6 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
     {
         return (float) $this->model->query()
             ->where('cliente_id', $cliente_id)
-            ->whereNull('deleted_at')
             ->sum('total');
     }
 
@@ -162,7 +159,6 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
                     ->whereColumn('cliente_cuentacorriente_id', 'cliente_cuentacorriente.id'),
             ])
             ->where('cliente_cuentacorriente.cliente_id', $cliente_id)
-            ->whereNull('cliente_cuentacorriente.deleted_at')
             ->whereNotNull('cliente_cuentacorriente.venta_id')
             ->whereNull('cliente_cuentacorriente.cobranza_id')
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteClienteCc())
@@ -184,7 +180,6 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
 
         return (float) $this->model->query()
             ->where('cliente_id', $cliente_id)
-            ->whereNull('deleted_at')
             ->where(function ($q) use ($primerRegistro) {
                 $q->where('fecha', '<', $primerRegistro->fecha)
                     ->orWhere(function ($q2) use ($primerRegistro) {
@@ -222,9 +217,7 @@ class Cliente_CuentacorrienteRepository implements Cliente_CuentacorrienteReposi
                                                         ->selectRaw('SUM(total)')
                                                         ->whereColumn('cliente_cuentacorriente_id', 'cliente_cuentacorriente.id')
                                                 ])
-                                                ->whereRaw(SqlDialectSupport::sqlSaldoPendienteClienteCc())
-                                                ->where('cliente_cuentacorriente.deleted_at', null);
-
+                                                ->whereRaw(SqlDialectSupport::sqlSaldoPendienteClienteCc());
         if (isset($venta_id))
             $cuentacorriente = $cuentacorriente->where('venta.id', $venta_id);
         else

@@ -52,7 +52,6 @@ final class BackfillArticuloMovimientoPrecioService
         $actualizados = 0;
 
         Articulo_Movimiento::query()
-            ->whereNull('deleted_at')
             ->whereNotNull('venta_id')
             ->where('precio', 0)
             ->tap(static fn ($q) => GastronomiaVentaDetalleSupport::aplicarWhereConceptoNoEsInsumo($q))
@@ -85,7 +84,6 @@ final class BackfillArticuloMovimientoPrecioService
         $actualizados = 0;
 
         Articulo_Movimiento::query()
-            ->whereNull('deleted_at')
             ->where('costo', 0)
             ->where('precio', 0)
             ->tap(static fn ($q) => GastronomiaVentaDetalleSupport::aplicarWhereConceptoEsInsumo($q))
@@ -123,7 +121,6 @@ final class BackfillArticuloMovimientoPrecioService
         $actualizados = 0;
 
         Articulo_Movimiento::query()
-            ->whereNull('deleted_at')
             ->whereNull('venta_id')
             ->where('precio', 0)
             ->where('costo', 0)
@@ -165,19 +162,16 @@ final class BackfillArticuloMovimientoPrecioService
     {
         return [
             'ventas_pendientes' => (int) Articulo_Movimiento::query()
-                ->whereNull('deleted_at')
                 ->whereNotNull('venta_id')
                 ->where('precio', 0)
                 ->tap(static fn ($q) => GastronomiaVentaDetalleSupport::aplicarWhereConceptoNoEsInsumo($q))
                 ->count(),
             'insumos_pendientes' => (int) Articulo_Movimiento::query()
-                ->whereNull('deleted_at')
                 ->where('costo', 0)
                 ->where('precio', 0)
                 ->tap(static fn ($q) => GastronomiaVentaDetalleSupport::aplicarWhereConceptoEsInsumo($q))
                 ->count(),
             'movimientos_pendientes' => (int) Articulo_Movimiento::query()
-                ->whereNull('deleted_at')
                 ->whereNull('venta_id')
                 ->where('precio', 0)
                 ->where('costo', 0)

@@ -100,7 +100,6 @@ final class ExistenciasDepositoListadoFiltros
 
     if (empty($filtros['fecha_desde'])) {
       $min = DB::table('articulo_movimiento')
-        ->whereNull('deleted_at')
         ->min('fecha');
 
       $filtros['fecha_desde'] = $min ? substr((string) $min, 0, 10) : $filtros['fecha_hasta'];

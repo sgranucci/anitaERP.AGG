@@ -211,7 +211,6 @@ final class MovimientoStockListadoCostoSupport
             $rows = DB::table('articulo_movimiento')
                 ->select(['movimientostock_id', 'articulo_id', 'cantidad'])
                 ->whereIn('movimientostock_id', $movIds)
-                ->whereNull('deleted_at')
                 ->get();
             foreach ($rows as $row) {
                 $clave = 'movimiento:'.(int) $row->movimientostock_id;

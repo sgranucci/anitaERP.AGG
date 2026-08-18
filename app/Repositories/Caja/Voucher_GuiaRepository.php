@@ -3,6 +3,7 @@
 namespace App\Repositories\Caja;
 
 use App\Models\Caja\Voucher_Guia;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Carbon\Carbon;
 use Auth;
@@ -34,9 +35,9 @@ class Voucher_GuiaRepository implements Voucher_GuiaRepositoryInterface
 
     public function delete($voucher_id, $codigo)
     {
-        $voucher_guia = $this->model->where('voucher_id', $voucher_id)->delete();
-
-		return $proveedor;
+        return EloquentAuditDeleteSupport::each(
+            $this->model->newQuery()->where('voucher_id', $voucher_id)
+        );
     }
 
     public function find($id)
@@ -132,7 +133,9 @@ class Voucher_GuiaRepository implements Voucher_GuiaRepositoryInterface
 		}
 		else
 		{
-			$voucher_guia = $this->model->where('voucher_id', $id)->delete();
+			EloquentAuditDeleteSupport::each(
+				$this->model->newQuery()->where('voucher_id', $id)
+			);
 		}
 	}
 
@@ -166,7 +169,6 @@ class Voucher_GuiaRepository implements Voucher_GuiaRepositoryInterface
 								->whereNotExists(function ($query) {
 									$query->select(DB::raw(1))
 											->from('rendicionreceptivo')
-											->where('deleted_at', null)
 											->whereColumn('voucher_guia.ordenservicio_id', 'rendicionreceptivo.ordenservicio_id');
 								})
 								->get();

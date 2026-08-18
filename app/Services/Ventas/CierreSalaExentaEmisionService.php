@@ -10,6 +10,7 @@ use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Impuesto;
 use App\Repositories\Ventas\VentaRepositoryInterface;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Support\Facades\Auth;
 use InvalidArgumentException;
 use RuntimeException;
@@ -157,7 +158,9 @@ class CierreSalaExentaEmisionService
             );
         }
 
-        Venta_Impuesto::query()->where('venta_id', $ventaId)->delete();
+        EloquentAuditDeleteSupport::each(
+            Venta_Impuesto::query()->where('venta_id', $ventaId)
+        );
         $venta->delete();
     }
 

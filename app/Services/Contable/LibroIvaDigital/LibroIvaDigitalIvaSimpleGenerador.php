@@ -107,12 +107,10 @@ class LibroIvaDigitalIvaSimpleGenerador
             ->join('tipotransaccion as tt', 'tt.id', '=', 'venta.tipotransaccion_id')
             ->join('venta_impuesto as vi_neto', function ($join): void {
                 $join->on('vi_neto.venta_id', '=', 'venta.id')
-                    ->whereNull('vi_neto.deleted_at')
                     ->where('vi_neto.concepto', 'like', 'Gravado al%');
             })
             ->join('venta_impuesto as vi_iva', function ($join): void {
                 $join->on('vi_iva.venta_id', '=', 'venta.id')
-                    ->whereNull('vi_iva.deleted_at')
                     ->where(function ($q): void {
                         $q->where('vi_iva.concepto', 'like', 'Iva %')
                             ->orWhere('vi_iva.concepto', 'like', 'IVA%');
@@ -122,7 +120,6 @@ class LibroIvaDigitalIvaSimpleGenerador
             ->leftJoin('actividad_arca', 'actividad_arca.id', '=', 'venta.actividad_arca_id')
             ->leftJoin('actividad_arca as aa_pv', 'aa_pv.id', '=', 'puntoventa.actividad_arca_id')
             ->leftJoin('condicioniva', 'condicioniva.id', '=', 'venta.condicioniva_id')
-            ->whereNull('venta.deleted_at')
             ->where('puntoventa.empresa_id', $empresaId)
             ->whereNotIn('tt.abreviatura', ['IZV', 'FBI', 'FSL']);
 
@@ -196,7 +193,6 @@ class LibroIvaDigitalIvaSimpleGenerador
             ->join('tipotransaccion as tt', 'tt.id', '=', 'venta.tipotransaccion_id')
             ->join('venta_impuesto as vi', function ($join): void {
                 $join->on('vi.venta_id', '=', 'venta.id')
-                    ->whereNull('vi.deleted_at')
                     ->where(function ($q): void {
                         $q->where('vi.concepto', 'like', '%Exento%')
                             ->orWhere('vi.concepto', 'like', '%No Gravado%');
@@ -204,7 +200,6 @@ class LibroIvaDigitalIvaSimpleGenerador
             })
             ->leftJoin('actividad_arca', 'actividad_arca.id', '=', 'venta.actividad_arca_id')
             ->leftJoin('actividad_arca as aa_pv', 'aa_pv.id', '=', 'puntoventa.actividad_arca_id')
-            ->whereNull('venta.deleted_at')
             ->where('puntoventa.empresa_id', $empresaId)
             ->whereNotIn('tt.abreviatura', ['IZV', 'FBI', 'FSL'])
             ->where(function ($q): void {
@@ -259,7 +254,6 @@ class LibroIvaDigitalIvaSimpleGenerador
             ->join('comprobante_proveedor_concepto as cpc', 'cpc.comprobante_proveedor_id', '=', 'cp.id')
             ->join('concepto_ivacompra as ci', 'ci.id', '=', 'cpc.concepto_ivacompra_id')
             ->leftJoin('impuesto as imp', 'imp.id', '=', 'ci.impuesto_id')
-            ->whereNull('cp.deleted_at')
             ->where('cp.empresa_id', $empresaId)
             ->whereBetween('cp.fechaiva', [$desde, $hasta])
             ->where('cp.estado', '<>', ComprobanteProveedorEstados::ANULADO)

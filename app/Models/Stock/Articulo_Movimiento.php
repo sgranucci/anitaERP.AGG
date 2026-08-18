@@ -4,14 +4,12 @@ namespace App\Models\Stock;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Str;
 use App\Models\Ventas\Ordentrabajo;
 use App\Models\Ventas\Venta;
 
 class Articulo_Movimiento extends Model
 {
-    //use SoftDeletes;
     protected $fillable = ['fecha','fechajornada', 'tipotransaccion_id', 'tipotransaccion_stock_id', 'venta_id', 'venta_emision_id', 'movimientostock_id',
                         'pedido_combinacion_id', 'ordentrabajo_id', 'lote', 'articulo_id', 'color_id', 'talle_id', 'numeroparte', 'combinacion_id', 
                         'concepto', 'modulo_id', 'cantidad', 

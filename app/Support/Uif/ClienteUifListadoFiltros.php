@@ -72,7 +72,7 @@ class ClienteUifListadoFiltros
         'menor' => 'Menor que',
     ];
 
-    private const SQL_ULTIMO_PREMIO_FECHA = '(SELECT cp.fechaentrega FROM cliente_premio_uif cp WHERE cp.cliente_uif_id = cliente_uif.id AND cp.deleted_at IS NULL ORDER BY cp.fechaentrega DESC, cp.id DESC LIMIT 1)';
+    private const SQL_ULTIMO_PREMIO_FECHA = '(SELECT cp.fechaentrega FROM cliente_premio_uif cp WHERE cp.cliente_uif_id = cliente_uif.id ORDER BY cp.fechaentrega DESC, cp.id DESC LIMIT 1)';
 
     private const SQL_TELEFONO_NORMALIZADO = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(COALESCE(cliente_uif.telefono,''),' ',''),'-',''),'(',''),')',''),'.',''),'+','')";
 
@@ -459,7 +459,7 @@ class ClienteUifListadoFiltros
         }
 
         if (! empty($filtros['con_premios'])) {
-            $query->whereRaw('(SELECT COUNT(*) FROM cliente_premio_uif WHERE cliente_premio_uif.cliente_uif_id = cliente_uif.id AND cliente_premio_uif.deleted_at IS NULL) > 0');
+            $query->whereRaw('(SELECT COUNT(*) FROM cliente_premio_uif WHERE cliente_premio_uif.cliente_uif_id = cliente_uif.id) > 0');
         }
 
         $valor = trim((string) ($filtros['valor'] ?? ''));
@@ -468,7 +468,7 @@ class ClienteUifListadoFiltros
         }
 
         if (self::esBusquedaSoloConPremios($valor) && ($filtros['modo'] ?? '') === self::MODO_TODOS) {
-            $query->whereRaw('(SELECT COUNT(*) FROM cliente_premio_uif WHERE cliente_premio_uif.cliente_uif_id = cliente_uif.id AND cliente_premio_uif.deleted_at IS NULL) > 0');
+            $query->whereRaw('(SELECT COUNT(*) FROM cliente_premio_uif WHERE cliente_premio_uif.cliente_uif_id = cliente_uif.id) > 0');
 
             return;
         }

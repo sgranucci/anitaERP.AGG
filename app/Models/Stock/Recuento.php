@@ -5,11 +5,9 @@ namespace App\Models\Stock;
 use App\Models\Configuracion\Empresa;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Recuento extends Model
 {
-    use SoftDeletes;
 
     public const ESTADO_PENDIENTE = 'PENDIENTE';
 

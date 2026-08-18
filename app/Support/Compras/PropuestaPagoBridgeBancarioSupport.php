@@ -20,7 +20,6 @@ class PropuestaPagoBridgeBancarioSupport
     {
         return \App\Models\Compras\Pagoproveedor::query()
             ->where('propuesta_pago_id', $propuestaPagoId)
-            ->whereNull('deleted_at')
             ->orderBy('id')
             ->get();
     }

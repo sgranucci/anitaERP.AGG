@@ -137,7 +137,7 @@ class ExistenciasDepositoReporteService
     $rows = DB::table($this->usaSaldoVigenteTabla($fechaHasta) ? 'articulo_saldo_deposito' : 'articulo_movimiento')
       ->when(
         ! $this->usaSaldoVigenteTabla($fechaHasta),
-        fn ($q) => $q->whereNull('deleted_at')->where('fecha', '<=', $fechaHasta)
+        fn ($q) => $q->where('fecha', '<=', $fechaHasta)
       )
       ->whereIn('articulo_id', $articuloIds)
       ->whereIn('deposito_id', $depositoIds)
@@ -289,7 +289,6 @@ class ExistenciasDepositoReporteService
     }
 
     return DB::table('articulo_movimiento')
-      ->whereNull('deleted_at')
       ->whereIn('deposito_id', $depositoIds)
       ->where('fecha', '<=', $fechaHasta)
       ->groupBy('deposito_id')
@@ -350,7 +349,6 @@ class ExistenciasDepositoReporteService
   {
     $query = DB::table('articulo_movimiento as am')
       ->join('articulo as a', 'a.id', '=', 'am.articulo_id')
-      ->whereNull('am.deleted_at')
       ->whereIn('am.deposito_id', $depositoIds)
       ->where('am.fecha', '<=', $fechaHasta);
 
@@ -410,7 +408,6 @@ class ExistenciasDepositoReporteService
     }
 
     $rows = DB::table('articulo_movimiento')
-      ->whereNull('deleted_at')
       ->whereIn('articulo_id', $articuloIds)
       ->whereIn('deposito_id', $depositoIds)
       ->where('fecha', '<=', $fechaHasta)

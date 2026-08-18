@@ -395,7 +395,6 @@ class ProyeccionPagosReporteService
                 DB::table('requisicion_estado')
                     ->selectRaw('requisicion_id, MAX(fecha) AS fecha_aprobacion')
                     ->where('estado', 'APROBADA')
-                    ->whereNull('deleted_at')
                     ->groupBy('requisicion_id'),
                 'reap',
                 'reap.requisicion_id',
@@ -488,7 +487,6 @@ class ProyeccionPagosReporteService
                 'pp.asiento_id as asiento_id',
                 'cm.conceptogasto_id as pago_conceptogasto_id',
             ])
-            ->whereNull('pp.deleted_at');
 
         return collect($query->get());
     }
@@ -524,7 +522,6 @@ class ProyeccionPagosReporteService
                 'mon.abreviatura as moneda_abreviatura',
                 DB::raw(SqlDialectSupport::coalesce('apl.aplicado', '0').' as aplicado'),
             ])
-            ->whereNull('cc.deleted_at')
             ->where('cc.fecha', '<=', $fechaBase)
             ->whereRaw('abs(cc.total + '.SqlDialectSupport::coalesce('apl.aplicado', '0').') > 0.009');
 

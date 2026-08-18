@@ -10,13 +10,11 @@ use App\Models\Contable\Asiento;
 use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Recepcion_Proveedor;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class Comprobante_Proveedor extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
-    use SoftDeletes;
 
     protected $table = 'comprobante_proveedor';
 
@@ -42,7 +40,6 @@ class Comprobante_Proveedor extends Model implements Auditable
         'es_fce' => 'boolean',
         'pararevisar' => 'boolean',
         'anita_sync_at' => 'datetime',
-        'deleted_at' => 'datetime',
     ];
 
     public function empresas()

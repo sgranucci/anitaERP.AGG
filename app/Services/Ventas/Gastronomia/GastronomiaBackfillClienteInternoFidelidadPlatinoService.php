@@ -76,7 +76,6 @@ final class GastronomiaBackfillClienteInternoFidelidadPlatinoService
                 ->join('venta_gastronomia_emision as vge', 'vge.venta_id', '=', 'e.venta_id')
                 ->join('venta as v', 'v.id', '=', 'e.venta_id')
                 ->join('cuenta_gastronomia as cg', 'cg.id', '=', 'vge.cuenta_gastronomia_id')
-                ->whereNull('v.deleted_at')
                 ->whereNull('vge.venta_factura_origen_id')
                 ->where('cg.empresa_id', $empresaId)
                 ->whereIn('cat.codigo', $codigosCategoriaPlatino)

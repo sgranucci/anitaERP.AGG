@@ -52,7 +52,6 @@ final class MovimientoStockVisibilidadSupport
         return DB::table('articulo_movimiento as am')
             ->join('depmae', 'depmae.id', '=', 'am.deposito_id')
             ->where('am.movimientostock_id', $movimientoId)
-            ->whereNull('am.deleted_at')
             ->where('depmae.empresa_id', SurmarSupport::EMPRESA_ID)
             ->exists();
     }

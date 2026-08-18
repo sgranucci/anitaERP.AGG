@@ -11,6 +11,7 @@ use App\Repositories\Sala\RequisicionSalaRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Services\Stock\TransferenciaMercaderiaService;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Sala\RequisicionSalaEdicionSupport;
 use App\Support\Sala\RequisicionSalaTransferenciaLaboratorioDeferred;
 use App\Support\Sala\RequisicionSalaTransferenciaAsociadaSupport;
@@ -242,9 +243,10 @@ class RequisicionSalaService
                 $this->transferenciaMercaderiaService->revertirTransferenciaConfirmada((int) $tmLab->id);
             }
 
-            Arbolaprobacion_Movimiento::query()
-                ->where('requisicion_sala_id', $id)
-                ->delete();
+            EloquentAuditDeleteSupport::each(
+                Arbolaprobacion_Movimiento::query()
+                    ->where('requisicion_sala_id', $id)
+            );
 
             $this->requisicionSalaEstadoRepository->creaEstado(
                 $id,

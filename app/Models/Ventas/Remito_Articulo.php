@@ -3,7 +3,6 @@
 namespace App\Models\Ventas;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Listaprecio;
@@ -14,7 +13,6 @@ use OwenIt\Auditing\Contracts\Auditable;
 class Remito_Articulo extends Model implements Auditable
 {
     use Remito_ArticuloTrait;
-    use SoftDeletes;
     use \OwenIt\Auditing\Auditable;
 
     protected $fillable = [

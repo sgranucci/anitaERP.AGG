@@ -40,7 +40,6 @@ class CashPositionSupport
                     ->selectRaw('SUM(total)')
                     ->whereColumn('proveedor_cuentacorriente_id', 'proveedor_cuentacorriente.id'),
             ])
-            ->whereNull('proveedor_cuentacorriente.deleted_at')
             ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
             ->whereDate('fechavencimiento', '<=', $hoy)
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());
@@ -107,7 +106,6 @@ class CashPositionSupport
                     ->selectRaw('SUM(total)')
                     ->whereColumn('proveedor_cuentacorriente_id', 'proveedor_cuentacorriente.id'),
             ])
-            ->whereNull('proveedor_cuentacorriente.deleted_at')
             ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
             ->whereNotNull('proveedor_cuentacorriente.fechavencimiento')
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());

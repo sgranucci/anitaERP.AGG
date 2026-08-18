@@ -117,7 +117,6 @@ class AjusteInflacionService
             $ultimaFecha = DB::table('asiento')
                 ->where('empresa_id', $empresaId)
                 ->where('tipoasiento_id', (int) $tipoAj->id)
-                ->whereNull('deleted_at')
                 ->max('fecha');
 
             if ($ultimaFecha === null) {
@@ -135,13 +134,11 @@ class AjusteInflacionService
                 ->where('empresa_id', $empresaId)
                 ->where('tipoasiento_id', (int) $tipoAj->id)
                 ->whereDate('fecha', $ultimaFecha)
-                ->whereNull('deleted_at')
                 ->orderByDesc('id')
                 ->get(['id']);
 
             $movimientos = DB::table('asiento_movimiento')
                 ->whereIn('asiento_id', $asientos->pluck('id')->all())
-                ->whereNull('deleted_at')
                 ->get(['asiento_id', 'cuentacontable_id']);
 
             $cantidadPorAsiento = [];
@@ -428,8 +425,6 @@ class AjusteInflacionService
             ->whereDate('a.fecha', '<=', $fechaCierre)
             ->whereIn('am.cuentacontable_id', $cuentaIds)
             ->whereNotIn('ta.abreviatura', self::TIPOS_EXCLUIDOS)
-            ->whereNull('a.deleted_at')
-            ->whereNull('am.deleted_at')
             ->orderBy('am.cuentacontable_id')
             ->orderBy('am.centrocosto_id')
             ->orderBy('a.fecha')

@@ -8,6 +8,7 @@ use App\Repositories\Compras\PropuestaPagoRepositoryInterface;
 use App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepositoryInterface;
 use App\Repositories\Configuracion\ArbolaprobacionRepositoryInterface;
 use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Auth;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Hash;
@@ -41,7 +42,6 @@ class PropuestaPagoArbolIntegracionService
     {
         return Arbolaprobacion_Movimiento::query()
             ->where('propuesta_pago_id', $propuestaPagoId)
-            ->whereNull('deleted_at')
             ->orderBy('nivel')
             ->orderBy('id')
             ->with('enviousuarios')
@@ -51,9 +51,10 @@ class PropuestaPagoArbolIntegracionService
 
     public function dispararAlEnviarAprobacion(int $propuestaPagoId): int
     {
-        Arbolaprobacion_Movimiento::query()
-            ->where('propuesta_pago_id', $propuestaPagoId)
-            ->delete();
+        EloquentAuditDeleteSupport::each(
+            Arbolaprobacion_Movimiento::query()
+                ->where('propuesta_pago_id', $propuestaPagoId)
+        );
 
         return app(\App\Services\Configuracion\ArbolaprobacionService::class)
             ->procesaArbolaprobacion(self::TIPO_COMPROBANTE, $propuestaPagoId, 'insert');

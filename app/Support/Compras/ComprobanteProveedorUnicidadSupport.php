@@ -137,7 +137,6 @@ final class ComprobanteProveedorUnicidadSupport
             throw ComprobanteProveedorDuplicadoException::desdeExistente($duplicado, $codigoAfip);
         }
 
-        // El índice único de MySQL incluye soft-deleted; el filtro AFIP solo ve no eliminados.
         $duplicadoClave = self::findDuplicadoPorClaveUnica(
             $empresaId,
             $tipotransaccionCompraId,
@@ -146,7 +145,6 @@ final class ComprobanteProveedorUnicidadSupport
             $numerocomprobante,
             $cuit,
             $excluirComprobanteId,
-            incluirEliminados: true,
         );
         if ($duplicadoClave !== null) {
             throw ComprobanteProveedorDuplicadoException::desdeExistente($duplicadoClave, $codigoAfip);
@@ -259,7 +257,6 @@ final class ComprobanteProveedorUnicidadSupport
 
         $query = Comprobante_Proveedor::query()
             ->with(['tipotransaccion_compras', 'proveedores'])
-            ->whereNull('deleted_at')
             ->where('empresa_id', $empresaId)
             ->whereIn('tipotransaccion_compra_id', $tipoIds)
             ->where('letra', $letra)
@@ -324,7 +321,6 @@ final class ComprobanteProveedorUnicidadSupport
         int $numerocomprobante,
         string $cuitDigitos,
         ?int $excluirComprobanteId = null,
-        bool $incluirEliminados = false,
     ): ?Comprobante_Proveedor {
         $cuitDigitos = self::normalizarCuitDigitos($cuitDigitos);
         if ($cuitDigitos === '' || $tipotransaccionCompraId <= 0) {
@@ -333,9 +329,7 @@ final class ComprobanteProveedorUnicidadSupport
 
         $letra = strtoupper(substr(trim($letra), 0, 1));
 
-        $query = $incluirEliminados
-            ? Comprobante_Proveedor::withTrashed()
-            : Comprobante_Proveedor::query();
+        $query = Comprobante_Proveedor::query();
 
         $query->with(['tipotransaccion_compras', 'proveedores'])
             ->where('empresa_id', $empresaId)
@@ -353,7 +347,7 @@ final class ComprobanteProveedorUnicidadSupport
     }
 
     /**
-     * Convierte violación de índice único (carrera / soft-delete) en mensaje de negocio.
+     * Convierte violación de índice único (carrera) en mensaje de negocio.
      *
      * @throws ComprobanteProveedorDuplicadoException
      */
@@ -381,7 +375,6 @@ final class ComprobanteProveedorUnicidadSupport
             $numerocomprobante,
             $cuit,
             $excluirComprobanteId,
-            incluirEliminados: true,
         );
 
         if ($dup !== null) {
@@ -393,7 +386,7 @@ final class ComprobanteProveedorUnicidadSupport
 
         throw new RuntimeException(
             'Ya existe un comprobante con la misma empresa, tipo, letra, sucursal, número y CUIT. '
-            .'Buscalo en Cuentas a pagar (puede estar en borrador o eliminado).'
+            .'Buscalo en Cuentas a pagar.'
         );
     }
 
@@ -480,7 +473,6 @@ final class ComprobanteProveedorUnicidadSupport
     ): ?Comprobante_Proveedor {
         $query = Comprobante_Proveedor::query()
             ->with(['tipotransaccion_compras', 'proveedores'])
-            ->whereNull('deleted_at')
             ->where('empresa_id', $empresaId)
             ->where(function ($q) {
                 $q->whereNull('estado')
@@ -601,16 +593,6 @@ final class ComprobanteProveedorUnicidadSupport
         $cuitFmt = $cuit !== '' ? self::formatearCuit($cuit) : 'sin CUIT';
         $estado = strtoupper(trim((string) ($existente->estado ?? '')));
         $origen = ComprobanteProveedorOrigenEntrada::etiqueta((string) ($existente->origen_entrada ?? ''));
-
-        if ($existente->trashed()) {
-            return sprintf(
-                'Ya existió el comprobante #%d (%s, CUIT %s), hoy eliminado. '
-                .'La misma identificación fiscal no se puede volver a dar de alta mientras ese registro conserve la clave única.',
-                $existente->id,
-                $comprobante,
-                $cuitFmt,
-            );
-        }
 
         return sprintf(
             'Ya existe el comprobante #%d (%s, CUIT %s, estado %s, origen %s). '

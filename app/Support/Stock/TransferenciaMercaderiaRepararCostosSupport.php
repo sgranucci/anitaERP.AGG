@@ -349,8 +349,7 @@ final class TransferenciaMercaderiaRepararCostosSupport
             ->where('articulo_origen_id', $articuloId)
             ->where('fl_conversion_formula', true)
             ->whereHas('transferencias', function ($q) use ($modo, $opciones) {
-                $q->where('estado', TransferenciaMercaderiaEstados::CONFIRMADA)
-                    ->whereNull('deleted_at');
+                $q->where('estado', TransferenciaMercaderiaEstados::CONFIRMADA);
 
                 if ($modo === 'rango') {
                     $desde = trim((string) ($opciones['fecha_desde'] ?? ''));

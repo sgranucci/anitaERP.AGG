@@ -72,7 +72,6 @@ class LibroIvaDigitalComprasGenerador
     private function queryCompras(int $empresaId, string $desde, string $hasta): Builder
     {
         return Comprobante_Proveedor::query()
-            ->whereNull('comprobante_proveedor.deleted_at')
             ->where('comprobante_proveedor.empresa_id', $empresaId)
             ->whereBetween('comprobante_proveedor.fechaiva', [$desde, $hasta])
             ->where('comprobante_proveedor.estado', '<>', ComprobanteProveedorEstados::ANULADO);

@@ -289,7 +289,6 @@ final class WaitryCobrosPostCierreJornadaSupport
                             ->whereDate('v.fecha', $fechaJornada);
                     });
             })
-            ->whereNull('v.deleted_at')
             ->get([
                 'vge.waitry_order_id',
                 'vge.waitry_comandas_json',

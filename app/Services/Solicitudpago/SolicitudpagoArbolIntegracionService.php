@@ -10,6 +10,7 @@ use App\Repositories\Admin\UsuarioRepositoryInterface;
 use App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepositoryInterface;
 use App\Repositories\Solicitudpago\SolicitudpagoRepositoryInterface;
 use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use Auth;
 use Carbon\Carbon;
@@ -42,7 +43,6 @@ class SolicitudpagoArbolIntegracionService
     {
         return Arbolaprobacion_Movimiento::query()
             ->where('solicitudpago_id', $solicitudpagoId)
-            ->whereNull('deleted_at')
             ->orderBy('nivel')
             ->orderBy('id')
             ->with('enviousuarios')
@@ -91,9 +91,10 @@ class SolicitudpagoArbolIntegracionService
         }
 
         return DB::transaction(function () use ($sp, $solicitudpagoId) {
-            Arbolaprobacion_Movimiento::query()
-                ->where('solicitudpago_id', $solicitudpagoId)
-                ->delete();
+            EloquentAuditDeleteSupport::each(
+                Arbolaprobacion_Movimiento::query()
+                    ->where('solicitudpago_id', $solicitudpagoId)
+            );
 
             $estadosAptosSinReset = [
                 SolicitudpagoEstados::EMITIDA,

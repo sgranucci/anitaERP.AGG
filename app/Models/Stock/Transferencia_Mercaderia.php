@@ -6,11 +6,9 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Asiento;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Transferencia_Mercaderia extends Model
 {
-    use SoftDeletes;
 
     protected $table = 'transferencia_mercaderia';
 

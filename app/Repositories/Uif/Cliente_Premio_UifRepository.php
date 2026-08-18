@@ -5,6 +5,7 @@ namespace App\Repositories\Uif;
 use App\Models\Uif\Cliente_Premio_Uif;
 use App\Models\Uif\Cliente_Uif;
 use App\Services\Uif\ClientePremioUifFotoTesoreria;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Uif\ClientePremioUifListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
@@ -239,7 +240,9 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
 
     public function delete($id)
     {
-        return $this->model->where('id', $id)->delete();
+        return EloquentAuditDeleteSupport::each(
+            $this->model->newQuery()->where('id', $id)
+        );
     }
 
     public function find($id)
@@ -351,7 +354,9 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
 		}
 		else
 		{
-			$cliente_premio_uif = $this->model->where('cliente_uif_id', $id)->delete();
+			$cliente_premio_uif = EloquentAuditDeleteSupport::each(
+				$this->model->newQuery()->where('cliente_uif_id', $id)
+			);
 		}
 
 		return $cliente_premio_uif;
@@ -422,7 +427,6 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
                                 ->leftJoin('usuario as usuario_alta', 'usuario_alta.id', '=', 'cliente_premio_uif.creousuario_id')
                                 ->leftJoin('sala', 'sala.id', '=', 'cliente_premio_uif.sala_id')
                                 ->leftJoin('empresa', 'empresa.id', '=', 'sala.empresa_id')
-								->whereNull('cliente_premio_uif.deleted_at')
 								->whereNull('cliente_uif.deleted_at')
 								->where('cliente_premio_uif.monto', '>=', $limite)
 								->when($empresaId, function ($query, $empresaId) {

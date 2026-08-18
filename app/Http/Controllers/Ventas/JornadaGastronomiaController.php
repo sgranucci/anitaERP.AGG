@@ -236,7 +236,6 @@ class JornadaGastronomiaController extends Controller
                 ->join('venta as v', 'vge.venta_id', '=', 'v.id')
                 ->join('puntoventa as pv', 'v.puntoventa_id', '=', 'pv.id')
                 ->where('pv.empresa_id', $empresaId)
-                ->whereNull('v.deleted_at')
                 ->whereNull('pv.deleted_at')
                 ->where(function ($q) use ($fechaJornadaYmd) {
                     $q->whereDate('v.fechajornada', $fechaJornadaYmd)

@@ -10,9 +10,12 @@ use App\Models\Compras\Comprobante_Proveedor_Cuota;
 use App\Models\Compras\Comprobante_Proveedor_Estado;
 use App\Models\Compras\Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
+use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Repositories\Compras\Precarga_Comprobante_ProveedorRepositoryInterface;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
+use App\Support\Contable\AsientoEloquentDeleteSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -36,7 +39,7 @@ class ComprobanteProveedorEliminarService
      */
     public function eliminar(int $comprobanteId, bool $tambienPrecarga = false): array
     {
-        $comprobante = Comprobante_Proveedor::withTrashed()
+        $comprobante = Comprobante_Proveedor::query()
             ->with([
                 'tipotransaccion_compras',
                 'proveedores',
@@ -95,7 +98,9 @@ class ComprobanteProveedorEliminarService
                 ->update(['proveedor_cuentacorriente_id' => null]);
 
             if ($ccIds !== []) {
-                DB::table('proveedor_cuentacorriente')->whereIn('id', $ccIds)->delete();
+                EloquentAuditDeleteSupport::each(
+                    Proveedor_Cuentacorriente::query()->whereIn('id', $ccIds)
+                );
             }
 
             // Soltar FKs RESTRICT antes de borrar asiento / precarga.
@@ -107,27 +112,35 @@ class ComprobanteProveedorEliminarService
                     : null,
             ])->save();
 
-            if ($asientoId > 0) {
-                DB::table('asiento_movimiento')->where('asiento_id', $asientoId)->delete();
-                // Otras FKs a este asiento (p. ej. comprobante_proveedor ya soltado).
-                DB::table('asiento')->where('id', $asientoId)->delete();
-            }
+            AsientoEloquentDeleteSupport::eliminarPorId($asientoId);
 
             // Hijas (también CASCADE en MySQL; se borran explícitas por claridad).
-            Comprobante_Proveedor_Recepcion::query()->where('comprobante_proveedor_id', $comprobante->id)->delete();
-            Comprobante_Proveedor_Concepto::query()->where('comprobante_proveedor_id', $comprobante->id)->delete();
-            Comprobante_Proveedor_Articulo::query()->where('comprobante_proveedor_id', $comprobante->id)->delete();
-            Comprobante_Proveedor_Cuota::query()->where('comprobante_proveedor_id', $comprobante->id)->delete();
-            Comprobante_Proveedor_Estado::query()->where('comprobante_proveedor_id', $comprobante->id)->delete();
+            EloquentAuditDeleteSupport::each(
+                Comprobante_Proveedor_Recepcion::query()->where('comprobante_proveedor_id', $comprobante->id)
+            );
+            EloquentAuditDeleteSupport::each(
+                Comprobante_Proveedor_Concepto::query()->where('comprobante_proveedor_id', $comprobante->id)
+            );
+            EloquentAuditDeleteSupport::each(
+                Comprobante_Proveedor_Articulo::query()->where('comprobante_proveedor_id', $comprobante->id)
+            );
+            EloquentAuditDeleteSupport::each(
+                Comprobante_Proveedor_Cuota::query()->where('comprobante_proveedor_id', $comprobante->id)
+            );
+            EloquentAuditDeleteSupport::each(
+                Comprobante_Proveedor_Estado::query()->where('comprobante_proveedor_id', $comprobante->id)
+            );
             // Filas de adjuntos en BD (el PDF en disco de Facturas_scan no se toca acá:
             // suele pertenecer a la precarga / montaje compartido).
-            Comprobante_Proveedor_Archivo::query()->where('comprobante_proveedor_id', $comprobante->id)->delete();
+            EloquentAuditDeleteSupport::each(
+                Comprobante_Proveedor_Archivo::query()->where('comprobante_proveedor_id', $comprobante->id)
+            );
 
             if ($tambienPrecarga) {
                 $comprobante->forceFill(['precarga_comprobante_proveedor_id' => null])->save();
             }
 
-            $comprobante->forceDelete();
+            $comprobante->delete();
         });
 
         $precargaBorrada = false;

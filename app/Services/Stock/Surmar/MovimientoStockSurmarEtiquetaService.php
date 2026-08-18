@@ -613,7 +613,6 @@ class MovimientoStockSurmarEtiquetaService
     {
         return Articulo_Movimiento::query()
             ->where('movimientostock_id', $movimientoId)
-            ->whereNull('deleted_at')
             ->where(function ($q) {
                 $q->whereNull('concepto')
                     ->orWhere('concepto', 'not like', 'DES etiqueta #%');

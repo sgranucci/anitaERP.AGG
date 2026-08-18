@@ -140,7 +140,6 @@ final class CaeaEmisionFechaCorrelatividadSupport
         $letra = self::letraDesdeCodigoVenta((string) ($venta->codigo ?? ''));
         $anterior = Venta::query()
             ->where('puntoventa_id', (int) $puntoventa->id)
-            ->whereNull('deleted_at')
             ->where('numerocomprobante', '<', $nro)
             ->when($letra !== '', static function ($q) use ($letra): void {
                 $q->where(static function ($q2) use ($letra): void {
@@ -303,7 +302,6 @@ final class CaeaEmisionFechaCorrelatividadSupport
         $query = Venta::query()
             ->join('tipotransaccion as tt', 'tt.id', '=', 'venta.tipotransaccion_id')
             ->where('venta.puntoventa_id', $puntoventaId)
-            ->whereNull('venta.deleted_at')
             ->whereNull('tt.deleted_at');
 
         if ($empresaId !== null && $empresaId > 0) {

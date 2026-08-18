@@ -3,7 +3,6 @@
 namespace App\Models\Stock;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\Models\Stock\Articulo_Movimiento;
@@ -13,7 +12,6 @@ use App\Traits\Stock\MovimientoStockTrait;
 
 class MovimientoStock extends Model
 {
-	use SoftDeletes;
 	use MovimientoStockTrait;
 
     protected $table = "movimientostock";

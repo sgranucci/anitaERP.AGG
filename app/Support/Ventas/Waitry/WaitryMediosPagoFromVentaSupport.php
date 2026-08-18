@@ -20,7 +20,6 @@ final class WaitryMediosPagoFromVentaSupport
 
         $movimientoId = DB::table('caja_movimiento')
             ->where('venta_id', $ventaId)
-            ->whereNull('deleted_at')
             ->orderByDesc('id')
             ->value('id');
 
@@ -30,7 +29,6 @@ final class WaitryMediosPagoFromVentaSupport
 
         $lineas = DB::table('caja_movimiento_cuentacaja')
             ->where('caja_movimiento_id', $movimientoId)
-            ->whereNull('deleted_at')
             ->orderBy('id')
             ->get(['cuentacaja_id', 'moneda_id', 'monto', 'cotizacion', 'observacion']);
 

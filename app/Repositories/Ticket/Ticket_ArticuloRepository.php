@@ -3,6 +3,7 @@
 namespace App\Repositories\Ticket;
 
 use App\Models\Ticket\Ticket_Articulo;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Carbon\Carbon;
 use Auth;
@@ -38,7 +39,9 @@ class Ticket_ArticuloRepository implements Ticket_ArticuloRepositoryInterface
 
     public function delete($ticket_id, $codigo)
     {
-        return $this->model->where('ticket_id', $ticket_id)->delete();
+        return EloquentAuditDeleteSupport::each(
+            $this->model->newQuery()->where('ticket_id', $ticket_id)
+        );
     }
 
     public function find($id)
@@ -131,7 +134,9 @@ class Ticket_ArticuloRepository implements Ticket_ArticuloRepositoryInterface
 		}
 		else
 		{
-			$ticket_articulo = $this->model->where('ticket_id', $id)->delete();
+			$ticket_articulo = EloquentAuditDeleteSupport::each(
+				$this->model->newQuery()->where('ticket_id', $id)
+			);
 		}
 
 		return $ticket_articulo;

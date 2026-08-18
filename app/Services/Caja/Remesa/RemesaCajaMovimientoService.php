@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace App\Services\Caja\Remesa;
 
 use App\Models\Caja\Caja_Movimiento;
-use App\Models\Caja\Caja_Movimiento_Archivo;
 use App\Models\Caja\Caja_Movimiento_Cuentacaja;
 use App\Models\Caja\Caja_Movimiento_Estado;
 use App\Models\Caja\Cheque;
@@ -14,6 +13,7 @@ use App\Models\Caja\RemesaLinea;
 use App\Models\Caja\Tipotransaccion_Caja;
 use App\Models\Contable\Asiento;
 use App\Repositories\Caja\Caja_MovimientoRepositoryInterface;
+use App\Support\Caja\CajaMovimientoEloquentDeleteSupport;
 use App\Support\Caja\Remesa\RemesaSupport;
 use Carbon\Carbon;
 use InvalidArgumentException;
@@ -186,21 +186,12 @@ final class RemesaCajaMovimientoService
             ->where('caja_movimiento_id', $cajaMovimientoId)
             ->update(['caja_movimiento_id' => null]);
 
-        Caja_Movimiento_Cuentacaja::query()
-            ->where('caja_movimiento_id', $cajaMovimientoId)
-            ->delete();
-        Caja_Movimiento_Estado::query()
-            ->where('caja_movimiento_id', $cajaMovimientoId)
-            ->delete();
-        Caja_Movimiento_Archivo::query()
-            ->where('caja_movimiento_id', $cajaMovimientoId)
-            ->delete();
         Cheque::query()
             ->where('caja_movimiento_id', $cajaMovimientoId)
             ->update(['caja_movimiento_id' => null]);
 
         // No usar repository->delete: eliminarAnita legacy recibe firma distinta y puede fallar.
-        Caja_Movimiento::query()->whereKey($cajaMovimientoId)->delete();
+        CajaMovimientoEloquentDeleteSupport::eliminarPorId($cajaMovimientoId);
     }
 
     private function detalleMovimiento(Remesa $remesa): string

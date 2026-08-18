@@ -7,6 +7,7 @@ use App\Models\Sueldos\Concepto_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Liquidacion_Sueldos;
 use App\Models\Sueldos\Novedad_Sueldos;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Sueldos\NovedadSueldosCatalogo;
 use App\Support\Sueldos\NovedadSueldosListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -376,7 +377,9 @@ class Novedad_SueldosRepository implements Novedad_SueldosRepositoryInterface
                         }
                     }
                     if ($staleIds !== []) {
-                        DB::table('novedad_sueldos')->whereIn('id', $staleIds)->delete();
+                        EloquentAuditDeleteSupport::each(
+                            Novedad_Sueldos::query()->whereIn('id', $staleIds)
+                        );
                         $resultado['eliminados'] = count($staleIds);
                     }
                 }

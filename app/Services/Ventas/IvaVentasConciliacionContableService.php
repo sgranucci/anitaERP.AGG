@@ -470,7 +470,7 @@ final class IvaVentasConciliacionContableService
             ->join('asiento_movimiento as am', 'am.asiento_id', '=', 'a.id')
             ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
             ->leftJoin('venta as v', function ($join) {
-                $join->on('v.id', '=', 'a.venta_id')->whereNull('v.deleted_at');
+                $join->on('v.id', '=', 'a.venta_id');
             })
             ->leftJoin('venta_estacionamiento_emision as vee', 'vee.venta_id', '=', 'a.venta_id')
             ->leftJoin('venta_gastronomia_emision as vge', 'vge.venta_id', '=', 'a.venta_id')
@@ -560,7 +560,7 @@ final class IvaVentasConciliacionContableService
             ->join('asiento_movimiento as am', 'am.asiento_id', '=', 'a.id')
             ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
             ->leftJoin('venta as v', function ($join) {
-                $join->on('v.id', '=', 'a.venta_id')->whereNull('v.deleted_at');
+                $join->on('v.id', '=', 'a.venta_id');
             })
             ->where('a.empresa_id', $empresaId)
             ->whereIn('cc.id', $idsTodos);
@@ -634,7 +634,7 @@ final class IvaVentasConciliacionContableService
             ->join('asiento_movimiento as am', 'am.asiento_id', '=', 'a.id')
             ->join('cuentacontable as cc', 'cc.id', '=', 'am.cuentacontable_id')
             ->leftJoin('venta as v', function ($join) {
-                $join->on('v.id', '=', 'a.venta_id')->whereNull('v.deleted_at');
+                $join->on('v.id', '=', 'a.venta_id');
             })
             ->where('a.empresa_id', $empresaId)
             ->whereIn('cc.id', $idsTodos);
@@ -706,7 +706,6 @@ final class IvaVentasConciliacionContableService
                 ->where('a.empresa_id', $empresaId)
                 ->whereIn('a.venta_id', $chunk)
                 ->whereIn('cc.id', $idsTodos)
-                ->whereNull('v.deleted_at')
                 ->selectRaw('v.puntoventa_id, cc.id as cuenta_id, SUM(-am.monto * ('.$this->sqlCoeficienteMonedaAsiento($filtros).')) as importe')
                 ->groupBy('v.puntoventa_id', 'cc.id')
                 ->get();

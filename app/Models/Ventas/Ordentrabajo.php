@@ -3,7 +3,6 @@
 namespace App\Models\Ventas;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Storage;
 use App\ApiAnita;
 use Carbon\Carbon;
@@ -13,7 +12,6 @@ use App\Traits\Ventas\OrdenTrabajoTrait;
 
 class Ordentrabajo extends Model
 {
-	use SoftDeletes;
 	use OrdenTrabajoTrait;
 
     protected $fillable = ['fecha', 'codigo', 'leyenda', 'estado', 'usuario_id'];

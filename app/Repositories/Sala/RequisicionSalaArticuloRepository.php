@@ -3,6 +3,7 @@
 namespace App\Repositories\Sala;
 
 use App\Models\Sala\RequisicionSalaArticulo;
+use App\Support\Database\EloquentAuditDeleteSupport;
 
 class RequisicionSalaArticuloRepository implements RequisicionSalaArticuloRepositoryInterface
 {
@@ -43,7 +44,9 @@ class RequisicionSalaArticuloRepository implements RequisicionSalaArticuloReposi
     public function syncFromRequest(array $data, int $requisicion_sala_id): void
     {
         if (! isset($data['articulo_ids']) || ! is_array($data['articulo_ids'])) {
-            $this->model->where('requisicion_sala_id', $requisicion_sala_id)->delete();
+            EloquentAuditDeleteSupport::each(
+                $this->model->newQuery()->where('requisicion_sala_id', $requisicion_sala_id)
+            );
 
             return;
         }
@@ -93,11 +96,10 @@ class RequisicionSalaArticuloRepository implements RequisicionSalaArticuloReposi
             }
         }
 
-        $queryEliminar = $this->model->where('requisicion_sala_id', $requisicion_sala_id);
-        if ($idsAConservar !== []) {
-            $queryEliminar->whereNotIn('id', $idsAConservar);
-        }
-        $queryEliminar->delete();
+        EloquentAuditDeleteSupport::exceptIds(
+            $this->model->newQuery()->where('requisicion_sala_id', $requisicion_sala_id),
+            $idsAConservar
+        );
     }
 
     public function syncDatosMenoresFromRequest(array $data, int $requisicion_sala_id): void

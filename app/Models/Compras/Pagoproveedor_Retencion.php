@@ -5,11 +5,9 @@ namespace App\Models\Compras;
 use App\Models\Configuracion\Moneda;
 use App\Models\Configuracion\Provincia;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Pagoproveedor_Retencion extends Model
 {
-    use SoftDeletes;
 
     public const TIPO_GANANCIAS = 'G';
 

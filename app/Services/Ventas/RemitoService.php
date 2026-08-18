@@ -665,7 +665,6 @@ class RemitoService
         $ventaIds = Venta::query()
             ->whereDate('fecha', $fecha)
             ->where('transporte_id', $transporteId)
-            ->whereNull('deleted_at')
             ->pluck('id');
 
         if ($ventaIds->isEmpty()) {

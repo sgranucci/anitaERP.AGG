@@ -27,4 +27,23 @@ final class EloquentAuditDeleteSupport
 
         return $borrados;
     }
+
+    /**
+     * Sincronizar hijas de ABM: borra las filas del query que no están en $idsConservar.
+     * Si $idsConservar está vacío no aplica whereNotIn (en Laravel eso no matchea filas).
+     *
+     * @param  list<int|string>  $idsConservar
+     */
+    public static function exceptIds(Builder $query, array $idsConservar, string $key = 'id'): int
+    {
+        $ids = array_values(array_filter(
+            array_map('intval', $idsConservar),
+            static fn (int $id) => $id > 0
+        ));
+        if ($ids !== []) {
+            $query->whereNotIn($key, $ids);
+        }
+
+        return self::each($query);
+    }
 }

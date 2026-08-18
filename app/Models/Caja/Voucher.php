@@ -4,7 +4,6 @@ namespace App\Models\Caja;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use OwenIt\Auditing\Contracts\Auditable;
 use App\Models\Receptivo\Servicioterrestre;
 use App\Models\Compras\Proveedor;
@@ -13,7 +12,6 @@ use Auth;
 
 class Voucher extends Model implements Auditable
 {
-    use SoftDeletes;
 	use \OwenIt\Auditing\Auditable;
 
     protected $fillable = ['talonariovoucher_id', 'numero', 'fecha',

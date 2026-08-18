@@ -24,6 +24,7 @@ use App\Repositories\Solicitudpago\Sector_SolicitudpagoRepositoryInterface;
 use App\Support\Solicitudpago\SolicitudpagoAnitaFechaSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use App\Support\Solicitudpago\SolicitudpagoTratamientos;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -335,7 +336,9 @@ class SolicitudpagoAnitaSyncService
         }
 
         if ($idsTocados !== []) {
-            Solicitudpago_Cuenta::query()->whereIn('solicitudpago_id', array_keys($idsTocados))->delete();
+            EloquentAuditDeleteSupport::each(
+                Solicitudpago_Cuenta::query()->whereIn('solicitudpago_id', array_keys($idsTocados))
+            );
         }
         foreach (array_chunk($buffer, 500) as $chunk) {
             Solicitudpago_Cuenta::query()->insert($chunk);
@@ -391,7 +394,9 @@ class SolicitudpagoAnitaSyncService
         }
 
         if ($idsTocados !== []) {
-            Solicitudpago_Cuota::query()->whereIn('solicitudpago_id', array_keys($idsTocados))->delete();
+            EloquentAuditDeleteSupport::each(
+                Solicitudpago_Cuota::query()->whereIn('solicitudpago_id', array_keys($idsTocados))
+            );
         }
         foreach (array_chunk($buffer, 500) as $chunk) {
             Solicitudpago_Cuota::query()->insert($chunk);
@@ -442,7 +447,9 @@ class SolicitudpagoAnitaSyncService
         }
 
         if ($idsTocados !== []) {
-            Solicitudpago_Estado::query()->whereIn('solicitudpago_id', array_keys($idsTocados))->delete();
+            EloquentAuditDeleteSupport::each(
+                Solicitudpago_Estado::query()->whereIn('solicitudpago_id', array_keys($idsTocados))
+            );
         }
         foreach (array_chunk($buffer, 500) as $chunk) {
             Solicitudpago_Estado::query()->insert($chunk);
@@ -544,7 +551,9 @@ class SolicitudpagoAnitaSyncService
         }
 
         if ($idsTocados !== []) {
-            Solicitudpago_Archivo::query()->whereIn('solicitudpago_id', array_keys($idsTocados))->delete();
+            EloquentAuditDeleteSupport::each(
+                Solicitudpago_Archivo::query()->whereIn('solicitudpago_id', array_keys($idsTocados))
+            );
         }
         foreach (array_chunk($buffer, 500) as $chunk) {
             Solicitudpago_Archivo::query()->insert($chunk);

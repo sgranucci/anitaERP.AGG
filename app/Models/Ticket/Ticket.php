@@ -4,7 +4,6 @@ namespace App\Models\Ticket;
 
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Arr;
 use App\Models\Configuracion\Sala;
@@ -15,7 +14,6 @@ use DB;
 class Ticket extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
-    use SoftDeletes;
     protected $fillable = ['fecha', 'sala_id', 'subcategoria_ticket_id', 'areadestino_id', 'sector_id', 'titulo', 'comentario',
 							'usuario_id', 'bienuso_id', 'observacion', 'estado_ticket',
 							'fecha_resolucion', 'hora_resolucion', 'tiempo_insumido_total'];

@@ -67,7 +67,6 @@ final class MovimientoStockListadoUnificadoSupport
             ->selectRaw('MIN(am.lote) as lote')
             ->selectRaw('SUM(ABS(am.cantidad)) as total_cantidad')
             ->selectRaw('COUNT(*) as items_count')
-            ->whereNull('am.deleted_at')
             ->whereNotNull('am.movimientostock_id')
             ->groupBy('am.movimientostock_id');
 
@@ -84,11 +83,9 @@ final class MovimientoStockListadoUnificadoSupport
             ->join('tipotransaccion_stock as tts', 'tts.id', '=', 'ms.tipotransaccion_stock_id')
             ->leftJoin('mventa', 'mventa.id', '=', 'ms.mventa_id')
             ->leftJoin('usuario', 'usuario.id', '=', 'ms.usuario_id')
-            ->whereNull('ms.deleted_at')
             ->whereNotExists(function ($sub) {
                 $sub->select(DB::raw(1))
                     ->from('transferencia_mercaderia as tm_legs')
-                    ->whereNull('tm_legs.deleted_at')
                     ->where(function ($w) {
                         $w->whereColumn('tm_legs.movimientostock_salida_id', 'ms.id')
                             ->orWhereColumn('tm_legs.movimientostock_entrada_id', 'ms.id');
@@ -135,7 +132,6 @@ final class MovimientoStockListadoUnificadoSupport
             ->leftJoin('depmae as dep_o', 'dep_o.id', '=', 'tm.deposito_origen_id')
             ->leftJoin('depmae as dep_d', 'dep_d.id', '=', 'tm.deposito_destino_id')
             ->leftJoin('usuario as u_orig', 'u_orig.id', '=', 'tm.usuario_origen_id')
-            ->whereNull('tm.deleted_at')
             ->select([
                 DB::raw("'transferencia' as fila_tipo"),
                 'tm.id as pk_id',

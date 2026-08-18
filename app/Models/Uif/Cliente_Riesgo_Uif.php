@@ -5,12 +5,10 @@ namespace App\Models\Uif;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use OwenIt\Auditing\Contracts\Auditable;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use Auth;
 
 class Cliente_Riesgo_Uif extends Model implements Auditable
 {
-    use SoftDeletes;
 	use \OwenIt\Auditing\Auditable;
 
     protected $fillable = [

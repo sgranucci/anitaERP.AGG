@@ -158,7 +158,6 @@ class GastronomiaArticulosVendidosQuery
             ->join('articulo as a', 'a.id', '=', 've.articulo_id')
             ->join('tipotransaccion as tt', 'tt.id', '=', 'v.tipotransaccion_id')
             ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
-            ->whereNull('v.deleted_at')
             ->where('pv.empresa_id', $empresaId)
             ->whereDate('v.fechajornada', '>=', $fechaDesde)
             ->whereDate('v.fechajornada', '<=', $fechaHasta);
@@ -235,7 +234,6 @@ class GastronomiaArticulosVendidosQuery
             ->join('venta_gastronomia_emision as vge', 'vge.venta_id', '=', 'v.id')
             ->join('articulo as a', 'a.id', '=', 've.articulo_id')
             ->leftJoin('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
-            ->whereNull('v.deleted_at')
             ->select('v.id')
             ->distinct();
 
@@ -268,7 +266,6 @@ class GastronomiaArticulosVendidosQuery
             ->join('venta_gastronomia_emision as vge', 'vge.venta_id', '=', 'v.id')
             ->join('articulo as a', 'a.id', '=', 've.articulo_id')
             ->leftJoin('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
-            ->whereNull('v.deleted_at')
             ->select('v.id')
             ->distinct();
 
@@ -374,7 +371,6 @@ class GastronomiaArticulosVendidosQuery
             ->join('articulo as a', 'a.id', '=', 've.articulo_id')
             ->join('tipotransaccion as tt', 'tt.id', '=', 'v.tipotransaccion_id')
             ->leftJoin('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
-            ->whereNull('v.deleted_at')
             ->where('ve.articulo_id', $articuloId);
 
         $this->aplicarJoinsDeposito($query, $filtros);
@@ -490,7 +486,6 @@ class GastronomiaArticulosVendidosQuery
             ->leftJoin('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
             ->where('am.articulo_id', $articuloId)
             ->tap(fn ($q) => GastronomiaVentaDetalleSupport::aplicarWhereConceptoNoEsInsumo($q, 'am.concepto'))
-            ->whereNull('v.deleted_at')
             ->where(function ($w) use ($articuloId) {
                 $w->whereNotNull('ve.id')
                     ->orWhere(function ($w2) use ($articuloId) {
@@ -587,8 +582,7 @@ class GastronomiaArticulosVendidosQuery
             ->join('articulo as a', 'a.id', '=', 've.articulo_id')
             ->leftJoin('subcategoria as sc', 'sc.id', '=', 'a.subcategoria_id')
             ->join('tipotransaccion as tt', 'tt.id', '=', 'v.tipotransaccion_id')
-            ->leftJoin('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
-            ->whereNull('v.deleted_at');
+            ->leftJoin('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id');
 
         $this->aplicarJoinsDeposito($query, $filtros);
 

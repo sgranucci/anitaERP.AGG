@@ -181,7 +181,6 @@ final class GastronomiaTurnoHuecosArcaSupport
     {
         $rows = Venta::query()
             ->where('puntoventa_id', $puntoventaId)
-            ->whereNull('deleted_at')
             ->where(function ($fecha) use ($fechaJornada) {
                 $fecha->whereDate('fechajornada', $fechaJornada)
                     ->orWhere(function ($legacy) use ($fechaJornada) {
@@ -216,7 +215,6 @@ final class GastronomiaTurnoHuecosArcaSupport
             ->where('venta_gastronomia_emision.identificador_pc', $identificadorPc)
             ->whereNull('venta_gastronomia_emision.venta_factura_origen_id')
             ->where('puntoventa.empresa_id', $empresaId)
-            ->whereNull('venta.deleted_at')
             ->where(function ($fecha) use ($fechaJornada) {
                 $fecha->whereDate('venta.fechajornada', $fechaJornada)
                     ->orWhere(function ($legacy) use ($fechaJornada) {

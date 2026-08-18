@@ -213,7 +213,6 @@ final class ArcaCaeaInformeMailSupport
                 ->where('venta.numerocomprobante', '>=', $desde)
                 ->whereNotNull('venta.cae')
                 ->where('venta.cae', '!=', '')
-                ->whereNull('venta.deleted_at')
                 ->orderBy('venta.numerocomprobante')
                 ->first([
                     'venta.numerocomprobante',

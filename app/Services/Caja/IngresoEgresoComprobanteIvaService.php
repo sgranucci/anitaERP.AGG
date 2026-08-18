@@ -22,6 +22,7 @@ use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorTipoTesoreria;
 use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -45,7 +46,6 @@ class IngresoEgresoComprobanteIvaService
         return Comprobante_Proveedor::query()
             ->where('caja_movimiento_id', $cajaMovimientoId)
             ->where('origen_entrada', ComprobanteProveedorOrigenEntrada::INGRESO_EGRESO)
-            ->whereNull('deleted_at')
             ->with([
                 'proveedores',
                 'tipotransaccion_compras',
@@ -79,7 +79,6 @@ class IngresoEgresoComprobanteIvaService
         $existentes = Comprobante_Proveedor::query()
             ->where('caja_movimiento_id', $cajaMovimientoId)
             ->where('origen_entrada', ComprobanteProveedorOrigenEntrada::INGRESO_EGRESO)
-            ->whereNull('deleted_at')
             ->pluck('id')
             ->all();
 
@@ -114,7 +113,12 @@ class IngresoEgresoComprobanteIvaService
 
         $aEliminar = array_diff($existentes, $conservados);
         if ($aEliminar !== []) {
-            Comprobante_Proveedor::query()->whereIn('id', $aEliminar)->delete();
+            Comprobante_Proveedor::query()->whereIn('id', $aEliminar)->update([
+                'asiento_id' => null,
+            ]);
+            EloquentAuditDeleteSupport::each(
+                Comprobante_Proveedor::query()->whereIn('id', $aEliminar)
+            );
         }
 
         if ($vincularAsiento) {

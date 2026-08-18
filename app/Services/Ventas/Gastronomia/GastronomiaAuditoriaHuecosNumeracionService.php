@@ -227,7 +227,6 @@ final class GastronomiaAuditoriaHuecosNumeracionService
                 ])
                 ->where('puntoventa_id', (int) $puntoventa->id)
                 ->whereDate('fechajornada', $fechaJornada)
-                ->whereNull('deleted_at')
                 ->whereHas('gastronomiaEmision')
                 ->orderBy('venta.codigo')
                 ->get();
@@ -247,7 +246,6 @@ final class GastronomiaAuditoriaHuecosNumeracionService
                 $numerosCompartidos = Venta::query()
                     ->where('puntoventa_id', (int) $puntoventa->id)
                     ->where('tipotransaccion_id', (int) $tipoId)
-                    ->whereNull('deleted_at')
                     ->whereBetween('numerocomprobante', [min($numerosCircuito), max($numerosCircuito)])
                     ->pluck('numerocomprobante');
 

@@ -243,7 +243,6 @@ class ComprobanteProveedorPersistenciaService
     {
         $existente = Comprobante_Proveedor::query()
             ->where('precarga_comprobante_proveedor_id', $precargaId)
-            ->whereNull('deleted_at')
             ->first();
 
         if ($existente) {

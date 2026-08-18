@@ -10,6 +10,7 @@ use App\Models\Sueldos\Liquidacion_Importacion_Sueldos;
 use App\Models\Sueldos\Liquidacion_Recibo_Sueldos;
 use App\Models\Sueldos\Liquidacion_Sueldos;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Sueldos\AnitaAuxLiquidacionSupport;
 use App\Support\Sueldos\LiquidacionConfidencialSeguridadSupport;
 use App\Support\Sueldos\LiquidacionDetalleTotalesSupport;
@@ -326,7 +327,9 @@ class ImportarAuxconfLiquidacionService
                         ]);
                         $creados++;
                     } else {
-                        Liquidacion_Detalle_Sueldos::query()->where('recibo_id', $recibo->id)->delete();
+                        EloquentAuditDeleteSupport::each(
+                            Liquidacion_Detalle_Sueldos::query()->where('recibo_id', $recibo->id)
+                        );
                         $actualizados++;
                     }
 

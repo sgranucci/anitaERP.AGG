@@ -4,7 +4,6 @@ namespace App\Models\Ventas;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use App\Models\Configuracion\Moneda;
 use App\Models\Configuracion\Actividad_Arca;
 use App\Models\Ventas\Tipotransaccion;
@@ -15,15 +14,14 @@ use App\Models\Ordenventa\Ordenventa;
 use App\Models\Caja\Caja_Movimiento;
 use App\Models\Caja\Cobranza;
 use App\Models\Seguridad\Usuario;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use OwenIt\Auditing\Contracts\Auditable;
 
 class Venta extends Model implements Auditable
 {
-    use SoftDeletes;
     use \OwenIt\Auditing\Auditable;
     
 	protected $casts = [
-			'deleted_at' => 'datetime',
             'caea_informado_at' => 'datetime',
 	];
     protected $fillable = [
@@ -175,18 +173,17 @@ class Venta extends Model implements Auditable
         return $this->hasOne(\App\Models\Configuracion\Condicioniva::class, 'id', 'condicioniva_id');
     }
 
-    // Borra en cadena por soft deletes
     protected static function boot()
 	{
 		parent::boot();
 
 		static::deleting(function ($venta) {
-			$venta->venta_impuestos()->delete();
+			EloquentAuditDeleteSupport::each($venta->venta_impuestos()->getQuery());
 			foreach ($venta->venta_emisiones as $emision) {
 				$emision->delete();
 			}
-			$venta->venta_exportaciones()->delete();
-            $venta->cliente_cuentacorrientes()->delete();
+			EloquentAuditDeleteSupport::each($venta->venta_exportaciones()->getQuery());
+			EloquentAuditDeleteSupport::each($venta->cliente_cuentacorrientes()->getQuery());
 		});
 	}    
 }

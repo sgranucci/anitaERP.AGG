@@ -121,7 +121,6 @@ final class ConceptoCashflowResolverSupport
             ->join('cuentacontable as cta', 'cta.id', '=', 'am.cuentacontable_id')
             ->join('conceptogasto as cg', 'cg.id', '=', 'cta.conceptogasto_id')
             ->whereIn($columna, $valores)
-            ->whereNull('am.deleted_at')
             ->orderBy('am.id')
             ->get([
                 DB::raw($columna.' as clave'),

@@ -3,6 +3,7 @@
 namespace App\Repositories\Presupuesto;
 
 use App\Models\Presupuesto\Partidagasto_Estado;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Carbon\Carbon;
 use Auth;
@@ -47,7 +48,9 @@ class Partidagasto_EstadoRepository implements Partidagasto_EstadoRepositoryInte
 
     public function delete($partidagasto_id, $codigo)
     {
-        return $this->model->where('partidagasto_id', $partidagasto_id)->delete();
+        return EloquentAuditDeleteSupport::each(
+            $this->model->newQuery()->where('partidagasto_id', $partidagasto_id)
+        );
     }
 
     public function find($id)
@@ -132,7 +135,9 @@ class Partidagasto_EstadoRepository implements Partidagasto_EstadoRepositoryInte
 		}
 		else
 		{
-			$partidagasto_estado = $this->model->where('partidagasto_id', $id)->delete();
+			$partidagasto_estado = EloquentAuditDeleteSupport::each(
+				$this->model->newQuery()->where('partidagasto_id', $id)
+			);
 		}
 
 		return $partidagasto_estado;
@@ -147,7 +152,6 @@ class Partidagasto_EstadoRepository implements Partidagasto_EstadoRepositoryInte
 							'usuario_id',
 							'observacion')
 					->where('partidagasto_id', $partidagasto_id)
-					->where('deleted_at', null)
 					->with('usuarios')
 					->get();
 	}

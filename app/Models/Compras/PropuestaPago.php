@@ -7,11 +7,9 @@ use App\Models\Configuracion\Moneda;
 use App\Models\Seguridad\Usuario;
 use App\Traits\Compras\PropuestaPagoEstadoTrait;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\SoftDeletes;
 
 class PropuestaPago extends Model
 {
-    use SoftDeletes;
     use PropuestaPagoEstadoTrait;
 
     protected $table = 'propuesta_pago';

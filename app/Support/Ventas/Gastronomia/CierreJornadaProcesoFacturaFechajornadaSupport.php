@@ -56,7 +56,6 @@ final class CierreJornadaProcesoFacturaFechajornadaSupport
     {
         $filas = DB::table('venta_gastronomia_emision as e')
             ->join('venta as v', 'v.id', '=', 'e.venta_id')
-            ->whereNull('v.deleted_at')
             ->where(function ($q): void {
                 $q->where('e.identificador_pc', GastronomiaCierreJornadaFacturaProcesoEmisionService::IDENTIFICADOR_PC_PROCESO)
                     ->orWhere(function ($q2): void {

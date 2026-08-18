@@ -1435,7 +1435,6 @@ class ArbolaprobacionService
             ->where('id', $triggerId)
             ->where('arbolaprobacion_id', $arbolId)
             ->where('activo', 'S')
-            ->whereNull('deleted_at')
             ->first();
     }
 
@@ -2596,7 +2595,6 @@ class ArbolaprobacionService
             ->where('activo', 'S')
             ->where('tipo', OcArbolTriggerCatalog::TIPO_EVENTO)
             ->where('evento', OcArbolTriggerCatalog::EVENTO_ALTA)
-            ->whereNull('deleted_at')
             ->exists();
         if (! $tieneTriggerAlta && ! $this->ocDispararArbolAlAlta($arbol)) {
             return;

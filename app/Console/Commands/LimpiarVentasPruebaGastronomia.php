@@ -99,7 +99,7 @@ class LimpiarVentasPruebaGastronomia extends Command
 
     private function ventasEnRango(int $puntoventaId, string $desde, string $hasta): Collection
     {
-        return Venta::withTrashed()
+        return Venta::query()
             ->where('puntoventa_id', $puntoventaId)
             ->whereDate('fecha', '>=', $desde)
             ->whereDate('fecha', '<=', $hasta)

@@ -123,7 +123,6 @@ if ($puntoventaId === null) {
     $ventas = DB::table('venta')
         ->leftJoin('tipotransaccion', 'tipotransaccion.id', '=', 'venta.tipotransaccion_id')
         ->where('venta.puntoventa_id', $puntoventaId)
-        ->whereNull('venta.deleted_at')
         ->select([
             'venta.id',
             'venta.numerocomprobante',

@@ -166,7 +166,6 @@ final class GastronomiaAnaliticoReporteQuery
             ->leftJoin('cliente as cli_fact', 'cli_fact.id', '=', 'v.cliente_id')
             ->leftJoin('cliente as cli_int', 'cli_int.id', '=', 'cg.cliente_interno_descuento_id')
             ->leftJoin('cliente_vip_gastronomia as cv', 'cv.id', '=', 'cg.cliente_vip_gastronomia_id')
-            ->whereNull('v.deleted_at')
             ->whereNull('vge.venta_factura_origen_id');
 
         $this->aplicarExclusionInsumosYDescartables($query);

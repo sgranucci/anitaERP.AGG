@@ -486,7 +486,7 @@ class Articulo_MovimientoService
 		if ($columnasPermitidas === null) {
 			$columnasPermitidas = array_flip(array_diff(
 				Schema::getColumnListing('articulo_movimiento'),
-				['id', 'created_at', 'updated_at', 'deleted_at']
+				['id', 'created_at', 'updated_at']
 			));
 		}
 

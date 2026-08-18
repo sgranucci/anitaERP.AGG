@@ -38,7 +38,6 @@ $tms = DB::table('transferencia_mercaderia as tm')
     ->leftJoin('tipotransaccion_stock as tt', 'tt.id', '=', 'tm.tipotransaccion_stock_id')
     ->whereIn('tma.articulo_origen_id', $titoIds)
     ->whereBetween('tm.fecha', ['2026-07-01', '2026-07-31'])
-    ->whereNull('tm.deleted_at')
     ->where('tm.estado', 'CONFIRMADA')
     ->where('tt.maneja_contabilidad', 1)
     ->whereNotNull('tm.asiento_id')
@@ -55,7 +54,6 @@ echo "--- Costos línea (alinear a precio del asiento) ---\n";
 foreach ($tms as $r) {
     $monto = (float) DB::table('asiento_movimiento')
         ->where('asiento_id', $r->asiento_id)
-        ->whereNull('deleted_at')
         ->where('monto', '>', 0)
         ->value('monto');
     $cant = (float) $r->cantidad_origen;
@@ -157,7 +155,6 @@ DB::transaction(function () use ($ajustesCosto, $tm28, $asiento28, $nroViejo, $e
             DB::table('articulo_movimiento')
                 ->where('movimientostock_id', $movId)
                 ->where('articulo_id', $aj['articulo_id'])
-                ->whereNull('deleted_at')
                 ->update([
                     'precio' => $precio,
                     'costo' => $precio,

@@ -398,7 +398,6 @@ class Comprobante_ProveedorController extends Controller
 
         $existente = Comprobante_Proveedor::query()
             ->where('precarga_comprobante_proveedor_id', $precargaId)
-            ->whereNull('deleted_at')
             ->orderBy('id')
             ->first();
         if ($existente) {

@@ -277,7 +277,6 @@ final class GastronomiaSaneamientoHuecosArcaLoteService
                 $existente = Venta::query()
                     ->where('puntoventa_id', (int) $r['puntoventa_id'])
                     ->where('numerocomprobante', $numero)
-                    ->whereNull('deleted_at')
                     ->first();
 
                 if ($existente !== null) {
@@ -481,7 +480,7 @@ final class GastronomiaSaneamientoHuecosArcaLoteService
             ->whereNull('venta_factura_origen_id')
             ->whereNotNull('cuenta_gastronomia_id')
             ->whereHas('venta', function ($v) use ($fechaJornada, $desde, $hasta, $impTotal, $tol) {
-                $v->whereNull('deleted_at')
+                $v
                     ->where(function ($fecha) use ($fechaJornada) {
                         $fecha->whereDate('fechajornada', $fechaJornada)
                             ->orWhere(function ($legacy) use ($fechaJornada) {

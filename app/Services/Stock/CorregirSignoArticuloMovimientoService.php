@@ -148,7 +148,6 @@ final class CorregirSignoArticuloMovimientoService
         $query = DB::table('articulo_movimiento as am')
             ->leftJoin('tipotransaccion as tt', 'tt.id', '=', 'am.tipotransaccion_id')
             ->leftJoin('tipotransaccion_stock as ts', 'ts.id', '=', 'am.tipotransaccion_stock_id')
-            ->whereNull('am.deleted_at')
             ->select([
                 'am.id',
                 'am.cantidad',

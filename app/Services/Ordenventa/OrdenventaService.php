@@ -12,6 +12,7 @@ use App\Repositories\Ventas\VentaRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
 use App\Models\Ordenventa\Ordenventa_Estado;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Carbon\Carbon;
@@ -292,7 +293,9 @@ class OrdenventaService
 
 		DB::beginTransaction();
 		try {
-			Arbolaprobacion_Movimiento::where('ordenventa_id', $id)->delete();
+			EloquentAuditDeleteSupport::each(
+				Arbolaprobacion_Movimiento::query()->where('ordenventa_id', $id)
+			);
 
 			$this->ordenventa_estadoRepository->creaEstado(
 				$id,

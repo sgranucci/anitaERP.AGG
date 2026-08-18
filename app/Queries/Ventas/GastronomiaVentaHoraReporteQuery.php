@@ -28,7 +28,6 @@ final class GastronomiaVentaHoraReporteQuery
             ->join('venta_gastronomia_emision as vge', 'vge.venta_id', '=', 'v.id')
             ->join('tipotransaccion as tt', 'tt.id', '=', 'v.tipotransaccion_id')
             ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
-            ->whereNull('v.deleted_at')
             ->where('pv.empresa_id', (int) ($filtros['empresa_id'] ?? 0))
             ->selectRaw("{$jornada} as jornada")
             ->selectRaw("{$hora} as hora")

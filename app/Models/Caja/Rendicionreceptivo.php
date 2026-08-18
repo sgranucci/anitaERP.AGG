@@ -4,7 +4,6 @@ namespace App\Models\Caja;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Database\Eloquent\SoftDeletes;
 use OwenIt\Auditing\Contracts\Auditable;
 use App\Models\Configuracion\Empresa;
 use App\Models\Receptivo\Guia;
@@ -14,7 +13,6 @@ use Auth;
 
 class Rendicionreceptivo extends Model implements Auditable
 {
-    use SoftDeletes;
 	use \OwenIt\Auditing\Auditable;
 
     protected $fillable = ['fecha', 'empresa_id', 'caja_id',

@@ -4,6 +4,7 @@ namespace App\Repositories\Ticket;
 
 use App\Models\Ticket\Ticket;
 use App\Models\Ticket\Ticket_Archivo;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
@@ -35,7 +36,9 @@ class Ticket_ArchivoRepository implements Ticket_ArchivoRepositoryInterface
 
     public function delete($ticket_id, $codigo)
     {
-        return $this->model->where('ticket_id', $ticket_id)->delete();
+        return EloquentAuditDeleteSupport::each(
+            $this->model->newQuery()->where('ticket_id', $ticket_id)
+        );
     }
 
     public function find($id)

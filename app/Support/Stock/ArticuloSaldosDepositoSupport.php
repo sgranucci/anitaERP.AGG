@@ -43,7 +43,6 @@ final class ArticuloSaldosDepositoSupport
                     ->from('articulo_movimiento')
                     ->where('articulo_id', $articuloId)
                     ->whereNotNull('deposito_id')
-                    ->whereNull('deleted_at')
                     ->groupBy('deposito_id');
             })
             ->orderBy('codigo');

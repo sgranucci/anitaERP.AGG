@@ -122,7 +122,6 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
 
         $activos = Comprobante_Proveedor::query()
             ->where('precarga_comprobante_proveedor_id', $precargaId)
-            ->whereNull('deleted_at')
             ->orderBy('id')
             ->pluck('id')
             ->map(fn ($v) => (int) $v)
@@ -136,8 +135,8 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
             );
         }
 
-        // Soft-deleted CP siguen con FK RESTRICT: soltar vínculo y luego borrar precarga.
-        Comprobante_Proveedor::withTrashed()
+        // Soltar vínculo FK RESTRICT si quedó algún comprobante sin listar (no debería).
+        Comprobante_Proveedor::query()
             ->where('precarga_comprobante_proveedor_id', $precargaId)
             ->update(['precarga_comprobante_proveedor_id' => null]);
 
@@ -222,7 +221,6 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
                         'comprobante_proveedor.precarga_comprobante_proveedor_id',
                         'precarga_comprobante_proveedor.id'
                     )
-                    ->whereNull('comprobante_proveedor.deleted_at')
                     ->orderBy('comprobante_proveedor.id')
                     ->limit(1);
             }, 'comprobante_proveedor_id')
@@ -233,7 +231,6 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
                         'comprobante_proveedor.precarga_comprobante_proveedor_id',
                         'precarga_comprobante_proveedor.id'
                     )
-                    ->whereNull('comprobante_proveedor.deleted_at')
                     ->orderBy('comprobante_proveedor.id')
                     ->limit(1);
             }, 'comprobante_proveedor_estado')

@@ -488,7 +488,6 @@ class PagoproveedorService
             $ya = Pagoproveedor::query()
                 ->where('interbanking_transferencia_id', $interbankingTransferenciaId)
                 ->where('id', '!=', $pagoproveedorId)
-                ->whereNull('deleted_at')
                 ->exists();
             if ($ya) {
                 throw new Exception('La transferencia IB #'.$interbankingTransferenciaId.' ya está vinculada a otra OP.');
@@ -537,7 +536,6 @@ class PagoproveedorService
             $ya = Pagoproveedor::query()
                 ->where('interbanking_movimiento_id', $interbankingMovimientoId)
                 ->where('id', '!=', $pagoproveedorId)
-                ->whereNull('deleted_at')
                 ->exists();
             if ($ya) {
                 throw new Exception('El movimiento IB #'.$interbankingMovimientoId.' ya está vinculado a otra OP.');

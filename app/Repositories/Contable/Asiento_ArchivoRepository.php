@@ -5,6 +5,7 @@ namespace App\Repositories\Contable;
 use App\Models\Contable\Asiento;
 use App\Models\Contable\Asiento_Archivo;
 use App\Http\Requests\ValidacionAsiento;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Storage;
 use App\ApiAnita;
@@ -37,7 +38,9 @@ class Asiento_ArchivoRepository implements Asiento_ArchivoRepositoryInterface
 
     public function delete($asiento_id, $codigo)
     {
-        return $this->model->where('asiento_id', $asiento_id)->delete();
+        return EloquentAuditDeleteSupport::each(
+            $this->model->newQuery()->where('asiento_id', $asiento_id)
+        );
     }
 
     public function find($id)

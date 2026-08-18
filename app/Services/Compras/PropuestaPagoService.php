@@ -546,7 +546,6 @@ class PropuestaPagoService
                     ->whereColumn('proveedor_cuentacorriente_id', 'proveedor_cuentacorriente.id'),
             ])
             ->where('proveedor_cuentacorriente.empresa_id', $empresaId)
-            ->whereNull('proveedor_cuentacorriente.deleted_at')
             ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());
 

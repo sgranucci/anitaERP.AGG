@@ -979,8 +979,7 @@ final class AiConsultaOperativaSupport
                 'monedas:id,abreviatura',
                 'empresas:id,nombre',
             ])
-            ->where('proveedor_id', (int) $proveedor->id)
-            ->whereNull('deleted_at');
+            ->where('proveedor_id', (int) $proveedor->id);
         if ($fechaDesde !== '') {
             $q->whereDate('fecha', '>=', $fechaDesde);
         }
@@ -1533,8 +1532,7 @@ final class AiConsultaOperativaSupport
                 'monedas:id,abreviatura',
                 'empresas:id,nombre',
             ])
-            ->where('cliente_id', (int) $cliente->id)
-            ->whereNull('deleted_at');
+            ->where('cliente_id', (int) $cliente->id);
         if ($fechaDesde !== '') {
             $q->whereDate('fecha', '>=', $fechaDesde);
         }

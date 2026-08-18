@@ -1279,7 +1279,7 @@ class FacturacionService
 			foreach ($ordenventa->ordenventa_cuotas as $cuota)
 			{
 				$cantidadCuota++;
-				if ($cuota->venta_id == null && $cuota->deleted_at == null &&
+				if ($cuota->venta_id == null &&
 					$ordenventa_cuota_id == 0)
 				{
 					$precioUnitario = $cuota->montofactura;

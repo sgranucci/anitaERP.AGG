@@ -68,7 +68,6 @@ class PropuestaPagoClearingBancarioSupport
         $ops = Pagoproveedor::query()
             ->with(['proveedores', 'pagoproveedor_retenciones'])
             ->where('propuesta_pago_id', $propuestaPagoId)
-            ->whereNull('deleted_at')
             ->orderBy('id')
             ->get();
 
@@ -284,7 +283,6 @@ class PropuestaPagoClearingBancarioSupport
 
         $opsPend = Pagoproveedor::query()
             ->with(['proveedores', 'empresas', 'pagoproveedor_retenciones'])
-            ->whereNull('deleted_at')
             ->whereIn('estado', ['CONFIRMADA', 'PAGADA'])
             ->whereNull('interbanking_transferencia_id')
             ->when(

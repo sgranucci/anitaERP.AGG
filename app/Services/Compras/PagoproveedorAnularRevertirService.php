@@ -10,9 +10,11 @@ use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Contable\Asiento;
 use App\Repositories\Compras\PagoproveedorRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
+use App\Support\Caja\CajaMovimientoEloquentDeleteSupport;
 use App\Support\Compras\PagoproveedorAplicacionCuentacorrienteSupport;
 use App\Support\Contable\AsientoReversoSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Auth;
 use DB;
 use RuntimeException;
@@ -57,14 +59,18 @@ class PagoproveedorAnularRevertirService
                 $this->asientoRepository->delete((int) $asiento->id);
             }
 
-            Cheque::query()->where('pagoproveedor_id', (int) $pago->id)->delete();
+            EloquentAuditDeleteSupport::each(
+                Cheque::query()->where('pagoproveedor_id', (int) $pago->id)
+            );
 
-            Caja_Movimiento::query()->where('pagoproveedor_id', (int) $pago->id)->delete();
-            if ((int) ($pago->caja_movimiento_id ?? 0) > 0) {
-                Caja_Movimiento::query()->where('id', (int) $pago->caja_movimiento_id)->delete();
-            }
+            CajaMovimientoEloquentDeleteSupport::eliminarPorQuery(
+                Caja_Movimiento::query()->where('pagoproveedor_id', (int) $pago->id)
+            );
+            CajaMovimientoEloquentDeleteSupport::eliminarPorId((int) ($pago->caja_movimiento_id ?? 0));
 
-            Pagoproveedor_Retencion::query()->where('pagoproveedor_id', (int) $pago->id)->delete();
+            EloquentAuditDeleteSupport::each(
+                Pagoproveedor_Retencion::query()->where('pagoproveedor_id', (int) $pago->id)
+            );
 
             $this->registrarEstado($pago, 'BAJA', 'Anulación física de OP');
             $this->pagoproveedorRepository->update(['estado' => 'BAJA'], (int) $pago->id);

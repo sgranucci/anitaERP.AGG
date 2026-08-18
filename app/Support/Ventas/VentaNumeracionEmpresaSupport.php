@@ -50,7 +50,6 @@ final class VentaNumeracionEmpresaSupport
         $query = Venta::query()
             ->join('tipotransaccion as tt', 'tt.id', '=', 'venta.tipotransaccion_id')
             ->where('venta.puntoventa_id', $puntoventaId)
-            ->whereNull('venta.deleted_at')
             ->whereNull('tt.deleted_at');
 
         if ($empresaId !== null && $empresaId > 0) {

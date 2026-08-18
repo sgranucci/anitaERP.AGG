@@ -114,8 +114,7 @@ final class RecuentoMovimientosArticuloSupport
         $empresaId = $empresaId > 0 ? $empresaId : null;
 
         $query = self::queryBase($articuloId)
-            ->where('am.articulo_id', $articuloId)
-            ->whereNull('am.deleted_at');
+            ->where('am.articulo_id', $articuloId);
 
         if (self::esModoTodosDepositos($depositoId)) {
             self::aplicarFiltroDepositosAutorizados($query, $empresaId);

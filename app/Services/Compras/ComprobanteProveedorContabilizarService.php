@@ -4,9 +4,12 @@ namespace App\Services\Compras;
 
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Estado;
+use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
+use App\Support\Contable\AsientoEloquentDeleteSupport;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -269,7 +272,9 @@ class ComprobanteProveedorContabilizarService
                     ->update(['proveedor_cuentacorriente_id' => null]);
 
                 if ($ccIds !== []) {
-                    DB::table('proveedor_cuentacorriente')->whereIn('id', $ccIds)->delete();
+                    EloquentAuditDeleteSupport::each(
+                        Proveedor_Cuentacorriente::query()->whereIn('id', $ccIds)
+                    );
                 }
 
                 // Soltar FK antes de borrar asiento (RESTRICT).
@@ -278,10 +283,7 @@ class ComprobanteProveedorContabilizarService
                     'estado' => ComprobanteProveedorEstados::BORRADOR,
                 ])->save();
 
-                if ($asientoId > 0) {
-                    DB::table('asiento_movimiento')->where('asiento_id', $asientoId)->delete();
-                    DB::table('asiento')->where('id', $asientoId)->delete();
-                }
+                AsientoEloquentDeleteSupport::eliminarPorId($asientoId);
 
                 Comprobante_Proveedor_Estado::query()
                     ->where('comprobante_proveedor_id', $comprobante->id)

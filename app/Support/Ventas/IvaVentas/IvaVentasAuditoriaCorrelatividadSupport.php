@@ -174,7 +174,6 @@ final class IvaVentasAuditoriaCorrelatividadSupport
         $out = [];
         foreach (array_chunk($numeros, 500) as $chunk) {
             $rows = Venta::query()
-                ->whereNull('deleted_at')
                 ->where('puntoventa_id', $puntoventaId)
                 ->where('tipotransaccion_id', $tipotransaccionId)
                 ->whereIn('numerocomprobante', $chunk)
