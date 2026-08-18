@@ -19,7 +19,8 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 
 /**
- * Auditoría diaria OC ERP ↔ Anita: cabeceras faltantes, proveedor sin pad, aplicped faltante.
+ * Auditoría diaria OC ERP ↔ Anita: cabeceras faltantes, proveedor sin pad, aplicped faltante,
+ * cobertura pendmovp por nro_interno (faltantes/duplicados). Auto-repara y notifica por mail.
  */
 final class OrdencompraAnitaAuditoriaDiariaService
 {
@@ -54,7 +55,10 @@ final class OrdencompraAnitaAuditoriaDiariaService
             'total_oc' => 0,
             'ok' => 0,
             'reparadas' => 0,
+            'pendmovp_cobertura_detectadas' => 0,
+            'pendmovp_cobertura_reparadas' => 0,
             'discrepancias' => [],
+            'filas_reparadas' => [],
             'errores' => [],
             'filas' => [],
             'proveedores_mal_pad_anita' => [],
@@ -95,10 +99,17 @@ final class OrdencompraAnitaAuditoriaDiariaService
             }
 
             $informe['filas'][] = $fila;
+            if (! empty($fila['pendmovp_cobertura'])) {
+                $informe['pendmovp_cobertura_detectadas']++;
+                if (($fila['estado'] ?? '') === 'reparada') {
+                    $informe['pendmovp_cobertura_reparadas']++;
+                }
+            }
             if (($fila['estado'] ?? '') === 'ok') {
                 $informe['ok']++;
             } elseif (($fila['estado'] ?? '') === 'reparada') {
                 $informe['reparadas']++;
+                $informe['filas_reparadas'][] = $fila;
             } else {
                 $informe['discrepancias'][] = $fila;
             }
@@ -115,19 +126,31 @@ final class OrdencompraAnitaAuditoriaDiariaService
         foreach ($informe['proveedores_mal_pad_anita'] as $item) {
             if (($item['estado'] ?? '') === 'reparada') {
                 $informe['reparadas']++;
+                $informe['filas_reparadas'][] = [
+                    'numero' => (int) ($item['numero'] ?? 0),
+                    'problemas' => [$item['problema'] ?? 'Proveedor sin pad'],
+                    'acciones' => $item['acciones'] ?? [],
+                    'estado' => 'reparada',
+                    'pendmovp_cobertura' => false,
+                ];
             } elseif (($item['estado'] ?? '') === 'discrepancia') {
                 $informe['discrepancias'][] = [
                     'numero' => (int) ($item['numero'] ?? 0),
                     'problemas' => [$item['problema'] ?? 'Proveedor sin pad'],
                     'acciones' => $item['acciones'] ?? [],
                     'estado' => 'discrepancia',
+                    'pendmovp_cobertura' => false,
                 ];
             }
         }
 
         $informe['requiere_alerta'] = $informe['discrepancias'] !== [] || $informe['errores'] !== [];
+        $mailSiReparo = filter_var($config['mail_si_reparo'] ?? true, FILTER_VALIDATE_BOOLEAN);
+        $debeEnviarMail = $informe['requiere_alerta']
+            || filter_var($config['mail_siempre'] ?? false, FILTER_VALIDATE_BOOLEAN)
+            || ($mailSiReparo && $informe['reparadas'] > 0);
 
-        if ($enviarMail && ($informe['requiere_alerta'] || filter_var($config['mail_siempre'] ?? false, FILTER_VALIDATE_BOOLEAN))) {
+        if ($enviarMail && $debeEnviarMail) {
             $mail = $this->enviarMail($informe, $config);
             $informe = array_merge($informe, $mail);
         }
@@ -141,6 +164,7 @@ final class OrdencompraAnitaAuditoriaDiariaService
     private function auditarOc(Ordencompra $oc, bool $autoReparar): array
     {
         $diag = $this->ordencompraBridge->diagnosticarSincronizacionAnita($oc);
+        $pendmovpCobertura = $this->esProblemaCoberturaPendmovp($diag['problemas']);
         $fila = [
             'numero' => (int) $oc->numeroordencompra,
             'ordencompra_id' => (int) $oc->id,
@@ -149,6 +173,7 @@ final class OrdencompraAnitaAuditoriaDiariaService
             'problemas' => $diag['problemas'],
             'acciones' => [],
             'estado' => $diag['problemas'] === [] ? 'ok' : 'discrepancia',
+            'pendmovp_cobertura' => $pendmovpCobertura,
         ];
 
         if ($autoReparar && $diag['problemas'] !== []) {
@@ -156,6 +181,9 @@ final class OrdencompraAnitaAuditoriaDiariaService
             $fila['acciones'] = $rep['acciones'];
             $fila['problemas'] = $rep['problemas_restantes'];
             $fila['estado'] = $rep['problemas_restantes'] === [] ? 'reparada' : 'discrepancia';
+            $fila['pendmovp_cobertura'] = $pendmovpCobertura
+                || $this->esProblemaCoberturaPendmovp($rep['problemas_restantes'])
+                || $this->accionFueCoberturaPendmovp($rep['acciones']);
         }
 
         $aplicped = $this->auditarAplicpedRecepciones($oc, $autoReparar);
@@ -175,6 +203,45 @@ final class OrdencompraAnitaAuditoriaDiariaService
         }
 
         return $fila;
+    }
+
+    /**
+     * @param  list<string>  $problemas
+     */
+    private function esProblemaCoberturaPendmovp(array $problemas): bool
+    {
+        foreach ($problemas as $problema) {
+            $p = mb_strtolower((string) $problema);
+            if (
+                str_contains($p, 'pendmovp')
+                || str_contains($p, 'nro_interno')
+                || str_contains($p, 'duplicadas')
+                || str_contains($p, 'sin líneas')
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  list<string>  $acciones
+     */
+    private function accionFueCoberturaPendmovp(array $acciones): bool
+    {
+        foreach ($acciones as $accion) {
+            $a = mb_strtolower((string) $accion);
+            if (
+                str_contains($a, 'pendmovp')
+                || str_contains($a, 'regrabó detalle')
+                || str_contains($a, 'duplicadas')
+            ) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

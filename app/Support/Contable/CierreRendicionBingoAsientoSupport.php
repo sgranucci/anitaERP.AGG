@@ -270,7 +270,8 @@ final class CierreRendicionBingoAsientoSupport
             'centrocosto_ids' => $centrocostoIds,
             'cotizaciones' => $cotizaciones,
             'observaciones' => $observaciones,
-            'path_sistema' => 'C',
+            // No setear path_sistema: una letra (ej. "C") pisa ANITA_BDD_PATH
+            // (/usr2/biyemas) y el asiento ERP puede quedar sin ctamov real.
         ];
     }
 

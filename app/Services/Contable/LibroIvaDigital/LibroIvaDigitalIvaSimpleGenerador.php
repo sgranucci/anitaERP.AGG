@@ -6,6 +6,7 @@ use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalConceptoIvacompraSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalIvaSimpleSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasPeriodoSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -27,13 +28,17 @@ class LibroIvaDigitalIvaSimpleGenerador
      *     resumen: array<string, int|float>
      * }
      */
-    public function generar(int $empresaId, int $anio, int $mes): array
+    /**
+     * @param  array{por_fecha_jornada?: bool}  $opciones
+     */
+    public function generar(int $empresaId, int $anio, int $mes, array $opciones = []): array
     {
         $desde = sprintf('%04d-%02d-01', $anio, $mes);
         $hasta = date('Y-m-t', strtotime($desde));
+        $porFechaJornada = (bool) ($opciones['por_fecha_jornada'] ?? false);
 
-        $ventasDebito = $this->ventasDebitoFiscal($empresaId, $desde, $hasta, false);
-        $ventasRestitucion = $this->ventasDebitoFiscal($empresaId, $desde, $hasta, true);
+        $ventasDebito = $this->ventasDebitoFiscal($empresaId, $desde, $hasta, false, $porFechaJornada);
+        $ventasRestitucion = $this->ventasDebitoFiscal($empresaId, $desde, $hasta, true, $porFechaJornada);
         $filasCredito = $this->comprasCreditoFiscal($empresaId, $desde, $hasta, false);
         $filasRestitucionCredito = $this->comprasCreditoFiscal($empresaId, $desde, $hasta, true);
 
@@ -90,8 +95,13 @@ class LibroIvaDigitalIvaSimpleGenerador
     /**
      * @return array{lineas: list<string>, detalle: list<array<string, mixed>>}
      */
-    private function ventasDebitoFiscal(int $empresaId, string $desde, string $hasta, bool $soloNotasCredito): array
-    {
+    private function ventasDebitoFiscal(
+        int $empresaId,
+        string $desde,
+        string $hasta,
+        bool $soloNotasCredito,
+        bool $porFechaJornada,
+    ): array {
         $query = DB::table('venta')
             ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
             ->join('tipotransaccion as tt', 'tt.id', '=', 'venta.tipotransaccion_id')
@@ -114,9 +124,10 @@ class LibroIvaDigitalIvaSimpleGenerador
             ->leftJoin('condicioniva', 'condicioniva.id', '=', 'venta.condicioniva_id')
             ->whereNull('venta.deleted_at')
             ->where('puntoventa.empresa_id', $empresaId)
-            ->whereBetween('venta.fecha', [$desde, $hasta])
-            ->whereNotNull('venta.cae')
-            ->where('venta.cae', '<>', '');
+            ->whereNotIn('tt.abreviatura', ['IZV', 'FBI', 'FSL']);
+
+        LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroFecha($query, $desde, $hasta, $porFechaJornada);
+        LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroCaeORmv($query, 'venta', 'tt');
 
         if ($soloNotasCredito) {
             $query->where('tt.signo', '<', 0);
@@ -167,7 +178,7 @@ class LibroIvaDigitalIvaSimpleGenerador
         }
 
         if (! $soloNotasCredito) {
-            $exentas = $this->ventasExentasDebito($empresaId, $desde, $hasta);
+            $exentas = $this->ventasExentasDebito($empresaId, $desde, $hasta, $porFechaJornada);
             $lineas = array_merge($lineas, $exentas['lineas']);
             $detalle = array_merge($detalle, $exentas['detalle']);
         }
@@ -178,9 +189,9 @@ class LibroIvaDigitalIvaSimpleGenerador
     /**
      * @return array{lineas: list<string>, detalle: list<array<string, mixed>>}
      */
-    private function ventasExentasDebito(int $empresaId, string $desde, string $hasta): array
+    private function ventasExentasDebito(int $empresaId, string $desde, string $hasta, bool $porFechaJornada): array
     {
-        $exentos = DB::table('venta')
+        $query = DB::table('venta')
             ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
             ->join('tipotransaccion as tt', 'tt.id', '=', 'venta.tipotransaccion_id')
             ->join('venta_impuesto as vi', function ($join): void {
@@ -195,11 +206,15 @@ class LibroIvaDigitalIvaSimpleGenerador
             ->leftJoin('actividad_arca as aa_pv', 'aa_pv.id', '=', 'puntoventa.actividad_arca_id')
             ->whereNull('venta.deleted_at')
             ->where('puntoventa.empresa_id', $empresaId)
-            ->whereBetween('venta.fecha', [$desde, $hasta])
-            ->whereNotNull('venta.cae')
+            ->whereNotIn('tt.abreviatura', ['IZV', 'FBI', 'FSL'])
             ->where(function ($q): void {
                 $q->whereNull('tt.signo')->orWhere('tt.signo', '>=', 0);
-            })
+            });
+
+        LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroFecha($query, $desde, $hasta, $porFechaJornada);
+        LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroCaeORmv($query, 'venta', 'tt');
+
+        $exentos = $query
             ->selectRaw("
                 COALESCE(NULLIF(TRIM(actividad_arca.codigoarca), ''), NULLIF(TRIM(aa_pv.codigoarca), ''), '000000') as actividad,
                 COALESCE(NULLIF(TRIM(actividad_arca.nombre), ''), NULLIF(TRIM(aa_pv.nombre), ''), '') as actividad_nombre,

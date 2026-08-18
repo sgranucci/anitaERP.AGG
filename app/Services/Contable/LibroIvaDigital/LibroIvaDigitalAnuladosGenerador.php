@@ -5,20 +5,23 @@ namespace App\Services\Contable\LibroIvaDigital;
 use App\Models\Ventas\Venta;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalFormatoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasPeriodoSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use Illuminate\Support\Facades\DB;
 
 class LibroIvaDigitalAnuladosGenerador
 {
     /**
+     * @param  array{por_fecha_jornada?: bool}  $opciones
      * @return array{ventas: string, compras: string, resumen: array<string, int>}
      */
-    public function generar(int $empresaId, int $anio, int $mes): array
+    public function generar(int $empresaId, int $anio, int $mes, array $opciones = []): array
     {
         $desde = sprintf('%04d-%02d-01', $anio, $mes);
         $hasta = date('Y-m-t', strtotime($desde)).' 23:59:59';
+        $porFechaJornada = (bool) ($opciones['por_fecha_jornada'] ?? false);
 
-        $lineasVentas = $this->ventasAnuladas($empresaId, $desde, $hasta);
+        $lineasVentas = $this->ventasAnuladas($empresaId, $desde, $hasta, $porFechaJornada);
         $lineasCompras = $this->comprasAnuladas($empresaId, $desde, $hasta);
 
         return [
@@ -34,7 +37,7 @@ class LibroIvaDigitalAnuladosGenerador
     /**
      * @return list<string>
      */
-    private function ventasAnuladas(int $empresaId, string $desde, string $hasta): array
+    private function ventasAnuladas(int $empresaId, string $desde, string $hasta, bool $porFechaJornada): array
     {
         $lineas = [];
 
@@ -46,14 +49,15 @@ class LibroIvaDigitalAnuladosGenerador
             ->where('cae', '<>', '')
             ->orderBy('fecha')
             ->lazy(100)
-            ->each(function (Venta $venta) use (&$lineas): void {
+            ->each(function (Venta $venta) use (&$lineas, $porFechaJornada): void {
                 $letra = LibroIvaDigitalMapeosSupport::letraDesdeCodigoVenta((string) $venta->codigo);
                 $tipo = LibroIvaDigitalMapeosSupport::tipoComprobanteVentas(
                     (string) ($venta->tipotransacciones->codigo ?? '001'),
                     $letra,
+                    (string) ($venta->tipotransacciones->abreviatura ?? ''),
                 );
                 $lineas[] = LibroIvaDigitalFormatoSupport::registroComprobanteAnulado([
-                    'fecha_comprobante' => date('Ymd', strtotime((string) $venta->fecha)),
+                    'fecha_comprobante' => LibroIvaDigitalVentasPeriodoSupport::fechaDocumento($venta, $porFechaJornada),
                     'tipo_comprobante' => $tipo,
                     'punto_venta' => (int) ($venta->puntoventas->codigo ?? 0),
                     'numero_comprobante' => (int) $venta->numerocomprobante,

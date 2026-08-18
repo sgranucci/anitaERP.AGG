@@ -16,7 +16,7 @@ class OrdencompraAuditoriaAnitaDiariaCommand extends Command
                             {--reparar : Repara gaps detectados (override config)}
                             {--sin-reparar : Solo diagnostica, no repara}';
 
-    protected $description = 'Audita OC ERP ↔ Anita (cabecera, proveedor pad, aplicped) y repara';
+    protected $description = 'Audita OC ERP ↔ Anita (cabecera, pad, pendmovp cobertura, aplicped), repara y notifica';
 
     public function handle(OrdencompraAnitaAuditoriaDiariaService $service): int
     {
@@ -70,11 +70,22 @@ class OrdencompraAuditoriaAnitaDiariaCommand extends Command
                 ['OC en alcance', (string) ($informe['total_oc'] ?? 0)],
                 ['OK', (string) ($informe['ok'] ?? 0)],
                 ['Reparadas', (string) ($informe['reparadas'] ?? 0)],
+                ['Pendmovp cobertura detectada', (string) ($informe['pendmovp_cobertura_detectadas'] ?? 0)],
+                ['Pendmovp cobertura reparada', (string) ($informe['pendmovp_cobertura_reparadas'] ?? 0)],
                 ['Discrepancias', (string) count($informe['discrepancias'] ?? [])],
                 ['Errores', (string) count($informe['errores'] ?? [])],
                 ['Proveedor mal pad (scan Anita)', (string) count($informe['proveedores_mal_pad_anita'] ?? [])],
             ],
         );
+
+        foreach ($informe['filas_reparadas'] ?? [] as $fila) {
+            $this->info(sprintf(
+                'OC %s reparada%s: %s',
+                (string) ($fila['numero'] ?? '?'),
+                ! empty($fila['pendmovp_cobertura']) ? ' (pendmovp)' : '',
+                implode('; ', $fila['acciones'] ?? []),
+            ));
+        }
 
         foreach ($informe['discrepancias'] ?? [] as $fila) {
             $this->warn(sprintf(

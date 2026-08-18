@@ -23,7 +23,18 @@ class OrdencompraAnitaAuditoriaDiaria extends Mailable
         $fecha = (string) ($this->informe['fecha_calendario'] ?? '');
         $discrepancias = count($this->informe['discrepancias'] ?? []);
         $errores = count($this->informe['errores'] ?? []);
-        $estado = ($discrepancias + $errores) > 0 ? 'ALERTA' : 'OK';
+        $reparadas = (int) ($this->informe['reparadas'] ?? 0);
+        $pendmovp = (int) ($this->informe['pendmovp_cobertura_reparadas'] ?? 0);
+
+        if (($discrepancias + $errores) > 0) {
+            $estado = 'ALERTA';
+        } elseif ($reparadas > 0) {
+            $estado = $pendmovp > 0
+                ? 'REPARADAS (pendmovp '.$pendmovp.')'
+                : 'REPARADAS';
+        } else {
+            $estado = 'OK';
+        }
 
         $asunto = sprintf(
             '[%s] Órdenes de compra Anita — auditoría %s — %s',

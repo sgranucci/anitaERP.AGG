@@ -13,6 +13,10 @@
     · Auto-reparar:
     <strong>{{ ! empty($informe['auto_reparar']) ? 'sí' : 'no' }}</strong>
 </p>
+<p style="margin:0 0 16px 0; color:#555; font-size:13px;">
+    Incluye cobertura <code>pendmovp</code> por <code>nro_interno</code>
+    (líneas faltantes o duplicadas aunque el conteo de filas coincida).
+</p>
 
 <h3 style="margin:18px 0 6px 0;">Resumen</h3>
 <table cellpadding="6" cellspacing="0" border="1" style="border-collapse:collapse; font-size:13px;">
@@ -33,6 +37,14 @@
         <td align="right">{{ (int) ($informe['reparadas'] ?? 0) }}</td>
     </tr>
     <tr>
+        <td>Cobertura pendmovp detectada</td>
+        <td align="right">{{ (int) ($informe['pendmovp_cobertura_detectadas'] ?? 0) }}</td>
+    </tr>
+    <tr>
+        <td>Cobertura pendmovp reparada</td>
+        <td align="right">{{ (int) ($informe['pendmovp_cobertura_reparadas'] ?? 0) }}</td>
+    </tr>
+    <tr>
         <td>Discrepancias</td>
         <td align="right">{{ count($informe['discrepancias'] ?? []) }}</td>
     </tr>
@@ -42,8 +54,32 @@
     </tr>
 </table>
 
+@if (! empty($informe['filas_reparadas']))
+    <h3 style="margin:18px 0 6px 0;">Reparadas automáticamente</h3>
+    <table cellpadding="6" cellspacing="0" border="1" style="border-collapse:collapse; font-size:12px; width:100%;">
+        <tr style="background:#d5f5e3;">
+            <th align="left">OC</th>
+            <th align="left">Tipo</th>
+            <th align="left">Acciones</th>
+        </tr>
+        @foreach ($informe['filas_reparadas'] as $fila)
+            <tr>
+                <td>{{ $fila['numero'] ?? '—' }}</td>
+                <td>
+                    @if (! empty($fila['pendmovp_cobertura']))
+                        pendmovp cobertura
+                    @else
+                        sync / pad / aplicped
+                    @endif
+                </td>
+                <td>{{ implode('; ', $fila['acciones'] ?? []) }}</td>
+            </tr>
+        @endforeach
+    </table>
+@endif
+
 @if (! empty($informe['discrepancias']))
-    <h3 style="margin:18px 0 6px 0;">Discrepancias</h3>
+    <h3 style="margin:18px 0 6px 0;">Discrepancias pendientes</h3>
     <table cellpadding="6" cellspacing="0" border="1" style="border-collapse:collapse; font-size:12px; width:100%;">
         <tr style="background:#f0f0f0;">
             <th align="left">OC</th>
@@ -74,6 +110,8 @@
 
 <p style="margin-top:20px; color:#666; font-size:12px;">
     Generado {{ now()->format('d/m/Y H:i') }} — anitaERP
+    · Comando: <code>php artisan ordencompra:auditoria-anita-diaria</code>
+    · Desactivar al dejar Anita: <code>ORDENCOMPRA_AUDITORIA_ANITA_HABILITADA=false</code>
 </p>
 </body>
 </html>

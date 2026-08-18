@@ -65,6 +65,26 @@
                         </div>
                     </div>
 
+                    <div class="form-group row">
+                        <span class="col-lg-2 control-label pt-2">Fecha de ventas</span>
+                        <div class="col-lg-8">
+                            <input type="hidden" name="por_fecha_jornada" value="0">
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" name="por_fecha_jornada"
+                                       id="por_fecha_jornada" value="1"
+                                       @checked(! empty($filtros['por_fecha_jornada']))>
+                                <label class="form-check-label" for="por_fecha_jornada">
+                                    Usar fecha de jornada (optativo)
+                                </label>
+                            </div>
+                            <small class="form-text text-muted">
+                                Alinea el per&iacute;odo con IVA Ventas y con Anita (<code>ven_fecha_vto</code>):
+                                gastronom&iacute;a, estacionamiento y vending. Si el comprobante no tiene jornada,
+                                se usa la fecha del movimiento. Sin marcar, se usa la fecha del comprobante/CAE.
+                            </small>
+                        </div>
+                    </div>
+
                     <div class="form-group row mb-0">
                         <div class="col-lg-2"></div>
                         <div class="col-lg-10">
@@ -86,7 +106,15 @@
                     </div>
                 </form>
 
-                @if ($consultado && $resultado)
+                    @if ($consultado && $resultado)
+                    <p class="text-muted small mb-2">
+                        Ventas filtradas por
+                        @if (! empty($resultado['opciones']['por_fecha_jornada']) || ! empty($resultado['ventas']['resumen']['por_fecha_jornada']))
+                            fecha de jornada
+                        @else
+                            fecha del comprobante
+                        @endif.
+                    </p>
                     @if (!empty($resultado['validaciones']))
                         <div class="alert alert-warning">
                             <strong>Validaciones:</strong>
@@ -122,6 +150,14 @@
                                             {{ number_format($resultado['ventas']['resumen']['ventas_b_individuales'], 0, ',', '.') }} Facturas B informadas individualmente
                                             (&ge; ${{ number_format(config('arca_wsfe.receptor.consumidor_final_umbral_monto', 10000000), 0, ',', '.') }} o comprador identificado).
                                         @endif
+                                    </td>
+                                </tr>
+                                @endif
+                                @if (($resultado['ventas']['resumen']['ventas_rmv'] ?? 0) > 0)
+                                <tr>
+                                    <td colspan="3" class="text-muted small py-0">
+                                        {{ number_format($resultado['ventas']['resumen']['ventas_rmv'], 0, ',', '.') }} rendiciones vending RMV
+                                        (Factura B tipo 006, documento 89, sucursal &ge; 1000; mismo criterio que Anita p-rg3685).
                                     </td>
                                 </tr>
                                 @endif
@@ -193,7 +229,7 @@
                     @if (!empty($resultado['iva_simple']['resumen_por_actividad']))
                         <h5 class="mb-2">IVA Simple — débito fiscal por actividad ARCA</h5>
                         <p class="text-muted small">
-                            Agrupación desde ventas con CAE del período. Actividad: comprobante
+                            Agrupación desde ventas del período (con CAE o RMV vending). Actividad: comprobante
                             (<code>venta.actividad_arca_id</code>) o, si falta, punto de venta
                             (<code>puntoventa.actividad_arca_id</code>).
                         </p>

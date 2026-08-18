@@ -33,12 +33,18 @@ class LibroIvaDigitalController extends Controller
                 'empresa_id' => $filtros['empresa_id'],
                 'periodo' => $filtros['periodo'],
             ]);
+            ReportePreferenciasUsuario::persistirBool(
+                self::PREFERENCIAS_CLAVE,
+                'por_fecha_jornada',
+                (bool) $filtros['por_fecha_jornada'],
+            );
             ini_set('memory_limit', '-1');
             ini_set('max_execution_time', '0');
             $resultado = $this->libroIvaDigitalService->generar(
                 (int) $filtros['empresa_id'],
                 (int) $filtros['anio'],
                 (int) $filtros['mes'],
+                ['por_fecha_jornada' => (bool) $filtros['por_fecha_jornada']],
             );
         }
 
@@ -68,6 +74,7 @@ class LibroIvaDigitalController extends Controller
             (int) $filtros['empresa_id'],
             (int) $filtros['anio'],
             (int) $filtros['mes'],
+            ['por_fecha_jornada' => (bool) $filtros['por_fecha_jornada']],
         );
 
         $zipPath = $this->libroIvaDigitalService->crearZipDescarga($resultado, (int) $filtros['empresa_id']);
@@ -93,6 +100,7 @@ class LibroIvaDigitalController extends Controller
             (int) $filtros['empresa_id'],
             (int) $filtros['anio'],
             (int) $filtros['mes'],
+            ['por_fecha_jornada' => (bool) $filtros['por_fecha_jornada']],
         );
 
         $zipPath = $this->libroIvaDigitalService->crearZipIvaSimple($resultado, (int) $filtros['empresa_id']);
@@ -102,7 +110,7 @@ class LibroIvaDigitalController extends Controller
 
     /**
      * @param  \Illuminate\Support\Collection<int, mixed>|null  $empresaQuery
-     * @return array{empresa_id:?int, periodo:?string, anio:?int, mes:?int}
+     * @return array{empresa_id:?int, periodo:?string, anio:?int, mes:?int, por_fecha_jornada:bool}
      */
     private function filtrosDesdeRequest(Request $request, $empresaQuery = null): array
     {
@@ -155,11 +163,22 @@ class LibroIvaDigitalController extends Controller
             }
         }
 
+        if ($request->exists('por_fecha_jornada')) {
+            $porFechaJornada = $request->boolean('por_fecha_jornada');
+        } else {
+            $porFechaJornada = ReportePreferenciasUsuario::leerBool(
+                self::PREFERENCIAS_CLAVE,
+                'por_fecha_jornada',
+                true,
+            );
+        }
+
         return [
             'empresa_id' => $empresaId,
             'periodo' => $periodo,
             'anio' => $anio,
             'mes' => $mes,
+            'por_fecha_jornada' => $porFechaJornada ? 1 : 0,
         ];
     }
 

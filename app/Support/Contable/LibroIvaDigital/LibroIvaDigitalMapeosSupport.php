@@ -2,8 +2,18 @@
 
 namespace App\Support\Contable\LibroIvaDigital;
 
+use App\Support\Ventas\MaquinavendingRmvTipoSupport;
+
 final class LibroIvaDigitalMapeosSupport
 {
+    /** Anita p-rg3685.c: RMV letra Z → tipo 6 (Factura B). */
+    public const RMV_TIPO_COMPROBANTE = '006';
+
+    /** Anita p-rg3685.c: RMV usa documento 89 (LE) y número 1. */
+    public const RMV_CODIGO_DOCUMENTO = '89';
+
+    public const RMV_NUMERO_IDENTIFICACION = '1';
+
     /** @var array<string, string> tasa ERP → código LID 4 dígitos */
     private const ALICUOTA_LID_POR_TASA = [
         '0' => '0003',
@@ -56,12 +66,35 @@ final class LibroIvaDigitalMapeosSupport
         return self::ALICUOTA_IVA_SIMPLE_POR_TASA[$keyInt] ?? self::ALICUOTA_IVA_SIMPLE_POR_TASA[$key] ?? 3;
     }
 
-    public static function tipoComprobanteVentas(string $codigoBase, string $letra): string
+    public static function tipoComprobanteVentas(string $codigoBase, string $letra, ?string $abreviatura = null): string
     {
+        if (self::esRmv($abreviatura)) {
+            return self::RMV_TIPO_COMPROBANTE;
+        }
+
         $base = (int) preg_replace('/\D+/', '', $codigoBase);
         $offset = self::OFFSET_LETRA[strtoupper($letra)] ?? 0;
 
         return str_pad((string) ($base + $offset), 3, '0', STR_PAD_LEFT);
+    }
+
+    public static function esRmv(?string $abreviatura): bool
+    {
+        return strtoupper(trim((string) $abreviatura)) === MaquinavendingRmvTipoSupport::ABREVIATURA;
+    }
+
+    /**
+     * @return array{codigo_documento: string, numero_identificacion: string, nombre: string}
+     */
+    public static function compradorRmv(?string $nombre): array
+    {
+        $texto = trim((string) $nombre);
+
+        return [
+            'codigo_documento' => self::RMV_CODIGO_DOCUMENTO,
+            'numero_identificacion' => self::RMV_NUMERO_IDENTIFICACION,
+            'nombre' => $texto !== '' ? $texto : MaquinavendingRmvTipoSupport::NOMBRE_CLIENTE,
+        ];
     }
 
     public static function letraDesdeCodigoVenta(string $codigoVenta): string

@@ -8,7 +8,9 @@ use App\Models\Ventas\Tipotransaccion;
 use InvalidArgumentException;
 
 /**
- * Tipo RMV (Anita t_comp: Rendicion maquinas vending, estado interno).
+ * Tipo RMV (Anita t_comp: Rendicion maquinas vending).
+ * p-vtagastro.c: sucursal ≥ 1000 = expendedora; emite RMV letra Z.
+ * p-rg3685.c: RMV entra al Libro IVA como Factura B (tipo 6, doc 89, nro 1).
  */
 final class MaquinavendingRmvTipoSupport
 {

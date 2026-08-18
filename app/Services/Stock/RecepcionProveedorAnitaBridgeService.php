@@ -5,6 +5,7 @@ namespace App\Services\Stock;
 use App\ApiAnita;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Models\Stock\Recepcion_Proveedor_Articulo;
+use App\Services\Compras\OrdencompraAnitaBridgeService;
 use App\Services\Compras\OrdencompraAnitaSyncService;
 use App\Models\Contable\Asiento_Movimiento;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
@@ -35,6 +36,7 @@ class RecepcionProveedorAnitaBridgeService
 
     public function __construct(
         private readonly OrdencompraAnitaSyncService $ordencompraAnitaSync,
+        private readonly OrdencompraAnitaBridgeService $ordencompraAnitaBridge,
     ) {
     }
 
@@ -1600,6 +1602,21 @@ class RecepcionProveedorAnitaBridgeService
         $oc = $recepcion->ordencompras;
         if (! $oc) {
             throw new \RuntimeException('Recepción sin orden de compra asociada para actualizar pendmovp.');
+        }
+
+        // Huecos/duplicados en Anita (count OK pero falta un nro_interno): regrabar antes de aplicar cantentr.
+        if ($multiplicador > 0 && $this->ordencompraAnitaBridge->habilitado()) {
+            $this->ordencompraAnitaBridge->asegurarPendmovpCompletoParaRecepcion($oc);
+            $recepcion->unsetRelation('ordencompras');
+            $recepcion->load([
+                'ordencompras.ordencompra_articulos',
+                'recepcion_proveedor_articulos.articulos',
+            ]);
+            RecepcionProveedorAnitaOrdenLineaSupport::alinearLineasRecepcionConOc($recepcion);
+            $oc = $recepcion->ordencompras;
+            if (! $oc) {
+                throw new \RuntimeException('Recepción sin orden de compra asociada para actualizar pendmovp.');
+            }
         }
 
         $cfg = config('recepcion_proveedor.anita');

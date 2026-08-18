@@ -12,17 +12,23 @@ return new class extends Migration
             return;
         }
 
-        DB::statement("
-            UPDATE reporte_sueldos_definible r
-            LEFT JOIN (
-                SELECT reporte_sueldos_definible_id, MIN(usuario_id) AS uid
-                FROM reporte_sueldos_definible_version
-                WHERE usuario_id IS NOT NULL
-                GROUP BY reporte_sueldos_definible_id
-            ) v ON v.reporte_sueldos_definible_id = r.id
-            SET r.owner_id = v.uid
-            WHERE r.owner_id IS NULL AND v.uid IS NOT NULL
-        ");
+        if (! Schema::hasTable('reporte_sueldos_definible_version')) {
+            return;
+        }
+
+        // Query Builder (no UPDATE…JOIN): portable MySQL / PostgreSQL.
+        $owners = DB::table('reporte_sueldos_definible_version')
+            ->whereNotNull('usuario_id')
+            ->groupBy('reporte_sueldos_definible_id')
+            ->selectRaw('reporte_sueldos_definible_id, MIN(usuario_id) as uid')
+            ->pluck('uid', 'reporte_sueldos_definible_id');
+
+        foreach ($owners as $reporteId => $uid) {
+            DB::table('reporte_sueldos_definible')
+                ->where('id', $reporteId)
+                ->whereNull('owner_id')
+                ->update(['owner_id' => $uid]);
+        }
     }
 
     public function down(): void

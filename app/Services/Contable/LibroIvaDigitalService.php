@@ -23,15 +23,16 @@ class LibroIvaDigitalService
     }
 
     /**
+     * @param  array{por_fecha_jornada?: bool}  $opciones
      * @return array<string, mixed>
      */
-    public function generar(int $empresaId, int $anio, int $mes): array
+    public function generar(int $empresaId, int $anio, int $mes, array $opciones = []): array
     {
-        $ventas = $this->ventasGenerador->generar($empresaId, $anio, $mes);
+        $ventas = $this->ventasGenerador->generar($empresaId, $anio, $mes, $opciones);
         $compras = $this->comprasGenerador->generar($empresaId, $anio, $mes);
         $importaciones = $this->importacionesGenerador->generar($empresaId, $anio, $mes);
-        $anulados = $this->anuladosGenerador->generar($empresaId, $anio, $mes);
-        $ivaSimple = $this->ivaSimpleGenerador->generar($empresaId, $anio, $mes);
+        $anulados = $this->anuladosGenerador->generar($empresaId, $anio, $mes, $opciones);
+        $ivaSimple = $this->ivaSimpleGenerador->generar($empresaId, $anio, $mes, $opciones);
 
         $cabecerasImportacion = $importaciones['compras_cbte_importacion'] ?? [];
         if ($cabecerasImportacion !== []) {
@@ -52,6 +53,9 @@ class LibroIvaDigitalService
                 'mes' => $mes,
                 'etiqueta' => sprintf('%04d-%02d', $anio, $mes),
             ],
+            'opciones' => [
+                'por_fecha_jornada' => (bool) ($opciones['por_fecha_jornada'] ?? false),
+            ],
             'validaciones' => [],
         ];
 
@@ -61,16 +65,20 @@ class LibroIvaDigitalService
     }
 
     /**
+     * @param  array{por_fecha_jornada?: bool}  $opciones
      * @return array<string, mixed>
      */
-    public function generarIvaSimple(int $empresaId, int $anio, int $mes): array
+    public function generarIvaSimple(int $empresaId, int $anio, int $mes, array $opciones = []): array
     {
         return [
-            'iva_simple' => $this->ivaSimpleGenerador->generar($empresaId, $anio, $mes),
+            'iva_simple' => $this->ivaSimpleGenerador->generar($empresaId, $anio, $mes, $opciones),
             'periodo' => [
                 'anio' => $anio,
                 'mes' => $mes,
                 'etiqueta' => sprintf('%04d-%02d', $anio, $mes),
+            ],
+            'opciones' => [
+                'por_fecha_jornada' => (bool) ($opciones['por_fecha_jornada'] ?? false),
             ],
         ];
     }
@@ -108,12 +116,13 @@ class LibroIvaDigitalService
     private function crearZip(array $resultado, int $empresaId, array $archivos, string $prefijoZip): string
     {
         $periodo = (string) ($resultado['periodo']['etiqueta'] ?? date('Y-m'));
+        $sufijoFecha = ! empty($resultado['opciones']['por_fecha_jornada']) ? '_jornada' : '';
         $dir = storage_path('framework/cache');
         if (! is_dir($dir)) {
             throw new \RuntimeException('No existe el directorio de caché de Laravel.');
         }
 
-        $zipPath = $dir.'/'.$prefijoZip.'_'.$empresaId.'_'.$periodo.'.zip';
+        $zipPath = $dir.'/'.$prefijoZip.'_'.$empresaId.'_'.$periodo.$sufijoFecha.'.zip';
         if (file_exists($zipPath)) {
             @unlink($zipPath);
         }

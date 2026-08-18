@@ -361,7 +361,7 @@ final class CierreRendicionMaquinaAsientoSupport
             'centrocosto_ids' => $centrocostoIds,
             'cotizaciones' => $cotizaciones,
             'observaciones' => $observaciones,
-            'path_sistema' => 'C',
+            // No setear path_sistema (no pisar ANITA_BDD_PATH).
         ];
     }
 

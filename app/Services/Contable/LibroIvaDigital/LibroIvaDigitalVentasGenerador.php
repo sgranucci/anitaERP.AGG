@@ -8,6 +8,8 @@ use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasAgrupacionSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasAlicuotaSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasConsumidorFinalSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasPeriodoSupport;
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -22,10 +24,14 @@ class LibroIvaDigitalVentasGenerador
      *     resumen: array<string, int|float>
      * }
      */
-    public function generar(int $empresaId, int $anio, int $mes): array
+    /**
+     * @param  array{por_fecha_jornada?: bool}  $opciones
+     */
+    public function generar(int $empresaId, int $anio, int $mes, array $opciones = []): array
     {
         $desde = sprintf('%04d-%02d-01', $anio, $mes);
         $hasta = date('Y-m-t', strtotime($desde));
+        $porFechaJornada = (bool) ($opciones['por_fecha_jornada'] ?? false);
 
         $contenidoCbte = '';
         $contenidoAlicuotas = '';
@@ -35,6 +41,7 @@ class LibroIvaDigitalVentasGenerador
         $conteoRegistros = 0;
         $conteoConAlicuotas = 0;
         $conteoAlicuotas = 0;
+        $conteoRmv = 0;
 
         $conteoVentasBIndividuales = 0;
 
@@ -43,30 +50,39 @@ class LibroIvaDigitalVentasGenerador
         /** @var list<array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}> $registrosIndividuales */
         $registrosIndividuales = [];
 
-        $this->queryVentas($empresaId, $desde, $hasta)
+        $this->queryVentas($empresaId, $desde, $hasta, $porFechaJornada)
             ->with($this->relacionesVentas())
-            ->orderBy('venta.fecha')
+            ->orderByRaw(SqlDialectSupport::fecha(
+                LibroIvaDigitalVentasPeriodoSupport::expresionFechaSql($porFechaJornada),
+            ))
             ->orderBy('venta.puntoventa_id')
             ->orderBy('venta.tipotransaccion_id')
             ->orderBy('venta.numerocomprobante')
             ->lazy(self::CHUNK_SIZE)
             ->each(function (Venta $venta) use (
+                $porFechaJornada,
                 &$gruposFacturaB,
                 &$registrosIndividuales,
                 &$totalImporte,
                 &$conteoVentas,
                 &$conteoVentasBIndividuales,
+                &$conteoRmv,
             ): void {
-                $registro = $this->armarRegistroVenta($venta);
+                $registro = $this->armarRegistroVenta($venta, $porFechaJornada);
                 if ($registro === null) {
                     return;
                 }
 
                 $totalImporte += abs((float) $venta->total);
                 $conteoVentas++;
-
                 $letra = LibroIvaDigitalMapeosSupport::letraDesdeCodigoVenta((string) $venta->codigo);
-                if ($letra === 'B') {
+                $esRmv = LibroIvaDigitalMapeosSupport::esRmv(
+                    (string) ($venta->tipotransacciones->abreviatura ?? ''),
+                );
+                if ($esRmv) {
+                    $conteoRmv++;
+                }
+                if ($letra === 'B' && ! $esRmv) {
                     $importeRegistro = abs((float) ($registro['cabecera']['importe_total'] ?? 0));
                     if (LibroIvaDigitalVentasConsumidorFinalSupport::permiteAgrupacionGlobalDiaria($venta, $importeRegistro)) {
                         $clave = LibroIvaDigitalVentasAgrupacionSupport::claveGrupoFacturaB($registro['cabecera']);
@@ -115,6 +131,8 @@ class LibroIvaDigitalVentasGenerador
                 'alicuotas' => $conteoAlicuotas,
                 'importe_total' => round($totalImporte, 2),
                 'total_iva' => round($totalIva, 2),
+                'ventas_rmv' => $conteoRmv,
+                'por_fecha_jornada' => $porFechaJornada,
             ],
         ];
     }
@@ -128,7 +146,7 @@ class LibroIvaDigitalVentasGenerador
             'venta_impuestos' => static function (HasMany $query): void {
                 $query->select('id', 'venta_id', 'concepto', 'importe', 'tasa');
             },
-            'tipotransacciones:id,codigo,signo',
+            'tipotransacciones:id,codigo,signo,abreviatura',
             'puntoventas:id,codigo',
             'condicionivas:id,nombre,codigoexterno',
             'clientes:id,nombre,numerodocumento,condicioniva_id,tipodocumento_id',
@@ -138,40 +156,45 @@ class LibroIvaDigitalVentasGenerador
         ];
     }
 
-    private function queryVentas(int $empresaId, string $desde, string $hasta): Builder
+    private function queryVentas(int $empresaId, string $desde, string $hasta, bool $porFechaJornada): Builder
     {
-        return Venta::query()
+        $query = Venta::query()
             ->select('venta.*')
             ->join('puntoventa as pv_lid', 'pv_lid.id', '=', 'venta.puntoventa_id')
             ->where('pv_lid.empresa_id', $empresaId)
-            ->whereNull('venta.deleted_at')
-            ->whereBetween('venta.fecha', [$desde, $hasta])
-            ->whereNotNull('venta.cae')
-            ->where('venta.cae', '<>', '');
+            ->whereNull('venta.deleted_at');
+
+        LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroFecha($query, $desde, $hasta, $porFechaJornada);
+        LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroCaeORmv($query);
+
+        return $query;
     }
 
     /**
      * @return array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}|null
      */
-    private function armarRegistroVenta(Venta $venta): ?array
+    private function armarRegistroVenta(Venta $venta, bool $porFechaJornada): ?array
     {
-        // RMV / IZV internos (Anita t_comp estado I): no van al libro IVA digital AFIP.
+        // IZV / FBI / FSL internos. RMV sí informa Anita (p-rg3685.c: tipo 6, sucursal ≥ 1000).
         $abrev = strtoupper(trim((string) ($venta->tipotransacciones->abreviatura ?? '')));
-        if (in_array($abrev, ['RMV', 'IZV', 'FBI', 'FSL'], true)) {
+        if (in_array($abrev, ['IZV', 'FBI', 'FSL'], true)) {
             return null;
         }
 
+        $esRmv = LibroIvaDigitalMapeosSupport::esRmv($abrev);
         $letra = LibroIvaDigitalMapeosSupport::letraDesdeCodigoVenta((string) $venta->codigo);
         $codigoBase = (string) ($venta->tipotransacciones->codigo ?? '001');
-        $tipoComprobante = LibroIvaDigitalMapeosSupport::tipoComprobanteVentas($codigoBase, $letra);
+        $tipoComprobante = LibroIvaDigitalMapeosSupport::tipoComprobanteVentas($codigoBase, $letra, $abrev);
         $puntoVenta = (int) ($venta->puntoventas->codigo ?? 0);
         $numero = (int) $venta->numerocomprobante;
 
-        $totales = $this->desglosarImpuestos($venta, $letra);
-        $comprador = LibroIvaDigitalVentasConsumidorFinalSupport::resolverComprador(
-            $venta,
-            (float) $totales['importe_total'],
-        );
+        $totales = $this->desglosarImpuestos($venta, $esRmv ? 'B' : $letra);
+        $comprador = $esRmv
+            ? LibroIvaDigitalMapeosSupport::compradorRmv((string) ($venta->nombre ?? ''))
+            : LibroIvaDigitalVentasConsumidorFinalSupport::resolverComprador(
+                $venta,
+                (float) $totales['importe_total'],
+            );
 
         $codigoOperacion = $letra === 'C'
             ? ' '
@@ -188,7 +211,7 @@ class LibroIvaDigitalVentasGenerador
         );
 
         $cabecera = [
-            'fecha' => date('Ymd', strtotime((string) $venta->fecha)),
+            'fecha' => LibroIvaDigitalVentasPeriodoSupport::fechaDocumento($venta, $porFechaJornada),
             'tipo_comprobante' => $tipoComprobante,
             'punto_venta' => $puntoVenta,
             'numero_comprobante' => $numero,

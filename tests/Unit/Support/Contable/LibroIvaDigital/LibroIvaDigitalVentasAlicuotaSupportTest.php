@@ -7,6 +7,7 @@ use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalValidacionSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasAgrupacionSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasAlicuotaSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasPeriodoSupport;
 use PHPUnit\Framework\TestCase;
 
 class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
@@ -152,6 +153,35 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         $this->assertSame(1, $grupo['cabecera']['cantidad_alicuotas']);
         $this->assertSame(' ', $grupo['cabecera']['codigo_operacion']);
         $this->assertSame('0005', $grupo['alicuotas'][0]['alicuota_iva']);
+    }
+
+    public function test_rmv_mapea_factura_b_con_documento_89_como_anita(): void
+    {
+        $this->assertSame('006', LibroIvaDigitalMapeosSupport::tipoComprobanteVentas('RMV', 'Z', 'RMV'));
+        $this->assertSame('006', LibroIvaDigitalMapeosSupport::tipoComprobanteVentas('001', 'B', 'FAC'));
+        $this->assertTrue(LibroIvaDigitalMapeosSupport::esRmv('RMV'));
+        $this->assertFalse(LibroIvaDigitalMapeosSupport::esRmv('IZV'));
+
+        $comprador = LibroIvaDigitalMapeosSupport::compradorRmv('Venta expendedoras');
+        $this->assertSame('89', $comprador['codigo_documento']);
+        $this->assertSame('1', $comprador['numero_identificacion']);
+        $this->assertSame('Venta expendedoras', $comprador['nombre']);
+    }
+
+    public function test_fecha_jornada_usa_jornada_y_cae_si_falta(): void
+    {
+        $this->assertSame(
+            '20260731',
+            LibroIvaDigitalVentasPeriodoSupport::fechaYmd('2026-07-31', '2026-08-01', true),
+        );
+        $this->assertSame(
+            '20260801',
+            LibroIvaDigitalVentasPeriodoSupport::fechaYmd('2026-07-31', '2026-08-01', false),
+        );
+        $this->assertSame(
+            '20260801',
+            LibroIvaDigitalVentasPeriodoSupport::fechaYmd(null, '2026-08-01', true),
+        );
     }
 
     /**

@@ -295,11 +295,22 @@ class OrdencompraAnitaBridgeService
         }
 
         $esperadas = $oc->ordencompra_articulos->count();
+        $cobertura = $this->analizarCoberturaPendmovp($oc, $lineas);
         if ($cabecera !== null && count($lineas) === 0 && $esperadas > 0) {
             $problemas[] = 'Cabecera Anita sin líneas pendmovp.';
         }
-        if (count($lineas) > $esperadas && $esperadas > 0) {
+        if ($cobertura['duplicados'] > 0) {
+            $problemas[] = 'Líneas Anita duplicadas (filas='.count($lineas)
+                .', internos únicos='.count($cobertura['internos_anita'])
+                .', duplicados='.$cobertura['duplicados'].').';
+        } elseif (count($lineas) > $esperadas && $esperadas > 0) {
             $problemas[] = 'Líneas Anita duplicadas o de más (Anita='.count($lineas).', ERP='.$esperadas.').';
+        }
+        if ($cobertura['faltan'] !== []) {
+            $problemas[] = 'Faltan en pendmovp nro_interno ERP: '.implode(', ', $cobertura['faltan']).'.';
+        }
+        if ($cobertura['sobran'] !== []) {
+            $problemas[] = 'pendmovp con nro_interno no presentes en ERP: '.implode(', ', $cobertura['sobran']).'.';
         }
 
         if ($cabecera !== null) {
@@ -390,8 +401,9 @@ class OrdencompraAnitaBridgeService
 
             $lineasAnita = $this->listarPendmovp($clave);
             $esperadas = $oc->ordencompra_articulos->count();
-            // Faltan líneas (0 tras rollback incompleto) o sobran (duplicados): regrabar detalle.
-            if ($esperadas > 0 && count($lineasAnita) !== $esperadas) {
+            $cobertura = $this->analizarCoberturaPendmovp($oc, $lineasAnita);
+            // Faltan/sobran por nro_interno o duplicados (count puede coincidir y ocultar el hueco).
+            if ($esperadas > 0 && $cobertura['requiere_regrab']) {
                 foreach ($lineasAnita as $linea) {
                     $nroInterno = (int) ($linea->penvp_nro_interno ?? 0);
                     if ($nroInterno > 0) {
@@ -402,13 +414,9 @@ class OrdencompraAnitaBridgeService
                     }
                 }
 
-                $internosValidos = [];
-                foreach ($lineasAnita as $linea) {
-                    $nroInterno = (int) ($linea->penvp_nro_interno ?? 0);
-                    if ($nroInterno > 0) {
-                        $internosValidos[$nroInterno] = true;
-                    }
-                }
+                // Conservar internos ERP que Anita aún no tiene (insert fallido): no liberarlos.
+                // Solo liberar los que no están en Anita ni en el set ERP esperado.
+                $internosValidos = $cobertura['internos_anita'] + $cobertura['internos_erp'];
                 $liberados = OrdencompraAnitaLineaSupport::liberarNroInternosInvalidos($oc, $internosValidos);
                 if ($liberados !== []) {
                     $acciones[] = 'reasignó '.count($liberados).' penvp_nro_interno inválidos';
@@ -421,9 +429,10 @@ class OrdencompraAnitaBridgeService
                 $this->eliminarDetalle($clave, false);
                 $this->grabarDetalle($oc, $ctx, $clave);
                 $this->restaurarCantentrLineas($clave, $cantentrPreserve);
-                $acciones[] = count($lineasAnita) > $esperadas
-                    ? 'eliminó líneas duplicadas y regrabó detalle'
-                    : 'regrabó pendmovp faltante (Anita='.count($lineasAnita).', ERP='.$esperadas.')';
+                $acciones[] = $cobertura['duplicados'] > 0 || $cobertura['sobran'] !== []
+                    ? 'eliminó líneas duplicadas/sobrantes y regrabó detalle'
+                    : 'regrabó pendmovp faltante (Anita únicos='.count($cobertura['internos_anita'])
+                        .', ERP='.$esperadas.', faltan='.implode(',', $cobertura['faltan']).')';
             }
         }
 
@@ -696,6 +705,102 @@ class OrdencompraAnitaBridgeService
         }
 
         return '0';
+    }
+
+    /**
+     * Compara líneas ERP vs pendmovp por nro_interno (no solo por cantidad de filas).
+     * Un count coincidente puede ocultar un interno faltante + un duplicado (OC 223049).
+     *
+     * @param  list<object>  $lineasAnita
+     * @return array{
+     *   internos_erp: array<int, true>,
+     *   internos_anita: array<int, true>,
+     *   faltan: list<int>,
+     *   sobran: list<int>,
+     *   duplicados: int,
+     *   requiere_regrab: bool
+     * }
+     */
+    private function analizarCoberturaPendmovp(Ordencompra $oc, array $lineasAnita): array
+    {
+        $internosErp = [];
+        foreach ($oc->ordencompra_articulos as $ocArt) {
+            $nro = (int) ($ocArt->penvp_nro_interno ?? 0);
+            if ($nro > 0) {
+                $internosErp[$nro] = true;
+            }
+        }
+
+        $internosAnita = [];
+        $duplicados = 0;
+        foreach ($lineasAnita as $linea) {
+            $nro = (int) ($linea->penvp_nro_interno ?? 0);
+            if ($nro <= 0) {
+                continue;
+            }
+            if (isset($internosAnita[$nro])) {
+                $duplicados++;
+            } else {
+                $internosAnita[$nro] = true;
+            }
+        }
+
+        $faltan = array_values(array_map('intval', array_keys(array_diff_key($internosErp, $internosAnita))));
+        sort($faltan);
+        $sobran = array_values(array_map('intval', array_keys(array_diff_key($internosAnita, $internosErp))));
+        sort($sobran);
+
+        $esperadas = $oc->ordencompra_articulos->count();
+        $requiereRegrab = $esperadas > 0 && (
+            $faltan !== []
+            || $sobran !== []
+            || $duplicados > 0
+            || count($lineasAnita) !== $esperadas
+            || count($internosAnita) !== count($internosErp)
+        );
+
+        return [
+            'internos_erp' => $internosErp,
+            'internos_anita' => $internosAnita,
+            'faltan' => $faltan,
+            'sobran' => $sobran,
+            'duplicados' => $duplicados,
+            'requiere_regrab' => $requiereRegrab,
+        ];
+    }
+
+    /**
+     * Antes de confirmar recepción: si pendmovp está incompleto/duplicado, regraba detalle.
+     */
+    public function asegurarPendmovpCompletoParaRecepcion(Ordencompra $oc): void
+    {
+        if (! $this->habilitado()) {
+            return;
+        }
+
+        $this->cargarRelaciones($oc);
+        $this->fijarEmpresaPath($oc);
+        $clave = OrdencompraAnitaWhereSupport::claveDesdeOrdencompra($oc);
+        $lineasAnita = $this->listarPendmovp($clave);
+        $cobertura = $this->analizarCoberturaPendmovp($oc, $lineasAnita);
+        if (! $cobertura['requiere_regrab']) {
+            return;
+        }
+
+        Log::warning('OrdencompraAnitaBridge: pendmovp incompleto antes de recepción; reparando', [
+            'numero_oc' => (int) $oc->numeroordencompra,
+            'faltan' => $cobertura['faltan'],
+            'sobran' => $cobertura['sobran'],
+            'duplicados' => $cobertura['duplicados'],
+            'filas_anita' => count($lineasAnita),
+        ]);
+
+        $resultado = $this->repararSincronizacionAnita($oc);
+        Log::info('OrdencompraAnitaBridge: reparación pendmovp pre-recepción', [
+            'numero_oc' => (int) $oc->numeroordencompra,
+            'acciones' => $resultado['acciones'],
+            'problemas_restantes' => $resultado['problemas_restantes'],
+        ]);
     }
 
     /**
