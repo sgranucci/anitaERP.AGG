@@ -23,11 +23,21 @@ class ValidacionLocalidad extends FormRequest
      */
     public function rules()
     {
+        if ($this->isMethod('post')) {
+            // Alta: el código lo asigna el servidor (max Anita/MySQL + 1).
+            return [
+                'nombre' => 'required|max:255',
+                'codigopostal' => 'sometimes|max:50',
+                'codigo' => 'nullable|max:50',
+                'provincia_id' => 'integer',
+            ];
+        }
+
         return [
             'nombre' => 'required|max:255',
-            'codigopostal' => 'sometimes|max:50' ,
-            'codigo' => 'sometimes|max:50' ,
-            'provincia_id' => 'integer' 
+            'codigopostal' => 'sometimes|max:50',
+            'codigo' => 'required|max:50|unique:localidad,codigo,'.($this->route('id') ?? 'NULL'),
+            'provincia_id' => 'integer',
         ];
     }
 }

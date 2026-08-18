@@ -111,8 +111,9 @@ class LocalidadController extends Controller
         can('crear-localidades');
 
 		$provincia_query = Provincia::all();
+        $codigoSugerido = (new Localidad())->proximoCodigo();
 
-        return view('configuracion.localidad.crear', compact('provincia_query'));
+        return view('configuracion.localidad.crear', compact('provincia_query', 'codigoSugerido'));
     }
 
     /**
@@ -123,13 +124,42 @@ class LocalidadController extends Controller
      */
     public function guardar(ValidacionLocalidad $request)
     {
-        $localidad = Localidad::create($request->all());
+        $localidadModel = new Localidad();
+        $intentos = 0;
+        $ultimoError = null;
 
-		// Graba anita
-		$Localidad = new Localidad();
-        $Localidad->guardarAnita($request, $localidad->id);
+        while ($intentos < 3) {
+            $intentos++;
+            $codigo = (string) $localidadModel->proximoCodigo();
+            $payload = $request->all();
+            $payload['codigo'] = $codigo;
+            $request->merge(['codigo' => $codigo]);
 
-        return redirect('configuracion/localidad')->with('mensaje', 'Localidad creada con exito');
+            $localidad = Localidad::create($payload);
+
+            try {
+                $localidadModel->guardarAnita($request, $localidad->id);
+
+                return redirect('configuracion/localidad')->with(
+                    'mensaje',
+                    'Localidad creada con éxito (código '.$codigo.')'
+                );
+            } catch (\Throwable $e) {
+                $ultimoError = $e;
+                $localidad->delete();
+
+                // Código tomado entre lectura y grabación: reintentar con max+1.
+                if (! $localidadModel->esErrorDuplicadoAnita($e->getMessage())) {
+                    break;
+                }
+            }
+        }
+
+        return back()
+            ->withInput()
+            ->with('errores', [
+                'No se pudo grabar la localidad en Anita: '.($ultimoError?->getMessage() ?? 'error desconocido'),
+            ]);
     }
 
 

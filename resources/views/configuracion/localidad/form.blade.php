@@ -11,9 +11,14 @@
     </div>
 </div>
 <div class="form-group row">
-    <label for="codigo" class="col-lg-3 col-form-label">C&oacute;digo externo</label>
+    <label for="codigo" class="col-lg-3 col-form-label">C&oacute;digo externo (Anita)</label>
     <div class="col-lg-2">
-    <input type="text" name="codigo" id="codigo" class="form-control" value="{{old('codigo', $data->codigo ?? '')}}">
+        @if (isset($codigoSugerido) && ! isset($data))
+            <input type="text" name="codigo" id="codigo" class="form-control" value="{{ old('codigo', $codigoSugerido) }}" readonly>
+            <small class="form-text text-muted">Se asigna autom&aacute;tico (m&aacute;ximo + 1).</small>
+        @else
+            <input type="text" name="codigo" id="codigo" class="form-control" value="{{ old('codigo', $data->codigo ?? '') }}" readonly>
+        @endif
     </div>
 </div>
 <div class="form-group row">

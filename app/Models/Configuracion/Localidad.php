@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use App\ApiAnita;
+use App\Support\Database\SqlDialectSupport;
 
 class Localidad extends Model
 {
@@ -17,6 +18,32 @@ class Localidad extends Model
     public function provincias()
     {
         return $this->belongsTo(Provincia::class, 'provincia_id');
+    }
+
+    /**
+     * Próximo código Anita/ERP: max(Anita, MySQL numérico) + 1.
+     */
+    public function proximoCodigo(): int
+    {
+        $cast = SqlDialectSupport::castEntero('codigo');
+        $maxLocal = (int) (self::query()->selectRaw("MAX({$cast}) as m")->value('m') ?? 0);
+
+        $maxAnita = 0;
+        try {
+            $apiAnita = new ApiAnita();
+            $raw = $apiAnita->apiCall([
+                'acc' => 'list',
+                'sistema' => 'shared',
+                'tabla' => $this->table,
+                'campos' => 'max('.$this->keyFieldAnita.') as max_codigo',
+            ]);
+            $fila = ApiAnita::primeraFilaLista(is_string($raw) ? $raw : null);
+            $maxAnita = (int) ($fila->max_codigo ?? 0);
+        } catch (\Throwable $e) {
+            // Si Anita no responde, igual se puede sugerir desde MySQL.
+        }
+
+        return max($maxAnita, $maxLocal) + 1;
     }
 
     public function sincronizarConAnita(){
@@ -155,21 +182,7 @@ class Localidad extends Model
 
 	public function guardarAnita($request, $id) {
         $apiAnita = new ApiAnita();
-
-        // Si el código ya existe en Anita (desfasaje sync), actualizar en lugar de insertar.
-        $consulta = [
-            'acc' => 'list',
-            'tabla' => $this->table,
-            'sistema' => 'shared',
-            'campos' => $this->keyFieldAnita,
-            'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$request->codigo."' ",
-        ];
-        $existenteAnita = json_decode($apiAnita->apiCall($consulta));
-        if (is_array($existenteAnita) && count($existenteAnita) > 0) {
-            $this->actualizarAnita($request, $id);
-
-            return;
-        }
+        $codigo = trim((string) ($request->codigo ?? ''));
 
         $provincia = Provincia::select('codigo')->where('id', $request->provincia_id)->first();
 
@@ -182,7 +195,7 @@ class Localidad extends Model
                         'sistema' => 'shared',
 						'acc' => 'insert',
             			'campos' => ' loc_localidad, loc_provincia, loc_desc, loc_cod_postal, loc_cod_senasa',
-            			'valores' => " '".$request->codigo."', 
+            			'valores' => " '".$codigo."', 
 										'".$codigoprovincia."',
 										'".$request->nombre."',  
 										'".$request->codigopostal."',
@@ -193,12 +206,23 @@ class Localidad extends Model
                         'sistema' => 'shared',
 						'acc' => 'insert',
             			'campos' => ' loc_localidad, loc_provincia, loc_desc',
-            			'valores' => " '".$request->codigo."', 
+            			'valores' => " '".$codigo."', 
 										'".$codigoprovincia."',
 										'".$request->nombre."' "
             );
+
         $apiAnita->apiCallEscritura($data);
 	}
+
+    public function esErrorDuplicadoAnita(string $mensaje): bool
+    {
+        $m = strtolower($mensaje);
+
+        return str_contains($m, 'duplicate')
+            || str_contains($m, 'unique index')
+            || str_contains($m, 'unique key')
+            || str_contains($m, '239:');
+    }
 
 	public function actualizarAnita($request, $id) {
         $apiAnita = new ApiAnita();
