@@ -85,6 +85,40 @@
                         </div>
                     </div>
 
+                    <div class="form-group row">
+                        <span class="col-lg-2 control-label pt-2">Compras</span>
+                        <div class="col-lg-8">
+                            <input type="hidden" name="prorrateo_cf_global" value="0">
+                            <div class="form-check mt-2">
+                                <input class="form-check-input" type="checkbox" name="prorrateo_cf_global"
+                                       id="prorrateo_cf_global" value="1"
+                                       @checked(! empty($filtros['prorrateo_cf_global']))>
+                                <label class="form-check-label" for="prorrateo_cf_global">
+                                    Prorrateo CF por asignaci&oacute;n global (CF computable = 0)
+                                </label>
+                            </div>
+                            <small class="form-text text-muted mb-2 d-block">
+                                Usar si en ARCA eligi&oacute; prorrateo global: el archivo pone cr&eacute;dito fiscal
+                                computable en cero y el CF se carga en la solapa <em>CF Computable Global</em>.
+                            </small>
+
+                            <input type="hidden" name="completar_compras_anita" value="0">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="completar_compras_anita"
+                                       id="completar_compras_anita" value="1"
+                                       @checked(! empty($filtros['completar_compras_anita']))>
+                                <label class="form-check-label" for="completar_compras_anita">
+                                    Completar con compras Anita (sin solapar ERP)
+                                </label>
+                            </div>
+                            <small class="form-text text-muted">
+                                Lee <code>compra</code> + <code>concmov</code> del per&iacute;odo en una pasada al bridge
+                                y agrega las que no est&eacute;n ya en anitaERP (misma clave proveedor/tipo/letra/PV/nro
+                                o <code>anita_nro_interno</code>).
+                            </small>
+                        </div>
+                    </div>
+
                     <div class="form-group row mb-0">
                         <div class="col-lg-2"></div>
                         <div class="col-lg-10">
@@ -113,6 +147,15 @@
                             fecha de jornada
                         @else
                             fecha del comprobante
+                        @endif.
+                        Compras:
+                        @if (! empty($resultado['opciones']['prorrateo_cf_global']) || ! empty($resultado['compras']['resumen']['prorrateo_cf_global']))
+                            prorrateo CF global (computable = 0)
+                        @else
+                            CF computable = IVA del comprobante
+                        @endif
+                        @if (! empty($resultado['opciones']['completar_compras_anita']) || ! empty($resultado['compras']['resumen']['completar_compras_anita']))
+                            ; completa con Anita si faltan en ERP
                         @endif.
                     </p>
                     @if (!empty($resultado['validaciones']))
@@ -179,6 +222,14 @@
                                     <td class="text-right">{{ number_format($resultado['compras']['resumen']['comprobantes'] ?? 0, 0, ',', '.') }}</td>
                                     <td class="text-right">${{ number_format($resultado['compras']['resumen']['importe_total'] ?? 0, 2, ',', '.') }}</td>
                                 </tr>
+                                @if (($resultado['compras']['resumen']['comprobantes_anita'] ?? 0) > 0)
+                                <tr>
+                                    <td colspan="3" class="text-muted small py-0">
+                                        {{ number_format($resultado['compras']['resumen']['comprobantes_anita'], 0, ',', '.') }}
+                                        comprobantes solo en Anita (no estaban en ERP).
+                                    </td>
+                                </tr>
+                                @endif
                                 <tr>
                                     <td><code>{{ LibroIvaDigitalArchivosSupport::COMPRAS_ALICUOTAS }}</code></td>
                                     <td class="text-right">{{ number_format($resultado['compras']['resumen']['alicuotas'] ?? 0, 0, ',', '.') }}</td>

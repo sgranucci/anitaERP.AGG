@@ -4,6 +4,8 @@ namespace App\Services\Contable\LibroIvaDigital;
 
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaArmadoSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaBridgeReader;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalConceptoIvacompraSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalFormatoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
@@ -11,23 +13,39 @@ use Illuminate\Database\Eloquent\Builder;
 
 class LibroIvaDigitalComprasGenerador
 {
+    public function __construct(
+        private readonly LibroIvaDigitalComprasAnitaBridgeReader $comprasAnitaBridgeReader,
+    ) {
+    }
+
     /**
+     * @param  array{
+     *     prorrateo_cf_global?: bool,
+     *     completar_compras_anita?: bool
+     * }  $opciones
      * @return array{
      *     compras_cbte: string,
      *     compras_alicuotas: string,
-     *     resumen: array<string, int|float>
+     *     resumen: array<string, int|float|bool>
      * }
      */
-    public function generar(int $empresaId, int $anio, int $mes): array
+    public function generar(int $empresaId, int $anio, int $mes, array $opciones = []): array
     {
         $desde = sprintf('%04d-%02d-01', $anio, $mes);
         $hasta = date('Y-m-t', strtotime($desde));
+        $prorrateoGlobal = (bool) ($opciones['prorrateo_cf_global'] ?? false);
+        $completarAnita = (bool) ($opciones['completar_compras_anita'] ?? true);
 
         $lineasCbte = [];
         $lineasAlicuotas = [];
         $conteo = 0;
+        $conteoAnita = 0;
         $totalImporte = 0.0;
         $totalIva = 0.0;
+        /** @var array<string, true> $clavesErp */
+        $clavesErp = [];
+        /** @var array<int, true> $nrosInternosErp */
+        $nrosInternosErp = [];
 
         $this->queryCompras($empresaId, $desde, $hasta)
             ->with([
@@ -41,8 +59,26 @@ class LibroIvaDigitalComprasGenerador
             ->orderBy('comprobante_proveedor.sucursal')
             ->orderBy('comprobante_proveedor.numerocomprobante')
             ->lazy(100)
-            ->each(function (Comprobante_Proveedor $cp) use (&$lineasCbte, &$lineasAlicuotas, &$conteo, &$totalImporte, &$totalIva): void {
-                $registro = $this->armarRegistroCompra($cp);
+            ->each(function (Comprobante_Proveedor $cp) use (
+                &$lineasCbte,
+                &$lineasAlicuotas,
+                &$conteo,
+                &$totalImporte,
+                &$totalIva,
+                &$clavesErp,
+                &$nrosInternosErp,
+                $prorrateoGlobal,
+            ): void {
+                $clave = $this->claveErp($cp);
+                if ($clave !== '') {
+                    $clavesErp[$clave] = true;
+                }
+                $nroInterno = (int) ($cp->anita_nro_interno ?? 0);
+                if ($nroInterno > 0) {
+                    $nrosInternosErp[$nroInterno] = true;
+                }
+
+                $registro = $this->armarRegistroCompra($cp, $prorrateoGlobal);
                 if ($registro === null) {
                     return;
                 }
@@ -57,14 +93,63 @@ class LibroIvaDigitalComprasGenerador
                 $totalImporte += abs((float) $cp->total);
             });
 
+        if ($completarAnita) {
+            $filasAnita = $this->comprasAnitaBridgeReader->listarPeriodo($empresaId, $desde, $hasta);
+            foreach ($filasAnita as $fila) {
+                $compra = $fila['compra'];
+                $nroInterno = (int) ($compra['com_nro_interno'] ?? 0);
+                if ($nroInterno > 0 && isset($nrosInternosErp[$nroInterno])) {
+                    continue;
+                }
+
+                $clave = LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural(
+                    (string) ($compra['com_proveedor'] ?? ''),
+                    (string) ($compra['com_tipo'] ?? ''),
+                    (string) ($compra['com_letra'] ?? ''),
+                    (int) ($compra['com_sucursal'] ?? 0),
+                    (int) ($compra['com_nro'] ?? 0),
+                );
+                if (isset($clavesErp[$clave])) {
+                    continue;
+                }
+
+                $registro = LibroIvaDigitalComprasAnitaArmadoSupport::armarRegistro(
+                    $compra,
+                    $fila['conceptos'],
+                    $prorrateoGlobal,
+                );
+                if ($registro === null) {
+                    continue;
+                }
+
+                $clavesErp[$clave] = true;
+                if ($nroInterno > 0) {
+                    $nrosInternosErp[$nroInterno] = true;
+                }
+
+                $lineasCbte[] = LibroIvaDigitalFormatoSupport::registroComprasCbte($registro['cabecera']);
+                foreach ($registro['alicuotas'] as $alicuota) {
+                    $lineasAlicuotas[] = LibroIvaDigitalFormatoSupport::registroComprasAlicuota($alicuota);
+                    $totalIva += (float) ($alicuota['impuesto_liquidado'] ?? 0);
+                }
+
+                $conteo++;
+                $conteoAnita++;
+                $totalImporte += abs((float) ($compra['com_monto'] ?? 0));
+            }
+        }
+
         return [
             'compras_cbte' => implode("\r\n", $lineasCbte),
             'compras_alicuotas' => implode("\r\n", $lineasAlicuotas),
             'resumen' => [
                 'comprobantes' => $conteo,
+                'comprobantes_anita' => $conteoAnita,
                 'alicuotas' => count($lineasAlicuotas),
                 'importe_total' => round($totalImporte, 2),
                 'total_iva' => round($totalIva, 2),
+                'prorrateo_cf_global' => $prorrateoGlobal,
+                'completar_compras_anita' => $completarAnita,
             ],
         ];
     }
@@ -77,10 +162,29 @@ class LibroIvaDigitalComprasGenerador
             ->where('comprobante_proveedor.estado', '<>', ComprobanteProveedorEstados::ANULADO);
     }
 
+    private function claveErp(Comprobante_Proveedor $cp): string
+    {
+        $proveedor = str_pad(trim((string) ($cp->proveedores->codigo ?? '')), 6, '0', STR_PAD_LEFT);
+        $tipo = strtoupper(substr(trim((string) ($cp->tipotransaccion_compras->abreviatura ?? '')), 0, 3));
+        $letra = strtoupper(substr(trim((string) ($cp->letra ?: 'A')), 0, 1));
+
+        if ($proveedor === '000000' || $tipo === '') {
+            return '';
+        }
+
+        return LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural(
+            $proveedor,
+            $tipo,
+            $letra,
+            (int) $cp->sucursal,
+            (int) $cp->numerocomprobante,
+        );
+    }
+
     /**
      * @return array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}|null
      */
-    private function armarRegistroCompra(Comprobante_Proveedor $cp): ?array
+    private function armarRegistroCompra(Comprobante_Proveedor $cp, bool $prorrateoGlobal): ?array
     {
         $letra = strtoupper((string) ($cp->letra ?: 'A'));
         $codigoAfip = (string) ($cp->tipotransaccion_compras->codigoafip ?? '001');
@@ -97,6 +201,8 @@ class LibroIvaDigitalComprasGenerador
             $cp->monedas->codigo ?? null,
             $cp->monedas->nombre ?? null,
         );
+
+        $credito = $prorrateoGlobal ? 0.0 : (float) $totales['credito_computable'];
 
         $cabecera = [
             'fecha' => date('Ymd', strtotime((string) ($cp->fechaiva ?: $cp->fechacomprobante))),
@@ -122,7 +228,7 @@ class LibroIvaDigitalComprasGenerador
             ),
             'cantidad_alicuotas' => $totales['cantidad_alicuotas'],
             'codigo_operacion' => ' ',
-            'credito_fiscal_computable' => $totales['credito_computable'],
+            'credito_fiscal_computable' => $credito,
             'otros_tributos' => 0,
             'cuit_emisor_corredor' => '0',
             'denominacion_emisor_corredor' => '',

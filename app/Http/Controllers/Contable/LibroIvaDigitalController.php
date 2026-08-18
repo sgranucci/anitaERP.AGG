@@ -33,18 +33,20 @@ class LibroIvaDigitalController extends Controller
                 'empresa_id' => $filtros['empresa_id'],
                 'periodo' => $filtros['periodo'],
             ]);
-            ReportePreferenciasUsuario::persistirBool(
-                self::PREFERENCIAS_CLAVE,
-                'por_fecha_jornada',
-                (bool) $filtros['por_fecha_jornada'],
-            );
+            foreach (['por_fecha_jornada', 'prorrateo_cf_global', 'completar_compras_anita'] as $campo) {
+                ReportePreferenciasUsuario::persistirBool(
+                    self::PREFERENCIAS_CLAVE,
+                    $campo,
+                    (bool) $filtros[$campo],
+                );
+            }
             ini_set('memory_limit', '-1');
             ini_set('max_execution_time', '0');
             $resultado = $this->libroIvaDigitalService->generar(
                 (int) $filtros['empresa_id'],
                 (int) $filtros['anio'],
                 (int) $filtros['mes'],
-                ['por_fecha_jornada' => (bool) $filtros['por_fecha_jornada']],
+                $this->opcionesDesdeFiltros($filtros),
             );
         }
 
@@ -74,7 +76,7 @@ class LibroIvaDigitalController extends Controller
             (int) $filtros['empresa_id'],
             (int) $filtros['anio'],
             (int) $filtros['mes'],
-            ['por_fecha_jornada' => (bool) $filtros['por_fecha_jornada']],
+            $this->opcionesDesdeFiltros($filtros),
         );
 
         $zipPath = $this->libroIvaDigitalService->crearZipDescarga($resultado, (int) $filtros['empresa_id']);
@@ -100,7 +102,7 @@ class LibroIvaDigitalController extends Controller
             (int) $filtros['empresa_id'],
             (int) $filtros['anio'],
             (int) $filtros['mes'],
-            ['por_fecha_jornada' => (bool) $filtros['por_fecha_jornada']],
+            $this->opcionesDesdeFiltros($filtros),
         );
 
         $zipPath = $this->libroIvaDigitalService->crearZipIvaSimple($resultado, (int) $filtros['empresa_id']);
@@ -109,8 +111,29 @@ class LibroIvaDigitalController extends Controller
     }
 
     /**
+     * @param  array<string, mixed>  $filtros
+     * @return array{por_fecha_jornada: bool, prorrateo_cf_global: bool, completar_compras_anita: bool}
+     */
+    private function opcionesDesdeFiltros(array $filtros): array
+    {
+        return [
+            'por_fecha_jornada' => (bool) ($filtros['por_fecha_jornada'] ?? false),
+            'prorrateo_cf_global' => (bool) ($filtros['prorrateo_cf_global'] ?? false),
+            'completar_compras_anita' => (bool) ($filtros['completar_compras_anita'] ?? true),
+        ];
+    }
+
+    /**
      * @param  \Illuminate\Support\Collection<int, mixed>|null  $empresaQuery
-     * @return array{empresa_id:?int, periodo:?string, anio:?int, mes:?int, por_fecha_jornada:bool}
+     * @return array{
+     *     empresa_id:?int,
+     *     periodo:?string,
+     *     anio:?int,
+     *     mes:?int,
+     *     por_fecha_jornada:int,
+     *     prorrateo_cf_global:int,
+     *     completar_compras_anita:int
+     * }
      */
     private function filtrosDesdeRequest(Request $request, $empresaQuery = null): array
     {
@@ -139,7 +162,6 @@ class LibroIvaDigitalController extends Controller
         $anio = null;
         $mes = null;
 
-        // Preferir mes/año tipados (UI); si no, periodo YYYY-MM / MM-YYYY de preferencias o links export.
         if ($tieneMesAnio) {
             $mes = max(1, min(12, (int) $mesReq));
             $anio = max(2000, min(2100, (int) $anioReq));
@@ -163,23 +185,24 @@ class LibroIvaDigitalController extends Controller
             }
         }
 
-        if ($request->exists('por_fecha_jornada')) {
-            $porFechaJornada = $request->boolean('por_fecha_jornada');
-        } else {
-            $porFechaJornada = ReportePreferenciasUsuario::leerBool(
-                self::PREFERENCIAS_CLAVE,
-                'por_fecha_jornada',
-                true,
-            );
-        }
-
         return [
             'empresa_id' => $empresaId,
             'periodo' => $periodo,
             'anio' => $anio,
             'mes' => $mes,
-            'por_fecha_jornada' => $porFechaJornada ? 1 : 0,
+            'por_fecha_jornada' => $this->boolFiltro($request, 'por_fecha_jornada', true) ? 1 : 0,
+            'prorrateo_cf_global' => $this->boolFiltro($request, 'prorrateo_cf_global', false) ? 1 : 0,
+            'completar_compras_anita' => $this->boolFiltro($request, 'completar_compras_anita', true) ? 1 : 0,
         ];
+    }
+
+    private function boolFiltro(Request $request, string $campo, bool $default): bool
+    {
+        if ($request->exists($campo)) {
+            return $request->boolean($campo);
+        }
+
+        return ReportePreferenciasUsuario::leerBool(self::PREFERENCIAS_CLAVE, $campo, $default);
     }
 
     private function enteroOpcional(mixed $valor): ?int

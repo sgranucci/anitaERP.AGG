@@ -2,6 +2,7 @@
 
 namespace Tests\Unit\Support\Contable\LibroIvaDigital;
 
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaArmadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalFormatoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalValidacionSupport;
@@ -182,6 +183,14 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
             '20260801',
             LibroIvaDigitalVentasPeriodoSupport::fechaYmd(null, '2026-08-01', true),
         );
+    }
+
+    public function test_clave_natural_compras_anita_es_estable(): void
+    {
+        $a = LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural('123', 'FNU', 'A', 1, 55);
+        $b = LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural('000123', 'fnu', 'a', 1, 55);
+        $this->assertSame($a, $b);
+        $this->assertSame('000123|FNU|A|1|55', $a);
     }
 
     /**

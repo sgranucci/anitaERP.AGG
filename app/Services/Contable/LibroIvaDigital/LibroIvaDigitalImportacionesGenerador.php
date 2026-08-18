@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Schema;
 class LibroIvaDigitalImportacionesGenerador
 {
     /**
+     * @param  array{prorrateo_cf_global?: bool}  $opciones
      * @return array{
      *     compras_cbte_importacion: list<string>,
      *     importacion_bienes_alicuotas: string,
@@ -17,7 +18,7 @@ class LibroIvaDigitalImportacionesGenerador
      *     resumen: array<string, int>
      * }
      */
-    public function generar(int $empresaId, int $anio, int $mes): array
+    public function generar(int $empresaId, int $anio, int $mes, array $opciones = []): array
     {
         if (! Schema::hasTable('libro_iva_importacion_bien')) {
             return [
@@ -30,6 +31,7 @@ class LibroIvaDigitalImportacionesGenerador
 
         $desde = sprintf('%04d-%02d-01', $anio, $mes);
         $hasta = date('Y-m-t', strtotime($desde));
+        $prorrateoGlobal = (bool) ($opciones['prorrateo_cf_global'] ?? false);
 
         $cabecerasImportacion = [];
         $lineasAlicuotas = [];
@@ -63,7 +65,7 @@ class LibroIvaDigitalImportacionesGenerador
                 'tipo_cambio' => (float) ($row->tipo_cambio ?: 1),
                 'cantidad_alicuotas' => 1,
                 'codigo_operacion' => $row->codigo_operacion ?: ' ',
-                'credito_fiscal_computable' => (float) $row->impuesto_liquidado,
+                'credito_fiscal_computable' => $prorrateoGlobal ? 0.0 : (float) $row->impuesto_liquidado,
                 'otros_tributos' => 0,
                 'cuit_emisor_corredor' => '0',
                 'denominacion_emisor_corredor' => '',

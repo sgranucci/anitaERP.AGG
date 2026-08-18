@@ -23,14 +23,18 @@ class LibroIvaDigitalService
     }
 
     /**
-     * @param  array{por_fecha_jornada?: bool}  $opciones
+     * @param  array{
+     *     por_fecha_jornada?: bool,
+     *     prorrateo_cf_global?: bool,
+     *     completar_compras_anita?: bool
+     * }  $opciones
      * @return array<string, mixed>
      */
     public function generar(int $empresaId, int $anio, int $mes, array $opciones = []): array
     {
         $ventas = $this->ventasGenerador->generar($empresaId, $anio, $mes, $opciones);
-        $compras = $this->comprasGenerador->generar($empresaId, $anio, $mes);
-        $importaciones = $this->importacionesGenerador->generar($empresaId, $anio, $mes);
+        $compras = $this->comprasGenerador->generar($empresaId, $anio, $mes, $opciones);
+        $importaciones = $this->importacionesGenerador->generar($empresaId, $anio, $mes, $opciones);
         $anulados = $this->anuladosGenerador->generar($empresaId, $anio, $mes, $opciones);
         $ivaSimple = $this->ivaSimpleGenerador->generar($empresaId, $anio, $mes, $opciones);
 
@@ -55,6 +59,8 @@ class LibroIvaDigitalService
             ],
             'opciones' => [
                 'por_fecha_jornada' => (bool) ($opciones['por_fecha_jornada'] ?? false),
+                'prorrateo_cf_global' => (bool) ($opciones['prorrateo_cf_global'] ?? false),
+                'completar_compras_anita' => (bool) ($opciones['completar_compras_anita'] ?? true),
             ],
             'validaciones' => [],
         ];
@@ -117,12 +123,13 @@ class LibroIvaDigitalService
     {
         $periodo = (string) ($resultado['periodo']['etiqueta'] ?? date('Y-m'));
         $sufijoFecha = ! empty($resultado['opciones']['por_fecha_jornada']) ? '_jornada' : '';
+        $sufijoProrrateo = ! empty($resultado['opciones']['prorrateo_cf_global']) ? '_prorrateo' : '';
         $dir = storage_path('framework/cache');
         if (! is_dir($dir)) {
             throw new \RuntimeException('No existe el directorio de caché de Laravel.');
         }
 
-        $zipPath = $dir.'/'.$prefijoZip.'_'.$empresaId.'_'.$periodo.$sufijoFecha.'.zip';
+        $zipPath = $dir.'/'.$prefijoZip.'_'.$empresaId.'_'.$periodo.$sufijoFecha.$sufijoProrrateo.'.zip';
         if (file_exists($zipPath)) {
             @unlink($zipPath);
         }
