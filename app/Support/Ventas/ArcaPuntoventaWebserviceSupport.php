@@ -62,6 +62,22 @@ final class ArcaPuntoventaWebserviceSupport
     }
 
     /**
+     * Elige el webservice CAEA de la empresa: MTXCA si hay algún PV (incl. mtxsca/mtxca), si no WSFE.
+     *
+     * @param  iterable<int|string, mixed>  $webservices
+     */
+    public static function preferidoParaCaea(iterable $webservices): string
+    {
+        foreach ($webservices as $ws) {
+            if (self::esMtxca(is_string($ws) ? $ws : (string) $ws)) {
+                return self::WSMTXCA;
+            }
+        }
+
+        return self::WSFE;
+    }
+
+    /**
      * Clona/ajusta el objeto PV para servicios SOAP (webservice canónico).
      */
     public static function puntoventaParaSoap(object $puntoventa): object

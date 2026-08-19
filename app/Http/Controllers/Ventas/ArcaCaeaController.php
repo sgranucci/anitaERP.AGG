@@ -8,7 +8,7 @@ use App\Models\Ventas\ArcaCaea;
 use App\Services\Arca\ArcaCaeaAnitaSyncService;
 use App\Services\Arca\ArcaCaeaPresentacionManualService;
 use App\Services\Arca\ArcaCaeaPresentacionService;
-use App\Services\Arca\ArcaWsfeCaeaService;
+use App\Services\Arca\ArcaCaeaQuincenalOrquestadorService;
 use App\Support\Ventas\ArcaCaeaInformeColaSupport;
 use App\Support\Ventas\ArcaCaeaInformeUiSupport;
 use App\Support\Ventas\CaeaQuincenaSupport;
@@ -21,7 +21,7 @@ use Illuminate\Validation\Rule;
 class ArcaCaeaController extends Controller
 {
     public function __construct(
-        private ArcaWsfeCaeaService $caeaService,
+        private ArcaCaeaQuincenalOrquestadorService $orquestador,
         private ArcaCaeaAnitaSyncService $anitaSync,
         private ArcaCaeaPresentacionService $presentacionService,
         private ArcaCaeaPresentacionManualService $presentacionManualService,
@@ -219,7 +219,7 @@ class ArcaCaeaController extends Controller
             'solo_consultar' => ['nullable', 'boolean'],
         ]);
 
-        $resultado = $this->caeaService->solicitarYGuardar(
+        $resultado = $this->orquestador->solicitarYGuardar(
             (int) $data['empresa_id'],
             (int) $data['periodo'],
             (int) $data['orden'],
@@ -246,7 +246,7 @@ class ArcaCaeaController extends Controller
 
         $registro = $this->resolverRegistroPermitido($id);
 
-        $resultado = $this->caeaService->solicitarYGuardar(
+        $resultado = $this->orquestador->solicitarYGuardar(
             (int) $registro->empresa_id,
             (int) $registro->periodo,
             (int) $registro->orden,

@@ -6,6 +6,7 @@ use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\ArcaCaea;
 use App\Models\Ventas\Puntoventa;
 use App\Support\Ventas\ArcaCaeaSolicitudSupport;
+use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
 use App\Support\Ventas\CaeaQuincenaSupport;
 use Carbon\Carbon;
 use Exception;
@@ -37,7 +38,7 @@ class ArcaWsfeCaeaService
         $idsConPvCaea = Puntoventa::query()
             ->whereIn('empresa_id', $idsUsuarios)
             ->where('modofacturacion', 'A')
-            ->where('webservice', 'wsfev1')
+            ->whereIn('webservice', ArcaPuntoventaWebserviceSupport::ALIASES_WSFE)
             ->where('estado', 'A')
             ->distinct()
             ->pluck('empresa_id')
