@@ -5,6 +5,7 @@ namespace App\Services\Solicitudpago;
 use App\Models\Solicitudpago\Solicitudpago;
 use App\Models\Solicitudpago\Solicitudpago_Cuota;
 use App\Repositories\Solicitudpago\SolicitudpagoRepositoryInterface;
+use App\Support\Solicitudpago\SolicitudpagoCuotaAsientoSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -90,8 +91,7 @@ class SolicitudpagoGenerarCuotasService
         return DB::transaction(function () use ($madre, $cuota) {
             $madre->loadMissing('cuentas');
             $montoCuota = (float) $cuota->monto;
-            $montoMadre = (float) $madre->monto;
-            $coef = $montoMadre > 0.0 ? ($montoMadre / max($montoCuota, 0.00001)) : 1.0;
+            $montosCta = SolicitudpagoCuotaAsientoSupport::montosHija($madre->cuentas, $montoCuota);
 
             $detalle = trim((string) ($madre->detalle ?? ''));
             if ($detalle === '') {
@@ -109,13 +109,14 @@ class SolicitudpagoGenerarCuotasService
             $cuentaIds = [];
             $ccIds = [];
             $dhs = [];
-            $montosCta = [];
-            foreach ($madre->cuentas as $cta) {
+            foreach ($madre->cuentas as $i => $cta) {
                 $empresaIds[] = $cta->empresa_id;
                 $cuentaIds[] = $cta->cuentacontable_id;
                 $ccIds[] = $cta->centrocosto_id;
                 $dhs[] = $cta->debe_haber;
-                $montosCta[] = round(((float) $cta->monto) / $coef, 2);
+                if (! isset($montosCta[$i])) {
+                    $montosCta[$i] = $montoCuota;
+                }
             }
 
             $hija = $this->repository->guardarCompleto([

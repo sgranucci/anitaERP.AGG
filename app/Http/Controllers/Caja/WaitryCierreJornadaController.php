@@ -485,7 +485,7 @@ class WaitryCierreJornadaController extends Controller
         $request->validate([
             'empresa_id' => 'required|integer|min:1',
             'fecha_jornada' => 'nullable|date',
-            'enviar_mail' => 'nullable|boolean',
+            'enviar_mail' => 'nullable',
         ]);
 
         try {

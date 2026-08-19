@@ -26,6 +26,7 @@ final class OrdencompraAnitaLineaSupport
             (int) ($oc->empresa_id ?? 0)
         );
         $orden = 0;
+        $internosUsados = [];
 
         foreach ($lineas as $linea) {
             $cambios = [];
@@ -35,9 +36,12 @@ final class OrdencompraAnitaLineaSupport
             }
 
             $nroInterno = (int) ($linea->penvp_nro_interno ?? 0);
-            if ($nroInterno <= 0) {
+            // Vacío o repetido en esta OC: la primera línea conserva el interno, las demás reservan uno nuevo.
+            if ($nroInterno <= 0 || isset($internosUsados[$nroInterno])) {
                 $cambios['penvp_nro_interno'] = $siguienteInterno;
                 $siguienteInterno++;
+            } else {
+                $internosUsados[$nroInterno] = true;
             }
 
             if ($cambios !== []) {

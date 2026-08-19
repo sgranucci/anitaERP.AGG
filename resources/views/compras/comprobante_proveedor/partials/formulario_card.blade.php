@@ -13,6 +13,7 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
+        @include('compras.precarga_comprobante_proveedor.partials.aviso_ya_en_anita')
 
         <div class="card card-primary">
             <div class="card-header">

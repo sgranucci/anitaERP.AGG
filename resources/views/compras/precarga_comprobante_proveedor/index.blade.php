@@ -78,7 +78,7 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                             <th>Total</th>
                             <th>Estado</th>
                             <th>Origen</th>
-                            <th class="text-nowrap" style="width:150px" data-orderable="false"></th>
+                            <th class="text-nowrap" style="width:180px" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -94,7 +94,16 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                             <td>{{$data->numeroordencompra ?? ''}}</td>
                             <td class="text-right">{{ number_format((float) ($data->total ?? 0), 2, ',', '.') }}</td>
                             <td>
-                                {{$data->estado}}
+                                @if (($data->estado ?? '') === \App\Support\Compras\PrecargaComprobanteEstados::CARGADA_ANITA)
+                                    <span class="badge badge-info" title="Factura ya existente en Anita; no se genera comprobante ERP">
+                                        {{ \App\Support\Compras\PrecargaComprobanteEstados::etiquetaRegistro($data->estado) }}
+                                    </span>
+                                    @if (!empty($data->anita_nro_interno))
+                                        <br><small class="text-muted">Anita #{{ $data->anita_nro_interno }}</small>
+                                    @endif
+                                @else
+                                    {{ \App\Support\Compras\PrecargaComprobanteEstados::etiquetaRegistro((string) ($data->estado ?? '')) }}
+                                @endif
                                 @if (!empty($data->comprobante_proveedor_id))
                                     @php
                                         $cpEstado = $data->comprobante_proveedor_estado ?? null;
@@ -123,12 +132,19 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                                    title="Abrir comprobante #{{ $data->comprobante_proveedor_id }}">
                                     <i class="fa fa-external-link"></i>
                                 </a>
-                                @elseif (can('crear-comprobante-proveedor', false))
+                                @elseif (can('crear-comprobante-proveedor', false)
+                                    && \App\Support\Compras\PrecargaComprobanteEstados::puedeGenerarComprobante((string) ($data->estado ?? '')))
                                 <a href="{{ route('crear_comprobante_proveedor', ['precarga_id' => $data->id]) }}"
                                    class="btn-accion-tabla tooltipsC text-success"
                                    title="Abrir alta de comprobante desde esta precarga (no graba hasta Guardar)">
                                     <i class="fa fa-file-text-o"></i>
                                 </a>
+                                @endif
+                                @if (\App\Support\Compras\PrecargaComprobanteEstados::puedeMarcarCargadaAnita((string) ($data->estado ?? ''))
+                                    && empty($data->comprobante_proveedor_id))
+                                    @include('compras.precarga_comprobante_proveedor.partials.boton_marcar_cargada_anita', [
+                                        'precargaId' => $data->id,
+                                    ])
                                 @endif
                        			@if (can('editar-precarga-proveedores', false))
                                 	<a href="{{route('editar_precarga_comprobante_proveedor', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

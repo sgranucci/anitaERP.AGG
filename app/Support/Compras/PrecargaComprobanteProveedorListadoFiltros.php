@@ -114,7 +114,7 @@ class PrecargaComprobanteProveedorListadoFiltros
     }
 
     /**
-     * Por defecto: solo pendientes. Query `estado=GENERADA|PENDIENTE|todas`.
+     * Por defecto: solo pendientes. Query `estado=GENERADA|CARGADA_ANITA|PENDIENTE|todas`.
      */
     public static function resolverEstadoExterno(Request $request): string
     {
@@ -124,6 +124,9 @@ class PrecargaComprobanteProveedorListadoFiltros
         }
         if ($raw === PrecargaComprobanteEstados::GENERADA) {
             return PrecargaComprobanteEstados::GENERADA;
+        }
+        if ($raw === PrecargaComprobanteEstados::CARGADA_ANITA) {
+            return PrecargaComprobanteEstados::CARGADA_ANITA;
         }
 
         return PrecargaComprobanteEstados::PENDIENTE;
@@ -207,6 +210,9 @@ class PrecargaComprobanteProveedorListadoFiltros
         if ($scope === PrecargaComprobanteEstados::GENERADA) {
             return ['estado' => PrecargaComprobanteEstados::GENERADA];
         }
+        if ($scope === PrecargaComprobanteEstados::CARGADA_ANITA) {
+            return ['estado' => PrecargaComprobanteEstados::CARGADA_ANITA];
+        }
 
         // Default pendiente: no hace falta query param (limpiar vuelve a pendientes).
         return [];
@@ -247,6 +253,11 @@ class PrecargaComprobanteProveedorListadoFiltros
         }
         if ($scope === PrecargaComprobanteEstados::GENERADA) {
             $query->where('precarga_comprobante_proveedor.estado', PrecargaComprobanteEstados::GENERADA);
+
+            return;
+        }
+        if ($scope === PrecargaComprobanteEstados::CARGADA_ANITA) {
+            $query->where('precarga_comprobante_proveedor.estado', PrecargaComprobanteEstados::CARGADA_ANITA);
 
             return;
         }

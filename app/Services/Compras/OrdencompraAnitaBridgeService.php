@@ -5,8 +5,8 @@ namespace App\Services\Compras;
 use App\ApiAnita;
 use App\Models\Compras\Ordencompra;
 use App\Models\Stock\Recepcion_Proveedor;
-use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaEscrituraSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaErpContext;
+use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaEscrituraSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaLineaSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaNumeracionSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaOcfpagoCuotaExpander;
@@ -299,12 +299,20 @@ class OrdencompraAnitaBridgeService
         if ($cabecera !== null && count($lineas) === 0 && $esperadas > 0) {
             $problemas[] = 'Cabecera Anita sin líneas pendmovp.';
         }
-        if ($cobertura['duplicados'] > 0) {
+        $internosRepetidosErp = $this->internosDuplicadosEnErp($oc);
+        if ($internosRepetidosErp !== []) {
+            $detalle = [];
+            foreach ($internosRepetidosErp as $interno => $cant) {
+                $detalle[] = $interno.'×'.$cant;
+            }
+            $problemas[] = 'Clave nro_interno repetida en líneas distintas del ERP ('
+                .implode(', ', $detalle).'); no son renglones de más.';
+        } elseif ($cobertura['duplicados'] > 0) {
             $problemas[] = 'Líneas Anita duplicadas (filas='.count($lineas)
                 .', internos únicos='.count($cobertura['internos_anita'])
                 .', duplicados='.$cobertura['duplicados'].').';
         } elseif (count($lineas) > $esperadas && $esperadas > 0) {
-            $problemas[] = 'Líneas Anita duplicadas o de más (Anita='.count($lineas).', ERP='.$esperadas.').';
+            $problemas[] = 'Líneas Anita de más (Anita='.count($lineas).', ERP='.$esperadas.').';
         }
         if ($cobertura['faltan'] !== []) {
             $problemas[] = 'Faltan en pendmovp nro_interno ERP: '.implode(', ', $cobertura['faltan']).'.';
@@ -402,6 +410,11 @@ class OrdencompraAnitaBridgeService
             $lineasAnita = $this->listarPendmovp($clave);
             $esperadas = $oc->ordencompra_articulos->count();
             $cobertura = $this->analizarCoberturaPendmovp($oc, $lineasAnita);
+            if ($esperadas > 0 && $this->internosDuplicadosEnErp($oc) !== []) {
+                $repErp = $this->repararPendmovpFaltanteDesdeRecepciones($oc);
+                $acciones = array_merge($acciones, $repErp['acciones']);
+                $cobertura['requiere_regrab'] = false;
+            }
             // Faltan/sobran por nro_interno o duplicados (count puede coincidir y ocultar el hueco).
             if ($esperadas > 0 && $cobertura['requiere_regrab']) {
                 foreach ($lineasAnita as $linea) {
@@ -767,6 +780,27 @@ class OrdencompraAnitaBridgeService
             'duplicados' => $duplicados,
             'requiere_regrab' => $requiereRegrab,
         ];
+    }
+
+    /**
+     * Dos renglones reales del ERP (p. ej. dos ítems de RQ) no son “líneas duplicadas”:
+     * solo compartieron la clave Anita. Interno => cantidad de líneas ERP.
+     *
+     * @return array<int, int>
+     */
+    private function internosDuplicadosEnErp(Ordencompra $oc): array
+    {
+        $oc->loadMissing('ordencompra_articulos');
+        $conteo = [];
+        foreach ($oc->ordencompra_articulos as $ocArt) {
+            $nro = (int) ($ocArt->penvp_nro_interno ?? 0);
+            if ($nro <= 0) {
+                continue;
+            }
+            $conteo[$nro] = ($conteo[$nro] ?? 0) + 1;
+        }
+
+        return array_filter($conteo, static fn (int $cant): bool => $cant > 1);
     }
 
     /**

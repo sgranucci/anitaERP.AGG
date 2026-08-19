@@ -15,6 +15,7 @@ use App\Repositories\Compras\Tipotransaccion_CompraRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Compras\ComprobanteProveedorPersistenciaService;
+use App\Services\Compras\PrecargaComprobanteMarcarCargadaAnitaService;
 use App\Services\Compras\ComprobanteProveedorPrefillService;
 use App\Services\Compras\ComprobanteProveedorRecepcionesSupport;
 use App\Services\Compras\ComprobanteProveedorComLegajoResolucionService;
@@ -27,6 +28,8 @@ use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorControlesConfigSupport;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorDuplicadoException;
+use App\Support\Compras\ComprobanteProveedorYaExistenteEnAnitaException;
+use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\ComprobanteProveedorListadoFiltros;
@@ -66,6 +69,7 @@ class Comprobante_ProveedorController extends Controller
         private PrecargaProveedorNumeroOcSupport $numeroOcSupport,
         private ComprobanteProveedorComLegajoResolucionService $comLegajoResolucion,
         private CotizacionQueryInterface $cotizacionQuery,
+        private PrecargaComprobanteMarcarCargadaAnitaService $marcarCargadaAnitaService,
     ) {}
 
     public function index(Request $request)
@@ -136,7 +140,17 @@ class Comprobante_ProveedorController extends Controller
 
         $prefill = $this->prefillService->construirDesdeRequest($request);
 
-        return view('compras.comprobante_proveedor.crear', $this->datosFormulario($prefill));
+        $facturaYaEnAnita = $this->avisoFacturaYaEnAnitaDesdePrefill($prefill);
+        if (($facturaYaEnAnita['ya_marcada'] ?? false) === true) {
+            return redirect()
+                ->route('precarga_comprobante_proveedor', ['estado' => PrecargaComprobanteEstados::CARGADA_ANITA])
+                ->with('errores', [$facturaYaEnAnita['mensaje'] ?? 'Esta precarga ya está marcada como cargada en Anita.']);
+        }
+
+        return view('compras.comprobante_proveedor.crear', array_merge(
+            $this->datosFormulario($prefill),
+            ['facturaYaEnAnita' => $facturaYaEnAnita]
+        ));
     }
 
     public function opcionesCarga(Request $request)
@@ -190,6 +204,8 @@ class Comprobante_ProveedorController extends Controller
             $comprobante = $this->persistenciaService->crearDesdeRequest($request);
         } catch (ComprobanteProveedorDuplicadoException $e) {
             return $this->respuestaComprobanteDuplicado($e);
+        } catch (ComprobanteProveedorYaExistenteEnAnitaException $e) {
+            return $this->respuestaFacturaYaEnAnita($request, $e);
         } catch (\Throwable $e) {
             return redirect()
                 ->back()
@@ -249,6 +265,8 @@ class Comprobante_ProveedorController extends Controller
             $this->persistenciaService->actualizarDesdeRequest($request, $id);
         } catch (ComprobanteProveedorDuplicadoException $e) {
             return $this->respuestaComprobanteDuplicado($e, quedarseEnFormulario: true);
+        } catch (ComprobanteProveedorYaExistenteEnAnitaException $e) {
+            return $this->respuestaFacturaYaEnAnita($request, $e, 'No se pudo actualizar el comprobante');
         } catch (\Throwable $e) {
             return redirect()
                 ->back()
@@ -404,6 +422,13 @@ class Comprobante_ProveedorController extends Controller
             return redirect()
                 ->route('editar_comprobante_proveedor', ['id' => $existente->id])
                 ->with('mensaje', 'Esta precarga ya tiene el comprobante #'.$existente->id.' generado. Se abrió para revisión.');
+        }
+
+        $precarga = Precarga_Comprobante_Proveedor::query()->find($precargaId);
+        if ($precarga && (string) $precarga->estado === PrecargaComprobanteEstados::CARGADA_ANITA) {
+            return redirect()
+                ->route('precarga_comprobante_proveedor', ['estado' => PrecargaComprobanteEstados::CARGADA_ANITA])
+                ->with('errores', ['La precarga #'.$precargaId.' ya está marcada como cargada en Anita.']);
         }
 
         // No grabar hasta que el operador pulse Guardar en el alta.
@@ -638,6 +663,51 @@ class Comprobante_ProveedorController extends Controller
             ->back()
             ->withInput()
             ->with('errores', [$e->getMessage()]);
+    }
+
+    /** @param array<string, mixed> $prefill */
+    private function avisoFacturaYaEnAnitaDesdePrefill(array $prefill): ?array
+    {
+        $data = $prefill['data'] ?? null;
+        $precargaId = (int) ($data->precarga_comprobante_proveedor_id ?? 0);
+        if ($precargaId <= 0) {
+            return null;
+        }
+
+        $precarga = Precarga_Comprobante_Proveedor::query()->find($precargaId);
+        if (! $precarga) {
+            return null;
+        }
+
+        $aviso = $this->marcarCargadaAnitaService->avisoSiYaExisteEnAnita($precarga);
+        if ($aviso === null) {
+            return null;
+        }
+
+        $aviso['precarga_id'] = $precargaId;
+
+        return $aviso;
+    }
+
+    private function respuestaFacturaYaEnAnita(
+        Request $request,
+        ComprobanteProveedorYaExistenteEnAnitaException $e,
+        string $prefijo = 'No se pudo guardar el comprobante',
+    ) {
+        $precargaId = (int) $request->input('precarga_comprobante_proveedor_id', 0);
+        $aviso = [
+            'mensaje' => $e->getMessage(),
+            'nro_interno' => $e->nroInterno(),
+            'fila' => $e->fila(),
+            'ya_marcada' => false,
+            'precarga_id' => $precargaId > 0 ? $precargaId : null,
+        ];
+
+        return redirect()
+            ->back()
+            ->withInput()
+            ->with('errores', [$this->mensajeErrorPersistencia($prefijo, $e)])
+            ->with('factura_ya_en_anita', $aviso);
     }
 
     private function mensajeErrorPersistencia(string $prefijo, \Throwable $e): string

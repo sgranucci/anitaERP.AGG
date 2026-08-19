@@ -1965,7 +1965,8 @@
         lotesResumen.textContent = cantLotes + ' lote(s) · '
             + cantFactura + ' comanda(s) a facturar ($ ' + fmt(data.total_factura) + ') · '
             + cantAjuste + ' comanda(s) solo ajuste ($ ' + fmt(data.total_ajuste) + ') · '
-            + 'tope CF $ ' + fmt(data.tope_cf);
+            + 'objetivo $ ' + fmt(data.objetivo_lote)
+            + ' · tope CF $ ' + fmt(data.tope_cf);
         lotesResumen.classList.remove('d-none');
 
         lotes.forEach(function (lote) {
@@ -3200,8 +3201,9 @@
             alert('Seleccione una empresa.');
             return;
         }
+        var fechaTxt = params.fecha_jornada ? params.fecha_jornada : 'la última jornada cerrada pendiente';
         if (!window.confirm(
-            '¿Ejecutar el cierre automático Waitry para la última jornada cerrada pendiente de esta empresa?\n\n'
+            '¿Ejecutar el cierre automático Waitry para ' + fechaTxt + '?\n\n'
             + 'Incluye: analizar tramo, recalcular con el % configurado, emitir facturas del proceso '
             + 'y grabar asientos contables (+ rendición Anita).\n\n'
             + 'Se enviará un correo con el detalle.'
@@ -3223,10 +3225,14 @@
                 'Enviando correo de resumen…',
             ],
         });
-        apiPost(CFG.urlEjecutarAutomatico || '', {
+        var body = {
             empresa_id: params.empresa_id,
-            enviar_mail: true,
-        }).then(function (data) {
+            enviar_mail: 1,
+        };
+        if (params.fecha_jornada) {
+            body.fecha_jornada = params.fecha_jornada;
+        }
+        apiPost(CFG.urlEjecutarAutomatico || '', body).then(function (data) {
             detenerAvisoVivo();
             if (!data) {
                 throw new Error('Sin respuesta del servidor.');

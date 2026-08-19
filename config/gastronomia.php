@@ -579,8 +579,15 @@ return [
     /**
      * Porcentaje del tope CF (ARCA) para agrupar comandas en cada lote de facturación del proceso Waitry.
      * Default 20 = lotes ~20 % de ARCA_WSFE_RECEPTOR_CF_UMBRAL_MONTO.
+     * Se ignora si cierre_jornada_cf_lote_monto > 0.
      */
     'cierre_jornada_cf_lote_porcentaje_tope' => (float) env('GASTRONOMIA_CIERRE_JORNADA_CF_LOTE_PORCENTAJE_TOPE', 20),
+
+    /**
+     * Monto objetivo (pesos) de cada factura CF del proceso Waitry.
+     * Si es > 0, pisa el % sobre el tope ARCA. El tope CF sigue siendo el máximo legal por factura.
+     */
+    'cierre_jornada_cf_lote_monto' => (float) env('GASTRONOMIA_CIERRE_JORNADA_CF_LOTE_MONTO', 0),
 
     /**
      * Porcentaje de redistribución QR/efectivo del proceso Waitry (manual y automático).

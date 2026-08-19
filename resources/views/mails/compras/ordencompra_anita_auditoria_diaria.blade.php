@@ -15,7 +15,7 @@
 </p>
 <p style="margin:0 0 16px 0; color:#555; font-size:13px;">
     Incluye cobertura <code>pendmovp</code> por <code>nro_interno</code>
-    (líneas faltantes o duplicadas aunque el conteo de filas coincida).
+    (faltantes, o clave repetida en renglones distintos del ERP — no son OC de más).
 </p>
 
 <h3 style="margin:18px 0 6px 0;">Resumen</h3>

@@ -12,6 +12,8 @@
             $q['estado_todas'] = 1;
         } elseif ($estado === PrecargaComprobanteEstados::GENERADA) {
             $q['estado'] = PrecargaComprobanteEstados::GENERADA;
+        } elseif ($estado === PrecargaComprobanteEstados::CARGADA_ANITA) {
+            $q['estado'] = PrecargaComprobanteEstados::CARGADA_ANITA;
         }
         // Pendiente = default sin query param
 
@@ -31,11 +33,26 @@
                    class="btn {{ $estadoScope === PrecargaComprobanteEstados::GENERADA ? 'btn-info' : 'btn-outline-info' }}">
                     Generadas
                 </a>
+                <a href="{{ $urlEstado(PrecargaComprobanteEstados::CARGADA_ANITA) }}"
+                   class="btn {{ $estadoScope === PrecargaComprobanteEstados::CARGADA_ANITA ? 'btn-info' : 'btn-outline-info' }}">
+                    Ya cargadas en Anita
+                </a>
                 <a href="{{ $urlEstado('todas') }}"
                    class="btn {{ $estadoScope === 'todas' ? 'btn-primary' : 'btn-outline-primary' }}">
                     Todas
                 </a>
             </div>
+            @if ($estadoScope === PrecargaComprobanteEstados::PENDIENTE && can('editar-precarga-proveedores', false))
+            <form action="{{ route('detectar_precargas_comprobante_proveedor_cargadas_anita') }}"
+                  method="POST"
+                  class="d-inline ml-2"
+                  onsubmit="return confirm('Se consultará Anita (hasta 40 pendientes) y se marcarán las facturas que ya existan en compra. ¿Continuar?');">
+                @csrf
+                <button type="submit" class="btn btn-outline-secondary btn-sm" title="Marca las pendientes que ya existen en Anita">
+                    <i class="fa fa-search"></i> Detectar ya cargadas en Anita
+                </button>
+            </form>
+            @endif
         </div>
     </div>
 </div>

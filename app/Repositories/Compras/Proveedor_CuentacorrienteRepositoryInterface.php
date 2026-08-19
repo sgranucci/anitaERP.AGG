@@ -27,4 +27,14 @@ interface Proveedor_CuentacorrienteRepositoryInterface
     public function consultarDeuda($proveedor_id, $empresa_id, $comprobante_proveedor_id = null);
 
     public function consultarAplicacion($proveedor_cuentacorriente_id, $comprobante, $codigoproveedor);
+
+    /**
+     * @return \Illuminate\Support\Collection<int, \App\Models\Compras\Proveedor_Cuentacorriente>
+     */
+    public function listarPendientesAplicacion(int $proveedor_id, string $lado, ?int $empresa_id = null);
+
+    /**
+     * @return \Illuminate\Support\Collection<int, \App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion>
+     */
+    public function listarAplicacionesManualesRecientes(int $proveedor_id, ?int $empresa_id = null, int $limite = 30);
 }

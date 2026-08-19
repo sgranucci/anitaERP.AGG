@@ -19,6 +19,7 @@ use RuntimeException;
 final class ComprobanteProveedorAnitaCompraExistenciaSupport
 {
     /**
+     * @throws ComprobanteProveedorYaExistenteEnAnitaException
      * @throws RuntimeException
      */
     public static function assertNoDuplicadoEnAnita(
@@ -44,7 +45,12 @@ final class ComprobanteProveedorAnitaCompraExistenciaSupport
             return;
         }
 
-        throw new RuntimeException(self::mensajeDuplicado($fila, $letra, $sucursal, $numerocomprobante));
+        throw ComprobanteProveedorYaExistenteEnAnitaException::desdeFila(
+            $fila,
+            $letra,
+            $sucursal,
+            $numerocomprobante,
+        );
     }
 
     /**

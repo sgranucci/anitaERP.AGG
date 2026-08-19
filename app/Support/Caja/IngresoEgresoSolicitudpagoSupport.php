@@ -169,8 +169,95 @@ class IngresoEgresoSolicitudpagoSupport
             $lineas,
             static fn (array $linea) => ! self::esCodigoCajaBanco((string) ($linea['codigo'] ?? ''))
         ));
+        $sinBanco = self::ajustarLineasNoBancoAlCaja($sinBanco, $lineasCaja);
 
         return array_merge($sinBanco, $lineasCaja);
+    }
+
+    /**
+     * La pierna de caja es el importe real del pago. Si el asiento de la SP
+     * no coincidía con el monto (p. ej. importado de Anita), escala el Debe
+     * no-banco para que cierre. Conserva retenciones (Haber no-banco).
+     *
+     * @param  list<array<string, mixed>>  $sinBanco
+     * @param  list<array<string, mixed>>  $lineasCaja
+     * @return list<array<string, mixed>>
+     */
+    public static function ajustarLineasNoBancoAlCaja(array $sinBanco, array $lineasCaja): array
+    {
+        if ($sinBanco === [] || $lineasCaja === []) {
+            return $sinBanco;
+        }
+
+        $debeCaja = 0.0;
+        $haberCaja = 0.0;
+        foreach ($lineasCaja as $linea) {
+            $debeCaja += (float) ($linea['debe'] ?: 0);
+            $haberCaja += (float) ($linea['haber'] ?: 0);
+        }
+
+        $debeNoBanco = 0.0;
+        $haberNoBanco = 0.0;
+        foreach ($sinBanco as $linea) {
+            $debeNoBanco += (float) ($linea['debe'] ?: 0);
+            $haberNoBanco += (float) ($linea['haber'] ?: 0);
+        }
+
+        $debeTotal = round($debeCaja + $debeNoBanco, 2);
+        $haberTotal = round($haberCaja + $haberNoBanco, 2);
+        $dif = round($haberTotal - $debeTotal, 2);
+        if (abs($dif) < 0.01) {
+            return $sinBanco;
+        }
+
+        if ($dif > 0 && $debeNoBanco >= 0.01) {
+            return self::escalarLadoAsiento($sinBanco, 'debe', $debeNoBanco + $dif);
+        }
+        if ($dif < 0 && $haberNoBanco >= 0.01) {
+            return self::escalarLadoAsiento($sinBanco, 'haber', $haberNoBanco - $dif);
+        }
+        if ($dif < 0 && $debeNoBanco >= 0.01) {
+            return self::escalarLadoAsiento($sinBanco, 'debe', $debeNoBanco + $dif);
+        }
+
+        return $sinBanco;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $lineas
+     * @return list<array<string, mixed>>
+     */
+    private static function escalarLadoAsiento(array $lineas, string $lado, float $destino): array
+    {
+        $actual = 0.0;
+        $indices = [];
+        foreach ($lineas as $i => $linea) {
+            $valor = (float) ($linea[$lado] ?: 0);
+            if ($valor >= 0.01) {
+                $actual += $valor;
+                $indices[] = $i;
+            }
+        }
+        if ($actual < 0.01 || $indices === []) {
+            return $lineas;
+        }
+
+        $destino = round($destino, 2);
+        $acum = 0.0;
+        $ultimo = $indices[count($indices) - 1];
+        $otro = $lado === 'debe' ? 'haber' : 'debe';
+        foreach ($indices as $i) {
+            if ($i === $ultimo) {
+                $nuevo = round($destino - $acum, 2);
+            } else {
+                $nuevo = round(((float) ($lineas[$i][$lado] ?: 0)) * $destino / $actual, 2);
+                $acum += $nuevo;
+            }
+            $lineas[$i][$lado] = $nuevo;
+            $lineas[$i][$otro] = $lineas[$i][$otro] ?: '';
+        }
+
+        return $lineas;
     }
 
     /**

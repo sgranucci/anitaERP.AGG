@@ -87,6 +87,12 @@ return [
             'permiso' => 'listar-cuentacorriente-proveedor',
         ],
         [
+            'herramienta' => 'Aplicar cuenta corriente',
+            'ubicacion' => 'Menú Compras, ficha del proveedor y cuenta corriente',
+            'accion' => 'Workbench para aplicar notas de crédito y pagos a cuenta contra facturas adeudadas (FIFO / pareo / parcial / desaplicar).',
+            'permiso' => 'aplicar-cuentacorriente-proveedor',
+        ],
+        [
             'herramienta' => 'Eliminar',
             'ubicacion' => $columnaAcciones . ' (ícono X rojo)',
             'accion' => 'Borrado lógico; solicita confirmación.',

@@ -14,6 +14,7 @@ final class CierreJornadaProcesoFacturaLotesSupportTest extends TestCase
         parent::setUp();
         config(['arca_wsfe.receptor.consumidor_final_umbral_monto' => 1000.]);
         config(['gastronomia.cierre_jornada_cf_lote_porcentaje_tope' => 20.]);
+        config(['gastronomia.cierre_jornada_cf_lote_monto' => 0.]);
     }
 
     public function test_arma_lotes_respetando_tope_y_objetivo(): void
@@ -65,5 +66,35 @@ final class CierreJornadaProcesoFacturaLotesSupportTest extends TestCase
         $this->assertSame(120., $plan['total_ajuste']);
         $this->assertSame(920., $plan['total_grupo']);
         $this->assertCount(1, $plan['lotes']);
+    }
+
+    public function test_plan_usa_monto_fijo_como_objetivo_y_no_el_porcentaje(): void
+    {
+        config([
+            'arca_wsfe.receptor.consumidor_final_umbral_monto' => 10_000_000.,
+            'gastronomia.cierre_jornada_cf_lote_porcentaje_tope' => 20.,
+            'gastronomia.cierre_jornada_cf_lote_monto' => 100000.,
+        ]);
+
+        $movimientos = [];
+        for ($i = 1; $i <= 15; $i++) {
+            $movimientos[] = [
+                'grupo' => CierreJornadaProcesoClasificacionSupport::GRUPO_SIN_FACTURAR_QR,
+                'waitry_order_id' => $i,
+                'total' => 100000.,
+                'medios_pago_planificados' => [
+                    ['clave' => CierreJornadaProcesoMedioSupport::CLAVE_QR, 'monto' => 100000.],
+                ],
+            ];
+        }
+
+        $plan = CierreJornadaProcesoFacturaLotesSupport::armarPlanDesdeMovimientos($movimientos);
+
+        $this->assertSame(100000., $plan['objetivo_lote']);
+        $this->assertCount(15, $plan['lotes']);
+        $this->assertSame(1_500_000., $plan['total_factura']);
+        foreach ($plan['lotes'] as $lote) {
+            $this->assertSame(100000., $lote['total']);
+        }
     }
 }

@@ -209,6 +209,7 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
             'precarga_comprobante_proveedor.numeroordencompra as numeroordencompra',
             'precarga_comprobante_proveedor.total as total',
             'precarga_comprobante_proveedor.estado as estado',
+            'precarga_comprobante_proveedor.anita_nro_interno as anita_nro_interno',
             'precarga_comprobante_proveedor.origen_entrada as origen_entrada',
             'precarga_comprobante_proveedor.rutaalmacenamiento as rutaalmacenamiento',
         ];

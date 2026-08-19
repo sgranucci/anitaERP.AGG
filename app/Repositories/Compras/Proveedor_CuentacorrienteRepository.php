@@ -2,10 +2,11 @@
 
 namespace App\Repositories\Compras;
 
-use App\Support\Database\SqlDialectSupport;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Queries\Compras\ProveedorQueryInterface;
+use App\Services\Compras\ProveedorCuentacorrienteAplicacionService;
+use App\Support\Database\SqlDialectSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRepositoryInterface
@@ -256,6 +257,73 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
             )
             ->where('proveedor_cuentacorriente_id', $proveedor_cuentacorriente_id)
             ->orderBy('fecha')
+            ->get();
+    }
+
+    public function listarPendientesAplicacion(int $proveedor_id, string $lado, ?int $empresa_id = null)
+    {
+        $query = $this->model->query()
+            ->with([
+                'comprobante_proveedores.tipotransaccion_compras',
+                'pagoproveedores',
+                'monedas',
+                'empresas',
+            ])
+            ->select('proveedor_cuentacorriente.*')
+            ->addSelect([
+                'aplicado' => Proveedor_Cuentacorriente_Aplicacion::query()
+                    ->selectRaw('SUM(total)')
+                    ->whereColumn('proveedor_cuentacorriente_id', 'proveedor_cuentacorriente.id'),
+            ])
+            ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
+            ->whereRaw($lado === 'credito'
+                ? ProveedorCuentacorrienteAplicacionService::sqlLadoCredito()
+                : ProveedorCuentacorrienteAplicacionService::sqlLadoDeuda());
+
+        if ($empresa_id !== null && $empresa_id > 0) {
+            $query->where('proveedor_cuentacorriente.empresa_id', $empresa_id);
+        }
+
+        if ($lado === 'deuda') {
+            $query->orderBy('proveedor_cuentacorriente.fechavencimiento', 'asc')
+                ->orderBy('proveedor_cuentacorriente.fecha', 'asc')
+                ->orderBy('proveedor_cuentacorriente.id', 'asc');
+        } else {
+            $query->orderBy('proveedor_cuentacorriente.fecha', 'asc')
+                ->orderBy('proveedor_cuentacorriente.id', 'asc');
+        }
+
+        return $query->get();
+    }
+
+    public function listarAplicacionesManualesRecientes(int $proveedor_id, ?int $empresa_id = null, int $limite = 30)
+    {
+        $query = Proveedor_Cuentacorriente_Aplicacion::query()
+            ->select('proveedor_cuentacorriente_aplicacion.*')
+            ->join(
+                'proveedor_cuentacorriente as cc',
+                'cc.id',
+                '=',
+                'proveedor_cuentacorriente_aplicacion.proveedor_cuentacorriente_id'
+            )
+            ->where('cc.proveedor_id', $proveedor_id)
+            ->whereNull('proveedor_cuentacorriente_aplicacion.pagoproveedor_id')
+            ->where('proveedor_cuentacorriente_aplicacion.total', '<', 0)
+            ->with([
+                'proveedor_cuentacorrientes.comprobante_proveedores.tipotransaccion_compras',
+                'proveedor_cuentacorrientes.pagoproveedores',
+                'proveedor_cuentacorriente_aplicados.comprobante_proveedores.tipotransaccion_compras',
+                'proveedor_cuentacorriente_aplicados.pagoproveedores',
+                'monedas',
+            ]);
+
+        if ($empresa_id !== null && $empresa_id > 0) {
+            $query->where('proveedor_cuentacorriente_aplicacion.empresa_id', $empresa_id);
+        }
+
+        return $query->orderByDesc('proveedor_cuentacorriente_aplicacion.fecha')
+            ->orderByDesc('proveedor_cuentacorriente_aplicacion.id')
+            ->limit($limite)
             ->get();
     }
 }

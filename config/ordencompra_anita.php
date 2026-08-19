@@ -38,7 +38,8 @@ return [
     | Auditoría diaria OC ERP ↔ Anita (ordencompra:auditoria-anita-diaria).
     | Detecta/repara: cabecera pendmaep faltante, líneas huérfanas, proveedor sin pad 6,
     | legcompra/pendfecha/occuota, aplicped de recepciones confirmadas,
-    | y cobertura pendmovp por nro_interno (faltantes + duplicados con count engañoso; OC 223049).
+    | y cobertura pendmovp por nro_interno (faltantes; clave repetida en líneas distintas del ERP
+    | no es “OC/línea duplicada” — son renglones reales que compartieron interno).
     | Vive hasta desactivar escritura Anita / ORDENCOMPRA_AUDITORIA_ANITA_HABILITADA=false.
     */
     'auditoria_diaria' => [

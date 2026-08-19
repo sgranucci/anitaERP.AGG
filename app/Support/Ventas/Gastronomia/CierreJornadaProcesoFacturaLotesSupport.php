@@ -5,7 +5,7 @@ namespace App\Support\Ventas\Gastronomia;
 use InvalidArgumentException;
 
 /**
- * Agrupa comandas atómicas de facturación en lotes CF (~% del tope ARCA).
+ * Agrupa comandas atómicas de facturación en lotes CF (monto fijo o ~% del tope ARCA).
  */
 final class CierreJornadaProcesoFacturaLotesSupport
 {
@@ -31,15 +31,20 @@ final class CierreJornadaProcesoFacturaLotesSupport
      *   cantidad_comandas_ajuste: int
      * }
      */
-    public static function armarPlanDesdeMovimientos(array $movimientos, ?float $topeCf = null, ?float $pctLote = null): array
-    {
+    public static function armarPlanDesdeMovimientos(
+        array $movimientos,
+        ?float $topeCf = null,
+        ?float $pctLote = null,
+        ?float $montoLote = null,
+    ): array {
         $clasificacion = CierreJornadaProcesoFacturaComandasSupport::clasificar($movimientos);
         $comandasFactura = $clasificacion['facturar'];
         $comandasAjuste = $clasificacion['ajuste'];
 
         $topeCf = $topeCf ?? (float) config('arca_wsfe.receptor.consumidor_final_umbral_monto', 0);
         $pctLote = $pctLote ?? (float) config('gastronomia.cierre_jornada_cf_lote_porcentaje_tope', 20);
-        $objetivoLote = $topeCf > 0. ? round($topeCf * $pctLote / 100., 2) : 0.;
+        $montoLote = $montoLote ?? (float) config('gastronomia.cierre_jornada_cf_lote_monto', 0);
+        $objetivoLote = self::objetivoLote($topeCf, $pctLote, $montoLote);
 
         $lotes = self::armarLotes($comandasFactura, $topeCf, $objetivoLote);
 
@@ -137,6 +142,17 @@ final class CierreJornadaProcesoFacturaLotesSupport
         }
 
         return $lotes;
+    }
+
+    public static function objetivoLote(float $topeCf, float $pctLote, float $montoLote): float
+    {
+        if ($montoLote > 0.) {
+            $objetivo = round($montoLote, 2);
+
+            return $topeCf > 0. ? min($objetivo, round($topeCf, 2)) : $objetivo;
+        }
+
+        return $topeCf > 0. ? round($topeCf * $pctLote / 100., 2) : 0.;
     }
 
     /**

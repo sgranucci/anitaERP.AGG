@@ -15,8 +15,7 @@ class TesoreriaCockpitController extends Controller
 {
     public function __construct(
         private EmpresaRepositoryInterface $empresaRepository,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request)
     {
@@ -57,6 +56,13 @@ class TesoreriaCockpitController extends Controller
                 'ruta' => route('pagoproveedor'),
                 'icono' => 'fa-file-invoice-dollar',
                 'can' => can('listar-pagoproveedor', false),
+            ],
+            [
+                'titulo' => 'Aplicar cuenta corriente',
+                'desc' => 'NC y pagos a cuenta contra facturas',
+                'ruta' => route('aplicacion_cuentacorriente_proveedor'),
+                'icono' => 'fa-compress-alt',
+                'can' => can('aplicar-cuentacorriente-proveedor', false),
             ],
             [
                 'titulo' => 'Ingreso / Egreso',

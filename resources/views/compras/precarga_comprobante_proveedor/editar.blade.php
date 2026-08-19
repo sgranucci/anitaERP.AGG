@@ -14,6 +14,25 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
+        @if (($data->estado ?? '') === \App\Support\Compras\PrecargaComprobanteEstados::CARGADA_ANITA)
+        <div class="alert alert-info">
+            <i class="fa fa-check-circle"></i>
+            Esta precarga está marcada como <strong>ya cargada en Anita</strong>
+            @if (!empty($data->anita_nro_interno))
+                (nro. interno {{ $data->anita_nro_interno }})
+            @endif
+            y no se puede generar el comprobante desde el ERP.
+        </div>
+        @elseif (\App\Support\Compras\PrecargaComprobanteEstados::puedeMarcarCargadaAnita((string) ($data->estado ?? '')) && ! $data->comprobante_proveedor)
+        <div class="alert alert-light border">
+            Si esta factura ya se cargó en Anita, podés marcarla para sacarla de Pendientes.
+            @include('compras.precarga_comprobante_proveedor.partials.boton_marcar_cargada_anita', [
+                'precargaId' => $data->id,
+                'claseBoton' => 'btn btn-outline-info btn-sm',
+                'etiquetaBoton' => 'Marcar como ya cargada en Anita',
+            ])
+        </div>
+        @endif
         @if ($data->comprobante_proveedor)
         <div class="alert alert-warning">
             <i class="fa fa-info-circle"></i>
@@ -60,7 +79,9 @@
                     <div class="row">
                         <div class="col-lg-3"></div>
                         <div class="col-lg-6">
-                            @include('includes.boton-form-editar')
+                            @if (($data->estado ?? '') !== \App\Support\Compras\PrecargaComprobanteEstados::CARGADA_ANITA)
+                                @include('includes.boton-form-editar')
+                            @endif
                         </div>
                     </div>
                 </div>

@@ -3147,6 +3147,12 @@ Route::post('compras/guardar_proveedor_encuesta', 'Compras\ProveedorController@g
 
 Route::get('compras/proveedor/leercuentacorrienteaplicacion/{id}', 'Compras\ProveedorController@leerCuentaCorrienteAplicacion')->name('leer_cuentacorriente_aplicacion_proveedor');
 
+Route::get('compras/aplicacion-cuentacorriente', 'Compras\ProveedorCuentacorrienteAplicacionController@index')->name('aplicacion_cuentacorriente_proveedor');
+Route::get('compras/aplicacion-cuentacorriente/api/pendientes', 'Compras\ProveedorCuentacorrienteAplicacionController@apiPendientes')->name('api_pendientes_aplicacion_cuentacorriente_proveedor');
+Route::get('compras/aplicacion-cuentacorriente/api/sugerir', 'Compras\ProveedorCuentacorrienteAplicacionController@apiSugerir')->name('api_sugerir_aplicacion_cuentacorriente_proveedor');
+Route::post('compras/aplicacion-cuentacorriente/aplicar', 'Compras\ProveedorCuentacorrienteAplicacionController@aplicar')->name('aplicar_cuentacorriente_proveedor');
+Route::post('compras/aplicacion-cuentacorriente/{id}/desaplicar', 'Compras\ProveedorCuentacorrienteAplicacionController@desaplicar')->name('desaplicar_cuentacorriente_proveedor');
+
 /*
  * Precarga de comprobantes de proveedores
  */
@@ -3180,6 +3186,8 @@ Route::post('compras/precarga_comprobante_proveedor/pdf-ia/preview', 'Compras\Pr
 Route::post('compras/precarga_comprobante_proveedor/pdf-ia/resolver-oc', 'Compras\Precarga_Comprobante_ProveedorController@resolverOcPdfIa')->name('precarga_comprobante_proveedor_pdf_ia_resolver_oc');
 Route::post('compras/precarga_comprobante_proveedor/pdf-ia/confirmar', 'Compras\Precarga_Comprobante_ProveedorController@confirmarPdfIa')->name('precarga_comprobante_proveedor_pdf_ia_confirmar');
 Route::get('compras/precarga_comprobante_proveedor/{id}/factura-pdf', 'Compras\Precarga_Comprobante_ProveedorController@verFacturaPdf')->name('precarga_comprobante_proveedor_factura_pdf');
+Route::post('compras/precarga_comprobante_proveedor/detectar-cargadas-anita', 'Compras\Precarga_Comprobante_ProveedorController@detectarCargadasEnAnita')->name('detectar_precargas_comprobante_proveedor_cargadas_anita');
+Route::post('compras/precarga_comprobante_proveedor/{id}/marcar-cargada-anita', 'Compras\Precarga_Comprobante_ProveedorController@marcarCargadaEnAnita')->name('marcar_precarga_comprobante_proveedor_cargada_anita');
 Route::post('compras/precarga_comprobante_proveedor/{id}/generar-comprobante', 'Compras\Comprobante_ProveedorController@generarDesdePrecarga')->name('generar_comprobante_desde_precarga');
 Route::get('compras/precarga_comprobante_proveedor/crear', 'Compras\Precarga_Comprobante_ProveedorController@crear')->name('crear_precarga_comprobante_proveedor');
 Route::post('compras/precarga_comprobante_proveedor', 'Compras\Precarga_Comprobante_ProveedorController@guardar')->name('guardar_precarga_comprobante_proveedor');

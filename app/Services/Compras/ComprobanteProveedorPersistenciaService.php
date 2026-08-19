@@ -69,6 +69,19 @@ class ComprobanteProveedorPersistenciaService
         $payload['creousuario_id'] = Auth::id();
         $payload['estado'] = ComprobanteProveedorEstados::BORRADOR;
 
+        $precargaIdRequest = (int) ($request->input('precarga_comprobante_proveedor_id', 0) ?: 0);
+        if ($precargaIdRequest > 0) {
+            $estadoPrecarga = (string) Precarga_Comprobante_Proveedor::query()
+                ->whereKey($precargaIdRequest)
+                ->value('estado');
+            if ($estadoPrecarga === PrecargaComprobanteEstados::CARGADA_ANITA) {
+                throw new RuntimeException(
+                    'La precarga #'.$precargaIdRequest.' ya está marcada como cargada en Anita '
+                    .'y no se puede generar el comprobante desde el ERP.'
+                );
+            }
+        }
+
         ComprobanteProveedorUnicidadSupport::assertUnico(
             (int) $payload['empresa_id'],
             (int) $payload['tipotransaccion_compra_id'],
@@ -879,7 +892,7 @@ class ComprobanteProveedorPersistenciaService
 
         Precarga_Comprobante_Proveedor::query()
             ->whereKey($precargaId)
-            ->where('estado', '!=', PrecargaComprobanteEstados::GENERADA)
+            ->where('estado', PrecargaComprobanteEstados::PENDIENTE)
             ->update(['estado' => PrecargaComprobanteEstados::GENERADA]);
     }
 

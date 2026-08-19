@@ -150,6 +150,7 @@ class ComprobanteProveedorEliminarService
         } elseif (! $tambienPrecarga && $precargaId > 0) {
             Precarga_Comprobante_Proveedor::query()
                 ->whereKey($precargaId)
+                ->where('estado', PrecargaComprobanteEstados::GENERADA)
                 ->update(['estado' => PrecargaComprobanteEstados::PENDIENTE]);
         }
 

@@ -56,6 +56,11 @@
                         <a href="{{route('listar_cuentacorriente_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" title="Cuenta Corriente (se abre en modo consulta)">
                             <i class="fa fa-folder-open">Cuenta Corriente</i>
                         </a>
+                    @endif
+                    @if (can('aplicar-cuentacorriente-proveedor', false))
+                        <a href="{{ route('aplicacion_cuentacorriente_proveedor', ['proveedor_id' => $data->id]) }}" class="btn btn-secondary btn-sm" title="Aplicar NC y pagos a cuenta">
+                            <i class="fa fa-compress-alt"></i> Aplicar CC
+                        </a>
                     @endif       
                     @if (can('listar-encuesta-proveedor', false))
                         <a href="{{route('listar_encuesta_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" title="Encuestas del Proveedor (se abre en modo consulta)">

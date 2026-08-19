@@ -11,9 +11,11 @@ use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
+use App\Services\Compras\PrecargaComprobanteMarcarCargadaAnitaService;
 use App\Services\Compras\ComprobanteProveedorPdfIaService;
 use App\Support\Compras\PrecargaRecepcionErrorRegistrar;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
+use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use Illuminate\Http\Request;
@@ -34,6 +36,8 @@ class Precarga_Comprobante_ProveedorController extends Controller
 
     private ComprobanteProveedorPdfIaService $pdfIaService;
 
+    private PrecargaComprobanteMarcarCargadaAnitaService $marcarCargadaAnitaService;
+
 	public function __construct(Precarga_Comprobante_ProveedorRepositoryInterface $precarga_comprobante_proveedorRepository,
                                 Precarga_Comprobante_Proveedor_ConceptoRepositoryInterface $precarga_comprobante_proveedor_conceptoRepository,
                                 EmpresaRepositoryInterface $empresaRepository,
@@ -42,6 +46,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
                                 PrecargaComprobanteAnitaSyncService $precargaAnitaSync,
                                 PrecargaFacturaScanPathResolver $facturaScanPathResolver,
                                 ComprobanteProveedorPdfIaService $pdfIaService,
+                                PrecargaComprobanteMarcarCargadaAnitaService $marcarCargadaAnitaService,
                                 )
     {
         $this->precarga_comprobante_proveedorRepository = $precarga_comprobante_proveedorRepository;
@@ -52,6 +57,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
         $this->precargaAnitaSync = $precargaAnitaSync;
         $this->facturaScanPathResolver = $facturaScanPathResolver;
         $this->pdfIaService = $pdfIaService;
+        $this->marcarCargadaAnitaService = $marcarCargadaAnitaService;
     }
 
     /**
@@ -375,6 +381,57 @@ class Precarga_Comprobante_ProveedorController extends Controller
                                                                                 'concepto_ivacompra_query'));
     }
 
+    public function marcarCargadaEnAnita(Request $request, int $id)
+    {
+        can('editar-precarga-proveedores');
+
+        try {
+            $resultado = $this->marcarCargadaAnitaService->marcar($id);
+        } catch (\Throwable $e) {
+            if ($request->ajax()) {
+                return response()->json(['mensaje' => 'ng', 'error' => $e->getMessage()], 422);
+            }
+
+            return redirect()
+                ->back()
+                ->withInput()
+                ->with('errores', [$e->getMessage()]);
+        }
+
+        if ($request->ajax()) {
+            return response()->json(['mensaje' => 'ok', 'detalle' => $resultado['mensaje']]);
+        }
+
+        return redirect()
+            ->route('precarga_comprobante_proveedor')
+            ->with('mensaje', $resultado['mensaje']);
+    }
+
+    public function detectarCargadasEnAnita()
+    {
+        can('editar-precarga-proveedores');
+
+        try {
+            $resultado = $this->marcarCargadaAnitaService->detectarYMarcarPendientes(
+                40,
+                $this->empresaRepository->traeEmpresasAsignadas()
+            );
+        } catch (\Throwable $e) {
+            return redirect()
+                ->route('precarga_comprobante_proveedor')
+                ->with('errores', [$e->getMessage()]);
+        }
+
+        $params = [];
+        if (($resultado['marcadas'] ?? 0) > 0) {
+            $params['estado'] = PrecargaComprobanteEstados::CARGADA_ANITA;
+        }
+
+        return redirect()
+            ->route('precarga_comprobante_proveedor', $params)
+            ->with('mensaje', $resultado['mensaje']);
+    }
+
     /**
      * Updote the specified resource in storage.
      *
@@ -385,6 +442,13 @@ class Precarga_Comprobante_ProveedorController extends Controller
     public function actualizar(ValidacionPrecarga_Comprobante_Proveedor $request, $id)
     {
         can('actualizar-precarga-proveedores');
+
+        $actual = Precarga_Comprobante_Proveedor::query()->whereKey($id)->value('estado');
+        if ((string) $actual === PrecargaComprobanteEstados::CARGADA_ANITA) {
+            return redirect()
+                ->back()
+                ->with('errores', ['Esta precarga ya está marcada como cargada en Anita y no se puede modificar.']);
+        }
 
         try {
             DB::transaction(function () use ($request, $id) {

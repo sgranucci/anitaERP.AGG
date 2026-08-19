@@ -158,7 +158,7 @@
                 <i class="fa fa-cog"></i> Configuración contable
             </button>
             <button type="button" class="btn btn-outline-danger btn-sm" id="btn-proceso-ejecutar-automatico"
-                    title="Ejecuta analizar + recalcular % + facturas + asientos para la última jornada cerrada pendiente (envía mail)">
+                    title="Ejecuta analizar + recalcular % + facturas + asientos para la jornada consultada (envía mail)">
                 <i class="fa fa-bolt"></i> Probar cierre automático
             </button>
         </div>
@@ -755,8 +755,18 @@
             </div>
             <div class="modal-body">
                 <p class="small text-muted mb-3">
-                    Facturas CF en lotes (~{{ (float) config('gastronomia.cierre_jornada_cf_lote_porcentaje_tope', 20) }} %
-                    del tope ARCA). Comandas con QR/MP van completas a facturación; las 100 % efectivo
+                    Facturas CF en lotes de alrededor de
+                    ${{ number_format(
+                        \App\Support\Ventas\Gastronomia\CierreJornadaProcesoFacturaLotesSupport::objetivoLote(
+                            (float) config('arca_wsfe.receptor.consumidor_final_umbral_monto', 0),
+                            (float) config('gastronomia.cierre_jornada_cf_lote_porcentaje_tope', 20),
+                            (float) config('gastronomia.cierre_jornada_cf_lote_monto', 0),
+                        ),
+                        0,
+                        ',',
+                        '.'
+                    ) }}.
+                    Comandas con QR/MP van completas a facturación; las 100 % efectivo
                     generan un único ajuste de insumos al final.
                 </p>
                 <div class="form-group">

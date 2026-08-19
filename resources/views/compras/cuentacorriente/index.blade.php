@@ -25,6 +25,11 @@ $modoCuentaCorriente = ($modoVista ?? ProveedorCuentacorrientePreferenciasUsuari
             <div class="card-header">
                 <h3 class="card-title">Cuenta Corriente Proveedor: {{ $nombreproveedor }}</h3>
                 <div class="card-tools">
+                    @if (can('aplicar-cuentacorriente-proveedor', false))
+                        <a href="{{ route('aplicacion_cuentacorriente_proveedor', ['proveedor_id' => $id]) }}" class="btn btn-outline-primary btn-sm">
+                            <i class="fa fa-compress-alt"></i> Aplicar comprobantes
+                        </a>
+                    @endif
                     @if (!str_contains($urlOrigen ?? '', 'editar'))
                         @if (isset($urlOrigen))
                             <a href="{{ $urlOrigen }}" class="btn btn-outline-secondary btn-sm">

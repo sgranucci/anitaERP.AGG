@@ -1,0 +1,240 @@
+<?php
+
+namespace App\Services\Compras;
+
+use App\Models\Compras\Proveedor_Cuentacorriente;
+use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
+use App\Support\Compras\ProveedorCuentacorrienteAplicacionFilaSupport;
+use App\Support\Compras\ProveedorCuentacorrienteAplicacionMatcherSupport;
+use App\Support\Compras\ProveedorCuentacorrienteGrillaSupport;
+use App\Support\Database\SqlDialectSupport;
+use Illuminate\Support\Facades\DB;
+use RuntimeException;
+
+/**
+ * Aplica NC y pagos a cuenta contra facturas adeudadas (subledger, sin asiento).
+ */
+class ProveedorCuentacorrienteAplicacionService
+{
+    /**
+     * @param  list<array{credito_id:int,deuda_id:int,monto:float}>  $lineas
+     * @return array{aplicadas:int, monto:float, ids: list<int>}
+     */
+    public function aplicar(int $proveedorId, string $fecha, array $lineas): array
+    {
+        $fecha = substr($fecha, 0, 10);
+        if (! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fecha)) {
+            throw new RuntimeException('Fecha de aplicación inválida.');
+        }
+
+        return DB::transaction(function () use ($proveedorId, $fecha, $lineas) {
+            $ids = [];
+            foreach ($lineas as $linea) {
+                $ids[] = (int) ($linea['credito_id'] ?? 0);
+                $ids[] = (int) ($linea['deuda_id'] ?? 0);
+            }
+            $ids = array_values(array_unique(array_filter($ids)));
+            if ($ids === []) {
+                throw new RuntimeException('Indique al menos una línea a aplicar.');
+            }
+
+            /** @var \Illuminate\Support\Collection<int, Proveedor_Cuentacorriente> $bloqueados */
+            $bloqueados = Proveedor_Cuentacorriente::query()
+                ->with([
+                    'comprobante_proveedores.tipotransaccion_compras',
+                    'pagoproveedores',
+                    'monedas',
+                    'empresas',
+                ])
+                ->where('proveedor_id', $proveedorId)
+                ->whereIn('id', $ids)
+                ->lockForUpdate()
+                ->get()
+                ->keyBy('id');
+
+            $aplicados = $this->sumasAplicadas($ids);
+
+            $creditosById = [];
+            $deudasById = [];
+            foreach ($bloqueados as $cc) {
+                $fila = ProveedorCuentacorrienteAplicacionFilaSupport::desdeModelo(
+                    $this->conAplicado($cc, (float) ($aplicados[$cc->id] ?? 0))
+                );
+                if ($fila['lado'] === 'credito') {
+                    $creditosById[$fila['id']] = $fila;
+                } else {
+                    $deudasById[$fila['id']] = $fila;
+                }
+            }
+
+            $errores = ProveedorCuentacorrienteAplicacionMatcherSupport::validarLineas(
+                $creditosById,
+                $deudasById,
+                $lineas,
+                $fecha
+            );
+            if ($errores !== []) {
+                throw new RuntimeException(implode(' ', $errores));
+            }
+
+            $creadas = 0;
+            $montoTotal = 0.0;
+            $idsAplicacion = [];
+
+            foreach ($lineas as $linea) {
+                $cid = (int) $linea['credito_id'];
+                $did = (int) $linea['deuda_id'];
+                $monto = round(abs((float) $linea['monto']), 4);
+                $credito = $bloqueados->get($cid);
+                $deuda = $bloqueados->get($did);
+                if ($credito === null || $deuda === null) {
+                    throw new RuntimeException('Movimiento de cuenta corriente no encontrado.');
+                }
+
+                $etiquetaCredito = ProveedorCuentacorrienteAplicacionFilaSupport::etiqueta(
+                    $credito,
+                    ProveedorCuentacorrienteAplicacionFilaSupport::tipo($credito, 'credito')
+                );
+                $etiquetaDeuda = ProveedorCuentacorrienteAplicacionFilaSupport::etiqueta(
+                    $deuda,
+                    ProveedorCuentacorrienteAplicacionFilaSupport::tipo($deuda, 'deuda')
+                );
+
+                $aplDeuda = Proveedor_Cuentacorriente_Aplicacion::query()->create([
+                    'fecha' => $fecha,
+                    'proveedor_cuentacorriente_id' => $deuda->id,
+                    'total' => -$monto,
+                    'moneda_id' => $deuda->moneda_id,
+                    'cotizacion' => $deuda->cotizacion,
+                    'comprobanteaplicado' => $etiquetaCredito,
+                    'comprobante_proveedor_aplicado_id' => $credito->comprobante_proveedor_id,
+                    'empresa_id' => $deuda->empresa_id,
+                    'proveedor_cuentacorriente_aplicado_id' => $credito->id,
+                ]);
+                $aplCredito = Proveedor_Cuentacorriente_Aplicacion::query()->create([
+                    'fecha' => $fecha,
+                    'proveedor_cuentacorriente_id' => $credito->id,
+                    'total' => $monto,
+                    'moneda_id' => $credito->moneda_id,
+                    'cotizacion' => $credito->cotizacion,
+                    'comprobanteaplicado' => $etiquetaDeuda,
+                    'comprobante_proveedor_aplicado_id' => $deuda->comprobante_proveedor_id,
+                    'empresa_id' => $credito->empresa_id,
+                    'proveedor_cuentacorriente_aplicado_id' => $deuda->id,
+                ]);
+
+                $idsAplicacion[] = (int) $aplDeuda->id;
+                $idsAplicacion[] = (int) $aplCredito->id;
+                $creadas++;
+                $montoTotal += $monto;
+            }
+
+            return [
+                'aplicadas' => $creadas,
+                'monto' => round($montoTotal, 4),
+                'ids' => $idsAplicacion,
+            ];
+        });
+    }
+
+    /**
+     * Revierte un par de aplicaciones generado por este proceso (no OP).
+     */
+    public function desaplicar(int $aplicacionId, int $proveedorId): void
+    {
+        DB::transaction(function () use ($aplicacionId, $proveedorId) {
+            /** @var Proveedor_Cuentacorriente_Aplicacion|null $apl */
+            $apl = Proveedor_Cuentacorriente_Aplicacion::query()
+                ->lockForUpdate()
+                ->find($aplicacionId);
+            if ($apl === null) {
+                throw new RuntimeException('Aplicación no encontrada.');
+            }
+            if ((int) ($apl->pagoproveedor_id ?? 0) > 0) {
+                throw new RuntimeException('Esta aplicación pertenece a una orden de pago. Revierta la OP.');
+            }
+
+            $parId = (int) ($apl->proveedor_cuentacorriente_aplicado_id ?? 0);
+            $idsBorrar = [(int) $apl->id];
+
+            if ($parId > 0) {
+                $par = Proveedor_Cuentacorriente_Aplicacion::query()
+                    ->lockForUpdate()
+                    ->where('proveedor_cuentacorriente_id', $parId)
+                    ->where('proveedor_cuentacorriente_aplicado_id', $apl->proveedor_cuentacorriente_id)
+                    ->whereNull('pagoproveedor_id')
+                    ->where('id', '!=', $apl->id)
+                    ->orderByDesc('id')
+                    ->first();
+                if ($par !== null) {
+                    $idsBorrar[] = (int) $par->id;
+                }
+            }
+
+            $ccIds = Proveedor_Cuentacorriente_Aplicacion::query()
+                ->whereIn('id', $idsBorrar)
+                ->pluck('proveedor_cuentacorriente_id');
+
+            $ajenos = Proveedor_Cuentacorriente::query()
+                ->whereIn('id', $ccIds)
+                ->where('proveedor_id', '!=', $proveedorId)
+                ->exists();
+            if ($ajenos) {
+                throw new RuntimeException('La aplicación no pertenece al proveedor indicado.');
+            }
+
+            Proveedor_Cuentacorriente_Aplicacion::query()
+                ->whereIn('id', $idsBorrar)
+                ->delete();
+        });
+    }
+
+    /**
+     * @param  list<int>  $ccIds
+     * @return array<int, float>
+     */
+    private function sumasAplicadas(array $ccIds): array
+    {
+        if ($ccIds === []) {
+            return [];
+        }
+
+        $rows = Proveedor_Cuentacorriente_Aplicacion::query()
+            ->selectRaw('proveedor_cuentacorriente_id, SUM(total) as aplicado')
+            ->whereIn('proveedor_cuentacorriente_id', $ccIds)
+            ->groupBy('proveedor_cuentacorriente_id')
+            ->get();
+
+        $out = [];
+        foreach ($rows as $row) {
+            $out[(int) $row->proveedor_cuentacorriente_id] = (float) $row->aplicado;
+        }
+
+        return $out;
+    }
+
+    private function conAplicado(Proveedor_Cuentacorriente $cc, float $aplicado): Proveedor_Cuentacorriente
+    {
+        $cc->aplicado = $aplicado;
+
+        return $cc;
+    }
+
+    public static function sqlLadoCredito(): string
+    {
+        return 'proveedor_cuentacorriente.total < 0 AND '.SqlDialectSupport::sqlSaldoPendienteProveedorCc();
+    }
+
+    public static function sqlLadoDeuda(): string
+    {
+        return 'proveedor_cuentacorriente.total > 0 AND '.SqlDialectSupport::sqlSaldoPendienteProveedorCc();
+    }
+
+    public static function saldoAbsoluto(Proveedor_Cuentacorriente $fila): float
+    {
+        return ProveedorCuentacorrienteGrillaSupport::saldoPendienteAbsoluto(
+            (float) $fila->total,
+            $fila->aplicado ?? null
+        );
+    }
+}
