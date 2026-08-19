@@ -140,7 +140,10 @@
                 <td class="num">{{ (int) ($fila['cantidad_rendiciones'] ?? 0) }}</td>
                 <td class="num">{{ $fmtNum($fila['total_facturacion'] ?? 0) }}</td>
                 <td class="num">{{ $fmtNum($fila['total_ventas_brutas'] ?? 0) }}</td>
-                <td class="num">{{ $fmtNum($fila['total_flash_vending'] ?? 0) }}</td>
+                <td class="num">
+                    {{ $fmtNum($fila['total_flash_vending'] ?? 0) }}
+                    @include('caja.flash.partials.tilde_validado', ['validado' => ! empty($fila['flash_validado']), 'soloTexto' => true])
+                </td>
                 <td class="num">{{ $fmtNum($fila['total_rendgastro_z'] ?? 0) }}</td>
                 <td class="num">{{ $fmtNum($fila['total_asientos_debe'] ?? 0) }}</td>
                 <td class="num">{{ $fmtNum($fila['diferencia_flash'] ?? 0) }}</td>

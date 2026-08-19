@@ -4,6 +4,7 @@ namespace App\Services\Contable\LibroIvaDigital;
 
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAlicuotaSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaArmadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaBridgeReader;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalConceptoIvacompraSupport;
@@ -249,6 +250,9 @@ class LibroIvaDigitalComprasGenerador
             ];
         }
 
-        return ['cabecera' => $cabecera, 'alicuotas' => $alicuotas];
+        return LibroIvaDigitalComprasAlicuotaSupport::asegurarRegistro([
+            'cabecera' => $cabecera,
+            'alicuotas' => $alicuotas,
+        ]);
     }
 }

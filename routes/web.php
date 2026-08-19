@@ -1026,6 +1026,9 @@ Route::delete('contable/suss-config/{id}', 'Contable\SussConfigController@elimin
 Route::get('contable/efe-mensual', 'Contable\EfeMensualController@index')->name('efe_mensual');
 Route::get('contable/listar-efe-mensual/{formato}', 'Contable\EfeMensualController@exportar')->name('listar_efe_mensual');
 
+Route::get('contable/flash-contable', 'Contable\FlashContableController@index')->name('flash_contable');
+Route::get('contable/listar-flash-contable/{formato?}', 'Contable\FlashContableController@exportar')->name('listar_flash_contable');
+
 Route::get('contable/mayor-plano-cuenta', 'Contable\MayorPlanoCuentaController@index')->name('mayor_plano_cuenta')->middleware('modo.consulta');
 Route::get('contable/listar-mayor-plano-cuenta/{formato}', 'Contable\MayorPlanoCuentaController@exportar')->name('listar_mayor_plano_cuenta')->middleware('modo.consulta');
 Route::get('contable/cc-vs-mayor-anita', 'Contable\CcVsMayorAnitaController@index')->name('cc_vs_mayor_anita');
@@ -2609,6 +2612,13 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::get('caja/flash/reporte-historico', 'Caja\Flash\FlashCajaController@reporteHistorico')->name('flash_caja_reporte_historico');
     Route::get('caja/flash/listar-reporte-historico/{formato?}', 'Caja\Flash\FlashCajaController@exportarReporteHistorico')->name('listar_flash_caja_reporte_historico');
 
+    Route::get('caja/flash/reporte', 'Caja\Flash\FlashReporteAggController@index')->name('flash_reporte_agg');
+    Route::get('caja/flash/reporte/exportar', 'Caja\Flash\FlashReporteAggController@exportar')->name('exportar_flash_reporte_agg');
+    Route::post('caja/flash/reporte/suscripciones', 'Caja\Flash\FlashReporteAggController@guardarSuscripcion')->name('guardar_suscripcion_flash_reporte_agg');
+    Route::put('caja/flash/reporte/suscripciones/{id}', 'Caja\Flash\FlashReporteAggController@actualizarSuscripcion')->name('actualizar_suscripcion_flash_reporte_agg');
+    Route::delete('caja/flash/reporte/suscripciones/{id}', 'Caja\Flash\FlashReporteAggController@eliminarSuscripcion')->name('eliminar_suscripcion_flash_reporte_agg');
+    Route::post('caja/flash/reporte/suscripciones/{id}/probar', 'Caja\Flash\FlashReporteAggController@probarSuscripcion')->name('probar_suscripcion_flash_reporte_agg');
+
     Route::get('caja/flash/parametro', 'Caja\Flash\FlashParametroController@index')->name('flash_parametro');
     Route::get('caja/lista-flash-parametro/{formato?}/{busqueda?}', 'Caja\Flash\FlashParametroController@listar')->name('lista_flash_parametro');
     Route::get('caja/flash/parametro/crear', 'Caja\Flash\FlashParametroController@crear')->name('crear_flash_parametro');
@@ -2624,6 +2634,8 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::post('caja/flash/api/origen-total', 'Caja\Flash\FlashCajaController@apiOrigenTotal')->name('flash_caja_api_origen_total');
     Route::get('caja/flash/api/desglose-wigos-excel', 'Caja\Flash\FlashCajaController@exportarDesgloseWigos')->name('flash_caja_desglose_wigos_excel');
     Route::get('caja/flash/{id}/editar', 'Caja\Flash\FlashCajaController@editar')->name('editar_flash_caja');
+    Route::post('caja/flash/{id}/validar', 'Caja\Flash\FlashCajaController@validar')->name('validar_flash_caja');
+    Route::post('caja/flash/{id}/quitar-validacion', 'Caja\Flash\FlashCajaController@quitarValidacion')->name('quitar_validacion_flash_caja');
     Route::put('caja/flash/{id}', 'Caja\Flash\FlashCajaController@actualizar')->name('actualizar_flash_caja');
     Route::delete('caja/flash/{id}', 'Caja\Flash\FlashCajaController@eliminar')->name('eliminar_flash_caja');
     Route::get('caja/flash/{id}/reporte/{formato?}', 'Caja\Flash\FlashCajaController@reporte')->name('flash_caja_reporte');

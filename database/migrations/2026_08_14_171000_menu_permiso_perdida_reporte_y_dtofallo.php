@@ -14,8 +14,6 @@ return new class extends Migration
     /** @var list<string> */
     private const ROLES_CAJA = [
         'administrador',
-        'Op-tesoreria',
-        'op-Tesoreria Operativa',
         'Enc-tesorería',
         'Enc-tesoreria',
         'enc-Tesoreria Operativa',

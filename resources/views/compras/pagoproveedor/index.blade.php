@@ -54,6 +54,7 @@
                             <th>OP</th>
                             <th>Empresa</th>
                             <th>Proveedor</th>
+                            <th>Cuentas de caja</th>
                             <th class="text-right">Monto</th>
                             <th>Estado</th>
                             <th class="width80" data-orderable="false"></th>
@@ -75,6 +76,20 @@
                                 </td>
                                 <td>{{ $fila->empresas->nombre ?? '' }}</td>
                                 <td>{{ $fila->proveedores->nombre ?? '' }}</td>
+                                <td>
+                                    @php
+                                        $cuentasCaja = $fila instanceof \App\Support\Compras\PagoproveedorListadoFila
+                                            ? $fila->cuentasCajaLista()
+                                            : [];
+                                    @endphp
+                                    @if (count($cuentasCaja) > 0)
+                                        <ul class="mb-0 pl-3 small">
+                                            @foreach ($cuentasCaja as $cuentaCaja)
+                                                <li>{{ $cuentaCaja }}</li>
+                                            @endforeach
+                                        </ul>
+                                    @endif
+                                </td>
                                 <td class="text-right">{{ number_format((float)$fila->monto, 2, ',', '.') }} {{ $fila->monedas->abreviatura ?? '' }}</td>
                                 <td>{{ $fila->estado }}</td>
                                 <td class="text-nowrap">
@@ -105,7 +120,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="7" class="text-center text-muted">Sin órdenes de pago</td></tr>
+                            <tr><td colspan="8" class="text-center text-muted">Sin órdenes de pago</td></tr>
                         @endforelse
                     </tbody>
                 </table>

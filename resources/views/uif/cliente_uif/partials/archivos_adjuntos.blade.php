@@ -1,6 +1,8 @@
 @php
     $archivosList = isset($data) && $data && ($data->cliente_archivos_uif ?? null)
-        ? $data->cliente_archivos_uif
+        ? collect($data->cliente_archivos_uif)->sortByDesc(function ($arch) {
+            return [$arch->created_at ? $arch->created_at->timestamp : 0, $arch->id ?? 0];
+        })->values()
         : collect();
     $ocultarInputsConservar = $ocultarInputsConservar ?? false;
 @endphp
@@ -19,7 +21,14 @@
             <div class="col-md-6 col-lg-4 mb-3 cliente-uif-archivo-item">
                 <div class="card card-outline card-secondary h-100 mb-0">
                     <div class="card-body p-2 d-flex flex-column">
-                        <div class="small text-truncate mb-2" title="{{ $safeName }}">{{ $safeName }}</div>
+                        <div class="small text-truncate mb-1" title="{{ $safeName }}">{{ $safeName }}</div>
+                        <div class="small text-muted mb-2">
+                            @if ($arch->created_at)
+                                Subido: {{ $arch->created_at->format('d/m/Y H:i') }}
+                            @else
+                                Subido: —
+                            @endif
+                        </div>
                         @if ($esImagen)
                             <div class="text-center bg-light rounded mb-2" style="min-height: 120px;">
                                 <a href="{{ $urlInline }}" target="_blank" rel="noopener noreferrer" title="Abrir imagen">

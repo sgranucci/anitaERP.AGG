@@ -114,6 +114,7 @@ class CierreRendicionBingoConciliacionFlashExport implements FromView, WithColum
                 'cantidad_rendiciones' => (int) ($dia['cantidad_rendiciones'] ?? 0),
                 'cantidad_pendiente' => (int) ($dia['cantidad_pendiente'] ?? 0),
                 'estado_cierre' => (string) ($dia['estado_cierre'] ?? ''),
+                'flash_validado' => ! empty($dia['flash_validado']),
             ]);
         }
 

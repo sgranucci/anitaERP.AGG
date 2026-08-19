@@ -800,8 +800,13 @@ final class RendicionMaquinaService
             ];
         }
 
+        $lineas = $this->ordenarLineasPorCodigoNumerico($lineas);
+        if ($rendicion !== null && RendicionMaquinaTurno::esCompleto((string) $rendicion->turno)) {
+            $lineas = RendicionMaquinaValoresCuentacajaSupport::anularCotizacionDivisa($lineas);
+        }
+
         return RendicionMaquinaValoresCuentacajaSupport::enriquecerLineas(
-            $this->ordenarLineasPorCodigoNumerico($lineas),
+            $lineas,
             $fechaYmd,
             $empresaId
         );

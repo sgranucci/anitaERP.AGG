@@ -8,12 +8,19 @@
     foreach (RendicionGastronomiaCajaListadoFiltros::CAMPOS as $key => $meta) {
         $operadoresJson[$key] = RendicionGastronomiaCajaListadoFiltros::operadoresParaCampo($key);
     }
+    $fScope = $f['empresa_scope'] ?? 'una';
+    $fEmp = (int) ($f['empresa_id'] ?? 0);
 @endphp
 <div class="collapse border-bottom" id="panel-filtros-rendicion-gastronomia" data-listado-filtros-panel>
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
+    {{-- Persistencia del filtro externo de empresa al buscar por texto o aplicar el panel --}}
+    @if ($fScope === 'todas')
+        <input type="hidden" name="empresa_todas" value="1">
+    @elseif ($fEmp > 0)
+        <input type="hidden" name="empresa_id" value="{{ $fEmp }}">
+    @endif
     <div class="card-body bg-light py-2 text-body">
         <div class="form-row align-items-end">
-            @include('includes.listado.filtro_empresa_asignada', ['f' => $f])
             <div class="form-group col-md-2 col-sm-6 mb-2">
                 <label class="small mb-1" for="fecha_jornada_desde">Desde (fecha jornada)</label>
                 <input type="date"

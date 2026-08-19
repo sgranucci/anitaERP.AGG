@@ -1,7 +1,7 @@
 $(function () {
     const modoCuentaCorriente = 'cuenta_corriente';
     const modoDeuda = 'deuda';
-    const $form = $('#form-cuentacorriente-filtros');
+    const $form = $('#form-filtros-cuentacorriente-proveedor');
     const $modoInput = $('#modo_vista');
     const $switch = $('#switch-modo-vista');
     const $label = $('#label-modo-vista');

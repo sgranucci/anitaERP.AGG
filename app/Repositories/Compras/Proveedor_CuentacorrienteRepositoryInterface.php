@@ -14,15 +14,15 @@ interface Proveedor_CuentacorrienteRepositoryInterface
 
     public function delete($id);
 
-    public function listarCuentaCorriente($busqueda, $proveedor_id, $paginar = true);
+    public function listarCuentaCorriente($busqueda, $proveedor_id, $paginar = true, array $filtros = []);
 
-    public function listarDeudaProveedor($busqueda, $proveedor_id, $paginar = true);
+    public function listarDeudaProveedor($busqueda, $proveedor_id, $paginar = true, array $filtros = []);
 
-    public function calcularSaldoCuentaCorriente(int $proveedor_id): float;
+    public function calcularSaldoCuentaCorriente(int $proveedor_id, array $filtros = []): float;
 
-    public function calcularTotalDeudaProveedor(int $proveedor_id): float;
+    public function calcularTotalDeudaProveedor(int $proveedor_id, array $filtros = []): float;
 
-    public function saldoAnteriorPagina(int $proveedor_id, $primerRegistro): float;
+    public function saldoAnteriorPagina(int $proveedor_id, $primerRegistro, array $filtros = []): float;
 
     public function consultarDeuda($proveedor_id, $empresa_id, $comprobante_proveedor_id = null);
 

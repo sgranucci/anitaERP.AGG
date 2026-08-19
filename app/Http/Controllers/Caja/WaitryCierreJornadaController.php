@@ -37,6 +37,9 @@ class WaitryCierreJornadaController extends Controller
 
         $empresas = $this->empresaRepository->allFiltrado();
         $empresaId = (int) $request->input('empresa_id', $empresas->first()->id ?? 0);
+        if ($empresaId > 0 && $empresas->firstWhere('id', $empresaId) === null) {
+            $empresaId = (int) ($empresas->first()->id ?? 0);
+        }
         $fechaJornada = $this->resolverFechaJornadaConsulta($request, $empresaId);
 
         $payload = null;
@@ -587,9 +590,12 @@ class WaitryCierreJornadaController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $empresaId = (int) $request->input('empresa_id', 0);
-        $fechaJornada = $this->resolverFechaJornadaConsulta($request, $empresaId);
         $empresas = $this->empresaRepository->allFiltrado();
+        $empresaId = (int) $request->input('empresa_id', $empresas->first()->id ?? 0);
+        if ($empresaId > 0 && $empresas->firstWhere('id', $empresaId) === null) {
+            $empresaId = (int) ($empresas->first()->id ?? 0);
+        }
+        $fechaJornada = $this->resolverFechaJornadaConsulta($request, $empresaId);
         $empresaNombre = $empresas->firstWhere('id', $empresaId)?->nombre ?? '';
 
         try {

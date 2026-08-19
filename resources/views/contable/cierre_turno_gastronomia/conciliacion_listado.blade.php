@@ -127,7 +127,10 @@
                 <td>{{ $fila['estado'] ?? '' }}</td>
                 <td class="num">{{ (int) ($fila['cantidad_cierres'] ?? 0) }}</td>
                 <td class="num">{{ $fmtNum($fila['total_facturacion'] ?? 0) }}</td>
-                <td class="num">{{ $fmtNum($fila['total_flash_ayb'] ?? 0) }}</td>
+                <td class="num">
+                    {{ $fmtNum($fila['total_flash_ayb'] ?? 0) }}
+                    @include('caja.flash.partials.tilde_validado', ['validado' => ! empty($fila['flash_validado']), 'soloTexto' => true])
+                </td>
                 <td class="num">{{ $fmtNum($fila['total_asientos_debe'] ?? 0) }}</td>
                 <td class="num">{{ $fmtNum($fila['total_mayor_neto'] ?? 0) }}</td>
                 <td class="num">{{ $fmtNum($fila['diferencia_flash'] ?? 0) }}</td>

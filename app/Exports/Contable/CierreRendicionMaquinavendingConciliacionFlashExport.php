@@ -96,6 +96,7 @@ class CierreRendicionMaquinavendingConciliacionFlashExport implements FromView, 
                 'diferencia_flash' => (float) ($dia['diferencia'] ?? 0),
                 'diferencia_rendgastro' => (float) ($dia['diferencia_rendgastro'] ?? 0),
                 'diferencia_venta_asientos' => (float) ($dia['diferencia_venta_total_asientos'] ?? 0),
+                'flash_validado' => ! empty($dia['flash_validado']),
             ];
         }
 

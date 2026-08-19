@@ -8,6 +8,7 @@ use App\Repositories\Compras\Proveedor_CuentacorrienteRepositoryInterface;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\ProveedorCuentacorrienteAplicacionService;
+use App\Support\Compras\ProveedorCuentacorrienteAplicacionDcSupport;
 use App\Support\Compras\ProveedorCuentacorrienteAplicacionFilaSupport;
 use App\Support\Compras\ProveedorCuentacorrienteAplicacionMatcherSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -69,6 +70,12 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
             'deudas' => $deudas,
             'recientes' => $recientes,
             'kpis' => $kpis,
+            'aplicacionCcInicial' => [
+                'creditos' => $creditos,
+                'deudas' => $deudas,
+                'recientes' => $recientes,
+                'kpis' => $kpis,
+            ],
         ]);
     }
 
@@ -142,9 +149,15 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
             (int) $request->query('empresa_id', $request->input('empresa_id', 0))
         );
 
+        $mensaje = $resultado['aplicadas'].' aplicación(es) por '.number_format($resultado['monto'], 2, ',', '.');
+        $dc = (float) ($resultado['dc'] ?? 0);
+        if (ProveedorCuentacorrienteAplicacionDcSupport::requiereAsiento($dc)) {
+            $mensaje .= ' · DC '.number_format(abs($dc), 2, ',', '.').' ('.ProveedorCuentacorrienteAplicacionDcSupport::etiqueta($dc).')';
+        }
+
         return response()->json([
             'ok' => true,
-            'mensaje' => $resultado['aplicadas'].' aplicación(es) por '.number_format($resultado['monto'], 2, ',', '.'),
+            'mensaje' => $mensaje,
             'resultado' => $resultado,
             'workbench' => $payload,
         ]);
@@ -218,6 +231,8 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
                         : '',
                     'deuda_id' => (int) $apl->proveedor_cuentacorriente_id,
                     'credito_id' => (int) ($apl->proveedor_cuentacorriente_aplicado_id ?? 0),
+                    'diferencia_cambio' => round((float) ($apl->diferencia_cambio ?? 0), 4),
+                    'asiento_id' => (int) ($apl->asiento_id ?? 0) ?: null,
                 ];
             })
             ->values()

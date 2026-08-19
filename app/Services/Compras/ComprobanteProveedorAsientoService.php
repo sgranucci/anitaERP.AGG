@@ -10,7 +10,9 @@ use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Services\Stock\RecepcionProveedorAsientoService;
+use App\Support\Compras\ComprobanteProveedorAsientoCuadreSupport;
 use App\Support\Compras\ComprobanteProveedorAsientoDescripcionSupport;
+use App\Support\Compras\ComprobanteProveedorCentrocostoSupport;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
 use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
@@ -169,9 +171,8 @@ class ComprobanteProveedorAsientoService
         $monedaFactura = $this->monedaFactura($comprobante);
 
         $esNotaCredito = (string) ($comprobante->tipotransaccion_compras?->signo ?? 'S') === 'R';
-        $centrocostoId = (int) ($comprobante->proveedores?->centrocostocompra_id
-            ?? $comprobante->ordencompras?->centrocosto_id
-            ?? 1);
+        // CC destino de la OC (no el default de compras del proveedor).
+        $centrocostoId = ComprobanteProveedorCentrocostoSupport::resolverDesdeComprobante($comprobante);
 
         $modoAsignaRecepcion = $comprobante->modo_carga === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
         // Provisión FAR solo si la empresa genera asiento en la COM (GR valuado).
@@ -198,6 +199,8 @@ class ComprobanteProveedorAsientoService
             : 0;
 
         $lineasDebe = [];
+        $lineasHaberExtra = [];
+        $cuentaProvisionId = 0;
         $totalNetoConceptos = 0.0;
         // Con recepción vinculada: "COM: nro codigo nombre"; si no, "codigo nombre".
         $varianteLinea = $modoAsignaRecepcion ? 'com' : 'normal';
@@ -324,7 +327,7 @@ class ComprobanteProveedorAsientoService
 
             $diferenciaNeto = round($totalNetoConceptos - $totalProvision, 2);
 
-            if ($diferenciaNeto < -0.05) {
+            if ($diferenciaNeto < -ComprobanteProveedorAsientoCuadreSupport::TOLERANCIA) {
                 throw new RuntimeException(
                     'El neto de la factura ('.number_format($totalNetoConceptos, 2)
                     .') es menor que la provisión COM ('.number_format($totalProvision, 2).').'
@@ -341,17 +344,22 @@ class ComprobanteProveedorAsientoService
                 ];
             }
 
-            if ($diferenciaNeto > 0.05) {
+            // Incluir también 0,01–0,05: si se omite, FAR no cierra vs COM y Anita rechaza el asiento.
+            if (ComprobanteProveedorAsientoCuadreSupport::hayDiferenciaAImputar($diferenciaNeto)) {
                 $lineasDiff = $this->lineasDebeDiferenciaArticulosProrrateada(
                     $comprobante,
-                    $diferenciaNeto,
+                    abs($diferenciaNeto),
                     $centrocostoId
                 );
                 foreach ($lineasDiff as &$lineaDiff) {
                     $lineaDiff['observacion'] = $descDiferenciaErp;
                 }
                 unset($lineaDiff);
-                $lineasDebe = array_merge($lineasDebe, $lineasDiff);
+                if ($diferenciaNeto > 0) {
+                    $lineasDebe = array_merge($lineasDebe, $lineasDiff);
+                } else {
+                    $lineasHaberExtra = $lineasDiff;
+                }
             }
         }
 
@@ -388,19 +396,29 @@ class ComprobanteProveedorAsientoService
             throw new RuntimeException('El total del comprobante debe ser mayor a cero para contabilizar.');
         }
 
-        $diferencia = round($totalDebe - $totalComprobante, 2);
-        if (abs($diferencia) > 0.05) {
+        $lineasHaber = array_merge([[
+            'cuentacontable_id' => $cuentaProveedor,
+            'importe' => $totalComprobante,
+            'centrocosto_id' => $centrocostoId,
+            'observacion' => $descLineaErp,
+        ]], $lineasHaberExtra);
+
+        $totalHaber = round(array_sum(array_column($lineasHaber, 'importe')), 2);
+        $diferencia = round($totalDebe - $totalHaber, 2);
+        if (abs($diferencia) > ComprobanteProveedorAsientoCuadreSupport::TOLERANCIA) {
             throw new RuntimeException(
                 'Los conceptos ('.number_format($totalDebe, 2).') no coinciden con el total del comprobante ('.number_format($totalComprobante, 2).').'
             );
         }
 
-        $lineasHaber = [[
-            'cuentacontable_id' => $cuentaProveedor,
-            'importe' => $totalComprobante,
-            'centrocosto_id' => $centrocostoId,
-            'observacion' => $descLineaErp,
-        ]];
+        if (ComprobanteProveedorAsientoCuadreSupport::hayDiferenciaAImputar($diferencia)) {
+            $lineasDebe = ComprobanteProveedorAsientoCuadreSupport::absorberCentavosEnDebe(
+                $lineasDebe,
+                round($totalHaber - $totalDebe, 2),
+                $cuentaProvisionId
+            );
+            $totalDebe = round(array_sum(array_column($lineasDebe, 'importe')), 2);
+        }
 
         if ($esNotaCredito) {
             [$lineasDebe, $lineasHaber] = [$lineasHaber, $lineasDebe];

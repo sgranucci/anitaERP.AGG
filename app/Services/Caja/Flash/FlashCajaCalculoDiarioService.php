@@ -32,6 +32,7 @@ final class FlashCajaCalculoDiarioService
     public function __construct(
         private readonly FlashCajaCalculoService $calculoService,
         private readonly FlashCajaRepositoryInterface $repository,
+        private readonly FlashCajaAnitaExportService $exportAnitaService,
     ) {}
 
     /**
@@ -157,10 +158,13 @@ final class FlashCajaCalculoDiarioService
                         throw $e;
                     }
 
+                    $syncAnita = $this->exportAnitaService->enviarSiNoExisteEnAnita($flash);
+
                     return $base + [
                         'estado' => self::ESTADO_CREADO,
                         'flash_id' => $flash->id,
-                        'mensaje' => 'Flash creado desde Wigos/ERP.',
+                        'mensaje' => 'Flash creado desde Wigos/ERP. '.$syncAnita['mensaje'],
+                        'anita_sync' => $syncAnita['resultado'],
                     ];
                 }
 

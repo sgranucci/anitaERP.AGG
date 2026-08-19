@@ -91,6 +91,7 @@ final class PagoproveedorListadoUnificadoSupport
                 'pp.estado',
                 'pp.detalle',
                 DB::raw('NULL as solicitudpago_id'),
+                $this->selectCuentasCajaPagoproveedor(),
             ]);
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'pp.empresa_id');
@@ -152,6 +153,7 @@ final class PagoproveedorListadoUnificadoSupport
                 DB::raw("CASE WHEN cm.caja_movimiento_revertido_por_id IS NOT NULL THEN 'REVERTIDA' ELSE 'CONFIRMADA' END as estado"),
                 'cm.detalle',
                 'cm.solicitudpago_id',
+                $this->selectCuentasCajaIeOpp(),
             ]);
 
         if ($tipoOppId > 0) {
@@ -175,6 +177,41 @@ final class PagoproveedorListadoUnificadoSupport
         ], true);
 
         return $query;
+    }
+
+    /**
+     * Cuentas de caja usadas en el movimiento de la OP (`pagoproveedor`).
+     */
+    private function selectCuentasCajaPagoproveedor(): \Illuminate\Database\Query\Expression
+    {
+        return DB::raw('('.$this->sqlGroupConcatCuentasCaja().'
+            FROM caja_movimiento_cuentacaja AS cmc
+            INNER JOIN caja_movimiento AS cmx ON cmx.id = cmc.caja_movimiento_id
+            INNER JOIN cuentacaja AS cc ON cc.id = cmc.cuentacaja_id
+            WHERE cmx.pagoproveedor_id = pp.id
+               OR (pp.caja_movimiento_id IS NOT NULL AND cmx.id = pp.caja_movimiento_id)
+        ) as cuentas_caja');
+    }
+
+    /**
+     * Cuentas de caja usadas en la OPP de Ingresos/Egresos.
+     */
+    private function selectCuentasCajaIeOpp(): \Illuminate\Database\Query\Expression
+    {
+        return DB::raw('('.$this->sqlGroupConcatCuentasCaja().'
+            FROM caja_movimiento_cuentacaja AS cmc
+            INNER JOIN cuentacaja AS cc ON cc.id = cmc.cuentacaja_id
+            WHERE cmc.caja_movimiento_id = cm.id
+        ) as cuentas_caja');
+    }
+
+    private function sqlGroupConcatCuentasCaja(): string
+    {
+        return "SELECT GROUP_CONCAT(DISTINCT TRIM(CONCAT(
+            COALESCE(cc.codigo, ''),
+            CASE WHEN COALESCE(cc.codigo, '') = '' THEN '' ELSE ' — ' END,
+            COALESCE(cc.nombre, '')
+        )) SEPARATOR ' | ')";
     }
 
     /**

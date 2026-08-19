@@ -3,7 +3,8 @@
 namespace App\Support\Compras;
 
 use App\Models\Compras\Requisicion;
-use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
+use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Session;
 
@@ -64,72 +65,74 @@ final class RequisicionVisibilidadSupport
     }
 
     /**
-     * @param  Builder<\App\Models\Compras\Requisicion>  $query
+     * @param  EloquentBuilder<\App\Models\Compras\Requisicion>|QueryBuilder  $query
      */
-    public static function aplicarFiltroListado(Builder $query): void
+    public static function aplicarFiltroListado(EloquentBuilder|QueryBuilder $query, string $tabla = 'requisicion'): void
     {
+        $tabla = trim($tabla) !== '' ? $tabla : 'requisicion';
+
         if (self::puedeVerTodasSinRestriccion()) {
             return;
         }
 
-        self::aplicarFiltroEmpresasAsignadas($query);
+        self::aplicarFiltroEmpresasAsignadas($query, $tabla);
 
         if (self::esUsuarioCompras()) {
-            self::aplicarFiltroOficinaComprasSiActivo($query);
+            self::aplicarFiltroOficinaComprasSiActivo($query, $tabla);
 
             return;
         }
 
         if (self::esUsuarioRestoSectores()) {
-            self::aplicarFiltroCentrocostoOrigen($query);
+            self::aplicarFiltroCentrocostoOrigen($query, $tabla);
 
             return;
         }
 
-        self::aplicarFiltroSoloCreador($query);
+        self::aplicarFiltroSoloCreador($query, $tabla);
     }
 
     /**
-     * @param  Builder<\App\Models\Compras\Requisicion>  $query
+     * @param  EloquentBuilder<\App\Models\Compras\Requisicion>|QueryBuilder  $query
      */
-    private static function aplicarFiltroEmpresasAsignadas(Builder $query): void
+    private static function aplicarFiltroEmpresasAsignadas(EloquentBuilder|QueryBuilder $query, string $tabla): void
     {
         $empresas = self::empresaIdsAsignadas();
         if (count($empresas) >= 1) {
-            $query->whereIn('requisicion.empresa_id', $empresas);
+            $query->whereIn($tabla.'.empresa_id', $empresas);
         }
     }
 
     /**
-     * @param  Builder<\App\Models\Compras\Requisicion>  $query
+     * @param  EloquentBuilder<\App\Models\Compras\Requisicion>|QueryBuilder  $query
      */
-    private static function aplicarFiltroSoloCreador(Builder $query): void
+    private static function aplicarFiltroSoloCreador(EloquentBuilder|QueryBuilder $query, string $tabla): void
     {
         $usuarioId = (int) (Auth::id() ?? 0);
         if ($usuarioId > 0) {
-            $query->where('requisicion.creousuario_id', $usuarioId);
+            $query->where($tabla.'.creousuario_id', $usuarioId);
         }
     }
 
     /**
-     * @param  Builder<\App\Models\Compras\Requisicion>  $query
+     * @param  EloquentBuilder<\App\Models\Compras\Requisicion>|QueryBuilder  $query
      */
-    private static function aplicarFiltroCentrocostoOrigen(Builder $query): void
+    private static function aplicarFiltroCentrocostoOrigen(EloquentBuilder|QueryBuilder $query, string $tabla): void
     {
         $centrocostoId = self::centrocostoOrigenUsuario();
         if ($centrocostoId !== null) {
-            $query->where('requisicion.centrocosto_id', $centrocostoId);
+            $query->where($tabla.'.centrocosto_id', $centrocostoId);
 
             return;
         }
 
-        self::aplicarFiltroSoloCreador($query);
+        self::aplicarFiltroSoloCreador($query, $tabla);
     }
 
     /**
-     * @param  Builder<\App\Models\Compras\Requisicion>  $query
+     * @param  EloquentBuilder<\App\Models\Compras\Requisicion>|QueryBuilder  $query
      */
-    private static function aplicarFiltroOficinaComprasSiActivo(Builder $query): void
+    private static function aplicarFiltroOficinaComprasSiActivo(EloquentBuilder|QueryBuilder $query, string $tabla): void
     {
         if (! config('requisicion.filtro_oficina_compras_activo', false)) {
             return;
@@ -137,7 +140,7 @@ final class RequisicionVisibilidadSupport
 
         $oficinaCompraId = Auth::user()->oficinacompra_id ?? null;
         if ($oficinaCompraId) {
-            $query->where('requisicion.oficinacompra_id', $oficinaCompraId);
+            $query->where($tabla.'.oficinacompra_id', $oficinaCompraId);
         }
     }
 

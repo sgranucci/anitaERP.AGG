@@ -4,17 +4,41 @@
 @endsection
 
 @section("scripts")
+<style>
+    #tabla-paginada th.col-acciones-cc,
+    #tabla-paginada td.col-acciones-cc {
+        width: 8.5rem;
+        min-width: 8.5rem;
+        white-space: nowrap;
+        text-align: center;
+        vertical-align: middle;
+    }
+    #tabla-paginada td.col-acciones-cc .btn-accion-tabla {
+        display: inline-block;
+        vertical-align: middle;
+        margin: 0 2px;
+    }
+</style>
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/compras/cuentacorriente/filtro.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/cuentacorriente/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/cuentacorriente/modo.js")}}" type="text/javascript"></script>
 @endsection
 
 @php
 use App\Support\Compras\ProveedorCuentacorrienteGrillaSupport;
+use App\Support\Compras\ProveedorCuentacorrienteListadoFiltros;
 use App\Support\Compras\ProveedorCuentacorrientePreferenciasUsuario;
 
 $modoCuentaCorriente = ($modoVista ?? ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE)
     === ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE;
+$limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
+    ['id' => $id],
+    ProveedorCuentacorrienteListadoFiltros::paraQueryStringEmpresa($filtros ?? []),
+    ['modo_vista' => $modoVista ?? ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE],
+    request()->only(['origen', 'vista'])
+));
 @endphp
 
 @section('contenido')
@@ -24,52 +48,60 @@ $modoCuentaCorriente = ($modoVista ?? ProveedorCuentacorrientePreferenciasUsuari
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Cuenta Corriente Proveedor: {{ $nombreproveedor }}</h3>
-                <div class="card-tools">
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @if (can('aplicar-cuentacorriente-proveedor', false))
-                        <a href="{{ route('aplicacion_cuentacorriente_proveedor', ['proveedor_id' => $id]) }}" class="btn btn-outline-primary btn-sm">
+                        <a href="{{ route('aplicacion_cuentacorriente_proveedor', ['proveedor_id' => $id]) }}" class="btn btn-outline-primary btn-sm mr-1">
                             <i class="fa fa-compress-alt"></i> Aplicar comprobantes
                         </a>
                     @endif
                     @if (!str_contains($urlOrigen ?? '', 'editar'))
                         @if (isset($urlOrigen))
-                            <a href="{{ $urlOrigen }}" class="btn btn-outline-secondary btn-sm">
+                            <a href="{{ $urlOrigen }}" class="btn btn-outline-secondary btn-sm mr-1">
                                 <i class="fa fa-fw fa-reply-all"></i> Volver
                             </a>
                         @else
-                            <a href="javascript:history.back()" class="btn btn-outline-secondary btn-sm">
+                            <a href="javascript:history.back()" class="btn btn-outline-secondary btn-sm mr-1">
                                 <i class="fa fa-fw fa-reply-all"></i> Volver atr&aacute;s
                             </a>
                         @endif
                     @endif
-                </div>
-                <div class="d-md-flex justify-content-md-end flex-wrap align-items-center mt-2 mt-md-0">
-                    <form action="{{ route('listar_cuentacorriente_proveedor', ['id' => $id]) }}" method="GET" id="form-cuentacorriente-filtros" class="d-flex flex-wrap align-items-center">
-                        <input type="hidden" name="modo_vista" id="modo_vista" value="{{ $modoVista ?? ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE }}">
-                        @foreach (request()->only(['origen', 'vista']) as $modoConsultaClave => $modoConsultaValor)
-                            <input type="hidden" name="{{ $modoConsultaClave }}" value="{{ $modoConsultaValor }}">
-                        @endforeach
-                        <div class="custom-control custom-switch mr-3 mb-2">
-                            <input type="checkbox"
-                                   class="custom-control-input"
-                                   id="switch-modo-vista"
-                                   @checked(! $modoCuentaCorriente)>
-                            <label class="custom-control-label" for="switch-modo-vista" id="label-modo-vista">
-                                @if ($modoCuentaCorriente)
-                                    Cuenta corriente (Debe / Haber)
-                                @else
-                                    Deuda (facturas impagas)
-                                @endif
-                            </label>
-                        </div>
-                        <div class="btn-group mb-2">
-                            <input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..." value="{{ $busqueda ?? '' }}">
-                            <button type="submit" class="btn btn-default">
-                                <span class="fa fa-search"></span>
-                            </button>
-                        </div>
-                    </form>
+                    @include('includes.listado.filtros_toolbar', [
+                        'formId' => 'form-filtros-cuentacorriente-proveedor',
+                        'filtroValor' => $filtros['valor'] ?? '',
+                        'tieneCriterios' => ProveedorCuentacorrienteListadoFiltros::tieneCriteriosTexto($filtros ?? []),
+                        'limpiarUrl' => $limpiarUrl,
+                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
+                        'toggleTarget' => '#panel-filtros-cuentacorriente-proveedor',
+                        'toggleId' => 'btn-toggle-filtros-cuentacorriente-proveedor',
+                        'inputId' => 'filtro_valor',
+                    ])
                 </div>
             </div>
+            <form method="get" action="{{ route('listar_cuentacorriente_proveedor', ['id' => $id]) }}" id="form-filtros-cuentacorriente-proveedor" class="mb-0">
+                <input type="hidden" name="modo_vista" id="modo_vista" value="{{ $modoVista ?? ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE }}">
+                @foreach (request()->only(['origen', 'vista']) as $modoConsultaClave => $modoConsultaValor)
+                    <input type="hidden" name="{{ $modoConsultaClave }}" value="{{ $modoConsultaValor }}">
+                @endforeach
+                <div class="card-body py-2 border-bottom bg-white">
+                    <div class="custom-control custom-switch">
+                        <input type="checkbox"
+                               class="custom-control-input"
+                               id="switch-modo-vista"
+                               @checked(! $modoCuentaCorriente)>
+                        <label class="custom-control-label" for="switch-modo-vista" id="label-modo-vista">
+                            @if ($modoCuentaCorriente)
+                                Cuenta corriente (Debe / Haber)
+                            @else
+                                Deuda (facturas impagas)
+                            @endif
+                        </label>
+                    </div>
+                </div>
+                @include('compras.cuentacorriente.partials.filtros_listado', [
+                    'limpiarUrl' => $limpiarUrl,
+                ])
+            </form>
+            @include('compras.cuentacorriente.partials.filtros_externos')
             <div class="card-body">
                 <div class="row mb-3">
                     <div class="col-md-6">
@@ -96,10 +128,10 @@ $modoCuentaCorriente = ($modoVista ?? ProveedorCuentacorrientePreferenciasUsuari
                     @include('includes.exportar-tabla-id', [
                         'ruta' => 'listar_cuentacorriente_proveedor',
                         'id' => $id,
-                        'busqueda' => $busqueda ?? '',
-                        'queryExtra' => array_merge(['modo_vista' => $modoVista ?? ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE], request()->only(['origen', 'vista'])),
+                        'busqueda' => '',
+                        'queryExtra' => $filtrosQuery ?? [],
                     ])
-                    <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
+                    <table class="table table-striped table-bordered table-hover tabla-acciones-fijas" id="tabla-paginada">
                         <thead>
                             <tr>
                                 <th class="width20">ID</th>
@@ -117,7 +149,7 @@ $modoCuentaCorriente = ($modoVista ?? ProveedorCuentacorrientePreferenciasUsuari
                                     <th style="width: 12%; text-align: right;">Aplicado</th>
                                     <th style="width: 12%; text-align: right;">Saldo pendiente</th>
                                 @endif
-                                <th class="width80" data-orderable="false">Acciones</th>
+                                <th class="width160 text-nowrap col-acciones-tabla col-acciones-cc" data-orderable="false">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -173,7 +205,7 @@ $modoCuentaCorriente = ($modoVista ?? ProveedorCuentacorrientePreferenciasUsuari
                                             {{ number_format($saldoPendiente, 2) }}
                                         </td>
                                     @endif
-                                    <td>
+                                    <td class="col-acciones-tabla col-acciones-cc">
                                         <input type="hidden" name="total" id="total" class="form-control total" value="{{ $data->total }}"/>
                                         @include('compras.cuentacorriente.partials.acciones_grilla', ['data' => $data])
                                     </td>
@@ -206,5 +238,5 @@ $modoCuentaCorriente = ($modoVista ?? ProveedorCuentacorrientePreferenciasUsuari
     </div>
 </div>
 @include('compras.cuentacorriente.modalaplicacion')
-{{ $cuentacorriente->appends(array_merge(['busqueda' => $busqueda ?? '', 'modo_vista' => $modoVista ?? ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE], request()->only(['origen', 'vista'])))->links() }}
+{{ $cuentacorriente->appends($filtrosQuery ?? [])->links() }}
 @endsection

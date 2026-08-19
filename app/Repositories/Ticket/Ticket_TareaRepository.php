@@ -19,6 +19,9 @@ class Ticket_TareaRepository implements Ticket_TareaRepositoryInterface
 	/** @var array<int, array<string, mixed>> */
 	public $tareasRecienCreadas = [];
 
+	/** @var list<int> */
+	public $tareasAsignacionTecnico = [];
+
     /**
      * PostRepository constructor.
      *
@@ -185,6 +188,7 @@ class Ticket_TareaRepository implements Ticket_TareaRepositoryInterface
 		}
 		$this->ticket_tarea_ids = [];
 		$this->tareasRecienCreadas = [];
+		$this->tareasAsignacionTecnico = [];
 
 		// Graba tareas
 		if (isset($data))
@@ -230,6 +234,7 @@ class Ticket_TareaRepository implements Ticket_TareaRepositoryInterface
 							// Asigna tabla de ids de tareas
 							$this->ticket_tarea_ids[] = $ticket_tarea->id;
 							$this->registrarTareaRecienCreada($i, $nombretarea_tickets, $fechacargas, $fechaprogramaciones, $tecnico_ids, $turno_ids);
+							$this->registrarAsignacionTecnicoSiCorresponde((int) $ticket_tarea->id, 0, $tecnico_ids[$i] ?? null);
 
 							// Agrega estado de tarea asignada
 							// Crea estado
@@ -239,7 +244,9 @@ class Ticket_TareaRepository implements Ticket_TareaRepositoryInterface
 					}
 					else
 					{
-						$ticket_tarea = $this->model->findOrFail($ticket_tarea_ids[$i])->update([
+						$ticket_tarea = $this->model->findOrFail($ticket_tarea_ids[$i]);
+						$tecnicoAnterior = (int) ($ticket_tarea->tecnico_id ?? 0);
+						$ticket_tarea->update([
 									"ticket_id" => $id,
 									"tarea_id" => $tarea_ticket_ids[$i],
 									"detalle" => $nombretarea_tickets[$i],
@@ -254,6 +261,7 @@ class Ticket_TareaRepository implements Ticket_TareaRepositoryInterface
 
 						// Asigna tabla de ids de tareas
 						$this->ticket_tarea_ids[] = $ticket_tarea_ids[$i];
+						$this->registrarAsignacionTecnicoSiCorresponde((int) $ticket_tarea_ids[$i], $tecnicoAnterior, $tecnico_ids[$i] ?? null);
 					}
 				}
 			}
@@ -282,6 +290,7 @@ class Ticket_TareaRepository implements Ticket_TareaRepositoryInterface
 							// Asigna tabla de ids de tareas
 							$this->ticket_tarea_ids[] = $ticket_tarea->id;
 							$this->registrarTareaRecienCreada($i, $nombretarea_tickets, $fechacargas, $fechaprogramaciones, $tecnico_ids, $turno_ids);
+							$this->registrarAsignacionTecnicoSiCorresponde((int) $ticket_tarea->id, 0, $tecnico_ids[$i] ?? null);
 
 							// Agrega estado de tarea asignada
 							// Crea estado
@@ -318,6 +327,7 @@ class Ticket_TareaRepository implements Ticket_TareaRepositoryInterface
 		return [
 			'ticket_tarea_ids' => $this->ticket_tarea_ids,
 			'tareas_recien_creadas' => $this->tareasRecienCreadas,
+			'tareas_asignacion_tecnico' => $this->tareasAsignacionTecnico,
 		];
 	}
 
@@ -343,5 +353,13 @@ class Ticket_TareaRepository implements Ticket_TareaRepositoryInterface
 			'tecnico_id' => $tecnico_ids[$i] ?? null,
 			'turno_id' => $turno_ids[$i] ?? null,
 		];
+	}
+
+	private function registrarAsignacionTecnicoSiCorresponde(int $ticketTareaId, int $tecnicoAnterior, $tecnicoNuevo): void
+	{
+		$nuevo = (int) ($tecnicoNuevo ?? 0);
+		if ($nuevo > 0 && $nuevo !== $tecnicoAnterior) {
+			$this->tareasAsignacionTecnico[] = $ticketTareaId;
+		}
 	}
 }

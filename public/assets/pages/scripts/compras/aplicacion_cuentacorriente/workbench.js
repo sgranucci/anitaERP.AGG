@@ -33,6 +33,43 @@
         return (Number(n) || 0).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
 
+    function cotizLabel(item) {
+        var mon = item.moneda || '';
+        var cot = Number(item.cotizacion) || 1;
+        if (cot > 1.0001) {
+            return mon + ' · cot ' + cot.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+        }
+        return mon;
+    }
+
+    function dcDeLinea(l) {
+        var c = creditoById(l.credito_id);
+        var d = deudaById(l.deuda_id);
+        if (!c || !d || Number(c.moneda_id) !== Number(d.moneda_id)) {
+            return 0;
+        }
+        var dc = round4((Number(l.monto) || 0) * ((Number(d.cotizacion) || 1) - (Number(c.cotizacion) || 1)));
+        return Math.abs(dc) < TOL ? 0 : dc;
+    }
+
+    function dcLabel(dc) {
+        if (Math.abs(dc) < TOL) {
+            return '';
+        }
+        return fmt(Math.abs(dc)) + (dc > 0 ? ' pérdida' : ' ganancia');
+    }
+
+    function fechaComprobante(item, conVencimiento) {
+        var fecha = fechaUi(item && item.fecha);
+        if (!fecha) {
+            return '';
+        }
+        if (conVencimiento && item.vencimiento && item.vencimiento !== item.fecha) {
+            return fecha + ' · vto ' + fechaUi(item.vencimiento);
+        }
+        return fecha;
+    }
+
     function fechaUi(ymd) {
         if (!ymd) {
             return '';
@@ -316,7 +353,7 @@
         $row.find('.acc-sel-credito').prop('checked', Number(state.creditoActivo) === Number(c.id));
         var resto = round4(c.saldo - usado);
         $row.find('.acc-saldo').text(fmt(resto));
-        $row.find('.acc-saldo-sub').text(usado >= TOL ? ('de ' + fmt(c.saldo)) : (c.moneda || ''));
+        $row.find('.acc-saldo-sub').text(usado >= TOL ? ('de ' + fmt(c.saldo)) : cotizLabel(c));
         var pct = c.saldo > 0 ? Math.min(100, (usado / c.saldo) * 100) : 0;
         $row.find('.acc-progress').toggleClass('is-manual', hasManual).find('span').css('width', pct + '%');
         var $chips = $row.find('.acc-chips').empty();
@@ -325,6 +362,7 @@
             $chips.append($('<span class="acc-chip"/>').toggleClass('is-manual', l.origen === 'manual')
                 .text((d ? d.etiqueta : '#' + l.deuda_id) + ' ' + fmt(l.monto)));
         });
+        $row.find('.acc-fecha').text(fechaComprobante(c, false));
         $row.find('.acc-meta-hint').text(hintCredito(c) || ((c.empresa || '') + (c.tipo_label ? ' · ' + c.tipo_label : '')));
     }
 
@@ -358,7 +396,8 @@
             $monto.attr('placeholder', fmt(d.saldo));
         }
         $row.find('.acc-saldo').text(fmt(round4(d.saldo - usado)));
-        $row.find('.acc-saldo-sub').text((d.moneda || '') + ' · ' + fechaUi(d.vencimiento || d.fecha));
+        $row.find('.acc-saldo-sub').text(cotizLabel(d));
+        $row.find('.acc-fecha').text(fechaComprobante(d, true));
         var $chips = $row.find('.acc-chips').empty();
         if (omitida) {
             $chips.append($('<span class="acc-chip is-manual"/>').text('excluida · clic para incluir'));
@@ -376,7 +415,7 @@
         return '<div class="acc-row" data-id="' + c.id + '" data-lado="credito">'
             + '<input type="radio" name="acc-credito" class="acc-sel-credito" value="' + c.id + '">'
             + '<span class="acc-badge ' + String(c.tipo).toLowerCase() + '">' + $('<div>').text(c.tipo).html() + '</span>'
-            + '<div><div class="acc-etiqueta"></div><div class="acc-meta acc-meta-hint"></div><div class="acc-chips"></div><div class="acc-progress"><span></span></div></div>'
+            + '<div><div class="acc-etiqueta"></div><div class="acc-fecha"></div><div class="acc-meta acc-meta-hint"></div><div class="acc-chips"></div><div class="acc-progress"><span></span></div></div>'
             + '<div class="acc-side"><div class="acc-saldo"></div><div class="acc-saldo-sub"></div></div>'
             + '</div>';
     }
@@ -385,7 +424,7 @@
         return '<div class="acc-row" data-id="' + d.id + '" data-lado="deuda">'
             + '<input type="checkbox" class="acc-sel-deuda">'
             + '<span class="acc-badge ' + String(d.tipo).toLowerCase() + '">' + $('<div>').text(d.tipo).html() + '</span>'
-            + '<div><div class="acc-etiqueta"></div>'
+            + '<div><div class="acc-etiqueta"></div><div class="acc-fecha"></div>'
             + '<div><span class="acc-badge aging-' + d.aging + '">' + $('<div>').text(d.aging_label || '').html() + '</span></div>'
             + '<div class="acc-meta acc-meta-hint"></div><div class="acc-chips"></div></div>'
             + '<div class="acc-side"><div class="acc-saldo"></div><div class="acc-saldo-sub"></div>'
@@ -442,12 +481,16 @@
         state.lineas.forEach(function (l, idx) {
             var c = creditoById(l.credito_id);
             var d = deudaById(l.deuda_id);
+            var dc = dcDeLinea(l);
+            var fechaC = c ? fechaComprobante(c, false) : '';
+            var fechaD = d ? fechaComprobante(d, true) : '';
             html += '<div class="acc-pair is-' + l.origen + '" data-idx="' + idx + '" data-credito="' + l.credito_id + '" data-deuda="' + l.deuda_id + '">'
                 + '<span class="acc-badge ' + l.origen + '">' + (l.origen === 'manual' ? 'Fijada' : 'Sugerida') + '</span>'
-                + '<div><div class="acc-pair-nom acc-pair-c"></div><div class="acc-pair-meta">' + (c ? ((c.moneda || '') + ' · resto ' + fmt(round4(c.saldo - asignadoCredito(c.id)))) : '') + '</div></div>'
+                + '<div><div class="acc-pair-nom acc-pair-c"></div><div class="acc-pair-meta">' + (c ? ((fechaC ? fechaC + ' · ' : '') + cotizLabel(c) + ' · resto ' + fmt(round4(c.saldo - asignadoCredito(c.id)))) : '') + '</div></div>'
                 + '<div class="acc-pair-arrow">→</div>'
-                + '<div><div class="acc-pair-nom acc-pair-d"></div><div class="acc-pair-meta">' + (d ? ((d.aging_label || '') + ' · saldo ' + fmt(d.saldo)) : '') + '</div></div>'
+                + '<div><div class="acc-pair-nom acc-pair-d"></div><div class="acc-pair-meta">' + (d ? ((fechaD ? fechaD + ' · ' : '') + cotizLabel(d) + ' · saldo ' + fmt(d.saldo)) : '') + '</div></div>'
                 + '<input type="number" min="0" step="0.01" class="form-control form-control-sm acc-board-monto" value="' + l.monto.toFixed(2) + '">'
+                + '<div class="acc-pair-dc' + (dc > 0 ? ' is-loss' : (dc < 0 ? ' is-gain' : '')) + '">' + (dcLabel(dc) || '—') + '</div>'
                 + '<button type="button" class="btn btn-sm btn-outline-danger acc-board-x" title="Sacar este par">×</button>'
                 + '</div>';
         });
@@ -467,15 +510,17 @@
     function renderRecientes() {
         var $tb = $('#acc-recientes-body');
         if (!state.recientes.length) {
-            $tb.html('<tr><td colspan="5" class="text-muted text-center">Sin aplicaciones manuales recientes</td></tr>');
+            $tb.html('<tr><td colspan="6" class="text-muted text-center">Sin aplicaciones manuales recientes</td></tr>');
             return;
         }
         var html = '';
         state.recientes.forEach(function (r) {
+            var dc = Number(r.diferencia_cambio) || 0;
             html += '<tr>'
                 + '<td>' + fechaUi(r.fecha) + '</td>'
                 + '<td></td><td></td>'
                 + '<td class="text-right">' + fmt(r.monto) + ' ' + (r.moneda || '') + '</td>'
+                + '<td class="text-right">' + (Math.abs(dc) >= TOL ? dcLabel(dc) : '—') + '</td>'
                 + '<td><button type="button" class="btn btn-outline-danger btn-xs btn-sm acc-desaplicar" data-id="' + r.id + '">Desaplicar</button></td>'
                 + '</tr>';
         });
@@ -504,8 +549,11 @@
 
         var credito = creditoById(state.creditoActivo);
         var restoActivo = credito ? round4(credito.saldo - asignadoCredito(credito.id)) : libreC;
+        var dcTotal = state.lineas.reduce(function (s, l) { return s + dcDeLinea(l); }, 0);
         $('#acc-dock-aplicar').text(fmt(total));
         $('#acc-dock-resto').text(credito ? fmt(restoActivo) : fmt(Math.max(0, libreC)));
+        $('#acc-dock-dc').text(Math.abs(dcTotal) >= TOL ? dcLabel(dcTotal) : '—');
+        $('#acc-dock-dc').toggleClass('is-loss', dcTotal > TOL).toggleClass('is-gain', dcTotal < -TOL);
         $('#acc-dock-lineas').text(state.lineas.length);
         var denom = credito ? credito.saldo : (k.creditos || 1);
         var pct = denom > 0 ? Math.min(100, (total / denom) * 100) : 0;

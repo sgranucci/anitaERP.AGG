@@ -10,7 +10,6 @@ use App\Support\Compras\RequisicionVisibilidadSupport;
 use Illuminate\Database\Query\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 
 class RequisicionReporteService
@@ -261,7 +260,7 @@ class RequisicionReporteService
                 'e.nombre as nombreempresa',
             ]);
 
-        $this->aplicarVisibilidad($query);
+        RequisicionVisibilidadSupport::aplicarFiltroListado($query, 'r');
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'r.empresa_id');
 
         $empresaIds = array_values(array_filter(
@@ -333,43 +332,6 @@ class RequisicionReporteService
             default:
                 $query->orderBy('r.creousuario_id')->orderBy('u.nombre')->orderBy('r.numerorequisicion')->orderBy('ra.id');
                 break;
-        }
-    }
-
-    private function aplicarVisibilidad(Builder $query): void
-    {
-        if (RequisicionVisibilidadSupport::puedeVerTodasSinRestriccion()) {
-            return;
-        }
-
-        $empresas = RequisicionVisibilidadSupport::empresaIdsAsignadas();
-        if ($empresas !== []) {
-            $query->whereIn('r.empresa_id', $empresas);
-        }
-
-        if (RequisicionVisibilidadSupport::esUsuarioCompras()) {
-            if (config('requisicion.filtro_oficina_compras_activo', false)) {
-                $oficinaCompraId = Auth::user()->oficinacompra_id ?? null;
-                if ($oficinaCompraId) {
-                    $query->where('r.oficinacompra_id', $oficinaCompraId);
-                }
-            }
-
-            return;
-        }
-
-        if (RequisicionVisibilidadSupport::esUsuarioRestoSectores()) {
-            $centrocostoId = RequisicionVisibilidadSupport::centrocostoOrigenUsuario();
-            if ($centrocostoId !== null) {
-                $query->where('r.centrocosto_id', $centrocostoId);
-
-                return;
-            }
-        }
-
-        $usuarioId = (int) (Auth::id() ?? 0);
-        if ($usuarioId > 0) {
-            $query->where('r.creousuario_id', $usuarioId);
         }
     }
 

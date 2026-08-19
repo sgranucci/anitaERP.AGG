@@ -3,8 +3,13 @@
     Flash — reporte histórico
 @endsection
 
+@section('styles')
+<link rel="stylesheet" href="{{ asset('assets/css/tabla-ancha-reporte.css') }}?v={{ @filemtime(public_path('assets/css/tabla-ancha-reporte.css')) ?: time() }}">
+@endsection
+
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/admin/tabla-ancha-reporte.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/admin/tabla-ancha-reporte.js')) ?: time() }}" type="text/javascript"></script>
 <script>
 (function () {
     var form = document.getElementById('form-flash-historico');
@@ -38,6 +43,11 @@
                     <a href="{{ route('flash_caja_reporte_historico') }}" class="btn btn-outline-secondary btn-sm" title="Limpiar filtros">
                         <i class="fa fa-eraser"></i> Limpiar
                     </a>
+                    @if (can('listar-flash-reporte-agg', false))
+                        <a href="{{ route('flash_reporte_agg') }}" class="btn btn-outline-success btn-sm">
+                            <i class="fa fa-file-excel-o"></i> Flash Report AGG
+                        </a>
+                    @endif
                     <a href="{{ route('flash_caja') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>

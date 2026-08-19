@@ -74,8 +74,12 @@ class Cliente_Archivo_UifRepository implements Cliente_Archivo_UifRepositoryInte
 
 	private function guardaCliente_Archivo_UifEnOrigen($request, $funcion, $id = null)
 	{
+		$fechasPrevias = [];
 		if ($funcion == 'update')
 		{
+			$fechasPrevias = $this->model->where('cliente_uif_id', $id)
+				->pluck('created_at', 'nombrearchivo')
+				->all();
 			// Borra los registros antes de grabar nuevamente
        		$this->delete($id);
 		}
@@ -129,10 +133,15 @@ class Cliente_Archivo_UifRepository implements Cliente_Archivo_UifRepositoryInte
 				// Agrega el archivo anterior no tocado
 				if (!$fl_encontro && $request->nombresanteriores[$i_archivo] != '')
 				{
+					$nombreAnterior = $request->nombresanteriores[$i_archivo];
 					$cliente_archivo_uif = $this->model->create([
 									'cliente_uif_id' => $id,
-									'nombrearchivo' => $request->nombresanteriores[$i_archivo],
+									'nombrearchivo' => $nombreAnterior,
 									]);
+					if (! empty($fechasPrevias[$nombreAnterior])) {
+						$cliente_archivo_uif->created_at = $fechasPrevias[$nombreAnterior];
+						$cliente_archivo_uif->save();
+					}
 				}
 			}
 		}

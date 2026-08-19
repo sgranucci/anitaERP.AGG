@@ -129,7 +129,10 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             ];
         }
 
-        return ['cabecera' => $cabecera, 'alicuotas' => $alicuotas];
+        return LibroIvaDigitalComprasAlicuotaSupport::asegurarRegistro([
+            'cabecera' => $cabecera,
+            'alicuotas' => $alicuotas,
+        ]);
     }
 
     /**
@@ -238,7 +241,7 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             ];
         }
 
-        $cantidad = in_array(strtoupper($letra), ['B', 'C'], true) ? 0 : count($filas);
+        $cantidad = strtoupper($letra) === 'C' ? 0 : count($filas);
         $credito = array_sum(array_column($filas, 'iva'));
 
         return [

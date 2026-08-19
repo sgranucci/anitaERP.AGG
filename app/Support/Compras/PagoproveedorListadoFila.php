@@ -28,6 +28,7 @@ final class PagoproveedorListadoFila
         public readonly string $estado,
         public readonly string $detalle,
         public readonly ?int $solicitudpagoId = null,
+        public readonly string $cuentasCaja = '',
     ) {
         $this->nombreempresa = $this->nombreEmpresa;
     }
@@ -57,14 +58,30 @@ final class PagoproveedorListadoFila
             'fecha' => $this->fecha,
             'id' => $this->id,
             'nombreempresa' => $this->nombreempresa,
+            'cuentasCaja' => $this->cuentasCaja,
             default => null,
         };
+    }
+
+    /**
+     * @return list<string>
+     */
+    public function cuentasCajaLista(): array
+    {
+        if (trim($this->cuentasCaja) === '') {
+            return [];
+        }
+
+        return array_values(array_filter(
+            array_map('trim', explode(' | ', $this->cuentasCaja)),
+            static fn (string $item): bool => $item !== ''
+        ));
     }
 
     public function __isset(string $name): bool
     {
         return in_array($name, [
-            'empresas', 'proveedores', 'monedas', 'monto', 'estado', 'detalle', 'fecha', 'id', 'nombreempresa',
+            'empresas', 'proveedores', 'monedas', 'monto', 'estado', 'detalle', 'fecha', 'id', 'nombreempresa', 'cuentasCaja',
         ], true);
     }
 
@@ -102,6 +119,7 @@ final class PagoproveedorListadoFila
             solicitudpagoId: isset($row->solicitudpago_id) && (int) $row->solicitudpago_id > 0
                 ? (int) $row->solicitudpago_id
                 : null,
+            cuentasCaja: trim((string) ($row->cuentas_caja ?? '')),
         );
     }
 }

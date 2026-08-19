@@ -121,7 +121,7 @@ final class CierreRendicionMaquinaConciliacionFlashSupport
     }
 
     /**
-     * @return array<string, array{flash: float, slot: float, ruleta: float}>
+     * @return array<string, array{flash: float, slot: float, ruleta: float, validado: bool}>
      */
     private function cargarFlashPorFecha(int $empresaId, string $desde, string $hasta): array
     {
@@ -130,7 +130,7 @@ final class CierreRendicionMaquinaConciliacionFlashSupport
             ->where('empresa_id', $empresaId)
             ->whereDate('fecha', '>=', $desde)
             ->whereDate('fecha', '<=', $hasta)
-            ->get(['fecha', 'win_ol_slot', 'win_ol_rul'])
+            ->get(['fecha', 'win_ol_slot', 'win_ol_rul', 'validado'])
             ->each(function (FlashCaja $flash) use (&$out) {
                 $fecha = $flash->fecha?->format('Y-m-d');
                 if ($fecha === null || $fecha === '') {
@@ -142,6 +142,7 @@ final class CierreRendicionMaquinaConciliacionFlashSupport
                     'slot' => $slot,
                     'ruleta' => $ruleta,
                     'flash' => round($slot + $ruleta, 2),
+                    'validado' => $flash->estaValidado(),
                 ];
             });
 
@@ -150,7 +151,7 @@ final class CierreRendicionMaquinaConciliacionFlashSupport
 
     /**
      * @param  Collection<int, RendicionMaquina>  $rendiciones
-     * @param  array<string, array{flash: float, slot: float, ruleta: float}>  $flashPorFecha
+     * @param  array<string, array{flash: float, slot: float, ruleta: float, validado?: bool}>  $flashPorFecha
      * @return array<string, mixed>
      */
     private function armarDia(
@@ -226,6 +227,7 @@ final class CierreRendicionMaquinaConciliacionFlashSupport
             'rendicion_ruletas_real' => round((float) ($totales['ruletas_real'] ?? 0), 2),
             'diferencia_flash_rendicion' => $diferenciaFlashRendicion,
             'diferencia_real_online' => $diferenciaRealOnline,
+            'flash_validado' => ! empty($flashPorFecha[$fechaDia]['validado']),
             'estado' => $estado,
             'rendicion_ids' => $rendicionesDia->pluck('id')->map(fn ($id) => (int) $id)->values()->all(),
         ];

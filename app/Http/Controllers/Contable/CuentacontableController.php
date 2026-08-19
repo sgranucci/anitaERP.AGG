@@ -2,36 +2,47 @@
 
 namespace App\Http\Controllers\Contable;
 
-use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ValidacionCuentacontable;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Contable\Rubrocontable;
-use App\Http\Requests\ValidacionCuentacontable;
 use App\Repositories\Caja\ConceptogastoRepositoryInterface;
-use App\Repositories\Contable\CuentacontableRepositoryInterface;
-use App\Repositories\Contable\Cuentacontable_CentrocostoRepositoryInterface;
-use App\Repositories\Contable\CentrocostoRepositoryInterface;
-use App\Repositories\Contable\Usuario_CuentacontableRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use App\Repositories\Contable\Cuentacontable_CentrocostoRepositoryInterface;
+use App\Repositories\Contable\CuentacontableRepositoryInterface;
+use App\Repositories\Contable\Usuario_CuentacontableRepositoryInterface;
+use App\Support\Contable\AsientoCuentaUsuarioSupport;
+use App\Support\Contable\CuentacontableArbolSupport;
 use App\Support\Contable\CuentacontableConsultaSupport;
+use App\Support\Contable\CuentacontableGemeloSupport;
+use App\Support\Contable\CuentacontableListadoFiltros;
+use App\Support\Listado\QueryRetornoListado;
 use DB;
+use Illuminate\Http\Request;
 
 class CuentacontableController extends Controller
 {
     private $conceptogastoRepository;
+
     private $cuentacontableRepository;
+
     private $empresaRepository;
+
     private $cuentacontable_centrocostoRepository;
+
     private $centrocostoRepository;
+
     private $usuario_cuentacontableRepository;
- 
-    public function __construct(ConceptogastoRepositoryInterface $conceptogastorepository,
-                                CuentacontableRepositoryInterface $cuentacontablerepository,
-                                EmpresaRepositoryInterface $empresarepository,
-                                CentrocostoRepositoryInterface $centrocostorepository,
-                                Cuentacontable_CentrocostoRepositoryInterface $cuentacontable_centrocostorepository,
-                                Usuario_CuentaContableRepositoryInterface $usuario_cuentacontablerepository)
-    {
+
+    public function __construct(
+        ConceptogastoRepositoryInterface $conceptogastorepository,
+        CuentacontableRepositoryInterface $cuentacontablerepository,
+        EmpresaRepositoryInterface $empresarepository,
+        CentrocostoRepositoryInterface $centrocostorepository,
+        Cuentacontable_CentrocostoRepositoryInterface $cuentacontable_centrocostorepository,
+        Usuario_CuentaContableRepositoryInterface $usuario_cuentacontablerepository
+    ) {
         $this->conceptogastoRepository = $conceptogastorepository;
         $this->cuentacontableRepository = $cuentacontablerepository;
         $this->empresaRepository = $empresarepository;
@@ -40,73 +51,117 @@ class CuentacontableController extends Controller
         $this->usuario_cuentacontableRepository = $usuario_cuentacontablerepository;
     }
 
-    /**
-     * Display a listing of the resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
-    public function index()
+    public function index(Request $request)
     {
         can('listar-cuentas-contables');
 
-        $cuentacontables = $this->cuentacontableRepository->all();
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresaIdsPermitidos = $empresaQuery->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $filtros = $this->resolverFiltrosListado($request, $empresaQuery);
 
-        return view('contable.cuentacontable.index', compact('cuentacontables'));
+        $query = $this->cuentacontableRepository->queryListado();
+        $query->leftJoin('empresa', 'empresa.id', '=', 'cuentacontable.empresa_id')
+            ->leftJoin('rubrocontable', 'rubrocontable.id', '=', 'cuentacontable.rubrocontable_id')
+            ->leftJoin('conceptogasto', 'conceptogasto.id', '=', 'cuentacontable.conceptogasto_id')
+            ->select('cuentacontable.*');
+
+        $vistaArbol = ($filtros['vista'] ?? '') === CuentacontableListadoFiltros::VISTA_ARBOL
+            && ($filtros['empresa_scope'] ?? '') === 'una';
+
+        if ($vistaArbol) {
+            if (! empty($filtros['empresa_id'])) {
+                $query->where('cuentacontable.empresa_id', (int) $filtros['empresa_id']);
+            } elseif ($empresaIdsPermitidos !== []) {
+                $query->whereIn('cuentacontable.empresa_id', $empresaIdsPermitidos);
+            }
+            $cuentas = $query->orderBy('cuentacontable.codigo')->get();
+            $arbol = CuentacontableArbolSupport::armar(
+                $cuentas,
+                (bool) ($filtros['mostrar_totalizadoras'] ?? false)
+            );
+            $busqueda = trim((string) ($filtros['valor'] ?? ''));
+            if ($busqueda !== '') {
+                $arbol = CuentacontableArbolSupport::podarPorBusqueda($arbol, $busqueda);
+            }
+            $arbol = CuentacontableArbolSupport::podarPorTipoNivel(
+                $arbol,
+                (string) ($filtros['tipocuenta'] ?? ''),
+                (int) ($filtros['nivel'] ?? 0)
+            );
+            $cuentacontables = collect();
+            $arbolCount = CuentacontableArbolSupport::contarNodos($arbol);
+        } else {
+            CuentacontableListadoFiltros::aplicar($query, $filtros, $empresaIdsPermitidos);
+            if (empty($filtros['mostrar_totalizadoras']) && (string) ($filtros['tipocuenta'] ?? '') === '') {
+                $query->where('cuentacontable.tipocuenta', '!=', CuentacontableArbolSupport::TIPO_TOTALIZADORA);
+            }
+            $cuentacontables = $query->orderBy('cuentacontable.codigo')->paginate(80)->withQueryString();
+            $arbol = [];
+            $arbolCount = 0;
+        }
+
+        return view('contable.cuentacontable.index', [
+            'cuentacontables' => $cuentacontables,
+            'arbol' => $arbol,
+            'arbolCount' => $arbolCount,
+            'vistaArbol' => $vistaArbol,
+            'filtros' => $filtros,
+            'filtrosQuery' => CuentacontableListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => CuentacontableListadoFiltros::CAMPOS,
+            'empresa_query' => $empresaQuery,
+            'tiposCuenta' => CuentacontableArbolSupport::etiquetasTipo(),
+        ]);
     }
 
-    /**
-     * Show the form for creating a new resource.
-     *
-     * @return \Illuminate\Http\Response
-     */
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-cuentas-contables');
-		$rubrocontable_query = Rubrocontable::all();
-        $empresa_query = $this->empresaRepository->allFiltrado();
-        $cuentacontable_query = $this->cuentacontableRepository->all();
-        $conceptogasto_query = $this->conceptogastoRepository->all();
-        $centrocosto_query = $this->centrocostoRepository->all();
-        $ajustamonedaextranjera_enum = CuentaContable::$enumAjustaMonedaExtranjera;
 
-        return view('contable.cuentacontable.crear', compact('rubrocontable_query', 'empresa_query',
-                                                        'conceptogasto_query', 'cuentacontable_query',
-                                                        'centrocosto_query', 'ajustamonedaextranjera_enum'));
+        $filtrosQuery = QueryRetornoListado::desdeRequestSiIndex($request, CuentacontableListadoFiltros::class);
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresaId = (int) ($request->query('empresa_id') ?: ($empresaQuery->first()->id ?? 0));
+        $prefill = $this->prefillDesdePadre($request, $empresaId);
+
+        return view('contable.cuentacontable.crear', $this->datosFormulario(null, $empresaQuery) + [
+            'filtrosQuery' => $filtrosQuery,
+            'empresaPrefillId' => (int) ($prefill['empresa_id'] ?? $empresaId),
+            'prefill' => $prefill,
+        ]);
     }
 
-    /**
-     * Store a newly created resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @return \Illuminate\Http\Response
-     */
     public function guardar(ValidacionCuentacontable $request)
     {
         DB::beginTransaction();
-        try
-        {
-            $cuentacontable = $this->cuentacontableRepository->all($request->all());
-
-            // Guarda tablas asociadas
-            if ($cuentacontable)
-                $cuentacontable_centrocosto = $this->cuentacontable_centrocostoRepository->create($request->all(), $cuentacontable->id);
+        try {
+            $payload = $this->payloadCuenta($request);
+            $cuentacontable = $this->cuentacontableRepository->create($payload);
+            if ($cuentacontable) {
+                $this->cuentacontable_centrocostoRepository->create($request->all(), $cuentacontable->id);
+                $this->asegurarGemeloTotalizadora($payload);
+            }
             DB::commit();
         } catch (\Exception $e) {
             DB::rollback();
-            return ['errores' => $e->getMessage()];
+
+            return redirect()->back()->withInput()->withErrors(['error' => $e->getMessage()]);
         }
 
-        return redirect('contable/cuentacontable/crear')->with('mensaje', 'Cuenta contable creada con exito');
+        $retorno = QueryRetornoListado::desdeRequestSiIndex($request, CuentacontableListadoFiltros::class);
+        if ($retorno === []) {
+            $retorno = CuentacontableListadoFiltros::paraQueryString([
+                'empresa_id' => (int) $request->input('empresa_id'),
+                'empresa_scope' => 'una',
+                'vista' => CuentacontableListadoFiltros::VISTA_ARBOL,
+            ]);
+        }
+
+        return redirect()->route('cuentacontable', $retorno)
+            ->with('mensaje', 'Cuenta contable creada con éxito');
     }
-    /**
-     * Show the form for editing the specified resource.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
-    public function editar($id)
+
+    public function editar(Request $request, $id)
     {
-        $soloConsulta = request()->query('origen') === 'modal_consulta';
+        $soloConsulta = $request->query('origen') === 'modal_consulta';
         if ($soloConsulta) {
             can('listar-cuentas-contables');
         } else {
@@ -114,25 +169,15 @@ class CuentacontableController extends Controller
         }
 
         $data = $this->cuentacontableRepository->findOrFail($id);
-		$rubrocontable_query = Rubrocontable::all();
-        $empresa_query = $this->empresaRepository->allFiltrado();
-        $cuentacontable_query = $this->cuentacontableRepository->all();
-        $conceptogasto_query = $this->conceptogastoRepository->all();
-        $centrocosto_query = $this->centrocostoRepository->all();
-        $ajustamonedaextranjera_enum = CuentaContable::$enumAjustaMonedaExtranjera;
+        $filtrosQuery = QueryRetornoListado::desdeRequestSiIndex($request, CuentacontableListadoFiltros::class);
 
-        return view('contable.cuentacontable.editar', compact('data', 'rubrocontable_query', 
-                                                'empresa_query', 'conceptogasto_query', 'cuentacontable_query',
-                                                'centrocosto_query', 'ajustamonedaextranjera_enum', 'soloConsulta'));
+        return view('contable.cuentacontable.editar', $this->datosFormulario($data) + [
+            'data' => $data,
+            'soloConsulta' => $soloConsulta,
+            'filtrosQuery' => $filtrosQuery,
+        ]);
     }
 
-    /**
-     * Update the specified resource in storage.
-     *
-     * @param  \Illuminate\Http\Request  $request
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
     public function actualizar(ValidacionCuentacontable $request, $id)
     {
         if ($request->input('origen') === 'modal_consulta') {
@@ -142,63 +187,53 @@ class CuentacontableController extends Controller
         can('actualizar-cuentas-contables');
 
         DB::beginTransaction();
-        try
-        {
-            // Graba cuenta contable
-            $this->cuentacontableRepository->update($request->all(), $id);
-
-            // Graba centros de costos
+        try {
+            $this->cuentacontableRepository->update($this->payloadCuenta($request), $id);
             $this->cuentacontable_centrocostoRepository->update($request->all(), $id);
-
             DB::commit();
         } catch (\Exception $e) {
             DB::rollback();
 
-            dd($e->getMessage());
-            return ['errores' => $e->getMessage()];
+            return redirect()->back()->withInput()->withErrors(['error' => $e->getMessage()]);
         }
 
-        return redirect('contable/cuentacontable')->with('mensaje', 'Cuenta actualizada con exito');
+        $retorno = QueryRetornoListado::desdeRequestSiIndex($request, CuentacontableListadoFiltros::class);
+
+        return redirect()->route('cuentacontable', $retorno)
+            ->with('mensaje', 'Cuenta actualizada con éxito');
     }
 
-    /**
-     * Remove the specified resource from storage.
-     *
-     * @param  int  $id
-     * @return \Illuminate\Http\Response
-     */
-    public function eliminar($id)
+    public function eliminar(Request $request, $id)
     {
         can('borrar-cuentas-contables');
 
         if ($request->ajax()) {
-        	if ($this->cuentacontableRepository->delete($id)) {
+            if ($this->cuentacontableRepository->delete($id)) {
                 return response()->json(['mensaje' => 'ok']);
-            } else {
-                return response()->json(['mensaje' => 'ng']);
             }
-        } else {
-            abort(404);
+
+            return response()->json(['mensaje' => 'ng']);
         }
-        return redirect('contable/cuentacontable')->with('mensaje', 'Cuenta eliminada con exito');
+
+        abort(404);
     }
 
     public function consultaCuentaContable(Request $request)
     {
-		$columnsOut = ['cuentacontable_id', 'codigocuentacontable', 'nombrecuentacontable', 'nombreempresa'];
+        $columnsOut = ['cuentacontable_id', 'codigocuentacontable', 'nombrecuentacontable', 'nombreempresa'];
         $count = count($columnsOut);
 
         $empresaId = (int) $request->input('empresa_id');
         $consulta = trim((string) $request->input('consulta', ''));
 
         $query = Cuentacontable::select(
-                'cuentacontable.id as cuentacontable_id',
-                'cuentacontable.codigo as codigocuentacontable',
-                'cuentacontable.nombre as nombrecuentacontable',
-                'cuentacontable.empresa_id as empresa_id',
-                'empresa.nombre as nombreempresa',
-                'cuentacontable.tipocuenta'
-            )
+            'cuentacontable.id as cuentacontable_id',
+            'cuentacontable.codigo as codigocuentacontable',
+            'cuentacontable.nombre as nombrecuentacontable',
+            'cuentacontable.empresa_id as empresa_id',
+            'empresa.nombre as nombreempresa',
+            'cuentacontable.tipocuenta'
+        )
             ->leftJoin('empresa', 'cuentacontable.empresa_id', '=', 'empresa.id')
             ->where('cuentacontable.tipocuenta', '1');
 
@@ -212,12 +247,12 @@ class CuentacontableController extends Controller
         $rows = $query->limit(250)->get();
 
         $output = [];
-		$output['data'] = '';
+        $output['data'] = '';
         $flSinDatos = true;
         $puedeConsultar = can('listar-cuentas-contables', false) || can('editar-cuentas-contables', false);
-        $usuarioTieneRestriccion = \App\Support\Contable\AsientoCuentaUsuarioSupport::usuarioTieneRestriccionCuentas((int) auth()->id());
+        $usuarioTieneRestriccion = AsientoCuentaUsuarioSupport::usuarioTieneRestriccionCuentas((int) auth()->id());
 
-		foreach ($rows as $row) {
+        foreach ($rows as $row) {
             $usuario_cuentacontable = $this->usuario_cuentacontableRepository
                 ->leePorUsuarioCuenta(auth()->id(), $row['cuentacontable_id']);
 
@@ -229,7 +264,7 @@ class CuentacontableController extends Controller
             $flSinDatos = false;
             $output['data'] .= '<tr>';
             for ($i = 0; $i < $count; $i++) {
-                $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row[$columnsOut[$i]] . '</td>';
+                $output['data'] .= '<td class="'.$columnsOut[$i].'">'.$row[$columnsOut[$i]].'</td>';
             }
             $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultacuentacontable">Elegir</a>';
             if ($puedeConsultar) {
@@ -242,16 +277,16 @@ class CuentacontableController extends Controller
             }
             $output['data'] .= '</td>';
             $output['data'] .= '</tr>';
-		}
+        }
 
         if ($flSinDatos) {
-			$output['data'] .= '<tr>';
-			$output['data'] .= '<td colspan="4">Sin resultados</td>';
-			$output['data'] .= '</tr>';
-		}
+            $output['data'] .= '<tr>';
+            $output['data'] .= '<td colspan="4">Sin resultados</td>';
+            $output['data'] .= '</tr>';
+        }
 
-		return response()->json($output);
-	}
+        return response()->json($output);
+    }
 
     public function leerCuentaContablePorCodigo($empresa_id, $codigo)
     {
@@ -262,24 +297,138 @@ class CuentacontableController extends Controller
     {
         $cuentacontable = $this->cuentacontableRepository->find($cuentacontable_id);
 
-        // Busca los centros de costo asociados
-        if ($cuentacontable)
-        {
-            if ($cuentacontable->manejaccosto === '1' || $cuentacontable->manejaccosto === 'S')
-            {
+        if ($cuentacontable) {
+            if ($cuentacontable->manejaccosto === '1' || $cuentacontable->manejaccosto === 'S') {
                 $centrocosto = $this->cuentacontable_centrocostoRepository->leeCuentacontable_Centrocosto($cuentacontable->id);
 
-                if (count($centrocosto) > 0)
-                    return($centrocosto);
-                else
-                    return ($this->centrocostoRepository->all());
+                if (count($centrocosto) > 0) {
+                    return $centrocosto;
+                }
+
+                return $this->centrocostoRepository->all();
             }
-            else
-            {
-                return 'No maneja centro de costo';
-            }
+
+            return 'No maneja centro de costo';
         }
+
         return 'Cuenta inexistente';
     }
 
+    /**
+     * @param  \Illuminate\Support\Collection<int, mixed>  $empresaQuery
+     * @return array<string, mixed>
+     */
+    private function resolverFiltrosListado(Request $request, $empresaQuery): array
+    {
+        $empresaDefault = optional($empresaQuery->first())->id;
+        $filtros = CuentacontableListadoFiltros::resolverDesdeRequest(
+            $request,
+            null,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
+
+        $permitidos = $empresaQuery->pluck('id')->map(fn ($id) => (int) $id)->all();
+        if (! empty($filtros['empresa_id']) && $permitidos !== [] && ! in_array((int) $filtros['empresa_id'], $permitidos, true)) {
+            $filtros['empresa_id'] = $permitidos[0] ?? null;
+            $filtros['empresa_scope'] = $filtros['empresa_id'] ? 'una' : 'todas';
+        }
+
+        return $filtros;
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, mixed>|null  $empresaQuery
+     * @return array<string, mixed>
+     */
+    private function datosFormulario(?Cuentacontable $data, $empresaQuery = null): array
+    {
+        return [
+            'rubrocontable_query' => Rubrocontable::all(),
+            'empresa_query' => $empresaQuery ?? $this->empresaRepository->allFiltrado(),
+            'cuentacontable_query' => $this->cuentacontableRepository->all(),
+            'conceptogasto_query' => $this->conceptogastoRepository->all(),
+            'centrocosto_query' => $this->centrocostoRepository->all(),
+            'ajustamonedaextranjera_enum' => Cuentacontable::$enumAjustaMonedaExtranjera,
+            'tiposCuenta' => CuentacontableArbolSupport::etiquetasTipo(),
+            'data' => $data,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function payloadCuenta(Request $request): array
+    {
+        $payload = $request->only([
+            'empresa_id',
+            'rubrocontable_id',
+            'nombre',
+            'codigo',
+            'tipocuenta',
+            'nivel',
+            'monetaria',
+            'manejaccosto',
+            'ajustamonedaextranjera',
+            'conceptogasto_id',
+            'cuentacontable_difcambio_id',
+        ]);
+        foreach (['conceptogasto_id', 'cuentacontable_difcambio_id'] as $campo) {
+            if (($payload[$campo] ?? '') === '' || (int) ($payload[$campo] ?? 0) === 0) {
+                $payload[$campo] = null;
+            }
+        }
+
+        return $payload;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function prefillDesdePadre(Request $request, int $empresaId): array
+    {
+        $codigoPadre = preg_replace('/\D/', '', (string) $request->query('padre', '')) ?? '';
+        if ($codigoPadre === '' || $empresaId <= 0) {
+            return [];
+        }
+
+        $padre = $this->cuentacontableRepository->findPorCodigo($empresaId, $codigoPadre);
+        if (! $padre) {
+            $padre = $this->cuentacontableRepository->findPorCodigo($empresaId, (string) ((int) $codigoPadre));
+        }
+        if (! $padre) {
+            return ['empresa_id' => $empresaId];
+        }
+
+        $nivel = min(5, max(1, (int) $padre->nivel + 1));
+
+        return [
+            'empresa_id' => (int) $padre->empresa_id,
+            'rubrocontable_id' => (int) $padre->rubrocontable_id,
+            'nivel' => $nivel,
+            'tipocuenta' => $nivel >= 5
+                ? CuentacontableArbolSupport::TIPO_IMPUTABLE
+                : CuentacontableArbolSupport::TIPO_TITULO,
+            'codigo_sugerido' => '',
+            'padre_nombre' => (string) $padre->nombre,
+            'padre_codigo' => CuentacontableArbolSupport::formatearCodigo((string) $padre->codigo),
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $grupo
+     */
+    private function asegurarGemeloTotalizadora(array $grupo): void
+    {
+        $payload = CuentacontableGemeloSupport::payloadTotalizadora($grupo);
+        if ($payload === null || (int) $payload['empresa_id'] <= 0) {
+            return;
+        }
+
+        $existe = $this->cuentacontableRepository->findPorCodigo($payload['empresa_id'], $payload['codigo']);
+        if ($existe) {
+            return;
+        }
+
+        $this->cuentacontableRepository->create($payload);
+    }
 }

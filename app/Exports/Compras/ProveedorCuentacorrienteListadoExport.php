@@ -43,6 +43,9 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
 
     private bool $esCsv = false;
 
+    /** @var array<string, mixed> */
+    private array $filtros = [];
+
     private bool $hayFilaLogos = false;
 
     private int $filasMetaEncabezado = 4;
@@ -64,9 +67,9 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
     public function view(): View
     {
         if ($this->modoVista === ProveedorCuentacorrientePreferenciasUsuario::MODO_DEUDA) {
-            $filas = $this->proveedorCuentacorrienteRepository->listarDeudaProveedor($this->busqueda, $this->proveedorId, false);
+            $filas = $this->proveedorCuentacorrienteRepository->listarDeudaProveedor($this->busqueda, $this->proveedorId, false, $this->filtros);
         } else {
-            $filas = $this->proveedorCuentacorrienteRepository->listarCuentaCorriente($this->busqueda, $this->proveedorId, false);
+            $filas = $this->proveedorCuentacorrienteRepository->listarCuentaCorriente($this->busqueda, $this->proveedorId, false, $this->filtros);
         }
 
         self::enriquecerNombreEmpresa($filas);
@@ -234,6 +237,7 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
         float $saldoCuentaCorriente,
         float $totalDeuda,
         bool $esCsv = false,
+        array $filtros = [],
     ): self {
         $this->busqueda = $busqueda;
         $this->proveedorId = $proveedorId;
@@ -242,6 +246,7 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
         $this->saldoCuentaCorriente = $saldoCuentaCorriente;
         $this->totalDeuda = $totalDeuda;
         $this->esCsv = $esCsv;
+        $this->filtros = $filtros;
 
         return $this;
     }

@@ -67,9 +67,18 @@
                 <td>{{ $f['fecha_fmt'] ?? '' }}</td>
                 <td>{{ $f['estado'] ?? '' }}</td>
                 <td class="text-center">{{ (int) ($f['cantidad_rendiciones'] ?? 0) }}</td>
-                <td class="num">{{ $fmtNum($f['total_flash'] ?? 0) }}</td>
-                <td class="num">{{ $fmtNum($f['flash_slot'] ?? 0) }}</td>
-                <td class="num">{{ $fmtNum($f['flash_ruleta'] ?? 0) }}</td>
+                <td class="num">
+                    {{ $fmtNum($f['total_flash'] ?? 0) }}
+                    @include('caja.flash.partials.tilde_validado', ['validado' => ! empty($f['flash_validado']), 'soloTexto' => true])
+                </td>
+                <td class="num">
+                    {{ $fmtNum($f['flash_slot'] ?? 0) }}
+                    @include('caja.flash.partials.tilde_validado', ['validado' => ! empty($f['flash_validado']), 'soloTexto' => true])
+                </td>
+                <td class="num">
+                    {{ $fmtNum($f['flash_ruleta'] ?? 0) }}
+                    @include('caja.flash.partials.tilde_validado', ['validado' => ! empty($f['flash_validado']), 'soloTexto' => true])
+                </td>
                 <td class="num">{{ $fmtNum($f['rendicion_online'] ?? 0) }}</td>
                 <td class="num">{{ $fmtNum($f['rendicion_real'] ?? 0) }}</td>
                 <td class="num">{{ $fmtNum($f['diferencia_flash_rendicion'] ?? 0) }}</td>

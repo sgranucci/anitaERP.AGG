@@ -257,14 +257,17 @@ final class LibroIvaDigitalValidacionSupport
             $tipoCambio = LibroIvaDigitalFormatoSupport::parseTipoCambio10(substr($linea, 227, 10));
             $tipo = substr($linea, 8, 3);
             $cantAlic = (int) substr($linea, 237, 1);
-            $esBC = in_array($tipo, ['006', '007', '008', '009', '010', '011', '012', '013', '015', '016'], true);
+            $esTipoC = in_array($tipo, LibroIvaDigitalVentasAlicuotaSupport::TIPOS_SIN_ALICUOTA, true);
 
             if ($moneda === 'PES' && abs($tipoCambio - 1.0) > 0.000001) {
                 $pesTipoCambioMal++;
                 $primera ??= $i + 1;
             }
-            if ($esBC && $cantAlic !== 0) {
-                self::agregar($avisos, 'COMPRAS_CBTE línea '.($i + 1).": comprobante B/C debe informar cantidad de alícuotas 0 (tiene {$cantAlic}).");
+            if ($esTipoC && $cantAlic !== 0) {
+                self::agregar($avisos, 'COMPRAS_CBTE línea '.($i + 1).": comprobante C debe informar cantidad de alícuotas 0 (tiene {$cantAlic}).");
+            }
+            if (! $esTipoC && $cantAlic < 1) {
+                self::agregar($avisos, 'COMPRAS_CBTE línea '.($i + 1).": tipo {$tipo} debe informar alícuotas IVA (tiene {$cantAlic}).");
             }
         }
         if ($pesTipoCambioMal > 0) {

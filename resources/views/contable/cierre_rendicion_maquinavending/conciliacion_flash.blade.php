@@ -223,6 +223,7 @@
                                             </td>
                                             <td class="text-right align-middle">
                                                 {{ number_format($flashVend, 2, ',', '.') }}
+                                                @include('caja.flash.partials.tilde_validado', ['validado' => ! empty($dia['flash_validado'])])
                                             </td>
                                             <td class="text-right align-middle">
                                                 {{ number_format($rendgZ, 2, ',', '.') }}

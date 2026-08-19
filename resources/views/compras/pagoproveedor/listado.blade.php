@@ -33,6 +33,7 @@
             <th>OP</th>
             <th>Empresa</th>
             <th>Proveedor</th>
+            <th>Cuentas de caja</th>
             <th class="text-right">Monto</th>
             <th>Estado</th>
             <th>Detalle</th>
@@ -50,6 +51,11 @@
                 </td>
                 <td>{{ $fila->empresas->nombre ?? '' }}</td>
                 <td>{{ $fila->proveedores->nombre ?? '' }}</td>
+                <td>
+                    @if ($fila instanceof \App\Support\Compras\PagoproveedorListadoFila)
+                        {{ implode(' | ', $fila->cuentasCajaLista()) }}
+                    @endif
+                </td>
                 <td class="text-right">{{ number_format((float)$fila->monto, 2, ',', '.') }}</td>
                 <td>{{ $fila->estado }}</td>
                 <td>{{ $fila->detalle }}</td>

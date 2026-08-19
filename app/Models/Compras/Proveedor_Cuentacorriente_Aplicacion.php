@@ -12,6 +12,7 @@ class Proveedor_Cuentacorriente_Aplicacion extends Model
 
     protected $fillable = [
         'fecha', 'proveedor_cuentacorriente_id', 'total', 'moneda_id', 'cotizacion',
+        'diferencia_cambio', 'asiento_id',
         'comprobante_proveedor_aplicado_id', 'comprobanteaplicado', 'empresa_id',
         'proveedor_cuentacorriente_aplicado_id', 'pagoproveedor_id',
     ];

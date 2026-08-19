@@ -24,6 +24,11 @@
             <div class="card-header">
                 <h3 class="card-title">Flash diario</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @if (can('listar-flash-reporte-agg', false))
+                        <a href="{{ route('flash_reporte_agg') }}" class="btn btn-outline-success btn-sm mr-2">
+                            <i class="fa fa-file-excel-o"></i> Flash Report AGG
+                        </a>
+                    @endif
                     @if (can('exportar-reporte-flash-caja', false))
                         <a href="{{ route('flash_caja_reporte_historico') }}" class="btn btn-outline-primary btn-sm mr-2">
                             <i class="fa fa-line-chart"></i> Reporte hist&oacute;rico
@@ -66,8 +71,9 @@
                             <th class="width100 text-right">Win OL ruletas</th>
                             <th class="width100 text-right">Gaming</th>
                             <th class="width100 text-right">Revenues</th>
+                            <th class="width40 text-center" title="Validado">Val.</th>
                             <th class="width120">Comentario</th>
-                            <th class="width160 text-nowrap" data-orderable="false"></th>
+                            <th class="width180 text-nowrap" data-orderable="false"></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -83,9 +89,20 @@
                             <td class="text-right">{{ number_format((float) $data->win_ol_slot, 2, ',', '.') }}</td>
                             <td class="text-right">{{ number_format((float) $data->win_ol_rul, 2, ',', '.') }}</td>
                             <td class="text-right">{{ number_format($data->total_gaming, 2, ',', '.') }}</td>
-                            <td class="text-right">{{ number_format($data->total_revenues, 2, ',', '.') }}</td>
+                            <td class="text-right">
+                                {{ number_format($data->total_revenues, 2, ',', '.') }}
+                                @include('caja.flash.partials.tilde_validado', ['validado' => $data->estaValidado()])
+                            </td>
+                            <td class="text-center">
+                                @include('caja.flash.partials.tilde_validado', ['validado' => $data->estaValidado()])
+                            </td>
                             <td>{{ $data->comentario }}</td>
                             <td class="text-nowrap">
+                                @include('caja.flash.partials.boton_validar', [
+                                    'flash' => $data,
+                                    'puedeValidarFlash' => $puedeValidarFlash ?? false,
+                                    'retornoListadoQuery' => $retornoListadoQuery ?? [],
+                                ])
                                 @if (can('exportar-reporte-flash-caja', false))
                                     <a href="{{ route('flash_caja_reporte', ['id' => $data->id, 'formato' => 'PDF']) }}" class="btn-accion-tabla tooltipsC" title="Reporte PDF" target="_blank" rel="noopener">
                                         <i class="fa fa-file-pdf-o text-danger"></i>

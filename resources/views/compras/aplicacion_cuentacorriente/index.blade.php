@@ -5,20 +5,15 @@
 @endsection
 
 @section('styles')
-<link rel="stylesheet" href="{{ asset('assets/css/compras-aplicacion-cc.css') }}?v={{ @filemtime(public_path('assets/css/compras-aplicacion-cc.css')) ?: time() }}">
+<link rel="stylesheet" href="{{ asset('assets/css/compras-aplicacion-cc.css') }}">
 @endsection
 
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}" type="text/javascript"></script>
 <script>
-    window.APLICACION_CC_INICIAL = @json([
-        'creditos' => $creditos,
-        'deudas' => $deudas,
-        'recientes' => $recientes,
-        'kpis' => $kpis,
-    ]);
+    window.APLICACION_CC_INICIAL = @json($aplicacionCcInicial);
 </script>
-<script src="{{ asset('assets/pages/scripts/compras/aplicacion_cuentacorriente/workbench.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/aplicacion_cuentacorriente/workbench.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/aplicacion_cuentacorriente/workbench.js') }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -67,7 +62,7 @@
                 <div class="input-group input-group-sm">
                     <input type="hidden" name="proveedor_id" id="proveedor_id" class="proveedor_id" value="{{ $proveedor_id ?: '' }}">
                     <input type="text" class="form-control codigoproveedor" id="codigoproveedor" placeholder="Código" value="{{ $codigoProveedor }}">
-                    <input type="text" class="form-control descripcionproveedor" id="descripcionproveedor" readonly placeholder="Nombre" value="{{ $nombreProveedor }}">
+                    <input type="text" class="form-control nombreproveedor" id="nombreproveedor" readonly placeholder="Nombre" value="{{ $nombreProveedor }}">
                     <div class="input-group-append">
                         <button type="button" class="btn btn-info consultaproveedor" title="Consultar"><i class="fa fa-search"></i></button>
                     </div>
@@ -151,6 +146,7 @@
             <span class="acc-badge auto">Sugerida</span> se recálcula sola.
             <span class="acc-badge manual">Fijada</span> la cambiaste vos y no se toca.
             Destildá una factura para sacarla del matching.
+            Si crédito y deuda tienen distinta cotización se muestra la diferencia de cambio y se asienta al confirmar.
         </div>
         <div id="acc-board-body" class="acc-board-body"></div>
     </div>
@@ -165,11 +161,12 @@
                         <th>Crédito</th>
                         <th>Deuda</th>
                         <th class="text-right">Monto</th>
+                        <th class="text-right">DC</th>
                         <th></th>
                     </tr>
                 </thead>
                 <tbody id="acc-recientes-body">
-                    <tr><td colspan="5" class="text-muted text-center">Seleccione un proveedor</td></tr>
+                    <tr><td colspan="6" class="text-muted text-center">Seleccione un proveedor</td></tr>
                 </tbody>
             </table>
         </div>
@@ -178,6 +175,7 @@
     <div class="acc-dock">
         <div class="acc-dock-stat">Se va a aplicar<strong id="acc-dock-aplicar">0,00</strong></div>
         <div class="acc-dock-stat">Libre del crédito<strong id="acc-dock-resto">—</strong></div>
+        <div class="acc-dock-stat">Dif. de cambio<strong id="acc-dock-dc">—</strong></div>
         <div class="acc-dock-stat">Pares<strong id="acc-dock-lineas">0</strong></div>
         <div class="acc-bar" id="acc-dock-bar"><span></span></div>
         <span class="acc-toast-error" id="acc-dock-error"></span>

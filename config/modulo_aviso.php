@@ -42,6 +42,7 @@ return [
         'uif.cliente_alta' => App\Services\Configuracion\Handlers\UifClienteAltaAvisoHandler::class,
         'sueldos.empleado_alta_provisoria' => App\Services\Configuracion\Handlers\SueldosEmpleadoAltaProvisoriaAvisoHandler::class,
         'ticket.alta_tecnologia' => App\Services\Configuracion\Handlers\TicketAltaTecnologiaAvisoHandler::class,
+        'ticket.asignacion_tecnico' => App\Services\Configuracion\Handlers\TicketAsignacionTecnicoAvisoHandler::class,
     ],
 
 ];

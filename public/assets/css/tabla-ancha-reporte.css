@@ -139,3 +139,46 @@
 .tabla-ancha-grilla.tabla-ancha--compacta thead .col-fija-der-2 {
     z-index: auto;
 }
+
+/* Cabecera de 2 filas (flash / l-flash): la segunda queda debajo de la primera. */
+.tabla-ancha--doble-cabecera {
+    --tabla-ancha-h1: 1.8rem;
+}
+.tabla-ancha--doble-cabecera .col-fija-1,
+.tabla-ancha--doble-cabecera .col-fija-2 {
+    white-space: nowrap;
+}
+.tabla-ancha--doble-cabecera thead tr:nth-child(1) th {
+    top: 0;
+}
+.tabla-ancha--doble-cabecera thead tr:nth-child(2) th {
+    top: var(--tabla-ancha-h1);
+}
+.tabla-ancha--doble-cabecera thead tr:nth-child(1) th[rowspan] {
+    top: 0;
+    z-index: 9;
+    vertical-align: middle;
+}
+
+/* Una sola columna congelada a la izquierda (Fecha). */
+.tabla-ancha--una-fija .col-fija-1 {
+    box-shadow: 4px 0 8px -2px rgba(0, 0, 0, .12);
+    z-index: 6;
+}
+.tabla-ancha--una-fija thead .col-fija-1 {
+    z-index: 9;
+}
+.tabla-ancha--una-fija tfoot .col-fija-1 {
+    z-index: 9;
+}
+
+.tabla-ancha tbody tr.fila-total-flash td,
+.tabla-ancha tfoot tr.fila-total-flash td {
+    background: #D6EAF8;
+    font-weight: 700;
+}
+.tabla-ancha tbody tr.fila-total-flash .col-fija-1,
+.tabla-ancha tbody tr.fila-total-flash .col-fija-2,
+.tabla-ancha tfoot tr.fila-total-flash .col-fija-1 {
+    background: #D6EAF8 !important;
+}

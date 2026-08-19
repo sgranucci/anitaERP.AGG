@@ -82,8 +82,12 @@ class TicketService
 				throw new Exception('Error en grabacion');
 
 			// Guarda tablas asociadas
-			if ($ticket)
-				$tareasNotificar = Self::agrega($data, $ticket, $request);
+			$tareasAsignacion = [];
+			if ($ticket) {
+				$resultadoTareas = Self::agrega($data, $ticket, $request);
+				$tareasNotificar = $resultadoTareas['tareas_recien_creadas'] ?? [];
+				$tareasAsignacion = $resultadoTareas['tareas_asignacion_tecnico'] ?? [];
+			}
 
 			DB::commit();
 
@@ -91,6 +95,7 @@ class TicketService
 
 			if ($origen === 'administracion') {
 				$this->ticketTareaAsignadaNotificacionService->notificar($ticket->id, $tareasNotificar);
+				$this->avisarAsignacionTecnico($tareasAsignacion);
 			}
 		} catch (\Exception $e) {
 			DB::rollback();
@@ -139,6 +144,21 @@ class TicketService
 		$this->moduloAvisoService->enviar('ticket', 'alta_tecnologia', (int) $ticket->id);
 	}
 
+	/**
+	 * @param  list<int>  $ticketTareaIds
+	 */
+	private function avisarAsignacionTecnico(array $ticketTareaIds): void
+	{
+		foreach ($ticketTareaIds as $ticketTareaId) {
+			$id = (int) $ticketTareaId;
+			if ($id <= 0) {
+				continue;
+			}
+
+			$this->moduloAvisoService->enviar('ticket', 'asignacion_tecnico', $id);
+		}
+	}
+
 	// Agrega tablas asociadas
 	private function agrega($data, $ticket, $request)
 	{
@@ -146,22 +166,28 @@ class TicketService
 		$ticket_archivo = $this->ticket_archivoRepository->create($request, $ticket->id);
 
 		$tareasNotificar = [];
+		$tareasAsignacion = [];
 		// Si existen las tareas asume que graba desde administracion de tickets
 		if (isset($data['tarea_ticket_ids'])) {
 			$result = $this->ticket_tareaRepository->create($data, $ticket->id);
 			$tareasNotificar = $result['tareas_recien_creadas'] ?? [];
+			$tareasAsignacion = $result['tareas_asignacion_tecnico'] ?? [];
 		}
 
 		if (isset($data['articulo_ids']))			
 			$ticket_articulo = $this->ticket_ArticuloRepository->create($data, $ticket->id);
 
-		return $tareasNotificar;
+		return [
+			'tareas_recien_creadas' => $tareasNotificar,
+			'tareas_asignacion_tecnico' => $tareasAsignacion,
+		];
 	}
 
     public function actualizaTicket($request, $id, $origen = null)
     {
 		$data = $request->all();
 		$tareasNotificar = [];
+		$tareasAsignacion = [];
 
 		// Crea estado
 		$data['fechas'][] = Carbon::now();
@@ -172,12 +198,15 @@ class TicketService
 		DB::beginTransaction();
 		try
 		{
-			$tareasNotificar = Self::actualiza($data, $id, $request);
+			$resultadoTareas = Self::actualiza($data, $id, $request);
+			$tareasNotificar = $resultadoTareas['tareas_recien_creadas'] ?? [];
+			$tareasAsignacion = $resultadoTareas['tareas_asignacion_tecnico'] ?? [];
 
 			DB::commit();
 
 			if ($origen === 'administracion') {
 				$this->ticketTareaAsignadaNotificacionService->notificar($id, $tareasNotificar);
+				$this->avisarAsignacionTecnico($tareasAsignacion);
 			}
 		} catch (\Exception $e) {
 			DB::rollback();
@@ -224,7 +253,10 @@ class TicketService
 			'tiempo_insumido_total' => TicketEstadisticaSupport::sumarTiempoInsumido((int) $id),
 		]);
 
-		return $result['tareas_recien_creadas'] ?? [];
+		return [
+			'tareas_recien_creadas' => $result['tareas_recien_creadas'] ?? [],
+			'tareas_asignacion_tecnico' => $result['tareas_asignacion_tecnico'] ?? [],
+		];
 	}
 
 	public function grabaTicketTareaNovedad($data)
@@ -303,6 +335,9 @@ class TicketService
 			return response('ng', 422);
 		}
 
+		$ticket_tarea = $this->ticket_tareaRepository->find($ticket_tarea_id);
+		$tecnicoAnteriorId = (int) ($ticket_tarea->tecnico_id ?? 0);
+
 		$novedad = [
 					"ticket_tarea_id" => $ticket_tarea_id,
 					"desdefecha" => Carbon::now(),
@@ -314,14 +349,16 @@ class TicketService
 
 		$tarea_novedad = $this->ticket_tarea_novedadRepository->createUnique($novedad);
 
-		$ticket_tarea = $this->ticket_tareaRepository->find($ticket_tarea_id);
-
 		if ($ticket_tarea)
 		{
 			$this->ticket_estadoRepository->creaEstado($ticket_tarea->ticket_id, Carbon::now(), $tarea_novedad->estado,
 							Auth::user()->id, $tarea_novedad->comentario.' '.$ticket_tarea->tareas->nombre);
 
 			$ticket_tarea->update(['tecnico_id' => $tecnico_ticket_id]);
+
+			if ((int) $tecnico_ticket_id !== $tecnicoAnteriorId) {
+				$this->avisarAsignacionTecnico([(int) $ticket_tarea->id]);
+			}
 		}
 
 		return 'ok';

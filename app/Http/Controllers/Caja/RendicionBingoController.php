@@ -9,7 +9,6 @@ use App\Services\Caja\Bingo\RendicionBingoCajaService;
 use App\Support\Caja\Bingo\RendicionBingoCajaListadoFiltros;
 use App\Support\Caja\Bingo\RendicionBingoCajaPermiso;
 use App\Support\Contable\CierreRendicionOrigenConsultaSupport;
-use App\Support\Listado\FiltrosListadoRequest;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -87,21 +86,21 @@ class RendicionBingoController extends Controller
      */
     private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
     {
-        $filtros = RendicionBingoCajaListadoFiltros::resolverDesdeRequest($request, $busquedaRuta);
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresaDefault = optional($empresaQuery->first())->id;
+        $filtros = RendicionBingoCajaListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busquedaRuta,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
+
         $asignadas = $this->empresaRepository->traeEmpresasAsignadas();
         $filtros['empresas_asignadas'] = $asignadas;
 
-        if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return $filtros;
-        }
-
-        $empresaQuery = $this->empresaRepository->allFiltrado();
         $empresaId = (int) ($filtros['empresa_id'] ?? 0);
-
-        if ($empresaId <= 0 && count($asignadas) === 1 && ! $request->has('empresa_id')) {
+        if ($empresaId > 0 && $asignadas !== [] && ! in_array($empresaId, $asignadas, true)) {
             $filtros['empresa_id'] = $this->resolverEmpresaDefaultId($empresaQuery);
-        } elseif ($empresaId > 0 && count($asignadas) >= 1 && ! in_array($empresaId, $asignadas, true)) {
-            $filtros['empresa_id'] = $this->resolverEmpresaDefaultId($empresaQuery);
+            $filtros['empresa_scope'] = ((int) $filtros['empresa_id']) > 0 ? 'una' : 'todas';
         }
 
         return $filtros;

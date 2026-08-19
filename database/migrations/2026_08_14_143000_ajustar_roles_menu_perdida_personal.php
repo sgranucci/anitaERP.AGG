@@ -24,9 +24,7 @@ return new class extends Migration
     /** @var list<string> */
     private const ROLES_PERMITIDOS = [
         'administrador',
-        // Tesorería
-        'Op-tesoreria',
-        'op-Tesoreria Operativa',
+        // Tesorería (supervisión / gerencia; no operadores)
         'Enc-tesorería',
         'Enc-tesoreria',
         'enc-Tesoreria Operativa',
@@ -45,6 +43,9 @@ return new class extends Migration
         'Enc-contaduría',
         'Enc-finanzas',
         'Op-Finanzas',
+        'Op-tesoreria',
+        'op-Tesoreria Operativa',
+        'opflash-tesoreria',
     ];
 
     public function up(): void

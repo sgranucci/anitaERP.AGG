@@ -59,7 +59,7 @@ final class LibroIvaDigitalConceptoIvacompraSupport
             ];
         }
 
-        $cantidad = in_array(strtoupper($letra), ['B', 'C'], true) ? 0 : count($filasAlicuota);
+        $cantidad = strtoupper($letra) === 'C' ? 0 : count($filasAlicuota);
         $credito = array_sum(array_column($filasAlicuota, 'iva'));
 
         $resultado['alicuotas'] = $cantidad > 0 ? $filasAlicuota : [];

@@ -46,6 +46,7 @@
             <div class="card-header">
                 <h3 class="card-title">Cierre de jornada Waitry</h3>
             </div>
+            @include('caja.waitry_cierre_jornada.partials.filtros_externos')
             <div class="card-body">
                 @include('caja.waitry_cierre_jornada.partials.ayuda_colapsable', [
                     'id' => 'waitry-ayuda-conciliacion-intro',
@@ -54,13 +55,17 @@
                 ])
 
                 <form method="get" action="{{ route('waitry_cierre_jornada') }}" class="form-inline mb-4">
-                    @include('includes.listado.filtro_empresa_asignada_inline', [
-                        'empresas' => $empresas,
-                        'empresa_id' => $empresa_id,
-                        'select_class' => 'mr-3',
-                        'required' => true,
-                        'permite_todas' => false,
-                    ])
+                    @if (($empresas ?? collect())->count() > 1)
+                        <input type="hidden" name="empresa_id" id="empresa_id" value="{{ (int) $empresa_id }}">
+                    @else
+                        @include('includes.listado.filtro_empresa_asignada_inline', [
+                            'empresas' => $empresas,
+                            'empresa_id' => $empresa_id,
+                            'select_class' => 'mr-3',
+                            'required' => true,
+                            'permite_todas' => false,
+                        ])
+                    @endif
                     <label class="mr-2" for="fecha_jornada">Fecha jornada</label>
                     <input type="date" name="fecha_jornada" id="fecha_jornada" class="form-control mr-3"
                            value="{{ $fecha_jornada }}" required>

@@ -61,10 +61,18 @@ class RendicionBingoCajaListadoFiltros
         'vacio' => 'Sin fecha',
     ];
 
-    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
-    {
+    public static function resolverDesdeRequest(
+        Request $request,
+        ?string $busquedaRuta = null,
+        ?int $empresaDefault = null
+    ): array {
+        [$empresaId, $empresaScope] = self::resolverEmpresaExterna($request, $empresaDefault);
+
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return self::filtrosVacios();
+            return array_merge(self::filtrosVacios(), [
+                'empresa_id' => $empresaId,
+                'empresa_scope' => $empresaScope,
+            ]);
         }
 
         $valor = FiltrosListadoRequest::valorBusqueda($request, $busquedaRuta);
@@ -102,9 +110,30 @@ class RendicionBingoCajaListadoFiltros
             'busqueda_rapida' => $busquedaRapida,
             'fecha_jornada_desde' => $fechaDesde !== '' ? $fechaDesde : '',
             'fecha_jornada_hasta' => $fechaHasta !== '' ? $fechaHasta : '',
-            'empresa_id' => (int) $request->input('empresa_id', 0),
+            'empresa_id' => $empresaId,
+            'empresa_scope' => $empresaScope,
             'empresas_asignadas' => [],
         ];
+    }
+
+    /**
+     * Filtro externo del index: empresa (default primera asignada) o todas (`empresa_todas=1`).
+     *
+     * @return array{0:?int,1:string}  [empresa_id, empresa_scope]
+     */
+    private static function resolverEmpresaExterna(Request $request, ?int $empresaDefault): array
+    {
+        if ($request->boolean('empresa_todas') || $request->input('empresa_scope') === 'todas') {
+            return [null, 'todas'];
+        }
+        if ($request->filled('empresa_id')) {
+            return [(int) $request->input('empresa_id'), 'una'];
+        }
+        if ($empresaDefault !== null && $empresaDefault > 0) {
+            return [$empresaDefault, 'una'];
+        }
+
+        return [null, 'todas'];
     }
 
     /**
@@ -163,7 +192,8 @@ class RendicionBingoCajaListadoFiltros
             'busqueda' => '',
             'fecha_jornada_desde' => '',
             'fecha_jornada_hasta' => '',
-            'empresa_id' => 0,
+            'empresa_id' => null,
+            'empresa_scope' => 'una',
             'empresas_asignadas' => [],
         ];
     }
@@ -173,7 +203,7 @@ class RendicionBingoCajaListadoFiltros
      */
     public static function paraQueryString(array $filtros): array
     {
-        $params = self::paraQueryStringModoValor($filtros);
+        $params = array_merge(self::paraQueryStringEmpresa($filtros), self::paraQueryStringModoValor($filtros));
 
         if (! empty($filtros['fecha_jornada_desde'])) {
             $params['fecha_jornada_desde'] = $filtros['fecha_jornada_desde'];
@@ -181,11 +211,25 @@ class RendicionBingoCajaListadoFiltros
         if (! empty($filtros['fecha_jornada_hasta'])) {
             $params['fecha_jornada_hasta'] = $filtros['fecha_jornada_hasta'];
         }
-        if ((int) ($filtros['empresa_id'] ?? 0) > 0) {
-            $params['empresa_id'] = (int) $filtros['empresa_id'];
-        }
 
         return $params;
+    }
+
+    /**
+     * Solo el filtro externo de empresa (para Limpiar texto sin perder empresa).
+     *
+     * @return array<string, int>
+     */
+    public static function paraQueryStringEmpresa(array $filtros): array
+    {
+        if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
+            return ['empresa_todas' => 1];
+        }
+        if (! empty($filtros['empresa_id'])) {
+            return ['empresa_id' => (int) $filtros['empresa_id']];
+        }
+
+        return [];
     }
 
     /**

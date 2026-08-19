@@ -25,6 +25,7 @@ use App\Support\Caja\RendicionEstacionamientoPdfPermiso;
 @section('contenido')
 @php
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+    $limpiarUrl = route('rendicionestacionamiento', RendicionEstacionamientoCajaListadoFiltros::paraQueryStringEmpresa($filtros ?? []));
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -37,7 +38,7 @@ use App\Support\Caja\RendicionEstacionamientoPdfPermiso;
                         'formId' => 'form-filtros-rendicion-estacionamiento',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => RendicionEstacionamientoCajaListadoFiltros::tieneCriteriosUsuario($filtros ?? []),
-                        'limpiarUrl' => route('rendicionestacionamiento'),
+                        'limpiarUrl' => $limpiarUrl,
                         'placeholder' => 'Búsqueda rápida (ticket, ID, empresa…)',
                         'toggleTarget' => '#panel-filtros-rendicion-estacionamiento',
                         'toggleId' => 'btn-toggle-filtros-rendicion-estacionamiento',
@@ -50,6 +51,7 @@ use App\Support\Caja\RendicionEstacionamientoPdfPermiso;
             <form method="get" action="{{ route('rendicionestacionamiento') }}" id="form-filtros-rendicion-estacionamiento" class="mb-0">
                 @include('caja.rendicionestacionamiento.partials.filtros_listado')
             </form>
+            @include('caja.rendicionestacionamiento.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'listar_rendicionestacionamiento',

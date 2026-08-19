@@ -5,8 +5,11 @@ namespace App\Repositories\Compras;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Queries\Compras\ProveedorQueryInterface;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\ProveedorCuentacorrienteAplicacionService;
+use App\Support\Compras\ProveedorCuentacorrienteListadoFiltros;
 use App\Support\Database\SqlDialectSupport;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRepositoryInterface
@@ -18,6 +21,7 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
     public function __construct(
         Proveedor_Cuentacorriente $proveedor_cuentacorriente,
         ProveedorQueryInterface $proveedorQuery,
+        private EmpresaRepositoryInterface $empresaRepository,
     ) {
         $this->model = $proveedor_cuentacorriente;
         $this->proveedorQuery = $proveedorQuery;
@@ -69,35 +73,25 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
             ->get();
     }
 
-    public function listarCuentaCorriente($busqueda, $proveedor_id, $paginar = true)
+    public function listarCuentaCorriente($busqueda, $proveedor_id, $paginar = true, array $filtros = [])
     {
-        $busqueda = trim((string) $busqueda);
+        $filtros = $this->normalizarFiltrosListado($busqueda, $filtros);
 
         $query = $this->model->query()
+            ->select('proveedor_cuentacorriente.*')
             ->with([
                 'comprobante_proveedores.tipotransaccion_compras',
+                'comprobante_proveedores.precarga_comprobante_proveedores',
+                'comprobante_proveedores.comprobante_proveedor_archivos',
+                'pagoproveedores',
                 'monedas',
                 'empresas',
             ])
             ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id);
 
-        if ($busqueda !== '') {
-            $query->where(function ($q) use ($busqueda) {
-                $q->where('proveedor_cuentacorriente.fecha', 'like', "%{$busqueda}%")
-                    ->orWhere('proveedor_cuentacorriente.fechavencimiento', 'like', "%{$busqueda}%")
-                    ->orWhereHas('monedas', function ($monedaQuery) use ($busqueda) {
-                        $monedaQuery->where('abreviatura', 'like', "%{$busqueda}%");
-                    })
-                    ->orWhereHas('comprobante_proveedores', function ($comprobanteQuery) use ($busqueda) {
-                        $comprobanteQuery->where('letra', 'like', "%{$busqueda}%")
-                            ->orWhere('sucursal', 'like', "%{$busqueda}%")
-                            ->orWhere('numerocomprobante', 'like', "%{$busqueda}%");
-                    })
-                    ->orWhereHas('comprobante_proveedores.tipotransaccion_compras', function ($tipoQuery) use ($busqueda) {
-                        $tipoQuery->where('nombre', 'like', "%{$busqueda}%");
-                    });
-            });
-        }
+        $this->aplicarJoinsListado($query);
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'proveedor_cuentacorriente.empresa_id');
+        ProveedorCuentacorrienteListadoFiltros::aplicar($query, $filtros);
 
         $query->orderBy('proveedor_cuentacorriente.fecha', 'asc')
             ->orderBy('proveedor_cuentacorriente.id', 'asc');
@@ -105,18 +99,21 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
         return $paginar ? $query->paginate(10) : $query->get();
     }
 
-    public function listarDeudaProveedor($busqueda, $proveedor_id, $paginar = true)
+    public function listarDeudaProveedor($busqueda, $proveedor_id, $paginar = true, array $filtros = [])
     {
-        $busqueda = trim((string) $busqueda);
+        $filtros = $this->normalizarFiltrosListado($busqueda, $filtros);
 
         $query = $this->model->query()
+            ->select('proveedor_cuentacorriente.*')
             ->with([
                 'comprobante_proveedores.tipotransaccion_compras',
+                'comprobante_proveedores.precarga_comprobante_proveedores',
+                'comprobante_proveedores.comprobante_proveedor_archivos',
                 'comprobante_proveedores.ordencompras.ordencompra_articulos',
+                'pagoproveedores',
                 'monedas',
                 'empresas',
             ])
-            ->select('proveedor_cuentacorriente.*')
             ->addSelect([
                 'aplicado' => Proveedor_Cuentacorriente_Aplicacion::query()
                     ->selectRaw('SUM(total)')
@@ -126,23 +123,9 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
             ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
             ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());
 
-        if ($busqueda !== '') {
-            $query->where(function ($q) use ($busqueda) {
-                $q->where('proveedor_cuentacorriente.fecha', 'like', "%{$busqueda}%")
-                    ->orWhere('proveedor_cuentacorriente.fechavencimiento', 'like', "%{$busqueda}%")
-                    ->orWhereHas('monedas', function ($monedaQuery) use ($busqueda) {
-                        $monedaQuery->where('abreviatura', 'like', "%{$busqueda}%");
-                    })
-                    ->orWhereHas('comprobante_proveedores', function ($comprobanteQuery) use ($busqueda) {
-                        $comprobanteQuery->where('letra', 'like', "%{$busqueda}%")
-                            ->orWhere('sucursal', 'like', "%{$busqueda}%")
-                            ->orWhere('numerocomprobante', 'like', "%{$busqueda}%");
-                    })
-                    ->orWhereHas('comprobante_proveedores.tipotransaccion_compras', function ($tipoQuery) use ($busqueda) {
-                        $tipoQuery->where('nombre', 'like', "%{$busqueda}%");
-                    });
-            });
-        }
+        $this->aplicarJoinsListado($query);
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'proveedor_cuentacorriente.empresa_id');
+        ProveedorCuentacorrienteListadoFiltros::aplicar($query, $filtros);
 
         $query->orderBy('proveedor_cuentacorriente.fecha', 'asc')
             ->orderBy('proveedor_cuentacorriente.id', 'asc');
@@ -150,16 +133,20 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
         return $paginar ? $query->paginate(10) : $query->get();
     }
 
-    public function calcularSaldoCuentaCorriente(int $proveedor_id): float
+    public function calcularSaldoCuentaCorriente(int $proveedor_id, array $filtros = []): float
     {
-        return (float) $this->model->query()
-            ->where('proveedor_id', $proveedor_id)
-            ->sum('total');
+        $query = $this->model->query()
+            ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id);
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'proveedor_cuentacorriente.empresa_id');
+        ProveedorCuentacorrienteListadoFiltros::aplicarEmpresa($query, $filtros);
+
+        return (float) $query->sum('proveedor_cuentacorriente.total');
     }
 
-    public function calcularTotalDeudaProveedor(int $proveedor_id): float
+    public function calcularTotalDeudaProveedor(int $proveedor_id, array $filtros = []): float
     {
-        $filas = $this->model->query()
+        $query = $this->model->query()
             ->select('proveedor_cuentacorriente.total')
             ->addSelect([
                 'aplicado' => Proveedor_Cuentacorriente_Aplicacion::query()
@@ -168,33 +155,63 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
             ])
             ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
             ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
-            ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc())
-            ->get();
+            ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'proveedor_cuentacorriente.empresa_id');
+        ProveedorCuentacorrienteListadoFiltros::aplicarEmpresa($query, $filtros);
 
         $total = 0.0;
-        foreach ($filas as $fila) {
+        foreach ($query->get() as $fila) {
             $total += abs((float) $fila->total + (float) ($fila->aplicado ?? 0));
         }
 
         return $total;
     }
 
-    public function saldoAnteriorPagina(int $proveedor_id, $primerRegistro): float
+    public function saldoAnteriorPagina(int $proveedor_id, $primerRegistro, array $filtros = []): float
     {
         if ($primerRegistro === null) {
             return 0.0;
         }
 
-        return (float) $this->model->query()
-            ->where('proveedor_id', $proveedor_id)
+        $query = $this->model->query()
+            ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
             ->where(function ($q) use ($primerRegistro) {
-                $q->where('fecha', '<', $primerRegistro->fecha)
+                $q->where('proveedor_cuentacorriente.fecha', '<', $primerRegistro->fecha)
                     ->orWhere(function ($q2) use ($primerRegistro) {
-                        $q2->where('fecha', $primerRegistro->fecha)
-                            ->where('id', '<', $primerRegistro->id);
+                        $q2->where('proveedor_cuentacorriente.fecha', $primerRegistro->fecha)
+                            ->where('proveedor_cuentacorriente.id', '<', $primerRegistro->id);
                     });
-            })
-            ->sum('total');
+            });
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'proveedor_cuentacorriente.empresa_id');
+        ProveedorCuentacorrienteListadoFiltros::aplicarEmpresa($query, $filtros);
+
+        return (float) $query->sum('proveedor_cuentacorriente.total');
+    }
+
+    /**
+     * @param  Builder<\App\Models\Compras\Proveedor_Cuentacorriente>  $query
+     */
+    private function aplicarJoinsListado(Builder $query): void
+    {
+        $query->leftJoin('empresa', 'empresa.id', '=', 'proveedor_cuentacorriente.empresa_id')
+            ->leftJoin('moneda', 'moneda.id', '=', 'proveedor_cuentacorriente.moneda_id')
+            ->leftJoin('comprobante_proveedor', 'comprobante_proveedor.id', '=', 'proveedor_cuentacorriente.comprobante_proveedor_id')
+            ->leftJoin('tipotransaccion_compra', 'tipotransaccion_compra.id', '=', 'comprobante_proveedor.tipotransaccion_compra_id');
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    private function normalizarFiltrosListado($busqueda, array $filtros): array
+    {
+        if ($filtros !== []) {
+            return $filtros;
+        }
+
+        return ProveedorCuentacorrienteListadoFiltros::desdeBusquedaLegacy((string) $busqueda);
     }
 
     public function consultarDeuda($proveedor_id, $empresa_id, $comprobante_proveedor_id = null)

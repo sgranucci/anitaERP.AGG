@@ -486,7 +486,7 @@ class ProyeccionPagosReporteService
                 'pp.detalle as pago_detalle',
                 'pp.asiento_id as asiento_id',
                 'cm.conceptogasto_id as pago_conceptogasto_id',
-            ])
+            ]);
 
         return collect($query->get());
     }

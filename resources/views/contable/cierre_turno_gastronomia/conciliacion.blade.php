@@ -204,6 +204,7 @@
                                             </td>
                                             <td class="text-right align-middle">
                                                 {{ number_format((float) ($dia['total_flash_ayb'] ?? 0), 2, ',', '.') }}
+                                                @include('caja.flash.partials.tilde_validado', ['validado' => ! empty($dia['flash_validado'])])
                                                 @if (abs((float) ($dia['total_vending'] ?? 0)) > $tol)
                                                     <br>
                                                     <small class="text-muted font-weight-normal">

@@ -63,6 +63,17 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
         return $cuentacontable;
     }
 
+    public function queryListado()
+    {
+        $hay = $this->model->newQuery()->exists();
+        if (! $hay && AnitaSyncIndexSupport::autoImportHabilitado()) {
+            $this->sincronizarConAnita();
+        }
+
+        return $this->model->newQuery()
+            ->with(['empresas', 'rubrocontables', 'conceptogastos']);
+    }
+
     public function allPrimeraEmpresa()
     {
         $empresa_query = $this->empresaRepository->allFiltrado();

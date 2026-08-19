@@ -8,7 +8,23 @@
         }
         var table = wrap.querySelector('table');
         var syncing = false;
+        function medirDobleCabecera() {
+            if (!root.classList.contains('tabla-ancha--doble-cabecera') || !table) {
+                return;
+            }
+            var thead = table.querySelector('thead');
+            var segunda = table.querySelector('thead tr:nth-child(2)');
+            if (!thead || !segunda) {
+                return;
+            }
+            var altoSegunda = segunda.offsetHeight;
+            var altoPrimera = Math.max(0, thead.offsetHeight - altoSegunda);
+            if (altoPrimera > 0) {
+                root.style.setProperty('--tabla-ancha-h1', altoPrimera + 'px');
+            }
+        }
         function medir() {
+            medirDobleCabecera();
             var ancho = table ? table.scrollWidth : wrap.scrollWidth;
             topInner.style.width = ancho + 'px';
             if (wrap.scrollWidth > wrap.clientWidth + 2) {
@@ -37,7 +53,13 @@
         medir();
     }
 
-    document.addEventListener('DOMContentLoaded', function () {
+    function iniciar() {
         document.querySelectorAll('[data-tabla-ancha]').forEach(bindTablaAncha);
-    });
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', iniciar);
+    } else {
+        iniciar();
+    }
 })();

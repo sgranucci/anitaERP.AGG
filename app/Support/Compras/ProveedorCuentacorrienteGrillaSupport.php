@@ -15,6 +15,10 @@ final class ProveedorCuentacorrienteGrillaSupport
             return trim($tipo.' '.$comprobante->letra.$comprobante->sucursal.'-'.$comprobante->numerocomprobante);
         }
 
+        if ((int) ($fila->pagoproveedor_id ?? 0) > 0 && $fila->pagoproveedores) {
+            return $fila->pagoproveedores->etiquetaComprobante();
+        }
+
         return 'Movimiento #'.(int) $fila->id;
     }
 
@@ -39,15 +43,19 @@ final class ProveedorCuentacorrienteGrillaSupport
      */
     public static function destinoImpresion(Proveedor_Cuentacorriente $fila): ?array
     {
-        if ((int) ($fila->comprobante_proveedor_id ?? 0) > 0) {
-            return [
-                'tipo' => 'comprobante_proveedor',
-                'id' => (int) $fila->comprobante_proveedor_id,
-                'titulo' => 'Ver PDF de la factura',
-            ];
+        if ((int) ($fila->comprobante_proveedor_id ?? 0) <= 0 || ! $fila->comprobante_proveedores) {
+            return null;
         }
 
-        return null;
+        if (ComprobanteProveedorArchivoPathSupport::referenciaPdfPrecarga($fila->comprobante_proveedores) === null) {
+            return null;
+        }
+
+        return [
+            'tipo' => 'comprobante_proveedor',
+            'id' => (int) $fila->comprobante_proveedor_id,
+            'titulo' => 'Ver PDF original de la precarga',
+        ];
     }
 
     public static function urlImpresion(Proveedor_Cuentacorriente $fila): ?string

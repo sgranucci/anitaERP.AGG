@@ -60,6 +60,7 @@ use App\Exports\Compras\ProveedorExport;
 use App\Support\Compras\ProveedorListadoFiltros;
 use App\Support\Listado\QueryRetornoListado;
 use App\Exports\Compras\ProveedorCuentacorrienteListadoExport;
+use App\Support\Compras\ProveedorCuentacorrienteListadoFiltros;
 use App\Support\Compras\ProveedorCuentacorrientePreferenciasUsuario;
 use Carbon\Carbon;
 use Mail;
@@ -132,7 +133,8 @@ class ProveedorController extends Controller
         CentrocostoRepositoryInterface $centrocostorepository,
         CuentacontableRepositoryInterface $cuentacontablerepository,
         EncuestaRepositoryInterface $encuestaRepository,
-        MonedaRepositoryInterface $monedaRepository)
+        MonedaRepositoryInterface $monedaRepository,
+        private EmpresaRepositoryInterface $empresaRepository)
     {
         $this->proveedorRepository = $proveedorrepository;
         $this->proveedor_exclusionRepository = $proveedor_exclusionrepository;
@@ -881,8 +883,14 @@ class ProveedorController extends Controller
         ini_set('max_execution_time', '0');
 
         $formato = $request->formato;
-        $busqueda = (string) ($request->busqueda ?? '');
+        $filtros = $this->resolverFiltrosCuentaCorriente($request);
+        $busqueda = (string) ($filtros['busqueda'] ?? '');
         $modoVista = ProveedorCuentacorrientePreferenciasUsuario::resolverModoVista($request->input('modo_vista'));
+        $filtrosQuery = array_merge(
+            ProveedorCuentacorrienteListadoFiltros::paraQueryString($filtros),
+            ['modo_vista' => $modoVista],
+            $request->only(['origen', 'vista'])
+        );
 
         if ($request->has('modo_vista')) {
             ProveedorCuentacorrientePreferenciasUsuario::persistirModoVista($modoVista);
@@ -899,15 +907,15 @@ class ProveedorController extends Controller
             $codigoproveedor = $proveedor->codigo;
         }
 
-        $saldoCuentaCorriente = $this->proveedor_cuentacorrienteRepository->calcularSaldoCuentaCorriente((int) $proveedor_id);
-        $totalDeuda = $this->proveedor_cuentacorrienteRepository->calcularTotalDeudaProveedor((int) $proveedor_id);
+        $saldoCuentaCorriente = $this->proveedor_cuentacorrienteRepository->calcularSaldoCuentaCorriente((int) $proveedor_id, $filtros);
+        $totalDeuda = $this->proveedor_cuentacorrienteRepository->calcularTotalDeudaProveedor((int) $proveedor_id, $filtros);
 
         switch ($formato) {
         case 'PDF':
             if ($modoVista === ProveedorCuentacorrientePreferenciasUsuario::MODO_DEUDA) {
-                $cuentacorriente = $this->proveedor_cuentacorrienteRepository->listarDeudaProveedor($busqueda, $proveedor_id, false);
+                $cuentacorriente = $this->proveedor_cuentacorrienteRepository->listarDeudaProveedor($busqueda, $proveedor_id, false, $filtros);
             } else {
-                $cuentacorriente = $this->proveedor_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $proveedor_id, false);
+                $cuentacorriente = $this->proveedor_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $proveedor_id, false, $filtros);
             }
 
             $view = \View::make('compras.cuentacorriente.listado', compact(
@@ -929,26 +937,27 @@ class ProveedorController extends Controller
 
         case 'EXCEL':
             return (new ProveedorCuentacorrienteListadoExport($this->proveedor_cuentacorrienteRepository))
-                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldoCuentaCorriente, $totalDeuda)
+                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldoCuentaCorriente, $totalDeuda, false, $filtros)
                 ->download('cuentacorriente_proveedor.xlsx');
             break;
 
         case 'CSV':
             return (new ProveedorCuentacorrienteListadoExport($this->proveedor_cuentacorrienteRepository))
-                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldoCuentaCorriente, $totalDeuda, true)
+                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldoCuentaCorriente, $totalDeuda, true, $filtros)
                 ->download('cuentacorriente_proveedor.csv', \Maatwebsite\Excel\Excel::CSV);
             break;
 
         default:
             if ($modoVista === ProveedorCuentacorrientePreferenciasUsuario::MODO_DEUDA) {
-                $cuentacorriente = $this->proveedor_cuentacorrienteRepository->listarDeudaProveedor($busqueda, $proveedor_id);
+                $cuentacorriente = $this->proveedor_cuentacorrienteRepository->listarDeudaProveedor($busqueda, $proveedor_id, true, $filtros);
                 $saldoAnterior = 0.0;
             } else {
-                $cuentacorriente = $this->proveedor_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $proveedor_id);
+                $cuentacorriente = $this->proveedor_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $proveedor_id, true, $filtros);
                 $primerRegistro = $cuentacorriente->first();
                 $saldoAnterior = $this->proveedor_cuentacorrienteRepository->saldoAnteriorPagina(
                     (int) $proveedor_id,
                     $primerRegistro,
+                    $filtros,
                 );
             }
 
@@ -966,10 +975,28 @@ class ProveedorController extends Controller
                 'saldoCuentaCorriente' => $saldoCuentaCorriente,
                 'totalDeuda' => $totalDeuda,
                 'saldoAnterior' => $saldoAnterior ?? 0.0,
+                'filtros' => $filtros,
+                'filtrosQuery' => $filtrosQuery,
+                'camposFiltro' => ProveedorCuentacorrienteListadoFiltros::CAMPOS,
+                'empresa_query' => $this->empresaRepository->allFiltrado(),
             ];
 
             return view('compras.cuentacorriente.index', $datas);
         }
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolverFiltrosCuentaCorriente(Request $request, ?string $busquedaRuta = null): array
+    {
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+
+        return ProveedorCuentacorrienteListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busquedaRuta,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
     }
 
     public function editarCuentaCorriente($cuentacorriente_id)

@@ -109,6 +109,14 @@
                                 <i class="fa fa-file-text-o"></i> Datos principales
                             </a>
                         </li>
+                        @if ($mostrarSolapaOc ?? false)
+                        <li class="nav-item">
+                            <a class="nav-link cp-tab-solapa" id="cp-boton-ordencompra" data-toggle="tab"
+                               href="#cp-solapa-ordencompra" role="tab" aria-controls="cp-solapa-ordencompra" aria-selected="false">
+                                <i class="fa fa-file-text-o"></i> Orden de compra
+                            </a>
+                        </li>
+                        @endif
                         @if ($mostrarSolapaCom ?? false)
                         <li class="nav-item">
                             <a class="nav-link cp-tab-solapa" id="cp-boton-recepciones-com" data-toggle="tab"
@@ -227,6 +235,11 @@
                                 </div>
                             @endif
                         </div>
+                        @if ($mostrarSolapaOc ?? false)
+                        <div class="tab-pane fade cp-solapa" id="cp-solapa-ordencompra" role="tabpanel">
+                            @include('compras.comprobante_proveedor.partials.solapa_ordencompra')
+                        </div>
+                        @endif
                         @if ($mostrarSolapaCom ?? false)
                         <div class="tab-pane fade cp-solapa" id="cp-solapa-recepciones-com" role="tabpanel">
                             @include('compras.comprobante_proveedor.partials.solapa_recepciones_com')
@@ -358,5 +371,5 @@
 <script type="application/json" id="cp-conceptos-cuenta-meta">@json($conceptos_cuenta_meta ?? [])</script>
 <script>
 window.cpAbrirSolapaComAlInicio = false;
-window.cpCentrocostoOcId = {{ (int) ($data->ordencompras->centrocosto_id ?? 0) }};
+window.cpCentrocostoOcId = {{ (int) \App\Support\Compras\ComprobanteProveedorCentrocostoSupport::resolverDesdeOc($data->ordencompras ?? null) }};
 </script>

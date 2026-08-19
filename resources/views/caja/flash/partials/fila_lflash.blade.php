@@ -3,10 +3,11 @@
     $vsS = $m['vs_season'] ?? [];
     $vsB = $m['vs_budget'] ?? [];
     $bold = !empty($esTotal) ? 'font-weight:bold;' : '';
+    $congelar = !empty($congelarColumnas);
 @endphp
-<tr style="{{ $bold }}">
-    <td>{{ $m['etiqueta'] ?? ($m['dia_semana'] ?? '') }}</td>
-    <td>{{ $m['fecha'] ?? '' }}</td>
+<tr class="{{ !empty($esTotal) ? 'fila-total-flash' : '' }}" style="{{ $bold }}">
+    <td class="{{ $congelar ? 'col-fija-1' : '' }}">{{ $m['etiqueta'] ?? ($m['dia_semana'] ?? '') }}</td>
+    <td class="{{ $congelar ? 'col-fija-2' : '' }}">{{ $m['fecha'] ?? '' }}</td>
     <td class="text-right">{{ F::entero($m['custom'] ?? 0) }}</td>
     <td class="text-right">{{ F::entero($m['slot_units'] ?? 0) }}</td>
     <td class="text-right">{{ $fn($m['slot_coin_in'] ?? 0) }}</td>

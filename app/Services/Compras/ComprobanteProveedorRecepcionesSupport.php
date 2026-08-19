@@ -5,25 +5,32 @@ namespace App\Services\Compras;
 use App\Models\Compras\Comprobante_Proveedor_Recepcion;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Services\Stock\RecepcionProveedorAsientoService;
+use App\Services\Stock\RecepcionProveedorImportarDesdeAnitaService;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class ComprobanteProveedorRecepcionesSupport
 {
     public function __construct(
         private RecepcionProveedorAsientoService $recepcionAsientoService,
+        private RecepcionProveedorImportarDesdeAnitaService $importarDesdeAnitaService,
     ) {}
 
     /**
      * Recepciones CONFIRMADAS de la OC con provisión contable y sin factura contabilizada previa.
+     * Completa desde Anita las COM de la OC que aún no están en ERP (o están huérfanas).
      *
      * @return Collection<int, Recepcion_Proveedor>
      */
     public function listarDisponibles(int $ordencompraId, ?int $comprobanteId = null): Collection
     {
+        $this->asegurarRecepcionesDesdeAnita($ordencompraId);
+
         $yaFacturadas = $this->recepcionIdsFacturadas($comprobanteId);
 
         return Recepcion_Proveedor::query()
@@ -35,7 +42,7 @@ class ComprobanteProveedorRecepcionesSupport
             ->where('ordencompra_id', $ordencompraId)
             ->where('tipo', Recepcion_Proveedor::TIPO_RECEPCION)
             ->where('estado', Recepcion_Proveedor::ESTADO_CONFIRMADA)
-            ->whereNotNull('asiento_id')
+            ->tap(fn (Builder $q) => self::aplicarCriterioAsignable($q))
             ->when($yaFacturadas !== [], fn ($q) => $q->whereNotIn('id', $yaFacturadas))
             ->orderBy('fecha')
             ->orderBy('id')
@@ -65,7 +72,7 @@ class ComprobanteProveedorRecepcionesSupport
             ->where('empresa_id', $empresaId)
             ->where('tipo', Recepcion_Proveedor::TIPO_RECEPCION)
             ->where('estado', Recepcion_Proveedor::ESTADO_CONFIRMADA)
-            ->whereNotNull('asiento_id')
+            ->tap(fn (Builder $q) => self::aplicarCriterioAsignable($q))
             ->whereHas('ordencompras', function ($query) use ($sectorLegajocompraId) {
                 if ($sectorLegajocompraId) {
                     $query->where('sector_legajocompra_id', $sectorLegajocompraId);
@@ -265,5 +272,32 @@ class ComprobanteProveedorRecepcionesSupport
         }
 
         return $query->pluck('cpr.recepcion_proveedor_id')->map(fn ($id) => (int) $id)->all();
+    }
+
+    /**
+     * COM nativas con asiento, o históricas importadas de Anita (provisión ya en Anita).
+     */
+    public static function aplicarCriterioAsignable(Builder $query): Builder
+    {
+        return $query->where(function (Builder $q) {
+            $q->whereNotNull('asiento_id')
+                ->orWhere('origen_carga', 'ANITA_IMPORT');
+        });
+    }
+
+    private function asegurarRecepcionesDesdeAnita(int $ordencompraId): void
+    {
+        if ($ordencompraId <= 0) {
+            return;
+        }
+
+        try {
+            $this->importarDesdeAnitaService->asegurarPorOrdencompraId($ordencompraId);
+        } catch (\Throwable $e) {
+            Log::warning('ComprobanteProveedorRecepciones: fallback Anita por OC', [
+                'ordencompra_id' => $ordencompraId,
+                'mensaje' => $e->getMessage(),
+            ]);
+        }
     }
 }

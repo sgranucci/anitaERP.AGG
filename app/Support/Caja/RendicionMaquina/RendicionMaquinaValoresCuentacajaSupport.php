@@ -87,6 +87,50 @@ final class RendicionMaquinaValoresCuentacajaSupport
     }
 
     /**
+     * Al sumar M/T/N: no heredar la tasa de una línea en cero (la Mañana suele
+     * quedar con la cotización del día anterior). Si hay montos con tasas
+     * distintas, null → tesorería del día en enriquecerLineas.
+     */
+    public static function cotizacionAlSumar(?float $acumulada, ?float $nueva, float $montoLinea): ?float
+    {
+        if (abs($montoLinea) < 0.00001) {
+            return $acumulada;
+        }
+        if ($nueva === null) {
+            return $acumulada;
+        }
+        if ($acumulada === null) {
+            return $nueva;
+        }
+        if (abs($acumulada - $nueva) > 0.0001) {
+            return null;
+        }
+
+        return $acumulada;
+    }
+
+    /**
+     * El Completo convierte ME con la tesorería del día, no con la tasa que
+     * quedó pegada en un parcial cargado antes de actualizar el tipo de cambio.
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     * @return list<array<string, mixed>>
+     */
+    public static function anularCotizacionDivisa(array $lineas): array
+    {
+        $out = [];
+        foreach ($lineas as $linea) {
+            $monedaId = (int) ($linea['moneda_id'] ?? 1);
+            if (self::esMonedaExtranjera($monedaId)) {
+                $linea['cotizacion'] = null;
+            }
+            $out[] = $linea;
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  array<string, mixed>  $linea
      */
     private static function cotizacionParaLinea(

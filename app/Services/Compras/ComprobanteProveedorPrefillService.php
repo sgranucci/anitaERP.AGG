@@ -17,6 +17,7 @@ use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Log;
 
 class ComprobanteProveedorPrefillService
 {
@@ -24,6 +25,7 @@ class ComprobanteProveedorPrefillService
         private ComprobanteProveedorCondicionPagoDesdeOcService $condicionPagoDesdeOc,
         private ComprobanteProveedorComLegajoResolucionService $comLegajoResolucion,
         private CotizacionQueryInterface $cotizacionQuery,
+        private OrdencompraAnitaSyncService $ordencompraAnitaSyncService,
     ) {}
 
   /**
@@ -433,7 +435,35 @@ class ComprobanteProveedorPrefillService
             return $mismaEmpresa;
         }
 
-        return $base->orderByDesc('id')->first();
+        $existente = $base->orderByDesc('id')->first();
+        if ($existente) {
+            return $existente;
+        }
+
+        return $this->importarOrdencompraDesdeAnita($nro);
+    }
+
+    private function importarOrdencompraDesdeAnita(int $numeroOc): ?Ordencompra
+    {
+        try {
+            $resultado = $this->ordencompraAnitaSyncService->traerRegistroDeAnita($numeroOc);
+            if (! in_array($resultado, ['importado', 'omitido', 'lineas_completadas'], true)) {
+                return null;
+            }
+        } catch (\Throwable $e) {
+            Log::warning('ComprobanteProveedorPrefill: no se pudo importar OC desde Anita', [
+                'numero_oc' => $numeroOc,
+                'mensaje' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        return Ordencompra::query()
+            ->with('ordencompra_articulos')
+            ->where('numeroordencompra', $numeroOc)
+            ->orderByDesc('id')
+            ->first();
     }
 
     private function resolverMonedaIdDesdeOrdencompra(Ordencompra $ordencompra): int

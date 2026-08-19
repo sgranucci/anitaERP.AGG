@@ -4,6 +4,7 @@ namespace App\Support\Contable;
 
 use App\Models\Caja\RendicionEstacionamientoCaja;
 use App\Models\Configuracion\Empresa;
+use App\Support\Caja\Flash\FlashCajaValidacionSupport;
 use App\Models\Contable\Asiento;
 use App\Support\Contable\CierreRendicionEstacionamientoGrupoSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaControlFlashSupport;
@@ -58,6 +59,7 @@ final class CierreRendicionEstacionamientoConciliacionFlashSupport
 
         $rendiciones = $this->cargarRendiciones($empresaId, $desde, $hasta);
         $flashPorFecha = $this->cargarFlashEstacPorFecha((int) $empresa->codigo, $desde, $hasta);
+        $flashValidadoPorFecha = FlashCajaValidacionSupport::mapaValidadoPorFecha($empresaId, $desde, $hasta);
 
         $dias = [];
         $diasOk = 0;
@@ -68,7 +70,7 @@ final class CierreRendicionEstacionamientoConciliacionFlashSupport
 
         foreach (CarbonPeriod::create($desde, $hasta) as $fecha) {
             $fechaStr = $fecha->toDateString();
-            $dia = $this->armarDia($fechaStr, $rendiciones, $flashPorFecha, $tolerancia);
+            $dia = $this->armarDia($fechaStr, $rendiciones, $flashPorFecha, $tolerancia, $flashValidadoPorFecha);
             if ($dia['cantidad_rendiciones'] <= 0 && abs($dia['total_flash_estac']) <= $tolerancia) {
                 continue;
             }
@@ -166,6 +168,7 @@ final class CierreRendicionEstacionamientoConciliacionFlashSupport
     /**
      * @param  Collection<int, RendicionEstacionamientoCaja>  $rendiciones
      * @param  array<string, float>  $flashPorFecha
+     * @param  array<string, bool>  $flashValidadoPorFecha
      * @return array<string, mixed>
      */
     private function armarDia(
@@ -173,6 +176,7 @@ final class CierreRendicionEstacionamientoConciliacionFlashSupport
         Collection $rendiciones,
         array $flashPorFecha,
         float $tolerancia,
+        array $flashValidadoPorFecha = [],
     ): array {
         /** @var array<string, array{
          *   pv_codigo: string,
@@ -343,6 +347,7 @@ final class CierreRendicionEstacionamientoConciliacionFlashSupport
             'total_rendiciones_ventas_brutas' => $totalVentasBrutas,
             'total_asientos_debe' => $totalAsientos,
             'total_flash_estac' => $flashEstac,
+            'flash_validado' => ! empty($flashValidadoPorFecha[$fechaJornada]),
             'diferencia_cobrado_flash' => $diferenciaCobradoFlash,
             'diferencia' => $diferencia,
             'diferencia_rend_asientos' => $diferenciaAsientos,

@@ -465,21 +465,14 @@ class Comprobante_ProveedorController extends Controller
             abort(404);
         }
 
-        $archivo = $comprobante->comprobante_proveedor_archivos
-            ->firstWhere('tipo', ComprobanteProveedorArchivoTipos::ORIGEN_IA);
-
-        $ruta = $archivo?->ruta_externa;
-        if (! $ruta && $comprobante->precarga_comprobante_proveedores) {
-            $ruta = $comprobante->precarga_comprobante_proveedores->rutaalmacenamiento;
-        }
-
+        $ruta = ComprobanteProveedorArchivoPathSupport::referenciaPdfPrecarga($comprobante);
         $path = $this->facturaScanPathResolver->resolve($ruta);
         if ($path === null) {
             $path = $this->archivoPathSupport->absolutePathDesdeComprobante($comprobante);
         }
 
         if ($path === null || ! is_readable($path)) {
-            abort(404, 'No se encontró el PDF de la factura.');
+            abort(404, 'No se encontró el PDF original de la precarga en Facturas_scan'.($ruta ? ' para: '.$ruta : '.'));
         }
 
         $nombre = basename($path);
@@ -819,7 +812,14 @@ class Comprobante_ProveedorController extends Controller
             'bloquea_sin_com' => false,
         ];
         if ($data) {
-            $data->loadMissing(['ordencompras.sector_legajocompras', 'ordencompras.contrato_cuentacontables']);
+            $data->loadMissing([
+                'ordencompras.sector_legajocompras',
+                'ordencompras.contrato_cuentacontables',
+                'ordencompras.centrocostos',
+                'ordencompras.ordencompra_articulos.articulos',
+                'ordencompras.ordencompra_articulos.centrocostos_destino',
+                'ordencompras.ordencompra_articulos.monedas',
+            ]);
             $oc = $data->ordencompras;
             $tieneCom = $recepcionesDisponibles->isNotEmpty();
             $fechaPolitica = null;
@@ -916,6 +916,7 @@ class Comprobante_ProveedorController extends Controller
                     || ($comPolitica['bloquea_sin_com'] ?? false)
                     || (string) ($data->modo_carga ?? '') === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION
                 ),
+            'mostrarSolapaOc' => (int) ($data?->ordencompra_id ?? 0) > 0,
             // Match SKU/precio off en AGG: ocultar solapa vacía; mostrar si hay líneas (OCR) o flags activos.
             'mostrarSolapaArticulos' => $this->mostrarSolapaArticulosFormulario(
                 (int) ($data->empresa_id ?? 0),

@@ -9,7 +9,7 @@
        target="_blank"
        rel="noopener"
        class="text-primary"
-       title="Ver PDF de la factura">
+       title="Ver PDF original de la precarga">
         {{ $etiquetaComprobante }}
     </a>
 @else

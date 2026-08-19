@@ -90,6 +90,7 @@ class CierreTurnoGastronomiaContableConciliacionExport implements FromView, Shou
                 'cantidad_cierres' => (int) ($dia['cantidad_cierres'] ?? 0),
                 'total_facturacion' => (float) ($dia['total_facturacion'] ?? 0),
                 'total_flash_ayb' => (float) ($dia['total_flash_ayb'] ?? 0),
+                'flash_validado' => ! empty($dia['flash_validado']),
                 'total_asientos_debe' => (float) ($dia['total_asientos_debe'] ?? 0),
                 'total_mayor_neto' => (float) ($dia['total_mayor_neto'] ?? 0),
                 'diferencia_flash' => (float) ($dia['diferencia_flash'] ?? 0),

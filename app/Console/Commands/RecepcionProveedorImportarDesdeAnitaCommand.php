@@ -12,6 +12,7 @@ class RecepcionProveedorImportarDesdeAnitaCommand extends Command
                             {--desde=2025-01-01 : Fecha ISO desde (inclusive)}
                             {--hasta= : Fecha ISO hasta (inclusive, default hoy)}
                             {--nro= : Importar solo una COM por recm_nro}
+                            {--oc= : Importar todas las COM de una OC (recepmae + aplicped)}
                             {--sucursal=1 : Sucursal Anita (recm_sucursal) para --nro}
                             {--impactar : Confirma en ERP (stock + asiento + sync Anita); default histórico sin impacto}
                             {--dry-run : Solo contadores, sin grabar}';
@@ -22,7 +23,27 @@ class RecepcionProveedorImportarDesdeAnitaCommand extends Command
     {
         $dryRun = (bool) $this->option('dry-run');
         $nro = $this->option('nro');
+        $numeroOc = $this->option('oc');
         $impactar = (bool) $this->option('impactar');
+
+        if ($numeroOc !== null && $numeroOc !== '') {
+            $stats = $service->asegurarPorNumeroOc((int) $numeroOc, $impactar, $dryRun);
+            $this->table(['Métrica', 'Cantidad'], [
+                ['COM en Anita', $stats['claves']],
+                ['Importadas', $stats['importadas']],
+                ['Vinculadas a la OC', $stats['vinculadas']],
+                ['Omitidas / ya existían', $stats['omitidas']],
+                ['Errores', count($stats['errores'])],
+            ]);
+            foreach ($stats['errores'] as $error) {
+                $this->warn($error);
+            }
+            if ($dryRun) {
+                $this->comment('Dry-run: no se grabó nada.');
+            }
+
+            return $stats['errores'] === [] ? self::SUCCESS : self::FAILURE;
+        }
 
         if ($nro !== null && $nro !== '') {
             $sucursal = (int) $this->option('sucursal');
@@ -56,7 +77,7 @@ class RecepcionProveedorImportarDesdeAnitaCommand extends Command
                 $this->comment('Dry-run: no se grabó nada.');
             }
 
-            return in_array($resultado['estado'], ['importada', 'importada_con_impacto', 'omitida', 'dry_run'], true)
+            return in_array($resultado['estado'], ['importada', 'importada_con_impacto', 'omitida', 'vinculada', 'dry_run'], true)
                 ? self::SUCCESS
                 : self::FAILURE;
         }

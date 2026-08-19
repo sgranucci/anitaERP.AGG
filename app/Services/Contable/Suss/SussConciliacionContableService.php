@@ -10,9 +10,9 @@ use App\Support\Contable\Anita\AnitaMayorAnaliticoSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\Sicore\SicoreConciliacionAuditoriaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
-use App\Support\Contable\Sicore\SicoreMayorComparableSupport;
 use App\Support\Contable\Sicore\SicoreSaldoEjercicioSupport;
 use App\Support\Contable\Suss\SussFormatoF2004Support;
+use App\Support\Contable\Suss\SussMayorComparableSupport;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -66,7 +66,9 @@ final class SussConciliacionContableService
         $movimientosMayorCompleto = $movimientosErp !== [] ? $movimientosErp : $movimientosAnita;
         $fuenteMayor = $movimientosErp !== [] ? 'erp' : ($movimientosAnita !== [] ? 'anita' : 'ninguna');
 
-        $particion = SicoreMayorComparableSupport::particionar($movimientosMayorCompleto, null);
+        // Período: excluye pago DDJJ/SUSS por texto y pago a AFIP (prov. 1299).
+        // El saldo de ejercicio (acumulado) no usa esta partición.
+        $particion = SussMayorComparableSupport::particionar($movimientosMayorCompleto);
         $movimientosComparable = $particion['comparables'];
         $movimientosExcluidos = $particion['excluidos'];
         $totalMayorNeto = $particion['total_comparable'];
@@ -154,6 +156,13 @@ final class SussConciliacionContableService
         $filas = DB::table('asiento_movimiento as am')
             ->join('asiento as a', 'a.id', '=', 'am.asiento_id')
             ->join('cuentacontable as c', 'c.id', '=', 'am.cuentacontable_id')
+            ->leftJoin('pagoproveedor as pp', 'pp.id', '=', 'a.pagoproveedor_id')
+            ->leftJoin('pagoproveedor as pp2', function ($join) {
+                $join->on('pp2.asiento_id', '=', 'a.id')
+                    ->whereNull('a.pagoproveedor_id');
+            })
+            ->leftJoin('proveedor as p', 'p.id', '=', 'pp.proveedor_id')
+            ->leftJoin('proveedor as p2', 'p2.id', '=', 'pp2.proveedor_id')
             ->where('a.empresa_id', $empresaId)
             ->whereBetween('a.fecha', [$desde, $hasta])
             ->whereIn('am.cuentacontable_id', $cuentaIds)
@@ -166,11 +175,15 @@ final class SussConciliacionContableService
                 'c.nombre as cuenta_nombre',
                 'am.monto',
                 'am.observacion',
+                'p.codigo as proveedor_codigo',
+                'p2.codigo as proveedor_codigo_asiento',
             ]);
 
         $out = [];
         foreach ($filas as $fila) {
             $monto = (float) $fila->monto;
+            $codigoProveedor = trim((string) ($fila->proveedor_codigo ?? ''))
+                ?: trim((string) ($fila->proveedor_codigo_asiento ?? ''));
             $out[] = [
                 'fecha' => (string) $fila->fecha,
                 'asiento_id' => (int) $fila->asiento_id,
@@ -180,6 +193,8 @@ final class SussConciliacionContableService
                 'haber' => $monto < 0 ? round(abs($monto), 2) : null,
                 'neto_haber' => round(-$monto, 2),
                 'detalle' => trim((string) ($fila->observacion ?? '')),
+                'codigo_proveedor' => $codigoProveedor,
+                'subd_emisor' => $codigoProveedor,
                 'origen' => 'erp',
             ];
         }

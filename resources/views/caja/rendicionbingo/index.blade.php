@@ -33,6 +33,7 @@ use App\Support\Caja\Bingo\RendicionBingoCajaListadoFiltros;
 @section('contenido')
 @php
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+    $limpiarUrl = route('rendicionbingo', RendicionBingoCajaListadoFiltros::paraQueryStringEmpresa($filtros ?? []));
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -52,7 +53,7 @@ use App\Support\Caja\Bingo\RendicionBingoCajaListadoFiltros;
                         'formId' => 'form-filtros-rendicion-bingo',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => RendicionBingoCajaListadoFiltros::tieneCriteriosUsuario($filtros ?? []),
-                        'limpiarUrl' => route('rendicionbingo'),
+                        'limpiarUrl' => $limpiarUrl,
                         'placeholder' => 'Búsqueda rápida (código, ID, empresa, terminal…)',
                         'toggleTarget' => '#panel-filtros-rendicion-bingo',
                         'toggleId' => 'btn-toggle-filtros-rendicion-bingo',
@@ -65,6 +66,7 @@ use App\Support\Caja\Bingo\RendicionBingoCajaListadoFiltros;
             <form method="get" action="{{ route('rendicionbingo') }}" id="form-filtros-rendicion-bingo" class="mb-0">
                 @include('caja.rendicionbingo.partials.filtros_listado')
             </form>
+            @include('caja.rendicionbingo.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'listar_rendicionbingo',

@@ -7,6 +7,31 @@
                 <div class="h4 mb-0 text-primary font-weight-bold">
                     OC #{{ $data->ordencompras->numeroordencompra ?? $data->ordencompra_id }}
                 </div>
+                @php
+                    $ccDestBannerId = \App\Support\Compras\ComprobanteProveedorCentrocostoSupport::resolverDesdeOc($data->ordencompras ?? null);
+                    $ccDestBanner = null;
+                    foreach (($data->ordencompras->ordencompra_articulos ?? []) as $linCcBan) {
+                        if ((int) ($linCcBan->centrocostodestino_id ?? 0) === $ccDestBannerId && $linCcBan->centrocostos_destino) {
+                            $ccDestBanner = $linCcBan->centrocostos_destino;
+                            break;
+                        }
+                    }
+                    if (! $ccDestBanner && optional($data->ordencompras->centrocostos ?? null) && (int) ($data->ordencompras->centrocosto_id ?? 0) === $ccDestBannerId) {
+                        $ccDestBanner = $data->ordencompras->centrocostos;
+                    }
+                @endphp
+                @if ($ccDestBanner || $ccDestBannerId > 0)
+                <div class="small mt-1">
+                    CC destino:
+                    <span class="badge badge-info">
+                        @if ($ccDestBanner)
+                            {{ $ccDestBanner->codigo }} {{ $ccDestBanner->nombre }}
+                        @else
+                            #{{ $ccDestBannerId }}
+                        @endif
+                    </span>
+                </div>
+                @endif
                 @if (optional($data->ordencompras->sector_legajocompras ?? null)->nombre)
                 <div class="small mt-1">
                     Sector legajo:
@@ -41,8 +66,13 @@
                 @endif
             </div>
             <div class="d-flex flex-wrap" style="gap:6px;">
+                @if ($mostrarSolapaOc ?? false)
+                <button type="button" class="btn btn-outline-primary btn-sm cp-abrir-solapa-oc">
+                    <i class="fa fa-file-text-o"></i> Ver OC
+                </button>
+                @endif
                 @if (can('editar-ordencompra', false) || can('listar-ordencompra', false))
-                <a href="{{ route('editar_ordencompra', ['id' => $data->ordencompra_id]) }}"
+                <a href="{{ route('editar_ordencompra', ['id' => $data->ordencompra_id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
                    class="btn btn-primary btn-sm" target="_blank" rel="noopener">
                     <i class="fa fa-external-link"></i> Abrir OC
                 </a>
@@ -72,7 +102,7 @@
             }
         }
     }
-    $centrocostoOcId = (int) ($data->ordencompras->centrocosto_id ?? 0);
+    $centrocostoOcId = \App\Support\Compras\ComprobanteProveedorCentrocostoSupport::resolverDesdeOc($data->ordencompras ?? null);
     $desdePrecarga = (int) ($data->precarga_comprobante_proveedor_id ?? 0) > 0;
 @endphp
 <div class="row">
@@ -413,6 +443,11 @@
             Este comprobante usa modo asignación de recepción COM.
         @endif
     </span>
+    @if ($mostrarSolapaOc ?? false)
+    <button type="button" class="btn btn-sm btn-outline-primary ml-2 cp-abrir-solapa-oc">
+        Ver OC
+    </button>
+    @endif
     <button type="button" class="btn btn-sm btn-outline-primary ml-2" id="cp-abrir-solapa-com-desde-datos">
         Ir a Recepciones COM
     </button>

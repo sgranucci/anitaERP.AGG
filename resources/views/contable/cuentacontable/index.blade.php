@@ -1,79 +1,83 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-    Cuentas Contables
+    Plan de cuentas
+@endsection
+
+@section('styles')
+<style>
+.pc-arbol { list-style: none; margin: 0; padding: 0 0 1rem; }
+.pc-nodo { list-style: none; }
+.pc-nodo__hijos { list-style: none; margin: 0; padding: 0 0 0 1.15rem; border-left: 1px solid #d6eaf8; }
+.pc-nodo__row {
+    display: flex; align-items: center; gap: .45rem;
+    padding: .32rem .75rem; border-bottom: 1px solid #f0f3f5;
+}
+.pc-nodo__row:hover { background: #f4f9fc; }
+.pc-nodo--hit > .pc-nodo__row { background: #d6eaf8; }
+.pc-nodo--total > .pc-nodo__row { opacity: .72; }
+.pc-nodo__toggle {
+    width: 22px; height: 22px; padding: 0; border: 0; background: transparent;
+    color: #2471A3; line-height: 1;
+}
+.pc-nodo__toggle--empty { display: inline-block; width: 22px; }
+.pc-nodo__codigo { font-family: SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; color: #1B4F72; min-width: 88px; }
+.pc-nodo__nombre { flex: 1; min-width: 0; }
+.pc-nodo__tipo { font-size: 10px; text-transform: uppercase; letter-spacing: .02em; }
+.pc-nodo__meta { font-size: 11px; white-space: nowrap; }
+.pc-nodo__acciones { white-space: nowrap; }
+.pc-arbol-toolbar { background: #fbfcfd; }
+</style>
 @endsection
 
 @section("scripts")
-<script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/cuentacontable/index.js') }}" type="text/javascript"></script>
 @endsection
 
-<?php use App\Helpers\biblioteca ?>
-
 @section('contenido')
+@php
+    use App\Support\Contable\CuentacontableListadoFiltros;
+    use App\Support\Listado\QueryRetornoListado;
+    $retornoListadoQuery = QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+    $limpiarUrl = route('cuentacontable', CuentacontableListadoFiltros::paraQueryStringEmpresa($filtros ?? []));
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
         <div class="card card-info">
             <div class="card-header">
-                <h3 class="card-title">Cuentas Contables</h3>
-                <div class="card-tools">
-                    <a href="{{route('crear_cuentacontable')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-cuentas-contables', false))
-                        	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-						@endif
-                    </a>
+                <h3 class="card-title">Plan de cuentas</h3>
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.listado.filtros_toolbar', [
+                        'formId' => 'form-filtros-cuentacontable',
+                        'filtroValor' => $filtros['valor'] ?? '',
+                        'tieneCriterios' => CuentacontableListadoFiltros::tieneCriteriosTexto($filtros ?? []),
+                        'limpiarUrl' => $limpiarUrl,
+                        'placeholder' => 'Buscar código o nombre…',
+                        'toggleTarget' => '#panel-filtros-cuentacontable',
+                        'toggleId' => 'btn-toggle-filtros-cuentacontable',
+                        'inputId' => 'filtro_valor',
+                        'nuevoRegistroUrl' => route('crear_cuentacontable', $retornoListadoQuery),
+                        'nuevoRegistroCan' => 'crear-cuentas-contables',
+                    ])
                 </div>
             </div>
-            <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover" id="tabla-data">
-                    <thead>
-                        <tr>
-                            <th class="width20">ID</th>
-                            <th>Empresa</th>
-                            <th>Número de cuenta</th>
-                            <th>Nombre</th>
-                            <th>Nivel</th>
-                            <th>Tipo de cuenta</th>
-                            <th>Rubro</th>
-                            <th>C.Costo</th>
-                            <th>Concepto</th>
-                            <th class="width80" data-orderable="false"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($cuentacontables as $data)
-                        <tr>
-                            <td>{{$data->id}}</td>
-                            <td>{{$data->empresas->nombre}}</td>
-                            <td>{{$data->codigo}}</td>
-                            <td>{{$data->nombre}}</td>
-                            <td>{{$data->nivel}}</td>
-                            <td>{{($data->tipocuenta==1?'Imputable':
-                                  ($data->tipocuenta==2?'No imputable':'Totalizadora'))}}</td>
-                            <td>{{$data->rubrocontables->nombre??''}}</td>
-                            <td>{{$data->manejaccosto == 'S' ? 'Maneja C.Costo' : 'No maneja C.Costo'}}</td>
-                            <td>{{$data->conceptogastos->nombre??''}}</td>
-                            <td>
-                       			@if (can('editar-cuentas-contables', false))
-                                	<a href="{{route('editar_cuentacontable', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
-                                    <i class="fa fa-edit"></i>
-                                	</a>
-								@endif
-                       			@if (can('borrar-cuentas-contables', false))
-                                <form action="{{route('eliminar_cuentacontable', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
-                                    @csrf @method("delete")
-                                    <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
-                                        <i class="fa fa-times-circle text-danger"></i>
-                                    </button>
-                                </form>
-								@endif
-                            </td>
-                        </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
+            <form method="get" action="{{ route('cuentacontable') }}" id="form-filtros-cuentacontable" class="mb-0">
+                @include('contable.cuentacontable.partials.filtros_listado', [
+                    'limpiarUrl' => $limpiarUrl,
+                ])
+            </form>
+            @include('contable.cuentacontable.partials.filtros_externos')
+            @if ($vistaArbol ?? false)
+                @include('contable.cuentacontable.partials.arbol')
+            @else
+                @include('contable.cuentacontable.partials.tabla_lista')
+            @endif
         </div>
     </div>
 </div>
+@if (! ($vistaArbol ?? false) && isset($cuentacontables) && method_exists($cuentacontables, 'links'))
+    {{ $cuentacontables->appends($filtrosQuery ?? [])->links() }}
+@endif
 @endsection

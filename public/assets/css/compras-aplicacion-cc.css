@@ -195,6 +195,13 @@
     color: #1B2631;
     font-size: 13px;
 }
+.acc-row .acc-fecha {
+    font-size: 12px;
+    font-weight: 600;
+    color: #1A5276;
+    font-variant-numeric: tabular-nums;
+    margin-top: 1px;
+}
 .acc-row .acc-meta {
     font-size: 11px;
     color: #5D6D7E;
@@ -308,7 +315,7 @@
 .acc-board-body { padding: 8px 8px 12px; }
 .acc-pair {
     display: grid;
-    grid-template-columns: 72px minmax(0, 1fr) 16px minmax(0, 1fr) 120px 32px;
+    grid-template-columns: 72px minmax(0, 1fr) 16px minmax(0, 1fr) 110px 108px 32px;
     gap: 8px;
     align-items: center;
     padding: 8px 10px;
@@ -334,6 +341,16 @@
     font-size: 12px;
     text-align: right;
 }
+.acc-pair .acc-pair-dc {
+    font-size: 11px;
+    font-weight: 600;
+    text-align: right;
+    color: #7F8C8D;
+}
+.acc-pair .acc-pair-dc.is-loss { color: #C0392B; }
+.acc-pair .acc-pair-dc.is-gain { color: #1E8449; }
+.acc-dock-stat #acc-dock-dc.is-loss { color: #F5B7B1; }
+.acc-dock-stat #acc-dock-dc.is-gain { color: #ABEBC6; }
 .acc-pair.is-manual { background: #FBF5FC; }
 .acc-pair.is-auto { background: #F8FBF9; }
 .acc-recientes h3 { display: block; }

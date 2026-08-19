@@ -173,7 +173,7 @@ final class CierreRendicionBingoConciliacionFlashSupport
     }
 
     /**
-     * @return array<string, array{venta: float, resultado: float}>
+     * @return array<string, array{venta: float, resultado: float, validado: bool}>
      */
     private function cargarFlashPorFecha(int $empresaId, string $desde, string $hasta): array
     {
@@ -182,7 +182,7 @@ final class CierreRendicionBingoConciliacionFlashSupport
             ->where('empresa_id', $empresaId)
             ->whereDate('fecha', '>=', $desde)
             ->whereDate('fecha', '<=', $hasta)
-            ->get(['fecha', 'bingo_total_venta', 'bingo_resultado'])
+            ->get(['fecha', 'bingo_total_venta', 'bingo_resultado', 'validado'])
             ->each(function (FlashCaja $flash) use (&$out) {
                 $fecha = $flash->fecha?->format('Y-m-d');
                 if ($fecha === null || $fecha === '') {
@@ -191,6 +191,7 @@ final class CierreRendicionBingoConciliacionFlashSupport
                 $out[$fecha] = [
                     'venta' => round((float) ($flash->bingo_total_venta ?? 0), 2),
                     'resultado' => round((float) ($flash->bingo_resultado ?? 0), 2),
+                    'validado' => $flash->estaValidado(),
                 ];
             });
 
@@ -292,7 +293,7 @@ final class CierreRendicionBingoConciliacionFlashSupport
     /**
      * @param  Collection<int, RendicionBingoCaja>  $rendicionesDia
      * @param  array<string, mixed>  $totalesDia
-     * @param  array<string, array{venta: float, resultado: float}>  $flashPorFecha
+     * @param  array<string, array{venta: float, resultado: float, validado?: bool}>  $flashPorFecha
      * @param  array<int, array<string, mixed>>  $concbIndex
      * @param  list<array<string, mixed>>  $columnas
      * @return array<string, mixed>
@@ -398,6 +399,7 @@ final class CierreRendicionBingoConciliacionFlashSupport
             'cantidad_grupos_pendientes' => count($gruposPendientes),
             'estado_cierre' => $estadoCierre,
             'estado' => $estado,
+            'flash_validado' => ! empty($flashPorFecha[$fechaDia]['validado']),
             'valores' => $valores,
             'rendicion_ids' => $rendicionesDia->pluck('id')->map(fn ($id) => (int) $id)->values()->all(),
         ];

@@ -31,6 +31,10 @@ class QueryRetornoListado
             'fecha_entrega_hasta',
             'empresa_id',
             'empresa_todas',
+            'vista',
+            'mostrar_totalizadoras',
+            'filtro_tipocuenta',
+            'filtro_nivel',
         ] as $key) {
             if ($request->query->has($key)) {
                 return true;

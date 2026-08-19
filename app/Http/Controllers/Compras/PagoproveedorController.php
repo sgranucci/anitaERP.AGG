@@ -369,7 +369,9 @@ class PagoproveedorController extends Controller
 
     public function imprimir(int $id)
     {
-        can('listar-pagoproveedor');
+        if (! can('listar-pagoproveedor', false) && ! can('listar-cuentacorriente-proveedor', false)) {
+            abort(403);
+        }
 
         $pago = $this->pagoproveedorRepository->find($id);
         $pdf = Pdf::loadView('compras.pagoproveedor.comprobante', [
@@ -385,7 +387,10 @@ class PagoproveedorController extends Controller
         $path = $dir.'/op_'.$pago->id.'.pdf';
         $pdf->save($path);
 
-        return response()->file($path);
+        return response()->file($path, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'inline; filename="op_'.$pago->id.'.pdf"',
+        ]);
     }
 
     public function imprimirRetencion(int $id, int $retencionId)

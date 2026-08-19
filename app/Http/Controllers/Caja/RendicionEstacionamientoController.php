@@ -10,7 +10,6 @@ use App\Support\Caja\EstacionamientoJornadaComprobantePermiso;
 use App\Support\Caja\RendicionEstacionamientoCajaListadoFiltros;
 use App\Support\Caja\RendicionEstacionamientoCajaPermiso;
 use App\Support\Contable\CierreRendicionOrigenConsultaSupport;
-use App\Support\Listado\FiltrosListadoRequest;
 use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
 use InvalidArgumentException;
@@ -89,22 +88,21 @@ class RendicionEstacionamientoController extends Controller
      */
     private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
     {
-        $filtros = RendicionEstacionamientoCajaListadoFiltros::resolverDesdeRequest($request, $busquedaRuta);
+        $empresaQuery = $this->empresaRepository->allFiltrado();
+        $empresaDefault = optional($empresaQuery->first())->id;
+        $filtros = RendicionEstacionamientoCajaListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busquedaRuta,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
+
         $asignadas = $this->empresaRepository->traeEmpresasAsignadas();
         $filtros['empresas_asignadas'] = $asignadas;
 
-        if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return $filtros;
-        }
-
-        $empresaQuery = $this->empresaRepository->allFiltrado();
         $empresaId = (int) ($filtros['empresa_id'] ?? 0);
-
-        // Solo preseleccionar empresa cuando el usuario tiene una única empresa asignada.
-        if ($empresaId <= 0 && count($asignadas) === 1 && ! $request->has('empresa_id')) {
+        if ($empresaId > 0 && $asignadas !== [] && ! in_array($empresaId, $asignadas, true)) {
             $filtros['empresa_id'] = $this->resolverEmpresaDefaultId($empresaQuery);
-        } elseif ($empresaId > 0 && count($asignadas) >= 1 && ! in_array($empresaId, $asignadas, true)) {
-            $filtros['empresa_id'] = $this->resolverEmpresaDefaultId($empresaQuery);
+            $filtros['empresa_scope'] = ((int) $filtros['empresa_id']) > 0 ? 'una' : 'todas';
         }
 
         return $filtros;

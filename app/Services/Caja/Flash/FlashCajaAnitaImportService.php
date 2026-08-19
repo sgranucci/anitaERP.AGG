@@ -6,6 +6,7 @@ namespace App\Services\Caja\Flash;
 
 use App\ApiAnita;
 use App\Repositories\Caja\Flash\FlashCajaRepositoryInterface;
+use App\Support\Caja\Flash\FlashCajaAnitaMapeoSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -21,13 +22,6 @@ use Illuminate\Support\Facades\DB;
  */
 final class FlashCajaAnitaImportService
 {
-    /** @var array<int, int> sala Anita → empresa_id ERP */
-    private const SALA_A_EMPRESA = [
-        21 => 1,
-        38 => 2,
-        43 => 3,
-    ];
-
     public function __construct(
         private readonly FlashCajaRepositoryInterface $repository,
     ) {}
@@ -42,8 +36,12 @@ final class FlashCajaAnitaImportService
      *   salas_desconocidas: array<int, int>
      * }
      */
-    public function importarRango(string $fechaDesde, string $fechaHasta, ?callable $log = null): array
-    {
+    public function importarRango(
+        string $fechaDesde,
+        string $fechaHasta,
+        ?callable $log = null,
+        bool $soloFaltantes = false,
+    ): array {
         $desde = Carbon::parse($fechaDesde)->startOfDay();
         $hasta = Carbon::parse($fechaHasta)->startOfDay();
         if ($desde->gt($hasta)) {
@@ -58,7 +56,7 @@ final class FlashCajaAnitaImportService
 
         $sistema = (string) config('flash_caja_anita.sistema', 'caja');
         $tabla = (string) config('flash_caja_anita.tabla', 'flash');
-        $salas = array_keys(self::SALA_A_EMPRESA);
+        $salas = FlashCajaAnitaMapeoSupport::salas();
 
         $leidos = 0;
         $creados = 0;
@@ -91,7 +89,8 @@ final class FlashCajaAnitaImportService
             foreach ($filas as $fila) {
                 $leidos++;
                 $sala = (int) preg_replace('/\D+/', '', (string) ($fila->flash_sala ?? ''));
-                if (! isset(self::SALA_A_EMPRESA[$sala])) {
+                $empresaId = FlashCajaAnitaMapeoSupport::empresaIdDesdeSala($sala);
+                if ($empresaId === null) {
                     $salasDesconocidas[$sala] = ($salasDesconocidas[$sala] ?? 0) + 1;
                     $omitidos++;
 
@@ -111,15 +110,17 @@ final class FlashCajaAnitaImportService
                     (int) substr((string) $fechaEntera, 6, 2),
                 );
 
-                $empresaId = self::SALA_A_EMPRESA[$sala];
                 $payload = $this->mapearFila($fila, $empresaId, $fecha);
 
-                $resultado = DB::transaction(function () use ($empresaId, $fecha, $payload) {
+                $resultado = DB::transaction(function () use ($empresaId, $fecha, $payload, $soloFaltantes) {
                     $existente = $this->repository->findPorEmpresaFecha($empresaId, $fecha);
                     if ($existente === null) {
                         $this->repository->create($payload);
 
                         return 'creado';
+                    }
+                    if ($soloFaltantes) {
+                        return 'omitido';
                     }
                     // Vending solo vive en anitaERP: no pisar con el 0 del bridge Anita.
                     unset($payload['vending']);
@@ -130,8 +131,10 @@ final class FlashCajaAnitaImportService
 
                 if ($resultado === 'creado') {
                     $creados++;
-                } else {
+                } elseif ($resultado === 'actualizado') {
                     $actualizados++;
+                } else {
+                    $omitidos++;
                 }
             }
 

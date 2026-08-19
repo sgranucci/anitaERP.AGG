@@ -39,6 +39,17 @@ return [
     ],
 
     /*
+     * Quién puede marcar el flash diario como validado (tilde verde en Contable).
+     * Por ahora solo mbarrios; ampliar la lista o FLASH_CAJA_VALIDACION_USUARIOS cuando corresponda.
+     */
+    'flash_validacion' => [
+        'usuarios' => array_values(array_filter(array_map(
+            'strtolower',
+            array_map('trim', explode(',', (string) env('FLASH_CAJA_VALIDACION_USUARIOS', 'mbarrios')))
+        ), fn (string $login) => $login !== '')),
+    ],
+
+    /*
      * Clientes VIP caja (Anita base_admin.clivip). Solo importación; no create/update/delete hacia Anita.
      * Reutiliza bridge por empresa de tickettarj/gastronomía (mismo host Informix).
      */
@@ -166,4 +177,24 @@ return [
      * 0 = desactivado (default). Si monto IE >= umbral al guardar: log/warning stub (sin árbol IE completo).
      */
     'arbol_umbral_monto' => (float) env('CAJA_IE_ARBOL_UMBRAL_MONTO', 0),
+
+    /*
+     * Flash Report AGG (plantilla oficial). Menú caja/flash/reporte.
+     * Distribución: flash:distribuir-reportes (horario de cada suscripción).
+     */
+    'flash_reporte_agg' => [
+        'distribucion_habilitada' => filter_var(
+            env('FLASH_REPORTE_AGG_DISTRIBUCION', true),
+            FILTER_VALIDATE_BOOLEAN
+        ),
+        'plantilla' => env(
+            'FLASH_REPORTE_AGG_PLANTILLA',
+            resource_path('templates/caja/flash/plantilla-flash-agg.xlsx')
+        ),
+        'empresas' => [
+            1 => ['hoja' => 'Biyemas S.A.', 'datos' => 'Datos Biyemas'],
+            2 => ['hoja' => 'Kandiko S.A', 'datos' => 'Datos Kandiko'],
+            3 => ['hoja' => 'Rebisco S.A.', 'datos' => 'Datos Rebisco'],
+        ],
+    ],
 ];

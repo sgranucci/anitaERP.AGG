@@ -41,7 +41,9 @@ class Cliente_Uif extends Model implements Auditable
 
     public function cliente_archivos_uif()
     {
-        return $this->hasMany(Cliente_Archivo_Uif::class, 'cliente_uif_id');
+        return $this->hasMany(Cliente_Archivo_Uif::class, 'cliente_uif_id')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
     }
 
     public function tipodocumentos()

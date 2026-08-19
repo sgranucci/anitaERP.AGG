@@ -118,6 +118,123 @@ class RecepcionProveedorAnitaImportSupport
         return 0;
     }
 
+    public static function whereRecepmaePorOrdencompra(int $numeroOc): string
+    {
+        $nro = (int) $numeroOc;
+
+        return " WHERE recm_tipo = 'COM' AND recm_letra = 'X'"
+            ." AND (recm_com_nro = {$nro} OR recm_nro_fac = {$nro})";
+    }
+
+    public static function whereAplicpedPorOrdencompra(int $numeroOc): string
+    {
+        $nro = (int) $numeroOc;
+        $tipoOc = addslashes((string) config('recepcion_proveedor.anita.oc_tipo', 'PEP'));
+        $tipoCom = addslashes((string) config('recepcion_proveedor.anita.recepcion_tipo', 'COM'));
+
+        return " WHERE aplp_ref_tipo = '{$tipoOc}'"
+            ." AND aplp_ref_nro = {$nro}"
+            ." AND aplp_tipo = '{$tipoCom}'";
+    }
+
+    /**
+     * Cabeceras COM/X en Anita vinculadas a la OC (recm_com_nro o recm_nro_fac).
+     *
+     * @return list<object>
+     */
+    public static function listarRecepmaePorOrdencompra(int $numeroOc): array
+    {
+        if ($numeroOc <= 0) {
+            return [];
+        }
+
+        $api = new ApiAnita;
+        $filas = ApiAnita::decodificarListaFilas($api->apiCall([
+            'acc' => 'list',
+            'sistema' => self::sistemaCompras(),
+            'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera', 'recepmae'),
+            'campos' => 'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro,recm_tipo_fac,recm_letra_fac,recm_sucursal_fac,recm_nro_fac',
+            'orderBy' => 'recm_sucursal, recm_nro',
+            'whereArmado' => self::whereRecepmaePorOrdencompra($numeroOc),
+        ]));
+
+        return array_values(array_filter(
+            $filas,
+            static fn (object $cab): bool => self::numeroOrdencompraDesdeCabecera($cab) === $numeroOc
+        ));
+    }
+
+    /**
+     * @return list<object>
+     */
+    public static function listarAplicpedPorOrdencompra(int $numeroOc): array
+    {
+        if ($numeroOc <= 0) {
+            return [];
+        }
+
+        $api = new ApiAnita;
+
+        return ApiAnita::decodificarListaFilas($api->apiCall([
+            'acc' => 'list',
+            'sistema' => self::sistemaCompras(),
+            'tabla' => config('recepcion_proveedor.anita.tablas.aplicacion_oc', 'aplicped'),
+            'campos' => 'aplp_proveedor,aplp_tipo,aplp_letra,aplp_sucursal,aplp_nro,aplp_ref_tipo,aplp_ref_letra,aplp_ref_sucursal,aplp_ref_nro',
+            'whereArmado' => self::whereAplicpedPorOrdencompra($numeroOc),
+        ]));
+    }
+
+    /**
+     * Claves COM únicas de la OC en Anita (recepmae + aplicped).
+     *
+     * @return list<array{tipo: string, letra: string, sucursal: int, nro: int}>
+     */
+    public static function clavesComPorOrdencompra(int $numeroOc): array
+    {
+        return self::unirClavesCom(
+            self::listarRecepmaePorOrdencompra($numeroOc),
+            self::listarAplicpedPorOrdencompra($numeroOc)
+        );
+    }
+
+    /**
+     * @param  list<object>  $cabeceras
+     * @param  list<object>  $aplicped
+     * @return list<array{tipo: string, letra: string, sucursal: int, nro: int}>
+     */
+    public static function unirClavesCom(array $cabeceras, array $aplicped = []): array
+    {
+        $claves = [];
+        foreach ($cabeceras as $cab) {
+            $sucursal = (int) ($cab->recm_sucursal ?? 0);
+            $nro = (int) ($cab->recm_nro ?? 0);
+            if ($sucursal <= 0 || $nro <= 0) {
+                continue;
+            }
+            $claves[$sucursal.'-'.$nro] = [
+                'tipo' => 'COM',
+                'letra' => 'X',
+                'sucursal' => $sucursal,
+                'nro' => $nro,
+            ];
+        }
+        foreach ($aplicped as $apl) {
+            $sucursal = (int) ($apl->aplp_sucursal ?? 0);
+            $nro = (int) ($apl->aplp_nro ?? 0);
+            if ($sucursal <= 0 || $nro <= 0) {
+                continue;
+            }
+            $claves[$sucursal.'-'.$nro] = [
+                'tipo' => trim((string) ($apl->aplp_tipo ?? 'COM')) ?: 'COM',
+                'letra' => trim((string) ($apl->aplp_letra ?? 'X')) ?: 'X',
+                'sucursal' => $sucursal,
+                'nro' => $nro,
+            ];
+        }
+
+        return array_values($claves);
+    }
+
     /**
      * @return list<object>
      */

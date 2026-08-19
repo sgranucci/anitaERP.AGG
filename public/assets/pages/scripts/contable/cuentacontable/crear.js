@@ -7,22 +7,23 @@ $(function () {
     $('#agrega_renglon_centrocosto').on('click', agregaRenglonCentrocosto);
     $(document).on('click', '.eliminar_centrocosto', borraRenglonCentrocosto);
 
+    if ($('#manejaccosto').val() !== 'S') {
+        $('#divcentrocosto').prop('hidden', true);
+    }
+
     $('#manejaccosto').on('change', function (event) {
         event.preventDefault();
         var manejaccosto = $(this).val();
 
-        if (manejaccosto === 'S')
-        {
+        if (manejaccosto === 'S') {
             $('#divcentrocosto').prop('hidden', false);
-        }
-        else
-        {
-            if (confirm("Este cambio va a borrar los centros de costos que tiene asignados, continua?")) {
+        } else {
+            if ($('#tbody-centrocosto-table tr').length === 0 || confirm('Este cambio va a borrar los centros de costos asignados. ¿Continúa?')) {
                 $('#divcentrocosto').prop('hidden', true);
                 $('#tbody-centrocosto-table').empty();
-            }
-            else
+            } else {
                 $('#manejaccosto').val('S');
+            }
         }
     });
 });

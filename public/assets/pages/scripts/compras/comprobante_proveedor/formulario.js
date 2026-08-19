@@ -66,6 +66,12 @@ $(function () {
         }
     }
 
+    function abrirSolapaOc() {
+        if ($('#cp-solapa-ordencompra').length) {
+            mostrarSolapa('#cp-solapa-ordencompra');
+        }
+    }
+
     function marcarTabActivo(btnDomId) {
         var $b = $('#' + btnDomId);
         if ($b.length && $b.hasClass('nav-link') && typeof $b.tab === 'function') {
@@ -661,6 +667,11 @@ $(function () {
         abrirSolapaCom();
     });
 
+    $(document).on('click', '.cp-abrir-solapa-oc', function (e) {
+        e.preventDefault();
+        abrirSolapaOc();
+    });
+
     $(document).on('click', '#cp-refrescar-preview-conceptos', function (e) {
         e.preventDefault();
         window.refrescarPreviewAsiento(true);
@@ -1085,6 +1096,8 @@ $(function () {
     if (paramsUrl.get('solapa') === 'asiento' && $('#cp-solapa-asiento-contable').length) {
         mostrarSolapa('#cp-solapa-asiento-contable');
         marcarTabActivo('cp-boton-asiento-contable');
+    } else if (paramsUrl.get('solapa') === 'oc' && $('#cp-solapa-ordencompra').length) {
+        abrirSolapaOc();
     } else if (paramsUrl.get('solapa') === 'com' && $('#cp-solapa-recepciones-com').length) {
         abrirSolapaCom();
     } else if (paramsUrl.get('solapa') === 'archivos' && $('#cp-solapa-archivos').length) {

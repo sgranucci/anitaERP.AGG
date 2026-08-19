@@ -51,15 +51,13 @@ return new class extends Migration
     ];
 
     /**
-     * Solo Administrador + Tesorería + Capital Humano.
-     * No heredar roles de caja/usocuentacaja (trae Contaduría/Finanzas).
+     * Solo Administrador + supervisión tesorería + Capital Humano.
+     * No operadores de tesorería. No heredar roles de caja/usocuentacaja.
      *
      * @var list<string>
      */
     private const ROLES_PERMITIDOS = [
         'administrador',
-        'Op-tesoreria',
-        'op-Tesoreria Operativa',
         'Enc-tesorería',
         'Enc-tesoreria',
         'enc-Tesoreria Operativa',

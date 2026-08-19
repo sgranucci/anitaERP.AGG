@@ -306,6 +306,7 @@
                                                                                 'pago_sicore' => 'Pago DDJJ SICORE',
                                                                                 'pago_arba' => 'Pago liquidación ARBA',
                                                                                 'pago_suss' => 'Pago liquidación SUSS',
+                                                                                'pago_afip' => 'Pago a AFIP (prov. 1299)',
                                                                                 'compensacion_sicore' => 'Compensación',
                                                                                 'reclasificacion' => 'Reclasificación',
                                                                                 default => 'Excluido',

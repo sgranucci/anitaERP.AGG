@@ -4,6 +4,7 @@ namespace App\Services\Compras;
 
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
+use App\Support\Compras\ProveedorCuentacorrienteAplicacionDcSupport;
 use App\Support\Compras\ProveedorCuentacorrienteAplicacionFilaSupport;
 use App\Support\Compras\ProveedorCuentacorrienteAplicacionMatcherSupport;
 use App\Support\Compras\ProveedorCuentacorrienteGrillaSupport;
@@ -12,13 +13,18 @@ use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
- * Aplica NC y pagos a cuenta contra facturas adeudadas (subledger, sin asiento).
+ * Aplica NC y pagos a cuenta contra facturas adeudadas.
+ * Subledger siempre; asiento de DC solo si las cotizaciones difieren.
  */
 class ProveedorCuentacorrienteAplicacionService
 {
+    public function __construct(
+        private ProveedorCuentacorrienteAplicacionAsientoService $asientoDcService,
+    ) {}
+
     /**
      * @param  list<array{credito_id:int,deuda_id:int,monto:float}>  $lineas
-     * @return array{aplicadas:int, monto:float, ids: list<int>}
+     * @return array{aplicadas:int, monto:float, dc:float, asientos_dc:int, ids: list<int>}
      */
     public function aplicar(int $proveedorId, string $fecha, array $lineas): array
     {
@@ -42,7 +48,10 @@ class ProveedorCuentacorrienteAplicacionService
             $bloqueados = Proveedor_Cuentacorriente::query()
                 ->with([
                     'comprobante_proveedores.tipotransaccion_compras',
+                    'comprobante_proveedores.ordencompras.ordencompra_articulos',
+                    'comprobante_proveedores.proveedores',
                     'pagoproveedores',
+                    'proveedores',
                     'monedas',
                     'empresas',
                 ])
@@ -79,6 +88,8 @@ class ProveedorCuentacorrienteAplicacionService
 
             $creadas = 0;
             $montoTotal = 0.0;
+            $dcTotal = 0.0;
+            $asientosDc = 0;
             $idsAplicacion = [];
 
             foreach ($lineas as $linea) {
@@ -90,6 +101,18 @@ class ProveedorCuentacorrienteAplicacionService
                 if ($credito === null || $deuda === null) {
                     throw new RuntimeException('Movimiento de cuenta corriente no encontrado.');
                 }
+
+                $dc = ProveedorCuentacorrienteAplicacionDcSupport::calcular(
+                    $monto,
+                    (float) ($deuda->cotizacion ?? 1),
+                    (float) ($credito->cotizacion ?? 1)
+                );
+                $asientoId = $this->asientoDcService->generarSiCorresponde(
+                    $deuda,
+                    $credito,
+                    $dc,
+                    $fecha
+                );
 
                 $etiquetaCredito = ProveedorCuentacorrienteAplicacionFilaSupport::etiqueta(
                     $credito,
@@ -106,6 +129,8 @@ class ProveedorCuentacorrienteAplicacionService
                     'total' => -$monto,
                     'moneda_id' => $deuda->moneda_id,
                     'cotizacion' => $deuda->cotizacion,
+                    'diferencia_cambio' => $dc,
+                    'asiento_id' => $asientoId,
                     'comprobanteaplicado' => $etiquetaCredito,
                     'comprobante_proveedor_aplicado_id' => $credito->comprobante_proveedor_id,
                     'empresa_id' => $deuda->empresa_id,
@@ -117,6 +142,8 @@ class ProveedorCuentacorrienteAplicacionService
                     'total' => $monto,
                     'moneda_id' => $credito->moneda_id,
                     'cotizacion' => $credito->cotizacion,
+                    'diferencia_cambio' => $dc,
+                    'asiento_id' => $asientoId,
                     'comprobanteaplicado' => $etiquetaDeuda,
                     'comprobante_proveedor_aplicado_id' => $deuda->comprobante_proveedor_id,
                     'empresa_id' => $credito->empresa_id,
@@ -127,11 +154,17 @@ class ProveedorCuentacorrienteAplicacionService
                 $idsAplicacion[] = (int) $aplCredito->id;
                 $creadas++;
                 $montoTotal += $monto;
+                $dcTotal += $dc;
+                if ($asientoId) {
+                    $asientosDc++;
+                }
             }
 
             return [
                 'aplicadas' => $creadas,
                 'monto' => round($montoTotal, 4),
+                'dc' => round($dcTotal, 4),
+                'asientos_dc' => $asientosDc,
                 'ids' => $idsAplicacion,
             ];
         });
@@ -156,6 +189,10 @@ class ProveedorCuentacorrienteAplicacionService
 
             $parId = (int) ($apl->proveedor_cuentacorriente_aplicado_id ?? 0);
             $idsBorrar = [(int) $apl->id];
+            $asientoIds = [];
+            if ((int) ($apl->asiento_id ?? 0) > 0) {
+                $asientoIds[] = (int) $apl->asiento_id;
+            }
 
             if ($parId > 0) {
                 $par = Proveedor_Cuentacorriente_Aplicacion::query()
@@ -168,6 +205,9 @@ class ProveedorCuentacorrienteAplicacionService
                     ->first();
                 if ($par !== null) {
                     $idsBorrar[] = (int) $par->id;
+                    if ((int) ($par->asiento_id ?? 0) > 0) {
+                        $asientoIds[] = (int) $par->asiento_id;
+                    }
                 }
             }
 
@@ -181,6 +221,11 @@ class ProveedorCuentacorrienteAplicacionService
                 ->exists();
             if ($ajenos) {
                 throw new RuntimeException('La aplicación no pertenece al proveedor indicado.');
+            }
+
+            $fechaReverso = now()->format('Y-m-d');
+            foreach (array_values(array_unique($asientoIds)) as $asientoId) {
+                $this->asientoDcService->revertirSiCorresponde($asientoId, $fechaReverso);
             }
 
             Proveedor_Cuentacorriente_Aplicacion::query()

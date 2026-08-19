@@ -87,12 +87,13 @@ class RecepcionProveedorImportarDesdeAnitaService
             return $resultado;
         }
 
-        if (Recepcion_Proveedor::query()
-            ->where('empresa_id', $empresaId)
-            ->where('numerorecepcion', $nro)
-            ->exists()) {
-            $resultado['estado'] = 'omitida';
-            $resultado['mensaje'] = 'La COM ya existe en anitaERP.';
+        $existente = $this->buscarRecepcionErp($empresaId, $sucursal, $nro);
+        if ($existente) {
+            $resultado['recepcion_id'] = (int) $existente->id;
+            $resultado['lineas'] = $existente->recepcion_proveedor_articulos()->count();
+            $vinculo = $this->vincularRecepcionAOcSiFalta($existente, $cab, $empresaId, $dryRun);
+            $resultado['estado'] = $vinculo['estado'];
+            $resultado['mensaje'] = $vinculo['mensaje'];
 
             return $resultado;
         }
@@ -120,6 +121,7 @@ class RecepcionProveedorImportarDesdeAnitaService
             $oc = $this->resolverOrdencompra($numeroOc, $empresaId);
             if ($oc === null && ! $dryRun) {
                 $this->ordencompraAnitaSyncService->traerRegistroDeAnita($numeroOc);
+                $this->olvidarCacheOc($numeroOc, $empresaId);
                 $oc = $this->resolverOrdencompra($numeroOc, $empresaId);
             }
             if ($oc) {
@@ -201,6 +203,77 @@ class RecepcionProveedorImportarDesdeAnitaService
         }
 
         return $resultado;
+    }
+
+    /**
+     * Trae de Anita todas las COM de una OC e importa o vincula las que falten en ERP.
+     *
+     * @return array{claves: int, importadas: int, vinculadas: int, omitidas: int, errores: list<string>}
+     */
+    public function asegurarPorNumeroOc(int $numeroOc, bool $conImpacto = false, bool $dryRun = false): array
+    {
+        $stats = [
+            'claves' => 0,
+            'importadas' => 0,
+            'vinculadas' => 0,
+            'omitidas' => 0,
+            'errores' => [],
+        ];
+
+        if ($numeroOc <= 0) {
+            return $stats;
+        }
+
+        $claves = RecepcionProveedorAnitaImportSupport::clavesComPorOrdencompra($numeroOc);
+        $stats['claves'] = count($claves);
+
+        if ($claves === []) {
+            return $stats;
+        }
+
+        if (! $dryRun) {
+            $oc = $this->resolverOrdencompra($numeroOc, 0);
+            if ($oc === null) {
+                $this->ordencompraAnitaSyncService->traerRegistroDeAnita($numeroOc);
+                $this->olvidarCacheOc($numeroOc, 0);
+            }
+        }
+
+        foreach ($claves as $clave) {
+            $resultado = $this->importarCom(
+                (int) $clave['sucursal'],
+                (int) $clave['nro'],
+                $conImpacto,
+                $dryRun
+            );
+            $estado = (string) ($resultado['estado'] ?? '');
+            if (in_array($estado, ['importada', 'importada_con_impacto'], true)) {
+                $stats['importadas']++;
+            } elseif ($estado === 'vinculada') {
+                $stats['vinculadas']++;
+            } elseif (in_array($estado, ['omitida', 'dry_run'], true)) {
+                $stats['omitidas']++;
+            } else {
+                $stats['errores'][] = sprintf(
+                    'COM %d sucursal %d: %s',
+                    (int) $clave['nro'],
+                    (int) $clave['sucursal'],
+                    (string) ($resultado['mensaje'] ?? $estado)
+                );
+            }
+        }
+
+        return $stats;
+    }
+
+    /**
+     * @return array{claves: int, importadas: int, vinculadas: int, omitidas: int, errores: list<string>}
+     */
+    public function asegurarPorOrdencompraId(int $ordencompraId, bool $conImpacto = false): array
+    {
+        $numeroOc = (int) (Ordencompra::query()->whereKey($ordencompraId)->value('numeroordencompra') ?? 0);
+
+        return $this->asegurarPorNumeroOc($numeroOc, $conImpacto);
     }
 
     /**
@@ -482,18 +555,81 @@ class RecepcionProveedorImportarDesdeAnitaService
         return $this->cacheProveedor[$codigoNorm];
     }
 
+    private function buscarRecepcionErp(int $empresaId, int $sucursal, int $nro): ?Recepcion_Proveedor
+    {
+        $porEmpresa = Recepcion_Proveedor::query()
+            ->where('empresa_id', $empresaId)
+            ->where('numerorecepcion', $nro)
+            ->first();
+        if ($porEmpresa) {
+            return $porEmpresa;
+        }
+
+        return Recepcion_Proveedor::query()
+            ->where('anita_sucursal', $sucursal)
+            ->where('anita_nro', $nro)
+            ->first();
+    }
+
+    /**
+     * @return array{estado: string, mensaje: string}
+     */
+    private function vincularRecepcionAOcSiFalta(
+        Recepcion_Proveedor $existente,
+        object $cab,
+        int $empresaId,
+        bool $dryRun,
+    ): array {
+        if ((int) ($existente->ordencompra_id ?? 0) > 0) {
+            return ['estado' => 'omitida', 'mensaje' => 'La COM ya existe en anitaERP.'];
+        }
+
+        $numeroOc = RecepcionProveedorAnitaImportSupport::numeroOrdencompraDesdeCabecera($cab);
+        if ($numeroOc <= 0) {
+            return ['estado' => 'omitida', 'mensaje' => 'La COM ya existe en anitaERP.'];
+        }
+
+        $oc = $this->resolverOrdencompra($numeroOc, $empresaId);
+        if ($oc === null && ! $dryRun) {
+            $this->ordencompraAnitaSyncService->traerRegistroDeAnita($numeroOc);
+            $this->olvidarCacheOc($numeroOc, $empresaId);
+            $oc = $this->resolverOrdencompra($numeroOc, $empresaId);
+        }
+        if (! $oc) {
+            return ['estado' => 'omitida', 'mensaje' => 'La COM ya existe en anitaERP (OC Anita no encontrada).'];
+        }
+
+        if ($dryRun) {
+            return ['estado' => 'dry_run', 'mensaje' => 'Se vincularía la COM existente a la OC '.$numeroOc];
+        }
+
+        $existente->ordencompra_id = $oc->id;
+        $existente->save();
+
+        return ['estado' => 'vinculada', 'mensaje' => 'COM existente vinculada a OC '.$numeroOc];
+    }
+
     private function resolverOrdencompra(int $numeroOc, int $empresaId): ?Ordencompra
     {
         $key = $empresaId.'-'.$numeroOc;
         if (! array_key_exists($key, $this->cacheOc)) {
-            $id = Ordencompra::query()
-                ->where('numeroordencompra', $numeroOc)
-                ->where('empresa_id', $empresaId)
-                ->value('id');
+            $query = Ordencompra::query()->where('numeroordencompra', $numeroOc);
+            if ($empresaId > 0) {
+                $query->where('empresa_id', $empresaId);
+            }
+            $id = $query->value('id');
             $this->cacheOc[$key] = $id ? (int) $id : null;
         }
 
         return $this->cacheOc[$key] ? Ordencompra::find($this->cacheOc[$key]) : null;
+    }
+
+    private function olvidarCacheOc(int $numeroOc, int $empresaId): void
+    {
+        unset($this->cacheOc[$empresaId.'-'.$numeroOc]);
+        if ($empresaId > 0) {
+            unset($this->cacheOc['0-'.$numeroOc]);
+        }
     }
 
     private function resolverArticuloId(string $skuAnita): ?int

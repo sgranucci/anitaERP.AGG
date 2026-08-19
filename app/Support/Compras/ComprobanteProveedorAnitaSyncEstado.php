@@ -10,6 +10,9 @@ final class ComprobanteProveedorAnitaSyncEstado
 
     public const ERROR = 'ERROR';
 
+    /** Importado desde Anita; no reenviar al bridge. */
+    public const IMPORTADO = 'IMPORTADO';
+
     /** @return list<string> */
     public static function todos(): array
     {
@@ -17,6 +20,7 @@ final class ComprobanteProveedorAnitaSyncEstado
             self::PENDIENTE,
             self::SYNC_OK,
             self::ERROR,
+            self::IMPORTADO,
         ];
     }
 }

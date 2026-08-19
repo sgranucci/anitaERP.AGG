@@ -67,6 +67,10 @@ Configurar aviso — {{ $tipo->nombre }}
                     <p class="text-muted small">
                         Podés indicar email directo y/o usuario del sistema. Los filtros de empresa y centro de costo
                         limitan el aviso solo a documentos de ese ámbito (vacío = todos).
+                        @if($tipo->codigo === 'asignacion_tecnico')
+                            En este aviso el mail principal siempre va al usuario del técnico asignado;
+                            las filas de esta tabla se envían como copia adicional.
+                        @endif
                     </p>
                     <table class="table table-sm" id="tabla-destinatarios-aviso">
                         <thead>

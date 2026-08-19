@@ -45,6 +45,9 @@ class FlashCaja extends Model implements Auditable
         'calculado_en',
         'creousuario_id',
         'actualizousuario_id',
+        'validado',
+        'validado_en',
+        'validado_usuario_id',
     ];
 
     protected $casts = [
@@ -56,6 +59,8 @@ class FlashCaja extends Model implements Auditable
         'pos_online' => 'integer',
         'cant_vehic' => 'integer',
         'calculado_en' => 'datetime',
+        'validado' => 'boolean',
+        'validado_en' => 'datetime',
         'ayb' => 'float',
         'slot_coin_in' => 'float',
         'slot_d' => 'float',
@@ -90,6 +95,16 @@ class FlashCaja extends Model implements Auditable
     public function actualizoUsuario()
     {
         return $this->belongsTo(Usuario::class, 'actualizousuario_id');
+    }
+
+    public function validadoUsuario()
+    {
+        return $this->belongsTo(Usuario::class, 'validado_usuario_id');
+    }
+
+    public function estaValidado(): bool
+    {
+        return (bool) ($this->validado ?? false);
     }
 
     /** True si un usuario del ERP lo creó o editó (ABM), no el cron ni el import Anita. */

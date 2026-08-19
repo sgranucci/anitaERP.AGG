@@ -7,6 +7,9 @@ use App\Models\Compras\Ordencompra_Articulo;
 
 /**
  * Asigna penvp_orden y penvp_nro_interno en líneas ERP antes de escribir Anita.
+ *
+ * penvp_orden debe ser único en la OC: ocvley indexa por (ocvl_nro_orden, ocvl_linea)
+ * y un INSERT duplicado aborta la confirmación de la COM.
  */
 final class OrdencompraAnitaLineaSupport
 {
@@ -25,14 +28,16 @@ final class OrdencompraAnitaLineaSupport
         $siguienteInterno = OrdencompraAnitaNumeracionSupport::reservarSiguienteNroInterno(
             (int) ($oc->empresa_id ?? 0)
         );
-        $orden = 0;
+        $ordenesUsados = [];
         $internosUsados = [];
 
         foreach ($lineas as $linea) {
             $cambios = [];
 
-            if ($linea->penvp_orden === null) {
-                $cambios['penvp_orden'] = $orden;
+            $ordenActual = $linea->penvp_orden === null ? null : (int) $linea->penvp_orden;
+            $ordenUnico = self::siguienteOrdenUnico($ordenActual, $ordenesUsados);
+            if ($ordenActual === null || $ordenActual !== $ordenUnico) {
+                $cambios['penvp_orden'] = $ordenUnico;
             }
 
             $nroInterno = (int) ($linea->penvp_nro_interno ?? 0);
@@ -53,8 +58,6 @@ final class OrdencompraAnitaLineaSupport
                     $linea->{$k} = $v;
                 }
             }
-
-            $orden++;
         }
 
         $oc->unsetRelation('ordencompra_articulos');
@@ -96,5 +99,27 @@ final class OrdencompraAnitaLineaSupport
         }
 
         return $cambios;
+    }
+
+    /**
+     * Conserva el orden actual si no está usado; si es null o está repetido, toma el menor libre ≥ 0.
+     *
+     * @param  array<int, true>  $usados
+     */
+    public static function siguienteOrdenUnico(?int $ordenActual, array &$usados): int
+    {
+        if ($ordenActual !== null && ! isset($usados[$ordenActual])) {
+            $usados[$ordenActual] = true;
+
+            return $ordenActual;
+        }
+
+        $candidato = 0;
+        while (isset($usados[$candidato])) {
+            $candidato++;
+        }
+        $usados[$candidato] = true;
+
+        return $candidato;
     }
 }

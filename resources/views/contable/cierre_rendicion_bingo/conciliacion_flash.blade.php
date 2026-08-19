@@ -198,6 +198,8 @@
                 <div class="alert alert-info py-2 small mb-3">
                     Réplica del informe Anita <strong>p-vtabingo</strong> (recaudación, premios, pozos, efectivo, cánones, hospital)
                     más columnas de <strong>flash</strong> (venta, cartones, resultado) para cruzar día a día.
+                    El tilde verde a la derecha del monto indica que el flash de esa jornada fue validado.
+                    Si no hay tilde, todavía no está validado.
                     Tolerancia: {{ number_format($tolConfig, 2, ',', '.') }}.
                 </div>
                 <form method="get" action="{{ route('cierre_rendicion_bingo_conciliacion_flash') }}" id="form-conciliacion-bingo" class="mb-4">

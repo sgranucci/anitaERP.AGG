@@ -64,7 +64,15 @@ class FlashCajaRepository implements FlashCajaRepositoryInterface
 
     public function update(array $data, $id)
     {
-        return $this->model->findOrFail($id)->update($data);
+        $flash = $this->model->findOrFail($id);
+        // Cualquier cambio de datos (ABM, cron, import) quita la validación.
+        if ($flash->estaValidado() && ! array_key_exists('validado', $data)) {
+            $data['validado'] = false;
+            $data['validado_en'] = null;
+            $data['validado_usuario_id'] = null;
+        }
+
+        return $flash->update($data);
     }
 
     public function delete($id)
@@ -74,12 +82,12 @@ class FlashCajaRepository implements FlashCajaRepositoryInterface
 
     public function find($id)
     {
-        return $this->model->with(['empresa', 'creoUsuario', 'actualizoUsuario'])->find($id);
+        return $this->model->with(['empresa', 'creoUsuario', 'actualizoUsuario', 'validadoUsuario'])->find($id);
     }
 
     public function findOrFail($id)
     {
-        return $this->model->with(['empresa', 'creoUsuario', 'actualizoUsuario'])->findOrFail($id);
+        return $this->model->with(['empresa', 'creoUsuario', 'actualizoUsuario', 'validadoUsuario'])->findOrFail($id);
     }
 
     public function findPorEmpresaFecha(int $empresaId, string $fecha, bool $forUpdate = false): ?FlashCaja

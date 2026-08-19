@@ -80,9 +80,18 @@
                         $tipo = (string) ($col['tipo'] ?? 'texto');
                         $valor = $f[$key] ?? '';
                         $esFlash = ($col['grupo'] ?? '') === 'flash';
+                        $esMontoFlash = in_array($key, ['flash_venta', 'flash_resultado'], true);
                     @endphp
                     @if ($tipo === 'numero')
-                        <td class="num{{ $esFlash ? ' flash' : '' }}">{{ $fmtNum($valor) }}</td>
+                        <td class="num{{ $esFlash ? ' flash' : '' }}">
+                            {{ $fmtNum($valor) }}
+                            @if ($esMontoFlash)
+                                @include('caja.flash.partials.tilde_validado', [
+                                    'validado' => ! empty($f['flash_validado']),
+                                    'soloTexto' => true,
+                                ])
+                            @endif
+                        </td>
                     @else
                         <td class="{{ $esFlash ? 'flash' : '' }}">{{ $valor }}</td>
                     @endif

@@ -30,6 +30,12 @@ return [
     'anita_sistema_compras' => 'compras',
     'anita_sistema_contab' => 'contab',
     'anita_tabla_ctamov' => 'ctamov',
+    'anita_tabla_aplmovp' => 'aplmovp',
+
+    'import_anita' => [
+        'usuario_id' => (int) env('COMPROBANTE_PROVEEDOR_IMPORT_USUARIO_ID', 1),
+        'formapago_id' => (int) env('COMPROBANTE_PROVEEDOR_IMPORT_FORMAPAGO_ID', 1),
+    ],
 
     'tipoasiento_abreviatura' => env('COMPROBANTE_PROVEEDOR_TIPOASIENTO', 'COM'),
 ];

@@ -6,6 +6,7 @@ namespace App\Support\Contable;
 
 use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\TurnoOperativoGastronomia;
+use App\Support\Caja\Flash\FlashCajaValidacionSupport;
 use App\Support\Contable\Anita\AnitaMayorAnaliticoSupport;
 use App\Support\Contable\Anita\AnitaMovimientoDetalleModuloSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionRendgAsientosDiaSupport;
@@ -87,6 +88,7 @@ final class CierreTurnoGastronomiaContableConciliacionSupport
         $cierres = $this->cargarCierresDefinitivos($empresaId, $desde, $hasta);
         $empresaCodigo = (int) ($empresa->codigo ?? 0);
         $flashPorFecha = $this->cargarFlashAybPorFecha($empresaCodigo, $desde, $hasta);
+        $flashValidadoPorFecha = FlashCajaValidacionSupport::mapaValidadoPorFecha($empresaId, $desde, $hasta);
         $vendingPorFecha = $flashIncluyeVending
             ? $this->cargarVendingErpPorFecha($empresaId, $desde, $hasta)
             : [];
@@ -117,6 +119,7 @@ final class CierreTurnoGastronomiaContableConciliacionSupport
                 $flashOffset,
                 $tolerancia,
                 $flashIncluyeVending,
+                $flashValidadoPorFecha,
             );
 
             $sinActividad = (int) ($dia['cantidad_cierres'] ?? 0) === 0
@@ -329,6 +332,7 @@ final class CierreTurnoGastronomiaContableConciliacionSupport
      * @param  array<string, float>  $vendingPorFecha
      * @param  array<string, float>  $mayorPorFecha
      * @param  array<string, mixed>  $asientos
+     * @param  array<string, bool>  $flashValidadoPorFecha
      * @return array<string, mixed>
      */
     private function armarDia(
@@ -341,6 +345,7 @@ final class CierreTurnoGastronomiaContableConciliacionSupport
         int $flashOffset,
         float $tolerancia,
         bool $flashIncluyeVending,
+        array $flashValidadoPorFecha = [],
     ): array {
         $fechaFlash = $flashOffset > 0
             ? Carbon::parse($fechaJornada)->subDays($flashOffset)->toDateString()
@@ -448,6 +453,7 @@ final class CierreTurnoGastronomiaContableConciliacionSupport
             'total_cierres' => $totalCierres,
             'total_habilitacion' => $totalHabilitacion,
             'total_flash_ayb' => $flashAyb,
+            'flash_validado' => ! empty($flashValidadoPorFecha[$fechaFlash]),
             'total_flash_ayb_bruto' => $flashAybBruto,
             'total_vending' => $vendingErp,
             'flash_ayb_incluye_vending' => $flashIncluyeVending,

@@ -6,6 +6,7 @@
     $budget = $reporte['budget_mes'] ?? [];
     $filas = $reporte['filas_diarias'] ?? [];
     $mostrarAcciones = !empty($mostrar_acciones) && empty($modo_excel) && empty($modo_pdf);
+    $pantalla = empty($modo_excel) && empty($modo_pdf);
 @endphp
 
 @if(!empty($budget))
@@ -25,12 +26,20 @@
 </p>
 @endif
 
+@if ($pantalla)
+<div class="tabla-ancha-grilla tabla-ancha--doble-cabecera" data-tabla-ancha style="--tabla-ancha-c1: 4.2rem; --tabla-ancha-c2: 5.6rem;">
+    <div class="tabla-ancha-scroll-top" hidden>
+        <div class="tabla-ancha-scroll-top-inner"></div>
+    </div>
+    <div class="tabla-ancha-wrap">
+@else
 <div class="table-responsive" style="overflow-x: auto;">
-<table class="data flash-lflash-table" style="width:100%; border-collapse:collapse; font-size:7px;">
+@endif
+<table class="data flash-lflash-table{{ $pantalla ? ' tabla-ancha' : '' }}" style="{{ $pantalla ? '' : 'width:100%; border-collapse:collapse; ' }}font-size:7px;">
     <thead>
         <tr style="background:#85C1E9;color:#17202A;">
-            <th rowspan="2">Day</th>
-            <th rowspan="2">Fecha</th>
+            <th rowspan="2" class="{{ $pantalla ? 'col-fija-1' : '' }}">Day</th>
+            <th rowspan="2" class="{{ $pantalla ? 'col-fija-2' : '' }}">Fecha</th>
             <th rowspan="2">Custom</th>
             <th colspan="8">SLOTS</th>
             <th colspan="8">ELECTRONIC ROULETTE</th>
@@ -67,14 +76,14 @@
     </thead>
     <tbody>
         @foreach($filas as $dia)
-            @include('caja.flash.partials.fila_lflash', ['m' => $dia, 'fn' => $fn, 'fp' => $fp, 'mostrarAcciones' => $mostrarAcciones, 'esTotal' => false])
+            @include('caja.flash.partials.fila_lflash', ['m' => $dia, 'fn' => $fn, 'fp' => $fp, 'mostrarAcciones' => $mostrarAcciones, 'esTotal' => false, 'congelarColumnas' => $pantalla])
         @endforeach
 
         @if(!empty($reporte['total_final']) && ($reporte['cantidad_dias'] ?? count($filas)) > 0)
-            @include('caja.flash.partials.fila_lflash', ['m' => $reporte['total_final'], 'fn' => $fn, 'fp' => $fp, 'mostrarAcciones' => false, 'esTotal' => true])
+            @include('caja.flash.partials.fila_lflash', ['m' => $reporte['total_final'], 'fn' => $fn, 'fp' => $fp, 'mostrarAcciones' => false, 'esTotal' => true, 'congelarColumnas' => $pantalla])
         @endif
         @if(!empty($reporte['mtd_average']) && ($reporte['cantidad_dias'] ?? 0) > 0)
-            @include('caja.flash.partials.fila_lflash', ['m' => $reporte['mtd_average'], 'fn' => $fn, 'fp' => $fp, 'mostrarAcciones' => false, 'esTotal' => true])
+            @include('caja.flash.partials.fila_lflash', ['m' => $reporte['mtd_average'], 'fn' => $fn, 'fp' => $fp, 'mostrarAcciones' => false, 'esTotal' => true, 'congelarColumnas' => $pantalla])
         @endif
         @if(!empty($reporte['mtd_resta_season']) && ($reporte['cantidad_dias'] ?? 0) > 0)
             @include('caja.flash.partials.fila_lflash_resta', [
@@ -86,7 +95,12 @@
         @endif
     </tbody>
 </table>
+@if ($pantalla)
+    </div>
 </div>
+@else
+</div>
+@endif
 
 @php
     $compMes = $reporte['comparativo_mes_ant'] ?? null;

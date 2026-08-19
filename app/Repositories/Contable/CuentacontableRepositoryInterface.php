@@ -6,6 +6,7 @@ interface CuentacontableRepositoryInterface extends RepositoryInterface
 {
 
     public function all();
+    public function queryListado();
     public function sincronizarConAnita(?array $empresasCodigo = null): array;
     /**
      * Actualiza cuentacontable.conceptogasto_id desde Anita ctaconc (ctaco_concepto).

@@ -90,6 +90,7 @@ class CierreRendicionMaquinaConciliacionFlashExport implements FromView, ShouldA
                 'diferencia_real_online' => (float) ($dia['diferencia_real_online'] ?? 0),
                 'cantidad_pendiente' => (int) ($dia['cantidad_pendiente'] ?? 0),
                 'estado_cierre' => (string) ($dia['estado_cierre'] ?? ''),
+                'flash_validado' => ! empty($dia['flash_validado']),
             ];
         }
 

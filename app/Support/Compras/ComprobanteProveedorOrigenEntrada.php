@@ -22,6 +22,9 @@ final class ComprobanteProveedorOrigenEntrada
     /** Alta desde ingresos y egresos de caja (fondo fijo, gastos banco, etc.). */
     public const INGRESO_EGRESO = 'INGRESO_EGRESO';
 
+    /** Histórico importado desde Anita (compra/promov/aplmovp). */
+    public const ANITA_IMPORT = 'ANITA_IMPORT';
+
     /** @return list<string> */
     public static function todos(): array
     {
@@ -31,6 +34,7 @@ final class ComprobanteProveedorOrigenEntrada
             self::MANUAL,
             self::PDF_IA,
             self::INGRESO_EGRESO,
+            self::ANITA_IMPORT,
         ];
     }
 
@@ -42,6 +46,7 @@ final class ComprobanteProveedorOrigenEntrada
             self::MANUAL => 'Sin OC (manual)',
             self::PDF_IA => 'PDF — modelo IA Anita',
             self::INGRESO_EGRESO => 'Ingresos y egresos (tesorería)',
+            self::ANITA_IMPORT => 'Importado desde Anita',
             default => $origen,
         };
     }

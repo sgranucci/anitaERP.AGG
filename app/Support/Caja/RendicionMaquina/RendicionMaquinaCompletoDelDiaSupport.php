@@ -144,7 +144,7 @@ final class RendicionMaquinaCompletoDelDiaSupport
         return [
             'inputs' => $inputs,
             'valores' => RendicionMaquinaValoresCuentacajaSupport::enriquecerLineas(
-                $valores,
+                RendicionMaquinaValoresCuentacajaSupport::anularCotizacionDivisa($valores),
                 $fechaYmd,
                 $empresaId
             ),
@@ -448,14 +448,16 @@ final class RendicionMaquinaCompletoDelDiaSupport
                 if (! isset($montos[$id])) {
                     $montos[$id] = [
                         'monto' => 0.0,
-                        'cotizacion' => $valor->cotizacion !== null ? (float) $valor->cotizacion : null,
+                        'cotizacion' => null,
                         'codigo_valormae' => $valor->codigo_valormae,
                     ];
                 }
                 $montos[$id]['monto'] = round($montos[$id]['monto'] + (float) $valor->monto, 2);
-                if ($montos[$id]['cotizacion'] === null && $valor->cotizacion !== null) {
-                    $montos[$id]['cotizacion'] = (float) $valor->cotizacion;
-                }
+                $montos[$id]['cotizacion'] = RendicionMaquinaValoresCuentacajaSupport::cotizacionAlSumar(
+                    $montos[$id]['cotizacion'],
+                    $valor->cotizacion !== null ? (float) $valor->cotizacion : null,
+                    (float) $valor->monto
+                );
             }
         }
         $meta['origen_valores'] = $montos === [] ? 'catalogo_cero' : 'erp';
@@ -534,9 +536,11 @@ final class RendicionMaquinaCompletoDelDiaSupport
                 ];
             }
             $porCodigo[$codigo]['monto'] = round($porCodigo[$codigo]['monto'] + (float) ($obj->rendv_total ?? 0), 2);
-            if ($porCodigo[$codigo]['cotizacion'] === null && isset($obj->rendv_cotizacion)) {
-                $porCodigo[$codigo]['cotizacion'] = (float) $obj->rendv_cotizacion;
-            }
+            $porCodigo[$codigo]['cotizacion'] = RendicionMaquinaValoresCuentacajaSupport::cotizacionAlSumar(
+                $porCodigo[$codigo]['cotizacion'],
+                isset($obj->rendv_cotizacion) ? (float) $obj->rendv_cotizacion : null,
+                (float) ($obj->rendv_total ?? 0)
+            );
         }
 
         if ($porCodigo === []) {

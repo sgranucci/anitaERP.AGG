@@ -174,6 +174,15 @@ class ModuloAvisoController extends Controller
             ]);
         }
 
+        if ($modulo === 'ticket' && $codigo === 'asignacion_tecnico') {
+            return array_merge($comunes, [
+                '{id}', '{numero}', '{titulo}', '{tarea}', '{tecnico}', '{turno}',
+                '{asignado_por}', '{usuario}', '{sala}', '{sector}',
+                '{categoria}', '{subcategoria}', '{comentario}', '{fecha}',
+                '{fechaprogramacion}', '{estado}', '{area}',
+            ]);
+        }
+
         if ($modulo === 'compras' && $codigo === 'ordencompra_alertas_abiertas') {
             return array_merge($comunes, [
                 '{fecha}', '{dias_sin_recepcion}',

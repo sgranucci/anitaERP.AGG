@@ -1,5 +1,6 @@
 <?php
 
+use App\Support\Cache\PermisoCacheSupport;
 use App\Support\SuitecrmPermiso;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
@@ -13,7 +14,11 @@ return new class extends Migration
     private const PADRE_URL_HINT = 'compras/pagoproveedor';
 
     /** @var list<string> */
-    private const ROLES = ['administrador'];
+    private const ROLES = [
+        'administrador',
+        'Op-Pagos',
+        'Enc-pagos',
+    ];
 
     /** @var list<array{nombre: string, slug: string}> */
     private const PERMISOS = [
@@ -89,6 +94,9 @@ return new class extends Migration
         }
 
         SuitecrmPermiso::flushCachePermisos();
+        foreach ($rolIds as $rolId) {
+            PermisoCacheSupport::forgetRol($rolId);
+        }
     }
 
     public function down(): void

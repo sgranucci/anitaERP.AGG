@@ -23,7 +23,7 @@ class PagoproveedorListadoExport implements FromView, ShouldAutoSize, WithColumn
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'G';
+    private const COL_ULTIMA = 'H';
 
     private PagoproveedorRepositoryInterface $pagoproveedorRepository;
 
@@ -98,7 +98,7 @@ class PagoproveedorListadoExport implements FromView, ShouldAutoSize, WithColumn
     public function columnWidths(): array
     {
         return [
-            'A' => 12, 'B' => 18, 'C' => 22, 'D' => 28, 'E' => 14, 'F' => 14, 'G' => 40,
+            'A' => 12, 'B' => 18, 'C' => 22, 'D' => 28, 'E' => 36, 'F' => 14, 'G' => 14, 'H' => 40,
         ];
     }
 

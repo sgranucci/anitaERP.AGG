@@ -35,6 +35,7 @@
             <div class="card-body">
                 <div class="alert alert-info py-2 small mb-3">
                     Compara <strong>win_ol_slot + win_ol_rul</strong> del m&oacute;dulo flash ERP con la recaudaci&oacute;n online de rendiciones turno C.
+                    El tilde verde a la derecha del monto indica que el flash de esa jornada fue validado.
                     Tolerancia: {{ number_format($tolConfig, 2, ',', '.') }}.
                 </div>
                 <form method="get" action="{{ route('cierre_rendicion_maquina_conciliacion_flash') }}" class="mb-4">
@@ -168,9 +169,18 @@
                                             </td>
                                             <td class="text-center"><span class="badge {{ $badgeClass }}">{{ $estado !== '' ? $estado : '—' }}</span></td>
                                             <td class="text-center">{{ (int) ($dia['cantidad_rendiciones'] ?? 0) }}</td>
-                                            <td class="text-right">{{ number_format((float) ($dia['total_flash'] ?? 0), 2, ',', '.') }}</td>
-                                            <td class="text-right">{{ number_format((float) ($dia['flash_slot'] ?? 0), 2, ',', '.') }}</td>
-                                            <td class="text-right">{{ number_format((float) ($dia['flash_ruleta'] ?? 0), 2, ',', '.') }}</td>
+                                            <td class="text-right">
+                                                {{ number_format((float) ($dia['total_flash'] ?? 0), 2, ',', '.') }}
+                                                @include('caja.flash.partials.tilde_validado', ['validado' => ! empty($dia['flash_validado'])])
+                                            </td>
+                                            <td class="text-right">
+                                                {{ number_format((float) ($dia['flash_slot'] ?? 0), 2, ',', '.') }}
+                                                @include('caja.flash.partials.tilde_validado', ['validado' => ! empty($dia['flash_validado'])])
+                                            </td>
+                                            <td class="text-right">
+                                                {{ number_format((float) ($dia['flash_ruleta'] ?? 0), 2, ',', '.') }}
+                                                @include('caja.flash.partials.tilde_validado', ['validado' => ! empty($dia['flash_validado'])])
+                                            </td>
                                             <td class="text-right">{{ number_format((float) ($dia['rendicion_online'] ?? 0), 2, ',', '.') }}</td>
                                             <td class="text-right">{{ number_format((float) ($dia['rendicion_real'] ?? 0), 2, ',', '.') }}</td>
                                             <td class="text-right {{ abs($difFlash) > $tol ? 'text-danger font-weight-bold' : 'text-muted' }}">

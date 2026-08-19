@@ -4,6 +4,7 @@ namespace App\Support\Contable;
 
 use App\Models\Caja\Flash\FlashCaja;
 use App\Models\Caja\RendicionMaquinavendingCaja;
+use App\Support\Caja\Flash\FlashCajaValidacionSupport;
 use App\Models\Configuracion\Empresa;
 use App\Models\Contable\Asiento;
 use App\Support\Contable\CierreRendicionMaquinavendingGrupoSupport;
@@ -63,6 +64,7 @@ final class CierreRendicionMaquinavendingConciliacionFlashSupport
 
         $rendiciones = $this->cargarRendiciones($empresaId, $desde, $hasta);
         $flashPorFecha = $this->cargarFlashVendingPorFecha($empresaId, $desde, $hasta);
+        $flashValidadoPorFecha = FlashCajaValidacionSupport::mapaValidadoPorFecha($empresaId, $desde, $hasta);
         $rendgastroPorFecha = $this->cargarRendgastroZPorFecha($empresaId, $desde, $hasta, $tolerancia);
 
         $dias = [];
@@ -74,7 +76,7 @@ final class CierreRendicionMaquinavendingConciliacionFlashSupport
 
         foreach (CarbonPeriod::create($desde, $hasta) as $fecha) {
             $fechaStr = $fecha->toDateString();
-            $dia = $this->armarDia($fechaStr, $rendiciones, $flashPorFecha, $rendgastroPorFecha, $tolerancia);
+            $dia = $this->armarDia($fechaStr, $rendiciones, $flashPorFecha, $rendgastroPorFecha, $tolerancia, $flashValidadoPorFecha);
             if ($dia['cantidad_rendiciones'] <= 0
                 && abs($dia['total_flash_vending']) <= $tolerancia
                 && abs($dia['total_rendgastro_z']) <= $tolerancia) {
@@ -189,6 +191,7 @@ final class CierreRendicionMaquinavendingConciliacionFlashSupport
      * @param  Collection<int, RendicionMaquinavendingCaja>  $rendiciones
      * @param  array<string, float>  $flashPorFecha
      * @param  array<string, float>  $rendgastroPorFecha
+     * @param  array<string, bool>  $flashValidadoPorFecha
      * @return array<string, mixed>
      */
     private function armarDia(
@@ -197,6 +200,7 @@ final class CierreRendicionMaquinavendingConciliacionFlashSupport
         array $flashPorFecha,
         array $rendgastroPorFecha,
         float $tolerancia,
+        array $flashValidadoPorFecha = [],
     ): array {
         /** @var array<string, array<string, mixed>> $porPv */
         $porPv = [];
@@ -364,6 +368,7 @@ final class CierreRendicionMaquinavendingConciliacionFlashSupport
             'total_rendiciones_ventas_brutas' => $totalVentasBrutas,
             'total_asientos_debe' => $totalAsientos,
             'total_flash_vending' => $flashVending,
+            'flash_validado' => ! empty($flashValidadoPorFecha[$fechaJornada]),
             'total_rendgastro_z' => $rendgastroZ,
             'diferencia_cobrado_flash' => $diferenciaCobradoFlash,
             'diferencia' => $diferenciaFlash,

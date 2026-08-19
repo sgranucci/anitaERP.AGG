@@ -23,6 +23,9 @@ use App\Support\Ventas\GastronomiaJornadaComprobantePermiso;
 ?>
 
 @section('contenido')
+@php
+    $limpiarUrl = route('rendiciongastronomia', RendicionGastronomiaCajaListadoFiltros::paraQueryStringEmpresa($filtros ?? []));
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('caja.rendiciongastronomia.partials.flash_mensajes')
@@ -34,7 +37,7 @@ use App\Support\Ventas\GastronomiaJornadaComprobantePermiso;
                         'formId' => 'form-filtros-rendicion-gastronomia',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => RendicionGastronomiaCajaListadoFiltros::tieneCriteriosUsuario($filtros ?? []),
-                        'limpiarUrl' => route('rendiciongastronomia'),
+                        'limpiarUrl' => $limpiarUrl,
                         'placeholder' => 'Búsqueda rápida (ticket, ID, empresa…)',
                         'toggleTarget' => '#panel-filtros-rendicion-gastronomia',
                         'toggleId' => 'btn-toggle-filtros-rendicion-gastronomia',
@@ -47,6 +50,7 @@ use App\Support\Ventas\GastronomiaJornadaComprobantePermiso;
             <form method="get" action="{{ route('rendiciongastronomia') }}" id="form-filtros-rendicion-gastronomia" class="mb-0">
                 @include('caja.rendiciongastronomia.partials.filtros_listado')
             </form>
+            @include('caja.rendiciongastronomia.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'listar_rendiciongastronomia',

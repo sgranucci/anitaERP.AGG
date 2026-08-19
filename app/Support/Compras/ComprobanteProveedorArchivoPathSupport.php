@@ -77,6 +77,26 @@ final class ComprobanteProveedorArchivoPathSupport
     }
 
     /**
+     * Referencia del PDF original de precarga (ruta_externa ORIGEN_IA o rutaalmacenamiento).
+     */
+    public static function referenciaPdfPrecarga(Comprobante_Proveedor $comprobante): ?string
+    {
+        $comprobante->loadMissing(['comprobante_proveedor_archivos', 'precarga_comprobante_proveedores']);
+
+        $ruta = $comprobante->comprobante_proveedor_archivos
+            ->firstWhere('tipo', ComprobanteProveedorArchivoTipos::ORIGEN_IA)
+            ?->ruta_externa;
+
+        if (! filled($ruta) && $comprobante->precarga_comprobante_proveedores) {
+            $ruta = $comprobante->precarga_comprobante_proveedores->rutaalmacenamiento;
+        }
+
+        $ruta = trim((string) $ruta);
+
+        return $ruta !== '' ? $ruta : null;
+    }
+
+    /**
      * Valor para rutaalmacenamiento / ruta_externa (compatible con precarga).
      */
     public function storageReferenceDesdeComprobante(Comprobante_Proveedor $comprobante): string

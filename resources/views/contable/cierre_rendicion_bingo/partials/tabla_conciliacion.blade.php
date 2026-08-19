@@ -70,10 +70,16 @@
                             : ($key === 'estado_cierre' ? (string) ($dia['estado_cierre'] ?? '')
                             : ($valores[$key] ?? 0))));
                         $esDif = in_array($key, ['dif_venta', 'dif_resultado'], true);
+                        $esMontoFlash = in_array($key, ['flash_venta', 'flash_resultado'], true);
                         $claseNum = $esDif && abs((float) $valor) > $tol ? 'text-danger font-weight-bold' : '';
                     @endphp
                     @if ($tipo === 'numero')
-                        <td class="text-right {{ $claseGrupo($grupo) }} {{ $claseNum }}">{{ $fmtNum($valor) }}</td>
+                        <td class="text-right {{ $claseGrupo($grupo) }} {{ $claseNum }}">
+                            {{ $fmtNum($valor) }}
+                            @if ($esMontoFlash)
+                                @include('caja.flash.partials.tilde_validado', ['validado' => ! empty($dia['flash_validado'])])
+                            @endif
+                        </td>
                     @elseif ($tipo === 'entero')
                         <td class="text-center {{ $claseGrupo($grupo) }}">{{ $fmtEntero($valor) }}</td>
                     @elseif ($key === 'estado' && $modoPantalla)

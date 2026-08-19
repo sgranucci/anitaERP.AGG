@@ -11,9 +11,11 @@ use App\Http\Requests\ValidacionFlashCaja;
 use App\Models\Caja\Flash\FlashCaja;
 use App\Repositories\Caja\Flash\FlashCajaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Services\Caja\Flash\FlashCajaAnitaExportService;
 use App\Services\Caja\Flash\FlashCajaCalculoService;
 use App\Support\Caja\Flash\FlashCajaHistoricoFiltros;
 use App\Support\Caja\Flash\FlashCajaListadoFiltros;
+use App\Support\Caja\Flash\FlashCajaValidacionSupport;
 use App\Support\Caja\Flash\FlashCajaOrigenTotalSupport;
 use App\Support\Caja\Flash\FlashCajaReporteSupport;
 use App\Support\Listado\QueryRetornoListado;
@@ -31,6 +33,7 @@ class FlashCajaController extends Controller
         private readonly FlashCajaRepositoryInterface $repository,
         private readonly EmpresaRepositoryInterface $empresaRepository,
         private readonly FlashCajaCalculoService $calculoService,
+        private readonly FlashCajaAnitaExportService $exportAnitaService,
     ) {}
 
     public function index(Request $request)
@@ -47,6 +50,7 @@ class FlashCajaController extends Controller
             'filtrosQuery' => FlashCajaListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => FlashCajaListadoFiltros::CAMPOS,
             'empresa_query' => $empresa_query,
+            'puedeValidarFlash' => FlashCajaValidacionSupport::usuarioPuedeValidar(),
         ]);
     }
 
@@ -102,10 +106,17 @@ class FlashCajaController extends Controller
         can('crear-flash-caja');
 
         $payload = $this->armarPayload($request);
-        $this->repository->create($payload);
+        $flash = $this->repository->create($payload);
+        $syncAnita = $this->exportAnitaService->enviarSiNoExisteEnAnita($flash);
+        $mensaje = 'Flash diario creado con éxito';
+        if ($syncAnita['resultado'] === FlashCajaAnitaExportService::RESULTADO_ENVIADO) {
+            $mensaje .= '. '.$syncAnita['mensaje'];
+        } elseif ($syncAnita['resultado'] === FlashCajaAnitaExportService::RESULTADO_ERROR) {
+            $mensaje .= '. No se pudo enviar a Anita: '.$syncAnita['mensaje'];
+        }
 
         return redirect()->route('flash_caja', QueryRetornoListado::desdeRequest($request, FlashCajaListadoFiltros::class))
-            ->with('mensaje', 'Flash diario creado con éxito');
+            ->with('mensaje', $mensaje);
     }
 
     public function editar(Request $request, $id)
@@ -117,7 +128,38 @@ class FlashCajaController extends Controller
         $empresa_query = $this->empresaRepository->allFiltrado();
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, FlashCajaListadoFiltros::class);
 
-        return view('caja.flash.editar', compact('data', 'empresa_query', 'filtrosQuery'));
+        return view('caja.flash.editar', [
+            'data' => $data,
+            'empresa_query' => $empresa_query,
+            'filtrosQuery' => $filtrosQuery,
+            'puedeValidarFlash' => FlashCajaValidacionSupport::usuarioPuedeValidar(),
+        ]);
+    }
+
+    public function validar(Request $request, $id)
+    {
+        can('listar-flash-caja');
+        $this->assertPuedeValidarFlash();
+
+        $data = $this->repository->findOrFail($id);
+        $this->assertAccesoEmpresa((int) $data->empresa_id);
+
+        FlashCajaValidacionSupport::marcarValidado($data, (int) (session('usuario_id') ?? auth()->id() ?? 0));
+
+        return $this->redirigirTrasValidacion($request, 'Flash validado. El tilde verde aparece en Contable.');
+    }
+
+    public function quitarValidacion(Request $request, $id)
+    {
+        can('listar-flash-caja');
+        $this->assertPuedeValidarFlash();
+
+        $data = $this->repository->findOrFail($id);
+        $this->assertAccesoEmpresa((int) $data->empresa_id);
+
+        FlashCajaValidacionSupport::quitarValidacion($data);
+
+        return $this->redirigirTrasValidacion($request, 'Se quitó la validación del flash.');
     }
 
     public function actualizar(ValidacionFlashCaja $request, $id)
@@ -128,10 +170,21 @@ class FlashCajaController extends Controller
         $this->assertAccesoEmpresa((int) $data->empresa_id);
 
         $payload = $this->armarPayload($request, $data);
+        $empresaAnterior = (int) $data->empresa_id;
+        $fechaAnterior = $data->fecha?->format('Y-m-d');
         $this->repository->update($payload, $id);
+        $flash = $this->repository->findOrFail($id);
+        $syncAnita = $this->exportAnitaService->enviarModificacionEnAnita($flash, $empresaAnterior, $fechaAnterior);
+        $mensaje = 'Flash diario actualizado con éxito';
+        if ($syncAnita['resultado'] === FlashCajaAnitaExportService::RESULTADO_ACTUALIZADO
+            || $syncAnita['resultado'] === FlashCajaAnitaExportService::RESULTADO_ENVIADO) {
+            $mensaje .= '. '.$syncAnita['mensaje'];
+        } elseif ($syncAnita['resultado'] === FlashCajaAnitaExportService::RESULTADO_ERROR) {
+            $mensaje .= '. No se pudo actualizar Anita: '.$syncAnita['mensaje'];
+        }
 
         return redirect()->route('flash_caja', QueryRetornoListado::desdeRequest($request, FlashCajaListadoFiltros::class))
-            ->with('mensaje', 'Flash diario actualizado con éxito');
+            ->with('mensaje', $mensaje);
     }
 
     public function eliminar(Request $request, $id)
@@ -624,6 +677,20 @@ class FlashCajaController extends Controller
         $filtros['empresas_asignadas'] = $this->empresaRepository->traeEmpresasAsignadas();
 
         return $filtros;
+    }
+
+    private function assertPuedeValidarFlash(): void
+    {
+        if (! FlashCajaValidacionSupport::usuarioPuedeValidar()) {
+            abort(403, 'Solo un usuario habilitado puede validar el flash.');
+        }
+    }
+
+    private function redirigirTrasValidacion(Request $request, string $mensaje)
+    {
+        $retorno = QueryRetornoListado::desdeRequest($request, FlashCajaListadoFiltros::class);
+
+        return redirect()->route('flash_caja', $retorno)->with('mensaje', $mensaje);
     }
 
     private function assertAccesoEmpresa(int $empresaId): void

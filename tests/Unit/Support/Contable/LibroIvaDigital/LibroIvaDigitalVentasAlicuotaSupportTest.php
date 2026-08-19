@@ -2,6 +2,8 @@
 
 namespace Tests\Unit\Support\Contable\LibroIvaDigital;
 
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAlicuotaSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasCuitSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaArmadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalFormatoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
@@ -185,12 +187,144 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         );
     }
 
+    public function test_compra_ico_sin_cuit_resuelve_total_coin_y_fiserv(): void
+    {
+        $this->assertTrue(LibroIvaDigitalComprasCuitSupport::esCuitValido(LibroIvaDigitalComprasCuitSupport::CUIT_TOTAL_COIN));
+        $this->assertTrue(LibroIvaDigitalComprasCuitSupport::esCuitValido(LibroIvaDigitalComprasCuitSupport::CUIT_FISERV));
+
+        $this->assertSame(
+            LibroIvaDigitalComprasCuitSupport::CUIT_TOTAL_COIN,
+            LibroIvaDigitalComprasCuitSupport::resolver('0', 'TOTAL COIN MAQUINAS 10231/0'),
+        );
+        $this->assertSame(
+            LibroIvaDigitalComprasCuitSupport::CUIT_FISERV,
+            LibroIvaDigitalComprasCuitSupport::resolver('', 'MEDIO DE COBRO FISE 10233/0'),
+        );
+
+        $registro = LibroIvaDigitalComprasAlicuotaSupport::asegurarRegistro([
+            'cabecera' => [
+                'tipo_comprobante' => '002',
+                'punto_venta' => 0,
+                'numero_comprobante' => 15320,
+                'codigo_documento' => '80',
+                'numero_identificacion' => '0',
+                'nombre_vendedor' => 'TOTAL COIN MAQUINAS 10231/0',
+                'cantidad_alicuotas' => 0,
+                'codigo_operacion' => ' ',
+                'operaciones_exentas' => 100.0,
+            ],
+            'alicuotas' => [],
+        ]);
+
+        $this->assertSame(LibroIvaDigitalComprasCuitSupport::CUIT_TOTAL_COIN, $registro['cabecera']['numero_identificacion']);
+        $this->assertSame(LibroIvaDigitalComprasCuitSupport::CUIT_TOTAL_COIN, $registro['alicuotas'][0]['numero_identificacion']);
+        $this->assertSame(1, $registro['cabecera']['punto_venta']);
+    }
+
+    public function test_compra_factura_a_exenta_informa_alicuota_cero(): void
+    {
+        $registro = LibroIvaDigitalComprasAlicuotaSupport::asegurarRegistro([
+            'cabecera' => [
+                'tipo_comprobante' => '001',
+                'punto_venta' => 151,
+                'numero_comprobante' => 427352,
+                'codigo_documento' => '80',
+                'numero_identificacion' => '30682737650',
+                'cantidad_alicuotas' => 0,
+                'codigo_operacion' => ' ',
+                'operaciones_exentas' => 20418928.23,
+            ],
+            'alicuotas' => [],
+        ]);
+
+        $this->assertSame(1, $registro['cabecera']['cantidad_alicuotas']);
+        $this->assertSame('E', $registro['cabecera']['codigo_operacion']);
+        $this->assertSame('0003', $registro['alicuotas'][0]['alicuota_iva']);
+        $this->assertSame('80', $registro['alicuotas'][0]['codigo_documento']);
+        $this->assertSame('30682737650', $registro['alicuotas'][0]['numero_identificacion']);
+    }
+
+    public function test_compra_punto_venta_cero_pasa_a_uno(): void
+    {
+        $registro = LibroIvaDigitalComprasAlicuotaSupport::asegurarRegistro([
+            'cabecera' => [
+                'tipo_comprobante' => '002',
+                'punto_venta' => 0,
+                'numero_comprobante' => 15348,
+                'codigo_documento' => '80',
+                'numero_identificacion' => '30500010084',
+                'cantidad_alicuotas' => 1,
+                'codigo_operacion' => ' ',
+            ],
+            'alicuotas' => [[
+                'tipo_comprobante' => '002',
+                'punto_venta' => 0,
+                'numero_comprobante' => 15348,
+                'neto_gravado' => 100.0,
+                'alicuota_iva' => '0005',
+                'impuesto_liquidado' => 21.0,
+            ]],
+        ]);
+
+        $this->assertSame(1, $registro['cabecera']['punto_venta']);
+        $this->assertSame(1, $registro['alicuotas'][0]['punto_venta']);
+        $linea = LibroIvaDigitalFormatoSupport::registroComprasCbte(array_merge(
+            $this->cabeceraCompraMinima(),
+            $registro['cabecera'],
+        ));
+        $this->assertSame(325, strlen($linea));
+        $this->assertSame('00001', substr($linea, 11, 5));
+    }
+
+    public function test_compra_factura_c_sigue_sin_alicuotas(): void
+    {
+        $registro = LibroIvaDigitalComprasAlicuotaSupport::asegurarRegistro([
+            'cabecera' => [
+                'tipo_comprobante' => '011',
+                'punto_venta' => 3,
+                'numero_comprobante' => 10,
+                'cantidad_alicuotas' => 0,
+                'codigo_operacion' => ' ',
+            ],
+            'alicuotas' => [],
+        ]);
+
+        $this->assertSame(0, $registro['cabecera']['cantidad_alicuotas']);
+        $this->assertSame([], $registro['alicuotas']);
+    }
+
     public function test_clave_natural_compras_anita_es_estable(): void
     {
         $a = LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural('123', 'FNU', 'A', 1, 55);
         $b = LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural('000123', 'fnu', 'a', 1, 55);
         $this->assertSame($a, $b);
         $this->assertSame('000123|FNU|A|1|55', $a);
+    }
+
+    /**
+     * @param  array<string, mixed>  $overrides
+     * @return array<string, mixed>
+     */
+    /**
+     * @return array<string, mixed>
+     */
+    private function cabeceraCompraMinima(): array
+    {
+        return [
+            'fecha' => '20260701',
+            'tipo_comprobante' => '002',
+            'punto_venta' => 1,
+            'numero_comprobante' => 1,
+            'despacho_importacion' => '',
+            'codigo_documento' => '80',
+            'numero_identificacion' => '30500010084',
+            'nombre_vendedor' => 'BANCO MACRO',
+            'importe_total' => 121.0,
+            'codigo_moneda' => 'PES',
+            'tipo_cambio' => 1.0,
+            'cantidad_alicuotas' => 1,
+            'codigo_operacion' => ' ',
+        ];
     }
 
     /**
