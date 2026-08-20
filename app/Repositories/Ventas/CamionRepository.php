@@ -111,59 +111,171 @@ class CamionRepository implements CamionRepositoryInterface
 
     public function sincronizarConAnita()
     {
+        $this->resincronizarDesdeAnita(false, false);
+    }
+
+    /**
+     * Importa faltantes y actualiza existentes desde Anita (tabla camion: 7 campos de camion.sql).
+     *
+     * @return array{
+     *     en_anita: int,
+     *     iguales: int,
+     *     crear: list<array<string, mixed>>,
+     *     actualizar: list<array{codigo: string, id: int, diffs: array<string, array{erp: mixed, anita: mixed}>}>,
+     *     solo_erp: list<array{id: int, codigo: string, dominio: string}>,
+     *     importados: int,
+     *     actualizados: int,
+     *     errores: list<string>
+     * }
+     */
+    public function resincronizarDesdeAnita(bool $dryRun = true, bool $actualizarExistentes = true): array
+    {
         ini_set('max_execution_time', '300');
 
-        $apiAnita = new ApiAnita();
-        $data = [
-            'acc' => 'list',
-            'sistema' => 'ventas',
-            'campos' => "$this->keyFieldAnita as $this->keyField, $this->keyFieldAnita",
-            'tabla' => $this->tableAnita,
+        $ret = [
+            'en_anita' => 0,
+            'iguales' => 0,
+            'crear' => [],
+            'actualizar' => [],
+            'solo_erp' => [],
+            'importados' => 0,
+            'actualizados' => 0,
+            'errores' => [],
         ];
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-        if (! is_array($dataAnita)) {
-            return;
+
+        $filasAnita = $this->listarDesdeAnita();
+        $ret['en_anita'] = count($filasAnita);
+
+        $erp = Camion::query()->get()->keyBy(fn (Camion $c) => $this->normalizarCodigo((string) $c->codigo));
+        $codigosAnita = [];
+
+        foreach ($filasAnita as $row) {
+            $payload = $this->payloadDesdeFilaAnita($row);
+            if ($payload === null) {
+                continue;
+            }
+            $codigo = $payload['codigo'];
+            $codigosAnita[$codigo] = true;
+
+            /** @var Camion|null $local */
+            $local = $erp->get($codigo);
+            if (! $local) {
+                $ret['crear'][] = $payload;
+                if (! $dryRun) {
+                    try {
+                        $this->model->create($payload);
+                        $ret['importados']++;
+                    } catch (\Throwable $e) {
+                        $ret['errores'][] = "Alta codigo {$codigo}: ".$e->getMessage();
+                    }
+                }
+
+                continue;
+            }
+
+            $diffs = $this->diferenciasContraLocal($local, $payload);
+            if ($diffs === []) {
+                $ret['iguales']++;
+
+                continue;
+            }
+
+            $ret['actualizar'][] = [
+                'codigo' => $codigo,
+                'id' => (int) $local->id,
+                'diffs' => $diffs,
+            ];
+            if (! $dryRun && $actualizarExistentes) {
+                try {
+                    $local->update($payload);
+                    $ret['actualizados']++;
+                } catch (\Throwable $e) {
+                    $ret['errores'][] = "Update codigo {$codigo}: ".$e->getMessage();
+                }
+            }
         }
 
-        $datosLocalArray = Camion::query()->pluck($this->keyField)->map(fn ($c) => ltrim((string) $c, '0'))->all();
-
-        foreach ($dataAnita as $value) {
-            $codigo = ltrim((string) ($value->{$this->keyField} ?? ''), '0');
-            if ($codigo === '') {
-                $codigo = '0';
-            }
-            if (! in_array($codigo, $datosLocalArray, true)) {
-                $this->traerRegistroDeAnita($value->{$this->keyFieldAnita});
+        foreach ($erp as $codigo => $local) {
+            if (! isset($codigosAnita[$codigo])) {
+                $ret['solo_erp'][] = [
+                    'id' => (int) $local->id,
+                    'codigo' => (string) $codigo,
+                    'dominio' => (string) ($local->dominio ?? ''),
+                ];
             }
         }
+
+        return $ret;
     }
 
     public function traerRegistroDeAnita($key)
     {
         $apiAnita = new ApiAnita();
+        $keySql = str_replace("'", "''", (string) $key);
         $data = [
             'acc' => 'list',
             'tabla' => $this->tableAnita,
             'sistema' => 'ventas',
-            'campos' => '
-                cam_camion,
-                cam_dominio,
-                cam_habilitacion,
-                cam_tipo,
-                cam_dom_acoplado,
-                cam_cuit_chofer,
-                cam_cant_precinto
-            ',
-            'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$key."' ",
+            'campos' => $this->camposAnita(),
+            'whereArmado' => ' WHERE '.$this->keyFieldAnita." = '".$keySql."' ",
         ];
-        $dataAnita = json_decode($apiAnita->apiCall($data));
-        if (! is_array($dataAnita) || count($dataAnita) === 0) {
+        $parsed = ApiAnita::parsearRespuestaLista($apiAnita->apiCall($data));
+        if ($parsed['error_lectura'] !== null || $parsed['filas'] === []) {
             return;
         }
 
-        $row = $dataAnita[0];
-        $arr = [
-            'codigo' => (string) ltrim((string) $row->cam_camion, '0'),
+        $payload = $this->payloadDesdeFilaAnita($parsed['filas'][0]);
+        if ($payload === null) {
+            return;
+        }
+
+        $local = $this->findPorCodigo($payload['codigo']);
+        if ($local) {
+            $local->update($payload);
+
+            return;
+        }
+
+        $this->model->create($payload);
+    }
+
+    /**
+     * @return list<object>
+     */
+    private function listarDesdeAnita(): array
+    {
+        $apiAnita = new ApiAnita();
+        $data = [
+            'acc' => 'list',
+            'sistema' => 'ventas',
+            'tabla' => $this->tableAnita,
+            'campos' => $this->camposAnita(),
+        ];
+        $parsed = ApiAnita::parsearRespuestaLista($apiAnita->apiCall($data));
+        if ($parsed['error_lectura'] !== null) {
+            return [];
+        }
+
+        return $parsed['filas'];
+    }
+
+    private function camposAnita(): string
+    {
+        return 'cam_camion,cam_dominio,cam_habilitacion,cam_tipo,cam_dom_acoplado,cam_cuit_chofer,cam_cant_precinto';
+    }
+
+    /**
+     * @return array{codigo: string, dominio: string, habilitacion: string, tipo: string, dominio_acoplado: string, cuit_chofer: string, cantidad_precinto: int}|null
+     */
+    private function payloadDesdeFilaAnita(object $row): ?array
+    {
+        $codigo = $this->normalizarCodigo((string) ($row->cam_camion ?? ''));
+        if ($codigo === '') {
+            return null;
+        }
+
+        return [
+            'codigo' => $codigo,
             'dominio' => trim((string) ($row->cam_dominio ?? '')),
             'habilitacion' => trim((string) ($row->cam_habilitacion ?? '')),
             'tipo' => trim((string) ($row->cam_tipo ?? '')),
@@ -171,15 +283,32 @@ class CamionRepository implements CamionRepositoryInterface
             'cuit_chofer' => trim((string) ($row->cam_cuit_chofer ?? '')),
             'cantidad_precinto' => (int) ($row->cam_cant_precinto ?? 0),
         ];
-        if ($arr['codigo'] === '') {
-            $arr['codigo'] = '0';
+    }
+
+    /**
+     * @param  array{codigo: string, dominio: string, habilitacion: string, tipo: string, dominio_acoplado: string, cuit_chofer: string, cantidad_precinto: int}  $payload
+     * @return array<string, array{erp: mixed, anita: mixed}>
+     */
+    private function diferenciasContraLocal(Camion $local, array $payload): array
+    {
+        $diffs = [];
+        foreach (['dominio', 'habilitacion', 'tipo', 'dominio_acoplado', 'cuit_chofer', 'cantidad_precinto'] as $campo) {
+            $erp = $campo === 'cantidad_precinto'
+                ? (int) $local->{$campo}
+                : trim((string) ($local->{$campo} ?? ''));
+            if ($erp !== $payload[$campo]) {
+                $diffs[$campo] = ['erp' => $erp, 'anita' => $payload[$campo]];
+            }
         }
 
-        if ($this->findPorCodigo($arr['codigo'])) {
-            return;
-        }
+        return $diffs;
+    }
 
-        $this->model->create($arr);
+    private function normalizarCodigo(string $codigo): string
+    {
+        $codigo = ltrim(trim($codigo), '0');
+
+        return $codigo === '' ? '0' : $codigo;
     }
 
     public function guardarAnita($request)
@@ -273,7 +402,7 @@ class CamionRepository implements CamionRepositoryInterface
 
         $output = ['data' => ''];
         if ($data->isEmpty()) {
-            $output['data'] = '<tr><td colspan="6">Sin resultados</td></tr>';
+            $output['data'] = '<tr><td colspan="7">Sin resultados</td></tr>';
         } else {
             foreach ($data as $row) {
                 $output['data'] .= '<tr>';
@@ -282,6 +411,7 @@ class CamionRepository implements CamionRepositoryInterface
                 $output['data'] .= '<td class="dominio">'.e($row->dominio).'</td>';
                 $output['data'] .= '<td class="habilitacion">'.e($row->habilitacion).'</td>';
                 $output['data'] .= '<td class="tipo">'.e($row->tipo).'</td>';
+                $output['data'] .= '<td class="cantidad_precinto text-right">'.e((int) $row->cantidad_precinto).'</td>';
                 $output['data'] .= '<td class="text-nowrap">';
                 $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultacamion">Elegir</a>';
                 if ($puedeAbrirAbm) {

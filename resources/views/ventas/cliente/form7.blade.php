@@ -1,7 +1,7 @@
 <div id="tab-articulos-suspendidos" class="tab-pane fade card form7" role="tabpanel">
     <div class="card-body">
-    	<table class="table" id="articulo-suspendido-table">
-    		<thead>
+    	<table class="table table-sm table-bordered" id="articulo-suspendido-table">
+    		<thead style="background:#85C1E9;color:#17202A;">
     			<tr>
     				<th style="width: 15%;">Artículo</th>
     				<th style="width: 35%;">Descripción</th>

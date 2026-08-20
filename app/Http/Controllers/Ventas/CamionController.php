@@ -72,9 +72,7 @@ class CamionController extends Controller
 
     public function consultaCamion(Request $request)
     {
-        if (! can('listar-camion', false)
-            && ! can('crear-certificado-sanitario', false)
-            && ! can('listar-certificado-sanitario', false)) {
+        if (! $this->puedeConsultarCamion()) {
             abort(403);
         }
 
@@ -83,12 +81,23 @@ class CamionController extends Controller
 
     public function leeUnCamion(string $codigo)
     {
-        if (! can('listar-camion', false)
-            && ! can('crear-certificado-sanitario', false)
-            && ! can('listar-certificado-sanitario', false)) {
+        if (! $this->puedeConsultarCamion()) {
             abort(403);
         }
 
-        return $this->repository->findPorCodigo($codigo);
+        $camion = $this->repository->findPorCodigo($codigo);
+
+        return response()->json($camion ? $camion->aConsultaArray() : null);
+    }
+
+    private function puedeConsultarCamion(): bool
+    {
+        return can('listar-camion', false)
+            || can('crear-camion', false)
+            || can('editar-camion', false)
+            || can('crear-certificado-sanitario', false)
+            || can('listar-certificado-sanitario', false)
+            || can('crear-certificado-senasa-surmar', false)
+            || can('listar-certificado-senasa-surmar', false);
     }
 }

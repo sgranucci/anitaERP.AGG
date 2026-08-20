@@ -8,6 +8,7 @@ use App\Models\Stock\CertificadoSenasaSurmar;
 use App\Models\Ventas\Camion;
 use App\Models\Ventas\Transporte;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Ventas\CamionRepositoryInterface;
 use App\Services\Stock\CertificadoSenasaSurmarService;
 use App\Support\Pdf\DompdfPaperSupport;
 use App\Support\Stock\CertificadoSenasaSurmarListadoFiltros;
@@ -87,9 +88,13 @@ class CertificadoSenasaSurmarController extends Controller
     {
         can('crear-certificado-senasa-surmar');
         $this->assertSurmar();
+        if (! Camion::query()->exists()) {
+            app(CamionRepositoryInterface::class)->all();
+        }
+
         return view('stock.certificado_senasa_surmar.crear', [
             'empresa_id' => SurmarSupport::EMPRESA_ID,
-            'camiones' => Camion::query()->orderBy('codigo')->get(['id', 'codigo', 'dominio', 'cantidad_precinto']),
+            'camionSeleccionado' => $this->resolverCamionDesdeRequest($request),
             'transporteSeleccionado' => $this->resolverTransporteDesdeRequest($request),
             'punto_emision' => (int) config('arca_wsremcarne.defaults.punto_emision', 1),
         ]);
@@ -260,6 +265,24 @@ class CertificadoSenasaSurmarController extends Controller
             basename($cert->xml_path),
             ['Content-Type' => 'application/xml']
         );
+    }
+
+    private function resolverCamionDesdeRequest(Request $request): ?Camion
+    {
+        $id = (int) $request->input('camion_id', old('camion_id', 0));
+        if ($id > 0) {
+            $porId = Camion::query()->find($id);
+            if ($porId) {
+                return $porId;
+            }
+        }
+
+        $codigo = trim((string) $request->input('camion_codigo', old('camion_codigo', '')));
+        if ($codigo === '') {
+            return null;
+        }
+
+        return app(CamionRepositoryInterface::class)->findPorCodigo($codigo);
     }
 
     private function resolverTransporteDesdeRequest(Request $request): ?Transporte

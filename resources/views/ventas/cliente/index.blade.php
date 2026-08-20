@@ -15,6 +15,8 @@ use App\Support\Ventas\ClienteListadoFiltros; ?>
 @section('contenido')
 @php
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+    $esBierzo = \App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo();
+    $filtroCodigo = trim((string) ($filtros['codigo'] ?? ''));
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -23,6 +25,18 @@ use App\Support\Ventas\ClienteListadoFiltros; ?>
             <div class="card-header">
                 <h3 class="card-title">Clientes</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @if ($esBierzo)
+                        <input type="text"
+                               name="filtro_codigo"
+                               id="filtro_codigo"
+                               form="form-filtros-cliente"
+                               class="form-control form-control-sm d-inline-block mr-1{{ $filtroCodigo !== '' ? ' listado-filtros-input-activo' : '' }}"
+                               style="width: 110px; vertical-align: middle;"
+                               value="{{ $filtroCodigo }}"
+                               placeholder="C&oacute;digo"
+                               autocomplete="off"
+                               title="Filtrar por c&oacute;digo de cliente (Enter)">
+                    @endif
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-cliente',
                         'filtroValor' => $filtros['valor'] ?? '',
@@ -46,19 +60,25 @@ use App\Support\Ventas\ClienteListadoFiltros; ?>
                     'queryparams' => $filtrosQuery ?? [],
                 ])
                 <table class="table table-striped table-bordered table-hover table-sm" id="tabla-paginada" style="font-size: 0.8125rem;">
-                    <thead>
+                    <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
-                            <th class="width10">ID</th>
+                            @if ($esBierzo)
+                                <th class="width10">C&oacute;d.</th>
+                            @else
+                                <th class="width10">ID</th>
+                            @endif
                             <th style="min-width: 120px;">Nombre</th>
                             <th style="min-width: 90px;">Vendedor</th>
-                            @if (config('app.empresa') == 'EL BIERZO')
+                            @if ($esBierzo)
                                 <th style="min-width: 90px;">Reparto</th>
                             @endif
                             <th style="min-width: 95px;">C.U.I.T.</th>
                             <th style="min-width: 120px;">Domicilio</th>
                             <th style="min-width: 85px;">Localidad</th>
                             <th style="min-width: 85px;">Provincia</th>
-                            <th class="width10">C&oacute;d.</th>
+                            @if (! $esBierzo)
+                                <th class="width10">C&oacute;d.</th>
+                            @endif
                             <th class="text-center" style="width: 2.25rem;" title="Estado">St.</th>
                             <th class="width10">APOC</th>
                             <th class="width40" data-orderable="false"></th>
@@ -73,7 +93,11 @@ use App\Support\Ventas\ClienteListadoFiltros; ?>
 							@else
                         		<tr>
 							@endif
-                            <td>{{$data->id}}</td>
+                            @if ($esBierzo)
+                                <td><small>{{ $data->codigo }}</small></td>
+                            @else
+                                <td>{{ $data->id }}</td>
+                            @endif
                             <td class="text-truncate" style="max-width: 160px;" title="{{ $data->nombre }}">{{$data->nombre}}</td>
                             <td class="text-truncate" style="max-width: 110px;" title="{{ trim(($data->cvendedor ?? '').($data->nombrevendedor ? ' - '.$data->nombrevendedor : '')) }}">
                                 <small>
@@ -83,7 +107,7 @@ use App\Support\Ventas\ClienteListadoFiltros; ?>
                                     @endif
                                 </small>
                             </td>
-                            @if (config('app.empresa') == 'EL BIERZO')
+                            @if ($esBierzo)
                                 <td class="text-truncate" style="max-width: 110px;" title="{{ trim(($data->ctransporte ?? '').($data->nombretransporte ? '-'.$data->nombretransporte : '')) }}">
                                     <small>{{$data->ctransporte}}-{{$data->nombretransporte}}</small>
                                 </td>
@@ -92,7 +116,9 @@ use App\Support\Ventas\ClienteListadoFiltros; ?>
                             <td class="text-truncate" style="max-width: 160px;" title="{{ $data->domicilio }}"><small>{{$data->domicilio}}</small></td>
                             <td class="text-truncate" style="max-width: 110px;" title="{{ $data->nombrelocalidad ?? '' }}"><small>{{$data->nombrelocalidad ?? ''}}</small></td>
                             <td class="text-truncate" style="max-width: 110px;" title="{{ $data->nombreprovincia ?? '' }}"><small>{{$data->nombreprovincia ?? ''}}</small></td>
-                            <td><small>{{$data->codigo}}</small></td>
+                            @if (! $esBierzo)
+                                <td><small>{{$data->codigo}}</small></td>
+                            @endif
                             <td class="text-center p-1">
                                 @if ($data->estado === '1')
                                     <span class="badge badge-danger" title="Suspendido">S</span>

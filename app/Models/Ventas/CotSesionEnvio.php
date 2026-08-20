@@ -47,4 +47,34 @@ class CotSesionEnvio extends Model
     {
         return $this->belongsTo(Usuario::class, 'usuario_id');
     }
+
+    /**
+     * Reparto(s) de la sesión: código + nombre desde repartos_json.
+     */
+    public function etiquetaRepartos(): string
+    {
+        $repartos = $this->repartos_json;
+        if (! is_array($repartos) || $repartos === []) {
+            return '';
+        }
+
+        $etiquetas = [];
+        foreach ($repartos as $reparto) {
+            if (! is_array($reparto)) {
+                continue;
+            }
+
+            $codigo = trim((string) ($reparto['codigo'] ?? ''));
+            $nombre = trim((string) ($reparto['nombre'] ?? ''));
+            if ($codigo !== '' && $nombre !== '') {
+                $etiquetas[] = $codigo.' '.$nombre;
+            } elseif ($codigo !== '') {
+                $etiquetas[] = $codigo;
+            } elseif ($nombre !== '') {
+                $etiquetas[] = $nombre;
+            }
+        }
+
+        return implode(', ', array_values(array_unique($etiquetas)));
+    }
 }

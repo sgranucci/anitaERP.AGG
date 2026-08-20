@@ -8,6 +8,11 @@ interface CamionRepositoryInterface extends RepositoryInterface
 
     public function sincronizarConAnita();
 
+    /**
+     * @return array<string, mixed>
+     */
+    public function resincronizarDesdeAnita(bool $dryRun = true, bool $actualizarExistentes = true): array;
+
     public function traerRegistroDeAnita($key);
 
     public function guardarAnita($request);

@@ -27,17 +27,26 @@
     <h2>Listado de clientes</h2>
     <div style="font-size: 8px; margin-bottom: 8px;">Generado {{ date('d/m/Y H:i') }}</div>
     <table class="data">
+        @php
+            $esBierzo = \App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo();
+        @endphp
         <thead>
             <tr>
-                <th style="width: 5%;">ID</th>
+                @if ($esBierzo)
+                    <th style="width: 6%;">C&oacute;d.</th>
+                @else
+                    <th style="width: 5%;">ID</th>
+                @endif
                 <th style="width: 18%;">Nombre</th>
                 <th style="width: 11%;">Vendedor</th>
                 <th style="width: 11%;">C.U.I.T.</th>
                 <th style="width: 18%;">Domicilio</th>
                 <th style="width: 10%;">Localidad</th>
                 <th style="width: 10%;">Provincia</th>
-                <th style="width: 6%;">C&oacute;d.</th>
-                @if (config('app.empresa') == 'EL BIERZO')
+                @if (! $esBierzo)
+                    <th style="width: 6%;">C&oacute;d.</th>
+                @endif
+                @if ($esBierzo)
                     <th style="width: 11%;">Reparto</th>
                 @endif
             </tr>
@@ -45,15 +54,21 @@
         <tbody>
             @foreach ($clientes as $data)
                 <tr>
-                    <td>{{ $data->id }}</td>
+                    @if ($esBierzo)
+                        <td>{{ $data->codigo }}</td>
+                    @else
+                        <td>{{ $data->id }}</td>
+                    @endif
                     <td>{{ $data->nombre }}</td>
                     <td>{{ trim(($data->cvendedor ?? '').($data->nombrevendedor ? '-'.$data->nombrevendedor : '')) }}</td>
                     <td>{{ $data->numerodocumento }}</td>
                     <td>{{ $data->domicilio }}</td>
                     <td>{{ $data->nombrelocalidad ?? '' }}</td>
                     <td>{{ $data->nombreprovincia ?? '' }}</td>
-                    <td>{{ $data->codigo }}</td>
-                    @if (config('app.empresa') == 'EL BIERZO')
+                    @if (! $esBierzo)
+                        <td>{{ $data->codigo }}</td>
+                    @endif
+                    @if ($esBierzo)
                         <td>{{ $data->ctransporte }}-{{ $data->nombretransporte }}</td>
                     @endif
                 </tr>

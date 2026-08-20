@@ -125,5 +125,18 @@
         });
 
         actualizarOperadores(true);
+
+        $('#filtro_codigo').on('keydown', function (e) {
+            if (e.key !== 'Enter') {
+                return;
+            }
+            e.preventDefault();
+            var $form = $('#form-filtros-cliente');
+            if ($form.length && $form[0] && typeof $form[0].requestSubmit === 'function') {
+                $form[0].requestSubmit();
+            } else if ($form.length) {
+                $form.trigger('submit');
+            }
+        });
     });
 })(jQuery);

@@ -1,7 +1,7 @@
 <div id="tab-cm05" class="tab-pane fade card form8" role="tabpanel">
     <div class="card-body">
-    	<table class="table" id="cm05-table">
-    		<thead>
+    	<table class="table table-sm table-bordered" id="cm05-table">
+    		<thead style="background:#85C1E9;color:#17202A;">
     			<tr>
     				<th style="width: 8%;">Provincia</th>
 					<th style="width: 13%;">Nombre Provincia</th>

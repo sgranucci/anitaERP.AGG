@@ -34,6 +34,7 @@ use App\Support\Ventas\ClienteListadoFiltros;
 use App\Support\Ventas\ClienteAnitaNumeracionSupport;
 use App\Support\Ventas\ClienteAnitaVillafrancaSupport;
 use App\Support\Ventas\ClienteAnitaZonamultSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Services\Ventas\ClienteAnitaSyncService;
 use App\Traits\AnitaBridgeEscritura;
 use Carbon\Carbon;
@@ -72,7 +73,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 		}
 		$data['estado'] = '0';
 
-		if (config('app.empresa') == 'EL BIERZO') {
+		if (EntornoEmpresaSupport::esElBierzo()) {
 			$data['emitenotadecredito'] = 'NO EMITE';
 			if (empty($data['agregabonificacion'])) {
 				$data['agregabonificacion'] = Cliente::$enumAgregaBonificacion['S'];
@@ -80,6 +81,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 			$data['coeficiente_id'] = $data['coeficiente_id'] ?? null;
 			$data['coeficienteextra'] = $data['coeficienteextra'] ?? 0;
 			$data['porcentajelogistica'] = $data['porcentajelogistica'] ?? 0;
+			$data['emitecertificado'] = Cliente::normalizarEmiteCertificado($data['emitecertificado'] ?? 'N');
 		}
 
 		if ($data['retieneiva'] == null)
@@ -114,6 +116,10 @@ class ClienteRepository implements ClienteRepositoryInterface
         }
 
 		$data = $this->alinearProvinciaConLocalidad($data);
+
+		if (EntornoEmpresaSupport::esElBierzo() && array_key_exists('emitecertificado', $data)) {
+			$data['emitecertificado'] = Cliente::normalizarEmiteCertificado($data['emitecertificado']);
+		}
 
         $cliente = $this->model->findOrFail($id)
             ->update($data);
@@ -733,10 +739,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 			if (config('app.empresa') == 'EL BIERZO')
 			{
-				if ($data->clim_emite_cert == 'S')
-					$emiteCertificado = "Emite Certificado";
-				else	
-					$emiteCertificado = "No Emite Certificado";
+				$emiteCertificado = Cliente::normalizarEmiteCertificado($data->clim_emite_cert ?? 'N');
 
 				if ($data->clim_emite_nc == 'S')
 					$emiteNotaDeCredito = "Emite Nota de Credito";
@@ -1551,7 +1554,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 			'listaprecio_id' => $cliente->listaprecio_id ?? 0,
 			'porcentajelogistica' => $cliente->porcentajelogistica ?? 0,
 			'coeficienteextra' => $cliente->coeficienteextra ?? 0,
-			'emitecertificado' => $cliente->emitecertificado ?? 'No Emite Certificado',
+			'emitecertificado' => Cliente::normalizarEmiteCertificado($cliente->emitecertificado ?? 'N'),
 			'emitenotadecredito' => $cliente->emitenotadecredito ?? 'No Emite Nota de Credito',
 			'agregabonificacion' => $cliente->agregabonificacion ?? 'No Agrega Bonificacion',
 			'modofacturacion' => $cliente->modofacturacion ?? 'N',
@@ -2003,10 +2006,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 		if (config("app.empresa") == "EL BIERZO")
 		{
-			if (($request['emitecertificado'] ?? 'No Emite Certificado') === 'Emite Certificado')
-				$emitecertificado = 'S';
-			else
-				$emitecertificado = 'N';
+			$emitecertificado = Cliente::normalizarEmiteCertificado($request['emitecertificado'] ?? 'N');
 
 			if (($request['emitenotadecredito'] ?? 'No Emite Nota de Credito') === 'Emite Nota de Credito')
 				$emitenotadecredito = 'S';
@@ -2381,6 +2381,7 @@ class ClienteRepository implements ClienteRepositoryInterface
                 'operador' => 'contiene',
                 'valor' => $texto,
                 'valor_hasta' => '',
+                'codigo' => '',
                 'busqueda' => $texto,
             ];
         } elseif (! is_array($filtros)) {

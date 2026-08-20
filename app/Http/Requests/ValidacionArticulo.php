@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ValidacionArticulo extends FormRequest
@@ -30,6 +31,15 @@ class ValidacionArticulo extends FormRequest
         $this->merge([
             'maneja_stock_color_talle' => $this->boolean('maneja_stock_color_talle'),
         ]);
+
+        if (EntornoEmpresaSupport::esElBierzo()) {
+            $sid = $this->input('codigosenasa_id');
+            $this->merge([
+                'codigosenasa_id' => ($sid === '' || $sid === null) ? null : (int) $sid,
+            ]);
+        } else {
+            $this->request->remove('codigosenasa_id');
+        }
     }
 
     /**
@@ -62,6 +72,10 @@ class ValidacionArticulo extends FormRequest
 
         if (config('articulo.filtro_empresa')) {
             $rules['empresa_id'] = ['nullable', 'integer', 'exists:empresa,id'];
+        }
+
+        if (EntornoEmpresaSupport::esElBierzo()) {
+            $rules['codigosenasa_id'] = ['nullable', 'integer', 'exists:codigosenasa,id'];
         }
 
         return $rules;

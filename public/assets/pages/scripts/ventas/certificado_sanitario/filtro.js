@@ -1,127 +1,126 @@
-(function ($) {
-    'use strict';
+/* global carpetaBase */
+window.clienteConsultaModoFiltro = true;
 
-    var MODO_CAMPO = 'campo';
-    var operadoresPorCampo = {};
-    var LF = window.ListadoFiltros;
+function aplicarClienteFiltroCertsan(data) {
+    if (!data || !data.id) {
+        $('#cliente_id').val('');
+        $('#codigocliente').val('');
+        $('#nombrecliente').val('');
+        return;
+    }
+    $('#cliente_id').val(data.id);
+    $('#codigocliente').val(data.codigo != null ? data.codigo : '');
+    $('#nombrecliente').val(data.nombre || '');
+}
 
-    function $valorPrincipal() {
-        return $('#filtro_valor');
+function limpiarClienteFiltroCertsan(mantenerCodigo) {
+    $('#cliente_id').val('');
+    if (!mantenerCodigo) {
+        $('#codigocliente').val('');
+    }
+    $('#nombrecliente').val('');
+}
+
+function resolverClienteFiltroCertsan(codigo, opciones) {
+    opciones = opciones || {};
+    var alertar = !!opciones.alertar;
+    var $input = $('#codigocliente');
+    var cod = $.trim(codigo || '');
+
+    if (cod === '') {
+        limpiarClienteFiltroCertsan(false);
+        return;
     }
 
-    function $valorPanel() {
-        return $('#filtro_valor_panel');
-    }
-
-    function parseOperadores() {
-        var $sel = $('#filtro_operador');
-        if (!$sel.length) {
-            return;
-        }
-        try {
-            operadoresPorCampo = JSON.parse($sel.attr('data-operadores') || '{}');
-        } catch (e) {
-            operadoresPorCampo = {};
-        }
-    }
-
-    function tipoCampoActivo() {
-        var modo = $('#filtro_modo').val();
-        if (modo !== MODO_CAMPO) {
-            return 'texto';
-        }
-        var $opt = $('#filtro_campo option:selected');
-        return $opt.data('type') || 'texto';
-    }
-
-    function setPlaceholderValor(texto) {
-        $valorPrincipal().attr('placeholder', texto);
-        $valorPanel().attr('placeholder', texto);
-    }
-
-    function actualizarVisibilidad() {
-        var modo = $('#filtro_modo').val();
-        var operador = $('#filtro_operador').val();
-        var tipo = tipoCampoActivo();
-
-        if (modo === MODO_CAMPO) {
-            $('.filtro-campo-wrap').show();
-        } else {
-            $('.filtro-campo-wrap').hide();
-        }
-
-        if (operador === 'vacio') {
-            $valorPrincipal().val('');
-            $valorPanel().val('');
-        }
-
-        if (tipo === 'entero') {
-            setPlaceholderValor('N\u00famero');
-        } else {
-            setPlaceholderValor('Texto o n\u00famero');
-        }
-    }
-
-    function actualizarOperadores(mantenerSeleccion) {
-        var modo = $('#filtro_modo').val();
-        var valorActual = mantenerSeleccion ? $('#filtro_operador').val() : null;
-        var mapa;
-        var $op = $('#filtro_operador');
-
-        if (modo === MODO_CAMPO) {
-            var campo = $('#filtro_campo').val();
-            mapa = operadoresPorCampo[campo] || LF.operadoresModoTodos();
-        } else {
-            mapa = LF.operadoresModoTodos();
-        }
-
-        LF.rellenarSelectOperadores($op, mapa, valorActual);
-        actualizarVisibilidad();
-    }
-
-    $(function () {
-        if (!$('#form-filtros-certificado-sanitario').length) {
-            return;
-        }
-
-        parseOperadores();
-
-        LF.sincronizarValorPrincipal('#filtro_valor', '#filtro_valor_panel');
-
-        function sincronizarValorAntesDeEnviar() {
-            var $panel = $('#panel-filtros-certificado-sanitario');
-            var panelAbierto = $panel.hasClass('show') || $panel.hasClass('in');
-            if (panelAbierto) {
-                $valorPrincipal().val($valorPanel().val());
-            } else {
-                $valorPanel().val($valorPrincipal().val());
+    $.get(carpetaBase + '/ventas/leerunclienteporcodigo/' + encodeURIComponent(cod))
+        .done(function (data) {
+            if (data && data.id) {
+                aplicarClienteFiltroCertsan(data);
+                return;
             }
-        }
-
-        $('#form-filtros-certificado-sanitario').on('click', '[data-aplicar-filtros-panel]', function () {
-            $valorPrincipal().val($valorPanel().val());
-        });
-
-        $('#form-filtros-certificado-sanitario').on('submit.listadoFiltrosSync', function () {
-            sincronizarValorAntesDeEnviar();
-        });
-
-        LF.initSubmitBusquedaRapida($('#form-filtros-certificado-sanitario'), {
-            selectorPanel: '#panel-filtros-certificado-sanitario'
-        });
-
-        $('#filtro_modo, #filtro_campo').on('change', function () {
-            actualizarOperadores(false);
-        });
-
-        $('#filtro_operador').on('change', function () {
-            if ($(this).val() === 'vacio') {
-                $valorPrincipal().val('');
-                $valorPanel().val('');
+            limpiarClienteFiltroCertsan(true);
+            $input.val(cod);
+            if (alertar) {
+                setTimeout(function () {
+                    alert('No se encontr\u00f3 el cliente indicado.');
+                    $input.trigger('focus').select();
+                }, 0);
             }
-            actualizarVisibilidad();
+        })
+        .fail(function () {
+            limpiarClienteFiltroCertsan(true);
+            $input.val(cod);
+            if (alertar) {
+                setTimeout(function () {
+                    alert('No se encontr\u00f3 el cliente indicado.');
+                    $input.trigger('focus').select();
+                }, 0);
+            }
         });
+}
 
-        actualizarOperadores(true);
-    });
-})(jQuery);
+window.onClienteElegidoEnConsulta = function (fila) {
+    aplicarClienteFiltroCertsan(fila);
+    return true;
+};
+
+function esTeclaF1ClienteCertsan(e) {
+    return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
+}
+
+function modalConsultaClienteAbiertoCertsan() {
+    var m = document.getElementById('consultaclienteModal');
+    return !!(m && (m.classList.contains('show') || m.classList.contains('in')));
+}
+
+function manejarF1ClienteCertsan(e) {
+    if (!esTeclaF1ClienteCertsan(e)) {
+        return;
+    }
+    var target = e.target;
+    if (!target || !target.classList || !target.classList.contains('codigocliente')) {
+        return;
+    }
+    if (target.readOnly || target.disabled) {
+        return;
+    }
+    if (modalConsultaClienteAbiertoCertsan()) {
+        return;
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    $(target).closest('.tm-cliente-campo, .form-group').find('.consultacliente').first().trigger('click');
+}
+
+function manejarEnterClienteCertsan(e) {
+    if (!(e && (e.key === 'Enter' || e.which === 13 || e.keyCode === 13))) {
+        return;
+    }
+    var target = e.target;
+    if (!target || !target.classList || !target.classList.contains('codigocliente')) {
+        return;
+    }
+    if (target.readOnly || target.disabled) {
+        return;
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    resolverClienteFiltroCertsan($(target).val(), { alertar: true });
+}
+
+if (!window.__certsanClienteCaptureActivo) {
+    document.addEventListener('keydown', manejarF1ClienteCertsan, true);
+    document.addEventListener('keydown', manejarEnterClienteCertsan, true);
+    window.__certsanClienteCaptureActivo = true;
+}
+
+$(function () {
+    $('#codigocliente')
+        .off('change.certsanCliente')
+        .on('blur.certsanCliente', function () {
+            if (modalConsultaClienteAbiertoCertsan()) {
+                return;
+            }
+            resolverClienteFiltroCertsan($(this).val(), { alertar: false });
+        });
+});

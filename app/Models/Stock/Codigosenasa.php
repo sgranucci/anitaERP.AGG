@@ -20,4 +20,19 @@ class Codigosenasa extends Model implements Auditable
         return $this->belongsTo(Envasesenasa::class, 'envasesenasa_id');
     }
 
+    /**
+     * @return array{id: int, codigo: string, nombre: string, registro: string, prefijo: string, llevafrio: string}
+     */
+    public function aConsultaArray(): array
+    {
+        return [
+            'id' => (int) $this->id,
+            'codigo' => (string) $this->codigo,
+            'nombre' => trim((string) $this->nombre),
+            'registro' => trim((string) $this->registro),
+            'prefijo' => trim((string) $this->prefijo),
+            'llevafrio' => (string) $this->llevafrio,
+        ];
+    }
+
 }

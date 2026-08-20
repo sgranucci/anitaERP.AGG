@@ -158,7 +158,23 @@
                             @endforeach
                         </select>
                         </div>
-                    </div>  
+                    </div>
+                    @php
+                        $senasaRel = $producto->codigosenasas ?? null;
+                        $senasaIdForm = old('codigosenasa_id', $producto->codigosenasa_id ?? '');
+                        if ($senasaIdForm && (! $senasaRel || (int) $senasaRel->id !== (int) $senasaIdForm)) {
+                            $senasaRel = \App\Models\Stock\Codigosenasa::query()->find($senasaIdForm);
+                        }
+                    @endphp
+                    @include('stock.partials.campo_consulta_codigosenasa', [
+                        'codigosenasaId' => $senasaIdForm,
+                        'codigo' => $senasaRel->codigo ?? '',
+                        'descripcion' => $senasaRel->nombre ?? '',
+                        'required' => false,
+                        'solo_lectura' => ! empty($soloConsulta) && empty($puedeActualizarArticulo),
+                        'col_label' => 'col-lg-4 col-form-label text-right pr-2',
+                        'col_input' => 'col-lg-8',
+                    ])
                 @endif
             </div>
             <div class="col-sm-6">

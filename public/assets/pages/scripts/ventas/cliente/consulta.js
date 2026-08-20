@@ -110,6 +110,10 @@ function aplicarSeleccionClienteInternoDescuento(fila) {
 }
 
 function aplicarSeleccionClienteFactura(fila) {
+    if (typeof window.onClienteElegidoEnConsulta === 'function'
+        && window.onClienteElegidoEnConsulta(fila) === true) {
+        return;
+    }
     if (typeof window.gastroOnClienteFacturaElegido === 'function') {
         window.gastroOnClienteFacturaElegido(fila);
         return;
@@ -347,6 +351,12 @@ function leeUnCliente(cliente_id, codigocliente)
         $.get(url_res).done(function(data){
             if (data)
             {
+                if (window.clienteConsultaModoFiltro) {
+                    $('#codigocliente').val(data.codigo);
+                    $('#cliente_id').val(data.id);
+                    $('#nombrecliente').val(data.nombre || '');
+                    return;
+                }
                 if (!window.clienteEstaHabilitadoParaFacturacion(data.estado))
                 {
                     if (typeof window.limpiarSeleccionClienteOperacion === 'function') {

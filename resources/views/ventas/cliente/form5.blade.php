@@ -10,8 +10,8 @@
         @else
             <p class="text-muted small mb-2">Archivos</p>
         @endif
-        <table class="table" id="archivo-table">
-            <thead>
+        <table class="table table-sm table-bordered" id="archivo-table">
+            <thead style="background:#85C1E9;color:#17202A;">
                 <tr>
                     <th>Archivo nuevo</th>
                     <th style="width: 90px;"></th>

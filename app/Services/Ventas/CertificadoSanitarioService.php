@@ -15,6 +15,7 @@ use App\Support\Ventas\CertificadoSanitario\CertificadoSanitarioAnitaNumeracionS
 use App\Support\Ventas\CertificadoSanitario\CertificadoSanitarioOrigenSupport;
 use App\Support\Ventas\CertificadoSanitario\CertificadoSanitarioWebXmlBuilder;
 use App\Support\Ventas\CertificadoSanitario\PedidoCertificadoLinea;
+use App\Support\Ventas\CertificadoSanitario\PedidoCertificadoListado;
 use App\Support\Ventas\CertificadoSanitario\PedidoCertificadoSource;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
@@ -43,6 +44,11 @@ class CertificadoSanitarioService
     public function previewLineas(array $filtros): Collection
     {
         return $this->pedidoSource->listarLineas($filtros);
+    }
+
+    public function previewConsulta(array $filtros): PedidoCertificadoListado
+    {
+        return $this->pedidoSource->listar($filtros);
     }
 
     /**
@@ -159,7 +165,21 @@ class CertificadoSanitarioService
 
         $this->codigosenasaRepository->sincronizarConAnita();
 
-        $lineas = $this->pedidoSource->listarLineas($input);
+        $listado = $this->pedidoSource->listar($input);
+        if ($listado->omitidosSinSenasa->isNotEmpty()) {
+            $skus = $listado->omitidosSinSenasa
+                ->map(static fn ($o) => $o->sku)
+                ->unique()
+                ->values()
+                ->all();
+            throw new RuntimeException(
+                'No se puede generar el certificado: hay artículos sin código SENASA. '
+                .'Cárguelos en el ABM de artículos y vuelva a consultar los pedidos: '
+                .implode(', ', $skus)
+            );
+        }
+
+        $lineas = $listado->lineas;
         if ($lineas->isEmpty()) {
             throw new RuntimeException('No hay pedidos con artículos SENASA para la fecha/filtros indicados.');
         }

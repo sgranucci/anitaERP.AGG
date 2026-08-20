@@ -7,6 +7,9 @@
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/transporte/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/transporte/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/zonavta/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/zonavta/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/camion/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/camion/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/certificado_sanitario/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/certificado_sanitario/filtro.js')) ?: time() }}" type="text/javascript"></script>
 <script>
 $(function () {
     if (typeof activa_eventos_consultatransporte === 'function') {
@@ -14,6 +17,12 @@ $(function () {
     }
     if (typeof activa_eventos_consultazonavta === 'function') {
         activa_eventos_consultazonavta();
+    }
+    if (typeof activa_eventos_consultacliente === 'function') {
+        activa_eventos_consultacliente();
+    }
+    if (typeof activa_eventos_consultacamion === 'function') {
+        activa_eventos_consultacamion();
     }
     var $reparto = $('#codigotransporte');
     if ($reparto.length) {
@@ -87,6 +96,26 @@ $(function () {
                             </div>
                         </div>
                     </div>
+                    <div class="form-group row tm-cliente-campo">
+                        <label for="codigocliente" class="col-lg-3 control-label text-right pr-2">Cliente</label>
+                        <div class="col-lg-6">
+                            <div class="input-group">
+                                <input type="hidden" class="cliente_id" name="cliente_id" id="cliente_id"
+                                    value="{{ old('cliente_id', $filtros['cliente_id'] ?? '') }}">
+                                <input type="text" class="form-control codigocliente" id="codigocliente" name="codigocliente"
+                                    value="{{ old('codigocliente', optional($clienteSeleccionado)->codigo ?? '') }}"
+                                    placeholder="C&oacute;d." title="C&oacute;digo; Enter valida; F1 consulta" autocomplete="off" style="max-width:7rem;">
+                                <input type="text" class="form-control nombrecliente" id="nombrecliente"
+                                    value="{{ old('nombrecliente', optional($clienteSeleccionado)->nombre ?? '') }}"
+                                    placeholder="Todos" readonly>
+                                <div class="input-group-append">
+                                    <button type="button" class="btn btn-outline-secondary consultacliente" title="Consultar clientes (F1)">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                     <div class="form-group row">
                         <label class="col-lg-3 control-label text-right pr-2">Fallback Anita</label>
                         <div class="col-lg-6">
@@ -113,7 +142,12 @@ $(function () {
             $fmtN = static fn (float $n, int $dec = 2): string => number_format($n, $dec, ',', '.');
             $previewTotales = $previewTotales ?? ['kilos' => 0.0, 'cajas' => 0.0, 'lineas' => 0, 'pedidos' => 0];
             $previewFilas = $previewFilas ?? collect();
+            $omitidosSinSenasa = $omitidosSinSenasa ?? collect();
+            $bloquearGeneracion = $omitidosSinSenasa->isNotEmpty();
         @endphp
+        @include('ventas.certificado_sanitario.partials.aviso_sin_senasa', [
+            'omitidosSinSenasa' => $omitidosSinSenasa,
+        ])
         <div class="card card-outline card-info mt-3">
             <div class="card-header">
                 <h3 class="card-title">
@@ -188,7 +222,15 @@ $(function () {
             </div>
         </div>
 
-        @if ($preview->count() > 0)
+        @if ($preview->count() > 0 && $bloquearGeneracion)
+        <div class="alert alert-warning mt-3 mb-0">
+            <i class="fa fa-ban"></i>
+            La generaci&oacute;n qued&oacute; bloqueada hasta que esos art&iacute;culos tengan c&oacute;digo SENASA.
+            C&aacute;rguelo en el ABM (links de arriba) y vuelva a consultar.
+        </div>
+        @endif
+
+        @if ($preview->count() > 0 && ! $bloquearGeneracion)
         <div class="card card-primary mt-3">
             <div class="card-header">
                 <h3 class="card-title">Datos del certificado y generaci&oacute;n WEB</h3>
@@ -204,21 +246,17 @@ $(function () {
                 <input type="hidden" name="fecha" value="{{ $filtros['fecha'] }}">
                 <input type="hidden" name="transporte_id" value="{{ $filtros['transporte_id'] }}">
                 <input type="hidden" name="zonavta_id" value="{{ $filtros['zonavta_id'] }}">
+                <input type="hidden" name="cliente_id" value="{{ $filtros['cliente_id'] }}">
                 <input type="hidden" name="fallback_anita" value="{{ !empty($filtros['fallback_anita']) ? 1 : 0 }}">
                 <div class="card-body">
-                    <div class="form-group row">
-                        <label for="camion_id" class="col-lg-3 control-label text-right pr-2 requerido">Cami&oacute;n</label>
-                        <div class="col-lg-6">
-                            <select name="camion_id" id="camion_id" class="form-control" required>
-                                <option value="">-- Seleccionar --</option>
-                                @foreach($camiones as $c)
-                                <option value="{{$c->id}}" @selected((string)old('camion_id') === (string)$c->id)>
-                                    {{$c->codigo}} · {{$c->dominio}} · {{$c->habilitacion}}
-                                </option>
-                                @endforeach
-                            </select>
-                        </div>
-                    </div>
+                    @include('ventas.partials.campo_consulta_camion', [
+                        'camionId' => old('camion_id', optional($camionSeleccionado)->id ?? ''),
+                        'codigo' => old('camion_codigo', optional($camionSeleccionado)->codigo ?? ''),
+                        'descripcion' => old('camion_descripcion', optional($camionSeleccionado)->descripcionConsulta() ?? ''),
+                        'col_label' => 'col-lg-3 control-label text-right pr-2',
+                        'col_input' => 'col-lg-6',
+                        'focusSiguiente' => '#temperatura',
+                    ])
                     <div class="form-group row">
                         <label for="temperatura" class="col-lg-3 control-label text-right pr-2">Temperatura</label>
                         <div class="col-lg-2">
@@ -234,7 +272,7 @@ $(function () {
                     <div class="form-group row">
                         <label for="cantidad_precinto" class="col-lg-3 control-label text-right pr-2">Cant. precintos</label>
                         <div class="col-lg-2">
-                            <input type="number" name="cantidad_precinto" id="cantidad_precinto" class="form-control" min="0" max="99" value="{{ old('cantidad_precinto', 0) }}">
+                            <input type="number" name="cantidad_precinto" id="cantidad_precinto" class="form-control" min="0" max="99" value="{{ old('cantidad_precinto', optional($camionSeleccionado)->cantidad_precinto ?? 0) }}">
                         </div>
                     </div>
                     <div class="form-group row">
@@ -276,4 +314,6 @@ $(function () {
 </div>
 @include('includes.ventas.modalconsultatransporte')
 @include('includes.ventas.modalconsultazonavta')
+@include('includes.ventas.modalconsultacliente')
+@include('includes.ventas.modalconsultacamion')
 @endsection

@@ -25,6 +25,37 @@ class Camion extends Model implements Auditable
         'cantidad_precinto' => 'integer',
     ];
 
+    public function descripcionConsulta(): string
+    {
+        $partes = [];
+        $dominio = trim((string) ($this->dominio ?? ''));
+        $habilitacion = trim((string) ($this->habilitacion ?? ''));
+        if ($dominio !== '') {
+            $partes[] = $dominio;
+        }
+        if ($habilitacion !== '') {
+            $partes[] = $habilitacion;
+        }
+
+        return implode(' · ', $partes);
+    }
+
+    /**
+     * @return array{id: int, codigo: string, dominio: string, habilitacion: string, tipo: string, cantidad_precinto: int, descripcion: string}
+     */
+    public function aConsultaArray(): array
+    {
+        return [
+            'id' => (int) $this->id,
+            'codigo' => (string) $this->codigo,
+            'dominio' => (string) ($this->dominio ?? ''),
+            'habilitacion' => (string) ($this->habilitacion ?? ''),
+            'tipo' => (string) ($this->tipo ?? ''),
+            'cantidad_precinto' => (int) ($this->cantidad_precinto ?? 0),
+            'descripcion' => $this->descripcionConsulta(),
+        ];
+    }
+
     public static function resolverIdPorCodigoAnita(mixed $codigoAnita): ?int
     {
         $codigoAnita = trim((string) ($codigoAnita ?? ''));

@@ -7,6 +7,7 @@ Nuevo certificado SENASA Surmar
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/transporte/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/camion/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/camion/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/certificado_senasa_surmar/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/certificado_senasa_surmar/crear.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
@@ -54,19 +55,14 @@ Nuevo certificado SENASA Surmar
                             </div>
                         </div>
                     </div>
-                    <div class="form-group row">
-                        <label class="col-lg-4 control-label text-right pr-2 requerido" for="camion_id">Camión</label>
-                        <div class="col-lg-6">
-                            <select name="camion_id" id="camion_id" class="form-control" required>
-                                <option value="">Seleccione…</option>
-                                @foreach ($camiones as $c)
-                                    <option value="{{ $c->id }}" @if ((string) old('camion_id') === (string) $c->id) selected @endif>
-                                        {{ $c->codigo }} — {{ $c->dominio }}
-                                    </option>
-                                @endforeach
-                            </select>
-                        </div>
-                    </div>
+                    @include('ventas.partials.campo_consulta_camion', [
+                        'camionId' => old('camion_id', optional($camionSeleccionado)->id ?? ''),
+                        'codigo' => old('camion_codigo', optional($camionSeleccionado)->codigo ?? ''),
+                        'descripcion' => old('camion_descripcion', optional($camionSeleccionado)->descripcionConsulta() ?? ''),
+                        'col_label' => 'col-lg-4 control-label text-right pr-2',
+                        'col_input' => 'col-lg-6',
+                        'focusSiguiente' => '#codigotransporte',
+                    ])
                     <div class="form-group row tm-transporte-campo">
                         <label class="col-lg-4 control-label text-right pr-2" for="codigotransporte">Reparto</label>
                         <div class="col-lg-6">
@@ -94,7 +90,7 @@ Nuevo certificado SENASA Surmar
                         </div>
                         <label class="col-lg-2 control-label text-right pr-2" for="cantidad_precinto">Cant. precinto</label>
                         <div class="col-lg-2">
-                            <input type="number" name="cantidad_precinto" id="cantidad_precinto" class="form-control" min="0" value="{{ old('cantidad_precinto') }}">
+                            <input type="number" name="cantidad_precinto" id="cantidad_precinto" class="form-control" min="0" value="{{ old('cantidad_precinto', optional($camionSeleccionado)->cantidad_precinto ?? '') }}">
                         </div>
                     </div>
                     <div class="form-group row">
@@ -136,4 +132,5 @@ Nuevo certificado SENASA Surmar
 </div>
 @include('includes.ventas.modalconsultacliente')
 @include('includes.ventas.modalconsultatransporte')
+@include('includes.ventas.modalconsultacamion')
 @endsection

@@ -97,6 +97,7 @@ class ClienteListadoFiltros
             'operador' => $operador,
             'valor' => $valor,
             'valor_hasta' => trim((string) $request->input('filtro_valor_hasta', '')),
+            'codigo' => trim((string) $request->input('filtro_codigo', '')),
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
         ];
@@ -104,6 +105,10 @@ class ClienteListadoFiltros
 
     public static function tieneCriteriosAplicados(array $filtros): bool
     {
+        if (trim((string) ($filtros['codigo'] ?? '')) !== '') {
+            return true;
+        }
+
         if (($filtros['operador'] ?? '') === 'vacio') {
             return true;
         }
@@ -128,7 +133,7 @@ class ClienteListadoFiltros
     }
 
     /**
-     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string}
+     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, codigo: string, busqueda: string}
      */
     public static function filtrosVacios(): array
     {
@@ -138,6 +143,7 @@ class ClienteListadoFiltros
             'operador' => 'contiene',
             'valor' => '',
             'valor_hasta' => '',
+            'codigo' => '',
             'busqueda' => '',
         ];
     }
@@ -163,6 +169,9 @@ class ClienteListadoFiltros
         if (! empty($filtros['valor_hasta'])) {
             $params['filtro_valor_hasta'] = $filtros['valor_hasta'];
         }
+        if (trim((string) ($filtros['codigo'] ?? '')) !== '') {
+            $params['filtro_codigo'] = trim((string) $filtros['codigo']);
+        }
 
         return $params;
     }
@@ -172,6 +181,8 @@ class ClienteListadoFiltros
      */
     public static function aplicar(Builder $query, array $filtros): void
     {
+        self::aplicarFiltroCodigo($query, $filtros);
+
         $valor = trim((string) ($filtros['valor'] ?? ''));
         if ($valor === '' && ($filtros['operador'] ?? '') !== 'vacio') {
             return;
@@ -187,6 +198,48 @@ class ClienteListadoFiltros
         }
 
         self::aplicarBusquedaGlobal($query, $operador, $valor);
+    }
+
+    /**
+     * Filtro dedicado de código (barra superior El Bierzo):
+     * acepta el código con o sin ceros a la izquierda.
+     *
+     * @param  Builder<\App\Models\Ventas\Cliente>  $query
+     */
+    private static function aplicarFiltroCodigo(Builder $query, array $filtros): void
+    {
+        $codigo = trim((string) ($filtros['codigo'] ?? ''));
+        if ($codigo === '') {
+            return;
+        }
+
+        $variantes = self::variantesCodigo($codigo);
+        if ($variantes === []) {
+            return;
+        }
+
+        $query->whereIn('cliente.codigo', $variantes);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private static function variantesCodigo(string $codigo): array
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '') {
+            return [];
+        }
+        if (! ctype_digit($codigo)) {
+            return [$codigo];
+        }
+
+        $norm = ltrim($codigo, '0');
+        if ($norm === '') {
+            $norm = '0';
+        }
+
+        return array_values(array_unique([$codigo, $norm, str_pad($norm, 6, '0', STR_PAD_LEFT)]));
     }
 
     /**

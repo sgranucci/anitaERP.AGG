@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use Illuminate\Foundation\Http\FormRequest;
 use App\Rules\Ventas\RuleCliente;
 use App\Models\Ventas\Cliente;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 
 class ValidacionClienteProvisorio extends FormRequest
 {
@@ -25,7 +26,7 @@ class ValidacionClienteProvisorio extends FormRequest
      */
     public function rules()
     {
-        return [
+        $reglas = [
             'nombre' => 'required|max:255|',
             'domicilio' => 'required|max:255|',
             'descuento' => 'numeric|nullable|max:100',
@@ -41,5 +42,11 @@ class ValidacionClienteProvisorio extends FormRequest
             'nroinscripcion' => ['required', new RuleCliente('nroinscripcion')],
             'vaweb' => ['required', new RuleCliente('vaweb')],
         ];
+
+        if (EntornoEmpresaSupport::esElBierzo()) {
+            $reglas['emitecertificado'] = 'nullable|in:S,N,Emite Certificado,No Emite Certificado';
+        }
+
+        return $reglas;
     }
 }

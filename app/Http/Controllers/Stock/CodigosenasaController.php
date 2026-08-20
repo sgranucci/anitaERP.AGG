@@ -115,4 +115,37 @@ class CodigosenasaController extends Controller
         }
     }
 
+    public function consultaCodigosenasa(Request $request)
+    {
+        if (! $this->puedeConsultarCodigosenasa()) {
+            abort(403);
+        }
+
+        return $this->repository->consultaCodigosenasa((string) ($request->get('consulta') ?? ''));
+    }
+
+    public function leeUnCodigosenasa(string $codigo)
+    {
+        if (! $this->puedeConsultarCodigosenasa()) {
+            abort(403);
+        }
+
+        $row = $this->repository->findPorCodigo($codigo);
+
+        return response()->json($row ? $row->aConsultaArray() : null);
+    }
+
+    private function puedeConsultarCodigosenasa(): bool
+    {
+        return can('listar-codigo-senasa-stock', false)
+            || can('crear-codigo-senasa-stock', false)
+            || can('editar-codigo-senasa-stock', false)
+            || can('listar-articulos', false)
+            || can('crear-articulos', false)
+            || can('editar-articulos', false)
+            || can('actualizar-articulos', false)
+            || can('crear-certificado-sanitario', false)
+            || can('listar-certificado-sanitario', false);
+    }
+
 }

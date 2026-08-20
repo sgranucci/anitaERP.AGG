@@ -11,6 +11,7 @@
         <div class="card-body">
             <div class="row mb-3">
                 <div class="col-md-3"><strong>Fecha facturas:</strong> {{ $sesionDetalle->fecha_facturas?->format('d/m/Y') }}</div>
+                <div class="col-md-3"><strong>Reparto:</strong> {{ $sesionDetalle->etiquetaRepartos() !== '' ? $sesionDetalle->etiquetaRepartos() : '—' }}</div>
                 <div class="col-md-3"><strong>Ambiente:</strong> {{ strtoupper($sesionDetalle->ambiente) }}</div>
                 <div class="col-md-3"><strong>Usuario:</strong> {{ $sesionDetalle->usuarios->nombre ?? $sesionDetalle->usuarios->usuario ?? '—' }}</div>
                 <div class="col-md-3"><strong>Archivo:</strong> {{ $sesionDetalle->nombre_archivo ?? '—' }}</div>

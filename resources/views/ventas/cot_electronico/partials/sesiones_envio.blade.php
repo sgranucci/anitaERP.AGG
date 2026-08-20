@@ -48,6 +48,7 @@
                         <th>#</th>
                         <th>Fecha env&iacute;o</th>
                         <th>Fecha facturas</th>
+                        <th>Reparto</th>
                         <th>Ambiente</th>
                         <th>Usuario</th>
                         <th>Archivo</th>
@@ -65,6 +66,7 @@
                             <td>{{ $sesion->id }}</td>
                             <td>{{ $sesion->fecha_envio?->format('d/m/Y H:i') }}</td>
                             <td>{{ $sesion->fecha_facturas?->format('d/m/Y') }}</td>
+                            <td>{{ $sesion->etiquetaRepartos() !== '' ? $sesion->etiquetaRepartos() : '—' }}</td>
                             <td>
                                 <span class="badge badge-{{ $sesion->ambiente === 'prod' ? 'danger' : 'warning' }}">
                                     {{ strtoupper($sesion->ambiente) }}
@@ -96,7 +98,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="12" class="text-center text-muted py-4">No hay sesiones de env&iacute;o en el per&iacute;odo.</td>
+                            <td colspan="13" class="text-center text-muted py-4">No hay sesiones de env&iacute;o en el per&iacute;odo.</td>
                         </tr>
                     @endforelse
                 </tbody>

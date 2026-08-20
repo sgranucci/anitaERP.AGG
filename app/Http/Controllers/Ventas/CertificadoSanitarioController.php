@@ -3,12 +3,13 @@
 namespace App\Http\Controllers\Ventas;
 
 use App\Exports\Ventas\CertificadoSanitarioListadoExport;
-use App\Support\Database\SqlDialectSupport;
 use App\Http\Controllers\Controller;
 use App\Models\Ventas\Camion;
 use App\Models\Ventas\CertificadoSanitario;
+use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Transporte;
 use App\Models\Ventas\Zonavta;
+use App\Repositories\Ventas\CamionRepositoryInterface;
 use App\Services\Ventas\CertificadoSanitarioPdfService;
 use App\Services\Ventas\CertificadoSanitarioService;
 use App\Support\Pdf\DompdfPaperSupport;
@@ -87,43 +88,48 @@ class CertificadoSanitarioController extends Controller
     {
         can('crear-certificado-sanitario');
 
-        $camiones = Camion::query()->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))->get();
-        if ($camiones->isEmpty()) {
-            app(\App\Repositories\Ventas\CamionRepositoryInterface::class)->all();
-            $camiones = Camion::query()->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))->get();
+        if (! Camion::query()->exists()) {
+            app(CamionRepositoryInterface::class)->all();
         }
 
         $zonas = collect();
         $transporteSeleccionado = $this->resolverTransporteDesdeRequest($request);
         $zonaSeleccionada = $this->resolverZonavtaDesdeRequest($request);
+        $clienteSeleccionado = $this->resolverClienteDesdeRequest($request);
+        $camionSeleccionado = $this->resolverCamionDesdeRequest($request);
 
         $preview = null;
         $previewFilas = collect();
         $previewTotales = ['kilos' => 0.0, 'cajas' => 0.0, 'lineas' => 0, 'pedidos' => 0];
+        $omitidosSinSenasa = collect();
         $filtros = [
             'fecha' => $request->get('fecha', now()->toDateString()),
             'transporte_id' => $transporteSeleccionado?->id,
             'zonavta_id' => $zonaSeleccionada?->id,
-            'cliente_id' => $request->get('cliente_id'),
+            'cliente_id' => $clienteSeleccionado?->id,
             'transporte_desde' => $request->get('transporte_desde'),
             'transporte_hasta' => $request->get('transporte_hasta'),
             'fallback_anita' => $request->boolean('fallback_anita', (bool) config('senasa.fallback_anita_pedido')),
         ];
 
         if ($request->boolean('consultar')) {
-            $preview = $this->service->previewLineas($filtros);
+            $listado = $this->service->previewConsulta($filtros);
+            $preview = $listado->lineas;
+            $omitidosSinSenasa = $listado->omitidosSinSenasa;
             $previewFilas = CertificadoSanitarioPreviewAplanado::aplanar($preview);
             $previewTotales = CertificadoSanitarioPreviewAplanado::totales($preview);
         }
 
         return view('ventas.certificado_sanitario.crear', compact(
-            'camiones',
+            'camionSeleccionado',
             'transporteSeleccionado',
             'zonaSeleccionada',
+            'clienteSeleccionado',
             'zonas',
             'preview',
             'previewFilas',
             'previewTotales',
+            'omitidosSinSenasa',
             'filtros'
         ));
     }
@@ -157,6 +163,8 @@ class CertificadoSanitarioController extends Controller
         $data['transporte_id'] = $transporte?->id;
         $zona = $this->resolverZonavtaDesdeRequest($request);
         $data['zonavta_id'] = $zona?->id;
+        $cliente = $this->resolverClienteDesdeRequest($request);
+        $data['cliente_id'] = $cliente?->id;
 
         try {
             $creados = $this->service->generar($data);
@@ -243,6 +251,24 @@ class CertificadoSanitarioController extends Controller
         return response()->json(['mensaje' => 'ok']);
     }
 
+    private function resolverCamionDesdeRequest(Request $request): ?Camion
+    {
+        $id = (int) $request->input('camion_id', old('camion_id', 0));
+        if ($id > 0) {
+            $porId = Camion::query()->find($id);
+            if ($porId) {
+                return $porId;
+            }
+        }
+
+        $codigo = trim((string) $request->input('camion_codigo', old('camion_codigo', '')));
+        if ($codigo === '') {
+            return null;
+        }
+
+        return app(CamionRepositoryInterface::class)->findPorCodigo($codigo);
+    }
+
     private function resolverTransporteDesdeRequest(Request $request): ?Transporte
     {
         $id = (int) $request->input('transporte_id', old('transporte_id', 0));
@@ -259,6 +285,33 @@ class CertificadoSanitarioController extends Controller
         }
 
         return Transporte::query()->where('codigo', $codigo)->first();
+    }
+
+    private function resolverClienteDesdeRequest(Request $request): ?Cliente
+    {
+        $id = (int) $request->input('cliente_id', old('cliente_id', 0));
+        if ($id > 0) {
+            $porId = Cliente::query()->find($id);
+            if ($porId) {
+                return $porId;
+            }
+        }
+
+        $codigo = trim((string) $request->input('codigocliente', old('codigocliente', '')));
+        if ($codigo === '') {
+            return null;
+        }
+
+        return Cliente::query()
+            ->where(function ($q) use ($codigo) {
+                $q->where('codigo', $codigo);
+                $alt = ltrim($codigo, '0');
+                if ($alt !== '' && $alt !== $codigo) {
+                    $q->orWhere('codigo', $alt);
+                }
+            })
+            ->orderBy('id')
+            ->first();
     }
 
     private function resolverZonavtaDesdeRequest(Request $request): ?Zonavta

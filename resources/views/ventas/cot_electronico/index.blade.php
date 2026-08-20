@@ -188,9 +188,9 @@
                     <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-agregar-reparto">
                         <i class="fa fa-plus"></i> Agregar reparto
                     </button>
-                    <button type="button" class="btn btn-outline-warning btn-sm ml-1" id="btn-limpiar-repartos"
-                        title="Quita todos los repartos y deja una fila vac&iacute;a">
-                        <i class="fa fa-eraser"></i> Limpiar repartos
+                    <button type="button" class="btn btn-outline-warning btn-sm ml-1 btn-limpiar-sesion-cot"
+                        title="Quita repartos y remitos consultados. Conserva la fecha para pedir otro reparto.">
+                        <i class="fa fa-eraser"></i> Limpiar sesi&oacute;n
                     </button>
 
                     @if ($consultado)
@@ -199,12 +199,19 @@
                         @if (count($remitos) === 0)
                             <div class="alert alert-warning mb-0">No se encontraron remitos Anita ni anitaERP para la fecha y repartos indicados.</div>
                         @else
+                            <p class="mb-2">
+                                <span class="badge badge-success">{{ $cantidadRemitosPendientes }} pendientes listos para presentar</span>
+                                @if ($cantidadRemitosEmitidos > 0)
+                                    <span class="badge badge-secondary">{{ $cantidadRemitosEmitidos }} ya emitidos (no se vuelven a enviar)</span>
+                                @endif
+                            </p>
                             <div class="table-responsive">
                                 <table class="table table-sm table-bordered" id="tabla-remitos-cot">
                                     <thead style="background-color:#85C1E9;color:#17202A;">
                                         <tr>
                                             <th style="width:40px;">
-                                                <input type="checkbox" id="check-todos-remitos" checked>
+                                                <input type="checkbox" id="check-todos-remitos"
+                                                    {{ $cantidadRemitosPendientes > 0 ? 'checked' : 'disabled' }}>
                                             </th>
                                             <th>N&deg; remito</th>
                                             <th>Fecha factura</th>
@@ -222,6 +229,7 @@
                                                 <td class="text-center">
                                                     @if (empty($remito['ya_enviado']))
                                                         <input type="checkbox" name="remitos_seleccionados[]"
+                                                            class="check-remito-cot-pendiente"
                                                             value="{{ $remito['clave'] }}" checked>
                                                     @else
                                                         <span class="text-muted">—</span>
@@ -236,12 +244,15 @@
                                                 <td>{{ $remito['desde_factura'] ? ($remito['factura_codigo'] ?? '') : 'Remito directo' }}</td>
                                                 <td>
                                                     @if (!empty($remito['ya_enviado']))
-                                                        Enviado
+                                                        <span class="badge badge-secondary">Ya emitido</span>
                                                         @if (!empty($remito['cot_previo']))
-                                                            — COT {{ $remito['cot_previo'] }}
+                                                            <div class="small">COT {{ $remito['cot_previo'] }}</div>
+                                                        @endif
+                                                        @if (!empty($remito['sesion_previa_id']))
+                                                            <div class="small text-muted">Sesi&oacute;n #{{ $remito['sesion_previa_id'] }}</div>
                                                         @endif
                                                     @else
-                                                        Pendiente
+                                                        <span class="badge badge-success">Pendiente</span>
                                                     @endif
                                                 </td>
                                             </tr>
@@ -289,7 +300,11 @@
                     <button type="submit" class="btn btn-info" id="btn-consultar-remitos">
                         <i class="fa fa-search"></i> Consultar remitos
                     </button>
-                    @if ($consultado && count($remitos) > 0)
+                    <button type="button" class="btn btn-outline-warning btn-limpiar-sesion-cot"
+                        title="Quita repartos y remitos consultados. Conserva la fecha para pedir otro reparto.">
+                        <i class="fa fa-eraser"></i> Limpiar sesi&oacute;n
+                    </button>
+                    @if ($consultado && ($cantidadRemitosPendientes ?? 0) > 0)
                         <button type="submit" class="btn btn-success" id="btn-procesar-cot">
                             <i class="fa fa-paper-plane"></i> Procesar env&iacute;o ARBA
                         </button>
@@ -308,5 +323,5 @@
 @endsection
 
 @section('scripts')
-<script src="{{ asset('assets/pages/scripts/ventas/cot_electronico/proceso.js') }}"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/cot_electronico/proceso.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cot_electronico/proceso.js')) }}"></script>
 @endsection

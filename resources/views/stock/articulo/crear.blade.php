@@ -16,6 +16,9 @@
 @if (config('app.empresa') == 'INTERFORMING')
 <script src="{{ asset('assets/pages/scripts/stock/sifab_maestro/consulta.js') }}?v=20260727" type="text/javascript"></script>
 @endif
+@if (config('app.empresa') == 'EL BIERZO')
+<script src="{{ asset('assets/pages/scripts/stock/codigosenasa/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/codigosenasa/consulta.js')) ?: time() }}" type="text/javascript"></script>
+@endif
 @if (can('listar-formula-articulo', false) || can('listar-articulos', false))
 <script>
 window.consultaFormulaArticuloConfig = {
@@ -88,5 +91,8 @@ window.consultaFormulaArticuloConfig = {
 @endif
 @if (config('app.empresa') == 'INTERFORMING')
 @include('includes.stock.modalconsultasifabmaestro')
+@endif
+@if (config('app.empresa') == 'EL BIERZO')
+@include('includes.stock.modalconsultacodigosenasa')
 @endif
 @endsection

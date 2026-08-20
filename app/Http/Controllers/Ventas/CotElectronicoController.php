@@ -82,6 +82,8 @@ class CotElectronicoController extends Controller
             'fecha' => $fecha,
             'repartos' => $repartos,
             'remitos' => $remitos,
+            'cantidadRemitosPendientes' => collect($remitos)->filter(fn ($r) => empty($r['ya_enviado']))->count(),
+            'cantidadRemitosEmitidos' => collect($remitos)->filter(fn ($r) => ! empty($r['ya_enviado']))->count(),
             'consultado' => $consultado || $procesado,
             'resultadoProceso' => $resultadoProceso,
             'resultadoPruebaConexion' => session('resultadoPruebaConexion'),
@@ -135,8 +137,12 @@ class CotElectronicoController extends Controller
             }
             $filas = $sesion->remitos()->orderBy('numero_remito')->get();
             $titulo = 'Detalle sesión COT #'.$sesion->id;
+            $repartoTxt = $sesion->etiquetaRepartos();
             $subtitulo = 'Fecha facturas: '.$sesion->fecha_facturas?->format('d/m/Y')
                 .' — Envío: '.$sesion->fecha_envio?->format('d/m/Y H:i');
+            if ($repartoTxt !== '') {
+                $subtitulo .= ' — Reparto: '.$repartoTxt;
+            }
         } else {
             $filtros = $this->sesionRepository->filtrosDesdeRequest(
                 $request->input('fecha_desde'),

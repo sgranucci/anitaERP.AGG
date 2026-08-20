@@ -68,7 +68,16 @@ class CotRemitoConsultaService
 
         // Físico primero: pendmae > ERP > factura Anita (sucursal 1 no debe tapar REM R 99 N).
         $filas = $this->fusionarRemitosSinDuplicar([$pendmae, $erp, $comprob]);
-        usort($filas, fn ($a, $b) => ($a['numero_remito'] <=> $b['numero_remito']));
+        $filas = $this->marcarEnviosPrevios($filas);
+        usort($filas, function ($a, $b) {
+            $enviadoA = ! empty($a['ya_enviado']) ? 1 : 0;
+            $enviadoB = ! empty($b['ya_enviado']) ? 1 : 0;
+            if ($enviadoA !== $enviadoB) {
+                return $enviadoA <=> $enviadoB;
+            }
+
+            return ($a['numero_remito'] <=> $b['numero_remito']);
+        });
 
         return $filas;
     }
@@ -246,7 +255,6 @@ class CotRemitoConsultaService
         // p-cot: sucursal remito de factura siempre 1
         $sucursal = 1;
         $fechaRemito = $this->fechaDesdeAnita((int) ($row->comp_fecha ?? 0), $fecha);
-        $envioPrevio = $this->buscarEnvioExitosoPrevio('REM', 'R', $sucursal, $numeroRemito, $fechaRemito);
 
         $codigoClienteAnita = trim((string) ($row->comp_cliente ?? ''));
         $cliente = $this->resolverClientePorCodigoAnita($codigoClienteAnita);
@@ -299,11 +307,11 @@ class CotRemitoConsultaService
             'cuit_chofer' => (string) ($reparto['cuit_chofer'] ?? ''),
             'kilos' => round($kilos, 2),
             'importe' => round($importe, 2),
-            'ya_enviado' => $envioPrevio !== null,
-            'cot_previo' => $envioPrevio?->cot,
-            'nro_unico_previo' => $envioPrevio?->nro_unico,
-            'error_previo' => $envioPrevio?->error,
-            'seleccionado' => $envioPrevio === null,
+            'ya_enviado' => false,
+            'cot_previo' => null,
+            'nro_unico_previo' => null,
+            'error_previo' => null,
+            'seleccionado' => true,
             'destinatario' => $this->destinatarioDesdeCliente($cliente, $codigoClienteAnita),
         ];
     }
@@ -331,7 +339,6 @@ class CotRemitoConsultaService
             $sucursal = 1;
         }
         $fechaRemito = $this->fechaDesdeAnita((int) ($row->penm_fecha ?? 0), $fecha);
-        $envioPrevio = $this->buscarEnvioExitosoPrevio('REM', $letra, $sucursal, $numeroRemito, $fechaRemito);
 
         $codigoClienteAnita = trim((string) ($row->penm_cliente ?? ''));
         $cliente = $this->resolverClientePorCodigoAnita($codigoClienteAnita);
@@ -377,11 +384,11 @@ class CotRemitoConsultaService
             'cuit_chofer' => (string) ($reparto['cuit_chofer'] ?? ''),
             'kilos' => round($kilos, 2),
             'importe' => round(abs($importe), 2),
-            'ya_enviado' => $envioPrevio !== null,
-            'cot_previo' => $envioPrevio?->cot,
-            'nro_unico_previo' => $envioPrevio?->nro_unico,
-            'error_previo' => $envioPrevio?->error,
-            'seleccionado' => $envioPrevio === null,
+            'ya_enviado' => false,
+            'cot_previo' => null,
+            'nro_unico_previo' => null,
+            'error_previo' => null,
+            'seleccionado' => true,
             'destinatario' => $this->destinatarioDesdeCliente($cliente, $codigoClienteAnita),
         ];
     }
@@ -397,7 +404,6 @@ class CotRemitoConsultaService
         $fechaRemito = Carbon::parse($remito->fecha)->startOfDay();
         $transporteId = (int) ($remito->transporte_id ?? 0);
         $reparto = $repartosPorId->get($transporteId, []);
-        $envioPrevio = $this->buscarEnvioExitosoPrevio('REM', 'R', $sucursal, $numeroRemito, $fechaRemito);
 
         $cliente = $remito->clientes;
         $kilos = $this->calcularKilosRemito($remito);
@@ -427,11 +433,11 @@ class CotRemitoConsultaService
             'cuit_chofer' => (string) ($reparto['cuit_chofer'] ?? ''),
             'kilos' => round($kilos, 2),
             'importe' => round($importe, 2),
-            'ya_enviado' => $envioPrevio !== null,
-            'cot_previo' => $envioPrevio?->cot,
-            'nro_unico_previo' => $envioPrevio?->nro_unico,
-            'error_previo' => $envioPrevio?->error,
-            'seleccionado' => $envioPrevio === null,
+            'ya_enviado' => false,
+            'cot_previo' => null,
+            'nro_unico_previo' => null,
+            'error_previo' => null,
+            'seleccionado' => true,
             'destinatario' => $this->destinatarioDesdeCliente($cliente),
         ];
     }
@@ -646,14 +652,45 @@ class CotRemitoConsultaService
      */
     private function claveLogicaRemito(array $fila): string
     {
-        $tipo = trim((string) ($fila['tipo'] ?? 'REM')) ?: 'REM';
-        $letra = trim((string) ($fila['letra'] ?? 'R')) ?: 'R';
-        $numero = (int) ($fila['numero_remito'] ?? 0);
-        if ($numero <= 0) {
-            return '';
+        return CotRemitoEnvio::armarClaveLogica(
+            (string) ($fila['tipo'] ?? 'REM'),
+            (string) ($fila['letra'] ?? 'R'),
+            (int) ($fila['numero_remito'] ?? 0),
+        );
+    }
+
+    /**
+     * Contrasta la grilla contra cot_remito_envio (persistencia por remito).
+     * Si ya hay COT exitoso, la fila queda emitida y no se puede volver a presentar.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private function marcarEnviosPrevios(array $filas): array
+    {
+        $numeros = [];
+        foreach ($filas as $fila) {
+            $numero = (int) ($fila['numero_remito'] ?? 0);
+            if ($numero > 0) {
+                $numeros[] = $numero;
+            }
         }
 
-        return implode('|', [$tipo, $letra, $numero]);
+        $envios = CotRemitoEnvio::ultimosExitososPorClave($numeros);
+
+        foreach ($filas as $i => $fila) {
+            $clave = $this->claveLogicaRemito($fila);
+            $envio = $clave !== '' ? $envios->get($clave) : null;
+
+            $filas[$i]['ya_enviado'] = $envio !== null;
+            $filas[$i]['cot_previo'] = $envio?->cot;
+            $filas[$i]['nro_unico_previo'] = $envio?->nro_unico;
+            $filas[$i]['sesion_previa_id'] = $envio?->cot_sesion_envio_id;
+            $filas[$i]['error_previo'] = $envio?->error;
+            $filas[$i]['seleccionado'] = $envio === null;
+        }
+
+        return $filas;
     }
 
     /**
@@ -680,29 +717,6 @@ class CotRemitoConsultaService
         }
 
         return $filas;
-    }
-
-    private function buscarEnvioExitosoPrevio(
-        string $tipo,
-        string $letra,
-        int $sucursal,
-        int $numeroRemito,
-        Carbon $fechaFactura,
-    ): ?CotRemitoEnvio {
-        return CotRemitoEnvio::query()
-            ->where('tipo', $tipo)
-            ->where('letra', $letra)
-            ->where('sucursal', $sucursal)
-            ->where('numero_remito', $numeroRemito)
-            ->whereDate('fecha_remito', $fechaFactura->toDateString())
-            ->where(function ($q) {
-                $q->where('procesado', 'SI')
-                    ->orWhere(function ($sq) {
-                        $sq->whereNotNull('cot')->where('cot', '!=', '');
-                    });
-            })
-            ->orderByDesc('id')
-            ->first();
     }
 
     private function calcularKilosRemito(Remito $remito): float

@@ -6,6 +6,7 @@ use Illuminate\Foundation\Http\FormRequest;
 use App\Rules\Ventas\RuleCliente;
 use App\Rules\Ventas\RuleClienteDocumentoUnico;
 use App\Models\Ventas\Cliente;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 
 class ValidacionCliente extends FormRequest
 {
@@ -50,8 +51,8 @@ class ValidacionCliente extends FormRequest
                 'condicioniibb_id' => 'required',
                 'vaweb' => ['required', new RuleCliente('vaweb')],
             ];
-        else
-            return [
+        else {
+            $reglas = [
                 'nombre' => 'required|max:255|',
                 'domicilio' => 'required|max:255|',
                 'descuento' => 'numeric|nullable|max:100',
@@ -70,5 +71,12 @@ class ValidacionCliente extends FormRequest
                 'retieneiva' => ['required', new RuleCliente('retieneiva')],
                 'condicioniibb_id' => 'required',
             ];
+
+            if (EntornoEmpresaSupport::esElBierzo()) {
+                $reglas['emitecertificado'] = 'nullable|in:S,N,Emite Certificado,No Emite Certificado';
+            }
+
+            return $reglas;
+        }
     }
 }

@@ -17,6 +17,14 @@ use Illuminate\Support\Collection;
  */
 final class PedidoCertificadoSource
 {
+    /** @var Collection<int, CertificadoSanitarioArticuloSinSenasa> */
+    private Collection $omitidosSinSenasa;
+
+    public function __construct()
+    {
+        $this->omitidosSinSenasa = collect();
+    }
+
     /**
      * @param  array{
      *   fecha: string,
@@ -31,6 +39,15 @@ final class PedidoCertificadoSource
      */
     public function listarLineas(array $filtros): Collection
     {
+        return $this->listar($filtros)->lineas;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function listar(array $filtros): PedidoCertificadoListado
+    {
+        $this->omitidosSinSenasa = collect();
         $fecha = Carbon::parse($filtros['fecha'])->startOfDay();
         $lineasErp = $this->lineasDesdeErp($fecha, $filtros);
         $codigosErp = $lineasErp->pluck('codigoPedido')->unique()->all();
@@ -40,13 +57,19 @@ final class PedidoCertificadoSource
             : (bool) config('senasa.fallback_anita_pedido', true);
 
         if (! $fallback) {
-            return CertificadoSanitarioOrigenSupport::enriquecerLineas($lineasErp->values());
+            return new PedidoCertificadoListado(
+                CertificadoSanitarioOrigenSupport::enriquecerLineas($lineasErp->values()),
+                $this->omitidosSinSenasa->values()
+            );
         }
 
         $lineasAnita = $this->lineasDesdeAnita($fecha, $filtros, $codigosErp);
 
-        return CertificadoSanitarioOrigenSupport::enriquecerLineas(
-            $lineasErp->concat($lineasAnita)->values()
+        return new PedidoCertificadoListado(
+            CertificadoSanitarioOrigenSupport::enriquecerLineas(
+                $lineasErp->concat($lineasAnita)->values()
+            ),
+            $this->omitidosSinSenasa->values()
         );
     }
 
@@ -106,7 +129,18 @@ final class PedidoCertificadoSource
                     continue;
                 }
                 $cods = $art->codigosenasas;
-                if (! $cods) {
+                if (! $this->tieneCodigoSenasa($cods)) {
+                    $this->registrarOmitidoSinSenasa(
+                        $filtros,
+                        sku: $sku,
+                        articuloId: (int) $art->id,
+                        articuloNombre: trim((string) ($art->descripcion ?? $art->nombre ?? $sku)),
+                        codigoPedido: (string) ($pedido->codigo ?? $pedido->id),
+                        origen: 'erp',
+                        codigoCliente: (string) ($cliente->codigo ?? ''),
+                        clienteNombre: trim((string) ($cliente->nombre ?? '')),
+                        codigoTransporte: $transporte?->codigo !== null ? (string) $transporte->codigo : null,
+                    );
                     continue;
                 }
 
@@ -262,7 +296,18 @@ final class PedidoCertificadoSource
                     })
                     ->first();
                 $cods = $art?->codigosenasas;
-                if (! $cods) {
+                if (! $this->tieneCodigoSenasa($cods)) {
+                    $this->registrarOmitidoSinSenasa(
+                        $filtros,
+                        sku: $sku,
+                        articuloId: $art?->id,
+                        articuloNombre: trim((string) ($art?->descripcion ?? $art?->nombre ?? $sku)),
+                        codigoPedido: $codigo,
+                        origen: 'anita',
+                        codigoCliente: $codigoCliente !== '' ? $codigoCliente : trim((string) $cab->penm_cliente),
+                        clienteNombre: trim((string) ($cliente->nombre ?? '')),
+                        codigoTransporte: (string) (int) $cab->penm_expreso,
+                    );
                     continue;
                 }
 
@@ -353,16 +398,65 @@ final class PedidoCertificadoSource
         }
 
         return $lineas->filter(function (PedidoCertificadoLinea $l) use ($desde, $hasta) {
-            $cod = (int) ($l->codigoTransporte ?? 0);
-            if ($desde !== null && $cod < $desde) {
-                return false;
-            }
-            if ($hasta !== null && $cod > $hasta) {
-                return false;
-            }
-
-            return true;
+            return $this->pasaRangoTransporte($l->codigoTransporte, $desde, $hasta);
         })->values();
+    }
+
+    private function pasaRangoTransporte(?string $codigoTransporte, ?int $desde, ?int $hasta): bool
+    {
+        if ($desde === null && $hasta === null) {
+            return true;
+        }
+        $cod = (int) ($codigoTransporte ?? 0);
+        if ($desde !== null && $cod < $desde) {
+            return false;
+        }
+        if ($hasta !== null && $cod > $hasta) {
+            return false;
+        }
+
+        return true;
+    }
+
+    private function tieneCodigoSenasa(?Codigosenasa $cods): bool
+    {
+        if (! $cods) {
+            return false;
+        }
+
+        return trim((string) ($cods->registro ?? '')) !== ''
+            || trim((string) ($cods->codigo ?? '')) !== '';
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function registrarOmitidoSinSenasa(
+        array $filtros,
+        string $sku,
+        ?int $articuloId,
+        string $articuloNombre,
+        string $codigoPedido,
+        string $origen,
+        string $codigoCliente,
+        string $clienteNombre,
+        ?string $codigoTransporte,
+    ): void {
+        $desde = isset($filtros['transporte_desde']) ? (int) $filtros['transporte_desde'] : null;
+        $hasta = isset($filtros['transporte_hasta']) ? (int) $filtros['transporte_hasta'] : null;
+        if (! $this->pasaRangoTransporte($codigoTransporte, $desde, $hasta)) {
+            return;
+        }
+
+        $this->omitidosSinSenasa->push(new CertificadoSanitarioArticuloSinSenasa(
+            sku: $sku,
+            articuloId: $articuloId,
+            articuloNombre: $articuloNombre,
+            codigoPedido: $codigoPedido,
+            origen: $origen,
+            codigoCliente: $codigoCliente,
+            clienteNombre: $clienteNombre,
+        ));
     }
 
     private function cajasDesdePiezas(float $piezas, float $unidadesPorEnvase): float

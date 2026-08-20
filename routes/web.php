@@ -4772,9 +4772,11 @@ Route::delete('stock/envasesenasa/{id}', 'Stock\EnvasesenasaController@eliminar'
 Route::get('stock/codigosenasa', 'Stock\CodigosenasaController@index')->name('consultar_codigosenasa');
 Route::get('stock/codigosenasa/crear', 'Stock\CodigosenasaController@crear')->name('crear_codigosenasa');
 Route::post('stock/codigosenasa', 'Stock\CodigosenasaController@guardar')->name('guardar_codigosenasa');
-Route::get('stock/codigosenasa/{id}/editar', 'Stock\CodigosenasaController@editar')->name('editar_codigosenasa');
-Route::put('stock/codigosenasa/{id}', 'Stock\CodigosenasaController@actualizar')->name('actualizar_codigosenasa');
+Route::get('stock/codigosenasa/{id}/editar', 'Stock\CodigosenasaController@editar')->name('editar_codigosenasa')->middleware('modo.consulta');
+Route::put('stock/codigosenasa/{id}', 'Stock\CodigosenasaController@actualizar')->name('actualizar_codigosenasa')->middleware('modo.consulta');
 Route::delete('stock/codigosenasa/{id}', 'Stock\CodigosenasaController@eliminar')->name('eliminar_codigosenasa');
+Route::post('stock/codigosenasa/consultacodigosenasa', 'Stock\CodigosenasaController@consultaCodigosenasa')->name('consulta_codigosenasa');
+Route::get('stock/leercodigosenasa/{codigo}', 'Stock\CodigosenasaController@leeUnCodigosenasa')->name('leer_codigosenasa');
 
 /* Produccion
  * Tipo de produccion

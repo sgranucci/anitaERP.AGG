@@ -59,4 +59,59 @@ class CotRemitoEnvio extends Model
     {
         return $this->belongsTo(Usuario::class, 'usuario_id');
     }
+
+    public function fueEmitido(): bool
+    {
+        $procesado = strtoupper(trim((string) $this->procesado));
+        $cot = trim((string) $this->cot);
+
+        return $procesado === 'SI' || $cot !== '';
+    }
+
+    /**
+     * Identidad persistida del remito para el COT: tipo + letra + número.
+     * La sucursal no entra (factura Anita = 1, remito físico = 99).
+     */
+    public function claveLogica(): string
+    {
+        return self::armarClaveLogica($this->tipo, $this->letra, (int) $this->numero_remito);
+    }
+
+    public static function armarClaveLogica(?string $tipo, ?string $letra, int $numero): string
+    {
+        if ($numero <= 0) {
+            return '';
+        }
+
+        $tipoNorm = trim((string) $tipo) ?: 'REM';
+        $letraNorm = trim((string) $letra) ?: 'R';
+
+        return implode('|', [$tipoNorm, $letraNorm, $numero]);
+    }
+
+    /**
+     * Último COT exitoso por identidad de remito.
+     *
+     * @param  list<int>  $numeros
+     * @return \Illuminate\Support\Collection<string, self>
+     */
+    public static function ultimosExitososPorClave(array $numeros)
+    {
+        $numeros = array_values(array_unique(array_filter(
+            array_map('intval', $numeros),
+            static fn (int $n) => $n > 0
+        )));
+
+        if ($numeros === []) {
+            return collect();
+        }
+
+        return static::query()
+            ->whereIn('numero_remito', $numeros)
+            ->orderByDesc('id')
+            ->get()
+            ->filter(static fn (self $envio) => $envio->fueEmitido())
+            ->unique(static fn (self $envio) => $envio->claveLogica())
+            ->keyBy(static fn (self $envio) => $envio->claveLogica());
+    }
 }

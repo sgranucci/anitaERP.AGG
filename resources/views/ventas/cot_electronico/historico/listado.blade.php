@@ -3,11 +3,13 @@
 <head>
     <meta charset="utf-8">
     <style>
-        body { font-family: DejaVu Sans, sans-serif; font-size: 8px; }
-        h2, h3 { margin: 0 0 6px 0; }
+        body { font-family: DejaVu Sans, sans-serif; font-size: 11px; color: #17202A; }
+        h2 { font-size: 16px; margin: 0 0 6px 0; }
+        h3 { font-size: 13px; margin: 0 0 6px 0; }
+        .meta { font-size: 11px; margin: 0 0 10px 0; }
         .data { width: 100%; border-collapse: collapse; }
-        .data th { background-color: #85C1E9; color: #17202A; padding: 4px; border: 1px solid #cccccc; }
-        .data td { padding: 3px; border: 1px solid #cccccc; vertical-align: top; }
+        .data th { background-color: #85C1E9; color: #17202A; padding: 6px; border: 1px solid #cccccc; font-size: 11px; }
+        .data td { padding: 5px 6px; border: 1px solid #cccccc; vertical-align: top; font-size: 11px; }
         .data tr:nth-child(even) { background-color: #f5f5f5; }
     </style>
 </head>
@@ -16,7 +18,13 @@
     @if (!empty($subtitulo))
         <h3>{{ $subtitulo }}</h3>
     @endif
-    <p>Generado {{ now()->format('d/m/Y H:i') }} — {{ count($filas) }} registro(s)</p>
+    @if (!empty($sesion))
+        @php
+            $repartoSesion = $sesion->etiquetaRepartos();
+        @endphp
+        <p class="meta"><strong>Reparto:</strong> {{ $repartoSesion !== '' ? $repartoSesion : '—' }}</p>
+    @endif
+    <p class="meta">Generado {{ now()->format('d/m/Y H:i') }} — {{ count($filas) }} registro(s)</p>
 
     <table class="data">
         <thead>

@@ -55,10 +55,20 @@ trait ClienteTrait {
 		'S' => 'Lleva caja especial',
 		];
 
-	public static $enumEmiteCertificado = [		
-		'S' => "Emite Certificado",
-		'N' => "No Emite Certificado"
+	public static $enumEmiteCertificado = [
+		'S' => 'Sí',
+		'N' => 'No',
 		];
+
+	public static function normalizarEmiteCertificado(mixed $valor): string
+	{
+		$v = mb_strtolower(trim((string) ($valor ?? '')));
+		if (in_array($v, ['s', 'si', 'sí', 'emite certificado'], true)) {
+			return 'S';
+		}
+
+		return 'N';
+	}
 
 	public static $enumEmiteNotaDeCredito = [
 		'S' => "Emite Nota de Credito",

@@ -60,7 +60,9 @@ class ArticuloConsultaDesdeModal
             || can('crear-comprobante-proveedor', false)
             || can('editar-comprobante-proveedor', false)
             || can('actualizar-comprobante-proveedor', false)
-            || can('listar-comprobante-proveedor', false);
+            || can('listar-comprobante-proveedor', false)
+            || can('crear-certificado-sanitario', false)
+            || can('listar-certificado-sanitario', false);
     }
 
     public static function urlEditar(int $id): string

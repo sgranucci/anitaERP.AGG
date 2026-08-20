@@ -919,6 +919,9 @@ class ArticuloController extends Controller
         }
 
         $producto = $this->articuloRepository->find($id);
+        if ($producto) {
+            $producto->loadMissing('codigosenasas');
+        }
         $puedeActualizarArticulo = can('actualizar-articulos', false);
 
         $categoria = Categoria::orderBy('nombre')->get();

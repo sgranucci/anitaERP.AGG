@@ -5,6 +5,7 @@ namespace App\Repositories\Stock;
 use App\Models\Stock\Codigosenasa;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
+use App\Support\Database\SqlDialectSupport;
 
 class CodigosenasaRepository implements CodigosenasaRepositoryInterface
 {
@@ -68,6 +69,84 @@ class CodigosenasaRepository implements CodigosenasaRepositoryInterface
         $codigosenasa = $this->model->destroy($id);
 
 		return $codigosenasa;
+    }
+
+    public function findPorCodigo(string $codigo): ?Codigosenasa
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '') {
+            return null;
+        }
+
+        $encontrado = $this->model->newQuery()->where('codigo', $codigo)->first();
+        if ($encontrado) {
+            return $encontrado;
+        }
+
+        $sinCeros = ltrim($codigo, '0');
+        if ($sinCeros !== '' && $sinCeros !== $codigo) {
+            $encontrado = $this->model->newQuery()->where('codigo', $sinCeros)->first();
+            if ($encontrado) {
+                return $encontrado;
+            }
+        }
+
+        if (ctype_digit($codigo)) {
+            return $this->model->newQuery()->where('codigo', (string) (int) $codigo)->first();
+        }
+
+        return null;
+    }
+
+    public function consultaCodigosenasa(string $consulta): string
+    {
+        $consulta = trim($consulta);
+        $query = $this->model->newQuery()->select(
+            'id',
+            'codigo',
+            'nombre',
+            'registro',
+            'prefijo',
+            'llevafrio'
+        );
+        if ($consulta !== '') {
+            $query->where(function ($q) use ($consulta) {
+                $q->where('codigo', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('nombre', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('registro', 'LIKE', '%'.$consulta.'%')
+                    ->orWhere('prefijo', 'LIKE', '%'.$consulta.'%');
+            });
+        }
+
+        $data = $query->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))->limit(200)->get();
+        $puedeAbrirAbm = can('editar-codigo-senasa-stock', false) || can('listar-codigo-senasa-stock', false);
+
+        $output = ['data' => ''];
+        if ($data->isEmpty()) {
+            $output['data'] = '<tr><td colspan="6">Sin resultados</td></tr>';
+        } else {
+            foreach ($data as $row) {
+                $output['data'] .= '<tr>';
+                $output['data'] .= '<td class="id">'.e($row->id).'</td>';
+                $output['data'] .= '<td class="codigo">'.e($row->codigo).'</td>';
+                $output['data'] .= '<td class="nombre">'.e($row->nombre).'</td>';
+                $output['data'] .= '<td class="registro">'.e($row->registro).'</td>';
+                $output['data'] .= '<td class="prefijo">'.e($row->prefijo).'</td>';
+                $output['data'] .= '<td class="text-nowrap">';
+                $output['data'] .= '<a class="btn btn-warning btn-sm eligeconsultacodigosenasa">Elegir</a>';
+                if ($puedeAbrirAbm) {
+                    $url = route('editar_codigosenasa', [
+                        'id' => $row->id,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ]);
+                    $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+                }
+                $output['data'] .= '</td></tr>';
+            }
+        }
+
+        return json_encode($output, JSON_UNESCAPED_UNICODE);
     }
 
     public function find($id)

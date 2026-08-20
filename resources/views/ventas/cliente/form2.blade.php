@@ -2,86 +2,97 @@
 	<div class="row">
 		<div class="col-sm-6">
 			<div class="form-group row">
-				<label for="tipodocumento_id" class="col-lg-4 col-form-label requerido">Documento</label>
-				<select name="tipodocumento_id" id="tipodocumento_id" data-placeholder="Tipo de documento" class="col-lg-2 form-control" required data-fouc>
-					<option value="">-- Seleccionar --</option>
-					@foreach($tipodocumento_query as $key => $value)
-						@if( (int) $value->id == (int) old('tipodocumento_id', $data->tipodocumento_id ?? ''))
-							<option value="{{ $value->id }}" selected="select">{{ $value->abreviatura }}</option>    
+				<label for="tipodocumento_id" class="col-lg-4 control-label text-right pr-2 requerido">Documento</label>
+				<div class="col-lg-8">
+					<div class="d-flex flex-wrap align-items-center" style="gap: 4px;">
+						<select name="tipodocumento_id" id="tipodocumento_id" data-placeholder="Tipo de documento" class="form-control flex-shrink-0" required data-fouc style="width: 5.5rem;">
+							<option value="">--</option>
+							@foreach($tipodocumento_query as $key => $value)
+								<option value="{{ $value->id }}" {{ (int) $value->id === (int) old('tipodocumento_id', $data->tipodocumento_id ?? '') ? 'selected' : '' }}>{{ $value->abreviatura }}</option>
+							@endforeach
+						</select>
+						<input type="hidden" id="condicioniva_query" value="{{$condicioniva_query}}">
+						<span class="input-group-text">#</span>
+						<input type="text" name="numerodocumento" id="numerodocumento" class="form-control" style="min-width: 8rem; flex: 1 1 auto;" value="{{ old('numerodocumento', $data->numerodocumento ?? '') }}">
+						@if (!empty($data->facturas_apocrifas))
+							<span id="cliente-apoc-estado-badge" class="badge badge-danger align-self-center">Facturas ap&oacute;crifas (ARCA)</span>
+						@elseif (!empty($data->facturas_apocrifas_consulta_at))
+							<span id="cliente-apoc-estado-badge" class="badge badge-success align-self-center">Sin registro APOC ({{ $data->facturas_apocrifas_consulta_at->format('d/m/Y H:i') }})</span>
 						@else
-							<option value="{{ $value->id }}">{{ $value->abreviatura }}</option>    
+							<span id="cliente-apoc-estado-badge" class="badge badge-secondary align-self-center" style="display: none;"></span>
 						@endif
-					@endforeach
-				</select>
-				<input type="hidden" id="condicioniva_query" value="{{$condicioniva_query}}">
-				<span class="input-group-text">#</span>
-				<input type="text" name="numerodocumento" id="numerodocumento" class="col-lg-3 form-control" value="{{ old('numerodocumento', $data->numerodocumento ?? '') }}">
-				@if (!empty($data->facturas_apocrifas))
-					<span id="cliente-apoc-estado-badge" class="badge badge-danger ml-1 align-self-center">Facturas ap&oacute;crifas (ARCA)</span>
-				@elseif (!empty($data->facturas_apocrifas_consulta_at))
-					<span id="cliente-apoc-estado-badge" class="badge badge-success ml-1 align-self-center">Sin registro APOC ({{ $data->facturas_apocrifas_consulta_at->format('d/m/Y H:i') }})</span>
-				@else
-					<span id="cliente-apoc-estado-badge" class="badge badge-secondary ml-1 align-self-center" style="display: none;"></span>
-				@endif
-				<span class="d-inline-block position-relative pl-1 align-middle">
-					<button type="button" id="btn-consulta-arca-cliente" title="Consultar padrón ARCA" class="btn-accion-tabla tooltipsC" style="padding:1;" onclick="return window.consultaArcaCliente?.(event)">
-						<i class="fa fa-search text-primary"></i>
-					</button>
-					<span id="arca-loading-cliente" style="display:none; position:absolute; left:100%; top:50%; transform:translateY(-50%); margin-left:8px; white-space:nowrap; color:#6c757d; font-size:0.95em; z-index:5;">
-						<i class="fa fa-spinner fa-spin" aria-hidden="true"></i> Consultando a ARCA...
-					</span>
-				</span>
-			</div>			
-			<div class="form-group row">
-				@if ($tipoalta != 'P')
-					<label for="retieneiva" class="col-lg-4 col-form-label requerido">Percepción iva</label>
-				@else
-					<label for="retieneiva" class="col-lg-4 col-form-label">Percepción iva</label>
-				@endif
-				<select name="retieneiva" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
-					@foreach ($retieneiva_enum as $value => $retieneiva)
-						<option value="{{ $value }}"
-							@if (old('retieneiva', $data->retieneiva ?? '') == $value) selected @endif
-							>{{ $retieneiva }}</option>
-					@endforeach
-				</select>
+						<span class="d-inline-block position-relative align-middle">
+							<button type="button" id="btn-consulta-arca-cliente" title="Consultar padrón ARCA" class="btn-accion-tabla tooltipsC" style="padding:1;" onclick="return window.consultaArcaCliente?.(event)">
+								<i class="fa fa-search text-primary"></i>
+							</button>
+							<span id="arca-loading-cliente" style="display:none; position:absolute; left:100%; top:50%; transform:translateY(-50%); margin-left:8px; white-space:nowrap; color:#6c757d; font-size:0.95em; z-index:5;">
+								<i class="fa fa-spinner fa-spin" aria-hidden="true"></i> Consultando a ARCA...
+							</span>
+						</span>
+					</div>
+				</div>
 			</div>
 			<div class="form-group row">
 				@if ($tipoalta != 'P')
-					<label for="modofacturacion" class="col-lg-4 col-form-label requerido">Modo facturaci&oacute;n</label>
+					<label for="retieneiva" class="col-lg-4 control-label text-right pr-2 requerido">Percepci&oacute;n IVA</label>
 				@else
-					<label for="modofacturacion" class="col-lg-4 col-form-label">Modo facturaci&oacute;n</label>
+					<label for="retieneiva" class="col-lg-4 control-label text-right pr-2">Percepci&oacute;n IVA</label>
 				@endif
-				<select name="modofacturacion" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
-					@foreach ($modofacturacion_enum as $value => $modofacturacion)
-						<option value="{{ $value }}"
-							@if (old('modofacturacion', $data->modofacturacion ?? '') == $value) selected @endif
-							>{{ $modofacturacion }}</option>
-					@endforeach
-				</select>
-				@if (config('app.empresa') == 'EL BIERZO')
-					<label for="logistica" class="col-lg-2 col-form-label">Logística</label>
-					<input type="number" min="0" max="100" name="porcentajelogistica" id="porcentajelogistica" class="col-lg-2 form-control" value="{{old('porcentajelogistica', $data->porcentajelogistica ?? '0')}}"/>
-				@endif
+				<div class="col-lg-8">
+					<select name="retieneiva" class="form-control" @if ($tipoalta != 'P') required @endif>
+						@foreach ($retieneiva_enum as $value => $retieneiva)
+							<option value="{{ $value }}" {{ old('retieneiva', $data->retieneiva ?? '') == $value ? 'selected' : '' }}>{{ $retieneiva }}</option>
+						@endforeach
+					</select>
+				</div>
 			</div>
 			<div class="form-group row">
-				<label for="nroiibb" class="col-lg-4 col-form-label">Nro.IIBB</label>
-				<div class="col-lg-3">
+				@if ($tipoalta != 'P')
+					<label for="modofacturacion" class="col-lg-4 control-label text-right pr-2 requerido">Modo facturaci&oacute;n</label>
+				@else
+					<label for="modofacturacion" class="col-lg-4 control-label text-right pr-2">Modo facturaci&oacute;n</label>
+				@endif
+				<div class="col-lg-8">
+					<select name="modofacturacion" class="form-control" @if ($tipoalta != 'P') required @endif>
+						@foreach ($modofacturacion_enum as $value => $modofacturacion)
+							<option value="{{ $value }}" {{ old('modofacturacion', $data->modofacturacion ?? '') == $value ? 'selected' : '' }}>{{ $modofacturacion }}</option>
+						@endforeach
+					</select>
+				</div>
+			</div>
+			@if (config('app.empresa') == 'EL BIERZO')
+				<div class="form-group row">
+					<label for="porcentajelogistica" class="col-lg-4 control-label text-right pr-2">Log&iacute;stica</label>
+					<div class="col-lg-8">
+						<input type="number" min="0" max="100" name="porcentajelogistica" id="porcentajelogistica" class="form-control" value="{{old('porcentajelogistica', $data->porcentajelogistica ?? '0')}}"/>
+					</div>
+				</div>
+			@endif
+			<div class="form-group row">
+				<label for="nroiibb" class="col-lg-4 control-label text-right pr-2">Nro. IIBB</label>
+				<div class="col-lg-8">
 					<input type="text" name="nroiibb" id="nroiibb" class="form-control" value="{{old('nroiibb', $data->nroiibb ?? '')}}"/>
 				</div>
-				@if (config('app.empresa') == 'EL BIERZO')
-					<label for="emitecertificado" class="col-lg-2 col-form-label">Emite Cert.</label>
-					<select name="emitecertificado" class="col-lg-3 form-control">
-						@foreach ($emitecertificado_enum as $value => $emitecertificado)
-							<option value="{{ $emitecertificado }}"
-								@if (old('emitecertificado', $data->emitecertificado ?? '') == $emitecertificado) selected @endif
-								>{{ $emitecertificado }}</option>
-						@endforeach
-					</select>		
-				@endif
 			</div>
+			@if (\App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo())
+				@php
+					$emitecertificadoActual = \App\Models\Ventas\Cliente::normalizarEmiteCertificado(
+						old('emitecertificado', $data->emitecertificado ?? 'N')
+					);
+				@endphp
+				<div class="form-group row">
+					<label for="emitecertificado" class="col-lg-4 control-label text-right pr-2">Emite certificado</label>
+					<div class="col-lg-8">
+						<select name="emitecertificado" id="emitecertificado" class="form-control">
+							@foreach ($emitecertificado_enum as $value => $emitecertificado)
+								<option value="{{ $value }}" {{ $emitecertificadoActual === (string) $value ? 'selected' : '' }}>{{ $emitecertificado }}</option>
+							@endforeach
+						</select>
+					</div>
+				</div>
+			@endif
 			<div class="form-group row">
-				<label for="zonavta" class="col-lg-4 col-form-label">Zona de venta</label>
+				<label for="zonavta" class="col-lg-4 control-label text-right pr-2">Zona de venta</label>
 				<div class="col-lg-8 tm-zonavta-campo">
 					<input type="hidden" id="zonavta_id_previa" name="zonavta_id_previa" value="{{old('zonavta_id', $data->zonavta_id ?? '')}}" >
 					<input type="hidden" id="desc_zonavta" name="desc_zonavta" value="{{old('desc_zonavta', $data->desc_zonavta ?? '')}}" >
@@ -103,34 +114,30 @@
 				<input type="hidden" name="subzonavta_id" id="subzonavta_id" class="form-control" value="{{old('subzonavta_id', $data->subzonavta_id ?? '')}}">
 			@else
 				<div class="form-group row">
-					<label for="subzonavta" class="col-lg-4 col-form-label">Subzona de venta</label>
-					<select name="subzonavta_id" id="subzonavta_id" data-placeholder="Subzona de venta" class="col-lg-5 form-control" data-fouc>
-						<option value="">-- Seleccionar Subzona --</option>
-						@foreach($subzonavta_query as $key => $value)
-							@if( (int) $value->id == (int) old('subzonavta_id', $data->subzonavta_id ?? ''))
-								<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-							@else
-								<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-							@endif
-						@endforeach
-					</select>
+					<label for="subzonavta_id" class="col-lg-4 control-label text-right pr-2">Subzona de venta</label>
+					<div class="col-lg-8">
+						<select name="subzonavta_id" id="subzonavta_id" data-placeholder="Subzona de venta" class="form-control" data-fouc>
+							<option value="">-- Seleccionar Subzona --</option>
+							@foreach($subzonavta_query as $key => $value)
+								<option value="{{ $value->id }}" {{ (int) $value->id === (int) old('subzonavta_id', $data->subzonavta_id ?? '') ? 'selected' : '' }}>{{ $value->nombre }}</option>
+							@endforeach
+						</select>
+					</div>
 				</div>
 			@endif
 			<div class="form-group row">
-				<label for="condicionventa" class="col-lg-4 col-form-label">Condici&oacute;n de venta</label>
-				<select name="condicionventa_id" id="condicionventa_id" data-placeholder="Vendedor" class="col-lg-5 form-control" data-fouc>
-					<option value="">-- Seleccionar Cond. Venta --</option>
-					@foreach($condicionventa_query as $key => $value)
-						@if( (int) $value->id == (int) old('condicionventa_id', $data->condicionventa_id ?? ''))
-							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-						@else
-							<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-						@endif
-					@endforeach
-				</select>
+				<label for="condicionventa_id" class="col-lg-4 control-label text-right pr-2">Condici&oacute;n de venta</label>
+				<div class="col-lg-8">
+					<select name="condicionventa_id" id="condicionventa_id" data-placeholder="Condición de venta" class="form-control" data-fouc>
+						<option value="">-- Seleccionar Cond. Venta --</option>
+						@foreach($condicionventa_query as $key => $value)
+							<option value="{{ $value->id }}" {{ (int) $value->id === (int) old('condicionventa_id', $data->condicionventa_id ?? '') ? 'selected' : '' }}>{{ $value->nombre }}</option>
+						@endforeach
+					</select>
+				</div>
 			</div>
 			<div class="form-group row tm-listaprecio-campo">
-				<label for="listaprecio_id" class="col-lg-4 col-form-label">Lista de precio</label>
+				<label for="listaprecio_id" class="col-lg-4 control-label text-right pr-2">Lista de precio</label>
 				<div class="col-lg-8">
 					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
 						<input type="hidden" class="listaprecio_id" name="listaprecio_id" id="listaprecio_id"
@@ -157,20 +164,18 @@
 			</div>
 			@if (config('app.empresa') == 'EL BIERZO')
 				<div class="form-group row">
-					<label for="abasto" class="col-lg-4 col-form-label">Abasto</label>
-					<select name="abasto_id" id="abasto_id" data-placeholder="Abasto" class="col-lg-5 form-control" data-fouc>
-						<option value="">-- Seleccionar abasto --</option>
-						@foreach($abasto_query as $key => $value)
-							@if( (int) $value->id == (int) old('abasto_id', $data->abasto_id ?? ''))
-								<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-							@else
-								<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-							@endif
-						@endforeach
-					</select>
+					<label for="abasto_id" class="col-lg-4 control-label text-right pr-2">Abasto</label>
+					<div class="col-lg-8">
+						<select name="abasto_id" id="abasto_id" data-placeholder="Abasto" class="form-control" data-fouc>
+							<option value="">-- Seleccionar abasto --</option>
+							@foreach($abasto_query as $key => $value)
+								<option value="{{ $value->id }}" {{ (int) $value->id === (int) old('abasto_id', $data->abasto_id ?? '') ? 'selected' : '' }}>{{ $value->nombre }}</option>
+							@endforeach
+						</select>
+					</div>
 				</div>
 				<div class="form-group row tm-distribuidor-campo">
-					<label for="distribuidor_id" class="col-lg-4 col-form-label">Distribuidor</label>
+					<label for="distribuidor_id" class="col-lg-4 control-label text-right pr-2">Distribuidor</label>
 					<div class="col-lg-8">
 						<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
 							<input type="hidden" class="distribuidor_id" name="distribuidor_id" id="distribuidor_id"
@@ -199,53 +204,49 @@
 		</div>
 		<div class="col-sm-6">
 			<div class="form-group row">
-				<label for="condicioniva_id" class="col-lg-4 col-form-label requerido">Condicion de iva.</label>
-				<select name="condicioniva_id" id="condicioniva_id" data-placeholder="Condicion de iva" class="col-lg-5 form-control" required data-fouc>
-					<option value="">-- Seleccionar --</option>
-					@foreach($condicioniva_query as $key => $value)
-						@if( (int) $value->id == (int) old('condicioniva_id', $data->condicioniva_id ?? ''))
-							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-						@else
-							<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-						@endif
-					@endforeach
-				</select>
-				<input type="hidden" id="condicioniva_query" value="{{$condicioniva_query}}">
-				<span class="input-group-text">#</span>
-				<input type="text" name="letra" id="letra" class="col-lg-1 form-control" value="" readonly>
+				<label for="condicioniva_id" class="col-lg-4 control-label text-right pr-2 requerido">Condici&oacute;n de IVA</label>
+				<div class="col-lg-8">
+					<div class="d-flex flex-nowrap align-items-center" style="gap: 4px;">
+						<select name="condicioniva_id" id="condicioniva_id" data-placeholder="Condicion de iva" class="form-control" required data-fouc style="min-width: 0; flex: 1 1 auto;">
+							<option value="">-- Seleccionar --</option>
+							@foreach($condicioniva_query as $key => $value)
+								<option value="{{ $value->id }}" {{ (int) $value->id === (int) old('condicioniva_id', $data->condicioniva_id ?? '') ? 'selected' : '' }}>{{ $value->nombre }}</option>
+							@endforeach
+						</select>
+						<input type="hidden" id="condicioniva_query" value="{{$condicioniva_query}}">
+						<span class="input-group-text">#</span>
+						<input type="text" name="letra" id="letra" class="form-control flex-shrink-0" style="width: 3.5rem;" value="" readonly>
+					</div>
+				</div>
 			</div>
 			<div class="form-group row">
-				@if ($tipoalta != 'P') 
-					<label for="condicioniibb_id" class="col-lg-4 col-form-label requerido">Condici&oacute;n IIBB</label>
+				@if ($tipoalta != 'P')
+					<label for="condicioniibb_id" class="col-lg-4 control-label text-right pr-2 requerido">Condici&oacute;n IIBB</label>
 				@else
-					<label for="condicioniibb_id" class="col-lg-4 col-form-label">Condici&oacute;n IIBB</label>
+					<label for="condicioniibb_id" class="col-lg-4 control-label text-right pr-2">Condici&oacute;n IIBB</label>
 				@endif
-				<select name="condicioniibb_id" class="col-lg-5 form-control" @if ($tipoalta != 'P') required @endif>
-					<option value="">-- Elija condici&oacute;n IIBB --</option>
-					@foreach($condicioniibb_query as $key => $value)
-						@if( (int) $value->id == (int) old('condicioniibb_id', $data->condicioniibb_id ?? ''))
-							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-						@else
-							<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-						@endif
-					@endforeach
-				</select>
+				<div class="col-lg-8">
+					<select name="condicioniibb_id" class="form-control" @if ($tipoalta != 'P') required @endif>
+						<option value="">-- Elija condici&oacute;n IIBB --</option>
+						@foreach($condicioniibb_query as $key => $value)
+							<option value="{{ $value->id }}" {{ (int) $value->id === (int) old('condicioniibb_id', $data->condicioniibb_id ?? '') ? 'selected' : '' }}>{{ $value->nombre }}</option>
+						@endforeach
+					</select>
+				</div>
 			</div>
 			<div class="form-group row">
-				<label for="tipoempresa_cliente_id" class="col-lg-4 col-form-label">Tipo de empresa</label>
-				<select name="tipoempresa_cliente_id" id="tipoempresa_cliente_id" data-placeholder="Tipo de empresa" class="col-lg-5 form-control" data-fouc>
-					<option value="">-- Seleccionar --</option>
-					@foreach($tipoempresa_cliente_query as $key => $value)
-						@if( (int) $value->id == (int) old('tipoempresa_cliente_id', $data->tipoempresa_cliente_id ?? ''))
-							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
-						@else
-							<option value="{{ $value->id }}">{{ $value->nombre }}</option>
-						@endif
-					@endforeach
-				</select>
+				<label for="tipoempresa_cliente_id" class="col-lg-4 control-label text-right pr-2">Tipo de empresa</label>
+				<div class="col-lg-8">
+					<select name="tipoempresa_cliente_id" id="tipoempresa_cliente_id" data-placeholder="Tipo de empresa" class="form-control" data-fouc>
+						<option value="">-- Seleccionar --</option>
+						@foreach($tipoempresa_cliente_query as $key => $value)
+							<option value="{{ $value->id }}" {{ (int) $value->id === (int) old('tipoempresa_cliente_id', $data->tipoempresa_cliente_id ?? '') ? 'selected' : '' }}>{{ $value->nombre }}</option>
+						@endforeach
+					</select>
+				</div>
 			</div>
 			<div class="form-group row tm-vendedor-campo">
-				<label for="vendedor_id" class="col-lg-4 col-form-label">Vendedor</label>
+				<label for="vendedor_id" class="col-lg-4 control-label text-right pr-2">Vendedor</label>
 				<div class="col-lg-8">
 					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
 						<input type="hidden" class="vendedor_id" name="vendedor_id" id="vendedor_id"
@@ -271,7 +272,7 @@
 				</div>
 			</div>
 			<div class="form-group row tm-cobrador-campo">
-				<label for="cobrador_id" class="col-lg-4 col-form-label">Cobrador</label>
+				<label for="cobrador_id" class="col-lg-4 control-label text-right pr-2">Cobrador</label>
 				<div class="col-lg-8">
 					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
 						<input type="hidden" class="cobrador_id" name="cobrador_id" id="cobrador_id"
@@ -297,7 +298,7 @@
 				</div>
 			</div>
 			<div class="form-group row tm-transporte-campo">
-				<label for="transporte" class="col-lg-4 col-form-label">Reparto</label>
+				<label for="transporte" class="col-lg-4 control-label text-right pr-2">Reparto</label>
 				<div class="col-lg-8">
 					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
 						<input type="hidden" class="transporte_id" name="transporte_id" id="transporte_id"
@@ -316,9 +317,9 @@
 			</div>
 			<div class="form-group row tm-cuentacontable-campo">
 				@if ($tipoalta != 'P')
-					<label for="cuentacontable_id" class="col-lg-4 col-form-label requerido">Cuenta contable</label>
+					<label for="cuentacontable_id" class="col-lg-4 control-label text-right pr-2 requerido">Cuenta contable</label>
 				@else
-					<label for="cuentacontable_id" class="col-lg-4 col-form-label">Cuenta contable</label>
+					<label for="cuentacontable_id" class="col-lg-4 control-label text-right pr-2">Cuenta contable</label>
 				@endif
 				@php
 					$cuentaContableId = old('cuentacontable_id', $data->cuentacontable_id ?? '');
@@ -362,22 +363,28 @@
 				</div>
 			</div>
 			@if (can('modificar-descuento-cliente', false))
+				@if (config('app.empresa') == 'EL BIERZO')
+					<div class="form-group row">
+						<label for="agregabonificacion" class="col-lg-4 control-label text-right pr-2">Agrega bonif.</label>
+						<div class="col-lg-8">
+							<select name="agregabonificacion" class="form-control">
+								@foreach ($agregabonificacion_enum as $value => $agregabonificacion)
+									<option value="{{ $agregabonificacion }}" {{ old('agregabonificacion', $data->agregabonificacion ?? 'Agrega Bonificacion') == $agregabonificacion ? 'selected' : '' }}>{{ $agregabonificacion }}</option>
+								@endforeach
+							</select>
+						</div>
+					</div>
+				@endif
 				<div class="form-group row">
-					@if (config('app.empresa') == 'EL BIERZO')
-						<label for="agregabonificacion" class="col-lg-3 col-form-label">Agrega Bonif.</label>
-						<select name="agregabonificacion" class="col-lg-4 form-control">
-							@foreach ($agregabonificacion_enum as $value => $agregabonificacion)
-								<option value="{{ $agregabonificacion }}"
-									@if (old('agregabonificacion', $data->agregabonificacion ?? 'Agrega Bonificacion') == $agregabonificacion) selected @endif
-									>{{ $agregabonificacion }}</option>
-							@endforeach
-						</select>			
-					@endif
-					<label for="descuento" class="col-lg-2 col-form-label">Descuento</label>
-					<span class="input-group-text"><i class="fas fa-percent"></i></span>
-					<div class="col-lg-2">
-						<input type="text" name="descuento" id="descuento" class="form-control" value="{{old('descuento', $data->descuento ?? '0')}}">
-					</div>								
+					<label for="descuento" class="col-lg-4 control-label text-right pr-2">Descuento</label>
+					<div class="col-lg-8">
+						<div class="input-group">
+							<div class="input-group-prepend">
+								<span class="input-group-text"><i class="fas fa-percent"></i></span>
+							</div>
+							<input type="text" name="descuento" id="descuento" class="form-control" value="{{old('descuento', $data->descuento ?? '0')}}">
+						</div>
+					</div>
 				</div>
 			@else
 				<input type="hidden" name="descuento" id="descuento" class="form-control" value="{{old('descuento', $data->descuento ?? '0')}}">
@@ -389,23 +396,25 @@
 				<input type="hidden" name="descuentoventa_id" id="descuentoventa_id" class="form-control" value="{{old('descuentoventa_id', $data->descuentoventa_id ?? '')}}">
 				@if (can('cargar-coeficiente-cliente', false))
 					<div class="form-group row">
-						<label for="coeficiente" class="col-lg-4 col-form-label">Coeficiente</label>
-						<select name="coeficiente_id" id="coeficiente_id" data-placeholder="Coeficiente" class="col-lg-5 form-control" data-fouc>
-							<option value="">-- Seleccionar Coeficiente --</option>
-							@foreach($coeficiente_query as $key => $value)
-								@if( (int) $value->id == (int) old('coeficiente_id', $data->coeficiente_id ?? ''))
-									<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-								@else
-									<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-								@endif
-							@endforeach
-						</select>
+						<label for="coeficiente_id" class="col-lg-4 control-label text-right pr-2">Coeficiente</label>
+						<div class="col-lg-8">
+							<select name="coeficiente_id" id="coeficiente_id" data-placeholder="Coeficiente" class="form-control" data-fouc>
+								<option value="">-- Seleccionar Coeficiente --</option>
+								@foreach($coeficiente_query as $key => $value)
+									<option value="{{ $value->id }}" {{ (int) $value->id === (int) old('coeficiente_id', $data->coeficiente_id ?? '') ? 'selected' : '' }}>{{ $value->nombre }}</option>
+								@endforeach
+							</select>
+						</div>
 					</div>
 					<div class="form-group row">
-						<label for="coeficienteextra" class="col-lg-3 col-form-label">Coeficiente Extra</label>
-						<span class="input-group-text"><i class="fas fa-percent"></i></span>
-						<div class="col-lg-3">
-							<input type="number" min="0" max="100" name="coeficienteextra" id="coeficienteextra" class="form-control" value="{{old('coeficienteextra', $data->coeficienteextra ?? '0')}}">
+						<label for="coeficienteextra" class="col-lg-4 control-label text-right pr-2">Coeficiente extra</label>
+						<div class="col-lg-8">
+							<div class="input-group">
+								<div class="input-group-prepend">
+									<span class="input-group-text"><i class="fas fa-percent"></i></span>
+								</div>
+								<input type="number" min="0" max="100" name="coeficienteextra" id="coeficienteextra" class="form-control" value="{{old('coeficienteextra', $data->coeficienteextra ?? '0')}}">
+							</div>
 						</div>
 					</div>
 				@else
@@ -416,22 +425,22 @@
 			@if (strtoupper(config('app.empresa')) == 'CALZADOS FERLI')
 				<div class="form-group row">
 					@if ($tipoalta != 'P')
-						<label for="cajaespecial" class="col-lg-4 col-form-label requerido">Caja especial</label>
+						<label for="cajaespecial" class="col-lg-4 control-label text-right pr-2 requerido">Caja especial</label>
 					@else
-						<label for="cajaespecial" class="col-lg-4 col-form-label">Caja especial</label>
+						<label for="cajaespecial" class="col-lg-4 control-label text-right pr-2">Caja especial</label>
 					@endif
-					<select name="cajaespecial" class="col-lg-3 form-control" @if ($tipoalta != 'P') required @endif>
-						<option value="">-- Elija si lleva caja especial --</option>
-						@foreach ($cajaespecial_enum as $value => $cajaespecial)
-							<option value="{{ $value }}"
-								@if (old('cajaespecial', $data->cajaespecial ?? '') == $value) selected @endif
-								>{{ $cajaespecial }}</option>
-						@endforeach
-					</select>
+					<div class="col-lg-8">
+						<select name="cajaespecial" class="form-control" @if ($tipoalta != 'P') required @endif>
+							<option value="">-- Elija si lleva caja especial --</option>
+							@foreach ($cajaespecial_enum as $value => $cajaespecial)
+								<option value="{{ $value }}" {{ old('cajaespecial', $data->cajaespecial ?? '') == $value ? 'selected' : '' }}>{{ $cajaespecial }}</option>
+							@endforeach
+						</select>
+					</div>
 				</div>
 			@endif
 			<div class="form-group row">
-				<label for="horarioatencion" class="col-lg-4 col-form-label">Horario de Atención</label>
+				<label for="horarioatencion" class="col-lg-4 control-label text-right pr-2">Horario de atenci&oacute;n</label>
 				<div class="col-lg-8">
 					<input type="text" name="horarioatencion" id="horarioatencion" class="form-control" value="{{old('horarioatencion', $data->horarioatencion ?? '')}}"/>
 				</div>
@@ -443,11 +452,11 @@
 			<div class="row">
 				<div class="col-sm-12">
 					<div class="form-group row align-items-center">
-						<label for="desdefecha_exclusionpercepcioniva" class="col-lg-2 col-form-label">Desde Fecha Excl. Perc. Iva</label>
+						<label for="desdefecha_exclusionpercepcioniva" class="col-lg-2 control-label text-right pr-2">Desde excl. perc. IVA</label>
 						<div class="col-lg-2">
 							<input type="date" name="desdefecha_exclusionpercepcioniva" id="desdefecha_exclusionpercepcioniva" class="form-control" value="{{substr(old('desdefecha_exclusionpercepcioniva', $data->desdefecha_exclusionpercepcioniva ?? ''),0,10)}}">
 						</div>
-						<label for="hastafecha_exclusionpercepcioniva" class="col-lg-2 col-form-label">Hasta Fecha Excl. Perc. Iva</label>
+						<label for="hastafecha_exclusionpercepcioniva" class="col-lg-2 control-label text-right pr-2">Hasta excl. perc. IVA</label>
 						<div class="col-lg-2">
 							<input type="date" name="hastafecha_exclusionpercepcioniva" id="hastafecha_exclusionpercepcioniva" class="form-control" value="{{substr(old('hastafecha_exclusionpercepcioniva', $data->hastafecha_exclusionpercepcioniva ?? ''),0,10)}}">
 						</div>

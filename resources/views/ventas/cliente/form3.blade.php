@@ -1,13 +1,13 @@
 <div id="tab-lugares-entrega" class="tab-pane fade card form3" role="tabpanel">
     <div class="card-body">
 		<div class="form-group row">
-			<label for="lugarentrega" class="col-lg-3 col-form-label">Lugar de Entrega</label>
+			<label for="lugarentrega" class="col-lg-3 control-label text-right pr-2">Lugar de entrega</label>
 			<div class="col-lg-6">
 				<input type="text" name="lugarentrega" id="lugarentrega" class="form-control" value="{{old('lugarentrega', $data->lugarentrega ?? '')}}"/>
 			</div>
 		</div>
-    	<table class="table" id="cuotas-table">
-    		<thead>
+    	<table class="table table-sm table-bordered" id="cuotas-table">
+    		<thead style="background:#85C1E9;color:#17202A;">
     			<tr>
     				<th style="width: 5%;">Cod.</th>
     				<th style="width: 18%;">Nombre</th>

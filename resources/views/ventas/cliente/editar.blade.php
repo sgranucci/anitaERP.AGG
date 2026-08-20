@@ -63,13 +63,21 @@
         @include('includes.mensaje')
         @include('ventas.cliente.partials.arca_impuestos_alerta')
         @include('ventas.cliente.partials.cuit_duplicado_alerta')
-        <div class="card card-danger">
-            <div class="card-header">
-                <h3 class="card-title">Editar Cliente </h3>&nbsp;ID:&nbsp;{{$data->id }}&nbsp;{{$data->nombre}}
-                
-                @if ($tipoalta == config('cliente.tipoalta')['PROVISORIO'][0])
-                    &nbsp; CLIENTE PROVISORIO
-                @endif
+        <div class="card card-primary">
+            <div class="card-header d-flex flex-wrap align-items-center">
+                <h3 class="card-title mb-0">
+                    Editar Cliente
+                    @if (!empty($data->nombre))
+                        <span class="font-weight-normal">· {{ $data->nombre }}</span>
+                    @endif
+                    @if (! \App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo())
+                        <small class="font-weight-normal">· ID {{ $data->id }}</small>
+                    @endif
+                    @if ($tipoalta == config('cliente.tipoalta')['PROVISORIO'][0])
+                        <span class="badge badge-warning ml-2">Provisorio</span>
+                    @endif
+                </h3>
+                @include('ventas.cliente.partials.codigo_barra')
 
                 <div class="card-tools">
                     @if (can('modifica-emite-nota-de-credito', false))
@@ -135,13 +143,14 @@
                     @include('ventas.cliente.partials.arca_padron_support', ['clienteId' => $data->id])
                     @include('ventas.cliente.partials.arca_apoc_validacion_support', ['clienteId' => $data->id])
                 </div>
-                <div class="card-footer" style="padding-top: 0">
-                	<div class="row">
-                   		<div class="col-lg-4">
-                        	<button type="submit" onclick="sub()" class="btn btn-success">Actualizar</button>
-                    	</div>
-            		</div>
-            	</div>
+                <div class="card-footer">
+                    <div class="row">
+                        <div class="col-lg-3"></div>
+                        <div class="col-lg-6">
+                            <button type="submit" onclick="sub()" class="btn botonsubmit btn-success">Actualizar</button>
+                        </div>
+                    </div>
+                </div>
             </form>
             @include('compras.proveedor.arca-cuit-entry-modal')
             @include('includes.compras.arca_apoc_validacion_modal')

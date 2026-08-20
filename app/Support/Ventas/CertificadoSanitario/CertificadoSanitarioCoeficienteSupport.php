@@ -28,7 +28,7 @@ final class CertificadoSanitarioCoeficienteSupport
             return true;
         }
 
-        return $valor === 'S' || strcasecmp($valor, 'Emite Certificado') === 0;
+        return Cliente::normalizarEmiteCertificado($valor) === 'S';
     }
 
     /**

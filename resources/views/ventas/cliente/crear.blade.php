@@ -52,9 +52,15 @@ $( "#botonform0" ).click(function() {
         @include('includes.mensaje')
         @include('ventas.cliente.partials.arca_impuestos_alerta')
         @include('ventas.cliente.partials.cuit_duplicado_alerta')
-        <div class="card card-danger">
-            <div class="card-header">
-                <h3 class="card-title">Crear Cliente @if ($tipoalta == 'P') Provisorio @endif</h3>
+        <div class="card card-primary">
+            <div class="card-header d-flex flex-wrap align-items-center">
+                <h3 class="card-title mb-0">
+                    Crear Cliente
+                    @if ($tipoalta == 'P')
+                        Provisorio
+                    @endif
+                </h3>
+                @include('ventas.cliente.partials.codigo_barra')
                 <div class="card-tools">
                     @if (isset($urlOrigen))
                         <a href="javascript:history.back()" class="btn btn-outline-info btn-sm">
@@ -90,14 +96,15 @@ $( "#botonform0" ).click(function() {
                     @include('ventas.cliente.partials.arca_padron_support')
                 </div>
                 <div class="card-footer">
-                	<div class="row">
-                   		<div class="col-lg-4">
-							<button type="button" id="botonform0" class="btn btn-success">
-						   	<i class="fa fa-save"></i> Guardar
-							</button>
-                    	</div>
-            		</div>
-            	</div>
+                    <div class="row">
+                        <div class="col-lg-3"></div>
+                        <div class="col-lg-6">
+                            <button type="button" id="botonform0" class="btn botonsubmit btn-success">
+                                <i class="fa fa-save"></i> Guardar
+                            </button>
+                        </div>
+                    </div>
+                </div>
             </form>
             @include('compras.proveedor.arca-cuit-entry-modal')
         </div>

@@ -19,6 +19,9 @@
 @if (config('app.empresa') == 'INTERFORMING')
 <script src="{{ asset('assets/pages/scripts/stock/sifab_maestro/consulta.js') }}?v=20260727" type="text/javascript"></script>
 @endif
+@if (config('app.empresa') == 'EL BIERZO')
+<script src="{{ asset('assets/pages/scripts/stock/codigosenasa/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/codigosenasa/consulta.js')) ?: time() }}" type="text/javascript"></script>
+@endif
 @if((string)($producto->numeroparte ?? '0') === '1')
 <script src="{{ asset('assets/pages/scripts/stock/articulo/partes_unicas.js') }}?v=20260608" type="text/javascript"></script>
 @endif
@@ -191,6 +194,9 @@ window.consultaFormulaArticuloConfig = {
 @endif
 @if (config('app.empresa') == 'INTERFORMING')
 @include('includes.stock.modalconsultasifabmaestro')
+@endif
+@if (config('app.empresa') == 'EL BIERZO')
+@include('includes.stock.modalconsultacodigosenasa')
 @endif
 @if (\App\Support\Stock\MovimientosArticuloDepositoSupport::puedeConsultar())
 @include('includes.stock.modal_kardex_deposito')

@@ -164,14 +164,35 @@
         consultarTitularCuit($fila);
     }
 
+    function esTeclaEnter(e) {
+        return e && (e.key === 'Enter' || e.which === 13 || e.keyCode === 13);
+    }
+
+    function enfocarInput($input) {
+        if (!$input || !$input.length) {
+            return;
+        }
+
+        $input.trigger('focus');
+        if ($input[0] && typeof $input[0].select === 'function') {
+            $input[0].select();
+        }
+    }
+
     function focoCodigoReparto($fila) {
         var $input = ($fila && $fila.length)
             ? $fila.find('.input-codigo-reparto').first()
             : $tablaRepartos.find('tr.fila-reparto:first .input-codigo-reparto');
 
-        if ($input.length) {
-            $input.trigger('focus');
-        }
+        enfocarInput($input);
+    }
+
+    function focoDominioCamion($fila) {
+        enfocarInput($fila.find('.input-patente-reparto').first());
+    }
+
+    function focoCuitChofer($fila) {
+        enfocarInput($fila.find('.input-cuit-reparto').first());
     }
 
     function filaRepartoVacia() {
@@ -237,7 +258,7 @@
 
     function aplicarTransporteEnFila($fila, data) {
         if (!data || !data.id) {
-            return;
+            return false;
         }
 
         if (repartoDuplicadoEnGrilla(data.id, data.codigo || '', $fila)) {
@@ -250,7 +271,7 @@
             $fila.find('.input-titular-cuit').val('');
             marcarEstadoCuit($fila, 'vacio');
             focoCodigoReparto($fila);
-            return;
+            return false;
         }
 
         $fila.find('.input-transporte-id').val(data.id);
@@ -262,16 +283,28 @@
         $cuit.val(data.cuit_chofer || '');
         formatearInputCuit($cuit[0]);
         consultarTitularCuit($fila);
+
+        return true;
     }
 
-    function resolverTransportePorCodigo($fila, codigo) {
+    function resolverTransportePorCodigo($fila, codigo, onDone) {
+        var listo = function (ok) {
+            if (typeof onDone === 'function') {
+                onDone($fila, !!ok);
+            }
+        };
+
         if (!codigo) {
+            listo(false);
             return;
         }
 
         $.getJSON(carpetaBase + '/ventas/leertransporte/' + encodeURIComponent(codigo))
             .done(function (data) {
-                aplicarTransporteEnFila($fila, data);
+                listo(aplicarTransporteEnFila($fila, data));
+            })
+            .fail(function () {
+                listo(false);
             });
     }
 
@@ -392,7 +425,7 @@
         focoCodigoReparto($destino);
     });
 
-    $('#btn-limpiar-repartos').on('click', function () {
+    $(document).on('click', '.btn-limpiar-sesion-cot', function () {
         limpiarGrillaRepartos();
     });
 
@@ -407,32 +440,56 @@
     });
 
     $(document).on('keydown', '.input-cuit-reparto', function (e) {
-        if (e.which === 13) {
-            e.preventDefault();
-            consultarTitularCuit($(this).closest('tr'));
+        if (!esTeclaEnter(e)) {
+            return;
         }
+
+        e.preventDefault();
+        consultarTitularCuit($(this).closest('tr'));
     });
 
     $(document).on('change', '.input-codigo-reparto', function () {
+        var $fila = $(this).closest('tr');
+        if ($fila.data('cotResolviendoEnter')) {
+            return;
+        }
+
+        resolverTransportePorCodigo($fila, ($(this).val() || '').trim());
+    });
+
+    $(document).on('keydown', '.input-codigo-reparto', function (e) {
+        if (!esTeclaEnter(e)) {
+            return;
+        }
+
+        e.preventDefault();
+        var $fila = $(this).closest('tr');
         var codigo = ($(this).val() || '').trim();
-        resolverTransportePorCodigo($(this).closest('tr'), codigo);
+
+        if (codigo === '') {
+            focoDominioCamion($fila);
+            return;
+        }
+
+        $fila.data('cotResolviendoEnter', true);
+        resolverTransportePorCodigo($fila, codigo, function ($f, ok) {
+            $f.data('cotResolviendoEnter', false);
+            if (ok) {
+                focoDominioCamion($f);
+                return;
+            }
+
+            focoCodigoReparto($f);
+        });
     });
 
-    $(document).on('keypress', '.input-codigo-reparto', function (e) {
-        if (e.which === 13) {
-            e.preventDefault();
-            var $fila = $(this).closest('tr');
-            var codigo = ($(this).val() || '').trim();
-            resolverTransportePorCodigo($fila, codigo);
-            $fila.find('.input-patente-reparto').focus();
+    $(document).on('keydown', '.input-patente-reparto', function (e) {
+        if (!esTeclaEnter(e)) {
+            return;
         }
-    });
 
-    $(document).on('keypress', '.input-patente-reparto', function (e) {
-        if (e.which === 13) {
-            e.preventDefault();
-            $(this).closest('tr').find('.input-cuit-reparto').focus();
-        }
+        e.preventDefault();
+        focoCuitChofer($(this).closest('tr'));
     });
 
     $(document).on('click', '.btn-consulta-reparto-cot', function () {
@@ -464,8 +521,11 @@
             return;
         }
 
-        resolverTransportePorCodigo($filaRepartoActiva, codigo);
-        $filaRepartoActiva.find('.input-patente-reparto').focus();
+        resolverTransportePorCodigo($filaRepartoActiva, codigo, function ($f, ok) {
+            if (ok) {
+                focoDominioCamion($f);
+            }
+        });
         $filaRepartoActiva = null;
     });
 
@@ -486,7 +546,7 @@
 
     $('#check-todos-remitos').on('change', function () {
         var marcado = $(this).is(':checked');
-        $('#tabla-remitos-cot tbody input[type=checkbox]').prop('checked', marcado);
+        $('#tabla-remitos-cot tbody .check-remito-cot-pendiente').prop('checked', marcado);
     });
 
     $('#btn-procesar-cot').on('click', function (e) {
