@@ -217,6 +217,11 @@
                     </div>
                     @endif
                 </div>
+                <div class="alert alert-warning py-2 mb-2 d-none" id="ms_aviso_formula_insumo" role="alert">
+                    <strong>Depósito destino Fórmulas:</strong> cada artículo debe tener SKU alternativo (insumo).
+                    Si falta, <strong>no se graba</strong> y se listan acá los SKU.
+                    <ul class="mb-0 mt-1 pl-3" id="ms_aviso_formula_insumo_lista"></ul>
+                </div>
                 <div class="form-group row mb-2" id="ms_panel_centrocosto" style="{{ $tipoActualManejaCont ? '' : 'display:none;' }}">
                     <label for="centrocosto_destino_id" class="col-lg-4 col-form-label requerido">Centro costo destino</label>
                     <div class="col-lg-8">

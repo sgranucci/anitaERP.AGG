@@ -313,11 +313,7 @@ class RecepcionProveedorDepositoSupport
         if ($esFormula) {
             $insumo = self::resolverArticuloInsumo($articulo, $empresaId);
             if ($insumo === null) {
-                throw new \RuntimeException(
-                    'Artículo '.($articulo->sku ?? $articulo->id)
-                    .': depósito fórmulas requiere insumo vía SKU alternativo ('
-                    .trim((string) ($articulo->skualternativo ?? '')).'), no encontrado en el maestro.'
-                );
+                throw new \RuntimeException(DepositoFormulaInsumoFaltanteSupport::mensajeArticulo($articulo));
             }
 
             return [

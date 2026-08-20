@@ -299,10 +299,10 @@ class MovimientoStockController extends Controller
 		} catch (\Illuminate\Validation\ValidationException $e) {
             $msg = collect($e->errors())->flatten()->first() ?: $e->getMessage();
 
-            return redirect()->back()->withInput()->with('mensaje', $msg);
+            return redirect()->back()->withInput()->with('mensaje-error', $msg);
         } catch (\Exception $e)
 		{
-			return redirect()->back()->withInput()->with('mensaje', $e->getMessage());
+			return redirect()->back()->withInput()->with('mensaje-error', $e->getMessage());
 		}
 
         return redirect($urlIndex)->with('mensaje', $mensaje ?: 'Movimiento de stock creado con éxito');

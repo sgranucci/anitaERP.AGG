@@ -119,6 +119,19 @@
 			});
 		}
 
+		if (!flError && typeof window.msArticulosSinInsumoFormula === 'function') {
+			var faltanInsumo = window.msArticulosSinInsumoFormula();
+			if (faltanInsumo.length) {
+				alert(
+					'No se puede grabar la transferencia al depósito Fórmulas.\n'
+					+ 'Falta SKU alternativo (insumo) en:\n\n'
+					+ faltanInsumo.join('\n')
+					+ '\n\nCargue el SKU alt./insumo en el maestro de artículos.'
+				);
+				flError = true;
+			}
+		}
+
 		if (!flError)
 			$('#formgeneral').submit();
 	}

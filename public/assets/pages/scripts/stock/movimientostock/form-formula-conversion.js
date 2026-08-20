@@ -142,6 +142,44 @@
         return contextoFormulaConversion().activo;
     }
 
+    function articulosSinInsumoFormula() {
+        var list = [];
+        $('#tabla-items-movimientostock tbody tr.item-pedido').each(function () {
+            var $tr = $(this);
+            var $hint = $tr.find('.ms-conversion-formula.text-danger').filter(function () {
+                return !$(this).hasClass('d-none') && $.trim($(this).text()) !== '';
+            });
+            if (!$hint.length) {
+                return;
+            }
+            var sku = $.trim(String($tr.find('.codigoarticulo').val() || ''));
+            var texto = $.trim($hint.first().text());
+            list.push(sku ? (sku + ': ' + texto) : texto);
+        });
+        return list;
+    }
+
+    function actualizarAvisoFormulaInsumo() {
+        var $aviso = $('#ms_aviso_formula_insumo');
+        var $lista = $('#ms_aviso_formula_insumo_lista');
+        if (!$aviso.length) {
+            return;
+        }
+        var visible = conversionTransferenciaFormulaActiva();
+        $aviso.toggleClass('d-none', !visible);
+        if (!visible) {
+            $lista.empty();
+            return;
+        }
+        var faltan = articulosSinInsumoFormula();
+        $lista.empty();
+        faltan.forEach(function (linea) {
+            $lista.append($('<li></li>').text(linea));
+        });
+        $aviso.toggleClass('alert-danger', faltan.length > 0);
+        $aviso.toggleClass('alert-warning', faltan.length === 0);
+    }
+
     function actualizarVisibilidadColumnasConversion() {
         var visible = conversionTransferenciaFormulaActiva();
         var $tabla = $('#tabla-items-movimientostock');
@@ -151,6 +189,7 @@
                 limpiarConversionFila($(this));
             });
         }
+        actualizarAvisoFormulaInsumo();
     }
 
     function limpiarColumnasDestinoFila($tr) {
@@ -269,7 +308,8 @@
 
             if (!data.ok) {
                 limpiarColumnasDestinoFila($tr);
-                mostrarConversionFila($tr, data.mensaje || 'Sin conversión', true);
+                mostrarConversionFila($tr, data.mensaje || 'Falta SKU alternativo (insumo)', true);
+                actualizarAvisoFormulaInsumo();
                 return;
             }
 
@@ -284,11 +324,13 @@
 
             aplicarColumnasDestinoFila($tr, data, cantidadReal);
             mostrarConversionFila($tr, '', false);
+            actualizarAvisoFormulaInsumo();
         }).fail(function (xhr) {
             var msg = (xhr.responseJSON && xhr.responseJSON.mensaje)
                 ? xhr.responseJSON.mensaje
                 : 'No se pudo calcular la conversión.';
             mostrarConversionFila($tr, msg, true);
+            actualizarAvisoFormulaInsumo();
         });
     }
 
@@ -308,6 +350,37 @@
     }
 
     window.msRefrescarConversionFormulaFilas = refrescarTodasLasFilas;
+    window.msArticulosSinInsumoFormula = articulosSinInsumoFormula;
+
+    function activarInterceptorGrabadoSinInsumo() {
+        var form = document.getElementById('formgeneral');
+        if (!form) {
+            return;
+        }
+
+        form.addEventListener('submit', function (e) {
+            if (!conversionTransferenciaFormulaActiva()) {
+                return;
+            }
+            var faltan = articulosSinInsumoFormula();
+            if (!faltan.length) {
+                return;
+            }
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            actualizarAvisoFormulaInsumo();
+            alert(
+                'No se puede grabar la transferencia al depósito Fórmulas.\n'
+                + 'Falta SKU alternativo (insumo) en:\n\n'
+                + faltan.join('\n')
+                + '\n\nCargue el SKU alt./insumo en el maestro de artículos.'
+            );
+            var $aviso = $('#ms_aviso_formula_insumo');
+            if ($aviso.length && $aviso[0].scrollIntoView) {
+                $aviso[0].scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }, true);
+    }
 
     $(document).on('input change', '#tabla-items-movimientostock .cantidad-stock, #tabla-items-movimientostock .cantidad', function () {
         programarPreviewFila($(this).closest('tr'));
@@ -350,6 +423,7 @@
             pendingPickCallback = null;
         });
 
+        activarInterceptorGrabadoSinInsumo();
         refrescarTodasLasFilas();
     });
 }(jQuery));

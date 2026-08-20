@@ -15,7 +15,9 @@ use App\Services\Configuracion\ModuloAvisoService;
 use App\Services\Stock\Surmar\MovimientoStockSurmarEtiquetaService;
 use App\Support\Contable\AsientoReversoSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Stock\DepositoFormulaInsumoFaltanteSupport;
 use App\Support\Stock\DepmaeControlStockSupport;
+use App\Support\Stock\RecepcionProveedorDepositoSupport;
 use App\Support\Configuracion\OperacionPublicaTokenSupport;
 use App\Support\Stock\MovimientoStockSalidaSaldoSupport;
 use App\Support\Stock\RecuentoBloqueoSalidaDepositoSupport;
@@ -734,6 +736,7 @@ class TransferenciaMercaderiaService
     {
         $resueltas = [];
         $item = 0;
+        $faltantesInsumo = [];
 
         foreach ($lineas as $linea) {
             $articuloId = (int) ($linea['articulo_id'] ?? 0);
@@ -746,12 +749,22 @@ class TransferenciaMercaderiaService
             if ($destinoBienUso) {
                 $conv = TransferenciaMercaderiaLineaSupport::resolverLineaParaBienUso($articulo, $cantidad);
             } else {
-                $conv = TransferenciaMercaderiaLineaSupport::resolverLinea(
-                    $articulo,
-                    $depositoEntrada,
-                    $cantidad,
-                    $empresaId > 0 ? $empresaId : null
-                );
+                try {
+                    $conv = TransferenciaMercaderiaLineaSupport::resolverLinea(
+                        $articulo,
+                        $depositoEntrada,
+                        $cantidad,
+                        $empresaId > 0 ? $empresaId : null
+                    );
+                } catch (\RuntimeException $e) {
+                    if (RecepcionProveedorDepositoSupport::esDepositoFormula($depositoEntrada)
+                        && RecepcionProveedorDepositoSupport::resolverArticuloInsumo($articulo, $empresaId > 0 ? $empresaId : null) === null) {
+                        $faltantesInsumo[] = DepositoFormulaInsumoFaltanteSupport::mensajeArticulo($articulo);
+                        continue;
+                    }
+
+                    throw $e;
+                }
             }
             $item++;
             $numeroparte = trim((string) ($linea['numeroparte'] ?? ''));
@@ -759,6 +772,10 @@ class TransferenciaMercaderiaService
                 'item' => $item,
                 'numeroparte' => $numeroparte !== '' ? $numeroparte : null,
             ]);
+        }
+
+        if ($faltantesInsumo !== []) {
+            throw new \RuntimeException(DepositoFormulaInsumoFaltanteSupport::mensajeListado($faltantesInsumo));
         }
 
         if ($resueltas === []) {
