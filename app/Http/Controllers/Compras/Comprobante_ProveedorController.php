@@ -292,7 +292,10 @@ class Comprobante_ProveedorController extends Controller
     {
         if (! can('crear-comprobante-proveedor', false)
             && ! can('editar-comprobante-proveedor', false)
-            && ! can('actualizar-comprobante-proveedor', false)) {
+            && ! can('actualizar-comprobante-proveedor', false)
+            && ! can('aplicar-cuentacorriente-proveedor', false)
+            && ! can('crear-pagoproveedor', false)
+            && ! can('editar-pagoproveedor', false)) {
             return response()->json(['message' => 'Sin permisos'], 403);
         }
 
@@ -889,6 +892,23 @@ class Comprobante_ProveedorController extends Controller
             }
         }
 
+        $politicaValidacionAbono = [];
+        $validacionAbono = null;
+        $urlValidacionAbono = null;
+        $validacionAbonoCompleta = true;
+        $mostrarContabilizarAbono = true;
+        if ($data && (int) ($data->id ?? 0) > 0 && $data->ordencompras) {
+            $svcVal = app(\App\Services\Compras\ContratoValidacionAbonoService::class);
+            $politicaValidacionAbono = $svcVal->politicaDeOc($data->ordencompras);
+            if (\App\Support\Compras\ContratoValidacionAbonoPoliticaSupport::cortaFactura($politicaValidacionAbono)) {
+                $validacionAbono = $svcVal->asegurarParaComprobante($data);
+                $validacionAbono?->loadMissing('usuarios');
+                $urlValidacionAbono = route('editar_validacion_abono_comprobante', ['id' => $data->id]);
+                $validacionAbonoCompleta = $validacionAbono?->estaCompleta() ?? false;
+                $mostrarContabilizarAbono = $validacionAbonoCompleta;
+            }
+        }
+
         return array_merge($prefill, [
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'tipotransaccion_compra_query' => $this->tipotransaccionCompraRepository->all('*'),
@@ -929,6 +949,12 @@ class Comprobante_ProveedorController extends Controller
             'cotizacion_dia' => $cotizacionMeta['cotizacion_dia'],
             'cotizacion_origen' => $cotizacionMeta['cotizacion_origen'],
             'cotizacion_factura' => $cotizacionMeta['cotizacion_factura'],
+            'politicaValidacionAbono' => $politicaValidacionAbono,
+            'validacionAbono' => $validacionAbono,
+            'urlValidacionAbono' => $urlValidacionAbono,
+            'accionValidacionAbono' => 'contabilizar la factura',
+            'validacionAbonoCompleta' => $validacionAbonoCompleta,
+            'mostrarContabilizarAbono' => $mostrarContabilizarAbono,
         ]);
     }
 

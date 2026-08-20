@@ -137,11 +137,15 @@ class ComprobanteProveedorPersistenciaService
         $this->archivoRepository->sincronizarDesdeRequest($request, (int) $comprobante->id);
         $this->marcarOrdencompraComprobanteCargado($comprobante);
 
-        return $comprobante->fresh([
+        $comprobante = $comprobante->fresh([
             'comprobante_proveedor_conceptos',
             'comprobante_proveedor_cuotas',
             'comprobante_proveedor_archivos',
+            'ordencompras',
         ]);
+        app(ContratoValidacionAbonoService::class)->asegurarParaComprobante($comprobante);
+
+        return $comprobante;
     }
 
     public function actualizarDesdeRequest(Request $request, int $id): Comprobante_Proveedor
@@ -245,11 +249,15 @@ class ComprobanteProveedorPersistenciaService
 
         $this->marcarOrdencompraComprobanteCargado($comprobante);
 
-        return $comprobante->fresh([
+        $comprobante = $comprobante->fresh([
             'comprobante_proveedor_conceptos',
             'comprobante_proveedor_cuotas',
             'comprobante_proveedor_archivos',
+            'ordencompras',
         ]);
+        app(ContratoValidacionAbonoService::class)->asegurarParaComprobante($comprobante);
+
+        return $comprobante;
     }
 
     public function generarBorradorDesdePrecarga(int $precargaId): Comprobante_Proveedor

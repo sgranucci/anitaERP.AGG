@@ -2,12 +2,15 @@
 
 namespace App\Services\Compras;
 
+use App\Models\Caja\Tipotransaccion_Caja;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Concepto;
 use App\Models\Compras\Comprobante_Proveedor_Cuota;
 use App\Models\Compras\Comprobante_Proveedor_Estado;
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Compras\Condicionpago;
+use App\Models\Compras\Pagoproveedor;
+use App\Models\Compras\Pagoproveedor_Estado;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
@@ -17,6 +20,7 @@ use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportAplmovpSuppor
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportBridgeReader;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportExistenciaSupport;
+use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportOpaSupport;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
@@ -43,6 +47,9 @@ class ComprobanteProveedorImportarDesdeAnitaService
 
     /** @var array<int, int|null> */
     private array $cacheConcepto = [];
+
+    /** @var array<string, int|null> */
+    private array $cacheTipoCaja = [];
 
     public function __construct(
         private readonly ComprobanteProveedorAnitaImportBridgeReader $reader = new ComprobanteProveedorAnitaImportBridgeReader,
@@ -160,6 +167,24 @@ class ComprobanteProveedorImportarDesdeAnitaService
         $pares = ComprobanteProveedorAnitaImportAplmovpSupport::paresDesdeFilas($aplmovps, $signoPorTipo);
         $stats['aplicaciones_anita'] = count($pares);
 
+        $adelantosPlan = $this->prepararAdelantos(
+            $promovs,
+            (int) $proveedor->id,
+            (string) $proveedor->codigo,
+            $empresaCodigo
+        );
+        $stats['adelantos_anita'] = count(array_filter(
+            $promovs,
+            static fn (array $p) => ComprobanteProveedorAnitaImportOpaSupport::esTipoAdelanto((string) ($p['prov_tipo'] ?? ''))
+        ));
+        $stats['adelantos_a_crear'] = count($adelantosPlan['a_crear']);
+        $stats['adelantos_omitidos_ya_en_erp'] = $adelantosPlan['omitidos'];
+        $stats['muestra_adelantos'] = array_map(
+            static fn (array $i) => $i['resumen'],
+            array_slice($adelantosPlan['a_crear'], 0, 20)
+        );
+        $stats['errores'] = array_merge($stats['errores'], $adelantosPlan['errores']);
+
         if ($dryRun) {
             $stats['aplicaciones'] = count($pares);
             $stats['aplicaciones_pago_sintetico'] = count(array_filter(
@@ -171,7 +196,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
             return $stats;
         }
 
-        return DB::transaction(function () use ($plan, $pares, $stats, $proveedor, $usuarioId, $signoPorTipo) {
+        return DB::transaction(function () use ($plan, $pares, $adelantosPlan, $stats, $proveedor, $usuarioId, $signoPorTipo) {
             $ccPorClave = $this->indexarCcExistente(
                 (int) $proveedor->id,
                 (string) $proveedor->codigo
@@ -185,6 +210,13 @@ class ComprobanteProveedorImportarDesdeAnitaService
                         $ccPorClave[$clave][] = $cc;
                     }
                 }
+            }
+
+            foreach ($adelantosPlan['a_crear'] as $adelanto) {
+                $creado = $this->persistirAdelanto($adelanto, $proveedor, $usuarioId);
+                $stats['adelantos_creados']++;
+                $stats['cc']++;
+                $ccPorClave[$adelanto['clave']][] = $creado;
             }
 
             $apl = $this->persistirAplicaciones($pares, $ccPorClave, (int) $proveedor->id);
@@ -451,6 +483,142 @@ class ComprobanteProveedorImportarDesdeAnitaService
     }
 
     /**
+     * @param  list<array<string, mixed>>  $promovs
+     * @return array{a_crear: list<array<string, mixed>>, omitidos: int, errores: list<string>}
+     */
+    private function prepararAdelantos(
+        array $promovs,
+        int $proveedorId,
+        string $proveedorCodigo,
+        ?int $empresaCodigoFiltro,
+    ): array {
+        $existentes = $this->indexarPagosExistentes($proveedorId, $proveedorCodigo);
+        $aCrear = [];
+        $omitidos = 0;
+        $errores = [];
+
+        foreach (ComprobanteProveedorAnitaImportOpaSupport::adelantosPendientes($promovs) as $adelanto) {
+            if ($empresaCodigoFiltro && $adelanto['empresa_codigo'] > 0
+                && $adelanto['empresa_codigo'] !== $empresaCodigoFiltro) {
+                continue;
+            }
+            $empresaId = $this->resolverEmpresaId($adelanto['empresa_codigo']);
+            if (! $empresaId) {
+                $errores[] = 'Empresa Anita '.$adelanto['empresa_codigo'].' no mapeada. '.$adelanto['etiqueta'];
+                continue;
+            }
+            if (isset($existentes[$adelanto['clave'].'|'.$empresaId])) {
+                $omitidos++;
+                continue;
+            }
+
+            $aCrear[] = [
+                'clave' => $adelanto['clave'],
+                'tipo' => $adelanto['tipo'],
+                'letra' => $adelanto['letra'],
+                'sucursal' => $adelanto['sucursal'],
+                'numero' => $adelanto['numero'],
+                'fecha' => $adelanto['fecha'],
+                'fechavencimiento' => $adelanto['fechavencimiento'] ?: $adelanto['fecha'],
+                'pendiente' => $adelanto['pendiente'],
+                'moneda_id' => RecepcionProveedorAnitaImportSupport::monedaIdDesdeCodigoAnita($adelanto['moneda_anita']),
+                'cotizacion' => $adelanto['cotizacion'],
+                'empresa_id' => $empresaId,
+                'resumen' => [
+                    'etiqueta' => $adelanto['etiqueta'],
+                    'fecha' => $adelanto['fecha'],
+                    'total' => $adelanto['pendiente'],
+                    'empresa_id' => $empresaId,
+                    'moneda_anita' => $adelanto['moneda_anita'],
+                ],
+            ];
+        }
+
+        return [
+            'a_crear' => $aCrear,
+            'omitidos' => $omitidos,
+            'errores' => $errores,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $adelanto
+     * @return array{id:int, saldo:float, moneda_id:int, empresa_id:int, comprobante_id:?int}
+     */
+    private function persistirAdelanto(array $adelanto, Proveedor $proveedor, int $usuarioId): array
+    {
+        $monto = round((float) $adelanto['pendiente'], 4);
+        $pago = Pagoproveedor::query()->create([
+            'empresa_id' => $adelanto['empresa_id'],
+            'tipotransaccion_caja_id' => $this->resolverTipoCajaId($adelanto['tipo']),
+            'tipocomprobante' => $adelanto['tipo'],
+            'letra' => $adelanto['letra'],
+            'sucursal' => $adelanto['sucursal'],
+            'numerotransaccion' => (string) $adelanto['numero'],
+            'fecha' => $adelanto['fecha'],
+            'proveedor_id' => $proveedor->id,
+            'detalle' => 'Importado desde Anita — OPA sin aplicar',
+            'estado' => 'CONFIRMADA',
+            'monto' => $monto,
+            'cotizacion' => $adelanto['cotizacion'],
+            'moneda_id' => $adelanto['moneda_id'],
+            'modo_cotizacion' => 'dia',
+            'usuario_id' => $usuarioId,
+        ]);
+
+        Pagoproveedor_Estado::query()->create([
+            'pagoproveedor_id' => $pago->id,
+            'fecha' => now(),
+            'estado' => 'CONFIRMADA',
+            'usuario_id' => $usuarioId,
+            'observacion' => 'Importado desde Anita (OPA sin aplicar)',
+        ]);
+
+        $cc = Proveedor_Cuentacorriente::query()->create([
+            'fecha' => $adelanto['fecha'],
+            'fechavencimiento' => $adelanto['fechavencimiento'],
+            'proveedor_id' => $proveedor->id,
+            'total' => -$monto,
+            'moneda_id' => $adelanto['moneda_id'],
+            'cotizacion' => $adelanto['cotizacion'],
+            'empresa_id' => $adelanto['empresa_id'],
+            'pagoproveedor_id' => $pago->id,
+        ]);
+
+        return [
+            'id' => (int) $cc->id,
+            'saldo' => $monto,
+            'moneda_id' => (int) $adelanto['moneda_id'],
+            'empresa_id' => (int) $adelanto['empresa_id'],
+            'comprobante_id' => null,
+        ];
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function indexarPagosExistentes(int $proveedorId, string $proveedorCodigo): array
+    {
+        $out = [];
+        $pagos = Pagoproveedor::query()
+            ->where('proveedor_id', $proveedorId)
+            ->get(['id', 'empresa_id', 'tipocomprobante', 'letra', 'sucursal', 'numerotransaccion']);
+
+        foreach ($pagos as $pago) {
+            $clave = ComprobanteProveedorAnitaImportClaveSupport::clave(
+                $proveedorCodigo,
+                (string) $pago->tipocomprobante,
+                (string) $pago->letra,
+                (int) $pago->sucursal,
+                (int) $pago->numerotransaccion,
+            );
+            $out[$clave.'|'.(int) $pago->empresa_id] = (int) $pago->id;
+        }
+
+        return $out;
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $pares
      * @param  array<string, list<array{id:int, saldo:float, moneda_id:int, empresa_id:int, comprobante_id:?int}>>  $ccPorClave
      * @return array{creadas:int, pagos_sinteticos:int, omitidas:int, errores: list<string>}
@@ -463,13 +631,23 @@ class ComprobanteProveedorImportarDesdeAnitaService
         $errores = [];
 
         foreach ($pares as $par) {
-            $deuda = $this->tomarCc($ccPorClave, $par['deuda']['clave'], (float) $par['monto']);
+            $monto = round((float) $par['monto'], 4);
+            $idsDeuda = array_map(
+                static fn (array $cc) => (int) $cc['id'],
+                $ccPorClave[$par['deuda']['clave']] ?? []
+            );
+            if ($this->aplicacionYaExistePorEtiquetaEnCcs($idsDeuda, (string) $par['etiqueta_credito'], $monto)) {
+                $omitidas++;
+                continue;
+            }
+
+            $deuda = $this->peekCc($ccPorClave, $par['deuda']['clave'], $monto);
             if ($deuda === null) {
                 $omitidas++;
                 continue;
             }
 
-            $credito = $this->tomarCc($ccPorClave, $par['credito']['clave'], (float) $par['monto']);
+            $credito = $this->peekCc($ccPorClave, $par['credito']['clave'], $monto);
             if ($credito === null && $par['credito_es_pago']) {
                 $credito = $this->crearCcPagoSintetico($par, $deuda, $proveedorId);
                 $ccPorClave[$par['credito']['clave']][] = $credito;
@@ -480,12 +658,15 @@ class ComprobanteProveedorImportarDesdeAnitaService
                 continue;
             }
 
-            if ($this->aplicacionYaExiste((int) $deuda['id'], (int) $credito['id'], (float) $par['monto'])) {
+            if ($this->aplicacionYaExiste((int) $deuda['id'], (int) $credito['id'], $monto)) {
                 $omitidas++;
                 continue;
             }
 
-            $monto = round((float) $par['monto'], 4);
+            $this->consumirCc($ccPorClave, $par['deuda']['clave'], (int) ($deuda['_idx'] ?? 0), $monto);
+            if (isset($credito['_idx'])) {
+                $this->consumirCc($ccPorClave, $par['credito']['clave'], (int) $credito['_idx'], $monto);
+            }
             Proveedor_Cuentacorriente_Aplicacion::query()->create([
                 'fecha' => $par['fecha'],
                 'proveedor_cuentacorriente_id' => $deuda['id'],
@@ -521,9 +702,9 @@ class ComprobanteProveedorImportarDesdeAnitaService
 
     /**
      * @param  array<string, list<array{id:int, saldo:float, moneda_id:int, empresa_id:int, comprobante_id:?int}>>  $ccPorClave
-     * @return array{id:int, saldo:float, moneda_id:int, empresa_id:int, comprobante_id:?int}|null
+     * @return array{id:int, saldo:float, moneda_id:int, empresa_id:int, comprobante_id:?int, _idx:int}|null
      */
-    private function tomarCc(array &$ccPorClave, string $clave, float $monto): ?array
+    private function peekCc(array $ccPorClave, string $clave, float $monto): ?array
     {
         if (! isset($ccPorClave[$clave]) || $ccPorClave[$clave] === []) {
             return null;
@@ -531,13 +712,43 @@ class ComprobanteProveedorImportarDesdeAnitaService
 
         foreach ($ccPorClave[$clave] as $i => $cc) {
             if ($cc['saldo'] + 0.0001 >= $monto) {
-                $ccPorClave[$clave][$i]['saldo'] = round($cc['saldo'] - $monto, 4);
+                $cc['_idx'] = (int) $i;
 
                 return $cc;
             }
         }
 
-        return $ccPorClave[$clave][0];
+        $cc = $ccPorClave[$clave][0];
+        $cc['_idx'] = 0;
+
+        return $cc;
+    }
+
+    /**
+     * @param  array<string, list<array{id:int, saldo:float, moneda_id:int, empresa_id:int, comprobante_id:?int}>>  $ccPorClave
+     */
+    private function consumirCc(array &$ccPorClave, string $clave, int $idx, float $monto): void
+    {
+        if (! isset($ccPorClave[$clave][$idx])) {
+            return;
+        }
+        $ccPorClave[$clave][$idx]['saldo'] = round($ccPorClave[$clave][$idx]['saldo'] - $monto, 4);
+    }
+
+    /**
+     * @param  array<string, list<array{id:int, saldo:float, moneda_id:int, empresa_id:int, comprobante_id:?int}>>  $ccPorClave
+     * @return array{id:int, saldo:float, moneda_id:int, empresa_id:int, comprobante_id:?int}|null
+     */
+    private function tomarCc(array &$ccPorClave, string $clave, float $monto): ?array
+    {
+        $cc = $this->peekCc($ccPorClave, $clave, $monto);
+        if ($cc === null) {
+            return null;
+        }
+        $this->consumirCc($ccPorClave, $clave, (int) $cc['_idx'], $monto);
+        unset($cc['_idx']);
+
+        return $cc;
     }
 
     /**
@@ -578,40 +789,77 @@ class ComprobanteProveedorImportarDesdeAnitaService
     }
 
     /**
+     * @param  list<int>  $cuentacorrienteIds
+     */
+    private function aplicacionYaExistePorEtiquetaEnCcs(array $cuentacorrienteIds, string $etiquetaCredito, float $monto): bool
+    {
+        $etiqueta = trim($etiquetaCredito);
+        $ids = array_values(array_filter($cuentacorrienteIds, static fn (int $id) => $id > 0));
+        if ($etiqueta === '' || $ids === []) {
+            return false;
+        }
+
+        return Proveedor_Cuentacorriente_Aplicacion::query()
+            ->whereIn('proveedor_cuentacorriente_id', $ids)
+            ->where('comprobanteaplicado', $etiqueta)
+            ->whereRaw('ABS(total) BETWEEN ? AND ?', [round($monto - 0.01, 4), round($monto + 0.01, 4)])
+            ->exists();
+    }
+
+    /**
      * @return array<string, list<array{id:int, saldo:float, moneda_id:int, empresa_id:int, comprobante_id:?int}>>
      */
     private function indexarCcExistente(int $proveedorId, string $proveedorCodigo): array
     {
         $filas = Proveedor_Cuentacorriente::query()
-            ->with('comprobante_proveedores.tipotransaccion_compras')
+            ->with(['comprobante_proveedores.tipotransaccion_compras', 'pagoproveedores'])
             ->where('proveedor_id', $proveedorId)
-            ->whereNotNull('comprobante_proveedor_id')
+            ->where(function ($q): void {
+                $q->whereNotNull('comprobante_proveedor_id')
+                    ->orWhereNotNull('pagoproveedor_id');
+            })
             ->get();
 
         $out = [];
         foreach ($filas as $cc) {
             $comp = $cc->comprobante_proveedores;
-            if ($comp === null) {
-                continue;
+            if ($comp !== null) {
+                $tipo = (string) ($comp->tipotransaccion_compras?->abreviatura ?? '');
+                if ($tipo !== '') {
+                    $clave = ComprobanteProveedorAnitaImportClaveSupport::clave(
+                        $proveedorCodigo,
+                        $tipo,
+                        (string) $comp->letra,
+                        (int) $comp->sucursal,
+                        (int) $comp->numerocomprobante,
+                    );
+                    $out[$clave][] = [
+                        'id' => (int) $cc->id,
+                        'saldo' => abs((float) $cc->total),
+                        'moneda_id' => (int) $cc->moneda_id,
+                        'empresa_id' => (int) $cc->empresa_id,
+                        'comprobante_id' => (int) $comp->id,
+                    ];
+                }
             }
-            $tipo = (string) ($comp->tipotransaccion_compras?->abreviatura ?? '');
-            if ($tipo === '') {
-                continue;
+
+            $pago = $cc->pagoproveedores;
+            if ($pago !== null) {
+                $clavePago = ComprobanteProveedorAnitaImportClaveSupport::clave(
+                    $proveedorCodigo,
+                    (string) $pago->tipocomprobante,
+                    (string) $pago->letra,
+                    (int) $pago->sucursal,
+                    (int) $pago->numerotransaccion,
+                );
+                $out[$clavePago][] = [
+                    'id' => (int) $cc->id,
+                    'saldo' => abs((float) $cc->total),
+                    'moneda_id' => (int) $cc->moneda_id,
+                    'empresa_id' => (int) $cc->empresa_id,
+                    'comprobante_id' => null,
+                ];
             }
-            $clave = ComprobanteProveedorAnitaImportClaveSupport::clave(
-                $proveedorCodigo,
-                $tipo,
-                (string) $comp->letra,
-                (int) $comp->sucursal,
-                (int) $comp->numerocomprobante,
-            );
-            $out[$clave][] = [
-                'id' => (int) $cc->id,
-                'saldo' => abs((float) $cc->total),
-                'moneda_id' => (int) $cc->moneda_id,
-                'empresa_id' => (int) $cc->empresa_id,
-                'comprobante_id' => (int) $comp->id,
-            ];
         }
 
         return $out;
@@ -642,6 +890,27 @@ class ComprobanteProveedorImportarDesdeAnitaService
         }
 
         return $this->cacheEmpresa[$key];
+    }
+
+    private function resolverTipoCajaId(string $abrev): ?int
+    {
+        $abrev = ComprobanteProveedorAnitaImportClaveSupport::tipo($abrev);
+        if ($abrev === '') {
+            return null;
+        }
+        if (! array_key_exists($abrev, $this->cacheTipoCaja)) {
+            $id = (int) (Tipotransaccion_Caja::query()
+                ->where('abreviatura', $abrev)
+                ->value('id') ?: 0);
+            if ($id <= 0 && $abrev !== 'OPP') {
+                $id = (int) (Tipotransaccion_Caja::query()
+                    ->where('abreviatura', 'OPP')
+                    ->value('id') ?: 0);
+            }
+            $this->cacheTipoCaja[$abrev] = $id > 0 ? $id : null;
+        }
+
+        return $this->cacheTipoCaja[$abrev];
     }
 
     private function resolverTipo(string $abrev): ?Tipotransaccion_Compra
@@ -729,8 +998,13 @@ class ComprobanteProveedorImportarDesdeAnitaService
             'aplicaciones' => 0,
             'aplicaciones_pago_sintetico' => 0,
             'aplicaciones_omitidas' => 0,
+            'adelantos_anita' => 0,
+            'adelantos_a_crear' => 0,
+            'adelantos_creados' => 0,
+            'adelantos_omitidos_ya_en_erp' => 0,
             'errores' => [],
             'muestra' => [],
+            'muestra_adelantos' => [],
             'modo' => 'dry-run',
         ];
     }

@@ -28,6 +28,7 @@ use App\Services\Configuracion\OcArbolTriggerDispatcherService;
 use App\Support\Compras\OrdencompraCondicionPagoDefaultSupport;
 use App\Support\Compras\OrdencompraComprobanteEstados;
 use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
+use App\Support\Compras\ContratoPeriodoServicioSupport;
 use App\Support\Stock\SurmarSupport;
 use App\Support\Compras\OrdencompraCondicionesContratacionGenerator;
 use App\Support\Compras\OrdencompraDescuentoSupport;
@@ -954,6 +955,11 @@ class OrdencompraGestionService
                 'contrato_requiere_recepcion' => true,
                 'contrato_imputacion_contable' => null,
                 'contrato_cuentacontable_id' => null,
+                'contrato_periodo_servicio' => null,
+                'contrato_requiere_validacion_abono' => false,
+                'contrato_validacion_plantilla_id' => null,
+                'contrato_exige_ingresos' => false,
+                'contrato_minimo_ingresos' => null,
             ];
         }
 
@@ -989,6 +995,20 @@ class OrdencompraGestionService
             'contrato_requiere_recepcion' => $requiereRecepcion,
             'contrato_imputacion_contable' => $requiereRecepcion ? null : $imputacion,
             'contrato_cuentacontable_id' => $cuentaId > 0 ? $cuentaId : null,
+            'contrato_periodo_servicio' => ContratoPeriodoServicioSupport::normalizar(
+                $payload['contrato_periodo_servicio'] ?? null
+            ),
+            'contrato_requiere_validacion_abono' => filter_var(
+                $payload['contrato_requiere_validacion_abono'] ?? false,
+                FILTER_VALIDATE_BOOLEAN
+            ) || filter_var($payload['contrato_exige_ingresos'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            'contrato_validacion_plantilla_id' => ! empty($payload['contrato_validacion_plantilla_id'])
+                ? (int) $payload['contrato_validacion_plantilla_id']
+                : null,
+            'contrato_exige_ingresos' => filter_var($payload['contrato_exige_ingresos'] ?? false, FILTER_VALIDATE_BOOLEAN),
+            'contrato_minimo_ingresos' => ! empty($payload['contrato_minimo_ingresos'])
+                ? max(1, (int) $payload['contrato_minimo_ingresos'])
+                : 1,
         ];
     }
 
@@ -1069,6 +1089,11 @@ class OrdencompraGestionService
             'contrato_requiere_recepcion' => 'nullable|boolean',
             'contrato_imputacion_contable' => 'nullable|string|in:articulos,manual',
             'contrato_cuentacontable_id' => 'nullable|integer|exists:cuentacontable,id',
+            'contrato_periodo_servicio' => 'nullable|string|in:mes_vencido,mismo_mes',
+            'contrato_requiere_validacion_abono' => 'nullable|boolean',
+            'contrato_validacion_plantilla_id' => 'nullable|integer|exists:validacion_abono_plantilla,id',
+            'contrato_exige_ingresos' => 'nullable|boolean',
+            'contrato_minimo_ingresos' => 'nullable|integer|min:1|max:99',
         ];
     }
 

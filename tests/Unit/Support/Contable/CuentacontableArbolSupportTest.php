@@ -60,6 +60,34 @@ class CuentacontableArbolSupportTest extends TestCase
         $this->assertCount(1, $podado[0]['hijos'][0]['hijos']);
     }
 
+    public function test_parent_id_manual_pisa_el_prefijo_del_codigo(): void
+    {
+        $cuentas = $this->ramaCaja();
+        $cuentas[2]->parent_id = 1;
+
+        $arbol = CuentacontableArbolSupport::armar($cuentas, false);
+        $hijosCajaBancos = array_column($arbol[0]['hijos'], 'nombre');
+
+        $this->assertContains('CAJA PESOS', $hijosCajaBancos);
+        $this->assertContains('CAJA', $hijosCajaBancos);
+    }
+
+    public function test_aplanar_trae_ancestros_y_hijos_para_el_preview(): void
+    {
+        $plano = CuentacontableArbolSupport::aplanar(
+            CuentacontableArbolSupport::armar($this->ramaCaja(), false)
+        );
+        $pesos = collect($plano)->firstWhere('nombre', 'CAJA PESOS');
+
+        $this->assertNotNull($pesos);
+        $this->assertSame(['CAJA Y BANCOS', 'CAJA'], array_column($pesos['ancestros'], 'nombre'));
+        $this->assertSame([], $pesos['hijo_ids']);
+
+        $caja = collect($plano)->firstWhere('nombre', 'CAJA');
+        $this->assertContains(3, $caja['hijo_ids']);
+        $this->assertContains(4, $caja['hijo_ids']);
+    }
+
     public function test_payload_gemelo_solo_para_titulo(): void
     {
         $this->assertNull(CuentacontableGemeloSupport::payloadTotalizadora([

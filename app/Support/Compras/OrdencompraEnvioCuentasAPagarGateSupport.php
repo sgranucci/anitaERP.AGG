@@ -62,6 +62,12 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             $errores[] = 'Debe existir al menos una recepción COM confirmada con provisión contable (sin facturar) para esta orden de compra.';
         }
 
+        $erroresContrato = app(\App\Services\Compras\ContratoValidacionAbonoService::class)
+            ->erroresEnvioCuentasAPagar($oc);
+        foreach ($erroresContrato as $errorContrato) {
+            $errores[] = $errorContrato;
+        }
+
         return [
             'ok' => $errores === [],
             'errores' => $errores,

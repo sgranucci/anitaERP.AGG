@@ -1,5 +1,6 @@
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
+    use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
     use App\Support\Ventas\ClienteCuentacorrientePreferenciasUsuario;
 
     foreach ($cuentacorriente as $row) {
@@ -9,12 +10,22 @@
     $totalFilas = is_countable($cuentacorriente) ? count($cuentacorriente) : 0;
     $modoDeuda = ($modoVista ?? ClienteCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE)
         === ClienteCuentacorrientePreferenciasUsuario::MODO_DEUDA;
+    $mostrarSaldoCorrido = (bool) ($mostrarSaldoCorrido ?? false);
+    $saldosPorMoneda = $saldosPorMoneda ?? [];
+    $equivalentePesos = $equivalentePesos ?? [];
+    $expresion = CuentacorrienteSaldosPorMoneda::resolverExpresion($expresion ?? null);
+    $enPesos = CuentacorrienteSaldosPorMoneda::esExpresionPesos($expresion);
+    $abrevLocal = CuentacorrienteSaldosPorMoneda::abreviaturaLocal();
     $tituloReporte = $modoDeuda
         ? 'Deuda de clientes (facturas impagas)'
         : 'Cuenta corriente de clientes';
     $subtitulo = 'Cliente: '.($nombrecliente ?? '')
-        .' · Saldo cuenta corriente: '.number_format($saldoCuentaCorriente ?? 0, 2, ',', '.')
-        .' · Total deuda: '.number_format($totalDeuda ?? 0, 2, ',', '.');
+        .' · Saldo: '.CuentacorrienteSaldosPorMoneda::formatearResumen($saldosPorMoneda, 'saldo_cc')
+        .' · Deuda: '.CuentacorrienteSaldosPorMoneda::formatearResumen($saldosPorMoneda, 'deuda')
+        .' · Equiv. '.$abrevLocal.' (TC compr.): '.CuentacorrienteSaldosPorMoneda::formatearMonto((float) ($equivalentePesos['saldo_cc'] ?? 0), $abrevLocal);
+    if ($enPesos) {
+        $subtitulo .= ' · Importes expresados en '.$abrevLocal;
+    }
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -74,6 +85,8 @@
             'filas' => $cuentacorriente,
             'modoVista' => $modoVista ?? ClienteCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE,
             'saldoAnterior' => 0,
+            'mostrarSaldoCorrido' => $mostrarSaldoCorrido,
+            'expresion' => $expresion,
             'para_pdf' => true,
         ])
     </table>

@@ -40,6 +40,7 @@ use App\Services\Configuracion\ModuloAvisoService;
 use App\Services\Compras\OrdencompraRecepcionCumplimientoService;
 use App\Services\Compras\OrdencompraRecepcionPrecioSyncService;
 use App\Services\Ai\AiDecisionLogger;
+use App\Services\Compras\ContratoValidacionAbonoService;
 use App\Models\Ai\AiDecision;
 use App\Support\Stock\RecepcionProveedorOcr\RecepcionProveedorOcrAiHashSupport;
 use Auth;
@@ -61,6 +62,7 @@ class RecepcionProveedorService
         private readonly OrdencompraRecepcionCumplimientoService $ordencompraRecepcionCumplimientoService,
         private readonly RecepcionProveedorPrecioPendienteService $precioPendienteService,
         private readonly AiDecisionLogger $aiDecisionLogger,
+        private readonly ContratoValidacionAbonoService $contratoValidacionAbonoService,
     ) {
     }
 
@@ -180,7 +182,10 @@ class RecepcionProveedorService
             RecepcionProveedorArticuloProveedorSyncSupport::sincronizarDesdeRecepcion($recepcion, $items);
             $this->resolverDecisionIaOcr($data, $recepcion, $items);
 
-            return $this->precioPendienteService->evaluarTrasGuardarBorrador($recepcion, true);
+            $recepcion = $this->precioPendienteService->evaluarTrasGuardarBorrador($recepcion, true);
+            $this->contratoValidacionAbonoService->asegurarParaRecepcion($recepcion);
+
+            return $recepcion;
         });
     }
 
@@ -260,7 +265,10 @@ class RecepcionProveedorService
 
             $this->resolverDecisionIaOcr($data, $recepcion, $items);
 
-            return $this->precioPendienteService->evaluarTrasGuardarBorrador($recepcion->fresh(), true);
+            $recepcion = $this->precioPendienteService->evaluarTrasGuardarBorrador($recepcion->fresh(), true);
+            $this->contratoValidacionAbonoService->asegurarParaRecepcion($recepcion);
+
+            return $recepcion;
         });
     }
 
@@ -299,6 +307,7 @@ class RecepcionProveedorService
         $pre = $this->repository->find($id);
         $this->precioPendienteService->assertPuedeConfirmar($pre);
         RecepcionProveedorImpuestoInternoSupport::assertImpuestoInternoCumplido($pre);
+        $this->contratoValidacionAbonoService->assertRecepcionConfirmable($pre);
         if ($pre->recepcion_proveedor_articulos->isEmpty()) {
             throw new \RuntimeException('La recepción no tiene ítems.');
         }

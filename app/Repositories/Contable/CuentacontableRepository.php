@@ -104,6 +104,14 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 		return $cuentacontable;
     }
 
+    public function updateJerarquia(array $data, $id)
+    {
+        $this->model->findOrFail($id)->update($data);
+        $this->actualizarAnitaMaestro($data, $data['codigo']);
+
+        return $this->model->findOrFail($id);
+    }
+
     public function delete($id)
     {
     	$cuentacontable = $this->model->find($id);
@@ -520,42 +528,9 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 	}
 
 	public function actualizarAnita($request, $codigo) {
+        $this->actualizarAnitaMaestro($request, $codigo);
+
         $apiAnita = new ApiAnita();
-
-        Self::cambia_para_grabar($request, $codigo, $tipocuenta, $ajustable, $manejaccosto, $cuenta,
-                            $cuentacontable_difcambio);
-
-        $data = array( 'acc' => 'update', 
-                        'sistema' => 'contab',
-						'tabla' => $this->tableAnita[0], 
-            			'valores' => "
-                            ctam_empresa = '".$request['empresa_id']."', 
-                            ctam_cuenta = '".$codigo."', 
-                            ctam_tipo = '".$tipocuenta."', 
-                            ctam_desc = '".$request['nombre']."', 
-                            ctam_nivel = '".$request['nivel']."', 
-                            ctam_ajustable = '".$ajustable."', 
-                            ctam_rubro ='".$request['rubrocontable_id']."', 
-                            ctam_fl_ccosto = '".$manejaccosto."', 
-                            ctam_cuenta_alfa = '".$cuenta."',
-                            ctam_aju_mon_ext = '".$request['ajustamonedaextranjera']."',
-                            ctam_cta_dif_cbio = '".$cuentacontable_difcambio."'",
-						'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$codigo.
-                                            "' AND ctam_empresa='".$request['empresa_id']."' ");
-        $apiAnita->apiCallEscritura($data);
-
-        $apiAnitaConc = new ApiAnita();
-
-		$data = array( 'acc' => 'update', 
-                        'sistema' => 'contab',
-						'tabla' => $this->tableAnita[1], 
-            			'valores' => "
-                            ctaco_empresa = '".$request['empresa_id']."', 
-                            ctaco_cuenta = '".$codigo."', 
-                            ctaco_concepto = '".$request['conceptogasto_id']."' ",
-						'whereArmado' => " WHERE ctaco_cuenta = '".$codigo.
-                                            "' AND ctaco_empresa='".$request['empresa_id']."' ");
-        $apiAnitaConc->apiCallEscritura($data);
 
         // Borra centros de costo
         $data = array( 'acc' => 'delete', 'tabla' => $this->tableAnita[2], 
@@ -567,6 +542,49 @@ class CuentacontableRepository implements CuentacontableRepositoryInterface
 		// Graba centros de costo
 		Self::grabaCentrocosto($codigo, $request);
 	}
+
+    /**
+     * Sincroniza nombre, nivel, tipo y rubro a Anita. No toca ccosvalid ni parent_id.
+     */
+    private function actualizarAnitaMaestro($request, $codigo): void
+    {
+        $apiAnita = new ApiAnita();
+
+        Self::cambia_para_grabar($request, $codigo, $tipocuenta, $ajustable, $manejaccosto, $cuenta,
+                            $cuentacontable_difcambio);
+
+        $data = array( 'acc' => 'update',
+                        'sistema' => 'contab',
+                        'tabla' => $this->tableAnita[0],
+                        'valores' => "
+                            ctam_empresa = '".$request['empresa_id']."',
+                            ctam_cuenta = '".$codigo."',
+                            ctam_tipo = '".$tipocuenta."',
+                            ctam_desc = '".$request['nombre']."',
+                            ctam_nivel = '".$request['nivel']."',
+                            ctam_ajustable = '".$ajustable."',
+                            ctam_rubro ='".$request['rubrocontable_id']."',
+                            ctam_fl_ccosto = '".$manejaccosto."',
+                            ctam_cuenta_alfa = '".$cuenta."',
+                            ctam_aju_mon_ext = '".$request['ajustamonedaextranjera']."',
+                            ctam_cta_dif_cbio = '".$cuentacontable_difcambio."'",
+                        'whereArmado' => " WHERE ".$this->keyFieldAnita." = '".$codigo.
+                                            "' AND ctam_empresa='".$request['empresa_id']."' ");
+        $apiAnita->apiCallEscritura($data);
+
+        $apiAnitaConc = new ApiAnita();
+
+        $data = array( 'acc' => 'update',
+                        'sistema' => 'contab',
+                        'tabla' => $this->tableAnita[1],
+                        'valores' => "
+                            ctaco_empresa = '".$request['empresa_id']."',
+                            ctaco_cuenta = '".$codigo."',
+                            ctaco_concepto = '".$request['conceptogasto_id']."' ",
+                        'whereArmado' => " WHERE ctaco_cuenta = '".$codigo.
+                                            "' AND ctaco_empresa='".$request['empresa_id']."' ");
+        $apiAnitaConc->apiCallEscritura($data);
+    }
 
 	private function grabaCentrocosto($codigo, $request)
 	{

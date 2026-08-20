@@ -23,6 +23,13 @@ class JuegoUifDesdeAnitaResolver
         'RULETA',
     ];
 
+    /** Anita usa "posición electrónica" para slots y ruletas; el canónico UIF es SLOTS (RULETA se define por bien_uso). */
+    private const ALIAS_A_SLOTS = [
+        'POSICION ELECTRONICA',
+        'POS ELECTRONICA',
+        'POSICION ELECT',
+    ];
+
     /** @var array<string, string> Valores Anita / alias → nombre canónico en juego_uif (tabla local) */
     private const ALIAS_ANITA = [
         'BINGO' => 'BINGO',
@@ -30,17 +37,18 @@ class JuegoUifDesdeAnitaResolver
         'SLOT' => 'SLOTS',
         'SLOTS' => 'SLOTS',
         'OTRO' => 'SLOTS',
-        'POS ELECTRONICA' => 'POSICION ELECTRONICA',
-        'POSICION ELECT' => 'POSICION ELECTRONICA',
+        'POS ELECTRONICA' => 'SLOTS',
+        'POSICION ELECT' => 'SLOTS',
+        'POSICION ELECTRONICA' => 'SLOTS',
         'P' => 'SLOTS',
     ];
 
     /** @var array<string, string> Fragmentos (más específicos primero) → nombre canónico en juego_uif */
     private const FRAGMENTOS = [
-        'POSICION ELECTRONICA' => 'POSICION ELECTRONICA',
+        'POSICION ELECTRONICA' => 'SLOTS',
         'COMPRA TARJETA' => 'COMPRA TARJETA',
-        'POS ELECTRONICA' => 'POSICION ELECTRONICA',
-        'POSICION ELECT' => 'POSICION ELECTRONICA',
+        'POS ELECTRONICA' => 'SLOTS',
+        'POSICION ELECT' => 'SLOTS',
         'BINGO' => 'BINGO',
         'RULETA' => 'RULETA',
         'SLOTS' => 'SLOTS',
@@ -97,6 +105,8 @@ class JuegoUifDesdeAnitaResolver
                 $juegoId ??= self::idPorDefecto();
             }
         }
+
+        $juegoId = self::remapearPosicionElectronicaASlots($juegoId);
 
         if ($aplicarOverrideRuleta) {
             return self::aplicarOverrideRuletaSiCorresponde($juegoId, $posicion, $salaOEmpresaId);
@@ -188,6 +198,17 @@ class JuegoUifDesdeAnitaResolver
         $primerId = reset($juegos);
 
         return $primerId !== false ? (int) $primerId : 1;
+    }
+
+    private static function remapearPosicionElectronicaASlots(int $juegoUifId): int
+    {
+        foreach (self::juegosPorNombre() as $nombre => $id) {
+            if ((int) $id === $juegoUifId && in_array($nombre, self::ALIAS_A_SLOTS, true)) {
+                return self::idDesdeNombreCanonico('SLOTS', self::juegosPorNombre());
+            }
+        }
+
+        return $juegoUifId;
     }
 
     private static function debePreservarJuego(int $juegoUifId): bool

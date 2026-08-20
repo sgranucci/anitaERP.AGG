@@ -52,6 +52,13 @@
                 @include('caja.flash.partials.filtros_listado')
             </form>
             @include('caja.flash.partials.filtros_externos')
+            @if (! empty($puedeValidarFlash))
+                <div class="px-3 pt-2 mb-0 small text-muted">
+                    <i class="fa fa-check"></i>
+                    Use el tilde de la columna <strong>Val.</strong> para validar cada flash.
+                    Pueden marcarlo Marcela Barrios y administradores. El tilde verde se replica en Contable.
+                </div>
+            @endif
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_flash_caja',
@@ -61,6 +68,7 @@
                     <thead>
                         <tr style="background:#85C1E9;color:#17202A;">
                             <th class="width90">Fecha</th>
+                            <th class="width90 text-center" title="Validación del flash. mbarrios, sergio y administrador.">Validar</th>
                             <th class="width20">ID</th>
                             <th>Empresa</th>
                             <th class="width100 text-right">AyB</th>
@@ -71,7 +79,6 @@
                             <th class="width100 text-right">Win OL ruletas</th>
                             <th class="width100 text-right">Gaming</th>
                             <th class="width100 text-right">Revenues</th>
-                            <th class="width40 text-center" title="Validado">Val.</th>
                             <th class="width120">Comentario</th>
                             <th class="width180 text-nowrap" data-orderable="false"></th>
                         </tr>
@@ -80,6 +87,13 @@
                         @foreach ($datas as $data)
                         <tr>
                             <td>{{ $data->fecha?->format('d/m/Y') }}</td>
+                            <td class="text-center text-nowrap">
+                                @include('caja.flash.partials.boton_validar', [
+                                    'flash' => $data,
+                                    'puedeValidarFlash' => $puedeValidarFlash ?? \App\Support\Caja\Flash\FlashCajaValidacionSupport::usuarioPuedeValidar(),
+                                    'retornoListadoQuery' => $retornoListadoQuery ?? [],
+                                ])
+                            </td>
                             <td>{{ $data->id }}</td>
                             <td>{{ $data->empresa->nombre ?? '' }}</td>
                             <td class="text-right">{{ number_format((float) $data->ayb, 2, ',', '.') }}</td>
@@ -93,16 +107,8 @@
                                 {{ number_format($data->total_revenues, 2, ',', '.') }}
                                 @include('caja.flash.partials.tilde_validado', ['validado' => $data->estaValidado()])
                             </td>
-                            <td class="text-center">
-                                @include('caja.flash.partials.tilde_validado', ['validado' => $data->estaValidado()])
-                            </td>
                             <td>{{ $data->comentario }}</td>
                             <td class="text-nowrap">
-                                @include('caja.flash.partials.boton_validar', [
-                                    'flash' => $data,
-                                    'puedeValidarFlash' => $puedeValidarFlash ?? false,
-                                    'retornoListadoQuery' => $retornoListadoQuery ?? [],
-                                ])
                                 @if (can('exportar-reporte-flash-caja', false))
                                     <a href="{{ route('flash_caja_reporte', ['id' => $data->id, 'formato' => 'PDF']) }}" class="btn-accion-tabla tooltipsC" title="Reporte PDF" target="_blank" rel="noopener">
                                         <i class="fa fa-file-pdf-o text-danger"></i>

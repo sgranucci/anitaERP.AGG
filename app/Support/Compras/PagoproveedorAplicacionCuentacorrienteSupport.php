@@ -73,10 +73,23 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
             }
 
             $deuda = Proveedor_Cuentacorriente::query()->with('comprobante_proveedores')->findOrFail($ccId);
-            $monedaId = (int) ($apl['moneda_id'] ?? $deuda->moneda_id ?? 1);
-            $cotizacion = (float) ($apl['cotizacion'] ?? $deuda->cotizacion ?? 1);
-            $cotAplicada = isset($apl['cotizacion_aplicada']) ? (float) $apl['cotizacion_aplicada'] : null;
+            $monedaId = (int) ($deuda->moneda_id ?? $apl['moneda_id'] ?? 1);
+            $cotizacion = (float) ($deuda->cotizacion ?? $apl['cotizacion'] ?? 1);
+            $cotAplicada = isset($apl['cotizacion_aplicada']) && (float) $apl['cotizacion_aplicada'] > 0
+                ? (float) $apl['cotizacion_aplicada']
+                : $cotizacion;
             $dc = isset($apl['diferencia_cambio']) ? round((float) $apl['diferencia_cambio'], 4) : null;
+            if ($dc === null) {
+                $liq = PagoproveedorLiquidacionSupport::calcular(
+                    $monto,
+                    $monedaId,
+                    $cotizacion,
+                    (int) ($pago->moneda_id ?? 1),
+                    $cotAplicada
+                );
+                $dc = $liq['dc'];
+                $cotAplicada = $liq['cotizacion_aplicada'];
+            }
 
             $codigoComp = self::codigoComprobante($deuda);
 
@@ -118,21 +131,6 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
                 'pagoproveedor_id' => $pago->id,
             ]);
 
-            $ccDcId = null;
-            if ($dc !== null && abs($dc) >= 0.01) {
-                $ccDc = Proveedor_Cuentacorriente::query()->create([
-                    'fecha' => $fecha,
-                    'fechavencimiento' => $fecha,
-                    'proveedor_id' => $pago->proveedor_id,
-                    'total' => $dc,
-                    'moneda_id' => 1,
-                    'cotizacion' => 1,
-                    'empresa_id' => $pago->empresa_id,
-                    'pagoproveedor_id' => $pago->id,
-                ]);
-                $ccDcId = $ccDc->id;
-            }
-
             Pagoproveedor_Comprobante::query()->create([
                 'pagoproveedor_id' => $pago->id,
                 'proveedor_cuentacorriente_id' => $deuda->id,
@@ -140,8 +138,8 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
                 'cotizacion' => $cotizacion,
                 'moneda_id' => $monedaId,
                 'cotizacion_aplicada' => $cotAplicada,
-                'diferencia_cambio' => $dc,
-                'proveedor_cuentacorriente_dc_id' => $ccDcId,
+                'diferencia_cambio' => $dc ?? 0,
+                'proveedor_cuentacorriente_dc_id' => null,
             ]);
         }
     }

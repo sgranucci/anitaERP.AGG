@@ -16,7 +16,9 @@
         creditoActivo: 0,
         autoActivo: true,
         omitidosDeuda: {},
-        omitidosCredito: {}
+        omitidosCredito: {},
+        verOtrasEmpresas: false,
+        verOtrasMonedas: false
     };
 
     var csrf = $('meta[name="csrf-token"]').attr('content') || $('input[name="_token"]').val();
@@ -24,6 +26,9 @@
     var urlAplicar = $root.data('url-aplicar');
     var urlDesaplicar = $root.data('url-desaplicar');
     var urlCc = $root.data('url-cc');
+    var urlCotizacion = $root.data('url-cotizacion');
+    var monedaLocalId = parseInt($root.data('moneda-local') || '1', 10) || 1;
+    var cotDiaCache = {};
 
     function round4(n) {
         return Math.round((Number(n) || 0) * 10000) / 10000;
@@ -42,14 +47,104 @@
         return mon;
     }
 
-    function dcDeLinea(l) {
+    function esLocal(monedaId) {
+        return Number(monedaId) <= monedaLocalId;
+    }
+
+    function cotNorm(v) {
+        var n = Number(v) || 0;
+        return n > 0 ? n : 1;
+    }
+
+    function esCruzada(c, d) {
+        return !!(c && d && Number(c.moneda_id) !== Number(d.moneda_id));
+    }
+
+    function cotLiqDePar(c, d, override) {
+        if (override != null && Number(override) > 0) {
+            return Number(override);
+        }
+        var toolbar = parseFloat($('#acc-cot-liq').val() || '0') || 0;
+        if (toolbar > 0) {
+            return toolbar;
+        }
+        var me = null;
+        if (d && !esLocal(d.moneda_id)) {
+            me = d;
+        } else if (c && !esLocal(c.moneda_id)) {
+            me = c;
+        }
+        if (!me) {
+            return 1;
+        }
+        var key = String(me.moneda_id) + '|' + ($('#acc-fecha').val() || '');
+        if (cotDiaCache[key] > 0) {
+            return cotDiaCache[key];
+        }
+        return cotNorm(me.cotizacion);
+    }
+
+    function valorLocal(monto, cot, monedaId) {
+        monto = Math.abs(Number(monto) || 0);
+        return esLocal(monedaId) ? round4(monto) : round4(monto * cotNorm(cot));
+    }
+
+    function convertirDeudaACredito(montoDeuda, monedaDeuda, monedaCredito, cotLiq, cotCredito) {
+        montoDeuda = Math.abs(Number(montoDeuda) || 0);
+        cotLiq = cotNorm(cotLiq);
+        cotCredito = cotNorm(cotCredito);
+        if (esLocal(monedaDeuda) && !esLocal(monedaCredito)) {
+            return round4(montoDeuda / cotLiq);
+        }
+        if (!esLocal(monedaDeuda) && esLocal(monedaCredito)) {
+            return round4(montoDeuda * cotLiq);
+        }
+        return round4((montoDeuda * cotLiq) / cotCredito);
+    }
+
+    function liquidar(c, d, montoDeuda, cotLiq) {
+        montoDeuda = round4(Math.abs(Number(montoDeuda) || 0));
+        if (!c || !d) {
+            return { cruzada: false, monto_deuda: montoDeuda, monto_credito: montoDeuda, dc: 0, cotizacion_liquidacion: 1 };
+        }
+        if (!esCruzada(c, d)) {
+            var dcMisma = round4(montoDeuda * (cotNorm(d.cotizacion) - cotNorm(c.cotizacion)));
+            return {
+                cruzada: false,
+                monto_deuda: montoDeuda,
+                monto_credito: montoDeuda,
+                dc: Math.abs(dcMisma) < TOL ? 0 : dcMisma,
+                cotizacion_liquidacion: cotNorm(d.cotizacion)
+            };
+        }
+        cotLiq = cotLiqDePar(c, d, cotLiq);
+        var montoCredito = convertirDeudaACredito(montoDeuda, d.moneda_id, c.moneda_id, cotLiq, c.cotizacion);
+        var valorD = valorLocal(montoDeuda, d.cotizacion, d.moneda_id);
+        var valorC = valorLocal(montoCredito, c.cotizacion, c.moneda_id);
+        var dcCruz = round4(valorC - valorD);
+        return {
+            cruzada: true,
+            monto_deuda: montoDeuda,
+            monto_credito: montoCredito,
+            dc: Math.abs(dcCruz) < TOL ? 0 : dcCruz,
+            cotizacion_liquidacion: cotLiq
+        };
+    }
+
+    function enriquecerLinea(l) {
         var c = creditoById(l.credito_id);
         var d = deudaById(l.deuda_id);
-        if (!c || !d || Number(c.moneda_id) !== Number(d.moneda_id)) {
-            return 0;
+        var liq = liquidar(c, d, l.monto, l.cotizacion_liquidacion);
+        l.monto_credito = liq.monto_credito;
+        l.dc = liq.dc;
+        if (liq.cruzada) {
+            l.cotizacion_liquidacion = liq.cotizacion_liquidacion;
         }
-        var dc = round4((Number(l.monto) || 0) * ((Number(d.cotizacion) || 1) - (Number(c.cotizacion) || 1)));
-        return Math.abs(dc) < TOL ? 0 : dc;
+        return l;
+    }
+
+    function dcDeLinea(l) {
+        return enriquecerLinea(l).dc || 0;
     }
 
     function dcLabel(dc) {
@@ -96,7 +191,11 @@
 
     function asignadoCredito(id) {
         return state.lineas.reduce(function (s, l) {
-            return Number(l.credito_id) === Number(id) ? s + l.monto : s;
+            if (Number(l.credito_id) !== Number(id)) {
+                return s;
+            }
+            enriquecerLinea(l);
+            return s + (Number(l.monto_credito) || l.monto);
         }, 0);
     }
 
@@ -121,17 +220,120 @@
         return l ? l.origen : '';
     }
 
-    function esCompatible(c, d) {
+    function mismaEmpresa(c, d) {
         if (!c || !d) {
-            return false;
-        }
-        if (Number(c.moneda_id) !== Number(d.moneda_id)) {
             return false;
         }
         if (Number(c.empresa_id) > 0 && Number(d.empresa_id) > 0 && Number(c.empresa_id) !== Number(d.empresa_id)) {
             return false;
         }
         return true;
+    }
+
+    function empresaContexto() {
+        var filtro = empresaId();
+        if (filtro > 0) {
+            return filtro;
+        }
+        var c = creditoById(state.creditoActivo);
+        return c && Number(c.empresa_id) > 0 ? Number(c.empresa_id) : 0;
+    }
+
+    function esOtraEmpresa(item) {
+        var emp = empresaContexto();
+        if (!emp || !item) {
+            return false;
+        }
+        return Number(item.empresa_id) > 0 && Number(item.empresa_id) !== emp;
+    }
+
+    function monedaContexto() {
+        var c = creditoById(state.creditoActivo);
+        return c && Number(c.moneda_id) > 0 ? Number(c.moneda_id) : 0;
+    }
+
+    function esOtraMoneda(item) {
+        var mon = monedaContexto();
+        if (!mon || !item) {
+            return false;
+        }
+        return Number(item.moneda_id) > 0 && Number(item.moneda_id) !== mon;
+    }
+
+    function estaAsignado(item, lado) {
+        if (!item) {
+            return false;
+        }
+        return (lado === 'credito' ? asignadoCredito(item.id) : asignadoDeuda(item.id)) >= TOL;
+    }
+
+    function visiblePorEmpresa(item, lado) {
+        if (!esOtraEmpresa(item)) {
+            return true;
+        }
+        if (estaAsignado(item, lado)) {
+            return true;
+        }
+        return !!state.verOtrasEmpresas;
+    }
+
+    function visiblePorMoneda(item, lado) {
+        if (!esOtraMoneda(item)) {
+            return true;
+        }
+        if (estaAsignado(item, lado)) {
+            return true;
+        }
+        return !!state.verOtrasMonedas;
+    }
+
+    function visiblePorVista(item, lado) {
+        return visiblePorEmpresa(item, lado) && visiblePorMoneda(item, lado);
+    }
+
+    function contarOtros(predicado) {
+        var n = 0;
+        state.creditos.forEach(function (c) {
+            if (predicado(c) && !estaAsignado(c, 'credito')) {
+                n += 1;
+            }
+        });
+        state.deudas.forEach(function (d) {
+            if (predicado(d) && !estaAsignado(d, 'deuda')) {
+                n += 1;
+            }
+        });
+        return n;
+    }
+
+    function itemsOtrasEmpresas() {
+        return contarOtros(esOtraEmpresa);
+    }
+
+    function itemsOtrasMonedas() {
+        return contarOtros(function (item) {
+            return esOtraMoneda(item) && !esOtraEmpresa(item);
+        });
+    }
+
+    function hintConversion(d, c) {
+        if (!c || !d || !esCruzada(c, d)) {
+            return '';
+        }
+        var cot = cotLiqDePar(c, d, null);
+        var equiv = convertirDeudaACredito(d.saldo, d.moneda_id, c.moneda_id, cot, c.cotizacion);
+        return '≈ ' + fmt(equiv) + ' ' + (c.moneda || '') + ' @ ' + cot.toLocaleString('es-AR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 4
+        });
+    }
+
+    function esCompatibleFifo(c, d) {
+        return mismaEmpresa(c, d) && Number(c.moneda_id) === Number(d.moneda_id);
+    }
+
+    function esCompatible(c, d) {
+        return mismaEmpresa(c, d);
     }
 
     function toast(msg, tipo) {
@@ -179,7 +381,7 @@
         var out = [];
         creditosOrd.forEach(function (c) {
             deudasOrd.forEach(function (d) {
-                if (!esCompatible(c, d)) {
+                if (!esCompatibleFifo(c, d)) {
                     return;
                 }
                 var dispC = restC[c.id] || 0;
@@ -210,7 +412,7 @@
                 return;
             }
             deudasOrd.some(function (d) {
-                if (usados[d.id] || !esCompatible(c, d)) {
+                if (usados[d.id] || !esCompatibleFifo(c, d)) {
                     return false;
                 }
                 var saldoD = round4(Math.abs(d.saldo));
@@ -252,23 +454,24 @@
             return;
         }
         var autos = sugerirFifoRestanteLocal(manuals, state.omitidosDeuda, state.omitidosCredito).map(function (l) {
-            return { credito_id: l.credito_id, deuda_id: l.deuda_id, monto: l.monto, origen: 'auto' };
+            return enriquecerLinea({ credito_id: l.credito_id, deuda_id: l.deuda_id, monto: l.monto, origen: 'auto' });
         });
         state.lineas = manuals.concat(autos);
     }
 
-    function upsertManual(creditoId, deudaId, monto) {
+    function upsertManual(creditoId, deudaId, monto, cotLiq) {
         monto = round4(monto);
         state.lineas = state.lineas.filter(function (l) {
             return !(Number(l.credito_id) === Number(creditoId) && Number(l.deuda_id) === Number(deudaId));
         });
         if (monto >= TOL) {
-            state.lineas.push({
+            state.lineas.push(enriquecerLinea({
                 credito_id: Number(creditoId),
                 deuda_id: Number(deudaId),
                 monto: monto,
+                cotizacion_liquidacion: cotLiq != null ? cotLiq : null,
                 origen: 'manual'
-            });
+            }));
         }
         delete state.omitidosDeuda[deudaId];
         recomponerAuto();
@@ -293,11 +496,17 @@
     }
 
     function filaVisibleCredito(c) {
+        if (!visiblePorVista(c, 'credito')) {
+            return false;
+        }
         var q = String($('#acc-buscar-credito').val() || '').trim().toLowerCase();
         return !q || textoBusqueda(c).indexOf(q) !== -1;
     }
 
     function filaVisibleDeuda(d) {
+        if (!visiblePorVista(d, 'deuda')) {
+            return false;
+        }
         var q = String($('#acc-buscar-deuda').val() || '').trim().toLowerCase();
         if (q && textoBusqueda(d).indexOf(q) === -1) {
             return false;
@@ -349,6 +558,8 @@
         $row.toggleClass('is-matched', usado >= TOL && !hasManual);
         $row.toggleClass('is-manual', hasManual);
         $row.toggleClass('is-exact', lineasDeCredito(c.id).some(esExactoPar));
+        $row.toggleClass('is-incompatible', esOtraEmpresa(c));
+        $row.toggleClass('is-otra-moneda', !esOtraEmpresa(c) && esOtraMoneda(c));
         $row.toggleClass('acc-hidden', !filaVisibleCredito(c));
         $row.find('.acc-sel-credito').prop('checked', Number(state.creditoActivo) === Number(c.id));
         var resto = round4(c.saldo - usado);
@@ -375,8 +586,9 @@
         $row.toggleClass('is-matched', usado >= TOL && !hasManual && !omitida);
         $row.toggleClass('is-manual', hasManual);
         $row.toggleClass('is-omitida', omitida);
-        $row.toggleClass('is-compatible', !!cAct && compatible && usado < TOL && !omitida);
-        $row.toggleClass('is-incompatible', !!cAct && !compatible);
+        $row.toggleClass('is-compatible', !!cAct && compatible && usado < TOL && !omitida && !esOtraMoneda(d));
+        $row.toggleClass('is-incompatible', esOtraEmpresa(d) || (!!cAct && !compatible));
+        $row.toggleClass('is-otra-moneda', !!cAct && compatible && esOtraMoneda(d) && !omitida);
         $row.toggleClass('is-exact', lineasDeDeuda(d.id).some(esExactoPar));
         $row.toggleClass('acc-hidden', !filaVisibleDeuda(d));
         $row.find('.acc-sel-deuda').prop('checked', usado >= TOL);
@@ -407,6 +619,12 @@
                 $chips.append($('<span class="acc-chip"/>').toggleClass('is-manual', l.origen === 'manual')
                     .text((c ? c.tipo : 'CC') + ' ' + fmt(l.monto)));
             });
+            if (cAct && esOtraMoneda(d) && esCompatible(cAct, d)) {
+                var conv = hintConversion(d, cAct);
+                if (conv) {
+                    $chips.append($('<span class="acc-chip is-cruzada"/>').text(conv));
+                }
+            }
         }
         $row.find('.acc-meta-hint').text(omitida ? 'Fuera del matching automático' : (hintDeuda(d) || (d.empresa || '')));
     }
@@ -484,13 +702,24 @@
             var dc = dcDeLinea(l);
             var fechaC = c ? fechaComprobante(c, false) : '';
             var fechaD = d ? fechaComprobante(d, true) : '';
-            html += '<div class="acc-pair is-' + l.origen + '" data-idx="' + idx + '" data-credito="' + l.credito_id + '" data-deuda="' + l.deuda_id + '">'
+            enriquecerLinea(l);
+            var cruz = c && d && esCruzada(c, d);
+            var cotInp = cruz
+                ? '<input type="number" min="0" step="0.0001" class="form-control form-control-sm acc-board-cot" value="' + cotLiqDePar(c, d, l.cotizacion_liquidacion).toFixed(4) + '" title="Cotización de liquidación">'
+                : '<span class="acc-pair-equiv">' + (c && d ? fmt(l.monto_credito || l.monto) + ' ' + (c.moneda || '') : '') + '</span>';
+            var equiv = cruz
+                ? fmt(l.monto_credito) + ' ' + (c ? (c.moneda || '') : '')
+                : '';
+            html += '<div class="acc-pair is-' + l.origen + (cruz ? ' is-cruzada' : '') + '" data-idx="' + idx + '" data-credito="' + l.credito_id + '" data-deuda="' + l.deuda_id + '">'
                 + '<span class="acc-badge ' + l.origen + '">' + (l.origen === 'manual' ? 'Fijada' : 'Sugerida') + '</span>'
                 + '<div><div class="acc-pair-nom acc-pair-c"></div><div class="acc-pair-meta">' + (c ? ((fechaC ? fechaC + ' · ' : '') + cotizLabel(c) + ' · resto ' + fmt(round4(c.saldo - asignadoCredito(c.id)))) : '') + '</div></div>'
                 + '<div class="acc-pair-arrow">→</div>'
                 + '<div><div class="acc-pair-nom acc-pair-d"></div><div class="acc-pair-meta">' + (d ? ((fechaD ? fechaD + ' · ' : '') + cotizLabel(d) + ' · saldo ' + fmt(d.saldo)) : '') + '</div></div>'
-                + '<input type="number" min="0" step="0.01" class="form-control form-control-sm acc-board-monto" value="' + l.monto.toFixed(2) + '">'
-                + '<div class="acc-pair-dc' + (dc > 0 ? ' is-loss' : (dc < 0 ? ' is-gain' : '')) + '">' + (dcLabel(dc) || '—') + '</div>'
+                + '<input type="number" min="0" step="0.01" class="form-control form-control-sm acc-board-monto" value="' + l.monto.toFixed(2) + '" title="Monto en moneda de la deuda">'
+                + cotInp
+                + '<div class="acc-pair-dc' + (dc > 0 ? ' is-loss' : (dc < 0 ? ' is-gain' : '')) + '">'
+                + (equiv ? '<div class="acc-pair-equiv">' + equiv + '</div>' : '')
+                + (dcLabel(dc) || '—') + '</div>'
                 + '<button type="button" class="btn btn-sm btn-outline-danger acc-board-x" title="Sacar este par">×</button>'
                 + '</div>';
         });
@@ -519,7 +748,11 @@
             html += '<tr>'
                 + '<td>' + fechaUi(r.fecha) + '</td>'
                 + '<td></td><td></td>'
-                + '<td class="text-right">' + fmt(r.monto) + ' ' + (r.moneda || '') + '</td>'
+                + '<td class="text-right">' + fmt(r.monto) + ' ' + (r.moneda || '')
+                + (r.cotizacion_liquidacion && r.moneda_contraparte && r.moneda_contraparte !== r.moneda
+                    ? ' → ' + (r.moneda_contraparte || '') + ' · liq ' + Number(r.cotizacion_liquidacion).toLocaleString('es-AR')
+                    : '')
+                + '</td>'
                 + '<td class="text-right">' + (Math.abs(dc) >= TOL ? dcLabel(dc) : '—') + '</td>'
                 + '<td><button type="button" class="btn btn-outline-danger btn-xs btn-sm acc-desaplicar" data-id="' + r.id + '">Desaplicar</button></td>'
                 + '</tr>';
@@ -532,20 +765,24 @@
     }
 
     function renderKpisDock() {
-        var k = state.kpis;
+        var visiblesCredito = state.creditos.filter(function (c) { return visiblePorVista(c, 'credito'); });
+        var visiblesDeuda = state.deudas.filter(function (d) { return visiblePorVista(d, 'deuda'); });
+        var ocultosCredito = state.creditos.length - visiblesCredito.length;
+        var ocultosDeuda = state.deudas.length - visiblesDeuda.length;
+        var k = kpisDeVista(visiblesCredito, visiblesDeuda);
         var total = state.lineas.reduce(function (s, l) { return s + l.monto; }, 0);
         var libreC = round4(k.creditos - total);
         $('#acc-kpi-creditos').text(fmt(k.creditos));
         $('#acc-kpi-deudas').text(fmt(k.deudas));
         $('#acc-kpi-match').text(fmt(total));
         $('#acc-kpi-libre').text(fmt(Math.max(0, libreC)));
-        $('#acc-kpi-creditos-hint').text(state.creditos.length + ' comprobantes · NC ' + fmt(k.nc) + ' · pagos ' + fmt(k.pagos));
-        $('#acc-kpi-deudas-hint').text(state.deudas.length + ' comprobantes · vencida ' + fmt(k.vencida));
+        $('#acc-kpi-creditos-hint').text(visiblesCredito.length + ' comprobantes · NC ' + fmt(k.nc) + ' · pagos ' + fmt(k.pagos));
+        $('#acc-kpi-deudas-hint').text(visiblesDeuda.length + ' comprobantes · vencida ' + fmt(k.vencida));
         $('#acc-kpi-match-hint').text(state.lineas.filter(function (l) { return l.origen === 'auto'; }).length + ' sugeridas · '
             + state.lineas.filter(function (l) { return l.origen === 'manual'; }).length + ' fijadas');
         $('#acc-kpi-libre-hint').text(libreC >= TOL ? 'Todavía hay crédito sin pegar' : 'Crédito cubierto');
-        $('#acc-count-creditos').text(state.creditos.length);
-        $('#acc-count-deudas').text(state.deudas.length);
+        $('#acc-count-creditos').text(visiblesCredito.length + (ocultosCredito ? ' · ' + ocultosCredito + ' ocultos' : ''));
+        $('#acc-count-deudas').text(visiblesDeuda.length + (ocultosDeuda ? ' · ' + ocultosDeuda + ' ocultos' : ''));
 
         var credito = creditoById(state.creditoActivo);
         var restoActivo = credito ? round4(credito.saldo - asignadoCredito(credito.id)) : libreC;
@@ -563,6 +800,8 @@
         $('#acc-dock-bar').toggleClass('is-over', restoActivo < -TOL).find('span').css('width', pct + '%');
         $('#btn-acc-aplicar').prop('disabled', state.lineas.length === 0);
         $('#acc-dock-error').text(restoActivo < -TOL ? 'Hay un crédito sobreaplicado. Bajá el monto.' : '');
+        actualizarBotonOtrasEmpresas();
+        actualizarBotonOtrasMonedas();
         var pid = proveedorId();
         var $link = $('#acc-link-cc');
         if (pid > 0 && urlCc) {
@@ -572,9 +811,79 @@
         }
     }
 
+    function kpisDeVista(creditos, deudas) {
+        var k = { creditos: 0, deudas: 0, nc: 0, pagos: 0, vencida: 0 };
+        creditos.forEach(function (c) {
+            k.creditos += Number(c.saldo) || 0;
+            if (String(c.tipo || '').toUpperCase() === 'NC') {
+                k.nc += Number(c.saldo) || 0;
+            } else {
+                k.pagos += Number(c.saldo) || 0;
+            }
+        });
+        deudas.forEach(function (d) {
+            k.deudas += Number(d.saldo) || 0;
+            if (['vencida', '30', '60'].indexOf(d.aging) !== -1) {
+                k.vencida += Number(d.saldo) || 0;
+            }
+        });
+        Object.keys(k).forEach(function (key) {
+            k[key] = round4(k[key]);
+        });
+        return k;
+    }
+
+    function actualizarBotonOtrasEmpresas() {
+        var n = itemsOtrasEmpresas();
+        var $btn = $('#btn-acc-otras-empresas');
+        $btn.toggleClass('acc-hidden', n === 0 && !state.verOtrasEmpresas)
+            .toggleClass('is-on', !!state.verOtrasEmpresas);
+        $('#acc-otras-count').text(n);
+        $btn.find('.acc-otras-label').text(state.verOtrasEmpresas ? 'Ocultar otras empresas' : 'Ver otras empresas');
+        $btn.attr('title', state.verOtrasEmpresas
+            ? 'Volver a la vista de la empresa en uso'
+            : 'Mostrar comprobantes de otras empresas (aparecen grisados)');
+    }
+
+    function actualizarBotonOtrasMonedas() {
+        var n = itemsOtrasMonedas();
+        var $btn = $('#btn-acc-otras-monedas');
+        $btn.toggleClass('acc-hidden', n === 0 && !state.verOtrasMonedas)
+            .toggleClass('is-on', !!state.verOtrasMonedas);
+        $('#acc-otras-mon-count').text(n);
+        $btn.find('.acc-otras-mon-label').text(state.verOtrasMonedas ? 'Ocultar otras monedas' : 'Ver otras monedas');
+        $btn.attr('title', state.verOtrasMonedas
+            ? 'Volver a la misma moneda del crédito'
+            : 'Mostrar facturas en otra moneda para aplicarlas con cotización');
+    }
+
+    function asegurarVacioFiltro($body, lado) {
+        $body.children('.acc-empty-filtro').remove();
+        if (!$body.children('[data-id]').length) {
+            return;
+        }
+        if ($body.children('[data-id]:not(.acc-hidden)').length) {
+            return;
+        }
+        var nEmp = itemsOtrasEmpresas();
+        var nMon = itemsOtrasMonedas();
+        var msg = lado === 'credito'
+            ? 'Sin créditos de esta empresa y moneda.'
+            : 'Sin facturas de esta empresa y moneda.';
+        if (nMon > 0) {
+            msg += ' Hay ' + nMon + ' de otra moneda.';
+        }
+        if (nEmp > 0) {
+            msg += ' Hay ' + nEmp + ' de otras empresas.';
+        }
+        $body.append('<div class="acc-empty acc-empty-filtro">' + msg + '</div>');
+    }
+
     function pintar() {
         syncLista($('#acc-creditos-body'), state.creditos, 'credito');
         syncLista($('#acc-deudas-body'), state.deudas, 'deuda');
+        asegurarVacioFiltro($('#acc-creditos-body'), 'credito');
+        asegurarVacioFiltro($('#acc-deudas-body'), 'deuda');
         renderBoard();
         renderRecientes();
         renderKpisDock();
@@ -598,6 +907,8 @@
             state.creditoActivo = Number(state.creditos[0].id);
         }
         recomponerAuto();
+        refrescarCotDia();
+        sincronizarCotLiq(creditoById(state.creditoActivo));
         pintar();
     }
 
@@ -607,14 +918,30 @@
             aplicarWorkbench({ creditos: [], deudas: [], recientes: [], kpis: { creditos: 0, deudas: 0, nc: 0, pagos: 0, vencida: 0 } });
             return;
         }
-        $.getJSON(urlPendientes, { proveedor_id: pid, empresa_id: empresaId() })
+        $.getJSON(urlPendientes, { proveedor_id: pid })
             .done(function (res) { aplicarWorkbench(res); })
             .fail(function () { toast('No se pudieron cargar los pendientes', 'error'); });
     }
 
     function seleccionarCredito(id) {
         state.creditoActivo = Number(id) || 0;
+        state.verOtrasMonedas = false;
+        sincronizarCotLiq(creditoById(state.creditoActivo));
         pintar();
+    }
+
+    function sincronizarCotLiq(c) {
+        var $inp = $('#acc-cot-liq');
+        var $hint = $('#acc-cot-liq-hint');
+        if (!c || esLocal(c.moneda_id)) {
+            $hint.text('Para cruzar pesos ↔ dólares');
+            return;
+        }
+        var cot = cotNorm(c.cotizacion);
+        if (!$inp.val() && cot > 1) {
+            $inp.attr('placeholder', String(cot));
+        }
+        $hint.text('Pesos por 1 ' + (c.moneda || 'ME') + ' · tildá la factura en pesos para aplicarla');
     }
 
     function asignarDeuda(deudaId, checked, montoExplicit) {
@@ -642,7 +969,12 @@
             return;
         }
         if (!esCompatible(c, d)) {
-            toast('Ese crédito y esa factura no son de la misma moneda/empresa', 'warning');
+            toast('Ese crédito y esa factura no son de la misma empresa', 'warning');
+            pintar();
+            return;
+        }
+        if (esCruzada(c, d) && cotLiqDePar(c, d, null) <= 0) {
+            toast('Indicá la cotización de liquidación para cruzar monedas', 'warning');
             pintar();
             return;
         }
@@ -652,11 +984,19 @@
                 ya = l.monto;
             }
         });
-        var restoC = round4(c.saldo - asignadoCredito(c.id) + ya);
+        var restoC = round4(c.saldo - asignadoCredito(c.id) + (esCruzada(c, d) ? (ya ? liquidar(c, d, ya, null).monto_credito : 0) : ya));
         var restoD = round4(d.saldo - asignadoDeuda(d.id) + ya);
-        var monto = montoExplicit != null ? round4(montoExplicit) : round4(Math.min(restoC, restoD));
-        monto = Math.min(monto, restoC, restoD);
-        upsertManual(c.id, d.id, monto);
+        var maxDeuda = restoD;
+        if (esCruzada(c, d)) {
+            var cot = cotLiqDePar(c, d, null);
+            var equiv = convertirDeudaACredito(1, d.moneda_id, c.moneda_id, cot, c.cotizacion);
+            maxDeuda = equiv > 0 ? round4(Math.min(restoD, restoC / equiv)) : restoD;
+        } else {
+            maxDeuda = Math.min(restoC, restoD);
+        }
+        var monto = montoExplicit != null ? round4(montoExplicit) : maxDeuda;
+        monto = Math.min(monto, maxDeuda);
+        upsertManual(c.id, d.id, monto, esCruzada(c, d) ? cotLiqDePar(c, d, null) : null);
         pintar();
     }
 
@@ -667,7 +1007,16 @@
         }
         $('#btn-acc-aplicar').prop('disabled', true);
         var payload = state.lineas.map(function (l) {
-            return { credito_id: l.credito_id, deuda_id: l.deuda_id, monto: l.monto };
+            enriquecerLinea(l);
+            var row = { credito_id: l.credito_id, deuda_id: l.deuda_id, monto: l.monto };
+            var c = creditoById(l.credito_id);
+            var d = deudaById(l.deuda_id);
+            if (c && d && esCruzada(c, d)) {
+                row.cotizacion_liquidacion = cotLiqDePar(c, d, l.cotizacion_liquidacion);
+            } else if (l.cotizacion_liquidacion) {
+                row.cotizacion_liquidacion = l.cotizacion_liquidacion;
+            }
+            return row;
         });
         $.ajax({
             url: urlAplicar,
@@ -722,6 +1071,20 @@
         asignarDeuda(id, monto > 0, monto);
     });
 
+    $root.on('change', '.acc-board-cot', function () {
+        var $pair = $(this).closest('.acc-pair');
+        var cid = parseInt($pair.data('credito'), 10);
+        var did = parseInt($pair.data('deuda'), 10);
+        var cot = parseFloat($(this).val() || '0') || 0;
+        var linea = state.lineas.find(function (l) {
+            return Number(l.credito_id) === cid && Number(l.deuda_id) === did;
+        });
+        if (!linea) {
+            return;
+        }
+        upsertManual(cid, did, linea.monto, cot);
+        pintar();
+    });
     $root.on('change', '.acc-board-monto', function () {
         var $pair = $(this).closest('.acc-pair');
         var cid = parseInt($pair.data('credito'), 10);
@@ -797,6 +1160,17 @@
     $('#acc-buscar-credito, #acc-buscar-deuda, #acc-filtro-deuda').on('input change', function () {
         pintar();
     });
+    $('#btn-acc-otras-empresas').on('click', function () {
+        state.verOtrasEmpresas = !state.verOtrasEmpresas;
+        pintar();
+    });
+    $('#btn-acc-otras-monedas').on('click', function () {
+        state.verOtrasMonedas = !state.verOtrasMonedas;
+        if (state.verOtrasMonedas) {
+            sincronizarCotLiq(creditoById(state.creditoActivo));
+        }
+        pintar();
+    });
 
     $('#acc-recientes-body').on('click', '.acc-desaplicar', function () {
         var id = parseInt($(this).data('id'), 10);
@@ -817,7 +1191,56 @@
         });
     });
 
-    $('#empresa_id').on('change', cargar);
+    function refrescarCotDia() {
+        var fecha = $('#acc-fecha').val();
+        var monedas = {};
+        state.creditos.concat(state.deudas).forEach(function (item) {
+            if (item && !esLocal(item.moneda_id)) {
+                monedas[item.moneda_id] = true;
+            }
+        });
+        Object.keys(monedas).forEach(function (mid) {
+            if (!urlCotizacion || !fecha) {
+                return;
+            }
+            $.getJSON(urlCotizacion, { fecha: fecha, moneda_id: mid })
+                .done(function (res) {
+                    var cot = parseFloat(res && res.cotizacion);
+                    if (cot > 0) {
+                        cotDiaCache[String(mid) + '|' + fecha] = cot;
+                        if (!$('#acc-cot-liq').val()) {
+                            $('#acc-cot-liq-hint').text('Día: ' + cot.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 4 }));
+                        }
+                    }
+                });
+        });
+    }
+
+    $('#acc-fecha, #acc-cot-liq').on('change', function () {
+        if (this.id === 'acc-fecha') {
+            refrescarCotDia();
+        }
+        state.lineas.forEach(function (l) {
+            if (l.origen === 'manual') {
+                enriquecerLinea(l);
+            }
+        });
+        pintar();
+    });
+
+    $('#empresa_id').on('change', function () {
+        state.verOtrasEmpresas = false;
+        var emp = empresaId();
+        if (emp > 0) {
+            var actual = creditoById(state.creditoActivo);
+            if (!actual || Number(actual.empresa_id) !== emp) {
+                var primero = state.creditos.find(function (c) { return Number(c.empresa_id) === emp; });
+                state.creditoActivo = primero ? Number(primero.id) : 0;
+            }
+        }
+        recomponerAuto();
+        pintar();
+    });
     $(document).on('change.cpProveedorCargado', '#proveedor_id', cargar);
     $('#proveedor_id').on('change', cargar);
 

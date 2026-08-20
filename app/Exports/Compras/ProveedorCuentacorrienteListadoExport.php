@@ -5,6 +5,7 @@ namespace App\Exports\Compras;
 use App\Repositories\Compras\Proveedor_CuentacorrienteRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Compras\ProveedorCuentacorrientePreferenciasUsuario;
+use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
 use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -25,7 +26,9 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'I';
+    private const COL_ULTIMA_DEUDA = 'J';
+
+    private const COL_ULTIMA_CC = 'J';
 
     private Proveedor_CuentacorrienteRepositoryInterface $proveedorCuentacorrienteRepository;
 
@@ -37,9 +40,15 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
 
     private string $nombreProveedor = '';
 
-    private float $saldoCuentaCorriente = 0.0;
+    /** @var list<array{moneda_id: int, abreviatura: string, saldo_cc: float, deuda: float}> */
+    private array $saldosPorMoneda = [];
 
-    private float $totalDeuda = 0.0;
+    private ?int $monedaId = null;
+
+    private string $expresion = CuentacorrienteSaldosPorMoneda::EXPRESION_ORIGEN;
+
+    /** @var array{saldo_cc?: float, deuda?: float, abreviatura?: string} */
+    private array $equivalentePesos = [];
 
     private bool $esCsv = false;
 
@@ -92,8 +101,11 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
             'modoVista' => $this->modoVista,
             'titulo' => $titulo,
             'subtitulo' => $subtitulo,
-            'saldoCuentaCorriente' => $this->saldoCuentaCorriente,
-            'totalDeuda' => $this->totalDeuda,
+            'saldosPorMoneda' => $this->saldosPorMoneda,
+            'monedaId' => $this->monedaId,
+            'expresion' => $this->expresion,
+            'equivalentePesos' => $this->equivalentePesos,
+            'mostrarSaldoCorrido' => CuentacorrienteSaldosPorMoneda::mostrarSaldoCorrido($this->monedaId, $this->saldosPorMoneda),
             'totalFilas' => $filas->count(),
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'formatoNumeroExcel' => $this->formatoNumeroEfectivo(),
@@ -110,6 +122,7 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
             'G' => $codigo,
             'H' => $codigo,
             'I' => $codigo,
+            'J' => $codigo,
         ];
     }
 
@@ -139,10 +152,11 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
             'C' => 12,
             'D' => 12,
             'E' => 32,
-            'F' => 8,
+            'F' => CuentacorrienteSaldosPorMoneda::esExpresionPesos($this->expresion) ? 22 : 8,
             'G' => 14,
             'H' => 14,
             'I' => 14,
+            'J' => 16,
         ];
     }
 
@@ -177,11 +191,11 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
                 $filaTit = $this->filaInicioMeta;
                 $filaFinMeta = $this->filaInicioMeta + $this->filasMetaEncabezado - 1;
                 for ($fila = $filaTit; $fila <= $filaFinMeta; $fila++) {
-                    $sheet->mergeCells('A'.$fila.':'.self::COL_ULTIMA.$fila);
+                    $sheet->mergeCells('A'.$fila.':'.$this->colUltima().$fila);
                 }
 
                 $sheet->getRowDimension($filaTit)->setRowHeight(28);
-                $sheet->getStyle('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit)->applyFromArray([
+                $sheet->getStyle('A'.$filaTit.':'.$this->colUltima().$filaTit)->applyFromArray([
                     'font' => [
                         'bold' => true,
                         'size' => 16,
@@ -194,7 +208,7 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
                     ],
                 ]);
 
-                $sheet->getStyle('A'.($filaTit + 1).':'.self::COL_ULTIMA.$filaFinMeta)->applyFromArray([
+                $sheet->getStyle('A'.($filaTit + 1).':'.$this->colUltima().$filaFinMeta)->applyFromArray([
                     'font' => [
                         'bold' => true,
                         'size' => 10,
@@ -215,11 +229,18 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
                     ->setWrapText(true)
                     ->setVertical(Alignment::VERTICAL_TOP);
 
-                $sheet->getStyle('G'.$primera.':I'.$sheet->getHighestRow())
+                $sheet->getStyle('G'.$primera.':'.$this->colUltima().$sheet->getHighestRow())
                     ->getAlignment()
                     ->setHorizontal(Alignment::HORIZONTAL_RIGHT);
             },
         ];
+    }
+
+    private function colUltima(): string
+    {
+        return $this->modoVista === ProveedorCuentacorrientePreferenciasUsuario::MODO_DEUDA
+            ? self::COL_ULTIMA_DEUDA
+            : self::COL_ULTIMA_CC;
     }
 
     public function title(): string
@@ -234,19 +255,23 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
         int $proveedorId,
         string $modoVista,
         string $nombreProveedor,
-        float $saldoCuentaCorriente,
-        float $totalDeuda,
+        array $saldosPorMoneda = [],
+        ?int $monedaId = null,
         bool $esCsv = false,
         array $filtros = [],
+        string $expresion = CuentacorrienteSaldosPorMoneda::EXPRESION_ORIGEN,
+        array $equivalentePesos = [],
     ): self {
         $this->busqueda = $busqueda;
         $this->proveedorId = $proveedorId;
         $this->modoVista = ProveedorCuentacorrientePreferenciasUsuario::resolverModoVista($modoVista);
         $this->nombreProveedor = $nombreProveedor;
-        $this->saldoCuentaCorriente = $saldoCuentaCorriente;
-        $this->totalDeuda = $totalDeuda;
+        $this->saldosPorMoneda = $saldosPorMoneda;
+        $this->monedaId = $monedaId;
         $this->esCsv = $esCsv;
         $this->filtros = $filtros;
+        $this->expresion = CuentacorrienteSaldosPorMoneda::resolverExpresion($expresion);
+        $this->equivalentePesos = $equivalentePesos;
 
         return $this;
     }

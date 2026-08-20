@@ -371,6 +371,18 @@ return [
             'permiso' => 'crear-ordencompra / editar-ordencompra',
         ],
         [
+            'herramienta' => 'Período de servicio del remito',
+            'ubicacion' => 'Bloque Contrato',
+            'accion' => 'Mes vencido (mes anterior a la fecha del remito) o dentro del mismo mes (del 1 a la fecha). Define la ventana de tickets de ingreso.',
+            'permiso' => 'crear-ordencompra / editar-ordencompra',
+        ],
+        [
+            'herramienta' => 'Validación de abono + ingresos de planta',
+            'ubicacion' => 'Bloque Contrato',
+            'accion' => 'Si está marcada, el área debe completar el cuestionario antes de confirmar la COM (o la factura si no hay COM). El legajo no sale a Cuentas a pagar con validaciones pendientes. El responsable del contrato puede confirmarla.',
+            'permiso' => 'completar-validacion-abono / override-validacion-abono',
+        ],
+        [
             'herramienta' => 'Responsable',
             'ubicacion' => 'Bloque Contrato',
             'accion' => 'Usuario dueño del contrato; recibe siempre los avisos de sus contratos.',
@@ -379,7 +391,7 @@ return [
         [
             'herramienta' => 'Recepción para facturar',
             'ubicacion' => 'Bloque Contrato',
-            'accion' => 'Obligatoria (factura contra COM) o no requiere recepción (abonos, honorarios). Fija la ruta de la factura mientras el contrato esté vigente.',
+            'accion' => 'Obligatoria (factura contra COM; honorarios y abonos van por esta ruta) o no requiere recepción (casos excepcionales). Fija la ruta de la factura mientras el contrato esté vigente.',
             'permiso' => 'crear-ordencompra / editar-ordencompra',
         ],
         [

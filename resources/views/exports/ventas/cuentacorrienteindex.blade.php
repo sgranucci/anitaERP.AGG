@@ -1,10 +1,16 @@
 @php
+    use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
     use App\Support\Ventas\ClienteCuentacorrientePreferenciasUsuario;
 
-    $colspan = 9;
+    $mostrarSaldoCorrido = (bool) ($mostrarSaldoCorrido ?? false);
+    $saldosPorMoneda = $saldosPorMoneda ?? [];
+    $equivalentePesos = $equivalentePesos ?? [];
+    $expresion = CuentacorrienteSaldosPorMoneda::resolverExpresion($expresion ?? null);
+    $enPesos = CuentacorrienteSaldosPorMoneda::esExpresionPesos($expresion);
+    $abrevLocal = CuentacorrienteSaldosPorMoneda::abreviaturaLocal();
     $modoDeuda = ($modoVista ?? ClienteCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE)
         === ClienteCuentacorrientePreferenciasUsuario::MODO_DEUDA;
-    $formatear = static fn ($v) => number_format((float) $v, 2, ',', '.');
+    $colspan = $modoDeuda ? 9 : 10;
 @endphp
 <table>
     @if (! empty($reservarFilaLogoExcel))
@@ -34,8 +40,12 @@
         @endif
         <tr>
             <td colspan="{{ $colspan }}" style="font-size: 10pt; color: #444;">
-                Saldo cuenta corriente: {{ $formatear($saldoCuentaCorriente ?? 0) }}
-                &middot; Total deuda: {{ $formatear($totalDeuda ?? 0) }}
+                Saldo: {{ CuentacorrienteSaldosPorMoneda::formatearResumen($saldosPorMoneda, 'saldo_cc') }}
+                &middot; Deuda: {{ CuentacorrienteSaldosPorMoneda::formatearResumen($saldosPorMoneda, 'deuda') }}
+                &middot; Equiv. {{ $abrevLocal }} (TC compr.): {{ CuentacorrienteSaldosPorMoneda::formatearMonto((float) ($equivalentePesos['saldo_cc'] ?? 0), $abrevLocal) }}
+                @if ($enPesos)
+                    &middot; Importes expresados en {{ $abrevLocal }}
+                @endif
             </td>
         </tr>
         @if (($totalFilas ?? 0) > 0)
@@ -50,6 +60,8 @@
         'filas' => $filas,
         'modoVista' => $modoVista ?? ClienteCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE,
         'saldoAnterior' => 0,
+        'mostrarSaldoCorrido' => $mostrarSaldoCorrido,
+        'expresion' => $expresion,
         'para_pdf' => true,
         'para_excel' => true,
     ])

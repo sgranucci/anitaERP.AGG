@@ -92,6 +92,27 @@
 .acc-switch input {
     margin: 0;
 }
+.acc-btn-otras .acc-otras-count {
+    display: inline-block;
+    min-width: 1.4em;
+    margin-left: 4px;
+    padding: 0 5px;
+    font-size: 11px;
+    font-weight: 700;
+    border: 1px solid #AED6F1;
+    background: #EAF2F8;
+    color: #1A5276;
+}
+.acc-btn-otras.is-on {
+    background: #1B4F72;
+    border-color: #1B4F72;
+    color: #fff;
+}
+.acc-btn-otras.is-on .acc-otras-count {
+    background: #154360;
+    border-color: #5DADE2;
+    color: #D4E6F1;
+}
 .acc-panes {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -229,6 +250,21 @@
     color: #6C3483;
     background: #F5EEF8;
 }
+.acc-chip.is-cruzada {
+    border-color: #F5B041;
+    color: #9A7D0A;
+    background: #FEF9E7;
+}
+.acc-row.is-otra-moneda {
+    background: #FEF9E7;
+    border-left-color: #F5B041;
+    opacity: 1;
+}
+.acc-btn-otras-mon.is-on {
+    background: #9A7D0A;
+    border-color: #9A7D0A;
+    color: #fff;
+}
 .acc-row .acc-side {
     text-align: right;
 }
@@ -315,7 +351,7 @@
 .acc-board-body { padding: 8px 8px 12px; }
 .acc-pair {
     display: grid;
-    grid-template-columns: 72px minmax(0, 1fr) 16px minmax(0, 1fr) 110px 108px 32px;
+    grid-template-columns: 72px minmax(0, 1fr) 16px minmax(0, 1fr) 88px 88px 108px 32px;
     gap: 8px;
     align-items: center;
     padding: 8px 10px;
@@ -349,6 +385,11 @@
 }
 .acc-pair .acc-pair-dc.is-loss { color: #C0392B; }
 .acc-pair .acc-pair-dc.is-gain { color: #1E8449; }
+.acc-pair .acc-pair-equiv {
+    font-size: 10px;
+    color: #7F8C8D;
+    text-align: right;
+}
 .acc-dock-stat #acc-dock-dc.is-loss { color: #F5B7B1; }
 .acc-dock-stat #acc-dock-dc.is-gain { color: #ABEBC6; }
 .acc-pair.is-manual { background: #FBF5FC; }

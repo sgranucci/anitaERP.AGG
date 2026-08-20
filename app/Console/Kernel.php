@@ -126,6 +126,13 @@ class Kernel extends ConsoleKernel
 
         $schedule->command('prestamo:recordatorios')->dailyAt('07:30');
 
+        $schedule->command('compras:conciliar-cc-proveedor')
+            ->dailyAt((string) config('compras.conciliacion_cc_proveedor.hora', '07:40'))
+            ->runInBackground()
+            ->withoutOverlapping(120)
+            ->appendOutputTo(storage_path('logs/compras-cc-conciliacion-schedule.log'))
+            ->when(fn () => (bool) config('compras.conciliacion_cc_proveedor.habilitada', true));
+
         $schedule->command('compras:alertas-ordencompra-abiertas')
             ->dailyAt((string) config('compras.oc_alertas_abiertas.hora', '08:15'))
             ->runInBackground()

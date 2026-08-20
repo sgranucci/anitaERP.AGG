@@ -86,6 +86,10 @@
 
         <hr>
         <h5>Comprobantes a pagar</h5>
+        <p class="text-muted small mb-2">
+            El monto a aplicar va en moneda de la factura. Si la OP está en otra moneda se convierte con la cotización de liquidación
+            (factura o del día según el modo), se muestra el equivalente y la diferencia de cambio. El matching de CC queda en la cubeta de la factura; la DC se asienta, no abre un ítem en pesos.
+        </p>
         <div class="table-responsive">
             <table class="table table-sm table-bordered" id="tabla-deuda-proveedor">
                 <thead style="background:#85C1E9;color:#17202A;">
@@ -96,10 +100,13 @@
                         <th>Moneda</th>
                         <th class="text-right">Saldo</th>
                         <th class="text-right">A aplicar</th>
+                        <th class="text-right">Cot. liq.</th>
+                        <th class="text-right">Equiv. OP</th>
+                        <th class="text-right">DC</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td colspan="6" class="text-muted text-center">Seleccione proveedor y empresa</td></tr>
+                    <tr><td colspan="9" class="text-muted text-center">Seleccione proveedor y empresa</td></tr>
                 </tbody>
             </table>
         </div>

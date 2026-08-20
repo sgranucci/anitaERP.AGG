@@ -27,16 +27,26 @@
 @endsection
 
 @php
-use App\Support\Compras\ProveedorCuentacorrienteGrillaSupport;
-use App\Support\Compras\ProveedorCuentacorrienteListadoFiltros;
-use App\Support\Compras\ProveedorCuentacorrientePreferenciasUsuario;
+    use App\Support\Compras\ProveedorCuentacorrienteGrillaSupport;
+    use App\Support\Compras\ProveedorCuentacorrienteListadoFiltros;
+    use App\Support\Compras\ProveedorCuentacorrientePreferenciasUsuario;
+    use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
 
-$modoCuentaCorriente = ($modoVista ?? ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE)
-    === ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE;
+    $modoCuentaCorriente = ($modoVista ?? ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE)
+        === ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE;
+    $mostrarSaldoCorrido = (bool) ($mostrarSaldoCorrido ?? false);
+    $monedaId = $monedaId ?? null;
+    $expresion = CuentacorrienteSaldosPorMoneda::resolverExpresion($expresion ?? null);
+    $enPesos = CuentacorrienteSaldosPorMoneda::esExpresionPesos($expresion);
+    $abrevLocal = CuentacorrienteSaldosPorMoneda::abreviaturaLocal();
 $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
     ['id' => $id],
     ProveedorCuentacorrienteListadoFiltros::paraQueryStringEmpresa($filtros ?? []),
-    ['modo_vista' => $modoVista ?? ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE],
+    [
+        'modo_vista' => $modoVista ?? ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE,
+        'moneda_id' => CuentacorrienteSaldosPorMoneda::valorQuery($monedaId),
+        'expresion' => $expresion,
+    ],
     request()->only(['origen', 'vista'])
 ));
 @endphp
@@ -50,17 +60,17 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
                 <h3 class="card-title">Cuenta Corriente Proveedor: {{ $nombreproveedor }}</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @if (can('aplicar-cuentacorriente-proveedor', false))
-                        <a href="{{ route('aplicacion_cuentacorriente_proveedor', ['proveedor_id' => $id]) }}" class="btn btn-outline-primary btn-sm mr-1">
+                        <a href="{{ route('aplicacion_cuentacorriente_proveedor', ['proveedor_id' => $id]) }}" class="btn btn-light btn-sm mr-1">
                             <i class="fa fa-compress-alt"></i> Aplicar comprobantes
                         </a>
                     @endif
                     @if (!str_contains($urlOrigen ?? '', 'editar'))
                         @if (isset($urlOrigen))
-                            <a href="{{ $urlOrigen }}" class="btn btn-outline-secondary btn-sm mr-1">
+                            <a href="{{ $urlOrigen }}" class="btn btn-light btn-sm mr-1">
                                 <i class="fa fa-fw fa-reply-all"></i> Volver
                             </a>
                         @else
-                            <a href="javascript:history.back()" class="btn btn-outline-secondary btn-sm mr-1">
+                            <a href="javascript:history.back()" class="btn btn-light btn-sm mr-1">
                                 <i class="fa fa-fw fa-reply-all"></i> Volver atr&aacute;s
                             </a>
                         @endif
@@ -79,6 +89,8 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
             </div>
             <form method="get" action="{{ route('listar_cuentacorriente_proveedor', ['id' => $id]) }}" id="form-filtros-cuentacorriente-proveedor" class="mb-0">
                 <input type="hidden" name="modo_vista" id="modo_vista" value="{{ $modoVista ?? ProveedorCuentacorrientePreferenciasUsuario::MODO_CUENTA_CORRIENTE }}">
+                <input type="hidden" name="moneda_id" value="{{ CuentacorrienteSaldosPorMoneda::valorQuery($monedaId) }}">
+                <input type="hidden" name="expresion" value="{{ $expresion }}">
                 @foreach (request()->only(['origen', 'vista']) as $modoConsultaClave => $modoConsultaValor)
                     <input type="hidden" name="{{ $modoConsultaClave }}" value="{{ $modoConsultaValor }}">
                 @endforeach
@@ -103,26 +115,15 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
             </form>
             @include('compras.cuentacorriente.partials.filtros_externos')
             <div class="card-body">
-                <div class="row mb-3">
-                    <div class="col-md-6">
-                        <div class="info-box mb-0 bg-light">
-                            <span class="info-box-icon bg-info"><i class="fas fa-balance-scale"></i></span>
-                            <span class="info-box-content">
-                                <span class="info-box-text">Saldo cuenta corriente</span>
-                                <span class="info-box-number">{{ number_format($saldoCuentaCorriente ?? 0, 2) }}</span>
-                            </span>
-                        </div>
-                    </div>
-                    <div class="col-md-6">
-                        <div class="info-box mb-0 bg-light">
-                            <span class="info-box-icon bg-warning"><i class="fas fa-file-invoice-dollar"></i></span>
-                            <span class="info-box-content">
-                                <span class="info-box-text">Total deuda (facturas impagas)</span>
-                                <span class="info-box-number">{{ number_format($totalDeuda ?? 0, 2) }}</span>
-                            </span>
-                        </div>
-                    </div>
-                </div>
+                @include('includes.cuentacorriente.saldos_por_moneda', [
+                    'saldosPorMoneda' => $saldosPorMoneda ?? [],
+                    'equivalentePesos' => $equivalentePesos ?? [],
+                    'monedaId' => $monedaId,
+                    'expresion' => $expresion,
+                    'ruta' => 'listar_cuentacorriente_proveedor',
+                    'id' => $id,
+                    'queryFiltros' => $filtrosQuery ?? [],
+                ])
 
                 <div class="table-responsive p-0">
                     @include('includes.exportar-tabla-id', [
@@ -141,28 +142,54 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
                                 <th>Comprobante</th>
                                 <th>Moneda</th>
                                 @if ($modoCuentaCorriente)
-                                    <th style="width: 12%; text-align: right;">Debe</th>
-                                    <th style="width: 12%; text-align: right;">Haber</th>
+                                    <th style="width: 11%; text-align: right;">Debe</th>
+                                    <th style="width: 11%; text-align: right;">Haber</th>
                                     <th style="width: 12%; text-align: right;">Saldo</th>
+                                    <th style="width: 13%; text-align: right;">{{ CuentacorrienteSaldosPorMoneda::etiquetaColumnaSaldoPesos() }}</th>
                                 @else
-                                    <th style="width: 12%; text-align: right;">Importe</th>
-                                    <th style="width: 12%; text-align: right;">Aplicado</th>
+                                    <th style="width: 11%; text-align: right;">Importe</th>
+                                    <th style="width: 11%; text-align: right;">Aplicado</th>
                                     <th style="width: 12%; text-align: right;">Saldo pendiente</th>
+                                    <th style="width: 13%; text-align: right;">{{ CuentacorrienteSaldosPorMoneda::etiquetaColumnaSaldoPendientePesos() }}</th>
                                 @endif
                                 <th class="width160 text-nowrap col-acciones-tabla col-acciones-cc" data-orderable="false">Acciones</th>
                             </tr>
                         </thead>
                         <tbody>
-                            @php $saldo = (float) ($saldoAnterior ?? 0); @endphp
+                            @php
+                                $saldosCorridos = $saldosAnterioresPorMoneda ?? [];
+                                $saldoPesos = (float) ($saldoAnteriorPesos ?? 0);
+                            @endphp
                             @foreach ($cuentacorriente as $data)
                                 @php
                                     $etiquetaComprobante = ProveedorCuentacorrienteGrillaSupport::etiquetaComprobante($data);
-                                    $aplicado = (float) ($data->aplicado ?? 0);
-                                    $saldoPendiente = ProveedorCuentacorrienteGrillaSupport::saldoPendienteAbsoluto((float) $data->total, $data->aplicado ?? null);
+                                    $importes = CuentacorrienteSaldosPorMoneda::importesParaGrilla(
+                                        $data,
+                                        $enPesos,
+                                        static fn ($total, $aplicado) => ProveedorCuentacorrienteGrillaSupport::saldoPendienteAbsoluto((float) $total, $aplicado)
+                                    );
+                                    $totalMostrar = $importes['total'];
+                                    $aplicadoMostrar = $importes['aplicado'];
+                                    $saldoPendiente = $importes['saldo_pendiente_origen'];
+                                    $saldoPendientePesos = $importes['saldo_pendiente_pesos'];
+                                    $abreviaturaFila = $importes['abreviatura'];
+                                    $etiquetaMoneda = $importes['etiqueta_moneda'];
+                                    $monedaFilaId = $importes['moneda_id'];
+                                    if ($modoCuentaCorriente) {
+                                        $saldosCorridos = CuentacorrienteSaldosPorMoneda::acumularSaldoCorrido(
+                                            $saldosCorridos,
+                                            $monedaFilaId,
+                                            (float) $data->total
+                                        );
+                                        $saldoFila = $saldosCorridos[$monedaFilaId] ?? 0.0;
+                                        $saldoPesos = CuentacorrienteSaldosPorMoneda::acumularSaldoCorridoPesos(
+                                            $saldoPesos,
+                                            $data,
+                                            (float) $data->total
+                                        );
+                                        $saldoFilaPesos = $saldoPesos;
+                                    }
                                 @endphp
-                                @if ($modoCuentaCorriente)
-                                    @php $saldo += (float) $data->total; @endphp
-                                @endif
                                 <tr>
                                     <td class="cuentacorriente_id">{{ $data->id }}</td>
                                     <td>{{ $data->empresas->nombre ?? '' }}</td>
@@ -175,34 +202,40 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
                                         ])
                                     </td>
                                     <td>
-                                        {{ $data->monedas->abreviatura ?? '' }}
+                                        {{ $etiquetaMoneda }}
                                         <input type="hidden" name="moneda" class="form-control moneda" value="{{ $data->monedas->id ?? '' }}">
                                     </td>
                                     @if ($modoCuentaCorriente)
                                         <td class="debe" style="text-align: right;">
-                                            @if ($data->total >= 0)
-                                                {{ number_format($data->total, 2) }}
+                                            @if ($totalMostrar >= 0)
+                                                {{ CuentacorrienteSaldosPorMoneda::formatearMonto($totalMostrar, $abreviaturaFila) }}
                                             @endif
                                         </td>
                                         <td class="haber" style="text-align: right;">
-                                            @if ($data->total < 0)
-                                                {{ number_format(abs($data->total), 2) }}
+                                            @if ($totalMostrar < 0)
+                                                {{ CuentacorrienteSaldosPorMoneda::formatearMonto(abs($totalMostrar), $abreviaturaFila) }}
                                             @endif
                                         </td>
                                         <td style="text-align: right;">
-                                            {{ number_format($saldo, 2) }}
+                                            {{ CuentacorrienteSaldosPorMoneda::formatearMonto((float) $saldoFila, $data->monedas->abreviatura ?? $abreviaturaFila) }}
+                                        </td>
+                                        <td style="text-align: right;">
+                                            {{ CuentacorrienteSaldosPorMoneda::formatearMonto((float) $saldoFilaPesos, $abrevLocal) }}
                                         </td>
                                     @else
                                         <td style="text-align: right;">
-                                            {{ number_format(abs($data->total), 2) }}
+                                            {{ CuentacorrienteSaldosPorMoneda::formatearMonto(abs($totalMostrar), $abreviaturaFila) }}
                                         </td>
                                         <td style="text-align: right;">
-                                            @if ($aplicado != 0)
-                                                {{ number_format(abs($aplicado), 2) }}
+                                            @if ($aplicadoMostrar != 0)
+                                                {{ CuentacorrienteSaldosPorMoneda::formatearMonto(abs($aplicadoMostrar), $abreviaturaFila) }}
                                             @endif
                                         </td>
                                         <td style="text-align: right;">
-                                            {{ number_format($saldoPendiente, 2) }}
+                                            {{ CuentacorrienteSaldosPorMoneda::formatearMonto($saldoPendiente, $data->monedas->abreviatura ?? $abreviaturaFila) }}
+                                        </td>
+                                        <td style="text-align: right;">
+                                            {{ CuentacorrienteSaldosPorMoneda::formatearMonto($saldoPendientePesos, $abrevLocal) }}
                                         </td>
                                     @endif
                                     <td class="col-acciones-tabla col-acciones-cc">
@@ -215,17 +248,33 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
                         @if ($modoCuentaCorriente)
                             <tfoot>
                                 <tr class="font-weight-bold bg-light">
-                                    <td colspan="8" class="text-right">Saldo al cierre de la p&aacute;gina</td>
-                                    <td style="text-align: right;">{{ number_format($saldo, 2) }}</td>
+                                    <td colspan="8" class="text-right">Saldos acumulados</td>
+                                    <td style="text-align: right;">
+                                        {{ CuentacorrienteSaldosPorMoneda::formatearResumen($saldosPorMoneda ?? [], 'saldo_cc') }}
+                                    </td>
+                                    <td style="text-align: right;">
+                                        {{ CuentacorrienteSaldosPorMoneda::formatearMonto((float) ($equivalentePesos['saldo_cc'] ?? 0), $abrevLocal) }}
+                                    </td>
                                     <td></td>
                                 </tr>
                             </tfoot>
                         @else
+                            @php
+                                $pendienteAbsoluto = static fn ($fila) => ProveedorCuentacorrienteGrillaSupport::saldoPendienteAbsoluto((float) $fila->total, $fila->aplicado ?? null);
+                                $deudaPantalla = CuentacorrienteSaldosPorMoneda::totalesEnPantalla($cuentacorriente, $pendienteAbsoluto);
+                                $deudaPantallaPesos = CuentacorrienteSaldosPorMoneda::deudaPantallaEnPesos(
+                                    $cuentacorriente,
+                                    static fn ($total, $aplicado) => ProveedorCuentacorrienteGrillaSupport::saldoPendienteAbsoluto((float) $total, $aplicado)
+                                );
+                            @endphp
                             <tfoot>
                                 <tr class="font-weight-bold bg-light">
                                     <td colspan="8" class="text-right">Total deuda en pantalla</td>
                                     <td style="text-align: right;">
-                                        {{ number_format($cuentacorriente->sum(fn ($fila) => ProveedorCuentacorrienteGrillaSupport::saldoPendienteAbsoluto((float) $fila->total, $fila->aplicado ?? null)), 2) }}
+                                        {{ CuentacorrienteSaldosPorMoneda::formatearResumen($deudaPantalla, 'total') }}
+                                    </td>
+                                    <td style="text-align: right;">
+                                        {{ CuentacorrienteSaldosPorMoneda::formatearMonto($deudaPantallaPesos, $abrevLocal) }}
                                     </td>
                                     <td></td>
                                 </tr>

@@ -5,7 +5,11 @@
 @endsection
 
 @section('styles')
-<link rel="stylesheet" href="{{ asset('assets/css/compras-aplicacion-cc.css') }}">
+@php
+    $accCss = public_path('assets/css/compras-aplicacion-cc.css');
+    $accJs = public_path('assets/pages/scripts/compras/aplicacion_cuentacorriente/workbench.js');
+@endphp
+<link rel="stylesheet" href="{{ asset('assets/css/compras-aplicacion-cc.css') }}?v={{ is_file($accCss) ? filemtime($accCss) : time() }}">
 @endsection
 
 @section('scripts')
@@ -13,7 +17,7 @@
 <script>
     window.APLICACION_CC_INICIAL = @json($aplicacionCcInicial);
 </script>
-<script src="{{ asset('assets/pages/scripts/compras/aplicacion_cuentacorriente/workbench.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/aplicacion_cuentacorriente/workbench.js') }}?v={{ is_file($accJs) ? filemtime($accJs) : time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -28,7 +32,9 @@
      data-url-sugerir="{{ route('api_sugerir_aplicacion_cuentacorriente_proveedor') }}"
      data-url-aplicar="{{ route('aplicar_cuentacorriente_proveedor') }}"
      data-url-desaplicar="{{ url('compras/aplicacion-cuentacorriente/__ID__/desaplicar') }}"
-     data-url-cc="{{ url('compras/listarcuentacorrienteproveedor/__ID__') }}">
+     data-url-cc="{{ url('compras/listarcuentacorrienteproveedor/__ID__') }}"
+     data-url-cotizacion="{{ route('comprobante_proveedor_cotizacion_moneda_fecha') }}"
+     data-moneda-local="{{ (int) config('cotizacion.ID_MONEDA_DEFAULT', 1) }}">
 
     <div class="acc-hero">
         <div class="d-flex justify-content-between align-items-start flex-wrap">
@@ -72,7 +78,12 @@
                 <label class="small mb-1">Fecha aplicación</label>
                 <input type="date" id="acc-fecha" class="form-control form-control-sm" value="{{ $fecha }}">
             </div>
-            <div class="form-group col-md-4 mb-2 acc-toolbar-actions">
+            <div class="form-group col-md-2 mb-2">
+                <label class="small mb-1">Cot. liquidación</label>
+                <input type="number" step="0.0001" min="0" id="acc-cot-liq" class="form-control form-control-sm" placeholder="Pesos por 1 ME">
+                <small class="text-muted" id="acc-cot-liq-hint">Para cruzar pesos ↔ dólares</small>
+            </div>
+            <div class="form-group col-md-12 mb-2 acc-toolbar-actions">
                 <label class="acc-switch mb-0 mr-2" title="Arma FIFO con el saldo que no fijaste">
                     <input type="checkbox" id="acc-auto" checked>
                     <span>Sugerir al instante</span>
@@ -80,6 +91,14 @@
                 <button type="button" id="btn-acc-fifo" class="btn btn-sm btn-outline-primary">Rehacer FIFO</button>
                 <button type="button" id="btn-acc-parear" class="btn btn-sm btn-outline-primary">Parear iguales</button>
                 <button type="button" id="btn-acc-limpiar" class="btn btn-sm btn-outline-secondary">Limpiar</button>
+                <button type="button" id="btn-acc-otras-empresas" class="btn btn-sm btn-outline-secondary acc-btn-otras acc-hidden" title="Mostrar comprobantes de otras empresas">
+                    <span class="acc-otras-label">Ver otras empresas</span>
+                    <span id="acc-otras-count" class="acc-otras-count">0</span>
+                </button>
+                <button type="button" id="btn-acc-otras-monedas" class="btn btn-sm btn-outline-secondary acc-btn-otras acc-btn-otras-mon acc-hidden" title="Mostrar facturas de otra moneda">
+                    <span class="acc-otras-mon-label">Ver otras monedas</span>
+                    <span id="acc-otras-mon-count" class="acc-otras-count">0</span>
+                </button>
             </div>
         </div>
     </div>
@@ -146,7 +165,7 @@
             <span class="acc-badge auto">Sugerida</span> se recálcula sola.
             <span class="acc-badge manual">Fijada</span> la cambiaste vos y no se toca.
             Destildá una factura para sacarla del matching.
-            Si crédito y deuda tienen distinta cotización se muestra la diferencia de cambio y se asienta al confirmar.
+            Misma moneda: DC si cambió la cotización. Distinta moneda: usá <strong>Ver otras monedas</strong>, cargá la cotización de liquidación y tildá la factura en pesos: se convierte, se consume cada cubeta en su moneda y se asienta DC. El FIFO no cruza monedas.
         </div>
         <div id="acc-board-body" class="acc-board-body"></div>
     </div>

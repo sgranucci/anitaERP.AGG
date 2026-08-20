@@ -55,7 +55,7 @@ class ComprobanteProveedorImportarDesdeAnitaCommand extends Command
             $dryRun ? 'DRY-RUN' : 'EJECUTAR'
         ));
         $this->line('Fuente Anita: compra + promov + aplmovp (concmov solo para conceptos IVA).');
-        $this->line('Las facturas ya cargadas en ERP no se importan.');
+        $this->line('Las facturas ya cargadas en ERP no se importan. OPA sin aplicar sí se traen.');
 
         try {
             $stats = $service->importar(
@@ -93,6 +93,10 @@ class ComprobanteProveedorImportarDesdeAnitaCommand extends Command
             ['Aplicaciones a grabar/grabadas', $stats['aplicaciones']],
             ['Pagos sintéticos (OP)', $stats['aplicaciones_pago_sintetico']],
             ['Aplicaciones omitidas', $stats['aplicaciones_omitidas']],
+            ['OPA Anita', $stats['adelantos_anita']],
+            ['OPA sin aplicar a crear', $stats['adelantos_a_crear']],
+            ['OPA creados', $stats['adelantos_creados']],
+            ['OPA ya en ERP', $stats['adelantos_omitidos_ya_en_erp']],
             ['Errores', count($stats['errores'])],
         ]);
 
@@ -109,6 +113,20 @@ class ComprobanteProveedorImportarDesdeAnitaCommand extends Command
                     $r['cuotas'],
                     $r['nro_interno'] ?: '—',
                 ], $stats['muestra'])
+            );
+        }
+
+        if ($stats['muestra_adelantos'] !== []) {
+            $this->newLine();
+            $this->line('OPA sin aplicar (hasta 20):');
+            $this->table(
+                ['Adelanto', 'Emp', 'Fecha', 'Pendiente'],
+                array_map(static fn (array $r) => [
+                    $r['etiqueta'],
+                    $r['empresa_id'] ?? '—',
+                    $r['fecha'],
+                    number_format((float) $r['total'], 2, ',', '.'),
+                ], $stats['muestra_adelantos'])
             );
         }
 

@@ -48,6 +48,8 @@ class ComprobanteProveedorContabilizarService
             throw new RuntimeException('No se puede contabilizar en estado «'.$comprobante->estado.'».');
         }
 
+        app(ContratoValidacionAbonoService::class)->assertComprobanteContabilizable($comprobante);
+
         if ($comprobante->comprobante_proveedor_conceptos()->count() === 0) {
             throw new RuntimeException('Agregue al menos un concepto IVA antes de contabilizar.');
         }

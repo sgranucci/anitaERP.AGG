@@ -168,6 +168,8 @@ final class PagoproveedorAsientoArmadoSupport
 
         $proveedor = Proveedor::query()->find($proveedorId);
         $totalesPorCuenta = [];
+        $dcTotal = 0.0;
+        $cuentaApRef = 0;
         foreach ($datosComprobantes as $comp) {
             $comp = self::asObject($comp);
             $monto = abs((float) ($comp->montos ?? 0));
@@ -196,16 +198,20 @@ final class PagoproveedorAsientoArmadoSupport
             if ($cuentaId <= 0) {
                 continue;
             }
-            $key = $cuentaId.'|'.$monedaId.'|'.(float) ($comp->cotizaciones ?? 1);
+            $cotLinea = (float) ($comp->cotizacion_aplicadas ?? $comp->cotizaciones ?? 1);
+            $key = $cuentaId.'|'.$monedaId.'|'.$cotLinea;
             if (! isset($totalesPorCuenta[$key])) {
                 $totalesPorCuenta[$key] = [
                     'cuentacontable_id' => $cuentaId,
                     'moneda_id' => $monedaId,
-                    'cotizacion' => (float) ($comp->cotizaciones ?? 1),
+                    'cotizacion' => $cotLinea,
                     'monto' => 0.0,
                 ];
             }
             $totalesPorCuenta[$key]['monto'] += $monto;
+            $dcLinea = isset($comp->diferencias_cambio) ? (float) $comp->diferencias_cambio : (float) ($comp->diferencia_cambio ?? 0);
+            $dcTotal += $dcLinea;
+            $cuentaApRef = $cuentaId;
         }
 
         foreach ($totalesPorCuenta as $fila) {
@@ -220,6 +226,14 @@ final class PagoproveedorAsientoArmadoSupport
                 'Cancelación proveedores'
             );
         }
+
+        self::agregarDcSiCorresponde(
+            $asiento,
+            $dcTotal,
+            $cuentaApRef,
+            $proveedor,
+            $cuentacontableRepository
+        );
 
         return $asiento;
     }
@@ -297,6 +311,66 @@ final class PagoproveedorAsientoArmadoSupport
         }
         if ($haber !== '') {
             $asiento[$idx]['haber'] = (float) ($asiento[$idx]['haber'] ?: 0) + $monto;
+        }
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $asiento
+     */
+    private static function agregarDcSiCorresponde(
+        array &$asiento,
+        float $dcTotal,
+        int $cuentaApId,
+        ?Proveedor $proveedor,
+        CuentacontableRepositoryInterface $cuentacontableRepository,
+    ): void {
+        $dcTotal = round($dcTotal, 4);
+        if (abs($dcTotal) < 0.01) {
+            return;
+        }
+
+        $cuentaDcId = 0;
+        $ids = array_filter([
+            $cuentaApId,
+            (int) ($proveedor->cuentacontable_id ?? 0),
+            (int) ($proveedor->cuentacontableme_id ?? 0),
+        ]);
+        foreach ($ids as $id) {
+            $cuenta = $cuentacontableRepository->find($id);
+            $dcId = (int) ($cuenta->cuentacontable_difcambio_id ?? 0);
+            if ($dcId > 0 && $dcId !== (int) $id) {
+                $cuentaDcId = $dcId;
+                break;
+            }
+        }
+        if ($cuentaDcId <= 0) {
+            return;
+        }
+
+        $monedaLocal = (int) config('cotizacion.ID_MONEDA_DEFAULT', 1);
+        $importe = abs($dcTotal);
+        $perdida = $dcTotal > 0;
+        self::agregaCuenta(
+            $asiento,
+            $cuentaDcId,
+            $monedaLocal,
+            1,
+            $perdida ? 'D' : 'H',
+            $importe,
+            $cuentacontableRepository,
+            'Diferencia de cambio OP'
+        );
+        if ($cuentaApId > 0) {
+            self::agregaCuenta(
+                $asiento,
+                $cuentaApId,
+                $monedaLocal,
+                1,
+                $perdida ? 'H' : 'D',
+                $importe,
+                $cuentacontableRepository,
+                'Diferencia de cambio OP'
+            );
         }
     }
 

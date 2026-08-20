@@ -202,6 +202,13 @@ class ModuloAvisoController extends Controller
             ]);
         }
 
+        if ($modulo === 'compras' && $codigo === 'contrato_validacion_abono_pendiente') {
+            return array_merge($comunes, [
+                '{numero_oc}', '{proveedor}', '{detalle}', '{periodo}',
+                '{origen_etiqueta}', '{origen_numero}', '{estado}',
+            ]);
+        }
+
         return array_merge($comunes, ['{numero}', '{solicitante}', '{empresa}', '{centro_costo}', '{fecha}']);
     }
 }

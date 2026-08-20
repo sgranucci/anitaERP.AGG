@@ -23,6 +23,7 @@ use App\Repositories\Ventas\Cliente_CuentacorrienteRepository;
 use App\Repositories\Ventas\ClienteRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Support\Compras\ComprasKpisOperativosSupport;
+use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
 use App\Support\Contable\CuentacontableSaldoMesSupport;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Stock\ArticuloSaldosDepositoSupport;
@@ -965,8 +966,9 @@ final class AiConsultaOperativaSupport
 
         /** @var Proveedor_CuentacorrienteRepositoryInterface $repoCt */
         $repoCt = app(Proveedor_CuentacorrienteRepositoryInterface::class);
-        $saldo = $repoCt->calcularSaldoCuentaCorriente((int) $proveedor->id);
-        $deuda = $repoCt->calcularTotalDeudaProveedor((int) $proveedor->id);
+        $saldosPorMoneda = $repoCt->calcularSaldosYDeudasPorMoneda((int) $proveedor->id);
+        $saldo = CuentacorrienteSaldosPorMoneda::formatearResumen($saldosPorMoneda, 'saldo_cc');
+        $deuda = CuentacorrienteSaldosPorMoneda::formatearResumen($saldosPorMoneda, 'deuda');
         $max = self::topeLineas($params, 60);
         $fechaDesde = trim((string) ($params['fecha_desde'] ?? ''));
         $fechaHasta = trim((string) ($params['fecha_hasta'] ?? ''));
@@ -1028,8 +1030,8 @@ final class AiConsultaOperativaSupport
 
         $parrafos = [
             'Proveedor '.$proveedor->codigo.' — '.($proveedor->nombre ?? ''),
-            'Saldo cuenta corriente: '.number_format($saldo, 2, ',', '.'),
-            'Deuda pendiente (aprox.): '.number_format($deuda, 2, ',', '.'),
+            'Saldo cuenta corriente: '.$saldo,
+            'Deuda pendiente (aprox.): '.$deuda,
         ];
         if ($fechaDesde !== '' || $fechaHasta !== '') {
             $parrafos[] = 'Período: '
@@ -1518,8 +1520,9 @@ final class AiConsultaOperativaSupport
 
         /** @var Cliente_CuentacorrienteRepository $repoCt */
         $repoCt = app(Cliente_CuentacorrienteRepository::class);
-        $saldo = $repoCt->calcularSaldoCuentaCorriente((int) $cliente->id);
-        $deuda = $repoCt->calcularTotalDeudaCliente((int) $cliente->id);
+        $saldosPorMoneda = $repoCt->calcularSaldosYDeudasPorMoneda((int) $cliente->id);
+        $saldo = CuentacorrienteSaldosPorMoneda::formatearResumen($saldosPorMoneda, 'saldo_cc');
+        $deuda = CuentacorrienteSaldosPorMoneda::formatearResumen($saldosPorMoneda, 'deuda');
         $max = self::topeLineas($params, 60);
         $fechaDesde = trim((string) ($params['fecha_desde'] ?? ''));
         $fechaHasta = trim((string) ($params['fecha_hasta'] ?? ''));
@@ -1577,8 +1580,8 @@ final class AiConsultaOperativaSupport
 
         $parrafos = [
             'Cliente '.$cliente->codigo.' — '.($cliente->nombre ?? ''),
-            'Saldo cuenta corriente: '.number_format($saldo, 2, ',', '.'),
-            'Deuda pendiente (aprox.): '.number_format($deuda, 2, ',', '.'),
+            'Saldo cuenta corriente: '.$saldo,
+            'Deuda pendiente (aprox.): '.$deuda,
         ];
         if ($fechaDesde !== '' || $fechaHasta !== '') {
             $parrafos[] = 'Período: '

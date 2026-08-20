@@ -2903,8 +2903,13 @@ $(function () {
 		$('#oc-contrato-imputacion').toggle(esContrato && !requiereRecepcion);
 		var imputacionManual = $('#contrato_imputacion_manual').is(':checked');
 		$('#oc-contrato-cuenta-imputar').toggle(esContrato && !requiereRecepcion && imputacionManual);
+
+		var requiereValidacion = esContrato && $('#contrato_requiere_validacion_abono').is(':checked');
+		var exigeIngresos = esContrato && $('#contrato_exige_ingresos').is(':checked');
+		$('#oc-contrato-plantilla-validacion').toggle(requiereValidacion || exigeIngresos);
+		$('#oc-contrato-minimo-ingresos').toggle(exigeIngresos);
 	}
 
-	$(document).on('change', '#es_contrato, #contrato_auto_renovable, input[name="contrato_requiere_recepcion"], input[name="contrato_imputacion_contable"]', ocSincronizarBloqueContrato);
+	$(document).on('change', '#es_contrato, #contrato_auto_renovable, input[name="contrato_requiere_recepcion"], input[name="contrato_imputacion_contable"], #contrato_requiere_validacion_abono, #contrato_exige_ingresos', ocSincronizarBloqueContrato);
 	ocSincronizarBloqueContrato();
 });

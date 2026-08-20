@@ -26,7 +26,7 @@
                     @endif
                 </h3>
                 <div class="card-tools">
-                    @if ($mostrarContabilizar)
+                    @if ($mostrarContabilizar && ($mostrarContabilizarAbono ?? true))
                         @if ($esEdicion)
                         <form action="{{ route('contabilizar_comprobante_proveedor', ['id' => $data->id]) }}" method="POST" class="d-inline"
                             onsubmit="return confirm('¿Confirmar / contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
@@ -42,6 +42,10 @@
                             <i class="fa fa-check"></i> Contabilizar
                         </button>
                         @endif
+                    @elseif ($mostrarContabilizar)
+                        <button type="button" class="btn btn-warning btn-sm" disabled title="Completá la validación de abono">
+                            <i class="fa fa-lock"></i> Contabilizar (bloqueado)
+                        </button>
                     @endif
                     <a href="{{ route('comprobante_proveedor') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
@@ -193,6 +197,7 @@
                 </div>
 
                 <div class="card-body">
+                    @include('compras.contrato_validacion_abono.partials.banner')
                     @php
                         $avisosIniciales = $asientoPreview['avisos'] ?? [];
                         $errorInicial = $asientoPreview['error'] ?? null;

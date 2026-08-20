@@ -4,6 +4,7 @@ namespace App\Exports\Ventas;
 
 use App\Repositories\Ventas\Cliente_CuentacorrienteRepositoryInterface;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
 use App\Support\Ventas\ClienteCuentacorrientePreferenciasUsuario;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -24,7 +25,9 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'I';
+    private const COL_ULTIMA_DEUDA = 'I';
+
+    private const COL_ULTIMA_CC = 'J';
 
     private Cliente_CuentacorrienteRepositoryInterface $clienteCuentacorrienteRepository;
 
@@ -36,9 +39,15 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
 
     private string $nombreCliente = '';
 
-    private float $saldoCuentaCorriente = 0.0;
+    /** @var list<array{moneda_id: int, abreviatura: string, saldo_cc: float, deuda: float}> */
+    private array $saldosPorMoneda = [];
 
-    private float $totalDeuda = 0.0;
+    private ?int $monedaId = null;
+
+    private string $expresion = CuentacorrienteSaldosPorMoneda::EXPRESION_ORIGEN;
+
+    /** @var array{saldo_cc?: float, deuda?: float, abreviatura?: string} */
+    private array $equivalentePesos = [];
 
     private bool $hayFilaLogos = false;
 
@@ -61,9 +70,9 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
     public function view(): View
     {
         if ($this->modoVista === ClienteCuentacorrientePreferenciasUsuario::MODO_DEUDA) {
-            $filas = $this->clienteCuentacorrienteRepository->listarDeudaCliente($this->busqueda, $this->clienteId, false);
+            $filas = $this->clienteCuentacorrienteRepository->listarDeudaCliente($this->busqueda, $this->clienteId, false, $this->monedaId);
         } else {
-            $filas = $this->clienteCuentacorrienteRepository->listarCuentaCorriente($this->busqueda, $this->clienteId, false);
+            $filas = $this->clienteCuentacorrienteRepository->listarCuentaCorriente($this->busqueda, $this->clienteId, false, $this->monedaId);
         }
 
         self::enriquecerNombreEmpresa($filas);
@@ -86,8 +95,11 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
             'modoVista' => $this->modoVista,
             'titulo' => $titulo,
             'subtitulo' => $subtitulo,
-            'saldoCuentaCorriente' => $this->saldoCuentaCorriente,
-            'totalDeuda' => $this->totalDeuda,
+            'saldosPorMoneda' => $this->saldosPorMoneda,
+            'monedaId' => $this->monedaId,
+            'expresion' => $this->expresion,
+            'equivalentePesos' => $this->equivalentePesos,
+            'mostrarSaldoCorrido' => CuentacorrienteSaldosPorMoneda::mostrarSaldoCorrido($this->monedaId, $this->saldosPorMoneda),
             'totalFilas' => $filas->count(),
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
         ]);
@@ -100,6 +112,7 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
             'G' => NumberFormat::FORMAT_NUMBER_00,
             'H' => NumberFormat::FORMAT_NUMBER_00,
             'I' => NumberFormat::FORMAT_NUMBER_00,
+            'J' => NumberFormat::FORMAT_NUMBER_00,
         ];
     }
 
@@ -129,10 +142,11 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
             'C' => 12,
             'D' => 12,
             'E' => 32,
-            'F' => 8,
+            'F' => CuentacorrienteSaldosPorMoneda::esExpresionPesos($this->expresion) ? 22 : 8,
             'G' => 14,
             'H' => 14,
             'I' => 14,
+            'J' => 16,
         ];
     }
 
@@ -167,11 +181,11 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
                 $filaTit = $this->filaInicioMeta;
                 $filaFinMeta = $this->filaInicioMeta + $this->filasMetaEncabezado - 1;
                 for ($fila = $filaTit; $fila <= $filaFinMeta; $fila++) {
-                    $sheet->mergeCells('A'.$fila.':'.self::COL_ULTIMA.$fila);
+                    $sheet->mergeCells('A'.$fila.':'.$this->colUltima().$fila);
                 }
 
                 $sheet->getRowDimension($filaTit)->setRowHeight(28);
-                $sheet->getStyle('A'.$filaTit.':'.self::COL_ULTIMA.$filaTit)->applyFromArray([
+                $sheet->getStyle('A'.$filaTit.':'.$this->colUltima().$filaTit)->applyFromArray([
                     'font' => [
                         'bold' => true,
                         'size' => 16,
@@ -184,7 +198,7 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
                     ],
                 ]);
 
-                $sheet->getStyle('A'.($filaTit + 1).':'.self::COL_ULTIMA.$filaFinMeta)->applyFromArray([
+                $sheet->getStyle('A'.($filaTit + 1).':'.$this->colUltima().$filaFinMeta)->applyFromArray([
                     'font' => [
                         'bold' => true,
                         'size' => 10,
@@ -205,11 +219,18 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
                     ->setWrapText(true)
                     ->setVertical(Alignment::VERTICAL_TOP);
 
-                $sheet->getStyle('G'.$primera.':I'.$sheet->getHighestRow())
+                $sheet->getStyle('G'.$primera.':'.$this->colUltima().$sheet->getHighestRow())
                     ->getAlignment()
                     ->setHorizontal(Alignment::HORIZONTAL_RIGHT);
             },
         ];
+    }
+
+    private function colUltima(): string
+    {
+        return $this->modoVista === ClienteCuentacorrientePreferenciasUsuario::MODO_DEUDA
+            ? self::COL_ULTIMA_DEUDA
+            : self::COL_ULTIMA_CC;
     }
 
     public function title(): string
@@ -224,15 +245,19 @@ class ClienteCuentacorrienteListadoExport implements FromView, ShouldAutoSize, W
         int $clienteId,
         string $modoVista,
         string $nombreCliente,
-        float $saldoCuentaCorriente,
-        float $totalDeuda,
+        array $saldosPorMoneda = [],
+        ?int $monedaId = null,
+        string $expresion = CuentacorrienteSaldosPorMoneda::EXPRESION_ORIGEN,
+        array $equivalentePesos = [],
     ): self {
         $this->busqueda = $busqueda;
         $this->clienteId = $clienteId;
         $this->modoVista = ClienteCuentacorrientePreferenciasUsuario::resolverModoVista($modoVista);
         $this->nombreCliente = $nombreCliente;
-        $this->saldoCuentaCorriente = $saldoCuentaCorriente;
-        $this->totalDeuda = $totalDeuda;
+        $this->saldosPorMoneda = $saldosPorMoneda;
+        $this->monedaId = $monedaId;
+        $this->expresion = CuentacorrienteSaldosPorMoneda::resolverExpresion($expresion);
+        $this->equivalentePesos = $equivalentePesos;
 
         return $this;
     }

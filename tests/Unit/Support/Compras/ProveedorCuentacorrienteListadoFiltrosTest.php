@@ -19,6 +19,19 @@ class ProveedorCuentacorrienteListadoFiltrosTest extends TestCase
         $this->assertSame(4, $filtros['empresa_id']);
         $this->assertSame('una', $filtros['empresa_scope']);
         $this->assertSame(ProveedorCuentacorrienteListadoFiltros::MODO_TODOS, $filtros['modo']);
+        $this->assertNull($filtros['moneda_id']);
+    }
+
+    public function test_moneda_id_del_request_queda_en_filtros(): void
+    {
+        $filtros = ProveedorCuentacorrienteListadoFiltros::resolverDesdeRequest(
+            Request::create('/compras/listarcuentacorrienteproveedor/1', 'GET', [
+                'moneda_id' => 2,
+                'empresa_todas' => 1,
+            ])
+        );
+
+        $this->assertSame(2, $filtros['moneda_id']);
     }
 
     public function test_todas_las_empresas_limpia_empresa_id(): void
@@ -52,6 +65,17 @@ class ProveedorCuentacorrienteListadoFiltrosTest extends TestCase
         $this->assertSame('desde', $q['filtro_operador']);
         $this->assertSame('01/01/2026', $q['filtro_valor']);
         $this->assertArrayNotHasKey('empresa_todas', $q);
+        $this->assertSame('todas', $q['moneda_id']);
+    }
+
+    public function test_query_string_conserva_moneda(): void
+    {
+        $q = ProveedorCuentacorrienteListadoFiltros::paraQueryString([
+            'empresa_scope' => 'todas',
+            'moneda_id' => 2,
+        ]);
+
+        $this->assertSame(2, $q['moneda_id']);
     }
 
     public function test_busqueda_rapida_fuerza_modo_todos(): void
@@ -69,5 +93,32 @@ class ProveedorCuentacorrienteListadoFiltrosTest extends TestCase
         $this->assertSame(ProveedorCuentacorrienteListadoFiltros::MODO_TODOS, $filtros['modo']);
         $this->assertSame('contiene', $filtros['operador']);
         $this->assertSame('FAC', $filtros['valor']);
+    }
+
+    public function test_busqueda_global_incluye_tipo_de_pago_opa(): void
+    {
+        $columnas = ProveedorCuentacorrienteListadoFiltros::columnasTextoBusquedaGlobal();
+
+        $this->assertContains('pagoproveedor.tipocomprobante', $columnas);
+        $this->assertContains('tipotransaccion_compra.abreviatura', $columnas);
+        $this->assertContains('pagoproveedor.numerotransaccion', $columnas);
+    }
+
+    public function test_filtro_opa_busca_en_pagoproveedor_y_abreviatura(): void
+    {
+        $query = \App\Models\Compras\Proveedor_Cuentacorriente::query();
+        ProveedorCuentacorrienteListadoFiltros::aplicar($query, [
+            'modo' => ProveedorCuentacorrienteListadoFiltros::MODO_TODOS,
+            'operador' => 'contiene',
+            'valor' => 'OPA',
+            'empresa_id' => null,
+            'moneda_id' => null,
+        ]);
+
+        $sql = $query->toSql();
+        $this->assertStringContainsString('pagoproveedor', $sql);
+        $this->assertStringContainsString('tipocomprobante', $sql);
+        $this->assertStringContainsString('abreviatura', $sql);
+        $this->assertContains('%OPA%', $query->getBindings());
     }
 }

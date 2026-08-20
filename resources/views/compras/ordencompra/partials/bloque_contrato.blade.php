@@ -27,6 +27,37 @@
     $cuentaContrato = $ocContrato->contrato_cuentacontables ?? null;
     $cuentaContratoCodigo = old('contrato_cuentacontable_codigo', $cuentaContrato->codigo ?? '');
     $cuentaContratoNombre = old('contrato_cuentacontable_nombre', $cuentaContrato->nombre ?? '');
+    $periodoServicio = old(
+        'contrato_periodo_servicio',
+        $ocContrato->contrato_periodo_servicio ?? \App\Support\Compras\ContratoPeriodoServicioSupport::MES_VENCIDO
+    );
+    $periodoServicio = \App\Support\Compras\ContratoPeriodoServicioSupport::normalizar($periodoServicio);
+    $requiereValidacionOld = old('contrato_requiere_validacion_abono');
+    if ($requiereValidacionOld === null) {
+        $requiereValidacion = (bool) ($ocContrato->contrato_requiere_validacion_abono ?? false);
+    } else {
+        $requiereValidacion = (string) $requiereValidacionOld === '1' || $requiereValidacionOld === 1 || $requiereValidacionOld === true;
+    }
+    $exigeIngresosOld = old('contrato_exige_ingresos');
+    if ($exigeIngresosOld === null) {
+        $exigeIngresos = (bool) ($ocContrato->contrato_exige_ingresos ?? false);
+    } else {
+        $exigeIngresos = (string) $exigeIngresosOld === '1' || $exigeIngresosOld === 1 || $exigeIngresosOld === true;
+    }
+    $minimoIngresos = old('contrato_minimo_ingresos', $ocContrato->contrato_minimo_ingresos ?? 1);
+    $plantillaValidacionId = (int) old('contrato_validacion_plantilla_id', $ocContrato->contrato_validacion_plantilla_id ?? 0);
+    $plantillasValidacion = collect();
+    if (\Illuminate\Support\Facades\Schema::hasTable('validacion_abono_plantilla')) {
+        $plantillasValidacion = \App\Models\Compras\Validacion_Abono_Plantilla::query()
+            ->where('activo', true)
+            ->orderBy('nombre')
+            ->get(['id', 'codigo', 'nombre']);
+    }
+    if ($plantillaValidacionId <= 0) {
+        $plantillaValidacionId = (int) (optional($plantillasValidacion->firstWhere('codigo', 'estandar'))->id
+            ?? optional($plantillasValidacion->first())->id
+            ?? 0);
+    }
     if ($cuentaContratoId > 0 && ($cuentaContratoCodigo === '' || $cuentaContratoCodigo === null)) {
         $ctaContrato = \App\Models\Contable\Cuentacontable::query()->find($cuentaContratoId);
         $cuentaContratoCodigo = $ctaContrato->codigo ?? '';
@@ -53,8 +84,8 @@
         <p class="text-muted small mb-3">
             El sistema avisa por mail cuando se acerca el fin de vigencia, cuando llega la fecha l&iacute;mite
             para notificar la no renovaci&oacute;n y cuando el consumo alcanza el porcentaje configurado del tope.
-            El consumo se toma de las recepciones confirmadas y, para lo que no pasa por recepci&oacute;n
-            (abonos, honorarios), de las facturas del proveedor.
+            El consumo se toma de las recepciones confirmadas y, para lo que no pasa por recepci&oacute;n,
+            de las facturas del proveedor. Honorarios y abonos deben ir con COM para que el &aacute;rea valide la prestaci&oacute;n.
             La <strong>ruta de facturaci&oacute;n</strong> (con o sin COM) y el origen de la
             <strong>cuenta contable</strong> se usan al cargar facturas de este contrato.
         </p>
@@ -75,7 +106,7 @@
                         class="custom-control-input" value="0"
                         {{ ! $requiereRecepcion ? 'checked' : '' }} {{ $soloLectura ? 'disabled' : '' }}>
                     <label class="custom-control-label" for="contrato_requiere_recepcion_no">
-                        No requiere recepci&oacute;n &mdash; se factura el contrato sin COM (abonos, honorarios)
+                        No requiere recepci&oacute;n &mdash; se factura el contrato sin COM (casos excepcionales)
                     </label>
                 </div>
             </div>
@@ -228,6 +259,94 @@
                     @endforeach
                 </select>
                 <small class="form-text text-muted">Recibe siempre los avisos de este contrato, adem&aacute;s de los destinatarios configurados.</small>
+            </div>
+        </div>
+
+        <div class="form-group row">
+            <label class="col-lg-4 control-label text-right pr-2">Período de servicio del remito</label>
+            <div class="col-lg-8">
+                <div class="custom-control custom-radio">
+                    <input type="radio" id="contrato_periodo_mes_vencido" name="contrato_periodo_servicio"
+                        class="custom-control-input" value="{{ \App\Support\Compras\ContratoPeriodoServicioSupport::MES_VENCIDO }}"
+                        {{ $periodoServicio === \App\Support\Compras\ContratoPeriodoServicioSupport::MES_VENCIDO ? 'checked' : '' }}
+                        {{ $soloLectura ? 'disabled' : '' }}>
+                    <label class="custom-control-label" for="contrato_periodo_mes_vencido">
+                        Mes vencido
+                    </label>
+                    <small class="form-text text-muted mt-0">
+                        El remito de agosto se emite cuando agosto ya cerró; se controlan los ingresos de ese mes cerrado.
+                    </small>
+                </div>
+                <div class="custom-control custom-radio mt-2">
+                    <input type="radio" id="contrato_periodo_mismo_mes" name="contrato_periodo_servicio"
+                        class="custom-control-input" value="{{ \App\Support\Compras\ContratoPeriodoServicioSupport::MISMO_MES }}"
+                        {{ $periodoServicio === \App\Support\Compras\ContratoPeriodoServicioSupport::MISMO_MES ? 'checked' : '' }}
+                        {{ $soloLectura ? 'disabled' : '' }}>
+                    <label class="custom-control-label" for="contrato_periodo_mismo_mes">
+                        Dentro del mismo mes
+                    </label>
+                    <small class="form-text text-muted mt-0">
+                        El remito cubre del 1 a la fecha del remito; se controla hasta esa fecha.
+                    </small>
+                </div>
+                <small class="form-text text-muted">
+                    No importa cuándo llega el papel: importa el período que cubre el remito.
+                    Honorarios y abonos también van por recepción COM para que el área valide la prestación.
+                </small>
+            </div>
+        </div>
+
+        <div class="form-group row">
+            <label class="col-lg-4 control-label text-right pr-2">Validaciones obligatorias</label>
+            <div class="col-lg-8">
+                <div class="custom-control custom-checkbox">
+                    <input type="hidden" name="contrato_requiere_validacion_abono" value="0">
+                    <input type="checkbox" class="custom-control-input" id="contrato_requiere_validacion_abono"
+                        name="contrato_requiere_validacion_abono" value="1"
+                        {{ $requiereValidacion ? 'checked' : '' }} {{ $soloLectura ? 'disabled' : '' }}>
+                    <label class="custom-control-label" for="contrato_requiere_validacion_abono">
+                        Requiere validación de abono antes de grabar la recepción (o la factura, si no hay COM)
+                    </label>
+                </div>
+                <div id="oc-contrato-plantilla-validacion" class="mt-2" style="{{ $requiereValidacion || $exigeIngresos ? '' : 'display:none;' }}">
+                    <small class="text-muted d-block">Plantilla de preguntas</small>
+                    <select name="contrato_validacion_plantilla_id" id="contrato_validacion_plantilla_id"
+                        class="form-control" {{ $soloLectura ? 'disabled' : '' }}>
+                        @forelse ($plantillasValidacion as $plantilla)
+                            <option value="{{ $plantilla->id }}" {{ $plantillaValidacionId === (int) $plantilla->id ? 'selected' : '' }}>
+                                {{ $plantilla->nombre }}
+                            </option>
+                        @empty
+                            <option value="">No hay plantillas cargadas</option>
+                        @endforelse
+                    </select>
+                    <small class="form-text text-muted">
+                        Hoy hay una sola: las 5 preguntas estándar (servicio, conformidad, ingresos, monto, reclamos).
+                        Otras plantillas se agregan en <code>validacion_abono_plantilla</code> (P1: ABM).
+                    </small>
+                </div>
+                <div class="custom-control custom-checkbox mt-3">
+                    <input type="hidden" name="contrato_exige_ingresos" value="0">
+                    <input type="checkbox" class="custom-control-input" id="contrato_exige_ingresos"
+                        name="contrato_exige_ingresos" value="1"
+                        {{ $exigeIngresos ? 'checked' : '' }} {{ $soloLectura ? 'disabled' : '' }}>
+                    <label class="custom-control-label" for="contrato_exige_ingresos">
+                        No habilitar confirmación ni pago si el proveedor no registró tickets de ingreso en el período
+                    </label>
+                </div>
+                <div id="oc-contrato-minimo-ingresos" class="form-group row mt-2 mb-0" style="{{ $exigeIngresos ? '' : 'display:none;' }}">
+                    <div class="col-sm-6">
+                        <small class="text-muted d-block">Mínimo de ingresos requeridos</small>
+                        <input type="number" min="1" max="99" step="1" name="contrato_minimo_ingresos"
+                            id="contrato_minimo_ingresos" class="form-control"
+                            value="{{ $minimoIngresos !== null && $minimoIngresos !== '' ? $minimoIngresos : 1 }}"
+                            {{ $soloLectura ? 'readonly' : '' }}>
+                    </div>
+                    <div class="col-sm-6">
+                        <small class="text-muted d-block">Período que se controla</small>
+                        <input type="text" class="form-control" value="Según período de servicio del remito ↑" readonly>
+                    </div>
+                </div>
             </div>
         </div>
 

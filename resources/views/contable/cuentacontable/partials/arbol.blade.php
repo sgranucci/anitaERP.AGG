@@ -5,7 +5,7 @@
     <span class="text-muted small mr-3">{{ (int) ($arbolCount ?? 0) }} cuentas en el árbol</span>
     <button type="button" class="btn btn-outline-secondary btn-sm mr-1" id="pc-expandir-todo">Expandir todo</button>
     <button type="button" class="btn btn-outline-secondary btn-sm" id="pc-contraer-todo">Contraer</button>
-    <span class="text-muted small ml-auto">Las totalizadoras se ocultan salvo que pida verlas. Siguen en el plan y en Anita.</span>
+    <span class="text-muted small ml-auto">Clic en una cuenta para asignar nivel y ver el bloque. Las totalizadoras se ocultan salvo que pida verlas.</span>
 </div>
 @if (($arbol ?? []) === [])
     <div class="p-4 text-center text-muted">

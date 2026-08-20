@@ -29,16 +29,22 @@ class ProveedorCuentacorrienteAplicacionAsientoService
         private readonly AsientoReversoSupport $asientoReversoSupport,
     ) {}
 
+    /**
+     * @param  array{
+     *   cruzada?:bool,
+     *   valor_local_deuda?:float,
+     *   valor_local_credito?:float,
+     *   dc?:float
+     * }|null  $liquidacion
+     */
     public function generarSiCorresponde(
         Proveedor_Cuentacorriente $deuda,
         Proveedor_Cuentacorriente $credito,
         float $dc,
         string $fecha,
+        ?array $liquidacion = null,
     ): ?int {
-        if (! ProveedorCuentacorrienteAplicacionDcSupport::requiereAsiento($dc)) {
-            return null;
-        }
-
+        $cruzada = (bool) ($liquidacion['cruzada'] ?? false);
         $deuda->loadMissing([
             'proveedores',
             'comprobante_proveedores.ordencompras.ordencompra_articulos',
@@ -46,9 +52,23 @@ class ProveedorCuentacorrienteAplicacionAsientoService
             'comprobante_proveedores.tipotransaccion_compras',
         ]);
         $credito->loadMissing([
+            'comprobante_proveedores.ordencompras.ordencompra_articulos',
+            'comprobante_proveedores.proveedores',
             'comprobante_proveedores.tipotransaccion_compras',
             'pagoproveedores',
         ]);
+
+        $proveedor = $deuda->proveedores ?? $credito->proveedores;
+        $cuentaApDeuda = $this->resolverCuentaDeLado($deuda, $proveedor);
+        $cuentaApCredito = $this->resolverCuentaDeLado($credito, $proveedor);
+        $mismaCuenta = $cuentaApDeuda === $cuentaApCredito;
+
+        if (! $cruzada && ! ProveedorCuentacorrienteAplicacionDcSupport::requiereAsiento($dc)) {
+            return null;
+        }
+        if ($cruzada && $mismaCuenta && ! ProveedorCuentacorrienteAplicacionDcSupport::requiereAsiento($dc)) {
+            return null;
+        }
 
         $empresaId = (int) ($deuda->empresa_id ?: $credito->empresa_id);
         PeriodoContableCierreSupport::assertOperacionPermitida(
@@ -57,15 +77,11 @@ class ProveedorCuentacorrienteAplicacionAsientoService
             PeriodoContableCierreSupport::MODULO_COMPRAS
         );
 
-        $proveedor = $deuda->proveedores;
-        $cuentaApId = $this->resolverCuentaProveedor($deuda, $credito, $proveedor);
-        $cuentaDcId = $this->resolverCuentaDc($cuentaApId, $proveedor);
+        $cuentaDcId = $this->resolverCuentaDc($cuentaApDeuda ?: $cuentaApCredito, $proveedor);
         $tipoAsiento = $this->resolverTipoAsiento();
         $monedaLocalId = (int) config('cotizacion.ID_MONEDA_DEFAULT', 1);
-        $importe = round(abs($dc), 4);
-        $obs = $this->observacion($deuda, $credito, $dc);
+        $obs = $this->observacion($deuda, $credito, $dc, $cruzada);
 
-        $debeDc = ProveedorCuentacorrienteAplicacionDcSupport::esPerdida($dc);
         $payload = [
             'empresa_id' => $empresaId,
             'tipoasiento_id' => (int) $tipoAsiento->id,
@@ -82,22 +98,43 @@ class ProveedorCuentacorrienteAplicacionAsientoService
             'observaciones' => [],
         ];
 
-        $this->agregarLinea(
-            $payload,
-            $cuentaDcId,
-            $monedaLocalId,
-            $debeDc ? $importe : 0.0,
-            $debeDc ? 0.0 : $importe,
-            $obs
-        );
-        $this->agregarLinea(
-            $payload,
-            $cuentaApId,
-            $monedaLocalId,
-            $debeDc ? 0.0 : $importe,
-            $debeDc ? $importe : 0.0,
-            $obs
-        );
+        if ($cruzada) {
+            $valorDeuda = round(abs((float) ($liquidacion['valor_local_deuda'] ?? 0)), 4);
+            $valorCredito = round(abs((float) ($liquidacion['valor_local_credito'] ?? 0)), 4);
+            $this->agregarLinea($payload, $cuentaApDeuda, $monedaLocalId, $valorDeuda, 0.0, $obs);
+            $this->agregarLinea($payload, $cuentaApCredito, $monedaLocalId, 0.0, $valorCredito, $obs);
+            if (ProveedorCuentacorrienteAplicacionDcSupport::requiereAsiento($dc)) {
+                $importe = round(abs($dc), 4);
+                $perdida = $dc > 0;
+                $this->agregarLinea(
+                    $payload,
+                    $cuentaDcId,
+                    $monedaLocalId,
+                    $perdida ? $importe : 0.0,
+                    $perdida ? 0.0 : $importe,
+                    $obs
+                );
+            }
+        } else {
+            $importe = round(abs($dc), 4);
+            $debeDc = ProveedorCuentacorrienteAplicacionDcSupport::esPerdida($dc);
+            $this->agregarLinea(
+                $payload,
+                $cuentaDcId,
+                $monedaLocalId,
+                $debeDc ? $importe : 0.0,
+                $debeDc ? 0.0 : $importe,
+                $obs
+            );
+            $this->agregarLinea(
+                $payload,
+                $cuentaApDeuda,
+                $monedaLocalId,
+                $debeDc ? 0.0 : $importe,
+                $debeDc ? $importe : 0.0,
+                $obs
+            );
+        }
 
         $asiento = $this->asientoRepository->create($payload);
         if ($asiento === 'Error' || ! $asiento) {
@@ -129,12 +166,11 @@ class ProveedorCuentacorrienteAplicacionAsientoService
         );
     }
 
-    private function resolverCuentaProveedor(
-        Proveedor_Cuentacorriente $deuda,
-        Proveedor_Cuentacorriente $credito,
+    private function resolverCuentaDeLado(
+        Proveedor_Cuentacorriente $lado,
         ?Proveedor $proveedor,
     ): int {
-        $comprobante = $deuda->comprobante_proveedores ?? $credito->comprobante_proveedores;
+        $comprobante = $lado->comprobante_proveedores;
         if ($comprobante) {
             $cuentaId = ProveedorCuentaContableMonedaSupport::cuentaProveedorDesdeComprobante(
                 $comprobante,
@@ -146,15 +182,15 @@ class ProveedorCuentacorrienteAplicacionAsientoService
         }
 
         $cuentaId = ProveedorCuentaContableMonedaSupport::cuentaProveedorId(
-            $proveedor,
-            (int) ($deuda->moneda_id ?: 1)
+            $proveedor ?? $lado->proveedores,
+            (int) ($lado->moneda_id ?: 1)
         );
         if ($cuentaId > 0) {
             return $cuentaId;
         }
 
         throw new RuntimeException(
-            'El proveedor no tiene cuenta contable de proveedores para asentar la diferencia de cambio.'
+            'El proveedor no tiene cuenta contable de proveedores para asentar la liquidación / diferencia de cambio.'
         );
     }
 
@@ -215,6 +251,7 @@ class ProveedorCuentacorrienteAplicacionAsientoService
         Proveedor_Cuentacorriente $deuda,
         Proveedor_Cuentacorriente $credito,
         float $dc,
+        bool $cruzada = false,
     ): string {
         $etiDeuda = ProveedorCuentacorrienteAplicacionFilaSupport::etiqueta(
             $deuda,
@@ -224,13 +261,18 @@ class ProveedorCuentacorrienteAplicacionAsientoService
             $credito,
             ProveedorCuentacorrienteAplicacionFilaSupport::tipo($credito, 'credito')
         );
+        $prefijo = $cruzada ? 'Liquidación cruzada CC' : 'DC aplicación CC';
+        $etiquetaDc = ProveedorCuentacorrienteAplicacionDcSupport::requiereAsiento($dc)
+            ? ProveedorCuentacorrienteAplicacionDcSupport::etiqueta($dc)
+            : 'sin DC';
 
         return sprintf(
-            'DC aplicación CC %s / %s · %s %s',
+            '%s %s / %s · %s %s',
+            $prefijo,
             $etiCredito,
             $etiDeuda,
             number_format(abs($dc), 2, ',', '.'),
-            ProveedorCuentacorrienteAplicacionDcSupport::etiqueta($dc)
+            $etiquetaDc
         );
     }
 }

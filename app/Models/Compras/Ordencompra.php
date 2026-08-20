@@ -45,12 +45,17 @@ class Ordencompra extends Model
         'contrato_moneda_id', 'contrato_auto_renovable', 'contrato_dias_preaviso', 'contrato_dias_aviso',
         'contrato_responsable_id', 'contrato_requiere_recepcion', 'contrato_imputacion_contable',
         'contrato_cuentacontable_id',
+        'contrato_periodo_servicio', 'contrato_requiere_validacion_abono', 'contrato_validacion_plantilla_id',
+        'contrato_exige_ingresos', 'contrato_minimo_ingresos',
     ];
 
     protected $casts = [
         'es_contrato' => 'boolean',
         'contrato_auto_renovable' => 'boolean',
         'contrato_requiere_recepcion' => 'boolean',
+        'contrato_requiere_validacion_abono' => 'boolean',
+        'contrato_exige_ingresos' => 'boolean',
+        'contrato_minimo_ingresos' => 'integer',
         'contrato_vigencia_desde' => 'date',
         'contrato_vigencia_hasta' => 'date',
         'contrato_monto_tope' => 'float',

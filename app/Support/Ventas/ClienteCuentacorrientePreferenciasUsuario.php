@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas;
 
+use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
 use Illuminate\Support\Facades\Cache;
 
 final class ClienteCuentacorrientePreferenciasUsuario
@@ -11,6 +12,10 @@ final class ClienteCuentacorrientePreferenciasUsuario
     public const MODO_DEUDA = 'deuda';
 
     private const CACHE_MODO_VISTA = 'cliente-cuentacorriente-modo-vista';
+
+    private const CACHE_MONEDA = 'cliente-cuentacorriente-moneda';
+
+    private const CACHE_EXPRESION = 'cliente-cuentacorriente-expresion';
 
     public static function persistirModoVista(string $modo): void
     {
@@ -38,5 +43,40 @@ final class ClienteCuentacorrientePreferenciasUsuario
     public static function modoValido(string $modo): bool
     {
         return in_array($modo, [self::MODO_CUENTA_CORRIENTE, self::MODO_DEUDA], true);
+    }
+
+    public static function persistirMonedaId(?int $monedaId): void
+    {
+        Cache::forever(generaKey(self::CACHE_MONEDA), $monedaId);
+    }
+
+    public static function resolverMonedaId(mixed $valorRequest = null, bool $requestTieneMoneda = false): ?int
+    {
+        if ($requestTieneMoneda) {
+            return CuentacorrienteSaldosPorMoneda::resolverMonedaId($valorRequest);
+        }
+
+        $cached = cache()->get(generaKey(self::CACHE_MONEDA));
+
+        return CuentacorrienteSaldosPorMoneda::resolverMonedaId($cached);
+    }
+
+    public static function persistirExpresion(string $expresion): void
+    {
+        Cache::forever(
+            generaKey(self::CACHE_EXPRESION),
+            CuentacorrienteSaldosPorMoneda::resolverExpresion($expresion)
+        );
+    }
+
+    public static function resolverExpresion(mixed $valorRequest = null, bool $requestTieneExpresion = false): string
+    {
+        if ($requestTieneExpresion) {
+            return CuentacorrienteSaldosPorMoneda::resolverExpresion($valorRequest);
+        }
+
+        $cached = cache()->get(generaKey(self::CACHE_EXPRESION));
+
+        return CuentacorrienteSaldosPorMoneda::resolverExpresion($cached);
     }
 }

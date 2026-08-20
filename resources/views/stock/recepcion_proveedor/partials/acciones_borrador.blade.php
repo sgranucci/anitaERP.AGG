@@ -14,10 +14,14 @@
         <i class="fa fa-save"></i> Guardar
     </button>
     @endif
-    @if($puedeConfirmar)
+    @if($puedeConfirmar && ($validacionAbonoCompleta ?? true))
     <button type="submit" class="btn btn-success mr-2 mb-2" form="form-recepcion-confirmar"
             id="btn-confirmar-recepcion-proveedor">
         <i class="fa fa-check"></i> Confirmar recepción
+    </button>
+    @elseif($puedeConfirmar)
+    <button type="button" class="btn btn-success mr-2 mb-2" disabled title="Completá la validación de abono">
+        <i class="fa fa-lock"></i> Confirmar (bloqueado)
     </button>
     @endif
     @if($puedeEliminar)

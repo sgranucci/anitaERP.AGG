@@ -6,8 +6,7 @@ use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use Illuminate\Support\Collection;
 
 /**
- * Árbol del plan a partir del código de 9 dígitos (Anita).
- * No persiste parent_id: el padre se infiere. Las totalizadoras cuelgan del grupo que totalizan.
+ * Árbol del plan: padre explícito (ERP) o, si no hay, prefijo del código Anita.
  */
 class CuentacontableArbolSupport
 {
@@ -116,9 +115,28 @@ class CuentacontableArbolSupport
 
         ksort($nodos, SORT_STRING);
 
+        $codigoPorId = [];
+        foreach ($nodos as $codigo9 => $nodo) {
+            $codigoPorId[(int) $nodo['id']] = $codigo9;
+        }
+
         foreach ($nodos as $codigo9 => &$nodo) {
-            $padre = self::resolverPadreCodigo($codigo9, $nodos);
-            $nodo['padre_codigo'] = $padre;
+            $padreManual = self::padreManualCodigo($nodo, $codigoPorId);
+            if ($padreManual !== null && $padreManual !== $codigo9 && isset($nodos[$padreManual])) {
+                $nodo['padre_codigo'] = $padreManual;
+                $nodo['padre_origen'] = 'manual';
+            } else {
+                $nodo['padre_codigo'] = self::resolverPadreCodigo($codigo9, $nodos);
+                $nodo['padre_origen'] = 'codigo';
+            }
+        }
+        unset($nodo);
+
+        foreach ($nodos as $codigo9 => &$nodo) {
+            if (self::creaCiclo($codigo9, $nodos)) {
+                $nodo['padre_codigo'] = self::resolverPadreCodigo($codigo9, $nodos);
+                $nodo['padre_origen'] = 'codigo';
+            }
         }
         unset($nodo);
 
@@ -247,6 +265,100 @@ class CuentacontableArbolSupport
     }
 
     /**
+     * Lista plana para el inspector / preview (sin hijos anidados).
+     *
+     * @param  list<array<string, mixed>>  $arbol
+     * @return list<array<string, mixed>>
+     */
+    public static function aplanar(array $arbol): array
+    {
+        $out = [];
+        $walk = function (array $nodo, int $depth, array $ancestros) use (&$walk, &$out): void {
+            $hijos = $nodo['hijos'] ?? [];
+            $item = $nodo;
+            unset($item['hijos']);
+            $item['depth'] = $depth;
+            $item['ancestros'] = $ancestros;
+            $item['hijo_ids'] = array_map(static fn (array $h): int => (int) $h['id'], $hijos);
+            $out[] = $item;
+            $sig = array_merge($ancestros, [[
+                'id' => (int) $nodo['id'],
+                'nombre' => (string) $nodo['nombre'],
+                'codigo_fmt' => (string) $nodo['codigo_fmt'],
+                'nivel' => (int) $nodo['nivel'],
+            ]]);
+            foreach ($hijos as $hijo) {
+                $walk($hijo, $depth + 1, $sig);
+            }
+        };
+        foreach ($arbol as $raiz) {
+            $walk($raiz, 0, []);
+        }
+
+        return $out;
+    }
+
+    /**
+     * Grupos (títulos) para el selector "Colgar de".
+     *
+     * @param  list<array<string, mixed>>  $plano
+     * @return list<array{id:int,label:string,nivel:int}>
+     */
+    public static function gruposParaSelect(array $plano, int $excluirId = 0): array
+    {
+        $out = [];
+        foreach ($plano as $nodo) {
+            if ((int) ($nodo['id'] ?? 0) === $excluirId) {
+                continue;
+            }
+            if ((string) ($nodo['tipocuenta'] ?? '') === self::TIPO_TOTALIZADORA) {
+                continue;
+            }
+            $indent = str_repeat('· ', max(0, (int) ($nodo['nivel'] ?? 1) - 1));
+            $out[] = [
+                'id' => (int) $nodo['id'],
+                'label' => $indent.$nodo['codigo_fmt'].' '.$nodo['nombre'],
+                'nivel' => (int) ($nodo['nivel'] ?? 0),
+                'tipocuenta' => (string) ($nodo['tipocuenta'] ?? ''),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $nodo
+     * @param  array<int, string>  $codigoPorId
+     */
+    private static function padreManualCodigo(array $nodo, array $codigoPorId): ?string
+    {
+        $pid = (int) ($nodo['parent_id'] ?? 0);
+        if ($pid <= 0 || ! isset($codigoPorId[$pid])) {
+            return null;
+        }
+
+        return $codigoPorId[$pid];
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $nodos
+     */
+    private static function creaCiclo(string $codigo9, array $nodos): bool
+    {
+        $visto = [];
+        $cur = $codigo9;
+        while ($cur !== null && isset($nodos[$cur])) {
+            if (isset($visto[$cur])) {
+                return true;
+            }
+            $visto[$cur] = true;
+            $cur = $nodos[$cur]['padre_codigo'] ?? null;
+        }
+
+        return false;
+    }
+
+    /**
      * @param  array<string, array<string, mixed>>  $nodos
      */
     private static function resolverPadreCodigo(string $codigo9, array $nodos): ?string
@@ -279,9 +391,12 @@ class CuentacontableArbolSupport
             'tipocuenta' => $tipo,
             'tipo_label' => self::etiquetaTipo($tipo),
             'rubro' => (string) ($cuenta->rubrocontables->nombre ?? ''),
+            'rubrocontable_id' => (int) ($cuenta->rubrocontable_id ?? 0),
+            'parent_id' => (int) ($cuenta->parent_id ?? 0) ?: null,
             'manejaccosto' => (string) ($cuenta->manejaccosto ?? 'N'),
             'concepto' => (string) ($cuenta->conceptogastos->nombre ?? ''),
             'padre_codigo' => null,
+            'padre_origen' => 'codigo',
             'hijos' => [],
             'coincide' => false,
             'expandido' => $nivel > 0 && $nivel <= 2,

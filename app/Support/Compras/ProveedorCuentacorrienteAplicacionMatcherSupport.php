@@ -193,7 +193,7 @@ final class ProveedorCuentacorrienteAplicacionMatcherSupport
     /**
      * @param  array<int, array{id:int,saldo:float,moneda_id:int,empresa_id?:int,proveedor_id?:int,fecha:?string}>  $creditosById
      * @param  array<int, array{id:int,saldo:float,moneda_id:int,empresa_id?:int,proveedor_id?:int,fecha:?string}>  $deudasById
-     * @param  list<array{credito_id:int,deuda_id:int,monto:float}>  $lineas
+     * @param  list<array{credito_id:int,deuda_id:int,monto:float,cotizacion_liquidacion?:float|null}>  $lineas
      * @return list<string>
      */
     public static function validarLineas(array $creditosById, array $deudasById, array $lineas, ?string $fechaAplicacion = null): array
@@ -240,9 +240,6 @@ final class ProveedorCuentacorrienteAplicacionMatcherSupport
 
                 continue;
             }
-            if ((int) ($credito['moneda_id'] ?? 0) !== (int) ($deuda['moneda_id'] ?? 0)) {
-                $errores[] = "Línea {$n}: crédito y deuda deben estar en la misma moneda.";
-            }
             if (isset($credito['empresa_id'], $deuda['empresa_id'])
                 && (int) $credito['empresa_id'] !== (int) $deuda['empresa_id']) {
                 $errores[] = "Línea {$n}: crédito y deuda deben ser de la misma empresa.";
@@ -258,8 +255,32 @@ final class ProveedorCuentacorrienteAplicacionMatcherSupport
                 }
             }
 
-            $consumoCredito[$cid] = round(($consumoCredito[$cid] ?? 0) + $monto, 4);
-            $consumoDeuda[$did] = round(($consumoDeuda[$did] ?? 0) + $monto, 4);
+            $cruzada = ProveedorCuentacorrienteAplicacionLiquidacionSupport::esCruzada(
+                (int) ($deuda['moneda_id'] ?? 0),
+                (int) ($credito['moneda_id'] ?? 0)
+            );
+            $cotLiq = $linea['cotizacion_liquidacion'] ?? null;
+            if ($cruzada && (! is_numeric($cotLiq) || (float) $cotLiq <= 0)) {
+                $errores[] = "Línea {$n}: para aplicar monedas distintas indique la cotización de liquidación.";
+
+                continue;
+            }
+
+            try {
+                $liq = ProveedorCuentacorrienteAplicacionLiquidacionSupport::liquidar(
+                    $deuda,
+                    $credito,
+                    $monto,
+                    $cotLiq
+                );
+            } catch (\InvalidArgumentException $e) {
+                $errores[] = "Línea {$n}: ".$e->getMessage();
+
+                continue;
+            }
+
+            $consumoCredito[$cid] = round(($consumoCredito[$cid] ?? 0) + $liq['monto_credito'], 4);
+            $consumoDeuda[$did] = round(($consumoDeuda[$did] ?? 0) + $liq['monto_deuda'], 4);
         }
 
         foreach ($consumoCredito as $cid => $usado) {

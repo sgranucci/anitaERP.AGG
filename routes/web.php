@@ -948,6 +948,7 @@ Route::get('contable/cuentacontable/crear', 'Contable\CuentacontableController@c
 Route::post('contable/cuentacontable', 'Contable\CuentacontableController@guardar')->name('guardar_cuentacontable');
 Route::get('contable/cuentacontable/{id}/editar', 'Contable\CuentacontableController@editar')->name('editar_cuentacontable')->middleware('modo.consulta');
 Route::put('contable/cuentacontable/{id}', 'Contable\CuentacontableController@actualizar')->name('actualizar_cuentacontable')->middleware('modo.consulta');
+Route::put('contable/cuentacontable/{id}/inspector', 'Contable\CuentacontableController@actualizarInspector')->name('actualizar_inspector_cuentacontable')->middleware('modo.consulta');
 Route::get('contable/cuentacontable/{id}/eliminar', 'Contable\CuentacontableController@eliminar')->name('eliminar_cuentacontable');
 Route::post('contable/cuentacontable/guardarorden', 'Contable\CuentacontableController@guardarOrden')->name('guardar_orden_contable');
 
@@ -1434,6 +1435,8 @@ Route::get('stock/listar-recepcion-proveedor-articulo/{formato?}', 'Stock\Recepc
 Route::get('stock/recepcion-proveedor/{id}/editar', 'Stock\RecepcionProveedorController@editar')->name('editar_recepcion_proveedor')->middleware('modo.consulta');
 Route::put('stock/recepcion-proveedor/{id}', 'Stock\RecepcionProveedorController@actualizar')->name('actualizar_recepcion_proveedor');
 Route::post('stock/recepcion-proveedor/{id}/confirmar', 'Stock\RecepcionProveedorController@confirmar')->name('confirmar_recepcion_proveedor');
+Route::get('stock/recepcion-proveedor/{id}/validacion-abono', 'Compras\ContratoValidacionAbonoController@editarRecepcion')->name('editar_validacion_abono_recepcion');
+Route::post('stock/recepcion-proveedor/{id}/validacion-abono', 'Compras\ContratoValidacionAbonoController@guardarRecepcion')->name('guardar_validacion_abono_recepcion');
 Route::post('stock/recepcion-proveedor/{id}/cambiar-cotizacion', 'Stock\RecepcionProveedorController@cambiarCotizacion')->name('cambiar_cotizacion_recepcion_proveedor');
 Route::post('stock/recepcion-proveedor/api/preview-articulo-proveedor', 'Stock\RecepcionProveedorController@apiPreviewArticuloProveedor')->name('recepcion_proveedor_preview_articulo_proveedor');
 Route::get('stock/recepcion-proveedor/api/precarga-oc', 'Stock\RecepcionProveedorController@apiPrecargaOc')->name('recepcion_proveedor_precarga_oc');
@@ -3224,6 +3227,8 @@ Route::delete('compras/comprobante-proveedor/{id}/con-precarga', 'Compras\Compro
 Route::match(['get', 'post', 'put', 'patch'], 'compras/comprobante-proveedor/preview-asiento', 'Compras\Comprobante_ProveedorController@previewAsientoContable')->name('preview_asiento_comprobante_proveedor_nuevo');
 Route::match(['get', 'post', 'put', 'patch'], 'compras/comprobante-proveedor/{id}/preview-asiento', 'Compras\Comprobante_ProveedorController@previewAsientoContable')->name('preview_asiento_comprobante_proveedor');
 Route::post('compras/comprobante-proveedor/{id}/contabilizar', 'Compras\Comprobante_ProveedorController@contabilizar')->name('contabilizar_comprobante_proveedor');
+Route::get('compras/comprobante-proveedor/{id}/validacion-abono', 'Compras\ContratoValidacionAbonoController@editarComprobante')->name('editar_validacion_abono_comprobante');
+Route::post('compras/comprobante-proveedor/{id}/validacion-abono', 'Compras\ContratoValidacionAbonoController@guardarComprobante')->name('guardar_validacion_abono_comprobante');
 Route::post('compras/comprobante-proveedor/validar-proveedor-arca', 'Compras\Comprobante_ProveedorController@validarProveedorArcaPadron')->name('comprobante_proveedor_validar_proveedor_arca');
 Route::post('compras/comprobante-proveedor/validar-proveedor-arca-apoc', 'Compras\Comprobante_ProveedorController@validarProveedorArcaApoc')->name('comprobante_proveedor_validar_proveedor_arca_apoc');
 Route::get('compras/comprobante-proveedor/{id}/factura-pdf', 'Compras\Comprobante_ProveedorController@verFacturaPdf')->name('comprobante_proveedor_factura_pdf');

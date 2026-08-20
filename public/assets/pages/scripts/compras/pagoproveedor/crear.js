@@ -119,7 +119,9 @@ var flModificaAsiento = false;
                 proveedor_cuentacorriente_ids: $tr.data('cc-id'),
                 montos: monto,
                 moneda_ids: $monto.data('moneda'),
-                cotizaciones: $monto.data('cotizacion')
+                cotizaciones: $monto.data('cotizacion'),
+                cotizacion_aplicadas: $monto.data('cot-aplicada') || $monto.data('cotizacion'),
+                diferencias_cambio: $monto.data('dc') || 0
             });
         });
         return JSON.stringify(datos);

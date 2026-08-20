@@ -5,7 +5,8 @@ namespace App\Support\Caja\Flash;
 use App\Models\Caja\Flash\FlashCaja;
 
 /**
- * Validación manual del flash diario. Por ahora solo mbarrios puede marcarla.
+ * Validación manual del flash diario (tilde verde en Contable).
+ * Habilitados: mbarrios, sergio, admin, y cualquier sesión con rol administrador.
  */
 final class FlashCajaValidacionSupport
 {
@@ -14,12 +15,12 @@ final class FlashCajaValidacionSupport
      */
     public static function usuariosHabilitados(): array
     {
-        $raw = config('caja.flash_validacion.usuarios', ['mbarrios']);
+        $raw = config('caja.flash_validacion.usuarios', []);
         if (is_string($raw)) {
             $raw = explode(',', $raw);
         }
 
-        $out = [];
+        $out = ['mbarrios', 'sergio', 'admin'];
         foreach ((array) $raw as $login) {
             $login = strtolower(trim((string) $login));
             if ($login !== '') {
@@ -32,21 +33,43 @@ final class FlashCajaValidacionSupport
 
     public static function loginActual(): string
     {
-        return strtolower(trim((string) (
-            session('usuario')
-            ?? auth()->user()?->usuario
-            ?? ''
-        )));
+        $authLogin = strtolower(trim((string) (auth()->user()?->usuario ?? '')));
+        if ($authLogin !== '') {
+            return $authLogin;
+        }
+
+        return strtolower(trim((string) (session('usuario') ?? '')));
     }
 
     public static function usuarioPuedeValidar(?string $login = null): bool
     {
+        $usarSesion = $login === null;
         $login = strtolower(trim((string) ($login ?? self::loginActual())));
-        if ($login === '') {
+        if ($login !== '' && in_array($login, self::usuariosHabilitados(), true)) {
+            return true;
+        }
+
+        if (! $usarSesion) {
             return false;
         }
 
-        return in_array($login, self::usuariosHabilitados(), true);
+        return self::sesionEsAdministrador();
+    }
+
+    public static function sesionEsAdministrador(): bool
+    {
+        if (strtolower(trim((string) session('rol_nombre'))) === 'administrador') {
+            return true;
+        }
+
+        foreach ((array) session('roles', []) as $rol) {
+            $nombre = is_array($rol) ? (string) ($rol['nombre'] ?? '') : (string) $rol;
+            if (strtolower(trim($nombre)) === 'administrador') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public static function estaValidado(?FlashCaja $flash): bool

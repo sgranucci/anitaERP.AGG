@@ -12,15 +12,14 @@
 @endphp
 @include('includes.listado.filtros_estilos_activos')
 <button type="button"
-        class="btn btn-outline-secondary btn-sm mr-1{{ !empty($tieneCriterios) ? ' listado-filtros-toggle-activo' : '' }}"
+        class="btn btn-light btn-sm mr-1{{ !empty($tieneCriterios) ? ' listado-filtros-toggle-activo' : '' }}"
         id="{{ $toggleId }}"
         data-toggle="collapse"
         data-target="{{ $toggleTarget }}"
         data-listado-filtros-toggle
         data-listado-filtros-label-show="{{ $toggleLabel ?? 'Filtros' }}"
         data-listado-filtros-label-hide="{{ $toggleLabelOculto ?? 'Ocultar filtros' }}"
-        aria-expanded="false"
-        style="color: #fff;">
+        aria-expanded="false">
     <i class="fa fa-filter"></i>
         <span class="js-listado-filtros-toggle-text">{{ $toggleLabel ?? 'Filtros' }}</span>
 </button>
@@ -47,7 +46,7 @@
     'showLimpiar' => true,
 ])
 @if(!empty($nuevoRegistroUrl) && can($nuevoRegistroCan ?? '', false))
-    <a href="{{ $nuevoRegistroUrl }}" class="btn btn-outline-secondary btn-sm">
+    <a href="{{ $nuevoRegistroUrl }}" class="btn btn-light btn-sm">
         <i class="fa fa-fw fa-plus-circle"></i> {{ $nuevoRegistroLabel ?? 'Nuevo registro' }}
     </a>
 @endif

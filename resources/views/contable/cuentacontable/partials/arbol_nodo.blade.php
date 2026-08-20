@@ -12,8 +12,14 @@
 <li class="pc-nodo{{ !empty($nodo['coincide']) ? ' pc-nodo--hit' : '' }}{{ CuentacontableArbolSupport::esTotalizadora($tipo) ? ' pc-nodo--total' : '' }}"
     data-id="{{ $nodo['id'] }}"
     data-nivel="{{ $nodo['nivel'] }}"
-    data-tipo="{{ $tipo }}">
-    <div class="pc-nodo__row">
+    data-tipo="{{ $tipo }}"
+    data-nombre="{{ $nodo['nombre'] }}"
+    data-codigo="{{ $nodo['codigo_fmt'] }}"
+    data-rubro-id="{{ $nodo['rubrocontable_id'] }}"
+    data-rubro="{{ $nodo['rubro'] }}"
+    data-parent-id="{{ $nodo['parent_id'] ?? '' }}"
+    data-padre-origen="{{ $nodo['padre_origen'] ?? 'codigo' }}">
+    <div class="pc-nodo__row" role="button" tabindex="0">
         @if ($tieneHijos)
             <button type="button" class="pc-nodo__toggle" aria-expanded="{{ $expandido ? 'true' : 'false' }}" title="Expandir / contraer">
                 <i class="fa {{ $expandido ? 'fa-caret-down' : 'fa-caret-right' }}"></i>
@@ -28,8 +34,8 @@
         <span class="pc-nodo__acciones">
             @if (can('editar-cuentas-contables', false))
                 <a href="{{ route('editar_cuentacontable', ['id' => $nodo['id']] + $retornoListadoQuery) }}"
-                   class="btn-accion-tabla tooltipsC" title="Editar">
-                    <i class="fa fa-edit"></i>
+                   class="btn-accion-tabla tooltipsC pc-nodo__ficha" title="Ficha completa (Anita, c.costo)">
+                    <i class="fa fa-file-text-o"></i>
                 </a>
             @endif
             @if (can('crear-cuentas-contables', false) && $tipo !== CuentacontableArbolSupport::TIPO_TOTALIZADORA)

@@ -75,9 +75,13 @@ class ProveedorCuentacorrienteAplicacionMatcherSupportTest extends TestCase
 
         $this->assertNotEmpty($errores);
         $texto = implode(' ', $errores);
-        $this->assertStringContainsString('misma moneda', $texto);
-        $this->assertStringContainsString('se aplica por', $texto);
+        $this->assertStringContainsString('cotización de liquidación', $texto);
         $this->assertStringContainsString('fecha de aplicación', $texto);
+
+        $erroresSobre = ProveedorCuentacorrienteAplicacionMatcherSupport::validarLineas($creditos, $deudas, [
+            ['credito_id' => 1, 'deuda_id' => 10, 'monto' => 80],
+        ], '2026-01-10');
+        $this->assertStringContainsString('se aplica por', implode(' ', $erroresSobre));
     }
 
     public function test_validar_lineas_ok(): void
@@ -136,6 +140,22 @@ class ProveedorCuentacorrienteAplicacionMatcherSupportTest extends TestCase
         $this->assertSame([
             ['credito_id' => 1, 'deuda_id' => 11, 'monto' => 60.0],
         ], $lineas);
+    }
+
+    public function test_validar_lineas_acepta_cruzada_con_cotizacion(): void
+    {
+        $creditos = [
+            1 => ['id' => 1, 'saldo' => 1100000.0, 'moneda_id' => 1, 'empresa_id' => 1, 'proveedor_id' => 9, 'fecha' => '2026-01-01', 'cotizacion' => 1],
+        ];
+        $deudas = [
+            10 => ['id' => 10, 'saldo' => 1000.0, 'moneda_id' => 2, 'empresa_id' => 1, 'proveedor_id' => 9, 'fecha' => '2026-01-01', 'cotizacion' => 1200],
+        ];
+
+        $errores = ProveedorCuentacorrienteAplicacionMatcherSupport::validarLineas($creditos, $deudas, [
+            ['credito_id' => 1, 'deuda_id' => 10, 'monto' => 1000, 'cotizacion_liquidacion' => 1100],
+        ], '2026-01-10');
+
+        $this->assertSame([], $errores);
     }
 
     public function test_fifo_no_cruza_empresa(): void

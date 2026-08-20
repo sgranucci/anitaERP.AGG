@@ -8,6 +8,7 @@ use App\Queries\Compras\ProveedorQueryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\ProveedorCuentacorrienteAplicacionService;
 use App\Support\Compras\ProveedorCuentacorrienteListadoFiltros;
+use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
 use App\Support\Database\SqlDialectSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -144,28 +145,67 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
         return (float) $query->sum('proveedor_cuentacorriente.total');
     }
 
-    public function calcularTotalDeudaProveedor(int $proveedor_id, array $filtros = []): float
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<array{moneda_id: int, abreviatura: string, saldo_cc: float}>
+     */
+    public function calcularSaldosPorMoneda(int $proveedor_id, array $filtros = []): array
     {
         $query = $this->model->query()
-            ->select('proveedor_cuentacorriente.total')
-            ->addSelect([
-                'aplicado' => Proveedor_Cuentacorriente_Aplicacion::query()
-                    ->selectRaw('SUM(total)')
-                    ->whereColumn('proveedor_cuentacorriente_id', 'proveedor_cuentacorriente.id'),
-            ])
+            ->selectRaw('proveedor_cuentacorriente.moneda_id as moneda_id')
+            ->selectRaw('MAX(moneda.abreviatura) as abreviatura')
+            ->selectRaw('SUM(proveedor_cuentacorriente.total) as saldo_cc')
+            ->leftJoin('moneda', 'moneda.id', '=', 'proveedor_cuentacorriente.moneda_id')
             ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
-            ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
-            ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());
+            ->groupBy('proveedor_cuentacorriente.moneda_id')
+            ->orderBy('proveedor_cuentacorriente.moneda_id');
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'proveedor_cuentacorriente.empresa_id');
         ProveedorCuentacorrienteListadoFiltros::aplicarEmpresa($query, $filtros);
 
-        $total = 0.0;
+        $saldos = [];
         foreach ($query->get() as $fila) {
+            $saldos[] = [
+                'moneda_id' => (int) $fila->moneda_id,
+                'abreviatura' => (string) ($fila->abreviatura ?? ''),
+                'saldo_cc' => (float) $fila->saldo_cc,
+            ];
+        }
+
+        return $saldos;
+    }
+
+    public function calcularTotalDeudaProveedor(int $proveedor_id, array $filtros = []): float
+    {
+        $total = 0.0;
+        foreach ($this->filasDeudaProveedor($proveedor_id, $filtros) as $fila) {
             $total += abs((float) $fila->total + (float) ($fila->aplicado ?? 0));
         }
 
         return $total;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<array{moneda_id: int, abreviatura: string, deuda: float}>
+     */
+    public function calcularDeudasPorMoneda(int $proveedor_id, array $filtros = []): array
+    {
+        return CuentacorrienteSaldosPorMoneda::deudaDesdeFilas(
+            $this->filasDeudaProveedor($proveedor_id, $filtros)
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<array{moneda_id: int, abreviatura: string, saldo_cc: float, deuda: float}>
+     */
+    public function calcularSaldosYDeudasPorMoneda(int $proveedor_id, array $filtros = []): array
+    {
+        return CuentacorrienteSaldosPorMoneda::consolidar(
+            $this->calcularSaldosPorMoneda($proveedor_id, $filtros),
+            $this->calcularDeudasPorMoneda($proveedor_id, $filtros),
+        );
     }
 
     public function saldoAnteriorPagina(int $proveedor_id, $primerRegistro, array $filtros = []): float
@@ -186,8 +226,122 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'proveedor_cuentacorriente.empresa_id');
         ProveedorCuentacorrienteListadoFiltros::aplicarEmpresa($query, $filtros);
+        ProveedorCuentacorrienteListadoFiltros::aplicarMoneda($query, $filtros);
 
         return (float) $query->sum('proveedor_cuentacorriente.total');
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<int, float>
+     */
+    public function saldosAnterioresPorMoneda(int $proveedor_id, $primerRegistro, array $filtros = []): array
+    {
+        if ($primerRegistro === null) {
+            return [];
+        }
+
+        $query = $this->model->query()
+            ->selectRaw('proveedor_cuentacorriente.moneda_id as moneda_id')
+            ->selectRaw('SUM(proveedor_cuentacorriente.total) as saldo')
+            ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
+            ->where(function ($q) use ($primerRegistro) {
+                $q->where('proveedor_cuentacorriente.fecha', '<', $primerRegistro->fecha)
+                    ->orWhere(function ($q2) use ($primerRegistro) {
+                        $q2->where('proveedor_cuentacorriente.fecha', $primerRegistro->fecha)
+                            ->where('proveedor_cuentacorriente.id', '<', $primerRegistro->id);
+                    });
+            })
+            ->groupBy('proveedor_cuentacorriente.moneda_id');
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'proveedor_cuentacorriente.empresa_id');
+        ProveedorCuentacorrienteListadoFiltros::aplicarEmpresa($query, $filtros);
+        ProveedorCuentacorrienteListadoFiltros::aplicarMoneda($query, $filtros);
+
+        $saldos = [];
+        foreach ($query->get() as $fila) {
+            $saldos[(int) $fila->moneda_id] = (float) $fila->saldo;
+        }
+
+        return $saldos;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array{saldo_cc: float, deuda: float, abreviatura: string}
+     */
+    public function calcularEquivalentePesos(int $proveedor_id, array $filtros = []): array
+    {
+        $query = $this->model->query()
+            ->select('proveedor_cuentacorriente.total', 'proveedor_cuentacorriente.moneda_id', 'proveedor_cuentacorriente.cotizacion')
+            ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id);
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'proveedor_cuentacorriente.empresa_id');
+        ProveedorCuentacorrienteListadoFiltros::aplicarEmpresa($query, $filtros);
+
+        $filtrosDeuda = $filtros;
+        unset($filtrosDeuda['moneda_id']);
+
+        return CuentacorrienteSaldosPorMoneda::equivalenteDesdeFilas(
+            $query->get(),
+            $this->filasDeudaProveedor($proveedor_id, $filtrosDeuda),
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function saldoAnteriorPaginaEnPesos(int $proveedor_id, $primerRegistro, array $filtros = []): float
+    {
+        if ($primerRegistro === null) {
+            return 0.0;
+        }
+
+        $query = $this->model->query()
+            ->select('proveedor_cuentacorriente.total', 'proveedor_cuentacorriente.moneda_id', 'proveedor_cuentacorriente.cotizacion')
+            ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
+            ->where(function ($q) use ($primerRegistro) {
+                $q->where('proveedor_cuentacorriente.fecha', '<', $primerRegistro->fecha)
+                    ->orWhere(function ($q2) use ($primerRegistro) {
+                        $q2->where('proveedor_cuentacorriente.fecha', $primerRegistro->fecha)
+                            ->where('proveedor_cuentacorriente.id', '<', $primerRegistro->id);
+                    });
+            });
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'proveedor_cuentacorriente.empresa_id');
+        ProveedorCuentacorrienteListadoFiltros::aplicarEmpresa($query, $filtros);
+        ProveedorCuentacorrienteListadoFiltros::aplicarMoneda($query, $filtros);
+
+        return CuentacorrienteSaldosPorMoneda::saldoAnteriorEnPesosDe($query->get(), $primerRegistro);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return \Illuminate\Support\Collection<int, Proveedor_Cuentacorriente>
+     */
+    private function filasDeudaProveedor(int $proveedor_id, array $filtros)
+    {
+        $query = $this->model->query()
+            ->select(
+                'proveedor_cuentacorriente.total',
+                'proveedor_cuentacorriente.moneda_id',
+                'proveedor_cuentacorriente.cotizacion',
+                'moneda.abreviatura as abreviatura'
+            )
+            ->addSelect([
+                'aplicado' => Proveedor_Cuentacorriente_Aplicacion::query()
+                    ->selectRaw('SUM(total)')
+                    ->whereColumn('proveedor_cuentacorriente_id', 'proveedor_cuentacorriente.id'),
+            ])
+            ->leftJoin('moneda', 'moneda.id', '=', 'proveedor_cuentacorriente.moneda_id')
+            ->where('proveedor_cuentacorriente.proveedor_id', $proveedor_id)
+            ->whereNotNull('proveedor_cuentacorriente.comprobante_proveedor_id')
+            ->whereRaw(SqlDialectSupport::sqlSaldoPendienteProveedorCc());
+
+        $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'proveedor_cuentacorriente.empresa_id');
+        ProveedorCuentacorrienteListadoFiltros::aplicarEmpresa($query, $filtros);
+
+        return $query->get();
     }
 
     /**
@@ -198,7 +352,8 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
         $query->leftJoin('empresa', 'empresa.id', '=', 'proveedor_cuentacorriente.empresa_id')
             ->leftJoin('moneda', 'moneda.id', '=', 'proveedor_cuentacorriente.moneda_id')
             ->leftJoin('comprobante_proveedor', 'comprobante_proveedor.id', '=', 'proveedor_cuentacorriente.comprobante_proveedor_id')
-            ->leftJoin('tipotransaccion_compra', 'tipotransaccion_compra.id', '=', 'comprobante_proveedor.tipotransaccion_compra_id');
+            ->leftJoin('tipotransaccion_compra', 'tipotransaccion_compra.id', '=', 'comprobante_proveedor.tipotransaccion_compra_id')
+            ->leftJoin('pagoproveedor', 'pagoproveedor.id', '=', 'proveedor_cuentacorriente.pagoproveedor_id');
     }
 
     /**
@@ -331,6 +486,7 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
                 'proveedor_cuentacorrientes.pagoproveedores',
                 'proveedor_cuentacorriente_aplicados.comprobante_proveedores.tipotransaccion_compras',
                 'proveedor_cuentacorriente_aplicados.pagoproveedores',
+                'proveedor_cuentacorriente_aplicados.monedas',
                 'monedas',
             ]);
 

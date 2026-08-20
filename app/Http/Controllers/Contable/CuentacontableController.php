@@ -110,6 +110,8 @@ class CuentacontableController extends Controller
             'camposFiltro' => CuentacontableListadoFiltros::CAMPOS,
             'empresa_query' => $empresaQuery,
             'tiposCuenta' => CuentacontableArbolSupport::etiquetasTipo(),
+            'rubrocontable_query' => Rubrocontable::all(),
+            'puedeEditarArbol' => can('editar-cuentas-contables', false) || can('actualizar-cuentas-contables', false),
         ]);
     }
 
@@ -201,6 +203,64 @@ class CuentacontableController extends Controller
 
         return redirect()->route('cuentacontable', $retorno)
             ->with('mensaje', 'Cuenta actualizada con éxito');
+    }
+
+    public function actualizarInspector(Request $request, $id)
+    {
+        can('actualizar-cuentas-contables');
+
+        $cuenta = $this->cuentacontableRepository->findOrFail($id);
+        $validated = $request->validate([
+            'nombre' => 'required|string|max:100',
+            'nivel' => 'required|integer|min:1|max:5',
+            'tipocuenta' => 'required|in:1,2,3',
+            'rubrocontable_id' => 'required|integer',
+            'parent_id' => 'nullable|integer',
+        ]);
+
+        $parentId = (int) ($validated['parent_id'] ?? 0);
+        if ($parentId === (int) $cuenta->id) {
+            return response()->json(['ok' => false, 'error' => 'Una cuenta no puede colgar de sí misma.'], 422);
+        }
+        if ($parentId > 0) {
+            $padre = $this->cuentacontableRepository->find($parentId);
+            if (! $padre || (int) $padre->empresa_id !== (int) $cuenta->empresa_id) {
+                return response()->json(['ok' => false, 'error' => 'El padre debe ser de la misma empresa.'], 422);
+            }
+            $ciclo = $this->parentIdCreaCiclo($cuenta, $parentId);
+            if ($ciclo !== null) {
+                return response()->json(['ok' => false, 'error' => $ciclo], 422);
+            }
+        }
+
+        $payload = array_merge($cuenta->only([
+            'empresa_id', 'rubrocontable_id', 'nombre', 'codigo', 'tipocuenta', 'nivel',
+            'monetaria', 'manejaccosto', 'ajustamonedaextranjera', 'conceptogasto_id',
+            'cuentacontable_difcambio_id',
+        ]), [
+            'nombre' => $validated['nombre'],
+            'nivel' => (int) $validated['nivel'],
+            'tipocuenta' => $validated['tipocuenta'],
+            'rubrocontable_id' => (int) $validated['rubrocontable_id'],
+            'parent_id' => $parentId > 0 ? $parentId : null,
+        ]);
+
+        $this->cuentacontableRepository->updateJerarquia($payload, (int) $id);
+
+        $cuenta->refresh();
+
+        return response()->json([
+            'ok' => true,
+            'cuenta' => [
+                'id' => (int) $cuenta->id,
+                'nombre' => (string) $cuenta->nombre,
+                'nivel' => (int) $cuenta->nivel,
+                'tipocuenta' => (string) $cuenta->tipocuenta,
+                'tipo_label' => CuentacontableArbolSupport::etiquetaTipo($cuenta->tipocuenta),
+                'rubrocontable_id' => (int) $cuenta->rubrocontable_id,
+                'parent_id' => (int) ($cuenta->parent_id ?? 0) ?: null,
+            ],
+        ]);
     }
 
     public function eliminar(Request $request, $id)
@@ -362,6 +422,7 @@ class CuentacontableController extends Controller
         $payload = $request->only([
             'empresa_id',
             'rubrocontable_id',
+            'parent_id',
             'nombre',
             'codigo',
             'tipocuenta',
@@ -372,7 +433,7 @@ class CuentacontableController extends Controller
             'conceptogasto_id',
             'cuentacontable_difcambio_id',
         ]);
-        foreach (['conceptogasto_id', 'cuentacontable_difcambio_id'] as $campo) {
+        foreach (['conceptogasto_id', 'cuentacontable_difcambio_id', 'parent_id'] as $campo) {
             if (($payload[$campo] ?? '') === '' || (int) ($payload[$campo] ?? 0) === 0) {
                 $payload[$campo] = null;
             }
@@ -430,5 +491,44 @@ class CuentacontableController extends Controller
         }
 
         $this->cuentacontableRepository->create($payload);
+    }
+
+    private function parentIdCreaCiclo(Cuentacontable $cuenta, int $parentId): ?string
+    {
+        $cur = $parentId;
+        $guard = 0;
+        while ($cur > 0 && $guard++ < 24) {
+            if ($cur === (int) $cuenta->id) {
+                return 'Ese padre crearía un ciclo.';
+            }
+            $nodo = $this->cuentacontableRepository->find($cur);
+            if (! $nodo) {
+                break;
+            }
+            $cur = (int) ($nodo->parent_id ?? 0);
+        }
+
+        $hermanas = Cuentacontable::query()
+            ->where('empresa_id', (int) $cuenta->empresa_id)
+            ->with('rubrocontables')
+            ->get();
+        foreach ($hermanas as $hermana) {
+            if ((int) $hermana->id === (int) $cuenta->id) {
+                $hermana->parent_id = $parentId;
+            }
+        }
+        $plano = CuentacontableArbolSupport::aplanar(
+            CuentacontableArbolSupport::armar($hermanas, true)
+        );
+        foreach ($plano as $nodo) {
+            if ((int) ($nodo['id'] ?? 0) !== (int) $cuenta->id) {
+                continue;
+            }
+            if (($nodo['padre_origen'] ?? '') !== 'manual') {
+                return 'Ese padre crearía un ciclo.';
+            }
+        }
+
+        return null;
     }
 }

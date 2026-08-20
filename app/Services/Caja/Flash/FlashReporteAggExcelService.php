@@ -117,6 +117,9 @@ class FlashReporteAggExcelService
         $path = $dir.'/flash-reporte-agg-'.uniqid('', true).'.xlsx';
 
         $writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
+        // La plantilla oficial tiene fórmulas que PhpSpreadsheet no puede resolver
+        // (p. ej. Resumen!AZ26 → "internal error"). Excel las calcula al abrir.
+        $writer->setPreCalculateFormulas(false);
         $writer->save($path);
         $spreadsheet->disconnectWorksheets();
         unset($spreadsheet);

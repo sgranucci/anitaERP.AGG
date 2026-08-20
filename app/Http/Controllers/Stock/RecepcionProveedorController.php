@@ -19,6 +19,7 @@ use App\Services\Stock\RecepcionProveedorOcrService;
 use App\Services\Stock\RecepcionProveedorOrdencompraResolverService;
 use App\Services\Stock\RecepcionProveedorPdfService;
 use App\Services\Stock\RecepcionProveedorService;
+use App\Services\Compras\ContratoValidacionAbonoService;
 use App\Support\Compras\OrdencompraDescuentoSupport;
 use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Support\Stock\RecepcionProveedorArticuloProveedorSyncSupport;
@@ -26,6 +27,7 @@ use App\Support\Pdf\DompdfPaperSupport;
 use App\Support\Stock\RecepcionProveedorListadoFiltros;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Stock\RecepcionProveedorOcPendienteSupport;
+use App\Support\Compras\ContratoValidacionAbonoPoliticaSupport;
 use App\Support\Configuracion\OperacionPublicaTokenSupport;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -43,6 +45,7 @@ class RecepcionProveedorController extends Controller
         private readonly Recepcion_ProveedorRepositoryInterface $repository,
         private readonly EmpresaRepositoryInterface $empresaRepository,
         private readonly CotizacionQueryInterface $cotizacionQuery,
+        private readonly ContratoValidacionAbonoService $contratoValidacionAbonoService,
     ) {}
 
     public function index(Request $request)
@@ -105,6 +108,7 @@ class RecepcionProveedorController extends Controller
         // Desde factura/OC/reportes (modo consulta) no aplicar filtro por centro de costo:
         // el operador ya tiene la COM en contexto y suele ser de otro CC (Cuentas a Pagar).
         $recepcion = $this->service->buscar($id, soloFiltroEmpresa: $soloConsulta);
+        $recepcion->loadMissing(['ordencompras.proveedores']);
 
         if (! $soloConsulta) {
             if ($recepcion->estado === 'BORRADOR') {
@@ -125,9 +129,26 @@ class RecepcionProveedorController extends Controller
             ? []
             : QueryRetornoListado::desdeRequest($request, RecepcionProveedorListadoFiltros::class);
 
+        $politicaValidacionAbono = $this->contratoValidacionAbonoService->politicaDeOc($recepcion->ordencompras ?? null);
+        $validacionAbono = null;
+        if (ContratoValidacionAbonoPoliticaSupport::cortaRecepcion($politicaValidacionAbono)
+            && $recepcion->estado === 'BORRADOR'
+        ) {
+            $validacionAbono = $this->contratoValidacionAbonoService->asegurarParaRecepcion($recepcion);
+            $validacionAbono?->loadMissing('usuarios');
+        } elseif ($politicaValidacionAbono['aplica'] ?? false) {
+            $validacionAbono = $this->contratoValidacionAbonoService->deRecepcion($recepcion);
+            $validacionAbono?->loadMissing('usuarios');
+        }
+        $urlValidacionAbono = route('editar_validacion_abono_recepcion', ['id' => $recepcion->id]);
+        $accionValidacionAbono = 'confirmar la recepción';
+        $validacionAbonoCompleta = $validacionAbono?->estaCompleta() ?? ! ($politicaValidacionAbono['aplica'] ?? false);
+
         return view('stock.recepcion_proveedor.editar', compact(
             'recepcion', 'empresa_query', 'moneda_query', 'asientoPreview',
             'soloConsulta', 'ocultarVolver', 'puedeActualizarRecepcion', 'filtrosQuery',
+            'politicaValidacionAbono', 'validacionAbono', 'urlValidacionAbono',
+            'accionValidacionAbono', 'validacionAbonoCompleta',
         ));
     }
 

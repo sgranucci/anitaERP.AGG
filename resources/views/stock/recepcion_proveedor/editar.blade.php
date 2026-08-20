@@ -51,7 +51,7 @@ Recepción {{ $recepcion->numerorecepcion }}
                         'recepcionId' => $recepcion->id,
                         'clase' => 'btn btn-danger btn-sm mr-2',
                     ])
-                    @if($recepcion->estado === 'BORRADOR' && empty($soloConsulta) && can('confirmar-recepcion-proveedor', false) && ! $recepcion->fl_precio_pendiente_aprobacion)
+                    @if($recepcion->estado === 'BORRADOR' && empty($soloConsulta) && can('confirmar-recepcion-proveedor', false) && ! $recepcion->fl_precio_pendiente_aprobacion && ($validacionAbonoCompleta ?? true))
                     <button type="submit" class="btn btn-success btn-sm mr-2" form="form-recepcion-confirmar"
                             id="btn-confirmar-recepcion-proveedor">
                         <i class="fa fa-check"></i> Confirmar
@@ -77,6 +77,7 @@ Recepción {{ $recepcion->numerorecepcion }}
                     <input type="hidden" name="origen" value="modal_consulta">
                 @endif
                 <div class="card-body @if(!empty($soloConsulta) && empty($puedeActualizarRecepcion)) pe-none @endif" @if(!empty($soloConsulta) && empty($puedeActualizarRecepcion)) style="opacity:.92" @endif>
+                    @include('compras.contrato_validacion_abono.partials.banner')
                     @include('stock.recepcion_proveedor.form', [
                         'modoEdicion' => ! empty($soloConsulta) ? ! empty($puedeActualizarRecepcion) : true,
                         'recepcion' => $recepcion,

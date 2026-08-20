@@ -20,6 +20,7 @@ class ValidacionAplicacionCuentacorrienteProveedor extends FormRequest
             'lineas.*.credito_id' => 'required|integer|min:1',
             'lineas.*.deuda_id' => 'required|integer|min:1',
             'lineas.*.monto' => 'required|numeric|min:0.01',
+            'lineas.*.cotizacion_liquidacion' => 'nullable|numeric|min:0',
         ];
     }
 

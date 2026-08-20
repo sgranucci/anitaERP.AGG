@@ -20,9 +20,44 @@ interface Proveedor_CuentacorrienteRepositoryInterface
 
     public function calcularSaldoCuentaCorriente(int $proveedor_id, array $filtros = []): float;
 
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<array{moneda_id: int, abreviatura: string, saldo_cc: float}>
+     */
+    public function calcularSaldosPorMoneda(int $proveedor_id, array $filtros = []): array;
+
     public function calcularTotalDeudaProveedor(int $proveedor_id, array $filtros = []): float;
 
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<array{moneda_id: int, abreviatura: string, deuda: float}>
+     */
+    public function calcularDeudasPorMoneda(int $proveedor_id, array $filtros = []): array;
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<array{moneda_id: int, abreviatura: string, saldo_cc: float, deuda: float}>
+     */
+    public function calcularSaldosYDeudasPorMoneda(int $proveedor_id, array $filtros = []): array;
+
     public function saldoAnteriorPagina(int $proveedor_id, $primerRegistro, array $filtros = []): float;
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<int, float>
+     */
+    public function saldosAnterioresPorMoneda(int $proveedor_id, $primerRegistro, array $filtros = []): array;
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array{saldo_cc: float, deuda: float, abreviatura: string}
+     */
+    public function calcularEquivalentePesos(int $proveedor_id, array $filtros = []): array;
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function saldoAnteriorPaginaEnPesos(int $proveedor_id, $primerRegistro, array $filtros = []): float;
 
     public function consultarDeuda($proveedor_id, $empresa_id, $comprobante_proveedor_id = null);
 

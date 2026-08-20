@@ -9,6 +9,13 @@
     $manejaccosto = old('manejaccosto', $data->manejaccosto ?? 'N');
     $soloLectura = ! empty($soloConsulta);
 @endphp
+@if (! empty($data) && empty($soloConsulta))
+    <div class="alert alert-light border mb-3">
+        Nivel, “colgar de” y la vista del bloque se editan en el árbol (clic en la cuenta).
+        Esta ficha es para código Anita, monetaria, centro de costo y diferencia de cambio.
+        <a href="{{ route('cuentacontable', array_merge($filtrosQuery ?? [], ['vista' => 'arbol', 'cuenta' => $data->id])) }}">Abrir en el árbol</a>
+    </div>
+@endif
 @if (! empty($prefill['padre_nombre']))
     <div class="alert alert-light border mb-3">
         Alta bajo <strong>{{ $prefill['padre_codigo'] }} {{ $prefill['padre_nombre'] }}</strong>.

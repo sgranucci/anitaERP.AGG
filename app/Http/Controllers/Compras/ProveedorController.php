@@ -62,6 +62,7 @@ use App\Support\Listado\QueryRetornoListado;
 use App\Exports\Compras\ProveedorCuentacorrienteListadoExport;
 use App\Support\Compras\ProveedorCuentacorrienteListadoFiltros;
 use App\Support\Compras\ProveedorCuentacorrientePreferenciasUsuario;
+use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
 use Carbon\Carbon;
 use Mail;
 use DB;
@@ -886,14 +887,29 @@ class ProveedorController extends Controller
         $filtros = $this->resolverFiltrosCuentaCorriente($request);
         $busqueda = (string) ($filtros['busqueda'] ?? '');
         $modoVista = ProveedorCuentacorrientePreferenciasUsuario::resolverModoVista($request->input('modo_vista'));
+        $monedaId = ProveedorCuentacorrientePreferenciasUsuario::resolverMonedaId(
+            $request->input('moneda_id'),
+            $request->has('moneda_id'),
+        );
+        $expresion = ProveedorCuentacorrientePreferenciasUsuario::resolverExpresion(
+            $request->input('expresion'),
+            $request->has('expresion'),
+        );
+        $filtros['moneda_id'] = $monedaId;
         $filtrosQuery = array_merge(
             ProveedorCuentacorrienteListadoFiltros::paraQueryString($filtros),
-            ['modo_vista' => $modoVista],
+            ['modo_vista' => $modoVista, 'expresion' => $expresion],
             $request->only(['origen', 'vista'])
         );
 
         if ($request->has('modo_vista')) {
             ProveedorCuentacorrientePreferenciasUsuario::persistirModoVista($modoVista);
+        }
+        if ($request->has('moneda_id')) {
+            ProveedorCuentacorrientePreferenciasUsuario::persistirMonedaId($monedaId);
+        }
+        if ($request->has('expresion')) {
+            ProveedorCuentacorrientePreferenciasUsuario::persistirExpresion($expresion);
         }
 
         $proveedor = $this->proveedorRepository->find($proveedor_id);
@@ -907,8 +923,9 @@ class ProveedorController extends Controller
             $codigoproveedor = $proveedor->codigo;
         }
 
-        $saldoCuentaCorriente = $this->proveedor_cuentacorrienteRepository->calcularSaldoCuentaCorriente((int) $proveedor_id, $filtros);
-        $totalDeuda = $this->proveedor_cuentacorrienteRepository->calcularTotalDeudaProveedor((int) $proveedor_id, $filtros);
+        $saldosPorMoneda = $this->proveedor_cuentacorrienteRepository->calcularSaldosYDeudasPorMoneda((int) $proveedor_id, $filtros);
+        $equivalentePesos = $this->proveedor_cuentacorrienteRepository->calcularEquivalentePesos((int) $proveedor_id, $filtros);
+        $mostrarSaldoCorrido = CuentacorrienteSaldosPorMoneda::mostrarSaldoCorrido($monedaId, $saldosPorMoneda);
 
         switch ($formato) {
         case 'PDF':
@@ -922,8 +939,11 @@ class ProveedorController extends Controller
                 'cuentacorriente',
                 'nombreproveedor',
                 'modoVista',
-                'saldoCuentaCorriente',
-                'totalDeuda',
+                'saldosPorMoneda',
+                'equivalentePesos',
+                'monedaId',
+                'expresion',
+                'mostrarSaldoCorrido',
             ))->render();
             $path = storage_path('pdf/listados');
             $nombre_pdf = 'listado_cuentacorriente_proveedor';
@@ -937,24 +957,30 @@ class ProveedorController extends Controller
 
         case 'EXCEL':
             return (new ProveedorCuentacorrienteListadoExport($this->proveedor_cuentacorrienteRepository))
-                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldoCuentaCorriente, $totalDeuda, false, $filtros)
+                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldosPorMoneda, $monedaId, false, $filtros, $expresion, $equivalentePesos)
                 ->download('cuentacorriente_proveedor.xlsx');
             break;
 
         case 'CSV':
             return (new ProveedorCuentacorrienteListadoExport($this->proveedor_cuentacorrienteRepository))
-                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldoCuentaCorriente, $totalDeuda, true, $filtros)
+                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldosPorMoneda, $monedaId, true, $filtros, $expresion, $equivalentePesos)
                 ->download('cuentacorriente_proveedor.csv', \Maatwebsite\Excel\Excel::CSV);
             break;
 
         default:
             if ($modoVista === ProveedorCuentacorrientePreferenciasUsuario::MODO_DEUDA) {
                 $cuentacorriente = $this->proveedor_cuentacorrienteRepository->listarDeudaProveedor($busqueda, $proveedor_id, true, $filtros);
-                $saldoAnterior = 0.0;
+                $saldosAnterioresPorMoneda = [];
+                $saldoAnteriorPesos = 0.0;
             } else {
                 $cuentacorriente = $this->proveedor_cuentacorrienteRepository->listarCuentaCorriente($busqueda, $proveedor_id, true, $filtros);
                 $primerRegistro = $cuentacorriente->first();
-                $saldoAnterior = $this->proveedor_cuentacorrienteRepository->saldoAnteriorPagina(
+                $saldosAnterioresPorMoneda = $this->proveedor_cuentacorrienteRepository->saldosAnterioresPorMoneda(
+                    (int) $proveedor_id,
+                    $primerRegistro,
+                    $filtros,
+                );
+                $saldoAnteriorPesos = $this->proveedor_cuentacorrienteRepository->saldoAnteriorPaginaEnPesos(
                     (int) $proveedor_id,
                     $primerRegistro,
                     $filtros,
@@ -972,9 +998,13 @@ class ProveedorController extends Controller
                 'urlOrigen' => $urlOrigen,
                 'moneda_query' => $moneda_query,
                 'modoVista' => $modoVista,
-                'saldoCuentaCorriente' => $saldoCuentaCorriente,
-                'totalDeuda' => $totalDeuda,
-                'saldoAnterior' => $saldoAnterior ?? 0.0,
+                'saldosPorMoneda' => $saldosPorMoneda,
+                'equivalentePesos' => $equivalentePesos,
+                'monedaId' => $monedaId,
+                'expresion' => $expresion,
+                'mostrarSaldoCorrido' => $mostrarSaldoCorrido,
+                'saldosAnterioresPorMoneda' => $saldosAnterioresPorMoneda ?? [],
+                'saldoAnteriorPesos' => $saldoAnteriorPesos ?? 0.0,
                 'filtros' => $filtros,
                 'filtrosQuery' => $filtrosQuery,
                 'camposFiltro' => ProveedorCuentacorrienteListadoFiltros::CAMPOS,

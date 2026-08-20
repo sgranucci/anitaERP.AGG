@@ -53,7 +53,7 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
         ];
 
         if ($proveedor) {
-            $payload = $this->armarWorkbench($proveedorId, $empresaId);
+            $payload = $this->armarWorkbench($proveedorId, 0);
             $creditos = $payload['creditos'];
             $deudas = $payload['deudas'];
             $recientes = $payload['recientes'];
@@ -92,7 +92,7 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
             ]]);
         }
 
-        return response()->json($this->armarWorkbench($proveedorId, $empresaId));
+        return response()->json($this->armarWorkbench($proveedorId, 0));
     }
 
     public function apiSugerir(Request $request): JsonResponse
@@ -107,7 +107,7 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
             return response()->json(['lineas' => []]);
         }
 
-        $payload = $this->armarWorkbench($proveedorId, $empresaId);
+        $payload = $this->armarWorkbench($proveedorId, 0);
         $creditos = $payload['creditos'];
         $deudas = $payload['deudas'];
         $lineas = $modo === 'parear'
@@ -129,6 +129,9 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
                 'credito_id' => (int) ($linea['credito_id'] ?? 0),
                 'deuda_id' => (int) ($linea['deuda_id'] ?? 0),
                 'monto' => (float) ($linea['monto'] ?? 0),
+                'cotizacion_liquidacion' => isset($linea['cotizacion_liquidacion'])
+                    ? (float) $linea['cotizacion_liquidacion']
+                    : null,
             ];
         }
 
@@ -144,10 +147,7 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
             return response()->json(['error' => 'No se pudo aplicar: '.$e->getMessage()], 500);
         }
 
-        $payload = $this->armarWorkbench(
-            (int) $request->input('proveedor_id'),
-            (int) $request->query('empresa_id', $request->input('empresa_id', 0))
-        );
+        $payload = $this->armarWorkbench((int) $request->input('proveedor_id'), 0);
 
         $mensaje = $resultado['aplicadas'].' aplicación(es) por '.number_format($resultado['monto'], 2, ',', '.');
         $dc = (float) ($resultado['dc'] ?? 0);
@@ -181,7 +181,7 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
             return response()->json(['error' => 'No se pudo desaplicar: '.$e->getMessage()], 500);
         }
 
-        $payload = $this->armarWorkbench($proveedorId, (int) $request->input('empresa_id', 0));
+        $payload = $this->armarWorkbench($proveedorId, 0);
 
         return response()->json([
             'ok' => true,
@@ -217,6 +217,10 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
                     'fecha' => optional($apl->fecha)->format('Y-m-d'),
                     'monto' => round(abs((float) $apl->total), 4),
                     'moneda' => $apl->monedas->abreviatura ?? '',
+                    'moneda_contraparte' => $creditoCc?->monedas?->abreviatura ?? '',
+                    'cotizacion_liquidacion' => $apl->cotizacion_liquidacion !== null
+                        ? (float) $apl->cotizacion_liquidacion
+                        : null,
                     'deuda' => $deudaCc
                         ? ProveedorCuentacorrienteAplicacionFilaSupport::etiqueta(
                             $deudaCc,

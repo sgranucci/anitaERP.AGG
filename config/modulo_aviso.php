@@ -31,6 +31,7 @@ return [
         'stock.recepcion_proveedor_linea_rechazada' => App\Services\Configuracion\Handlers\StockRecepcionProveedorAvisoHandler::class,
         'stock.recepcion_proveedor_parte_unica' => App\Services\Configuracion\Handlers\StockRecepcionProveedorAvisoHandler::class,
         'stock.recepcion_proveedor_encuesta' => App\Services\Configuracion\Handlers\StockRecepcionProveedorEncuestaAvisoHandler::class,
+        'compras.contrato_validacion_abono_pendiente' => App\Services\Configuracion\Handlers\ComprasContratoValidacionAbonoPendienteAvisoHandler::class,
         'stock.transferencia_pendiente_aprobacion' => App\Services\Configuracion\Handlers\StockTransferenciaMercaderiaAvisoDespachoHandler::class,
         'stock.transferencia_confirmada' => App\Services\Configuracion\Handlers\StockTransferenciaMercaderiaAvisoDespachoHandler::class,
         'stock.transferencia_rechazada' => App\Services\Configuracion\Handlers\StockTransferenciaMercaderiaAvisoDespachoHandler::class,

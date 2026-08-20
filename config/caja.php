@@ -40,12 +40,13 @@ return [
 
     /*
      * Quién puede marcar el flash diario como validado (tilde verde en Contable).
-     * Por ahora solo mbarrios; ampliar la lista o FLASH_CAJA_VALIDACION_USUARIOS cuando corresponda.
+     * Logins: mbarrios + sergio/admin para soporte. El rol administrador también puede.
+     * Ampliar con FLASH_CAJA_VALIDACION_USUARIOS.
      */
     'flash_validacion' => [
         'usuarios' => array_values(array_filter(array_map(
             'strtolower',
-            array_map('trim', explode(',', (string) env('FLASH_CAJA_VALIDACION_USUARIOS', 'mbarrios')))
+            array_map('trim', explode(',', (string) env('FLASH_CAJA_VALIDACION_USUARIOS', 'mbarrios,sergio,admin')))
         ), fn (string $login) => $login !== '')),
     ],
 

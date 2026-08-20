@@ -198,7 +198,7 @@ class TicketService
 		DB::beginTransaction();
 		try
 		{
-			$resultadoTareas = Self::actualiza($data, $id, $request);
+			$resultadoTareas = Self::actualiza($data, $id, $request, $origen);
 			$tareasNotificar = $resultadoTareas['tareas_recien_creadas'] ?? [];
 			$tareasAsignacion = $resultadoTareas['tareas_asignacion_tecnico'] ?? [];
 
@@ -218,7 +218,7 @@ class TicketService
         return ['mensaje' => 'ok'];
     }
 
-	private function actualiza($data, $id, $request)
+	private function actualiza($data, $id, $request, $origen = null)
 	{
 		$ticketActual = $this->ticketRepository->find($id);
 		$estadoAnterior = (string) ($ticketActual->estado_ticket ?? '');
@@ -245,8 +245,17 @@ class TicketService
 		// Graba movimientos de estados y archivos
 		$this->ticket_archivoRepository->update($request, $id);
 
-		$result = $this->ticket_tareaRepository->update($data, $id);
-		$ticket_articulo = $this->ticket_articuloRepository->update($data, $id);
+		// Carga de tickets no manda tareas/artículos: no sincronizar (si no, borra lo asignado en administración).
+		$result = [
+			'tareas_recien_creadas' => [],
+			'tareas_asignacion_tecnico' => [],
+		];
+		if ($origen === 'administracion' || isset($data['tarea_ticket_ids'])) {
+			$result = $this->ticket_tareaRepository->update($data, $id);
+		}
+		if ($origen === 'administracion' || isset($data['articulo_ids'])) {
+			$this->ticket_articuloRepository->update($data, $id);
+		}
 
 		$ticketRefrescado = $this->ticketRepository->find($id);
 		$ticketRefrescado->update([

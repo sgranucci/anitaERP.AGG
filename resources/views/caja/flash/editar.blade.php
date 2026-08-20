@@ -25,14 +25,6 @@ window.flashOrigenTotalUrl = @json(route('flash_caja_api_origen_total'));
             <div class="card-header">
                 <h3 class="card-title">Editar flash diario #{{ $data->id }}</h3>
                 <div class="card-tools">
-                    @if (! empty($puedeValidarFlash))
-                        @include('caja.flash.partials.boton_validar', [
-                            'flash' => $data,
-                            'puedeValidarFlash' => true,
-                            'mostrarEtiqueta' => true,
-                            'retornoListadoQuery' => $filtrosQuery ?? [],
-                        ])
-                    @endif
                     @if (can('exportar-reporte-flash-caja', false))
                         <a href="{{ route('flash_caja_reporte', ['id' => $data->id, 'formato' => 'PDF']) }}" class="btn btn-outline-danger btn-sm" target="_blank" rel="noopener">
                             <i class="fa fa-file-pdf-o"></i> PDF
@@ -51,21 +43,34 @@ window.flashOrigenTotalUrl = @json(route('flash_caja_api_origen_total'));
                 @method('PUT')
                 <div class="card-body">
                     @if ($data->estaValidado())
-                        <div class="alert alert-success py-2">
-                            <i class="fa fa-check"></i>
-                            Flash validado
-                            @if ($data->validado_en)
-                                el {{ $data->validado_en->format('d/m/Y H:i') }}
+                        <div class="alert alert-success py-2 d-flex flex-wrap align-items-center">
+                            <div class="mr-3">
+                                <i class="fa fa-check"></i>
+                                Flash validado
+                                @if ($data->validado_en)
+                                    el {{ $data->validado_en->format('d/m/Y H:i') }}
+                                @endif
+                                @if ($data->validadoUsuario)
+                                    por {{ $data->validadoUsuario->usuario ?? $data->validadoUsuario->nombre }}
+                                @endif.
+                                Si guarda cambios se quitará la validación.
+                            </div>
+                            @if (! empty($puedeValidarFlash))
+                                @include('caja.flash.partials.boton_validar', [
+                                    'flash' => $data,
+                                    'puedeValidarFlash' => true,
+                                    'retornoListadoQuery' => $filtrosQuery ?? [],
+                                ])
                             @endif
-                            @if ($data->validadoUsuario)
-                                por {{ $data->validadoUsuario->usuario ?? $data->validadoUsuario->nombre }}
-                            @endif.
-                            Si guarda cambios se quitará la validación.
                         </div>
                     @elseif (! empty($puedeValidarFlash))
-                        <div class="alert alert-light border py-2 mb-3">
-                            Este flash todavía no está validado. Use <strong>Validar</strong> para que el tilde verde
-                            aparezca junto a los montos en Contable.
+                        <div class="alert alert-warning py-2 d-flex flex-wrap align-items-center mb-3">
+                            <span class="mr-3">Este flash todavía no está validado.</span>
+                            @include('caja.flash.partials.boton_validar', [
+                                'flash' => $data,
+                                'puedeValidarFlash' => true,
+                                'retornoListadoQuery' => $filtrosQuery ?? [],
+                            ])
                         </div>
                     @endif
                     @include('caja.flash.form')

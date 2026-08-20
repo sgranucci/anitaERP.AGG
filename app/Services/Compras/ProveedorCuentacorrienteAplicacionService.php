@@ -6,6 +6,7 @@ use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Support\Compras\ProveedorCuentacorrienteAplicacionDcSupport;
 use App\Support\Compras\ProveedorCuentacorrienteAplicacionFilaSupport;
+use App\Support\Compras\ProveedorCuentacorrienteAplicacionLiquidacionSupport;
 use App\Support\Compras\ProveedorCuentacorrienteAplicacionMatcherSupport;
 use App\Support\Compras\ProveedorCuentacorrienteGrillaSupport;
 use App\Support\Database\SqlDialectSupport;
@@ -23,7 +24,7 @@ class ProveedorCuentacorrienteAplicacionService
     ) {}
 
     /**
-     * @param  list<array{credito_id:int,deuda_id:int,monto:float}>  $lineas
+     * @param  list<array{credito_id:int,deuda_id:int,monto:float,cotizacion_liquidacion?:float|null}>  $lineas
      * @return array{aplicadas:int, monto:float, dc:float, asientos_dc:int, ids: list<int>}
      */
     public function aplicar(int $proveedorId, string $fecha, array $lineas): array
@@ -102,16 +103,25 @@ class ProveedorCuentacorrienteAplicacionService
                     throw new RuntimeException('Movimiento de cuenta corriente no encontrado.');
                 }
 
-                $dc = ProveedorCuentacorrienteAplicacionDcSupport::calcular(
+                $liq = ProveedorCuentacorrienteAplicacionLiquidacionSupport::liquidar(
+                    [
+                        'moneda_id' => (int) $deuda->moneda_id,
+                        'cotizacion' => $deuda->cotizacion,
+                    ],
+                    [
+                        'moneda_id' => (int) $credito->moneda_id,
+                        'cotizacion' => $credito->cotizacion,
+                    ],
                     $monto,
-                    (float) ($deuda->cotizacion ?? 1),
-                    (float) ($credito->cotizacion ?? 1)
+                    $linea['cotizacion_liquidacion'] ?? null
                 );
+                $dc = $liq['dc'];
                 $asientoId = $this->asientoDcService->generarSiCorresponde(
                     $deuda,
                     $credito,
                     $dc,
-                    $fecha
+                    $fecha,
+                    $liq
                 );
 
                 $etiquetaCredito = ProveedorCuentacorrienteAplicacionFilaSupport::etiqueta(
@@ -126,9 +136,10 @@ class ProveedorCuentacorrienteAplicacionService
                 $aplDeuda = Proveedor_Cuentacorriente_Aplicacion::query()->create([
                     'fecha' => $fecha,
                     'proveedor_cuentacorriente_id' => $deuda->id,
-                    'total' => -$monto,
+                    'total' => -$liq['monto_deuda'],
                     'moneda_id' => $deuda->moneda_id,
                     'cotizacion' => $deuda->cotizacion,
+                    'cotizacion_liquidacion' => $liq['cruzada'] ? $liq['cotizacion_liquidacion'] : null,
                     'diferencia_cambio' => $dc,
                     'asiento_id' => $asientoId,
                     'comprobanteaplicado' => $etiquetaCredito,
@@ -139,9 +150,10 @@ class ProveedorCuentacorrienteAplicacionService
                 $aplCredito = Proveedor_Cuentacorriente_Aplicacion::query()->create([
                     'fecha' => $fecha,
                     'proveedor_cuentacorriente_id' => $credito->id,
-                    'total' => $monto,
+                    'total' => $liq['monto_credito'],
                     'moneda_id' => $credito->moneda_id,
                     'cotizacion' => $credito->cotizacion,
+                    'cotizacion_liquidacion' => $liq['cruzada'] ? $liq['cotizacion_liquidacion'] : null,
                     'diferencia_cambio' => $dc,
                     'asiento_id' => $asientoId,
                     'comprobanteaplicado' => $etiquetaDeuda,

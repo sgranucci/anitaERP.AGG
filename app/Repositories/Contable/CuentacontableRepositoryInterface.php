@@ -18,6 +18,10 @@ interface CuentacontableRepositoryInterface extends RepositoryInterface
     public function traerRegistroDeAnita($empresa, $key);
 	public function guardarAnita($request);
 	public function actualizarAnita($request, $codigo);
+    /**
+     * Actualiza ERP + maestro Anita (ctamae / ctaconc) sin tocar centros de costo.
+     */
+    public function updateJerarquia(array $data, $id);
 	public function eliminarAnita($empresa, $id);
     public function findPorId($id);
     public function findPorCodigo($empresa_id, $codigo);

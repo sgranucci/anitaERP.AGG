@@ -75,4 +75,19 @@ return [
         ))),
     ],
 
+    /*
+    | Robot diario: concilia ficha CC proveedor ↔ deuda abierta ↔ mayor AP (MN/ME).
+    | Alerta por mail si hay descalce (el problema histórico de Anita en multi-moneda).
+    */
+    'conciliacion_cc_proveedor' => [
+        'habilitada' => filter_var(env('COMPRAS_CC_CONCILIACION_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('COMPRAS_CC_CONCILIACION_HORA', '07:40'),
+        'ventana_dias' => max(1, (int) env('COMPRAS_CC_CONCILIACION_VENTANA_DIAS', 45)),
+        'tolerancia' => (float) env('COMPRAS_CC_CONCILIACION_TOLERANCIA', 0.05),
+        'tolerancia_gl' => (float) env('COMPRAS_CC_CONCILIACION_TOLERANCIA_GL', 1.00),
+        'email' => env('COMPRAS_CC_CONCILIACION_EMAIL', env('MAIL_FROM_ADDRESS', '')),
+        'mail_siempre' => filter_var(env('COMPRAS_CC_CONCILIACION_MAIL_SIEMPRE', false), FILTER_VALIDATE_BOOLEAN),
+        'limite_filas_mail' => max(10, (int) env('COMPRAS_CC_CONCILIACION_LIMITE_MAIL', 80)),
+    ],
+
 ];

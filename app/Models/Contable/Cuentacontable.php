@@ -14,9 +14,9 @@ class Cuentacontable extends Model
 {
     use AjustamonedaextranjeraTrait;
 
-    protected $fillable = ['empresa_id', 'rubrocontable_id', 'nivel', 
-                            'nombre', 'codigo', 'tipocuenta', 'monetaria', 'manejaccosto', 
-                            'usuarioultcambio_id', 'ajustamonedaextrajera', 'conceptogasto_id',
+    protected $fillable = ['empresa_id', 'rubrocontable_id', 'parent_id', 'nivel',
+                            'nombre', 'codigo', 'tipocuenta', 'monetaria', 'manejaccosto',
+                            'usuarioultcambio_id', 'ajustamonedaextranjera', 'conceptogasto_id',
                             'cuentacontable_difcambio_id'];
     protected $table = 'cuentacontable';
 
@@ -34,6 +34,11 @@ class Cuentacontable extends Model
     public function rubrocontables()
     {
         return $this->belongsTo(Rubrocontable::class, 'rubrocontable_id');
+    }
+
+    public function padre()
+    {
+        return $this->belongsTo(self::class, 'parent_id');
     }
 
     public function conceptogastos()

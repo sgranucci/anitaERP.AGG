@@ -2,6 +2,7 @@
 
 namespace App\Support\Compras;
 
+use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
 use App\Support\Listado\CoincidenciaFlexibleTexto;
 use App\Support\Listado\FiltrosListadoRequest;
 use Carbon\Carbon;
@@ -73,6 +74,7 @@ class ProveedorCuentacorrienteListadoFiltros
             return array_merge(self::filtrosVacios(), [
                 'empresa_id' => $empresaId,
                 'empresa_scope' => $empresaScope,
+                'moneda_id' => CuentacorrienteSaldosPorMoneda::resolverMonedaId($request->input('moneda_id')),
             ]);
         }
 
@@ -108,6 +110,7 @@ class ProveedorCuentacorrienteListadoFiltros
             'busqueda_rapida' => $busquedaRapida,
             'empresa_id' => $empresaId,
             'empresa_scope' => $empresaScope,
+            'moneda_id' => CuentacorrienteSaldosPorMoneda::resolverMonedaId($request->input('moneda_id')),
         ];
     }
 
@@ -173,6 +176,7 @@ class ProveedorCuentacorrienteListadoFiltros
             'busqueda' => '',
             'empresa_id' => null,
             'empresa_scope' => 'una',
+            'moneda_id' => null,
         ];
     }
 
@@ -197,6 +201,11 @@ class ProveedorCuentacorrienteListadoFiltros
         }
         if (! empty($filtros['valor_hasta'])) {
             $params['filtro_valor_hasta'] = $filtros['valor_hasta'];
+        }
+        if (! empty($filtros['moneda_id'])) {
+            $params['moneda_id'] = (int) $filtros['moneda_id'];
+        } else {
+            $params['moneda_id'] = 'todas';
         }
 
         return $params;
@@ -225,6 +234,8 @@ class ProveedorCuentacorrienteListadoFiltros
         if (! empty($filtros['empresa_id'])) {
             $query->where('proveedor_cuentacorriente.empresa_id', (int) $filtros['empresa_id']);
         }
+
+        self::aplicarMoneda($query, $filtros);
 
         if (! self::tieneCriteriosTexto($filtros)) {
             return;
@@ -257,6 +268,18 @@ class ProveedorCuentacorrienteListadoFiltros
 
     /**
      * @param  Builder<\App\Models\Compras\Proveedor_Cuentacorriente>  $query
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function aplicarMoneda(Builder $query, array $filtros): void
+    {
+        $monedaId = CuentacorrienteSaldosPorMoneda::resolverMonedaId($filtros['moneda_id'] ?? null);
+        if ($monedaId !== null) {
+            $query->where('proveedor_cuentacorriente.moneda_id', $monedaId);
+        }
+    }
+
+    /**
+     * @param  Builder<\App\Models\Compras\Proveedor_Cuentacorriente>  $query
      */
     private static function aplicarBusquedaGlobal(Builder $query, string $operador, string $valor): void
     {
@@ -271,7 +294,9 @@ class ProveedorCuentacorrienteListadoFiltros
             if ($id !== false) {
                 $q->orWhere('proveedor_cuentacorriente.id', (int) $id)
                     ->orWhere('comprobante_proveedor.sucursal', (int) $id)
-                    ->orWhere('comprobante_proveedor.numerocomprobante', (int) $id);
+                    ->orWhere('comprobante_proveedor.numerocomprobante', (int) $id)
+                    ->orWhere('pagoproveedor.sucursal', (int) $id)
+                    ->orWhere('pagoproveedor.numerotransaccion', (string) (int) $id);
             }
 
             foreach (self::columnasTextoBusquedaGlobal() as $col) {
@@ -296,15 +321,45 @@ class ProveedorCuentacorrienteListadoFiltros
     }
 
     /** @return list<string> */
-    private static function columnasTextoBusquedaGlobal(): array
+    public static function columnasTextoBusquedaGlobal(): array
     {
         return [
             'empresa.nombre',
             'tipotransaccion_compra.nombre',
+            'tipotransaccion_compra.abreviatura',
             'comprobante_proveedor.letra',
+            'pagoproveedor.tipocomprobante',
+            'pagoproveedor.letra',
+            'pagoproveedor.numerotransaccion',
+            'pagoproveedor.detalle',
             'moneda.abreviatura',
             'proveedor_cuentacorriente.total',
         ];
+    }
+
+    /** @return list<string> */
+    private static function columnasCampo(string $campoKey): array
+    {
+        return match ($campoKey) {
+            'tipocomprobante' => [
+                'tipotransaccion_compra.nombre',
+                'tipotransaccion_compra.abreviatura',
+                'pagoproveedor.tipocomprobante',
+            ],
+            'letra' => [
+                'comprobante_proveedor.letra',
+                'pagoproveedor.letra',
+            ],
+            'numerocomprobante' => [
+                'comprobante_proveedor.numerocomprobante',
+                'pagoproveedor.numerotransaccion',
+            ],
+            'sucursal' => [
+                'comprobante_proveedor.sucursal',
+                'pagoproveedor.sucursal',
+            ],
+            default => [(string) (self::CAMPOS[$campoKey]['column'] ?? '')],
+        };
     }
 
     private static function usaCoincidenciaFlexibleEnColumna(string $column): bool
@@ -319,9 +374,22 @@ class ProveedorCuentacorrienteListadoFiltros
     {
         $def = self::CAMPOS[$campoKey] ?? self::CAMPOS['numerocomprobante'];
         $type = $def['type'];
+        $columnas = array_values(array_filter(self::columnasCampo($campoKey)));
 
         if ($type === 'entero') {
-            self::aplicarEntero($query, (string) $def['column'], $operador, $valor);
+            $query->where(function ($q) use ($columnas, $operador, $valor) {
+                foreach ($columnas as $i => $columna) {
+                    if ($i === 0) {
+                        self::aplicarEntero($q, $columna, $operador, $valor);
+
+                        continue;
+                    }
+
+                    $q->orWhere(function ($inner) use ($columna, $operador, $valor) {
+                        self::aplicarEntero($inner, $columna, $operador, $valor);
+                    });
+                }
+            });
 
             return;
         }
@@ -332,7 +400,19 @@ class ProveedorCuentacorrienteListadoFiltros
             return;
         }
 
-        self::aplicarTexto($query, (string) $def['column'], $operador, $valor);
+        $query->where(function ($q) use ($columnas, $operador, $valor) {
+            foreach ($columnas as $i => $columna) {
+                if ($i === 0) {
+                    self::aplicarTexto($q, $columna, $operador, $valor);
+
+                    continue;
+                }
+
+                $q->orWhere(function ($inner) use ($columna, $operador, $valor) {
+                    self::aplicarTexto($inner, $columna, $operador, $valor);
+                });
+            }
+        });
     }
 
     /**
