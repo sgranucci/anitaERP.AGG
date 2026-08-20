@@ -592,8 +592,9 @@ return [
     /**
      * Porcentaje de redistribución QR/efectivo del proceso Waitry (manual y automático).
      * Prioridad por empresa: gastronomia_cierre_jornada_config.porcentaje → mapa env → este default.
+     * Al aplicar: min(este objetivo, % máximo recodificable de la jornada) — 3er asiento / fondo fijo.
      */
-    'cierre_jornada_porcentaje' => (float) env('GASTRONOMIA_CIERRE_JORNADA_PORCENTAJE', 0),
+    'cierre_jornada_porcentaje' => (float) env('GASTRONOMIA_CIERRE_JORNADA_PORCENTAJE', 25),
 
     /**
      * @var array<int, float>

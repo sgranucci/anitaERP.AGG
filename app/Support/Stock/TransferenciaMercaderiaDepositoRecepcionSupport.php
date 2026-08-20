@@ -31,6 +31,30 @@ final class TransferenciaMercaderiaDepositoRecepcionSupport
     }
 
     /**
+     * El origen de TRCONT puede ser cualquier depósito donde el artículo tuvo
+     * una COM confirmada, no solo el de la última. Si no, una recepción en ADM
+     * (p.ej. LIM0016 en 22) bloquea la TRCONT habitual desde logística (1000).
+     */
+    public static function existeEnDeposito(
+        int $articuloId,
+        int $empresaId,
+        int $depositoId,
+        ?string $fechaHasta = null
+    ): bool {
+        if ($articuloId <= 0 || $empresaId <= 0 || $depositoId <= 0) {
+            return false;
+        }
+
+        if (self::existeFilaErpEnDeposito($articuloId, $empresaId, $depositoId, $fechaHasta)) {
+            return true;
+        }
+
+        $ultima = self::resolver($articuloId, $empresaId, $fechaHasta);
+
+        return $ultima['deposito_id'] !== null && (int) $ultima['deposito_id'] === $depositoId;
+    }
+
+    /**
      * @return array{deposito_id: ?int, origen: ?string}
      */
     private static function resolverDesdeEmpresa(int $articuloId, int $empresaId, ?string $fechaHasta): array
@@ -111,6 +135,32 @@ final class TransferenciaMercaderiaDepositoRecepcionSupport
                 'rp.deposito_id as deposito_cabecera_id',
                 'a.sku',
             ]);
+    }
+
+    private static function existeFilaErpEnDeposito(
+        int $articuloId,
+        ?int $empresaId,
+        int $depositoId,
+        ?string $fechaHasta
+    ): bool {
+        $query = DB::table('recepcion_proveedor_articulo as rpa')
+            ->join('recepcion_proveedor as rp', 'rp.id', '=', 'rpa.recepcion_proveedor_id')
+            ->where('rpa.articulo_id', $articuloId)
+            ->where('rp.estado', RecepcionProveedorEstados::CONFIRMADA)
+            ->where('rp.tipo', Recepcion_Proveedor::TIPO_RECEPCION)
+            ->where(static function ($q) use ($depositoId): void {
+                $q->where('rpa.deposito_id', $depositoId)
+                    ->orWhere('rp.deposito_id', $depositoId);
+            });
+
+        if ($empresaId !== null) {
+            $query->where('rp.empresa_id', $empresaId);
+        }
+        if ($fechaHasta !== null && trim($fechaHasta) !== '') {
+            $query->whereDate('rp.fecha', '<=', $fechaHasta);
+        }
+
+        return $query->exists();
     }
 
     private static function depositoDesdeFilaErp(object $fila): ?int

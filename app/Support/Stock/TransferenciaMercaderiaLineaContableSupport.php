@@ -9,7 +9,11 @@ use App\Support\Contable\CuentaAutomaticaResolver;
 use App\Support\Contable\CuentacontableEmpresaResolverSupport;
 
 /**
- * Clasificación y validación contable de líneas en transferencias TRCONT.
+     * Clasificación y validación contable de líneas en transferencias TRCONT.
+     *
+     * Depósito de salida:
+     * - TITO: debe ser el de la última recepción de compra.
+     * - Otros activos (cuenta compra del catálogo): cualquier depósito con COM de ese SKU.
  */
 final class TransferenciaMercaderiaLineaContableSupport
 {
@@ -151,7 +155,19 @@ final class TransferenciaMercaderiaLineaContableSupport
                 );
             }
 
-            if ($depositoOrigenId !== $depositoRecepcionId) {
+            $origenConRecepcion = $familia === self::FAMILIA_OTROS_ACTIVOS
+                && TransferenciaMercaderiaDepositoRecepcionSupport::existeEnDeposito(
+                    (int) $articulo->id,
+                    $empresaId,
+                    $depositoOrigenId,
+                    $fechaHasta
+                );
+            $origenEsUltimaRecepcion = $depositoOrigenId === $depositoRecepcionId;
+            $depositoOk = $familia === self::FAMILIA_TITO
+                ? $origenEsUltimaRecepcion
+                : $origenConRecepcion;
+
+            if (! $depositoOk) {
                 $etiquetaDep = $depositoRecepcion
                     ? Depmae::etiquetaDesdePartes(
                         (string) ($depositoRecepcion->codigo ?? ''),
@@ -160,10 +176,14 @@ final class TransferenciaMercaderiaLineaContableSupport
                     )
                     : '#'.$depositoRecepcionId;
 
+                $motivo = $familia === self::FAMILIA_TITO
+                    ? 'Artículo '.$sku.': el depósito de salida debe coincidir con el de la última recepción de compra ('.$etiquetaDep.').'
+                    : 'Artículo '.$sku.': el depósito de salida no tiene recepción de compra de este artículo (última recepción: '.$etiquetaDep.').';
+
                 return self::resultado(
                     false,
                     $familia,
-                    'Artículo '.$sku.': el depósito de salida debe coincidir con el de la última recepción de compra ('.$etiquetaDep.').',
+                    $motivo,
                     $depositoRecepcionId,
                     $depositoRecepcionCodigo
                 );

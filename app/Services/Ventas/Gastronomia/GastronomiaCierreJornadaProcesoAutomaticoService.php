@@ -149,17 +149,18 @@ final class GastronomiaCierreJornadaProcesoAutomaticoService
             );
         }
 
-        $porcentaje = CierreJornadaProcesoConfigSupport::resolverPorcentajeParaEmpresa($empresaId);
         $pv = CierreJornadaProcesoPuntoventaSupport::resolverOError($empresaId);
 
         $pasos = [];
-        $errores = [];
+        $porcentaje = 0.0;
 
         try {
             $snapshot = $this->snapshotDeJornada((int) $jornada->id);
             if (CierreJornadaProcesoAutomaticoSupport::necesitaAnalizarDefinitivo($jornada, $snapshot)) {
                 $pasos['analizar'] = $this->procesoService->analizarPorEmpresaYFecha($empresaId, $fechaJornada, true);
             }
+
+            $porcentaje = $this->procesoService->porcentajeAplicarParaJornada($jornada);
 
             $snapshot = $this->snapshotDeJornada((int) $jornada->id);
             $ctx = CierreJornadaProcesoJornadaSupport::contexto($jornada, $snapshot);

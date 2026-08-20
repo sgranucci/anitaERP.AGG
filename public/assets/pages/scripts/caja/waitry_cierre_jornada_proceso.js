@@ -1296,6 +1296,8 @@
                 : data.total_facturacion) || 0,
             totalRecodificable: parseFloat(ctx.total_sin_facturar_recodificable) || 0,
             porcentajeMaximo: parseFloat(ctx.porcentaje_maximo_recodificacion) || 0,
+            porcentajeObjetivo: parseFloat(ctx.porcentaje_objetivo) || 0,
+            porcentajeAplicar: parseFloat(ctx.porcentaje_aplicar) || 0,
             pendienteQrMpBase: parseFloat(ctx.total_pendiente_qr_mp) || 0,
         };
     }
@@ -1339,6 +1341,8 @@
         var elFact = el('ctx-facturacion-anita');
         var elRec = el('ctx-sin-facturar-recodificable');
         var elMax = el('ctx-porcentaje-maximo');
+        var elObjPct = el('ctx-porcentaje-objetivo');
+        var elApl = el('ctx-porcentaje-aplicar');
         var elObj = el('ctx-objetivo-importe');
         var elPend = el('ctx-pendiente-qr-mp-tras');
         var elExc = el('ctx-porcentaje-excedido');
@@ -1353,12 +1357,23 @@
                 ? (ctx.porcentajeMaximo + '%')
                 : '—';
         }
+        if (elObjPct) {
+            elObjPct.textContent = ctx.porcentajeObjetivo > 0.0001
+                ? (ctx.porcentajeObjetivo + '%')
+                : '—';
+        }
+        if (elApl) {
+            elApl.textContent = ctx.porcentajeAplicar > 0.0001
+                ? (ctx.porcentajeAplicar + '%')
+                : '0%';
+        }
         var inputPct = el('input-porcentaje');
         if (inputPct && ctx.porcentajeMaximo > 0.0001) {
             inputPct.setAttribute(
                 'title',
                 'Máximo recodificable para esta jornada: ' + ctx.porcentajeMaximo + '% '
-                + '(Waitry sin facturar QR/MP: ' + fmtMoney(ctx.totalRecodificable) + ').',
+                + '(disponible QR/MP: ' + fmtMoney(ctx.totalRecodificable)
+                + '). Se aplica min(objetivo ' + (ctx.porcentajeObjetivo || 25) + '%, ese tope).',
             );
         }
         if (elObj) {
@@ -3204,7 +3219,7 @@
         var fechaTxt = params.fecha_jornada ? params.fecha_jornada : 'la última jornada cerrada pendiente';
         if (!window.confirm(
             '¿Ejecutar el cierre automático Waitry para ' + fechaTxt + '?\n\n'
-            + 'Incluye: analizar tramo, recalcular con el % configurado, emitir facturas del proceso '
+            + 'Incluye: analizar tramo, aplicar min(objetivo %, disponible recodificable), emitir facturas del proceso '
             + 'y grabar asientos contables (+ rendición Anita).\n\n'
             + 'Se enviará un correo con el detalle.'
         )) {

@@ -25,6 +25,7 @@ final class ProveedorCuentacorrienteAplicacionFilaSupport
      *   id:int,
      *   tipo:string,
      *   tipo_label:string,
+     *   abreviatura:string,
      *   etiqueta:string,
      *   fecha:?string,
      *   vencimiento:?string,
@@ -66,6 +67,7 @@ final class ProveedorCuentacorrienteAplicacionFilaSupport
             'id' => (int) $fila->id,
             'tipo' => $tipo,
             'tipo_label' => self::tipoLabel($tipo),
+            'abreviatura' => self::abreviatura($fila, $tipo),
             'etiqueta' => self::etiqueta($fila, $tipo),
             'fecha' => optional($fila->fecha)->format('Y-m-d'),
             'vencimiento' => $vencimiento,
@@ -121,6 +123,51 @@ final class ProveedorCuentacorrienteAplicacionFilaSupport
             self::TIPO_ND => 'Nota de débito',
             default => 'Movimiento',
         };
+    }
+
+    /**
+     * Abreviatura del comprobante (tipo de transacción o, en pagos, OPA/OPP).
+     */
+    public static function abreviatura(Proveedor_Cuentacorriente $fila, string $tipo = ''): string
+    {
+        $comp = $fila->comprobante_proveedores;
+
+        return self::abreviaturaDesdePartes(
+            (string) ($comp?->tipotransaccion_compras?->abreviatura ?? ''),
+            (string) ($fila->pagoproveedores?->tipocomprobante ?? ''),
+            $tipo !== '' ? $tipo : self::tipo($fila, (float) $fila->total < 0 ? 'credito' : 'deuda')
+        );
+    }
+
+    public static function abreviaturaDesdePartes(
+        string $abreviaturaTipoTransaccion,
+        string $tipocomprobantePago = '',
+        string $tipoFallback = ''
+    ): string {
+        $abrev = strtoupper(trim($abreviaturaTipoTransaccion));
+        if ($abrev !== '') {
+            return $abrev;
+        }
+        $pago = strtoupper(trim($tipocomprobantePago));
+        if ($pago !== '') {
+            return $pago;
+        }
+
+        return strtoupper(trim($tipoFallback));
+    }
+
+    /**
+     * @return array{etiqueta: string, tipo: string, abreviatura: string}
+     */
+    public static function resumenEtiqueta(Proveedor_Cuentacorriente $fila, string $lado): array
+    {
+        $tipo = self::tipo($fila, $lado);
+
+        return [
+            'etiqueta' => self::etiqueta($fila, $tipo),
+            'tipo' => $tipo,
+            'abreviatura' => self::abreviatura($fila, $tipo),
+        ];
     }
 
     public static function etiqueta(Proveedor_Cuentacorriente $fila, string $tipo): string

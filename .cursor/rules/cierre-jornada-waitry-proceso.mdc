@@ -67,7 +67,7 @@ Consola: `php artisan gastronomia:diagnostico-cuadro-cierre {empresa} {fecha} {f
 | Paso | Estado | Clase / nota |
 |---|---|---|
 | Analizar tramo (cuadro + grupos) | OK | `analizarJornada()` |
-| % sobre facturado Anita | OK | input UI; objetivo en **pesos enteros** |
+| % sobre facturado Anita | OK | objetivo **25%** (config/empresa); se aplica `min(objetivo, tope recodificable del día)` al analizar y en el automático — eso arma el **3er asiento** (fondo fijo). Pesos enteros. |
 | Recalcular redistribución QR ↔ efectivo | OK | `CierreJornadaProcesoRedistribucionSupport` — Waitry QR→efectivo + compensación mismo importe en facturas Anita efectivo→QR (**solo memoria**); cuadro «Facturado Anita» muestra QR contable tras compensación |
 | Preview asientos (sin grabar) | OK | `CierreJornadaProcesoAsientosPreviewSupport` — requiere **Recalcular** |
 | Grabado asientos | **Implementado** | `GastronomiaCierreJornadaAsientosGrabacionService` → cuelga de ventas/cuadro; botón manual aparte; automático lo ejecuta después de emitir |

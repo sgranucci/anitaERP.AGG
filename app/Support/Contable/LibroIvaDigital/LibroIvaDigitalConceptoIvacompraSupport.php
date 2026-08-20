@@ -107,7 +107,9 @@ final class LibroIvaDigitalConceptoIvacompraSupport
                 $key = (string) round($tasa, 3);
                 $resultado['alicuotas'][$key]['iva'] = ($resultado['alicuotas'][$key]['iva'] ?? 0) + $monto;
                 $resultado['alicuotas'][$key]['tasa'] = $tasa;
-                $resultado['alicuotas'][$key]['concepto_iva_simple'] = $conceptoIvaSimple;
+                if (! isset($resultado['alicuotas'][$key]['concepto_iva_simple'])) {
+                    $resultado['alicuotas'][$key]['concepto_iva_simple'] = $conceptoIvaSimple;
+                }
                 $resultado['iva'] += $monto;
                 break;
             case 'P':

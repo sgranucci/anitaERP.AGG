@@ -55,6 +55,7 @@ use App\Support\Ventas\PedidoFacturaAnitaDeferSupport;
 use App\Support\Ventas\PedidoFacturacionExclusivaSupport;
 use App\Support\Ventas\PedidoItemCierreFaltaStockSupport;
 use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
+use App\Support\Ventas\VentaEmisionCajaPiezaSupport;
 use App\Support\Ventas\ArcaCaeaAnitaTipoAfipSupport;
 use App\Models\Stock\Talle;
 use App\Models\Stock\Material;
@@ -3367,7 +3368,7 @@ class FacturacionService
 					}
 				}
 
-				$dataEmision = [
+				$dataEmision = VentaEmisionCajaPiezaSupport::filtrarPayload([
 					'venta_id' => $vta->id,
 					'numeroitem' => ++$numeroItem, 
 					'lotestock' => 0,
@@ -3381,7 +3382,7 @@ class FacturacionService
 					'moneda_id' => $itemEmision['moneda_id'], 
 					'descuento' => $itemEmision['descuento'], 
 					'descuentointegrado' => $itemEmision['descuentointegrado'],
-				];
+				]);
 				if ($depositoIdEmision > 0) {
 					$dataEmision['deposito_id'] = $depositoIdEmision;
 				}

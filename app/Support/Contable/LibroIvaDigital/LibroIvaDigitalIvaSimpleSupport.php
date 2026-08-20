@@ -5,7 +5,7 @@ namespace App\Support\Contable\LibroIvaDigital;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Armado y resumen de CSV IVA Simple (débito fiscal por actividad ARCA).
+ * Armado y resumen de CSV IVA Simple (débito por actividad / crédito por concepto).
  */
 final class LibroIvaDigitalIvaSimpleSupport
 {
@@ -57,6 +57,145 @@ final class LibroIvaDigitalIvaSimpleSupport
         }
 
         return implode(';', $campos).';';
+    }
+
+    public static function etiquetaConceptoCredito(int $concepto): string
+    {
+        return match ($concepto) {
+            1 => 'Bienes',
+            2 => 'Locaciones',
+            3 => 'Servicios',
+            4 => 'Bienes de uso',
+            default => 'Concepto '.$concepto,
+        };
+    }
+
+    /**
+     * Agrupa neto + IVA de la misma alícuota/concepto (G e I van en el mismo renglón ARCA).
+     *
+     * @param  array<string, array<string, mixed>>  $acumulado
+     * @param  array<string, mixed>  $fila
+     */
+    public static function acumularCredito(
+        array &$acumulado,
+        array $fila,
+        bool $prorrateoGlobal = false,
+        bool $restitucion = false,
+    ): void {
+        $neto = (float) ($fila['neto'] ?? 0);
+        $iva = (float) ($fila['iva'] ?? 0);
+        if ($neto <= 0 && $iva <= 0) {
+            return;
+        }
+
+        $concepto = (int) ($fila['concepto_iva_simple'] ?? $fila['concepto'] ?? 1);
+        $tasa = (float) ($fila['tasa'] ?? 0);
+        $alicuota = isset($fila['alicuota_codigo'])
+            ? (int) $fila['alicuota_codigo']
+            : LibroIvaDigitalMapeosSupport::codigoAlicuotaIvaSimple($tasa);
+        $key = $concepto.'|'.$alicuota;
+
+        if (! isset($acumulado[$key])) {
+            $acumulado[$key] = [
+                'concepto' => $concepto,
+                'alicuota_codigo' => $alicuota,
+                'tasa' => $tasa,
+                'neto' => 0.0,
+                'iva' => 0.0,
+                'iva_computable' => 0.0,
+                'restitucion' => $restitucion,
+            ];
+        }
+
+        $acumulado[$key]['neto'] += $neto;
+        $acumulado[$key]['iva'] += $iva;
+        if (! $prorrateoGlobal) {
+            $acumulado[$key]['iva_computable'] += $iva;
+        }
+        if ($tasa > 0 && (float) ($acumulado[$key]['tasa'] ?? 0) <= 0) {
+            $acumulado[$key]['tasa'] = $tasa;
+        }
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $acumulado
+     * @return array{lineas: list<string>, detalle: list<array<string, mixed>>}
+     */
+    public static function lineasDesdeAcumuladoCredito(array $acumulado, bool $restitucion = false): array
+    {
+        ksort($acumulado);
+        $lineas = [];
+        $detalle = [];
+        foreach ($acumulado as $fila) {
+            $fila['neto'] = round((float) $fila['neto'], 2);
+            $fila['iva'] = round((float) $fila['iva'], 2);
+            $fila['iva_computable'] = round((float) $fila['iva_computable'], 2);
+            if ($fila['neto'] <= 0 && $fila['iva'] <= 0) {
+                continue;
+            }
+            $detalle[] = $fila;
+            $lineas[] = self::lineaCreditoFiscal($fila, $restitucion);
+        }
+
+        return ['lineas' => $lineas, 'detalle' => $detalle];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $detalleCredito
+     * @param  list<array<string, mixed>>  $detalleRestitucion
+     * @return list<array<string, mixed>>
+     */
+    public static function resumenPorConcepto(array $detalleCredito, array $detalleRestitucion): array
+    {
+        /** @var array<int, array<string, mixed>> $acumulado */
+        $acumulado = [];
+
+        foreach ($detalleCredito as $fila) {
+            self::sumarResumenConcepto($acumulado, $fila, false);
+        }
+        foreach ($detalleRestitucion as $fila) {
+            self::sumarResumenConcepto($acumulado, $fila, true);
+        }
+
+        ksort($acumulado);
+
+        return array_values($acumulado);
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $acumulado
+     * @param  array<string, mixed>  $fila
+     */
+    private static function sumarResumenConcepto(array &$acumulado, array $fila, bool $restitucion): void
+    {
+        $concepto = (int) ($fila['concepto'] ?? 1);
+        if (! isset($acumulado[$concepto])) {
+            $acumulado[$concepto] = [
+                'concepto' => $concepto,
+                'concepto_nombre' => self::etiquetaConceptoCredito($concepto),
+                'renglones_credito' => 0,
+                'renglones_restitucion' => 0,
+                'neto_gravado' => 0.0,
+                'iva_credito' => 0.0,
+                'iva_computable' => 0.0,
+                'iva_restitucion' => 0.0,
+            ];
+        }
+
+        if ($restitucion) {
+            $acumulado[$concepto]['renglones_restitucion']++;
+            $acumulado[$concepto]['iva_restitucion'] += (float) ($fila['iva'] ?? 0);
+        } else {
+            $acumulado[$concepto]['renglones_credito']++;
+            $acumulado[$concepto]['iva_computable'] += (float) ($fila['iva_computable'] ?? $fila['iva'] ?? 0);
+        }
+
+        $acumulado[$concepto]['neto_gravado'] += (float) ($fila['neto'] ?? 0);
+        $acumulado[$concepto]['iva_credito'] += (float) ($fila['iva'] ?? 0);
+        $acumulado[$concepto]['neto_gravado'] = round($acumulado[$concepto]['neto_gravado'], 2);
+        $acumulado[$concepto]['iva_credito'] = round($acumulado[$concepto]['iva_credito'], 2);
+        $acumulado[$concepto]['iva_computable'] = round($acumulado[$concepto]['iva_computable'], 2);
+        $acumulado[$concepto]['iva_restitucion'] = round($acumulado[$concepto]['iva_restitucion'], 2);
     }
 
     public static function etiquetaTipoOperacion(string $tipo): string

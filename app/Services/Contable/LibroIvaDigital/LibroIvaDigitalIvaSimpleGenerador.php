@@ -2,7 +2,10 @@
 
 namespace App\Services\Contable\LibroIvaDigital;
 
+use App\Models\Compras\Comprobante_Proveedor;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaArmadoSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaBridgeReader;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalConceptoIvacompraSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalIvaSimpleSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
@@ -12,11 +15,22 @@ use Illuminate\Support\Facades\Schema;
 
 /**
  * Totales abiertos por actividad ARCA para IVA Simple (DJ).
- * La actividad se toma de venta.actividad_arca_id y, si falta, de puntoventa.actividad_arca_id.
+ * Débito: actividad de venta.actividad_arca_id o, si falta, puntoventa.actividad_arca_id.
+ * Crédito: compras ERP + Anita (misma fuente que Libro IVA Digital compras).
  */
 class LibroIvaDigitalIvaSimpleGenerador
 {
+    public function __construct(
+        private readonly LibroIvaDigitalComprasAnitaBridgeReader $comprasAnitaBridgeReader,
+    ) {
+    }
+
     /**
+     * @param  array{
+     *     por_fecha_jornada?: bool,
+     *     prorrateo_cf_global?: bool,
+     *     completar_compras_anita?: bool
+     * }  $opciones
      * @return array{
      *     debito_fiscal: string,
      *     credito_fiscal: string,
@@ -24,23 +38,30 @@ class LibroIvaDigitalIvaSimpleGenerador
      *     restitucion_credito: string,
      *     detalle_debito: list<array<string, mixed>>,
      *     detalle_restitucion_debito: list<array<string, mixed>>,
+     *     detalle_credito: list<array<string, mixed>>,
+     *     detalle_restitucion_credito: list<array<string, mixed>>,
      *     resumen_por_actividad: list<array<string, mixed>>,
+     *     resumen_por_concepto: list<array<string, mixed>>,
      *     resumen: array<string, int|float>
      * }
-     */
-    /**
-     * @param  array{por_fecha_jornada?: bool}  $opciones
      */
     public function generar(int $empresaId, int $anio, int $mes, array $opciones = []): array
     {
         $desde = sprintf('%04d-%02d-01', $anio, $mes);
         $hasta = date('Y-m-t', strtotime($desde));
         $porFechaJornada = (bool) ($opciones['por_fecha_jornada'] ?? false);
+        $completarAnita = (bool) ($opciones['completar_compras_anita'] ?? true);
+        $prorrateoGlobal = (bool) ($opciones['prorrateo_cf_global'] ?? false);
 
         $ventasDebito = $this->ventasDebitoFiscal($empresaId, $desde, $hasta, false, $porFechaJornada);
         $ventasRestitucion = $this->ventasDebitoFiscal($empresaId, $desde, $hasta, true, $porFechaJornada);
-        $filasCredito = $this->comprasCreditoFiscal($empresaId, $desde, $hasta, false);
-        $filasRestitucionCredito = $this->comprasCreditoFiscal($empresaId, $desde, $hasta, true);
+        $compras = $this->comprasCreditoFiscal(
+            $empresaId,
+            $desde,
+            $hasta,
+            $completarAnita,
+            $prorrateoGlobal,
+        );
 
         $ajustes = $this->agregarAjustesManuales($empresaId, $anio, $mes);
 
@@ -55,18 +76,32 @@ class LibroIvaDigitalIvaSimpleGenerador
             $ventasRestitucion['lineas'],
             array_map(fn (array $fila) => LibroIvaDigitalIvaSimpleSupport::lineaDebitoFiscal($fila, true), $ajustes['detalle_restitucion_debito']),
         );
-        $filasCredito = array_merge(
-            $filasCredito,
-            array_map(fn (array $fila) => LibroIvaDigitalIvaSimpleSupport::lineaCreditoFiscal($fila), $ajustes['detalle_credito']),
-        );
-        $filasRestitucionCredito = array_merge(
-            $filasRestitucionCredito,
-            array_map(fn (array $fila) => LibroIvaDigitalIvaSimpleSupport::lineaCreditoFiscal($fila, true), $ajustes['detalle_restitucion_credito']),
-        );
+
+        $acumCredito = [];
+        $acumRestitucionCredito = [];
+        foreach ($compras['detalle'] as $fila) {
+            LibroIvaDigitalIvaSimpleSupport::acumularCredito($acumCredito, $fila, $prorrateoGlobal, false);
+        }
+        foreach ($ajustes['detalle_credito'] as $fila) {
+            LibroIvaDigitalIvaSimpleSupport::acumularCredito($acumCredito, $fila, $prorrateoGlobal, false);
+        }
+        foreach ($compras['detalle_restitucion'] as $fila) {
+            LibroIvaDigitalIvaSimpleSupport::acumularCredito($acumRestitucionCredito, $fila, $prorrateoGlobal, true);
+        }
+        foreach ($ajustes['detalle_restitucion_credito'] as $fila) {
+            LibroIvaDigitalIvaSimpleSupport::acumularCredito($acumRestitucionCredito, $fila, $prorrateoGlobal, true);
+        }
+
+        $credito = LibroIvaDigitalIvaSimpleSupport::lineasDesdeAcumuladoCredito($acumCredito, false);
+        $restitucionCredito = LibroIvaDigitalIvaSimpleSupport::lineasDesdeAcumuladoCredito($acumRestitucionCredito, true);
 
         $resumenPorActividad = LibroIvaDigitalIvaSimpleSupport::resumenPorActividad(
             $detalleDebito,
             $detalleRestitucionDebito,
+        );
+        $resumenPorConcepto = LibroIvaDigitalIvaSimpleSupport::resumenPorConcepto(
+            $credito['detalle'],
+            $restitucionCredito['detalle'],
         );
 
         $totalIvaDebito = $this->sumarIvaDesdeLineasDebito($filasDebito);
@@ -74,18 +109,23 @@ class LibroIvaDigitalIvaSimpleGenerador
 
         return [
             'debito_fiscal' => implode("\r\n", $filasDebito),
-            'credito_fiscal' => implode("\r\n", $filasCredito),
+            'credito_fiscal' => implode("\r\n", $credito['lineas']),
             'restitucion_debito' => implode("\r\n", $filasRestitucionDebito),
-            'restitucion_credito' => implode("\r\n", $filasRestitucionCredito),
+            'restitucion_credito' => implode("\r\n", $restitucionCredito['lineas']),
             'detalle_debito' => $detalleDebito,
             'detalle_restitucion_debito' => $detalleRestitucionDebito,
+            'detalle_credito' => $credito['detalle'],
+            'detalle_restitucion_credito' => $restitucionCredito['detalle'],
             'resumen_por_actividad' => $resumenPorActividad,
+            'resumen_por_concepto' => $resumenPorConcepto,
             'resumen' => [
                 'renglones_debito' => count($filasDebito),
-                'renglones_credito' => count($filasCredito),
+                'renglones_credito' => count($credito['lineas']),
                 'renglones_restitucion_debito' => count($filasRestitucionDebito),
-                'renglones_restitucion_credito' => count($filasRestitucionCredito),
+                'renglones_restitucion_credito' => count($restitucionCredito['lineas']),
                 'total_iva_debito' => round($totalIvaDebito, 2),
+                'total_iva_credito' => round(array_sum(array_column($credito['detalle'], 'iva')), 2),
+                'total_iva_restitucion_credito' => round(array_sum(array_column($restitucionCredito['detalle'], 'iva')), 2),
                 'sin_actividad_arca' => $sinActividad,
                 'actividades' => count($resumenPorActividad),
             ],
@@ -245,55 +285,151 @@ class LibroIvaDigitalIvaSimpleGenerador
     }
 
     /**
-     * @return list<string>
+     * @return array{
+     *     detalle: list<array<string, mixed>>,
+     *     detalle_restitucion: list<array<string, mixed>>
+     * }
      */
-    private function comprasCreditoFiscal(int $empresaId, string $desde, string $hasta, bool $soloNotasCredito): array
-    {
-        $query = DB::table('comprobante_proveedor as cp')
-            ->join('tipotransaccion_compra as tt', 'tt.id', '=', 'cp.tipotransaccion_compra_id')
-            ->join('comprobante_proveedor_concepto as cpc', 'cpc.comprobante_proveedor_id', '=', 'cp.id')
-            ->join('concepto_ivacompra as ci', 'ci.id', '=', 'cpc.concepto_ivacompra_id')
-            ->leftJoin('impuesto as imp', 'imp.id', '=', 'ci.impuesto_id')
-            ->where('cp.empresa_id', $empresaId)
-            ->whereBetween('cp.fechaiva', [$desde, $hasta])
-            ->where('cp.estado', '<>', ComprobanteProveedorEstados::ANULADO)
-            ->whereIn('ci.tipoconcepto', ['G', 'I']);
+    private function comprasCreditoFiscal(
+        int $empresaId,
+        string $desde,
+        string $hasta,
+        bool $completarAnita,
+        bool $prorrateoGlobal,
+    ): array {
+        $acumCredito = [];
+        $acumRestitucion = [];
+        /** @var array<string, true> $clavesErp */
+        $clavesErp = [];
+        /** @var array<int, true> $nrosInternosErp */
+        $nrosInternosErp = [];
 
-        if ($soloNotasCredito) {
-            $query->where('tt.signo', '<', 0);
-        } else {
-            $query->where(function ($q): void {
-                $q->whereNull('tt.signo')->orWhere('tt.signo', '>=', 0);
+        Comprobante_Proveedor::query()
+            ->where('comprobante_proveedor.empresa_id', $empresaId)
+            ->whereBetween('comprobante_proveedor.fechaiva', [$desde, $hasta])
+            ->where('comprobante_proveedor.estado', '<>', ComprobanteProveedorEstados::ANULADO)
+            ->with([
+                'proveedores',
+                'tipotransaccion_compras',
+                'comprobante_proveedor_conceptos.concepto_ivacompras.impuestos',
+            ])
+            ->orderBy('comprobante_proveedor.fechaiva')
+            ->lazy(100)
+            ->each(function (Comprobante_Proveedor $cp) use (
+                &$acumCredito,
+                &$acumRestitucion,
+                &$clavesErp,
+                &$nrosInternosErp,
+                $prorrateoGlobal,
+            ): void {
+                $clave = $this->claveErp($cp);
+                if ($clave !== '') {
+                    $clavesErp[$clave] = true;
+                }
+                $nroInterno = (int) ($cp->anita_nro_interno ?? 0);
+                if ($nroInterno > 0) {
+                    $nrosInternosErp[$nroInterno] = true;
+                }
+
+                $letra = strtoupper((string) ($cp->letra ?: 'A'));
+                $totales = LibroIvaDigitalConceptoIvacompraSupport::desglosarComprobante(
+                    $cp->comprobante_proveedor_conceptos,
+                    $letra,
+                );
+                $esNc = LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoTipo($cp->tipotransaccion_compras);
+                foreach ($totales['alicuotas'] as $row) {
+                    $this->acumularFilaCredito($acumCredito, $acumRestitucion, $row, $prorrateoGlobal, $esNc);
+                }
             });
-        }
 
-        $rows = $query
-            ->selectRaw("
-                ci.nombre as nombre,
-                COALESCE(imp.valor, 0) as tasa,
-                SUM(CASE WHEN ci.tipoconcepto = 'G' THEN ABS(cpc.monto) ELSE 0 END) as neto,
-                SUM(CASE WHEN ci.tipoconcepto = 'I' THEN ABS(cpc.monto) ELSE 0 END) as iva
-            ")
-            ->groupBy('nombre', 'tasa')
-            ->havingRaw('SUM(ABS(cpc.monto)) > 0')
-            ->get();
+        if ($completarAnita) {
+            $filasAnita = $this->comprasAnitaBridgeReader->listarPeriodo($empresaId, $desde, $hasta);
+            foreach ($filasAnita as $fila) {
+                $compra = $fila['compra'];
+                $nroInterno = (int) ($compra['com_nro_interno'] ?? 0);
+                if ($nroInterno > 0 && isset($nrosInternosErp[$nroInterno])) {
+                    continue;
+                }
 
-        $lineas = [];
-        foreach ($rows as $row) {
-            if ((float) $row->neto <= 0 && (float) $row->iva <= 0) {
-                continue;
+                $clave = LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural(
+                    (string) ($compra['com_proveedor'] ?? ''),
+                    (string) ($compra['com_tipo'] ?? ''),
+                    (string) ($compra['com_letra'] ?? ''),
+                    (int) ($compra['com_sucursal'] ?? 0),
+                    (int) ($compra['com_nro'] ?? 0),
+                );
+                if (isset($clavesErp[$clave])) {
+                    continue;
+                }
+
+                $registro = LibroIvaDigitalComprasAnitaArmadoSupport::armarRegistro(
+                    $compra,
+                    $fila['conceptos'],
+                    $prorrateoGlobal,
+                );
+                if ($registro === null) {
+                    continue;
+                }
+
+                $letra = strtoupper(substr(trim((string) ($compra['com_letra'] ?? 'A')), 0, 1));
+                $tipoAbrev = strtoupper(substr(trim((string) ($compra['com_tipo'] ?? '')), 0, 3));
+                $tipo = LibroIvaDigitalComprasAnitaArmadoSupport::tipoPorAbreviatura($tipoAbrev);
+                $esNc = LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoTipo($tipo);
+                $alicuotas = LibroIvaDigitalComprasAnitaArmadoSupport::alicuotasIvaSimple(
+                    $fila['conceptos'],
+                    $letra,
+                );
+                foreach ($alicuotas as $row) {
+                    $this->acumularFilaCredito($acumCredito, $acumRestitucion, $row, $prorrateoGlobal, $esNc);
+                }
             }
-            $fila = [
-                'concepto' => LibroIvaDigitalConceptoIvacompraSupport::conceptoIvaSimpleDesdeNombre((string) $row->nombre),
-                'alicuota_codigo' => LibroIvaDigitalMapeosSupport::codigoAlicuotaIvaSimple((float) $row->tasa),
-                'neto' => (float) $row->neto,
-                'iva' => (float) $row->iva,
-                'iva_computable' => (float) $row->iva,
-            ];
-            $lineas[] = LibroIvaDigitalIvaSimpleSupport::lineaCreditoFiscal($fila, $soloNotasCredito);
         }
 
-        return $lineas;
+        $credito = LibroIvaDigitalIvaSimpleSupport::lineasDesdeAcumuladoCredito($acumCredito, false);
+        $restitucion = LibroIvaDigitalIvaSimpleSupport::lineasDesdeAcumuladoCredito($acumRestitucion, true);
+
+        return [
+            'detalle' => $credito['detalle'],
+            'detalle_restitucion' => $restitucion['detalle'],
+        ];
+    }
+
+    /**
+     * @param  array<string, array<string, mixed>>  $acumCredito
+     * @param  array<string, array<string, mixed>>  $acumRestitucion
+     * @param  array<string, mixed>  $row
+     */
+    private function acumularFilaCredito(
+        array &$acumCredito,
+        array &$acumRestitucion,
+        array $row,
+        bool $prorrateoGlobal,
+        bool $esNc,
+    ): void {
+        if ($esNc) {
+            LibroIvaDigitalIvaSimpleSupport::acumularCredito($acumRestitucion, $row, $prorrateoGlobal, true);
+        } else {
+            LibroIvaDigitalIvaSimpleSupport::acumularCredito($acumCredito, $row, $prorrateoGlobal, false);
+        }
+    }
+
+    private function claveErp(Comprobante_Proveedor $cp): string
+    {
+        $proveedor = str_pad(trim((string) ($cp->proveedores->codigo ?? '')), 6, '0', STR_PAD_LEFT);
+        $tipo = strtoupper(substr(trim((string) ($cp->tipotransaccion_compras->abreviatura ?? '')), 0, 3));
+        $letra = strtoupper(substr(trim((string) ($cp->letra ?: 'A')), 0, 1));
+
+        if ($proveedor === '000000' || $tipo === '') {
+            return '';
+        }
+
+        return LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural(
+            $proveedor,
+            $tipo,
+            $letra,
+            (int) $cp->sucursal,
+            (int) $cp->numerocomprobante,
+        );
     }
 
     /**

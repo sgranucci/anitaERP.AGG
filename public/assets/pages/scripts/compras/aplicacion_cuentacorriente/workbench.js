@@ -173,6 +173,24 @@
         return p.length === 3 ? (p[2] + '/' + p[1] + '/' + p[0]) : ymd;
     }
 
+    function escapeHtml(s) {
+        return $('<div>').text(s == null ? '' : String(s)).html();
+    }
+
+    function htmlComprobanteAplicado(abrev, texto, tipo) {
+        abrev = String(abrev || '').trim();
+        texto = String(texto || '');
+        if (abrev) {
+            var re = new RegExp('^' + abrev.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s+', 'i');
+            texto = texto.replace(re, '');
+        }
+        var html = '';
+        if (abrev) {
+            html += '<span class="acc-badge ' + escapeHtml(String(tipo || '').toLowerCase()) + '">' + escapeHtml(abrev) + '</span> ';
+        }
+        return html + escapeHtml(texto);
+    }
+
     function proveedorId() {
         return parseInt($('#proveedor_id').val() || '0', 10);
     }
@@ -759,8 +777,9 @@
         });
         $tb.html(html);
         $tb.find('tr').each(function (i) {
-            $(this).find('td').eq(1).text(state.recientes[i].credito);
-            $(this).find('td').eq(2).text(state.recientes[i].deuda);
+            var r = state.recientes[i];
+            $(this).find('td').eq(1).html(htmlComprobanteAplicado(r.credito_abreviatura, r.credito, r.credito_tipo));
+            $(this).find('td').eq(2).html(htmlComprobanteAplicado(r.deuda_abreviatura, r.deuda, r.deuda_tipo));
         });
     }
 

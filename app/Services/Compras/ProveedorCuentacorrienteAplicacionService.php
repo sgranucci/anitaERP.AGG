@@ -12,15 +12,18 @@ use App\Support\Compras\ProveedorCuentacorrienteGrillaSupport;
 use App\Support\Database\SqlDialectSupport;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
+use Throwable;
 
 /**
  * Aplica NC y pagos a cuenta contra facturas adeudadas.
  * Subledger siempre; asiento de DC solo si las cotizaciones difieren.
+ * Después del commit MySQL espeja a Anita: aplmovp + promov.prov_t_pagado.
  */
 class ProveedorCuentacorrienteAplicacionService
 {
     public function __construct(
         private ProveedorCuentacorrienteAplicacionAsientoService $asientoDcService,
+        private ProveedorCuentacorrienteAplicacionAnitaSyncService $anitaSyncService,
     ) {}
 
     /**
@@ -34,7 +37,7 @@ class ProveedorCuentacorrienteAplicacionService
             throw new RuntimeException('Fecha de aplicación inválida.');
         }
 
-        return DB::transaction(function () use ($proveedorId, $fecha, $lineas) {
+        $resultado = DB::transaction(function () use ($proveedorId, $fecha, $lineas) {
             $ids = [];
             foreach ($lineas as $linea) {
                 $ids[] = (int) ($linea['credito_id'] ?? 0);
@@ -180,6 +183,16 @@ class ProveedorCuentacorrienteAplicacionService
                 'ids' => $idsAplicacion,
             ];
         });
+
+        try {
+            $this->anitaSyncService->syncPorIdsAplicacion($resultado['ids']);
+        } catch (Throwable $e) {
+            throw new RuntimeException(
+                'La aplicación quedó grabada en anitaERP pero no se reflejó en Anita (promov/aplmovp): '.$e->getMessage()
+            );
+        }
+
+        return $resultado;
     }
 
     /**
@@ -187,7 +200,9 @@ class ProveedorCuentacorrienteAplicacionService
      */
     public function desaplicar(int $aplicacionId, int $proveedorId): void
     {
-        DB::transaction(function () use ($aplicacionId, $proveedorId) {
+        $snapshot = null;
+
+        DB::transaction(function () use ($aplicacionId, $proveedorId, &$snapshot) {
             /** @var Proveedor_Cuentacorriente_Aplicacion|null $apl */
             $apl = Proveedor_Cuentacorriente_Aplicacion::query()
                 ->lockForUpdate()
@@ -198,6 +213,8 @@ class ProveedorCuentacorrienteAplicacionService
             if ((int) ($apl->pagoproveedor_id ?? 0) > 0) {
                 throw new RuntimeException('Esta aplicación pertenece a una orden de pago. Revierta la OP.');
             }
+
+            $snapshot = $this->anitaSyncService->snapshotDesdeAplicacion($apl);
 
             $parId = (int) ($apl->proveedor_cuentacorriente_aplicado_id ?? 0);
             $idsBorrar = [(int) $apl->id];
@@ -244,6 +261,18 @@ class ProveedorCuentacorrienteAplicacionService
                 ->whereIn('id', $idsBorrar)
                 ->delete();
         });
+
+        if ($snapshot === null) {
+            return;
+        }
+
+        try {
+            $this->anitaSyncService->revertir($snapshot);
+        } catch (Throwable $e) {
+            throw new RuntimeException(
+                'La aplicación se deshizo en anitaERP pero no se revirtió en Anita (promov/aplmovp): '.$e->getMessage()
+            );
+        }
     }
 
     /**

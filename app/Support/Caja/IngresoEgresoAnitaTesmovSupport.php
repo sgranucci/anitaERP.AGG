@@ -181,6 +181,109 @@ final class IngresoEgresoAnitaTesmovSupport
     }
 
     /**
+     * Backfill MultiEmpresa: axp_sucursal_cob = sucursal/empresa en líneas de cuenta-caja.
+     * No toca CHP (ahí axp_sucursal_cob es nro de cheque). pago no tiene sucursal_cob;
+     * pag_sucursal ya lleva nroemp.
+     *
+     * @return array{
+     *   movimiento_id: int,
+     *   tipo: string,
+     *   nro: int,
+     *   empresa: int,
+     *   sucursal: int,
+     *   filas_anita: int,
+     *   filas_a_corregir: int,
+     *   filas_actualizadas: int,
+     *   omitido: ?string
+     * }
+     */
+    public static function corregirSucursalCobDesdeMovimiento(Caja_Movimiento $movimiento, bool $ejecutar): array
+    {
+        $movimiento->loadMissing(['tipotransaccioncajas']);
+        $base = [
+            'movimiento_id' => (int) $movimiento->id,
+            'tipo' => '',
+            'nro' => 0,
+            'empresa' => 0,
+            'sucursal' => 0,
+            'filas_anita' => 0,
+            'filas_a_corregir' => 0,
+            'filas_actualizadas' => 0,
+            'omitido' => null,
+        ];
+
+        if (! self::estaHabilitada()) {
+            $base['omitido'] = 'escritura Anita deshabilitada';
+
+            return $base;
+        }
+
+        $ctx = self::contexto($movimiento);
+        if ($ctx === null) {
+            $base['omitido'] = 'sin contexto Anita (tipo/nro)';
+
+            return $base;
+        }
+
+        $base['tipo'] = (string) $ctx['tipo'];
+        $base['nro'] = (int) $ctx['nro'];
+        $base['empresa'] = (int) $ctx['empresa'];
+        $base['sucursal'] = (int) $ctx['sucursal'];
+
+        $where = ' WHERE axp_tipo = '.self::escSql($ctx['tipo'])
+            .' AND axp_rec = '.(int) $ctx['nro']
+            .' AND axp_empresa = '.(int) $ctx['empresa'];
+
+        $rawList = (new ApiAnita)->apiCallEscritura([
+            'acc' => 'list',
+            'sistema' => self::sistema(),
+            'tabla' => 'auxpag',
+            'campos' => 'axp_rec,axp_tipo,axp_tipo_ap,axp_sucursal,axp_sucursal_cob,axp_empresa',
+            'whereArmado' => $where,
+        ], 'caja IE auxpag list sucursal_cob '.$movimiento->id);
+
+        $parseado = ApiAnita::parsearRespuestaLista($rawList);
+        if ($parseado['error_lectura'] !== null) {
+            throw new \RuntimeException(
+                'Error al leer auxpag Anita OPP '.$ctx['nro'].': '.$parseado['error_lectura']
+            );
+        }
+
+        $aCorregir = 0;
+        foreach ($parseado['filas'] as $fila) {
+            $tipoAp = strtoupper(substr(trim((string) ($fila->axp_tipo_ap ?? '')), 0, 3));
+            if ($tipoAp === 'CHP') {
+                continue;
+            }
+            if ((int) ($fila->axp_sucursal_cob ?? 0) === (int) $ctx['sucursal']) {
+                continue;
+            }
+            $aCorregir++;
+        }
+
+        $base['filas_anita'] = count($parseado['filas']);
+        $base['filas_a_corregir'] = $aCorregir;
+
+        if (! $ejecutar || $aCorregir === 0) {
+            return $base;
+        }
+
+        $rawUpd = (new ApiAnita)->apiCallEscritura([
+            'tabla' => 'auxpag',
+            'acc' => 'update',
+            'sistema' => self::sistema(),
+            'valores' => 'axp_sucursal_cob = '.(int) $ctx['sucursal'],
+            'whereArmado' => $where
+                .' AND axp_tipo_ap <> '.self::escSql('CHP')
+                .' AND axp_sucursal_cob <> '.(int) $ctx['sucursal'],
+        ], 'caja IE auxpag update sucursal_cob '.$movimiento->id);
+
+        $base['filas_actualizadas'] = ApiAnita::extraerFilasAfectadas($rawUpd) ?? $aCorregir;
+
+        return $base;
+    }
+
+    /**
      * @return array{
      *   tipo: string,
      *   nro: int,
@@ -477,7 +580,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 ' ',
                 '".$ctx['sucursal']."',
                 '".self::esc($ctx['letra'])."',
-                '0',
+                '".$ctx['sucursal']."',
                 '0',
                 '0',
                 '".$ctx['empresa']."',

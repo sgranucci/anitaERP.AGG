@@ -155,7 +155,18 @@ final class CierreJornadaProcesoConfigSupport
             return round(max(0., min(100., (float) $mapa[$empresaId])), 4);
         }
 
-        return round(max(0., min(100., (float) config('gastronomia.cierre_jornada_porcentaje', 0))), 4);
+        return round(max(0., min(100., (float) config('gastronomia.cierre_jornada_porcentaje', 25))), 4);
+    }
+
+    /**
+     * Objetivo de empresa limitado al tope recodificable de la jornada (3er asiento / fondo fijo).
+     */
+    public static function resolverPorcentajeParaJornada(int $empresaId, float $maximoRecodificacion): float
+    {
+        return CierreJornadaProcesoRedistribucionSupport::porcentajeAplicar(
+            self::resolverPorcentajeParaEmpresa($empresaId),
+            $maximoRecodificacion,
+        );
     }
 
     /**

@@ -651,7 +651,7 @@
                             validas.length +
                                 ' artículo(s) válidos para TRCONT. Omitidos ' +
                                 omitidas +
-                                ' (no contabilizables o depósito distinto a última recepción).'
+                                ' (no contabilizables, TITO fuera de última recepción u otros activos sin COM en el depósito).'
                         );
                     } else {
                         setEstado(msgBase);

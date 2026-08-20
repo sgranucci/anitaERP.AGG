@@ -74,7 +74,7 @@ class WaitryCierreJornadaController extends Controller
                 : [],
             'porcentaje_proceso_config' => $empresaId > 0
                 ? CierreJornadaProcesoConfigSupport::resolverPorcentajeParaEmpresa($empresaId)
-                : (float) config('gastronomia.cierre_jornada_porcentaje', 0),
+                : (float) config('gastronomia.cierre_jornada_porcentaje', 25),
             'url_movimientos_proceso_base' => str_replace(
                 '__GRUPO__',
                 '',

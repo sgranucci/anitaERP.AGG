@@ -71,7 +71,7 @@ class LibroIvaDigitalService
     }
 
     /**
-     * @param  array{por_fecha_jornada?: bool}  $opciones
+     * @param  array{por_fecha_jornada?: bool, prorrateo_cf_global?: bool, completar_compras_anita?: bool}  $opciones
      * @return array<string, mixed>
      */
     public function generarIvaSimple(int $empresaId, int $anio, int $mes, array $opciones = []): array

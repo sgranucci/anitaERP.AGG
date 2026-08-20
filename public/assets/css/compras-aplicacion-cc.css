@@ -325,6 +325,11 @@
 .acc-badge.aging-vencida { color: #B9770E; border-color: #F5B041; background: #FCF3CF; }
 .acc-badge.aging-hoy { color: #1A5276; border-color: #5DADE2; background: #D4E6F1; }
 .acc-badge.aging-a_vencer { color: #196F3D; border-color: #82E0AA; background: #E8F8F5; }
+.acc-recientes td .acc-badge {
+    margin-right: 6px;
+    vertical-align: baseline;
+    white-space: nowrap;
+}
 .acc-hidden { display: none !important; }
 .acc-empty {
     padding: 48px 16px;

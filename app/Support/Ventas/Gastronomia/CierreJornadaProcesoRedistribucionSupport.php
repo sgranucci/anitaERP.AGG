@@ -306,6 +306,20 @@ final class CierreJornadaProcesoRedistribucionSupport
     }
 
     /**
+     * % a aplicar al 3er asiento: objetivo de la empresa (p. ej. 25 %) limitado al disponible recodificable.
+     */
+    public static function porcentajeAplicar(float $objetivo, float $maximoRecodificacion): float
+    {
+        $objetivo = round(max(0., min(100., $objetivo)), 4);
+        $maximo = round(max(0., min(100., $maximoRecodificacion)), 4);
+        if ($objetivo <= 0.0001 || $maximo <= 0.0001) {
+            return 0.0;
+        }
+
+        return round(min($objetivo, $maximo), 4);
+    }
+
+    /**
      * Impide que el objetivo del % supere el total Waitry sin facturar recodificable (QR/MP).
      *
      * @throws InvalidArgumentException

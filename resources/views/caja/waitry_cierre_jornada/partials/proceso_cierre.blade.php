@@ -353,7 +353,7 @@
                 <input type="number" id="input-porcentaje" class="form-control form-control-sm mr-1" style="width:90px"
                        min="0" max="100" step="0.0001"
                        value="{{ number_format((float) ($porcentaje_proceso_config ?? 0), 4, '.', '') }}"
-                       title="Porcentaje sobre facturado Anita; el máximo depende del Waitry sin facturar recodificable (ver debajo). También se usa en el proceso automático.">
+                       title="Objetivo sobre facturado Anita (default 25%). Si el disponible a recodificar es menor, se aplica ese tope (3er asiento). El automático usa la misma regla.">
                 <span class="mr-2 small">%</span>
                 <button type="button" class="btn btn-sm btn-primary mr-2 mb-1" id="btn-proceso-recalcular">
                     Recalcular medios
@@ -382,10 +382,14 @@
                 <span class="text-muted">
                     Facturado Anita (base del %):
                     <strong id="ctx-facturacion-anita">—</strong>
-                    · Waitry sin facturar a recodificar (QR/Totalcoin + MP):
+                    · Disponible a recodificar (QR/Totalcoin + MP → 3er asiento):
                     <strong id="ctx-sin-facturar-recodificable">—</strong>
-                    · Máx. % permitido:
+                    · Objetivo:
+                    <strong id="ctx-porcentaje-objetivo">—</strong>
+                    · Tope del día:
                     <strong id="ctx-porcentaje-maximo">—</strong>
+                    · Se aplica:
+                    <strong id="ctx-porcentaje-aplicar">—</strong>
                 </span>
                 <span class="d-none text-danger d-block mt-1" id="ctx-porcentaje-excedido"></span>
                 <br>
@@ -525,7 +529,8 @@
                     <div class="modal-body">
                         <p class="text-muted small mb-2">
                             Las cuentas se consultan filtradas por la empresa del formulario principal.
-                            El porcentaje se guarda por empresa y lo usa el proceso manual y el automático.
+                            El porcentaje se guarda por empresa (objetivo, default 25%) y lo usan el proceso manual y el automático.
+                            En cada jornada se aplica el menor entre ese objetivo y el disponible recodificable (3er asiento).
                         </p>
                         <div class="form-group row mb-3">
                             <label for="config-porcentaje" class="col-sm-5 col-form-label col-form-label-sm">
@@ -534,7 +539,7 @@
                             <div class="col-sm-4">
                                 <input type="number" class="form-control form-control-sm" id="config-porcentaje"
                                        name="porcentaje" min="0" max="100" step="0.0001"
-                                       placeholder="0">
+                                       placeholder="25">
                             </div>
                         </div>
                         <table class="table table-sm table-bordered mb-0" id="tabla-config-cuentas">

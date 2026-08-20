@@ -147,7 +147,7 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
      *     imp_interno: float,
      *     cantidad_alicuotas: int,
      *     credito_computable: float,
-     *     alicuotas: list<array{neto: float, iva: float, tasa: float, codigo_lid: string}>
+     *     alicuotas: list<array{neto: float, iva: float, tasa: float, codigo_lid: string, concepto_iva_simple: int}>
      * }
      */
     private static function desglosarConcmov(array $conceptos, string $letra): array
@@ -177,6 +177,9 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             $tipo = strtoupper(trim((string) ($concepto->tipoconcepto ?? '')));
             $tasa = (float) ($concepto->impuestos?->valor ?? 0);
             $key = (string) round($tasa, 3);
+            $conceptoIvaSimple = LibroIvaDigitalConceptoIvacompraSupport::conceptoIvaSimpleDesdeNombre(
+                (string) ($concepto->nombre ?? ''),
+            );
 
             switch ($tipo) {
                 case 'N':
@@ -186,11 +189,15 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
                     $alicuotas[$key]['neto'] = ($alicuotas[$key]['neto'] ?? 0) + $importe;
                     $alicuotas[$key]['tasa'] = $tasa;
                     $alicuotas[$key]['iva'] = $alicuotas[$key]['iva'] ?? 0;
+                    $alicuotas[$key]['concepto_iva_simple'] = $conceptoIvaSimple;
                     break;
                 case 'I':
                     $alicuotas[$key]['iva'] = ($alicuotas[$key]['iva'] ?? 0) + $importe;
                     $alicuotas[$key]['tasa'] = $tasa;
                     $alicuotas[$key]['neto'] = $alicuotas[$key]['neto'] ?? 0;
+                    if (! isset($alicuotas[$key]['concepto_iva_simple'])) {
+                        $alicuotas[$key]['concepto_iva_simple'] = $conceptoIvaSimple;
+                    }
                     break;
                 case 'E':
                     $exento += $importe;
@@ -238,6 +245,7 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
                 'iva' => $iva,
                 'tasa' => $tasa,
                 'codigo_lid' => LibroIvaDigitalMapeosSupport::codigoAlicuotaLid($tasa),
+                'concepto_iva_simple' => (int) ($row['concepto_iva_simple'] ?? 1),
             ];
         }
 
@@ -258,7 +266,7 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         ];
     }
 
-    private static function tipoPorAbreviatura(string $abrev): ?Tipotransaccion_Compra
+    public static function tipoPorAbreviatura(string $abrev): ?Tipotransaccion_Compra
     {
         if ($abrev === '') {
             return null;
@@ -266,6 +274,35 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         self::cargarTipos();
 
         return self::$tiposPorAbrev[$abrev] ?? null;
+    }
+
+    public static function esNotaCreditoTipo(?Tipotransaccion_Compra $tipo): bool
+    {
+        if ($tipo === null) {
+            return false;
+        }
+
+        return (int) $tipo->getRawOriginal('signo') < 0;
+    }
+
+    /**
+     * @param  list<array{concepto: int, importe: float}>  $conceptos
+     * @return list<array{neto: float, iva: float, tasa: float, concepto_iva_simple: int}>
+     */
+    public static function alicuotasIvaSimple(array $conceptos, string $letra): array
+    {
+        $totales = self::desglosarConcmov($conceptos, $letra);
+        $filas = [];
+        foreach ($totales['alicuotas'] as $row) {
+            $filas[] = [
+                'neto' => (float) ($row['neto'] ?? 0),
+                'iva' => (float) ($row['iva'] ?? 0),
+                'tasa' => (float) ($row['tasa'] ?? 0),
+                'concepto_iva_simple' => (int) ($row['concepto_iva_simple'] ?? 1),
+            ];
+        }
+
+        return $filas;
     }
 
     private static function cargarTipos(): void

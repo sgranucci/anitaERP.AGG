@@ -165,7 +165,8 @@ return [
             ? ' '
             : (string) $letraIeAnita,
     /**
-     * Sucursal Anita (pag/tesmov). null/vacío = código empresa Anita (MultiEmpresa a-movim).
+     * Sucursal Anita (pag_sucursal / tesv_sucursal / axp_sucursal / axp_sucursal_cob).
+     * null/vacío = código empresa Anita (MultiEmpresa a-movim).
      * Forzar 0 con CAJA_IE_ANITA_TESMOV_SUCURSAL=0.
      */
     'ingresoegreso_anita_tesmov_sucursal' => (($sucIeAnita = env('CAJA_IE_ANITA_TESMOV_SUCURSAL')) === null

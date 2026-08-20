@@ -113,7 +113,7 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
                 'resumen' => ['comprobantes' => 1, 'alicuotas' => 0, 'comprobantes_con_alicuotas' => 0, 'total_iva' => 0],
             ],
             'compras' => ['resumen' => ['comprobantes' => 0]],
-            'iva_simple' => ['resumen' => ['total_iva_debito' => 0, 'sin_actividad_arca' => 0]],
+            'iva_simple' => ['resumen' => ['total_iva_debito' => 0, 'sin_actividad_arca' => 0, 'total_iva_credito' => 0, 'renglones_credito' => 0]],
         ]);
 
         $this->assertNotEmpty($avisos);

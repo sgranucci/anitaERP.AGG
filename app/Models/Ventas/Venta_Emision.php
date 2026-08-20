@@ -11,6 +11,7 @@ use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
 use App\Models\Stock\Modulo;
+use App\Support\Ventas\VentaEmisionCajaPiezaSupport;
 
 class Venta_Emision extends Model implements Auditable
 {
@@ -23,6 +24,15 @@ class Venta_Emision extends Model implements Auditable
                         'impuesto_id', 'incluyeimpuesto', 
                         'moneda_id', 'descuento', 'descuentointegrado', 'deposito_id', 'loteimportacion_id'];
     protected $table = 'venta_emision';
+
+    public function getFillable()
+    {
+        if (VentaEmisionCajaPiezaSupport::columnasDisponibles()) {
+            return $this->fillable;
+        }
+
+        return array_values(array_diff($this->fillable, ['pieza', 'caja']));
+    }
 
     public function ventas()
 	{

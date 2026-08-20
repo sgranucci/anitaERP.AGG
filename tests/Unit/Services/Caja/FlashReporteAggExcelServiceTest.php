@@ -17,6 +17,30 @@ class FlashReporteAggExcelServiceTest extends TestCase
         $this->assertGreaterThan(100000, filesize($ruta));
     }
 
+    public function test_la_plantilla_respeta_columnas_ocultas_del_formato_oficial(): void
+    {
+        $service = new FlashReporteAggExcelService;
+        $spreadsheet = IOFactory::load($service->rutaPlantilla());
+
+        try {
+            $tabla = $spreadsheet->getSheetByName('Tabla');
+            $this->assertNotNull($tabla);
+            $this->assertTrue($tabla->getColumnDimension('D')->getVisible(), 'Tabla D debe verse (vs año ant)');
+            foreach (['G', 'H', 'I', 'J', 'K', 'L'] as $col) {
+                $this->assertFalse($tabla->getColumnDimension($col)->getVisible(), "Tabla {$col} debe permanecer oculta");
+            }
+
+            $resumen = $spreadsheet->getSheetByName('Resumen');
+            $this->assertNotNull($resumen);
+            foreach (range(22, 29) as $idx) {
+                $col = \PhpOffice\PhpSpreadsheet\Cell\Coordinate::stringFromColumnIndex($idx);
+                $this->assertFalse($resumen->getColumnDimension($col)->getVisible(), "Resumen {$col} (poker) sigue oculta");
+            }
+        } finally {
+            $spreadsheet->disconnectWorksheets();
+        }
+    }
+
     public function test_la_plantilla_oficial_se_guarda_sin_precalcular_formulas(): void
     {
         $service = new FlashReporteAggExcelService;

@@ -3,6 +3,7 @@
 namespace App\Repositories\Ventas;
 
 use App\Models\Ventas\Venta_Emision;
+use App\Support\Ventas\VentaEmisionCajaPiezaSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Auth;
 
@@ -27,12 +28,12 @@ class Venta_EmisionRepository implements Venta_EmisionRepositoryInterface
 
     public function create(array $data)
     {
-        return $this->model->create($data);
+        return $this->model->create(VentaEmisionCajaPiezaSupport::filtrarPayload($data));
     }
 
     public function update(array $data, $id)
     {
-        return $this->model->findOrFail($id)->update($data);
+        return $this->model->findOrFail($id)->update(VentaEmisionCajaPiezaSupport::filtrarPayload($data));
     }
 
     public function delete($id)

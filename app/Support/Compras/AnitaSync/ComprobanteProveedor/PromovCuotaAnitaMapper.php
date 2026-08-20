@@ -13,6 +13,8 @@ use Carbon\Carbon;
  * En alta de factura los campos de pago/referencia/marca van en 0 (numéricos) o
  * blanco (char): Anita nativo hace strrep(Null) sobre el registro y solo completa
  * lo que corresponde. Dejar NULL rompe lecturas CISAM (ldlong/lddbl) y pagos.
+ * El total pagado (prov_t_pagado) y aplmovp los actualiza
+ * ProveedorCuentacorrienteAplicacionAnitaSyncService al aplicar CC.
  */
 final class PromovCuotaAnitaMapper
 {

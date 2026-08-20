@@ -211,6 +211,12 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
             ->map(function ($apl) {
                 $deudaCc = $apl->proveedor_cuentacorrientes;
                 $creditoCc = $apl->proveedor_cuentacorriente_aplicados;
+                $deuda = $deudaCc
+                    ? ProveedorCuentacorrienteAplicacionFilaSupport::resumenEtiqueta($deudaCc, 'deuda')
+                    : ['etiqueta' => (string) $apl->comprobanteaplicado, 'tipo' => '', 'abreviatura' => ''];
+                $credito = $creditoCc
+                    ? ProveedorCuentacorrienteAplicacionFilaSupport::resumenEtiqueta($creditoCc, 'credito')
+                    : ['etiqueta' => '', 'tipo' => '', 'abreviatura' => ''];
 
                 return [
                     'id' => (int) $apl->id,
@@ -221,18 +227,12 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
                     'cotizacion_liquidacion' => $apl->cotizacion_liquidacion !== null
                         ? (float) $apl->cotizacion_liquidacion
                         : null,
-                    'deuda' => $deudaCc
-                        ? ProveedorCuentacorrienteAplicacionFilaSupport::etiqueta(
-                            $deudaCc,
-                            ProveedorCuentacorrienteAplicacionFilaSupport::tipo($deudaCc, 'deuda')
-                        )
-                        : (string) $apl->comprobanteaplicado,
-                    'credito' => $creditoCc
-                        ? ProveedorCuentacorrienteAplicacionFilaSupport::etiqueta(
-                            $creditoCc,
-                            ProveedorCuentacorrienteAplicacionFilaSupport::tipo($creditoCc, 'credito')
-                        )
-                        : '',
+                    'deuda' => $deuda['etiqueta'],
+                    'deuda_tipo' => $deuda['tipo'],
+                    'deuda_abreviatura' => $deuda['abreviatura'],
+                    'credito' => $credito['etiqueta'],
+                    'credito_tipo' => $credito['tipo'],
+                    'credito_abreviatura' => $credito['abreviatura'],
                     'deuda_id' => (int) $apl->proveedor_cuentacorriente_id,
                     'credito_id' => (int) ($apl->proveedor_cuentacorriente_aplicado_id ?? 0),
                     'diferencia_cambio' => round((float) ($apl->diferencia_cambio ?? 0), 4),

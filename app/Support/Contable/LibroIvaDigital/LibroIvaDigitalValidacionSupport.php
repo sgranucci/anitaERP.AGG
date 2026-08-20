@@ -297,6 +297,24 @@ final class LibroIvaDigitalValidacionSupport
                 );
             }
         }
+
+        $totalIvaCompras = (float) ($resultado['compras']['resumen']['total_iva'] ?? 0);
+        $totalIvaCredito = (float) ($resultado['iva_simple']['resumen']['total_iva_credito'] ?? 0)
+            + (float) ($resultado['iva_simple']['resumen']['total_iva_restitucion_credito'] ?? 0);
+        $renglonesCredito = (int) ($resultado['iva_simple']['resumen']['renglones_credito'] ?? 0)
+            + (int) ($resultado['iva_simple']['resumen']['renglones_restitucion_credito'] ?? 0);
+        if ($totalIvaCompras > 1 && $renglonesCredito === 0) {
+            $avisos[] = 'Hay IVA en compras del período pero IVA Simple crédito fiscal quedó vacío. Verifique «Completar con compras Anita» y conceptos G/I.';
+        } elseif ($totalIvaCompras > 0 && $totalIvaCredito > 0) {
+            $diffCredito = abs($totalIvaCompras - $totalIvaCredito);
+            if ($diffCredito > max(1.0, $totalIvaCompras * 0.02)) {
+                $avisos[] = sprintf(
+                    'IVA crédito compras (%.2f) difiere del CSV IVA Simple (%.2f) en más del 2%%.',
+                    $totalIvaCompras,
+                    $totalIvaCredito,
+                );
+            }
+        }
     }
 
     /**

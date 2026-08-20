@@ -123,16 +123,16 @@
                         <div class="col-lg-2"></div>
                         <div class="col-lg-10">
                             <input type="hidden" name="consultar" value="1">
-                            <button type="submit" class="btn btn-primary btn-sm">
+                            <button type="submit" class="btn btn-primary btn-sm" id="btn-consultar-libro-iva-digital">
                                 <i class="fa fa-search"></i> Consultar
                             </button>
                             @if (can('exportar-libro-iva-digital', false) && !empty($resultado))
                                 <a href="{{ route('exportar_libro_iva_digital', $filtros) }}"
-                                   class="btn btn-success btn-sm ml-1">
+                                   class="btn btn-success btn-sm ml-1" id="btn-exportar-libro-iva-digital">
                                     <i class="fa fa-download"></i> Descargar ZIP completo
                                 </a>
                                 <a href="{{ route('exportar_iva_simple_libro_iva_digital', $filtros) }}"
-                                   class="btn btn-outline-success btn-sm ml-1">
+                                   class="btn btn-outline-success btn-sm ml-1" id="btn-exportar-iva-simple">
                                     <i class="fa fa-download"></i> Solo IVA Simple (CSV)
                                 </a>
                             @endif
@@ -261,7 +261,7 @@
                                 <tr>
                                     <td><code>{{ LibroIvaDigitalArchivosSupport::IVA_SIMPLE_CREDITO_FISCAL }}</code></td>
                                     <td class="text-right">{{ number_format($resultado['iva_simple']['resumen']['renglones_credito'] ?? 0, 0, ',', '.') }}</td>
-                                    <td class="text-muted">Compras por concepto (tipoconcepto G/I)</td>
+                                    <td class="text-muted">Compras ERP + Anita (concepto × alícuota, gravado e IVA pareados)</td>
                                 </tr>
                                 <tr>
                                     <td><code>{{ LibroIvaDigitalArchivosSupport::IVA_SIMPLE_RESTITUCION_DEBITO_FISCAL }}</code></td>
@@ -333,6 +333,63 @@
                         </div>
                     @endif
 
+                    @if (!empty($resultado['iva_simple']['resumen_por_concepto']))
+                        <h5 class="mb-2">IVA Simple — crédito fiscal por concepto (compras)</h5>
+                        <p class="text-muted small">
+                            Misma fuente que el Libro IVA Digital de compras: comprobantes ERP
+                            y, si está marcado, Anita (<code>compra</code> + <code>concmov</code>)
+                            sin solapar. Gravado (G) e IVA (I) de la misma alícuota van en un solo renglón.
+                        </p>
+                        <div class="table-responsive mb-3">
+                            <table class="table table-bordered table-sm" id="tabla-iva-simple-concepto">
+                                <thead style="background-color:#82E0AA;color:#17202A;">
+                                    <tr>
+                                        <th>Concepto</th>
+                                        <th class="text-right">Rengl. crédito</th>
+                                        <th class="text-right">Rengl. restitución</th>
+                                        <th class="text-right">Neto gravado</th>
+                                        <th class="text-right">IVA crédito</th>
+                                        <th class="text-right">IVA computable</th>
+                                        <th class="text-right">IVA restitución</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach ($resultado['iva_simple']['resumen_por_concepto'] as $filaConcepto)
+                                        <tr>
+                                            <td>
+                                                <code>{{ $filaConcepto['concepto'] ?? '' }}</code>
+                                                {{ $filaConcepto['concepto_nombre'] ?? '' }}
+                                            </td>
+                                            <td class="text-right">{{ number_format($filaConcepto['renglones_credito'] ?? 0, 0, ',', '.') }}</td>
+                                            <td class="text-right">{{ number_format($filaConcepto['renglones_restitucion'] ?? 0, 0, ',', '.') }}</td>
+                                            <td class="text-right">${{ number_format($filaConcepto['neto_gravado'] ?? 0, 2, ',', '.') }}</td>
+                                            <td class="text-right">${{ number_format($filaConcepto['iva_credito'] ?? 0, 2, ',', '.') }}</td>
+                                            <td class="text-right">${{ number_format($filaConcepto['iva_computable'] ?? 0, 2, ',', '.') }}</td>
+                                            <td class="text-right">${{ number_format($filaConcepto['iva_restitucion'] ?? 0, 2, ',', '.') }}</td>
+                                        </tr>
+                                    @endforeach
+                                </tbody>
+                                <tfoot>
+                                    <tr class="font-weight-bold">
+                                        <td colspan="3">Total período</td>
+                                        <td class="text-right">
+                                            ${{ number_format(collect($resultado['iva_simple']['resumen_por_concepto'])->sum('neto_gravado'), 2, ',', '.') }}
+                                        </td>
+                                        <td class="text-right">
+                                            ${{ number_format($resultado['iva_simple']['resumen']['total_iva_credito'] ?? 0, 2, ',', '.') }}
+                                        </td>
+                                        <td class="text-right">
+                                            ${{ number_format(collect($resultado['iva_simple']['resumen_por_concepto'])->sum('iva_computable'), 2, ',', '.') }}
+                                        </td>
+                                        <td class="text-right">
+                                            ${{ number_format(collect($resultado['iva_simple']['resumen_por_concepto'])->sum('iva_restitucion'), 2, ',', '.') }}
+                                        </td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    @endif
+
                     <p class="text-muted small mb-0">
                         Período {{ $resultado['periodo']['etiqueta'] ?? '' }}.
                         Importaciones y ajustes manuales DJ se cargan en las tablas auxiliares
@@ -346,4 +403,84 @@
         </div>
     </div>
 </div>
+
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'libro-iva-digital-procesando-overlay',
+    'tituloId' => 'libro-iva-digital-procesando-titulo',
+    'subtituloId' => 'libro-iva-digital-procesando-subtitulo',
+    'titulo' => 'Generando Libro IVA Digital e IVA Simple…',
+    'subtitulo' => 'Armando ventas, compras (ERP y Anita) e importes por actividad/concepto. Puede demorar. No cierre la página.',
+])
+
+<script>
+    (function () {
+        var overlay = document.getElementById('libro-iva-digital-procesando-overlay');
+        if (!overlay) {
+            return;
+        }
+
+        function mostrarProcesoOverlay(titulo, subtitulo) {
+            if (titulo) {
+                var tituloEl = document.getElementById('libro-iva-digital-procesando-titulo');
+                if (tituloEl) {
+                    tituloEl.textContent = titulo;
+                }
+            }
+            if (subtitulo) {
+                var subEl = document.getElementById('libro-iva-digital-procesando-subtitulo');
+                if (subEl) {
+                    subEl.textContent = subtitulo;
+                }
+            }
+            overlay.classList.remove('d-none');
+            overlay.style.display = 'flex';
+            overlay.setAttribute('aria-hidden', 'false');
+        }
+
+        function ocultarProcesoOverlay() {
+            overlay.classList.add('d-none');
+            overlay.style.display = '';
+            overlay.setAttribute('aria-hidden', 'true');
+        }
+
+        var form = document.getElementById('form-libro-iva-digital');
+        if (form) {
+            form.addEventListener('submit', function () {
+                if (typeof form.checkValidity === 'function' && !form.checkValidity()) {
+                    return;
+                }
+                var btn = document.getElementById('btn-consultar-libro-iva-digital');
+                if (btn) {
+                    btn.disabled = true;
+                }
+                mostrarProcesoOverlay(
+                    'Generando Libro IVA Digital e IVA Simple…',
+                    'Armando ventas, compras (ERP y Anita) e importes por actividad/concepto. Puede demorar. No cierre la página.'
+                );
+            });
+        }
+
+        var btnZip = document.getElementById('btn-exportar-libro-iva-digital');
+        if (btnZip) {
+            btnZip.addEventListener('click', function () {
+                mostrarProcesoOverlay(
+                    'Generando ZIP de Libro IVA Digital e IVA Simple…',
+                    'Preparando los archivos ASCII/CSV. Puede demorar. No cierre la página.'
+                );
+            });
+        }
+
+        var btnIvaSimple = document.getElementById('btn-exportar-iva-simple');
+        if (btnIvaSimple) {
+            btnIvaSimple.addEventListener('click', function () {
+                mostrarProcesoOverlay(
+                    'Generando IVA Simple…',
+                    'Armando débito (ventas) y crédito fiscal (compras). Puede demorar. No cierre la página.'
+                );
+            });
+        }
+
+        window.addEventListener('pageshow', ocultarProcesoOverlay);
+    })();
+</script>
 @endsection

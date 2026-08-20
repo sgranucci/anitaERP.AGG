@@ -215,4 +215,20 @@ class CierreJornadaProcesoRedistribucionSupportTest extends TestCase
 
         $this->assertTrue(true);
     }
+
+    public function test_porcentaje_aplicar_usa_objetivo_si_hay_disponible(): void
+    {
+        $this->assertSame(25.0, CierreJornadaProcesoRedistribucionSupport::porcentajeAplicar(25.0, 30.4094));
+    }
+
+    public function test_porcentaje_aplicar_capea_al_disponible_cuando_es_menor(): void
+    {
+        $this->assertSame(18.459, CierreJornadaProcesoRedistribucionSupport::porcentajeAplicar(25.0, 18.459));
+    }
+
+    public function test_porcentaje_aplicar_sin_disponible_es_cero(): void
+    {
+        $this->assertSame(0.0, CierreJornadaProcesoRedistribucionSupport::porcentajeAplicar(25.0, 0.0));
+        $this->assertSame(0.0, CierreJornadaProcesoRedistribucionSupport::porcentajeAplicar(0.0, 18.459));
+    }
 }

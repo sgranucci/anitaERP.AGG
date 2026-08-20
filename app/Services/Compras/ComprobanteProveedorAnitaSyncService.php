@@ -7,6 +7,7 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\CompraCabeceraAnitaMapper;
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\ComprobanteProveedorAnitaContext;
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\ComprobanteProveedorAnitaNroInternoSupport;
+use App\Support\Compras\AnitaSync\ComprobanteProveedor\ComprobanteProveedorConcmovPertenenciaSupport;
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\ConcmovLineaAnitaMapper;
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\PromovCuotaAnitaMapper;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
@@ -14,6 +15,8 @@ use RuntimeException;
 
 /**
  * Sincroniza comprobante ERP → Anita (compra, concmov, promov).
+ * Las aplicaciones de CC (aplmovp + promov.prov_t_pagado) las graba
+ * ProveedorCuentacorrienteAplicacionAnitaSyncService.
  * Contabilidad: ctamov vía AsientoRepository (como facturación), no subdiario Anita.
  */
 class ComprobanteProveedorAnitaSyncService
@@ -91,11 +94,15 @@ class ComprobanteProveedorAnitaSyncService
             return;
         }
 
-        $comprobante->loadMissing(['proveedores', 'tipotransaccion_compras']);
+        $comprobante->loadMissing([
+            'proveedores',
+            'tipotransaccion_compras',
+            'comprobante_proveedor_conceptos.concepto_ivacompras',
+        ]);
         $ctx = new ComprobanteProveedorAnitaContext($comprobante, (int) $comprobante->anita_nro_interno);
 
         $this->apiDelete('promov', $ctx->claveWherePromov());
-        $this->apiDelete('concmov', " WHERE concv_nro_interno = '{$ctx->nroInterno}' ");
+        $this->deleteConceptos($ctx);
         $this->apiDelete('compra', $ctx->claveWhereCompra());
     }
 
@@ -141,7 +148,49 @@ class ComprobanteProveedorAnitaSyncService
 
     private function deleteConceptos(ComprobanteProveedorAnitaContext $ctx): void
     {
-        $this->apiDelete('concmov', " WHERE concv_nro_interno = '{$ctx->nroInterno}' ");
+        $lineasErp = [];
+        foreach ($ctx->comprobante->comprobante_proveedor_conceptos as $linea) {
+            $lineasErp[] = [
+                'concepto' => (int) ($linea->concepto_ivacompras?->codigo ?? 0),
+                'importe' => (float) $linea->monto,
+            ];
+        }
+
+        $api = new ApiAnita;
+        $raw = $api->apiCall([
+            'acc' => 'list',
+            'sistema' => self::SISTEMA_COMPRAS,
+            'tabla' => 'concmov',
+            'campos' => 'concv_nro_interno, concv_concepto, concv_importe',
+            'whereArmado' => ' WHERE concv_nro_interno = '.(int) $ctx->nroInterno,
+        ]);
+        $filas = ApiAnita::decodificarListaFilas($raw);
+        $lineasConcmov = [];
+        foreach ($filas as $fila) {
+            $a = (array) $fila;
+            $lineasConcmov[] = [
+                'concepto' => (int) ($a['concv_concepto'] ?? 0),
+                'importe' => (float) ($a['concv_importe'] ?? 0),
+            ];
+        }
+
+        $part = ComprobanteProveedorConcmovPertenenciaSupport::particionar($lineasErp, $lineasConcmov);
+        if (! $part['ok']) {
+            throw new RuntimeException(
+                'No se borra concmov del interno '.$ctx->nroInterno.': '.$part['error']
+            );
+        }
+
+        foreach ($part['de_erp'] as $linea) {
+            $this->apiDelete(
+                'concmov',
+                ComprobanteProveedorConcmovPertenenciaSupport::whereBorrarLinea(
+                    $ctx->nroInterno,
+                    (int) $linea['concepto'],
+                    (float) $linea['importe']
+                )
+            );
+        }
     }
 
     private function syncPromov(ComprobanteProveedorAnitaContext $ctx): void

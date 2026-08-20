@@ -225,7 +225,7 @@ return [
                 'rows' => [
                     ['Entre depósitos', 'Depósito A', 'Depósito B', 'Según configuración del tipo.', 'No (salvo tipo TRCONT).'],
                     ['Entre depósitos (con aprobación)', 'Depósito A', 'Depósito B', 'Siempre pendiente hasta Aprobar.', 'TRCONT: asiento al aprobar.'],
-                    ['TRCONT (contabilidad)', 'Depósito salida = últ. recep. compra', 'Depósito destino', 'Inmediata o con aprobación.', 'Sí — un asiento TRA al confirmar.'],
+                    ['TRCONT (contabilidad)', 'TITO: últ. recep. / Otros activos: depósito con COM', 'Depósito destino', 'Inmediata o con aprobación.', 'Sí — un asiento TRA al confirmar.'],
                     ['A bien de uso', 'Depósito', 'Equipo / bien de uso', 'Puede requerir aprobación del responsable.', 'No (TRCONT no admite bien origen).'],
                     ['Desde bien de uso', 'Equipo / bien de uso', 'Depósito', 'Suele requerir aprobación del depósito destino.', 'No (TRCONT requiere depósito salida).'],
                 ],
@@ -245,8 +245,8 @@ return [
             'parrafos' => [
                 'Menú: Stock → Transferencia. Diseño pensado para depósito o tablet: cabecera fija, lista de artículos, barra inferior Transferir.',
                 'Complete empresa, depósito salida, depósito entrada (o bienes de uso según tipo), tipo de transacción transferencia y centro de costo destino si el tipo lleva contabilidad (etiqueta «contabilidad» en el desplegable).',
-                'TRCONT: el depósito de salida debe coincidir con el de la última recepción de compra de cada artículo. «Cargar stock» lista solo artículos válidos; los demás se omiten con aviso. Al agregar un artículo manualmente, el sistema valida contabilidad y muestra badge TITO u Otros activos si corresponde.',
-                'Cargar stock: lista artículos con saldo en el depósito de salida y depósito de entrega igual al de salida (requisito TRCONT). Agregar artículo (modal): suma ítems puntuales con la misma validación.',
+                'TRCONT: la regla de depósito depende de la familia del artículo. TITO: el depósito de salida debe ser el de la última recepción de compra. Otros activos (cuenta compra del catálogo, p.ej. limpieza): cualquier depósito donde ese SKU tuvo COM. «Cargar stock» lista solo artículos válidos; los demás se omiten con aviso. Al agregar un artículo manualmente, el sistema valida contabilidad y muestra badge TITO u Otros activos si corresponde.',
+                'Cargar stock: lista artículos con saldo en el depósito de salida y, en TRCONT, los que cumplen la regla de depósito de su familia. Agregar artículo (modal): suma ítems puntuales con la misma validación.',
                 'Por cada fila: SKU, descripción, saldo disponible, campo cantidad. Artículos sin equivalencia ERP se marcan en rojo y no se pueden transferir.',
                 'Transferir (N): envía la transferencia; N indica cuántos ítems tienen cantidad > 0. Si falta centro de costo destino en TRCONT, el sistema rechaza la operación.',
                 'Pendientes: botón con contador de transferencias que esperan su aprobación (permiso listar transferencias pendientes).',
@@ -279,8 +279,8 @@ return [
                 'caption' => 'Familias de artículos en TRCONT',
                 'headers' => ['Familia', 'Cómo se identifica', 'Precio del asiento', 'Requisitos adicionales'],
                 'rows' => [
-                    ['TITO', 'Badge azul TITO en pantalla; flag «Precio promedio transferencia TRCONT» en artículo.', 'Exactamente 3 recepciones COM en ERP → promedio en pesos con moneda/cotización recepmov; si no, promedio Anita stkm_pre_compra1/2/3.', 'Depósito salida = depósito última recepción; cuentas gasto y compra distintas.'],
-                    ['Otros activos', 'Badge gris «Otros activos»; cuenta compra del artículo = cuenta «Otros activos» del catálogo (ej. 117010001).', 'Última compra ERP → Anita stkm_pre_compra3 → costo/PPP.', 'Igual que TITO en depósito y cuentas.'],
+                    ['TITO', 'Badge azul TITO en pantalla; flag «Precio promedio transferencia TRCONT» en artículo.', 'Exactamente 3 recepciones COM en ERP → promedio en pesos con moneda/cotización recepmov; si no, promedio Anita stkm_pre_compra1/2/3.', 'Depósito salida = última recepción de compra; cuentas gasto y compra distintas.'],
+                    ['Otros activos', 'Badge gris «Otros activos»; cuenta compra del artículo = cuenta «Otros activos» del catálogo (ej. 117010001).', 'Última compra ERP → Anita stkm_pre_compra3 → costo/PPP.', 'Depósito salida con alguna COM de ese SKU (no solo la última); cuentas gasto y compra distintas.'],
                     ['No contabilizable', 'Sin badge; artículo no entra en TRCONT.', '—', 'Use otro tipo de transferencia sin contabilidad para mover ese SKU.'],
                 ],
             ],
@@ -297,7 +297,7 @@ return [
             ],
             'items' => [
                 'Centro de costo destino (obligatorio): sector que recibe el DEBE del asiento. Por defecto se precarga el centro del usuario logueado; puede cambiarlo antes de Transferir.',
-                'Depósito de salida: debe coincidir con el depósito de la última recepción de compra confirmada de cada artículo (ERP o Anita). Si transfiere desde otro depósito, el artículo se rechaza o se omite al cargar stock.',
+                'Depósito de salida: TITO debe coincidir con la última recepción de compra confirmada (ERP o Anita). Otros activos (cuenta del catálogo): alcanza con que ese depósito haya recibido el SKU en alguna COM; si la última cayó en ADM y hay COM previas en logística, la TRCONT desde logística es válida. Si el depósito no cumple la regla de la familia, el artículo se rechaza o se omite al cargar stock.',
                 'Cuenta gasto (DEBE): grilla «GASTOS» del artículo por empresa; si no hay, usa cuenta compra del artículo.',
                 'Cuenta compra (HABER): cuenta compra del artículo con su centro de costo compra.',
                 'Importe por línea: cantidad transferida × precio unitario (según familia TITO u otros activos). Líneas con misma cuenta gasto y cuenta compra no generan movimiento contable.',
@@ -307,7 +307,7 @@ return [
             ],
             'parrafos2' => [
                 'Consultar el asiento grabado: con permiso listar-asiento o editar-asiento, busque en Contable → Asientos por observación «Transferencia TR-…» o por fecha y empresa. Desde Stock → Movimientos de Stock puede abrir la consulta de transferencia (icono ojo) y los movimientos -S/-E vinculados; el asiento está asociado al documento transferencia, no a cada movimiento por separado.',
-                'Errores frecuentes TRCONT: «Use otro tipo de transferencia sin contabilidad» (ningún artículo válido); «depósito de salida debe coincidir con última recepción»; «sin precio de promedio/última compra»; «faltan cuentas contables»; «Debe indicar centro de costo destino». Revise maestro de artículos, recepciones COM previas y tipo de transferencia elegido.',
+                'Errores frecuentes TRCONT: «Use otro tipo de transferencia sin contabilidad» (ningún artículo válido); TITO «depósito de salida debe coincidir con última recepción»; Otros activos «depósito de salida no tiene recepción de compra»; «sin precio de promedio/última compra»; «faltan cuentas contables»; «Debe indicar centro de costo destino». Revise maestro de artículos, recepciones COM previas y tipo de transferencia elegido.',
             ],
         ],
         [
@@ -355,7 +355,7 @@ return [
                     ['Saldo insuficiente al transferir', 'Reduzca cantidad o verifique movimientos previos en kardex.'],
                     ['Transferencia queda pendiente', 'Es normal si el tipo requiere aprobación; el receptor debe entrar a Pendientes o usar el enlace del correo.'],
                     ['Artículo en rojo en transferencia', 'Sin equivalencia ERP; regularice el artículo en Stock → Artículos.'],
-                    ['TRCONT rechaza artículos', 'Verifique depósito salida = última recepción COM, cuentas gasto/compra y precio (TITO u última compra). Use tipo sin contabilidad si el SKU no es contabilizable.'],
+                    ['TRCONT rechaza artículos', 'TITO: depósito = última COM. Otros activos: depósito con alguna COM de ese SKU. Además cuentas gasto/compra y precio. Use tipo sin contabilidad si el SKU no es contabilizable.'],
                     ['TRCONT desde Movimientos de Stock', 'No permitido. Use Stock → Transferencia con tipo (contabilidad).'],
                     ['Falta centro costo destino TRCONT', 'Complete el selector antes de Transferir; precarga el CC del usuario.'],
                     ['No aparece botón Nuevo', 'Falta permiso crear-recepcion-proveedor o crear-movimientos-de-stock.'],

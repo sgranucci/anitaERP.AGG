@@ -830,7 +830,9 @@ final class GastronomiaCierreJornadaProcesoService
      *   total_facturacion_anita: float,
      *   total_sin_facturar_recodificable: float,
      *   total_pendiente_qr_mp: float,
-     *   porcentaje_maximo_recodificacion: float
+     *   porcentaje_maximo_recodificacion: float,
+     *   porcentaje_objetivo: float,
+     *   porcentaje_aplicar: float
      * }
      */
     private function contextoRecodificacionPorcentaje(JornadaGastronomia $jornada): array
@@ -845,14 +847,21 @@ final class GastronomiaCierreJornadaProcesoService
             $clasificacion['movimientos'],
         );
         $totalFacturacion = round((float) ($clasificacion['total_facturacion'] ?? 0), 2);
+        $maximo = CierreJornadaProcesoRedistribucionSupport::porcentajeMaximoSobreFacturacion(
+            $totalFacturacion,
+            $recodificable,
+        );
+        $objetivo = CierreJornadaProcesoConfigSupport::resolverPorcentajeParaEmpresa($empresaId);
 
         return [
             'total_facturacion_anita' => $totalFacturacion,
             'total_sin_facturar_recodificable' => $recodificable,
             'total_pendiente_qr_mp' => self::totalPendienteQrMpDesdeGrilla($clasificacion['grilla'] ?? []),
-            'porcentaje_maximo_recodificacion' => CierreJornadaProcesoRedistribucionSupport::porcentajeMaximoSobreFacturacion(
-                $totalFacturacion,
-                $recodificable,
+            'porcentaje_maximo_recodificacion' => $maximo,
+            'porcentaje_objetivo' => $objetivo,
+            'porcentaje_aplicar' => CierreJornadaProcesoConfigSupport::resolverPorcentajeParaJornada(
+                $empresaId,
+                $maximo,
             ),
         ];
     }
@@ -931,8 +940,21 @@ final class GastronomiaCierreJornadaProcesoService
     }
 
     /**
-     * Con comandas Waitry a facturar, aplica 0 % al analizar (tramo definitivo) para poder emitir
-     * sin exigir «Recalcular medios» cuando no hay redistribución. Si necesita otro %, recalcule manualmente.
+     * Objetivo de empresa limitado al disponible recodificable de esta jornada (3er asiento).
+     */
+    public function porcentajeAplicarParaJornada(JornadaGastronomia $jornada): float
+    {
+        $ctx = $this->contextoRecodificacionPorcentaje($jornada);
+
+        return CierreJornadaProcesoConfigSupport::resolverPorcentajeParaJornada(
+            (int) $jornada->empresa_id,
+            (float) ($ctx['porcentaje_maximo_recodificacion'] ?? 0),
+        );
+    }
+
+    /**
+     * Con comandas Waitry a facturar, al analizar el tramo definitivo aplica
+     * min(objetivo empresa, tope recodificable) para armar el 3er asiento sin exigir «Recalcular».
      *
      * @param  array<string, mixed>  $clasificacion
      */
@@ -969,7 +991,14 @@ final class GastronomiaCierreJornadaProcesoService
             return;
         }
 
-        $this->persistirPorcentajeEnSnapshot((int) $jornada->id, 0., $clasificacion);
+        $pct = $this->porcentajeAplicarParaJornada($jornada);
+        if ($pct <= 0.0001) {
+            $this->persistirPorcentajeEnSnapshot((int) $jornada->id, 0., $clasificacion);
+
+            return;
+        }
+
+        $this->recalcular((int) $jornada->id, $pct);
     }
 
     /**
@@ -1418,7 +1447,7 @@ final class GastronomiaCierreJornadaProcesoService
             'Los medios de pago Waitry sin facturar se resuelven desde getOrdersPOS cuando getordersdetails no trae payment.type.',
             'El efectivo registrado en Waitry (cash) no se facturará; queda en fila aparte.',
             'Las facturas cobradas con TOTEM en Anita generan asiento puente (Debe medio real / Haber TOTEM); el QR de esas facturas entra en el cupo de redistribución a efectivo.',
-            'El porcentaje (pesos enteros) mueve QR/Totalcoin/MP→efectivo en Waitry sin facturar (orden waitry_order_id, sin priorizar MP sobre QR) y compensa con el mismo importe de facturas Anita cobradas en efectivo→mismo medio planificado (memoria; sin grabar cobranza). El cuadro refleja el QR contable tras compensación.',
+            'El porcentaje objetivo (default 25% sobre facturado Anita) mueve QR/Totalcoin/MP→efectivo en Waitry sin facturar (orden waitry_order_id) y arma el 3er asiento (fondo fijo). Si el disponible recodificable es menor, se aplica ese tope (p. ej. Kandiko 18,46% el 19/08). Compensa el mismo importe en facturas Anita cobradas en efectivo→mismo medio (memoria).',
             'El % no puede implicar recodificar más de lo cobrado Waitry sin facturar en QR/Totalcoin + MP; si excede, el pendiente QR/MP a facturar quedaría negativo.',
             'Haga clic en un importe del cuadro para ver comandas con fecha/hora y conciliar contra Waitry.',
             'Consola: php artisan gastronomia:diagnostico-cuadro-cierre {empresa} {fecha} {fila} {medio} [--csv=ruta]',

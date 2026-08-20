@@ -270,7 +270,7 @@ return [
         [
             'herramienta' => 'Cargar stock',
             'ubicacion' => 'Cabecera — botón',
-            'accion' => 'Lista artículos con saldo; en TRCONT filtra por depósito = última recepción de compra.',
+            'accion' => 'Lista artículos con saldo; en TRCONT filtra TITO por última recepción y Otros activos por COM en el depósito de salida.',
             'permiso' => 'transferir-mercaderia-entre-depositos',
         ],
         [
