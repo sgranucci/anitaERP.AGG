@@ -65,6 +65,100 @@
 		document.querySelector('#datosfactura').dataset.layoutItemsPedido === '1'
 	);
 
+	(function () {
+		var overlayTimer = null;
+		var overlayActivo = false;
+		var mensajesFactura = [
+			'Calculando importes…',
+			'Numerando comprobante…',
+			'Solicitando CAE en ARCA…',
+			'Registrando el comprobante…',
+		];
+		var mensajesNc = [
+			'Preparando nota de crédito…',
+			'Solicitando CAE en ARCA…',
+			'Registrando la nota de crédito…',
+		];
+
+		function overlayEl() {
+			return document.getElementById('factura-procesando-overlay');
+		}
+
+		function mostrarOverlay(on) {
+			var el = overlayEl();
+			if (!el) {
+				return;
+			}
+			if (on) {
+				el.classList.remove('d-none');
+				el.style.display = 'flex';
+				el.setAttribute('aria-hidden', 'false');
+			} else {
+				el.classList.add('d-none');
+				el.style.display = '';
+				el.setAttribute('aria-hidden', 'true');
+			}
+		}
+
+		window.FacturaProcesoOverlay = {
+			iniciar: function (esNc) {
+				if (overlayActivo) {
+					return;
+				}
+				overlayActivo = true;
+				var msgs = esNc ? mensajesNc : mensajesFactura;
+				var titulo = document.getElementById('factura-procesando-titulo');
+				var idx = 0;
+				if (titulo) {
+					titulo.textContent = esNc ? 'Generando nota de crédito…' : 'Generando comprobante…';
+				}
+				$('.factura-carga-bloqueable').filter('button, .btn, input[type="submit"], input[type="button"]').prop('disabled', true);
+				mostrarOverlay(true);
+				overlayTimer = setInterval(function () {
+					idx = (idx + 1) % msgs.length;
+					if (titulo) {
+						titulo.textContent = msgs[idx];
+					}
+				}, 2200);
+			},
+			detener: function () {
+				if (overlayTimer) {
+					clearInterval(overlayTimer);
+					overlayTimer = null;
+				}
+				overlayActivo = false;
+				$('.factura-carga-bloqueable').filter('button, .btn, input[type="submit"], input[type="button"]').prop('disabled', false);
+				mostrarOverlay(false);
+			}
+		};
+	})();
+
+	function esProcesoNotaDeCreditoFactura() {
+		var form = document.getElementById('formgeneral');
+		return !!(form && form.getAttribute('data-factura-proceso') === 'nc');
+	}
+
+	function iniciarOverlayProcesoFactura() {
+		if (window.FacturaProcesoOverlay) {
+			window.FacturaProcesoOverlay.iniciar(esProcesoNotaDeCreditoFactura());
+		}
+	}
+
+	window.validarSubmitFacturaConOverlay = function (event) {
+		var ok = true;
+		if (typeof validarPadronOperacionAntesSubmitForm === 'function') {
+			ok = validarPadronOperacionAntesSubmitForm(event) !== false;
+		}
+		if (!ok) {
+			if (window.FacturaProcesoOverlay) {
+				window.FacturaProcesoOverlay.detener();
+			}
+			return false;
+		}
+		iniciarOverlayProcesoFactura();
+		return true;
+	};
+
 	function guardarPreferenciasFactura() {
 		if (window.PreferenciasFacturacionUsuario) {
 			window.PreferenciasFacturacionUsuario.guardar();
@@ -152,8 +246,10 @@
 			}
 		});
 
-		if (!flError)
+		if (!flError) {
+			iniciarOverlayProcesoFactura();
 			$('#formgeneral').submit();
+		}
 	}
 
 	function completarCliente_Entrega(cliente_id){

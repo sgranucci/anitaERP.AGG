@@ -24,7 +24,7 @@
     };
 </script>
 @include('includes.ventas.preferencias_facturacion_scripts')
-<script src="{{asset("assets/pages/scripts/ventas/factura/crear.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/factura/crear.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/crear.js')) ?: time() }}" type="text/javascript"></script>
 @if ($layoutItemsPedido)
 <script src="{{asset("assets/pages/scripts/ventas/factura/crear-bierzo-items.js")}}" type="text/javascript"></script>
 @endif
@@ -78,7 +78,7 @@
                     </a>
                 </div>
             </div>
-            <form action="{{route('guardar_factura')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" onsubmit="return typeof validarPadronOperacionAntesSubmitForm === 'function' ? validarPadronOperacionAntesSubmitForm(event) : true;">
+            <form action="{{route('guardar_factura')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" data-factura-proceso="factura" onsubmit="return typeof validarSubmitFacturaConOverlay === 'function' ? validarSubmitFacturaConOverlay(event) : (typeof validarPadronOperacionAntesSubmitForm === 'function' ? validarPadronOperacionAntesSubmitForm(event) : true);">
                 @csrf
                 <div class="card-body">
                     @php $datos = ["funcion" => "crear", "layoutItemsPedido" => $layoutItemsPedido]; @endphp

@@ -52,8 +52,10 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
 use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
 use App\Support\Ventas\PedidoFacturaAnitaDeferSupport;
+use App\Support\Ventas\PedidoFacturacionExclusivaSupport;
 use App\Support\Ventas\PedidoItemCierreFaltaStockSupport;
 use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
+use App\Support\Ventas\ArcaCaeaAnitaTipoAfipSupport;
 use App\Models\Stock\Talle;
 use App\Models\Stock\Material;
 use App\Models\Stock\Materialcapellada;
@@ -68,6 +70,7 @@ use App\Models\Stock\Mventa;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Modulo;
 use App\Models\Stock\Listaprecio;
+use App\Models\Stock\Unidadmedida;
 use App\Models\Stock\Contrafuerte;
 use App\Models\Stock\Articulo_Caja;
 use App\Models\Stock\Caja;
@@ -610,6 +613,19 @@ class FacturacionService
 			return $errorEntrega;
 		}
 
+		return PedidoFacturacionExclusivaSupport::ejecutar((int) $pedido->id, function () use ($data, $cliente, $pedido, $tipotransaccion) {
+			return $this->emitirFacturasDePedido($data, $cliente, $pedido, $tipotransaccion);
+		});
+	}
+
+	/**
+	 * Emite 1 o 2 facturas del pedido (Bierzo / Villafranca). Debe correr bajo candado exclusivo.
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @return array<int|string, mixed>
+	 */
+	private function emitirFacturasDePedido(array $data, $cliente, $pedido, $tipotransaccion)
+	{
 		$retorno = null;
 
 		// Controla si divide factura
@@ -1185,7 +1201,10 @@ class FacturacionService
 					$pedidoIdMarcar = $ventaPedidoId ?: $pedido_id;
 					if ($pedidoIdMarcar) {
 						PedidoItemCierreFaltaStockSupport::cerrarItemsSinPesadaDelPedido((int) $pedidoIdMarcar);
-						$this->pedidoRepository->update(['estadopedido' => 'Facturado'], $pedidoIdMarcar);
+						$this->pedidoRepository->update([
+							'estado' => PedidoEstadoErpSupport::FACTURADO,
+							'estadopedido' => 'Facturado',
+						], $pedidoIdMarcar);
 					}
 
 					$anitaPendientePedido = null;
@@ -1846,6 +1865,7 @@ class FacturacionService
 		}
 
 		$descuentoventaIds = $data['descuentoventa_ids'] ?? [];
+		$descuentosPct = $data['descuentos'] ?? [];
 		$cantidades = [];
 		$descuentosLinea = [];
 
@@ -1858,6 +1878,8 @@ class FacturacionService
 				if ($descuentoventa) {
 					$descPct = (float) $descuentoventa->porcentajedescuento;
 				}
+			} elseif (isset($descuentosPct[$i]) && $descuentosPct[$i] !== '' && $descuentosPct[$i] !== null) {
+				$descPct = (float) str_replace(',', '', (string) $descuentosPct[$i]);
 			}
 			$descuentosLinea[$i] = $descPct;
 		}
@@ -1917,6 +1939,8 @@ class FacturacionService
 		$descripciones = $data['descripcionarticulos'];
 		$cantidades = $data['cantidades'];
 		$precios = $data['precios'];
+		$cajasInput = $data['cajas'] ?? [];
+		$piezasInput = $data['piezas'] ?? [];
 		$listaprecioGlobalId = isset($data['listaprecio_id']) ? (int) $data['listaprecio_id'] : null;
 		$listaspreciosIds = $data['listasprecios_id'] ?? null;
 		$incluyeimpuestosInput = $data['incluyeimpuestos'] ?? null;
@@ -2038,6 +2062,8 @@ class FacturacionService
 				&& ! empty($omitirStkmovAnitaPorItem[$offItem]);
 
 			$dataFactura[] = ["cantidad" => (float) str_replace(",","",$cantidad),
+				"pieza" => (float) str_replace(',', '', (string) ($piezasInput[$offItem] ?? 0)),
+				"caja" => (float) str_replace(',', '', (string) ($cajasInput[$offItem] ?? 0)),
 				"preciosindescuento" => (float) str_replace(",","",$precioUnitario),
 				"precio" => (float) str_replace(",","",$precioConDescuento),
 				"descuento" => $this->descuentoLinea,
@@ -2117,9 +2143,9 @@ class FacturacionService
 
 		$puntoventa_id = $data['puntoventa_id'];
 		$tipoTransaccion_id = $data['tipotransaccion_id'];
-		$fechaFactura = $data['fechafactura'];
-		$leyenda = $data['leyendafactura'];
-		$actividad_arca_id = $data['actividad_arca_id'];
+		$fechaFactura = $data['fechafactura'] ?? ($data['fecha'] ?? null);
+		$leyenda = $data['leyendafactura'] ?? '';
+		$actividad_arca_id = $data['actividad_arca_id'] ?? null;
 
 		$dataFactura = $calculoFactura['datosfactura'];
 		$conceptosTotales = $calculoFactura['conceptostotales'];
@@ -2132,9 +2158,9 @@ class FacturacionService
 			$venta_id = 0;
 
 		$cliente_id = $data['cliente_id'];
-		$this->descuentoPie = $data['descuentopie'];
-		$this->descuentoLinea = $data['descuentolinea'];
-		$this->descuentoImportePie = $data['descuentoimportepie'];
+		$this->descuentoPie = $data['descuentopie'] ?? 0;
+		$this->descuentoLinea = $data['descuentolinea'] ?? 0;
+		$this->descuentoImportePie = $data['descuentoimportepie'] ?? 0;
 
 		if (isset($data['fecha']))
 			$fechaFactura = $data['fecha'];
@@ -2324,9 +2350,12 @@ class FacturacionService
 						$asientoContable = [];
 						foreach ($asientoFactura->asiento_movimientos as $movimiento)
 						{
+							// monto firmado invertido: positivo=Debe, negativo=Haber.
+							// grabaAsientoContable detecta signos cruzados y no vuelve a
+							// volcar todo al Debe ni agrega deudores otra vez.
 							$asientoContable[] = ['empresa_id' => $asientoFactura->empresa_id,
 												'cuentacontable_id' => $movimiento->cuentacontable_id,
-												'monto' => $movimiento->monto*-1
+												'monto' => ((float) $movimiento->monto) * -1
 												];
 
 							$centrocosto_id = $movimiento->centrocosto_id;
@@ -2354,8 +2383,8 @@ class FacturacionService
 					$impuestos = [];
 					$this->facturaelectronicaService->armaImpuesto($conceptosTotales, $impuestos);
 
-					// Arma comprobantes asociados
-					$comprobantesAsociados = [];
+					// NC/ND: asociar la factura origen (ARCA MTXCA/WSFE exige comprobante o rango).
+					$comprobantesAsociados = $this->armaComprobantesAsociadosDesdeFactura($factura);
 
 					[$fechaAsignacionDesdeYmd, $fechaAsignacionHastaYmd] = $this->resolverFechasAsignacionPeriodoAsoc(
 						$data,
@@ -3343,8 +3372,10 @@ class FacturacionService
 					'numeroitem' => ++$numeroItem, 
 					'lotestock' => 0,
 					'detalle' => $itemEmision['detalle'] ?? $itemEmision['descripcion'],
-					'cantidad' => abs($itemEmision['cantidad']), 
-					'precio' => $itemEmision['precio'], 
+					'cantidad' => abs($itemEmision['cantidad']),
+					'pieza' => $itemEmision['pieza'] ?? 0,
+					'caja' => $itemEmision['caja'] ?? 0,
+					'precio' => $itemEmision['precio'],
 					'impuesto_id' => $itemEmision['impuesto_id'],
 					'incluyeimpuesto' => $itemEmision['incluyeimpuesto'], 
 					'moneda_id' => $itemEmision['moneda_id'], 
@@ -4393,7 +4424,7 @@ class FacturacionService
 							'".$numeroremito."',
 							'".date('Ymd', strtotime($venta['fecha']))."',
 							'".(config('app.empresa') == 'EL BIERZO' ? $codigoTransporte : '0')."',
-							'".(config('app.empresa') == 'EL BIERZO' ? $this->cantidadBulto : $condicionventa)."',
+							'".(config('app.empresa') == 'EL BIERZO' ? $this->cantidadBultoParaAnita($venta) : $condicionventa)."',
 							'".$lugarEntrega."',
 							'".$porcentajeDescuento."',
 							'".$codigoTransporte."',
@@ -4879,16 +4910,26 @@ class FacturacionService
 			}
 		}
 
-		// Numera el remito
-		if (isset($puntoventaremito) && !$this->flGrabaComprobanteDividido)
+		// Numera el remito. En réplica diferida (omitirNumeraAnitaFin) no se corta la
+		// grabación: el número ya está en el ERP; un fallo acá dejaba venta sin vencae.
+		if (isset($puntoventaremito) && ! $this->flGrabaComprobanteDividido)
 		{
 			$resultadoNumeradorRemito = $this->ventaRepository->numeraAnita('REM', 'R', $puntoventaremito);
-			if (
-				(EntornoEmpresaSupport::esElBierzo()
+			$falloRemito = (EntornoEmpresaSupport::esElBierzo()
 					&& (! is_int($resultadoNumeradorRemito) || $resultadoNumeradorRemito <= 0))
-				|| (! EntornoEmpresaSupport::esElBierzo() && $resultadoNumeradorRemito == 'Error')
-			)
-				return ['error' => 'Error numerador remito', 'mensaje' => 'No pudo numerar remito'];
+				|| (! EntornoEmpresaSupport::esElBierzo() && $resultadoNumeradorRemito == 'Error');
+			if ($falloRemito) {
+				if ($omitirNumeraAnitaFin) {
+					Log::warning('facturacion.anita.remito_numerador_omitido_post_venta', [
+						'codigo' => $venta['codigo'] ?? null,
+						'puntoventaremito' => $puntoventaremito,
+						'numeroremito' => $numeroremito,
+						'resultado' => $resultadoNumeradorRemito,
+					]);
+				} else {
+					return ['error' => 'Error numerador remito', 'mensaje' => 'No pudo numerar remito'];
+				}
+			}
 		}
 
 		return ['Success'];
@@ -5359,6 +5400,8 @@ class FacturacionService
 			throw new \InvalidArgumentException('anita_pendiente de pedido sin datos de venta.');
 		}
 
+		$this->cantidadBulto = $this->cantidadBultoParaAnita($venta);
+
 		$path = PedidoFacturaAnitaArchivosSupport::pathSistema($anitaPendiente);
 		$this->prepararGrabacionPedidoAnitaDiferida($path, $omitirTablas);
 
@@ -5687,6 +5730,34 @@ class FacturacionService
 		// Lee items
 	}
 
+	/**
+	 * Comprobantes asociados ARCA desde una venta origen (NC/ND).
+	 *
+	 * @return list<array{tipo: int, ptovta: int, nro: int}>
+	 */
+	private function armaComprobantesAsociadosDesdeFactura($factura): array
+	{
+		if (! is_object($factura)) {
+			return [];
+		}
+
+		$codigo = trim((string) ($factura->codigo ?? ''));
+		if ($codigo === '' || ! preg_match('/^([A-Z]{3})\s+([A-Z])-(\d+)-(\d+)$/i', $codigo, $m)) {
+			return [];
+		}
+
+		$tipoAfip = ArcaCaeaAnitaTipoAfipSupport::tipoAfipDesdeAnita((string) $m[1], (string) $m[2]);
+		if ($tipoAfip <= 0) {
+			return [];
+		}
+
+		return [[
+			'tipo' => $tipoAfip,
+			'ptovta' => (int) $m[3],
+			'nro' => (int) $m[4],
+		]];
+	}
+
 	public function leeNumeroOperacionSubdiario()
 	{
 		// Lee numero de operacion
@@ -5912,6 +5983,30 @@ class FacturacionService
 		return (int) config('facturacion.DEPOSITO_VENTA_ID', 1);
 	}
 
+	/**
+	 * Asiento ya completo (NC que copia el de la FAC con monto invertido):
+	 * hay Debe y Haber en el mismo payload. No aplicar signo del comprobante
+	 * ni agregar contrapartida de deudores.
+	 */
+	private function asientoContableTieneMontosCruzados(array $asientocontable): bool
+	{
+		$hayPositivo = false;
+		$hayNegativo = false;
+		foreach ($asientocontable as $imputacion) {
+			$monto = (float) ($imputacion['monto'] ?? 0);
+			if ($monto > 0.009) {
+				$hayPositivo = true;
+			} elseif ($monto < -0.009) {
+				$hayNegativo = true;
+			}
+			if ($hayPositivo && $hayNegativo) {
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	private function grabaAsientoContable($asientocontable, $empresa_id, $fecha, $venta_id, $observacion, $centrocosto_id,
 											$moneda_id, $cotizacion, $signo, $contrapartida_id, $tipo, $letra, $sucursal, $nro,
 											?string $modoFacturacionPv = null, ?string $fechaJornada = null)
@@ -5962,23 +6057,32 @@ class FacturacionService
 		$moneda_ids = [];
 		$cotizaciones = [];
 		$totalMonto = 0;
+		$asientoYaInvertido = $this->asientoContableTieneMontosCruzados($asientocontable);
 		foreach ($asientocontable as $imputacion)
 		{
+			$monto = (float) ($imputacion['monto'] ?? 0);
+			if (abs($monto) < 0.009) {
+				continue;
+			}
+
 			$cuentacontable_ids[] = $imputacion['cuentacontable_id'];
 
-			if ($signo < 0 && $imputacion['monto'] != 0)
-			{
-				$debes[] = $imputacion['monto'];
+			if ($asientoYaInvertido) {
+				if ($monto > 0) {
+					$debes[] = $monto;
+					$haberes[] = '';
+				} else {
+					$debes[] = '';
+					$haberes[] = abs($monto);
+				}
+			} elseif ($signo < 0) {
+				$debes[] = $monto;
 				$haberes[] = '';
-
-				$totalMonto += $imputacion['monto'];
-			}
-			elseif ($signo > 0 && $imputacion['monto'] != 0)
-			{
+				$totalMonto += $monto;
+			} elseif ($signo > 0) {
 				$debes[] = '';
-				$haberes[] = $imputacion['monto'];
-
-				$totalMonto -= $imputacion['monto'];
+				$haberes[] = $monto;
+				$totalMonto -= $monto;
 			}
 			
 			$centrocosto_ids[] = $centrocosto_id;
@@ -6041,31 +6145,36 @@ class FacturacionService
 
 		$asiento = $this->asientoRepository->create($data);
 
-		$totalMonto = 0;
+		$asiento_movimiento = null;
 
 		// Graba los movimientos del asiento en ERP
 		for ($i = 0; $i < count($data['cuentacontable_ids']); $i++)
 		{
-			$asientoContable = [];
-			if ($imputacion['monto'] != 0)
-			{
-				// Arma el asiento contable
-				$asientoContable['asiento_id'] = $asiento->id;
-				$asientoContable['cuentacontable_id'] = $data['cuentacontable_ids'][$i];
-				$asientoContable['moneda_id'] = $data['moneda_ids'][$i];
-				$asientoContable['centrocosto_id'] = $data['centrocosto_ids'][$i];
-
-				if (isset($data['haberes'][$i]) && is_numeric($data['haberes'][$i]))
-					$asientoContable['monto'] = -$data['haberes'][$i];
-
-				if (isset($data['debes'][$i]) && is_numeric($data['debes'][$i]))
-					$asientoContable['monto'] = $data['debes'][$i];
-
-				$asientoContable['cotizacion'] = $data['cotizaciones'][$i];
-				$asientoContable['observacion'] = $data['observaciones'][$i];
-
-				$asiento_movimiento = $this->asiento_movimientoRepository->createunique($asientoContable);
+			$debeLin = $data['debes'][$i] ?? '';
+			$haberLin = $data['haberes'][$i] ?? '';
+			$tieneDebe = is_numeric($debeLin) && abs((float) $debeLin) > 0.009;
+			$tieneHaber = is_numeric($haberLin) && abs((float) $haberLin) > 0.009;
+			if (! $tieneDebe && ! $tieneHaber) {
+				continue;
 			}
+
+			$asientoContable = [];
+			$asientoContable['asiento_id'] = $asiento->id;
+			$asientoContable['cuentacontable_id'] = $data['cuentacontable_ids'][$i];
+			$asientoContable['moneda_id'] = $data['moneda_ids'][$i];
+			$asientoContable['centrocosto_id'] = $data['centrocosto_ids'][$i];
+
+			if ($tieneHaber) {
+				$asientoContable['monto'] = -abs((float) $haberLin);
+			}
+			if ($tieneDebe) {
+				$asientoContable['monto'] = (float) $debeLin;
+			}
+
+			$asientoContable['cotizacion'] = $data['cotizaciones'][$i];
+			$asientoContable['observacion'] = $data['observaciones'][$i];
+
+			$asiento_movimiento = $this->asiento_movimientoRepository->createunique($asientoContable);
 		}
 		return $asiento_movimiento;
 	}
@@ -6269,6 +6378,15 @@ class FacturacionService
         $urlOrigen = request()->headers->get('referer');
         $consultaFacturasDia = request()->query('origen') === 'gastronomia_facturas_dia';
 
+		$layoutItemsPedido = facturaUsaLayoutItemsPedido();
+		$descuentoventa_query = collect();
+		$unidadmedida_query = [];
+		if ($layoutItemsPedido) {
+			$descuentoventa_query = $this->descuentoventaRepository->all();
+			$unidadmedida_query = Unidadmedida::all()->toArray();
+			array_splice($unidadmedida_query, 1, 1);
+		}
+
         return view('ventas.factura.editar', compact('data', 
 			'mventa_query', 'modulo_query', 
 			'listaprecio_query', 
@@ -6276,7 +6394,8 @@ class FacturacionService
             'puntoventaremitodefault_id',
             'deposito_query', 'lote_query', 'cliente_query','vendedor_query', 'condicionventa_query',
             'transporte_query', 'formapago_query', 'incoterm_query', 'flGeneraNotaDeCredito', 'moneda_query',
-			'actividad_arca_query', 'urlOrigen', 'consultaFacturasDia')); 
+			'actividad_arca_query', 'urlOrigen', 'consultaFacturasDia',
+			'layoutItemsPedido', 'descuentoventa_query', 'unidadmedida_query')); 
 	}
 
 	/*
@@ -7023,15 +7142,39 @@ class FacturacionService
 		}
 		$this->puntoventaremito_id = (int) ($data['puntoventaremito_id'] ?? $remito->puntoventa_id ?? 0);
 
-		try {
-			// $remito actúa como cabecera (mismos campos que pedido: cond/vendedor/transporte/entrega)
-			$retorno = $this->generaUnaFacturaPorPedido($data, $cliente, $remito);
-		} finally {
-			$this->facturandoDesdeRemitoId = null;
-			$this->numeroremitoFijoDesdeRemito = null;
+		$emitir = function () use ($data, $cliente, $remito) {
+			try {
+				// $remito actúa como cabecera (mismos campos que pedido: cond/vendedor/transporte/entrega)
+				$retorno = $this->generaUnaFacturaPorPedido($data, $cliente, $remito);
+			} finally {
+				$this->facturandoDesdeRemitoId = null;
+				$this->numeroremitoFijoDesdeRemito = null;
+			}
+
+			return [$retorno];
+		};
+
+		$pedidoId = (int) ($remito->pedido_id ?: 0);
+		if ($pedidoId > 0) {
+			return PedidoFacturacionExclusivaSupport::ejecutar($pedidoId, $emitir);
 		}
 
-		return [$retorno];
+		return $emitir();
+	}
+
+	/**
+	 * Bultos a Anita (El Bierzo: comprob.comp_cond_vta).
+	 * En réplica diferida $this->cantidadBulto está vacío: manda venta.cantidadbulto.
+	 *
+	 * @param  array<string, mixed>  $venta
+	 */
+	private function cantidadBultoParaAnita(array $venta): int
+	{
+		if (array_key_exists('cantidadbulto', $venta) && $venta['cantidadbulto'] !== null && $venta['cantidadbulto'] !== '') {
+			return $this->normalizarCantidadBulto($venta['cantidadbulto']);
+		}
+
+		return $this->normalizarCantidadBulto($this->cantidadBulto ?? 0);
 	}
 
 	private function normalizarCantidadBulto(mixed $valor): int

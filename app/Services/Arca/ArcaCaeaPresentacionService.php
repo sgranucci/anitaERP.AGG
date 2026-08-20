@@ -9,7 +9,12 @@ use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
 use App\Services\Ventas\FacturaelectronicaService;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
+use App\Support\Ventas\ArcaCaeaAnitaIvaVentasSupport;
+use App\Support\Ventas\ArcaCaeaAnitaTipoAfipSupport;
+use App\Support\Ventas\ArcaCaeaAnitaVencaeConsultaSupport;
+use App\Support\Ventas\ArcaCaeaInformeDatosDesdeAnitaSupport;
 use App\Support\Ventas\ArcaCaeaInformeDatosDesdeVentaSupport;
+use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\CaeaQuincenaSupport;
 use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
@@ -44,6 +49,11 @@ class ArcaCaeaPresentacionService
         $obs = (clone $query)->where('venta.caea_informado_estado', 'observacion')->count();
         $error = (clone $query)->where('venta.caea_informado_estado', 'error')->count();
         $pendientes = (clone $query)->whereNull('venta.caea_informado_estado')->count();
+
+        $anita = $this->resumenAnitaIvaVentasPeriodo($registro, $ultimosArca ?? []);
+        $total += $anita['total'];
+        $ok += $anita['informados_ok'];
+        $pendientes += $anita['pendientes'];
 
         $porTipo = $this->ultimosPorTipoPv($registro, $ultimosArca);
         $cola = $this->analizarColaInformeArca($registro, $ultimosArca ?? []);
@@ -162,6 +172,8 @@ class ArcaCaeaPresentacionService
             }
         }
 
+        $this->analizarColaInformeAnita($registro, $ultimosMap, $colaPorGrupo, $informables, $bloqueados);
+
         // No rellenar la cola con PV/tipos de otras quincenas de la empresa:
         // en el index solo interesa qué falta informar de ESTA quincena.
 
@@ -270,6 +282,28 @@ class ArcaCaeaPresentacionService
         }
 
         $sinCaeaFinal = $this->buscarVentaPvTipoSinFiltrarCae($empresaId, $ptoVta, $tipoAfip, $proximoNumero);
+        $anita = ArcaCaeaAnitaVencaeConsultaSupport::buscarIvaVentasPorAfip($ptoVta, $proximoNumero, $tipoAfip);
+        if ($anita !== null) {
+            $enEstaQuincena = $this->caeaAnitaEsDeQuincena(
+                $empresaId,
+                (string) $anita['nro_caea'],
+                $periodoActual,
+                $ordenActual,
+            );
+
+            return [
+                'pto_vta' => $ptoVta,
+                'tipo_afip' => $tipoAfip,
+                'proximo_numero' => $proximoNumero,
+                'primer_pendiente' => $proximoNumero,
+                'en_esta_quincena' => $enEstaQuincena,
+                'informable_ahora' => $enEstaQuincena,
+                'fuente' => 'anita',
+                'tipo_anita' => $anita['tipo_anita'],
+                'letra' => $anita['letra'],
+                'falta_en_erp' => $sinCaeaFinal === null,
+            ];
+        }
 
         return [
             'pto_vta' => $ptoVta,
@@ -673,25 +707,9 @@ class ArcaCaeaPresentacionService
             ];
         }
 
-        $query = $this->queryVentasPeriodo($registro)
-            ->with(['puntoventas', 'tipotransacciones', 'venta_impuestos', 'venta_emisiones', 'clientes.tipodocumentos', 'monedas'])
-            ->orderBy('venta.puntoventa_id')
-            ->orderBy('venta.tipotransaccion_id')
-            ->orderBy('venta.numerocomprobante');
+        $lote = $this->armarLoteInforme($registro, $soloErrores, $ultimosMemoria, $limite);
 
-        if ($soloErrores) {
-            $query->where('venta.caea_informado_estado', 'error');
-        } else {
-            $query->where(function (Builder $q): void {
-                $q->whereNull('venta.caea_informado_estado')
-                    ->orWhereIn('venta.caea_informado_estado', ['error']);
-            });
-        }
-
-        /** @var Collection<int, Venta> $ventas */
-        $ventas = $query->limit($limite)->get();
-
-        if ($ventas->isEmpty()) {
+        if ($lote === []) {
             $resumen = $this->actualizarResumenPeriodo($registro, $usuarioId, false, $sync);
 
             return [
@@ -712,101 +730,29 @@ class ArcaCaeaPresentacionService
         $erroresLote = [];
         $detenidoPorError = false;
 
-        foreach ($ventas as $venta) {
-            $puntoventa = $venta->puntoventas;
-            if ($puntoventa === null) {
-                $msg = 'Sin punto de venta';
-                $this->marcarVentaInforme($venta, 'error', null, $msg);
-                $conError++;
-                $ultimoError = $msg;
-                $erroresLote[] = $this->filaErrorDetalle($venta, null, $msg);
-                $detenidoPorError = true;
-                break;
-            }
-
-            try {
-                $datos = ArcaCaeaInformeDatosDesdeVentaSupport::construir($venta);
-            } catch (\Throwable $e) {
-                $this->marcarVentaInforme($venta, 'error', null, $e->getMessage());
-                $conError++;
-                $ultimoError = $e->getMessage();
-                $erroresLote[] = $this->filaErrorDetalle($venta, $puntoventa->codigo ?? null, $e->getMessage());
-                $detenidoPorError = true;
-                break;
-            }
-
-            $cbteTipo = (int) ($datos['cbte_tipo'] ?? 0);
-            $ptoVta = (int) ($puntoventa->codigo ?? 0);
-            $numero = (int) $venta->numerocomprobante;
-            $claveGrupo = $this->claveGrupoInforme($ptoVta, $cbteTipo);
-            $ultimoArca = (int) ($ultimosMemoria[$claveGrupo] ?? 0);
-
-            if ($numero <= $ultimoArca) {
-                $this->marcarVentaInforme(
-                    $venta,
-                    'ok',
-                    null,
-                    sprintf('Ya informado en ARCA (último autorizado: %d)', $ultimoArca),
-                );
-                $omitidosArca++;
-
-                continue;
-            }
-
-            if ($numero > $ultimoArca + 1) {
-                $proximo = $ultimoArca + 1;
-                $msgHueco = $this->mensajeBloqueoProximoEsperado(
-                    (int) $registro->empresa_id,
-                    $ptoVta,
-                    $cbteTipo,
-                    $proximo,
-                    $numero,
-                );
-                $conError++;
-                $ultimoError = $msgHueco;
-                $erroresLote[] = $this->filaErrorDetalle($venta, $ptoVta, $msgHueco);
-                $omitidosHueco++;
-                $detenidoPorError = true;
-                break;
-            }
-
-            unset($datos['cbte_tipo'], $datos['letra']);
-
-            $resultado = $this->facturaelectronicaService->informarComprobanteCaea(
-                $empresa->nroinscripcion,
-                $cbteTipo,
-                $puntoventa,
-                $datos,
+        foreach ($lote as $item) {
+            $resultadoItem = $this->informarItemLote(
+                $registro,
+                $empresa,
                 $caeaVigente,
+                $item,
+                $ultimosMemoria,
             );
 
-            if (! ($resultado['ok'] ?? false)) {
-                $msg = (string) ($resultado['error'] ?? 'Error desconocido');
-                $codigo = $this->extraerCodigoError($msg);
-                $this->marcarVentaInforme($venta, 'error', $codigo, $msg);
-                $conError++;
-                $ultimoError = $msg;
-                $erroresLote[] = $this->filaErrorDetalle($venta, $puntoventa->codigo ?? null, $msg, $codigo);
-                // Cualquier rechazo ARCA detiene el lote (no seguir saltando números).
-                $detenidoPorError = true;
-                Log::warning('arca:caea-informe — error al informar, se detiene el lote', [
-                    'arca_caea_id' => $registro->id,
-                    'venta_id' => $venta->id,
-                    'pto_vta' => $ptoVta,
-                    'numero' => $numero,
-                    'msg' => $msg,
-                ]);
-                break;
+            $omitidosArca += (int) ($resultadoItem['omitidos_arca'] ?? 0);
+            $omitidosHueco += (int) ($resultadoItem['omitidos_hueco'] ?? 0);
+            $informados += (int) ($resultadoItem['informados'] ?? 0);
+            $conObs += (int) ($resultadoItem['con_obs'] ?? 0);
+            $conError += (int) ($resultadoItem['errores'] ?? 0);
+            if (($resultadoItem['error_fila'] ?? null) !== null) {
+                $erroresLote[] = $resultadoItem['error_fila'];
             }
-
-            $resArca = (string) ($resultado['resultado'] ?? 'A');
-            $obs = trim((string) ($resultado['observaciones'] ?? ''));
-            $estado = $resArca === 'P' || $obs !== '' ? 'observacion' : 'ok';
-            $this->marcarVentaInforme($venta, $estado, null, $obs !== '' ? $obs : null);
-            $informados++;
-            $ultimosMemoria[$claveGrupo] = $numero;
-            if ($estado === 'observacion') {
-                $conObs++;
+            if (($resultadoItem['ultimo_error'] ?? '') !== '') {
+                $ultimoError = (string) $resultadoItem['ultimo_error'];
+            }
+            if (! empty($resultadoItem['detener'])) {
+                $detenidoPorError = true;
+                break;
             }
         }
 
@@ -899,6 +845,12 @@ class ArcaCaeaPresentacionService
             }
 
             $proximo = (int) $ultimoArca + 1;
+            $tienePendientesMayores = $this->hayPendienteMayorEnPeriodo(
+                $registro,
+                $ptoVta,
+                $tipoAfip,
+                $proximo,
+            );
             $ubicacion = $this->ubicacionProximoComprobanteEmpresa(
                 (int) $registro->empresa_id,
                 $ptoVta,
@@ -908,11 +860,15 @@ class ArcaCaeaPresentacionService
                 (int) $registro->orden,
             );
 
-            if ($ubicacion === null) {
+            if ($ubicacion !== null && ! empty($ubicacion['informable_ahora'])) {
                 continue;
             }
 
-            if (! empty($ubicacion['informable_ahora'])) {
+            if (! $tienePendientesMayores) {
+                continue;
+            }
+
+            if ($ubicacion === null) {
                 continue;
             }
 
@@ -953,7 +909,7 @@ class ArcaCaeaPresentacionService
 
         $row = $this->buscarVentaPvTipoSinFiltrarCae($empresaId, $ptoVta, $tipoAfip, $proximo);
         if ($row === null) {
-            $msg = $prefijo.' no está en el ERP; ARCA espera ese número y no se puede continuar.';
+            $msg = $prefijo.' no está en el ERP ni en Anita (IVA-ventas); ARCA espera ese número y no se puede continuar.';
         } elseif (trim((string) ($row->cae ?? '')) === '') {
             $msg = $prefijo.' existe en el ERP pero sin CAEA; no se puede informar ni continuar la correlatividad.';
         } else {
@@ -971,8 +927,8 @@ class ArcaCaeaPresentacionService
     {
         return match ($tipo) {
             1 => 'FA',
-            2 => 'NDA',
-            3 => 'NCA',
+            2 => 'ND',
+            3 => 'NC',
             6 => 'FB',
             7 => 'NDB',
             8 => 'NCB',
@@ -1130,20 +1086,26 @@ class ArcaCaeaPresentacionService
     {
         $fechas = CaeaQuincenaSupport::fechasQuincena((int) $registro->periodo, (int) $registro->orden);
         $nroCaea = trim((string) ($registro->nro_caea ?? ''));
+        $excluidas = ArcaCaeaAnitaIvaVentasSupport::tiposQueNoVanAlIvaVentas();
 
         return Venta::query()
             ->select('venta.*')
             ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
+            ->leftJoin('tipotransaccion', 'tipotransaccion.id', '=', 'venta.tipotransaccion_id')
             ->where('puntoventa.empresa_id', (int) $registro->empresa_id)
             ->where('puntoventa.modofacturacion', 'A')
-            ->whereIn('puntoventa.webservice', \App\Support\Ventas\ArcaPuntoventaWebserviceSupport::valoresWhereInSoapCaea())
+            ->whereIn('puntoventa.webservice', ArcaPuntoventaWebserviceSupport::valoresWhereInSoapCaea())
             ->whereBetween('venta.fecha', [
                 $fechas['desde']->toDateString(),
                 $fechas['hasta']->toDateString(),
             ])
             ->whereNotNull('venta.cae')
             ->where('venta.cae', '!=', '')
-            ->when($nroCaea !== '', fn (Builder $q) => $q->where('venta.cae', $nroCaea));
+            ->when($nroCaea !== '', fn (Builder $q) => $q->where('venta.cae', $nroCaea))
+            ->when($excluidas !== [], fn (Builder $q) => $q->where(function (Builder $w) use ($excluidas): void {
+                $w->whereNull('tipotransaccion.abreviatura')
+                    ->orWhereNotIn('tipotransaccion.abreviatura', $excluidas);
+            }));
     }
 
     /**
@@ -1294,7 +1256,7 @@ class ArcaCaeaPresentacionService
             ->join('tipotransaccion', 'tipotransaccion.id', '=', 'venta.tipotransaccion_id')
             ->where('puntoventa.empresa_id', $empresaId)
             ->where('puntoventa.modofacturacion', 'A')
-            ->whereIn('puntoventa.webservice', \App\Support\Ventas\ArcaPuntoventaWebserviceSupport::valoresWhereInSoapCaea())
+            ->whereIn('puntoventa.webservice', ArcaPuntoventaWebserviceSupport::valoresWhereInSoapCaea())
             ->whereNotNull('venta.cae')
             ->where('venta.cae', '!=', '')
             ->where(function ($q): void {
@@ -1328,7 +1290,7 @@ class ArcaCaeaPresentacionService
             ->join('tipotransaccion', 'tipotransaccion.id', '=', 'venta.tipotransaccion_id')
             ->where('puntoventa.empresa_id', (int) $registro->empresa_id)
             ->where('puntoventa.modofacturacion', 'A')
-            ->whereIn('puntoventa.webservice', \App\Support\Ventas\ArcaPuntoventaWebserviceSupport::valoresWhereInSoapCaea())
+            ->whereIn('puntoventa.webservice', ArcaPuntoventaWebserviceSupport::valoresWhereInSoapCaea())
             ->whereBetween('venta.fecha', [
                 $fechas['desde']->toDateString(),
                 $fechas['hasta']->toDateString(),
@@ -1347,7 +1309,7 @@ class ArcaCaeaPresentacionService
             ->orderBy('puntoventa.codigo')
             ->get();
 
-        return $this->mapearCombinacionesTipoPv($rows);
+        return $this->fusionarCombinacionesAnita($registro, $this->mapearCombinacionesTipoPv($rows));
     }
 
     /**
@@ -1441,6 +1403,616 @@ class ArcaCaeaPresentacionService
         }
 
         return array_values($porClave);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $out
+     * @return list<array<string, mixed>>
+     */
+    private function fusionarCombinacionesAnita(ArcaCaea $registro, array $out): array
+    {
+        $seen = [];
+        foreach ($out as $combo) {
+            $seen[$this->claveGrupoInforme((int) $combo['pto_vta'], (int) $combo['tipo_afip'])] = true;
+        }
+
+        $pvs = $this->puntosVentaCaeaPorCodigo((int) $registro->empresa_id);
+        foreach ($this->listarAnitaIvaVentasPeriodo($registro) as $item) {
+            $pto = (int) $item['sucursal'];
+            $tipoAfip = (int) $item['tipo_afip'];
+            $clave = $this->claveGrupoInforme($pto, $tipoAfip);
+            if (isset($seen[$clave])) {
+                continue;
+            }
+            $pv = $pvs[$pto] ?? null;
+            if ($pv === null) {
+                continue;
+            }
+            $seen[$clave] = true;
+            $out[] = [
+                'puntoventa_id' => (int) $pv->id,
+                'pto_vta' => $pto,
+                'tipo_afip' => $tipoAfip,
+                'webservice' => (string) $pv->webservice,
+                'letra' => (string) $item['letra'],
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return array<int, Puntoventa>
+     */
+    private function puntosVentaCaeaPorCodigo(int $empresaId): array
+    {
+        $rows = Puntoventa::query()
+            ->where('empresa_id', $empresaId)
+            ->where('modofacturacion', 'A')
+            ->whereIn('webservice', ArcaPuntoventaWebserviceSupport::valoresWhereInSoapCaea())
+            ->get();
+
+        $out = [];
+        foreach ($rows as $pv) {
+            $out[(int) $pv->codigo] = $pv;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function sucursalesCaeaEmpresa(int $empresaId): array
+    {
+        return array_values(array_filter(
+            array_map(static fn (Puntoventa $pv): int => (int) $pv->codigo, array_values($this->puntosVentaCaeaPorCodigo($empresaId))),
+            static fn (int $codigo): bool => $codigo > 0,
+        ));
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function listarAnitaIvaVentasPeriodo(ArcaCaea $registro): array
+    {
+        $nroCaea = trim((string) ($registro->nro_caea ?? ''));
+        if ($nroCaea === '') {
+            return [];
+        }
+
+        return ArcaCaeaAnitaVencaeConsultaSupport::listarPorCaeaIvaVentas(
+            $nroCaea,
+            $this->sucursalesCaeaEmpresa((int) $registro->empresa_id),
+        );
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private function clavesComprobanteErpPeriodo(ArcaCaea $registro): array
+    {
+        $ventas = $this->queryVentasPeriodo($registro)
+            ->with(['puntoventas', 'tipotransacciones'])
+            ->get();
+
+        $out = [];
+        foreach ($ventas as $venta) {
+            $pto = (int) ($venta->puntoventas->codigo ?? 0);
+            $tipo = $this->cbteTipoDesdeVenta($venta);
+            $numero = (int) $venta->numerocomprobante;
+            if ($pto > 0 && $tipo > 0 && $numero > 0) {
+                $out[$pto.'|'.$tipo.'|'.$numero] = true;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $ultimosArca
+     * @return array{total: int, informados_ok: int, pendientes: int}
+     */
+    private function resumenAnitaIvaVentasPeriodo(ArcaCaea $registro, array $ultimosArca): array
+    {
+        $ultimosMap = [];
+        foreach ($ultimosArca as $ua) {
+            $pto = (int) ($ua['pto_vta'] ?? 0);
+            $tipo = (int) ($ua['tipo_afip'] ?? 0);
+            if ($pto > 0 && $tipo > 0) {
+                $ultimosMap[$this->claveGrupoInforme($pto, $tipo)] = (int) ($ua['ultimo_arca'] ?? 0);
+            }
+        }
+
+        $erp = $this->clavesComprobanteErpPeriodo($registro);
+        $total = 0;
+        $ok = 0;
+        $pendientes = 0;
+        foreach ($this->listarAnitaIvaVentasPeriodo($registro) as $item) {
+            $claveNumero = $item['sucursal'].'|'.$item['tipo_afip'].'|'.$item['numero'];
+            if (isset($erp[$claveNumero])) {
+                continue;
+            }
+            $total++;
+            $ultimo = (int) ($ultimosMap[$this->claveGrupoInforme((int) $item['sucursal'], (int) $item['tipo_afip'])] ?? 0);
+            if ((int) $item['numero'] <= $ultimo) {
+                $ok++;
+            } else {
+                $pendientes++;
+            }
+        }
+
+        return ['total' => $total, 'informados_ok' => $ok, 'pendientes' => $pendientes];
+    }
+
+    /**
+     * @param  array<string, int>  $ultimosMap
+     * @param  array<string, array<string, mixed>>  $colaPorGrupo
+     */
+    private function analizarColaInformeAnita(
+        ArcaCaea $registro,
+        array $ultimosMap,
+        array &$colaPorGrupo,
+        int &$informables,
+        int &$bloqueados,
+    ): void {
+        $erp = $this->clavesComprobanteErpPeriodo($registro);
+        foreach ($this->listarAnitaIvaVentasPeriodo($registro) as $item) {
+            $pto = (int) $item['sucursal'];
+            $tipo = (int) $item['tipo_afip'];
+            $numero = (int) $item['numero'];
+            $claveNumero = $pto.'|'.$tipo.'|'.$numero;
+            if (isset($erp[$claveNumero])) {
+                continue;
+            }
+
+            $clave = $this->claveGrupoInforme($pto, $tipo);
+            if (! array_key_exists($clave, $ultimosMap)) {
+                continue;
+            }
+
+            $ultimoArca = (int) $ultimosMap[$clave];
+            if ($numero <= $ultimoArca) {
+                continue;
+            }
+
+            $proximoEsperado = $ultimoArca + 1;
+            if ($numero === $proximoEsperado) {
+                if (! isset($colaPorGrupo[$clave]) || empty($colaPorGrupo[$clave]['informable_ahora'])) {
+                    $informables++;
+                    $colaPorGrupo[$clave] = [
+                        'pto_vta' => $pto,
+                        'tipo_afip' => $tipo,
+                        'proximo_numero' => $proximoEsperado,
+                        'primer_pendiente_esta_quincena' => $numero,
+                        'en_esta_quincena' => true,
+                        'informable_ahora' => true,
+                        'fuente' => 'anita',
+                    ];
+                }
+            } elseif (! isset($colaPorGrupo[$clave])) {
+                $bloqueados++;
+                $colaPorGrupo[$clave] = [
+                    'pto_vta' => $pto,
+                    'tipo_afip' => $tipo,
+                    'proximo_numero' => $proximoEsperado,
+                    'primer_pendiente_esta_quincena' => $numero,
+                    'en_esta_quincena' => true,
+                    'informable_ahora' => false,
+                    'fuente' => 'anita',
+                ];
+            }
+        }
+    }
+
+    private function hayPendienteMayorEnPeriodo(ArcaCaea $registro, int $ptoVta, int $tipoAfip, int $proximo): bool
+    {
+        $erpPendiente = $this->primerNumeroConCaeaPendiente(
+            (int) $registro->empresa_id,
+            $ptoVta,
+            $tipoAfip,
+            $proximo + 1,
+        );
+        if ($erpPendiente > $proximo) {
+            return true;
+        }
+
+        foreach ($this->listarAnitaIvaVentasPeriodo($registro) as $item) {
+            if ((int) $item['sucursal'] === $ptoVta
+                && (int) $item['tipo_afip'] === $tipoAfip
+                && (int) $item['numero'] > $proximo
+            ) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function caeaAnitaEsDeQuincena(int $empresaId, string $nroCaea, int $periodo, int $orden): bool
+    {
+        $nroCaea = trim($nroCaea);
+        if ($nroCaea === '') {
+            return false;
+        }
+
+        return ArcaCaea::query()
+            ->where('empresa_id', $empresaId)
+            ->where('nro_caea', $nroCaea)
+            ->where('periodo', $periodo)
+            ->where('orden', $orden)
+            ->exists();
+    }
+
+    /**
+     * @param  array<string, int>  $ultimosMemoria
+     * @return list<array<string, mixed>>
+     */
+    private function armarLoteInforme(ArcaCaea $registro, bool $soloErrores, array $ultimosMemoria, int $limite): array
+    {
+        $query = $this->queryVentasPeriodo($registro)
+            ->with(['puntoventas', 'tipotransacciones', 'venta_impuestos', 'venta_emisiones', 'clientes.tipodocumentos', 'monedas'])
+            ->orderBy('venta.puntoventa_id')
+            ->orderBy('venta.tipotransaccion_id')
+            ->orderBy('venta.numerocomprobante');
+
+        if ($soloErrores) {
+            $query->where('venta.caea_informado_estado', 'error');
+        } else {
+            $query->where(function (Builder $q): void {
+                $q->whereNull('venta.caea_informado_estado')
+                    ->orWhere('venta.caea_informado_estado', 'error');
+            });
+        }
+
+        /** @var array<string, array<int, Venta>> $erpMap */
+        $erpMap = [];
+        /** @var Collection<int, Venta> $ventas */
+        $ventas = $query->limit(max(500, $limite * 10))->get();
+        foreach ($ventas as $venta) {
+            $pto = (int) ($venta->puntoventas->codigo ?? 0);
+            $tipo = $this->cbteTipoDesdeVenta($venta);
+            $numero = (int) $venta->numerocomprobante;
+            if ($pto < 1 || $tipo < 1 || $numero < 1) {
+                continue;
+            }
+            $erpMap[$this->claveGrupoInforme($pto, $tipo)][$numero] = $venta;
+        }
+
+        /** @var array<string, array<int, array<string, mixed>>> $anitaMap */
+        $anitaMap = [];
+        if (! $soloErrores) {
+            $erpTodas = $this->clavesComprobanteErpPeriodo($registro);
+            foreach ($this->listarAnitaIvaVentasPeriodo($registro) as $item) {
+                $pto = (int) $item['sucursal'];
+                $tipo = (int) $item['tipo_afip'];
+                $numero = (int) $item['numero'];
+                $claveNumero = $pto.'|'.$tipo.'|'.$numero;
+                if (isset($erpTodas[$claveNumero])) {
+                    continue;
+                }
+                $anitaMap[$this->claveGrupoInforme($pto, $tipo)][$numero] = $item;
+            }
+        }
+
+        $grupos = array_unique(array_merge(
+            array_keys($erpMap),
+            array_keys($anitaMap),
+            array_keys($ultimosMemoria),
+        ));
+        sort($grupos);
+
+        $lote = [];
+        foreach ($grupos as $clave) {
+            if (count($lote) >= $limite) {
+                break;
+            }
+            $ultimo = (int) ($ultimosMemoria[$clave] ?? 0);
+            $n = $ultimo + 1;
+            while (count($lote) < $limite) {
+                if (isset($erpMap[$clave][$n])) {
+                    $venta = $erpMap[$clave][$n];
+                    $lote[] = [
+                        'fuente' => 'erp',
+                        'venta' => $venta,
+                        'pto_vta' => (int) ($venta->puntoventas->codigo ?? 0),
+                        'tipo_afip' => $this->cbteTipoDesdeVenta($venta),
+                        'numero' => $n,
+                    ];
+                    $n++;
+
+                    continue;
+                }
+                if (isset($anitaMap[$clave][$n])) {
+                    $item = $anitaMap[$clave][$n];
+                    $lote[] = [
+                        'fuente' => 'anita',
+                        'venta' => null,
+                        'pto_vta' => (int) $item['sucursal'],
+                        'tipo_afip' => (int) $item['tipo_afip'],
+                        'numero' => $n,
+                        'tipo_anita' => (string) $item['tipo_anita'],
+                        'letra' => (string) $item['letra'],
+                    ];
+                    $n++;
+
+                    continue;
+                }
+
+                break;
+            }
+        }
+
+        return $lote;
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @param  array<string, int>  $ultimosMemoria
+     * @return array<string, mixed>
+     */
+    private function informarItemLote(
+        ArcaCaea $registro,
+        object $empresa,
+        array $caeaVigente,
+        array $item,
+        array &$ultimosMemoria,
+    ): array {
+        $fuente = (string) ($item['fuente'] ?? 'erp');
+        if ($fuente === 'anita') {
+            return $this->informarItemAnita($registro, $empresa, $caeaVigente, $item, $ultimosMemoria);
+        }
+
+        /** @var Venta $venta */
+        $venta = $item['venta'];
+        $puntoventa = $venta->puntoventas;
+        if ($puntoventa === null) {
+            $msg = 'Sin punto de venta';
+            $this->marcarVentaInforme($venta, 'error', null, $msg);
+
+            return [
+                'errores' => 1,
+                'detener' => true,
+                'ultimo_error' => $msg,
+                'error_fila' => $this->filaErrorDetalle($venta, null, $msg),
+            ];
+        }
+
+        try {
+            $datos = ArcaCaeaInformeDatosDesdeVentaSupport::construir($venta);
+        } catch (\Throwable $e) {
+            $this->marcarVentaInforme($venta, 'error', null, $e->getMessage());
+
+            return [
+                'errores' => 1,
+                'detener' => true,
+                'ultimo_error' => $e->getMessage(),
+                'error_fila' => $this->filaErrorDetalle($venta, $puntoventa->codigo ?? null, $e->getMessage()),
+            ];
+        }
+
+        $cbteTipo = (int) ($datos['cbte_tipo'] ?? 0);
+        $ptoVta = (int) ($puntoventa->codigo ?? 0);
+        $numero = (int) $venta->numerocomprobante;
+        $claveGrupo = $this->claveGrupoInforme($ptoVta, $cbteTipo);
+        $ultimoArca = (int) ($ultimosMemoria[$claveGrupo] ?? 0);
+
+        if ($numero <= $ultimoArca) {
+            $this->marcarVentaInforme(
+                $venta,
+                'ok',
+                null,
+                sprintf('Ya informado en ARCA (último autorizado: %d)', $ultimoArca),
+            );
+
+            return ['omitidos_arca' => 1];
+        }
+
+        if ($numero > $ultimoArca + 1) {
+            $proximo = $ultimoArca + 1;
+            $msgHueco = $this->mensajeBloqueoProximoEsperado(
+                (int) $registro->empresa_id,
+                $ptoVta,
+                $cbteTipo,
+                $proximo,
+                $numero,
+            );
+
+            return [
+                'errores' => 1,
+                'omitidos_hueco' => 1,
+                'detener' => true,
+                'ultimo_error' => $msgHueco,
+                'error_fila' => $this->filaErrorDetalle($venta, $ptoVta, $msgHueco),
+            ];
+        }
+
+        unset($datos['cbte_tipo'], $datos['letra']);
+
+        $resultado = $this->facturaelectronicaService->informarComprobanteCaea(
+            $empresa->nroinscripcion,
+            $cbteTipo,
+            $puntoventa,
+            $datos,
+            $caeaVigente,
+        );
+
+        if (! ($resultado['ok'] ?? false)) {
+            $msg = (string) ($resultado['error'] ?? 'Error desconocido');
+            $codigo = $this->extraerCodigoError($msg);
+            $this->marcarVentaInforme($venta, 'error', $codigo, $msg);
+            Log::warning('arca:caea-informe — error al informar, se detiene el lote', [
+                'arca_caea_id' => $registro->id,
+                'venta_id' => $venta->id,
+                'pto_vta' => $ptoVta,
+                'numero' => $numero,
+                'fuente' => 'erp',
+                'msg' => $msg,
+            ]);
+
+            return [
+                'errores' => 1,
+                'detener' => true,
+                'ultimo_error' => $msg,
+                'error_fila' => $this->filaErrorDetalle($venta, $puntoventa->codigo ?? null, $msg, $codigo),
+            ];
+        }
+
+        $resArca = (string) ($resultado['resultado'] ?? 'A');
+        $obs = trim((string) ($resultado['observaciones'] ?? ''));
+        $estado = $resArca === 'P' || $obs !== '' ? 'observacion' : 'ok';
+        $this->marcarVentaInforme($venta, $estado, null, $obs !== '' ? $obs : null);
+        $ultimosMemoria[$claveGrupo] = $numero;
+
+        return [
+            'informados' => 1,
+            'con_obs' => $estado === 'observacion' ? 1 : 0,
+        ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $item
+     * @param  array<string, int>  $ultimosMemoria
+     * @return array<string, mixed>
+     */
+    private function informarItemAnita(
+        ArcaCaea $registro,
+        object $empresa,
+        array $caeaVigente,
+        array $item,
+        array &$ultimosMemoria,
+    ): array {
+        $ptoVta = (int) ($item['pto_vta'] ?? 0);
+        $tipoAfip = (int) ($item['tipo_afip'] ?? 0);
+        $numero = (int) ($item['numero'] ?? 0);
+        $tipoAnita = (string) ($item['tipo_anita'] ?? '');
+        $letra = (string) ($item['letra'] ?? '');
+        $claveGrupo = $this->claveGrupoInforme($ptoVta, $tipoAfip);
+        $ultimoArca = (int) ($ultimosMemoria[$claveGrupo] ?? 0);
+
+        if ($numero <= $ultimoArca) {
+            return ['omitidos_arca' => 1];
+        }
+
+        if ($numero > $ultimoArca + 1) {
+            $msgHueco = $this->mensajeBloqueoProximoEsperado(
+                (int) $registro->empresa_id,
+                $ptoVta,
+                $tipoAfip,
+                $ultimoArca + 1,
+                $numero,
+            );
+
+            return [
+                'errores' => 1,
+                'omitidos_hueco' => 1,
+                'detener' => true,
+                'ultimo_error' => $msgHueco,
+                'error_fila' => $this->filaErrorDetalleLibre($ptoVta, $numero, $msgHueco),
+            ];
+        }
+
+        if (! ArcaCaeaAnitaIvaVentasSupport::vaAlSubdiarioIvaVentas($tipoAnita)) {
+            $msg = sprintf(
+                'PV %05d %s #%d tipo Anita %s no va al subdiario IVA-ventas; se omite del CAEA.',
+                $ptoVta,
+                $this->etiquetaTipoAfipCorta($tipoAfip),
+                $numero,
+                $tipoAnita,
+            );
+
+            return [
+                'errores' => 1,
+                'detener' => true,
+                'ultimo_error' => $msg,
+                'error_fila' => $this->filaErrorDetalleLibre($ptoVta, $numero, $msg),
+            ];
+        }
+
+        $puntoventa = $this->puntosVentaCaeaPorCodigo((int) $registro->empresa_id)[$ptoVta] ?? null;
+        if ($puntoventa === null) {
+            $msg = sprintf('Punto de venta %d no es CAEA de la empresa.', $ptoVta);
+
+            return [
+                'errores' => 1,
+                'detener' => true,
+                'ultimo_error' => $msg,
+                'error_fila' => $this->filaErrorDetalleLibre($ptoVta, $numero, $msg),
+            ];
+        }
+
+        try {
+            $armado = ArcaCaeaInformeDatosDesdeAnitaSupport::construir(
+                $tipoAnita,
+                $letra,
+                $ptoVta,
+                $numero,
+                (int) $registro->empresa_id,
+                trim((string) $registro->nro_caea),
+            );
+            $datos = $armado['datos'];
+            unset($datos['cbte_tipo'], $datos['letra'], $datos['caea']);
+        } catch (\Throwable $e) {
+            return [
+                'errores' => 1,
+                'detener' => true,
+                'ultimo_error' => $e->getMessage(),
+                'error_fila' => $this->filaErrorDetalleLibre($ptoVta, $numero, $e->getMessage()),
+            ];
+        }
+
+        $pvSoap = ArcaPuntoventaWebserviceSupport::puntoventaParaSoap($puntoventa);
+        $resultado = $this->facturaelectronicaService->informarComprobanteCaea(
+            $empresa->nroinscripcion,
+            $tipoAfip,
+            $pvSoap,
+            $datos,
+            $caeaVigente,
+        );
+
+        if (! ($resultado['ok'] ?? false)) {
+            $msg = (string) ($resultado['error'] ?? 'Error desconocido');
+            $codigo = $this->extraerCodigoError($msg);
+            Log::warning('arca:caea-informe — error al informar Anita, se detiene el lote', [
+                'arca_caea_id' => $registro->id,
+                'pto_vta' => $ptoVta,
+                'numero' => $numero,
+                'tipo_anita' => $tipoAnita,
+                'fuente' => 'anita',
+                'msg' => $msg,
+            ]);
+
+            return [
+                'errores' => 1,
+                'detener' => true,
+                'ultimo_error' => $msg,
+                'error_fila' => $this->filaErrorDetalleLibre($ptoVta, $numero, $msg, $codigo),
+            ];
+        }
+
+        $resArca = (string) ($resultado['resultado'] ?? 'A');
+        $obs = trim((string) ($resultado['observaciones'] ?? ''));
+        $estado = $resArca === 'P' || $obs !== '' ? 'observacion' : 'ok';
+        $ultimosMemoria[$claveGrupo] = $numero;
+
+        return [
+            'informados' => 1,
+            'con_obs' => $estado === 'observacion' ? 1 : 0,
+        ];
+    }
+
+    /**
+     * @return array{venta_id:int, pto_vta:?int, numero:int, codigo:?string, mensaje:string}
+     */
+    private function filaErrorDetalleLibre(int $ptoVta, int $numero, string $mensaje, ?string $codigo = null): array
+    {
+        return [
+            'venta_id' => 0,
+            'pto_vta' => $ptoVta,
+            'numero' => $numero,
+            'codigo' => $codigo,
+            'mensaje' => $mensaje,
+        ];
     }
 
     private function claveGrupoInforme(int $ptoVta, int $cbteTipo): string

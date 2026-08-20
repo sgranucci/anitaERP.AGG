@@ -114,17 +114,39 @@ final class ArcaCaeaInformeDatosDesdeAnitaSupport
             $totalTributo = $iibb;
         }
 
+        $totalTributo = round($totalTributo, 2);
+        $sumaPartes = round($gravado + $exento + $iva + $totalTributo, 2);
+        $diffTotal = round($total - $sumaPartes, 2);
+        if ($diffTotal > 0.009) {
+            // Total impreso mayor que gravado+IVA+percepciones. Va como tributo 99
+            // (no como ítem exento: MTXCA exige IVA/MTX en renglones).
+            $tributos[] = [
+                'id' => 99,
+                'base_imp' => 0,
+                'alicuota' => 0,
+                'desc' => 'Otros tributos',
+                'importe' => $diffTotal,
+            ];
+            $totalTributo = round($totalTributo + $diffTotal, 2);
+        } elseif ($diffTotal < -0.009) {
+            $total = $sumaPartes;
+        }
+
+        $codigoIva = ($iva > 0 && $gravado > 0)
+            ? self::codigoIvaAfip($gravado, $iva)
+            : 3;
         $impuestos = [];
-        if ($iva > 0) {
+        if ($iva > 0 && $gravado > 0) {
             $impuestos[] = [
-                'id' => 5,
+                'id' => $codigoIva,
                 'base_imp' => $gravado,
                 'importe' => $iva,
             ];
         }
 
-        $items = self::armarItems($tipoAnita, $letra, $sucursal, $numero, $gravado, $iva);
+        $items = self::armarItems($tipoAnita, $letra, $sucursal, $numero, $gravado, $iva, $codigoIva);
         $datosAdicionales = self::datosAdicionalesFce($cbteTipo, $empresaId);
+        $periodoAsoc = self::periodoAsociadosSiCorresponde($cbteTipo, $fecha);
 
         $datos = [
             'cbte_tipo' => $cbteTipo,
@@ -148,6 +170,8 @@ final class ArcaCaeaInformeDatosDesdeAnitaSupport
             'impuestos' => $impuestos,
             'tributos' => $tributos,
             'comprobantesasociados' => [],
+            'fechaasignaciondesde' => $periodoAsoc['desde'] ?? null,
+            'fechaasignacionhasta' => $periodoAsoc['hasta'] ?? null,
             'items' => $items,
             'datos_adicionales' => $datosAdicionales,
             'caea' => $nroCaea,
@@ -188,13 +212,14 @@ final class ArcaCaeaInformeDatosDesdeAnitaSupport
             }
         }
 
-        // Fallback: listar por sucursal/tipo/letra y filtrar (Informix a veces falla el rango).
+        // Fallback: igualdad exacta de número (no listar toda la sucursal).
         $filas = self::listar(
             'venta',
             'ven_cliente,ven_tipo,ven_letra,ven_sucursal,ven_nro,ven_fecha,ven_fecha_vto,ven_monto,ven_gravado,ven_exento,ven_impuesto1,ven_percepcion_iva,ven_perc_ing_bruto,ven_cod_mon,ven_cotizacion,ven_nombre_cliente',
             " WHERE ven_tipo = '".addslashes($tipoAnita)."'"
             ." AND ven_letra = '".addslashes($letra)."'"
-            ." AND ven_sucursal = ".$sucursal,
+            ." AND ven_sucursal = ".$sucursal
+            ." AND ven_nro = ".$numero,
         );
         foreach ($filas as $fila) {
             if ((int) ($fila['ven_nro'] ?? 0) === $numero) {
@@ -221,6 +246,35 @@ final class ArcaCaeaInformeDatosDesdeAnitaSupport
     }
 
     /**
+     * NC/ND MTXCA exigen comprobante asociado o rango de fechas (error 778).
+     *
+     * @return array{desde: string, hasta: string}|null
+     */
+    private static function periodoAsociadosSiCorresponde(int $cbteTipo, string $fechaYmd): ?array
+    {
+        if (! in_array($cbteTipo, [2, 3, 7, 8, 202, 203, 207, 208, 53], true)) {
+            return null;
+        }
+        $fechaYmd = preg_replace('/\D+/', '', $fechaYmd) ?? '';
+        if (strlen($fechaYmd) < 8) {
+            return null;
+        }
+        $hasta = substr($fechaYmd, 0, 8);
+        $desde = substr($hasta, 0, 6).'01';
+
+        return ['desde' => $desde, 'hasta' => $hasta];
+    }
+
+    private static function codigoIvaAfip(float $gravado, float $iva): int
+    {
+        if ($gravado <= 0 || $iva <= 0) {
+            return 5;
+        }
+
+        return ArcaMtxcaComprobanteTotalesSupport::codigoPorTasa(round($iva * 100 / $gravado, 1)) ?? 5;
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     private static function armarItems(
@@ -230,6 +284,7 @@ final class ArcaCaeaInformeDatosDesdeAnitaSupport
         int $numero,
         float $gravado,
         float $iva,
+        int $codigoIvaAfip = 5,
     ): array {
         $lineas = self::listar(
             'compaux',
@@ -265,8 +320,8 @@ final class ArcaCaeaInformeDatosDesdeAnitaSupport
             ? Articulo::query()->whereIn('sku', array_unique($skus))->get()->keyBy('sku')
             : collect();
 
-        $impuesto21 = Impuesto::query()->where('codigoarca', 5)->orderBy('id')->first();
-        $impuestoId = (int) ($impuesto21?->id ?? 0);
+        $impuestoIva = Impuesto::query()->where('codigoarca', $codigoIvaAfip)->orderBy('id')->first();
+        $impuestoId = (int) ($impuestoIva?->id ?? 0);
 
         $items = [];
         $netoAcum = 0.0;
@@ -308,13 +363,16 @@ final class ArcaCaeaInformeDatosDesdeAnitaSupport
             ]];
         }
 
-        // Ajuste de redondeo al gravado de cabecera + prorrateo IVA.
+        // Ajuste de redondeo al gravado de cabecera (solo si el precio queda > 0).
+        // Un descuento de cabecera mayor a la 1ª línea lo resuelve conciliar() como bonificación.
         $diff = round($gravado - $netoAcum, 2);
         if (abs($diff) >= 0.01 && isset($items[0]) && (float) $items[0]['cantidad'] > 0) {
-            $items[0]['precio'] = round(
-                ((float) $items[0]['precio'] * (float) $items[0]['cantidad'] + $diff) / (float) $items[0]['cantidad'],
-                6,
-            );
+            $nuevoPrecio = (
+                (float) $items[0]['precio'] * (float) $items[0]['cantidad'] + $diff
+            ) / (float) $items[0]['cantidad'];
+            if ($nuevoPrecio > 0) {
+                $items[0]['precio'] = round($nuevoPrecio, 6);
+            }
         }
 
         $netoFinal = 0.0;

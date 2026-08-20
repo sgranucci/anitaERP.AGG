@@ -259,7 +259,10 @@ class RemitoController extends Controller
         can('crear-remitos');
 
         $data = $request->all();
-        $data['puntoventa_id'] = $request->input('puntoventa_id', config('facturacion.PUNTOVENTA_REMITO'));
+        $pvRemito = $request->filled('puntoventa_id')
+            ? (int) $request->input('puntoventa_id')
+            : (int) (UsuarioPreferenciaFacturacionSupport::leer()['puntoventaremito_id'] ?? 0);
+        $data['puntoventa_id'] = $pvRemito > 0 ? $pvRemito : null;
 
         $resultado = $this->remitoService->guardaRemito($data, 'create');
 

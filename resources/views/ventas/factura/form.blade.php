@@ -283,20 +283,71 @@
     		<tbody id="tbody-tabla">
 		 		@if ($data->venta_emisiones[0] ?? '') 
 					@foreach ($data->venta_emisiones as $item)
+						@php
+							$articuloItem = $item->articulos;
+							$unidadMedidaIdItem = old('unidadmedida_ids.'.$loop->index, $articuloItem?->unidadmedida_id ?? '');
+							$unidadMedidaAbrevItem = $articuloItem?->unidadesdemedidas?->abreviatura ?? '';
+							$kiloItem = old('kilos.'.$loop->index, old('cantidades.'.$loop->index, $item->cantidad ?? 0));
+							$cajaItem = old('cajas.'.$loop->index, $item->caja ?? 0);
+							$piezaItem = old('piezas.'.$loop->index, $item->pieza ?? 0);
+							if (old('cajas.'.$loop->index) === null && old('piezas.'.$loop->index) === null
+								&& (float) $cajaItem == 0.0 && (float) $piezaItem == 0.0 && (float) $kiloItem != 0.0) {
+								$pesoArt = (float) ($articuloItem?->peso ?? 0);
+								$uxenvArt = (float) ($articuloItem?->unidadesxenvase ?? 0);
+								if ($pesoArt > 0) {
+									$piezaItem = round(((float) $kiloItem) / $pesoArt, 2);
+									if ($uxenvArt > 0) {
+										$cajaItem = round($piezaItem / $uxenvArt, 2);
+									}
+								}
+							}
+							$descuentoVentaIdItem = old('descuentoventa_ids.'.$loop->index, '');
+							$valorOldIndice = static function (string $campo, int $indice, $default = '') {
+								$valor = old($campo.'.'.$indice);
+								if ($valor === null) {
+									$valor = old($campo, $default);
+								}
+								if (is_array($valor)) {
+									$valor = $valor[$indice] ?? $default;
+								}
+								if (is_array($valor) || is_object($valor)) {
+									$valor = $default;
+								}
+
+								return $valor ?? $default;
+							};
+							$numeroOldIndice = static function (string $campo, int $indice, $default = 0) use ($valorOldIndice): float {
+								$valor = $valorOldIndice($campo, $indice, $default);
+								if ($valor === null || $valor === '') {
+									$valor = $default;
+								}
+								if (is_string($valor)) {
+									$valor = str_replace([' ', ','], '', $valor);
+								}
+
+								return (float) $valor;
+							};
+							$idxItem = (int) $loop->index;
+						@endphp
             			<tr class="{{ $layoutItemsPedido ? 'item-pedido' : 'item-factura' }}">
                				<td>
                					<input type="text" name="items[]" class="form-control item" value="{{ $loop->index+1 }}" readonly>
-                				<input type="hidden" name="listasprecios_id[]" class="form-control listaprecio_id" readonly value="{{old('listaprecios_id', $item->listaprecio_id??'')}}" />
-                				<input type="hidden" name="monedas_id[]" class="form-control moneda_id" readonly value="{{old('monedas_id', $item->moneda_id??'')}}" />
-                				<input type="hidden" name="incluyeimpuestos[]" class="form-control incluyeimpuesto" readonly value="{{old('incluyeimpuestos', $item->incluyeimpuesto??'')}}" />
-                				<input type="hidden" name="impuesto_ids[]" class="form-control impuesto_id" readonly value="{{old('impuesto_ids', $item->impuesto_id??'')}}" />
+                				<input type="hidden" name="listasprecios_id[]" class="form-control listaprecio_id" readonly value="{{ $valorOldIndice('listasprecios_id', $idxItem, $item->listaprecio_id ?? '') }}" />
+                				<input type="hidden" name="monedas_id[]" class="form-control moneda_id" readonly value="{{ $valorOldIndice('monedas_id', $idxItem, $item->moneda_id ?? '') }}" />
+                				<input type="hidden" name="incluyeimpuestos[]" class="form-control incluyeimpuesto" readonly value="{{ $valorOldIndice('incluyeimpuestos', $idxItem, $item->incluyeimpuesto ?? '') }}" />
+                				<input type="hidden" name="impuesto_ids[]" class="form-control impuesto_id" readonly value="{{ $valorOldIndice('impuesto_ids', $idxItem, $item->impuesto_id ?? '') }}" />
                 				<input type="hidden" name="ids[]" class="form-control ids" value="{{$item->id??''}}" />
-								<input type="hidden" name="loteids[]" class="form-control loteids" value="{{$item->lotes->id ?? ''}}" />
+								<input type="hidden" name="loteids[]" class="form-control loteids" value="{{ $item->lotes?->id ?? '' }}" />
+								@if ($layoutItemsPedido)
+									<input type="hidden" name="cantidades[]" class="form-control cantidad" value="{{ number_format((float) $kiloItem, 2, '.', '') }}" />
+									<input type="hidden" name="descuentos[]" class="form-control descuento" value="0" />
+								@endif
                 			</td>
                             <td>
                                 <div class="form-group row" id="articulo">
                                     <input type="hidden" name="articulo[]" class="form-control iiarticulo" readonly value="{{ $loop->index+1 }}" />
                                     <input type="hidden" class="articulo_id" name="articulo_ids[]" value="{{$item->articulo_id ?? ''}}" >
+                                    <input type="hidden" class="articulo_id_previa" name="articulo_id_previa[]" value="{{$item->articulo_id ?? ''}}" >
                                     <input type="hidden" class="articulo_id_previo" name="articulo_id_previo[]" value="{{$item->articulo_id ?? ''}}" >
 									<input type="hidden" class="categoria_id" name="categoria_ids[]" value="{{$item->articulos->categoria_id ?? ''}}" >
 									<input type="hidden" class="subcategoria_id" name="subcategoria_ids[]" value="{{$item->articulos->subcategoria_id ?? ''}}" >
@@ -311,21 +362,50 @@
                                 <input type="text" style="WIDTH: {{ $layoutItemsPedido ? '220' : '700' }}px; HEIGHT: 38px" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="{{$item->detalle ?? ''}}" @if($layoutItemsPedido) readonly @endif>
                             </td>
 							@if ($layoutItemsPedido)
-							<td></td>
-							<td><input type="text" name="cajas[]" class="form-control caja" value="" /></td>
-							<td><input type="text" name="piezas[]" class="form-control pieza" value="" /></td>
-							<td><input type="text" name="kilos[]" class="form-control kilo" value="{{number_format(old('cantidades.'.$loop->index, optional($item)->cantidad),2)}}" /></td>
-							<td></td>
+							<td>
+								<select name="unidadmedida_ids[]" data-placeholder="Unidad de Medida" class="unidadmedida_id form-control" data-fouc>
+									@foreach($unidadmedida_query as $key => $value)
+										@if ((int) $value['id'] == (int) $unidadMedidaIdItem)
+											<option value="{{ $value['id'] }}" selected="select">{{ $value['abreviatura'] }}</option>
+										@else
+											<option value="{{ $value['id'] }}">{{ $value['abreviatura'] }}</option>
+										@endif
+									@endforeach
+								</select>
+								<input type="hidden" name="unidadmedidas[]" class="form-control unidadmedida" value="{{ $unidadMedidaAbrevItem }}" />
+							</td>
+							<td>
+								<input type="text" name="cajas[]" class="form-control caja" value="{{ number_format((float) $cajaItem, 2, '.', '') }}" />
+							</td>
+							<td>
+								<input type="text" name="piezas[]" class="form-control pieza" value="{{ number_format((float) $piezaItem, 2, '.', '') }}" />
+							</td>
+							<td>
+								<input type="text" name="kilos[]" class="form-control kilo" value="{{ number_format((float) $kiloItem, 2, '.', '') }}" />
+							</td>
+							<td>
+								<select name="descuentoventa_ids[]" data-placeholder="Descuento" class="descuentoventa_id form-control" data-fouc>
+									<option value="">-Descuento-</option>
+									@foreach($descuentoventa_query as $key => $value)
+										@if ((string) $value->id === (string) $descuentoVentaIdItem)
+											<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
+										@else
+											<option value="{{ $value->id }}">{{ $value->nombre }}</option>
+										@endif
+									@endforeach
+								</select>
+								<input type="hidden" name="descuentoventaanterior_ids[]" class="form-control descuentoventaanterior_id" value="{{ $descuentoVentaIdItem }}" />
+							</td>
 							@else
 							<td>
-								<input type="text" name="cantidades[]" class="form-control cantidad" value="{{number_format(old('cantidades.'.$loop->index, optional($item)->cantidad),2)}}" />
+								<input type="text" name="cantidades[]" class="form-control cantidad" value="{{ number_format($numeroOldIndice('cantidades', $idxItem, optional($item)->cantidad ?? 0), 2) }}" />
                 			</td>		
 							<td>
-								<input type="text" name="descuentos[]" class="form-control descuento" value="{{number_format(old('descuentos.'.$loop->index, optional($item)->descuento),2)}}" />
+								<input type="text" name="descuentos[]" class="form-control descuento" value="{{ number_format($numeroOldIndice('descuentos', $idxItem, optional($item)->descuento ?? 0), 2) }}" />
                 			</td>
 							@endif								
                 			<td>
-                				<input type="text" style="text-align: right;" name="precios[]" class="form-control precio" readonly value="{{number_format(old('precios.'.$loop->index, optional($item)->precio),2)}}" />
+                				<input type="text" style="text-align: right;" name="precios[]" class="form-control precio" readonly value="{{ number_format($numeroOldIndice('precios', $idxItem, optional($item)->precio ?? 0), 2) }}" />
                 			</td>							
                 			<td>
 								<button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar tooltipsC">
@@ -440,3 +520,10 @@
 @include('includes.ventas.modalconsultacliente')
 @include('includes.ventas.modalconsultavendedor')
 @include('includes.ventas.modalconsultatransporte')
+@include('includes.proceso_overlay_aviso', [
+	'overlayId' => 'factura-procesando-overlay',
+	'tituloId' => 'factura-procesando-titulo',
+	'subtituloId' => 'factura-procesando-subtitulo',
+	'titulo' => 'Generando comprobante…',
+	'subtitulo' => 'Por favor espere. No cierre ni recargue la página.',
+])

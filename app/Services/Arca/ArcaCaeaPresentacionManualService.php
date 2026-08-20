@@ -9,7 +9,9 @@ use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Venta;
 use App\Services\Ventas\FacturaelectronicaService;
 use App\Support\Database\SqlDialectSupport;
+use App\Support\Ventas\ArcaCaeaAnitaIvaVentasSupport;
 use App\Support\Ventas\ArcaCaeaAnitaTipoAfipSupport;
+use App\Support\Ventas\ArcaCaeaAnitaVencaeConsultaSupport;
 use App\Support\Ventas\ArcaCaeaInformeDatosDesdeAnitaSupport;
 use App\Support\Ventas\ArcaCaeaInformeDatosDesdeVentaSupport;
 use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
@@ -312,11 +314,16 @@ class ArcaCaeaPresentacionManualService
             ];
         }
 
-        $anita = $this->resolverClaveAnita($tipoAfip, $tipoAnita, $letra);
+        $anita = $this->resolverClaveAnitaEncontrada($registro, $ptoVta, $tipoAfip, $numero, $tipoAnita, $letra);
         if ($anita === null) {
             return [
                 'encontrado' => false,
-                'mensaje' => 'No está en ERP y no se pudo inferir tipo Anita para buscar fallback.',
+                'mensaje' => sprintf(
+                    'No se encontró PV %d T%d #%d en ERP ni en Anita IVA-ventas.',
+                    $ptoVta,
+                    $tipoAfip,
+                    $numero,
+                ),
             ];
         }
 
@@ -389,9 +396,9 @@ class ArcaCaeaPresentacionManualService
             ];
         }
 
-        $anita = $this->resolverClaveAnita($tipoAfip, $tipoAnita, $letra);
+        $anita = $this->resolverClaveAnitaEncontrada($registro, $ptoVta, $tipoAfip, $numero, $tipoAnita, $letra);
         if ($anita === null) {
-            return ['encontrado' => false, 'mensaje' => 'Sin mapeo Anita para el tipo AFIP '.$tipoAfip];
+            return ['encontrado' => false, 'mensaje' => 'Sin comprobante Anita IVA-ventas para el tipo AFIP '.$tipoAfip];
         }
 
         try {
@@ -420,15 +427,92 @@ class ArcaCaeaPresentacionManualService
     /**
      * @return array{tipo_anita:string, letra:string}|null
      */
+    private function resolverClaveAnitaEncontrada(
+        ArcaCaea $registro,
+        int $ptoVta,
+        int $tipoAfip,
+        int $numero,
+        ?string $tipoAnita,
+        ?string $letra,
+    ): ?array {
+        $nroCaea = trim((string) ($registro->nro_caea ?? ''));
+        $found = ArcaCaeaAnitaVencaeConsultaSupport::buscarIvaVentasPorAfip($ptoVta, $numero, $tipoAfip, $nroCaea);
+        if ($found === null && $nroCaea !== '') {
+            $found = ArcaCaeaAnitaVencaeConsultaSupport::buscarIvaVentasPorAfip($ptoVta, $numero, $tipoAfip, '');
+        }
+        if ($found !== null) {
+            return ['tipo_anita' => $found['tipo_anita'], 'letra' => $found['letra']];
+        }
+
+        $intentos = [];
+        $directo = $this->resolverClaveAnita($tipoAfip, $tipoAnita, $letra);
+        if ($directo !== null) {
+            $intentos[] = $directo;
+        }
+        $letraAfip = strtoupper(trim((string) $letra));
+        if ($letraAfip === '') {
+            $letraAfip = ArcaCaeaAnitaTipoAfipSupport::letraDesdeTipoAfip($tipoAfip);
+        }
+        foreach (ArcaCaeaAnitaTipoAfipSupport::tiposAnitaParaTipoAfip($tipoAfip) as $candidato) {
+            $intentos[] = ['tipo_anita' => $candidato, 'letra' => $letraAfip];
+        }
+
+        $vistos = [];
+        foreach ($intentos as $intento) {
+            $clave = $intento['tipo_anita'].'|'.$intento['letra'];
+            if (isset($vistos[$clave])) {
+                continue;
+            }
+            $vistos[$clave] = true;
+            try {
+                $cab = ArcaCaeaInformeDatosDesdeAnitaSupport::leerCabecera(
+                    $intento['tipo_anita'],
+                    $intento['letra'],
+                    $ptoVta,
+                    $numero,
+                );
+            } catch (Throwable) {
+                continue;
+            }
+            if ($cab !== null) {
+                return $intento;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @return array{tipo_anita:string, letra:string}|null
+     */
     private function resolverClaveAnita(int $tipoAfip, ?string $tipoAnita, ?string $letra): ?array
     {
         $tipoAnita = strtoupper(trim((string) $tipoAnita));
         $letra = strtoupper(trim((string) $letra));
         if ($tipoAnita !== '' && $letra !== '') {
+            if (! ArcaCaeaAnitaIvaVentasSupport::vaAlSubdiarioIvaVentas($tipoAnita)) {
+                return null;
+            }
+
             return ['tipo_anita' => $tipoAnita, 'letra' => $letra];
         }
 
-        return ArcaCaeaAnitaTipoAfipSupport::anitaDesdeTipoAfip($tipoAfip);
+        $letraAfip = $letra !== '' ? $letra : ArcaCaeaAnitaTipoAfipSupport::letraDesdeTipoAfip($tipoAfip);
+        foreach (ArcaCaeaAnitaTipoAfipSupport::tiposAnitaParaTipoAfip($tipoAfip) as $candidato) {
+            if ($letraAfip !== '' && ArcaCaeaAnitaTipoAfipSupport::tipoAfipDesdeAnita($candidato, $letraAfip) === $tipoAfip) {
+                return ['tipo_anita' => $candidato, 'letra' => $letraAfip];
+            }
+        }
+
+        $fallback = ArcaCaeaAnitaTipoAfipSupport::anitaDesdeTipoAfip($tipoAfip);
+        if ($fallback === null) {
+            return null;
+        }
+        if (! ArcaCaeaAnitaIvaVentasSupport::vaAlSubdiarioIvaVentas($fallback['tipo_anita'])) {
+            return null;
+        }
+
+        return $fallback;
     }
 
     private function buscarVentaErp(int $empresaId, int $ptoVta, int $tipoAfip, int $numero): ?Venta
@@ -447,6 +531,11 @@ class ArcaCaeaPresentacionManualService
             ->get();
 
         foreach ($ventas as $venta) {
+            if (! ArcaCaeaAnitaIvaVentasSupport::erpVaAlSubdiarioIvaVentas(
+                (string) ($venta->tipotransacciones?->abreviatura ?? ''),
+            )) {
+                continue;
+            }
             $codigoAfip = TipotransaccionCodigoAfipSupport::codigoAfipDesdeVentaGrabada(
                 (string) ($venta->tipotransacciones?->codigo ?? ''),
                 (string) $venta->codigo,
@@ -534,23 +623,22 @@ class ArcaCaeaPresentacionManualService
             ];
         }
 
-        // Candidatos Anita habituales (FCE, etc.) aunque no existan en ERP.
+        // Candidatos Anita IVA-ventas (FAC, NDR, NCP/NCD/NCG, FCE, etc.) aunque no existan en ERP.
         foreach ($pvs as $pto => $pv) {
-            foreach (['FCE' => ['A' => 201, 'B' => 206], 'FAC' => ['A' => 1, 'B' => 6]] as $tipoAnita => $letras) {
-                foreach ($letras as $letra => $tipoAfip) {
-                    $clave = $pto.'|'.$tipoAfip;
-                    if (isset($seen[$clave])) {
-                        continue;
-                    }
-                    $seen[$clave] = true;
-                    $out[] = [
-                        'pto_vta' => (int) $pto,
-                        'tipo_afip' => $tipoAfip,
-                        'tipo_anita' => $tipoAnita,
-                        'letra' => $letra,
-                        'etiqueta' => $tipoAnita.' '.$letra.' ('.$tipoAfip.')',
-                    ];
+            foreach (ArcaCaeaAnitaTipoAfipSupport::catalogoPresentacionIvaVentas() as $item) {
+                $tipoAfip = (int) $item['tipo_afip'];
+                $clave = ((int) $pto).'|'.$tipoAfip;
+                if (isset($seen[$clave])) {
+                    continue;
                 }
+                $seen[$clave] = true;
+                $out[] = [
+                    'pto_vta' => (int) $pto,
+                    'tipo_afip' => $tipoAfip,
+                    'tipo_anita' => $item['tipo_anita'],
+                    'letra' => $item['letra'],
+                    'etiqueta' => $item['etiqueta'],
+                ];
             }
         }
 

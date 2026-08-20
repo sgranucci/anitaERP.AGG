@@ -181,7 +181,10 @@ class RemitoService
 
         try {
             if ($funcion == 'create') {
-                $puntoventaId = (int) ($data['puntoventa_id'] ?? config('facturacion.PUNTOVENTA_REMITO'));
+                $puntoventaId = (int) ($data['puntoventa_id'] ?? 0);
+                if ($puntoventaId <= 0) {
+                    $puntoventaId = (int) (UsuarioPreferenciaFacturacionSupport::leer()['puntoventaremito_id'] ?? 0);
+                }
                 $puntoventa = $this->puntoventaRepository->find($puntoventaId);
                 if (! $puntoventa) {
                     throw new \RuntimeException('Punto de venta de remito inexistente.');
@@ -463,7 +466,10 @@ class RemitoService
             return ['error' => 'Sin ítems para remito'];
         }
 
-        $puntoventaId = (int) ($data['puntoventaremito_id'] ?? $data['puntoventa_id'] ?? config('facturacion.PUNTOVENTA_REMITO'));
+        $puntoventaId = (int) ($data['puntoventaremito_id'] ?? $data['puntoventa_id'] ?? 0);
+        if ($puntoventaId <= 0) {
+            $puntoventaId = (int) (UsuarioPreferenciaFacturacionSupport::leer()['puntoventaremito_id'] ?? 0);
+        }
         $puntoventa = $this->puntoventaRepository->find($puntoventaId);
         if (! $puntoventa) {
             return ['error' => 'Punto de venta de remito inexistente'];

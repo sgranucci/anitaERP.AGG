@@ -564,9 +564,14 @@ class ArcaMtxcaFacturaElectronicaService
             'importeTotal' => $this->money($datos['total']),
             'codigoMoneda' => LibroIvaDigitalMapeosSupport::codigoMonedaAfip((string) ($datos['moneda'] ?? 'PES')),
             'cotizacionMoneda' => $this->moneyCotiz($this->cotizacionParaMonedaAfip($datos)),
-            'cancelaEnMismaMonedaExtranjera' => 'N',
             'codigoConcepto' => $concepto,
         ];
+
+        // AFIP 118: el flag solo se admite en facturas (1, 6, 51, 201, 206).
+        // En NC/ND, aunque vaya en N, ARCA rechaza el comprobante.
+        if (in_array($cbteTipo, [1, 6, 51, 201, 206], true)) {
+            $req['cancelaEnMismaMonedaExtranjera'] = 'N';
+        }
 
         if ($condIvaRec !== null) {
             $req['condicionIVAReceptor'] = $condIvaRec;
@@ -800,6 +805,10 @@ class ArcaMtxcaFacturaElectronicaService
 
         $base = $claseB ? $importeItem : $neto;
         $precioUnitario = $cantidad > 0 ? ($base + $bonificacion) / $cantidad : $base;
+        if ($precioUnitario < 0 && $cantidad > 0) {
+            $bonificacion = round($bonificacion + abs($precioUnitario) * $cantidad, 2);
+            $precioUnitario = 0.0;
+        }
 
         $item = [
             'codigo' => mb_substr((string) ($fila['codigo'] ?? ''), 0, 50),
@@ -818,9 +827,12 @@ class ArcaMtxcaFacturaElectronicaService
             $item['unidadesMtx'] = max(1, (int) ($fila['unidades_mtx'] ?? 1));
         }
 
-        // Clase B: informar importeIVA en el ítem es rechazo (validación 514).
-        if (! $claseB && ArcaMtxcaComprobanteTotalesSupport::esCondicionGravada((int) $fila['codigo_condicion_iva'])) {
-            $item['importeIVA'] = $this->money($iva);
+        if (! $claseB) {
+            $item['importeIVA'] = $this->money(
+                ArcaMtxcaComprobanteTotalesSupport::esCondicionGravada((int) $fila['codigo_condicion_iva'])
+                    ? $iva
+                    : 0.0
+            );
         }
 
         return $item;
@@ -940,7 +952,7 @@ class ArcaMtxcaFacturaElectronicaService
         if ($desde <= 0 || count($asoc) > 0) {
             return null;
         }
-        if (! in_array($cbteTipo, [3, 8, 203, 53], true)) {
+        if (! in_array($cbteTipo, [2, 3, 7, 8, 202, 203, 207, 208, 53], true)) {
             return null;
         }
 

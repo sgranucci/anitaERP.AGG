@@ -49,6 +49,13 @@ switch(strtoupper(config('app.empresa')))
             "LIMITE_FCE" => 5549862,
             "PUNTOVENTA_FACTURACION" => 5,
             "PUNTOVENTA_REMITO" => 1,
+            // Preferencia por usuario (códigos ARCA, no ids). clarisad = producción; resto = prueba.
+            "TIPO_FACTURA_ABREVIATURA" => "FAC",
+            "PUNTOVENTA_FACTURACION_CODIGO" => "00008",
+            "PUNTOVENTA_REMITO_CODIGO" => "00099",
+            "PREFERENCIA_FACTURACION_USUARIOS_PRODUCCION" => ["clarisad", "cdacurso"],
+            "PUNTOVENTA_FACTURACION_PRODUCCION_CODIGO" => "00010",
+            "PUNTOVENTA_REMITO_PRODUCCION_CODIGO" => "00001",
             "CUENTACONTABLE_PERCEPCION_IVA" => '211290000',
             "CUENTACONTABLE_IVA" => '211170000',
             "CUENTACONTABLE_VENTA" => '301100000',
@@ -73,6 +80,8 @@ switch(strtoupper(config('app.empresa')))
                                               // true netea el descuento en el precio de cada linea de la factura sin mandar descuento resultante al pie
             "IMPUESTO_INTERNO_LISTAPRECIO_POR_EMPRESA" => $impuestoInternoListasPorEmpresa,
             "IMPUESTO_INTERNO_TIPOARTICULO_NOMBRE" => $impuestoInternoTipoArticulo,
+            // Candado anti-doble factura del mismo pedido (segundos).
+            "pedido_facturacion_lock_segundos" => 180,
             // Anita de factura pedido: después de responder. ARCA (número + CAE) sigue síncrono.
             "ANITA_TRAS_RESPUESTA_PEDIDO" => filter_var(env('BIERZO_PEDIDO_ANITA_TRAS_RESPUESTA', true), FILTER_VALIDATE_BOOLEAN),
             "ANITA_PEDIDO_REGRABAR_HABILITADO" => filter_var(env('BIERZO_PEDIDO_ANITA_REGRABAR', true), FILTER_VALIDATE_BOOLEAN),

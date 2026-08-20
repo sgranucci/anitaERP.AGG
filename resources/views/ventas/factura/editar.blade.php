@@ -11,11 +11,20 @@
         && filter_var(config('arca_wsapoc.habilitado', true), FILTER_VALIDATE_BOOLEAN);
 @endphp
 <script>window.REQUIERE_VALIDACION_APOC_OPERACION = @json($requiereValidacionApocOperacion);</script>
+@php
+    $layoutItemsPedido = $layoutItemsPedido ?? facturaUsaLayoutItemsPedido();
+@endphp
+<script>
+    window.FL_FACTURA_LAYOUT_PEDIDO = @json($layoutItemsPedido);
+</script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/padron-operacion.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/arca-apoc-validacion-async.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 @include('includes.ventas.preferencias_facturacion_scripts')
-<script src="{{asset("assets/pages/scripts/ventas/factura/crear.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/factura/crear.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/crear.js')) ?: time() }}" type="text/javascript"></script>
+@if ($layoutItemsPedido)
+<script src="{{asset("assets/pages/scripts/ventas/factura/crear-bierzo-items.js")}}" type="text/javascript"></script>
+@endif
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/depmae/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}" type="text/javascript"></script>
@@ -36,6 +45,9 @@
             return false;
         }
 
+        if (typeof iniciarOverlayProcesoFactura === 'function') {
+            iniciarOverlayProcesoFactura();
+        }
         $('#formgeneral').submit();
     }
     $(function () {
@@ -91,7 +103,7 @@
                     </a>
                 </div>
             </div>
-            <form action="{{route('grabar_comprobante')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" onsubmit="return typeof validarPadronOperacionAntesSubmitForm === 'function' ? validarPadronOperacionAntesSubmitForm(event) : true;">
+            <form action="{{route('grabar_comprobante')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" data-factura-proceso="{{ isset($flGeneraNotaDeCredito) ? 'nc' : 'factura' }}" onsubmit="return typeof validarSubmitFacturaConOverlay === 'function' ? validarSubmitFacturaConOverlay(event) : (typeof validarPadronOperacionAntesSubmitForm === 'function' ? validarPadronOperacionAntesSubmitForm(event) : true);">
                 @csrf @method("put")
                 @include('includes.tabs-activas-estilos')
                 <div class="tabs-activas px-3 pt-2">

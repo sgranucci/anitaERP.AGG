@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Ventas;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller;
 use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use Illuminate\Http\JsonResponse;
@@ -372,10 +373,36 @@ class FacturacionController extends Controller
             return $bloqueo;
         }
 
-        $comprobante = $this->facturacionService->generaComprobanteGeneral($request->all());
+        try {
+            $comprobante = $this->facturacionService->generaComprobanteGeneral($request->all());
+        } catch (\Throwable $e) {
+            Log::error('ventas.factura.grabacomprobante.excepcion', [
+                'error' => $e->getMessage(),
+                'venta_id' => $request->input('venta_id'),
+                'tipotransaccion_id' => $request->input('tipotransaccion_id'),
+                'puntoventa_id' => $request->input('puntoventa_id'),
+            ]);
+
+            return redirect()->back()->withInput()->with('errores', [
+                $e->getMessage() !== '' ? $e->getMessage() : 'No se pudo generar el comprobante.',
+            ]);
+        }
 
         if (! empty($comprobante['error'])) {
-            return redirect()->back()->withInput()->with('errores', [$comprobante['error']]);
+            $detalle = trim((string) ($comprobante['error'] ?? ''));
+            $mensaje = trim((string) ($comprobante['mensaje'] ?? ''));
+            if ($mensaje !== '' && ! str_contains($detalle, $mensaje)) {
+                $detalle = trim($detalle.': '.$mensaje);
+            }
+            Log::warning('ventas.factura.grabacomprobante.error', [
+                'error' => $comprobante['error'] ?? null,
+                'mensaje' => $comprobante['mensaje'] ?? null,
+                'venta_id' => $request->input('venta_id'),
+                'tipotransaccion_id' => $request->input('tipotransaccion_id'),
+                'puntoventa_id' => $request->input('puntoventa_id'),
+            ]);
+
+            return redirect()->back()->withInput()->with('errores', [$detalle !== '' ? $detalle : 'No se pudo generar el comprobante.']);
         }
 
         return redirect()->back()->with('mensaje', 'Comprobante '.$comprobante['factura'].' generado con éxito');

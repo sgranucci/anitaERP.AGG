@@ -9,6 +9,7 @@ use App\Models\Compras\SectorLegajocompra;
 use App\Models\Seguridad\Usuario;
 use App\Repositories\Admin\UsuarioRepositoryInterface;
 use App\Support\Seguridad\UsuarioOperativoSupport;
+use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\OficinacompraRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
@@ -82,6 +83,7 @@ class UsuarioController extends Controller
         }
 
         $usuario = Usuario::create($payload);
+        UsuarioPreferenciaFacturacionSupport::asegurar((int) $usuario->id);
         $usuario->auditSync('roles', $request->rol_id);
 
         // Actualiza las empresas

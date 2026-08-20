@@ -18,11 +18,33 @@
     }
     $totalDebeAsientoExtTxt = $lineasAsiento->isNotEmpty() ? number_format($totalDebeAsientoExt, 2, ',', '.') : '';
     $totalHaberAsientoExtTxt = $lineasAsiento->isNotEmpty() ? number_format($totalHaberAsientoExt, 2, ',', '.') : '';
+    $valorOldEscalarAsiento = static function (string $campo, $default = '') {
+        $valor = old($campo, $default);
+        if (is_array($valor) || is_object($valor)) {
+            return $default;
+        }
+
+        return $valor ?? $default;
+    };
+    $valorOldIndiceAsiento = static function (string $campo, int $indice, $default = '') {
+        $valor = old($campo.'.'.$indice);
+        if ($valor === null) {
+            $valor = old($campo, $default);
+        }
+        if (is_array($valor)) {
+            $valor = $valor[$indice] ?? $default;
+        }
+        if (is_array($valor) || is_object($valor)) {
+            $valor = $default;
+        }
+
+        return $valor ?? $default;
+    };
 @endphp
 <div class="card card-outline card-info formasientoexterno" style="display: none">
-    <input type="hidden" name="tipoasiento_id" id="tipoasiento_id" value="{{old('tipoasiento_id', $asientoEdicion?->tipoasiento_id ?? '')}}">
-    <input type="hidden" name="fechaasiento" id="fechasiento" value="{{old('fecha', $asientoEdicion?->fecha ?? date('Y-m-d'))}}">
-    <input type="hidden" name="observacionasiento" id="observacionasiento" value="{{old('observacion', $asientoEdicion?->observacion ?? '')}}">
+    <input type="hidden" name="tipoasiento_id" id="tipoasiento_id" value="{{ $valorOldEscalarAsiento('tipoasiento_id', $asientoEdicion?->tipoasiento_id ?? '') }}">
+    <input type="hidden" name="fechaasiento" id="fechasiento" value="{{ $valorOldEscalarAsiento('fecha', $asientoEdicion?->fecha ?? date('Y-m-d')) }}">
+    <input type="hidden" name="observacionasiento" id="observacionasiento" value="{{ $valorOldEscalarAsiento('observacion', $asientoEdicion?->observacion ?? '') }}">
     <input type="hidden" name="numeroasiento" value="{{ $asientoEdicion?->numeroasiento ?? '' }}" />
     <input type="hidden" name="idasiento" value="{{ $asientoEdicion?->idasiento ?? '' }}" />
         <div class="card-header py-2">
@@ -71,7 +93,7 @@
                                 </button>
                                 <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigoasiento form-control" name="codigoasientos[]" value="{{$cuenta->cuentacontables->codigo ?? ''}}" >
                                 <input type="hidden" class="codigo_previo_cuentacontable" name="codigo_previo_cuentacontables[]" value="{{$cuenta->cuentacontables->codigo ?? ''}}" >
-                                <input type="hidden" class="carga_cuentacontable_manual" name="carga_cuentacontable_manuales[]" value="{{old('carga_cuentacontable_manuales', 0 ?? '')}}" >
+                                <input type="hidden" class="carga_cuentacontable_manual" name="carga_cuentacontable_manuales[]" value="{{ $valorOldIndiceAsiento('carga_cuentacontable_manuales', (int) $loop->index, '0') }}" >
                             </div>
                         </td>							
                         <td>
@@ -80,41 +102,54 @@
                         <td>
                             <select name="centrocostoasiento_ids[]" data-placeholder="Centro de costo" class="centrocostoasiento form-control" data-fouc>
                             </select>
-                            <input type="hidden" class="centrocostoasiento_id_previo" name="centrocostoasiento_id_previo[]" value="{{old('centrocostoasiento_ids', $cuenta->centrocosto_id ?? '')}}" >
+                            <input type="hidden" class="centrocostoasiento_id_previo" name="centrocostoasiento_id_previo[]" value="{{ $valorOldIndiceAsiento('centrocostoasiento_ids', (int) $loop->index, $cuenta->centrocosto_id ?? '') }}" >
                         </td>
                         <td>
                             <select name="monedaasiento_ids[]" data-placeholder="Moneda" class="monedaasiento form-control required" required data-fouc>
                                 <option value="">-- Seleccionar --</option>
                                 @foreach($moneda_query as $key => $value)
-                                    @if( (int) $value->id == (int) old('monedaasiento_ids[]', $cuenta->moneda_id ?? ''))
+                                    @if( (int) $value->id == (int) $valorOldIndiceAsiento('monedaasiento_ids', (int) $loop->index, $cuenta->moneda_id ?? ''))
                                         <option value="{{ $value->id }}" selected="select">{{ $value->abreviatura }}</option>    
                                     @else
                                         <option value="{{ $value->id }}">{{ $value->abreviatura }}</option>    
                                     @endif
                                 @endforeach
                             </select>
-                            <input type="hidden" class="monedaasiento_id_previo" name="monedaasiento_id_previo[]" value="{{old('monedaasiento_ids', $cuenta->moneda_id ?? '')}}" >
+                            <input type="hidden" class="monedaasiento_id_previo" name="monedaasiento_id_previo[]" value="{{ $valorOldIndiceAsiento('monedaasiento_ids', (int) $loop->index, $cuenta->moneda_id ?? '') }}" >
                         </td>
                         <td>
                             @php
-                                $debeAsientoValor = old('debeasientos.'.$loop->index, ($cuenta->monto ?? 0) > 0 ? number_format($cuenta->monto, 2, ',', '.') : '');
+                                $montoAsientoLin = (float) ($cuenta->monto ?? 0);
+                                $debeAsientoValor = $valorOldIndiceAsiento(
+                                    'debeasientos',
+                                    (int) $loop->index,
+                                    $montoAsientoLin > 0 ? number_format($montoAsientoLin, 2, ',', '.') : ''
+                                );
                             @endphp
                             <input type="text" inputmode="decimal" name="debeasientos[]" class="form-control text-right debeasiento" value="{{ $debeAsientoValor }}">
                         </td>
                         <td>
                             @php
-                                $haberAsientoValor = old('haberasientos.'.$loop->index, ($cuenta->monto ?? 0) < 0 ? number_format(abs($cuenta->monto), 2, ',', '.') : '');
+                                $haberAsientoValor = $valorOldIndiceAsiento(
+                                    'haberasientos',
+                                    (int) $loop->index,
+                                    $montoAsientoLin < 0 ? number_format(abs($montoAsientoLin), 2, ',', '.') : ''
+                                );
                             @endphp
                             <input type="text" inputmode="decimal" name="haberasientos[]" class="form-control text-right haberasiento" value="{{ $haberAsientoValor }}">
                         </td>
                         <td>
                             @php
-                                $cotizAsientoValor = old('cotizacionasientos.'.$loop->index, isset($cuenta->cotizacion) ? number_format((float) $cuenta->cotizacion, 2, ',', '.') : '0,00');
+                                $cotizAsientoValor = $valorOldIndiceAsiento(
+                                    'cotizacionasientos',
+                                    (int) $loop->index,
+                                    isset($cuenta->cotizacion) ? number_format((float) $cuenta->cotizacion, 2, ',', '.') : '0,00'
+                                );
                             @endphp
                             <input type="text" inputmode="decimal" name="cotizacionasientos[]" class="form-control text-right cotizacionasiento" value="{{ $cotizAsientoValor }}">
                         </td>
                         <td>
-                            <input type="text" name="observacionasientos[]" style="text-align: right;" class="form-control observacionasiento" value="{{old('observacionasientos[]', $cuenta->observacion ?? '')}}">
+                            <input type="text" name="observacionasientos[]" style="text-align: right;" class="form-control observacionasiento" value="{{ $valorOldIndiceAsiento('observacionasientos', (int) $loop->index, $cuenta->observacion ?? '') }}">
                         </td>
                         <td>
                             <button type="button" title="Elimina esta linea" style="text-align: right;" class="btn-accion-tabla eliminar_cuenta_asiento tooltipsC">

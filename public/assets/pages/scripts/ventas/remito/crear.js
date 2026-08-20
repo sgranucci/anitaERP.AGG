@@ -258,6 +258,26 @@
 		'Grabando en Anita…',
 	];
 
+	var emisionComprobantePedidoEnCurso = false;
+
+	function botonAceptaFacturarPedido() {
+		return $('#aceptaFacturarOrdenTrabajoModal');
+	}
+
+	function tomarEmisionComprobantePedido() {
+		if (emisionComprobantePedidoEnCurso) {
+			return false;
+		}
+		emisionComprobantePedidoEnCurso = true;
+		botonAceptaFacturarPedido().prop('disabled', true);
+		return true;
+	}
+
+	function liberarEmisionComprobantePedido() {
+		emisionComprobantePedidoEnCurso = false;
+		botonAceptaFacturarPedido().prop('disabled', false);
+	}
+
 	function iniciarProcesoFacturaPedido() {
 		if (window.PedidoProcesoOverlay) {
 			PedidoProcesoOverlay.iniciar(mensajesProcesoFacturaPedido, 'Facturando pedido…');
@@ -2116,8 +2136,14 @@
 			return false;
 		}
 
+		if (!tomarEmisionComprobantePedido()) {
+			return;
+		}
+
 		if (typeof window.ejecutarSiPadronOperacionOk === 'function') {
-			window.ejecutarSiPadronOperacionOk(cliente_id, emitirFacturaPedidoDesdeModal);
+			window.ejecutarSiPadronOperacionOk(cliente_id, emitirFacturaPedidoDesdeModal, {
+				onBloqueado: liberarEmisionComprobantePedido
+			});
 			return;
 		}
 
@@ -2179,6 +2205,7 @@
 			.done(function (data) {
 				mostrarResultadoFacturaPedido(data, function (exito) {
 					if (!exito) {
+						liberarEmisionComprobantePedido();
 						return;
 					}
 
@@ -2198,6 +2225,8 @@
 					errores: [msg],
 					exito: false,
 					codigosOk: [],
+				}, function () {
+					liberarEmisionComprobantePedido();
 				});
 			});
 	}

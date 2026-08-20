@@ -124,6 +124,8 @@ final class ArcaMtxcaComprobanteTotalesSupport
                 if ($indices !== [] && abs($difNeto) <= self::tolerancia($objetivo['neto'], count($indices))) {
                     $ultimo = $indices[array_key_last($indices)];
                     $filas[$ultimo]['neto'] = round((float) $filas[$ultimo]['neto'] + $difNeto, 2);
+                } elseif ($difNeto < 0 && self::absorberDescuentoEnFila($filas, $indices, $difNeto)) {
+                    $indices = self::indicesPorCondicion($filas, $codigo);
                 } else {
                     $filas[] = self::filaAjuste($codigo, $objetivo['alicuota'], $difNeto);
                     $indices = self::indicesPorCondicion($filas, $codigo);
@@ -269,21 +271,62 @@ final class ArcaMtxcaComprobanteTotalesSupport
     }
 
     /**
+     * Descuento de cabecera mayor a la tolerancia: baja el neto de la línea más grande
+     * (precio unitario queda >= 0 vía importeBonificacion). MTXCA rechaza precioUnitario < 0.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @param  list<int>  $indices
+     */
+    private static function absorberDescuentoEnFila(array &$filas, array $indices, float $difNeto): bool
+    {
+        if ($indices === [] || $difNeto >= 0) {
+            return false;
+        }
+
+        $absorber = $indices[0];
+        $maxNeto = (float) ($filas[$absorber]['neto'] ?? 0);
+        foreach ($indices as $i) {
+            $neto = (float) ($filas[$i]['neto'] ?? 0);
+            if ($neto > $maxNeto) {
+                $maxNeto = $neto;
+                $absorber = $i;
+            }
+        }
+
+        if ($maxNeto + $difNeto <= 0.009) {
+            return false;
+        }
+
+        $filas[$absorber]['neto'] = round($maxNeto + $difNeto, 2);
+        $filas[$absorber]['bonificacion'] = round(
+            (float) ($filas[$absorber]['bonificacion'] ?? 0) + abs($difNeto),
+            2,
+        );
+
+        return true;
+    }
+
+    /**
      * @return array<string, mixed>
      */
     private static function filaAjuste(int $codigo, float $alicuota, float $neto): array
     {
+        $neto = round($neto, 2);
+        $esDescuento = $neto < 0;
+
         return [
             'codigo' => '',
-            'descripcion' => $neto < 0 ? 'Bonificación' : 'Conceptos facturados',
+            'descripcion' => $esDescuento ? 'Bonificación' : 'Conceptos facturados',
             'cantidad' => 1.0,
             'codigo_unidad_medida' => 7,
-            'precio_lista' => round($neto, 2),
-            'bonificacion' => 0.0,
+            'precio_lista' => $esDescuento ? 0.0 : $neto,
+            'bonificacion' => $esDescuento ? abs($neto) : 0.0,
             'codigo_condicion_iva' => $codigo,
             'alicuota' => $alicuota,
-            'neto' => round($neto, 2),
+            'neto' => $neto,
             'iva' => round($neto * $alicuota / 100, 2),
+            'codigo_mtx' => '7790000000000',
+            'unidades_mtx' => 1,
         ];
     }
 
