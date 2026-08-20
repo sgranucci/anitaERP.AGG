@@ -1,6 +1,6 @@
 .acc-page {
     margin: -15px -15px 0;
-    padding-bottom: 96px;
+    padding-bottom: 112px;
 }
 .acc-hero {
     background: #1B4F72;
@@ -138,7 +138,7 @@
 .acc-pane-head h2,
 .acc-board-head h3,
 .acc-recientes h3 {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 700;
     margin: 0;
     text-transform: uppercase;
@@ -157,6 +157,10 @@
     border-bottom: 1px solid #EAECEE;
     background: #FBFCFC;
 }
+.acc-pane-tools .form-control {
+    font-size: 13px;
+    height: 36px;
+}
 .acc-pane-tools-deuda .form-control:first-child { flex: 1; }
 .acc-pane-tools-deuda select { max-width: 210px; }
 .acc-pane-body {
@@ -166,10 +170,10 @@
 }
 .acc-row {
     display: grid;
-    grid-template-columns: 28px 64px minmax(0, 1fr) 118px;
-    gap: 8px;
+    grid-template-columns: 28px 72px minmax(0, 1fr) 156px;
+    gap: 10px;
     align-items: center;
-    padding: 10px 14px;
+    padding: 12px 16px;
     border-bottom: 1px solid #EAECEE;
     cursor: pointer;
     border-left: 3px solid transparent;
@@ -202,7 +206,7 @@
 .acc-row.is-exact .acc-etiqueta::after {
     content: "igual";
     margin-left: 6px;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: .04em;
     text-transform: uppercase;
@@ -214,17 +218,17 @@
 .acc-row .acc-etiqueta {
     font-weight: 600;
     color: #1B2631;
-    font-size: 13px;
+    font-size: 15px;
 }
 .acc-row .acc-fecha {
-    font-size: 12px;
+    font-size: 13px;
     font-weight: 600;
     color: #1A5276;
     font-variant-numeric: tabular-nums;
     margin-top: 1px;
 }
 .acc-row .acc-meta {
-    font-size: 11px;
+    font-size: 12px;
     color: #5D6D7E;
 }
 .acc-row .acc-chips {
@@ -234,9 +238,9 @@
     margin-top: 4px;
 }
 .acc-chip {
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 600;
-    padding: 1px 6px;
+    padding: 2px 7px;
     border: 1px solid #AED6F1;
     color: #1A5276;
     background: #EAF2F8;
@@ -271,11 +275,11 @@
 .acc-row .acc-saldo {
     font-weight: 700;
     font-variant-numeric: tabular-nums;
-    font-size: 14px;
+    font-size: 16px;
     color: #1B2631;
 }
 .acc-row .acc-saldo-sub {
-    font-size: 11px;
+    font-size: 12px;
     color: #5D6D7E;
     font-variant-numeric: tabular-nums;
 }
@@ -293,15 +297,15 @@
 }
 .acc-progress.is-manual > span { background: #8E44AD; }
 .acc-row input[type="number"] {
-    height: 32px;
-    font-size: 12px;
+    height: 34px;
+    font-size: 13px;
     text-align: right;
-    width: 110px;
+    width: 132px;
     margin-left: auto;
 }
 .acc-badge {
     display: inline-block;
-    font-size: 10px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: .04em;
     text-transform: uppercase;
@@ -326,7 +330,7 @@
     padding: 48px 16px;
     text-align: center;
     color: #7F8C8D;
-    font-size: 13px;
+    font-size: 14px;
 }
 .acc-board,
 .acc-recientes {
@@ -351,20 +355,20 @@
 .acc-board-body { padding: 8px 8px 12px; }
 .acc-pair {
     display: grid;
-    grid-template-columns: 72px minmax(0, 1fr) 16px minmax(0, 1fr) 88px 88px 108px 32px;
-    gap: 8px;
+    grid-template-columns: 80px minmax(0, 1fr) 20px minmax(0, 1fr) 132px 120px 148px 36px;
+    gap: 10px;
     align-items: center;
-    padding: 8px 10px;
+    padding: 10px 12px;
     border-bottom: 1px solid #EAECEE;
 }
 .acc-pair:last-child { border-bottom: 0; }
 .acc-pair .acc-pair-nom {
-    font-size: 13px;
+    font-size: 14px;
     font-weight: 600;
     color: #1B2631;
 }
 .acc-pair .acc-pair-meta {
-    font-size: 11px;
+    font-size: 12px;
     color: #7F8C8D;
 }
 .acc-pair .acc-pair-arrow {
@@ -373,22 +377,26 @@
     text-align: center;
 }
 .acc-pair input[type="number"] {
-    height: 32px;
-    font-size: 12px;
+    height: 36px;
+    font-size: 14px;
     text-align: right;
+    min-width: 0;
+    width: 100%;
 }
 .acc-pair .acc-pair-dc {
-    font-size: 11px;
+    font-size: 13px;
     font-weight: 600;
     text-align: right;
     color: #7F8C8D;
+    white-space: nowrap;
 }
 .acc-pair .acc-pair-dc.is-loss { color: #C0392B; }
 .acc-pair .acc-pair-dc.is-gain { color: #1E8449; }
 .acc-pair .acc-pair-equiv {
-    font-size: 10px;
+    font-size: 12px;
     color: #7F8C8D;
     text-align: right;
+    white-space: nowrap;
 }
 .acc-dock-stat #acc-dock-dc.is-loss { color: #F5B7B1; }
 .acc-dock-stat #acc-dock-dc.is-gain { color: #ABEBC6; }
@@ -401,24 +409,33 @@
     z-index: 20;
     background: #154360;
     color: #F4F6F7;
-    padding: 12px 24px;
+    padding: 14px 24px;
     display: flex;
     align-items: center;
-    gap: 24px;
+    flex-wrap: wrap;
+    gap: 28px;
     margin: 0 -15px;
 }
 .acc-dock .acc-dock-stat {
     font-size: 12px;
     color: #D4E6F1;
+    flex: 0 0 auto;
+    min-width: 148px;
 }
 .acc-dock .acc-dock-stat strong {
     display: block;
-    font-size: 18px;
+    font-size: 22px;
     color: #fff;
     font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    letter-spacing: .01em;
+    line-height: 1.2;
+    margin-top: 2px;
 }
 .acc-dock .acc-bar {
-    flex: 1;
+    flex: 1 1 80px;
+    min-width: 48px;
+    max-width: 160px;
     height: 8px;
     background: #1B4F72;
     overflow: hidden;

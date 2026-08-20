@@ -18,7 +18,7 @@
         omitidosDeuda: {},
         omitidosCredito: {},
         verOtrasEmpresas: false,
-        verOtrasMonedas: false
+        verOtrasMonedas: true
     };
 
     var csrf = $('meta[name="csrf-token"]').attr('content') || $('input[name="_token"]').val();
@@ -848,7 +848,7 @@
     function actualizarBotonOtrasMonedas() {
         var n = itemsOtrasMonedas();
         var $btn = $('#btn-acc-otras-monedas');
-        $btn.toggleClass('acc-hidden', n === 0 && !state.verOtrasMonedas)
+        $btn.toggleClass('acc-hidden', n === 0)
             .toggleClass('is-on', !!state.verOtrasMonedas);
         $('#acc-otras-mon-count').text(n);
         $btn.find('.acc-otras-mon-label').text(state.verOtrasMonedas ? 'Ocultar otras monedas' : 'Ver otras monedas');
@@ -925,7 +925,6 @@
 
     function seleccionarCredito(id) {
         state.creditoActivo = Number(id) || 0;
-        state.verOtrasMonedas = false;
         sincronizarCotLiq(creditoById(state.creditoActivo));
         pintar();
     }

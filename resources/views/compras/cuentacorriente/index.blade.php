@@ -57,7 +57,7 @@ $limpiarUrl = route('listar_cuentacorriente_proveedor', array_merge(
         @include('includes.mensaje')
         <div class="card card-info">
             <div class="card-header">
-                <h3 class="card-title">Cuenta Corriente Proveedor: {{ $nombreproveedor }}</h3>
+                <h3 class="card-title">Cuenta Corriente Proveedor: @if(($codigoproveedor ?? '') !== ''){{ $codigoproveedor }} — @endif{{ $nombreproveedor }}</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @if (can('aplicar-cuentacorriente-proveedor', false))
                         <a href="{{ route('aplicacion_cuentacorriente_proveedor', ['proveedor_id' => $id]) }}" class="btn btn-light btn-sm mr-1">

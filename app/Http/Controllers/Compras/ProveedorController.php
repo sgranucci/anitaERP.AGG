@@ -938,6 +938,7 @@ class ProveedorController extends Controller
             $view = \View::make('compras.cuentacorriente.listado', compact(
                 'cuentacorriente',
                 'nombreproveedor',
+                'codigoproveedor',
                 'modoVista',
                 'saldosPorMoneda',
                 'equivalentePesos',
@@ -957,13 +958,13 @@ class ProveedorController extends Controller
 
         case 'EXCEL':
             return (new ProveedorCuentacorrienteListadoExport($this->proveedor_cuentacorrienteRepository))
-                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldosPorMoneda, $monedaId, false, $filtros, $expresion, $equivalentePesos)
+                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldosPorMoneda, $monedaId, false, $filtros, $expresion, $equivalentePesos, $codigoproveedor)
                 ->download('cuentacorriente_proveedor.xlsx');
             break;
 
         case 'CSV':
             return (new ProveedorCuentacorrienteListadoExport($this->proveedor_cuentacorrienteRepository))
-                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldosPorMoneda, $monedaId, true, $filtros, $expresion, $equivalentePesos)
+                ->parametros($busqueda, (int) $proveedor_id, $modoVista, $nombreproveedor, $saldosPorMoneda, $monedaId, true, $filtros, $expresion, $equivalentePesos, $codigoproveedor)
                 ->download('cuentacorriente_proveedor.csv', \Maatwebsite\Excel\Excel::CSV);
             break;
 

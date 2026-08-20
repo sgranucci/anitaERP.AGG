@@ -19,7 +19,7 @@
     $tituloReporte = $modoDeuda
         ? 'Deuda de proveedores (facturas impagas)'
         : 'Cuenta corriente de proveedores';
-    $subtitulo = 'Proveedor: '.($nombreproveedor ?? '')
+    $subtitulo = 'Proveedor: '.trim((($codigoproveedor ?? '') !== '' ? $codigoproveedor.' — ' : '').($nombreproveedor ?? ''))
         .' · Saldo: '.CuentacorrienteSaldosPorMoneda::formatearResumen($saldosPorMoneda, 'saldo_cc')
         .' · Deuda: '.CuentacorrienteSaldosPorMoneda::formatearResumen($saldosPorMoneda, 'deuda')
         .' · Equiv. '.$abrevLocal.' (TC compr.): '.CuentacorrienteSaldosPorMoneda::formatearMonto((float) ($equivalentePesos['saldo_cc'] ?? 0), $abrevLocal);

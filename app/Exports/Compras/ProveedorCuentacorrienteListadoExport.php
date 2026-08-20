@@ -40,6 +40,8 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
 
     private string $nombreProveedor = '';
 
+    private string $codigoProveedor = '';
+
     /** @var list<array{moneda_id: int, abreviatura: string, saldo_cc: float, deuda: float}> */
     private array $saldosPorMoneda = [];
 
@@ -94,7 +96,7 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
         $titulo = $modoDeuda
             ? 'Deuda de proveedores (facturas impagas)'
             : 'Cuenta corriente de proveedores';
-        $subtitulo = 'Proveedor: '.$this->nombreProveedor;
+        $subtitulo = 'Proveedor: '.trim(($this->codigoProveedor !== '' ? $this->codigoProveedor.' — ' : '').$this->nombreProveedor);
 
         return view('exports.compras.cuentacorrienteproveedorindex', [
             'filas' => $filas,
@@ -261,11 +263,13 @@ class ProveedorCuentacorrienteListadoExport implements FromView, ShouldAutoSize,
         array $filtros = [],
         string $expresion = CuentacorrienteSaldosPorMoneda::EXPRESION_ORIGEN,
         array $equivalentePesos = [],
+        string $codigoProveedor = '',
     ): self {
         $this->busqueda = $busqueda;
         $this->proveedorId = $proveedorId;
         $this->modoVista = ProveedorCuentacorrientePreferenciasUsuario::resolverModoVista($modoVista);
         $this->nombreProveedor = $nombreProveedor;
+        $this->codigoProveedor = $codigoProveedor;
         $this->saldosPorMoneda = $saldosPorMoneda;
         $this->monedaId = $monedaId;
         $this->esCsv = $esCsv;
