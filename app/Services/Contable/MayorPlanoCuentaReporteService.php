@@ -7,9 +7,9 @@ use App\Support\Contable\MayorConcepto\MayorConceptoMonedaConverter;
 use App\Support\Contable\MayorConceptoListadoFiltros;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaComprobanteEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCentrocostoFiltroSupport;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaEmisorEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaOrdencompraEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaProcesador;
-use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaProveedorEnricher;
 use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -24,7 +24,7 @@ class MayorPlanoCuentaReporteService
         private readonly MayorConceptoMonedaConverter $monedaConverter,
         private readonly EmpresaRepositoryInterface $empresaRepository,
         private readonly MayorPlanoCuentaOrdencompraEnricher $ordencompraEnricher,
-        private readonly MayorPlanoCuentaProveedorEnricher $proveedorEnricher,
+        private readonly MayorPlanoCuentaEmisorEnricher $emisorEnricher,
         private readonly MayorPlanoCuentaComprobanteEnricher $comprobanteEnricher,
     ) {
     }
@@ -330,7 +330,7 @@ class MayorPlanoCuentaReporteService
         $filas = $this->ordencompraEnricher->enriquecer($filas);
         $filas = $this->comprobanteEnricher->enriquecer($filas);
         $filas = $this->completarNroOcDesdeIds($filas);
-        $filas = $this->proveedorEnricher->enriquecer($filas);
+        $filas = $this->emisorEnricher->enriquecer($filas);
 
         if ($filtros !== []) {
             $filas = MayorPlanoCuentaListadoFiltros::aplicarFiltroTexto(

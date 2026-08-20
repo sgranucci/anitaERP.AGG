@@ -344,6 +344,8 @@
                                 'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
                                 'puede_ver_ordencompra' => $puede_ver_ordencompra ?? false,
                                 'puede_ver_proveedor' => $puede_ver_proveedor ?? false,
+                                'puede_ver_cliente' => $puede_ver_cliente ?? false,
+                                'puede_ver_cuentacaja' => $puede_ver_cuentacaja ?? false,
                                 'puede_ver_comprobante_proveedor' => $puede_ver_comprobante_proveedor ?? false,
                                 'puede_ver_factura' => $puede_ver_factura ?? false,
                                 'puede_ver_remesa' => $puede_ver_remesa ?? false,

@@ -120,6 +120,8 @@ class MayorPlanoCuentaController extends Controller
             'puede_ver_cuenta' => can('listar-cuentas-contables', false) || can('editar-cuentas-contables', false),
             'puede_ver_ordencompra' => can('listar-ordencompra', false) || can('editar-ordencompra', false),
             'puede_ver_proveedor' => can('listar-proveedor', false) || can('editar-proveedor', false),
+            'puede_ver_cliente' => can('listar-clientes', false) || can('editar-clientes', false),
+            'puede_ver_cuentacaja' => can('listar-cuentas-de-caja', false) || can('editar-cuentas-de-caja', false),
             'puede_ver_comprobante_proveedor' => can('listar-comprobante-proveedor', false) || can('editar-comprobante-proveedor', false),
             'puede_ver_factura' => can('listar-factura', false) || can('editar-factura', false),
             'puede_ver_remesa' => can('listar-remesa', false) || can('editar-remesa', false),
@@ -287,8 +289,8 @@ class MayorPlanoCuentaController extends Controller
     {
         $userId = (int) (auth()->id() ?? 0);
 
-        // v4: filtro y clasificación por centro de costo.
-        return 'mayor_plano_cuenta_v4_'.$userId.'_'.MayorPlanoCuentaListadoFiltros::firma($filtros);
+        // v5: las líneas guardan la entidad del emisor (proveedor, cliente, cuenta de caja).
+        return 'mayor_plano_cuenta_v5_'.$userId.'_'.MayorPlanoCuentaListadoFiltros::firma($filtros);
     }
 
     /**

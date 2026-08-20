@@ -119,7 +119,7 @@
                 <td>{{ $fila['nro_asiento_fmt'] ?? $fila['nro_asiento'] ?? '' }}</td>
                 <td>{{ $fila['tipo_comp'] ?? '' }}</td>
                 <td>{{ $fila['comprobante'] ?? '' }}</td>
-                <td>{{ $fila['emisor'] ?? '' }}</td>
+                <td>{{ ($fila['emisor_fmt'] ?? '') !== '' ? $fila['emisor_fmt'] : ($fila['emisor'] ?? '') }}</td>
                 <td>{{ $fila['cuit'] ?? '' }}</td>
                 <td>{{ $fila['descripcion'] ?? '' }}</td>
                 <td>

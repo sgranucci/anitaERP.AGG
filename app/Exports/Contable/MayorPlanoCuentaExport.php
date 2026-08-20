@@ -138,6 +138,7 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
         $fmt = [
             'A' => NumberFormat::FORMAT_TEXT,
             'B' => NumberFormat::FORMAT_TEXT,
+            'E' => NumberFormat::FORMAT_TEXT,
             'H' => NumberFormat::FORMAT_TEXT,
             'I' => NumberFormat::FORMAT_TEXT,
             'K' => ExcelFormatoNumero::codigoColumna($formato, 4),
@@ -167,7 +168,7 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
             'B' => 11,  // N.Asi.
             'C' => 5,   // Tip
             'D' => 15,  // Comprobante
-            'E' => 9,   // Emisor
+            'E' => 30,  // Emisor (código — nombre)
             'F' => 13,  // CUIT
             'G' => 32,  // Descripción mov.
             'H' => 20,  // Centro de costo

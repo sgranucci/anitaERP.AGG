@@ -13,6 +13,8 @@
     $puedeVerCuenta = $puede_ver_cuenta ?? false;
     $puedeVerOc = $puede_ver_ordencompra ?? false;
     $puedeVerProveedor = $puede_ver_proveedor ?? false;
+    $puedeVerCliente = $puede_ver_cliente ?? false;
+    $puedeVerCuentacaja = $puede_ver_cuentacaja ?? false;
     $mostrarEmpresa = $multiempresa ?? false;
     $totalColumnas = $mostrarEmpresa ? 17 : 16;
     $colSpanAntesImportes = 12;
@@ -218,13 +220,25 @@
                     @endif
                 </td>
                 <td>
-                    @if ($puedeVerProveedor && (int) ($fila['proveedor_id'] ?? 0) > 0)
-                        <a href="{{ route('editar_proveedor', ['id' => $fila['proveedor_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
-                           target="_blank" rel="noopener" class="text-primary">
-                            {{ $fila['emisor'] ?? '' }}
+                    @php
+                        $textoEmisor = ($fila['emisor_fmt'] ?? '') !== ''
+                            ? $fila['emisor_fmt']
+                            : ($fila['emisor'] ?? '');
+                        $hrefEmisor = null;
+                        if ($puedeVerProveedor && (int) ($fila['proveedor_id'] ?? 0) > 0) {
+                            $hrefEmisor = route('editar_proveedor', ['id' => $fila['proveedor_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']);
+                        } elseif ($puedeVerCliente && (int) ($fila['cliente_id'] ?? 0) > 0) {
+                            $hrefEmisor = route('editar_cliente', ['id' => $fila['cliente_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']);
+                        } elseif ($puedeVerCuentacaja && (int) ($fila['cuentacaja_id'] ?? 0) > 0) {
+                            $hrefEmisor = route('editar_cuentacaja', ['id' => $fila['cuentacaja_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']);
+                        }
+                    @endphp
+                    @if ($hrefEmisor)
+                        <a href="{{ $hrefEmisor }}" target="_blank" rel="noopener" class="text-primary">
+                            {{ $textoEmisor }}
                         </a>
                     @else
-                        {{ $fila['emisor'] ?? '' }}
+                        {{ $textoEmisor }}
                     @endif
                 </td>
                 <td>{{ $fila['cuit'] ?? '' }}</td>

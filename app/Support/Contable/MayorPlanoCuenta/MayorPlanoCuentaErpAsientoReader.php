@@ -19,7 +19,7 @@ use Illuminate\Support\Facades\Schema;
 final class MayorPlanoCuentaErpAsientoReader
 {
     private const SUBHIST_EMISOR_CAMPOS = 'subh_empresa,subh_fecha,subh_tipo,subh_letra,subh_sucursal,subh_nro,'
-        .'subh_emisor,subh_nro_operacion';
+        .'subh_emisor,subh_sistema,subh_nro_operacion';
 
     public function __construct(
         private readonly ApiAnita $api = new ApiAnita,
@@ -197,9 +197,13 @@ final class MayorPlanoCuentaErpAsientoReader
                     continue;
                 }
                 $clave = $this->claveDocumentoSubhistDesdeCtamov($fila);
-                $emisor = trim((string) ($indiceEmisores[$clave] ?? ''));
+                $emisor = trim((string) ($indiceEmisores[$clave]['emisor'] ?? ''));
                 if ($emisor !== '') {
                     $fila->erp_emisor_anita = $emisor;
+                    // El subsistema define si ese código es proveedor, cliente o cuenta de caja.
+                    if (trim((string) ($fila->ctav_sistema ?? '')) === '') {
+                        $fila->ctav_sistema = trim((string) ($indiceEmisores[$clave]['sistema'] ?? ''));
+                    }
                     $subhistEmisores++;
                 }
             }
@@ -303,7 +307,7 @@ final class MayorPlanoCuentaErpAsientoReader
      * @param  list<int>  $empresaIds
      * @param  list<int>  $cuentas
      * @param  list<string>  $errores
-     * @return array<string, string>
+     * @return array<string, array{emisor: string, sistema: string}>
      */
     private function cargarEmisoresSubhistMasivo(
         array $empresaIds,
@@ -356,7 +360,10 @@ final class MayorPlanoCuentaErpAsientoReader
                 (string) ($fila->subh_letra ?? ' '),
                 (int) ($fila->subh_sucursal ?? 0),
                 (int) ($fila->subh_nro ?? 0),
-            )] = $emisor;
+            )] = [
+                'emisor' => $emisor,
+                'sistema' => trim((string) ($fila->subh_sistema ?? '')),
+            ];
         }
 
         Log::info('mayor_plano_cuenta.bridge_subhist_erp', [

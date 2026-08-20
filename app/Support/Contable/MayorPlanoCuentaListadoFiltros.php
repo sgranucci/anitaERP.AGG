@@ -257,6 +257,7 @@ class MayorPlanoCuentaListadoFiltros
                 $fila['tipo_comp'] ?? '',
                 $fila['comprobante'] ?? '',
                 $fila['emisor'] ?? '',
+                $fila['emisor_nombre'] ?? '',
                 $fila['cuit'] ?? '',
                 $fila['descripcion'] ?? '',
                 (string) ($fila['nro_oc'] ?? ''),

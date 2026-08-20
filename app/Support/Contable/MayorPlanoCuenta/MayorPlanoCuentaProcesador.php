@@ -846,6 +846,13 @@ class MayorPlanoCuentaProcesador
             : trim((string) ($lineaRef->subd_ref_tipo ?? $subdTipo));
         $sucursal = (int) ($lineaRef->subd_ref_sucursal ?? $lineaRef->subd_sucursal ?? 0);
         $nro = (int) ($lineaRef->subd_ref_nro ?? $lineaRef->subd_nro ?? 0);
+        // subd_emisor es proveedor, cliente o cuenta de caja según el subsistema.
+        $emisor = MayorPlanoCuentaEmisorSupport::resolver(
+            (string) ($lineaRef->subd_sistema ?? ''),
+            $tipoComp,
+            (string) ($lineaRef->subd_emisor ?? ''),
+            (string) ($lineaRef->subd_desc_mov ?? ''),
+        );
 
         return [
             'origen' => 'subdiario',
@@ -873,13 +880,9 @@ class MayorPlanoCuentaProcesador
             'tipo_asiento' => '',
             'balancea' => 'S',
             'nro_oc' => 0,
-            'emisor' => MayorPlanoCuentaSupport::resolverEmisorProveedor(
-                $tipoComp,
-                (string) ($lineaRef->subd_emisor ?? ''),
-                (string) ($lineaRef->subd_desc_mov ?? ''),
-            ),
-            // Sin subd_emisor el código sale de la descripción: puede no ser un proveedor.
-            'emisor_deducido' => trim((string) ($lineaRef->subd_emisor ?? '')) === '',
+            'emisor' => $emisor['codigo'],
+            'emisor_entidad' => $emisor['entidad'],
+            'emisor_deducido' => $emisor['deducido'],
             'cuit' => '',
             'es_subdiario' => true,
             'importe_ya_convertido' => true,
@@ -905,6 +908,13 @@ class MayorPlanoCuentaProcesador
         $fecha = (int) ($linea->ctav_fecha ?? 0);
         $sucursal = (int) ($linea->ctav_sucursal ?? 0);
         $nro = (int) ($linea->ctav_nro ?? 0);
+        // En ERP histórico, subhist precarga el emisor; ctamov lo deduce de la descripción.
+        $emisor = MayorPlanoCuentaEmisorSupport::resolver(
+            (string) ($linea->ctav_sistema ?? ''),
+            $tipo,
+            (string) ($linea->erp_emisor_anita ?? ''),
+            (string) ($linea->ctav_desc_mov ?? ''),
+        );
 
         return [
             'origen' => 'ctamov',
@@ -932,13 +942,9 @@ class MayorPlanoCuentaProcesador
             'tipo_asiento' => trim((string) ($linea->ctav_tipo_asiento ?? '')),
             'balancea' => trim((string) ($linea->ctav_balancea ?? 'S')) !== '' ? trim((string) ($linea->ctav_balancea ?? 'S')) : 'S',
             'nro_oc' => (int) ($linea->ctav_o_compra ?? 0),
-            'emisor' => MayorPlanoCuentaSupport::resolverEmisorProveedor(
-                $tipo,
-                (string) ($linea->erp_emisor_anita ?? ''),
-                (string) ($linea->ctav_desc_mov ?? ''),
-            ),
-            // En ERP histórico, subhist se precarga en bloque; ctamov deduce desde descripción.
-            'emisor_deducido' => trim((string) ($linea->erp_emisor_anita ?? '')) === '',
+            'emisor' => $emisor['codigo'],
+            'emisor_entidad' => $emisor['entidad'],
+            'emisor_deducido' => $emisor['deducido'],
             'cuit' => '',
             // Solo llegan desde el reader ERP; con Anita los resuelven los enrichers.
             'erp_asiento_id' => (int) ($linea->erp_asiento_id ?? 0),
@@ -1114,6 +1120,7 @@ class MayorPlanoCuentaProcesador
                     (int) ($mov['nro'] ?? 0),
                 ),
                 'emisor' => $mov['emisor'] ?? '',
+                'emisor_entidad' => (string) ($mov['emisor_entidad'] ?? MayorPlanoCuentaEmisorSupport::ENTIDAD_PROVEEDOR),
                 'emisor_deducido' => (bool) ($mov['emisor_deducido'] ?? false),
                 'cuit' => $mov['cuit'] ?? '',
                 'asiento_id' => (int) ($mov['erp_asiento_id'] ?? 0),

@@ -274,30 +274,4 @@ class MayorPlanoCuentaSupport
 
         return $leyenda ?? $descripcion;
     }
-
-    /**
-     * Emisor = código de proveedor (Anita: subd_emisor; COM/DEP en ctamov no lo traen).
-     * Fallback l-mayor.c: primeros dígitos de la descripción (p. ej. "003615 EL SOL…" / "3980-MERCADO…").
-     */
-    public static function resolverEmisorProveedor(
-        string $tipoComprobante,
-        string $emisorOrigen,
-        string $descripcionMovimiento = '',
-    ): string {
-        $emisor = trim($emisorOrigen);
-        if ($emisor !== '') {
-            return $emisor;
-        }
-
-        $tipo = strtoupper(trim($tipoComprobante));
-        if (! in_array($tipo, ['COM', 'DEP'], true)) {
-            return '';
-        }
-
-        if (preg_match('/^\s*(\d+)/', $descripcionMovimiento, $m) !== 1) {
-            return '';
-        }
-
-        return ltrim($m[1], '0') !== '' ? $m[1] : '';
-    }
 }
