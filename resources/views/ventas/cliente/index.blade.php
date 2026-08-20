@@ -6,7 +6,10 @@ Clientes
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ventas/cliente/filtro.js")}}" type="text/javascript"></script>
+@php
+    $clienteFiltroJs = public_path('assets/pages/scripts/ventas/cliente/filtro.js');
+@endphp
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/filtro.js') }}?v={{ file_exists($clienteFiltroJs) ? filemtime($clienteFiltroJs) : time() }}" type="text/javascript"></script>
 @endsection
 
 <?php use App\Helpers\biblioteca;
@@ -35,14 +38,14 @@ use App\Support\Ventas\ClienteListadoFiltros; ?>
                                value="{{ $filtroCodigo }}"
                                placeholder="C&oacute;digo"
                                autocomplete="off"
-                               title="Filtrar por c&oacute;digo de cliente (Enter)">
+                               title="Filtrar por c&oacute;digo de cliente (al tipear)">
                     @endif
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-cliente',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => ClienteListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
                         'limpiarUrl' => route('cliente'),
-                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
+                        'placeholder' => 'Nombre, CUIT, domicilio… (parecido desde 2 letras)',
                         'toggleTarget' => '#panel-filtros-cliente',
                         'toggleId' => 'btn-toggle-filtros-cliente',
                         'inputId' => 'filtro_valor',
@@ -55,10 +58,12 @@ use App\Support\Ventas\ClienteListadoFiltros; ?>
                 @include('ventas.cliente.partials.filtros_listado')
             </form>
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'lista_cliente',
-                    'queryparams' => $filtrosQuery ?? [],
-                ])
+                <div id="cliente-export-toolbar">
+                    @include('includes.exportar-tabla-queryparams', [
+                        'ruta' => 'lista_cliente',
+                        'queryparams' => $filtrosQuery ?? [],
+                    ])
+                </div>
                 <table class="table table-striped table-bordered table-hover table-sm" id="tabla-paginada" style="font-size: 0.8125rem;">
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
@@ -84,84 +89,21 @@ use App\Support\Ventas\ClienteListadoFiltros; ?>
                             <th class="width40" data-orderable="false"></th>
                         </tr>
                     </thead>
-                    <tbody>
-                        @foreach ($clientes as $data)
-							@if ($data->estado == '1')
-                        		<tr class="table-danger">
-							@elseif ($data->estado == 'R')
-                        		<tr class="table-warning">
-							@else
-                        		<tr>
-							@endif
-                            @if ($esBierzo)
-                                <td><small>{{ $data->codigo }}</small></td>
-                            @else
-                                <td>{{ $data->id }}</td>
-                            @endif
-                            <td class="text-truncate" style="max-width: 160px;" title="{{ $data->nombre }}">{{$data->nombre}}</td>
-                            <td class="text-truncate" style="max-width: 110px;" title="{{ trim(($data->cvendedor ?? '').($data->nombrevendedor ? ' - '.$data->nombrevendedor : '')) }}">
-                                <small>
-                                    {{ $data->cvendedor ?? '' }}
-                                    @if (!empty($data->nombrevendedor))
-                                        -{{ $data->nombrevendedor }}
-                                    @endif
-                                </small>
-                            </td>
-                            @if ($esBierzo)
-                                <td class="text-truncate" style="max-width: 110px;" title="{{ trim(($data->ctransporte ?? '').($data->nombretransporte ? '-'.$data->nombretransporte : '')) }}">
-                                    <small>{{$data->ctransporte}}-{{$data->nombretransporte}}</small>
-                                </td>
-                            @endif
-                            <td><small>{{$data->numerodocumento}}</small></td>
-                            <td class="text-truncate" style="max-width: 160px;" title="{{ $data->domicilio }}"><small>{{$data->domicilio}}</small></td>
-                            <td class="text-truncate" style="max-width: 110px;" title="{{ $data->nombrelocalidad ?? '' }}"><small>{{$data->nombrelocalidad ?? ''}}</small></td>
-                            <td class="text-truncate" style="max-width: 110px;" title="{{ $data->nombreprovincia ?? '' }}"><small>{{$data->nombreprovincia ?? ''}}</small></td>
-                            @if (! $esBierzo)
-                                <td><small>{{$data->codigo}}</small></td>
-                            @endif
-                            <td class="text-center p-1">
-                                @if ($data->estado === '1')
-                                    <span class="badge badge-danger" title="Suspendido">S</span>
-                                @elseif ($data->estado === 'R')
-                                    <span class="badge badge-warning text-dark" title="Regularizado: problemas ARCA, facturaci&oacute;n permitida">R</span>
-                                @endif
-                            </td>
-                            <td class="text-center">
-                                @if (!empty($data->facturas_apocrifas))
-                                    <span class="badge badge-danger" title="Facturas apócrifas ARCA">Sí</span>
-                                @elseif (!empty($data->facturas_apocrifas_consulta_at))
-                                    <span class="badge badge-success" title="Consultado {{ $data->facturas_apocrifas_consulta_at }}">No</span>
-                                @else
-                                    <span class="text-muted">—</span>
-                                @endif
-                            </td>
-                            <td>
-                                @if (can('editar-clientes', false))
-                                	<a href="{{route('editar_cliente', ['id' => $data->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
-                                    <i class="fa fa-edit"></i>
-                                	</a>
-								@endif
-                                @if (can('listar-cuentacorriente-cliente', false))
-                                	<a href="{{route('listar_cuentacorriente_cliente', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Cuenta Corriente">
-                                    <i class="fa fa-folder-open"></i>
-                                	</a>
-								@endif
-                       			@if (can('borrar-clientes', false))
-                                    <form action="{{route('eliminar_cliente', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
-                                        @csrf @method("delete")
-                                        <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
-                                            <i class="fa fa-times-circle text-danger"></i>
-                                        </button>
-                                    </form>
-								@endif
-                            </td>
-                        </tr>
-                        @endforeach
+                    <tbody id="cliente-listado-filas">
+                        @include('ventas.cliente.partials.tabla_filas', [
+                            'clientes' => $clientes,
+                            'filtrosQuery' => $filtrosQuery ?? [],
+                            'retornoListadoQuery' => $retornoListadoQuery,
+                            'esBierzo' => $esBierzo,
+                        ])
                     </tbody>
                 </table>
             </div>
         </div>
     </div>
 </div>
-{{ $clientes->appends($filtrosQuery ?? [])->links() }}
+@include('ventas.cliente.partials.paginacion', [
+    'clientes' => $clientes,
+    'filtrosQuery' => $filtrosQuery ?? [],
+])
 @endsection

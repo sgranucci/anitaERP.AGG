@@ -178,7 +178,7 @@ $("input").keydown(function (e){
     if (e.which !== 13 && e.key !== 'Enter') {
         return;
     }
-    if ($(this).is('.codigotransporte')) {
+    if ($(this).is('.codigotransporte, .codigocliente, .codigovendedor, .codigodeposito')) {
         return;
     }
     e.preventDefault();

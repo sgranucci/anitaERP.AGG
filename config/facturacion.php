@@ -73,6 +73,15 @@ switch(strtoupper(config('app.empresa')))
                                               // true netea el descuento en el precio de cada linea de la factura sin mandar descuento resultante al pie
             "IMPUESTO_INTERNO_LISTAPRECIO_POR_EMPRESA" => $impuestoInternoListasPorEmpresa,
             "IMPUESTO_INTERNO_TIPOARTICULO_NOMBRE" => $impuestoInternoTipoArticulo,
+            // Anita de factura pedido: después de responder. ARCA (número + CAE) sigue síncrono.
+            "ANITA_TRAS_RESPUESTA_PEDIDO" => filter_var(env('BIERZO_PEDIDO_ANITA_TRAS_RESPUESTA', true), FILTER_VALIDATE_BOOLEAN),
+            "ANITA_PEDIDO_REGRABAR_HABILITADO" => filter_var(env('BIERZO_PEDIDO_ANITA_REGRABAR', true), FILTER_VALIDATE_BOOLEAN),
+            "ANITA_PEDIDO_REGRABAR_MAX_INTENTOS" => max(1, (int) env('BIERZO_PEDIDO_ANITA_REGRABAR_MAX_INTENTOS', 20)),
+            "ANITA_PEDIDO_REGRABAR_LIMITE" => max(1, (int) env('BIERZO_PEDIDO_ANITA_REGRABAR_LIMITE', 20)),
+            // Último número CAEA forzado por PV (próximo = piso+1). PV 8 no tiene compemis Anita.
+            "CAEA_PISO_NUMERO_POR_CODIGO" => [
+                '00008' => (int) env('FACTURACION_CAEA_PISO_PV_00008', 43),
+            ],
         ];
         break;
     case "AGG":

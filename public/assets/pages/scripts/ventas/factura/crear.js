@@ -216,21 +216,47 @@
 		if (!vendedorId) {
 			return;
 		}
-		if (!$sel.find('option[value="' + vendedorId + '"]').length) {
-			var nombre = (data.vendedores && data.vendedores.nombre)
-				? data.vendedores.nombre
-				: ('Vendedor ' + vendedorId);
-			$sel.append($('<option></option>').attr('value', vendedorId).text(nombre));
+		var nombre = (data.vendedores && data.vendedores.nombre)
+			? data.vendedores.nombre
+			: ('Vendedor ' + vendedorId);
+		var codigo = (data.vendedores && data.vendedores.codigo)
+			? data.vendedores.codigo
+			: '';
+		if ($sel.is('select')) {
+			if (!$sel.find('option[value="' + vendedorId + '"]').length) {
+				$sel.append($('<option></option>').attr('value', vendedorId).text(nombre));
+			}
+			$sel.val(vendedorId);
+			return;
 		}
 		$sel.val(vendedorId);
+		$('#codigovendedor').val(codigo);
+		$('#nombrevendedor').val(nombre);
+		if (typeof actualizarLinkEditarVendedor === 'function') {
+			actualizarLinkEditarVendedor($('.tm-vendedor-campo').first(), vendedorId);
+		}
 	}
 
 	window.aplicarVendedorDesdeCliente = aplicarVendedorDesdeCliente;
+
+	function actualizarLinkEditarClienteFactura(clienteId) {
+		var $link = $('#link-editar-cliente-factura');
+		if (!$link.length) {
+			return;
+		}
+		var id = parseInt(clienteId, 10) || 0;
+		if (id > 0) {
+			$link.attr('href', carpetaBase + '/ventas/cliente/' + id + '/editar?origen=modal_consulta&vista=consulta').removeClass('d-none');
+		} else {
+			$link.attr('href', '#').addClass('d-none');
+		}
+	}
 
    	function asignaDatosCliente(cliente_id, flCambioCliente){
 		if (!cliente_id || !$.isNumeric(cliente_id) || parseInt(cliente_id, 10) <= 0) {
 			return;
 		}
+		actualizarLinkEditarClienteFactura(cliente_id);
 
         $.get(carpetaBase+'/ventas/leercliente/'+cliente_id, function(data){
             const transporte_id = data.transporte_id == null ? 0 : data.transporte_id;
@@ -541,6 +567,7 @@
 			$.get(carpetaBase + '/ventas/leeunpuntoventa/' + puntoVentaDefault, function (data) {
 				$('#actividad_arca_id').val(data.actividad_arca_id);
 				$('#actividad_arca_id').attr('readonly', data.actividad_arca_id > 0);
+				sincronizarEmpresaDesdePuntoVenta(data, true);
 			});
 		}
 
@@ -582,22 +609,66 @@
 
 		$('#tipotransaccion_id').on('change', guardarPreferenciasFactura);
 
-		$("#botonform1").click(function(){
+		$("#botonform1").click(function(e){
+			if (e && typeof e.preventDefault === 'function') {
+				e.preventDefault();
+			}
 			$(".form1").show();
 			$(".formasientoexterno").hide();
+			$("#botonform1").addClass("active");
+			$("#botonform2").removeClass("active");
         });				
-		$("#botonform2").click(function(){
-			// Solo genera el asiento cuando se crea la operacion
-			//if (flCrear || flModificaAsiento)
-			//	generaAsientoContable();
-
+		$("#botonform2").click(function(e){
+			if (e && typeof e.preventDefault === 'function') {
+				e.preventDefault();
+			}
 			$(".form1").hide();
 			$(".formasientoexterno").show();
+			$("#botonform2").addClass("active");
+			$("#botonform1").removeClass("active");
 
 			$("#titulo").html("");
 			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
         });		
 	});
+
+	function esTeclaF1Factura(e) {
+		return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
+	}
+
+	$(document)
+		.off('keydown.facturaF1Consulta', '.codigocliente, #codigocliente, .codigovendedor, #codigovendedor')
+		.on('keydown.facturaF1Consulta', '.codigocliente, #codigocliente, .codigovendedor, #codigovendedor', function (e) {
+			if (!esTeclaF1Factura(e)) {
+				return;
+			}
+			e.preventDefault();
+			e.stopPropagation();
+			var $campo = $(this);
+			if ($campo.is('.codigocliente, #codigocliente')) {
+				$campo.closest('.tm-cliente-campo, .form-group').find('.consultacliente').first().trigger('click');
+				return;
+			}
+			$campo.closest('.tm-vendedor-campo, .form-group').find('.consultavendedor').first().trigger('click');
+		});
+
+	function sincronizarEmpresaDesdePuntoVenta(data, omitirLimpiarDeposito)
+	{
+		var $emp = $('#empresa_id');
+		if (!$emp.length || !data) {
+			return;
+		}
+		var nueva = String(data.empresa_id || '').trim();
+		var actual = String($emp.val() || '').trim();
+		if (nueva === actual) {
+			return;
+		}
+		if (omitirLimpiarDeposito) {
+			window._omitirLimpiarDepositoAlCambiarEmpresa = true;
+		}
+		$emp.val(nueva).trigger('change');
+		window._omitirLimpiarDepositoAlCambiarEmpresa = false;
+	}
 
 	function leePuntoVenta(puntoventa_id)
 	{
@@ -681,9 +752,16 @@
 		// Activa eventos de consulta
 		activa_eventos_consultacliente();
 		activa_eventos_consultaarticulo();
-		if ($('#codigotransporte').length && typeof activa_eventos_consultatransporte === 'function') {
+		if (typeof activa_eventos_consultadeposito === 'function') {
+			activa_eventos_consultadeposito();
+		}
+		if (typeof activa_eventos_consultavendedor === 'function') {
+			activa_eventos_consultavendedor();
+		}
+		if (typeof activa_eventos_consultatransporte === 'function') {
 			activa_eventos_consultatransporte();
 		}
+		$('#tm_deposito_factura .consultadeposito').addClass('factura-carga-bloqueable');
 
 		$('.articulo').on('click', function (event) {
 
@@ -716,6 +794,8 @@
 					$('#actividad_arca_id').attr('readonly', true);
 				else
 					$('#actividad_arca_id').attr('readonly', false);
+
+				sincronizarEmpresaDesdePuntoVenta(data, false);
 			});
         });
 		

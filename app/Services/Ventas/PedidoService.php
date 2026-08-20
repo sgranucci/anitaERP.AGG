@@ -16,6 +16,7 @@ use App\Models\Configuracion\Salida;
 use App\Support\Configuracion\SalidaImpresionFallbackSupport;
 use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
+use App\Support\Ventas\PedidoItemCierreFaltaStockSupport;
 use App\Services\Configuracion\ImpuestoService;
 use App\Services\Stock\Articulo_MovimientoService;
 use App\Services\Stock\PrecioService;
@@ -347,12 +348,20 @@ class PedidoService
 		//$pdfMerger = PDFMerger::init();
 
 		$data = $this->pedidoQuery->leePedidoporId($id);
-		$pedido = $data[0];
-		$nombre_pdf = 'pedido-'.$id.'-'.$pedido->clientes->nombre;
+		$pedido = $data[0] ?? null;
+		if (! $pedido) {
+			return back()->with('errores', ['Pedido no encontrado']);
+		}
+
+		$nombreCliente = preg_replace('/[^\w\-]+/', '_', (string) optional($pedido->clientes)->nombre);
+		$nombre_pdf = 'pedido-'.$id.'-'.$nombreCliente;
 
 		$view =  View::make('exports.ventas.pedido', compact('pedido'))
 			    ->render();
 		$path = storage_path('pdf/pedido');
+		if (! is_dir($path)) {
+			mkdir($path, 0775, true);
+		}
 
         $pdf = App::make('dompdf.wrapper');
         $pdf->setPaper('legal', 'landscape');
@@ -579,6 +588,12 @@ class PedidoService
 
 		if (!array_key_exists('leyenda',$data))
 			$data['leyenda'] = ' ';
+
+		if (! array_key_exists('caja_reales', $data) || $data['caja_reales'] === '' || $data['caja_reales'] === null) {
+			unset($data['caja_reales']);
+		} else {
+			$data['caja_reales'] = max(0, (int) $data['caja_reales']);
+		}
 
 		$articuloIdsAvisoProduccion = [];
 
@@ -1012,6 +1027,11 @@ class PedidoService
 
 		return $estadoPedido;
 	}	
+
+	public function cerrarItemsSinPesadaPorFaltaStock(int $pedidoId): int
+	{
+		return PedidoItemCierreFaltaStockSupport::cerrarItemsSinPesadaDelPedido($pedidoId);
+	}
 
 	public function itemFacturado($pedido_articulo_id)
 	{

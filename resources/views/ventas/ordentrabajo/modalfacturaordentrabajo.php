@@ -51,8 +51,8 @@
                             </select>
                         </div>
                         <div class="form-group row">
-                            <label for="recipient-name" class="col-lg-4 col-form-label">Cantidad de bultos</label>
-                            <input type="number" id="cantidadbulto" name="cantidadbulto" value="0"></input>
+                            <label for="cantidadbulto" class="col-lg-4 col-form-label">Cantidad de bultos</label>
+                            <input type="number" id="cantidadbulto" name="cantidadbulto" value="" min="0" step="1" inputmode="numeric">
                         </div>
                     </div>
                 </div>

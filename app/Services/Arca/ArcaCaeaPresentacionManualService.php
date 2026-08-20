@@ -376,7 +376,6 @@ class ArcaCaeaPresentacionManualService
                 $datos = ArcaCaeaInformeDatosDesdeVentaSupport::construir($venta);
                 if (ArcaCaeaAnitaTipoAfipSupport::esFce((int) ($datos['cbte_tipo'] ?? $tipoAfip))) {
                     $datos['datos_adicionales'] = $this->datosAdicionalesFce($empresaId);
-                    $datos['items_importe_con_iva'] = true;
                 }
             } catch (Throwable $e) {
                 return ['encontrado' => false, 'mensaje' => 'ERP: '.$e->getMessage()];

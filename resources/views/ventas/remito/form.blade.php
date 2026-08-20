@@ -87,6 +87,7 @@
     		</div>
 			<label for="estado" class="col-lg-3 col-form-label">Estado</label>
 			<input type="text" id="estadoremito" name="estadoremito" class="col-lg-3 form-control" readonly value="{{ $remito->estadoremito ?? '' }}">
+			<input type="hidden" id="caja_reales" value="{{ $remito->pedidos?->caja_reales ?? '' }}">
 		</div>
 		<div class="form-group row">
     		<label for="fechaentrega" class="col-lg-3 col-form-label required">Entrega</label>

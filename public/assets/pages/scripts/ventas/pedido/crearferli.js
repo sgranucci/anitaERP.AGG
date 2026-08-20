@@ -1458,9 +1458,13 @@
 		var mercaderia = $('#mercaderia').val();
 		var leyendaexportacion = $('#leyendaexportacion').val();
 
-		if (cantidadbulto < 1 || cantidadbulto > 999999)
+		cantidadbulto = typeof normalizarCantidadBulto === 'function'
+			? normalizarCantidadBulto(cantidadbulto)
+			: (parseInt(cantidadbulto, 10) || 0);
+		$('#cantidadbulto').val(cantidadbulto === 0 ? '' : cantidadbulto);
+		if (cantidadbulto > 999999)
 		{
-			alert("No permite facturar sin cargar bultos");
+			alert("La cantidad de bultos no puede superar 999999");
 			return false;
 		}
 		

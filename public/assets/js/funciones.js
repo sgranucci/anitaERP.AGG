@@ -401,3 +401,37 @@ function formatarCUIT(input) {
     // 4. Actualizar el valor del input
     input.value = value;
 }
+
+function normalizarCantidadBulto(valor) {
+    if (valor === '' || valor === null || valor === undefined) {
+        return 0;
+    }
+    var n = parseInt(String(valor).replace(',', '.').split('.')[0], 10);
+    if (isNaN(n) || n < 0) {
+        return 0;
+    }
+    return n;
+}
+
+function asignarCantidadBultoDesdePedido(totalCajasLineas) {
+    var $campo = $('#cantidadbulto');
+    if (!$campo.length) {
+        return;
+    }
+    var importado = $('#caja_reales').val();
+    if (importado !== '' && importado !== undefined && !isNaN(parseInt(importado, 10))) {
+        $campo.val(normalizarCantidadBulto(importado));
+        return;
+    }
+    $campo.val(normalizarCantidadBulto(totalCajasLineas));
+}
+
+$(document).on('input', '#cantidadbulto', function () {
+    var v = String(this.value || '');
+    if (v.indexOf('.') !== -1 || v.indexOf(',') !== -1) {
+        this.value = v.split(/[.,]/)[0];
+    }
+    if (this.value !== '' && parseInt(this.value, 10) < 0) {
+        this.value = 0;
+    }
+});

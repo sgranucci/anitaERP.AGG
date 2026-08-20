@@ -43,7 +43,7 @@
                        id="filtro_valor_panel"
                        class="form-control form-control-sm"
                        value="{{ $f['valor'] ?? '' }}"
-                       placeholder="Texto (tolera errores de tipeo desde 5 caracteres)"
+                       placeholder="Texto (parecido desde 2 letras, como el modal)"
                        autocomplete="off">
             </div>
             <div class="form-group col-md-auto mb-2">

@@ -255,7 +255,7 @@
 		'Calculando importes de la factura…',
 		'Numerando comprobante…',
 		'Registrando venta en el sistema…',
-		'Grabando en Anita…',
+		'Solicitando CAE en ARCA…',
 	];
 
 	function iniciarProcesoFacturaPedido() {
@@ -1675,6 +1675,17 @@
 		abrirModalEmisionPedidoSiPadronOk();
 	}
 
+	function pesadaNumericaFilaPedido($tr) {
+		var raw = (($tr.find('.pesada').val() || '') + '').replace(',', '.');
+		var n = parseFloat(raw);
+		return isNaN(n) ? 0 : n;
+	}
+
+	function estadoItemPendienteFacturable($tr) {
+		var estadoItem = $tr.find('.estados').val();
+		return estadoItem == 'P' || estadoItem == '0';
+	}
+
 	function generaFacturaAbrirModal()
 	{
 		let itemId, otId;
@@ -1683,21 +1694,32 @@
 		titulofactura_txt = [];
 		pedido_articulo_ids = [];
 		offFactura = 0;
+		window._pedidoItemsSinPesadaExcluidos = 0;
 
 		cliente_id = $("#cliente_id").val();
 		
 		$("#tbody-tabla .articulo_id").each(function(){
+			var $tr = $(this).parents('tr');
+			itemId = $tr.find('.ids').val();
 
-			itemId = $(this).parents('tr').find('.ids').val();
+			if (window.modoEmisionPedido === 'factura') {
+				if (!estadoItemPendienteFacturable($tr)) {
+					return;
+				}
+				if (pesadaNumericaFilaPedido($tr) <= 0) {
+					window._pedidoItemsSinPesadaExcluidos++;
+					return;
+				}
+			}
 			
 			if (!itemFacturado(itemId))
 			{
 				pedido_articulo_ids.push(itemId);
 
-				descripcion_articulo = $(this).parents("tr").find(".descripcionarticulo").val();
-				kilo = $(this).parents("tr").find(".kilo").val();
+				descripcion_articulo = $tr.find(".descripcionarticulo").val();
+				kilo = $tr.find(".kilo").val();
 
-				articulo_id = $(this).parents("tr").find(".articulo_id").val();
+				articulo_id = $tr.find(".articulo_id").val();
 
 				cantidades=[];
 				precios=[];
@@ -1778,24 +1800,29 @@
 		}
 
 		$("#tbody-tabla .articulo_id").each(function(){
-			let estadoItem = $(this).parents('tr').find('.estados').val();
+			var $tr = $(this).parents('tr');
+			let estadoItem = $tr.find('.estados').val();
 
 			if (estadoItem == 'P' || estadoItem == '0')
 			{
+				if (!esRemito && pesadaNumericaFilaPedido($tr) <= 0) {
+					return;
+				}
+
 				agregaRenglonFactura();
 
 				// Asigna variables
 				let articulo_id = $(this).val();
-				let codigoarticulo = $(this).parents("tr").find(".codigoarticulo").val();
-				let descripcionarticulo = $(this).parents("tr").find(".descripcionarticulo").val();
-				let pedido_articulo_id = $(this).parents("tr").find(".ids").val();
-				let unidadmedida = $(this).parents("tr").find(".unidadmedida_id").find(':selected').text();
-				let unidadmedida_id = $(this).parents("tr").find(".unidadmedida_id").val();
-				let caja = $(this).parents("tr").find(".caja").val();
-				let pieza = $(this).parents("tr").find(".pieza").val();
-				let pesada = $(this).parents("tr").find(".pesada").val();
-				let descuentoventa_id = $(this).parents("tr").find(".descuentoventa_id").val();
-				let precio = $(this).parents("tr").find(".precio").val();
+				let codigoarticulo = $tr.find(".codigoarticulo").val();
+				let descripcionarticulo = $tr.find(".descripcionarticulo").val();
+				let pedido_articulo_id = $tr.find(".ids").val();
+				let unidadmedida = $tr.find(".unidadmedida_id").find(':selected').text();
+				let unidadmedida_id = $tr.find(".unidadmedida_id").val();
+				let caja = $tr.find(".caja").val();
+				let pieza = $tr.find(".pieza").val();
+				let pesada = $tr.find(".pesada").val();
+				let descuentoventa_id = $tr.find(".descuentoventa_id").val();
+				let precio = $tr.find(".precio").val();
 
 				$('#factura-pedido-table').find('tr').last().find('.id_fac').val(pedido_articulo_id);
 				$('#factura-pedido-table').find('tr').last().find('.articulo_id_fac').val(articulo_id);
@@ -1846,6 +1873,20 @@
 		let totalpiezaspedido = $("#totalpiezaspedido").val();
 		let totalkilospesados = $("#totalkilospesados").val();
 
+		if (!esRemito) {
+			var totCajasFac = 0;
+			var totPiezasFac = 0;
+			var totPesadaFac = 0;
+			$('#tbody-tabla-factura tr').not('.renglon-total-item-factura').each(function () {
+				totCajasFac += parseFloat($(this).find('.caja_fac').val()) || 0;
+				totPiezasFac += parseFloat($(this).find('.pieza_fac').val()) || 0;
+				totPesadaFac += parseFloat($(this).find('.pesada_fac').val()) || 0;
+			});
+			totalcajaspedido = totCajasFac;
+			totalpiezaspedido = totPiezasFac;
+			totalkilospesados = totPesadaFac;
+		}
+
 		$('#factura-pedido-table').find('tr').last().find('.descripcionarticulo_fac').val("Totales");
 		$('#factura-pedido-table').find('tr').last().find('.descripcionarticulo_fac').css('fontWeight', 'bold');
 		$('#factura-pedido-table').find('tr').last().find('.caja_fac').val(totalcajaspedido);
@@ -1855,7 +1896,11 @@
 		$('#factura-pedido-table').find('tr').last().find('.pieza_fac').css('fontWeight', 'bold');
 		$('#factura-pedido-table').find('tr').last().find('.pesada_fac').css('fontWeight', 'bold');
 
-		$('#cantidadbulto').val(totalcajaspedido);
+		if (typeof asignarCantidadBultoDesdePedido === 'function') {
+			asignarCantidadBultoDesdePedido(totalcajaspedido);
+		} else {
+			$('#cantidadbulto').val(parseInt(totalcajaspedido, 10) || 0);
+		}
 
 		// Arma select de puntos de venta del remito (siempre)
 		selectPuntoVentaRemito.empty();
@@ -1909,17 +1954,6 @@
 			});
 		}
 
-		var token = $('#csrf_token').val();
-		var descuentopie = $('#descuentopie').val();
-		var descuentoimportepie = $('#descuentoimportepie').val();
-		var descuentolinea = $('#descuentolinea').val();
-		var fechafactura = $('#fechafactura').val();
-		var formapago_id = $('#formapago_id').val();
-		var incoterm_id = $('#incoterm_id').val();
-		var mercaderia = $('#mercaderia').val();
-		var cliente_id = $('#cliente_id').val();
-		let pedido_id = $('#pedido_id').val();
-
 		var puntoventa_id = $("#puntoventa_id").val();
 		var listarUri = carpetaBase+"/ventas/leeunpuntoventa/"+puntoventa_id;
 
@@ -1932,51 +1966,106 @@
 				$('#actividad_arca_id').attr('readonly', false);
 		});
 
-		$.post(carpetaBase+"/ventas/calculafacturaporpedido",
-		{
-			pedido_id: pedido_id,
-			pedido_articulo_ids: pedido_articulo_ids,
-			cliente_id: cliente_id,
-			fechafactura: fechafactura,
-			descuentopie: descuentopie,
-			descuentoimportepie: descuentoimportepie,
-			descuentolinea: descuentolinea,
-			formapago_id: formapago_id,
-			incoterm_id: incoterm_id,
-			mercaderia: mercaderia,
-			totalcajaspedido: totalcajaspedido,
-			_token: token
-		},
-		function(data){
-			modal.find('#alert-preview-factura-pedido').addClass('d-none').text('');
+		recalcularPreviewFacturaPedido(modal);
 
-			var errorCalculo = mensajeErrorFacturaPedido(data);
-			if (errorCalculo) {
-				modal.find('#alert-preview-factura-pedido')
-					.removeClass('d-none alert-info alert-success')
-					.addClass('alert alert-warning')
-					.text(errorCalculo);
-				if (window.toastr) {
-					toastr.warning(errorCalculo, 'Preview de factura', { timeOut: 9000, closeButton: true, progressBar: true });
-				} else {
-					alert(errorCalculo);
+	});
+
+	var previewFacturaPedidoXhr = null;
+	var previewFacturaPedidoTimer = null;
+	var previewFacturaPedidoSeq = 0;
+
+	function recalcularPreviewFacturaPedido(modal, opciones)
+	{
+		if (!modal || !modal.length) {
+			modal = $('#facturarPedidoModal');
+		}
+		if (window.modoEmisionPedido === 'remito') {
+			return;
+		}
+		var silencioso = !!(opciones && opciones.silencioso);
+
+		var token = $('#csrf_token').val();
+		var descuentopie = modal.find('#descuentopie').val();
+		var descuentoimportepie = modal.find('#descuentoimportepie').val();
+		var descuentolinea = modal.find('#descuentolinea').val();
+		var fechafactura = modal.find('#fechafactura').val();
+		var formapago_id = modal.find('#formapago_id').val();
+		var incoterm_id = modal.find('#incoterm_id').val();
+		var mercaderia = modal.find('#mercaderia').val();
+		var clienteIdPreview = $('#cliente_id').val();
+		var pedido_id = $('#pedido_id').val();
+		var totalcajaspedido = modal.find('#cantidadbulto').val();
+		var seq = ++previewFacturaPedidoSeq;
+
+		if (previewFacturaPedidoXhr && previewFacturaPedidoXhr.readyState !== 4) {
+			previewFacturaPedidoXhr.abort();
+		}
+
+		previewFacturaPedidoXhr = $.ajax({
+			type: 'POST',
+			url: carpetaBase+"/ventas/calculafacturaporpedido",
+			data: {
+				pedido_id: pedido_id,
+				pedido_articulo_ids: pedido_articulo_ids,
+				cliente_id: clienteIdPreview,
+				fechafactura: fechafactura,
+				descuentopie: descuentopie,
+				descuentoimportepie: descuentoimportepie,
+				descuentolinea: descuentolinea,
+				formapago_id: formapago_id,
+				incoterm_id: incoterm_id,
+				mercaderia: mercaderia,
+				totalcajaspedido: totalcajaspedido,
+				_token: token
+			},
+			success: function(data){
+				if (seq !== previewFacturaPedidoSeq) {
+					return;
 				}
-				return;
-			}
 
-			var lineasFactura = $('#tbody-tabla-factura tr').not('.renglon-total-item-factura').length;
-			if (lineasFactura === 0) {
-				var sinItems = 'No hay ítems pendientes en el pedido para mostrar en la factura.';
-				modal.find('#alert-preview-factura-pedido')
-					.removeClass('d-none alert-info alert-success')
-					.addClass('alert alert-warning')
-					.text(sinItems);
-				if (window.toastr) {
-					toastr.warning(sinItems, 'Preview de factura', { timeOut: 9000, closeButton: true });
+				var errorCalculo = mensajeErrorFacturaPedido(data);
+				if (errorCalculo) {
+					modal.find('#alert-preview-factura-pedido')
+						.removeClass('d-none alert-info alert-success')
+						.addClass('alert alert-warning')
+						.text(errorCalculo);
+					if (!silencioso) {
+						if (window.toastr) {
+							toastr.warning(errorCalculo, 'Preview de factura', { timeOut: 9000, closeButton: true, progressBar: true });
+						} else {
+							alert(errorCalculo);
+						}
+					}
+					return;
 				}
-			}
 
-			$.each(data.conceptostotales, function(index, item) {
+				modal.find('#tbody-tabla-total-factura').empty();
+				modal.find('#alert-preview-factura-pedido').addClass('d-none').text('');
+
+				var lineasFactura = $('#tbody-tabla-factura tr').not('.renglon-total-item-factura').length;
+				var excluidosSinPesada = window._pedidoItemsSinPesadaExcluidos || 0;
+				if (lineasFactura === 0) {
+					var sinItems = excluidosSinPesada > 0
+						? 'No hay ítems pesados para facturar. Los ítems sin pesar se cierran con Falta Stock al emitir, pero hace falta al menos uno pesado.'
+						: 'No hay ítems pendientes en el pedido para mostrar en la factura.';
+					modal.find('#alert-preview-factura-pedido')
+						.removeClass('d-none alert-info alert-success')
+						.addClass('alert alert-warning')
+						.text(sinItems);
+					if (!silencioso && window.toastr) {
+						toastr.warning(sinItems, 'Preview de factura', { timeOut: 9000, closeButton: true });
+					}
+				} else if (excluidosSinPesada > 0) {
+					var avisoExcluidos = excluidosSinPesada === 1
+						? '1 ítem sin pesar no se factura y se cerrará con Falta Stock.'
+						: excluidosSinPesada + ' ítems sin pesar no se facturan y se cerrarán con Falta Stock.';
+					modal.find('#alert-preview-factura-pedido')
+						.removeClass('d-none alert-warning alert-success')
+						.addClass('alert alert-info')
+						.text(avisoExcluidos);
+				}
+
+				$.each(data.conceptostotales || [], function(index, item) {
 					var esTotal = item.concepto === 'Total';
 					if (item.importe != 0 || esTotal)
 					{
@@ -1995,8 +2084,50 @@
 				});
 				$('.tasatotal').css('text-align', 'right');
 				$('.importetotal').css('text-align', 'right');
+			},
+			error: function(xhr, status) {
+				if (status === 'abort' || seq !== previewFacturaPedidoSeq) {
+					return;
+				}
+				var msg = 'No se pudo recalcular el preview de la factura.';
+				if (xhr && xhr.responseJSON) {
+					var errCalc = mensajeErrorFacturaPedido(xhr.responseJSON);
+					if (errCalc) {
+						msg = errCalc;
+					}
+				}
+				modal.find('#alert-preview-factura-pedido')
+					.removeClass('d-none alert-info alert-success')
+					.addClass('alert alert-warning')
+					.text(msg);
+			}
 		});
+	}
 
+	function programarRecalculoPreviewFacturaPedido()
+	{
+		if (window.modoEmisionPedido === 'remito') {
+			return;
+		}
+		if (!$('#facturarPedidoModal').is(':visible')) {
+			return;
+		}
+		clearTimeout(previewFacturaPedidoTimer);
+		previewFacturaPedidoTimer = setTimeout(function () {
+			recalcularPreviewFacturaPedido($('#facturarPedidoModal'), { silencioso: true });
+		}, 350);
+	}
+
+	$(document).on('input change', '#facturarPedidoModal #descuentopie, #facturarPedidoModal #descuentoimportepie', function () {
+		programarRecalculoPreviewFacturaPedido();
+	});
+
+	$(document).on('keydown', '#facturarPedidoModal #descuentopie, #facturarPedidoModal #descuentoimportepie', function (e) {
+		if (e.key === 'Enter' || e.which === 13) {
+			e.preventDefault();
+			clearTimeout(previewFacturaPedidoTimer);
+			recalcularPreviewFacturaPedido($('#facturarPedidoModal'), { silencioso: true });
+		}
 	});
 
 	// Agrega renglon factura
@@ -2143,9 +2274,13 @@
 			return;
 		}
 
-		if (cantidadbulto < 1 || cantidadbulto > 999999)
+		cantidadbulto = typeof normalizarCantidadBulto === 'function'
+			? normalizarCantidadBulto(cantidadbulto)
+			: (parseInt(cantidadbulto, 10) || 0);
+		$('#cantidadbulto').val(cantidadbulto === 0 ? '' : cantidadbulto);
+		if (cantidadbulto > 999999)
 		{
-			alert("No permite facturar sin cargar bultos");
+			alert("La cantidad de bultos no puede superar 999999");
 			return false;
 		}
 
@@ -2239,7 +2374,9 @@
 		var descuentolinea = $('#descuentolinea').val();
 		var fechafactura = $('#fechafactura').val();
 		var leyendafactura = $('#leyendafactura').val();
-		var cantidadbulto = $('#cantidadbulto').val();
+		var cantidadbulto = typeof normalizarCantidadBulto === 'function'
+			? normalizarCantidadBulto($('#cantidadbulto').val())
+			: (parseInt($('#cantidadbulto').val(), 10) || 0);
 		var puntoventaremito_id = $('#puntoventaremito_id').val();
 		var formapago_id = $('#formapago_id').val();
 		var incoterm_id = $('#incoterm_id').val();

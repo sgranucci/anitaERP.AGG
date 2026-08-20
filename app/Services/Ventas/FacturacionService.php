@@ -50,6 +50,9 @@ use App\Models\Stock\Categoria;
 use App\Models\Stock\Linea;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
+use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
+use App\Support\Ventas\PedidoFacturaAnitaDeferSupport;
+use App\Support\Ventas\PedidoItemCierreFaltaStockSupport;
 use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use App\Models\Stock\Talle;
 use App\Models\Stock\Material;
@@ -162,6 +165,8 @@ class FacturacionService
 	protected $coeficienteExtraCliente;
 	protected $flDivide;
 	protected $flGrabaComprobanteDividido;
+	/** @var list<string> Tablas Anita ya presentes: no reinsertar (regrabación selectiva). */
+	protected $anitaOmitirTablas = [];
 	protected $tasaImpuesto;
 	protected $puntoVentaDivision_id;
 	protected $numeroComprobanteDivision;
@@ -338,6 +343,7 @@ class FacturacionService
 		$this->descuentoPie = $data['descuentopie'];
 		$this->descuentoLinea = 0;
 		$this->descuentoImportePie = $data['descuentoimportepie'];
+		$this->anularDescuentoPieSiVillafranca();
 		$this->incoterm_id = $data['incoterm_id'];
 		$fechaFactura = $data['fechafactura'];
 
@@ -381,8 +387,16 @@ class FacturacionService
 		
 			$pedido_articulo = $this->pedido_articuloRepository->find($pedido_articulo_id);
 
+			if (! $pedido_articulo) {
+				continue;
+			}
+
 			if (PedidoEstadoErpSupport::esItemPendienteFacturable($pedido_articulo->estado ?? null))
 			{
+				if ((float) $pedido_articulo->pesada <= 0) {
+					continue;
+				}
+
 				// Trae el articulo
 				$articulo = $this->articuloQuery->traeArticuloPorId($pedido_articulo->articulo_id);
 
@@ -398,9 +412,6 @@ class FacturacionService
 				if ($errorListaprecio !== null) {
 					return $errorListaprecio;
 				}
-
-				if ($pedido_articulo->pesada == 0)
-					return ['error' => 'Artículo '.$articulo->sku.' sin pesar'];
 				
 				$moneda_id = $pedido_articulo->moneda_id;
 				
@@ -435,6 +446,8 @@ class FacturacionService
 						$this->coeficienteExtraCliente = config('facturacion.COEFICIENTE_EXTRA_REPARTO_101');
 					else
 						$this->coeficienteExtraCliente = $cliente->coeficienteextra;
+
+					$this->anularDescuentoPieSiVillafranca();
 				}
 
 				if ($this->flDivide)
@@ -516,6 +529,12 @@ class FacturacionService
 					];
 					$totKilo += $kilo;
 				}
+			}
+		}
+		$this->anularDescuentoPieSiVillafranca();
+		if ($this->omiteDescuentoPieVillafranca()) {
+			foreach ($dataFactura as $i => $item) {
+				$dataFactura[$i]['descuentofinal'] = 0;
 			}
 		}
 		// Arma datos del cliente
@@ -617,7 +636,12 @@ class FacturacionService
 				if ($this->coeficienteCliente < 100)
 				{
 					$this->puntoVentaDivision_id = 0;
-					$retorno1 = Self::generaUnaFacturaPorPedido($data, $cliente, $pedido);
+					$retorno1 = PedidoFacturaAnitaDeferSupport::tomarYProgramar(
+						Self::generaUnaFacturaPorPedido($data, $cliente, $pedido)
+					);
+					if ($this->resultadoFacturaPedidoConError($retorno1)) {
+						return [$retorno1];
+					}
 
 					// Cambia punto de venta de Villa
 					$this->puntoVentaDivision_id = config('facturacion.PUNTOVENTA_DIVISION_ID');
@@ -638,6 +662,9 @@ class FacturacionService
 					// Genera remito
 					$retorno1 = Self::generaUnRemito($data, $cliente, $pedido, config('facturacion.TIPO_REMITO'), 
 						config('facturacion.LETRA_REMITO'), $puntoventaremito->codigo, $puntoventaremito->empresas->codigo);
+					if ($this->resultadoFacturaPedidoConError($retorno1)) {
+						return [$retorno1];
+					}
 
 					// Cambia punto de venta de Villa
 					$this->puntoVentaDivision_id = config('facturacion.PUNTOVENTA_DIVISION_ID');
@@ -647,7 +674,9 @@ class FacturacionService
 				$this->flGrabaComprobanteDividido = true;
 
 				// Graba comprobante dividido (Villafranca / sucursal 15): se emite, pero no se muestra en el OK
-				$retorno2 = Self::generaUnaFacturaPorPedido($data, $cliente, $pedido);
+				$retorno2 = PedidoFacturaAnitaDeferSupport::tomarYProgramar(
+					Self::generaUnaFacturaPorPedido($data, $cliente, $pedido)
+				);
 				$retorno2 = $this->ocultarComprobanteDivididoEnMensaje($retorno2);
 
 				$retorno = [$retorno1, $retorno2];
@@ -658,7 +687,9 @@ class FacturacionService
 			$this->flGrabaComprobanteDividido = false;
 			$this->flDivide = false;
 
-			$retorno = [Self::generaUnaFacturaPorPedido($data, $cliente, $pedido)];
+			$retorno = [PedidoFacturaAnitaDeferSupport::tomarYProgramar(
+				Self::generaUnaFacturaPorPedido($data, $cliente, $pedido)
+			)];
 		}
 
 		return $retorno;
@@ -677,15 +708,12 @@ class FacturacionService
 		$actividad_arca_id = $data['actividad_arca_id'];
 		$pedido_id = $data['pedido_id'];
 
-		if (isset($data['deposito']))
-			$deposito = $data['deposito'];
-		else
-			$deposito = 1;
+		$deposito = $this->depositoIdDesdePayload($data);
 
 		$this->descuentoPie = $data['descuentopie'];
 		$this->descuentoLinea = 0;
 		$this->descuentoImportePie = $data['descuentoimportepie'];
-		$this->cantidadBulto = $data['cantidadbulto'];
+		$this->cantidadBulto = $this->normalizarCantidadBulto($data['cantidadbulto'] ?? 0);
 		$this->puntoventaremito_id = $data['puntoventaremito_id'];
 		$this->formapago_id = $data['formapago_id'];
 		$this->incoterm_id = $data['incoterm_id'];
@@ -866,6 +894,11 @@ class FacturacionService
 						$numeroremito = $this->ventaRepository->traeUltimoNumeroRemito('REM','R',$puntoventaremito->codigo);
 					else	
 						$numeroremito = 0;
+				}
+
+				// Villafranca (comprobante dividido) usa el mismo número que la FAC de Bierzo.
+				if ($this->flGrabaComprobanteDividido && (int) $this->numeroComprobanteDivision > 0) {
+					$numero = (int) $this->numeroComprobanteDivision;
 				}
 
 				if ($numeroremito === 'error') {
@@ -1151,40 +1184,86 @@ class FacturacionService
 					// Marca Pedido como facturado (si aplica)
 					$pedidoIdMarcar = $ventaPedidoId ?: $pedido_id;
 					if ($pedidoIdMarcar) {
+						PedidoItemCierreFaltaStockSupport::cerrarItemsSinPesadaDelPedido((int) $pedidoIdMarcar);
 						$this->pedidoRepository->update(['estadopedido' => 'Facturado'], $pedidoIdMarcar);
 					}
 
+					$anitaPendientePedido = null;
+					$vencaePendientePedido = null;
+					$deferAnitaPedido = PedidoFacturaAnitaDeferSupport::debeDiferir();
+
 					if ($puntoventa->modofacturacion != 'M' || $this->flGrabaComprobanteDividido)
 					{
-						// Graba anita por pedido/remito
 						$anitaPedidoId = (int) ($pedidoIdMarcar ?: 0);
-						$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, $puntoventaremito->codigo, $numeroremito,
-									$venta, $dataCAE, $conceptosTotales, $cuentaCorriente, $dataFactura, $signo,
-									$codigoTipoTransaccion, $anitaPedidoId,
-									true, 0, 0, $referenciaFactura, $empresa->codigo,
-									null, null, false, false, false, false, $puntoventa->modofacturacion ?? null);
+						$codigoPuntoventaRemito = $puntoventaremito->codigo ?? 0;
 
-						if (isset($anita['error']))
-						{
-							if ($anita['error'] == 'Error')
-								throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
+						if ($deferAnitaPedido) {
+							$anitaPendientePedido = [
+								'puntoventa_codigo' => $puntoventa->codigo,
+								'letra' => $letra,
+								'puntoventaremito_codigo' => $codigoPuntoventaRemito,
+								'numeroremito' => $numeroremito,
+								'venta' => $venta,
+								'data_cae' => $dataCAE,
+								'conceptos_totales' => $conceptosTotales,
+								'cuentacorriente' => $cuentaCorriente,
+								'data_factura' => $dataFactura,
+								'signo' => $signo,
+								'codigo_tipo_transaccion' => $codigoTipoTransaccion,
+								'pedido_id' => $anitaPedidoId,
+								'referencia_factura' => $referenciaFactura,
+								'empresa_codigo' => $empresa->codigo,
+								'modo_facturacion_puntoventa' => $puntoventa->modofacturacion ?? null,
+								'path_sistema' => $this->flGrabaComprobanteDividido
+									? PedidoFacturaAnitaArchivosSupport::PATH_VILLAFRANCA
+									: null,
+							];
+						} else {
+							$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, $codigoPuntoventaRemito, $numeroremito,
+										$venta, $dataCAE, $conceptosTotales, $cuentaCorriente, $dataFactura, $signo,
+										$codigoTipoTransaccion, $anitaPedidoId,
+										true, 0, 0, $referenciaFactura, $empresa->codigo,
+										null, null, false, false, false, false, $puntoventa->modofacturacion ?? null);
 
-							if ($anita['error'] == 'Errvend')
-								throw new Exception('No tiene vendedor asignado.');
+							if (isset($anita['error']))
+							{
+								if ($anita['error'] == 'Error')
+									throw new Exception('Error en grabacion anita. '.$anita['mensaje']);
+
+								if ($anita['error'] == 'Errvend')
+									throw new Exception('No tiene vendedor asignado.');
+							}
 						}
 
-						// Solicita generacion comprobante ARCA
-						Self::solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, substr($venta['codigo'], 0, 3), 
-							$letra, $puntoventa, $venta['numerocomprobante'], $fechaFactura, $dataCAE, $vta->id);
+						// ARCA síncrono: numera y valida CAE. vencae a Anita se difiere con la venta.
+						Self::solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, substr($venta['codigo'], 0, 3),
+							$letra, $puntoventa, $venta['numerocomprobante'], $fechaFactura, $dataCAE, $vta->id,
+							$deferAnitaPedido);
+
+						if ($deferAnitaPedido) {
+							$vencaePendientePedido = $this->armarVencaePendienteDesdeCaePendiente([
+								'venta_id' => $vta->id,
+								'tipo_anita' => substr($venta['codigo'], 0, 3),
+								'letra' => $letra,
+								'puntoventa' => $puntoventa,
+								'numero_comprobante' => $venta['numerocomprobante'],
+							]);
+						}
 					}
 					DB::commit();
 
-					return $this->respuestaFacturaPedidoOk($venta['codigo'] ?? '');
+					$ok = $this->respuestaFacturaPedidoOk($venta['codigo'] ?? '');
+					if ($deferAnitaPedido && ($anitaPendientePedido !== null || $vencaePendientePedido !== null)) {
+						$ok['venta_id'] = $vta->id;
+						$ok['anita_pendiente'] = $anitaPendientePedido;
+						$ok['vencae_pendiente'] = $vencaePendientePedido;
+					}
+
+					return $ok;
 				} catch (\Throwable $e) {
 					DB::rollback();
 
-					// Borra factura de anita
-					if ($venta['codigo'] ?? '')
+					if (($venta['codigo'] ?? '') && ! PedidoFacturaAnitaDeferSupport::debeDiferir())
 						self::borraAnita(substr($venta['codigo'], 0, 3), $letra, 
 											$puntoventa->codigo, $venta['numerocomprobante'], $empresa->codigo);
 
@@ -1209,6 +1288,26 @@ class FacturacionService
 		$payload = ['factura' => $codigo];
 
 		return $this->ocultarComprobanteDivididoEnMensaje($payload);
+	}
+
+	private function resultadoFacturaPedidoConError($retorno): bool
+	{
+		return is_array($retorno) && ! empty($retorno['error']);
+	}
+
+	private function omiteDescuentoPieVillafranca(): bool
+	{
+		return (bool) $this->flGrabaComprobanteDividido && EntornoEmpresaSupport::esElBierzo();
+	}
+
+	private function anularDescuentoPieSiVillafranca(): void
+	{
+		if (! $this->omiteDescuentoPieVillafranca()) {
+			return;
+		}
+
+		$this->descuentoPie = 0;
+		$this->descuentoImportePie = 0;
 	}
 
 	private function ocultarComprobanteDivididoEnMensaje($retorno)
@@ -2320,7 +2419,13 @@ class FacturacionService
 							'items' => $dataFactura
 					];
 				}
-				$opcionesEmision = $data['opciones_emision'] ?? null;
+				$opcionesEmision = $data['opciones_emision'] ?? [];
+				if (! is_array($opcionesEmision)) {
+					$opcionesEmision = [];
+				}
+				if (empty($opcionesEmision['deposito_id'])) {
+					$opcionesEmision['deposito_id'] = $this->depositoIdDesdePayload($data);
+				}
 				$graba = Self::grabaFacturaERP($empresa, $codigoTipoTransaccion, $tipotransaccion, $fechaFactura,  
 									$clienteGraba, $totalComprobante, $moneda_id, $cotizacion, $leyenda,  
 									$letra, $puntoventa, $numero, $ordenventa_id, $conceptosTotales, $cuentacorriente,
@@ -2355,15 +2460,12 @@ class FacturacionService
 		if (isset($data['actividad_arca_id']))
 			$actividad_arca_id = $data['actividad_arca_id'];
 
-		if (isset($data['deposito']))
-			$deposito = $data['deposito'];
-		else
-			$deposito = 1;
+		$deposito = $this->depositoIdDesdePayload($data);
 
 		$this->descuentoPie = $data['descuentopie'];
 		$this->descuentoLinea = $data['descuentolinea'];
 		$this->descuentoImportePie = $data['descuentoimportepie'];
-		$this->cantidadBulto = $data['cantidadbulto'];
+		$this->cantidadBulto = $this->normalizarCantidadBulto($data['cantidadbulto'] ?? 0);
 		$this->puntoventaremito_id = $data['puntoventaremito_id'];
 		$this->formapago_id = $data['formapago_id'];
 		$this->incoterm_id = $data['incoterm_id'];
@@ -2978,6 +3080,8 @@ class FacturacionService
 									$dataFactura, $asientoContable, $detalleContable, $signo, $centrocosto_id, $codigoCentrocosto,
 									$dataCAE, $venta_id, $referenciaFactura, $actividad_arca_id, $opcionesEmision = null)
 	{
+		$depositoIdEmision = (int) (is_array($opcionesEmision) ? ($opcionesEmision['deposito_id'] ?? 0) : 0);
+
 		$omitirMovimientoStock = (is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_movimiento_stock']))
 			|| ! \App\Support\Ventas\TipotransaccionOperacionStockSupport::afectaStock(
 				$tipotransaccion->operacionstock ?? \App\Support\Ventas\TipotransaccionOperacionStockSupport::SIN_OPERACION
@@ -3229,6 +3333,9 @@ class FacturacionService
 						'incluyeimpuesto' => $itemEmision['incluyeimpuesto'],
 						'listaprecio_id' => $itemEmision['listaprecio_id'],
 					];
+					if ($depositoIdEmision > 0) {
+						$dataArticuloMovimiento['deposito_id'] = $depositoIdEmision;
+					}
 				}
 
 				$dataEmision = [
@@ -3244,6 +3351,9 @@ class FacturacionService
 					'descuento' => $itemEmision['descuento'], 
 					'descuentointegrado' => $itemEmision['descuentointegrado'],
 				];
+				if ($depositoIdEmision > 0) {
+					$dataEmision['deposito_id'] = $depositoIdEmision;
+				}
 				if (! empty($itemEmision['articulo_id'])) {
 					$dataEmision['articulo_id'] = $itemEmision['articulo_id'];
 				}
@@ -4086,13 +4196,18 @@ class FacturacionService
 			$data['path_sistema'] = '/usr2/villafranca';
 		}
 
-		$errVta = $this->apiCallAnitaEscritura($apiAnita, $data, 'venta insert');
-		if ($errVta !== null) {
-			return $errVta;
+		if (! $this->debeOmitirTablaAnita('venta')) {
+			$errVta = $this->apiCallAnitaEscritura($apiAnita, $data, 'venta insert');
+			if ($errVta !== null) {
+				return $errVta;
+			}
 		}
 
 		// vengrav: gastronomía modo mínimo y facturación Ventas completa
 		foreach ($conceptostotales as $concepto) {
+			if ($this->debeOmitirTablaAnita('vengrav')) {
+				break;
+			}
 			if (strpos($concepto['concepto'], 'Iva') === false) {
 				continue;
 			}
@@ -4131,6 +4246,9 @@ class FacturacionService
 		// Graba venibr
 		foreach ($conceptostotales as $concepto)
 		{
+			if ($this->debeOmitirTablaAnita('venibr')) {
+				break;
+			}
 			if (array_key_exists('jurisdiccion', $concepto))
 			{
 				if ($concepto['jurisdiccion'] > 0)
@@ -4173,8 +4291,12 @@ class FacturacionService
 		$fechaVencimiento = 0;
 		foreach($cuentacorriente as $cuota)
 		{
-			$apiAnita = new ApiAnita();
 			$nroCuota++;
+			$fechaVencimiento = $cuota['fechavencimiento'];
+			if ($this->debeOmitirTablaAnita('climov')) {
+				continue;
+			}
+			$apiAnita = new ApiAnita();
 
 			if ($referenciaFactura != '')
 			{
@@ -4301,9 +4423,11 @@ class FacturacionService
 			$data['path_sistema'] = '/usr2/villafranca';
 		}
 
-		$errComprob = $this->apiCallAnitaEscritura($apiAnita, $data, 'comprob insert');
-		if ($errComprob !== null) {
-			return $errComprob;
+		if (! $this->debeOmitirTablaAnita('comprob')) {
+			$errComprob = $this->apiCallAnitaEscritura($apiAnita, $data, 'comprob insert');
+			if ($errComprob !== null) {
+				return $errComprob;
+			}
 		}
 		}
 
@@ -4513,7 +4637,7 @@ class FacturacionService
 				$data['path_sistema'] = '/usr2/villafranca';
 			}
 
-			if (! $modoMinimoAnita) {
+			if (! $modoMinimoAnita && ! $this->debeOmitirTablaAnita('compaux')) {
 			$errCompaux = $this->apiCallAnitaEscritura($apiAnita, $data, 'compaux insert');
 			if ($errCompaux !== null) {
 				return $errCompaux;
@@ -4552,7 +4676,7 @@ class FacturacionService
 			// Omitir stkmov para renglones marcados (p. ej. opcionales gastronomía $0:
 			// se preservan en compaux como detalle visible, pero el stock se descuenta
 			// vía formula expansion en deposito de insumos por separado).
-			if ($flGrabaStock && ! $omitirStkmovAnita && empty($medida['omitir_stkmov_anita']))
+			if ($flGrabaStock && ! $omitirStkmovAnita && empty($medida['omitir_stkmov_anita']) && ! $this->debeOmitirTablaAnita('stkmov'))
 			{
 				$data = array( 	'tabla' => 'stkmov', 
 							'acc' => 'insert',
@@ -4741,7 +4865,7 @@ class FacturacionService
 		) {
 			$omitirNumeraAnitaFin = true;
 		}
-		if (! $omitirNumeraAnitaFin) {
+		if (! $omitirNumeraAnitaFin && ! $this->debeOmitirTablaAnita('venta')) {
 			$resultadoNumera = $this->ventaRepository->numeraAnita(
 				substr($venta['codigo'], 0, 3),
 				$letra,
@@ -5134,7 +5258,7 @@ class FacturacionService
 			return $numeroForzado - 1;
 		}
 
-		return VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpDesdeTipotransaccion(
+		$ultimoErp = VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpDesdeTipotransaccion(
 			(int) ($puntoventa->id ?? 0),
 			$tipotransaccion->codigo ?? 0,
 			$letra,
@@ -5142,6 +5266,8 @@ class FacturacionService
 			$data['modofacturacion_cliente'] ?? null,
 			isset($data['total_comprobante']) ? (float) $data['total_comprobante'] : null,
 		);
+
+		return CaeaEmisionNumeracionSupport::aplicarPisoCaea((int) ($puntoventa->id ?? 0), $ultimoErp);
 	}
 
 	/**
@@ -5218,6 +5344,88 @@ class FacturacionService
 	 *
 	 * @param  array<string, mixed>  $anitaPendiente
 	 */
+	/**
+	 * Replica en Informix una factura de pedido diferida (El Bierzo, post-respuesta).
+	 *
+	 * @param  array<string, mixed>  $anitaPendiente
+	 */
+	/**
+	 * @param  list<string>  $omitirTablas
+	 */
+	public function ejecutarAnitaPendientePedidoBierzo(array $anitaPendiente, array $omitirTablas = []): void
+	{
+		$venta = $anitaPendiente['venta'] ?? null;
+		if (! is_array($venta)) {
+			throw new \InvalidArgumentException('anita_pendiente de pedido sin datos de venta.');
+		}
+
+		$path = PedidoFacturaAnitaArchivosSupport::pathSistema($anitaPendiente);
+		$this->prepararGrabacionPedidoAnitaDiferida($path, $omitirTablas);
+
+		try {
+			$anita = $this->grabaAnita(
+				$anitaPendiente['puntoventa_codigo'] ?? 0,
+				(string) ($anitaPendiente['letra'] ?? ''),
+				$anitaPendiente['puntoventaremito_codigo'] ?? 0,
+				$anitaPendiente['numeroremito'] ?? 0,
+				$venta,
+				$anitaPendiente['data_cae'] ?? [],
+				$anitaPendiente['conceptos_totales'] ?? [],
+				$anitaPendiente['cuentacorriente'] ?? [],
+				$anitaPendiente['data_factura'] ?? [],
+				$anitaPendiente['signo'] ?? 1.,
+				$anitaPendiente['codigo_tipo_transaccion'] ?? '',
+				(int) ($anitaPendiente['pedido_id'] ?? 0),
+				true,
+				0,
+				0,
+				(string) ($anitaPendiente['referencia_factura'] ?? ''),
+				null,
+				null,
+				false,
+				false,
+				false,
+				true,
+				$anitaPendiente['modo_facturacion_puntoventa'] ?? null,
+			);
+		} finally {
+			$this->anitaOmitirTablas = [];
+		}
+
+		if (is_array($anita) && isset($anita['error'])) {
+			if ($this->esResultadoGrabaAnitaDuplicado($anita)) {
+				return;
+			}
+			if ($anita['error'] === 'Errvend') {
+				throw new \RuntimeException('Error en grabación Anita: el cliente no tiene vendedor asignado.');
+			}
+
+			$detalle = trim((string) ($anita['mensaje'] ?? $anita['error'] ?? 'Error desconocido'));
+
+			throw new \RuntimeException('Error en grabación Anita: '.$detalle);
+		}
+	}
+
+	/**
+	 * @param  list<string>  $omitirTablas
+	 */
+	public function prepararGrabacionPedidoAnitaDiferida(?string $pathSistema, array $omitirTablas = []): void
+	{
+		$this->flGrabaComprobanteDividido = $pathSistema === PedidoFacturaAnitaArchivosSupport::PATH_VILLAFRANCA;
+		$this->anitaOmitirTablas = $omitirTablas;
+	}
+
+	public function resetearGrabacionPedidoAnitaDiferida(): void
+	{
+		$this->anitaOmitirTablas = [];
+		$this->flGrabaComprobanteDividido = false;
+	}
+
+	private function debeOmitirTablaAnita(string $tabla): bool
+	{
+		return in_array($tabla, $this->anitaOmitirTablas, true);
+	}
+
 	public function ejecutarAnitaPendienteGastronomia(array $anitaPendiente): void
 	{
 		$venta = $anitaPendiente['venta'] ?? null;
@@ -5689,6 +5897,19 @@ class FacturacionService
 			}
 		}
 		return $asientoContable;
+	}
+
+	/**
+	 * Depósito de stock del formulario (deposito_id) o fallback de config.
+	 */
+	private function depositoIdDesdePayload(array $data): int
+	{
+		$id = (int) ($data['deposito_id'] ?? $data['deposito'] ?? 0);
+		if ($id > 0) {
+			return $id;
+		}
+
+		return (int) config('facturacion.DEPOSITO_VENTA_ID', 1);
 	}
 
 	private function grabaAsientoContable($asientocontable, $empresa_id, $fecha, $venta_id, $observacion, $centrocosto_id,
@@ -6811,6 +7032,15 @@ class FacturacionService
 		}
 
 		return [$retorno];
+	}
+
+	private function normalizarCantidadBulto(mixed $valor): int
+	{
+		if ($valor === null || $valor === '') {
+			return 0;
+		}
+
+		return max(0, (int) $valor);
 	}
 }
 

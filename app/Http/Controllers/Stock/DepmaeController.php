@@ -62,7 +62,12 @@ class DepmaeController extends Controller
             || can('actualizar-requisicion-sala', false)
             || can('listar-requisicion-sala', false)
             || can('cumplir-requisicion-sala', false)
-            || can('cumplir-requisicion-compra', false);
+            || can('cumplir-requisicion-compra', false)
+            || can('crear-factura', false)
+            || can('editar-factura', false)
+            || can('actualizar-factura', false)
+            || can('listar-factura', false)
+            || can('generar-nota-de-credito', false);
     }
 
     /**

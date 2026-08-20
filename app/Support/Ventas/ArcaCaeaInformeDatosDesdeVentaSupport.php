@@ -232,7 +232,7 @@ final class ArcaCaeaInformeDatosDesdeVentaSupport
                 continue;
             }
 
-            if ($concepto === 'Percepcion IVA') {
+            if (str_starts_with($concepto, 'Percepcion IVA')) {
                 $tributos[] = [
                     'id' => 1,
                     'base_imp' => $base,

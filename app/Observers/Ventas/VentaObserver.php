@@ -9,7 +9,7 @@ class VentaObserver
 {
     public function deleting(Venta $venta): void
     {
-        if ($venta->isForceDeleting()) {
+        if (! method_exists($venta, 'isForceDeleting') || $venta->isForceDeleting()) {
             ArticuloMovimientoEliminacionSupport::eliminarPorVentaId((int) $venta->id);
         }
 

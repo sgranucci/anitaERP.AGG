@@ -8,9 +8,11 @@ use App\Models\Stock\Articulo;
 use App\Models\Ventas\Puntoventa;
 use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
+use App\Support\Ventas\ArcaMtxcaComprobanteTotalesSupport;
 use App\Support\Ventas\CaeaQuincenaSupport;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Support\Facades\Log;
 use SoapClient;
 use SoapFault;
 
@@ -281,18 +283,37 @@ class ArcaMtxcaFacturaElectronicaService
 
         $result = $this->unwrapSoapResponse($raw, 'autorizarComprobanteResponse');
 
-        return $this->parseAutorizacionResponse(
-            $result,
-            'autorizarComprobante',
-            $empresaId,
-            $cuit,
-            $ptoVta,
-            $cbteTipo,
-            (int) $datos['numerocomprobante'],
-            (float) $datos['total'],
-            $client,
-            $ctx,
-        );
+        try {
+            return $this->parseAutorizacionResponse(
+                $result,
+                'autorizarComprobante',
+                $empresaId,
+                $cuit,
+                $ptoVta,
+                $cbteTipo,
+                (int) $datos['numerocomprobante'],
+                (float) $datos['total'],
+                $client,
+                $ctx,
+            );
+        } catch (Exception $e) {
+            $this->logRechazoComprobante('autorizarComprobante', $comprobante, $e);
+
+            throw $e;
+        }
+    }
+
+    /**
+     * ARCA rechaza citando el campo pero no los importes enviados: sin el request en el log
+     * cada rechazo obliga a reconstruir el comprobante a mano.
+     *
+     * @param  array<string, mixed>  $comprobante
+     */
+    private function logRechazoComprobante(string $operacion, array $comprobante, Exception $e): void
+    {
+        Log::error('MTXCA '.$operacion.' rechazado: '.$e->getMessage(), [
+            'comprobante' => $comprobante,
+        ]);
     }
 
     /**
@@ -343,19 +364,25 @@ class ArcaMtxcaFacturaElectronicaService
         }
 
         $result = $this->unwrapSoapResponse($raw, 'informarComprobanteCAEAResponse');
-        $parsed = $this->parseAutorizacionResponse(
-            $result,
-            'informarComprobanteCAEA',
-            $empresaId,
-            $cuit,
-            $ptoVta,
-            $cbteTipo,
-            (int) $datos['numerocomprobante'],
-            (float) $datos['total'],
-            $client,
-            $ctx,
-            false,
-        );
+        try {
+            $parsed = $this->parseAutorizacionResponse(
+                $result,
+                'informarComprobanteCAEA',
+                $empresaId,
+                $cuit,
+                $ptoVta,
+                $cbteTipo,
+                (int) $datos['numerocomprobante'],
+                (float) $datos['total'],
+                $client,
+                $ctx,
+                false,
+            );
+        } catch (Exception $e) {
+            $this->logRechazoComprobante('informarComprobanteCAEA', $comprobante, $e);
+
+            throw $e;
+        }
 
         return [
             'cae' => $caeaNum,
@@ -575,7 +602,7 @@ class ArcaMtxcaFacturaElectronicaService
             $req['arrayOtrosTributos'] = $tributos;
         }
 
-        $items = $this->buildArrayItems($datos['items'] ?? [], $datos);
+        $items = $this->buildArrayItems($datos['items'] ?? [], $datos, $cbteTipo);
         if ($items !== null) {
             $req['arrayItems'] = $items;
         }
@@ -605,7 +632,28 @@ class ArcaMtxcaFacturaElectronicaService
             $req['arrayDatosAdicionales'] = $datosAdic;
         }
 
+        $this->assertTotalesCoherentes($req);
+
         return $req;
+    }
+
+    /**
+     * Corta antes del SOAP cuando el detalle no reproduce la cabecera: ARCA devuelve el
+     * rechazo sin decir qué importe no cierra.
+     *
+     * @param  array<string, mixed>  $req
+     */
+    private function assertTotalesCoherentes(array $req): void
+    {
+        $errores = ArcaMtxcaComprobanteTotalesSupport::inconsistencias($req);
+        if ($errores === []) {
+            return;
+        }
+
+        throw new Exception(
+            'MTXCA — el detalle de ítems no coincide con los totales del comprobante: '
+            .implode(' | ', $errores)
+        );
     }
 
     /**
@@ -630,10 +678,37 @@ class ArcaMtxcaFacturaElectronicaService
         return $out === [] ? null : ['datoAdicional' => $out];
     }
 
-    private function buildArrayItems(array $lineas, array $datos): ?array
+    /**
+     * @param  list<mixed>  $lineas
+     * @param  array<string, mixed>  $datos
+     * @return array{item: list<array<string, mixed>>}|null
+     */
+    private function buildArrayItems(array $lineas, array $datos, int $cbteTipo = 1): ?array
+    {
+        $filas = ArcaMtxcaComprobanteTotalesSupport::conciliar(
+            $this->filasItemsDesdeLineas($lineas),
+            $datos,
+        );
+        if ($filas === []) {
+            return null;
+        }
+
+        $claseB = $this->esComprobanteMtxcaClaseB($cbteTipo);
+
+        return ['item' => array_map(fn (array $fila): array => $this->itemSoapDesdeFila($fila, $claseB), $filas)];
+    }
+
+    /**
+     * Normaliza las líneas del comprobante a magnitudes numéricas (neto sin IVA e IVA por
+     * alícuota real) para poder conciliarlas después contra los totales de cabecera.
+     *
+     * @param  list<mixed>  $lineas
+     * @return list<array<string, mixed>>
+     */
+    private function filasItemsDesdeLineas(array $lineas): array
     {
         if ($lineas === []) {
-            return null;
+            return [];
         }
 
         $articuloIds = [];
@@ -658,7 +733,7 @@ class ArcaMtxcaFacturaElectronicaService
             ? Impuesto::query()->whereIn('id', array_unique($impuestoIds))->get()->keyBy('id')
             : collect();
 
-        $out = [];
+        $filas = [];
         foreach ($lineas as $linea) {
             if (! is_array($linea)) {
                 continue;
@@ -669,97 +744,140 @@ class ArcaMtxcaFacturaElectronicaService
                 continue;
             }
 
-            $precio = (float) ($linea['precio'] ?? 0);
-            $importeItem = round($cantidad * $precio, 2);
-            if ($importeItem <= 0) {
+            $impuesto = ! empty($linea['impuesto_id']) ? $impuestos->get((int) $linea['impuesto_id']) : null;
+            $tasa = $impuesto ? (float) $impuesto->valor : (float) ($linea['tasa_iva'] ?? $linea['tasa'] ?? 0);
+            $codigoCondicionIva = ArcaMtxcaComprobanteTotalesSupport::resolverCodigoCondicion(
+                $impuesto?->codigoarca ?? $linea['codigo_condicion_iva'] ?? $linea['codigoCondicionIVA'] ?? null,
+                $tasa,
+            );
+            $alicuota = ArcaMtxcaComprobanteTotalesSupport::alicuotaPorCodigo($codigoCondicionIva) ?? 0.0;
+
+            $precioLista = $this->precioNetoUnitarioItem($linea, (float) ($linea['precio'] ?? 0), $alicuota);
+            $neto = $this->importeNetoItem($linea, $cantidad, $precioLista);
+            if ($neto <= 0) {
                 continue;
             }
 
-            $impuesto = isset($linea['impuesto_id']) ? $impuestos->get((int) $linea['impuesto_id']) : null;
-            $codigoCondicionIva = (int) ($impuesto->codigoarca ?? 5);
-            $tasa = $impuesto ? (float) $impuesto->valor : 0.0;
-
-            $item = [
+            $filas[] = [
                 'codigo' => (string) ($linea['sku'] ?? ''),
                 'descripcion' => mb_substr((string) ($linea['descripcion'] ?? 'Item'), 0, 250),
-                'cantidad' => $this->decimal($cantidad),
-                'codigoUnidadMedida' => (int) ($linea['codigounidadmedida'] ?? 7),
-                'precioUnitario' => $this->decimal($precio),
-                'importeBonificacion' => $this->decimal(0),
-                'codigoCondicionIVA' => $codigoCondicionIva,
-                'importeItem' => $this->money($importeItem),
-            ];
-
-            $articulo = isset($linea['articulo_id']) ? $articulos->get((int) $linea['articulo_id']) : null;
-            $codigoMtx = trim((string) ($linea['codigo_mtx'] ?? $linea['codigoMtx'] ?? ''));
-            if ($codigoMtx === '' && $articulo !== null) {
-                $codigoMtx = trim((string) ($articulo->nomenclador ?? ''));
-                if ($codigoMtx === '') {
-                    $codigoMtx = trim((string) ($articulo->codigobarra ?? ''));
-                }
-            }
-            if ($codigoMtx !== '') {
-                $unidadesMtx = (int) ($linea['unidades_mtx'] ?? $linea['unidadesMtx'] ?? 0);
-                if ($unidadesMtx <= 0 && $articulo !== null) {
-                    $unidadesMtx = (int) ($articulo->unidadreferenciacodigobarra ?? 0);
-                }
-                if ($unidadesMtx <= 0) {
-                    $unidadesMtx = (int) (preg_replace('/\D+/', '', $codigoMtx) ?: 1);
-                    // Para códigos de barras EAN, unidades de referencia suele ser 1.
-                    if (strlen($codigoMtx) >= 8) {
-                        $unidadesMtx = max(1, (int) ($articulo->unidadreferenciacodigobarra ?? 1));
-                    }
-                }
-                $item['codigoMtx'] = $codigoMtx;
-                $item['unidadesMtx'] = max(1, $unidadesMtx);
-            }
-
-            if ($tasa > 0 && ($linea['incluyeimpuesto'] ?? '1') !== 'N') {
-                $importeIva = isset($linea['importe_iva'])
-                    ? round((float) $linea['importe_iva'], 2)
-                    : round($importeItem * $tasa / 100, 2);
-                if ($importeIva > 0) {
-                    $item['importeIVA'] = $this->money($importeIva);
-                }
-                // MTXCA FCE histórico Bierzo: importeItem = neto + IVA.
-                if (($linea['importe_item_con_iva'] ?? false) || ($datos['items_importe_con_iva'] ?? false)) {
-                    $item['importeItem'] = $this->money($importeItem + $importeIva);
-                }
-            }
-
-            $out[] = ['item' => $item];
-        }
-
-        if ($out === []) {
-            $importeSubtotal = $this->money((float) ($datos['gravado'] ?? 0) + (float) ($datos['exento'] ?? 0) + (float) ($datos['nogravado'] ?? 0));
-            $out[] = [
-                'item' => [
-                    'codigo' => 'GEN',
-                    'descripcion' => 'Conceptos facturados',
-                    'cantidad' => $this->decimal(1),
-                    'codigoUnidadMedida' => 7,
-                    'precioUnitario' => $this->decimal($importeSubtotal),
-                    'importeBonificacion' => $this->decimal(0),
-                    'codigoCondicionIVA' => 5,
-                    'importeItem' => $importeSubtotal,
-                ],
+                'cantidad' => $cantidad,
+                'codigo_unidad_medida' => (int) ($linea['codigounidadmedida'] ?? 7),
+                'precio_lista' => $precioLista,
+                'bonificacion' => max(0.0, round(round($cantidad * $precioLista, 2) - $neto, 2)),
+                'codigo_condicion_iva' => $codigoCondicionIva,
+                'alicuota' => $alicuota,
+                'neto' => $neto,
+                'iva' => $this->importeIvaDesdeNeto($linea, $neto, $alicuota, $codigoCondicionIva) ?? 0.0,
+                'codigo_mtx' => $this->codigoMtxDeLinea($linea, $articulos),
+                'unidades_mtx' => $this->unidadesMtxDeLinea($linea, $articulos),
             ];
         }
 
-        return ['item' => array_column($out, 'item')];
+        return $filas;
+    }
+
+    /**
+     * ARCA valida cada ítem sobre `base = cantidad × precioUnitario − importeBonificacion`:
+     * clase A la toma sin IVA (importeIVA = base × alícuota, importeItem = base × (1 + alícuota))
+     * y clase B con IVA incluido (importeItem = base, sin informar importeIVA).
+     *
+     * @param  array<string, mixed>  $fila
+     * @return array<string, mixed>
+     */
+    private function itemSoapDesdeFila(array $fila, bool $claseB): array
+    {
+        $cantidad = (float) $fila['cantidad'];
+        $neto = round((float) $fila['neto'], 2);
+        $iva = round((float) $fila['iva'], 2);
+        $alicuota = (float) $fila['alicuota'];
+        $importeItem = round($neto + $iva, 2);
+
+        $bonificacion = round((float) ($fila['bonificacion'] ?? 0), 2);
+        if ($claseB && $alicuota > 0) {
+            $bonificacion = round($bonificacion * (1 + $alicuota / 100), 2);
+        }
+
+        $base = $claseB ? $importeItem : $neto;
+        $precioUnitario = $cantidad > 0 ? ($base + $bonificacion) / $cantidad : $base;
+
+        $item = [
+            'codigo' => mb_substr((string) ($fila['codigo'] ?? ''), 0, 50),
+            'descripcion' => (string) ($fila['descripcion'] ?? 'Item'),
+            'cantidad' => $this->decimalCantidad($cantidad),
+            'codigoUnidadMedida' => (int) ($fila['codigo_unidad_medida'] ?? 7),
+            'precioUnitario' => $this->decimalCantidad($precioUnitario),
+            'importeBonificacion' => $this->decimal($bonificacion),
+            'codigoCondicionIVA' => (int) $fila['codigo_condicion_iva'],
+            'importeItem' => $this->money($importeItem),
+        ];
+
+        $codigoMtx = trim((string) ($fila['codigo_mtx'] ?? ''));
+        if ($codigoMtx !== '') {
+            $item['codigoMtx'] = $codigoMtx;
+            $item['unidadesMtx'] = max(1, (int) ($fila['unidades_mtx'] ?? 1));
+        }
+
+        // Clase B: informar importeIVA en el ítem es rechazo (validación 514).
+        if (! $claseB && ArcaMtxcaComprobanteTotalesSupport::esCondicionGravada((int) $fila['codigo_condicion_iva'])) {
+            $item['importeIVA'] = $this->money($iva);
+        }
+
+        return $item;
+    }
+
+    /**
+     * @param  array<string, mixed>  $linea
+     * @param  \Illuminate\Support\Collection<int, Articulo>  $articulos
+     */
+    private function codigoMtxDeLinea(array $linea, $articulos): string
+    {
+        $codigoMtx = trim((string) ($linea['codigo_mtx'] ?? $linea['codigoMtx'] ?? ''));
+        if ($codigoMtx !== '') {
+            return $codigoMtx;
+        }
+
+        $articulo = isset($linea['articulo_id']) ? $articulos->get((int) $linea['articulo_id']) : null;
+        if ($articulo === null) {
+            return '';
+        }
+
+        $codigoMtx = trim((string) ($articulo->nomenclador ?? ''));
+
+        return $codigoMtx !== '' ? $codigoMtx : trim((string) ($articulo->codigobarra ?? ''));
+    }
+
+    /**
+     * @param  array<string, mixed>  $linea
+     * @param  \Illuminate\Support\Collection<int, Articulo>  $articulos
+     */
+    private function unidadesMtxDeLinea(array $linea, $articulos): int
+    {
+        $articulo = isset($linea['articulo_id']) ? $articulos->get((int) $linea['articulo_id']) : null;
+
+        $unidadesMtx = (int) ($linea['unidades_mtx'] ?? $linea['unidadesMtx'] ?? 0);
+        if ($unidadesMtx <= 0 && $articulo !== null) {
+            $unidadesMtx = (int) ($articulo->unidadreferenciacodigobarra ?? 0);
+        }
+
+        return max(1, $unidadesMtx > 0 ? $unidadesMtx : 1);
     }
 
     private function buildSubtotalesIva(array $lista): ?array
     {
-        $subs = [];
+        // Validación 402: no se admiten dos subtotales con el mismo código de alícuota.
+        $porCodigo = [];
         foreach ($lista as $i) {
             if (! is_array($i) || (float) ($i['importe'] ?? 0) == 0.0) {
                 continue;
             }
-            $subs[] = [
-                'codigo' => (int) ($i['id'] ?? 0),
-                'importe' => $this->money($i['importe'] ?? 0),
-            ];
+            $codigo = (int) ($i['id'] ?? 0);
+            $porCodigo[$codigo] = ($porCodigo[$codigo] ?? 0) + (float) ($i['importe'] ?? 0);
+        }
+
+        $subs = [];
+        foreach ($porCodigo as $codigo => $importe) {
+            $subs[] = ['codigo' => $codigo, 'importe' => $this->money($importe)];
         }
 
         if ($subs === []) {
@@ -1507,6 +1625,61 @@ class ArcaMtxcaFacturaElectronicaService
         return $base;
     }
 
+    /**
+     * Clase B: precio con IVA; no informar importeIVA en el ítem.
+     */
+    private function esComprobanteMtxcaClaseB(int $cbteTipo): bool
+    {
+        return in_array($cbteTipo, [6, 7, 8, 206, 207, 208], true);
+    }
+
+    private function precioIncluyeIvaLinea(array $linea): bool
+    {
+        $incluye = (string) ($linea['incluyeimpuesto'] ?? '');
+
+        return $incluye !== '' && $incluye !== 'N' && $incluye !== '2';
+    }
+
+    private function precioNetoUnitarioItem(array $linea, float $precioIngresado, float $tasa): float
+    {
+        $precio = round($precioIngresado, 2);
+        if ($this->precioIncluyeIvaLinea($linea) && $tasa > 0) {
+            return round($precio / (1 + $tasa / 100), 2);
+        }
+
+        return $precio;
+    }
+
+    private function importeNetoItem(array $linea, float $cantidad, float $precioNeto): float
+    {
+        if (isset($linea['totalcondescuento']) && $linea['totalcondescuento'] !== '' && $linea['totalcondescuento'] !== null) {
+            return round((float) $linea['totalcondescuento'], 2);
+        }
+
+        return round($cantidad * $precioNeto, 2);
+    }
+
+    /**
+     * WSMTXCA: importeIVA es obligatorio en cada ítem gravado al pedir CAE (validación 514).
+     * `incluyeimpuesto` solo dice si el precio trae el IVA adentro; no decide si el campo viaja.
+     */
+    private function importeIvaDesdeNeto(array $linea, float $importeNeto, float $tasa, int $codigoCondicionIva): ?float
+    {
+        if (! ArcaMtxcaComprobanteTotalesSupport::esCondicionGravada($codigoCondicionIva)) {
+            return null;
+        }
+
+        if (array_key_exists('importe_iva', $linea) && $linea['importe_iva'] !== null && $linea['importe_iva'] !== '') {
+            return round((float) $linea['importe_iva'], 2);
+        }
+
+        if ($tasa > 0) {
+            return round($importeNeto * $tasa / 100, 2);
+        }
+
+        return 0.0;
+    }
+
     private function money(mixed $v): float
     {
         return round((float) $v, 2);
@@ -1540,5 +1713,14 @@ class ArcaMtxcaFacturaElectronicaService
     private function decimal(mixed $v): string
     {
         return number_format((float) $v, 2, '.', '');
+    }
+
+    /**
+     * Cantidad y precio unitario admiten 6 decimales (DecimalSimpleType 18.6). Redondearlos
+     * a 2 desplaza la base del ítem cuando la cantidad viene en kilos.
+     */
+    private function decimalCantidad(mixed $v): string
+    {
+        return number_format((float) $v, 6, '.', '');
     }
 }

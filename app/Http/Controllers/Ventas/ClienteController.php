@@ -54,6 +54,7 @@ use App\Exports\Ventas\ClienteListadoExport;
 use App\Exports\Ventas\ClienteCuentacorrienteListadoExport;
 use App\Support\Ventas\ClienteListadoFiltros;
 use App\Support\Listado\QueryRetornoListado;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Cuentacorriente\CuentacorrienteSaldosPorMoneda;
 use App\Support\Ventas\ClienteCuentacorrientePreferenciasUsuario;
 use App\Support\Ventas\ArcaPadronImpuestosClienteValidacion;
@@ -147,8 +148,9 @@ class ClienteController extends Controller
         $filtros = ClienteListadoFiltros::resolverDesdeRequest($request);
 
         $clientes = $this->clienteRepository->leeCliente($filtros, true);
+        $esAjax = $request->boolean('ajax') || $request->ajax();
 
-        if ($clientes->isEmpty() && ! ClienteListadoFiltros::tieneCriteriosAplicados($filtros))
+        if (! $esAjax && $clientes->isEmpty() && ! ClienteListadoFiltros::tieneCriteriosAplicados($filtros))
 		{
         	$this->clienteRepository->sincronizarConAnita();
 			$this->cliente_entregaRepository->sincronizarConAnita();
@@ -157,11 +159,41 @@ class ClienteController extends Controller
             $clientes = $this->clienteRepository->leeCliente($filtros, true);
 		}
 
+        $filtrosQuery = ClienteListadoFiltros::paraQueryString($filtros);
+        $retornoListadoQuery = QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery);
+        $esBierzo = EntornoEmpresaSupport::esElBierzo();
+
+        if ($esAjax) {
+            return response()->json([
+                'html' => view('ventas.cliente.partials.tabla_filas', [
+                    'clientes' => $clientes,
+                    'filtrosQuery' => $filtrosQuery,
+                    'retornoListadoQuery' => $retornoListadoQuery,
+                    'esBierzo' => $esBierzo,
+                ])->render(),
+                'paginacion' => view('ventas.cliente.partials.paginacion', [
+                    'clientes' => $clientes,
+                    'filtrosQuery' => $filtrosQuery,
+                ])->render(),
+                'export' => view('includes.exportar-tabla-queryparams', [
+                    'ruta' => 'lista_cliente',
+                    'queryparams' => $filtrosQuery,
+                ])->render(),
+                'filtros_query' => $filtrosQuery,
+                'tiene_criterios' => ClienteListadoFiltros::tieneCriteriosAplicados($filtros),
+                'aviso' => view('includes.listado.filtros_aviso_activos', [
+                    'tieneCriterios' => ClienteListadoFiltros::tieneCriteriosAplicados($filtros),
+                    'limpiarUrl' => route('cliente'),
+                    'showLimpiar' => true,
+                ])->render(),
+            ]);
+        }
+
         return view('ventas.cliente.index', [
             'clientes' => $clientes,
             'busqueda' => $filtros['busqueda'],
             'filtros' => $filtros,
-            'filtrosQuery' => ClienteListadoFiltros::paraQueryString($filtros),
+            'filtrosQuery' => $filtrosQuery,
             'camposFiltro' => ClienteListadoFiltros::CAMPOS,
         ]);
     }

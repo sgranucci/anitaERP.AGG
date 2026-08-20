@@ -25,6 +25,16 @@ final class PedidoEstadoErpSupport
     private const ITEM_ERP = [self::PENDIENTE, self::ANULADO, self::FACTURADO, self::ENTREGADO];
 
     /**
+     * Cabecera lista para facturar en ERP (ignora el estado Anita).
+     *
+     * @return array{estado: string, estadopedido: string}
+     */
+    public static function cabeceraPendiente(): array
+    {
+        return ['estado' => self::PENDIENTE, 'estadopedido' => 'Pendiente'];
+    }
+
+    /**
      * @return array{estado: string, estadopedido: string}
      */
     public static function mapearCabeceraDesdeAnita(?string $estadoAnita): array

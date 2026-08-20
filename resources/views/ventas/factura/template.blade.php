@@ -36,8 +36,8 @@
 			<input type="text" style="text-align: right;" name="precios[]" class="form-control precio" value="" />
 		</td>	
         <td>
-			<button type="button" title="Elimina esta linea" style="padding:0;" class="btn-accion-tabla eliminar tooltipsC">
-        		<i class="fa fa-trash text-danger"></i>
+			<button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar tooltipsC">
+        		<i class="fa fa-times-circle text-danger"></i>
 			</button>
         </td>
 	</tr>

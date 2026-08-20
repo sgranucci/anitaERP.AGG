@@ -149,7 +149,6 @@ final class ArcaCaeaInformeDatosDesdeAnitaSupport
             'tributos' => $tributos,
             'comprobantesasociados' => [],
             'items' => $items,
-            'items_importe_con_iva' => true,
             'datos_adicionales' => $datosAdicionales,
             'caea' => $nroCaea,
         ];

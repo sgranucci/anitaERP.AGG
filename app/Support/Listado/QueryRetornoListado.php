@@ -26,6 +26,7 @@ class QueryRetornoListado
             'filtro_operador',
             'filtro_valor_hasta',
             'filtro_busqueda_rapida',
+            'filtro_codigo',
             'filtro_reparto',
             'fecha_entrega_desde',
             'fecha_entrega_hasta',

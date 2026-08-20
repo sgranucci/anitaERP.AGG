@@ -192,9 +192,9 @@ class PedidoImportarDesdeAnitaService
 
         $zonavtaId = $this->resolverZonavtaId($cab->penm_zonavta ?? null);
 
-        $mapeoEstado = PedidoEstadoErpSupport::mapearCabeceraDesdeAnita(
-            trim((string) ($cab->penm_estado ?? ''))
-        );
+        // Anita ya tiene muchos PED facturados (penm_estado=3/'F'). En pruebas ERP
+        // se importan siempre como pendientes para poder pesada/facturar acá.
+        $mapeoEstado = PedidoEstadoErpSupport::cabeceraPendiente();
 
         $campos = [
             'fecha' => $this->fechaAnitaACarbon($cab->penm_fecha ?? null),
@@ -213,6 +213,7 @@ class PedidoImportarDesdeAnitaService
             'lugarentrega' => trim((string) ($cab->penm_entrega ?? '')),
             'codigo' => $codigo,
             'zonavta_id' => $zonavtaId,
+            'caja_reales' => self::enteroDesdeAnita($cab->penm_caja_reales ?? null),
         ];
 
         $lineasAnita = $this->leerPendmov(
@@ -346,7 +347,7 @@ class PedidoImportarDesdeAnitaService
                 penm_cliente, penm_tipo, penm_letra, penm_sucursal, penm_nro,
                 penm_fecha, penm_fecha_ent, penm_cond_vta, penm_vendedor, penm_zonavta,
                 penm_entrega, penm_dto, penm_expreso, penm_estado, penm_leyenda,
-                penm_dto_integrado
+                penm_dto_integrado, penm_caja_reales
             ',
             'whereArmado' => $where,
         ];
@@ -596,5 +597,18 @@ class PedidoImportarDesdeAnitaService
     private function esc(string $v): string
     {
         return str_replace("'", "''", $v);
+    }
+
+    /**
+     * Anita Informix puede devolver enteros en notación científica (1.0, 2.2e+01).
+     * No hay penv_cajas_reales en pendmov; el dato de bultos finales es penm_caja_reales.
+     */
+    private static function enteroDesdeAnita(mixed $valor): int
+    {
+        if ($valor === null || $valor === '') {
+            return 0;
+        }
+
+        return max(0, (int) round((float) $valor));
     }
 }

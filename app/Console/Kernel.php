@@ -2,6 +2,7 @@
 
 namespace App\Console;
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Interbanking\InterbankingCalendarioSync;
 use Carbon\Carbon;
 use Illuminate\Console\Scheduling\Schedule;
@@ -337,6 +338,19 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(120)
             ->appendOutputTo(storage_path('logs/flash-reporte-agg-distribucion.log'))
             ->when(fn () => (bool) config('caja.flash_reporte_agg.distribucion_habilitada', true));
+
+        $limiteRegrabarAnitaPedido = max(1, (int) config('facturacion.ANITA_PEDIDO_REGRABAR_LIMITE', 20));
+        $schedule->command('ventas:regrabar-anita-pedido', [
+            '--ejecutar' => true,
+            '--limite' => $limiteRegrabarAnitaPedido,
+        ])
+            ->everyTenMinutes()
+            ->runInBackground()
+            ->withoutOverlapping(15)
+            ->appendOutputTo(storage_path('logs/pedido-anita-regrabar.log'))
+            ->when(fn () => EntornoEmpresaSupport::esElBierzo()
+                && (bool) config('facturacion.ANITA_TRAS_RESPUESTA_PEDIDO', true)
+                && (bool) config('facturacion.ANITA_PEDIDO_REGRABAR_HABILITADO', true));
 
         // Flash 14:30 de la jornada de ayer (cerrada). Omite empresa si un usuario ya la cargó.
         $schedule->command('flash:calcular-diario')

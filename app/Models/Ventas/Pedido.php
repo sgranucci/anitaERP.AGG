@@ -24,7 +24,7 @@ class Pedido extends Model implements Auditable
 
     protected $fillable = ['fecha', 'fechaentrega', 'cliente_id', 'condicionventa_id', 'vendedor_id', 'transporte_id', 
 							'mventa_id', 'estado', 'usuario_id', 'leyenda', 'descuento', 'descuentointegrado', 
-							'cliente_entrega_id', 'lugarentrega', 'codigo', 'estadopedido', 'zonavta_id'];
+							'cliente_entrega_id', 'lugarentrega', 'codigo', 'estadopedido', 'caja_reales', 'zonavta_id'];
     protected $table = 'pedido';
 	protected $casts = ['fecha' => 'datetime:d-m-Y',
 						'fechaentrega' => 'datetime'];

@@ -1,6 +1,6 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-    Movimientos de stock
+    Comprobantes de venta
 @endsection
 
 @section("scripts")
@@ -29,10 +29,10 @@
 <script src="{{asset("assets/pages/scripts/ventas/factura/crear-bierzo-items.js")}}" type="text/javascript"></script>
 @endif
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/stock/depmae/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/consulta.js")}}" type="text/javascript"></script>
-@if (config('app.empresa') == 'EL BIERZO')
+<script src="{{asset("assets/pages/scripts/ventas/vendedor/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/transporte/consulta.js")}}" type="text/javascript"></script>
-@endif
 
 <script>
     $(function () {
@@ -40,6 +40,14 @@
             var cliente_id = $(this).val();
             completarCliente_Entrega(cliente_id);
             asignaDatosCliente(cliente_id, true);
+            var $link = $('#link-editar-cliente-factura');
+            if ($link.length) {
+                if (parseInt(cliente_id, 10) > 0) {
+                    $link.attr('href', carpetaBase + '/ventas/cliente/' + cliente_id + '/editar?origen=modal_consulta&vista=consulta').removeClass('d-none');
+                } else {
+                    $link.attr('href', '#').addClass('d-none');
+                }
+            }
             setTimeout(() => {
                 muestraTipoSuspension();			
             }, 1500);
@@ -61,9 +69,9 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
-                <h3 class="card-title">Crear Comprobante de Venta</h3>
+                <h3 class="card-title">Crear comprobante de venta</h3>
                 <div class="card-tools">
                     <a href="{{route('factura')}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
@@ -77,11 +85,9 @@
                     @include('ventas.factura.form', $datos)
                 </div>
                 <div class="card-footer">
-                    <div class="row">
-                        <div class="col-lg-6">
-							<button type="button" onclick="subm()" class="btn btn-success factura-carga-bloqueable" data-padron-accion-factura="1">Guardar</button>
-                        </div>
-                    </div>
+                    <button type="button" onclick="subm()" class="btn btn-success factura-carga-bloqueable" data-padron-accion-factura="1">
+                        <i class="fa fa-save"></i> Guardar
+                    </button>
                 </div>
             </form>
         </div>

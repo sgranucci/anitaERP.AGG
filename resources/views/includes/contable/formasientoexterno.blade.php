@@ -19,13 +19,15 @@
     $totalDebeAsientoExtTxt = $lineasAsiento->isNotEmpty() ? number_format($totalDebeAsientoExt, 2, ',', '.') : '';
     $totalHaberAsientoExtTxt = $lineasAsiento->isNotEmpty() ? number_format($totalHaberAsientoExt, 2, ',', '.') : '';
 @endphp
-<div class="card formasientoexterno" style="display: none">
+<div class="card card-outline card-info formasientoexterno" style="display: none">
     <input type="hidden" name="tipoasiento_id" id="tipoasiento_id" value="{{old('tipoasiento_id', $asientoEdicion?->tipoasiento_id ?? '')}}">
     <input type="hidden" name="fechaasiento" id="fechasiento" value="{{old('fecha', $asientoEdicion?->fecha ?? date('Y-m-d'))}}">
     <input type="hidden" name="observacionasiento" id="observacionasiento" value="{{old('observacion', $asientoEdicion?->observacion ?? '')}}">
     <input type="hidden" name="numeroasiento" value="{{ $asientoEdicion?->numeroasiento ?? '' }}" />
     <input type="hidden" name="idasiento" value="{{ $asientoEdicion?->idasiento ?? '' }}" />
-    <h3>Cuentas</h3>
+        <div class="card-header py-2">
+            <h3 class="card-title mb-0">Cuentas</h3>
+        </div>
     <style>
         #cuenta-asiento-table tfoot.asiento-totales-pie td {
             background-color: #e9ecef;
@@ -41,8 +43,8 @@
         }
     </style>
     <div class="card-body">
-        <table class="table" id="cuenta-asiento-table">
-            <thead>
+        <table class="table table-sm table-bordered" id="cuenta-asiento-table">
+            <thead style="background:#85C1E9;color:#17202A;">
                 <tr>
                     <th style="width: 12%;">Código</th>
                     <th style="width: 18%;">Descripción</th>

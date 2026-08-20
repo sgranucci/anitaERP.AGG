@@ -1,16 +1,41 @@
-<div class="card form1">
+@php
+	$layoutItemsPedido = $layoutItemsPedido ?? facturaUsaLayoutItemsPedido();
+	$tipotransaccionSeleccionada = old('tipotransaccion_id', $data->tipotransaccion_id ?? ($tipotransacciondefault_id ?? ''));
+	$unidadmedida_query = $unidadmedida_query ?? [];
+	$descuentoventa_query = $descuentoventa_query ?? collect();
+	$clienteIdFactura = old('cliente_id', $data->cliente_id ?? '');
+	$clienteCodigoFactura = old('codigocliente', isset($data->clientes) ? ($data->clientes->codigo ?? '') : '');
+	$clienteNombreFactura = old('nombrecliente', (isset($data->clientes) ? ($data->clientes->nombre ?? '') : null) ?? ($data->nombrecliente ?? ''));
+	$vendedorIdFactura = old('vendedor_id', $data->vendedor_id ?? '');
+	$vendedorSel = collect($vendedor_query ?? [])->firstWhere('id', (int) $vendedorIdFactura);
+	$transporteIdFactura = old('transporte_id', $data->transporte_id ?? '');
+	$transporteFactura = collect($transporte_query ?? [])->firstWhere('id', (int) $transporteIdFactura);
+	$puedeAbrirAbmCliente = can('editar-clientes', false) || can('listar-clientes', false);
+	$puedeAbrirAbmVendedor = can('editar-vendedores', false) || can('listar-vendedores', false);
+@endphp
+<style>
+	#itemspedido-table thead th,
+	#total-factura-table thead th {
+		background: #85C1E9;
+		color: #17202A;
+	}
+	#itemspedido-table td,
+	#total-factura-table td {
+		vertical-align: middle;
+	}
+</style>
+<div class="form1">
+<div class="card card-outline card-info mb-3">
+	<div class="card-header py-2">
+		<h3 class="card-title mb-0">Datos del comprobante</h3>
+	</div>
+	<div class="card-body pb-2">
 <div class="row">
-	@php
-		$layoutItemsPedido = $layoutItemsPedido ?? facturaUsaLayoutItemsPedido();
-		$tipotransaccionSeleccionada = old('tipotransaccion_id', $data->tipotransaccion_id ?? ($tipotransacciondefault_id ?? ''));
-		$unidadmedida_query = $unidadmedida_query ?? [];
-		$descuentoventa_query = $descuentoventa_query ?? collect();
-	@endphp
 	<div class="col-sm-6" id="datosfactura" data-puntoventa="{{$puntoventa_query}}" data-tipotransaccion="{{$tipotransaccion_query}}" data-incoterm="{{$incoterm_query ?? ''}}" data-formapago="{{$formapago_query ?? ''}}" data-layout-items-pedido="{{ $layoutItemsPedido ? '1' : '0' }}">
 		<input type="hidden" id="codigofactura" class="form-control" value="{{old('codigofactura', $data->codigo ?? '')}}" />
 		<div class="form-group row" id="tipotransaccion">
-			<label for="recipient-name" class="col-lg-3 col-form-label requerido">Tipo de transacci&oacute;n</label>
-			<select name="tipotransaccion_id" id="tipotransaccion_id" data-placeholder="Tipo de transacci&oacute;n" class="col-lg-6 form-control" data-fouc required>
+			<label for="tipotransaccion_id" class="col-lg-3 control-label text-right pr-2 requerido">Tipo de transacci&oacute;n</label>
+			<select name="tipotransaccion_id" id="tipotransaccion_id" data-placeholder="Tipo de transacci&oacute;n" class="col-lg-8 form-control" data-fouc required>
 				<option value="">-- Seleccionar transacción  --</option>
 				@php $flPrimero = true; @endphp
 				@foreach($tipotransaccion_query as $key => $value)
@@ -28,11 +53,11 @@
 			</select>
 		</div>
 		<div class="form-group row" id="puntoventa">
-			<label for="recipient-name" class="col-lg-3 col-form-label requerido">Punto de venta</label>
+			<label for="puntoventa_id" class="col-lg-3 control-label text-right pr-2 requerido">Punto de venta</label>
 			<input type="hidden" id="puntoventadefault_id" class="form-control" value="{{old('puntoventadefault_id', $puntoventadefault_id ?? ($data->puntoventa_id ?? ''))}}" />
 			<select name="puntoventa_id" id="puntoventa_id" data-placeholder="Punto de venta" class="col-lg-5 form-control required" data-fouc>
 			</select>
-			<label for="recipient-name" class="col-lg-2 col-form-label requerido">Actividad</label>
+			<label for="actividad_arca_id" class="col-lg-2 control-label text-right pr-2 requerido">Actividad</label>
 			<input type="hidden" id="actividad_arcadefault_id" class="form-control" value="{{old('actividad_arcadefault_id', $data->puntoventas->actividad_arca_id ?? '')}}" />
 			<select name="actividad_arca_id" id="actividad_arca_id" data-placeholder="Actividad ARCA" class="col-lg-2 form-control required" data-fouc>
 				<option value="">-- Seleccionar --</option>
@@ -45,74 +70,88 @@
 				@endforeach					
 			</select>
 		</div>
-		<div class="form-group row">
-   			<label for="cliente" class="col-lg-3 col-form-label requerido">Cliente</label>
-			<input type="text" class="col-lg-2" id="cliente_id" name="cliente_id" value="{{$data->cliente_id??''}}" >
-			<button type="button" title="Consulta clientes" style="padding:1;" class="btn-accion-tabla consultacliente tooltipsC">
-					<i class="fa fa-search text-primary"></i>
-			</button>
-			<input type="text" class="col-lg-5 form-control" id="nombrecliente" name="nombrecliente" value="{{$data->clientes->nombre??$data->nombrecliente??''}}" >
-			@if ($datos['funcion'] == 'crear')
-				<a href="{{route('crear_cliente', ['tipoalta' => 'P'])}}" id="clienteprovisorio" class="btn-accion-tabla tooltipsC" title="Crear cliente provisorio">
-                	<i class="fa fa-user"></i>
-            	</a>
-			@endif
-			<a href="{{route('editar_cliente', ['id' => $data->cliente_id ?? 0])}}" style="display: flex; align-items: center;" class="btn-accion-tabla tooltipsC" title="Editar este registro">
-                <i class="fa fa-edit"></i>
-            </a>                
-			<label for="Tiposuspension" id="nombretiposuspension" style="padding: 0px;" class="col-form-label text-danger"></label>
+		<div class="form-group row tm-cliente-campo">
+   			<label for="codigocliente" class="col-lg-3 control-label text-right pr-2 requerido">Cliente</label>
+			<div class="col-lg-8">
+				<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
+					<input type="hidden" class="cliente_id" id="cliente_id" name="cliente_id" value="{{ $clienteIdFactura }}">
+					<button type="button" title="Consulta clientes (F1)" class="btn-accion-tabla consultacliente tooltipsC flex-shrink-0">
+						<i class="fa fa-search text-primary"></i>
+					</button>
+					@if ($puedeAbrirAbmCliente)
+						<a href="{{ ((int) $clienteIdFactura > 0) ? route('editar_cliente', ['id' => (int) $clienteIdFactura, 'origen' => 'modal_consulta', 'vista' => 'consulta']) : '#' }}"
+							id="link-editar-cliente-factura" target="_blank" rel="noopener"
+							class="btn-accion-tabla tooltipsC flex-shrink-0 {{ ((int) $clienteIdFactura > 0) ? '' : 'd-none' }}"
+							title="Consultar cliente en ABM">
+							<i class="fa fa-edit"></i>
+						</a>
+					@endif
+					@if ($datos['funcion'] == 'crear')
+						<a href="{{route('crear_cliente', ['tipoalta' => 'P'])}}" id="clienteprovisorio" class="btn-accion-tabla tooltipsC flex-shrink-0" title="Crear cliente provisorio">
+							<i class="fa fa-user"></i>
+						</a>
+					@endif
+					<input type="text" class="form-control codigocliente flex-shrink-0" id="codigocliente" name="codigocliente"
+						value="{{ $clienteCodigoFactura }}" placeholder="C&oacute;d." autocomplete="off"
+						title="C&oacute;digo; Enter valida; F1 consulta" style="width: 5.5rem;">
+					<input type="text" class="form-control nombrecliente text-truncate" id="nombrecliente" name="nombrecliente"
+						value="{{ $clienteNombreFactura }}" placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">
+				</div>
+				<label id="nombretiposuspension" class="text-danger small mb-0"></label>
+			</div>
 		</div>
 		<div id="aviso-padron-operacion-factura" class="alert d-none col-12 mb-2" role="alert"></div>
 		@include('ventas.cliente.partials.arca_apoc_operacion_support')
-		<div class="form-group row">
-   			<label for="vendedor" class="col-lg-3 col-form-label requerido">Vendedor</label>
-        	<select name="vendedor_id" id="vendedor_id" data-placeholder="Vendedor" class="col-lg-8 form-control factura-carga-bloqueable required" data-fouc>
-        		<option value="">-- Seleccionar vendedor --</option>
-        		@foreach($vendedor_query as $key => $value)
-        			@if( (int) $value->id == (int) old('vendedor_id', $data->vendedor_id ?? ''))
-        				<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-        			@else
-        				<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-        			@endif
-        		@endforeach
-        	</select>
+		<div class="form-group row tm-vendedor-campo">
+   			<label for="codigovendedor" class="col-lg-3 control-label text-right pr-2 requerido">Vendedor</label>
+			<div class="col-lg-8">
+				<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
+					<input type="hidden" class="vendedor_id" name="vendedor_id" id="vendedor_id" value="{{ $vendedorIdFactura }}" required>
+					<button type="button" title="Consulta vendedores (F1)" class="btn-accion-tabla consultavendedor tooltipsC flex-shrink-0 factura-carga-bloqueable">
+						<i class="fa fa-search text-primary"></i>
+					</button>
+					@if ($puedeAbrirAbmVendedor)
+						<a href="{{ ((int) $vendedorIdFactura > 0) ? route('editar_vendedor', ['id' => (int) $vendedorIdFactura, 'origen' => 'modal_consulta', 'vista' => 'consulta']) : '#' }}"
+							target="_blank" rel="noopener"
+							class="btn-accion-tabla btn-link-editar-vendedor tooltipsC flex-shrink-0 {{ ((int) $vendedorIdFactura > 0) ? '' : 'd-none' }}"
+							title="Consultar vendedor en ABM">
+							<i class="fa fa-edit"></i>
+						</a>
+					@endif
+					<input type="text" class="form-control codigovendedor factura-carga-bloqueable flex-shrink-0" id="codigovendedor" name="codigovendedor"
+						value="{{ old('codigovendedor', $vendedorSel?->codigo ?? '') }}"
+						placeholder="C&oacute;d." title="C&oacute;digo; Enter valida; F1 consulta" autocomplete="off" style="width: 5.5rem;">
+					<input type="text" class="form-control nombrevendedor text-truncate" id="nombrevendedor" name="nombrevendedor"
+						value="{{ old('nombrevendedor', $vendedorSel?->nombre ?? '') }}"
+						placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">
+				</div>
+			</div>
 		</div>
-		<div class="form-group row">
-   			<label for="transporte" class="col-lg-3 col-form-label">@if (config('app.empresa') == 'EL BIERZO') Reparto @else Transporte @endif</label>
-			@if (config('app.empresa') == 'EL BIERZO')
-				@php
-					$transporteFactura = null;
-					if (! empty($data->transporte_id ?? null) && isset($transporte_query)) {
-						$transporteFactura = $transporte_query->firstWhere('id', (int) $data->transporte_id);
-					}
-				@endphp
-				<input type="hidden" class="col-form-label transporte_id" id="transporte_id" name="transporte_id" value="{{ old('transporte_id', $data->transporte_id ?? '') }}">
-				<input type="text" class="col-lg-2 codigotransporte factura-carga-bloqueable" id="codigotransporte" name="codigotransporte" value="{{ old('codigotransporte', $transporteFactura->codigo ?? '') }}">
-				<input type="text" class="col-lg-5 form-control nombretransporte" id="nombretransporte" name="nombretransporte" value="{{ old('nombretransporte', $transporteFactura->nombre ?? '') }}" readonly>
-				<button type="button" title="Consulta repartos" style="padding:1;" class="btn-accion-tabla consultatransporte tooltipsC">
-					<i class="fa fa-search text-primary"></i>
-				</button>
-			@else
-        	<select name="transporte_id" id="transporte_id" data-placeholder="Transporte" class="col-lg-8 form-control factura-carga-bloqueable" data-fouc>
-        		<option value="">-- Seleccionar transporte --</option>
-        		@foreach($transporte_query as $key => $value)
-        			@if( (int) $value->id == (int) old('transporte_id', $data->transporte_id ?? ''))
-        				<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-        			@else
-        				<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-        			@endif
-        		@endforeach
-        	</select>
-			@endif
+		<div class="form-group row tm-transporte-campo">
+   			<label for="codigotransporte" class="col-lg-3 control-label text-right pr-2">{{ config('app.empresa') == 'EL BIERZO' ? 'Reparto' : 'Transporte' }}</label>
+			<div class="col-lg-8">
+				<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
+					<input type="hidden" class="transporte_id" id="transporte_id" name="transporte_id" value="{{ $transporteIdFactura }}">
+					<button type="button" title="Consulta {{ config('app.empresa') == 'EL BIERZO' ? 'repartos' : 'transportes' }} (F1)" class="btn-accion-tabla consultatransporte tooltipsC flex-shrink-0 factura-carga-bloqueable">
+						<i class="fa fa-search text-primary"></i>
+					</button>
+					<input type="text" class="form-control codigotransporte factura-carga-bloqueable flex-shrink-0" id="codigotransporte" name="codigotransporte"
+						value="{{ old('codigotransporte', $transporteFactura?->codigo ?? '') }}"
+						placeholder="C&oacute;d." title="C&oacute;digo; Enter valida; F1 consulta" autocomplete="off" style="width: 5.5rem;">
+					<input type="text" class="form-control nombretransporte text-truncate" id="nombretransporte" name="nombretransporte"
+						value="{{ old('nombretransporte', $transporteFactura?->nombre ?? '') }}"
+						placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">
+				</div>
+			</div>
 		</div>
 		<div class="form-group row" id="divlugar">
-    		<label for="lugarentrega" class="col-lg-3 col-form-label">Lugar de Entrega</label>
+    		<label for="lugarentrega" class="col-lg-3 control-label text-right pr-2">Lugar de entrega</label>
     		<div class="col-lg-8">
     			<input type="text" name="lugarentrega" id="lugarentrega" class="form-control" value="{{old('lugarentrega', $data->lugarentrega ?? '')}}">
     		</div>
 		</div>
 		<div class="form-group row" id="divcodigoentrega">
-        	<label class="col-lg-3 col-form-label">Entrega en</label>
+        	<label for="cliente_entrega_id" class="col-lg-3 control-label text-right pr-2">Entrega en</label>
         	<select name="cliente_entrega_id" id='cliente_entrega_id' data-placeholder="Entrega" class="col-lg-8 form-control" data-fouc>
         		@if($data->cliente_entrega_id ?? '')
 					@if($data->cliente_entrega_id == "")
@@ -128,7 +167,7 @@
 	</div>
 	<div class="col-sm-6">
 		<div class="form-group row">
-			<label for="fechafactura" class="col-lg-4 col-form-label requerido">Fecha</label>
+			<label for="fechafactura" class="col-lg-4 control-label text-right pr-2 requerido">Fecha</label>
 			@if (! empty($consultaFacturasDia))
 				@php
 					$fechaVenta = old('fechafactura', $data->fecha ?? date('Y-m-d'));
@@ -139,7 +178,7 @@
 					       value="{{ $fechaVentaYmd !== '' ? \Illuminate\Support\Carbon::parse($fechaVentaYmd)->format('d-m-Y') : '' }}">
 					<input type="hidden" name="fechafactura" id="fechafactura" value="{{ $fechaVentaYmd }}">
 				</div>
-				<label for="hora_creacion_factura" class="col-lg-2 col-form-label">Hora creación</label>
+				<label for="hora_creacion_factura" class="col-lg-2 control-label text-right pr-2">Hora creaci&oacute;n</label>
 				<div class="col-lg-3">
 					<input type="text" id="hora_creacion_factura" class="form-control" readonly
 					       value="{{ $data->created_at ? $data->created_at->format('H:i:s') : '—' }}">
@@ -151,24 +190,28 @@
 			@endif
 		</div>
 		<div class="form-group row">
-			<label for="recipient-name" class="col-lg-4 col-form-label">Descuento de l&iacute;nea</label>
-			<input type="number" id="descuentolinea" name="descuentolinea" value=""></input>
+			<label for="descuentolinea" class="col-lg-4 control-label text-right pr-2">Descuento de l&iacute;nea</label>
+			<div class="col-lg-4">
+				<input type="number" id="descuentolinea" name="descuentolinea" class="form-control" value="">
+			</div>
 		</div>
 		<div class="form-group row">
-			<label for="recipient-name" class="col-lg-4 col-form-label">Descuento pie factura</label>
-			<input type="number" id="descuentopie" name="descuentopie" value="{{$data->descuento ?? ''}}"></input>
-			<input type="hidden" id="descuentoimportepie" name="descuentoimportepie" value=""></input>
+			<label for="descuentopie" class="col-lg-4 control-label text-right pr-2">Descuento pie factura</label>
+			<div class="col-lg-4">
+				<input type="number" id="descuentopie" name="descuentopie" class="form-control" value="{{$data->descuento ?? ''}}">
+				<input type="hidden" id="descuentoimportepie" name="descuentoimportepie" value="">
+			</div>
 		</div>
 		<div class="form-group row" id="puntoventaremito">
-			<label for="recipient-name" class="col-lg-4 col-form-label requerido">Pto.venta del remito</label>
+			<label for="puntoventaremito_id" class="col-lg-4 control-label text-right pr-2 requerido">Pto. venta del remito</label>
 			<input type="hidden" id="puntoventaremitoori_id" class="form-control" value="{{old('puntoventaremitoori_id', $data->puntoventaremito_id ?? '')}}" />
 			<select name="puntoventaremito_id" id="puntoventaremito_id" data-placeholder="Punto de venta del remito" class="col-lg-5 form-control required" data-fouc>
 			</select>
 		</div>
 		<input type="hidden" id="cantidadbulto" name="cantidadbulto" value="0"></input>
 		<div class="form-group row">
-			<label for="moneda" class="col-lg-3 col-form-label requerido">Moneda</label>
-			<select name="moneda_id" id="moneda_id" data-placeholder="Depósito" class="col-lg-3 form-control required" data-fouc>
+			<label for="moneda_id" class="col-lg-4 control-label text-right pr-2 requerido">Moneda</label>
+			<select name="moneda_id" id="moneda_id" data-placeholder="Moneda" class="col-lg-6 form-control required" data-fouc>
 				<option value="">-- Seleccionar moneda  --</option>
 				@foreach($moneda_query as $key => $value)
 					@if( (int) $value->id == (int) old('moneda_id', $data->moneda_id ?? '1'))
@@ -179,26 +222,46 @@
 				@endforeach
 			</select>
 		</div>		
-		<div class="form-group row">
-			<label for="deposito" class="col-lg-3 col-form-label requerido">Depósito</label>
-			<select name="deposito_id" id="deposito_id" data-placeholder="Depósito" class="col-lg-8 form-control factura-carga-bloqueable required" data-fouc>
-				<option value="">-- Seleccionar depósito  --</option>
-				@foreach($deposito_query as $key => $value)
-					@if( (int) $value->id == (int) old('deposito_id', $data->deposito_id ?? '1'))
-						<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-					@else
-						<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-					@endif
-				@endforeach
-			</select>
-		</div>
+		@php
+			$depositoIdDefault = (int) config('facturacion.DEPOSITO_VENTA_ID', 1);
+			$depositoIdDesdeEmision = null;
+			if (! empty($data->venta_emisiones[0] ?? null)) {
+				$depositoIdDesdeEmision = $data->venta_emisiones[0]->deposito_id ?? null;
+			}
+			$depositoIdSeleccionado = old('deposito_id', $data->deposito_id ?? $depositoIdDesdeEmision ?? $depositoIdDefault);
+			$depositoSeleccionado = collect($deposito_query ?? [])->firstWhere('id', (int) $depositoIdSeleccionado);
+			$pvIdEmpresa = (int) old('puntoventa_id', $data->puntoventa_id ?? ($puntoventadefault_id ?? 0));
+			$pvEmpresa = ($pvIdEmpresa > 0 && isset($puntoventa_query))
+				? collect($puntoventa_query)->firstWhere('id', $pvIdEmpresa)
+				: null;
+			$empresaIdFactura = $pvEmpresa?->empresa_id
+				?? (isset($data->puntoventas) ? $data->puntoventas->empresa_id : '');
+		@endphp
+		<input type="hidden" id="empresa_id" value="{{ $empresaIdFactura }}">
+		@include('stock.partials.campo_consulta_deposito', [
+			'prefix' => 'factura',
+			'layout' => 'form_row',
+			'inputName' => 'deposito_id',
+			'inputId' => 'deposito_id',
+			'depositoId' => $depositoIdSeleccionado,
+			'codigo' => old('deposito_codigo', $depositoSeleccionado?->codigo ?? ''),
+			'descripcion' => old('deposito_descripcion', $depositoSeleccionado?->nombre ?? ''),
+			'col_label' => 'col-lg-4 control-label text-right pr-2',
+			'col_input' => 'col-lg-8',
+			'codigoExtraClass' => 'factura-carga-bloqueable',
+		])
+	</div>
+</div>
 	</div>
 </div>
 
-<div class="card" id="factura-carga-contenido">
+<div class="card card-outline card-info" id="factura-carga-contenido">
+    <div class="card-header py-2">
+        <h3 class="card-title mb-0">&Iacute;tems</h3>
+    </div>
     <div class="card-body">
-    	<table class="table table-hover" id="itemspedido-table">
-    		<thead>
+    	<table class="table table-sm table-bordered table-hover" id="itemspedido-table">
+    		<thead style="background:#85C1E9;color:#17202A;">
     			<tr>
     				<th style="width: 5%;">Item</th>
     				<th style="width: 12%;">Art&iacute;culo</th>
@@ -265,8 +328,8 @@
                 				<input type="text" style="text-align: right;" name="precios[]" class="form-control precio" readonly value="{{number_format(old('precios.'.$loop->index, optional($item)->precio),2)}}" />
                 			</td>							
                 			<td>
-								<button type="button" title="Elimina esta linea" style="padding:0;" class="btn-accion-tabla eliminar tooltipsC">
-                            		<i class="fa fa-trash text-danger"></i>
+								<button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar tooltipsC">
+                            		<i class="fa fa-times-circle text-danger"></i>
 								</button>
                 			</td>
                 		</tr>
@@ -283,10 +346,10 @@
 		@else
 			@include('ventas.factura.template')
 		@endif
-	    <div class="row col-md-12">
-        	<div class="col-md-2">
-        		<button id="agrega_renglon" class="pull-right btn btn-danger factura-carga-bloqueable">+ Agrega rengl&oacute;n</button>
-        	</div>
+	    <div class="mb-3">
+        	<button type="button" id="agrega_renglon" class="btn btn-outline-primary btn-sm factura-carga-bloqueable">
+				<i class="fa fa-plus"></i> Agregar rengl&oacute;n
+			</button>
 		</div>
 		<div class="row">
 			<div class="col-sm-6">
@@ -297,11 +360,13 @@
             	</div>
 			</div>
 			<div class="col-sm-6">
-				<table class="table table-sm" id="total-factura-table">
-					<thead>
-						<th style="width: 25%;"></th>
-						<th style="width: 10%;"></th>
-						<th style="width: 15%;"></th>
+				<table class="table table-sm table-bordered" id="total-factura-table">
+					<thead style="background:#85C1E9;color:#17202A;">
+						<tr>
+							<th style="width: 25%;">Concepto</th>
+							<th style="width: 10%;">Tasa</th>
+							<th style="width: 15%;">Importe</th>
+						</tr>
 					</thead>
 					<tbody id="tbody-tabla-total-factura">
 						@if ($data->venta_impuestos[0] ?? '') 
@@ -343,17 +408,17 @@
 			</div>
 			<div class="col-md-4">
 				<div class="form-group row" id="div_incoterm">
-					<label for="recipient-name" class="col-lg-4 col-form-label requerido">Condiciones de venta (incoterms)</label>
+					<label for="incoterm_id" class="col-lg-4 control-label text-right pr-2 requerido">Condiciones de venta (incoterms)</label>
 					<select name="incoterm_id" id="incoterm_id" data-placeholder="Incoterms" class="col-lg-6 form-control required" data-fouc>
 					</select>
 				</div>
 				<div class="form-group row" id="div_formapago">
-					<label for="recipient-name" class="col-lg-4 col-form-label requerido">Forma de pago</label>
+					<label for="formapago_id" class="col-lg-4 control-label text-right pr-2 requerido">Forma de pago</label>
 					<select name="formapago_id" id="formapago_id" data-placeholder="Forma de pago" class="col-lg-6 form-control required" data-fouc>
 					</select>
 				</div>
 				<div class="form-group row" id="div_mercaderia">
-					<label for="recipient-name" class="col-lg-4 col-form-label">Mercader&iacute;a</label>
+					<label for="mercaderia" class="col-lg-4 control-label text-right pr-2">Mercader&iacute;a</label>
 					<input type="text" class="col-lg-6 form-control" id="mercaderia" name="marcaderia" value=""></input>
 				</div>
 			</div>
@@ -371,7 +436,7 @@
 @include('ventas.factura.modal')
 @include('ventas.factura.templatetotalfactura')
 @include('includes.stock.modalconsultaarticulo')
+@include('includes.stock.modalconsultadeposito')
 @include('includes.ventas.modalconsultacliente')
-@if (config('app.empresa') == 'EL BIERZO')
+@include('includes.ventas.modalconsultavendedor')
 @include('includes.ventas.modalconsultatransporte')
-@endif

@@ -192,12 +192,12 @@
 				}
 			@endphp
 			<tr>
-				<td>{{ $item->articulos->sku }}</td>
+				<td>{{ $item->articulos->sku ?? '' }}</td>
 				<td>{{ number_format($item->pieza, 2) }}</td>
 				<td>{{ number_format($item->kilo, 2) }}</td>
 				<td>{{ $item->descuentoventa_ids->nombre ?? '' }}</td>
-				<td>{{ $item->articulos->descripcion }}</td>
-				<td>{{ $item->articulos->unidadesdemedidas->abreviatura }}</td>
+				<td>{{ $item->articulos->descripcion ?? '' }}</td>
+				<td>{{ optional(optional($item->articulos)->unidadesdemedidas)->abreviatura ?? '' }}</td>
 				<td>{{ number_format($item->caja, 2) }}</td>
 				<td>{{ number_format($item->precio, 2) }}</td>
 				<td>

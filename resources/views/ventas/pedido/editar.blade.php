@@ -116,12 +116,15 @@
                     @else
                         <input type="hidden" id="suspendepedido" value="">
                     @endif
-                    @if ($pedido->estadopedido == "Facturado" && isset($pedido->ventas[0]->id))
-                        @if (can('listar-factura', false))
-                            <a href="{{route('lista_una_factura', ['id' => $pedido->ventas[0]->id])}}" class="btn btn-primary" title="Listar la factura">
-                                <i class="fas fa-file-pdf"> Listar Factura</i>
-                            </a>                    
-                        @endif  
+                    @php
+                        $ventasPedido = \App\Support\Ventas\PedidoFacturaAnitaArchivosSupport::ventasVisiblesEnPedido($pedido->ventas ?? []);
+                    @endphp
+                    @if ($ventasPedido->isNotEmpty() && can('listar-factura', false))
+                        @foreach ($ventasPedido as $ventaPedido)
+                            <a href="{{ route('lista_una_factura', ['id' => $ventaPedido->id]) }}" class="btn btn-primary" title="Listar {{ $ventaPedido->codigo }}" target="_blank" rel="noopener">
+                                <i class="fas fa-file-pdf"></i> {{ $ventaPedido->codigo }}
+                            </a>
+                        @endforeach
                     @endif
                     <a href="{{route('listar_pedido_pdf', ['id' => $pedido['id']])}}" class="btn btn-primary" title="Listar el pedido en PDF">
                         <i class="fas fa-file-pdf"> Listar Pedido</i>

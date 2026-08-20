@@ -60,7 +60,7 @@
         if (tipo === 'entero') {
             setPlaceholderValor('Número entero');
         } else {
-            setPlaceholderValor('Texto o número');
+            setPlaceholderValor('Texto (parecido desde 2 letras)');
         }
     }
 
@@ -126,17 +126,193 @@
 
         actualizarOperadores(true);
 
+        var busquedaVivaTimer = null;
+        var busquedaVivaSeq = 0;
+        var urlListado = $('#form-filtros-cliente').attr('action') || window.location.pathname;
+
+        function panelFiltrosAbierto() {
+            var $panel = $('#panel-filtros-cliente');
+            return $panel.hasClass('show') || $panel.hasClass('in');
+        }
+
+        function longitudMinima(valor) {
+            return /^\d+$/.test(valor) ? 1 : 2;
+        }
+
+        function paramsBusquedaViva(page) {
+            var valor = String($valorPrincipal().val() || '').trim();
+            var codigo = String($('#filtro_codigo').val() || '').trim();
+            var params = {
+                ajax: 1,
+                filtro_valor: valor,
+                filtro_busqueda_rapida: 1
+            };
+            if (codigo !== '') {
+                params.filtro_codigo = codigo;
+            }
+            if (page && parseInt(page, 10) > 1) {
+                params.page = parseInt(page, 10);
+            }
+            return params;
+        }
+
+        function debeDispararBusquedaViva() {
+            var valor = String($valorPrincipal().val() || '').trim();
+            var codigo = String($('#filtro_codigo').val() || '').trim();
+            if (codigo !== '') {
+                return true;
+            }
+            if (valor === '') {
+                return true;
+            }
+            return valor.length >= longitudMinima(valor);
+        }
+
+        function actualizarAvisoFiltros(data) {
+            var tiene = !!data.tiene_criterios;
+            $valorPrincipal().toggleClass('listado-filtros-input-activo', tiene);
+            $('#filtro_codigo').toggleClass(
+                'listado-filtros-input-activo',
+                String($('#filtro_codigo').val() || '').trim() !== ''
+            );
+            $('#btn-toggle-filtros-cliente').toggleClass('listado-filtros-toggle-activo', tiene);
+
+            var $aviso = $('.card-tools .listado-filtros-aviso-activos');
+            if (typeof data.aviso === 'string') {
+                if ($aviso.length) {
+                    $aviso.replaceWith(data.aviso);
+                } else if (data.aviso !== '') {
+                    $('.card-tools [data-busqueda-rapida="1"]').first().after(data.aviso);
+                }
+            }
+        }
+
+        function actualizarNuevoHref(filtrosQuery) {
+            var $nuevo = $('.card-tools a').has('.fa-plus-circle');
+            if (!$nuevo.length) {
+                return;
+            }
+            var base = String($nuevo.attr('href') || '').split('?')[0];
+            var qs = $.param(filtrosQuery || {});
+            $nuevo.attr('href', qs ? base + '?' + qs : base);
+        }
+
+        function actualizarHistorial(filtrosQuery, page) {
+            var params = $.extend({}, filtrosQuery || {});
+            if (page && parseInt(page, 10) > 1) {
+                params.page = parseInt(page, 10);
+            }
+            var qs = $.param(params);
+            var next = urlListado + (qs ? '?' + qs : '');
+            if (window.history && window.history.replaceState) {
+                window.history.replaceState({}, '', next);
+            }
+        }
+
+        function aplicarRespuestaListado(data, page) {
+            if (!data || typeof data.html !== 'string') {
+                return;
+            }
+            $('#cliente-listado-filas').html(data.html);
+            if (typeof data.paginacion === 'string') {
+                var $pag = $('#cliente-listado-paginacion');
+                if ($pag.length) {
+                    $pag.replaceWith(data.paginacion);
+                } else {
+                    $('.card.card-info').closest('.row').after(data.paginacion);
+                }
+            }
+            if (typeof data.export === 'string') {
+                $('#cliente-export-toolbar').html(data.export);
+            }
+            actualizarAvisoFiltros(data);
+            actualizarNuevoHref(data.filtros_query || {});
+            actualizarHistorial(data.filtros_query || {}, page);
+        }
+
+        function buscarListadoVivo(page) {
+            if (!debeDispararBusquedaViva()) {
+                return;
+            }
+            var seq = ++busquedaVivaSeq;
+            var params = paramsBusquedaViva(page);
+            $('#tabla-paginada').css('opacity', 0.55);
+
+            $.ajax({
+                url: urlListado,
+                type: 'GET',
+                dataType: 'json',
+                data: params
+            })
+                .done(function (data) {
+                    if (seq !== busquedaVivaSeq) {
+                        return;
+                    }
+                    aplicarRespuestaListado(data, page);
+                })
+                .fail(function () {
+                    if (seq !== busquedaVivaSeq) {
+                        return;
+                    }
+                })
+                .always(function () {
+                    if (seq === busquedaVivaSeq) {
+                        $('#tabla-paginada').css('opacity', 1);
+                    }
+                });
+        }
+
+        function programarBusquedaViva() {
+            if (panelFiltrosAbierto()) {
+                return;
+            }
+            $valorPanel().val($valorPrincipal().val());
+            clearTimeout(busquedaVivaTimer);
+            busquedaVivaTimer = setTimeout(function () {
+                buscarListadoVivo(1);
+            }, 280);
+        }
+
+        $valorPrincipal().on('input.clienteListadoVivo', function () {
+            programarBusquedaViva();
+        });
+
+        $('#filtro_codigo').on('input.clienteListadoVivo', function () {
+            programarBusquedaViva();
+        });
+
         $('#filtro_codigo').on('keydown', function (e) {
             if (e.key !== 'Enter') {
                 return;
             }
             e.preventDefault();
-            var $form = $('#form-filtros-cliente');
-            if ($form.length && $form[0] && typeof $form[0].requestSubmit === 'function') {
-                $form[0].requestSubmit();
-            } else if ($form.length) {
-                $form.trigger('submit');
+            clearTimeout(busquedaVivaTimer);
+            if (panelFiltrosAbierto()) {
+                var $form = $('#form-filtros-cliente');
+                if ($form.length && $form[0] && typeof $form[0].requestSubmit === 'function') {
+                    $form[0].requestSubmit();
+                } else if ($form.length) {
+                    $form.trigger('submit');
+                }
+                return;
             }
+            buscarListadoVivo(1);
+        });
+
+        $(document).on('click', '#cliente-listado-paginacion a', function (e) {
+            var href = $(this).attr('href');
+            if (!href || href === '#') {
+                return;
+            }
+            e.preventDefault();
+            var page = 1;
+            try {
+                var url = new URL(href, window.location.origin);
+                page = parseInt(url.searchParams.get('page') || '1', 10) || 1;
+            } catch (err) {
+                page = 1;
+            }
+            buscarListadoVivo(page);
         });
     });
 })(jQuery);

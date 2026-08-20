@@ -57,7 +57,7 @@ use App\Support\Ventas\FacturaListadoFiltros; ?>
                     'queryparams' => $filtrosQuery ?? [],
                 ])
                 <table class="table table-striped table-bordered table-hover table-sm" id="tabla-paginada" style="font-size: 0.8125rem;">
-                    <thead>
+                    <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th class="width20">ID</th>
                             <th>Fecha</th>

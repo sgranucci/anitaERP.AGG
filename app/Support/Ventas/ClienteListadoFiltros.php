@@ -290,11 +290,30 @@ class ClienteListadoFiltros
                         $col,
                         $valor,
                         true,
-                        CoincidenciaFlexibleTexto::LONGITUD_MINIMA_ARTICULO
+                        CoincidenciaFlexibleTexto::LONGITUD_MINIMA_CORTA
                     );
                 }
             }
+            self::aplicarCuitSinSeparadores($q, $valor);
         });
+    }
+
+    /**
+     * Igual que el modal: el CUIT se busca también sin guiones, puntos ni espacios.
+     *
+     * @param  Builder<\App\Models\Ventas\Cliente>  $q
+     */
+    private static function aplicarCuitSinSeparadores(Builder $q, string $valor): void
+    {
+        $soloDigitos = preg_replace('/\D+/', '', $valor);
+        if ($soloDigitos === '' || mb_strlen($soloDigitos) < 2) {
+            return;
+        }
+
+        $q->orWhereRaw(
+            "REPLACE(REPLACE(REPLACE(cliente.numerodocumento, '-', ''), '.', ''), ' ', '') LIKE ?",
+            ['%'.$soloDigitos.'%']
+        );
     }
 
     private static function usaCoincidenciaFlexibleEnColumna(string $column): bool
@@ -357,9 +376,12 @@ class ClienteListadoFiltros
                             $q,
                             $column,
                             $valor,
-                            false,
-                            CoincidenciaFlexibleTexto::LONGITUD_MINIMA_ARTICULO
+                            true,
+                            CoincidenciaFlexibleTexto::LONGITUD_MINIMA_CORTA
                         );
+                    }
+                    if ($column === 'cliente.numerodocumento') {
+                        self::aplicarCuitSinSeparadores($q, $valor);
                     }
                 });
                 break;

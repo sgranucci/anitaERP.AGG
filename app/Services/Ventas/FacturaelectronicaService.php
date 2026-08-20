@@ -767,7 +767,9 @@ class FacturaElectronicaService
 		$totalTributo = 0;
 		foreach ($conceptosTotales as $concepto)
 		{
-			if ($concepto['concepto'] == 'Percepcion IVA')
+			// El concepto llega con la tasa ("Percepcion IVA 3%"): comparar por igualdad la dejaba
+			// fuera de los tributos y el total del comprobante quedaba mayor que la suma declarada.
+			if (str_starts_with((string) $concepto['concepto'], 'Percepcion IVA'))
 			{
 				$tributos[] = [
 					'id' => 1,

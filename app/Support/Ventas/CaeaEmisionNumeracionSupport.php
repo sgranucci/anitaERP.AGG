@@ -37,14 +37,42 @@ final class CaeaEmisionNumeracionSupport
             return 0;
         }
 
-        return VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpDesdeTipotransaccion(
+        $ultimoErp = VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpDesdeTipotransaccion(
             $puntoventaId,
             (int) ($tipotransaccion->codigo ?? 0),
             $letraComprobante,
             $empresaId,
             $modoFacturacionCliente,
             $totalComprobante,
-        ) + 1;
+        );
+
+        return self::aplicarPisoCaea($puntoventaId, $ultimoErp) + 1;
+    }
+
+    /**
+     * Piso operativo (último número): el próximo CAEA es max(ERP, piso)+1.
+     * El PV 8 de El Bierzo no tiene compemis Anita; el hueco se fuerza por config.
+     */
+    public static function aplicarPisoCaea(int $puntoventaId, int $ultimoErp): int
+    {
+        return max($ultimoErp, self::pisoCaeaPorPuntoventaId($puntoventaId));
+    }
+
+    public static function pisoCaeaPorPuntoventaId(int $puntoventaId): int
+    {
+        $pisos = config('facturacion.CAEA_PISO_NUMERO_POR_CODIGO');
+        if ($puntoventaId <= 0 || ! is_array($pisos) || $pisos === []) {
+            return 0;
+        }
+
+        $codigo = trim((string) (Puntoventa::query()->whereKey($puntoventaId)->value('codigo') ?? ''));
+        if ($codigo === '') {
+            return 0;
+        }
+
+        $padded = str_pad(ctype_digit($codigo) ? $codigo : (string) preg_replace('/\D+/', '', $codigo), 5, '0', STR_PAD_LEFT);
+
+        return (int) ($pisos[$padded] ?? $pisos[$codigo] ?? 0);
     }
 
     /**

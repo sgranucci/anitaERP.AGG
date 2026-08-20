@@ -4,6 +4,7 @@ namespace App\Support\Stock\AnitaSync\Puntoventa;
 
 use App\Models\Configuracion\Actividad_Arca;
 use App\Models\Configuracion\Empresa;
+use App\Models\Configuracion\Localidad;
 use App\Models\Ventas\Puntoventa;
 
 /**
@@ -37,6 +38,16 @@ final class PuntoventaFieldMapper
             $empresa = Empresa::query()->where('codigo', (string) $nroEmp)->first();
             if ($empresa) {
                 return (int) $empresa->id;
+            }
+        }
+
+        $cuit = preg_replace('/\D+/', '', (string) ($row->suc_cuit ?? '')) ?? '';
+        if (strlen($cuit) >= 11) {
+            foreach (Empresa::query()->get(['id', 'nroinscripcion']) as $empresa) {
+                $empCuit = preg_replace('/\D+/', '', (string) $empresa->nroinscripcion) ?? '';
+                if ($empCuit !== '' && $empCuit === $cuit) {
+                    return (int) $empresa->id;
+                }
             }
         }
 
@@ -145,6 +156,16 @@ final class PuntoventaFieldMapper
         return $cache[$codigoNormalizado] ?? null;
     }
 
+    private static function localidadIdDefaultSiExiste(): ?int
+    {
+        $locId = (int) config('puntoventa_anita.default_localidad_id', 108);
+        if ($locId <= 0 || ! Localidad::query()->whereKey($locId)->exists()) {
+            return null;
+        }
+
+        return $locId;
+    }
+
     /**
      * @return array<string, mixed>
      */
@@ -169,7 +190,7 @@ final class PuntoventaFieldMapper
             'empresa_id' => self::mapEmpresaId($row),
             'domicilio' => $domicilio,
             'provincia_id' => (int) config('puntoventa_anita.default_provincia_id', 3),
-            'localidad_id' => (int) config('puntoventa_anita.default_localidad_id', 108),
+            'localidad_id' => self::localidadIdDefaultSiExiste(),
             'pais_id' => (int) config('puntoventa_anita.default_pais_id', 1),
             'codigopostal' => $codPostal !== '' ? $codPostal : null,
             'telefono' => self::strProp($row, 'suc_telefono') ?: null,
