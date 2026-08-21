@@ -964,6 +964,7 @@ class FacturacionService
 							'gravado' => \App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport::gravadoDesdeConceptosTotales($conceptosTotales, abs((float) $totalComprobante)),
 							'exento' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Exento', 'importe'),
 							'iva' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Iva ', 'importe'),
+							'logistica' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Total Logistica', 'importe'),
 							'tributo' => $totalTributo,
 							'fechavencimiento' => date('Ymd', strtotime($cuentaCorriente[0]['fechavencimiento'])),
 							'moneda' => $codigoMoneda,
@@ -984,16 +985,17 @@ class FacturacionService
 				}
 				$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
 
-				// Arma detalle
-				$detalleContable = $tipoAnita." ".$letra." ".$puntoventa->codigo." ".$numero.
-					($this->facturandoDesdeRemitoId
-						? (" REMITO: ".$this->facturandoDesdeRemitoId)
-						: (" PEDIDO: ".$pedido_id));
+				// Detalle asiento (ERP + ctamov): "FAC 1296 MORA CARLOS ARIEL" — solo factura por pedido Bierzo.
+				// No tocar gastronomía/estacionamiento AGG (usan otros flujos / grabaFacturaERP).
+				$nombreClienteAsiento = preg_replace('/[^A-Za-z0-9 ]/', '', (string) ($cliente->nombre ?? ''));
+				$nombreClienteAsiento = trim(preg_replace('/\s+/', ' ', $nombreClienteAsiento) ?? '');
+				$detalleContable = trim($tipoAnita.' '.$numero.' '.$nombreClienteAsiento);
 
 				// Graba la factura
 				DB::beginTransaction();
 				try 
 				{
+					$omitirAnitaAsiento = false;
 					if ($codigoTipoTransaccion >= '200')
 						$tipoAnita = substr($tipotransaccion->abreviatura,0,1)+"CE";
 					else
@@ -1154,12 +1156,15 @@ class FacturacionService
 						}
 					}
 					
-					// Graba contabilidad
+					// Graba contabilidad ERP. En PV electrónico (C/E) no escribe ctamov Anita
+					// hasta tener CAE: si ARCA rechaza, el rollback MySQL no limpia Informix.
+					$omitirAnitaAsiento = in_array((string) ($puntoventa->modofacturacion ?? ''), ['C', 'E'], true);
 					Self::grabaAsientoContable($asientoContable, $empresa_id, $fechaFactura, $vta->id, $detalleContable, $centrocosto_id,
 											$moneda_id, $cotizacion, $signo, $cliente->cuentacontable_id,
 											substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante'],
 											$puntoventa->modofacturacion ?? null,
-											isset($venta['fechajornada']) ? (string) $venta['fechajornada'] : null);
+											isset($venta['fechajornada']) ? (string) $venta['fechajornada'] : null,
+											$omitirAnitaAsiento);
 					
 					// Remito ERP (solo facturación administrativa Bierzo; no gastronomía/estacionamiento)
 					if ($this->facturandoDesdeRemitoId) {
@@ -1260,6 +1265,16 @@ class FacturacionService
 							$letra, $puntoventa, $venta['numerocomprobante'], $fechaFactura, $dataCAE, $vta->id,
 							$deferAnitaPedido);
 
+						if ($omitirAnitaAsiento) {
+							$this->sincronizarCtamovAnitaDeVenta(
+								(int) $vta->id,
+								substr((string) $venta['codigo'], 0, 3),
+								(string) $letra,
+								(int) $puntoventa->codigo,
+								(int) $venta['numerocomprobante'],
+							);
+						}
+
 						if ($deferAnitaPedido) {
 							$vencaePendientePedido = $this->armarVencaePendienteDesdeCaePendiente([
 								'venta_id' => $vta->id,
@@ -1283,9 +1298,27 @@ class FacturacionService
 				} catch (\Throwable $e) {
 					DB::rollback();
 
-					if (($venta['codigo'] ?? '') && ! PedidoFacturaAnitaDeferSupport::debeDiferir())
-						self::borraAnita(substr($venta['codigo'], 0, 3), $letra, 
-											$puntoventa->codigo, $venta['numerocomprobante'], $empresa->codigo);
+					// El asiento ERP puede haber escrito ctamov en Anita antes del CAE; el rollback
+					// MySQL no lo revierte. Limpiar siempre (también con Anita diferida).
+					if (($venta['codigo'] ?? '') !== '') {
+						try {
+							self::borraAnita(
+								substr((string) $venta['codigo'], 0, 3),
+								$letra,
+								$puntoventa->codigo,
+								$venta['numerocomprobante'],
+								$empresa->codigo,
+								false,
+								$puntoventa->modofacturacion ?? null,
+							);
+						} catch (\Throwable $cleanupEx) {
+							Log::warning('facturacion.pedido.cleanup_anita_post_rollback', [
+								'codigo' => $venta['codigo'] ?? null,
+								'mensaje' => $cleanupEx->getMessage(),
+								'origen' => $e->getMessage(),
+							]);
+						}
+					}
 
 					return ['error' => $e->getMessage()];
 				}
@@ -1643,6 +1676,7 @@ class FacturacionService
 							'gravado' => \App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport::gravadoDesdeConceptosTotales($conceptosTotales, abs((float) $totalComprobante)),
 							'exento' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Exento', 'importe'),
 							'iva' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Iva ', 'importe'),
+							'logistica' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Total Logistica', 'importe'),
 							'tributo' => $totalTributo,
 							'fechavencimiento' => date('Ymd', strtotime($cuentacorriente[0]['fechavencimiento'])),
 							'moneda' => $codigoMoneda,
@@ -2430,6 +2464,7 @@ class FacturacionService
 							'gravado' => \App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport::gravadoDesdeConceptosTotales($conceptosTotales, abs((float) $totalComprobante)),
 							'exento' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Exento', 'importe'),
 							'iva' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Iva ', 'importe'),
+							'logistica' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Total Logistica', 'importe'),
 							'tributo' => $totalTributo,
 							'fechavencimiento' => date('Ymd', strtotime($cuentacorriente[0]['fechavencimiento'])),
 							'moneda' => $codigoMoneda,
@@ -2841,6 +2876,7 @@ class FacturacionService
 							'gravado' => \App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport::gravadoDesdeConceptosTotales($conceptosTotales, abs((float) $totalComprobante)),
 							'exento' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Exento', 'importe'),
 							'iva' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Iva ', 'importe'),
+							'logistica' => $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Total Logistica', 'importe'),
 							'tributo' => $totalTributo,
 							'fechavencimiento' => date('Ymd', strtotime($cuentacorriente[0]['fechavencimiento'])),
 							'moneda' => $codigoMoneda,
@@ -6010,7 +6046,7 @@ class FacturacionService
 
 	private function grabaAsientoContable($asientocontable, $empresa_id, $fecha, $venta_id, $observacion, $centrocosto_id,
 											$moneda_id, $cotizacion, $signo, $contrapartida_id, $tipo, $letra, $sucursal, $nro,
-											?string $modoFacturacionPv = null, ?string $fechaJornada = null)
+											?string $modoFacturacionPv = null, ?string $fechaJornada = null, bool $omitirAnita = false)
 	{
 		$opcionesCierre = ['modofacturacion_pv' => $modoFacturacionPv];
 		if ($fechaJornada !== null && trim($fechaJornada) !== '') {
@@ -6046,6 +6082,10 @@ class FacturacionService
 		$data['alcance_cierre_contable'] = PeriodoContableCierreSupport::ALCANCE_FACTURACION;
 		if ($fechaJornada !== null && trim($fechaJornada) !== '') {
 			$data['fechajornada'] = $fechaJornada;
+		}
+		if ($omitirAnita) {
+			// CAE pendiente: no escribir ctamov hasta autorizar (rollback MySQL no limpia Informix).
+			$data['omitir_anita'] = true;
 		}
 
 		// Arma tablas para grabar en anita
@@ -6178,6 +6218,43 @@ class FacturacionService
 			$asiento_movimiento = $this->asiento_movimientoRepository->createunique($asientoContable);
 		}
 		return $asiento_movimiento;
+	}
+
+	/**
+	 * Tras CAE OK: escribe ctamov en Anita para el asiento ERP de la venta
+	 * (creado con omitir_anita mientras ARCA no había autorizado).
+	 */
+	private function sincronizarCtamovAnitaDeVenta(
+		int $ventaId,
+		string $tipo,
+		string $letra,
+		int $sucursal,
+		int $nro,
+	): void {
+		if ($ventaId <= 0) {
+			return;
+		}
+
+		$asiento = \App\Models\Contable\Asiento::query()
+			->where('venta_id', $ventaId)
+			->orderByDesc('id')
+			->first();
+
+		if (! $asiento) {
+			throw new Exception('No se encontró asiento ERP de la venta '.$ventaId.' para sincronizar Anita.');
+		}
+
+		$payload = $this->asientoRepository->armarPayloadAnitaDesdeModelo($asiento);
+		$payload['tipo'] = $tipo;
+		$payload['letra'] = $letra;
+		$payload['sucursal'] = $sucursal;
+		$payload['nro'] = $nro;
+
+		if ($this->flGrabaComprobanteDividido) {
+			$payload['path_sistema'] = '/usr2/villafranca';
+		}
+
+		$this->asientoRepository->sincronizarCtamovAnita($payload);
 	}
 
 	// Lista factura de ventas

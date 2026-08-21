@@ -8,6 +8,7 @@ use App\Models\Stock\Articulo;
 use App\Models\Ventas\Puntoventa;
 use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\ArcaMtxcaComprobanteTotalesSupport;
 use App\Support\Ventas\CaeaQuincenaSupport;
 use Carbon\Carbon;
@@ -690,10 +691,12 @@ class ArcaMtxcaFacturaElectronicaService
      */
     private function buildArrayItems(array $lineas, array $datos, int $cbteTipo = 1): ?array
     {
-        $filas = ArcaMtxcaComprobanteTotalesSupport::conciliar(
+        // a-comprob.c ~7219: logística se agrega como ítem simulado solo al arma FACEL/MTXCA.
+        $filas = $this->agregarItemLogisticaSimuladoBierzo(
             $this->filasItemsDesdeLineas($lineas),
             $datos,
         );
+        $filas = ArcaMtxcaComprobanteTotalesSupport::conciliar($filas, $datos);
         if ($filas === []) {
             return null;
         }
@@ -701,6 +704,52 @@ class ArcaMtxcaFacturaElectronicaService
         $claseB = $this->esComprobanteMtxcaClaseB($cbteTipo);
 
         return ['item' => array_map(fn (array $fila): array => $this->itemSoapDesdeFila($fila, $claseB), $filas)];
+    }
+
+    /**
+     * El Bierzo (a-comprob.c FACEL_tmov "Logistica"): ítem simulado gravado 21 %.
+     * No toca dataFactura / stock. AGG y demás: no-op.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @param  array<string, mixed>  $datos
+     * @return list<array<string, mixed>>
+     */
+    private function agregarItemLogisticaSimuladoBierzo(array $filas, array $datos): array
+    {
+        if (! EntornoEmpresaSupport::esElBierzo()) {
+            return $filas;
+        }
+
+        $logistica = round((float) ($datos['logistica'] ?? 0), 2);
+        if ($logistica < 0.01) {
+            return $filas;
+        }
+
+        foreach ($filas as $fila) {
+            if (($fila['descripcion'] ?? '') === 'Logistica') {
+                return $filas;
+            }
+        }
+
+        $codigo = ArcaMtxcaComprobanteTotalesSupport::codigoPorTasa(21.0) ?? 5;
+        $alicuota = ArcaMtxcaComprobanteTotalesSupport::alicuotaPorCodigo($codigo) ?? 21.0;
+
+        $filas[] = [
+            'codigo' => 'texto',
+            'descripcion' => 'Logistica',
+            'cantidad' => 1.0,
+            'codigo_unidad_medida' => 7,
+            'precio_lista' => $logistica,
+            'bonificacion' => 0.0,
+            'codigo_condicion_iva' => $codigo,
+            'alicuota' => $alicuota,
+            'neto' => $logistica,
+            'iva' => round($logistica * $alicuota / 100, 2),
+            'codigo_mtx' => '7790000000000',
+            'unidades_mtx' => 1,
+        ];
+
+        return $filas;
     }
 
     /**

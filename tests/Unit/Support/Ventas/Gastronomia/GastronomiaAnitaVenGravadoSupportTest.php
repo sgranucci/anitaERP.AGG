@@ -94,4 +94,15 @@ final class GastronomiaAnitaVenGravadoSupportTest extends TestCase
 
         $this->assertSame(1000.0, GastronomiaAnitaVenGravadoSupport::gravadoDesdeConceptosTotales($conceptos, 1210.0));
     }
+
+    public function test_incluye_total_logistica_en_el_gravado(): void
+    {
+        $conceptos = [
+            ['concepto' => 'Gravado al 21.000%', 'importe' => 1000, 'baseimponible' => 0],
+            ['concepto' => 'Total Logistica', 'importe' => 50, 'baseimponible' => 0],
+            ['concepto' => 'Iva 21.000%', 'importe' => 210, 'baseimponible' => 1000],
+        ];
+
+        $this->assertSame(1050.0, GastronomiaAnitaVenGravadoSupport::gravadoDesdeConceptosTotales($conceptos, 1260.0));
+    }
 }

@@ -802,6 +802,17 @@ class FacturaElectronicaService
 				];
 				$totalTributo += $concepto['importe'];
 			}
+			// Bierzo: tasa de abasto por kilo. ARCA código 99 = Otros (ver AlinearFacturaAnitaArcaService).
+			if (str_contains((string) $concepto['concepto'], 'Abasto') && (float) ($concepto['importe'] ?? 0) != 0.) {
+				$tributos[] = [
+					'id' => 99,
+					'base_imp' => $concepto['baseimponible'] ?? 0,
+					'alicuota' => $concepto['tasa'] ?? 0,
+					'desc' => $concepto['concepto'],
+					'importe' => $concepto['importe'],
+				];
+				$totalTributo += $concepto['importe'];
+			}
 		}
 	}
 

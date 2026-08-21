@@ -48,6 +48,20 @@ class FacturaelectronicaTributoPercepcionIvaTest extends TestCase
         self::assertSame(12.5, $total);
     }
 
+    public function test_el_abasto_entra_como_tributo_99(): void
+    {
+        [$tributos, $total] = $this->armaTributo([
+            ['concepto' => 'Total Abasto', 'tasa' => 10, 'importe' => 2057.0, 'baseimponible' => 0],
+            ['concepto' => 'Percepcion IVA 3%', 'tasa' => 3, 'importe' => 30.0, 'baseimponible' => 1000.0],
+        ]);
+
+        self::assertCount(2, $tributos);
+        self::assertSame(1, $tributos[0]['id']);
+        self::assertSame(99, $tributos[1]['id']);
+        self::assertSame(2057.0, $tributos[1]['importe']);
+        self::assertSame(2087.0, $total);
+    }
+
     /**
      * @param  list<array<string, mixed>>  $conceptosTotales
      * @return array{0: list<array<string, mixed>>, 1: float|int}

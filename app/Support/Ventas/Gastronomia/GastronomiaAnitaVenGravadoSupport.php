@@ -119,6 +119,9 @@ final class GastronomiaAnitaVenGravadoSupport
 
             if (preg_match('/^Gravado/i', $nombre)) {
                 $gravadoAl += $importe;
+            } elseif (strcasecmp($nombre, 'Total Logistica') === 0) {
+                // Bierzo: la logística grava e integra ven_gravado / importeGravado MTXCA.
+                $gravadoAl += $importe;
             } elseif ($nombre === 'Subtotal') {
                 $subtotalConcepto += $importe;
             } elseif (preg_match('/^Iva/i', $nombre)) {

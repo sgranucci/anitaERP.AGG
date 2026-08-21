@@ -12,6 +12,7 @@ use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use App\Repositories\Ventas\Cliente_Cm05RepositoryInterface;
 use App\Repositories\Ventas\AbastoRepositoryInterface;
 use App\Services\Ventas\FacturacionService;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\ExclusionPercepcionIvaSupport;
 use App\Support\Stock\FormulaArticuloFactorCosto;
 use Illuminate\Support\Facades\Storage;
@@ -95,20 +96,20 @@ class ImpuestoService extends FacturacionService
 				$flConIva = false;
 		}
 
-		// Lee el abasto
+		// Abasto / logística: solo El Bierzo (Anita a-comprob). AGG y resto no entran.
 		$tasaAbasto = 0;
-		if (strtoupper(config("app.empresa") == "EL BIERZO") && isset($dataCliente['abasto_id']))
-		{
-			$abasto = $this->abastoRepository->findPorId($dataCliente['abasto_id']);
-
-			if ($abasto)
-				$tasaAbasto = $abasto->tasa;
-		}
-
-		// Porcentaje de logistica
 		$porcentajeLogistica = 0;
-		if (strtoupper(config("app.empresa") == "EL BIERZO") && isset($dataCliente['porcentajelogistica']))
-			$porcentajeLogistica = $dataCliente['porcentajelogistica'];
+		if (EntornoEmpresaSupport::esElBierzo()) {
+			if (isset($dataCliente['abasto_id'])) {
+				$abasto = $this->abastoRepository->findPorId($dataCliente['abasto_id']);
+				if ($abasto) {
+					$tasaAbasto = $abasto->tasa;
+				}
+			}
+			if (isset($dataCliente['porcentajelogistica'])) {
+				$porcentajeLogistica = $dataCliente['porcentajelogistica'];
+			}
+		}
 
 		// Lee el CM05 del cliente
 		$cm05 = $this->cliente_cm05Repository->findPorClienteId($cliente_id);
@@ -268,27 +269,42 @@ class ImpuestoService extends FacturacionService
 			}
 		}
 
-		// Agraga item de logistica
-		if (strtoupper(config('app.empresa')) == 'EL BIERZO' && $porcentajeLogistica && !$flGrabaComprobanteDividido)
-		{
+		// Logística El Bierzo (a-comprob): IVA con la alícuota del impuesto (21 %), no con el
+		// % de logística. El ítem MTXCA "Logistica" se agrega al armar el CAE (no acá: dataItem
+		// alimenta stock / venta_emision).
+		if (EntornoEmpresaSupport::esElBierzo() && $porcentajeLogistica && ! $flGrabaComprobanteDividido) {
 			$totalLogistica = round($totalNeto * $porcentajeLogistica / 100., 2);
-			
+
 			$impuesto = Impuesto::findOrFail(config('facturacion.IMPUESTO_LOGISTICA_ID'));
 
-			if ($impuesto)
-			{
-				if (($item['descuentofinal']+$porcentajeDescuentoImportePie) != 0.)
-				{
-					$descuentoFinal += ($totalLogistica * ($item['descuentofinal'] +
-										$porcentajeDescuentoImportePie) / 100.);
-
-					$totalLogistica *= (1. - (($item['descuentofinal']+$porcentajeDescuentoImportePie) / 100.));
-					$porcDescuento = ($item['descuentofinal']+$porcentajeDescuentoImportePie);
+			if ($impuesto) {
+				$descuentoPieLinea = 0.0;
+				foreach ($dataItem as $lineaFactura) {
+					if ((float) ($lineaFactura['cantidad'] ?? 0) != 0.0) {
+						$descuentoPieLinea = (float) ($lineaFactura['descuentofinal'] ?? 0);
+						break;
+					}
 				}
 
-				// Acumula netos por tasa de impuesto
-				self::agregaItemTotales("Total Logistica", $porcentajeLogistica, 
-					$totalLogistica, $impuesto->id, $impuesto->codigo, $impuesto->codigoarca, $netos);
+				if (($descuentoPieLinea + $porcentajeDescuentoImportePie) != 0.) {
+					$descuentoFinal += ($totalLogistica * ($descuentoPieLinea +
+										$porcentajeDescuentoImportePie) / 100.);
+
+					$totalLogistica *= (1. - (($descuentoPieLinea + $porcentajeDescuentoImportePie) / 100.));
+					$porcDescuento = ($descuentoPieLinea + $porcentajeDescuentoImportePie);
+				}
+
+				$totalLogistica = round($totalLogistica, 2);
+
+				self::agregaItemTotales(
+					'Total Logistica',
+					(float) $impuesto->valor,
+					$totalLogistica,
+					$impuesto->id,
+					$impuesto->codigo,
+					$impuesto->codigoarca,
+					$netos,
+				);
 			}
 		}
 
@@ -379,19 +395,16 @@ class ImpuestoService extends FacturacionService
 																		$condicioniibb_id, $provincia, $cm05, $fechaFactura);
 		}
 
-		// Para El Bierzo agrega total de abasto
-		if (strtoupper(config('app.empresa')) == 'EL BIERZO' && !$flGrabaComprobanteDividido)
-		{
-			if ($tasaAbasto > 0)
-			{
-				$totalAbasto = $totalCantidad * $tasaAbasto;
+		// Abasto El Bierzo (a-comprob: kilos × tasa; MTXCA tributo 99).
+		if (EntornoEmpresaSupport::esElBierzo() && ! $flGrabaComprobanteDividido && $tasaAbasto > 0) {
+			$totalAbasto = $totalCantidad * $tasaAbasto;
 
-				$impuestos[] = ["concepto"=>"Total Abasto",
-								"baseimponible" => 0,
-								"tasa"=>$tasaAbasto,
-								"importe"=>$totalAbasto,
-								];				
-			}
+			$impuestos[] = [
+				'concepto' => 'Total Abasto',
+				'baseimponible' => 0,
+				'tasa' => $tasaAbasto,
+				'importe' => $totalAbasto,
+			];
 		}
 		// Agrega impuesto interno como concepto del comprobante (sumatoria por renglón).
 		$conceptosImpuestoInterno = [];
@@ -584,14 +597,25 @@ class ImpuestoService extends FacturacionService
 	public function buscaValor($arrayconcepto, $concepto, $key, $valor)
 	{
 		$valorRetorno = 0;
-		
-		foreach($arrayconcepto as $item)
-		{
-			$pos = strpos($item[$concepto], $key);
+		// "Total" / "Subtotal" exactos: strpos("Total Abasto", "Total") inflaba el
+		// importeTotal de MTXCA/WSFE (Bierzo) y ARCA rechazaba 115/116.
+		$exacto = $key === 'Total' || $key === 'Subtotal';
 
-			if ($pos >= 0 && $pos !== false)
+		foreach ($arrayconcepto as $item) {
+			$nombre = (string) ($item[$concepto] ?? '');
+			if ($exacto) {
+				if ($nombre === $key) {
+					$valorRetorno += $item[$valor];
+				}
+
+				continue;
+			}
+
+			if (strpos($nombre, $key) !== false) {
 				$valorRetorno += $item[$valor];
+			}
 		}
+
 		return $valorRetorno;
 	}
 
