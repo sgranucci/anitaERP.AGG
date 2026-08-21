@@ -9,7 +9,7 @@ use App\Models\Seguridad\Usuario;
 class Cliente_Seguimiento extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
-    protected $fillable = ['cliente_id', 'fecha', 'observacion', 'leyenda', 'creousuario_id'];
+    protected $fillable = ['cliente_id', 'anita_orden', 'fecha', 'observacion', 'leyenda', 'creousuario_id'];
 	
     protected $table = 'cliente_seguimiento';
 

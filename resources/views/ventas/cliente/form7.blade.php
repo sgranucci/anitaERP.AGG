@@ -1,5 +1,7 @@
 <div id="tab-articulos-suspendidos" class="tab-pane fade card form7" role="tabpanel">
     <div class="card-body">
+		{{-- Sin este marcador el repository no sincroniza: un submit que no incluya la solapa no debe borrar los artículos suspendidos. --}}
+		<input type="hidden" name="articulo_suspendido_en_formulario" value="1" />
     	<table class="table table-sm table-bordered" id="articulo-suspendido-table">
     		<thead style="background:#85C1E9;color:#17202A;">
     			<tr>

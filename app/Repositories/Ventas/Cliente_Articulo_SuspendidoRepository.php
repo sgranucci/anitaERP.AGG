@@ -3,6 +3,7 @@
 namespace App\Repositories\Ventas;
 
 use App\Models\Ventas\Cliente_Articulo_Suspendido;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Carbon\Carbon;
 use Auth;
@@ -43,7 +44,7 @@ class Cliente_Articulo_SuspendidoRepository implements Cliente_Articulo_Suspendi
 
     public function delete($id)
     {
-        return $this->model->where('id', $id)->delete();
+        return EloquentAuditDeleteSupport::each($this->model->newQuery()->where('id', $id));
     }
 
     public function find($id)
@@ -66,10 +67,17 @@ class Cliente_Articulo_SuspendidoRepository implements Cliente_Articulo_Suspendi
 
 	private function guardarCliente_Articulo_Suspendido($data, $funcion, $id = null)
 	{
+		// Un submit sin la solapa Artículos suspendidos no puede borrar lo importado de Anita.
+		if (! isset($data['articulo_suspendido_en_formulario'])) {
+			return null;
+		}
+
 		$articuloIds = $this->normalizarArticuloSuspendidoIds($data);
 
 		if ($articuloIds === []) {
-			return $this->model->where('cliente_id', $id)->delete();
+			return EloquentAuditDeleteSupport::each(
+				$this->model->newQuery()->where('cliente_id', $id)
+			);
 		}
 
 		if ($funcion == 'update')

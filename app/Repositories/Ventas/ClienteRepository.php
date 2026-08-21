@@ -876,12 +876,12 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 			if ($clienteExistente !== null) {
 				unset($arr_campos['usuario_id']);
-				if (! $this->hayCambiosCliente($clienteExistente, $arr_campos)) {
-					return 'omitido';
+				// Sin cambios de cabecera igual sigue: el seguimiento de Anita se sincroniza aparte.
+				if ($this->hayCambiosCliente($clienteExistente, $arr_campos)) {
+					$clienteExistente->update($arr_campos);
+					$estado = 'actualizado';
 				}
-				$clienteExistente->update($arr_campos);
 				$cliente = $clienteExistente->fresh();
-				$estado = 'actualizado';
 			} elseif ($fl_crea_registro !== false) {
             	$cliente = Cliente::create($arr_campos);
 				$clienteRecienCreado = true;
@@ -893,40 +893,274 @@ class ClienteRepository implements ClienteRepositoryInterface
 			return 'omitido';
 		}
 
-		if ($clienteRecienCreado && isset($cliente) && $cliente instanceof Cliente) {
-			if (isset($dataseguimientoAnita) && is_array($dataseguimientoAnita) && count($dataseguimientoAnita) > 0) {
-				foreach ($dataseguimientoAnita as $dataSeg) {
-					Cliente_Seguimiento::create([
-						'cliente_id' => $cliente->id,
-						'fecha' => $dataSeg->movsc_fecha,
-						'observacion' => $dataSeg->movsc_observacion,
-						'leyenda' => '',
-						'creousuario_id' => $usuario_id,
-					]);
-				}
+		if (isset($cliente) && $cliente instanceof Cliente) {
+			// Incremental: corre también sobre clientes ya existentes, no solo en el alta.
+			if (isset($dataseguimientoAnita) && is_array($dataseguimientoAnita)) {
+				$this->sincronizarSeguimientoDesdeAnita($cliente, $dataseguimientoAnita, $usuario_id);
 			}
 
-			if (isset($dataarticulo_suspendidoAnita) && is_array($dataarticulo_suspendidoAnita) && count($dataarticulo_suspendidoAnita) > 0) {
-				foreach ($dataarticulo_suspendidoAnita as $dataArt) {
-					$articulo = Articulo::select('sku', 'id')->where('sku', ltrim($dataArt->stksc_articulo, '0'))->first();
-
-					if ($articulo) {
-						Cliente_Articulo_Suspendido::create([
-							'cliente_id' => $cliente->id,
-							'articulo_id' => $articulo->id,
-							'creousuario_id' => $usuario_id,
-						]);
-					}
-				}
+			if (isset($dataarticulo_suspendidoAnita) && is_array($dataarticulo_suspendidoAnita)) {
+				$this->sincronizarArticuloSuspendidoDesdeAnita($cliente, $dataarticulo_suspendidoAnita, $usuario_id);
 			}
 
-			if (config('app.empresa') === 'INTERFORMING') {
+			if ($clienteRecienCreado && config('app.empresa') === 'INTERFORMING') {
 				$this->importarCm05DesdeAnita($apiAnita, trim((string) $data->clim_cuit), $cliente->id);
 			}
 		}
 
 		return $estado ?? 'omitido';
     }
+
+	/**
+	 * Deja en el ERP una fila por cada renglón de `movscli`, sin duplicar ni pisar
+	 * el seguimiento cargado a mano (esas filas no matchean ninguna de Anita y se conservan).
+	 *
+	 * @param  list<object>  $filasAnita
+	 * @return array{creados: int, duplicados_borrados: int}
+	 */
+	public function sincronizarSeguimientoDesdeAnita(Cliente $cliente, array $filasAnita, $usuarioId, bool $simular = false): array
+	{
+		$ret = ['creados' => 0, 'actualizados' => 0, 'duplicados_borrados' => 0];
+
+		$todas = Cliente_Seguimiento::query()
+			->where('cliente_id', $cliente->id)
+			->orderBy('id')
+			->get();
+
+		$porOrden = $todas->whereNotNull('anita_orden')->groupBy(fn (Cliente_Seguimiento $f) => (int) $f->anita_orden);
+		$porTexto = $todas->groupBy(fn (Cliente_Seguimiento $f) => $this->claveSeguimiento($f->fecha, $f->observacion));
+
+		foreach ($filasAnita as $filaAnita) {
+			$fecha = $this->fechaSeguimientoDesdeAnita($filaAnita->movsc_fecha ?? null);
+			if ($fecha === null) {
+				continue;
+			}
+
+			$observacion = trim((string) ($filaAnita->movsc_observacion ?? ''));
+			$orden = (int) ($filaAnita->movsc_orden ?? 0);
+			$clave = $this->claveSeguimiento($fecha, $observacion);
+
+			// 1) Por clave natural de Anita: permite ver ediciones de la nota
+			$coincidencias = $orden > 0 ? $porOrden->get($orden) : null;
+
+			// 2) Sin orden grabado todavía: cae al texto (filas de imports anteriores)
+			if ($coincidencias === null || $coincidencias->isEmpty()) {
+				$coincidencias = $porTexto->get($clave);
+			}
+
+			if ($coincidencias === null || $coincidencias->isEmpty()) {
+				$ret['creados']++;
+				if (! $simular) {
+					Cliente_Seguimiento::create([
+						'cliente_id' => $cliente->id,
+						'anita_orden' => $orden > 0 ? $orden : null,
+						'fecha' => $fecha,
+						'observacion' => $observacion,
+						'leyenda' => '',
+						'creousuario_id' => $usuarioId,
+					]);
+				}
+
+				continue;
+			}
+
+			$conservada = $coincidencias->first();
+			$cambio = (string) $conservada->fecha !== $fecha
+				|| trim((string) $conservada->observacion) !== $observacion
+				|| ($orden > 0 && (int) $conservada->anita_orden !== $orden);
+
+			if ($cambio) {
+				$ret['actualizados']++;
+				if (! $simular) {
+					$conservada->update([
+						'anita_orden' => $orden > 0 ? $orden : $conservada->anita_orden,
+						'fecha' => $fecha,
+						'observacion' => $observacion,
+					]);
+				}
+			}
+
+			// Conserva la primera y borra las copias que dejaron los imports repetidos
+			$sobrantes = $coincidencias->slice(1);
+			$ret['duplicados_borrados'] += $sobrantes->count();
+			if (! $simular) {
+				$sobrantes->each(fn (Cliente_Seguimiento $fila) => $fila->delete());
+			}
+
+			$restante = $coincidencias->take(1);
+			$porTexto->put($clave, $restante);
+			if ($orden > 0) {
+				$porOrden->put($orden, $restante);
+			}
+		}
+
+		return $ret;
+	}
+
+	/**
+	 * Réplica anitaERP → Anita: el ERP es el maestro, `movscli` queda como copia de resguardo.
+	 * Reescribe el seguimiento completo del cliente y numera `movsc_orden` desde 1.
+	 */
+	private function sincronizarMovscliAnita(ApiAnita $apiAnita, string $codigoCliente): void
+	{
+		if (config('app.empresa') !== 'EL BIERZO') {
+			return;
+		}
+
+		$clienteId = $this->queryClientePorCodigo($codigoCliente)->value('id');
+		if ($clienteId === null) {
+			return;
+		}
+
+		$filas = Cliente_Seguimiento::query()
+			->where('cliente_id', $clienteId)
+			->orderBy('fecha')
+			->orderBy('id')
+			->get();
+
+		// Sin seguimiento en el ERP no se borra el de Anita: es la copia de resguardo y el
+		// cliente puede tener notas cargadas en Anita que el ERP todavía no importó.
+		if ($filas->isEmpty()) {
+			return;
+		}
+
+		$codigoPadded = str_pad(ltrim($codigoCliente, '0') ?: '0', 6, '0', STR_PAD_LEFT);
+
+		$this->apiCallAnitaEscritura($apiAnita, [
+			'acc' => 'delete',
+			'tabla' => $this->tableAnita[3],
+			'sistema' => 'ventas',
+			'whereArmado' => " WHERE movsc_cliente = '".$codigoPadded."' ",
+		], 'movscli delete');
+
+		$usuario = substr((string) (Auth::user()->usuario ?? Auth::user()->nombre ?? 'anitaERP'), 0, 20);
+		$hoy = Carbon::now();
+		$orden = 0;
+
+		foreach ($filas as $fila) {
+			$orden++;
+			$fecha = $this->fechaSeguimientoDesdeAnita($fila->fecha);
+			if ($fecha === null) {
+				continue;
+			}
+
+			$this->apiCallAnitaEscritura($apiAnita, [
+				'tabla' => $this->tableAnita[3],
+				'acc' => 'insert',
+				'sistema' => 'ventas',
+				'campos' => '
+							movsc_cliente,
+							movsc_orden,
+							movsc_fecha,
+							movsc_estado,
+							movsc_fec_ult_tra,
+							movsc_usuario,
+							movsc_hora_ult_tra,
+							movsc_observacion
+									',
+				'valores' => "
+							'".$codigoPadded."',
+							'".$orden."',
+							'".str_replace('-', '', $fecha)."',
+							'0',
+							'".$hoy->format('Ymd')."',
+							'".$this->escaparTextoAnita($usuario)."',
+							'".$hoy->format('H:i')."',
+							'".$this->escaparTextoAnita((string) $fila->observacion)."' ",
+			], 'movscli insert');
+
+			if ((int) $fila->anita_orden !== $orden) {
+				$fila->update(['anita_orden' => $orden]);
+			}
+		}
+	}
+
+	/**
+	 * El bridge parte el CSV por `|`; la comilla simple corta el INSERT.
+	 */
+	private function escaparTextoAnita(string $texto): string
+	{
+		return str_replace(["'", '|'], ['', ' '], trim($texto));
+	}
+
+	/**
+	 * @param  list<object>  $filasAnita
+	 * @return array{creados: int, duplicados_borrados: int, sin_articulo: int}
+	 */
+	public function sincronizarArticuloSuspendidoDesdeAnita(Cliente $cliente, array $filasAnita, $usuarioId, bool $simular = false): array
+	{
+		$ret = ['creados' => 0, 'duplicados_borrados' => 0, 'sin_articulo' => 0];
+
+		$existentes = Cliente_Articulo_Suspendido::query()
+			->where('cliente_id', $cliente->id)
+			->orderBy('id')
+			->get()
+			->groupBy(fn (Cliente_Articulo_Suspendido $fila) => (int) $fila->articulo_id);
+
+		foreach ($filasAnita as $filaAnita) {
+			$sku = ltrim(trim((string) ($filaAnita->stksc_articulo ?? '')), '0');
+			if ($sku === '') {
+				continue;
+			}
+
+			$articulo = Articulo::select('sku', 'id')->where('sku', $sku)->first();
+			if (! $articulo) {
+				$ret['sin_articulo']++;
+
+				continue;
+			}
+
+			$coincidencias = $existentes->get((int) $articulo->id);
+
+			if ($coincidencias === null || $coincidencias->isEmpty()) {
+				$ret['creados']++;
+				if (! $simular) {
+					Cliente_Articulo_Suspendido::create([
+						'cliente_id' => $cliente->id,
+						'articulo_id' => $articulo->id,
+						'creousuario_id' => $usuarioId,
+					]);
+				}
+
+				continue;
+			}
+
+			$sobrantes = $coincidencias->slice(1);
+			$ret['duplicados_borrados'] += $sobrantes->count();
+			if (! $simular) {
+				$sobrantes->each(fn (Cliente_Articulo_Suspendido $fila) => $fila->delete());
+			}
+			$existentes->put((int) $articulo->id, $coincidencias->take(1));
+		}
+
+		return $ret;
+	}
+
+	private function claveSeguimiento($fecha, $observacion): string
+	{
+		return $this->fechaSeguimientoDesdeAnita($fecha).'|'.trim((string) $observacion);
+	}
+
+	/**
+	 * Anita entrega `movsc_fecha` como YYYYMMDD; la columna del ERP es `date`.
+	 */
+	private function fechaSeguimientoDesdeAnita($valor): ?string
+	{
+		$valor = trim((string) ($valor instanceof \DateTimeInterface ? $valor->format('Y-m-d') : $valor));
+		if ($valor === '' || $valor === '0') {
+			return null;
+		}
+
+		if (preg_match('/^\d{8}$/', $valor) === 1) {
+			$valor = substr($valor, 0, 4).'-'.substr($valor, 4, 2).'-'.substr($valor, 6, 2);
+		}
+
+		try {
+			return Carbon::parse($valor)->format('Y-m-d');
+		} catch (\Throwable) {
+			return null;
+		}
+	}
 
 	/**
 	 * @param  array<string, mixed>  $datos
@@ -1655,6 +1889,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 		// stksuspcli: sincronizarAnitaDespuesDeGrabado() tras cliente_articulo_suspendido
 
+		$this->sincronizarMovscliAnita($apiAnita, (string) ($request['codigo'] ?? ''));
+
 		// Graba comisiones
 		if ($request['vendedor_id'] > 0 && config('app.empresa') == 'Calzados Ferli')
 		{
@@ -1843,6 +2079,8 @@ class ClienteRepository implements ClienteRepositoryInterface
 			(string) $id,
 			$this->resolverArticuloSuspendidoIdsDesdeRequest($request)
 		);
+
+		$this->sincronizarMovscliAnita($apiAnita, (string) $id);
 
 		// Borra comisiones
 		if ($request['vendedor_id'] > 0 && config('app.empresa') == 'Calzados Ferli')
