@@ -22,7 +22,15 @@ class RendicionGastronomiaAuditoriaAnita extends Mailable
     {
         $fecha = (string) ($this->informe['fecha_jornada'] ?? '');
         $requiereAlerta = (bool) ($this->informe['requiere_alerta'] ?? false);
-        $estado = $requiereAlerta ? 'ALERTA' : 'OK';
+        $clasificacion = (string) ($this->informe['clasificacion_alerta'] ?? '');
+        if ($clasificacion === '') {
+            $clasificacion = $requiereAlerta ? 'alerta' : 'ok';
+        }
+        $estado = match ($clasificacion) {
+            'aviso_caja_pendiente' => 'AVISO (caja pendiente)',
+            'alerta' => 'ALERTA',
+            default => 'OK',
+        };
 
         $asunto = sprintf(
             '[%s] Rendgastro gastronomía — %s — %s',

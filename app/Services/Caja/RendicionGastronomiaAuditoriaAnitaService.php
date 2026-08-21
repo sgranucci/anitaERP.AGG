@@ -2,6 +2,9 @@
 
 namespace App\Services\Caja;
 
+use App\Models\Caja\Estacionamiento\JornadaEstacionamiento;
+use App\Models\Caja\RendicionEstacionamientoCaja;
+use App\Models\Caja\RendicionGastronomiaCaja;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionEstadoSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionEstacionamientoSupport;
@@ -150,6 +153,9 @@ final class RendicionGastronomiaAuditoriaAnitaService
             );
         }
 
+        $presentacionCaja = $this->resolverPresentacionCaja($empresaId, $fechaJornada, $filas);
+        $clasificacion = $this->clasificarAlerta($requiereAlerta, $presentacionCaja, $filas);
+
         return [
             'fecha_jornada' => $fechaJornada,
             'empresa_id' => $empresaId,
@@ -160,6 +166,9 @@ final class RendicionGastronomiaAuditoriaAnitaService
                 'puntoventas' => count($filas),
                 'conteo' => $conteo,
                 'requiere_alerta' => $requiereAlerta,
+                'clasificacion_alerta' => $clasificacion,
+                'presentacion_caja' => $presentacionCaja,
+                'avisos' => $presentacionCaja['avisos'],
                 'filtro_erp' => 'venta.fechajornada + venta_gastronomia_emision por PC (CAE+CAEA)',
                 'filtro_anita_venta' => 'cabecera venta Informix (ven_monto) emparejada por comprobante',
                 'filtro_anita_rendg' => 'rendgastro neto por rendg_host (Z portadora − NC por PC); total día salón + post-cierre + estacionamiento',
@@ -270,5 +279,170 @@ final class RendicionGastronomiaAuditoriaAnitaService
             ->whereDate('fecha_jornada', $fechaJornada)
             ->orderByDesc('id')
             ->first();
+    }
+
+    /**
+     * Z en rendgastro se recalcula al presentar la rendición tipo jornada en Caja.
+     * Sin esa presentación, Δ rendg suele ser falso positivo (Z=0 / NC sueltas).
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return array{
+     *   gastro_aplica: bool,
+     *   gastro_presentada: bool|null,
+     *   gastro_jornada_id: int|null,
+     *   gastro_estado_ventas: string|null,
+     *   estac_aplica: bool,
+     *   estac_presentada: bool|null,
+     *   estac_jornada_id: int|null,
+     *   estac_estado_ventas: string|null,
+     *   pendiente: bool,
+     *   avisos: list<string>
+     * }
+     */
+    private function resolverPresentacionCaja(int $empresaId, string $fechaJornada, array $filas): array
+    {
+        $hayGastro = false;
+        $hayEstac = false;
+        foreach ($filas as $fila) {
+            $tipo = (string) ($fila['tipo_fila'] ?? '');
+            if (in_array($tipo, ['pc', 'total_salon', 'total_gastro', 'post_cierre_caea'], true)) {
+                $hayGastro = true;
+            }
+            if (in_array($tipo, ['estacionamiento_pv', 'total_estacionamiento'], true)) {
+                $hayEstac = true;
+            }
+        }
+
+        $jornadaGastro = $this->resolverJornada($empresaId, $fechaJornada);
+        $gastroEstado = $jornadaGastro !== null ? (string) ($jornadaGastro->estado ?? '') : null;
+        $gastroId = $jornadaGastro !== null ? (int) $jornadaGastro->id : null;
+        $gastroAplica = $hayGastro || ($jornadaGastro !== null && $gastroEstado === JornadaGastronomia::ESTADO_CERRADA);
+        $gastroPresentada = null;
+        if ($gastroAplica && $gastroId !== null && $gastroEstado === JornadaGastronomia::ESTADO_CERRADA) {
+            $gastroPresentada = RendicionGastronomiaCaja::query()
+                ->where('jornada_gastronomia_id', $gastroId)
+                ->where('tipo', RendicionGastronomiaCaja::TIPO_JORNADA)
+                ->exists();
+        }
+
+        $jornadaEstac = JornadaEstacionamiento::query()
+            ->where('empresa_id', $empresaId)
+            ->whereDate('fecha_jornada', $fechaJornada)
+            ->orderByDesc('id')
+            ->first(['id', 'estado']);
+        $estacEstado = $jornadaEstac !== null ? (string) ($jornadaEstac->estado ?? '') : null;
+        $estacId = $jornadaEstac !== null ? (int) $jornadaEstac->id : null;
+        $estacAplica = $hayEstac || ($jornadaEstac !== null && $estacEstado === JornadaEstacionamiento::ESTADO_CERRADA);
+        $estacPresentada = null;
+        if ($estacAplica && $estacId !== null && $estacEstado === JornadaEstacionamiento::ESTADO_CERRADA) {
+            $estacPresentada = RendicionEstacionamientoCaja::query()
+                ->where('jornada_estacionamiento_id', $estacId)
+                ->where('tipo', RendicionEstacionamientoCaja::TIPO_JORNADA)
+                ->exists();
+        }
+
+        $avisos = [];
+        if ($gastroAplica && $gastroEstado === JornadaGastronomia::ESTADO_ABIERTA) {
+            $avisos[] = 'Gastronomía: la jornada de ventas sigue abierta; rendgastro Z aún no es comparable.';
+        } elseif ($gastroAplica && $gastroPresentada === false) {
+            $avisos[] = 'Gastronomía: la jornada aún no está presentada en Caja. '
+                .'En Anita el Z suele quedar en 0 hasta esa presentación; los DIF rendg pueden ser esperables.';
+        }
+
+        if ($estacAplica && $estacEstado === JornadaEstacionamiento::ESTADO_ABIERTA) {
+            $avisos[] = 'Estacionamiento: la jornada de ventas sigue abierta; rendgastro Z aún no es comparable.';
+        } elseif ($estacAplica && $estacPresentada === false) {
+            $avisos[] = 'Estacionamiento: la jornada aún no está presentada en Caja. '
+                .'En Anita el Z suele quedar en 0 hasta esa presentación; los DIF rendg pueden ser esperables.';
+        }
+
+        $pendiente = ($gastroAplica && $gastroPresentada === false)
+            || ($estacAplica && $estacPresentada === false)
+            || ($gastroAplica && $gastroEstado === JornadaGastronomia::ESTADO_ABIERTA)
+            || ($estacAplica && $estacEstado === JornadaEstacionamiento::ESTADO_ABIERTA);
+
+        return [
+            'gastro_aplica' => $gastroAplica,
+            'gastro_presentada' => $gastroPresentada,
+            'gastro_jornada_id' => $gastroId,
+            'gastro_estado_ventas' => $gastroEstado,
+            'estac_aplica' => $estacAplica,
+            'estac_presentada' => $estacPresentada,
+            'estac_jornada_id' => $estacId,
+            'estac_estado_ventas' => $estacEstado,
+            'pendiente' => $pendiente,
+            'avisos' => $avisos,
+        ];
+    }
+
+    /**
+     * @param  array{
+     *   pendiente: bool,
+     *   gastro_presentada: bool|null,
+     *   gastro_estado_ventas: string|null,
+     *   estac_presentada: bool|null,
+     *   estac_estado_ventas: string|null
+     * }  $presentacionCaja
+     * @param  list<array<string, mixed>>  $filas
+     */
+    private function clasificarAlerta(bool $requiereAlerta, array $presentacionCaja, array $filas): string
+    {
+        if (! $requiereAlerta) {
+            return 'ok';
+        }
+
+        $hayDifGastro = false;
+        $hayDifEstac = false;
+        foreach ($filas as $fila) {
+            $tipo = (string) ($fila['tipo_fila'] ?? '');
+            if (! in_array($tipo, ['pc', 'estacionamiento_pv'], true)) {
+                continue;
+            }
+            $esDif = GastronomiaConciliacionEstadoSupport::requiereAlertaRendg(
+                (string) ($fila['estado_rendg'] ?? ''),
+            ) || in_array((string) ($fila['estado'] ?? ''), ['DIF rendg', 'SIN RENDG', 'DIF'], true);
+            if (! $esDif) {
+                continue;
+            }
+            if ($tipo === 'pc') {
+                $hayDifGastro = true;
+            } else {
+                $hayDifEstac = true;
+            }
+        }
+
+        $difInexplicado = false;
+        if ($hayDifGastro && ! $this->difExplicablePorCajaPendiente(
+            $presentacionCaja['gastro_presentada'] ?? null,
+            $presentacionCaja['gastro_estado_ventas'] ?? null,
+            JornadaGastronomia::ESTADO_ABIERTA,
+        )) {
+            $difInexplicado = true;
+        }
+        if ($hayDifEstac && ! $this->difExplicablePorCajaPendiente(
+            $presentacionCaja['estac_presentada'] ?? null,
+            $presentacionCaja['estac_estado_ventas'] ?? null,
+            JornadaEstacionamiento::ESTADO_ABIERTA,
+        )) {
+            $difInexplicado = true;
+        }
+
+        if (! $difInexplicado && ! empty($presentacionCaja['pendiente'])) {
+            return 'aviso_caja_pendiente';
+        }
+
+        return 'alerta';
+    }
+
+    private function difExplicablePorCajaPendiente(
+        ?bool $presentada,
+        ?string $estadoVentas,
+        string $estadoAbierta,
+    ): bool {
+        if ($estadoVentas === $estadoAbierta) {
+            return true;
+        }
+
+        return $presentada === false;
     }
 }

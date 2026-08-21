@@ -69,6 +69,7 @@ class RendicionGastronomiaAuditoriaAnita extends Command
                 'tolerancia' => $tolerancia,
                 'empresas' => [],
                 'requiere_alerta' => false,
+                'clasificacion_alerta' => 'ok',
             ];
 
             foreach ($empresas as $empresaId) {
@@ -95,6 +96,13 @@ class RendicionGastronomiaAuditoriaAnita extends Command
                 if (! empty($informe['resumen']['requiere_alerta'])) {
                     $informeMail['requiere_alerta'] = true;
                 }
+                $clasificacionEmpresa = (string) ($informe['resumen']['clasificacion_alerta'] ?? 'ok');
+                if ($clasificacionEmpresa === 'alerta') {
+                    $informeMail['clasificacion_alerta'] = 'alerta';
+                } elseif ($clasificacionEmpresa === 'aviso_caja_pendiente'
+                    && ($informeMail['clasificacion_alerta'] ?? 'ok') !== 'alerta') {
+                    $informeMail['clasificacion_alerta'] = 'aviso_caja_pendiente';
+                }
 
                 $this->newLine();
                 $this->info('Empresa '.$empresaId.' — fecha jornada '.$fecha);
@@ -107,6 +115,10 @@ class RendicionGastronomiaAuditoriaAnita extends Command
                         ['Sin rendgastro', (string) ($conteo['sin_rendg'] ?? 0)],
                     ],
                 );
+
+                foreach ($informe['resumen']['avisos'] ?? [] as $aviso) {
+                    $this->warn('AVISO: '.$aviso);
+                }
 
                 $totalDia = $informe['total_dia'] ?? null;
                 if ($totalDia !== null) {
@@ -145,11 +157,15 @@ class RendicionGastronomiaAuditoriaAnita extends Command
 
                 if (! empty($informe['resumen']['requiere_alerta'])) {
                     $hayProblemas = true;
-                    $jornada = $service->resolverJornada($empresaId, $fecha);
-                    if ($jornada !== null) {
-                        $this->line('Reparación sugerida: php artisan rendicion-gastronomia:reparar-jornada-anita --jornada='.$jornada->id.' --dry-run');
+                    if (($informe['resumen']['clasificacion_alerta'] ?? '') === 'aviso_caja_pendiente') {
+                        $this->comment('Sin reparación Anita todavía: esperar presentación de jornada en Caja y reauditar.');
                     } else {
-                        $this->line('Reparación sugerida: php artisan rendicion-gastronomia:reparar-jornada-anita --fecha='.$fecha.' --empresa='.$empresaId.' --dry-run');
+                        $jornada = $service->resolverJornada($empresaId, $fecha);
+                        if ($jornada !== null) {
+                            $this->line('Reparación sugerida: php artisan rendicion-gastronomia:reparar-jornada-anita --jornada='.$jornada->id.' --dry-run');
+                        } else {
+                            $this->line('Reparación sugerida: php artisan rendicion-gastronomia:reparar-jornada-anita --fecha='.$fecha.' --empresa='.$empresaId.' --dry-run');
+                        }
                     }
                 } else {
                     $this->info('Consistente para '.$fecha.'.');

@@ -49,6 +49,7 @@ final class RendicionGastronomiaAuditoriaAnitaNotificacionService
                 'destino' => $destino,
                 'fecha_jornada' => $informe['fecha_jornada'] ?? null,
                 'requiere_alerta' => $informe['requiere_alerta'] ?? null,
+                'clasificacion_alerta' => $informe['clasificacion_alerta'] ?? null,
                 'empresas' => array_map(
                     static fn (array $e) => (int) ($e['empresa_id'] ?? 0),
                     $informe['empresas'] ?? [],

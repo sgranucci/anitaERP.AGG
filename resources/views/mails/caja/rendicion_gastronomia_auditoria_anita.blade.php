@@ -17,6 +17,10 @@
         return ($v > 0 ? '+' : '').$fmt($v);
     };
     $requiereAlerta = (bool) ($informe['requiere_alerta'] ?? false);
+    $clasificacion = (string) ($informe['clasificacion_alerta'] ?? '');
+    if ($clasificacion === '') {
+        $clasificacion = $requiereAlerta ? 'alerta' : 'ok';
+    }
 @endphp
 
 <h2 style="margin:0 0 8px 0;">Auditoría rendgastro vs ERP (gastronomía + estacionamiento)</h2>
@@ -25,7 +29,12 @@
     · Tolerancia $ {{ $fmt($informe['tolerancia'] ?? 0.02) }}
 </p>
 
-@if ($requiereAlerta)
+@if ($clasificacion === 'aviso_caja_pendiente')
+    <p style="color:#856404; background:#fff3cd; border:1px solid #ffeeba; padding:10px 12px; font-weight:bold;">
+        AVISO: hay DIF rendg, pero una o más jornadas aún no están presentadas en Caja.
+        Hasta esa presentación Anita suele dejar Z en 0; reauditar después de presentar.
+    </p>
+@elseif ($requiereAlerta)
     <p style="color:#dc3545; font-weight:bold;">
         Hay desvíos fuera de tolerancia entre ERP y rendgastro (Δ rendg).
     </p>
@@ -39,6 +48,8 @@
         $resumen = $detalle['resumen'] ?? [];
         $conteo = $resumen['conteo'] ?? [];
         $totalDia = $detalle['total_dia'] ?? null;
+        $avisos = $resumen['avisos'] ?? [];
+        $presentacion = $resumen['presentacion_caja'] ?? [];
     @endphp
     <h3 style="margin:18px 0 6px 0;">
         {{ $bloque['empresa_nombre'] ?? ('Empresa '.($bloque['empresa_id'] ?? '')) }}
@@ -49,6 +60,32 @@
         · DIF rendg {{ (int) ($conteo['dif_rendg'] ?? 0) }}
         · Sin rendg {{ (int) ($conteo['sin_rendg'] ?? 0) }}
     </p>
+
+    @if (! empty($avisos))
+        <div style="color:#856404; background:#fff3cd; border:1px solid #ffeeba; padding:8px 10px; margin:0 0 10px 0;">
+            @foreach ($avisos as $aviso)
+                <div style="margin:0 0 4px 0;"><strong>AVISO:</strong> {{ $aviso }}</div>
+            @endforeach
+            <div style="margin-top:6px; font-size:12px;">
+                Caja gastronomía:
+                @if (($presentacion['gastro_presentada'] ?? null) === true)
+                    presentada
+                @elseif (($presentacion['gastro_presentada'] ?? null) === false)
+                    pendiente
+                @else
+                    —
+                @endif
+                · Caja estacionamiento:
+                @if (($presentacion['estac_presentada'] ?? null) === true)
+                    presentada
+                @elseif (($presentacion['estac_presentada'] ?? null) === false)
+                    pendiente
+                @else
+                    —
+                @endif
+            </div>
+        </div>
+    @endif
 
     @if ($totalDia !== null)
         <p style="margin:0 0 8px 0;">
@@ -93,6 +130,7 @@
 <p style="margin-top:24px; font-size:12px; color:#666;">
     <strong>Δ rendg</strong>: ERP vs <code>rendg_total_z</code> en rendgastro por PC (salón) o por PV (estacionamiento).<br>
     Filas <strong>ESTAC …</strong>: circuito estacionamiento por PV.<br>
+    El Z de Anita se completa al <strong>presentar la jornada en Caja</strong>; sin eso los DIF pueden ser esperables.<br>
     Comando manual:
     <code>php artisan rendicion-gastronomia:auditoria-anita --fecha={{ $informe['fecha_jornada'] ?? '' }}</code>
 </p>
