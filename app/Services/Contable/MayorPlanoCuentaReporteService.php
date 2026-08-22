@@ -465,6 +465,241 @@ class MayorPlanoCuentaReporteService
     }
 
     /**
+     * Parte el resultado en un bloque por cuenta o por centro de costo (Excel multi-hoja).
+     *
+     * @param  array<string, mixed>  $resultado
+     * @param  'cuenta'|'centrocosto'  $dimension
+     * @return list<array{titulo: string, resultado: array<string, mixed>}>
+     */
+    public function partirResultadoParaSolapasExcel(array $resultado, string $dimension): array
+    {
+        if ($dimension === 'centrocosto') {
+            return $this->partirResultadoPorCentrocosto($resultado);
+        }
+
+        return $this->partirResultadoPorCuenta($resultado);
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultado
+     * @return list<array{titulo: string, resultado: array<string, mixed>}>
+     */
+    private function partirResultadoPorCuenta(array $resultado): array
+    {
+        $bloques = [];
+        $usados = [];
+
+        foreach ($resultado['secciones'] ?? [] as $seccion) {
+            $codigo = trim((string) ($seccion['cuenta_codigo'] ?? ''));
+            $nombre = trim((string) ($seccion['cuenta_nombre'] ?? ''));
+            $tituloBase = $codigo !== '' ? $codigo : ('Cta '.(int) ($seccion['cuenta'] ?? 0));
+            if ($nombre !== '') {
+                $tituloBase .= ' '.$nombre;
+            }
+            $titulo = $this->tituloHojaExcelUnico($tituloBase, $usados);
+
+            $mini = $resultado;
+            $mini['secciones'] = [$seccion];
+            $mini['totales'] = $this->totalesDesdeSecciones([$seccion], $resultado['stats'] ?? []);
+            $mini['stats'] = $resultado['stats'] ?? [];
+
+            $bloques[] = [
+                'titulo' => $titulo,
+                'resultado' => $mini,
+            ];
+        }
+
+        return $bloques;
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultado
+     * @return list<array{titulo: string, resultado: array<string, mixed>}>
+     */
+    private function partirResultadoPorCentrocosto(array $resultado): array
+    {
+        /** @var array<string, array{codigo: string, nombre: string, secciones: list<array<string, mixed>>}> $porCc */
+        $porCc = [];
+
+        foreach ($resultado['secciones'] ?? [] as $seccion) {
+            $gruposCc = $seccion['grupos_cc'] ?? [];
+            if ($gruposCc !== []) {
+                foreach ($gruposCc as $grupoCc) {
+                    $codigo = trim((string) ($grupoCc['centrocosto_codigo'] ?? ''));
+                    $clave = $codigo !== '' ? $codigo : '__SIN_CC__';
+                    if (! isset($porCc[$clave])) {
+                        $porCc[$clave] = [
+                            'codigo' => $codigo,
+                            'nombre' => (string) ($grupoCc['centrocosto_nombre'] ?? ''),
+                            'secciones' => [],
+                        ];
+                    } elseif ($porCc[$clave]['nombre'] === '' && ($grupoCc['centrocosto_nombre'] ?? '') !== '') {
+                        $porCc[$clave]['nombre'] = (string) $grupoCc['centrocosto_nombre'];
+                    }
+
+                    $seccionCc = $seccion;
+                    $seccionCc['grupos_cc'] = [$grupoCc];
+                    $seccionCc['lineas'] = $grupoCc['lineas'] ?? [];
+                    $seccionCc['saldo_inicial'] = (float) ($grupoCc['saldo_inicial'] ?? 0);
+                    $seccionCc['saldo_ejercicio_inicial'] = (float) ($grupoCc['saldo_ejercicio_inicial'] ?? $grupoCc['saldo_inicial'] ?? 0);
+                    $seccionCc['total_debe'] = (float) ($grupoCc['total_debe'] ?? 0);
+                    $seccionCc['total_haber'] = (float) ($grupoCc['total_haber'] ?? 0);
+                    $seccionCc['cantidad_lineas'] = (int) ($grupoCc['cantidad_lineas'] ?? count($seccionCc['lineas']));
+                    $porCc[$clave]['secciones'][] = $seccionCc;
+                }
+
+                continue;
+            }
+
+            $lineasPorCc = [];
+            foreach ($seccion['lineas'] ?? [] as $linea) {
+                $codigo = trim((string) ($linea['centrocosto_codigo'] ?? ''));
+                $clave = $codigo !== '' ? $codigo : '__SIN_CC__';
+                $lineasPorCc[$clave]['codigo'] = $codigo;
+                $lineasPorCc[$clave]['nombre'] = (string) ($linea['centrocosto_nombre'] ?? ($lineasPorCc[$clave]['nombre'] ?? ''));
+                $lineasPorCc[$clave]['lineas'][] = $linea;
+            }
+
+            // Sin movimientos: una solapa “Sin CC” para no perder saldo inicial de la cuenta.
+            if ($lineasPorCc === []) {
+                $clave = '__SIN_CC__';
+                $lineasPorCc[$clave] = [
+                    'codigo' => '',
+                    'nombre' => '',
+                    'lineas' => [],
+                ];
+            }
+
+            foreach ($lineasPorCc as $clave => $pack) {
+                if (! isset($porCc[$clave])) {
+                    $porCc[$clave] = [
+                        'codigo' => (string) ($pack['codigo'] ?? ''),
+                        'nombre' => (string) ($pack['nombre'] ?? ''),
+                        'secciones' => [],
+                    ];
+                } elseif ($porCc[$clave]['nombre'] === '' && ($pack['nombre'] ?? '') !== '') {
+                    $porCc[$clave]['nombre'] = (string) $pack['nombre'];
+                }
+
+                $lineas = $pack['lineas'] ?? [];
+                $totalDebe = 0.0;
+                $totalHaber = 0.0;
+                foreach ($lineas as $ln) {
+                    $totalDebe += (float) ($ln['debe'] ?? 0);
+                    $totalHaber += (float) ($ln['haber'] ?? 0);
+                }
+
+                $seccionCc = $seccion;
+                unset($seccionCc['grupos_cc']);
+                $seccionCc['lineas'] = $lineas;
+                $seccionCc['total_debe'] = round($totalDebe, 2);
+                $seccionCc['total_haber'] = round($totalHaber, 2);
+                $seccionCc['cantidad_lineas'] = count($lineas);
+                // Saldo inicial de cuenta no se prorratea por CC sin grupos: solo en hoja Sin CC.
+                if ($clave !== '__SIN_CC__') {
+                    $seccionCc['saldo_inicial'] = 0.0;
+                    $seccionCc['saldo_ejercicio_inicial'] = 0.0;
+                }
+                $porCc[$clave]['secciones'][] = $seccionCc;
+            }
+        }
+
+        uksort($porCc, static function (string $a, string $b): int {
+            if ($a === '__SIN_CC__') {
+                return 1;
+            }
+            if ($b === '__SIN_CC__') {
+                return -1;
+            }
+
+            return strnatcasecmp($a, $b);
+        });
+
+        $bloques = [];
+        $usados = [];
+        foreach ($porCc as $clave => $pack) {
+            $codigo = (string) ($pack['codigo'] ?? '');
+            $nombre = trim((string) ($pack['nombre'] ?? ''));
+            $tituloBase = $clave === '__SIN_CC__'
+                ? 'Sin CC'
+                : ($codigo !== '' ? $codigo : 'CC');
+            if ($nombre !== '' && $clave !== '__SIN_CC__') {
+                $tituloBase .= ' '.$nombre;
+            }
+            $titulo = $this->tituloHojaExcelUnico($tituloBase, $usados);
+
+            $mini = $resultado;
+            $mini['secciones'] = $pack['secciones'];
+            $mini['totales'] = $this->totalesDesdeSecciones($pack['secciones'], $resultado['stats'] ?? []);
+            $mini['stats'] = $resultado['stats'] ?? [];
+
+            $bloques[] = [
+                'titulo' => $titulo,
+                'resultado' => $mini,
+            ];
+        }
+
+        return $bloques;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $secciones
+     * @param  array<string, mixed>  $stats
+     * @return array{cuentas: int, debe: float, haber: float, lineas: int, stats: array<string, mixed>}
+     */
+    private function totalesDesdeSecciones(array $secciones, array $stats = []): array
+    {
+        $debe = 0.0;
+        $haber = 0.0;
+        $lineas = 0;
+        $cuentas = [];
+
+        foreach ($secciones as $seccion) {
+            $cuenta = (int) ($seccion['cuenta'] ?? 0);
+            if ($cuenta > 0) {
+                $cuentas[$cuenta] = true;
+            }
+            $debe += (float) ($seccion['total_debe'] ?? 0);
+            $haber += (float) ($seccion['total_haber'] ?? 0);
+            $lineas += (int) ($seccion['cantidad_lineas'] ?? count($seccion['lineas'] ?? []));
+        }
+
+        return [
+            'cuentas' => count($cuentas),
+            'debe' => round($debe, 2),
+            'haber' => round($haber, 2),
+            'lineas' => $lineas,
+            'stats' => $stats,
+        ];
+    }
+
+    /**
+     * @param  array<string, true>  $usados
+     */
+    private function tituloHojaExcelUnico(string $tituloBase, array &$usados): string
+    {
+        $base = self::sanitizarNombreHojaExcel($tituloBase);
+        $nombre = $base;
+        $i = 2;
+        while (isset($usados[$nombre])) {
+            $suffix = ' ('.$i.')';
+            $nombre = mb_substr($base, 0, max(1, 31 - mb_strlen($suffix))).$suffix;
+            $i++;
+        }
+        $usados[$nombre] = true;
+
+        return $nombre;
+    }
+
+    public static function sanitizarNombreHojaExcel(string $nombre): string
+    {
+        $nombre = preg_replace('/[\\\\\\/*\\[\\]:?]/', ' ', $nombre) ?? 'Hoja';
+        $nombre = trim(preg_replace('/\s+/', ' ', $nombre) ?? 'Hoja');
+
+        return mb_substr($nombre !== '' ? $nombre : 'Hoja', 0, 31);
+    }
+
+    /**
      * @param  list<int>  $empresaIds
      */
     private function resolverNombreEmpresaFila(array $empresaIds, int $empresaSeccion, bool $consolidar): string

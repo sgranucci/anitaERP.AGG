@@ -127,6 +127,13 @@ class Kernel extends ConsoleKernel
 
         $schedule->command('prestamo:recordatorios')->dailyAt('07:30');
 
+        // Reemplazo firmante: vence_el = último día inclusive → restaura a las 00:05 del día siguiente.
+        $schedule->command('configuracion:restaurar-reemplazos-firmante-vencidos')
+            ->dailyAt((string) config('arbolaprobacion.reemplazo_firmante_vencidos.hora', '00:05'))
+            ->runInBackground()
+            ->withoutOverlapping(30)
+            ->appendOutputTo(storage_path('logs/arbol-reemplazo-firmante-vencidos.log'));
+
         $schedule->command('compras:conciliar-cc-proveedor')
             ->dailyAt((string) config('compras.conciliacion_cc_proveedor.hora', '07:40'))
             ->runInBackground()
@@ -204,6 +211,28 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(180)
             ->appendOutputTo(storage_path('logs/ordencompra-anita-auditoria-schedule.log'))
             ->when(fn () => (bool) config('ordencompra_anita.auditoria_diaria.habilitada', true));
+
+        $ventanaAuditoriaFacturas = max(1, (int) config('comprobante_proveedor_anita.auditoria_diaria.ventana_dias', 7));
+        $schedule->command('comprobante-proveedor:auditoria-anita-diaria', [
+            '--desde' => Carbon::today()->subDays($ventanaAuditoriaFacturas - 1)->toDateString(),
+            '--hasta' => Carbon::today()->toDateString(),
+        ])
+            ->dailyAt((string) config('comprobante_proveedor_anita.auditoria_diaria.hora', '08:30'))
+            ->runInBackground()
+            ->withoutOverlapping(180)
+            ->appendOutputTo(storage_path('logs/comprobante-proveedor-anita-auditoria-schedule.log'))
+            ->when(fn () => (bool) config('comprobante_proveedor_anita.auditoria_diaria.habilitada', true));
+
+        $ventanaMayorCc = max(1, (int) config('comprobante_proveedor_anita.conciliacion_mayor_cc.ventana_dias', 30));
+        $schedule->command('comprobante-proveedor:conciliar-mayor-cc', [
+            '--desde' => Carbon::today()->subDays($ventanaMayorCc - 1)->toDateString(),
+            '--hasta' => Carbon::today()->toDateString(),
+        ])
+            ->dailyAt((string) config('comprobante_proveedor_anita.conciliacion_mayor_cc.hora', '08:35'))
+            ->runInBackground()
+            ->withoutOverlapping(120)
+            ->appendOutputTo(storage_path('logs/comprobante-proveedor-mayor-cc-schedule.log'))
+            ->when(fn () => (bool) config('comprobante_proveedor_anita.conciliacion_mayor_cc.habilitada', true));
 
         $schedule->command('rendicion-estacionamiento:auditoria-anita')
             ->dailyAt((string) config('rendicion_estacionamiento_anita.auditoria_diaria.hora', '07:30'))

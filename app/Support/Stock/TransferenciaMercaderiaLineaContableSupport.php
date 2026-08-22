@@ -76,6 +76,31 @@ final class TransferenciaMercaderiaLineaContableSupport
             );
     }
 
+    /**
+     * @param  list<int>  $articuloIds
+     */
+    public static function todosOtrosActivos(array $articuloIds, int $empresaId): bool
+    {
+        $articuloIds = array_values(array_unique(array_filter(
+            array_map('intval', $articuloIds),
+            static fn (int $id): bool => $id > 0
+        )));
+        if ($empresaId <= 0 || $articuloIds === []) {
+            return false;
+        }
+
+        $articulos = Articulo::query()
+            ->with('articulo_cuentacontables')
+            ->whereIn('id', $articuloIds)
+            ->get();
+
+        return $articulos->count() === count($articuloIds)
+            && $articulos->every(
+                static fn (Articulo $articulo): bool => self::resolverFamilia($articulo, $empresaId)
+                    === self::FAMILIA_OTROS_ACTIVOS
+            );
+    }
+
     public static function lineaGeneraAsiento(
         Articulo $articulo,
         int $empresaId,

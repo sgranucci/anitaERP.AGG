@@ -12,7 +12,7 @@ use App\Support\Caja\ChequePropioImputacionSupport;
 /**
  * Preview/armado de asiento TES para orden de pago.
  *
- * Debe: proveedores MN/ME (según OC del comprobante).
+ * Debe: proveedores MN/ME (según OC del comprobante); anticipos por lo pagado sin comprobante.
  * Haber: cuentas de caja, cheques propios (banco/diferidos), cheques entregados (valores a depositar), retenciones.
  */
 final class PagoproveedorAsientoArmadoSupport
@@ -235,7 +235,35 @@ final class PagoproveedorAsientoArmadoSupport
             $cuentacontableRepository
         );
 
+        // Último: el anticipo se mide como el residuo del asiento ya completo.
+        self::agregarAnticipoSiCorresponde($asiento, $empresaId, $cuentacontableRepository);
+
         return $asiento;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $asiento
+     */
+    private static function agregarAnticipoSiCorresponde(
+        array &$asiento,
+        int $empresaId,
+        CuentacontableRepositoryInterface $cuentacontableRepository,
+    ): void {
+        $linea = PagoproveedorAnticipoAsientoSupport::linea($asiento, $empresaId);
+        if ($linea === null) {
+            return;
+        }
+
+        self::agregaCuenta(
+            $asiento,
+            $linea['cuentacontable_id'],
+            $linea['moneda_id'],
+            $linea['cotizacion'],
+            'D',
+            $linea['monto'],
+            $cuentacontableRepository,
+            'Anticipo a proveedores'
+        );
     }
 
     private static function resolverCuentaRetencion(object $ret): int

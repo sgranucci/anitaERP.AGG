@@ -105,6 +105,11 @@
             </div>
         @endif
     </div>
+    @include('includes.proceso_overlay_aviso', [
+        'overlayId' => 'grabacion-overlay-global',
+        'titulo' => 'Grabando…',
+        'subtitulo' => 'No cierre ni recargue la pantalla y no vuelva a apretar el botón: cada envío extra genera un registro duplicado.',
+    ])
     <script>
         @php
             $laravelUsuario = null;
@@ -180,6 +185,7 @@
     <script src="{{asset("assets/js/scripts.js")}}"></script>
     <script src="{{asset("assets/js/funciones.js")}}"></script>
     <script src="{{asset('assets/js/modo-consulta.js')}}"></script>
+    <script src="{{ asset('assets/js/grabacion-bloqueo-submit.js') }}?v={{ @filemtime(public_path('assets/js/grabacion-bloqueo-submit.js')) ?: time() }}"></script>
     @auth
         <script src="{{ asset('assets/js/barra-tareas.js') }}"></script>
         <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/articulos_vendidos_procesando.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/articulos_vendidos_procesando.js')) ?: time() }}" type="text/javascript"></script>

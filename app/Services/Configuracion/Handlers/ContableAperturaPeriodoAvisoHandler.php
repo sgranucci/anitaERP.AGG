@@ -51,6 +51,14 @@ class ContableAperturaPeriodoAvisoHandler implements ModuloAvisoDespachoHandlerI
 
     private function despacharSolicitudPendiente(ModuloAvisoTipo $tipo, int $entityId): void
     {
+        if (AperturaPeriodoContablePermiso::esModoInmediata()) {
+            Log::info('ContableAperturaPeriodoAvisoHandler: omitido solicitud_pendiente (modo inmediata)', [
+                'apertura_id' => $entityId,
+            ]);
+
+            return;
+        }
+
         $destinatarios = AperturaPeriodoContablePermiso::emailsEncargadosHabilitacion();
         if ($destinatarios === []) {
             Log::info('ContableAperturaPeriodoAvisoHandler: sin encargados con permiso habilitar', [
@@ -73,18 +81,24 @@ class ContableAperturaPeriodoAvisoHandler implements ModuloAvisoDespachoHandlerI
     private function despacharAvisoUsuarioHabilitado(ModuloAvisoTipo $tipo, int $entityId): void
     {
         $apertura = AperturaPeriodoContable::query()
-            ->with(['empresa:id,nombre', 'habilitado:id,nombre,email,usuario'])
+            ->with([
+                'empresa:id,nombre',
+                'habilitado:id,nombre,email,usuario',
+                'solicitante:id,nombre,email,usuario',
+            ])
             ->find($entityId);
 
         if (! $apertura) {
             return;
         }
 
-        $email = trim((string) ($apertura->habilitado?->email ?? ''));
-        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            Log::warning('ContableAperturaPeriodoAvisoHandler: usuario sin email', [
+        $emails = $this->emailsAvisoOperativo($apertura, $tipo->codigo);
+        if ($emails === []) {
+            Log::warning('ContableAperturaPeriodoAvisoHandler: sin destinatarios con email válido', [
                 'apertura_id' => $entityId,
-                'usuario_id' => $apertura->usuario_habilitado_id,
+                'codigo' => $tipo->codigo,
+                'usuario_habilitado_id' => $apertura->usuario_habilitado_id,
+                'usuario_solicitante_id' => $apertura->usuario_solicitante_id,
             ]);
 
             return;
@@ -95,7 +109,9 @@ class ContableAperturaPeriodoAvisoHandler implements ModuloAvisoDespachoHandlerI
         $asunto = $this->aplicarPlaceholders($tipo->mail_asunto, $placeholders, $linkConsulta);
         $texto = $this->aplicarPlaceholders((string) ($tipo->mail_texto ?? ''), $placeholders, $linkConsulta);
 
-        $this->enviarCorreo($tipo, $email, $asunto, $texto, $linkConsulta, $entityId, $tipo->codigo);
+        foreach ($emails as $email) {
+            $this->enviarCorreo($tipo, $email, $asunto, $texto, $linkConsulta, $entityId, $tipo->codigo);
+        }
 
         match ($tipo->codigo) {
             'apertura_periodo_habilitada' => $apertura->update(['aviso_habilitacion_enviado_en' => now()]),
@@ -103,6 +119,32 @@ class ContableAperturaPeriodoAvisoHandler implements ModuloAvisoDespachoHandlerI
             'apertura_periodo_cerrada' => $apertura->update(['aviso_cierre_enviado_en' => now()]),
             default => null,
         };
+    }
+
+    /**
+     * Destinatarios del aviso operativo (habilitada / recordatorio / cerrada).
+     * En modo inmediata, la confirmación de habilitación prioriza al solicitante.
+     *
+     * @return list<string>
+     */
+    private function emailsAvisoOperativo(AperturaPeriodoContable $apertura, string $codigo): array
+    {
+        $emails = [];
+        $agregar = static function (?string $email) use (&$emails): void {
+            $email = strtolower(trim((string) $email));
+            if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                $emails[] = $email;
+            }
+        };
+
+        if ($codigo === 'apertura_periodo_habilitada' && AperturaPeriodoContablePermiso::esModoInmediata()) {
+            $agregar($apertura->solicitante?->email);
+            $agregar($apertura->habilitado?->email);
+        } else {
+            $agregar($apertura->habilitado?->email);
+        }
+
+        return array_values(array_unique($emails));
     }
 
     private function enviarCorreo(
@@ -149,7 +191,7 @@ class ContableAperturaPeriodoAvisoHandler implements ModuloAvisoDespachoHandlerI
             'fecha_desde' => optional($apertura->fecha_operacion_desde)->format('d/m/Y') ?? '',
             'fecha_hasta' => optional($apertura->fecha_operacion_hasta)->format('d/m/Y') ?? '',
             'vence_en' => optional($apertura->vence_en)->format('d/m/Y H:i') ?? '',
-            'duracion' => $apertura->duracion_cantidad.' '.($apertura->duracion_unidad === 'dias' ? 'día(s)' : 'hora(s)'),
+            'duracion' => $apertura->etiquetaDuracion(),
             'motivo' => (string) ($apertura->motivo ?? ''),
             'link_habilitar' => $apertura->estado === 'pendiente'
                 ? AperturaPeriodoContablePermiso::urlHabilitacionFirmada($entityId)

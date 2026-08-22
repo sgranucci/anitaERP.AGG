@@ -28,7 +28,9 @@ use App\Support\Stock\TransferenciaMercaderiaEstados;
 use App\Support\Stock\TransferenciaMercaderiaLineaContableSupport;
 use App\Support\Stock\TransferenciaMercaderiaIntercompanySupport;
 use App\Support\Stock\TransferenciaMercaderiaLineaReversoSupport;
+use App\Support\Stock\ArticuloSeleccionOperativaSupport;
 use App\Support\Stock\TransferenciaMercaderiaLineaSupport;
+use App\Support\Stock\TransferenciaMercaderiaPickeoSupport;
 use App\Support\Stock\StkmaePrecioCompraAnitaBridgeSupport;
 use App\Support\Stock\TransferenciaMercaderiaSignoSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
@@ -61,11 +63,23 @@ class TransferenciaMercaderiaService
         private AsientoReversoSupport $asientoReversoSupport,
     ) {}
 
-    public function defaultsUsuario(): array
+    public function defaultsUsuario(?int $empresaId = null): array
     {
+        $empresaId = (int) $empresaId;
+
         return [
-            'deposito_salida_id' => cache()->get(generaKey(self::CACHE_DEPOSITO_SALIDA)),
-            'deposito_entrada_id' => cache()->get(generaKey(self::CACHE_DEPOSITO_ENTRADA)),
+            'deposito_salida_id' => $this->resolverDepositoDefaultId(
+                cache()->get(generaKey(self::CACHE_DEPOSITO_SALIDA)),
+                (string) config('stock.transferencia_pickeo.deposito_salida_codigo', '1'),
+                $empresaId,
+                true
+            ),
+            'deposito_entrada_id' => $this->resolverDepositoDefaultId(
+                cache()->get(generaKey(self::CACHE_DEPOSITO_ENTRADA)),
+                (string) config('stock.transferencia_pickeo.deposito_entrada_codigo', '8'),
+                $empresaId,
+                false
+            ),
             'bien_uso_destino_id' => cache()->get(generaKey(self::CACHE_BIEN_USO_DESTINO)),
             'bien_uso_origen_id' => cache()->get(generaKey(self::CACHE_BIEN_USO_ORIGEN)),
             'tipotransaccion_stock_id' => $this->resolverTipoTransaccionStockIdDefault(),
@@ -131,6 +145,37 @@ class TransferenciaMercaderiaService
         });
 
         return $out;
+    }
+
+    /**
+     * @return array{ok: bool, mensaje?: string, articulo_id?: int, sku?: string, descripcion?: string, saldo?: float}
+     */
+    public function resolverArticuloPickeo(string $codigo, int $depositoSalidaId): array
+    {
+        $codigo = trim($codigo);
+        if ($codigo === '') {
+            return ['ok' => false, 'mensaje' => 'Ingrese o pickee el SKU o el código de barras.'];
+        }
+        if ($depositoSalidaId <= 0) {
+            return ['ok' => false, 'mensaje' => 'Seleccione depósito de salida.'];
+        }
+
+        $this->assertDepositoAutorizado($depositoSalidaId);
+
+        $articulo = TransferenciaMercaderiaPickeoSupport::resolver($codigo);
+        if ($articulo === null || ! ArticuloSeleccionOperativaSupport::esSeleccionable($articulo)) {
+            return ['ok' => false, 'mensaje' => 'No se encontró un artículo activo con ese SKU o código de barras.'];
+        }
+
+        $saldo = $this->saldoArticuloEnDeposito((int) $articulo->id, $depositoSalidaId);
+
+        return [
+            'ok' => true,
+            'articulo_id' => (int) $articulo->id,
+            'sku' => (string) ($articulo->sku ?? ''),
+            'descripcion' => (string) ($articulo->descripcion ?? ''),
+            'saldo' => $saldo,
+        ];
     }
 
     public function saldoArticuloEnDeposito(int $articuloId, int $depositoId): float
@@ -246,7 +291,7 @@ class TransferenciaMercaderiaService
         );
         if ($seleccionAutomaticaTrcont
             && strtoupper(trim((string) ($tipoTransferencia->abreviatura ?? ''))) === 'TRA'
-            && TransferenciaMercaderiaLineaContableSupport::todosContabilizables(
+            && TransferenciaMercaderiaLineaContableSupport::todosOtrosActivos(
                 array_column($lineas, 'articulo_id'),
                 $empresaId
             )) {
@@ -1272,8 +1317,71 @@ class TransferenciaMercaderiaService
         return $mapped ? (int) $mapped : null;
     }
 
+    private function resolverDepositoDefaultId($cachedId, string $codigoFallback, int $empresaId, bool $filtrarUsuario): ?int
+    {
+        $cachedId = (int) $cachedId;
+        if ($cachedId > 0) {
+            $cached = $this->buscarDepositoDefault($cachedId, null, $empresaId, $filtrarUsuario);
+            if ($cached !== null) {
+                return (int) $cached->id;
+            }
+        }
+
+        $codigo = trim($codigoFallback);
+        if ($codigo === '') {
+            return null;
+        }
+
+        $porCodigo = $this->buscarDepositoDefault(0, $codigo, $empresaId, $filtrarUsuario);
+
+        return $porCodigo !== null ? (int) $porCodigo->id : null;
+    }
+
+    private function buscarDepositoDefault(int $id, ?string $codigo, int $empresaId, bool $filtrarUsuario): ?Depmae
+    {
+        $query = Depmae::query();
+        if ($id > 0) {
+            $query->whereKey($id);
+        } else {
+            $codigo = trim((string) $codigo);
+            if ($codigo === '') {
+                return null;
+            }
+            $variantes = array_values(array_unique(array_filter([
+                $codigo,
+                ltrim($codigo, '0'),
+            ], static fn ($valor) => is_string($valor) && $valor !== '')));
+            if ($variantes === []) {
+                return null;
+            }
+            $query->whereIn('codigo', $variantes);
+        }
+
+        if ($empresaId > 0) {
+            $query->paraEmpresa($empresaId);
+        }
+
+        if ($filtrarUsuario) {
+            UsuarioDepositoAutorizado::aplicarFiltroQuery($query);
+        }
+
+        return $query->orderBy('id')->first();
+    }
+
     private function resolverPrimeraTipotransaccionTransferencia(): ?int
     {
+        $abrev = strtoupper(trim((string) config('stock.transferencia_pickeo.tipo_abreviatura', 'TRA')));
+        if ($abrev !== '') {
+            $idPorAbrev = Tipotransaccion_Stock::query()
+                ->where('operacion', TransferenciaMercaderiaSignoSupport::OPERACION_TIPO)
+                ->where('estado', 'A')
+                ->whereRaw('UPPER(TRIM(abreviatura)) = ?', [$abrev])
+                ->value('id');
+            if ($idPorAbrev) {
+                return (int) $idPorAbrev;
+            }
+        }
+
         $id = Tipotransaccion_Stock::query()
             ->where('operacion', TransferenciaMercaderiaSignoSupport::OPERACION_TIPO)
             ->where('estado', 'A')
@@ -1503,6 +1611,7 @@ class TransferenciaMercaderiaService
                         (int) $entrada['id'],
                         'Revierte transferencia '.$transferencia->codigo,
                         true, // omitir_anita: sync ctamov una sola vez abajo
+                        alcanceCierre: PeriodoContableCierreSupport::ALCANCE_TRANSFERENCIA,
                     );
                     $revert->asiento_id = (int) $asientoRev['asiento_id'];
                     $revert->save();

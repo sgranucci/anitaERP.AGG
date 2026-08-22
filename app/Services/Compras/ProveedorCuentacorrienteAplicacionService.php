@@ -4,6 +4,7 @@ namespace App\Services\Compras;
 
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
+use App\Services\Configuracion\ModuloAvisoService;
 use App\Support\Compras\ProveedorCuentacorrienteAplicacionDcSupport;
 use App\Support\Compras\ProveedorCuentacorrienteAplicacionFilaSupport;
 use App\Support\Compras\ProveedorCuentacorrienteAplicacionLiquidacionSupport;
@@ -24,11 +25,12 @@ class ProveedorCuentacorrienteAplicacionService
     public function __construct(
         private ProveedorCuentacorrienteAplicacionAsientoService $asientoDcService,
         private ProveedorCuentacorrienteAplicacionAnitaSyncService $anitaSyncService,
+        private ModuloAvisoService $moduloAvisoService,
     ) {}
 
     /**
      * @param  list<array{credito_id:int,deuda_id:int,monto:float,cotizacion_liquidacion?:float|null}>  $lineas
-     * @return array{aplicadas:int, monto:float, dc:float, asientos_dc:int, ids: list<int>}
+     * @return array{aplicadas:int, monto:float, dc:float, asientos_dc:int, ids: list<int>, avisos_reclasificacion: list<int>}
      */
     public function aplicar(int $proveedorId, string $fecha, array $lineas): array
     {
@@ -95,6 +97,7 @@ class ProveedorCuentacorrienteAplicacionService
             $dcTotal = 0.0;
             $asientosDc = 0;
             $idsAplicacion = [];
+            $avisosReclasificacion = [];
 
             foreach ($lineas as $linea) {
                 $cid = (int) $linea['credito_id'];
@@ -172,6 +175,9 @@ class ProveedorCuentacorrienteAplicacionService
                 $dcTotal += $dc;
                 if ($asientoId) {
                     $asientosDc++;
+                    if ($this->asientoDcService->esReclasificacionNoAnticipo($deuda, $credito)) {
+                        $avisosReclasificacion[] = (int) $aplDeuda->id;
+                    }
                 }
             }
 
@@ -181,6 +187,7 @@ class ProveedorCuentacorrienteAplicacionService
                 'dc' => round($dcTotal, 4),
                 'asientos_dc' => $asientosDc,
                 'ids' => $idsAplicacion,
+                'avisos_reclasificacion' => $avisosReclasificacion,
             ];
         });
 
@@ -190,6 +197,10 @@ class ProveedorCuentacorrienteAplicacionService
             throw new RuntimeException(
                 'La aplicación quedó grabada en anitaERP pero no se reflejó en Anita (promov/aplmovp): '.$e->getMessage()
             );
+        }
+
+        foreach ($resultado['avisos_reclasificacion'] as $aplicacionId) {
+            $this->moduloAvisoService->enviar('compras', 'aplicacion_cc_reclasificacion', $aplicacionId);
         }
 
         return $resultado;

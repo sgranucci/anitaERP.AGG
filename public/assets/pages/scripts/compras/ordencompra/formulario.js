@@ -199,6 +199,9 @@ $(function () {
 		} else if ($el.closest('#oc-solapa-arbol').length) {
 			mostrarSolapa('#oc-solapa-arbol');
 			ocMarcarTabActivo('oc-boton-arbol');
+		} else if ($el.closest('#oc-solapa-ingresos').length) {
+			mostrarSolapa('#oc-solapa-ingresos');
+			ocMarcarTabActivo('oc-boton-ingresos');
 		} else {
 			mostrarSolapa('#oc-solapa-principal');
 			ocMarcarTabActivo('oc-boton-principal');
@@ -2633,6 +2636,11 @@ $(function () {
 				window.AnitaArbolPanelIa.render(data && data.ai_contexto_arbol ? data.ai_contexto_arbol : null, '#oc-panel-ia-arbol-solapa');
 			}
 		});
+	});
+
+	$('#oc-boton-ingresos').on('click', function () {
+		mostrarSolapa('#oc-solapa-ingresos');
+		ocMarcarTabActivo('oc-boton-ingresos');
 	});
 
 	ocMarcarTabActivo('oc-boton-principal');

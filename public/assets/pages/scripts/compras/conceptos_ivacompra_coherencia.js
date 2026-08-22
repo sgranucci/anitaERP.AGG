@@ -102,13 +102,31 @@
     function necesitaApertura(estado) {
         var ivaPorTasa = estado.iva_por_tasa;
         var tasasIva = estado.tasas_iva;
-        if (tasasIva.length < 2 || estado.neto_total <= 0) {
+        if (tasasIva.length === 0) {
             return false;
         }
 
-        var buckets = (estado.neto_sin_tasa > 0 ? 1 : 0) + Object.keys(estado.neto_por_tasa).length;
-        if (buckets <= 1) {
+        // Sin neto gravado: se abre desde el IVA por división inversa.
+        if (estado.neto_total <= 0) {
             return true;
+        }
+
+        var buckets = (estado.neto_sin_tasa > 0 ? 1 : 0) + Object.keys(estado.neto_por_tasa).length;
+        if (tasasIva.length >= 2 && buckets <= 1) {
+            return true;
+        }
+
+        // Una sola tasa: si el neto no cierra con IVA/(tasa/100), reabrir desde IVA.
+        if (tasasIva.length === 1) {
+            var tasaUnica = parseFloat(tasasIva[0]);
+            var netoEsperadoUnico = tasaUnica > 0 ? round2(ivaPorTasa[tasasIva[0]] / (tasaUnica / 100)) : 0;
+            var netoActual = estado.neto_por_tasa[tasasIva[0]] || 0;
+            if (netoActual <= 0 && estado.neto_sin_tasa > 0) {
+                netoActual = estado.neto_sin_tasa;
+            }
+            if (netoActual <= 0 || Math.abs(netoActual - netoEsperadoUnico) > TOLERANCIA) {
+                return true;
+            }
         }
 
         for (var i = 0; i < tasasIva.length; i++) {
@@ -170,8 +188,13 @@
             sumaTeorica = round2(sumaTeorica + neto);
         });
 
-        var netoDescompuesto = repartirDiferencia(netoTeorico, sumaTeorica, netoOriginal);
-        var delta = round2(netoOriginal - sumaTeorica);
+        // Delta chico → reparte al neto informado; delta grande → manda IVA/tasa.
+        var deltaAbs = Math.abs(round2(netoOriginal - sumaTeorica));
+        var netoParaReparto = (netoOriginal > 0 && deltaAbs <= TOLERANCIA)
+            ? netoOriginal
+            : sumaTeorica;
+        var netoDescompuesto = repartirDiferencia(netoTeorico, sumaTeorica, netoParaReparto);
+        var delta = round2(netoParaReparto - sumaTeorica);
         var partes = [];
 
         tasasIva.forEach(function (tKey) {
@@ -185,11 +208,14 @@
         });
 
         if (errores.length === 0 && partes.length) {
-            var msg = 'Al guardar se abrirá el neto gravado (' + formatoNumero(netoOriginal)
+            var msg = 'Al guardar se abrirá el neto gravado (' + formatoNumero(netoParaReparto)
                 + ') en: ' + partes.join('; ') + '.';
             if (Math.abs(delta) >= 0.01) {
                 msg += ' Diferencia de ' + formatoNumero(delta)
                     + ' repartida entre los gravados (los IVA no se ajustan).';
+            } else if (netoOriginal > 0 && deltaAbs > TOLERANCIA) {
+                msg += ' Neto informado (' + formatoNumero(netoOriginal)
+                    + ') no cuadra con IVA; se usa gravado = IVA / tasa.';
             }
             advertencias.push(msg);
         }

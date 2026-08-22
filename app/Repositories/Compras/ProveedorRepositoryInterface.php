@@ -28,4 +28,11 @@ interface ProveedorRepositoryInterface extends RepositoryInterface
         ?int $empresaId = null,
     ): ?array;
 
+    /**
+     * Reenvía proveedor ERP → Anita (inserta promae si falta).
+     *
+     * @return 'insertado'|'actualizado'
+     */
+    public function sincronizarAnitaDesdeErp(int $proveedorId): string;
+
 }

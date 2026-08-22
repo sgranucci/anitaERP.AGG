@@ -1,6 +1,6 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-    Configuración punto de venta gastronomía
+    PC de gastronomía
 @endsection
 
 @section("scripts")
@@ -13,9 +13,9 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
-                <h3 class="card-title">Crear configuración por PC</h3>
+                <h3 class="card-title">Alta de PC de gastronomía</h3>
                 <div class="card-tools">
                     <a href="{{route('consultar_configuracion_puntoventa_gastronomia')}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado

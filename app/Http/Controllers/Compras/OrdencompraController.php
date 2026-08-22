@@ -40,6 +40,7 @@ use App\Services\Stock\RecepcionProveedorPrecioPendienteService;
 use App\Support\Compras\OrdencompraArticuloPrecioHistoriaOrigen;
 use App\Support\Compras\OrdencompraContratoVencimientoSupport;
 use App\Support\Compras\OrdencompraTratamientoMovimientosSupport;
+use App\Support\Seguridad\IngresoProveedorVinculoSupport;
 use App\Support\Seguridad\UsuarioOperativoSupport;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\ImpuestoService;
@@ -1074,6 +1075,18 @@ class OrdencompraController extends Controller
             ? OrdencompraContratoVencimientoSupport::resumenParaFormulario($id)
             : null;
 
+        $mostrar_solapa_ingresos = $id !== null && $data && IngresoProveedorVinculoSupport::usuarioPuedeVerSolapa();
+        $tickets_ingreso = $mostrar_solapa_ingresos
+            ? IngresoProveedorVinculoSupport::ticketsDeOc((int) $data->id)
+            : collect();
+        $url_nuevo_ticket_ingreso = $mostrar_solapa_ingresos
+            ? IngresoProveedorVinculoSupport::urlNuevoTicket([
+                'empresa_id' => $data->empresa_id,
+                'proveedor_id' => $data->proveedor_id,
+                'ordencompra_id' => $data->id,
+            ])
+            : null;
+
         return view('compras.ordencompra.editar', compact(
             'data',
             'empresa_query',
@@ -1106,6 +1119,9 @@ class OrdencompraController extends Controller
             'talle_query',
             'usuario_contrato_query',
             'oc_contrato_resumen',
+            'mostrar_solapa_ingresos',
+            'tickets_ingreso',
+            'url_nuevo_ticket_ingreso',
         ));
     }
 }

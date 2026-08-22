@@ -27,19 +27,33 @@
             <div class="card-body">
                 <div class="alert alert-info">
                     <strong>¿Cómo solicitar una apertura?</strong>
-                    <ol class="mb-0 pl-3 small">
-                        <li>Ingrese a <strong>Módulo Contable → Aperturas programadas</strong> (requiere permiso de solicitud).</li>
-                        <li>Pulse <strong>Solicitar apertura</strong> y complete empresa, usuario a habilitar (puede ser usted mismo), rango de fechas del período cerrado, alcance del módulo y duración en horas o días.</li>
-                        <li>Indique el motivo (mínimo 10 caracteres) y envíe. La solicitud queda en estado <em>pendiente</em>.</li>
-                        <li>El encargado de contaduría (o quien tenga permiso de habilitación) recibe un <strong>correo con enlace directo</strong> para habilitar sin entrar al módulo, o puede aprobar desde esta pantalla.</li>
-                        <li>Al aprobarse recibirá un correo; podrá operar solo en el alcance y fechas indicados hasta la hora de vencimiento.</li>
-                        <li>Antes de vencer recibirá un recordatorio; al finalizar el plazo el período vuelve a quedar cerrado para su usuario.</li>
-                    </ol>
+                    @if ($apertura_modo_inmediata ?? false)
+                        <ol class="mb-0 pl-3 small">
+                            <li>Ingrese a <strong>Módulo Contable → Aperturas programadas</strong> (requiere permiso de solicitud).</li>
+                            <li>Pulse <strong>Solicitar apertura</strong> y complete empresa, usuario a habilitar (puede ser usted mismo), rango de fechas del período cerrado, alcance del módulo y duración en minutos, horas o días.</li>
+                            <li>Indique el motivo (mínimo 10 caracteres) y envíe. La apertura queda <em>activa</em> de inmediato.</li>
+                            <li>Recibirá un correo de confirmación; podrá operar solo en el alcance y fechas indicados hasta la hora de vencimiento.</li>
+                            <li>Antes de vencer recibirá un recordatorio; al finalizar el plazo el período vuelve a quedar cerrado para su usuario.</li>
+                            <li>Quien tenga permiso de gestión puede <strong>revocar</strong> una apertura activa si hace falta.</li>
+                        </ol>
+                    @else
+                        <ol class="mb-0 pl-3 small">
+                            <li>Ingrese a <strong>Módulo Contable → Aperturas programadas</strong> (requiere permiso de solicitud).</li>
+                            <li>Pulse <strong>Solicitar apertura</strong> y complete empresa, usuario a habilitar (puede ser usted mismo), rango de fechas del período cerrado, alcance del módulo y duración en minutos, horas o días.</li>
+                            <li>Indique el motivo (mínimo 10 caracteres) y envíe. La solicitud queda en estado <em>pendiente</em>.</li>
+                            <li>El encargado de contaduría (o quien tenga permiso de habilitación) recibe un <strong>correo con enlace directo</strong> para habilitar sin entrar al módulo, o puede aprobar desde esta pantalla.</li>
+                            <li>Al aprobarse recibirá un correo; podrá operar solo en el alcance y fechas indicados hasta la hora de vencimiento.</li>
+                            <li>Antes de vencer recibirá un recordatorio; al finalizar el plazo el período vuelve a quedar cerrado para su usuario.</li>
+                        </ol>
+                    @endif
                 </div>
 
                 <p class="text-muted small">
                     Permite habilitar temporalmente a un usuario para operar en fechas dentro del período cerrado,
-                    en el módulo indicado, por un tiempo limitado en horas o días.
+                    en el módulo indicado, por un tiempo limitado en minutos, horas o días.
+                    @if ($apertura_modo_inmediata ?? false)
+                        En esta instalación la apertura se habilita al solicitarla (sin paso de aprobación).
+                    @endif
                 </p>
 
                 <form method="get" action="{{ route('apertura_periodo_contable') }}" class="form-inline mb-3">
@@ -87,7 +101,7 @@
                                         {{ optional($apertura->fecha_operacion_hasta)->format('d/m/Y') }}
                                     </td>
                                     <td>{{ $apertura->etiquetaAlcance() }}</td>
-                                    <td>{{ $apertura->duracion_cantidad }} {{ $apertura->duracion_unidad === 'dias' ? 'día(s)' : 'hora(s)' }}</td>
+                                    <td>{{ $apertura->etiquetaDuracion() }}</td>
                                     <td>{{ optional($apertura->vence_en)->format('d/m/Y H:i') ?? '—' }}</td>
                                     <td><span class="badge badge-secondary">{{ ucfirst($apertura->estado) }}</span></td>
                                     @if ($puede_gestionar || $puede_aprobar || $puede_habilitar)
@@ -198,6 +212,7 @@
                     </div>
                     <div class="col-md-4">
                         <select name="duracion_unidad" class="form-control" required>
+                            <option value="minutos" @selected(old('duracion_unidad') === 'minutos')>Minutos</option>
                             <option value="horas" @selected(old('duracion_unidad', 'horas') === 'horas')>Horas</option>
                             <option value="dias" @selected(old('duracion_unidad') === 'dias')>Días</option>
                         </select>

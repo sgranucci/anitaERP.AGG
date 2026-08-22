@@ -16,7 +16,7 @@
             <div class="card-header">
                 <h3 class="card-title">Importación facturas Tienda Nube</h3>
             </div>
-            <form action="{{route('listar_facturas_tiendanube')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{route('listar_facturas_tiendanube')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-mensaje-grabacion="Consultando…">
                 @csrf
                 <div class="card-body">
                     @include('ventas.facturante.formcrear')

@@ -10,6 +10,7 @@ use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalValidacionSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasAgrupacionSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasAlicuotaSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasFslAnitaArmadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasPeriodoSupport;
 use PHPUnit\Framework\TestCase;
 
@@ -169,6 +170,57 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         $this->assertSame('89', $comprador['codigo_documento']);
         $this->assertSame('1', $comprador['numero_identificacion']);
         $this->assertSame('Venta expendedoras', $comprador['nombre']);
+    }
+
+    public function test_fbi_fsl_mapean_factura_b_sin_cae_informables(): void
+    {
+        $this->assertSame('006', LibroIvaDigitalMapeosSupport::tipoComprobanteVentas('FBI', 'B', 'FBI'));
+        $this->assertSame('006', LibroIvaDigitalMapeosSupport::tipoComprobanteVentas('FSL', 'B', 'FSL'));
+        $this->assertTrue(LibroIvaDigitalMapeosSupport::esSinCaeInformable('RMV'));
+        $this->assertTrue(LibroIvaDigitalMapeosSupport::esSinCaeInformable('FBI'));
+        $this->assertTrue(LibroIvaDigitalMapeosSupport::esSinCaeInformable('FSL'));
+        $this->assertFalse(LibroIvaDigitalMapeosSupport::esSinCaeInformable('IZV'));
+        $this->assertTrue(LibroIvaDigitalMapeosSupport::esFbiOFsl('FBI'));
+        $this->assertTrue(LibroIvaDigitalMapeosSupport::esFbiOFsl('FSL'));
+        $this->assertFalse(LibroIvaDigitalMapeosSupport::esFbiOFsl('RMV'));
+        $this->assertSame(
+            ['RMV', 'FBI', 'FSL'],
+            LibroIvaDigitalMapeosSupport::abreviaturasSinCaeInformables(),
+        );
+    }
+
+    public function test_fsl_anita_arma_factura_b_exenta_tipo_006(): void
+    {
+        $fila = [
+            'ven_tipo' => 'FSL',
+            'ven_letra' => 'B',
+            'ven_sucursal' => '14',
+            'ven_nro' => '6903',
+            'ven_fecha' => '20260801',
+            'ven_fecha_vto' => '20260801',
+            'ven_monto' => '81952440.34',
+            'ven_exento' => '81952440.34',
+            'ven_gravado' => '0',
+            'ven_impuesto1' => '0',
+            'ven_nombre_cliente' => 'Venta maquinas',
+        ];
+
+        $reg = LibroIvaDigitalVentasFslAnitaArmadoSupport::armarRegistroLibro($fila, false);
+        $this->assertNotNull($reg);
+        $this->assertSame('006', $reg['cabecera']['tipo_comprobante']);
+        $this->assertSame(14, $reg['cabecera']['punto_venta']);
+        $this->assertSame(6903, $reg['cabecera']['numero_comprobante']);
+        $this->assertSame('E', $reg['cabecera']['codigo_operacion']);
+        $this->assertEqualsWithDelta(81952440.34, $reg['cabecera']['importe_total'], 0.01);
+        $this->assertEqualsWithDelta(81952440.34, $reg['cabecera']['operaciones_exentas'], 0.01);
+        $this->assertSame('96', $reg['cabecera']['codigo_documento']); // >= umbral CF
+
+        $exento = LibroIvaDigitalVentasFslAnitaArmadoSupport::filaIvaSimpleExento($fila);
+        $this->assertNotNull($exento);
+        $this->assertSame('920009', $exento['actividad_codigo']);
+        $this->assertSame('3', $exento['tipo_operacion']);
+        $this->assertEqualsWithDelta(81952440.34, $exento['exento'], 0.01);
+        $this->assertSame('14|6903', LibroIvaDigitalVentasFslAnitaArmadoSupport::claveDesdeFilaAnita($fila));
     }
 
     public function test_fecha_jornada_usa_jornada_y_cae_si_falta(): void

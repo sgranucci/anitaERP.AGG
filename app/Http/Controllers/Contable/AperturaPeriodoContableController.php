@@ -54,6 +54,7 @@ class AperturaPeriodoContableController extends Controller
             'puede_habilitar' => can(AperturaPeriodoContablePermiso::SLUG_HABILITAR, false),
             'puede_gestionar' => AperturaPeriodoContablePermiso::puedeGestionarSolicitudes(),
             'puede_revocar' => can('revocar-apertura-periodo-contable', false),
+            'apertura_modo_inmediata' => AperturaPeriodoContablePermiso::esModoInmediata(),
         ]);
     }
 
@@ -68,7 +69,7 @@ class AperturaPeriodoContableController extends Controller
             'fecha_operacion_hasta' => 'required|date|after_or_equal:fecha_operacion_desde',
             'alcance' => 'required|string|max:32',
             'duracion_cantidad' => 'required|integer|min:1|max:720',
-            'duracion_unidad' => 'required|in:horas,dias',
+            'duracion_unidad' => 'required|in:minutos,horas,dias',
             'motivo' => 'required|string|min:10|max:2000',
         ]);
 
@@ -83,7 +84,12 @@ class AperturaPeriodoContableController extends Controller
 
         return redirect()
             ->route('apertura_periodo_contable', ['empresa_id' => $request->input('empresa_id')])
-            ->with('mensaje', 'Solicitud de apertura registrada. Aguarda aprobación de contaduría.');
+            ->with(
+                'mensaje',
+                AperturaPeriodoContablePermiso::esModoInmediata()
+                    ? 'Apertura habilitada. Se envió aviso al solicitante.'
+                    : 'Solicitud de apertura registrada. Aguarda aprobación de contaduría.'
+            );
     }
 
     public function aprobar(Request $request, int $id)

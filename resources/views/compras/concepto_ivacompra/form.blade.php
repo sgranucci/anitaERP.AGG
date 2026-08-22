@@ -136,20 +136,12 @@
                 </select>
             </div>
         </div>
-        <div class="form-group row">
-            <label for="provincia_id" class="col-lg-4 control-label text-right pr-2">Provincia</label>
-            <div class="col-lg-8">
-                <select name="provincia_id" id="provincia_id" class="form-control">
-                    <option value="">-- Seleccionar --</option>
-                    @foreach ($provincia_query as $value)
-                        <option value="{{ $value->id }}"
-                            @if ((int) $value->id === (int) old('provincia_id', $data->provincia_id ?? '')) selected @endif>
-                            {{ $value->nombre }} Jur: {{ $value->jurisdiccion }}
-                        </option>
-                    @endforeach
-                </select>
-            </div>
-        </div>
+        @include('configuracion.partials.campo_consulta_provincia', [
+            'provinciaId' => $data->provincia_id ?? '',
+            'codigo' => $data->provincias->codigo ?? '',
+            'nombre' => $data->provincias->nombre ?? '',
+            'jurisdiccion' => $data->provincias->jurisdiccion ?? '',
+        ])
         <div class="form-group row">
             <label for="impuesto_id" class="col-lg-4 control-label text-right pr-2">Impuesto</label>
             <div class="col-lg-8">

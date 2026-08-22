@@ -17,6 +17,7 @@ use App\Repositories\Stock\Recuento_ItemRepositoryInterface;
 use App\Repositories\Stock\RecuentoRepositoryInterface;
 use App\Models\Stock\Color;
 use App\Models\Stock\Talle;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Stock\ArticuloEmpresaAsignacionSupport;
 use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
@@ -911,6 +912,13 @@ class RecuentoService
         }
 
         $fecha = $fechaMovimiento ?: now()->toDateString();
+
+        // El ajuste no pasa por MovimientoStockService: el cierre se valida acá.
+        PeriodoContableCierreSupport::assertOperacionPermitida(
+            (int) $recuento->empresa_id,
+            $fecha,
+            PeriodoContableCierreSupport::ALCANCE_STOCK
+        );
 
         $codigo = 'RC-'.str_pad((string) $recuento->id, 6, '0', STR_PAD_LEFT).'-'.now()->format('YmdHis');
 

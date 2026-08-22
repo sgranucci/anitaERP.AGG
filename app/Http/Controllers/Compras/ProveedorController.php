@@ -58,6 +58,7 @@ use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Mail\Compras\ProveedorProvisorio;
 use App\Exports\Compras\ProveedorExport;
 use App\Support\Compras\ProveedorListadoFiltros;
+use App\Support\Seguridad\IngresoProveedorVinculoSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Exports\Compras\ProveedorCuentacorrienteListadoExport;
 use App\Support\Compras\ProveedorCuentacorrienteListadoFiltros;
@@ -399,6 +400,14 @@ class ProveedorController extends Controller
             ? app(EmpresaRepositoryInterface::class)->allFiltrado()
             : collect();
 
+        $mostrar_solapa_ingresos = IngresoProveedorVinculoSupport::usuarioPuedeVerSolapa();
+        $tickets_ingreso = $mostrar_solapa_ingresos
+            ? IngresoProveedorVinculoSupport::ticketsDeProveedor((int) $data->id)
+            : collect();
+        $url_nuevo_ticket_ingreso = IngresoProveedorVinculoSupport::urlNuevoTicket([
+            'proveedor_id' => $data->id,
+        ]);
+
         return view('compras.proveedor.editar', compact('data', 'pais_query', 'provincia_query', 'tipoempresa_query',
 			'condicioniva_query', 'condicionIIBB_query',
             'retencionganancia_query', 'retencioniva_query', 'retencionsuss_query',
@@ -410,7 +419,7 @@ class ProveedorController extends Controller
 		    'tiposuspensionproveedor_query', 'agentepercepcioniva_enum', 'agentepercepcionIIBB_enum',
             'formapago_query', 'tipocuentacaja_query', 'moneda_query', 'banco_query', 'mediopago_query',
             'tiporetencion_enum', 'tipoconsulta', 'tiposervicio_proveedor_query', 'regimenfacturacion_enum', 'filtrosQuery',
-            'empresa_query'));
+            'empresa_query', 'mostrar_solapa_ingresos', 'tickets_ingreso', 'url_nuevo_ticket_ingreso'));
     }
 
     /**

@@ -9,12 +9,23 @@
 <script src="{{asset("assets/pages/scripts/contable/asiento/montos_formato.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/asiento/referencias.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/contable/asiento/crear.js")}}" type="text/javascript"></script>
+<script>
+    // Ruta relativa con carpetaBase (APP_URL no incluye /anitaERP/public).
+    window.asientoValidarFechaCierreUrl = (window.carpetaBase || '').replace(/\/$/, '')
+        + '/contable/cierre-periodo/validar-fecha';
+</script>
+<script src="{{ asset('assets/pages/scripts/contable/asiento/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/asiento/crear.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/asiento/validar_fecha_cierre.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/asiento/validar_fecha_cierre.js')) ?: time() }}" type="text/javascript"></script>
 <script>
     window.usuarioTieneRestriccionCuentas = @json($usuarioTieneRestriccionCuentas ?? false);
 </script>
 <script>
 $( "#botonform0" ).click(function() {
+    if (typeof window.asientoFechaCierrePermitidaSync === 'function'
+        && !window.asientoFechaCierrePermitidaSync()) {
+        return;
+    }
+
     let flError = false;
 
     $("#tbody-cuenta-table .moneda").each(function() {
@@ -152,4 +163,5 @@ $( "#botonform0" ).click(function() {
 </div>
 
 @include('contable.asiento.partials.modal_aprobacion_cuentas')
+@include('contable.asiento.partials.modal_periodo_cerrado')
 @endsection

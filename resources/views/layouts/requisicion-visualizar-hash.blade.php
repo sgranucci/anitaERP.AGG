@@ -38,6 +38,11 @@
             </section>
         </div>
     </div>
+    @include('includes.proceso_overlay_aviso', [
+        'overlayId' => 'grabacion-overlay-global',
+        'titulo' => 'Grabando…',
+        'subtitulo' => 'No cierre ni recargue la pantalla y no vuelva a apretar el botón: cada envío extra genera un registro duplicado.',
+    ])
     <script>
         window.Laravel = { baseUrl: '{{ url('/') }}' };
         var carpetaBase = '{{ config('app.app_carpeta') }}';
@@ -64,6 +69,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/toastr.js/latest/toastr.min.js"></script>
     <script src="{{ asset('assets/js/scripts.js') }}"></script>
     <script src="{{ asset('assets/js/funciones.js') }}"></script>
+    <script src="{{ asset('assets/js/grabacion-bloqueo-submit.js') }}?v={{ @filemtime(public_path('assets/js/grabacion-bloqueo-submit.js')) ?: time() }}"></script>
     @yield('scripts')
 </body>
 </html>

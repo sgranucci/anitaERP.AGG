@@ -127,6 +127,15 @@ class UsuarioRepository implements UsuarioRepositoryInterface
         return UsuarioOperativoSupport::filtrarIdsOperativosPorEmpresa($usuarioIds, $empresaId);
     }
 
+    /**
+     * @param  list<int>  $usuarioIds
+     * @return list<int>
+     */
+    public function filtrarIdsFirmantesArbolPorEmpresa(array $usuarioIds, int $empresaId): array
+    {
+        return UsuarioOperativoSupport::filtrarIdsFirmantesArbolPorEmpresa($usuarioIds, $empresaId);
+    }
+
     public function listadoOperativoParaSelector(
         ?int $empresaId = null,
         ?int $centrocostoId = null,

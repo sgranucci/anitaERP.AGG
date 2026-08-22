@@ -78,7 +78,73 @@ class MayorPlanoCuentaListadoFiltros
                 : null,
             'incluir_sin_cc_manual' => $request->boolean('incluir_sin_cc_manual'),
             'filtro_texto' => trim((string) $request->input('filtro_texto', '')),
+            'excel_solapas_separadas' => $request->boolean('excel_solapas_separadas'),
         ];
+    }
+
+    /**
+     * Hay cuentas elegidas (lista puntual y/o rango) — no “todas las cuentas”.
+     */
+    public static function tieneSeleccionParticularCuentas(array $filtros): bool
+    {
+        $cuentas = array_values(array_filter(array_map('intval', $filtros['cuentas'] ?? []), fn (int $c) => $c > 0));
+        if ($cuentas !== []) {
+            return true;
+        }
+
+        return (int) ($filtros['cuenta_desde'] ?? 0) > 0
+            || (int) ($filtros['cuenta_hasta'] ?? 0) > 0;
+    }
+
+    /**
+     * Hay centros de costo elegidos (lista puntual y/o rango) — no “todos”.
+     */
+    public static function tieneSeleccionParticularCentrocostos(array $filtros): bool
+    {
+        $codigos = MayorPlanoCuentaCentrocostoFiltroSupport::parsearCodigos(
+            $filtros['centrocostos_codigo'] ?? '',
+        );
+        if ($codigos !== []) {
+            return true;
+        }
+
+        return trim((string) ($filtros['cc_desde'] ?? '')) !== ''
+            || trim((string) ($filtros['cc_hasta'] ?? '')) !== '';
+    }
+
+    /**
+     * El tilde de Excel en solapas solo aplica con cuentas o CC particulares.
+     */
+    public static function puedeExcelSolapasSeparadas(array $filtros): bool
+    {
+        return self::tieneSeleccionParticularCuentas($filtros)
+            || self::tieneSeleccionParticularCentrocostos($filtros);
+    }
+
+    /**
+     * Dimensión de cada solapa: cuenta si hay filtro de cuentas; si no, centro de costo.
+     * Con ambos filtros y clasificación por CC, prioriza solapas por centro de costo.
+     *
+     * @return 'cuenta'|'centrocosto'|null
+     */
+    public static function dimensionExcelSolapas(array $filtros): ?string
+    {
+        if (! self::puedeExcelSolapasSeparadas($filtros)) {
+            return null;
+        }
+
+        $hayCuentas = self::tieneSeleccionParticularCuentas($filtros);
+        $hayCc = self::tieneSeleccionParticularCentrocostos($filtros);
+
+        if ($hayCuentas && $hayCc && ! empty($filtros['agrupar_por_cc'])) {
+            return 'centrocosto';
+        }
+
+        if ($hayCuentas) {
+            return 'cuenta';
+        }
+
+        return $hayCc ? 'centrocosto' : null;
     }
 
     /**
@@ -197,13 +263,20 @@ class MayorPlanoCuentaListadoFiltros
             $out['filtro_texto'] = $texto;
         }
 
+        if (
+            ! empty($filtros['excel_solapas_separadas'])
+            && self::puedeExcelSolapasSeparadas($filtros)
+        ) {
+            $out['excel_solapas_separadas'] = 1;
+        }
+
         return $out;
     }
 
     public static function firma(array $filtros): string
     {
         $base = self::paraQueryString($filtros);
-        unset($base['filtro_texto']);
+        unset($base['filtro_texto'], $base['excel_solapas_separadas']);
 
         return md5(json_encode($base));
     }

@@ -22,7 +22,6 @@ class ConfiguracionPuntoventaGastronomia extends Model implements Auditable
         'identificador_pc',
         'descripcion',
         'empresa_id',
-        'caja_id',
         'puntoventa_cae_id',
         'puntoventa_caea_id',
         'ubicacion_id',

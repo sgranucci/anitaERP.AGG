@@ -43,7 +43,16 @@
                 <p class="acc-sub">El matching FIFO se arma solo. Cambiá montos, destildá o fijá un crédito: lo que edites queda y el resto se vuelve a sugerir.</p>
             </div>
             <div class="acc-hero-tools">
-                <a href="{{ route('tesoreria_cockpit') }}" class="btn btn-sm btn-outline-light">Tesorería</a>
+                @if (!empty($soloConsulta) && (int) ($volverProveedorId ?? 0) > 0)
+                    <a href="{{ route('editar_proveedor', ['id' => (int) $volverProveedorId]) }}" class="btn btn-sm btn-light">
+                        <i class="fa fa-fw fa-reply-all"></i> Volver al proveedor
+                    </a>
+                    <button type="button" class="btn btn-sm btn-outline-light" onclick="window.close()">
+                        <i class="fa fa-fw fa-times"></i> Cerrar solapa
+                    </button>
+                @else
+                    <a href="{{ route('tesoreria_cockpit') }}" class="btn btn-sm btn-outline-light">Tesorería</a>
+                @endif
                 <a href="#" id="acc-link-cc" class="btn btn-sm btn-outline-light {{ $proveedor_id ? '' : 'd-none' }}">Cuenta corriente</a>
             </div>
         </div>

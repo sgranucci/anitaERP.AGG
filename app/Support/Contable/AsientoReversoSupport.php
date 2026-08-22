@@ -29,6 +29,7 @@ final class AsientoReversoSupport
         bool $omitirAnita = false,
         ?int $cajaMovimientoId = null,
         ?array $referenciaComprobante = null,
+        ?string $alcanceCierre = null,
     ): array {
         $asientoOriginal->loadMissing('asiento_movimientos');
 
@@ -79,7 +80,10 @@ final class AsientoReversoSupport
             'cotizaciones' => $cotizaciones,
             'debes' => $debes,
             'haberes' => $haberes,
-            'alcance_cierre_contable' => PeriodoContableCierreSupport::ALCANCE_CONTABLE,
+            // El reverso se valida contra el cierre del módulo de origen cuando el caller lo conoce.
+            'alcance_cierre_contable' => $alcanceCierre !== null && $alcanceCierre !== ''
+                ? $alcanceCierre
+                : PeriodoContableCierreSupport::ALCANCE_CONTABLE,
             // Caller que re-sincroniza ctamov después (ej. TM) evita huérfanos por doble escritura.
             'omitir_anita' => $omitirAnita,
         ];

@@ -26,6 +26,7 @@ return [
         'concmov',
         'promov',
         'aplmovp',
+        'aplicped',
     ],
 
     'anita_sistema_compras' => 'compras',

@@ -73,7 +73,11 @@ class AperturaPeriodoContableService
         }
 
         $duracionCantidad = max(1, (int) ($datos['duracion_cantidad'] ?? 1));
-        $duracionUnidad = ($datos['duracion_unidad'] ?? 'horas') === 'dias' ? 'dias' : 'horas';
+        $duracionUnidad = match ($datos['duracion_unidad'] ?? 'horas') {
+            'dias' => 'dias',
+            'minutos' => 'minutos',
+            default => 'horas',
+        };
 
         $habilitadoId = (int) ($datos['usuario_habilitado_id'] ?? Auth::id());
         if ($habilitadoId <= 0) {
@@ -92,7 +96,7 @@ class AperturaPeriodoContableService
             );
         }
 
-        $apertura = AperturaPeriodoContable::query()->create([
+        $attrs = [
             'empresa_id' => $empresaId,
             'usuario_solicitante_id' => (int) Auth::id(),
             'usuario_habilitado_id' => $habilitadoId,
@@ -103,9 +107,28 @@ class AperturaPeriodoContableService
             'duracion_unidad' => $duracionUnidad,
             'estado' => 'pendiente',
             'motivo' => trim((string) ($datos['motivo'] ?? '')),
-        ]);
+        ];
 
-        $this->moduloAvisoService->enviar('contable', 'apertura_periodo_solicitud_pendiente', (int) $apertura->id);
+        if (AperturaPeriodoContablePermiso::esModoInmediata()) {
+            $inicio = now();
+            $attrs['estado'] = 'activa';
+            $attrs['usuario_aprobador_id'] = (int) Auth::id();
+            $attrs['observacion_aprobacion'] = 'Habilitación inmediata (modo instalación).';
+            $attrs['inicio_en'] = $inicio;
+            $attrs['vence_en'] = PeriodoContableCierreSupport::calcularVencimiento(
+                $inicio,
+                $duracionCantidad,
+                $duracionUnidad
+            );
+        }
+
+        $apertura = AperturaPeriodoContable::query()->create($attrs);
+
+        if (AperturaPeriodoContablePermiso::esModoInmediata()) {
+            $this->moduloAvisoService->enviar('contable', 'apertura_periodo_habilitada', (int) $apertura->id);
+        } else {
+            $this->moduloAvisoService->enviar('contable', 'apertura_periodo_solicitud_pendiente', (int) $apertura->id);
+        }
 
         return $apertura;
     }

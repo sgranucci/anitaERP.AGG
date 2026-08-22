@@ -4,6 +4,7 @@ namespace App\Services\Compras;
 
 use App\ApiAnita;
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Support\Compras\AnitaSync\ComprobanteProveedor\AplicpedFacturaAnitaMapper;
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\CompraCabeceraAnitaMapper;
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\ComprobanteProveedorAnitaContext;
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\ComprobanteProveedorAnitaNroInternoSupport;
@@ -11,13 +12,16 @@ use App\Support\Compras\AnitaSync\ComprobanteProveedor\ComprobanteProveedorConcm
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\ConcmovLineaAnitaMapper;
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\PromovCuotaAnitaMapper;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
+use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
+use App\Support\Stock\RecepcionProveedorAnitaWhereSupport;
 use RuntimeException;
 
 /**
- * Sincroniza comprobante ERP → Anita (compra, concmov, promov).
+ * Sincroniza comprobante ERP → Anita (compra, concmov, promov, aplicped).
  * Las aplicaciones de CC (aplmovp + promov.prov_t_pagado) las graba
  * ProveedorCuentacorrienteAplicacionAnitaSyncService.
  * Contabilidad: ctamov vía AsientoRepository (como facturación), no subdiario Anita.
+ * aplicped: factura → PEP para que Anita (Capex, mayor, hop FIB) conozca la OC.
  */
 class ComprobanteProveedorAnitaSyncService
 {
@@ -32,9 +36,11 @@ class ComprobanteProveedorAnitaSyncService
         $comprobante->loadMissing([
             'comprobante_proveedor_conceptos.concepto_ivacompras',
             'comprobante_proveedor_cuotas',
+            'comprobante_proveedor_articulos.articulos',
             'empresas', 'proveedores.condicionivas', 'proveedores.provincias',
             'proveedor_condicioniva_eventual', 'condicionpagos',
-            'tipotransaccion_compras', 'monedas', 'ordencompras',
+            'tipotransaccion_compras', 'monedas',
+            'ordencompras.ordencompra_articulos.articulos',
         ]);
 
         if (! $comprobante->anita_nro_interno) {
@@ -49,6 +55,7 @@ class ComprobanteProveedorAnitaSyncService
         $this->insertCompra($ctx);
         $this->syncConceptos($ctx);
         $this->syncPromov($ctx);
+        $this->syncAplicped($ctx);
 
         $comprobante->forceFill([
             'anita_sync_estado' => ComprobanteProveedorAnitaSyncEstado::SYNC_OK,
@@ -62,9 +69,11 @@ class ComprobanteProveedorAnitaSyncService
         $comprobante->loadMissing([
             'comprobante_proveedor_conceptos.concepto_ivacompras',
             'comprobante_proveedor_cuotas',
+            'comprobante_proveedor_articulos.articulos',
             'empresas', 'proveedores.condicionivas', 'proveedores.provincias',
             'proveedor_condicioniva_eventual', 'condicionpagos',
-            'tipotransaccion_compras', 'monedas', 'ordencompras',
+            'tipotransaccion_compras', 'monedas',
+            'ordencompras.ordencompra_articulos.articulos',
         ]);
 
         if (! $comprobante->anita_nro_interno) {
@@ -80,6 +89,8 @@ class ComprobanteProveedorAnitaSyncService
         $this->syncConceptos($ctx);
         $this->deletePromov($ctx);
         $this->syncPromov($ctx);
+        $this->deleteAplicped($ctx);
+        $this->syncAplicped($ctx);
 
         $comprobante->forceFill([
             'anita_sync_estado' => ComprobanteProveedorAnitaSyncEstado::SYNC_OK,
@@ -98,12 +109,37 @@ class ComprobanteProveedorAnitaSyncService
             'proveedores',
             'tipotransaccion_compras',
             'comprobante_proveedor_conceptos.concepto_ivacompras',
+            'ordencompras',
         ]);
         $ctx = new ComprobanteProveedorAnitaContext($comprobante, (int) $comprobante->anita_nro_interno);
 
+        $this->deleteAplicped($ctx);
         $this->apiDelete('promov', $ctx->claveWherePromov());
         $this->deleteConceptos($ctx);
         $this->apiDelete('compra', $ctx->claveWhereCompra());
+    }
+
+    /**
+     * Regraba solo aplicped (factura → PEP). No toca compra / concmov / promov.
+     */
+    public function resyncAplicped(Comprobante_Proveedor $comprobante): void
+    {
+        $comprobante->loadMissing([
+            'proveedores',
+            'tipotransaccion_compras',
+            'comprobante_proveedor_articulos.articulos',
+            'ordencompras.ordencompra_articulos.articulos',
+        ]);
+
+        if (! $comprobante->anita_nro_interno) {
+            throw new RuntimeException(
+                'Comprobante '.$comprobante->id.' sin anita_nro_interno; no se puede grabar aplicped.'
+            );
+        }
+
+        $ctx = new ComprobanteProveedorAnitaContext($comprobante, (int) $comprobante->anita_nro_interno);
+        $this->deleteAplicped($ctx);
+        $this->syncAplicped($ctx);
     }
 
     private function insertCompra(ComprobanteProveedorAnitaContext $ctx): void
@@ -210,6 +246,58 @@ class ComprobanteProveedorAnitaSyncService
     private function deletePromov(ComprobanteProveedorAnitaContext $ctx): void
     {
         $this->apiDelete('promov', $ctx->claveWherePromov());
+    }
+
+    private function syncAplicped(ComprobanteProveedorAnitaContext $ctx): void
+    {
+        $clavePep = AplicpedFacturaAnitaMapper::clavePepDesdeContexto($ctx);
+        if ($clavePep === null) {
+            return;
+        }
+
+        $claveFactura = AplicpedFacturaAnitaMapper::claveFactura($ctx);
+        if ($claveFactura['tipo'] === '' || $claveFactura['nro'] <= 0) {
+            return;
+        }
+
+        $tabla = (string) config('recepcion_proveedor.anita.tablas.aplicacion_oc', 'aplicped');
+        $api = new ApiAnita;
+        $codigoProveedor = $ctx->proveedorCodigo();
+
+        foreach (AplicpedFacturaAnitaMapper::lineas($ctx->comprobante) as $linea) {
+            // aplp_nro_interno = com_nro_interno de la factura (no penvp de la OC).
+            $insert = RecepcionProveedorAnitaEscrituraSupport::aplicpedFacturaLineaInsert(
+                $codigoProveedor,
+                $claveFactura,
+                $clavePep,
+                (int) $linea['orden_com'],
+                (int) $linea['penvp_orden'],
+                (string) $linea['sku'],
+                (float) $linea['cantidad'],
+                (int) $ctx->nroInterno,
+            );
+            $api->apiCallEscritura([
+                'acc' => 'insert',
+                'tabla' => $tabla,
+                'sistema' => self::SISTEMA_COMPRAS,
+                'campos' => $insert['campos'],
+                'valores' => $insert['valores'],
+            ], 'aplicped insert comprobante proveedor');
+        }
+    }
+
+    private function deleteAplicped(ComprobanteProveedorAnitaContext $ctx): void
+    {
+        $claveFactura = AplicpedFacturaAnitaMapper::claveFactura($ctx);
+        if ($claveFactura['tipo'] === '' || $claveFactura['nro'] <= 0) {
+            return;
+        }
+
+        $tabla = (string) config('recepcion_proveedor.anita.tablas.aplicacion_oc', 'aplicped');
+        $this->apiDelete(
+            $tabla,
+            RecepcionProveedorAnitaWhereSupport::aplicpedCom($ctx->proveedorCodigo(), $claveFactura)
+        );
     }
 
     private function apiDelete(string $tabla, string $whereArmado): void

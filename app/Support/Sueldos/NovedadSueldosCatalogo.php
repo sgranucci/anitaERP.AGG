@@ -34,6 +34,8 @@ class NovedadSueldosCatalogo
 
     public const ORIGEN_DESCUENTO_FALLO = 'descuento_fallo';
 
+    public const ORIGEN_SANCION = 'sancion';
+
     /** @var array<string, string> */
     public const ORIGENES = [
         self::ORIGEN_MANUAL => 'Manual',
@@ -43,6 +45,7 @@ class NovedadSueldosCatalogo
         self::ORIGEN_PLAN_CUOTA => 'Plan de cuotas',
         self::ORIGEN_SYNC_ANITA => 'Sync Anita',
         self::ORIGEN_DESCUENTO_FALLO => 'Descuento por fallo',
+        self::ORIGEN_SANCION => 'Sanción disciplinaria',
     ];
 
     public static function etiquetaEstado(?string $estado): string

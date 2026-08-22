@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Services\Ventas;
 
+use App\Models\Configuracion\Actividad_Arca;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
@@ -92,7 +93,7 @@ class CierreSalaExentaEmisionService
             'tipotransaccion_id' => (int) $tipo->id,
             'puntoventa_id' => (int) $puntoventa->id,
             'numerocomprobante' => $numero,
-            'actividad_arca_id' => 1,
+            'actividad_arca_id' => $this->resolverActividadArcaId($puntoventa),
             'cliente_id' => (int) $cliente->id,
             'condicionventa_id' => $cliente->condicionventa_id,
             'total' => $monto,
@@ -189,5 +190,29 @@ class CierreSalaExentaEmisionService
         }
 
         return $puntoventa;
+    }
+
+    /**
+     * IVA Simple agrupa por actividad ARCA. Bingo/máquinas = 920009 (apuestas),
+     * no gastronomía. Preferir la del PV; si falta, actividad de apuestas.
+     */
+    private function resolverActividadArcaId(Puntoventa $puntoventa): int
+    {
+        $desdePv = (int) ($puntoventa->actividad_arca_id ?? 0);
+        if ($desdePv > 0) {
+            return $desdePv;
+        }
+
+        $id = (int) (Actividad_Arca::query()
+            ->where('codigoarca', '920009')
+            ->value('id') ?? 0);
+
+        if ($id <= 0) {
+            throw new RuntimeException(
+                'Falta actividad ARCA 920009 (Servicios de apuestas) para FBI/FSL.',
+            );
+        }
+
+        return $id;
     }
 }

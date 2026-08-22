@@ -2,11 +2,13 @@
 
 namespace App\Support\Contable\LibroIvaDigital;
 
+use App\Support\Ventas\BingoFbiTipoSupport;
+use App\Support\Ventas\MaquinaFslTipoSupport;
 use App\Support\Ventas\MaquinavendingRmvTipoSupport;
 
 final class LibroIvaDigitalMapeosSupport
 {
-    /** Anita p-rg3685.c: RMV letra Z → tipo 6 (Factura B). */
+    /** Anita p-rg3685.c: RMV letra Z → tipo 6 (Factura B). FBI/FSL también Factura B. */
     public const RMV_TIPO_COMPROBANTE = '006';
 
     /** Anita p-rg3685.c: RMV usa documento 89 (LE) y número 1. */
@@ -68,7 +70,8 @@ final class LibroIvaDigitalMapeosSupport
 
     public static function tipoComprobanteVentas(string $codigoBase, string $letra, ?string $abreviatura = null): string
     {
-        if (self::esRmv($abreviatura)) {
+        // RMV / FBI / FSL: codigo ERP no numérico; informan como Factura B (006).
+        if (self::esSinCaeInformable($abreviatura)) {
             return self::RMV_TIPO_COMPROBANTE;
         }
 
@@ -78,9 +81,41 @@ final class LibroIvaDigitalMapeosSupport
         return str_pad((string) ($base + $offset), 3, '0', STR_PAD_LEFT);
     }
 
+    /**
+     * Comprobantes internos sin CAE que sí van al Libro IVA Digital / IVA Simple.
+     * IZV queda excluido (interno gastronómico no informable).
+     *
+     * @return list<string>
+     */
+    public static function abreviaturasSinCaeInformables(): array
+    {
+        return [
+            MaquinavendingRmvTipoSupport::ABREVIATURA,
+            BingoFbiTipoSupport::ABREVIATURA,
+            MaquinaFslTipoSupport::ABREVIATURA,
+        ];
+    }
+
+    public static function esSinCaeInformable(?string $abreviatura): bool
+    {
+        return in_array(
+            strtoupper(trim((string) $abreviatura)),
+            self::abreviaturasSinCaeInformables(),
+            true,
+        );
+    }
+
     public static function esRmv(?string $abreviatura): bool
     {
         return strtoupper(trim((string) $abreviatura)) === MaquinavendingRmvTipoSupport::ABREVIATURA;
+    }
+
+    public static function esFbiOFsl(?string $abreviatura): bool
+    {
+        $abrev = strtoupper(trim((string) $abreviatura));
+
+        return $abrev === BingoFbiTipoSupport::ABREVIATURA
+            || $abrev === MaquinaFslTipoSupport::ABREVIATURA;
     }
 
     /**

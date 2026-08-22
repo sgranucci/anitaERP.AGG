@@ -229,6 +229,43 @@ final class RecepcionProveedorAnitaEscrituraSupport
     }
 
     /**
+     * Vínculo factura proveedor ↔ PEP por línea (aplicped).
+     * aplp_* = factura (FGA/FIB/FIS…); aplp_ref_* = PEP; cantidad en aplp_cantfact.
+     *
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $claveFactura
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $ocFac
+     * @return array{campos: string, valores: string}
+     */
+    public static function aplicpedFacturaLineaInsert(
+        string $codigoProveedor,
+        array $claveFactura,
+        array $ocFac,
+        int $ordenFactura,
+        int $penvpOrden,
+        string $skuAnita13,
+        float $cantidadFacturada,
+        int $comNroInterno,
+    ): array {
+        return self::insert([
+            'aplp_proveedor' => self::proveedorSql($codigoProveedor),
+            'aplp_tipo' => self::textoSql($claveFactura['tipo'], 3),
+            'aplp_letra' => self::textoSql($claveFactura['letra'], 1),
+            'aplp_sucursal' => self::enteroSql((int) $claveFactura['sucursal']),
+            'aplp_nro' => self::enteroSql((int) $claveFactura['nro']),
+            'aplp_ref_tipo' => self::textoSql($ocFac['tipo'], 3),
+            'aplp_ref_letra' => self::textoSql($ocFac['letra'], 1),
+            'aplp_ref_sucursal' => self::enteroSql((int) $ocFac['sucursal']),
+            'aplp_ref_nro' => self::enteroSql((int) $ocFac['nro']),
+            'aplp_orden_com' => self::enteroSql($ordenFactura),
+            'aplp_orden' => self::enteroSql($penvpOrden),
+            'aplp_articulo' => self::textoSql($skuAnita13, 13),
+            'aplp_cantentr' => self::decimalSql(0),
+            'aplp_nro_interno' => self::enteroSql($comNroInterno),
+            'aplp_cantfact' => self::decimalSql($cantidadFacturada),
+        ]);
+    }
+
+    /**
      * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $clave
      * @return array{campos: string, valores: string}
      */

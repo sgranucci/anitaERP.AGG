@@ -111,10 +111,25 @@
                                     Completar con compras Anita (sin solapar ERP)
                                 </label>
                             </div>
-                            <small class="form-text text-muted">
+                            <small class="form-text text-muted mb-2 d-block">
                                 Lee <code>compra</code> + <code>concmov</code> del per&iacute;odo en una pasada al bridge
                                 y agrega las que no est&eacute;n ya en anitaERP (misma clave proveedor/tipo/letra/PV/nro
                                 o <code>anita_nro_interno</code>).
+                            </small>
+
+                            <input type="hidden" name="completar_fsl_anita" value="0">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="completar_fsl_anita"
+                                       id="completar_fsl_anita" value="1"
+                                       @checked(! empty($filtros['completar_fsl_anita']))>
+                                <label class="form-check-label" for="completar_fsl_anita">
+                                    Completar FSL m&aacute;quinas desde Anita (sin solapar ERP)
+                                </label>
+                            </div>
+                            <small class="form-text text-muted">
+                                Mientras el cierre de m&aacute;quinas siga en Informix, lee <code>venta</code> tipo FSL
+                                del per&iacute;odo y las suma al Libro IVA / IVA Simple (actividad apuestas 920009).
+                                No duplica si ya hay FSL en ERP con la misma sucursal+n&uacute;mero.
                             </small>
                         </div>
                     </div>
@@ -156,6 +171,9 @@
                         @endif
                         @if (! empty($resultado['opciones']['completar_compras_anita']) || ! empty($resultado['compras']['resumen']['completar_compras_anita']))
                             ; completa con Anita si faltan en ERP
+                        @endif
+                        @if (! empty($resultado['opciones']['completar_fsl_anita']) || ! empty($resultado['ventas']['resumen']['completar_fsl_anita']))
+                            ; FSL m&aacute;quinas completadas desde Anita
                         @endif.
                     </p>
                     @if (!empty($resultado['validaciones']))
@@ -201,6 +219,21 @@
                                     <td colspan="3" class="text-muted small py-0">
                                         {{ number_format($resultado['ventas']['resumen']['ventas_rmv'], 0, ',', '.') }} rendiciones vending RMV
                                         (Factura B tipo 006, documento 89, sucursal &ge; 1000; mismo criterio que Anita p-rg3685).
+                                    </td>
+                                </tr>
+                                @endif
+                                @if (($resultado['ventas']['resumen']['ventas_fbi_fsl'] ?? 0) > 0)
+                                <tr class="table-warning">
+                                    <td colspan="3">
+                                        <strong>{{ number_format($resultado['ventas']['resumen']['ventas_fbi_fsl'], 0, ',', '.') }}</strong>
+                                        comprobantes bingo/m&aacute;quinas (FBI/FSL) incluidos como
+                                        <strong>Factura B tipo 006</strong> (exentas, sin CAE; PV 14/26/39 seg&uacute;n empresa).
+                                        @if (($resultado['ventas']['resumen']['ventas_fsl_anita'] ?? 0) > 0)
+                                            De ellas,
+                                            <strong>{{ number_format($resultado['ventas']['resumen']['ventas_fsl_anita'], 0, ',', '.') }}</strong>
+                                            FSL vinieron de Anita.
+                                        @endif
+                                        En el TXT no figura la abreviatura FBI/FSL: buscar tipo <code>006</code> y el PV de cierre.
                                     </td>
                                 </tr>
                                 @endif

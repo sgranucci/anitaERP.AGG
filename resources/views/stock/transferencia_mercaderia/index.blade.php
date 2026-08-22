@@ -44,6 +44,36 @@
         min-height: 2.75rem;
         min-width: 2.75rem;
     }
+    .tm-pickeo {
+        position: sticky;
+        top: 0;
+        z-index: 4;
+        background: #fff;
+        padding: 0.6rem 0 0.4rem;
+        margin-bottom: 0.35rem;
+        border-bottom: 1px solid #dee2e6;
+    }
+    .tm-pickeo label {
+        font-size: 0.8rem;
+        font-weight: 700;
+        margin-bottom: 0.2rem;
+        color: #1B4F72;
+    }
+    .tm-pickeo input {
+        font-size: 1.25rem;
+        min-height: 3.25rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+    }
+    .tm-pickeo .btn {
+        min-height: 3.25rem;
+        min-width: 3.25rem;
+        font-size: 1.1rem;
+    }
+    .tm-item.tm-item-recien {
+        outline: 2px solid #17a2b8;
+        background: #eaf6f8;
+    }
     .tm-filtro {
         background: #f8f9fa;
         padding: 0.5rem 0;
@@ -138,6 +168,50 @@
         white-space: pre-wrap;
         word-break: break-word;
     }
+    .tm-camara-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        z-index: 1055;
+        background: #111;
+        flex-direction: column;
+        color: #fff;
+    }
+    .tm-camara-overlay.tm-camara-visible {
+        display: flex;
+    }
+    .tm-camara-toolbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.6rem 0.75rem;
+        background: #1a1a1a;
+    }
+    .tm-camara-reader {
+        flex: 1 1 auto;
+        min-height: 220px;
+        position: relative;
+    }
+    .tm-camara-reader video,
+    .tm-camara-reader canvas {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover;
+    }
+    .tm-camara-footer {
+        padding: 0.75rem;
+        background: #1a1a1a;
+    }
+    .tm-camara-footer .btn {
+        min-height: 2.75rem;
+    }
+    #tm_camara_reader_foto {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        opacity: 0;
+    }
     @media (min-width: 768px) {
         .tm-lista {
             max-width: 720px;
@@ -156,6 +230,7 @@
         destinatarios: @json(route('transferencia_mercaderia_destinatarios')),
         validarLineaContable: @json(route('transferencia_mercaderia_validar_linea_contable')),
         saldoArticulo: @json(route('transferencia_mercaderia_saldo_articulo')),
+        resolverArticulo: @json(route('transferencia_mercaderia_resolver_articulo')),
         articuloConsultaUrl: {!! json_encode(route('editar_articulo', ['id' => '__ID__', 'origen' => 'modal_consulta', 'vista' => 'consulta'])) !!},
     };
 </script>
@@ -163,7 +238,9 @@
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/centrocosto/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/transferencia/aviso-modal.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/transferencia/aviso-modal.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/vendor/html5-qrcode.min.js') }}?v={{ @filemtime(public_path('assets/vendor/html5-qrcode.min.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/transferencia_mercaderia/index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/transferencia_mercaderia/index.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/transferencia_mercaderia/pickeo-camara.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/transferencia_mercaderia/pickeo-camara.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -315,22 +392,51 @@
                                 'ayuda' => 'Obligatorio para tipos de transferencia que generan asiento contable.',
                             ])
                         </div>
-                        <div class="form-group col-12 mb-2">
-                            <button type="button" id="tm_btn_agregar_articulo" class="btn btn-outline-primary btn-block">
-                                <i class="fa fa-search"></i> Agregar artículo (modal)
-                            </button>
-                        </div>
-                        <div class="form-group col-12 mb-0">
-                            <button type="button" id="tm_btn_cargar" class="btn btn-info btn-block">
-                                <i class="fa fa-refresh"></i> Cargar stock del depósito de salida
-                            </button>
-                        </div>
+                        <details class="col-12 mb-0" id="tm_opciones_avanzadas">
+                            <summary class="text-muted mb-2" style="cursor:pointer;">
+                                Más opciones (cargar stock completo, bien de uso)
+                            </summary>
+                            <div class="form-group col-12 mb-2 px-0">
+                                <button type="button" id="tm_btn_agregar_articulo" class="btn btn-outline-primary btn-block">
+                                    <i class="fa fa-search"></i> Agregar artículo (modal)
+                                </button>
+                            </div>
+                            <div class="form-group col-12 mb-0 px-0">
+                                <button type="button" id="tm_btn_cargar" class="btn btn-info btn-block">
+                                    <i class="fa fa-refresh"></i> Cargar stock del depósito de salida
+                                </button>
+                            </div>
+                        </details>
                     </div>
+                </div>
+
+                <div class="tm-pickeo" id="tm_panel_pickeo">
+                    <label for="tm_pickeo_codigo">Pickeá el código de barras o ingresá el SKU</label>
+                    <div class="d-flex align-items-stretch" style="gap: 0.4rem;">
+                        <button type="button" id="tm_btn_camara" class="btn btn-success flex-shrink-0"
+                            title="Pickeá con la cámara">
+                            <i class="fa fa-camera"></i>
+                            <span class="d-none d-sm-inline"> Cámara</span>
+                        </button>
+                        <button type="button" id="tm_btn_pickeo_lupa" class="btn btn-outline-primary flex-shrink-0"
+                            title="Consulta artículos (F1)">
+                            <i class="fa fa-search"></i>
+                        </button>
+                        <input type="text" id="tm_pickeo_codigo" class="form-control" autocomplete="off"
+                            autocorrect="off" autocapitalize="characters" spellcheck="false"
+                            inputmode="search" placeholder="Código de barras o SKU" autofocus>
+                        <button type="button" id="tm_btn_pickeo" class="btn btn-primary flex-shrink-0">
+                            Agregar
+                        </button>
+                    </div>
+                    <small class="text-muted d-block mt-1">
+                        Cámara, lector Bluetooth o SKU a mano. Cada lectura suma 1 hasta el stock.
+                    </small>
                 </div>
 
                 <div class="tm-filtro" id="tm_panel_filtro" style="display: none;">
                     <input type="search" id="tm_filtro_desc" class="form-control"
-                        placeholder="SKU o descripción…" autocomplete="off">
+                        placeholder="Filtrar ítems cargados…" autocomplete="off">
                 </div>
 
                 <div id="tm_estado" class="text-muted small mb-2"></div>
@@ -342,6 +448,26 @@
                     </button>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<div id="tm_camara_overlay" class="tm-camara-overlay" aria-modal="true" aria-labelledby="tm_camara_titulo">
+    <div class="tm-camara-toolbar">
+        <strong id="tm_camara_titulo">Pickeo con cámara</strong>
+        <button type="button" id="tm_camara_cerrar" class="btn btn-outline-light btn-sm">
+            Cerrar
+        </button>
+    </div>
+    <div id="tm_camara_reader" class="tm-camara-reader"></div>
+    <div id="tm_camara_reader_foto"></div>
+    <div class="tm-camara-footer">
+        <div id="tm_camara_feedback" class="small mb-2">Apuntá al código de barras…</div>
+        <div id="tm_camara_foto_wrap" class="d-none">
+            <label class="btn btn-warning btn-block mb-0">
+                <i class="fa fa-camera"></i> Sacar foto del código
+                <input type="file" id="tm_camara_foto" accept="image/*" capture="environment" class="d-none">
+            </label>
         </div>
     </div>
 </div>

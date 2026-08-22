@@ -37,6 +37,7 @@ Los diagramas (`flujo-*`, `circuito-*`, etc.) se conservan en SVG y **no** se so
 | Canjes marketing | `config/manual_canjes_marketing.php` | `public/docs/manual-canjes-marketing/img/` | `manual:generar-mockups canjes-marketing` |
 | Vending | `config/manual_vending.php` | `public/docs/manual-vending/img/` | `manual:generar-mockups vending` |
 | Caja (Flash, posición, máquinas, bingo) | `config/manual_caja.php` | `public/docs/manual-caja/img/` | `manual:generar-mockups caja` |
+| Sueldos (sanciones) | `config/manual_sueldos.php` | `public/docs/manual-sueldos/img/` | (diagrama SVG; sin mockup de pantallas) |
 | Solicitudes de pago | `config/manual_solicitudpago.php` | `public/docs/manual-solicitudpago/img/` | `manual:generar-mockups solicitudpago` |
 | Propuesta de pagos / Tesorería AP | `config/manual_propuesta_pago.php` | `public/docs/manual-propuesta-pago/img/` | `manual:generar-mockups propuesta-pago` |
 | Contable (cierres/aperturas) | `config/manual_contable.php` | `public/docs/manual-contable/img/` | `manual:generar-mockups contable` |
@@ -65,6 +66,7 @@ php docs/manual-ventas/generar.php
 php docs/manual-canjes-marketing/generar.php
 php docs/manual-vending/generar.php
 php docs/manual-caja/generar.php
+php docs/manual-sueldos/generar.php
 php docs/manual-solicitudpago/generar.php
 php docs/manual-propuesta-pago/generar.php
 php docs/manual-contable/generar.php

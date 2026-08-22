@@ -19,6 +19,7 @@ use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\ComprobanteProveedorLineasFacturaSupport;
@@ -33,7 +34,9 @@ use App\Support\Compras\OrdencompraComprobanteEstados;
 use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\ArticuloSkuMatchSupport;
+use DateTimeInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use RuntimeException;
@@ -63,11 +66,56 @@ class ComprobanteProveedorPersistenciaService
         return $this->ultimosAvisosControles;
     }
 
+    /**
+     * Cierre de período: manda la fecha de IVA, que es la de contabilización.
+     * La fecha del comprobante puede ser anterior (factura que llega tarde) y no define el período.
+     *
+     * @param  array<string, mixed>  $payload
+     */
+    private function assertPeriodoContablePermitido(array $payload): void
+    {
+        $empresaId = (int) ($payload['empresa_id'] ?? 0);
+        if ($empresaId <= 0) {
+            return;
+        }
+
+        $fecha = $this->fechaIvaYmd($payload);
+        if ($fecha === null) {
+            return;
+        }
+
+        PeriodoContableCierreSupport::assertOperacionPermitida(
+            $empresaId,
+            $fecha,
+            PeriodoContableCierreSupport::ALCANCE_CUENTAS_PAGAR
+        );
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function fechaIvaYmd(array $payload): ?string
+    {
+        foreach (['fechaiva', 'fechacomprobante'] as $clave) {
+            $valor = $payload[$clave] ?? null;
+            if ($valor instanceof DateTimeInterface) {
+                return $valor->format('Y-m-d');
+            }
+
+            $texto = trim((string) $valor);
+            if ($texto !== '') {
+                return substr($texto, 0, 10);
+            }
+        }
+
+        return null;
+    }
+
     public function crearDesdeRequest(Request $request): Comprobante_Proveedor
     {
         $payload = $this->armarPayloadCabecera($request);
         $payload['creousuario_id'] = Auth::id();
         $payload['estado'] = ComprobanteProveedorEstados::BORRADOR;
+
+        $this->assertPeriodoContablePermitido($payload);
 
         $precargaIdRequest = (int) ($request->input('precarga_comprobante_proveedor_id', 0) ?: 0);
         if ($precargaIdRequest > 0) {
@@ -158,6 +206,13 @@ class ComprobanteProveedorPersistenciaService
         }
 
         ComprobanteProveedorPagoSupport::assertSinPagosAplicados($id, 'actualizar');
+
+        // Período de origen y período destino: mover la fecha de IVA impacta en los dos.
+        $this->assertPeriodoContablePermitido([
+            'empresa_id' => $comprobante->empresa_id,
+            'fechaiva' => ComprobanteProveedorFechaContableSupport::fechaYmd($comprobante),
+        ]);
+        $this->assertPeriodoContablePermitido($this->armarPayloadCabecera($request));
 
         $estadosEditables = [
             ComprobanteProveedorEstados::BORRADOR,
@@ -283,6 +338,8 @@ class ComprobanteProveedorPersistenciaService
         );
         $payload['creousuario_id'] = Auth::id();
         $payload['estado'] = ComprobanteProveedorEstados::BORRADOR;
+
+        $this->assertPeriodoContablePermitido($payload);
 
         ComprobanteProveedorUnicidadSupport::assertUnico(
             (int) $payload['empresa_id'],

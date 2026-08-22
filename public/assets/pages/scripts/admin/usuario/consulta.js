@@ -1,6 +1,7 @@
 var ptrusuario_id;
-var ptrusuario_codigo;
 var ptrnombreusuario;
+var ptrusuario_codigo;
+var abriendoModalUsuario = false;
 
 function contenedorUsuarioConsulta($el) {
     var $tm = $el.closest('.tm-usuario-campo');
@@ -13,28 +14,105 @@ function contenedorUsuarioConsulta($el) {
         return $tr;
     }
 
-    return $el.closest('.form-group');
+    return $el.closest('.form-group, [id$="-campo"], .d-flex');
 }
 
 function esTeclaF1Usuario(e) {
     return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
 }
 
-function resolverUsuarioDesdeCodigo($input) {
+function modalUsuarioAbierto() {
+    var $modal = $('#consultausuarioModal');
+    return abriendoModalUsuario || ($modal.length > 0 && ($modal.hasClass('show') || $modal.hasClass('in')));
+}
+
+function avisarUsuarioNoEncontrado($input, valor, mensaje, avisar) {
+    $input.data('usuarioCodigoInvalido', valor);
+    if (!avisar) {
+        return;
+    }
+    if (typeof window.liberarPantallaModalesBloqueados === 'function') {
+        window.liberarPantallaModalesBloqueados();
+    }
+    setTimeout(function () {
+        alert(mensaje);
+        $input.trigger('focus');
+        if ($input.get(0) && typeof $input.get(0).select === 'function') {
+            $input.get(0).select();
+        }
+    }, 0);
+}
+
+/**
+ * @param {JQuery} $input
+ * @param {{avisar?: boolean, avanzarFoco?: boolean}} [opciones]
+ */
+function resolverUsuarioDesdeCodigo($input, opciones) {
+    opciones = opciones || {};
+    var avisar = opciones.avisar === true;
+    var avanzarFoco = opciones.avanzarFoco === true;
     var $cont = contenedorUsuarioConsulta($input);
     var valor = $.trim($input.val());
 
+    if (modalUsuarioAbierto()) {
+        return;
+    }
+
     if (!valor) {
+        $input.removeData('usuarioCodigoInvalido');
         limpiarCamposUsuarioConsulta($cont);
         return;
     }
 
+    if ($input.data('usuarioResolviendo')) {
+        return;
+    }
+
+    // Blur no repite aviso por el mismo código inválido (evita bucle alert ↔ blur).
+    if (!avisar && $input.data('usuarioCodigoInvalido') === valor) {
+        return;
+    }
+
+    $input.data('usuarioResolviendo', true);
+    $input.removeData('usuarioCodigoInvalido');
+
     $.getJSON(carpetaBase + '/configuracion/resolverusuario', paramsResolverUsuario(valor, $cont))
         .done(function (data) {
-            if (!aplicarUsuarioResuelto($cont, data)) {
-                limpiarCamposUsuarioConsulta($cont);
+            if (!aplicarUsuarioResuelto($cont, data, { avisar: avisar, $input: $input, valor: valor })) {
+                return;
             }
+            $input.removeData('usuarioCodigoInvalido');
+            if (avanzarFoco) {
+                avanzarFocoUsuario($cont, $input);
+            }
+        })
+        .fail(function () {
+            avisarUsuarioNoEncontrado(
+                $input,
+                valor,
+                'Usuario no encontrado o suspendido.',
+                avisar
+            );
+            limpiarCamposUsuarioConsulta($cont);
+            $input.val(valor);
+        })
+        .always(function () {
+            $input.removeData('usuarioResolviendo');
         });
+}
+
+function avanzarFocoUsuario($cont, $input) {
+    var $form = $cont.closest('form');
+    if (!$form.length) {
+        $form = $(document);
+    }
+    var $focusables = $form.find(
+        'input:not([type="hidden"]):not([readonly]):not(:disabled), select:not(:disabled), textarea:not([readonly]):not(:disabled), button:not(:disabled)'
+    );
+    var indice = $focusables.index($input);
+    if (indice >= 0 && indice + 1 < $focusables.length) {
+        $focusables.eq(indice + 1).trigger('focus');
+    }
 }
 
 function omitirFiltroEmpresaUsuarioConsulta($cont) {
@@ -91,13 +169,41 @@ function paramsResolverUsuario(valor, $cont) {
     return params;
 }
 
-function aplicarUsuarioResuelto($row, data) {
+/**
+ * @param {JQuery} $row
+ * @param {object} data
+ * @param {{avisar?: boolean, $input?: JQuery, valor?: string}} [opciones]
+ */
+function aplicarUsuarioResuelto($row, data, opciones) {
+    opciones = opciones || {};
+    var avisar = opciones.avisar === true;
+    var $input = opciones.$input || $row.find('.usuario_codigo_arbol').first();
+    var valor = opciones.valor != null ? opciones.valor : $.trim($input.val() || '');
+
     if (!data || !data.ok) {
-        alert((data && data.mensaje) ? data.mensaje : 'Usuario no encontrado');
+        limpiarCamposUsuarioConsulta($row);
+        if ($input.length && valor) {
+            $input.val(valor);
+        }
+        avisarUsuarioNoEncontrado(
+            $input,
+            valor,
+            (data && data.mensaje) ? data.mensaje : 'Usuario no encontrado',
+            avisar
+        );
         return false;
     }
     if (data.empresa_ok === false && !omitirFiltroEmpresaUsuarioConsulta($row)) {
-        alert('El usuario no pertenece a la empresa seleccionada.');
+        limpiarCamposUsuarioConsulta($row);
+        if ($input.length && valor) {
+            $input.val(valor);
+        }
+        avisarUsuarioNoEncontrado(
+            $input,
+            valor,
+            'El usuario no pertenece a la empresa seleccionada.',
+            avisar
+        );
         return false;
     }
     var $hid = $row.find('.usuario_id_arbol');
@@ -166,8 +272,16 @@ function limpiarCamposUsuarioConsulta($cont) {
     $cont.find('.nombreusuario').val('');
 }
 
+$(document).on('input', '.usuario_codigo_arbol', function () {
+    $(this).removeData('usuarioCodigoInvalido');
+    var $cont = contenedorUsuarioConsulta($(this));
+    $cont.find('.usuario_id_arbol').val('');
+    $cont.find('.nombreusuario').val('');
+});
+
 $(document).on('blur', '.usuario_codigo_arbol', function () {
-    resolverUsuarioDesdeCodigo($(this));
+    // Sin alert en blur: evita bucle con el diálogo nativo al fallar Enter.
+    resolverUsuarioDesdeCodigo($(this), { avisar: false, avanzarFoco: false });
 });
 
 $(document).on('keydown', '.usuario_codigo_arbol', function (e) {
@@ -182,7 +296,7 @@ $(document).on('keydown', '.usuario_codigo_arbol', function (e) {
 
     if (e.which === 13 || e.key === 'Enter') {
         e.preventDefault();
-        resolverUsuarioDesdeCodigo($(this));
+        resolverUsuarioDesdeCodigo($(this), { avisar: true, avanzarFoco: true });
         return false;
     }
 });
@@ -203,7 +317,7 @@ $(document).on('change', '.usuario_id', function (event) {
 
     $.getJSON(carpetaBase + '/configuracion/resolverusuario', paramsResolverUsuario(valor, $cont))
         .done(function (data) {
-            if (!aplicarUsuarioResuelto($cont, data)) {
+            if (!aplicarUsuarioResuelto($cont, data, { avisar: true, $input: $inp, valor: valor })) {
                 $inp.val('');
                 $cont.find('.nombreusuario').val('');
                 return;
@@ -224,6 +338,7 @@ $(document).on('click', '.eligeconsultausuario', function () {
     $(ptrnombreusuario).val(nombre);
     if (ptrusuario_codigo && $(ptrusuario_codigo).length) {
         $(ptrusuario_codigo).val(codigo);
+        $(ptrusuario_codigo).removeData('usuarioCodigoInvalido');
     }
 
     if ($("#usuario_id").length) {
@@ -268,9 +383,11 @@ function activa_eventos_consultausuario()
     $('.consultausuario').off('click.consultaUsuario').on('click.consultaUsuario', function (event) {
         event.preventDefault();
         var $btn = $(this);
+        abriendoModalUsuario = true;
         window._consultaUsuarioOmitirFiltroEmpresa = $btn.data('omitir_filtro_empresa') === 1
             || $btn.data('omitir_filtro_empresa') === '1'
-            || $btn.closest('#ms_panel_destinatario').length > 0;
+            || $btn.closest('#ms_panel_destinatario').length > 0
+            || !!window._consultaUsuarioOmitirFiltroEmpresaFijo;
 
         var ptrId = $btn.data('ptrusuario_id') || $btn.attr('data-ptrusuario_id');
         var ptrNom = $btn.data('ptrnombre') || $btn.attr('data-ptrnombre');
@@ -292,11 +409,20 @@ function activa_eventos_consultausuario()
     });
 
     $('#consultausuarioModal').off('shown.bs.modal.consultaUsuario').on('shown.bs.modal.consultaUsuario', function () {
+        abriendoModalUsuario = false;
         $(this).find('[autofocus]').focus();
     });
 
     $('#consultausuarioModal').off('hidden.bs.modal.consultaUsuario').on('hidden.bs.modal.consultaUsuario', function () {
-        window._consultaUsuarioOmitirFiltroEmpresa = false;
+        abriendoModalUsuario = false;
+        if (!window._consultaUsuarioOmitirFiltroEmpresaFijo) {
+            window._consultaUsuarioOmitirFiltroEmpresa = false;
+        } else {
+            window._consultaUsuarioOmitirFiltroEmpresa = true;
+        }
+        if (typeof window.liberarPantallaModalesBloqueados === 'function') {
+            window.liberarPantallaModalesBloqueados();
+        }
     });
 
     $('#aceptaconsultausuarioModal').off('click.consultaUsuario').on('click.consultaUsuario', function () {

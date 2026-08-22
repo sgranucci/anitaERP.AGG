@@ -1,5 +1,6 @@
 $(function () {
     window._consultaUsuarioOmitirFiltroEmpresa = true;
+    window._consultaUsuarioOmitirFiltroEmpresaFijo = true;
 
     if (typeof activa_eventos_consultausuario === 'function') {
         activa_eventos_consultausuario();
@@ -31,23 +32,174 @@ $(function () {
         }
     }).trigger('change');
 
+    function syncFechaTopeUi() {
+        var on = $('#con_fecha_tope').is(':checked');
+        $('#rf-vence-wrap').toggleClass('d-none', !on);
+        $('#rf-sin-vence-ayuda').toggleClass('d-none', on);
+        if (!on) {
+            $('#vence_el').val('');
+        }
+    }
+    $('#con_fecha_tope').on('change', syncFechaTopeUi);
+    syncFechaTopeUi();
+
     $('#incluir_globales').on('change', function () {
         var on = $(this).is(':checked');
         $('#rf-tipos-wrap').toggleClass('text-muted', !on);
         $('.rf-tipo').prop('disabled', !on);
     }).trigger('change');
 
+    function formatearFechaTope(ymd) {
+        var m = String(ymd || '').match(/^(\d{4})-(\d{2})-(\d{2})$/);
+        if (!m) {
+            return '';
+        }
+        return m[3] + '/' + m[2] + '/' + m[1];
+    }
+
+    var rfOverlayTimer = null;
+    var rfOverlayActivo = false;
+
+    function rfOverlayEl() {
+        return document.getElementById('rf-reemplazo-overlay');
+    }
+
+    function mostrarRfOverlay(on, titulo, subtitulo) {
+        var el = rfOverlayEl();
+        if (!el) {
+            return;
+        }
+        if (titulo) {
+            var $t = document.getElementById('rf-reemplazo-overlay-titulo');
+            if ($t) {
+                $t.textContent = titulo;
+            }
+        }
+        if (subtitulo) {
+            var $s = document.getElementById('rf-reemplazo-overlay-subtitulo');
+            if ($s) {
+                $s.textContent = subtitulo;
+            }
+        }
+        if (on) {
+            el.classList.remove('d-none');
+            el.style.display = 'flex';
+            el.setAttribute('aria-hidden', 'false');
+            rfOverlayActivo = true;
+        } else {
+            el.classList.add('d-none');
+            el.style.display = '';
+            el.setAttribute('aria-hidden', 'true');
+            rfOverlayActivo = false;
+        }
+    }
+
+    function mensajesVivosRf(modo) {
+        if (modo === 'restaurar') {
+            return [
+                'Restaurando titular…',
+                'Devolviendo niveles del árbol…',
+                'Actualizando conceptos SP…',
+                'Reasignando pendientes…',
+            ];
+        }
+        return [
+            'Aplicando reemplazo de firmante…',
+            'Actualizando niveles del árbol…',
+            'Actualizando conceptos SP…',
+            'Reasignando movimientos pendientes…',
+            'Casi listo, no cierre la página…',
+        ];
+    }
+
+    function iniciarMensajesVivosRf(modo) {
+        detenerMensajesVivosRf();
+        var msgs = mensajesVivosRf(modo);
+        var idx = 0;
+        var $t = document.getElementById('rf-reemplazo-overlay-titulo');
+        if ($t) {
+            $t.textContent = msgs[0];
+        }
+        rfOverlayTimer = setInterval(function () {
+            idx = (idx + 1) % msgs.length;
+            if ($t) {
+                $t.textContent = msgs[idx];
+            }
+        }, 2200);
+    }
+
+    function detenerMensajesVivosRf() {
+        if (rfOverlayTimer) {
+            clearInterval(rfOverlayTimer);
+            rfOverlayTimer = null;
+        }
+    }
+
+    function ocultarRfOverlay() {
+        detenerMensajesVivosRf();
+        mostrarRfOverlay(false);
+        $('#btn-aplicar-reemplazo, #btn-preview-reemplazo').prop('disabled', false);
+    }
+
     $('#btn-aplicar-reemplazo').on('click', function (e) {
         var modo = modoActual();
-        var msg = modo === 'restaurar'
-            ? '¿Confirma restaurar al titular sus posiciones en el árbol (fin de suplencia)?'
-            : '¿Confirma el reemplazo de firmante? Se guarda el titular original para poder restaurarlo después.';
+        var venceRaw = $.trim($('#vence_el').val() || '');
+        var venceFmt = formatearFechaTope(venceRaw);
+
+        if (modo === 'reemplazo' && $('#con_fecha_tope').is(':checked')) {
+            if (!venceRaw) {
+                alert('Indicó fecha tope: complete el último día del reemplazo.');
+                e.preventDefault();
+                $('#vence_el').focus();
+                return false;
+            }
+            if (!venceFmt) {
+                alert('La fecha tope no es válida. Use el selector de fecha (formato AAAA-MM-DD).');
+                e.preventDefault();
+                $('#vence_el').focus();
+                return false;
+            }
+        }
+        var msg;
+        if (modo === 'restaurar') {
+            msg = '¿Confirma restaurar al titular sus posiciones en el árbol (fin de suplencia)?';
+        } else if ($('#con_fecha_tope').is(':checked')) {
+            msg = '¿Confirma el reemplazo? Vigente hasta el ' + venceFmt
+                + ' inclusive; se restaurará automáticamente al día siguiente.';
+        } else {
+            msg = '¿Confirma el reemplazo sin fecha tope? Quedará activo hasta que restaure el titular manualmente.';
+        }
         if (!confirm(msg)) {
             e.preventDefault();
             return false;
         }
         return true;
     });
+
+    $('#form-reemplazo-firmante').on('submit', function () {
+        var modo = modoActual();
+        var titulo = modo === 'restaurar'
+            ? 'Restaurando titular…'
+            : 'Aplicando reemplazo de firmante…';
+        $('#btn-aplicar-reemplazo, #btn-preview-reemplazo').prop('disabled', true);
+        mostrarRfOverlay(
+            true,
+            titulo,
+            'Puede demorar según la cantidad de niveles, conceptos y pendientes. No cierre la página.'
+        );
+        iniciarMensajesVivosRf(modo);
+    });
+
+    // bfcache / atrás del navegador: no dejar el overlay pegado
+    window.addEventListener('pageshow', function () {
+        ocultarRfOverlay();
+    });
+    $(window).on('unload pagehide', function () {
+        // Al navegar por el POST exitoso el overlay ya se va con la página;
+        // por las dudas frenamos el timer.
+        detenerMensajesVivosRf();
+    });
+    ocultarRfOverlay();
 
     $('#btn-preview-reemplazo').on('click', function () {
         var $btn = $(this);
@@ -104,6 +256,17 @@ function renderPreview(p) {
         html += '<p class="mb-2"><span class="badge badge-secondary">Reemplazo</span> ';
         html += '<strong>' + esc(p.usuario_origen && p.usuario_origen.nombre) + '</strong>';
         html += ' → <strong>' + esc(p.usuario_destino && p.usuario_destino.nombre) + '</strong></p>';
+        if (o.con_fecha_tope && o.vence_el) {
+            var venceMostrar = String(o.vence_el);
+            var mVence = venceMostrar.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (mVence) {
+                venceMostrar = mVence[3] + '/' + mVence[2] + '/' + mVence[1];
+            }
+            html += '<p class="small mb-2">Vigente hasta <strong>' + esc(venceMostrar) + '</strong> inclusive'
+                + ' (restauración automática al día siguiente).</p>';
+        } else {
+            html += '<p class="small text-muted mb-2">Sin fecha tope: restauración solo manual.</p>';
+        }
     }
 
     html += '<ul class="mb-3">';

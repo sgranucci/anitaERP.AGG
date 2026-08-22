@@ -23,6 +23,11 @@
 @if (can('editar-empleado-sueldos', false))
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/fallos.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/fallos.js')) ?: time() }}"></script>
 @endif
+@if (can('listar-sancion-empleado-sueldos', false) || can('editar-empleado-sueldos', false))
+<script src="{{ asset('assets/pages/scripts/sueldos/tipo_sancion/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/tipo_sancion/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/sueldos/motivo_sancion/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/motivo_sancion/consulta.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/sueldos/empleado/sanciones.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/sanciones.js')) ?: time() }}"></script>
+@endif
 @if (can('listar-siradig-sueldos', false))
 <script src="{{ asset('assets/pages/scripts/sueldos/empleado/siradig.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/empleado/siradig.js')) ?: time() }}"></script>
 @endif
@@ -77,6 +82,9 @@
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-planes-cuota" role="tab"><i class="fa fa-hand-holding-usd"></i> Préstamos / Cuotas</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-novedades" role="tab"><i class="fa fa-bolt"></i> Novedades</a></li>
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-fallos" role="tab"><i class="fa fa-balance-scale"></i> Fallos</a></li>
+                        @if (can('listar-sancion-empleado-sueldos', false) || can('editar-empleado-sueldos', false))
+                        <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-sanciones" role="tab"><i class="fa fa-gavel"></i> Sanciones</a></li>
+                        @endif
                         <li class="nav-item"><a class="nav-link" data-toggle="tab" href="#tab-siradig" role="tab"><i class="fa fa-file-invoice-dollar"></i> SiRADIG (F572)</a></li>
                     </ul>
                 </div>
@@ -117,6 +125,9 @@
                     <div class="tab-pane fade" id="tab-planes-cuota" role="tabpanel"></div>
                     <div class="tab-pane fade" id="tab-novedades" role="tabpanel"></div>
                     <div class="tab-pane fade" id="tab-fallos" role="tabpanel"></div>
+                    @if (can('listar-sancion-empleado-sueldos', false) || can('editar-empleado-sueldos', false))
+                    <div class="tab-pane fade" id="tab-sanciones" role="tabpanel"></div>
+                    @endif
                     <div class="tab-pane fade" id="tab-siradig" role="tabpanel"></div>
                 </div>
 
@@ -150,6 +161,12 @@
                      data-url="{{ route('fallos_empleado_sueldos', ['empleado' => $data->id]) }}">
                     <div class="text-center text-muted py-4"><i class="fa fa-spinner fa-spin"></i> Cargando fallos…</div>
                 </div>
+                @if (can('listar-sancion-empleado-sueldos', false) || can('editar-empleado-sueldos', false))
+                <div id="host-sanciones" class="pt-3 d-none"
+                     data-url="{{ route('sanciones_empleado_sueldos', ['empleado' => $data->id]) }}">
+                    <div class="text-center text-muted py-4"><i class="fa fa-spinner fa-spin"></i> Cargando sanciones…</div>
+                </div>
+                @endif
                 @if (can('listar-siradig-sueldos', false))
                 <div id="host-siradig" class="pt-3 d-none"
                      data-url="{{ route('siradig_empleado_sueldos', ['empleado' => $data->id]) }}">
@@ -195,6 +212,8 @@
 
 @include('sueldos.empleado.modal_vigencias_base')
 @include('includes.sueldos.modalconsultaconcepto_sueldos')
+@include('includes.sueldos.modalconsultatipo_sancion')
+@include('includes.sueldos.modalconsultamotivo_sancion')
 @include('compras.proveedor.arca-cuit-entry-modal')
 @include('compras.proveedor.arca-padron-modals')
 
@@ -226,6 +245,7 @@
             ['tab-planes-cuota', 'host-planes-cuota'],
             ['tab-novedades', 'host-novedades'],
             ['tab-fallos', 'host-fallos'],
+            ['tab-sanciones', 'host-sanciones'],
             ['tab-siradig', 'host-siradig']
         ];
         map.forEach(function (pair) {

@@ -8,6 +8,8 @@ use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasAgrupacionSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasAlicuotaSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasConsumidorFinalSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasFslAnitaArmadoSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasFslAnitaBridgeReader;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasPeriodoSupport;
 use App\Support\Database\SqlDialectSupport;
 use Illuminate\Database\Eloquent\Builder;
@@ -17,21 +19,25 @@ class LibroIvaDigitalVentasGenerador
 {
     private const CHUNK_SIZE = 500;
 
+    public function __construct(
+        private readonly LibroIvaDigitalVentasFslAnitaBridgeReader $fslAnitaBridgeReader,
+    ) {
+    }
+
     /**
+     * @param  array{por_fecha_jornada?: bool, completar_fsl_anita?: bool}  $opciones
      * @return array{
      *     ventas_cbte: string,
      *     ventas_alicuotas: string,
      *     resumen: array<string, int|float>
      * }
      */
-    /**
-     * @param  array{por_fecha_jornada?: bool}  $opciones
-     */
     public function generar(int $empresaId, int $anio, int $mes, array $opciones = []): array
     {
         $desde = sprintf('%04d-%02d-01', $anio, $mes);
         $hasta = date('Y-m-t', strtotime($desde));
         $porFechaJornada = (bool) ($opciones['por_fecha_jornada'] ?? false);
+        $completarFslAnita = (bool) ($opciones['completar_fsl_anita'] ?? true);
 
         $contenidoCbte = '';
         $contenidoAlicuotas = '';
@@ -42,8 +48,13 @@ class LibroIvaDigitalVentasGenerador
         $conteoConAlicuotas = 0;
         $conteoAlicuotas = 0;
         $conteoRmv = 0;
+        $conteoFbiFsl = 0;
+        $conteoFslAnita = 0;
 
         $conteoVentasBIndividuales = 0;
+
+        /** @var array<string, true> $clavesErpFsl */
+        $clavesErpFsl = [];
 
         /** @var array<string, list<array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}>> $gruposFacturaB */
         $gruposFacturaB = [];
@@ -67,6 +78,8 @@ class LibroIvaDigitalVentasGenerador
                 &$conteoVentas,
                 &$conteoVentasBIndividuales,
                 &$conteoRmv,
+                &$conteoFbiFsl,
+                &$clavesErpFsl,
             ): void {
                 $registro = $this->armarRegistroVenta($venta, $porFechaJornada);
                 if ($registro === null) {
@@ -76,13 +89,25 @@ class LibroIvaDigitalVentasGenerador
                 $totalImporte += abs((float) $venta->total);
                 $conteoVentas++;
                 $letra = LibroIvaDigitalMapeosSupport::letraDesdeCodigoVenta((string) $venta->codigo);
-                $esRmv = LibroIvaDigitalMapeosSupport::esRmv(
-                    (string) ($venta->tipotransacciones->abreviatura ?? ''),
-                );
+                $abrev = strtoupper(trim((string) ($venta->tipotransacciones->abreviatura ?? '')));
+                $esRmv = LibroIvaDigitalMapeosSupport::esRmv($abrev);
+                $esFbiFsl = LibroIvaDigitalMapeosSupport::esFbiOFsl($abrev);
+                $esSinCaeInformable = LibroIvaDigitalMapeosSupport::esSinCaeInformable($abrev);
                 if ($esRmv) {
                     $conteoRmv++;
                 }
-                if ($letra === 'B' && ! $esRmv) {
+                if ($esFbiFsl) {
+                    $conteoFbiFsl++;
+                }
+                if ($abrev === 'FSL') {
+                    $pv = (int) ($venta->puntoventas->codigo ?? 0);
+                    $clavesErpFsl[LibroIvaDigitalVentasFslAnitaArmadoSupport::claveNatural(
+                        $pv,
+                        (int) $venta->numerocomprobante,
+                    )] = true;
+                }
+                // RMV / FBI / FSL: no agrupar con venta global diaria CF.
+                if ($letra === 'B' && ! $esSinCaeInformable) {
                     $importeRegistro = abs((float) ($registro['cabecera']['importe_total'] ?? 0));
                     if (LibroIvaDigitalVentasConsumidorFinalSupport::permiteAgrupacionGlobalDiaria($venta, $importeRegistro)) {
                         $clave = LibroIvaDigitalVentasAgrupacionSupport::claveGrupoFacturaB($registro['cabecera']);
@@ -96,6 +121,25 @@ class LibroIvaDigitalVentasGenerador
 
                 $registrosIndividuales[] = $registro;
             });
+
+        if ($completarFslAnita) {
+            foreach ($this->fslAnitaBridgeReader->listarPeriodo($empresaId, $desde, $hasta, $porFechaJornada) as $filaAnita) {
+                $clave = LibroIvaDigitalVentasFslAnitaArmadoSupport::claveDesdeFilaAnita($filaAnita);
+                if (isset($clavesErpFsl[$clave])) {
+                    continue;
+                }
+                $registro = LibroIvaDigitalVentasFslAnitaArmadoSupport::armarRegistroLibro($filaAnita, $porFechaJornada);
+                if ($registro === null) {
+                    continue;
+                }
+                $totalImporte += abs((float) ($registro['cabecera']['importe_total'] ?? 0));
+                $conteoVentas++;
+                $conteoFbiFsl++;
+                $conteoFslAnita++;
+                $clavesErpFsl[$clave] = true;
+                $registrosIndividuales[] = $registro;
+            }
+        }
 
         $registrosFinales = $registrosIndividuales;
         foreach ($gruposFacturaB as $grupo) {
@@ -132,7 +176,10 @@ class LibroIvaDigitalVentasGenerador
                 'importe_total' => round($totalImporte, 2),
                 'total_iva' => round($totalIva, 2),
                 'ventas_rmv' => $conteoRmv,
+                'ventas_fbi_fsl' => $conteoFbiFsl,
+                'ventas_fsl_anita' => $conteoFslAnita,
                 'por_fecha_jornada' => $porFechaJornada,
+                'completar_fsl_anita' => $completarFslAnita,
             ],
         ];
     }
@@ -174,20 +221,22 @@ class LibroIvaDigitalVentasGenerador
      */
     private function armarRegistroVenta(Venta $venta, bool $porFechaJornada): ?array
     {
-        // IZV / FBI / FSL internos. RMV sí informa Anita (p-rg3685.c: tipo 6, sucursal ≥ 1000).
+        // IZV interno gastronómico: no informa Libro IVA. RMV / FBI / FSL sí (sin CAE).
         $abrev = strtoupper(trim((string) ($venta->tipotransacciones->abreviatura ?? '')));
-        if (in_array($abrev, ['IZV', 'FBI', 'FSL'], true)) {
+        if ($abrev === 'IZV') {
             return null;
         }
 
         $esRmv = LibroIvaDigitalMapeosSupport::esRmv($abrev);
+        $esSinCaeInformable = LibroIvaDigitalMapeosSupport::esSinCaeInformable($abrev);
         $letra = LibroIvaDigitalMapeosSupport::letraDesdeCodigoVenta((string) $venta->codigo);
         $codigoBase = (string) ($venta->tipotransacciones->codigo ?? '001');
         $tipoComprobante = LibroIvaDigitalMapeosSupport::tipoComprobanteVentas($codigoBase, $letra, $abrev);
         $puntoVenta = (int) ($venta->puntoventas->codigo ?? 0);
         $numero = (int) $venta->numerocomprobante;
 
-        $totales = $this->desglosarImpuestos($venta, $esRmv ? 'B' : $letra);
+        // RMV viene letra Z; FBI/FSL letra B. Desglose de Factura B para todos los sin CAE.
+        $totales = $this->desglosarImpuestos($venta, $esSinCaeInformable ? 'B' : $letra);
         $comprador = $esRmv
             ? LibroIvaDigitalMapeosSupport::compradorRmv((string) ($venta->nombre ?? ''))
             : LibroIvaDigitalVentasConsumidorFinalSupport::resolverComprador(

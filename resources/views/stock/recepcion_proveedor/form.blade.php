@@ -165,6 +165,14 @@
         <span class="badge badge-light ml-1">{{ $recepcion->recepcion_proveedor_archivos->count() }}</span>
         @endif
     </button>
+    @if (!empty($mostrar_solapa_ingresos))
+    <button type="button" id="rp-boton-ingresos" class="btn btn-info btn-sm mx-1 rp-tab-solapa">
+        <span class="fa fa-id-badge"></span> Ingresos
+        @if (($tickets_ingreso ?? collect())->count())
+        <span class="badge badge-light ml-1">{{ $tickets_ingreso->count() }}</span>
+        @endif
+    </button>
+    @endif
     @endif
 </div>
 
@@ -623,6 +631,14 @@
         'soloLectura' => $soloLectura,
     ])
 </div>
+@if (!empty($mostrar_solapa_ingresos))
+<div id="rp-solapa-ingresos" class="rp-solapa" style="display:none;">
+    @include('seguridad.ingreso_proveedor.partials.solapa_vinculada', [
+        'tickets' => $tickets_ingreso ?? collect(),
+        'urlNuevo' => $url_nuevo_ticket_ingreso ?? null,
+    ])
+</div>
+@endif
 @endif
 
 <script>

@@ -28,6 +28,7 @@ use App\Support\Stock\RecepcionProveedorListadoFiltros;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Stock\RecepcionProveedorOcPendienteSupport;
 use App\Support\Compras\ContratoValidacionAbonoPoliticaSupport;
+use App\Support\Seguridad\IngresoProveedorVinculoSupport;
 use App\Support\Configuracion\OperacionPublicaTokenSupport;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -144,11 +145,25 @@ class RecepcionProveedorController extends Controller
         $accionValidacionAbono = 'confirmar la recepción';
         $validacionAbonoCompleta = $validacionAbono?->estaCompleta() ?? ! ($politicaValidacionAbono['aplica'] ?? false);
 
+        $mostrar_solapa_ingresos = IngresoProveedorVinculoSupport::usuarioPuedeVerSolapa();
+        $tickets_ingreso = $mostrar_solapa_ingresos
+            ? IngresoProveedorVinculoSupport::ticketsDeRecepcion($recepcion)
+            : collect();
+        $ocRecepcion = $recepcion->ordencompras ?? null;
+        $url_nuevo_ticket_ingreso = $mostrar_solapa_ingresos
+            ? IngresoProveedorVinculoSupport::urlNuevoTicket([
+                'empresa_id' => $ocRecepcion->empresa_id ?? $recepcion->empresa_id ?? null,
+                'proveedor_id' => $ocRecepcion->proveedor_id ?? optional($recepcion->proveedores)->id ?? null,
+                'ordencompra_id' => $recepcion->ordencompra_id,
+            ])
+            : null;
+
         return view('stock.recepcion_proveedor.editar', compact(
             'recepcion', 'empresa_query', 'moneda_query', 'asientoPreview',
             'soloConsulta', 'ocultarVolver', 'puedeActualizarRecepcion', 'filtrosQuery',
             'politicaValidacionAbono', 'validacionAbono', 'urlValidacionAbono',
             'accionValidacionAbono', 'validacionAbonoCompleta',
+            'mostrar_solapa_ingresos', 'tickets_ingreso', 'url_nuevo_ticket_ingreso',
         ));
     }
 

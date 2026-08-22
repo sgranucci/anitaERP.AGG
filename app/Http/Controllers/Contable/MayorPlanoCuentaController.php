@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Contable;
 
 use App\Exports\Contable\MayorPlanoCuentaExport;
+use App\Exports\Contable\MayorPlanoCuentaMultiExport;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
@@ -183,6 +184,15 @@ class MayorPlanoCuentaController extends Controller
                 );
 
             case 'EXCEL':
+                $solapasSeparadas = ! empty($filtros['excel_solapas_separadas'])
+                    && MayorPlanoCuentaListadoFiltros::puedeExcelSolapasSeparadas($filtros);
+
+                if ($solapasSeparadas) {
+                    return (new MayorPlanoCuentaMultiExport($this->reporteService))
+                        ->parametros($filtros, $resultado)
+                        ->download($this->armarNombreArchivoExport($filtros, 'xlsx'));
+                }
+
                 return (new MayorPlanoCuentaExport($this->reporteService))
                     ->parametros($filtros, $resultado)
                     ->download($this->armarNombreArchivoExport($filtros, 'xlsx'));

@@ -85,6 +85,11 @@ final class ManualMockupCatalogo
                 'img_dir' => 'docs/manual-caja/img',
                 'label' => 'Caja',
             ],
+            'sueldos' => [
+                'config' => 'manual_sueldos',
+                'img_dir' => 'docs/manual-sueldos/img',
+                'label' => 'Sueldos',
+            ],
             'cierres-rendiciones' => [
                 'config' => 'manual_cierres_rendiciones',
                 'img_dir' => 'docs/manual-cierres-rendiciones/img',
@@ -116,6 +121,7 @@ final class ManualMockupCatalogo
                 'mapa_modulo', 'glosario_flujo', 'fuente_verdad', 'layouts', 'consolidacion',
                 'drill', 'publicacion', 'distribucion', 'notas', 'paridad', 'alertas', 'ejemplos',
             ],
+            'sueldos' => ['flujo_sancion'],
             default => [],
         };
     }

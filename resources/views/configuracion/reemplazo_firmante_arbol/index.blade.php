@@ -64,7 +64,8 @@
                                                value="{{ old('usuario_origen_id') }}">
                                         <input type="text" class="usuario_codigo_arbol form-control" style="flex: 0 0 120px;"
                                                placeholder="Código" value="{{ old('usuario_origen_codigo') }}" autocomplete="off">
-                                        <button type="button" class="btn-accion-tabla consultausuario tooltipsC" title="Consultar usuario">
+                                        <button type="button" class="btn-accion-tabla consultausuario tooltipsC" title="Consultar usuario"
+                                                data-omitir_filtro_empresa="1">
                                             <i class="fa fa-search text-primary"></i>
                                         </button>
                                         <input type="text" class="nombreusuario form-control" name="usuario_origen_nombre"
@@ -80,7 +81,8 @@
                                                value="{{ old('usuario_destino_id') }}">
                                         <input type="text" class="usuario_codigo_arbol form-control" style="flex: 0 0 120px;"
                                                placeholder="Código" value="{{ old('usuario_destino_codigo') }}" autocomplete="off">
-                                        <button type="button" class="btn-accion-tabla consultausuario tooltipsC" title="Consultar usuario">
+                                        <button type="button" class="btn-accion-tabla consultausuario tooltipsC" title="Consultar usuario"
+                                                data-omitir_filtro_empresa="1">
                                             <i class="fa fa-search text-primary"></i>
                                         </button>
                                         <input type="text" class="nombreusuario form-control" name="usuario_destino_nombre"
@@ -88,6 +90,31 @@
                                     </div>
                                 </div>
                             </div>
+                        </div>
+
+                        @php
+                            $conFechaTopeOld = (string) old('con_fecha_tope', '') === '1';
+                            $venceElOld = old('vence_el', '');
+                        @endphp
+                        <div class="form-group border rounded p-3 bg-light">
+                            <div class="custom-control custom-checkbox mb-2">
+                                <input type="checkbox" class="custom-control-input" id="con_fecha_tope" name="con_fecha_tope" value="1"
+                                       {{ $conFechaTopeOld ? 'checked' : '' }}>
+                                <label class="custom-control-label" for="con_fecha_tope">
+                                    Con fecha tope (restauración automática)
+                                </label>
+                            </div>
+                            <div id="rf-vence-wrap" class="{{ $conFechaTopeOld ? '' : 'd-none' }}">
+                                <label for="vence_el" class="mb-1">Último día del reemplazo</label>
+                                <input type="date" class="form-control" style="max-width: 220px;" name="vence_el" id="vence_el"
+                                       value="{{ $venceElOld }}" min="{{ now()->toDateString() }}">
+                                <small class="form-text text-muted">
+                                    Ese día el suplente sigue firmando. La restauración automática corre a las 00:05 del día siguiente.
+                                </small>
+                            </div>
+                            <small id="rf-sin-vence-ayuda" class="form-text text-muted {{ $conFechaTopeOld ? 'd-none' : '' }}">
+                                Sin tilde: el reemplazo queda activo hasta que uses <strong>Restaurar titular</strong> manualmente.
+                            </small>
                         </div>
                     </div>
 
@@ -99,7 +126,8 @@
                                        value="{{ old('usuario_titular_id') }}">
                                 <input type="text" class="usuario_codigo_arbol form-control" style="flex: 0 0 120px;"
                                        placeholder="Código" value="{{ old('usuario_titular_codigo') }}" autocomplete="off">
-                                <button type="button" class="btn-accion-tabla consultausuario tooltipsC" title="Consultar usuario">
+                                <button type="button" class="btn-accion-tabla consultausuario tooltipsC" title="Consultar usuario"
+                                        data-omitir_filtro_empresa="1">
                                     <i class="fa fa-search text-primary"></i>
                                 </button>
                                 <input type="text" class="nombreusuario form-control" name="usuario_titular_nombre"
@@ -188,6 +216,8 @@
                             <th>Ejecutor</th>
                             <th>Origen / suplente</th>
                             <th>Destino / titular</th>
+                            <th>Vence</th>
+                            <th>Cierre</th>
                             <th>Niveles</th>
                             <th>Conceptos SP</th>
                             <th>Pendientes</th>
@@ -209,6 +239,29 @@
                                 <td>{{ $row->ejecutor_nombre ?? '—' }}</td>
                                 <td>{{ $row->origen_nombre ?? '—' }} <small class="text-muted">({{ $row->origen_usuario }})</small></td>
                                 <td>{{ $row->destino_nombre }} <small class="text-muted">({{ $row->destino_usuario }})</small></td>
+                                <td>
+                                    @if (($row->operacion ?? '') === 'reemplazo' && ! empty($row->vence_el))
+                                        {{ \Illuminate\Support\Carbon::parse($row->vence_el)->format('d/m/Y') }}
+                                    @elseif (($row->operacion ?? '') === 'reemplazo')
+                                        <span class="text-muted">manual</span>
+                                    @else
+                                        —
+                                    @endif
+                                </td>
+                                <td>
+                                    @if (! empty($row->restaurado_at))
+                                        <small>
+                                            {{ \Illuminate\Support\Carbon::parse($row->restaurado_at)->format('d/m/Y H:i') }}
+                                            @if (! empty($row->restaurado_modo))
+                                                <span class="badge badge-light">{{ $row->restaurado_modo }}</span>
+                                            @endif
+                                        </small>
+                                    @elseif (($row->operacion ?? '') === 'reemplazo' && ! empty($row->vence_el))
+                                        <span class="badge badge-warning">pendiente</span>
+                                    @else
+                                        —
+                                    @endif
+                                </td>
                                 <td>{{ $row->conteo_niveles }}</td>
                                 <td>{{ $row->conteo_conceptos_sp }}</td>
                                 <td>{{ $row->conteo_pendientes }}</td>
@@ -216,7 +269,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="10" class="text-center text-muted">Sin operaciones registradas.</td>
+                                <td colspan="12" class="text-center text-muted">Sin operaciones registradas.</td>
                             </tr>
                         @endforelse
                     </tbody>
@@ -226,4 +279,11 @@
     </div>
 </div>
 @include('includes.admin.modalconsultausuario')
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'rf-reemplazo-overlay',
+    'tituloId' => 'rf-reemplazo-overlay-titulo',
+    'subtituloId' => 'rf-reemplazo-overlay-subtitulo',
+    'titulo' => 'Aplicando reemplazo…',
+    'subtitulo' => 'Puede demorar según la cantidad de niveles, conceptos y pendientes. No cierre la página.',
+])
 @endsection

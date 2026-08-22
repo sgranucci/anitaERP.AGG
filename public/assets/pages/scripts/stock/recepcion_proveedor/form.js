@@ -3074,6 +3074,9 @@
         $('#rp-boton-asiento-contable').on('click', function () {
             rpMostrarSolapa('#rp-solapa-asiento-contable', 'rp-boton-asiento-contable');
         });
+        $('#rp-boton-ingresos').on('click', function () {
+            rpMostrarSolapa('#rp-solapa-ingresos', 'rp-boton-ingresos');
+        });
 
         $('#btn-cambiar-oc-recepcion').on('click', function () {
             rpMostrarSolapa('#rp-solapa-principal', 'rp-boton-principal');
@@ -3089,6 +3092,8 @@
             rpMostrarSolapa('#rp-solapa-historia-estados', 'rp-boton-historia-estados');
         } else if (paramsUrl.get('solapa') === 'asiento') {
             rpMostrarSolapa('#rp-solapa-asiento-contable', 'rp-boton-asiento-contable');
+        } else if (paramsUrl.get('solapa') === 'ingresos') {
+            rpMostrarSolapa('#rp-solapa-ingresos', 'rp-boton-ingresos');
         }
 
         programarFocoInicialNumeroOc(paramsUrl);

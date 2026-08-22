@@ -13,6 +13,7 @@ use App\Support\Compras\ContratoPeriodoServicioSupport;
 use App\Support\Compras\ContratoValidacionAbonoCumplimientoSupport;
 use App\Support\Compras\ContratoValidacionAbonoEstados;
 use App\Support\Compras\ContratoValidacionAbonoPoliticaSupport;
+use App\Support\Seguridad\IngresoProveedorConsultaSupport;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -230,15 +231,28 @@ class ContratoValidacionAbonoService
 
             $politica = ContratoValidacionAbonoPoliticaSupport::desdeOc($validacion->ordencompras);
             $minimo = max(1, (int) $politica['minimo_ingresos']);
-            $ingresos = $ticketRespondidoSi ? $minimo : 0;
+            $oc = $validacion->ordencompras;
+            $conteoTickets = IngresoProveedorConsultaSupport::cantidadEnPeriodo(
+                (int) ($oc->proveedor_id ?? 0),
+                (string) ($validacion->periodo_desde?->format('Y-m-d') ?? ''),
+                (string) ($validacion->periodo_hasta?->format('Y-m-d') ?? ''),
+                (int) ($oc->empresa_id ?? 0) ?: null
+            );
+            $ingresos = $conteoTickets;
+            $fuente = 'ingreso_proveedor';
+            if ($conteoTickets === 0 && $ticketRespondidoSi) {
+                $ingresos = $minimo;
+                $fuente = 'manual_p0';
+            }
 
             $validacion->forceFill([
                 'estado' => ContratoValidacionAbonoEstados::COMPLETA,
                 'ingresos_informados' => $ingresos,
                 'snapshot_ingresos_json' => [
-                    'fuente' => 'manual_p0',
+                    'fuente' => $fuente,
                     'tickets_si' => $ticketRespondidoSi,
                     'cantidad' => $ingresos,
+                    'conteo_tickets' => $conteoTickets,
                     'minimo' => $minimo,
                 ],
                 'usuario_id' => $usuarioId > 0 ? $usuarioId : null,

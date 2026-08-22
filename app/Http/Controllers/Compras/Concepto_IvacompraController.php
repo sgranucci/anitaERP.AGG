@@ -11,7 +11,6 @@ use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
 use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\ImpuestoRepositoryInterface;
-use App\Repositories\Configuracion\ProvinciaRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Support\Compras\ConceptoIvacompraListadoFiltros;
 use App\Support\Compras\ConceptoIvacompraConsultaSupport;
@@ -26,7 +25,6 @@ class Concepto_IvacompraController extends Controller
         private readonly Columna_IvacompraRepositoryInterface $columna_ivacompraRepository,
         private readonly CuentacontableRepositoryInterface $cuentacontableRepository,
         private readonly ImpuestoRepositoryInterface $impuestoRepository,
-        private readonly ProvinciaRepositoryInterface $provinciaRepository,
         private readonly CondicionivaRepositoryInterface $condicionivaRepository,
         private readonly EmpresaRepositoryInterface $empresaRepository,
     ) {}
@@ -241,7 +239,6 @@ class Concepto_IvacompraController extends Controller
             'retiene_enum' => Concepto_Ivacompra::$enumRetiene,
             'impuesto_query' => $this->impuestoRepository->all(),
             'columna_ivacompra_query' => $this->columna_ivacompraRepository->all(),
-            'provincia_query' => $this->provinciaRepository->all(),
             'condicioniva_query' => $this->condicionivaRepository->all(),
             'empresa_query' => $this->empresaRepository->allFiltrado(),
         ];

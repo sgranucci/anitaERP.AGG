@@ -769,7 +769,7 @@ class SolicitudpagoArbolIntegracionService
             $uids = array_values(array_unique(array_filter($cfg['uids'])));
             if ($uids !== []) {
                 if ($empresaId > 0) {
-                    $uids = $this->usuarioRepository->filtrarIdsOperativosPorEmpresa($uids, $empresaId);
+                    $uids = $this->usuarioRepository->filtrarIdsFirmantesArbolPorEmpresa($uids, $empresaId);
                 } else {
                     $uids = $this->usuarioRepository->filtrarIdsOperativos($uids);
                 }

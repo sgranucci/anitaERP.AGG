@@ -1192,6 +1192,7 @@ Route::post('contable/cierre-rendiciones-maquinavending/api/ejecutar-cierre-jorn
 Route::post('contable/cierre-rendiciones-maquinavending/api/anular-cierre', 'Contable\CierreRendicionMaquinavendingController@apiAnularCierre')->name('api_cierre_rendicion_maquinavending_anular');
 
 Route::get('contable/cierre-periodo', 'Contable\PeriodoCierreContableController@index')->name('cierre_periodo_contable');
+Route::get('contable/cierre-periodo/validar-fecha', 'Contable\PeriodoCierreContableController@validarFecha')->name('validar_fecha_cierre_periodo_contable');
 Route::post('contable/cierre-periodo/cerrar', 'Contable\PeriodoCierreContableController@cerrar')->name('ejecutar_cierre_periodo_contable');
 Route::post('contable/cierre-periodo/cerrar-todos', 'Contable\PeriodoCierreContableController@cerrarTodosAhora')->name('cerrar_todos_cierre_periodo_contable');
 Route::post('contable/cierre-periodo/borrar-ultimo', 'Contable\PeriodoCierreContableController@borrarUltimo')->name('borrar_ultimo_cierre_periodo_contable');
@@ -1387,6 +1388,7 @@ Route::get('stock/transferencia-mercaderia/destinatarios', 'Stock\TransferenciaM
 Route::get('stock/transferencia-mercaderia/validar-destinatario', 'Stock\TransferenciaMercaderiaController@validarDestinatario')->name('transferencia_mercaderia_validar_destinatario');
 Route::post('stock/transferencia-mercaderia/preferencias', 'Stock\TransferenciaMercaderiaController@preferencias')->name('transferencia_mercaderia_preferencias');
 Route::get('stock/transferencia-mercaderia/inventario', 'Stock\TransferenciaMercaderiaController@inventario')->name('transferencia_mercaderia_inventario');
+Route::get('stock/transferencia-mercaderia/resolver-articulo', 'Stock\TransferenciaMercaderiaController@resolverArticulo')->name('transferencia_mercaderia_resolver_articulo');
 Route::get('stock/transferencia-mercaderia/saldo-articulo', 'Stock\TransferenciaMercaderiaController@saldoArticulo')->name('transferencia_mercaderia_saldo_articulo');
 Route::get('stock/transferencia-mercaderia/validar-linea-contable', 'Stock\TransferenciaMercaderiaController@validarLineaContable')->name('transferencia_mercaderia_validar_linea_contable');
 Route::post('stock/transferencia-mercaderia', 'Stock\TransferenciaMercaderiaController@guardar')->name('transferencia_mercaderia_guardar');
@@ -3162,7 +3164,7 @@ Route::post('compras/guardar_proveedor_encuesta', 'Compras\ProveedorController@g
 
 Route::get('compras/proveedor/leercuentacorrienteaplicacion/{id}', 'Compras\ProveedorController@leerCuentaCorrienteAplicacion')->name('leer_cuentacorriente_aplicacion_proveedor');
 
-Route::get('compras/aplicacion-cuentacorriente', 'Compras\ProveedorCuentacorrienteAplicacionController@index')->name('aplicacion_cuentacorriente_proveedor');
+Route::get('compras/aplicacion-cuentacorriente', 'Compras\ProveedorCuentacorrienteAplicacionController@index')->name('aplicacion_cuentacorriente_proveedor')->middleware('modo.consulta');
 Route::get('compras/aplicacion-cuentacorriente/api/pendientes', 'Compras\ProveedorCuentacorrienteAplicacionController@apiPendientes')->name('api_pendientes_aplicacion_cuentacorriente_proveedor');
 Route::get('compras/aplicacion-cuentacorriente/api/sugerir', 'Compras\ProveedorCuentacorrienteAplicacionController@apiSugerir')->name('api_sugerir_aplicacion_cuentacorriente_proveedor');
 Route::post('compras/aplicacion-cuentacorriente/aplicar', 'Compras\ProveedorCuentacorrienteAplicacionController@aplicar')->name('aplicar_cuentacorriente_proveedor');
@@ -3390,6 +3392,8 @@ Route::get('compras/historial-precios-articulo', 'Compras\HistorialPreciosArticu
 Route::get('compras/listar-historial-precios-articulo/{formato?}', 'Compras\HistorialPreciosArticuloController@exportar')->name('listar_reporte_historial_precios_articulo');
 Route::get('compras/articulo-cuenta-oc-reporte', 'Compras\ArticuloCuentaOcReporteController@index')->name('reporte_articulo_cuenta_oc');
 Route::get('compras/listar-articulo-cuenta-oc-reporte/{formato?}', 'Compras\ArticuloCuentaOcReporteController@exportar')->name('listar_reporte_articulo_cuenta_oc');
+Route::get('compras/comprobante-proveedor-imputacion-ap-reporte', 'Compras\ComprobanteProveedorImputacionApReporteController@index')->name('reporte_imputacion_ap_proveedor');
+Route::get('compras/listar-comprobante-proveedor-imputacion-ap/{formato?}', 'Compras\ComprobanteProveedorImputacionApReporteController@exportar')->name('listar_reporte_imputacion_ap_proveedor');
 Route::get('compras/kpi', 'Compras\KpiComprasController@index')->name('consultar_kpi_compras');
 Route::get('compras/ordencompra', 'Compras\OrdencompraController@index')->name('consultar_ordencompra');
 Route::get('compras/ordencompra/crear', 'Compras\OrdencompraController@crear')->name('crear_ordencompra');
@@ -3477,6 +3481,10 @@ Route::get('stock/manual-stock-gastronomia/descargar-word', 'Stock\ManualStockGa
 Route::get('caja/manual', 'Caja\ManualCajaController@index')->name('manual_caja');
 Route::get('caja/manual/descargar-pdf', 'Caja\ManualCajaController@descargarPdf')->name('manual_caja_pdf');
 Route::get('caja/manual/descargar-word', 'Caja\ManualCajaController@descargarWord')->name('manual_caja_word');
+
+Route::get('sueldos/manual', 'Sueldos\ManualSueldosController@index')->name('manual_sueldos');
+Route::get('sueldos/manual/descargar-pdf', 'Sueldos\ManualSueldosController@descargarPdf')->name('manual_sueldos_pdf');
+Route::get('sueldos/manual/descargar-word', 'Sueldos\ManualSueldosController@descargarWord')->name('manual_sueldos_word');
 
 /*
  * Manual de usuario — Solicitudes de pago
@@ -4387,6 +4395,34 @@ Route::put('sueldos/tipo-ausencia/{id}', 'Sueldos\Tipo_Ausencia_SueldosControlle
 Route::delete('sueldos/tipo-ausencia/{id}', 'Sueldos\Tipo_Ausencia_SueldosController@eliminar')->name('eliminar_tipo_ausencia_sueldos');
 
 /*
+ * Tipos y motivos de sanción disciplinaria (catálogos del expediente).
+ */
+Route::get('sueldos/tipo-sancion', 'Sueldos\Tipo_Sancion_SueldosController@index')->name('consultar_tipo_sancion_sueldos');
+Route::get('sueldos/listatiposancion/{formato?}/{busqueda?}', 'Sueldos\Tipo_Sancion_SueldosController@listar')->name('lista_tipo_sancion_sueldos');
+Route::post('sueldos/tipo-sancion/consulta', 'Sueldos\Tipo_Sancion_SueldosController@consulta')->name('consulta_tipo_sancion_sueldos');
+Route::get('sueldos/tipo-sancion/leerporcodigo/{codigo}', 'Sueldos\Tipo_Sancion_SueldosController@leerPorCodigo')->name('leer_tipo_sancion_sueldos_por_codigo');
+Route::get('sueldos/tipo-sancion/leer/{id}', 'Sueldos\Tipo_Sancion_SueldosController@leer')->name('leer_tipo_sancion_sueldos');
+Route::get('sueldos/tipo-sancion/crear', 'Sueldos\Tipo_Sancion_SueldosController@crear')->name('crear_tipo_sancion_sueldos');
+Route::post('sueldos/tipo-sancion', 'Sueldos\Tipo_Sancion_SueldosController@guardar')->name('guardar_tipo_sancion_sueldos');
+Route::get('sueldos/tipo-sancion/{id}/editar', 'Sueldos\Tipo_Sancion_SueldosController@editar')->name('editar_tipo_sancion_sueldos');
+Route::put('sueldos/tipo-sancion/{id}', 'Sueldos\Tipo_Sancion_SueldosController@actualizar')->name('actualizar_tipo_sancion_sueldos');
+Route::delete('sueldos/tipo-sancion/{id}', 'Sueldos\Tipo_Sancion_SueldosController@eliminar')->name('eliminar_tipo_sancion_sueldos');
+
+Route::get('sueldos/motivo-sancion', 'Sueldos\Motivo_Sancion_SueldosController@index')->name('consultar_motivo_sancion_sueldos');
+Route::get('sueldos/listamotivosancion/{formato?}/{busqueda?}', 'Sueldos\Motivo_Sancion_SueldosController@listar')->name('lista_motivo_sancion_sueldos');
+Route::post('sueldos/motivo-sancion/consulta', 'Sueldos\Motivo_Sancion_SueldosController@consulta')->name('consulta_motivo_sancion_sueldos');
+Route::get('sueldos/motivo-sancion/leerporcodigo/{codigo}', 'Sueldos\Motivo_Sancion_SueldosController@leerPorCodigo')->name('leer_motivo_sancion_sueldos_por_codigo');
+Route::get('sueldos/motivo-sancion/leer/{id}', 'Sueldos\Motivo_Sancion_SueldosController@leer')->name('leer_motivo_sancion_sueldos');
+Route::get('sueldos/motivo-sancion/crear', 'Sueldos\Motivo_Sancion_SueldosController@crear')->name('crear_motivo_sancion_sueldos');
+Route::post('sueldos/motivo-sancion', 'Sueldos\Motivo_Sancion_SueldosController@guardar')->name('guardar_motivo_sancion_sueldos');
+Route::get('sueldos/motivo-sancion/{id}/editar', 'Sueldos\Motivo_Sancion_SueldosController@editar')->name('editar_motivo_sancion_sueldos');
+Route::put('sueldos/motivo-sancion/{id}', 'Sueldos\Motivo_Sancion_SueldosController@actualizar')->name('actualizar_motivo_sancion_sueldos');
+Route::delete('sueldos/motivo-sancion/{id}', 'Sueldos\Motivo_Sancion_SueldosController@eliminar')->name('eliminar_motivo_sancion_sueldos');
+
+Route::get('sueldos/sancion-reporte', 'Sueldos\SancionReporte_SueldosController@index')->name('sancion_reporte_sueldos');
+Route::get('sueldos/listar-sancion-reporte/{formato}', 'Sueldos\SancionReporte_SueldosController@exportar')->name('listar_sancion_reporte_sueldos');
+
+/*
  * Reporte de saldos de vacaciones (consulta paginada + PDF/Excel/CSV).
  * Lee el ledger (empleado_cuota_movimiento_sueldos); recalcular devenga a demanda.
  */
@@ -4534,6 +4570,18 @@ Route::post('sueldos/empleado/{empleado}/ausencias', 'Sueldos\Empleado_AusenciaS
 Route::post('sueldos/empleado/{empleado}/ausencias/devengar', 'Sueldos\Empleado_AusenciaSueldosController@devengar')->name('devengar_ausencia_empleado_sueldos');
 Route::put('sueldos/ausencia/{id}', 'Sueldos\Empleado_AusenciaSueldosController@actualizar')->name('actualizar_ausencia_empleado_sueldos');
 Route::delete('sueldos/ausencia/{id}', 'Sueldos\Empleado_AusenciaSueldosController@eliminar')->name('eliminar_ausencia_empleado_sueldos');
+
+/*
+ * Expediente disciplinario del empleado (solapa AJAX + carta PDF).
+ */
+Route::get('sueldos/empleado/{empleado}/sanciones', 'Sueldos\Empleado_SancionSueldosController@panel')->name('sanciones_empleado_sueldos');
+Route::post('sueldos/empleado/{empleado}/sanciones', 'Sueldos\Empleado_SancionSueldosController@guardar')->name('guardar_sancion_empleado_sueldos');
+Route::put('sueldos/sancion/{id}', 'Sueldos\Empleado_SancionSueldosController@actualizar')->name('actualizar_sancion_empleado_sueldos');
+Route::post('sueldos/sancion/{id}/transicion', 'Sueldos\Empleado_SancionSueldosController@transicion')->name('transicion_sancion_empleado_sueldos');
+Route::delete('sueldos/sancion/{id}', 'Sueldos\Empleado_SancionSueldosController@eliminar')->name('eliminar_sancion_empleado_sueldos');
+Route::get('sueldos/sancion/{id}/notificacion', 'Sueldos\Empleado_SancionSueldosController@notificacion')->name('notificacion_sancion_sueldos');
+Route::get('sueldos/sancion-archivo/{id}/descargar', 'Sueldos\Empleado_SancionSueldosController@descargarArchivo')->name('descargar_archivo_sancion_sueldos');
+Route::delete('sueldos/sancion-archivo/{id}', 'Sueldos\Empleado_SancionSueldosController@quitarArchivo')->name('quitar_archivo_sancion_sueldos');
 
 /*
  * Familiares a cargo (cantidades Ganancias: CONYUGE / HIJOS / HIJOS_50 / HIJO_INCAP).
@@ -4921,3 +4969,47 @@ Route::put('produccion/ordenproduccion/{id}', 'Produccion\OrdenproduccionControl
 Route::delete('produccion/ordenproduccion/{id}', 'Produccion\OrdenproduccionController@eliminar')->name('eliminar_ordenproduccion');
 
 Route::get('produccion/listaordenproduccion/{formato?}/{busqueda?}', 'Produccion\OrdenproduccionController@listar')->name('lista_ordenproduccion');
+
+/*
+ * Seguridad — ingreso de proveedores
+ */
+Route::get('seguridad/control-ingreso', 'Seguridad\IngresoProveedorControlController@index')->name('control_ingreso_proveedor');
+Route::post('seguridad/control-ingreso/buscar-dni', 'Seguridad\IngresoProveedorControlController@buscarDni')->name('control_ingreso_buscar_dni');
+Route::post('seguridad/control-ingreso/entro', 'Seguridad\IngresoProveedorControlController@marcarEntro')->name('control_ingreso_entro');
+Route::post('seguridad/control-ingreso/salio', 'Seguridad\IngresoProveedorControlController@marcarSalio')->name('control_ingreso_salio');
+
+Route::get('seguridad/reporte-tickets-ingreso', 'Seguridad\IngresoProveedorKpiReporteController@index')->name('reporte_tickets_ingreso');
+Route::get('seguridad/listar-reporte-tickets-ingreso/{formato?}', 'Seguridad\IngresoProveedorKpiReporteController@exportar')->name('listar_reporte_tickets_ingreso');
+Route::get('seguridad/reporte-ingresos-planta', 'Seguridad\IngresoProveedorPlantaReporteController@index')->name('reporte_ingresos_planta');
+Route::get('seguridad/listar-reporte-ingresos-planta/{formato?}', 'Seguridad\IngresoProveedorPlantaReporteController@exportar')->name('listar_reporte_ingresos_planta');
+
+Route::get('seguridad/ingreso-proveedor', 'Seguridad\IngresoProveedorController@index')->name('ingreso_proveedor');
+Route::get('seguridad/lista-ingreso-proveedor/{formato?}/{busqueda?}', 'Seguridad\IngresoProveedorController@listar')->name('lista_ingreso_proveedor');
+Route::get('seguridad/ingreso-proveedor/crear', 'Seguridad\IngresoProveedorController@crear')->name('crear_ingreso_proveedor')->middleware('modo.consulta');
+Route::post('seguridad/ingreso-proveedor', 'Seguridad\IngresoProveedorController@guardar')->name('guardar_ingreso_proveedor');
+Route::get('seguridad/ingreso-proveedor/{id}/editar', 'Seguridad\IngresoProveedorController@editar')->name('editar_ingreso_proveedor')->middleware('modo.consulta');
+Route::put('seguridad/ingreso-proveedor/{id}', 'Seguridad\IngresoProveedorController@actualizar')->name('actualizar_ingreso_proveedor')->middleware('modo.consulta');
+Route::delete('seguridad/ingreso-proveedor/{id}', 'Seguridad\IngresoProveedorController@eliminar')->name('eliminar_ingreso_proveedor');
+
+foreach (['punto', 'area', 'motivo', 'sector'] as $tipoCatalogo) {
+    Route::get("seguridad/ingreso-proveedor-{$tipoCatalogo}", 'Seguridad\IngresoProveedorCatalogoController@index')
+        ->defaults('tipo', $tipoCatalogo)
+        ->name("ingreso_proveedor_{$tipoCatalogo}");
+    Route::get("seguridad/ingreso-proveedor-{$tipoCatalogo}/crear", 'Seguridad\IngresoProveedorCatalogoController@crear')
+        ->defaults('tipo', $tipoCatalogo)
+        ->name("crear_ingreso_proveedor_{$tipoCatalogo}");
+    Route::post("seguridad/ingreso-proveedor-{$tipoCatalogo}", 'Seguridad\IngresoProveedorCatalogoController@guardar')
+        ->defaults('tipo', $tipoCatalogo)
+        ->name("guardar_ingreso_proveedor_{$tipoCatalogo}");
+    Route::get("seguridad/ingreso-proveedor-{$tipoCatalogo}/{id}/editar", 'Seguridad\IngresoProveedorCatalogoController@editar')
+        ->defaults('tipo', $tipoCatalogo)
+        ->name("editar_ingreso_proveedor_{$tipoCatalogo}")
+        ->middleware('modo.consulta');
+    Route::put("seguridad/ingreso-proveedor-{$tipoCatalogo}/{id}", 'Seguridad\IngresoProveedorCatalogoController@actualizar')
+        ->defaults('tipo', $tipoCatalogo)
+        ->name("actualizar_ingreso_proveedor_{$tipoCatalogo}")
+        ->middleware('modo.consulta');
+    Route::delete("seguridad/ingreso-proveedor-{$tipoCatalogo}/{id}", 'Seguridad\IngresoProveedorCatalogoController@eliminar')
+        ->defaults('tipo', $tipoCatalogo)
+        ->name("eliminar_ingreso_proveedor_{$tipoCatalogo}");
+}

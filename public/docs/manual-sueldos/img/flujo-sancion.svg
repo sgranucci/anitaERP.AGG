@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="220" viewBox="0 0 960 220">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#3b82f6"/><stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <style>
+      .box{fill:#1e293b;stroke:#3b82f6;stroke-width:2;rx:12}
+      .t{fill:#e2e8f0;font-family:Inter,Segoe UI,sans-serif;font-size:13px;font-weight:600}
+      .s{fill:#94a3b8;font-family:Inter,Segoe UI,sans-serif;font-size:11px}
+      .arrow{stroke:#64748b;stroke-width:2;fill:none;marker-end:url(#m)}
+    </style>
+    <marker id="m" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto"><path d="M0,0 L6,3 L0,6 Z" fill="#64748b"/></marker>
+  </defs>
+  <rect width="960" height="220" fill="#0f172a"/>
+  <text x="24" y="28" fill="url(#g)" font-family="Inter,sans-serif" font-size="16" font-weight="700">Circuito de sanciones</text>
+  <rect class="box" x="24" y="56" width="150" height="72"/><text class="t" x="40" y="88">1. Tipo</text><text class="s" x="40" y="108">Concepto y tildes</text>
+  <path class="arrow" d="M182 92 H210"/>
+  <rect class="box" x="218" y="56" width="150" height="72"/><text class="t" x="234" y="88">2. Expediente</text><text class="s" x="234" y="108">Ficha del empleado</text>
+  <path class="arrow" d="M376 92 H404"/>
+  <rect class="box" x="412" y="56" width="150" height="72"/><text class="t" x="428" y="88">3. Novedad</text><text class="s" x="428" y="108">Si el tipo lo pide</text>
+  <path class="arrow" d="M570 92 H598"/>
+  <rect class="box" x="606" y="56" width="150" height="72"/><text class="t" x="622" y="88">4. Recibo</text><text class="s" x="622" y="108">D�as e importe</text>
+  <path class="arrow" d="M764 92 H792"/>
+  <rect class="box" x="800" y="56" width="136" height="72"/><text class="t" x="816" y="88">5. Reporte</text><text class="s" x="816" y="108">Listado / export</text>
+  <text class="s" x="24" y="180">Importe no cobrado = salario que no se paga (no es una multa). El concepto se define en el tipo, no en cada carga.</text>
+</svg>

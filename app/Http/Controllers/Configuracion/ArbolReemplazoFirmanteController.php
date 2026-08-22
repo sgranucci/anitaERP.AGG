@@ -140,6 +140,8 @@ class ArbolReemplazoFirmanteController extends Controller
                 'actualizar_pendientes' => $request->boolean('actualizar_pendientes'),
                 'reenviar_correo' => $request->boolean('reenviar_correo'),
                 'tipos' => array_values(array_map('strval', $tipos)),
+                'con_fecha_tope' => $modo === 'reemplazo' && $request->boolean('con_fecha_tope'),
+                'vence_el' => $modo === 'reemplazo' ? $request->input('vence_el') : null,
             ],
         ];
     }

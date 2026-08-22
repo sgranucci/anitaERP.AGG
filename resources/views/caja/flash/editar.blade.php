@@ -38,41 +38,46 @@ window.flashOrigenTotalUrl = @json(route('flash_caja_api_origen_total'));
                     </a>
                 </div>
             </div>
-            <form action="{{ route('actualizar_flash_caja', ['id' => $data->id] + ($filtrosQuery ?? [])) }}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
-                @csrf
-                @method('PUT')
-                <div class="card-body">
-                    @if ($data->estaValidado())
-                        <div class="alert alert-success py-2 d-flex flex-wrap align-items-center">
-                            <div class="mr-3">
-                                <i class="fa fa-check"></i>
-                                Flash validado
-                                @if ($data->validado_en)
-                                    el {{ $data->validado_en->format('d/m/Y H:i') }}
-                                @endif
-                                @if ($data->validadoUsuario)
-                                    por {{ $data->validadoUsuario->usuario ?? $data->validadoUsuario->nombre }}
-                                @endif.
-                                Si guarda cambios se quitará la validación.
-                            </div>
-                            @if (! empty($puedeValidarFlash))
-                                @include('caja.flash.partials.boton_validar', [
-                                    'flash' => $data,
-                                    'puedeValidarFlash' => true,
-                                    'retornoListadoQuery' => $filtrosQuery ?? [],
-                                ])
+            {{-- Validar/quitar validación: form hermano, nunca anidado en #form-general --}}
+            @if ($data->estaValidado())
+                <div class="card-body pb-0">
+                    <div class="alert alert-success py-2 d-flex flex-wrap align-items-center mb-0">
+                        <div class="mr-3">
+                            <i class="fa fa-check"></i>
+                            Flash validado
+                            @if ($data->validado_en)
+                                el {{ $data->validado_en->format('d/m/Y H:i') }}
                             @endif
+                            @if ($data->validadoUsuario)
+                                por {{ $data->validadoUsuario->usuario ?? $data->validadoUsuario->nombre }}
+                            @endif.
+                            Si guarda cambios se quitará la validación.
                         </div>
-                    @elseif (! empty($puedeValidarFlash))
-                        <div class="alert alert-warning py-2 d-flex flex-wrap align-items-center mb-3">
-                            <span class="mr-3">Este flash todavía no está validado.</span>
+                        @if (! empty($puedeValidarFlash))
                             @include('caja.flash.partials.boton_validar', [
                                 'flash' => $data,
                                 'puedeValidarFlash' => true,
                                 'retornoListadoQuery' => $filtrosQuery ?? [],
                             ])
-                        </div>
-                    @endif
+                        @endif
+                    </div>
+                </div>
+            @elseif (! empty($puedeValidarFlash))
+                <div class="card-body pb-0">
+                    <div class="alert alert-warning py-2 d-flex flex-wrap align-items-center mb-0">
+                        <span class="mr-3">Este flash todavía no está validado.</span>
+                        @include('caja.flash.partials.boton_validar', [
+                            'flash' => $data,
+                            'puedeValidarFlash' => true,
+                            'retornoListadoQuery' => $filtrosQuery ?? [],
+                        ])
+                    </div>
+                </div>
+            @endif
+            <form action="{{ route('actualizar_flash_caja', ['id' => $data->id] + ($filtrosQuery ?? [])) }}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+                @csrf
+                @method('PUT')
+                <div class="card-body">
                     @include('caja.flash.form')
                 </div>
                 <div class="card-footer">

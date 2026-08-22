@@ -232,6 +232,12 @@ class Empleado_Sueldos extends Model implements Auditable
             ->orderByDesc('fecha_desde')->orderByDesc('id');
     }
 
+    public function sanciones()
+    {
+        return $this->hasMany(Empleado_Sancion_Sueldos::class, 'empleado_id')
+            ->orderByDesc('fecha_hecho')->orderByDesc('id');
+    }
+
     public function familiares()
     {
         return $this->hasMany(Empleado_Familiar_Sueldos::class, 'empleado_id')

@@ -14,6 +14,7 @@ use App\Services\Compras\OrdencompraService;
 use App\Services\Compras\ComprobanteService;
 use App\Services\Compras\PrecargaComprobanteAnitaSyncService;
 use App\Support\Compras\ApiPrecargaProveedorLogger;
+use App\Support\Compras\ComprobanteProveedorConceptosIibbPadronCotejoSupport;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
@@ -509,6 +510,13 @@ class ApiController extends Controller
             ];
         }
 
+        $avisosConceptos = [];
+        $revisarPorIibb = false;
+        $netoGravado = 0.0;
+        $cuadre = ComprobanteProveedorConceptosIvaCoherenciaSupport::cuadreConTotal([], 0.0);
+        $totalRequest = round(abs((float) ($request->total ?? 0)), 2);
+        $subtotalRequest = round(abs((float) ($request->subtotal ?? 0)), 2);
+
         try {
             $conceptosPermitidos = ComprobanteProveedorConceptosIvaCoherenciaSupport::idsPermitidosDesdeTipoTransaccion(
                 $comprobante
@@ -519,6 +527,35 @@ class ApiController extends Controller
                     $conceptosPermitidos
                 )
             );
+
+            // Cotejo del concepto IIBB elegido por el agente (BS.AS. vs Capital, u otro régimen).
+            $cotejoIibb = app(ComprobanteProveedorConceptosIibbPadronCotejoSupport::class)
+                ->cotejar(
+                    $lineasConcepto,
+                    (int) $empresa_id,
+                    (string) $request->fecha_factura,
+                    (string) ($request->cuit_empresa ?? ''),
+                    $conceptosPermitidos,
+                );
+            $lineasConcepto = ComprobanteProveedorConceptosIvaCoherenciaSupport::enriquecerCodigosAnita(
+                $cotejoIibb['lineas']
+            );
+            $avisosConceptos = array_merge($cotejoIibb['correcciones'], $cotejoIibb['avisos']);
+            $revisarPorIibb = $cotejoIibb['revisar'];
+
+            $netoGravado = ComprobanteProveedorConceptosIvaCoherenciaSupport::netoGravadoDesdeLineas($lineasConcepto);
+            $cuadre = ComprobanteProveedorConceptosIvaCoherenciaSupport::cuadreConTotal(
+                $lineasConcepto,
+                $totalRequest
+            );
+
+            // Subtotal de cabecera alineado al neto G tras reparación IVA.
+            if ($netoGravado > 0 && (
+                $subtotalRequest <= 0
+                || abs($netoGravado - $subtotalRequest) > ComprobanteProveedorConceptosIvaCoherenciaSupport::TOLERANCIA
+            )) {
+                $subtotalRequest = $netoGravado;
+            }
         } catch (\RuntimeException $e) {
             $log->warning('recibe_comprobante.coherencia_iva_error', [
                 'message' => $e->getMessage(),
@@ -528,9 +565,28 @@ class ApiController extends Controller
             return response()->json(['message' => $e->getMessage()], 422);
         }
 
+        // Total que no cuadra o imputación IIBB dudosa: la precarga entra igual, marcada
+        // para revisión manual.
+        $pararevisar = (bool) $request->para_revisar || $revisarPorIibb;
+        if ($cuadre['aplica'] && ! $cuadre['cuadra']) {
+            $pararevisar = true;
+            $avisosConceptos[] = $cuadre['mensaje'];
+            $log->warning('recibe_comprobante.total_no_cuadra', [
+                'suma_conceptos' => $cuadre['suma'],
+                'total' => $cuadre['total'],
+                'diferencia' => $cuadre['diferencia'],
+            ]);
+        }
+
         $log->info('recibe_comprobante.conceptos_ok', [
             'cantidad' => count($lineasConcepto),
             'lineas' => $lineasConcepto,
+            'suma_conceptos' => $cuadre['suma'],
+            'neto_gravado' => $netoGravado,
+            'total' => $totalRequest,
+            'subtotal' => $subtotalRequest,
+            'pararevisar' => $pararevisar,
+            'avisos' => $avisosConceptos,
         ]);
 
         $moneda_id = 1;
@@ -566,9 +622,9 @@ class ApiController extends Controller
             'numerocae' => $numeroCae,
             'numeroordencompra' => $numeroOc,
             'rutaalmacenamiento' => $request->ruta_almacenamiento,
-            'pararevisar' => $request->para_revisar,
-            'subtotal' => $request->subtotal,
-            'total' => $request->total,
+            'pararevisar' => $pararevisar,
+            'subtotal' => $subtotalRequest,
+            'total' => $totalRequest,
             'moneda' => $request->moneda,
             'moneda_id' => $moneda_id,
             'cotizacion' => $request->cotizacion,
@@ -627,6 +683,8 @@ class ApiController extends Controller
             return response()->json([
                 'id' => $precarga_comprobante_proveedor->id,
                 'message' => 'Precarga registrada en ERP y sincronizada con Anita (compras).',
+                'pararevisar' => $pararevisar,
+                'avisos' => $avisosConceptos,
             ], 201);
         } catch (\Throwable $e) {
             DB::rollBack();

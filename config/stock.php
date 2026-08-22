@@ -14,6 +14,17 @@ return [
     'transferencia_horas_validez_token' => (int) env('STOCK_TRANSFERENCIA_HORAS_TOKEN', 168),
 
     /*
+    | Defaults de la pantalla ágil (Stock → Transferencia) para pickeo nocturno
+    | depósito central → gastronomía. El usuario puede cambiarlos; se recuerdan
+    | en cache. Códigos de depmae, no IDs (los IDs varían entre instalaciones).
+    */
+    'transferencia_pickeo' => [
+        'tipo_abreviatura' => strtoupper(trim((string) env('STOCK_TRANSFERENCIA_TIPO_ABREVIATURA', 'TRA'))),
+        'deposito_salida_codigo' => trim((string) env('STOCK_TRANSFERENCIA_DEPOSITO_SALIDA_CODIGO', '1')),
+        'deposito_entrada_codigo' => trim((string) env('STOCK_TRANSFERENCIA_DEPOSITO_ENTRADA_CODIGO', '8')),
+    ],
+
+    /*
     | Ventana de edición de movimientos de stock.
     | true  → solo se pueden modificar o eliminar movimientos cuya fecha sea la del día.
     |          Los de fechas anteriores quedan únicamente con la opción Revertir (auditable).

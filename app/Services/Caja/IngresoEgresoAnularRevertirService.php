@@ -177,7 +177,8 @@ class IngresoEgresoAnularRevertirService
                     $leyenda,
                     false,
                     (int) $reverso->id,
-                    $ref
+                    $ref,
+                    PeriodoContableCierreSupport::ALCANCE_CAJA
                 );
                 $asientoId = (int) $resAsiento['asiento_id'];
             }

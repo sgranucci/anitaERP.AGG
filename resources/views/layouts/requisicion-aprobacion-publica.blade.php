@@ -44,8 +44,14 @@
             </div>
         </div>
     </div>
+    @include('includes.proceso_overlay_aviso', [
+        'overlayId' => 'grabacion-overlay-global',
+        'titulo' => 'Grabando…',
+        'subtitulo' => 'No cierre ni recargue la pantalla y no vuelva a apretar el botón: cada envío extra genera un registro duplicado.',
+    ])
     <script src="{{ asset("assets/$themePortal/plugins/jquery/jquery.min.js") }}"></script>
     <script src="{{ asset("assets/$themePortal/plugins/bootstrap/js/bootstrap.bundle.min.js") }}"></script>
+    <script src="{{ asset('assets/js/grabacion-bloqueo-submit.js') }}?v={{ @filemtime(public_path('assets/js/grabacion-bloqueo-submit.js')) ?: time() }}"></script>
     @stack('scripts')
 </body>
 </html>

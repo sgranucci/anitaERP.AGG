@@ -10,13 +10,16 @@ use RuntimeException;
 /**
  * Coherencia neto gravado (G) ↔ IVA liquidado (I) por alícuota en comprobantes de compra.
  *
- * Si hay 2+ alícuotas de IVA y el neto viene unificado (sin tasa o en una sola alícuota),
- * abre gravados a partir de los importes de IVA (fuente de verdad). Si la suma teórica
- * no cuadra con el neto original, reparte la diferencia entre los gravados; nunca ajusta IVA.
+ * El IVA liquidado es fuente de verdad: gravado = IVA / (tasa/100). Nunca se ajusta el IVA.
+ *
+ * Si hay 2+ alícuotas y el neto viene unificado, abre gravados desde esos importes de IVA.
+ * Si el neto G informado cuadra con la suma teórica (delta ≤ tolerancia), solo se reparte
+ * el redondeo entre alícuotas. Si el delta es grande (p. ej. el agente puso el importe de
+ * IVA también en el concepto G), se descarta el neto informado y se usa el teórico.
  *
  * Si el agente manda el neto en un concepto que no es G (p. ej. «No gravado» código 1 /
  * monotributo) junto con IVA liquidado, se descarta esa línea y se recrea el gravado
- * correcto: neto = IVA / (tasa/100). Tolerancia de cuadre IVA↔neto tras el ajuste: $0,90.
+ * correcto. Tolerancia de cuadre IVA↔neto tras el ajuste: $0,90.
  */
 final class ComprobanteProveedorConceptosIvaCoherenciaSupport
 {
@@ -85,6 +88,87 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
         self::assertCoherenciaIvaNeto($estado);
 
         return $lineas;
+    }
+
+    /**
+     * Suma de montos de líneas de concepto conservando el signo (los descuentos restan).
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     */
+    public static function sumaMontos(array $lineas): float
+    {
+        $suma = 0.0;
+        foreach ($lineas as $linea) {
+            $suma = round($suma + (float) ($linea['monto'] ?? 0), 2);
+        }
+
+        return $suma;
+    }
+
+    /**
+     * Neto gravado tipo G (post-normalización IVA).
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     */
+    public static function netoGravadoDesdeLineas(array $lineas): float
+    {
+        if ($lineas === []) {
+            return 0.0;
+        }
+
+        $conceptos = self::cargarConceptos($lineas);
+        $neto = 0.0;
+        foreach ($lineas as $linea) {
+            $concepto = $conceptos->get((int) ($linea['concepto_ivacompra_id'] ?? 0));
+            if (! $concepto || strtoupper((string) ($concepto->tipoconcepto ?? '')) !== 'G') {
+                continue;
+            }
+            $neto = round($neto + abs((float) ($linea['monto'] ?? 0)), 2);
+        }
+
+        return $neto;
+    }
+
+    /**
+     * Cuadre de la suma de conceptos contra el total del comprobante.
+     *
+     * No corta el circuito: el total es el árbitro que confirma la reparación de gravados,
+     * y cuando no cierra la precarga entra marcada para revisión manual.
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     * @return array{aplica: bool, suma: float, total: float, diferencia: float, cuadra: bool, mensaje: string}
+     */
+    public static function cuadreConTotal(array $lineas, float $total, float $tolerancia = self::TOLERANCIA): array
+    {
+        $total = round(abs($total), 2);
+        $suma = self::sumaMontos($lineas);
+
+        if ($total <= 0 || $lineas === []) {
+            return [
+                'aplica' => false,
+                'suma' => $suma,
+                'total' => $total,
+                'diferencia' => 0.0,
+                'cuadra' => true,
+                'mensaje' => '',
+            ];
+        }
+
+        // Una NC puede venir con todos los conceptos en negativo y el total en positivo.
+        $diferencia = round(abs(abs($suma) - $total), 2);
+        $cuadra = $diferencia <= $tolerancia;
+
+        return [
+            'aplica' => true,
+            'suma' => $suma,
+            'total' => $total,
+            'diferencia' => $diferencia,
+            'cuadra' => $cuadra,
+            'mensaje' => $cuadra ? '' : 'La suma de conceptos ('.number_format($suma, 2, ',', '.')
+                .') no coincide con el total del comprobante ('.number_format($total, 2, ',', '.')
+                .'). Diferencia '.number_format($diferencia, 2, ',', '.')
+                .' (tolerancia $'.number_format($tolerancia, 2, ',', '.').').',
+        ];
     }
 
     /**
@@ -322,9 +406,15 @@ final class ComprobanteProveedorConceptosIvaCoherenciaSupport
             return $lineas;
         }
 
-        // Sin neto tipo G el agente suele haber puesto el importe en E/N/etc. (ej. código 1).
-        // No repartir hacia 0: el IVA es fuente de verdad → neto = IVA/(tasa/100).
-        $netoOriginalParaReparto = $netoTotalG > 0 ? $netoTotalG : $sumaTeorica;
+        // IVA → neto teórico. Solo se reparte hacia el neto G informado si el delta es
+        // chico (redondeo / apertura multi-alícuota). Delta grande = neto mal cargado
+        // (p. ej. mismo importe que el IVA en el concepto G) → manda el teórico.
+        $deltaNeto = $netoTotalG > 0
+            ? abs(round($netoTotalG - $sumaTeorica, 2))
+            : 0.0;
+        $netoOriginalParaReparto = ($netoTotalG > 0 && $deltaNeto <= self::TOLERANCIA)
+            ? $netoTotalG
+            : $sumaTeorica;
 
         $netoDescompuesto = self::repartirDiferenciaEntreGravados(
             $netoTeorico,

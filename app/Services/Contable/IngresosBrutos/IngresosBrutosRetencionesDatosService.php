@@ -12,6 +12,7 @@ use App\Support\Contable\IngresosBrutos\IngresosBrutosFormatoArbaSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosProvinciaAnitaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Support\Contable\Sicore\SicoreProveedorErpSupport;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -19,9 +20,16 @@ use Illuminate\Support\Facades\Schema;
  */
 final class IngresosBrutosRetencionesDatosService
 {
+    private ?string $ultimaAdvertencia = null;
+
     public function __construct(
         private readonly SicoreProveedorErpSupport $proveedorSupport = new SicoreProveedorErpSupport(),
     ) {
+    }
+
+    public function ultimaAdvertencia(): ?string
+    {
+        return $this->ultimaAdvertencia;
     }
 
     /**
@@ -34,12 +42,19 @@ final class IngresosBrutosRetencionesDatosService
         Iibb_Presentacion_Config $config,
         Provincia $provincia,
     ): array {
+        $this->ultimaAdvertencia = null;
+
         $anita = $this->desdeRetibrmovAnita($empresaId, $fechaDesde, $fechaHasta, $config, $provincia);
         if ($anita !== []) {
             return $anita;
         }
 
-        return $this->desdePagoproveedorErp($empresaId, $fechaDesde, $fechaHasta, $config, $provincia);
+        $erp = $this->desdePagoproveedorErp($empresaId, $fechaDesde, $fechaHasta, $config, $provincia);
+        if ($erp !== []) {
+            return $erp;
+        }
+
+        return [];
     }
 
     /**
@@ -54,6 +69,8 @@ final class IngresosBrutosRetencionesDatosService
     ): array {
         $codigosProv = IngresosBrutosProvinciaAnitaSupport::codigosAnita($provincia);
         if ($codigosProv === []) {
+            $this->ultimaAdvertencia = 'La provincia seleccionada no tiene códigos Anita (codigoexterno/jurisdicción) para filtrar retibrmov.';
+
             return [];
         }
 
@@ -64,8 +81,8 @@ final class IngresosBrutosRetencionesDatosService
 
         // Columnas reales Informix (retibrmov.sql): retibr_nro_ret / retibr_porc_ret
         // (el C usa alias retibr_nro_retencion / retibr_porc_retencion vía .def).
-        $api = new ApiAnita();
-        $filas = ApiAnita::decodificarListaFilas($api->apiCall([
+        // Alias largos hacen que el bridge responda [] sin mensaje de error.
+        $payload = [
             'acc' => 'list',
             'sistema' => 'compras',
             'tabla' => 'retibrmov',
@@ -80,7 +97,25 @@ final class IngresosBrutosRetencionesDatosService
                 .' AND retibr_retencion <> 0'
                 .' AND retibr_provincia IN ('.$provIn.')',
             'orderBy' => 'retibr_fecha, retibr_nro_ret, retibr_proveedor',
-        ]));
+        ];
+
+        $parsed = $this->leerRetibrmovConReintento($payload, $empresaId, $fechaDesde, $fechaHasta);
+        $filas = $parsed['filas'];
+        $errorLectura = $parsed['error_lectura'];
+
+        if ($errorLectura !== null) {
+            $this->ultimaAdvertencia = 'No se pudo leer retenciones IIBB desde Anita (retibrmov): '.$errorLectura
+                .' Reintente la consulta. Si persiste, revise el bridge Anita.';
+            Log::warning('IIBB retibrmov: error de lectura Anita', [
+                'empresa_id' => $empresaId,
+                'empresa_anita' => $empresaAnita,
+                'desde' => $fechaDesde,
+                'hasta' => $fechaHasta,
+                'error' => $errorLectura,
+            ]);
+
+            return [];
+        }
 
         if ($filas === []) {
             return [];
@@ -142,7 +177,50 @@ final class IngresosBrutosRetencionesDatosService
             ];
         }
 
+        if ($filas !== [] && $out === []) {
+            $this->ultimaAdvertencia = 'Anita devolvió filas de retibrmov pero quedaron en cero al agrupar (sujeto/retención). Revise columnas retibr_nro_ret / retibr_sujeto / retibr_retencion.';
+            Log::warning('IIBB retibrmov: filas Anita descartadas al agrupar', [
+                'empresa_id' => $empresaId,
+                'filas_anita' => count($filas),
+            ]);
+        }
+
         return $out;
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     * @return array{filas: list<object>, error_lectura: ?string}
+     */
+    private function leerRetibrmovConReintento(
+        array $payload,
+        int $empresaId,
+        string $fechaDesde,
+        string $fechaHasta,
+    ): array {
+        $api = new ApiAnita();
+        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall($payload));
+
+        // Fallo puntual del bridge (timeout / body vacío / pico): un reintento suele recuperar.
+        if ($parsed['filas'] === [] || $parsed['error_lectura'] !== null) {
+            usleep(250_000);
+            $parsed2 = ApiAnita::parsearRespuestaLista($api->apiCall($payload));
+            if ($parsed2['filas'] !== [] || ($parsed2['error_lectura'] === null && $parsed['error_lectura'] !== null)) {
+                if ($parsed['error_lectura'] !== null || $parsed['filas'] === []) {
+                    Log::info('IIBB retibrmov: recuperado en reintento', [
+                        'empresa_id' => $empresaId,
+                        'desde' => $fechaDesde,
+                        'hasta' => $fechaHasta,
+                        'error_previo' => $parsed['error_lectura'],
+                        'filas' => count($parsed2['filas']),
+                    ]);
+                }
+
+                return $parsed2;
+            }
+        }
+
+        return $parsed;
     }
 
     /**

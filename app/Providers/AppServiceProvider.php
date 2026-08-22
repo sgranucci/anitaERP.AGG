@@ -1962,6 +1962,21 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Sueldos\Tipo_Sancion_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Tipo_Sancion_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Motivo_Sancion_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Motivo_Sancion_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Empleado_Sancion_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Empleado_Sancion_SueldosRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Sueldos\Prenda_SueldosRepositoryInterface',
             'App\Repositories\Sueldos\Prenda_SueldosRepository',
         );
@@ -2143,6 +2158,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Produccion\OrdenproduccionRepositoryInterface',
             'App\Repositories\Produccion\OrdenproduccionRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Seguridad\IngresoProveedorRepositoryInterface',
+            'App\Repositories\Seguridad\IngresoProveedorRepository',
         );
 
         $this->registrarPlataformaIa();

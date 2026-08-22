@@ -111,6 +111,13 @@ class AyudaManuales
                 'disponible' => true,
             ],
             [
+                'modulo' => 'Sueldos — Sanciones disciplinarias',
+                'bajada' => 'Tipos y motivos, carga en el empleado, importe no cobrado, novedad de liquidación y reporte.',
+                'url' => route('manual_sueldos'),
+                'icono' => 'fa-gavel',
+                'disponible' => true,
+            ],
+            [
                 'modulo' => 'UIF — Clientes, premios e informes',
                 'bajada' => 'Clientes y premios, informe mensual Excel/PDF/XML, congelados, conciliación Wigos y tablas maestras.',
                 'url' => route('manual_uif'),

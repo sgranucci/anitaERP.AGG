@@ -33,7 +33,7 @@ class LibroIvaDigitalController extends Controller
                 'empresa_id' => $filtros['empresa_id'],
                 'periodo' => $filtros['periodo'],
             ]);
-            foreach (['por_fecha_jornada', 'prorrateo_cf_global', 'completar_compras_anita'] as $campo) {
+            foreach (['por_fecha_jornada', 'prorrateo_cf_global', 'completar_compras_anita', 'completar_fsl_anita'] as $campo) {
                 ReportePreferenciasUsuario::persistirBool(
                     self::PREFERENCIAS_CLAVE,
                     $campo,
@@ -120,6 +120,7 @@ class LibroIvaDigitalController extends Controller
             'por_fecha_jornada' => (bool) ($filtros['por_fecha_jornada'] ?? false),
             'prorrateo_cf_global' => (bool) ($filtros['prorrateo_cf_global'] ?? false),
             'completar_compras_anita' => (bool) ($filtros['completar_compras_anita'] ?? true),
+            'completar_fsl_anita' => (bool) ($filtros['completar_fsl_anita'] ?? true),
         ];
     }
 
@@ -193,6 +194,7 @@ class LibroIvaDigitalController extends Controller
             'por_fecha_jornada' => $this->boolFiltro($request, 'por_fecha_jornada', true) ? 1 : 0,
             'prorrateo_cf_global' => $this->boolFiltro($request, 'prorrateo_cf_global', false) ? 1 : 0,
             'completar_compras_anita' => $this->boolFiltro($request, 'completar_compras_anita', true) ? 1 : 0,
+            'completar_fsl_anita' => $this->boolFiltro($request, 'completar_fsl_anita', true) ? 1 : 0,
         ];
     }
 

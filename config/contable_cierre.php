@@ -18,6 +18,14 @@ return [
     'apertura_link_habilitacion_dias' => (int) env('CONTABLE_CIERRE_APERTURA_LINK_DIAS', 7),
 
     /*
+    | Flujo de apertura programada:
+    | - aprobacion: el solicitante pide; encargados reciben mail y habilitan (flujo de dos personas).
+    | - inmediata: al solicitar queda activa; el mail va al solicitante (y al usuario habilitado si es otro).
+    |             No se notifica a todos los encargados. Aprobar/rechazar/revocar siguen disponibles.
+    */
+    'apertura_modo' => strtolower(trim((string) env('CONTABLE_CIERRE_APERTURA_MODO', 'aprobacion'))),
+
+    /*
     | Hora (HH:MM) a partir de la cual, el día de fecha_ejecucion, el job aplica el cierre programado.
     */
     'hora_fin_dia' => (string) env('CONTABLE_CIERRE_HORA_FIN_DIA', '23:50'),

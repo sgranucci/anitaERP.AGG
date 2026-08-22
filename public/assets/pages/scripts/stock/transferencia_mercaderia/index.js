@@ -83,34 +83,24 @@
         actualizarPanelCentrocosto();
     }
 
+    function vaciarListaPickeo() {
+        renderLista([]);
+    }
+
     function notificarCambioOrigen() {
         guardarPreferencias();
         cargarDestinatarios();
-        if (tipoOrigenBienUso()) {
-            if (bienUsoOrigenId()) {
-                cargarInventario();
-            } else {
-                $('#tm_lista').empty();
-                $('#tm_panel_filtro').hide();
-                setEstado('');
-                actualizarBotonTransferir();
-            }
-        } else {
-            notificarCambioDeposito();
-        }
+        vaciarListaPickeo();
+        setEstado('');
+        focarPickeo();
     }
 
     function notificarCambioDeposito() {
         guardarPreferencias();
         cargarDestinatarios();
-        if (depositoSalidaId()) {
-            cargarInventario();
-        } else {
-            $('#tm_lista').empty();
-            $('#tm_panel_filtro').hide();
-            setEstado('');
-            actualizarBotonTransferir();
-        }
+        vaciarListaPickeo();
+        setEstado('');
+        focarPickeo();
     }
 
     function tipotransaccionStockId() {
@@ -200,7 +190,9 @@
 
     function aplicarTipoTrcontSiCorresponde(resp) {
         var tipoTrcontId = parseInt(resp && resp.tipo_trcont_id, 10) || 0;
-        if (!resp || !resp.es_contabilizable || tipoManejaContabilidad() || tipoTrcontId <= 0) {
+        var familia = String((resp && resp.familia) || '');
+        var esOtrosActivos = familia === 'otros_activos';
+        if (!resp || !esOtrosActivos || !resp.es_contabilizable || tipoManejaContabilidad() || tipoTrcontId <= 0) {
             return false;
         }
         var $tipo = $('#tipotransaccion_stock_id');
@@ -208,7 +200,7 @@
             return false;
         }
         $tipo.val(String(tipoTrcontId)).trigger('change');
-        setEstado('Artículo contabilizable: se seleccionó TRCONT automáticamente.');
+        setEstado('Artículo de otros activos: se seleccionó TRCONT para no omitir la contabilidad.');
         return true;
     }
 
@@ -426,13 +418,177 @@
     }
 
     function focarFiltroSku() {
-        var $filtro = $('#tm_filtro_desc');
-        if (!$filtro.length || !$filtro.is(':visible')) {
+        focarPickeo();
+    }
+
+    function focarPickeo() {
+        var $pickeo = $('#tm_pickeo_codigo');
+        if (!$pickeo.length) {
             return;
         }
         setTimeout(function () {
-            $filtro.trigger('focus');
+            $pickeo.trigger('focus').trigger('select');
         }, 0);
+    }
+
+    function vibrarPickeo(ok) {
+        if (!navigator.vibrate) {
+            return;
+        }
+        navigator.vibrate(ok ? 40 : [80, 40, 80]);
+    }
+
+    function sincronizarCantidadesDesdeDom() {
+        $('#tm_lista .tm-item').each(function () {
+            var id = parseInt($(this).data('articulo-id'), 10);
+            if (!id) {
+                return;
+            }
+            var cant = parseFloat($(this).find('.tm-cant').val());
+            if (isNaN(cant) || cant < 0) {
+                cant = 0;
+            }
+            filas.forEach(function (f) {
+                if (parseInt(f.articulo_id, 10) === id) {
+                    f.cantidad = cant;
+                }
+            });
+        });
+    }
+
+    function resaltarCard(articuloId) {
+        var $card = $('#tm_lista .tm-item[data-articulo-id="' + articuloId + '"]');
+        if (!$card.length) {
+            return;
+        }
+        $('#tm_lista .tm-item').removeClass('tm-item-recien');
+        $card.addClass('tm-item-recien');
+        if ($card[0] && $card[0].scrollIntoView) {
+            $card[0].scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+    }
+
+    function abrirModalArticulo() {
+        if (typeof activa_eventos_consultaarticulo === 'function') {
+            activa_eventos_consultaarticulo();
+        }
+        $('#consultaarticuloModal').modal('show');
+    }
+
+    function modalArticuloAbierto() {
+        return $('#consultaarticuloModal').hasClass('show')
+            || $('#consultaarticuloModal').hasClass('showing');
+    }
+
+    function camaraPickeoActiva() {
+        return !!window.tmCamaraPickeoActiva;
+    }
+
+    function resolverPickeo(codigoForzado) {
+        if (modalArticuloAbierto()) {
+            return;
+        }
+        var codigo = codigoForzado != null && String(codigoForzado).trim() !== ''
+            ? String(codigoForzado).trim()
+            : ($('#tm_pickeo_codigo').val() || '').trim();
+        if (!codigo) {
+            return;
+        }
+        if (tipoOrigenBienUso()) {
+            if (!bienUsoOrigenId()) {
+                setEstado('Seleccione bien de uso de origen.', true);
+                return;
+            }
+        } else if (!depositoSalidaId()) {
+            setEstado('Seleccione depósito de salida.', true);
+            return;
+        }
+        if (cargando) {
+            return;
+        }
+
+        cargando = true;
+        $('#tm_btn_pickeo').prop('disabled', true);
+        if (!camaraPickeoActiva()) {
+            $('#tm_pickeo_codigo').val('');
+        }
+        setEstado('Buscando ' + codigo + '…');
+
+        $.ajax({
+            url: window.TM_URLS.resolverArticulo,
+            method: 'GET',
+            data: {
+                codigo: codigo,
+                deposito_id: depositoSalidaId(),
+                empresa_id: empresaId(),
+            },
+            dataType: 'json',
+        })
+            .done(function (resp) {
+                if (!resp || !resp.ok) {
+                    var msgNo = (resp && resp.mensaje) || 'Artículo no encontrado.';
+                    setEstado(msgNo, true);
+                    mostrarAlertaBanner(msgNo, 'Artículo no encontrado');
+                    vibrarPickeo(false);
+                    return;
+                }
+                agregarFilaManual({
+                    articulo_id: resp.articulo_id,
+                    sku: resp.sku || '',
+                    descripcion: resp.descripcion || '',
+                    saldo: parseFloat(resp.saldo) || 0,
+                });
+            })
+            .fail(function (xhr) {
+                var msg = 'Artículo no encontrado.';
+                if (xhr.responseJSON && xhr.responseJSON.mensaje) {
+                    msg = xhr.responseJSON.mensaje;
+                }
+                setEstado(msg, true);
+                mostrarAlertaBanner(msg, 'Artículo no encontrado');
+                vibrarPickeo(false);
+            })
+            .always(function () {
+                cargando = false;
+                $('#tm_btn_pickeo').prop('disabled', false);
+                actualizarBotonTransferir();
+                if (!camaraPickeoActiva()) {
+                    focarPickeo();
+                }
+            });
+    }
+
+    window.tmAplicarCodigoPickeo = function (codigo) {
+        resolverPickeo(codigo);
+    };
+
+    function cantidadMaximaFila(f) {
+        return parseFloat(f && f.saldo) || 0;
+    }
+
+    function incrementarFilaExistente(f, incremento) {
+        incremento = incremento == null ? 1 : incremento;
+        var max = cantidadMaximaFila(f);
+        var actual = parseFloat(f.cantidad) || 0;
+        var siguiente = actual + incremento;
+        if (siguiente > max + 0.000001) {
+            var msg = 'No hay más stock. Saldo ' + max + ', ya cargados ' + actual + '.';
+            setEstado(msg, true);
+            mostrarAlertaBanner(msg, 'Stock insuficiente');
+            vibrarPickeo(false);
+            resaltarCard(f.articulo_id);
+            return false;
+        }
+        f.cantidad = siguiente;
+        var $card = $('#tm_lista .tm-item[data-articulo-id="' + f.articulo_id + '"]');
+        if ($card.length) {
+            $card.find('.tm-cant').val(f.cantidad);
+            resaltarCard(f.articulo_id);
+        }
+        actualizarBotonTransferir();
+        setEstado((f.sku || '') + ' — cantidad ' + f.cantidad + ' (saldo ' + max + ')');
+        vibrarPickeo(true);
+        return true;
     }
 
     function aplicarFiltro() {
@@ -504,16 +660,35 @@
     }
 
     function agregarFilaManualConfirmado(f) {
-        var existe = filas.some(function (x) {
-            return parseInt(x.articulo_id, 10) === parseInt(f.articulo_id, 10);
+        sincronizarCantidadesDesdeDom();
+        var articuloId = parseInt(f.articulo_id, 10);
+        var existente = filas.find(function (x) {
+            return parseInt(x.articulo_id, 10) === articuloId;
         });
-        if (!existe) {
-            filas.push(f);
+        if (existente) {
+            existente.saldo = f.saldo != null ? f.saldo : existente.saldo;
+            incrementarFilaExistente(existente, 1);
+            return;
         }
+
+        var saldo = parseFloat(f.saldo) || 0;
+        if (saldo <= 0) {
+            var msgSin = 'Sin stock en el depósito de salida.';
+            setEstado(msgSin, true);
+            mostrarAlertaBanner(msgSin, 'Sin stock');
+            vibrarPickeo(false);
+            return;
+        }
+
+        f.cantidad = 1;
+        f.saldo = saldo;
+        filas.unshift(f);
         renderLista(filas);
-        var $card = $('#tm_lista .tm-item[data-articulo-id="' + f.articulo_id + '"]');
-        if ($card.length) {
-            $card.find('.tm-cant').trigger('focus');
+        resaltarCard(articuloId);
+        setEstado((f.sku || '') + ' — cantidad 1 (saldo ' + saldo + ')');
+        vibrarPickeo(true);
+        if (!camaraPickeoActiva()) {
+            focarPickeo();
         }
     }
 
@@ -523,7 +698,7 @@
 
         if (!filas.length) {
             $lista.html(
-                '<div class="tm-vacio">No hay artículos cargados. Use «Cargar stock» o «Agregar artículo».</div>'
+                '<div class="tm-vacio">Pickeá o ingresá el SKU para ir cargando. Al actualizar se genera la TRA.</div>'
             );
             $('#tm_panel_filtro').hide();
             actualizarBotonTransferir();
@@ -562,14 +737,28 @@
             }
             $top.append($descBlock);
 
+            var $acciones = $('<div class="d-flex align-items-center" style="gap:4px;"/>');
             if (articuloId && window.TM_URLS.articuloConsultaUrl) {
-                $top.append(
+                $acciones.append(
                     $('<a class="btn btn-outline-secondary btn-sm" target="_blank" rel="noopener"/>')
                         .attr('href', urlConsultaArticulo(articuloId))
                         .attr('title', 'Consultar artículo')
                         .html('<i class="fa fa-edit"></i>')
                 );
             }
+            $acciones.append(
+                $('<button type="button" class="btn btn-outline-danger btn-sm tm-quitar"/>')
+                    .attr('title', 'Quitar de la lista')
+                    .html('<i class="fa fa-times"></i>')
+                    .on('click', function () {
+                        filas = filas.filter(function (x) {
+                            return parseInt(x.articulo_id, 10) !== parseInt(articuloId, 10);
+                        });
+                        renderLista(filas);
+                        focarPickeo();
+                    })
+            );
+            $top.append($acciones);
 
             $card.append($top);
 
@@ -580,9 +769,14 @@
 
             var $cantRow = $('<div class="d-flex justify-content-between align-items-center mt-2"/>');
             $cantRow.append($('<span class="tm-meta"/>').text('A transferir'));
+            var cantidad = parseFloat(f.cantidad);
+            if (isNaN(cantidad) || cantidad < 0) {
+                cantidad = 0;
+            }
             var $input = $('<input type="number" class="form-control tm-cant" min="0" step="any" inputmode="decimal"/>')
                 .attr('max', saldo > 0 ? saldo : null)
                 .prop('disabled', sinErp)
+                .val(cantidad > 0 ? cantidad : '')
                 .attr('placeholder', '0');
             var $btnTodo = $('<button type="button" class="btn btn-outline-primary btn-sm ml-2"/>')
                 .text('Todo')
@@ -832,7 +1026,8 @@
                         window.location.href = $('a[href*="pendientes"]').attr('href') || window.location.href;
                         return;
                     }
-                    cargarInventario();
+                    vaciarListaPickeo();
+                    focarPickeo();
                 } else {
                     var msgError = resp.mensaje || 'No se pudo grabar.';
                     setEstado(msgError, true);
@@ -857,16 +1052,35 @@
         $('#tm_btn_cargar').on('click', cargarInventario);
         $('#tm_btn_transferir').on('click', grabarTransferencia);
         $('#tm_filtro_desc').on('input', aplicarFiltro);
-        $(document).on('input change', '.tm-cant', actualizarBotonTransferir);
+        $(document).on('input change', '.tm-cant', function () {
+            var $input = $(this);
+            var $card = $input.closest('.tm-item');
+            var max = parseFloat($card.data('saldo')) || 0;
+            var cant = parseFloat($input.val());
+            if (isNaN(cant) || cant < 0) {
+                cant = 0;
+            }
+            if (max > 0 && cant > max + 0.000001) {
+                cant = max;
+                $input.val(cant);
+            }
+            var articuloId = parseInt($card.data('articulo-id'), 10);
+            filas.forEach(function (f) {
+                if (parseInt(f.articulo_id, 10) === articuloId) {
+                    f.cantidad = cant;
+                }
+            });
+            actualizarBotonTransferir();
+        });
         $(document).on('change', '.tm-cant', function () {
             evaluarTipoAutomaticoFila($(this).closest('.tm-item'));
         });
-
         $('#tipotransaccion_stock_id').on('change input', function () {
             guardarPreferencias();
             actualizarPanelesDestino();
             actualizarPanelDestinatario();
             if (filas.length) {
+                sincronizarCantidadesDesdeDom();
                 filtrarFilasContables(filas.slice(), function (validas, omitidas) {
                     if (tipoManejaContabilidad() && omitidas > 0) {
                         setEstado(
@@ -913,17 +1127,27 @@
                 $(this).find('.codigodeposito').val('');
                 $(this).find('.descripciondeposito').val('');
             });
-            $('#tm_lista').empty();
-            $('#tm_panel_filtro').hide();
+            vaciarListaPickeo();
             setEstado('');
-            actualizarBotonTransferir();
         });
 
-        $('#tm_btn_agregar_articulo').on('click', function () {
-            if (typeof activa_eventos_consultaarticulo === 'function') {
-                activa_eventos_consultaarticulo();
+        $('#tm_btn_agregar_articulo, #tm_btn_pickeo_lupa').on('click', function () {
+            abrirModalArticulo();
+        });
+
+        $('#tm_btn_pickeo').on('click', function () {
+            resolverPickeo();
+        });
+        $('#tm_pickeo_codigo').on('keydown', function (e) {
+            if (e.key === 'Enter' || e.which === 13) {
+                e.preventDefault();
+                resolverPickeo();
+                return;
             }
-            $('#consultaarticuloModal').modal('show');
+            if (e.key === 'F1' || e.which === 112) {
+                e.preventDefault();
+                abrirModalArticulo();
+            }
         });
 
         window.onArticuloSeleccionado = function (dataArticulo) {
@@ -965,11 +1189,7 @@
         actualizarUiModoIntercompany();
 
         actualizarPanelesDestino();
-
-        if (tipoOrigenBienUso() && bienUsoOrigenId()) {
-            cargarInventario();
-        } else if (depositoSalidaId()) {
-            cargarInventario();
-        }
+        vaciarListaPickeo();
+        focarPickeo();
     });
 })(jQuery);

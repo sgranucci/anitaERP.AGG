@@ -42,6 +42,8 @@ class PeriodoContableCierreSupport
 
     public const ALCANCE_RECEPCION_PROVEEDOR = 'recepcion_proveedor';
 
+    public const ALCANCE_CUENTAS_PAGAR = 'cuentas_pagar';
+
     public const ALCANCE_INTERBANKING = 'interbanking';
 
     public const ALCANCE_INDUMENTARIA = 'indumentaria';
@@ -80,11 +82,12 @@ class PeriodoContableCierreSupport
                 self::ALCANCE_FACTURACION => 'Facturación (PV manual o CAEA)',
             ],
             self::MODULO_COMPRAS => [
-                self::ALCANCE_RECEPCION_PROVEEDOR => 'Recepción de proveedores',
+                self::ALCANCE_CUENTAS_PAGAR => 'Cuentas a pagar (facturas de proveedor)',
             ],
             self::MODULO_STOCK => [
                 self::ALCANCE_STOCK => 'Movimientos de stock',
                 self::ALCANCE_TRANSFERENCIA => 'Transferencias de mercadería',
+                self::ALCANCE_RECEPCION_PROVEEDOR => 'Recepción de proveedores',
             ],
             self::MODULO_SUELDOS => [
                 self::ALCANCE_INDUMENTARIA => 'Indumentaria (entrega y asiento)',
@@ -322,7 +325,12 @@ class PeriodoContableCierreSupport
         }
 
         throw new PeriodoContableCerradoException(
-            self::mensajeBloqueo($fechaOperacion, $fechaCierre, $alcance),
+            self::mensajeBloqueo(
+                $fechaOperacion,
+                $fechaCierre,
+                $alcance,
+                self::detalleAperturaUsuario($empresaId, $usuarioId, $fechaOperacion, $alcance)
+            ),
             $fechaOperacion->format('Y-m-d'),
             $fechaCierre->format('Y-m-d'),
             $alcance
@@ -381,15 +389,139 @@ class PeriodoContableCierreSupport
         return false;
     }
 
-    public static function mensajeBloqueo(Carbon $fechaOperacion, Carbon $fechaCierre, string $alcance): string
-    {
-        return 'El período contable está cerrado hasta el '
+    public static function mensajeBloqueo(
+        Carbon $fechaOperacion,
+        Carbon $fechaCierre,
+        string $alcance,
+        ?string $detalleApertura = null
+    ): string {
+        $mensaje = 'El período contable está cerrado hasta el '
             .$fechaCierre->format('d/m/Y')
             .'. No puede registrar operaciones con fecha '
             .$fechaOperacion->format('d/m/Y')
             .' en '
             .self::etiquetaAlcance($alcance)
-            .'. Solicite una apertura programada al encargado de contaduría.';
+            .'.';
+
+        if ($detalleApertura !== null && $detalleApertura !== '') {
+            return $mensaje.' '.$detalleApertura;
+        }
+
+        return $mensaje.' Solicite una apertura programada al encargado de contaduría.';
+    }
+
+    /**
+     * Explica la situación de las aperturas del propio usuario cuando el período está bloqueado:
+     * vencida, vigente pero con otro rango de fechas, de otro alcance o pendiente de habilitación.
+     * Sin apertura relacionada devuelve null (mensaje genérico).
+     */
+    public static function detalleAperturaUsuario(
+        int $empresaId,
+        int $usuarioId,
+        Carbon $fechaOperacion,
+        string $alcance
+    ): ?string {
+        if ($empresaId <= 0 || $usuarioId <= 0) {
+            return null;
+        }
+
+        $aperturas = AperturaPeriodoContable::query()
+            ->where('empresa_id', $empresaId)
+            ->where('usuario_habilitado_id', $usuarioId)
+            ->whereIn('estado', ['activa', 'vencida', 'pendiente'])
+            ->orderByDesc('id')
+            ->limit(20)
+            ->get();
+
+        $vencida = null;
+        $fueraDeRango = null;
+        $otroAlcance = null;
+        $pendiente = null;
+        $vencidaOtroRango = null;
+
+        foreach ($aperturas as $apertura) {
+            if ($apertura->estado === 'pendiente') {
+                $pendiente = $pendiente ?? $apertura;
+
+                continue;
+            }
+
+            $cubreAlcance = self::alcanceCubre((string) $apertura->alcance, $alcance);
+            $cubreFecha = self::aperturaCubreFecha($apertura, $fechaOperacion);
+            $vigente = $apertura->estaActiva();
+
+            if ($cubreAlcance && $cubreFecha && ! $vigente) {
+                $vencida = $vencida ?? $apertura;
+            } elseif ($cubreAlcance && ! $cubreFecha && $vigente) {
+                $fueraDeRango = $fueraDeRango ?? $apertura;
+            } elseif (! $cubreAlcance && $cubreFecha && $vigente) {
+                $otroAlcance = $otroAlcance ?? $apertura;
+            } elseif ($cubreAlcance && ! $cubreFecha && ! $vigente) {
+                $vencidaOtroRango = $vencidaOtroRango ?? $apertura;
+            }
+        }
+
+        if ($vencida !== null) {
+            return 'Su apertura '.self::referenciaApertura($vencida)
+                .' para esta fecha venció el '
+                .optional($vencida->vence_en)->format('d/m/Y H:i')
+                .' ('.$vencida->etiquetaDuracion().'). Solicite una apertura nueva para seguir operando.';
+        }
+
+        if ($fueraDeRango !== null) {
+            return 'Su apertura '.self::referenciaApertura($fueraDeRango)
+                .' está vigente hasta las '
+                .optional($fueraDeRango->vence_en)->format('H:i')
+                .' pero habilita solo del '
+                .optional($fueraDeRango->fecha_operacion_desde)->format('d/m/Y')
+                .' al '
+                .optional($fueraDeRango->fecha_operacion_hasta)->format('d/m/Y')
+                .'. Solicite una apertura que incluya el '
+                .$fechaOperacion->format('d/m/Y').'.';
+        }
+
+        if ($otroAlcance !== null) {
+            return 'Su apertura '.self::referenciaApertura($otroAlcance)
+                .' está vigente pero solo para '
+                .$otroAlcance->etiquetaAlcance()
+                .'. Solicite una apertura para '.self::etiquetaAlcance($alcance).'.';
+        }
+
+        if ($pendiente !== null) {
+            return 'Su solicitud de apertura '.self::referenciaApertura($pendiente)
+                .' sigue pendiente de habilitación.';
+        }
+
+        if ($vencidaOtroRango !== null) {
+            return 'Su última apertura '.self::referenciaApertura($vencidaOtroRango)
+                .' habilitaba del '
+                .optional($vencidaOtroRango->fecha_operacion_desde)->format('d/m/Y')
+                .' al '
+                .optional($vencidaOtroRango->fecha_operacion_hasta)->format('d/m/Y')
+                .' y venció el '
+                .optional($vencidaOtroRango->vence_en)->format('d/m/Y H:i')
+                .'. Solicite una apertura que incluya el '
+                .$fechaOperacion->format('d/m/Y').'.';
+        }
+
+        return null;
+    }
+
+    private static function aperturaCubreFecha(AperturaPeriodoContable $apertura, Carbon $fechaOperacion): bool
+    {
+        if ($apertura->fecha_operacion_desde === null || $apertura->fecha_operacion_hasta === null) {
+            return false;
+        }
+
+        $desde = $apertura->fecha_operacion_desde->copy()->startOfDay();
+        $hasta = $apertura->fecha_operacion_hasta->copy()->startOfDay();
+
+        return $fechaOperacion->gte($desde) && $fechaOperacion->lte($hasta);
+    }
+
+    private static function referenciaApertura(AperturaPeriodoContable $apertura): string
+    {
+        return '#'.(int) $apertura->id;
     }
 
     public static function mensajeRestriccionGenerico(): string
@@ -404,8 +536,20 @@ class PeriodoContableCierreSupport
 
         return match ($unidad) {
             'dias' => $inicio->copy()->addDays($cantidad),
+            'minutos' => $inicio->copy()->addMinutes($cantidad),
             default => $inicio->copy()->addHours($cantidad),
         };
+    }
+
+    public static function etiquetaDuracion(int $cantidad, string $unidad): string
+    {
+        $sufijo = match ($unidad) {
+            'dias' => 'día(s)',
+            'minutos' => 'minuto(s)',
+            default => 'hora(s)',
+        };
+
+        return $cantidad.' '.$sufijo;
     }
 
     /**

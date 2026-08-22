@@ -129,6 +129,124 @@ final class UsuarioOperativoSupport
         );
     }
 
+    /**
+     * Firmantes del árbol para la empresa del comprobante.
+     *
+     * Misma regla que filtrarIdsOperativosPorEmpresa, más suplentes activos
+     * (usuario_id con usuario_orig_id en nivel global o concepto SP) cuyo
+     * titular original aplica a esa empresa. Así un reemplazo intercompany
+     * (ej. Rebisco cubriendo Biyemas) puede firmar sin asignarle la empresa.
+     *
+     * El titular se valida solo por empresa (no por suspendido): en vacaciones
+     * a veces se suspende al titular y el suplente debe seguir firmando.
+     *
+     * @param  list<int>  $usuarioIds
+     * @return list<int>
+     */
+    public static function filtrarIdsFirmantesArbolPorEmpresa(array $usuarioIds, int $empresaId): array
+    {
+        $orden = self::normalizarIds($usuarioIds);
+        if ($orden === []) {
+            return [];
+        }
+
+        $activos = self::filtrarIdsActivos($orden);
+        if ($activos === []) {
+            return [];
+        }
+
+        if ($empresaId <= 0) {
+            return array_values(array_filter(
+                $orden,
+                static fn (int $id) => in_array($id, $activos, true)
+            ));
+        }
+
+        $porEmpresa = self::filtrarIdsPorEmpresa($activos, $empresaId);
+        $faltan = array_values(array_diff($activos, $porEmpresa));
+        if ($faltan === []) {
+            return array_values(array_filter(
+                $orden,
+                static fn (int $id) => in_array($id, $porEmpresa, true)
+            ));
+        }
+
+        $suplentesOk = self::idsSuplentesActivosConTitularDeEmpresa($faltan, $empresaId);
+        $aceptados = array_values(array_unique(array_merge($porEmpresa, $suplentesOk)));
+
+        return array_values(array_filter(
+            $orden,
+            static fn (int $id) => in_array($id, $aceptados, true)
+        ));
+    }
+
+    /**
+     * Entre candidatos que no pasaron el filtro de empresa, conserva los que
+     * están como suplente (usuario_orig_id) de un titular aplicable a la empresa.
+     *
+     * @param  list<int>  $candidatoIds
+     * @return list<int>
+     */
+    public static function idsSuplentesActivosConTitularDeEmpresa(array $candidatoIds, int $empresaId): array
+    {
+        $candidatoIds = self::normalizarIds($candidatoIds);
+        if ($candidatoIds === [] || $empresaId <= 0) {
+            return [];
+        }
+
+        $paresNivel = DB::table('arbolaprobacion_nivel')
+            ->whereIn('usuario_id', $candidatoIds)
+            ->whereNotNull('usuario_orig_id')
+            ->where('usuario_orig_id', '>', 0)
+            ->get(['usuario_id', 'usuario_orig_id']);
+
+        $paresConcepto = DB::table('concepto_solicitudpago_usuario')
+            ->whereIn('usuario_id', $candidatoIds)
+            ->whereNotNull('usuario_orig_id')
+            ->where('usuario_orig_id', '>', 0)
+            ->get(['usuario_id', 'usuario_orig_id']);
+
+        $titularesPorSuplente = [];
+        foreach ($paresNivel->concat($paresConcepto) as $row) {
+            $uid = (int) $row->usuario_id;
+            $titular = (int) $row->usuario_orig_id;
+            if ($uid <= 0 || $titular <= 0) {
+                continue;
+            }
+            $titularesPorSuplente[$uid][$titular] = true;
+        }
+
+        if ($titularesPorSuplente === []) {
+            return [];
+        }
+
+        $todosTitulares = [];
+        foreach ($titularesPorSuplente as $titulares) {
+            foreach (array_keys($titulares) as $titularId) {
+                $todosTitulares[] = (int) $titularId;
+            }
+        }
+        $titularesOk = array_fill_keys(
+            self::filtrarIdsPorEmpresa($todosTitulares, $empresaId),
+            true
+        );
+
+        $ok = [];
+        foreach ($candidatoIds as $uid) {
+            if (! isset($titularesPorSuplente[$uid])) {
+                continue;
+            }
+            foreach (array_keys($titularesPorSuplente[$uid]) as $titularId) {
+                if (isset($titularesOk[$titularId])) {
+                    $ok[] = $uid;
+                    break;
+                }
+            }
+        }
+
+        return array_values(array_unique($ok));
+    }
+
     public static function perteneceAEmpresa(Usuario $usuario, int $empresaId): bool
     {
         if ($empresaId <= 0) {

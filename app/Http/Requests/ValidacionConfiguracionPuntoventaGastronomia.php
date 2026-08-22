@@ -17,6 +17,10 @@ class ValidacionConfiguracionPuntoventaGastronomia extends FormRequest
         if ($this->input('ubicacion_id') === '' || $this->input('ubicacion_id') === '0') {
             $this->merge(['ubicacion_id' => null]);
         }
+        // caja_id no aplica a PC de gastronomía (sí a estacionamiento/bingo).
+        $input = $this->all();
+        unset($input['caja_id']);
+        $this->replace($input);
     }
 
     public function rules()
@@ -34,7 +38,6 @@ class ValidacionConfiguracionPuntoventaGastronomia extends FormRequest
             ],
             'descripcion' => 'nullable|max:255',
             'empresa_id' => 'required|exists:empresa,id',
-            'caja_id' => 'required|exists:caja,id',
             'puntoventa_cae_id' => [
                 'required',
                 Rule::exists('puntoventa', 'id')->where(function ($query) use ($empresaId) {
@@ -80,7 +83,6 @@ class ValidacionConfiguracionPuntoventaGastronomia extends FormRequest
     {
         return [
             'identificador_pc' => 'identificador de PC',
-            'caja_id' => 'caja de recepción',
             'puntoventa_cae_id' => 'punto de venta CAE',
             'puntoventa_caea_id' => 'punto de venta CAEA',
             'ubicacion_id' => 'ubicación',

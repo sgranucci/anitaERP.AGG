@@ -159,6 +159,11 @@ $(function () {
                             <i class="fa fa-file-text-o"></i> Facturar proveedor
                         </a>
                     @endif
+                    @if (!empty($url_nuevo_ticket_ingreso))
+                        <a href="{{ $url_nuevo_ticket_ingreso }}" class="btn btn-outline-light btn-sm" target="_blank" rel="noopener" title="Solicitar ticket de ingreso a planta">
+                            <i class="fa fa-id-badge"></i> Ticket de ingreso
+                        </a>
+                    @endif
                     @if (isset($data) && $data && empty($visualizar))
                         @if (can('actualizar-ordencompra', false))
                             <button type="button" class="btn btn-outline-light btn-sm" data-toggle="modal" data-target="#modalOcCambiarEstado">
@@ -220,6 +225,14 @@ $(function () {
                             <span class="fa fa-history"></span> Historia precios
                         </button>
                         <button type="button" id="oc-boton-arbol" class="btn btn-info btn-sm mx-1 oc-tab-solapa">Árbol aprobación</button>
+                        @if (!empty($mostrar_solapa_ingresos))
+                            <button type="button" id="oc-boton-ingresos" class="btn btn-info btn-sm mx-1 oc-tab-solapa">
+                                <span class="fa fa-id-badge"></span> Ingresos
+                                @if (($tickets_ingreso ?? collect())->count())
+                                    <span class="badge badge-light ml-1">{{ $tickets_ingreso->count() }}</span>
+                                @endif
+                            </button>
+                        @endif
                     @endif
                 </div>
 

@@ -4,7 +4,6 @@ namespace App\Support\Contable\LibroIvaDigital;
 
 use App\Models\Ventas\Venta;
 use App\Support\Database\SqlDialectSupport;
-use App\Support\Ventas\MaquinavendingRmvTipoSupport;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\DB;
@@ -40,7 +39,7 @@ final class LibroIvaDigitalVentasPeriodoSupport
     }
 
     /**
-     * CAE electrónico, o RMV interno vending (Anita p-rg3685.c lo informa sin CAE).
+     * CAE electrónico, o internos sin CAE informables (RMV / FBI / FSL).
      *
      * @param  EloquentBuilder<Venta>|QueryBuilder  $query
      */
@@ -50,21 +49,22 @@ final class LibroIvaDigitalVentasPeriodoSupport
         ?string $aliasTipo = null,
     ): void {
         $colCae = $aliasVenta.'.cae';
-        $query->where(function ($q) use ($colCae, $aliasTipo, $aliasVenta): void {
+        $abrevSinCae = LibroIvaDigitalMapeosSupport::abreviaturasSinCaeInformables();
+        $query->where(function ($q) use ($colCae, $aliasTipo, $aliasVenta, $abrevSinCae): void {
             $q->where(function ($cae) use ($colCae): void {
                 $cae->whereNotNull($colCae)->where($colCae, '<>', '');
             });
             if ($aliasTipo !== null) {
-                $q->orWhere($aliasTipo.'.abreviatura', MaquinavendingRmvTipoSupport::ABREVIATURA);
+                $q->orWhereIn($aliasTipo.'.abreviatura', $abrevSinCae);
 
                 return;
             }
-            $q->orWhereExists(function ($sub) use ($aliasVenta): void {
+            $q->orWhereExists(function ($sub) use ($aliasVenta, $abrevSinCae): void {
                 $sub->selectRaw('1')
-                    ->from('tipotransaccion as tt_lid_rmv')
-                    ->whereColumn('tt_lid_rmv.id', $aliasVenta.'.tipotransaccion_id')
-                    ->where('tt_lid_rmv.abreviatura', MaquinavendingRmvTipoSupport::ABREVIATURA)
-                    ->whereNull('tt_lid_rmv.deleted_at');
+                    ->from('tipotransaccion as tt_lid_sin_cae')
+                    ->whereColumn('tt_lid_sin_cae.id', $aliasVenta.'.tipotransaccion_id')
+                    ->whereIn('tt_lid_sin_cae.abreviatura', $abrevSinCae)
+                    ->whereNull('tt_lid_sin_cae.deleted_at');
             });
         });
     }

@@ -35,6 +35,8 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
 
     private bool $multiempresa = false;
 
+    private string $sheetTitle = 'Mayor plano cuenta';
+
     private int $filaTituloExcel = 1;
 
     private int $filaInicioMeta = 1;
@@ -61,6 +63,14 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
     {
         $this->filtros = $filtros;
         $this->resultado = $resultado;
+
+        return $this;
+    }
+
+    public function setTitle(string $title): self
+    {
+        $sanitizado = MayorPlanoCuentaReporteService::sanitizarNombreHojaExcel($title);
+        $this->sheetTitle = $sanitizado !== '' ? $sanitizado : 'Mayor plano cuenta';
 
         return $this;
     }
@@ -190,7 +200,7 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
 
     public function title(): string
     {
-        return 'Mayor plano cuenta';
+        return $this->sheetTitle;
     }
 
     public function registerEvents(): array

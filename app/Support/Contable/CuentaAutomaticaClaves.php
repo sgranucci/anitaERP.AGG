@@ -116,6 +116,12 @@ final class CuentaAutomaticaClaves
     public const STOCK_TRANSFERENCIA_OTROS_ACTIVOS = 'stock.transferencia_otros_activos';
 
     /**
+     * Anticipos a proveedores (OP adelantada / pago a cuenta).
+     * Vacía = el anticipo queda en la cuenta de proveedores y no hay nada que reclasificar al aplicarlo.
+     */
+    public const PAGO_ANTICIPO_PROVEEDOR = 'pago.anticipo_proveedor';
+
+    /**
      * @return array<string, array{
      *   grupo: string,
      *   descripcion: string,
@@ -493,6 +499,13 @@ final class CuentaAutomaticaClaves
                 'modulo_columna' => null,
                 'env_config' => null,
                 'multiple' => true,
+            ],
+            self::PAGO_ANTICIPO_PROVEEDOR => [
+                'grupo' => 'Pagos a proveedores',
+                'descripcion' => 'Anticipos a proveedores (OP adelantada). Vacía = el anticipo queda en la cuenta de proveedores',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
             ],
         ];
     }

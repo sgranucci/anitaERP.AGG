@@ -1157,4 +1157,13 @@
             <tbody></tbody>
         </table>
     </div>
+
+    @if (!empty($mostrar_solapa_ingresos))
+        <div id="oc-solapa-ingresos" class="oc-solapa" style="display:none;">
+            @include('seguridad.ingreso_proveedor.partials.solapa_vinculada', [
+                'tickets' => $tickets_ingreso ?? collect(),
+                'urlNuevo' => $url_nuevo_ticket_ingreso ?? null,
+            ])
+        </div>
+    @endif
 @endif

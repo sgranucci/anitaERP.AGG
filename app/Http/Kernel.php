@@ -38,6 +38,7 @@ class Kernel extends HttpKernel
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
             \App\Http\Middleware\UsuarioNoSuspendido::class,
             \App\Http\Middleware\RegistrarBitacoraAcceso::class,
+            \App\Http\Middleware\PrevenirEnvioDuplicado::class,
         ],
 
         'api' => [

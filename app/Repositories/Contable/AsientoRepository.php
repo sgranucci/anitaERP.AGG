@@ -3,7 +3,6 @@
 namespace App\Repositories\Contable;
 
 use App\Models\Contable\Asiento;
-use App\Models\Stock\MovimientoStock;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Models\Ventas\Venta;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
@@ -12,6 +11,7 @@ use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Contable\AsientoAlcanceCierreSupport;
 use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
@@ -1113,62 +1113,13 @@ class AsientoRepository implements AsientoRepositoryInterface
 			(int) $data['empresa_id'],
 			(string) $data['fecha'],
 			$alcance,
-			null,
+			(int) (Auth::id() ?? 0) ?: null,
 			$opciones
 		);
 	}
 
 	private function inferirAlcanceCierre(array $data): string
 	{
-		if (! empty($data['cobranza_id'])) {
-			return PeriodoContableCierreSupport::ALCANCE_COBRANZA;
-		}
-
-		if (! empty($data['caja_movimiento_id'])) {
-			return PeriodoContableCierreSupport::ALCANCE_CAJA;
-		}
-
-		if (! empty($data['movimientostock_id'])) {
-			$abrev = strtoupper((string) (
-				MovimientoStock::query()
-					->whereKey((int) $data['movimientostock_id'])
-					->with('tipotransaccion_stock:id,abreviatura')
-					->first()
-					?->tipotransaccion_stock
-					?->abreviatura
-				?? ''
-			));
-			if ($abrev === 'EIND') {
-				return PeriodoContableCierreSupport::ALCANCE_INDUMENTARIA;
-			}
-
-			return PeriodoContableCierreSupport::ALCANCE_STOCK;
-		}
-
-		if (! empty($data['venta_id'])) {
-			return PeriodoContableCierreSupport::ALCANCE_FACTURACION;
-		}
-
-		if (! empty($data['recepcionproveedor_id'])) {
-			return PeriodoContableCierreSupport::ALCANCE_RECEPCION_PROVEEDOR;
-		}
-
-		if (! empty($data['comprobante_proveedor_id'])) {
-			return PeriodoContableCierreSupport::ALCANCE_STOCK;
-		}
-
-		if (! empty($data['tipoasiento_id'])) {
-			$tipoasiento = $this->tipoasientoRepository->find($data['tipoasiento_id']);
-			if ($tipoasiento) {
-				return match (strtoupper((string) ($tipoasiento->abreviatura ?? ''))) {
-					'VTA' => PeriodoContableCierreSupport::ALCANCE_FACTURACION,
-					'TES', 'REM' => PeriodoContableCierreSupport::ALCANCE_CAJA,
-					'COM', 'STK' => PeriodoContableCierreSupport::ALCANCE_STOCK,
-					default => PeriodoContableCierreSupport::ALCANCE_CONTABLE,
-				};
-			}
-		}
-
-		return PeriodoContableCierreSupport::ALCANCE_CONTABLE;
+		return AsientoAlcanceCierreSupport::inferir($data);
 	}
 }

@@ -57,6 +57,11 @@ Recepción {{ $recepcion->numerorecepcion }}
                         <i class="fa fa-check"></i> Confirmar
                     </button>
                     @endif
+                    @if (!empty($url_nuevo_ticket_ingreso))
+                    <a href="{{ $url_nuevo_ticket_ingreso }}" class="btn btn-outline-light btn-sm mr-2" target="_blank" rel="noopener" title="Solicitar ticket de ingreso a planta">
+                        <i class="fa fa-id-badge"></i> Ticket de ingreso
+                    </a>
+                    @endif
                     @if (empty($ocultarVolver))
                     <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado

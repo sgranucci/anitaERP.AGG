@@ -384,37 +384,26 @@
             $("#botonestado").html("<i class='fa fa-bell'></i>&nbsp;Estado "+descripcion);
         });
 
+        function mostrarSolapaProveedor(n) {
+            for (var i = 1; i <= 8; i++) {
+                $(".form" + i).toggle(i === n);
+            }
+            $(".prov-tab-solapa").removeClass("btn-primary font-weight-bold").addClass("btn-info");
+            $("#botonform" + n).removeClass("btn-info").addClass("btn-primary font-weight-bold");
+        }
+
         $("#botonform1").click(function(){
-            $(".form1").show();
-            $(".form2").hide();
-            $(".form3").hide();
-            $(".form4").hide();
-            $(".form5").hide();
-            $(".form6").hide();
-            $(".form7").hide();
+            mostrarSolapaProveedor(1);
         });
 
         $("#botonform2").click(function(){
-            $(".form1").hide();
-            $(".form2").show();
-            $(".form3").hide();
-            $(".form4").hide();
-            $(".form5").hide();
-            $(".form6").hide();
-            $(".form7").hide();
-
+            mostrarSolapaProveedor(2);
 			$("#titulo").html("");
 			$("#titulo").html("<span class='fa fa-cash-register'></span> Datos impuestos");
         });
 
         $("#botonform3").click(function(){
-            $(".form1").hide();
-            $(".form2").hide();
-            $(".form3").show();
-            $(".form4").hide();
-            $(".form5").hide();
-            $(".form6").hide();
-            $(".form7").hide();
+            mostrarSolapaProveedor(3);
 
 	        $("#tbody-tabla .localidades").each(function(index) {
             	var provincia = $(this).parents("tr").find(".provincias");
@@ -432,46 +421,24 @@
         });
 
         $("#botonform4").click(function(){
-            $(".form1").hide();
-            $(".form2").hide();
-            $(".form3").hide();
-            $(".form4").show();
-            $(".form5").hide();
-            $(".form6").hide();
-            $(".form7").hide();
-
-		 	// Hace foco en el campo de la leyenda
+            mostrarSolapaProveedor(4);
 			$("#leyenda").focus();
         });
 
         $("#botonform5").click(function(){
-            $(".form1").hide();
-            $(".form2").hide();
-            $(".form3").hide();
-            $(".form4").hide();
-            $(".form5").show();
-            $(".form6").hide();
-            $(".form7").hide();
+            mostrarSolapaProveedor(5);
         });
 
         $("#botonform6").click(function(){
-            $(".form1").hide();
-            $(".form2").hide();
-            $(".form3").hide();
-            $(".form4").hide();
-            $(".form5").hide();
-            $(".form6").show();
-            $(".form7").hide();
+            mostrarSolapaProveedor(6);
         });
 
         $("#botonform7").click(function(){
-            $(".form1").hide();
-            $(".form2").hide();
-            $(".form3").hide();
-            $(".form4").hide();
-            $(".form5").hide();
-            $(".form6").hide();
-            $(".form7").show();
+            mostrarSolapaProveedor(7);
+        });
+
+        $("#botonform8").click(function(){
+            mostrarSolapaProveedor(8);
         });
 
         $(document).on('click', '.eliminar-documento-fiscal-proveedor', function () {

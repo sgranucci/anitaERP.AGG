@@ -67,6 +67,14 @@ class AperturaPeriodoContable extends Model
         return PeriodoContableCierreSupport::etiquetaAlcance($this->alcance ?? '');
     }
 
+    public function etiquetaDuracion(): string
+    {
+        return PeriodoContableCierreSupport::etiquetaDuracion(
+            (int) $this->duracion_cantidad,
+            (string) ($this->duracion_unidad ?? 'horas')
+        );
+    }
+
     public function estaActiva(): bool
     {
         return $this->estado === 'activa'

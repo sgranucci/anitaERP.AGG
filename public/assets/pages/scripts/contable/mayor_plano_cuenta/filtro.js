@@ -57,6 +57,61 @@ function mayorPlanoEsCampoPuntual($campo) {
     return $campo && $campo.length && $campo.hasClass('mpc-cuenta-puntual');
 }
 
+function mayorPlanoHaySeleccionParticularCuentas() {
+    if (Object.keys(mayorPlanoCuentasSel).length > 0) {
+        return true;
+    }
+
+    return String($('#cuenta_desde_codigo').val() || '').trim() !== ''
+        || String($('#cuenta_hasta_codigo').val() || '').trim() !== '';
+}
+
+function mayorPlanoDimensionExcelSolapas() {
+    var hayCuentas = mayorPlanoHaySeleccionParticularCuentas();
+    var hayCc = mayorPlanoHayFiltroCentrocosto();
+    if (!hayCuentas && !hayCc) {
+        return null;
+    }
+    if (hayCuentas && hayCc && $('#agrupar_por_cc').is(':checked')) {
+        return 'centrocosto';
+    }
+    if (hayCuentas) {
+        return 'cuenta';
+    }
+
+    return 'centrocosto';
+}
+
+function mayorPlanoActualizarExcelSolapasSeparadas() {
+    var $chk = $('#excel_solapas_separadas');
+    var $label = $('#excel_solapas_separadas_label');
+    var $ayuda = $('#excel_solapas_separadas_ayuda');
+    if (!$chk.length) {
+        return;
+    }
+
+    var dimension = mayorPlanoDimensionExcelSolapas();
+    var habilitado = dimension !== null;
+    $chk.prop('disabled', !habilitado);
+    if (!habilitado) {
+        $chk.prop('checked', false);
+    }
+
+    if (dimension === 'cuenta') {
+        $label.text('Excel en solapas separadas (una por cuenta contable)');
+        $ayuda.html('Al exportar Excel, cada cuenta elegida va en su propia solapa.');
+    } else if (dimension === 'centrocosto') {
+        $label.text('Excel en solapas separadas (una por centro de costo)');
+        $ayuda.html('Al exportar Excel, cada centro de costo elegido va en su propia solapa.');
+    } else {
+        $label.text('Excel en solapas separadas (una por cuenta o centro de costo)');
+        $ayuda.html(
+            'Se habilita al elegir cuentas o centros de costo en particular.'
+            + ' <span class="d-none d-md-inline"> · F1 en los c&oacute;digos abre la consulta.</span>'
+        );
+    }
+}
+
 function mayorPlanoSincronizarHiddenCuentas() {
     var codigos = Object.keys(mayorPlanoCuentasSel)
         .map(function (c) {
@@ -75,6 +130,8 @@ function mayorPlanoSincronizarHiddenCuentas() {
     if ($aviso.length) {
         $aviso.toggle(codigos.length === 0);
     }
+
+    mayorPlanoActualizarExcelSolapasSeparadas();
 }
 
 function mayorPlanoRenderTablaCuentas() {
@@ -505,6 +562,7 @@ function mayorPlanoSincronizarHiddenCentrocostos() {
         return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' });
     });
     $('#mpc_centrocostos_codigo').val(codigos.join(','));
+    mayorPlanoActualizarExcelSolapasSeparadas();
 }
 
 function mayorPlanoHayFiltroCentrocosto() {
@@ -641,13 +699,22 @@ $(function () {
             $campo.find('input').val('');
         }
     });
-    $(document).on('change.mpcCc blur.mpcCc', '#cc_desde, #cc_hasta', mayorPlanoAplicarIncluirSinCcAutomatico);
+    $(document).on('change.mpcCc blur.mpcCc', '#cc_desde, #cc_hasta', function () {
+        mayorPlanoAplicarIncluirSinCcAutomatico();
+        mayorPlanoActualizarExcelSolapasSeparadas();
+    });
     $(document).on('change.mpcCc', '#incluir_sin_cc', function () {
         $('#incluir_sin_cc_manual').val('1');
     });
+    $(document).on('change.mpcExcelSolapas', '#agrupar_por_cc, #cuenta_desde_codigo, #cuenta_hasta_codigo', mayorPlanoActualizarExcelSolapasSeparadas);
     $('#form-mayor-plano-cuenta').on('submit.mpcCc', function () {
         mayorPlanoAdoptarCcPuntualPendiente();
         mayorPlanoSincronizarHiddenCentrocostos();
         mayorPlanoAplicarIncluirSinCcAutomatico();
+        // Checkbox disabled no se envía: forzar 0 vía hidden ya presente.
+        if ($('#excel_solapas_separadas').prop('disabled')) {
+            $('#excel_solapas_separadas').prop('checked', false);
+        }
     });
+    mayorPlanoActualizarExcelSolapasSeparadas();
 });

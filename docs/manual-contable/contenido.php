@@ -40,7 +40,9 @@ return [
                     ['Fecha de cierre (fecha hasta)', 'Última fecha incluida en el bloqueo (inclusive). Es editable al programar.'],
                     ['Fecha de ejecución', 'Día en que el sistema (o usted) aplica el cierre programado.'],
                     ['Hora de ejecución', 'Hora del día. En pantalla 24:00 significa «fin de día»; el job la traduce a CONTABLE_CIERRE_HORA_FIN_DIA (default 23:50). Vacío = mismo fin de día.'],
-                    ['Alcance / módulo', 'Ámbito del cierre: general o un proceso (cobranza, caja, stock, facturación…).'],
+                    ['Alcance / módulo', 'Ámbito del cierre: general, un módulo completo (Caja, Ventas, Compras, Stock, Sueldos, Contable) o un proceso dentro de él (cobranza, caja, interbanking, facturación, cuentas a pagar, stock, transferencia, recepción de proveedores, indumentaria, asientos manuales).'],
+                    ['Cuentas a pagar', 'Facturas de proveedor. Está dentro del módulo Compras y se valida por la fecha de IVA (la de contabilización), no por la fecha del comprobante.'],
+                    ['Recepción de proveedores', 'Está dentro del módulo Stock: el cierre de Stock alcanza las recepciones.'],
                     ['Cierre general', 'Bloquea todos los módulos y congela el snapshot de saldos contables.'],
                     ['Agenda del mes', 'Grilla para programar cierres del mes en curso (o del mes elegido).'],
                     ['Apertura programada', 'Permiso temporal para operar fechas ya cerradas, limitado a un módulo y un usuario.'],
@@ -55,12 +57,14 @@ return [
                 'Cuando intenta grabar una cobranza, un movimiento de stock, un asiento o una factura en una fecha ya cerrada para ese módulo, el sistema lo impide e indica hasta qué fecha está cerrado el período.',
                 'Excepciones: (1) apertura programada activa para su usuario y ese alcance; (2) permiso especial de operar en período cerrado; (3) facturación electrónica WSFE/CAE (la fecha la valida AFIP/ARCA). Facturación manual o CAEA sí aplica el cierre.',
                 'Si hay un cierre general y otro por módulo, prevalece el más restrictivo (la fecha hasta más reciente entre ambos).',
+                'La fecha que se valida es la que define el período de cada proceso: en facturas de proveedor es la fecha de IVA (la factura puede tener fecha anterior), en facturación es la fecha de jornada y en el resto es la fecha del comprobante o del movimiento.',
             ],
             'tabla' => [
                 'caption' => 'Ejemplo práctico (agenda de agosto)',
                 'headers' => ['Módulo', 'Ejecución', 'Fecha cierre', 'Efecto'],
                 'rows' => [
-                    ['Recepción de proveedores', '05/08 a las 24:00', '31/07', 'Desde el fin del 05/08 no se graban recepciones con fecha ≤ 31/07.'],
+                    ['Recepción de proveedores (Stock)', '05/08 a las 24:00', '31/07', 'Desde el fin del 05/08 no se graban recepciones con fecha ≤ 31/07.'],
+                    ['Cuentas a pagar (Compras)', '10/08 a las 24:00', '31/07', 'No se cargan ni contabilizan facturas de proveedor con fecha de IVA ≤ 31/07.'],
                     ['Facturación', '01/08 a las 24:00', '31/07', 'Bloquea por fecha de jornada ≤ 31/07 (no solo por fecha del comprobante).'],
                     ['General (todos)', 'Cuando Contaduría lo indique', '31/07', 'Bloquea todos los módulos y congela saldos.'],
                 ],
@@ -137,8 +141,8 @@ return [
             ],
             'parrafos' => [
                 'Pantalla: Contable → Aprobaciones y períodos → Aperturas programadas.',
-                'Sirve para pedir permiso temporal de operar fechas ya cerradas. Indique empresa, rango de fechas de operación, módulo (alcance), duración en horas o días, usuario a habilitar y motivo.',
-                'El encargado aprueba o habilita desde el aviso por correo (enlace firmado) o desde la pantalla. Al vencer la ventana de tiempo, el permiso se cierra solo.',
+                'Sirve para pedir permiso temporal de operar fechas ya cerradas. Indique empresa, rango de fechas de operación, módulo (alcance), duración en minutos, horas o días, usuario a habilitar y motivo.',
+                'Según la instalación: modo inmediata (al solicitar queda activa y el mail va al solicitante) o modo aprobación (el encargado habilita desde el aviso por correo o desde la pantalla). Al vencer la ventana de tiempo, el permiso se cierra solo.',
             ],
             'items' => [
                 'Una apertura “General” habilita todos los módulos; una apertura de un módulo solo ese alcance.',

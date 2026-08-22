@@ -9,6 +9,8 @@ use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaBridgeReader
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalConceptoIvacompraSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalIvaSimpleSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasFslAnitaArmadoSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasFslAnitaBridgeReader;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasPeriodoSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -22,6 +24,7 @@ class LibroIvaDigitalIvaSimpleGenerador
 {
     public function __construct(
         private readonly LibroIvaDigitalComprasAnitaBridgeReader $comprasAnitaBridgeReader,
+        private readonly LibroIvaDigitalVentasFslAnitaBridgeReader $fslAnitaBridgeReader,
     ) {
     }
 
@@ -29,7 +32,8 @@ class LibroIvaDigitalIvaSimpleGenerador
      * @param  array{
      *     por_fecha_jornada?: bool,
      *     prorrateo_cf_global?: bool,
-     *     completar_compras_anita?: bool
+     *     completar_compras_anita?: bool,
+     *     completar_fsl_anita?: bool
      * }  $opciones
      * @return array{
      *     debito_fiscal: string,
@@ -51,10 +55,11 @@ class LibroIvaDigitalIvaSimpleGenerador
         $hasta = date('Y-m-t', strtotime($desde));
         $porFechaJornada = (bool) ($opciones['por_fecha_jornada'] ?? false);
         $completarAnita = (bool) ($opciones['completar_compras_anita'] ?? true);
+        $completarFslAnita = (bool) ($opciones['completar_fsl_anita'] ?? true);
         $prorrateoGlobal = (bool) ($opciones['prorrateo_cf_global'] ?? false);
 
-        $ventasDebito = $this->ventasDebitoFiscal($empresaId, $desde, $hasta, false, $porFechaJornada);
-        $ventasRestitucion = $this->ventasDebitoFiscal($empresaId, $desde, $hasta, true, $porFechaJornada);
+        $ventasDebito = $this->ventasDebitoFiscal($empresaId, $desde, $hasta, false, $porFechaJornada, $completarFslAnita);
+        $ventasRestitucion = $this->ventasDebitoFiscal($empresaId, $desde, $hasta, true, $porFechaJornada, false);
         $compras = $this->comprasCreditoFiscal(
             $empresaId,
             $desde,
@@ -141,6 +146,7 @@ class LibroIvaDigitalIvaSimpleGenerador
         string $hasta,
         bool $soloNotasCredito,
         bool $porFechaJornada,
+        bool $completarFslAnita = false,
     ): array {
         $query = DB::table('venta')
             ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
@@ -161,7 +167,7 @@ class LibroIvaDigitalIvaSimpleGenerador
             ->leftJoin('actividad_arca as aa_pv', 'aa_pv.id', '=', 'puntoventa.actividad_arca_id')
             ->leftJoin('condicioniva', 'condicioniva.id', '=', 'venta.condicioniva_id')
             ->where('puntoventa.empresa_id', $empresaId)
-            ->whereNotIn('tt.abreviatura', ['IZV', 'FBI', 'FSL']);
+            ->where('tt.abreviatura', '<>', 'IZV');
 
         LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroFecha($query, $desde, $hasta, $porFechaJornada);
         LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroCaeORmv($query, 'venta', 'tt');
@@ -215,7 +221,7 @@ class LibroIvaDigitalIvaSimpleGenerador
         }
 
         if (! $soloNotasCredito) {
-            $exentas = $this->ventasExentasDebito($empresaId, $desde, $hasta, $porFechaJornada);
+            $exentas = $this->ventasExentasDebito($empresaId, $desde, $hasta, $porFechaJornada, $completarFslAnita);
             $lineas = array_merge($lineas, $exentas['lineas']);
             $detalle = array_merge($detalle, $exentas['detalle']);
         }
@@ -226,8 +232,13 @@ class LibroIvaDigitalIvaSimpleGenerador
     /**
      * @return array{lineas: list<string>, detalle: list<array<string, mixed>>}
      */
-    private function ventasExentasDebito(int $empresaId, string $desde, string $hasta, bool $porFechaJornada): array
-    {
+    private function ventasExentasDebito(
+        int $empresaId,
+        string $desde,
+        string $hasta,
+        bool $porFechaJornada,
+        bool $completarFslAnita,
+    ): array {
         $query = DB::table('venta')
             ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
             ->join('tipotransaccion as tt', 'tt.id', '=', 'venta.tipotransaccion_id')
@@ -241,7 +252,7 @@ class LibroIvaDigitalIvaSimpleGenerador
             ->leftJoin('actividad_arca', 'actividad_arca.id', '=', 'venta.actividad_arca_id')
             ->leftJoin('actividad_arca as aa_pv', 'aa_pv.id', '=', 'puntoventa.actividad_arca_id')
             ->where('puntoventa.empresa_id', $empresaId)
-            ->whereNotIn('tt.abreviatura', ['IZV', 'FBI', 'FSL'])
+            ->where('tt.abreviatura', '<>', 'IZV')
             ->where(function ($q): void {
                 $q->whereNull('tt.signo')->orWhere('tt.signo', '>=', 0);
             });
@@ -259,14 +270,56 @@ class LibroIvaDigitalIvaSimpleGenerador
             ->havingRaw('SUM(ABS(vi.importe)) > 0')
             ->get();
 
-        $lineas = [];
-        $detalle = [];
+        /** @var array<string, array{actividad_codigo: string, actividad_nombre: string, exento: float}> $acum */
+        $acum = [];
         foreach ($exentos as $row) {
             $actividad = LibroIvaDigitalIvaSimpleSupport::normalizarCodigoActividad((string) $row->actividad);
-            $exento = (float) $row->exento;
+            $clave = $actividad;
+            if (! isset($acum[$clave])) {
+                $acum[$clave] = [
+                    'actividad_codigo' => $actividad,
+                    'actividad_nombre' => (string) $row->actividad_nombre,
+                    'exento' => 0.0,
+                ];
+            }
+            $acum[$clave]['exento'] += (float) $row->exento;
+        }
+
+        if ($completarFslAnita) {
+            $clavesErpFsl = $this->clavesFslErp($empresaId, $desde, $hasta, $porFechaJornada);
+            foreach ($this->fslAnitaBridgeReader->listarPeriodo($empresaId, $desde, $hasta, $porFechaJornada) as $filaAnita) {
+                $claveNat = LibroIvaDigitalVentasFslAnitaArmadoSupport::claveDesdeFilaAnita($filaAnita);
+                if (isset($clavesErpFsl[$claveNat])) {
+                    continue;
+                }
+                $fila = LibroIvaDigitalVentasFslAnitaArmadoSupport::filaIvaSimpleExento($filaAnita);
+                if ($fila === null) {
+                    continue;
+                }
+                $actividad = LibroIvaDigitalIvaSimpleSupport::normalizarCodigoActividad(
+                    (string) $fila['actividad_codigo'],
+                );
+                if (! isset($acum[$actividad])) {
+                    $acum[$actividad] = [
+                        'actividad_codigo' => $actividad,
+                        'actividad_nombre' => (string) $fila['actividad_nombre'],
+                        'exento' => 0.0,
+                    ];
+                }
+                $acum[$actividad]['exento'] += (float) $fila['exento'];
+            }
+        }
+
+        $lineas = [];
+        $detalle = [];
+        foreach ($acum as $row) {
+            $exento = (float) $row['exento'];
+            if ($exento <= 0.0001) {
+                continue;
+            }
             $fila = [
-                'actividad_codigo' => $actividad,
-                'actividad_nombre' => (string) $row->actividad_nombre,
+                'actividad_codigo' => $row['actividad_codigo'],
+                'actividad_nombre' => $row['actividad_nombre'],
                 'tipo_operacion' => '3',
                 'tipo_sujeto' => null,
                 'alicuota_codigo' => null,
@@ -282,6 +335,35 @@ class LibroIvaDigitalIvaSimpleGenerador
         }
 
         return ['lineas' => $lineas, 'detalle' => $detalle];
+    }
+
+    /**
+     * @return array<string, true>
+     */
+    private function clavesFslErp(
+        int $empresaId,
+        string $desde,
+        string $hasta,
+        bool $porFechaJornada,
+    ): array {
+        $query = DB::table('venta')
+            ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
+            ->join('tipotransaccion as tt', 'tt.id', '=', 'venta.tipotransaccion_id')
+            ->where('puntoventa.empresa_id', $empresaId)
+            ->where('tt.abreviatura', 'FSL');
+
+        LibroIvaDigitalVentasPeriodoSupport::aplicarFiltroFecha($query, $desde, $hasta, $porFechaJornada);
+
+        $claves = [];
+        foreach ($query->select('puntoventa.codigo', 'venta.numerocomprobante')->get() as $row) {
+            $pv = (int) preg_replace('/\D+/', '', (string) $row->codigo);
+            $claves[LibroIvaDigitalVentasFslAnitaArmadoSupport::claveNatural(
+                $pv,
+                (int) $row->numerocomprobante,
+            )] = true;
+        }
+
+        return $claves;
     }
 
     /**

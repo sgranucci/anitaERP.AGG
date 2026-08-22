@@ -37,12 +37,12 @@ class TransferenciaMercaderiaController extends Controller
         can('crear-transferencia-mercaderia');
 
         $tipotransacciones = $this->tipotransaccionStockRepository->all(['T'], ['A']);
-        $defaults = $this->transferenciaService->defaultsUsuario();
         $empresa_query = $this->empresaRepository->allFiltrado();
         $empresa_id = old('empresa_id', $empresa_query->first()->id ?? null);
+        $defaults = $this->transferenciaService->defaultsUsuario((int) $empresa_id);
 
-        $depSalida = $this->resolverDepositoDefault($defaults['deposito_salida_id'] ?? null, $empresa_id);
-        $depEntrada = $this->resolverDepositoDefault($defaults['deposito_entrada_id'] ?? null, $empresa_id);
+        $depSalida = $this->resolverDepositoDefault($defaults['deposito_salida_id'] ?? null, $empresa_id, true);
+        $depEntrada = $this->resolverDepositoDefault($defaults['deposito_entrada_id'] ?? null, $empresa_id, false);
         $bienUsoDestino = $this->resolverBienUsoDefault($defaults['bien_uso_destino_id'] ?? null);
         $bienUsoOrigen = $this->resolverBienUsoDefault($defaults['bien_uso_origen_id'] ?? null);
         $bienesUsoActivos = BienUso::query()
@@ -171,7 +171,7 @@ class TransferenciaMercaderiaController extends Controller
         abort(403);
     }
 
-    private function resolverDepositoDefault($id, $empresaId = null): ?Depmae
+    private function resolverDepositoDefault($id, $empresaId = null, bool $filtrarUsuario = true): ?Depmae
     {
         $id = (int) $id;
         if ($id <= 0) {
@@ -184,7 +184,9 @@ class TransferenciaMercaderiaController extends Controller
             $query->paraEmpresa($empresaId);
         }
 
-        UsuarioDepositoAutorizado::aplicarFiltroQuery($query);
+        if ($filtrarUsuario) {
+            UsuarioDepositoAutorizado::aplicarFiltroQuery($query);
+        }
 
         return $query->first();
     }
@@ -246,6 +248,29 @@ class TransferenciaMercaderiaController extends Controller
         }
 
         return response()->json(['ok' => true, 'filas' => $filas]);
+    }
+
+    public function resolverArticulo(Request $request): JsonResponse
+    {
+        can('crear-transferencia-mercaderia');
+
+        $codigo = trim((string) $request->input('codigo', ''));
+        $depositoId = (int) $request->input('deposito_id', 0);
+
+        if ($codigo === '') {
+            return response()->json(['ok' => false, 'mensaje' => 'Ingrese o pickee el SKU o el código de barras.'], 422);
+        }
+        if ($depositoId <= 0) {
+            return response()->json(['ok' => false, 'mensaje' => 'Seleccione depósito de salida.'], 422);
+        }
+
+        try {
+            $resultado = $this->transferenciaService->resolverArticuloPickeo($codigo, $depositoId);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+
+        return response()->json($resultado, ! empty($resultado['ok']) ? 200 : 422);
     }
 
     public function saldoArticulo(Request $request): JsonResponse

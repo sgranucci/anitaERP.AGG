@@ -187,6 +187,13 @@
                 </div>
             @endif
 
+            @if (! empty($resultado['advertencia_datos']))
+                <div class="alert alert-warning">
+                    <i class="fa fa-exclamation-triangle"></i>
+                    {{ $resultado['advertencia_datos'] }}
+                </div>
+            @endif
+
             @if (can('exportar-ingresos-brutos', false) && (($resultado['totales']['registros'] ?? 0) > 0))
                 <div class="mb-2">
                     @include('includes.exportar-tabla-queryparams', [

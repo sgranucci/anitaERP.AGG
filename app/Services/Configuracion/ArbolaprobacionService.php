@@ -782,6 +782,8 @@ class ArbolaprobacionService
     /**
      * Restringe firmantes del nivel a usuarios asignados a la empresa del comprobante (usuario_empresa).
      * Usuario sin filas en usuario_empresa aplica a todas las empresas (aprobador grupal).
+     * Suplentes de reemplazo (usuario_orig_id) pueden firmar si el titular aplica a la empresa,
+     * aunque el suplente sea de otra (vacaciones intercompany).
      *
      * @param  array{proximonivel: int, proximousuario: mixed, proximousuarios: array, documento_estado_al_aprobar: mixed}  $proximoNivel
      * @return array{proximonivel: int, proximousuario: mixed, proximousuarios: array, documento_estado_al_aprobar: mixed}
@@ -796,7 +798,7 @@ class ArbolaprobacionService
 
         $antes = count($uids);
         $filtrados = $empresaId > 0
-            ? $this->usuarioRepository->filtrarIdsOperativosPorEmpresa($uids, $empresaId)
+            ? $this->usuarioRepository->filtrarIdsFirmantesArbolPorEmpresa($uids, $empresaId)
             : $this->usuarioRepository->filtrarIdsOperativos($uids);
 
         if ($antes > 0 && count($filtrados) === 0) {

@@ -16,6 +16,7 @@ use App\Models\Stock\Stock_Etiqueta;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Models\Stock\Unidadmedida;
 use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
 use App\Support\Stock\RecepcionProveedorSurmarListadoFiltros;
@@ -976,6 +977,13 @@ class RecepcionProveedorSurmarService
 
         $signoDb = (int) $tipoStock->getRawOriginal('signo');
         $concepto = 'Recepción Surmar '.$recepcion->numerorecepcion;
+
+        // Confirmar no pasa por RecepcionProveedorService: el cierre se valida acá.
+        PeriodoContableCierreSupport::assertOperacionPermitida(
+            (int) $recepcion->empresa_id,
+            $recepcion->fecha->format('Y-m-d'),
+            PeriodoContableCierreSupport::ALCANCE_RECEPCION_PROVEEDOR
+        );
 
         $mov = MovimientoStock::create([
             'fecha' => $recepcion->fecha->format('Y-m-d'),

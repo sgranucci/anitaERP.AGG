@@ -6,11 +6,9 @@ use App\Models\Caja\Bingo\ConfiguracionPuntoventaBingo;
 use App\Models\Caja\Caja;
 use App\Models\Caja\Caja_Asignacion;
 use App\Models\Caja\Estacionamiento\ConfiguracionPuntoventaEstacionamiento;
-use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
 use App\Queries\Caja\Caja_AsignacionQueryInterface;
 use App\Support\Caja\Bingo\BingoIdentificadorPc;
 use App\Support\Caja\Estacionamiento\EstacionamientoIdentificadorPc;
-use App\Support\Ventas\GastronomiaIdentificadorPc;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -19,7 +17,10 @@ use Illuminate\Support\Facades\Auth;
  * Resuelve la caja física para recepción de rendiciones / movimientos.
  *
  * Orden: caja explícita → (si requiere asignación) caja_asignacion del día →
- * config PC (estacionamiento / gastronomía / bingo) → caja default.
+ * config PC (estacionamiento / bingo) → caja default.
+ *
+ * Las PC de gastronomía no definen caja_id: el POS no es caja de recepción;
+ * las rendiciones de gastronomía toman caja por parámetro, asignación o default.
  */
 final class CajaRecepcionPcSupport
 {
@@ -114,7 +115,6 @@ final class CajaRecepcionPcSupport
     {
         $candidatos = [
             EstacionamientoIdentificadorPc::resolver($request),
-            GastronomiaIdentificadorPc::resolver($request),
             BingoIdentificadorPc::resolver($request),
         ];
 
@@ -139,7 +139,6 @@ final class CajaRecepcionPcSupport
 
         $tablas = [
             ConfiguracionPuntoventaEstacionamiento::class,
-            ConfiguracionPuntoventaGastronomia::class,
             ConfiguracionPuntoventaBingo::class,
         ];
 

@@ -35,7 +35,11 @@
                 <div class="form-group row">
                     <label for="fecha" class="col-lg-4 control-label text-right pr-2">Fecha</label>
                     <div class="col-lg-5">
-                        <input type="date" name="fecha" id="fecha" class="form-control" value="{{old('fecha', $data->fecha ?? date('Y-m-d'))}}">
+                        <input type="date" name="fecha" id="fecha" class="form-control"
+                               value="{{ old('fecha', isset($data) && $data->fecha ? (\Illuminate\Support\Carbon::parse($data->fecha)->format('Y-m-d')) : date('Y-m-d')) }}"
+                               data-cierre-url="{{ rtrim((string) config('app.app_carpeta'), '/') }}/contable/cierre-periodo/validar-fecha"
+                               onchange="window.anitaValidarCierreAsiento && window.anitaValidarCierreAsiento(true)"
+                               onblur="window.anitaValidarCierreAsiento && window.anitaValidarCierreAsiento(true)">
                     </div>
                 </div>
                 @if ((int) ($data->anita_nro_asiento ?? 0) > 0)

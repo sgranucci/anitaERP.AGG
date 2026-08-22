@@ -156,9 +156,7 @@ class PagoproveedorAnularRevertirService
                     $fechaOp,
                     null,
                     $leyenda,
-                    false,
-                    null,
-                    null
+                    alcanceCierre: PeriodoContableCierreSupport::ALCANCE_CAJA
                 );
                 if (! empty($resAsiento['asiento_id'])) {
                     Asiento::query()->where('id', (int) $resAsiento['asiento_id'])->update([

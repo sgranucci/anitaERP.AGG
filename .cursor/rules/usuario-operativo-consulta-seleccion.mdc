@@ -41,6 +41,8 @@ $usuarios = $this->usuarioRepository->listadoOperativoParaSelector(
 // Listas de IDs (árbol, niveles, destinatarios)
 $ids = $this->usuarioRepository->filtrarIdsOperativosPorEmpresa($usuarioIds, $empresaId);
 $ids = $this->usuarioRepository->filtrarIdsOperativos($usuarioIds);
+// Firmantes del árbol (incluye suplente intercompany vía usuario_orig_id)
+$ids = $this->usuarioRepository->filtrarIdsFirmantesArbolPorEmpresa($usuarioIds, $empresaId);
 
 // Relación depósito admin / avisos préstamo
 ->whereHas('usuarios', fn ($q) => $q->soloActivos())

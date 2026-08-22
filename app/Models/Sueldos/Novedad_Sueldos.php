@@ -35,6 +35,7 @@ class Novedad_Sueldos extends Model implements Auditable
         'origen',
         'ausencia_id',
         'descuento_fallo_id',
+        'sancion_id',
         'usuario_id',
         'observacion',
     ];
@@ -54,6 +55,7 @@ class Novedad_Sueldos extends Model implements Auditable
         'periodo' => 'integer',
         'ausencia_id' => 'integer',
         'descuento_fallo_id' => 'integer',
+        'sancion_id' => 'integer',
         'usuario_id' => 'integer',
     ];
 
@@ -96,6 +98,11 @@ class Novedad_Sueldos extends Model implements Auditable
     public function descuentoFallo(): BelongsTo
     {
         return $this->belongsTo(DescuentoFallo_Sueldos::class, 'descuento_fallo_id');
+    }
+
+    public function sancion(): BelongsTo
+    {
+        return $this->belongsTo(Empleado_Sancion_Sueldos::class, 'sancion_id');
     }
 
     public function estadoLabel(): string

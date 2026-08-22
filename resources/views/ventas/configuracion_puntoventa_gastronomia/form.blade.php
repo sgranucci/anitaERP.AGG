@@ -1,14 +1,18 @@
+@php
+    $lbl = 'col-lg-4 control-label text-right pr-2';
+    $inp = 'col-lg-7';
+@endphp
 <div class="form-group row">
-    <label for="identificador_pc" class="col-lg-3 col-form-label requerido">Identificador de PC</label>
-    <div class="col-lg-8">
+    <label for="identificador_pc" class="{{ $lbl }} requerido">Identificador de PC</label>
+    <div class="{{ $inp }}">
         <input type="text" name="identificador_pc" id="identificador_pc" class="form-control"
             value="{{ old('identificador_pc', $data->exists ? $data->identificador_pc : \App\Support\Ventas\GastronomiaIdentificadorPc::resolver(request())) }}" required maxlength="100"/>
-        <small class="form-text text-muted">IP, hostname o código único de la terminal. El facturador resuelve la empresa desde esta fila (una configuración por PC). Con <code>GASTRONOMIA_IDENTIFICADOR_USAR_IP_CLIENTE=true</code> debe coincidir con la IP que ve el servidor para ese navegador.</small>
+        <small class="form-text text-muted">IP, hostname o código único de la terminal de gastronomía. El facturador resuelve la empresa desde esta fila (una configuración por PC). Con <code>GASTRONOMIA_IDENTIFICADOR_USAR_IP_CLIENTE=true</code> debe coincidir con la IP que ve el servidor para ese navegador.</small>
     </div>
 </div>
 <div class="form-group row">
-    <label for="descripcion" class="col-lg-3 col-form-label">Descripción</label>
-    <div class="col-lg-8">
+    <label for="descripcion" class="{{ $lbl }}">Descripción</label>
+    <div class="{{ $inp }}">
         <input type="text" name="descripcion" id="descripcion" class="form-control"
             value="{{ old('descripcion', $data->descripcion ?? '') }}" maxlength="255"/>
         <small class="form-text text-muted">Opcional: nombre amigable (ej. Caja salón, Terminal cocina).</small>
@@ -18,12 +22,12 @@
     'empresa_query' => $empresa_query,
     'empresa_id' => $data->empresa_id ?? null,
     'solo_lectura' => ! empty($data->id),
-    'col_input' => 'col-lg-8',
+    'col_label' => 'col-lg-4 text-right pr-2',
+    'col_input' => $inp,
 ])
-@include('caja.partials.campo_caja_config_pc')
 <div class="form-group row">
-    <label for="puntoventa_cae_id" class="col-lg-3 col-form-label requerido">Punto de venta CAE</label>
-    <div class="col-lg-8">
+    <label for="puntoventa_cae_id" class="{{ $lbl }} requerido">Punto de venta CAE</label>
+    <div class="{{ $inp }}">
         <select name="puntoventa_cae_id" id="puntoventa_cae_id" class="form-control" required>
             <option value="">Seleccione…</option>
             @foreach ($puntoventa_cae_query as $pv)
@@ -35,8 +39,8 @@
     </div>
 </div>
 <div class="form-group row">
-    <label for="puntoventa_caea_id" class="col-lg-3 col-form-label requerido">Punto de venta CAEA</label>
-    <div class="col-lg-8">
+    <label for="puntoventa_caea_id" class="{{ $lbl }} requerido">Punto de venta CAEA</label>
+    <div class="{{ $inp }}">
         <select name="puntoventa_caea_id" id="puntoventa_caea_id" class="form-control" required>
             <option value="">Seleccione…</option>
             @foreach ($puntoventa_caea_query as $pv)
@@ -48,8 +52,8 @@
     </div>
 </div>
 <div class="form-group row">
-    <label for="ubicacion_id" class="col-lg-3 col-form-label">Ubicación (filtro mesas)</label>
-    <div class="col-lg-8">
+    <label for="ubicacion_id" class="{{ $lbl }}">Ubicación (filtro mesas)</label>
+    <div class="{{ $inp }}">
         <select name="ubicacion_id" id="ubicacion_id" class="form-control">
             <option value="">Todas las ubicaciones</option>
             @foreach ($ubicacion_query as $ubicacion)
@@ -62,8 +66,8 @@
     </div>
 </div>
 <div class="form-group row">
-    <label for="listaprecio_id" class="col-lg-3 col-form-label requerido">Lista de precios (POS gastronomía)</label>
-    <div class="col-lg-8">
+    <label for="listaprecio_id" class="{{ $lbl }} requerido">Lista de precios (POS gastronomía)</label>
+    <div class="{{ $inp }}">
         <select name="listaprecio_id" id="listaprecio_id" class="form-control" required>
             <option value="">Seleccione…</option>
             @foreach ($listaprecio_query as $lp)
@@ -72,12 +76,12 @@
                 </option>
             @endforeach
         </select>
-        <small class="form-text text-muted">Precios sugeridos del catálogo (SKU configurado) en el proceso de facturación gastronómía.</small>
+        <small class="form-text text-muted">Precios sugeridos del catálogo (SKU configurado) en el proceso de facturación gastronomía.</small>
     </div>
 </div>
 <div class="form-group row">
-    <label for="deposito_venta_id" class="col-lg-3 col-form-label requerido">Depósito artículos facturados</label>
-    <div class="col-lg-8">
+    <label for="deposito_venta_id" class="{{ $lbl }} requerido">Depósito artículos facturados</label>
+    <div class="{{ $inp }}">
         <select name="deposito_venta_id" id="deposito_venta_id" class="form-control" required>
             <option value="">Seleccione…</option>
             @foreach ($deposito_query as $dep)
@@ -90,8 +94,8 @@
     </div>
 </div>
 <div class="form-group row">
-    <label for="deposito_insumos_id" class="col-lg-3 col-form-label requerido">Depósito descuento de insumos</label>
-    <div class="col-lg-8">
+    <label for="deposito_insumos_id" class="{{ $lbl }} requerido">Depósito descuento de insumos</label>
+    <div class="{{ $inp }}">
         <select name="deposito_insumos_id" id="deposito_insumos_id" class="form-control" required>
             <option value="">Seleccione…</option>
             @foreach ($deposito_query as $dep)
@@ -104,8 +108,8 @@
     </div>
 </div>
 <div class="form-group row">
-    <label for="tipotransaccion_id" class="col-lg-3 col-form-label requerido">Tipo de transacción (factura)</label>
-    <div class="col-lg-8">
+    <label for="tipotransaccion_id" class="{{ $lbl }} requerido">Tipo de transacción (factura)</label>
+    <div class="{{ $inp }}">
         <select name="tipotransaccion_id" id="tipotransaccion_id" class="form-control" required>
             <option value="">Seleccione…</option>
             @foreach ($tipotransaccion_query as $tt)
@@ -118,8 +122,8 @@
     </div>
 </div>
 <div class="form-group row">
-    <label for="tipotransaccion_nota_credito_id" class="col-lg-3 col-form-label">Tipo de transacción (nota de crédito)</label>
-    <div class="col-lg-8">
+    <label for="tipotransaccion_nota_credito_id" class="{{ $lbl }}">Tipo de transacción (nota de crédito)</label>
+    <div class="{{ $inp }}">
         <select name="tipotransaccion_nota_credito_id" id="tipotransaccion_nota_credito_id" class="form-control">
             <option value="">— Usar respaldo .env —</option>
             @foreach ($tipotransaccion_nota_credito_query as $tt)
@@ -132,8 +136,8 @@
     </div>
 </div>
 <div class="form-group row">
-    <label for="tipotransaccion_caja_id" class="col-lg-3 col-form-label requerido">Tipo de transacción de caja (cobranza)</label>
-    <div class="col-lg-8">
+    <label for="tipotransaccion_caja_id" class="{{ $lbl }} requerido">Tipo de transacción de caja (cobranza)</label>
+    <div class="{{ $inp }}">
         <select name="tipotransaccion_caja_id" id="tipotransaccion_caja_id" class="form-control" required>
             <option value="">Seleccione…</option>
             @foreach ($tipotransaccion_caja_query as $ttc)
@@ -146,8 +150,8 @@
     </div>
 </div>
 <div class="form-group row">
-    <label for="waitry_habilitado" class="col-lg-3 col-form-label requerido">Integración Waitry</label>
-    <div class="col-lg-8">
+    <label for="waitry_habilitado" class="{{ $lbl }} requerido">Integración Waitry</label>
+    <div class="{{ $inp }}">
         <select name="waitry_habilitado" id="waitry_habilitado" class="form-control" required>
             <option value="1" {{ (int) old('waitry_habilitado', $data->waitry_habilitado ?? 1) === 1 ? 'selected' : '' }}>Sí</option>
             <option value="0" {{ (int) old('waitry_habilitado', $data->waitry_habilitado ?? 1) === 0 ? 'selected' : '' }}>No</option>
@@ -156,8 +160,8 @@
     </div>
 </div>
 <div class="form-group row">
-    <label for="salida_comanda_id" class="col-lg-3 col-form-label requerido">Salida de comandas</label>
-    <div class="col-lg-8">
+    <label for="salida_comanda_id" class="{{ $lbl }} requerido">Salida de comandas</label>
+    <div class="{{ $inp }}">
         <select name="salida_comanda_id" id="salida_comanda_id" class="form-control" required>
             <option value="">Seleccione…</option>
             @foreach ($salida_query as $salida)
@@ -169,8 +173,8 @@
     </div>
 </div>
 <div class="form-group row">
-    <label for="salida_factura_id" class="col-lg-3 col-form-label requerido">Salida de facturas</label>
-    <div class="col-lg-8">
+    <label for="salida_factura_id" class="{{ $lbl }} requerido">Salida de facturas</label>
+    <div class="{{ $inp }}">
         <select name="salida_factura_id" id="salida_factura_id" class="form-control" required>
             <option value="">Seleccione…</option>
             @foreach ($salida_query as $salida)

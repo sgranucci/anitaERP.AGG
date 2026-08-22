@@ -4,6 +4,7 @@ namespace App\Services\Stock;
 
 use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Stock\Configuracion_Prestamo;
+use App\Models\Stock\Depmae;
 use App\Models\Stock\MovimientoStock;
 use App\Models\Stock\Prestamo;
 use App\Models\Stock\Prestamo_Estado;
@@ -12,6 +13,7 @@ use App\Models\Stock\Prestamo_Token;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 use App\Repositories\Stock\PrestamoRepositoryInterface;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\ArticuloMovimientoPrecioHistoricoSupport;
 use App\Services\Configuracion\ModuloAvisoService;
 use Auth;
@@ -483,6 +485,24 @@ class PrestamoService
     }
 
     /**
+     * El préstamo no pasa por MovimientoStockService: el cierre se valida acá,
+     * con la empresa del depósito que recibe el movimiento.
+     */
+    private function assertPeriodoContableStock(int $depositoId, string $fecha): void
+    {
+        $empresaId = (int) (Depmae::query()->whereKey($depositoId)->value('empresa_id') ?? 0);
+        if ($empresaId <= 0) {
+            return;
+        }
+
+        PeriodoContableCierreSupport::assertOperacionPermitida(
+            $empresaId,
+            $fecha,
+            PeriodoContableCierreSupport::ALCANCE_STOCK
+        );
+    }
+
+    /**
      * Genera un MovimientoStock + sus articulo_movimiento creando los
      * registros directamente. No usa MovimientoStockService porque
      * éste asume artículos con categoría de calzado que no aplican a
@@ -517,6 +537,8 @@ class PrestamoService
 
         $signo = (int) $tipo->signo === -1 ? -1 : 1;
         $codigo = 'PR-'.$tipo->abreviatura.'-'.str_pad((string) $prestamo->id, 6, '0', STR_PAD_LEFT);
+
+        $this->assertPeriodoContableStock($depositoId, now()->toDateString());
 
         $movimiento = MovimientoStock::create([
             'fecha' => now()->toDateString(),

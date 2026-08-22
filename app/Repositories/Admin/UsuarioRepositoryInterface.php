@@ -31,6 +31,14 @@ interface UsuarioRepositoryInterface extends RepositoryInterface
     public function filtrarIdsOperativosPorEmpresa(array $usuarioIds, int $empresaId): array;
 
     /**
+     * Firmantes de árbol: operativos de la empresa + suplentes intercompany.
+     *
+     * @param  list<int>  $usuarioIds
+     * @return list<int>
+     */
+    public function filtrarIdsFirmantesArbolPorEmpresa(array $usuarioIds, int $empresaId): array;
+
+    /**
      * Listado para selects y pantallas que eligen un usuario operativo.
      *
      * @param  list<string>  $columnas

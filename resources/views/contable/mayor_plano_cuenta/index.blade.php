@@ -214,9 +214,22 @@
                     </div>
 
                     <div class="d-flex flex-wrap align-items-center justify-content-between">
-                        <small class="text-muted mb-2 mb-md-0">
-                            <i class="fa fa-keyboard"></i> Puede usar F1 en los c&oacute;digos para abrir la consulta.
-                        </small>
+                        <div class="mb-2 mb-md-0 mr-3" id="mpc-excel-solapas-wrap">
+                            <div class="form-check mb-0">
+                                <input type="hidden" name="excel_solapas_separadas" value="0">
+                                <input class="form-check-input" type="checkbox" name="excel_solapas_separadas"
+                                    id="excel_solapas_separadas" value="1"
+                                    @checked(! empty($filtros['excel_solapas_separadas']))
+                                    @disabled(! \App\Support\Contable\MayorPlanoCuentaListadoFiltros::puedeExcelSolapasSeparadas($filtros ?? []))>
+                                <label class="form-check-label" for="excel_solapas_separadas" id="excel_solapas_separadas_label">
+                                    Excel en solapas separadas (una por cuenta o centro de costo)
+                                </label>
+                            </div>
+                            <small class="text-muted d-block" id="excel_solapas_separadas_ayuda">
+                                Se habilita al elegir cuentas o centros de costo en particular.
+                                <span class="d-none d-md-inline"> · F1 en los c&oacute;digos abre la consulta.</span>
+                            </small>
+                        </div>
                         <div>
                             <input type="hidden" name="consultar" value="1">
                             <button type="submit" class="btn btn-primary" id="btn-consultar">

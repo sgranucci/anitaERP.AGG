@@ -45,10 +45,126 @@ $(document).on('keyup', '#consultaprovincia', function () {
     }
 });
 
+/**
+ * Contenedor del campo: fila de grilla o bloque del formulario.
+ */
+function contenedorCampoProvincia(origen) {
+    var $origen = $(origen);
+    if (!$origen.length) {
+        return $();
+    }
+    var $tr = $origen.closest('tr');
+    if ($tr.length) {
+        return $tr;
+    }
+
+    return $origen.closest('.tm-provincia-campo');
+}
+
+/**
+ * Escribe la provincia elegida en el trío ID / código / nombre (+ jurisdicción).
+ */
+function aplicarProvinciaEnCampo($contenedor, datos) {
+    var id = datos ? datos.id : '';
+    var codigo = datos ? datos.codigo : '';
+    var nombre = datos ? datos.nombre : '';
+    var jurisdiccion = datos && datos.jurisdiccion !== undefined ? datos.jurisdiccion : '';
+
+    if ($contenedor && $contenedor.length) {
+        $contenedor.find('.provincia_id').val(id);
+        $contenedor.find('.codigoprovincia').val(codigo);
+        $contenedor.find('.nombreprovincia').val(nombre);
+        $contenedor.find('.jurisdiccionprovincia').val(jurisdiccion);
+    }
+
+    // Compatibilidad con pantallas que usan los ids globales.
+    if (!$contenedor || !$contenedor.length || !$contenedor.find('.provincia_id').length) {
+        $('#provincia_id').val(id);
+        $('#codigoprovincia').val(codigo);
+        $('#nombreprovincia').val(nombre);
+        $('#jurisdiccionprovincia').val(jurisdiccion);
+        $('#provincia').val(nombre);
+    }
+}
+
+/**
+ * Enfoca el campo siguiente del formulario (o de la fila) tras resolver el código.
+ */
+function avanzarDesdeCampoProvincia(origen) {
+    var $origen = $(origen);
+    var $ambito = $origen.closest('tr');
+    if (!$ambito.length) {
+        $ambito = $origen.closest('form');
+    }
+    if (!$ambito.length) {
+        return;
+    }
+
+    var $campos = $ambito.find('input, select, textarea, button').filter(':visible').not('[readonly], [disabled]');
+    var indice = $campos.index($origen);
+    if (indice >= 0 && indice + 1 < $campos.length) {
+        $campos.eq(indice + 1).trigger('focus');
+    }
+}
+
+/**
+ * Resuelve una provincia por código Anita.
+ *
+ * @param {string} codigo
+ * @param {HTMLElement} origen input .codigoprovincia
+ * @param {boolean} avisar true solo en Enter / elección explícita (nunca en blur)
+ */
+function leerProvinciaPorCodigo(codigo, origen, avisar) {
+    var $contenedor = contenedorCampoProvincia(origen);
+    var valor = $.trim(codigo || '');
+
+    if (valor === '') {
+        aplicarProvinciaEnCampo($contenedor, null);
+        return;
+    }
+
+    $.getJSON(carpetaBase + '/configuracion/leerunaprovincia/' + encodeURIComponent(valor))
+        .done(function (data) {
+            if (data && data.id) {
+                aplicarProvinciaEnCampo($contenedor, data);
+                $(origen).removeAttr('data-provincia-invalida');
+                if (avisar) {
+                    avanzarDesdeCampoProvincia(origen);
+                }
+                return;
+            }
+
+            aplicarProvinciaEnCampo($contenedor, null);
+            $(origen).val(valor).attr('data-provincia-invalida', valor);
+            if (avisar) {
+                // El alert sobre la transición del modal deja el backdrop huérfano.
+                $('#consultaprovinciaModal').modal('hide');
+                setTimeout(function () {
+                    alert('No existe una provincia con el código ' + valor + '.');
+                    $(origen).trigger('focus').trigger('select');
+                }, 0);
+            }
+        })
+        .fail(function () {
+            aplicarProvinciaEnCampo($contenedor, null);
+            if (avisar) {
+                $('#consultaprovinciaModal').modal('hide');
+                setTimeout(function () {
+                    alert('No se pudo consultar la provincia con el código ' + valor + '.');
+                    $(origen).trigger('focus');
+                }, 0);
+            }
+        });
+}
+
 function activa_eventos_consultaprovincia()
 {
     function esTeclaF1Provincia(e) {
         return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
+    }
+
+    function esCampoCodigoProvincia($target) {
+        return $target.hasClass('codigoprovincia') || $target.is('#codigoprovincia');
     }
 
     function abrirModalConsultaProvincia($origen) {
@@ -75,8 +191,7 @@ function activa_eventos_consultaprovincia()
             return;
         }
         var $target = $(target);
-        var esCampoProvincia = $target.hasClass('codigoprovincia')
-            || $target.is('#codigoprovincia')
+        var esCampoProvincia = esCampoCodigoProvincia($target)
             || $target.hasClass('nombreprovincia')
             || $target.is('#nombreprovincia')
             || $target.hasClass('consultaprovincia')
@@ -93,6 +208,42 @@ function activa_eventos_consultaprovincia()
     };
     document.addEventListener('keydown', window.__provinciaF1Capture, true);
 
+    // Enter en el código: se captura antes del bloqueo global de Enter de esta pantalla.
+    document.removeEventListener('keydown', window.__provinciaEnterCapture, true);
+    window.__provinciaEnterCapture = function (e) {
+        if (!e || (e.key !== 'Enter' && e.keyCode !== 13)) {
+            return;
+        }
+        var target = e.target;
+        if (!target || target.disabled || target.readOnly) {
+            return;
+        }
+        var $target = $(target);
+
+        // Enter en el buscador del modal: elige la primera fila.
+        if ($target.is('#consultaprovincia')) {
+            e.preventDefault();
+            e.stopPropagation();
+            $('#datosprovincia').find('.eligeconsultaprovincia').first().trigger('click');
+            return;
+        }
+
+        if (!esCampoCodigoProvincia($target)) {
+            return;
+        }
+        e.preventDefault();
+        e.stopPropagation();
+        leerProvinciaPorCodigo($target.val(), target, true);
+    };
+    document.addEventListener('keydown', window.__provinciaEnterCapture, true);
+
+    // Al reescribir el código se limpia la marca de inválido para no repetir el aviso.
+    $(document)
+        .off('input.consultaProvincia', '.codigoprovincia')
+        .on('input.consultaProvincia', '.codigoprovincia', function () {
+            $(this).removeAttr('data-provincia-invalida');
+        });
+
     $('#consultaprovinciaModal').off('shown.bs.modal.consultaProvincia').on('shown.bs.modal.consultaProvincia', function () {
         $(this).find('[autofocus]').focus();
     });
@@ -102,74 +253,35 @@ function activa_eventos_consultaprovincia()
     });
 
     $(document).off('click.eligeconsultaprovincia').on('click.eligeconsultaprovincia', '.eligeconsultaprovincia', function () {
-        let seleccion = $(this).parents("tr").children().html();
-        let nombre = $(this).parents("tr").find(".nombre").html();
-        let codigo = $(this).parents("tr").find(".codigo").html();
+        let $fila = $(this).parents('tr');
+        let datos = {
+            id: $fila.children().first().html(),
+            nombre: $fila.find('.nombre').html(),
+            codigo: $fila.find('.codigo').html(),
+            jurisdiccion: $fila.find('.jurisdiccion').html(),
+        };
 
-        $("#provincia_id").val(seleccion);
-        $("#nombreprovincia").val(nombre);
-        $("#provincia").val(nombre);
-        $("#codigoprovincia").val(codigo);
+        var $contenedor = ptrprovincia_id && ptrprovincia_id.length
+            ? contenedorCampoProvincia(ptrprovincia_id)
+            : $();
+        aplicarProvinciaEnCampo($contenedor, datos);
 
-        $(ptrprovincia_id).val(seleccion);
-        $(ptrprovincia_id).parents("tr").find(".codigoprovincia").val(codigo);
-        $(ptrprovincia_id).parents("tr").find(".nombreprovincia").val(nombre);
+        if (ptrprovincia_id && ptrprovincia_id.length) {
+            ptrprovincia_id.val(datos.id);
+        }
 
         $('#consultaprovinciaModal').modal('hide');
     });
 
-    $('#codigoprovincia').off('change.consultaProvincia').on('change.consultaProvincia', function (event) {
-        event.preventDefault();
-
-        // Lee servicio terrestre por codigo
-        let codigoprovincia = $("#codigoprovincia").val();
-        let url_res = carpetaBase+'/configuracion/leerunaprovincia/'+codigoprovincia;
-
-        $.get(url_res, function(data){
-            if (data)
-            {
-                $("#provincia_id").val(data.id);
-                $("#nombreprovincia").val(data.nombre);
-                $("#provincia").val(data.nombre);
-                $("#codigoprovincia").val(data.codigo);
-            }
+    // Blur / cambio de código: resuelve sin alertar (el aviso queda para Enter).
+    $(document)
+        .off('change.consultaProvincia', '.codigoprovincia, #codigoprovincia')
+        .on('change.consultaProvincia', '.codigoprovincia, #codigoprovincia', function (event) {
+            event.preventDefault();
+            leerProvinciaPorCodigo($(this).val(), this, false);
         });
-    });
-
-    $('.codigoprovincia').off('change.consultaProvinciaFila').on('change.consultaProvinciaFila', function (event) {
-        event.preventDefault();
-        var ptrrenglon = this;
-
-        let codigoprovincia = $(this).parents("tr").find(".codigoprovincia").val();
-        let url_res = carpetaBase+'/configuracion/leerunaprovincia/'+codigoprovincia;
-
-        $(ptrrenglon).parents("tr").find(".provincia_id").val("");
-        $(ptrrenglon).parents("tr").find(".codigoprovincia").val("");
-		$(ptrrenglon).parents("tr").find(".nombreprovincia").val("");
-
-        $("#provincia_id").val("");
-        $("#nombreprovincia").val("");
-
-        $.get(url_res, function(data){
-            if (data)
-            {
-                $(ptrrenglon).parents("tr").find(".provincia_id").val(data.id);
-                $(ptrrenglon).parents("tr").find(".codigoprovincia").val(data.codigo);
-                $(ptrrenglon).parents("tr").find(".nombreprovincia").val(data.nombre);
-
-                $("#provincia_id").val(data.id);
-                $("#nombreprovincia").val(data.nombre);
-            }
-        });
-
-        setTimeout(() => {
-        }, 1000);
-
-    });
-
-
 }
 
-
-
-
+$(function () {
+    activa_eventos_consultaprovincia();
+});

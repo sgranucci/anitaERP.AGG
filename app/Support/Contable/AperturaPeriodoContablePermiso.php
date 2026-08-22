@@ -12,6 +12,24 @@ class AperturaPeriodoContablePermiso
 
     public const SLUG_APROBAR = 'aprobar-apertura-periodo-contable';
 
+    /** Pide uno / habilita otro (mail a encargados). */
+    public const MODO_APROBACION = 'aprobacion';
+
+    /** Al solicitar queda activa (mail al solicitante). */
+    public const MODO_INMEDIATA = 'inmediata';
+
+    public static function modoApertura(): string
+    {
+        $modo = strtolower(trim((string) config('contable_cierre.apertura_modo', self::MODO_APROBACION)));
+
+        return $modo === self::MODO_INMEDIATA ? self::MODO_INMEDIATA : self::MODO_APROBACION;
+    }
+
+    public static function esModoInmediata(): bool
+    {
+        return self::modoApertura() === self::MODO_INMEDIATA;
+    }
+
     public static function puedeGestionarSolicitudes(): bool
     {
         return can(self::SLUG_APROBAR, false) || can(self::SLUG_HABILITAR, false);

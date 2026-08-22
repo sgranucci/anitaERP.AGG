@@ -268,15 +268,21 @@ return [
             'permiso' => 'transferir-mercaderia-entre-depositos',
         ],
         [
+            'herramienta' => 'Pickeo SKU / código de barras',
+            'ubicacion' => 'Caja principal bajo la cabecera',
+            'accion' => 'Cámara (vivo o foto), lector Bluetooth o SKU + Enter. Suma 1 (tope = saldo). Rescan incrementa. F1 o lupa abre el modal.',
+            'permiso' => 'crear-transferencia-mercaderia',
+        ],
+        [
             'herramienta' => 'Cargar stock',
-            'ubicacion' => 'Cabecera — botón',
+            'ubicacion' => 'Más opciones — botón',
             'accion' => 'Lista artículos con saldo; en TRCONT filtra TITO por última recepción y Otros activos por COM en el depósito de salida.',
             'permiso' => 'transferir-mercaderia-entre-depositos',
         ],
         [
             'herramienta' => 'Agregar artículo',
-            'ubicacion' => 'Cabecera — modal',
-            'accion' => 'Sumar ítems sin cargar inventario completo.',
+            'ubicacion' => 'Más opciones / lupa del pickeo — modal',
+            'accion' => 'Sumar ítems sin pickeo ni inventario completo.',
             'permiso' => 'transferir-mercaderia-entre-depositos',
         ],
         [

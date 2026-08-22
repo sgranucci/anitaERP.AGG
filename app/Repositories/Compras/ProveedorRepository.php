@@ -6,6 +6,7 @@ use App\Models\Compras\Proveedor;
 use App\Models\Compras\Proveedor_Exclusion;
 use App\Models\Compras\Proveedor_Formapago;
 use App\Models\Compras\Proveedor_Servicio;
+use App\Models\Configuracion\Condicioniva;
 use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\Impuesto;
 use App\Models\Configuracion\Localidad;
@@ -149,11 +150,35 @@ class ProveedorRepository implements ProveedorRepositoryInterface
         $proveedor = $this->model->findOrFail($id)
             ->update($data);
 		//
-		// Actualiza anita
+		// Actualiza anita (si falta promae, inserta — evita UPDATE 0 filas silencioso)
 		self::actualizarAnita($data, $data['codigo']);
 
 		return $proveedor;
     }
+
+	/**
+	 * Reenvía el proveedor ERP → Anita (promae + dependientes).
+	 * Útil cuando el alta ERP quedó sin fila en Informix.
+	 *
+	 * @return 'insertado'|'actualizado'
+	 */
+	public function sincronizarAnitaDesdeErp(int $proveedorId): string
+	{
+		$proveedor = $this->findOrFail($proveedorId);
+		$datos = $this->datosRequestDesdeProveedor($proveedor);
+		$codigoAnita = ProveedorExclusionAnitaSupport::codigoAnitaParaBridge((string) $datos['codigo']);
+		$apiAnita = new ApiAnita();
+
+		if ($this->consultarPromaeAnitaConReintento($apiAnita, $codigoAnita) === null) {
+			$this->guardarAnita($datos, true);
+
+			return 'insertado';
+		}
+
+		$this->actualizarAnita($datos, $datos['codigo']);
+
+		return 'actualizado';
+	}
 
     public function delete($id)
     {
@@ -1215,12 +1240,92 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 		return 'proveedor.anita_bridge.fallo';
 	}
 
-	private function guardarAnita($request) {
+	/**
+	 * Arma el array de request que esperan guardarAnita/actualizarAnita a partir del modelo ERP.
+	 *
+	 * @return array<string, mixed>
+	 */
+	private function datosRequestDesdeProveedor(Proveedor $proveedor): array
+	{
+		$proveedor->loadMissing([
+			'proveedor_exclusiones',
+			'proveedor_formapagos',
+			'proveedor_servicios',
+			'condicionivas',
+		]);
+
+		$condicioniva = $proveedor->condicioniva_id
+			? Condicioniva::query()->find($proveedor->condicioniva_id)
+			: null;
+
+		$datos = $proveedor->getAttributes();
+		$datos['desc_localidad'] = (string) ($proveedor->desc_localidad ?? '');
+		$datos['desc_provincia'] = (string) ($proveedor->desc_provincia ?? '');
+		$datos['letra'] = (string) ($condicioniva?->letra ?? '');
+		$datos['contacto'] = (string) ($proveedor->contacto ?? '');
+		$datos['email'] = (string) ($proveedor->email ?? '');
+		$datos['fantasia'] = (string) ($proveedor->fantasia ?? '');
+		$datos['telefono'] = (string) ($proveedor->telefono ?? '');
+		$datos['domicilio'] = (string) ($proveedor->domicilio ?? '');
+		$datos['codigopostal'] = (string) ($proveedor->codigopostal ?? '');
+		$datos['nroIIBB'] = (string) ($proveedor->nroIIBB ?? '');
+		$datos['leyenda'] = (string) ($proveedor->leyenda ?? '');
+
+		$datos['desdefechas'] = [];
+		$datos['hastafechas'] = [];
+		$datos['tiporetenciones'] = [];
+		$datos['porcentajeexclusiones'] = [];
+		$datos['comentarios'] = [];
+		foreach ($proveedor->proveedor_exclusiones as $ex) {
+			$datos['desdefechas'][] = $ex->desdefecha;
+			$datos['hastafechas'][] = $ex->hastafecha;
+			$datos['tiporetenciones'][] = $ex->tiporetencion;
+			$datos['porcentajeexclusiones'][] = $ex->porcentajeexclusion;
+			$datos['comentarios'][] = $ex->comentario;
+		}
+
+		$datos['nombres'] = [];
+		$datos['formapago_ids'] = [];
+		$datos['cbus'] = [];
+		$datos['tipocuentacaja_ids'] = [];
+		$datos['moneda_ids'] = [];
+		$datos['numerocuentas'] = [];
+		$datos['nroinscripciones'] = [];
+		$datos['banco_ids'] = [];
+		$datos['mediopago_ids'] = [];
+		$datos['emails'] = [];
+		foreach ($proveedor->proveedor_formapagos as $fp) {
+			$datos['nombres'][] = $fp->nombre;
+			$datos['formapago_ids'][] = $fp->formapago_id;
+			$datos['cbus'][] = $fp->cbu;
+			$datos['tipocuentacaja_ids'][] = $fp->tipocuentacaja_id;
+			$datos['moneda_ids'][] = $fp->moneda_id;
+			$datos['numerocuentas'][] = $fp->numerocuenta;
+			$datos['nroinscripciones'][] = $fp->nroinscripcion;
+			$datos['banco_ids'][] = $fp->banco_id;
+			$datos['mediopago_ids'][] = $fp->mediopago_id;
+			$datos['emails'][] = $fp->email;
+		}
+
+		$datos['servicios_clientes'] = [];
+		$datos['servicios_detalles'] = [];
+		$datos['servicios_empresa_ids'] = [];
+		foreach ($proveedor->proveedor_servicios as $serv) {
+			$datos['servicios_clientes'][] = $serv->cliente ?? $serv->nombre ?? '';
+			$datos['servicios_detalles'][] = $serv->detalle ?? '';
+			$datos['servicios_empresa_ids'][] = $serv->empresa_id ?? null;
+		}
+
+		return $datos;
+	}
+
+	private function guardarAnita($request, bool $omitirChequeoExistencia = false) {
         $apiAnita = new ApiAnita();
 		$codigoAnita = ProveedorExclusionAnitaSupport::codigoAnitaParaBridge((string) $request['codigo']);
 
 		// Reintento / huérfano Anita: actualizar cabecera en lugar de insertar de nuevo.
-		if ($this->consultarPromaeAnitaConReintento($apiAnita, $codigoAnita) !== null) {
+		if (! $omitirChequeoExistencia
+			&& $this->consultarPromaeAnitaConReintento($apiAnita, $codigoAnita) !== null) {
 			$this->actualizarAnita($request, $request['codigo']);
 
 			return;
@@ -1412,9 +1517,18 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 			if (stripos($e->getMessage(), 'duplicate') === false) {
 				throw $e;
 			}
+			if ($omitirChequeoExistencia) {
+				throw $e;
+			}
 			$this->actualizarAnita($request, $request['codigo']);
 
 			return;
+		}
+
+		if ($this->consultarPromaeAnitaConReintento($apiAnita, $codigoAnita) === null) {
+			throw new \RuntimeException(
+				'Anita no confirmó el alta de promae '.$codigoAnita.' (bridge OK sin fila).'
+			);
 		}
 
 		$this->reemplazarDependientesAnita($request, $apiAnita, $codigoAnita);
@@ -1523,6 +1637,15 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
 	private function actualizarAnita($request, $id) {
         $apiAnita = new ApiAnita();
+		$codigoAnita = ProveedorExclusionAnitaSupport::codigoAnitaParaBridge((string) $id);
+
+		// ERP con alta sin promae: el UPDATE del bridge no falla (0 filas) y Anita queda vacío.
+		if ($this->consultarPromaeAnitaConReintento($apiAnita, $codigoAnita) === null) {
+			$this->guardarAnita($request, true);
+
+			return;
+		}
+
         $fecha = Carbon::now();
 		$fecha = $fecha->format('Ymd');
 

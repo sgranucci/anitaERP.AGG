@@ -90,7 +90,8 @@ class MovimientoStockRevertirService
                     $movimiento->asientos,
                     $fechaOperacion,
                     $revertId,
-                    'Revierte movimiento stock '.$movimiento->codigo
+                    'Revierte movimiento stock '.$movimiento->codigo,
+                    alcanceCierre: PeriodoContableCierreSupport::ALCANCE_STOCK
                 );
                 $asientoReversoId = (int) $asientoReverso['asiento_id'];
                 $revert->asiento_id = $asientoReversoId;

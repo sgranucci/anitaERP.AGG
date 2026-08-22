@@ -82,6 +82,7 @@ final class IngresosBrutosReporteService
                 'conciliacion' => $resultado['conciliacion'] ?? [],
                 'nombre_archivo' => $resultado['nombre_archivo'] ?? '',
                 'mensaje_config' => $resultado['mensaje_config'] ?? null,
+                'advertencia_datos' => $resultado['advertencia_datos'] ?? null,
             ],
             self::CACHE_TTL,
         );
@@ -112,6 +113,7 @@ final class IngresosBrutosReporteService
                 'archivo_arba' => '',
                 'nombre_archivo' => 'iibb.txt',
                 'mensaje_config' => 'No hay configuración activa para la provincia y tipo seleccionados. Cargue Configuración IIBB.',
+                'advertencia_datos' => null,
                 'desde_cache' => false,
             ];
         }
@@ -125,13 +127,18 @@ final class IngresosBrutosReporteService
                 'archivo_arba' => '',
                 'nombre_archivo' => 'iibb.txt',
                 'mensaje_config' => 'Provincia no encontrada.',
+                'advertencia_datos' => null,
                 'desde_cache' => false,
             ];
         }
 
-        $registros = $tipo === IngresosBrutosListadoFiltros::TIPO_PERCEPCIONES
-            ? $this->percepcionesDatosService->generar($empresaId, $fechaDesde, $fechaHasta, $config, $provincia)
-            : $this->retencionesDatosService->generar($empresaId, $fechaDesde, $fechaHasta, $config, $provincia);
+        $advertenciaDatos = null;
+        if ($tipo === IngresosBrutosListadoFiltros::TIPO_PERCEPCIONES) {
+            $registros = $this->percepcionesDatosService->generar($empresaId, $fechaDesde, $fechaHasta, $config, $provincia);
+        } else {
+            $registros = $this->retencionesDatosService->generar($empresaId, $fechaDesde, $fechaHasta, $config, $provincia);
+            $advertenciaDatos = $this->retencionesDatosService->ultimaAdvertencia();
+        }
 
         usort($registros, static function (array $a, array $b): int {
             return strcmp((string) ($a['fecha_retencion'] ?? ''), (string) ($b['fecha_retencion'] ?? ''))
@@ -145,6 +152,23 @@ final class IngresosBrutosReporteService
         ];
 
         $conciliacion = $this->conciliacionService->conciliar($filtros, $registros, $config);
+
+        // IIBB vacío + mayor con saldo: síntoma típico de fallo puntual del bridge (retibrmov).
+        if (
+            $advertenciaDatos === null
+            && $totales['registros'] === 0
+            && $tipo === IngresosBrutosListadoFiltros::TIPO_RETENCIONES
+        ) {
+            $totalMayor = 0.0;
+            foreach ($conciliacion['items'] ?? [] as $item) {
+                $totalMayor += abs((float) ($item['total_mayor'] ?? 0));
+            }
+            if ($totalMayor > 0.05) {
+                $advertenciaDatos = 'Anita (retibrmov) no devolvió retenciones pero el mayor contable tiene movimiento'
+                    .' en el período. Reintente la consulta; si sigue vacío, revise el bridge Anita / tabla retibrmov.';
+            }
+        }
+
         $archivo = IngresosBrutosFormatoArbaSupport::generarArchivo($registros, $tipo);
 
         $empresa = Empresa::query()->find($empresaId);
@@ -166,6 +190,7 @@ final class IngresosBrutosReporteService
             'archivo_arba' => $archivo,
             'nombre_archivo' => $nombre,
             'mensaje_config' => null,
+            'advertencia_datos' => $advertenciaDatos,
             'desde_cache' => false,
         ];
     }
@@ -188,6 +213,7 @@ final class IngresosBrutosReporteService
             'archivo_arba' => IngresosBrutosFormatoArbaSupport::generarArchivo($registros, $tipo),
             'nombre_archivo' => (string) ($pack['nombre_archivo'] ?? 'iibb.txt'),
             'mensaje_config' => $pack['mensaje_config'] ?? null,
+            'advertencia_datos' => $pack['advertencia_datos'] ?? null,
             'desde_cache' => true,
         ];
     }

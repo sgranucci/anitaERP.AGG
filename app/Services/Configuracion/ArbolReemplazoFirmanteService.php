@@ -126,6 +126,8 @@ class ArbolReemplazoFirmanteService
                 'actualizar_pendientes' => $ctx['actualizar_pendientes'],
                 'reenviar_correo' => $ctx['reenviar_correo'],
                 'tipos' => $ctx['tipos_codigos'],
+                'vence_el' => $ctx['vence_el'],
+                'con_fecha_tope' => $ctx['vence_el'] !== null,
             ],
             'conteos' => [
                 'niveles_globales' => $conteoNiveles,
@@ -229,6 +231,7 @@ class ArbolReemplazoFirmanteService
                 'actualizar_pendientes' => $ctx['actualizar_pendientes'] ? 1 : 0,
                 'reenviar_correo' => $ctx['reenviar_correo'] ? 1 : 0,
                 'tipos_json' => json_encode($ctx['tipos_codigos'], JSON_UNESCAPED_UNICODE),
+                'vence_el' => $ctx['vence_el'],
                 'conteo_niveles' => $reemplazadosNivel,
                 'conteo_conceptos_sp' => $reemplazadosConcepto,
                 'conteo_pendientes' => $reemplazadosPend,
@@ -242,10 +245,17 @@ class ArbolReemplazoFirmanteService
                 'updated_at' => now(),
             ]);
 
+            $this->marcarReemplazosPendientesAnteriores(
+                $usuarioOrigenId,
+                $logId,
+                'supersedido'
+            );
+
             return [
                 'ok' => true,
                 'operacion' => 'reemplazo',
                 'log_id' => $logId,
+                'vence_el' => $ctx['vence_el'],
                 'usuario_origen' => $this->resumenUsuario($usuarioOrigenId),
                 'usuario_destino' => $this->resumenUsuario($usuarioDestinoId),
                 'conteos' => [
@@ -262,7 +272,9 @@ class ArbolReemplazoFirmanteService
                     $reemplazadosConcepto,
                     $reemplazadosPend,
                     $correosEnviados,
-                    $omitidosNivel + $omitidosConcepto
+                    $omitidosNivel + $omitidosConcepto,
+                    $ctx['vence_el'],
+                    true
                 ),
             ];
         });
@@ -376,6 +388,8 @@ class ArbolReemplazoFirmanteService
                 'actualizar_pendientes' => $ctx['actualizar_pendientes'],
                 'reenviar_correo' => $ctx['reenviar_correo'],
                 'tipos' => $ctx['tipos_codigos'],
+                'vence_el' => $ctx['vence_el'],
+                'con_fecha_tope' => $ctx['vence_el'] !== null,
             ],
             'conteos' => [
                 'niveles_globales' => $conteoNiveles,
@@ -406,8 +420,12 @@ class ArbolReemplazoFirmanteService
     public function restaurarTitular(int $titularId, array $opciones = []): array
     {
         $ctx = $this->resolverContextoRestaurar($titularId, $opciones);
+        $restauradoModo = (string) ($opciones['restaurado_modo'] ?? 'manual');
+        if (! in_array($restauradoModo, ['manual', 'automatico'], true)) {
+            $restauradoModo = 'manual';
+        }
 
-        return DB::transaction(function () use ($titularId, $ctx) {
+        return DB::transaction(function () use ($titularId, $ctx, $restauradoModo) {
             $reemplazadosNivel = 0;
             $omitidosNivel = 0;
             $reemplazadosConcepto = 0;
@@ -495,10 +513,17 @@ class ArbolReemplazoFirmanteService
                     'omitidos_nivel' => $omitidosNivel,
                     'omitidos_concepto' => $omitidosConcepto,
                     'errores_mail' => $erroresMail,
+                    'restaurado_modo' => $restauradoModo,
                 ], JSON_UNESCAPED_UNICODE),
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);
+
+            $this->marcarReemplazosPendientesDelTitular(
+                $titularId,
+                $restauradoModo,
+                $logId
+            );
 
             return [
                 'ok' => true,
@@ -523,6 +548,75 @@ class ArbolReemplazoFirmanteService
                 ),
             ];
         });
+    }
+
+    /**
+     * Restaura titulares cuyo vence_el ya pasó (último día inclusive → cae al día siguiente 00:00).
+     *
+     * @return array{procesados: int, ok: int, errores: list<string>, detalle: list<array<string, mixed>>}
+     */
+    public function procesarVencimientos(?Carbon $referencia = null): array
+    {
+        $referencia = $referencia ?? Carbon::now();
+        $hoy = $referencia->copy()->startOfDay()->toDateString();
+
+        $logs = DB::table('arbol_reemplazo_firmante_log')
+            ->where('operacion', 'reemplazo')
+            ->whereNotNull('vence_el')
+            ->whereNull('restaurado_at')
+            ->whereDate('vence_el', '<', $hoy)
+            ->orderBy('id')
+            ->get();
+
+        $procesados = 0;
+        $ok = 0;
+        $errores = [];
+        $detalle = [];
+
+        foreach ($logs as $log) {
+            $procesados++;
+            $titularId = (int) $log->usuario_origen_id;
+            $tipos = json_decode((string) ($log->tipos_json ?? '[]'), true);
+            if (! is_array($tipos)) {
+                $tipos = [];
+            }
+
+            try {
+                $resultado = $this->restaurarTitular($titularId, [
+                    'incluir_globales' => (bool) $log->incluir_globales,
+                    'incluir_conceptos_sp' => (bool) $log->incluir_conceptos_sp,
+                    'actualizar_pendientes' => (bool) $log->actualizar_pendientes,
+                    'reenviar_correo' => (bool) $log->reenviar_correo,
+                    'tipos' => $tipos,
+                    'restaurado_modo' => 'automatico',
+                ]);
+                $ok++;
+                $detalle[] = [
+                    'log_id' => (int) $log->id,
+                    'titular_id' => $titularId,
+                    'vence_el' => (string) $log->vence_el,
+                    'ok' => true,
+                    'restauracion_log_id' => $resultado['log_id'] ?? null,
+                    'mensaje' => $resultado['mensaje'] ?? '',
+                ];
+            } catch (\Throwable $e) {
+                $errores[] = 'Log #'.$log->id.' (titular '.$titularId.'): '.$e->getMessage();
+                $detalle[] = [
+                    'log_id' => (int) $log->id,
+                    'titular_id' => $titularId,
+                    'vence_el' => (string) $log->vence_el,
+                    'ok' => false,
+                    'mensaje' => $e->getMessage(),
+                ];
+            }
+        }
+
+        return [
+            'procesados' => $procesados,
+            'ok' => $ok,
+            'errores' => $errores,
+            'detalle' => $detalle,
+        ];
     }
 
     /**
@@ -615,7 +709,8 @@ class ArbolReemplazoFirmanteService
      *   actualizar_pendientes: bool,
      *   reenviar_correo: bool,
      *   tipos_codigos: list<string>,
-     *   tipos_nombres: list<string>
+     *   tipos_nombres: list<string>,
+     *   vence_el: ?string
      * }
      */
     private function resolverAlcance(array $opciones): array
@@ -659,7 +754,79 @@ class ArbolReemplazoFirmanteService
             'reenviar_correo' => $reenviarCorreo,
             'tipos_codigos' => $tiposCodigos,
             'tipos_nombres' => $tiposNombres,
+            'vence_el' => $this->resolverVenceEl($opciones),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $opciones
+     */
+    private function resolverVenceEl(array $opciones): ?string
+    {
+        $conFechaTope = (bool) ($opciones['con_fecha_tope'] ?? false);
+        if (! $conFechaTope) {
+            return null;
+        }
+
+        $raw = trim((string) ($opciones['vence_el'] ?? ''));
+        if ($raw === '') {
+            throw new InvalidArgumentException('Indicó fecha tope: complete la fecha de fin del reemplazo.');
+        }
+
+        try {
+            $fecha = Carbon::createFromFormat('Y-m-d', $raw)->startOfDay();
+        } catch (\Throwable) {
+            throw new InvalidArgumentException('La fecha tope no es válida (use AAAA-MM-DD).');
+        }
+
+        if ($fecha->lt(Carbon::today()->startOfDay())) {
+            throw new InvalidArgumentException('La fecha tope no puede ser anterior a hoy.');
+        }
+
+        return $fecha->toDateString();
+    }
+
+    /**
+     * Cancela la vigencia programada de reemplazos anteriores del mismo titular
+     * (sin tocar el árbol: el nuevo reemplazo ya lo actualizó).
+     */
+    private function marcarReemplazosPendientesAnteriores(int $titularId, int $exceptoLogId, string $modo): void
+    {
+        if ($titularId <= 0) {
+            return;
+        }
+
+        DB::table('arbol_reemplazo_firmante_log')
+            ->where('operacion', 'reemplazo')
+            ->where('usuario_origen_id', $titularId)
+            ->whereNull('restaurado_at')
+            ->where('id', '!=', $exceptoLogId)
+            ->update([
+                'restaurado_at' => now(),
+                'restaurado_modo' => $modo,
+                'updated_at' => now(),
+            ]);
+    }
+
+    /**
+     * Marca como cerrados los logs de reemplazo abiertos del titular (manual o automático).
+     */
+    private function marcarReemplazosPendientesDelTitular(int $titularId, string $modo, int $restauracionLogId): void
+    {
+        if ($titularId <= 0) {
+            return;
+        }
+
+        DB::table('arbol_reemplazo_firmante_log')
+            ->where('operacion', 'reemplazo')
+            ->where('usuario_origen_id', $titularId)
+            ->whereNull('restaurado_at')
+            ->update([
+                'restaurado_at' => now(),
+                'restaurado_modo' => $modo,
+                'restauracion_log_id' => $restauracionLogId,
+                'updated_at' => now(),
+            ]);
     }
 
     private function queryNivelesGlobales(int $usuarioOrigenId, array $tiposNombres)
@@ -896,7 +1063,9 @@ class ArbolReemplazoFirmanteService
         int $conceptos,
         int $pendientes,
         int $correos,
-        int $omitidos
+        int $omitidos,
+        ?string $venceEl = null,
+        bool $informarVigencia = false
     ): string {
         $partes = [];
         if ($niveles > 0) {
@@ -916,6 +1085,14 @@ class ArbolReemplazoFirmanteService
             : 'Se actualizó: '.implode(', ', $partes).'.';
         if ($omitidos > 0) {
             $msg .= ' Se omitieron/limpiaron '.$omitidos.' fila(s) por duplicado en el mismo nivel.';
+        }
+        if ($informarVigencia) {
+            if ($venceEl !== null && $venceEl !== '') {
+                $msg .= ' Vigente hasta el '.Carbon::parse($venceEl)->format('d/m/Y')
+                    .' inclusive; restauración automática a las 00:00 del día siguiente.';
+            } else {
+                $msg .= ' Sin fecha tope: restaure el titular manualmente cuando corresponda.';
+            }
         }
 
         return $msg;

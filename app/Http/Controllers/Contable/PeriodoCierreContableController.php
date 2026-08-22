@@ -2,12 +2,15 @@
 
 namespace App\Http\Controllers\Contable;
 
+use App\Exceptions\Contable\PeriodoContableCerradoException;
 use App\Http\Controllers\Controller;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Contable\PeriodoCierreContableService;
 use App\Services\Contable\PeriodoCierreProgramadoService;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Auth;
 use InvalidArgumentException;
 
 class PeriodoCierreContableController extends Controller
@@ -87,6 +90,104 @@ class PeriodoCierreContableController extends Controller
             'puede_ejecutar_cierre' => can('ejecutar-cierre-periodo-contable', false),
             'puede_borrar_ultimo_cierre' => $puedeBorrarUltimo,
         ]);
+    }
+
+    /**
+     * Consulta AJAX: ¿la fecha está dentro del período cerrado para el alcance?
+     * Usado en formularios (asiento, etc.) para avisar al usuario al elegir la fecha.
+     */
+    public function validarFecha(Request $request)
+    {
+        $data = $request->validate([
+            'empresa_id' => 'required|integer|min:1',
+            'fecha' => 'required|date',
+            'alcance' => 'nullable|string|max:32',
+        ]);
+
+        $empresaId = (int) $data['empresa_id'];
+        if (! $this->empresaRepository->empresaIdPermitida($empresaId)) {
+            abort(403);
+        }
+
+        $alcance = (string) ($data['alcance'] ?? PeriodoContableCierreSupport::ALCANCE_CONTABLE);
+        if (! PeriodoContableCierreSupport::alcanceEsValido($alcance)) {
+            $alcance = PeriodoContableCierreSupport::ALCANCE_CONTABLE;
+        }
+
+        $usuarioId = (int) (Auth::id() ?? 0);
+
+        try {
+            PeriodoContableCierreSupport::assertOperacionPermitida(
+                $empresaId,
+                (string) $data['fecha'],
+                $alcance,
+                $usuarioId
+            );
+
+            return response()->json(
+                $this->respuestaFechaPermitida($empresaId, (string) $data['fecha'], $alcance, $usuarioId)
+            );
+        } catch (PeriodoContableCerradoException $e) {
+            return response()->json([
+                'permitido' => false,
+                'mensaje' => $e->getMessage(),
+                'fecha_operacion' => $e->fechaOperacion(),
+                'fecha_cierre' => $e->fechaCierre(),
+                'alcance' => $e->alcance(),
+            ]);
+        }
+    }
+
+    /**
+     * Fecha habilitada. Si cae dentro del período cerrado, avisa por qué se permite
+     * (permiso especial o apertura programada vigente) sin bloquear la carga.
+     *
+     * @return array<string, mixed>
+     */
+    private function respuestaFechaPermitida(
+        int $empresaId,
+        string $fecha,
+        string $alcance,
+        int $usuarioId
+    ): array {
+        $fechaCierre = PeriodoContableCierreSupport::fechaCierreVigente($empresaId, $alcance);
+        $fechaOperacion = Carbon::parse($fecha)->startOfDay();
+
+        if ($fechaCierre === null || $fechaOperacion->gt($fechaCierre)) {
+            return ['permitido' => true];
+        }
+
+        $tieneApertura = $usuarioId > 0 && PeriodoContableCierreSupport::tieneAperturaActiva(
+            $empresaId,
+            $usuarioId,
+            $fechaOperacion,
+            $alcance
+        );
+
+        // Con apertura vigente: permitir en silencio (sin modal).
+        // Solo avisar cuando opera por permiso especial de período cerrado.
+        if ($tieneApertura) {
+            return [
+                'permitido' => true,
+                'fecha_operacion' => $fechaOperacion->format('Y-m-d'),
+                'fecha_cierre' => $fechaCierre->format('Y-m-d'),
+                'alcance' => $alcance,
+            ];
+        }
+
+        return [
+            'permitido' => true,
+            'advertencia' => 'El período contable está cerrado hasta el '
+                .$fechaCierre->format('d/m/Y')
+                .' en '
+                .PeriodoContableCierreSupport::etiquetaAlcance($alcance)
+                .'. La fecha '
+                .$fechaOperacion->format('d/m/Y')
+                .' queda habilitada porque su usuario tiene permiso para operar en período cerrado.',
+            'fecha_operacion' => $fechaOperacion->format('Y-m-d'),
+            'fecha_cierre' => $fechaCierre->format('Y-m-d'),
+            'alcance' => $alcance,
+        ];
     }
 
     public function cerrar(Request $request)

@@ -26,7 +26,8 @@ class LibroIvaDigitalService
      * @param  array{
      *     por_fecha_jornada?: bool,
      *     prorrateo_cf_global?: bool,
-     *     completar_compras_anita?: bool
+     *     completar_compras_anita?: bool,
+     *     completar_fsl_anita?: bool
      * }  $opciones
      * @return array<string, mixed>
      */
@@ -61,6 +62,7 @@ class LibroIvaDigitalService
                 'por_fecha_jornada' => (bool) ($opciones['por_fecha_jornada'] ?? false),
                 'prorrateo_cf_global' => (bool) ($opciones['prorrateo_cf_global'] ?? false),
                 'completar_compras_anita' => (bool) ($opciones['completar_compras_anita'] ?? true),
+                'completar_fsl_anita' => (bool) ($opciones['completar_fsl_anita'] ?? true),
             ],
             'validaciones' => [],
         ];

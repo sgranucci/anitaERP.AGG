@@ -18,7 +18,6 @@
     $(function () {
         $("#botontipoalta").click(function(){
                 var tipoalta = 'D';
-                
                 $("#tipoalta").val(tipoalta);
                 $("#botontipoalta").css('visibility', 'hidden');
         });
@@ -33,50 +32,62 @@
 @section('contenido')
 @php
     $volverListadoUrl = route('proveedor', $filtrosQuery ?? []);
+    $urlAplicarCc = route('aplicacion_cuentacorriente_proveedor', [
+        'proveedor_id' => $data->id,
+        'origen' => 'modal_consulta',
+        'vista' => 'consulta',
+        'volver_proveedor_id' => $data->id,
+    ]);
 @endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
-                <h3 class="card-title">Editar Proveedor </h3>&nbsp;ID:&nbsp;{{$data->id }}&nbsp;{{$data->nombre}}&nbsp; &nbsp; &nbsp;Código Anita: {{$data->codigo}}
-                
-                @if ($tipoalta == 'P')
-                    &nbsp; PROVEEDOR PROVISORIO
-                @endif
-
-                <div class="card-tools">
+                <h3 class="card-title">
+                    Editar Proveedor
+                    <small class="font-weight-normal">ID {{ $data->id }} · {{ $data->nombre }} · Código Anita {{ $data->codigo }}</small>
                     @if ($tipoalta == 'P')
-                        <button type="button" id="botontipoalta" class="btn btn-info btn-sm">
+                        <span class="badge badge-warning ml-2">PROVISORIO</span>
+                    @endif
+                </h3>
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @if ($tipoalta == 'P')
+                        <button type="button" id="botontipoalta" class="btn btn-info btn-sm mr-1">
                             <i class="fa fa-bell"></i> Cambia a DEFINITIVO
                         </button>
                     @endif
                     @if (can('listar-cuentacorriente-proveedor', false))
-                        <a href="{{route('listar_cuentacorriente_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" title="Cuenta Corriente (se abre en modo consulta)">
-                            <i class="fa fa-folder-open">Cuenta Corriente</i>
+                        <a href="{{route('listar_cuentacorriente_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn btn-outline-light btn-sm mr-1" title="Cuenta Corriente (se abre en modo consulta)">
+                            <i class="fa fa-folder-open"></i> Cuenta Corriente
                         </a>
                     @endif
                     @if (can('aplicar-cuentacorriente-proveedor', false))
-                        <a href="{{ route('aplicacion_cuentacorriente_proveedor', ['proveedor_id' => $data->id]) }}" class="btn btn-secondary btn-sm" title="Aplicar NC y pagos a cuenta">
+                        <a href="{{ $urlAplicarCc }}" target="_blank" rel="noopener" class="btn btn-outline-light btn-sm mr-1" title="Aplicar NC y pagos a cuenta (nueva solapa)">
                             <i class="fa fa-compress-alt"></i> Aplicar CC
                         </a>
-                    @endif       
-                    @if (can('listar-encuesta-proveedor', false))
-                        <a href="{{route('listar_encuesta_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" title="Encuestas del Proveedor (se abre en modo consulta)">
-                            <i class="fa fa-question">Encuestas</i>
+                    @endif
+                    @if (!empty($url_nuevo_ticket_ingreso))
+                        <a href="{{ $url_nuevo_ticket_ingreso }}" target="_blank" rel="noopener" class="btn btn-outline-light btn-sm mr-1" title="Solicitar ticket de ingreso a planta">
+                            <i class="fa fa-id-badge"></i> Ticket de ingreso
                         </a>
-                    @endif  
+                    @endif
+                    @if (can('listar-encuesta-proveedor', false))
+                        <a href="{{route('listar_encuesta_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn btn-outline-light btn-sm mr-1" title="Encuestas del Proveedor">
+                            <i class="fa fa-question"></i> Encuestas
+                        </a>
+                    @endif
                     @if (can('listar-requisicion-proveedor', false))
-                        <a href="{{route('listar_requisicion_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" title="Requisiciones del Proveedor (se abre en modo consulta)">
-                            <i class="fa fa-edit">Requisiciones</i>
-                        </a>   
-                    @endif                             
+                        <a href="{{route('listar_requisicion_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn btn-outline-light btn-sm mr-1" title="Requisiciones del Proveedor">
+                            <i class="fa fa-edit"></i> Requisiciones
+                        </a>
+                    @endif
                     @if (can('listar-ordencompra-proveedor', false))
-                        <a href="{{route('listar_ordencompra_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn btn-secondary btn-sm" title="Ordenes de Compra del Proveedor (se abre en modo consulta)">
-                            <i class="fa fa-shopping-cart">Ordenes de compra</i>
-                        </a>        
-                    @endif           
+                        <a href="{{route('listar_ordencompra_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn btn-outline-light btn-sm mr-1" title="Ordenes de Compra del Proveedor">
+                            <i class="fa fa-shopping-cart"></i> Ordenes de compra
+                        </a>
+                    @endif
                     @if ($tipoconsulta == "REMOTA")
                         <a href="javascript:history.back()" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-fw fa-reply-all"></i> Volver a consulta
@@ -90,39 +101,13 @@
             </div>
             <form action="{{route('actualizar_proveedor', ['id' => $data->id] + ($filtrosQuery ?? []))}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
                 @csrf @method("put")
-                <div class="col-lg-8" align="right" style="margin: 5px;">
-                    <button type="button" id="botonform1" class="btn btn-primary btn-sm">
-                        <i class="fa fa-user"></i> Datos principales
-                    </button>
-                    <button type="button" id="botonform2" class="btn btn-info btn-sm">
-                        <span class="fa fa-cash-register"></span> Datos impuestos
-                    </button>
-                    <button type="button" id="botonform3" class="btn btn-info btn-sm">
-                        <span class="fa fa-truck"></span> Formas de pago
-                    </button>
-                    <button type="button" id="botonform4" class="btn btn-info btn-sm">
-                        <span class="fa fa-comment"></span> Leyendas
-                    </button>
-                    <button type="button" id="botonform5" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Archivos asociados
-                    </button>
-                    <button type="button" id="botonform6" class="btn btn-info btn-sm">
-                        <span class="fa fa-id-card"></span> CM05 / CUIT
-                    </button>
-                    <button type="button" id="botonform7" class="btn btn-info btn-sm">
-                        <span class="fa fa-bolt"></span> Servicios
-                    </button>
-                    <button type="button" id="btn-consulta-arca-padron-crear" class="btn btn-outline-secondary btn-sm" title="Ingresá el CUIT y consultá el padrón ARCA">
-                        <i class="fa fa-search"></i> Consulta padrón ARCA
-                    </button>
-                </div>
+                @include('compras.proveedor.partials.barra_solapas')
                 <div class="card-body" style="padding-bottom: 0; padding-top: 5px;">
                     @include('compras.proveedor.form1')
                     @if (can('actualiza-impuestos', false))
                         @include('compras.proveedor.form2')
                     @else
                         @include('compras.proveedor.formronly2')
-                        {{-- Endpoint ARCA + modales (formronly2 no incluye tab2 ni vistas ARCA) --}}
                         <div id="tab2" class="d-none" data-arca-constancia-url="{{ route('arca_constancia_inscripcion') }}" aria-hidden="true"></div>
                         @include('compras.proveedor.arca-padron-modals')
                     @endif
@@ -131,17 +116,21 @@
                     @include('compras.proveedor.form5')
                     @include('compras.proveedor.form6')
                     @include('compras.proveedor.form7')
+                    @if (!empty($mostrar_solapa_ingresos))
+                        @include('compras.proveedor.form8')
+                    @endif
                     @include('compras.proveedor.suspensionmodal')
                     @include('compras.proveedor.partials.arca_validacion_support', ['proveedorId' => $data->id])
                     @include('compras.proveedor.partials.arca_apoc_validacion_support', ['proveedorId' => $data->id])
                 </div>
-                <div class="card-footer" style="padding-top: 0">
-                	<div class="row">
-                   		<div class="col-lg-4">
-                        	<button type="submit" onclick="sub()" class="btn btn-success">Actualizar</button>
-                    	</div>
-            		</div>
-            	</div>
+                <div class="card-footer">
+                    <div class="row">
+                        <div class="col-lg-3"></div>
+                        <div class="col-lg-6 text-center">
+                            <button type="submit" onclick="sub()" class="btn btn-success">Actualizar</button>
+                        </div>
+                    </div>
+                </div>
             </form>
             @include('compras.proveedor.arca-cuit-entry-modal')
             @include('includes.compras.arca_impuestos_validacion_modal')

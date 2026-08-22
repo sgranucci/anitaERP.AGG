@@ -1,0 +1,47 @@
+# Doble envío de formularios: bloqueo global
+
+Un alta que tarda (escribe en Anita, dispara el árbol, manda mails) invita al operador a volver a apretar Guardar. Cada envío extra es un registro nuevo.
+
+Incidente 21/ago/2026: solicitud de pago ARBA grabada 3 veces (códigos 11333/11334/11335, a 4 y 5 segundos, mismo usuario, mismo POST, mismos adjuntos).
+
+## Punto único (no reimplementar por pantalla)
+
+| Capa | Archivo |
+|---|---|
+| Bloqueo de pantalla + banner «Grabando…» | `public/assets/js/grabacion-bloqueo-submit.js` (cargado en `theme/lte/layout` y layouts públicos) |
+| Banner | `includes.proceso_overlay_aviso` con `overlayId => 'grabacion-overlay-global'` |
+| Red de seguridad servidor | `App\Http\Middleware\PrevenirEnvioDuplicado` (grupo `web`) + `config/envio_duplicado.php` |
+
+El JS cubre las dos vías de envío del ERP: submit real del navegador (listener en captura sobre `document`) y `$('#form-general').submit()` de los `.botonsubmit` (parche de `HTMLFormElement.prototype.submit`, porque jQuery no dispara listeners nativos). Mientras un envío está en vuelo, ningún formulario POST de la pantalla vuelve a salir.
+
+No interfiere con validaciones: si un handler hace `preventDefault()` (campos obligatorios, asiento sin balancear, submit por AJAX) no se bloquea ni se muestra el banner.
+
+## Al crear o tocar un formulario
+
+- **No** agregar flags `enviando`, overlays ni `prop('disabled')` propios para evitar el doble click: ya está resuelto.
+- Formulario POST que **no navega** (descarga directa, abre otra pestaña): `data-sin-bloqueo-grabacion` para que el banner no quede pegado.
+- Texto propio del banner: `data-mensaje-grabacion="Confirmando…"` (POST de consulta: «Consultando…»).
+- Endpoint POST que se repite a propósito (modal de consulta, resolver por código, API de pantalla): mandarlo por AJAX o sumar el patrón a `config('envio_duplicado.rutas_excluidas')`.
+
+## Prohibido
+
+```javascript
+// ❌ Guard por pantalla: duplica lógica y deja huecos
+var enviando = false;
+$('#form-general').on('submit', function () {
+    if (enviando) { return false; }
+    enviando = true;
+});
+```
+
+- Overlay propio a pantalla completa para «grabando» (usar el global; los overlays de `proceso-overlay-espera.mdc` son para procesos y reportes lentos).
+- Liberar el banner con un timer automático: habilita de nuevo el doble envío. El global ofrece «Liberar pantalla» manual a los 45 s.
+
+## Comprobación rápida
+
+```bash
+rg "grabacion-bloqueo-submit" resources/views/theme resources/views/layouts
+rg "PrevenirEnvioDuplicado" app/Http/Kernel.php
+node --check public/assets/js/grabacion-bloqueo-submit.js
+php artisan view:cache
+```

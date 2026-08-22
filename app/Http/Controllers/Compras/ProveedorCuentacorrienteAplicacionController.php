@@ -60,6 +60,9 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
             $kpis = $payload['kpis'];
         }
 
+        $soloConsulta = $request->query('origen') === 'modal_consulta';
+        $volverProveedorId = (int) $request->query('volver_proveedor_id', $proveedorId);
+
         return view('compras.aplicacion_cuentacorriente.index', [
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'proveedor' => $proveedor,
@@ -70,6 +73,8 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
             'deudas' => $deudas,
             'recientes' => $recientes,
             'kpis' => $kpis,
+            'soloConsulta' => $soloConsulta,
+            'volverProveedorId' => $volverProveedorId,
             'aplicacionCcInicial' => [
                 'creditos' => $creditos,
                 'deudas' => $deudas,
@@ -153,6 +158,10 @@ class ProveedorCuentacorrienteAplicacionController extends Controller
         $dc = (float) ($resultado['dc'] ?? 0);
         if (ProveedorCuentacorrienteAplicacionDcSupport::requiereAsiento($dc)) {
             $mensaje .= ' · DC '.number_format(abs($dc), 2, ',', '.').' ('.ProveedorCuentacorrienteAplicacionDcSupport::etiqueta($dc).')';
+        }
+        $asientos = (int) ($resultado['asientos_dc'] ?? 0);
+        if ($asientos > 0) {
+            $mensaje .= ' · '.$asientos.' asiento(s) contable(s)';
         }
 
         return response()->json([
