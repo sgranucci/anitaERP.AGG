@@ -22,6 +22,14 @@ class ValidacionTransporte extends FormRequest
      *
      * @return array
      */
+    protected function prepareForValidation(): void
+    {
+        $depositoId = $this->input('deposito_id');
+        if ($depositoId === '' || $depositoId === null) {
+            $this->merge(['deposito_id' => null]);
+        }
+    }
+
     public function rules()
     {
         return [
@@ -32,6 +40,7 @@ class ValidacionTransporte extends FormRequest
             'email' => 'nullable|email|max:255|unique:transporte,email,' . $this->route('id'),
             'nroinscripcion' => ['required', new RuleTransporte('nroinscripcion')],
             'condicioniva_id' => ['integer', 'nullable'],
+            'deposito_id' => 'nullable|integer|exists:depmae,id',
         ];
     }
 }

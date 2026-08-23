@@ -48,8 +48,13 @@ use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
 use App\Models\Stock\Categoria;
 use App\Models\Stock\Linea;
+use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use setasign\Fpdi\Fpdi;
+use App\Support\Ventas\CaiRemitoVigenteSupport;
+use App\Support\Ventas\ClienteDespachoSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
+use App\Support\Ventas\TransporteDepositoSupport;
 use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
 use App\Support\Ventas\PedidoFacturaAnitaDeferSupport;
 use App\Support\Ventas\PedidoFacturacionExclusivaSupport;
@@ -598,6 +603,10 @@ class FacturacionService
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
 
+		if (ClienteDespachoSupport::es((int) $cliente_id)) {
+			return ['error' => 'El pedido del cliente DESPACHO no se factura. Use Transferir al despacho.'];
+		}
+
 		// Lee el tipo de transaccion
 		$tipotransaccion = $this->tipotransaccionRepository->find($tipoTransaccion_id);
 
@@ -608,6 +617,10 @@ class FacturacionService
 			return ['error' => 'Pedido inexistente'];
 		else	
 			$pedido = $pedido_query[0];
+
+		if (PedidoEstadoErpSupport::esTransferido($pedido->estado ?? null, $pedido->estadopedido ?? null)) {
+			return ['error' => 'El pedido ya fue transferido al despacho.'];
+		}
 
 		$errorEntrega = $this->validarLugarEntregaPedido($cliente, $pedido);
 		if ($errorEntrega) {
@@ -725,7 +738,7 @@ class FacturacionService
 		$actividad_arca_id = $data['actividad_arca_id'];
 		$pedido_id = $data['pedido_id'];
 
-		$deposito = $this->depositoIdDesdePayload($data);
+		$deposito = $this->depositoIdDesdePayload($data, $cliente, $pedido);
 
 		$this->descuentoPie = $data['descuentopie'];
 		$this->descuentoLinea = 0;
@@ -1715,7 +1728,7 @@ class FacturacionService
 						'cliente_id' => $cliente->id,
 						'condicionventa_id' => $cliente->condicionventa_id,
 						'vendedor_id' => $cliente->vendedor_id,
-						'transporte_id' => $cliente->transporte_id,
+						'transporte_id' => TransporteDepositoSupport::transporteIdDesdeFactura($data, $cliente) ?: null,
 						'total' => $totalComprobante * $signo,
 						'moneda_id' => $moneda_id,
 						'cotizacion' => $cotizacion,
@@ -2259,6 +2272,10 @@ class FacturacionService
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
 
+		if (! $this->esEmisionPos($data) && ClienteDespachoSupport::es((int) $cliente_id)) {
+			return ['error' => 'El cliente DESPACHO no se factura. Use Transferir al despacho.'];
+		}
+
 		$clienteGraba = clone $cliente;
 		if (! empty($data['venta_receptor']) && is_array($data['venta_receptor'])) {
 			$vr = $data['venta_receptor'];
@@ -2488,8 +2505,14 @@ class FacturacionService
 				if (! is_array($opcionesEmision)) {
 					$opcionesEmision = [];
 				}
-				if (empty($opcionesEmision['deposito_id'])) {
-					$opcionesEmision['deposito_id'] = $this->depositoIdDesdePayload($data);
+				// POS gastronomía / estacionamiento / canje: no resolver depósito ni reparto.
+				if (! $this->esEmisionPos($data, $opcionesEmision)) {
+					if (empty($opcionesEmision['deposito_id'])) {
+						$opcionesEmision['deposito_id'] = $this->depositoIdDesdePayload($data, $clienteGraba);
+					}
+					if (empty($opcionesEmision['transporte_id'])) {
+						$opcionesEmision['transporte_id'] = TransporteDepositoSupport::transporteIdDesdeFactura($data, $clienteGraba);
+					}
 				}
 				$graba = Self::grabaFacturaERP($empresa, $codigoTipoTransaccion, $tipotransaccion, $fechaFactura,  
 									$clienteGraba, $totalComprobante, $moneda_id, $cotizacion, $leyenda,  
@@ -3147,6 +3170,10 @@ class FacturacionService
 									$dataCAE, $venta_id, $referenciaFactura, $actividad_arca_id, $opcionesEmision = null)
 	{
 		$depositoIdEmision = (int) (is_array($opcionesEmision) ? ($opcionesEmision['deposito_id'] ?? 0) : 0);
+		$transporteIdEmision = (int) (is_array($opcionesEmision) ? ($opcionesEmision['transporte_id'] ?? 0) : 0);
+		if ($transporteIdEmision <= 0) {
+			$transporteIdEmision = (int) ($cliente->transporte_id ?? 0);
+		}
 
 		$omitirMovimientoStock = (is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_movimiento_stock']))
 			|| ! \App\Support\Ventas\TipotransaccionOperacionStockSupport::afectaStock(
@@ -3199,7 +3226,7 @@ class FacturacionService
 				'cliente_id' => $cliente->id,
 				'condicionventa_id' => $cliente->condicionventa_id,
 				'vendedor_id' => $cliente->vendedor_id,
-				'transporte_id' => $cliente->transporte_id,
+				'transporte_id' => $transporteIdEmision > 0 ? $transporteIdEmision : null,
 				'total' => $totalComprobante * $signo,
 				'moneda_id' => $moneda_id,
 				'cotizacion' => $cotizacion,
@@ -6008,16 +6035,50 @@ class FacturacionService
 	}
 
 	/**
-	 * Depósito de stock del formulario (deposito_id) o fallback de config.
+	 * POS gastronomía, estacionamiento o canje: no usa depósito ni transporte de reparto.
+	 *
+	 * @param  array<string, mixed>  $data
+	 * @param  array<string, mixed>|null  $opcionesEmision
 	 */
-	private function depositoIdDesdePayload(array $data): int
+	private function esEmisionPos(array $data, ?array $opcionesEmision = null): bool
+	{
+		$op = is_array($opcionesEmision)
+			? $opcionesEmision
+			: (is_array($data['opciones_emision'] ?? null) ? $data['opciones_emision'] : []);
+
+		return ! empty($op['omitir_movimiento_stock'])
+			|| ! empty($op['emision_pos_arca'])
+			|| ! empty($op['origen_estacionamiento']);
+	}
+
+	/**
+	 * Depósito de stock: formulario, si no el del reparto (factura o pedido), si no default de ventas.
+	 * Emisión POS: solo el depósito explícito del payload (0 = no resolver por reparto).
+	 */
+	private function depositoIdDesdePayload(array $data, mixed $cliente = null, mixed $pedido = null): int
 	{
 		$id = (int) ($data['deposito_id'] ?? $data['deposito'] ?? 0);
 		if ($id > 0) {
 			return $id;
 		}
+		if ($this->esEmisionPos($data)) {
+			return 0;
+		}
 
-		return (int) config('facturacion.DEPOSITO_VENTA_ID', 1);
+		$empresaId = (int) ($data['empresa_id'] ?? 0);
+		if ($empresaId <= 0) {
+			$pvId = (int) ($data['puntoventa_id'] ?? 0);
+			if ($pvId > 0) {
+				$empresaId = (int) ($this->puntoventaRepository->find($pvId)->empresa_id ?? 0);
+			}
+		}
+
+		$transporteId = (int) (is_object($pedido) ? ($pedido->transporte_id ?? 0) : 0);
+		if ($transporteId <= 0) {
+			$transporteId = TransporteDepositoSupport::transporteIdDesdeFactura($data, $cliente);
+		}
+
+		return TransporteDepositoSupport::depositoId($transporteId, $empresaId);
 	}
 
 	/**
@@ -6260,9 +6321,24 @@ class FacturacionService
 	// Lista factura de ventas
 	public function listaUnaFactura($id)
 	{
-	  	ini_set('memory_limit', '512M');
+		$ruta = $this->generarPdfFacturaArchivo($id);
 
-		//$pdfMerger = PDFMerger::init();
+		return response()->download($ruta);
+	}
+
+	public function generarPdfFacturaArchivo($id, string $copiaLeyenda = 'ORIGINAL', bool $facturaPdfOmitirHojaRemito = false, bool $facturaPdfSoloHojaRemito = false): string
+	{
+		$ctx = $this->prepararContextoPdfFactura((int) $id);
+
+		return $this->renderPdfFacturaDesdeContexto($ctx, $copiaLeyenda, $facturaPdfOmitirHojaRemito, $facturaPdfSoloHojaRemito);
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	public function prepararContextoPdfFactura(int $id): array
+	{
+		ini_set('memory_limit', '512M');
 
 		$venta = $this->ventaRepository->find($id);
 		$venta->loadMissing([
@@ -6274,163 +6350,264 @@ class FacturacionService
 			'clientes.provincias',
 			'clientes.paises',
 			'transportes',
+			'remitos.puntoventas',
 		]);
 
 		$codigoTipoTransaccion = intval($venta->tipotransacciones->codigo);
-		
-		// Saca letra
-		$codigoComprobante = explode(" ", $venta->codigo);
-		$letra = substr($codigoComprobante[1], 0, 1);
-
-		if ($letra == 'B')
+		$codigoComprobante = explode(' ', (string) $venta->codigo);
+		$letra = substr($codigoComprobante[1] ?? '', 0, 1);
+		if ($letra == 'B') {
 			$codigoTipoTransaccion += 5;
+		}
 
-		$nombre_pdf = 'venta-'.$venta->codigo.'-'.$venta->clientes->nombre;
-
-		// Arma tablas para calculo de impuestos
-		// Lee el cliente
 		$cliente = $this->clienteQuery->traeClienteporId($venta->cliente_id);
-
 		$tblItem = [];
 		$flConDescuento = false;
-		foreach($venta->venta_emisiones as $ventaItem)
-		{
+		foreach ($venta->venta_emisiones as $ventaItem) {
 			$descuentoLinea = $ventaItem->descuento;
-
 			$precioSinDescuento = $ventaItem->precio;
-
-			// Aplica descuento integrado de linea
 			$precio = $ventaItem->precio;
-			if ($ventaItem->descuentointegrado)
-			{
-				$descuentoSeparado = explode("+", $ventaItem->descuentointegrado);
-
-				foreach ($descuentoSeparado as $descuento)
+			if ($ventaItem->descuentointegrado) {
+				foreach (explode('+', $ventaItem->descuentointegrado) as $descuento) {
 					$precio *= (1 - ($descuento / 100));
+				}
 			}
-
-			if ($descuentoLinea > 0)
-				$precioArticulo = $precio * (1 - ($descuentoLinea / 100));
-			else
-				$precioArticulo = $precio;		
-			
-			if (isset($ventaItem->articulos))
-			{
+			$precioArticulo = $descuentoLinea > 0 ? $precio * (1 - ($descuentoLinea / 100)) : $precio;
+			if (isset($ventaItem->articulos)) {
 				$sku = $ventaItem->articulos->sku;
 				$detalle = $ventaItem->articulos->descripcion;
-			}
-			else
-			{
+			} else {
 				$sku = '';
 				$detalle = $ventaItem->detalle;
 			}
-
-			// Calcula los kilos sin descuento y el descuento
 			$kiloDescuento = 0;
 			$cantidad = $ventaItem->cantidad;
-			if (config('app.empresa') == 'EL BIERZO')
-			{
-				if ($ventaItem->descuento != 0)
-				{
-					$cantidad = round($ventaItem->cantidad * (1. - ($ventaItem->descuento / 100.)), 1);	
-					$kiloDescuento = $ventaItem->cantidad - $cantidad;
-
-					$flConDescuento = true;
-				}
+			if (config('app.empresa') == 'EL BIERZO' && $ventaItem->descuento != 0) {
+				$cantidad = round($ventaItem->cantidad * (1. - ($ventaItem->descuento / 100.)), 1);
+				$kiloDescuento = $ventaItem->cantidad - $cantidad;
+				$flConDescuento = true;
 			}
-
-			$tblItem[] = ["sku" => $sku,
-					"detalle" => $detalle,
-					"cantidad" => $cantidad,
-					"kilodescuento" => $kiloDescuento,
-					"caja" => $ventaItem->caja,
-					"pieza" => $ventaItem->pieza,
-					"precio" => $precioArticulo,
-					"preciosindescuento" => $precioSinDescuento,
-					"descuento" => $ventaItem->descuento,
-					"descuentointegrado" => $ventaItem->descuentointegrado,
-					"incluyeimpuesto" => $ventaItem->incluyeimpuesto,
-					"moneda_id" => $ventaItem->moneda_id,
-					"impuesto_id" => $ventaItem->impuesto_id,
-					"id" => $ventaItem->id
-					];
+			$tblItem[] = [
+				'sku' => $sku,
+				'detalle' => $detalle,
+				'cantidad' => $cantidad,
+				'kilodescuento' => $kiloDescuento,
+				'caja' => $ventaItem->caja,
+				'pieza' => $ventaItem->pieza,
+				'precio' => $precioArticulo,
+				'preciosindescuento' => $precioSinDescuento,
+				'descuento' => $ventaItem->descuento,
+				'descuentointegrado' => $ventaItem->descuentointegrado,
+				'incluyeimpuesto' => $ventaItem->incluyeimpuesto,
+				'moneda_id' => $ventaItem->moneda_id,
+				'impuesto_id' => $ventaItem->impuesto_id,
+				'id' => $ventaItem->id,
+			];
 		}
-		// Arma datos del cliente
-		$datosCliente = [ "condicioniva_id" => $cliente->condicioniva_id,
-						  "nroinscripcion" => $cliente->nroinscripcion,
-						  "retieneiva" => $cliente->retieneiva,
-						  "condicioniibb" => $cliente->condicioniibb,
-						  "provincia" => $cliente->provincias->nombre??'',
-						  "localidad" => $cliente->localidades->nombre??'',
-						  "codigopostal" => $cliente->codigopostal,
-						  "id" => $cliente->id
-						];
 
-		// Calcula impuestos
 		$conceptosTotales = \App\Support\Ventas\GastronomiaVentaDisplaySupport::aplicarEtiquetaDescuentoEnConceptosTotales(
 			$venta,
 			$venta->venta_impuestos,
 		);
-
-		if ($venta->moneda_id == 1)
-			$cotizacion = 1;
-		else
-			$cotizacion = $venta->cotizacion;
-
-		$version = 1;
-
-		switch($venta->puntoventas->modofacturacion)
-		{
-			case 'C':
-				$tipoCodAut = 'E';
-				break;
-			default:
-				$tipoCodAut = 'A';
-				break;
-		}
-        $datos_cmp = [
-            "ver" => $version,
-            "fecha" => $venta->fecha,
-            "cuit" => intval(str_replace("-", "", $venta->puntoventas->empresas->nroinscripcion)),
-            "ptoVta" => intval($venta->puntoventas->codigo),
-            "tipoCmp" => intval($venta->tipotransacciones->codigo),
-            "nroCmp" => $venta->numerocomprobante,
-            "importe" => floatval(number_format($venta->total,2,'.','')),
-            "moneda" => $venta->monedas->abreviatura,
-            "ctz" => floatval($cotizacion),
-            "tipoDocRec" => intval($venta->clientes->tipodocumentos->codigoexterno),
-            "nroDocRec" => intval(str_replace("-", "", $venta->clientes->numerodocumento)),
-            "tipoCodAut" => $tipoCodAut,
-            "codAut" => intval($venta->cae),
+		$cotizacion = $venta->moneda_id == 1 ? 1 : $venta->cotizacion;
+		$tipoCodAut = $venta->puntoventas->modofacturacion === 'C' ? 'E' : 'A';
+		$datos_cmp = [
+			'ver' => 1,
+			'fecha' => $venta->fecha,
+			'cuit' => intval(str_replace('-', '', $venta->puntoventas->empresas->nroinscripcion)),
+			'ptoVta' => intval($venta->puntoventas->codigo),
+			'tipoCmp' => intval($venta->tipotransacciones->codigo),
+			'nroCmp' => $venta->numerocomprobante,
+			'importe' => floatval(number_format($venta->total, 2, '.', '')),
+			'moneda' => $venta->monedas->abreviatura,
+			'ctz' => floatval($cotizacion),
+			'tipoDocRec' => intval($venta->clientes->tipodocumentos->codigoexterno),
+			'nroDocRec' => intval(str_replace('-', '', $venta->clientes->numerodocumento)),
+			'tipoCodAut' => $tipoCodAut,
+			'codAut' => intval($venta->cae),
 		];
-		if (config('app.empresa') == "EL BIERZO")
-		{
+		if (config('app.empresa') == 'EL BIERZO') {
 			unset($conceptosTotales[0]);
-
-			if ($flConDescuento)
+			if ($flConDescuento) {
 				unset($conceptosTotales[1]);
+			}
 		}
 
-		$datosJson_cmp = json_encode($datos_cmp);
-		$url = 'https://www.arca.gob.ar/fe/qr/?p='.base64_encode($datosJson_cmp);
+		$qrPng = QrCode::encoding('UTF-8')->format('png')->size(500)->margin(10)->generate(
+			'https://www.arca.gob.ar/fe/qr/?p='.base64_encode(json_encode($datos_cmp))
+		);
+		$logo = EmpresaLogoArchivo::dataUriDesdeNombre($venta->puntoventas->empresas->nombre ?? null);
+		$nombreCliente = preg_replace('/[^\w\-]+/', '_', (string) optional($venta->clientes)->nombre);
+		$pathDir = storage_path('pdf/ventas');
+		if (! is_dir($pathDir)) {
+			mkdir($pathDir, 0775, true);
+		}
 
-		$qrCode = QrCode::encoding('UTF-8')->format('png')->size(500)->margin(10)->generate($url);
-		$output_file = '/img/qr-code/img-' . time() . '.png';
-		Storage::disk('public')->put($output_file, $qrCode);
+		return [
+			'venta' => $venta,
+			'conceptosTotales' => $conceptosTotales,
+			'tblItem' => $tblItem,
+			'caiRemito' => CaiRemitoVigenteSupport::paraVenta($venta),
+			'letra' => $letra,
+			'codigoTipoTransaccion' => $codigoTipoTransaccion,
+			'qrDataUri' => 'data:image/png;base64,'.base64_encode((string) $qrPng),
+			'logoEmpresaDataUri' => $logo['uri'] ?? null,
+			'pathDir' => $pathDir,
+			'nombreBase' => $venta->codigo.'-'.$nombreCliente,
+			'cliente' => $cliente,
+		];
+	}
 
-		$view =  \View::make('exports.ventas.formulariofactura', compact('venta', 'conceptosTotales', 
-																		'tblItem', 'output_file', 'letra',
-																		'codigoTipoTransaccion'))
-			    ->render();
-		$path = storage_path('pdf/ventas');
+	public function renderPdfFacturaDesdeContexto(
+		array $ctx,
+		string $copiaLeyenda = 'ORIGINAL',
+		bool $facturaPdfOmitirHojaRemito = false,
+		bool $facturaPdfSoloHojaRemito = false
+	): string {
+		$html = $this->htmlFacturaDesdeContexto($ctx, $copiaLeyenda, $facturaPdfOmitirHojaRemito, $facturaPdfSoloHojaRemito, false);
 
-        $pdf = App::make('dompdf.wrapper');
-        $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
-        $pdf->download($nombre_pdf.'.pdf');
+		return $this->guardarHtmlDompdf($html, $this->rutaArchivoFactura($ctx, $copiaLeyenda, $facturaPdfSoloHojaRemito));
+	}
 
-		Storage::disk('public')->delete($output_file, $qrCode);
+	/**
+	 * Un solo DomPDF para todas las copias de factura/remito. Si cada trabajo cabe en la misma cantidad de páginas, las separa.
+	 *
+	 * @param  array<int, array{leyenda: string, omitir_remito: bool, solo_remito: bool}>  $trabajos
+	 * @return array<int, string>
+	 */
+	public function renderPdfFacturaLote(array $ctx, array $trabajos): array
+	{
+		if ($trabajos === []) {
+			return [];
+		}
+		if (count($trabajos) === 1) {
+			$t = reset($trabajos);
+			$idx = key($trabajos);
 
-		return response()->download($path.'/'.$nombre_pdf.'.pdf');
+			return [$idx => $this->renderPdfFacturaDesdeContexto($ctx, $t['leyenda'], $t['omitir_remito'], $t['solo_remito'])];
+		}
+
+		$fragmentos = [];
+		$primero = true;
+		foreach ($trabajos as $idx => $t) {
+			$fragmentos[] = $this->htmlFacturaDesdeContexto(
+				$ctx,
+				$t['leyenda'],
+				$t['omitir_remito'],
+				$t['solo_remito'],
+				true,
+				! $primero
+			);
+			$primero = false;
+		}
+		$html = view('exports.ventas.formulariofactura_envelope', ['cuerpo' => implode('', $fragmentos)])->render();
+		$combinado = $ctx['pathDir'].'/lote-'.$this->nombreArchivoSeguro($ctx['nombreBase']).'-'.uniqid('', true).'.pdf';
+		$this->guardarHtmlDompdf($html, $combinado);
+
+		$paginas = $this->contarPaginasPdf($combinado);
+		$cantidad = count($trabajos);
+		$rutas = [];
+		if ($paginas > 0 && $paginas % $cantidad === 0) {
+			$porTrabajo = intdiv($paginas, $cantidad);
+			$desde = 1;
+			foreach ($trabajos as $idx => $t) {
+				$destino = $this->rutaArchivoFactura($ctx, $t['leyenda'], $t['solo_remito']);
+				$this->extraerPaginasPdf($combinado, $desde, $desde + $porTrabajo - 1, $destino);
+				$rutas[$idx] = $destino;
+				$desde += $porTrabajo;
+			}
+			@unlink($combinado);
+
+			return $rutas;
+		}
+
+		@unlink($combinado);
+		foreach ($trabajos as $idx => $t) {
+			$rutas[$idx] = $this->renderPdfFacturaDesdeContexto($ctx, $t['leyenda'], $t['omitir_remito'], $t['solo_remito']);
+		}
+
+		return $rutas;
+	}
+
+	private function htmlFacturaDesdeContexto(
+		array $ctx,
+		string $copiaLeyenda,
+		bool $omitirRemito,
+		bool $soloRemito,
+		bool $sinEnvelope,
+		bool $saltoAntes = false
+	): string {
+		if ($soloRemito) {
+			$omitirRemito = false;
+		}
+
+		return view('exports.ventas.formulariofactura', [
+			'venta' => $ctx['venta'],
+			'conceptosTotales' => $ctx['conceptosTotales'],
+			'tblItem' => $ctx['tblItem'],
+			'caiRemito' => $ctx['caiRemito'] ?? null,
+			'output_file' => '',
+			'qrDataUri' => $ctx['qrDataUri'],
+			'logoEmpresaDataUri' => $ctx['logoEmpresaDataUri'],
+			'letra' => $ctx['letra'],
+			'codigoTipoTransaccion' => $ctx['codigoTipoTransaccion'],
+			'copiaLeyenda' => $copiaLeyenda,
+			'facturaPdfOmitirHojaRemito' => $omitirRemito,
+			'facturaPdfSoloHojaRemito' => $soloRemito,
+			'facturaPdfSinEnvelope' => $sinEnvelope,
+			'facturaPdfSaltoAntes' => $saltoAntes,
+		])->render();
+	}
+
+	private function rutaArchivoFactura(array $ctx, string $copiaLeyenda, bool $soloRemito): string
+	{
+		$leyendaArchivo = preg_replace('/[^\w\-]+/', '_', $copiaLeyenda) ?: 'ORIGINAL';
+		$prefijo = $soloRemito ? 'REMITO-' : '';
+
+		return $ctx['pathDir'].'/venta-'.$this->nombreArchivoSeguro($ctx['nombreBase']).'-'.$prefijo.$leyendaArchivo.'.pdf';
+	}
+
+	private function nombreArchivoSeguro(string $nombre): string
+	{
+		return preg_replace('/[^\w.\-]+/', '_', $nombre) ?: 'comprobante';
+	}
+
+	private function guardarHtmlDompdf(string $html, string $destino): string
+	{
+		$dir = dirname($destino);
+		if (! is_dir($dir)) {
+			mkdir($dir, 0775, true);
+		}
+		$pdf = App::make('dompdf.wrapper');
+		$pdf->setOptions([
+			'isRemoteEnabled' => false,
+			'isHtml5ParserEnabled' => true,
+		]);
+		$pdf->setPaper('a4', 'portrait');
+		$pdf->loadHTML($html)->save($destino);
+
+		return $destino;
+	}
+
+	private function contarPaginasPdf(string $ruta): int
+	{
+		$fpdi = new Fpdi;
+		return $fpdi->setSourceFile($ruta);
+	}
+
+	private function extraerPaginasPdf(string $origen, int $desde, int $hasta, string $destino): void
+	{
+		$fpdi = new Fpdi;
+		$fpdi->setSourceFile($origen);
+		for ($i = $desde; $i <= $hasta; $i++) {
+			$template = $fpdi->importPage($i);
+			$size = $fpdi->getTemplateSize($template);
+			$ancho = (float) ($size['width'] ?? $size['w'] ?? 0);
+			$alto = (float) ($size['height'] ?? $size['h'] ?? 0);
+			$fpdi->AddPage($ancho > $alto ? 'L' : 'P', [$ancho, $alto]);
+			$fpdi->useTemplate($template);
+		}
+		$fpdi->Output($destino, 'F');
 	}
 
 	public function editaUnaFactura($id, $flGeneraNotaDeCredito = null)
@@ -6937,7 +7114,8 @@ class FacturacionService
 		$data['medidas'] = [];
 		$data['fecha'] = $data['fechafactura'];
 		$data['fechaentrega'] = $data['fechafactura'];
-		$data['deposito_id'] = config('facturacion.DEPOSITO_VENTA_ID');
+		$empresaIdRemito = (int) Empresa::query()->where('codigo', $codigoEmpresa)->value('id');
+		$data['deposito_id'] = TransporteDepositoSupport::depositoId((int) ($pedido->transporte_id ?? 0), $empresaIdRemito);
 		$data['loteimportacion_id'] = null;
 		$data['codigo'] = $tipoRemito.' '.$letraRemito.' '.$puntoVentaRemito.'-'.$numeroRemito;
 		$data['letra'] = $letraRemito;

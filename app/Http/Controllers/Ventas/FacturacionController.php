@@ -29,6 +29,8 @@ use App\Models\Stock\Listaprecio;
 use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Condicionventa;
 use App\Exports\Ventas\FacturaExport;
+use App\Models\Ventas\Venta;
+use App\Services\Ventas\ComprobanteImpresionSesionService;
 use App\Support\Ventas\ArcaApocClienteOperacionValidacionSupport;
 use App\Support\Ventas\FacturaListadoFiltros;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
@@ -351,7 +353,12 @@ class FacturacionController extends Controller
     // Lista una factura de ventas
     public function listaUnaFactura($id)
     {
-		return $this->facturacionService->listaUnaFactura($id);
+        $venta = Venta::query()->with(['gastronomiaEmision', 'estacionamientoEmision'])->find($id);
+        if ($venta && ($venta->gastronomiaEmision || $venta->estacionamientoEmision)) {
+            return $this->facturacionService->listaUnaFactura($id);
+        }
+
+        return redirect()->route('sesion_impresion_factura', ['id' => $id, 'auto' => 1]);
     }
 
     public function generaNotaDeCredito($id)
@@ -403,6 +410,16 @@ class FacturacionController extends Controller
             ]);
 
             return redirect()->back()->withInput()->with('errores', [$detalle !== '' ? $detalle : 'No se pudo generar el comprobante.']);
+        }
+
+        try {
+            app(ComprobanteImpresionSesionService::class)
+                ->dispararAlGrabarVenta((int) ($comprobante['venta_id'] ?? 0));
+        } catch (\Throwable $e) {
+            Log::warning('ventas.factura.impresion_al_grabar', [
+                'venta_id' => $comprobante['venta_id'] ?? null,
+                'error' => $e->getMessage(),
+            ]);
         }
 
         return redirect()->back()->with('mensaje', 'Comprobante '.$comprobante['factura'].' generado con éxito');

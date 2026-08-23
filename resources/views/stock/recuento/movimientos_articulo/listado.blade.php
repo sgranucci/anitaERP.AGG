@@ -15,6 +15,7 @@
         ? 'Depósito / Empresa'
         : 'Depósito';
     $sufijoUm = \App\Support\Stock\MovimientosArticuloDepositoSupport::sufijoColumnaCantidad($art['unidad_medida'] ?? '');
+    $mostrarCajaPieza = (bool) ($contexto['mostrar_caja_pieza'] ?? false);
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -74,6 +75,9 @@
         <strong>Depósito:</strong> {{ $depEtiqueta }}<br>
         <strong>Unidad de medida:</strong> {{ ! empty($art['unidad_medida']) ? $art['unidad_medida'] : '—' }}<br>
         <strong>{{ $modoTodos ? 'Saldo total' : 'Saldo actual' }}:</strong> {{ $contexto['saldo_fmt'] ?? '0' }}{{ $sufijoUm }}
+        @if ($mostrarCajaPieza)
+            <br><em>Tres cantidades en paralelo (kilos, caja y pieza), como pedido y factura. El ATP es kilos.</em>
+        @endif
     </div>
     <table class="data">
         <thead>
@@ -83,8 +87,16 @@
                 <th style="width: 18%;">{{ $tituloColumnaDeposito }}</th>
                 @endif
                 <th style="width: 7%;">Tipo</th>
-                <th class="num" style="width: 8%;">Entrada{{ $sufijoUm }}</th>
-                <th class="num" style="width: 8%;">Salida{{ $sufijoUm }}</th>
+                <th class="num" style="width: {{ $mostrarCajaPieza ? '6%' : '8%' }};">Entrada{{ $sufijoUm }}</th>
+                @if ($mostrarCajaPieza)
+                <th class="num" style="width: 5%;">Caja E</th>
+                <th class="num" style="width: 5%;">Pieza E</th>
+                @endif
+                <th class="num" style="width: {{ $mostrarCajaPieza ? '6%' : '8%' }};">Salida{{ $sufijoUm }}</th>
+                @if ($mostrarCajaPieza)
+                <th class="num" style="width: 5%;">Caja S</th>
+                <th class="num" style="width: 5%;">Pieza S</th>
+                @endif
                 <th class="num" style="width: 9%;">Precio unit.</th>
                 <th style="width: 18%;">Concepto</th>
                 <th style="width: 8%;">Mov. stock</th>
@@ -100,7 +112,15 @@
                     @endif
                     <td>{{ $m->tipo ?? '' }}</td>
                     <td class="num">{{ $m->entrada_fmt ?? '' }}</td>
+                    @if ($mostrarCajaPieza)
+                    <td class="num">{{ $m->entrada_caja_fmt ?? '' }}</td>
+                    <td class="num">{{ $m->entrada_pieza_fmt ?? '' }}</td>
+                    @endif
                     <td class="num">{{ $m->salida_fmt ?? '' }}</td>
+                    @if ($mostrarCajaPieza)
+                    <td class="num">{{ $m->salida_caja_fmt ?? '' }}</td>
+                    <td class="num">{{ $m->salida_pieza_fmt ?? '' }}</td>
+                    @endif
                     <td class="num">{{ $m->precio_unitario_fmt ?? '' }}</td>
                     <td>{{ $m->concepto_display ?? $m->concepto ?? '' }}</td>
                     <td>{{ $m->movimiento_codigo ?: ($m->movimientostock_id ?? '') }}</td>

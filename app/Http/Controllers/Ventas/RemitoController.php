@@ -200,7 +200,11 @@ class RemitoController extends Controller
     {
         can('listar-remitos');
 
-        return $this->remitoService->listarRemitoPdf($id);
+        return redirect()->route('sesion_impresion_remito', [
+            'id' => $id,
+            'auto' => 1,
+            'solo_formulario' => 'REMITO',
+        ]);
     }
 
     public function crear()

@@ -32,6 +32,8 @@ class ValidacionTransferenciaMercaderia extends FormRequest
             'lineas' => 'required|array|min:1',
             'lineas.*.articulo_id' => 'required|integer|exists:articulo,id',
             'lineas.*.cantidad' => 'required|numeric|gt:0',
+            'lineas.*.caja' => 'nullable|numeric|min:0',
+            'lineas.*.pieza' => 'nullable|numeric|min:0',
             'usuario_destino_id' => 'nullable|integer|exists:usuario,id',
             'centrocosto_destino_id' => 'nullable|integer|exists:centrocosto,id',
             'enviar_aviso' => 'nullable|boolean',

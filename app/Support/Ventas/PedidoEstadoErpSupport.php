@@ -18,8 +18,12 @@ final class PedidoEstadoErpSupport
 
     public const CERRADO = 'C';
 
+    public const TRANSFERIDO = 'T';
+
+    public const ETIQUETA_TRANSFERIDO = 'Transferido';
+
     /** @var list<string> */
-    private const CABECERA_ERP = [self::PENDIENTE, self::ENTREGADO, self::FACTURADO, self::ANULADO, self::CERRADO];
+    private const CABECERA_ERP = [self::PENDIENTE, self::ENTREGADO, self::FACTURADO, self::ANULADO, self::CERRADO, self::TRANSFERIDO];
 
     /** @var list<string> */
     private const ITEM_ERP = [self::PENDIENTE, self::ANULADO, self::FACTURADO, self::ENTREGADO];
@@ -58,6 +62,7 @@ final class PedidoEstadoErpSupport
             PedidoEstadosInterforming::CAB_ANULADO,
             self::ANULADO => ['estado' => self::ANULADO, 'estadopedido' => 'Anulado'],
             self::CERRADO => ['estado' => self::CERRADO, 'estadopedido' => 'Pendiente'],
+            self::TRANSFERIDO => ['estado' => self::TRANSFERIDO, 'estadopedido' => self::ETIQUETA_TRANSFERIDO],
             default => ['estado' => self::PENDIENTE, 'estadopedido' => 'Pendiente'],
         };
     }
@@ -69,6 +74,9 @@ final class PedidoEstadoErpSupport
 
         if ($etiqueta === 'Facturado') {
             return self::FACTURADO;
+        }
+        if ($etiqueta === self::ETIQUETA_TRANSFERIDO) {
+            return self::TRANSFERIDO;
         }
         if ($etiqueta === 'Anulado') {
             return self::ANULADO;
@@ -93,5 +101,18 @@ final class PedidoEstadoErpSupport
     public static function esItemPendienteFacturable(?string $estado): bool
     {
         return self::normalizarEstadoItem($estado) === self::PENDIENTE;
+    }
+
+    /**
+     * @return array{estado: string, estadopedido: string}
+     */
+    public static function cabeceraTransferido(): array
+    {
+        return ['estado' => self::TRANSFERIDO, 'estadopedido' => self::ETIQUETA_TRANSFERIDO];
+    }
+
+    public static function esTransferido(?string $estado, ?string $estadopedido = null): bool
+    {
+        return self::normalizarEstadoCabecera($estado, $estadopedido) === self::TRANSFERIDO;
     }
 }

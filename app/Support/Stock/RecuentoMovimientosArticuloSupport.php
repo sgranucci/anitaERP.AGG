@@ -76,6 +76,7 @@ final class RecuentoMovimientosArticuloSupport
                 'empresa_id' => $empresaId,
                 'saldo' => ($saldoTodos = self::saldoTodosDepositos($articuloId, $empresaId)),
                 'saldo_fmt' => self::formatearNumero($saldoTodos),
+                'mostrar_caja_pieza' => UnidadesCajaPiezaSupport::mostrarEnKardex(),
             ];
         }
 
@@ -105,6 +106,7 @@ final class RecuentoMovimientosArticuloSupport
             'empresa_id' => $empresaId,
             'saldo' => $saldo,
             'saldo_fmt' => self::formatearNumero($saldo),
+            'mostrar_caja_pieza' => UnidadesCajaPiezaSupport::mostrarEnKardex(),
         ];
     }
 
@@ -141,6 +143,17 @@ final class RecuentoMovimientosArticuloSupport
         $row->salida = $cantidad < 0 ? abs($cantidad) : null;
         $row->entrada_fmt = $row->entrada !== null ? self::formatearNumero((float) $row->entrada) : '';
         $row->salida_fmt = $row->salida !== null ? self::formatearNumero((float) $row->salida) : '';
+
+        $caja = (float) ($row->caja ?? 0);
+        $pieza = (float) ($row->pieza ?? 0);
+        $row->entrada_caja = $cantidad > 0 && $caja > 0 ? $caja : null;
+        $row->entrada_pieza = $cantidad > 0 && $pieza > 0 ? $pieza : null;
+        $row->salida_caja = $cantidad < 0 && $caja > 0 ? $caja : null;
+        $row->salida_pieza = $cantidad < 0 && $pieza > 0 ? $pieza : null;
+        $row->entrada_caja_fmt = $row->entrada_caja !== null ? self::formatearNumero((float) $row->entrada_caja) : '';
+        $row->entrada_pieza_fmt = $row->entrada_pieza !== null ? self::formatearNumero((float) $row->entrada_pieza) : '';
+        $row->salida_caja_fmt = $row->salida_caja !== null ? self::formatearNumero((float) $row->salida_caja) : '';
+        $row->salida_pieza_fmt = $row->salida_pieza !== null ? self::formatearNumero((float) $row->salida_pieza) : '';
 
         $tipoVenta = trim((string) ($row->tipo_venta_abreviatura ?? $row->tipo_venta_nombre ?? ''));
         if (! empty($row->venta_id) && $tipoVenta !== '') {
@@ -223,12 +236,16 @@ final class RecuentoMovimientosArticuloSupport
 
     private static function queryBase(int $articuloId): Builder
     {
+        $mostrarCajaPieza = UnidadesCajaPiezaSupport::mostrarEnKardex();
+
         return Articulo_Movimiento::query()
             ->from('articulo_movimiento as am')
-            ->select([
+            ->select(array_values(array_filter([
                 'am.id',
                 'am.fecha',
                 'am.cantidad',
+                $mostrarCajaPieza ? 'am.caja' : null,
+                $mostrarCajaPieza ? 'am.pieza' : null,
                 'am.precio',
                 'am.costo',
                 'am.concepto',
@@ -245,7 +262,7 @@ final class RecuentoMovimientosArticuloSupport
                 DB::raw('COALESCE(ts.abreviatura, tt.abreviatura) AS tipo_abreviatura'),
                 'ms.codigo AS movimiento_codigo',
                 'ms.leyenda AS movimiento_leyenda',
-            ])
+            ])))
             ->leftJoin('depmae as dep', 'dep.id', '=', 'am.deposito_id')
             ->leftJoin('empresa as emp', 'emp.id', '=', 'dep.empresa_id')
             ->leftJoin('venta as v', 'v.id', '=', 'am.venta_id')

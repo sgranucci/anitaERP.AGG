@@ -12,6 +12,19 @@
         return parseInt($('#deposito_entrada_id').val(), 10) || 0;
     }
 
+    function mostrarCajaPieza() {
+        return !!window.TM_CAJA_PIEZA;
+    }
+
+    function numeroNoNegativo($el) {
+        var n = parseFloat($el.val());
+        if (isNaN(n) || n < 0) {
+            return 0;
+        }
+
+        return n;
+    }
+
     function bienUsoDestinoId() {
         return parseInt($('#bien_uso_destino_id').val(), 10) || 0;
     }
@@ -427,10 +440,15 @@
             if (!articuloId) {
                 return;
             }
-            out.push({
+            var linea = {
                 articulo_id: articuloId,
                 cantidad: cant,
-            });
+            };
+            if (mostrarCajaPieza()) {
+                linea.caja = numeroNoNegativo($row.find('.tm-caja'));
+                linea.pieza = numeroNoNegativo($row.find('.tm-pieza'));
+            }
+            out.push(linea);
         });
         return out;
     }
@@ -474,17 +492,22 @@
 
     function sincronizarCantidadesDesdeDom() {
         $('#tm_lista .tm-item').each(function () {
-            var id = parseInt($(this).data('articulo-id'), 10);
+            var $row = $(this);
+            var id = parseInt($row.data('articulo-id'), 10);
             if (!id) {
                 return;
             }
-            var cant = parseFloat($(this).find('.tm-cant').val());
+            var cant = parseFloat($row.find('.tm-cant').val());
             if (isNaN(cant) || cant < 0) {
                 cant = 0;
             }
             filas.forEach(function (f) {
                 if (parseInt(f.articulo_id, 10) === id) {
                     f.cantidad = cant;
+                    if (mostrarCajaPieza()) {
+                        f.caja = numeroNoNegativo($row.find('.tm-caja'));
+                        f.pieza = numeroNoNegativo($row.find('.tm-pieza'));
+                    }
                 }
             });
         });
@@ -735,6 +758,8 @@
         }
 
         f.cantidad = 1;
+        f.caja = parseFloat(f.caja) || 0;
+        f.pieza = parseFloat(f.pieza) || 0;
         f.saldo = saldo;
         filas.unshift(f);
         renderLista(filas);
@@ -840,6 +865,29 @@
                 });
             $cantRow.append($('<div class="d-flex align-items-center"/>').append($input, $btnTodo));
             $card.append($cantRow);
+
+            if (mostrarCajaPieza() && !sinErp) {
+                var caja = parseFloat(f.caja);
+                var pieza = parseFloat(f.pieza);
+                if (isNaN(caja) || caja < 0) {
+                    caja = 0;
+                }
+                if (isNaN(pieza) || pieza < 0) {
+                    pieza = 0;
+                }
+                var $unidades = $('<div class="d-flex justify-content-between align-items-center mt-2"/>');
+                $unidades.append($('<span class="tm-meta"/>').text('Caja / Pieza'));
+                var $caja = $('<input type="number" class="form-control tm-caja" min="0" step="any" inputmode="decimal"/>')
+                    .val(caja > 0 ? caja : '')
+                    .attr('placeholder', '0')
+                    .attr('title', 'Cajas (informativo; el saldo es en kilos)');
+                var $pieza = $('<input type="number" class="form-control tm-pieza ml-2" min="0" step="any" inputmode="decimal"/>')
+                    .val(pieza > 0 ? pieza : '')
+                    .attr('placeholder', '0')
+                    .attr('title', 'Piezas (informativo; el saldo es en kilos)');
+                $unidades.append($('<div class="d-flex align-items-center"/>').append($caja, $pieza));
+                $card.append($unidades);
+            }
 
             if (sinErp) {
                 $card.append(
@@ -1125,6 +1173,18 @@
                 }
             });
             actualizarBotonTransferir();
+        });
+        $(document).on('input change', '.tm-caja, .tm-pieza', function () {
+            var $card = $(this).closest('.tm-item');
+            var articuloId = parseInt($card.data('articulo-id'), 10);
+            var caja = numeroNoNegativo($card.find('.tm-caja'));
+            var pieza = numeroNoNegativo($card.find('.tm-pieza'));
+            filas.forEach(function (f) {
+                if (parseInt(f.articulo_id, 10) === articuloId) {
+                    f.caja = caja;
+                    f.pieza = pieza;
+                }
+            });
         });
         $(document).on('change', '.tm-cant', function () {
             evaluarTipoAutomaticoFila($(this).closest('.tm-item'));

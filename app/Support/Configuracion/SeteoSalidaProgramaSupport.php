@@ -13,6 +13,10 @@ class SeteoSalidaProgramaSupport
 {
     public const VENTAS_PEDIDO = 'ventas_pedido';
 
+    public const VENTAS_FACTURA = 'ventas_factura';
+
+    public const VENTAS_REMITO = 'ventas_remito';
+
     public const VENTAS_REPEMISIONOT = 'ventas_repemisionot';
 
     public const STOCK_ARTICULO = 'stock_articulo';
@@ -27,6 +31,8 @@ class SeteoSalidaProgramaSupport
     /** @var array<string, string> */
     private const ETIQUETAS = [
         self::VENTAS_PEDIDO => 'Pedidos de clientes',
+        self::VENTAS_FACTURA => 'Facturas de administración',
+        self::VENTAS_REMITO => 'Remitos de administración',
         self::VENTAS_REPEMISIONOT => 'Emisión de OT',
         self::STOCK_ARTICULO => 'Artículos (etiquetas)',
         self::UIF_EXPORTA_OPERACION => 'Exportación UIF',
@@ -103,6 +109,8 @@ class SeteoSalidaProgramaSupport
     {
         return [
             self::VENTAS_PEDIDO,
+            self::VENTAS_FACTURA,
+            self::VENTAS_REMITO,
             self::VENTAS_REPEMISIONOT,
             self::STOCK_ARTICULO,
             self::UIF_EXPORTA_OPERACION,

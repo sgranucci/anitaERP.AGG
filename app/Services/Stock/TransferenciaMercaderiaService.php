@@ -33,6 +33,7 @@ use App\Support\Stock\TransferenciaMercaderiaLineaSupport;
 use App\Support\Stock\TransferenciaMercaderiaPickeoSupport;
 use App\Support\Stock\StkmaePrecioCompraAnitaBridgeSupport;
 use App\Support\Stock\TransferenciaMercaderiaSignoSupport;
+use App\Support\Stock\UnidadesCajaPiezaSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Auth;
 use Carbon\Carbon;
@@ -829,9 +830,12 @@ class TransferenciaMercaderiaService
             }
             $item++;
             $numeroparte = trim((string) ($linea['numeroparte'] ?? ''));
+            $unidades = UnidadesCajaPiezaSupport::extraerDeLinea($linea);
             $resueltas[] = array_merge($conv, [
                 'item' => $item,
                 'numeroparte' => $numeroparte !== '' ? $numeroparte : null,
+                'caja' => $unidades['caja'],
+                'pieza' => $unidades['pieza'],
             ]);
         }
 
@@ -852,7 +856,7 @@ class TransferenciaMercaderiaService
     private function persistirLineasTransferencia(Transferencia_Mercaderia $transferencia, array $lineas): void
     {
         foreach ($lineas as $linea) {
-            Transferencia_Mercaderia_Articulo::create([
+            $payload = [
                 'transferencia_mercaderia_id' => $transferencia->id,
                 'item' => (int) $linea['item'],
                 'articulo_origen_id' => (int) $linea['articulo_origen_id'],
@@ -864,7 +868,12 @@ class TransferenciaMercaderiaService
                 'precio_costo_destino' => (float) $linea['precio_costo_destino'],
                 'coeficienteconversion' => (float) $linea['coeficienteconversion'],
                 'fl_conversion_formula' => (bool) $linea['fl_conversion_formula'],
-            ]);
+            ];
+            if (UnidadesCajaPiezaSupport::transferenciaLineaTieneColumnas()) {
+                $payload['caja'] = (float) ($linea['caja'] ?? 0);
+                $payload['pieza'] = (float) ($linea['pieza'] ?? 0);
+            }
+            Transferencia_Mercaderia_Articulo::create($payload);
         }
     }
 
@@ -1099,6 +1108,8 @@ class TransferenciaMercaderiaService
     {
         $articulosId = [];
         $cantidades = [];
+        $cajas = [];
+        $piezas = [];
         $precios = [];
         $items = [];
         $numeropartes = [];
@@ -1115,6 +1126,9 @@ class TransferenciaMercaderiaService
             }
             $items[] = (int) $linea['item'];
             $numeropartes[] = (string) ($linea['numeroparte'] ?? '');
+            $unidades = UnidadesCajaPiezaSupport::extraerDeLinea($linea);
+            $cajas[] = $unidades['caja'];
+            $piezas[] = $unidades['pieza'];
         }
 
         $n = count($articulosId);
@@ -1126,8 +1140,8 @@ class TransferenciaMercaderiaService
             'modulos_id' => array_fill(0, $n, null),
             'items' => $items,
             'cantidades' => $cantidades,
-            'cajas' => array_fill(0, $n, 0),
-            'piezas' => array_fill(0, $n, 0),
+            'cajas' => $cajas,
+            'piezas' => $piezas,
             'precios' => $precios,
             'listasprecios_id' => array_fill(0, $n, null),
             'incluyeimpuestos' => array_fill(0, $n, '0'),
@@ -1155,6 +1169,8 @@ class TransferenciaMercaderiaService
                 'precio_costo_origen' => (float) $linea->precio_costo_origen,
                 'precio_costo_destino' => (float) $linea->precio_costo_destino,
                 'numeroparte' => $linea->numeroparte,
+                'caja' => (float) ($linea->caja ?? 0),
+                'pieza' => (float) ($linea->pieza ?? 0),
             ];
         }
 

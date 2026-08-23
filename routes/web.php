@@ -2148,6 +2148,7 @@ if (strtoupper((string) config('app.empresa')) === 'INTERFORMING') {
     Route::get('ventas/pedido/crear', 'Ventas\PedidoController@crear')->name('crear_pedido');
     Route::post('ventas/pedido', 'Ventas\PedidoController@guardar')->name('guardar_pedido');
     Route::get('ventas/pedido/{id}/editar', 'Ventas\PedidoController@editar')->name('editar_pedido')->middleware('modo.consulta');
+    Route::post('ventas/pedido/{id}/transferir-despacho', 'Ventas\PedidoController@transferirAlDespacho')->name('transferir_pedido_despacho');
     Route::put('ventas/pedido/{id}', 'Ventas\PedidoController@actualizar')->name('actualizar_pedido')->middleware('modo.consulta');
     Route::delete('ventas/pedido/{id}', 'Ventas\PedidoController@eliminar')->name('eliminar_pedido');
     Route::post('ventas/pedido/limpiafiltro', 'Ventas\PedidoController@limpiafiltro')->name('pedido.limpiafiltro');
@@ -2222,6 +2223,11 @@ Route::put('ventas/factura/{id}', 'Ventas\FacturacionController@actualizar')->na
 Route::delete('ventas/factura/{id}', 'Ventas\FacturacionController@eliminar')->name('eliminar_factura');
 Route::get('ventas/listafactura/{formato?}/{busqueda?}', 'Ventas\FacturacionController@listar')->name('listar_factura');
 Route::get('ventas/listaunafactura/{id}', 'Ventas\FacturacionController@listaUnaFactura')->name('lista_una_factura');
+Route::get('ventas/impresion-sesion/factura/{id}', 'Ventas\ComprobanteImpresionSesionController@factura')->name('sesion_impresion_factura');
+Route::get('ventas/impresion-sesion/pedido/{id}', 'Ventas\ComprobanteImpresionSesionController@pedido')->name('sesion_impresion_pedido');
+Route::get('ventas/impresion-sesion/remito/{id}', 'Ventas\ComprobanteImpresionSesionController@remito')->name('sesion_impresion_remito');
+Route::post('ventas/impresion-sesion/ejecutar', 'Ventas\ComprobanteImpresionSesionController@ejecutar')->name('ejecutar_impresion_sesion');
+Route::get('ventas/impresion-sesion/descargar', 'Ventas\ComprobanteImpresionSesionController@descargar')->name('descargar_impresion_sesion');
 Route::get('ventas/factura/generanotadecredito/{id}', 'Ventas\FacturacionController@generaNotaDeCredito')->name('generar_notadecredito');
 Route::post('ventas/calcula_factura_general', 'Ventas\FacturacionController@calculaFacturaGeneral')->name('calcula_factura_general');
 
@@ -4764,6 +4770,14 @@ Route::put('ventas/camion/{id}', 'Ventas\CamionController@actualizar')->name('ac
 Route::delete('ventas/camion/{id}', 'Ventas\CamionController@eliminar')->name('eliminar_camion');
 Route::post('ventas/camion/consultacamion', 'Ventas\CamionController@consultaCamion')->name('consulta_camion');
 Route::get('ventas/leercamion/{codigo}', 'Ventas\CamionController@leeUnCamion')->name('leer_camion');
+
+Route::get('ventas/programa-impresion', 'Ventas\ProgramaImpresionController@index')->name('consultar_programa_impresion');
+Route::get('ventas/lista-programa-impresion/{formato?}/{busqueda?}', 'Ventas\ProgramaImpresionController@listar')->name('lista_programa_impresion');
+Route::get('ventas/programa-impresion/crear', 'Ventas\ProgramaImpresionController@crear')->name('crear_programa_impresion');
+Route::post('ventas/programa-impresion', 'Ventas\ProgramaImpresionController@guardar')->name('guardar_programa_impresion');
+Route::get('ventas/programa-impresion/{id}/editar', 'Ventas\ProgramaImpresionController@editar')->name('editar_programa_impresion')->middleware('modo.consulta');
+Route::put('ventas/programa-impresion/{id}', 'Ventas\ProgramaImpresionController@actualizar')->name('actualizar_programa_impresion')->middleware('modo.consulta');
+Route::delete('ventas/programa-impresion/{id}', 'Ventas\ProgramaImpresionController@eliminar')->name('eliminar_programa_impresion');
 
 Route::get('ventas/certificado-sanitario', 'Ventas\CertificadoSanitarioController@index')->name('consultar_certificado_sanitario');
 Route::get('ventas/lista-certificado-sanitario/{formato?}/{busqueda?}', 'Ventas\CertificadoSanitarioController@listar')->name('lista_certificado_sanitario');

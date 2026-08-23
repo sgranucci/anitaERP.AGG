@@ -16,6 +16,8 @@ class Transferencia_Mercaderia_Articulo extends Model
         'numeroparte',
         'cantidad_origen',
         'cantidad_destino',
+        'caja',
+        'pieza',
         'precio_costo_origen',
         'precio_costo_destino',
         'coeficienteconversion',
@@ -25,6 +27,8 @@ class Transferencia_Mercaderia_Articulo extends Model
     protected $casts = [
         'cantidad_origen' => 'float',
         'cantidad_destino' => 'float',
+        'caja' => 'float',
+        'pieza' => 'float',
         'precio_costo_origen' => 'float',
         'precio_costo_destino' => 'float',
         'coeficienteconversion' => 'float',

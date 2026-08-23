@@ -2024,6 +2024,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Ventas\ComprobanteImpresionProgramaRepositoryInterface',
+            'App\Repositories\Ventas\ComprobanteImpresionProgramaRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Ventas\CaiRepositoryInterface',
             'App\Repositories\Ventas\CaiRepository',
         );

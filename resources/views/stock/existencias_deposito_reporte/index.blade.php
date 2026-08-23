@@ -39,6 +39,10 @@ window.obtenerEmpresaIdFiltroSaldosKardex = function () {
                         Solo columnas de dep&oacute;sitos con existencia &ne; 0.
                         El filtro de empresa restringe los <strong>dep&oacute;sitos</strong> (<code>depmae.empresa_id</code>), no el maestro de art&iacute;culos.
                         Un art&iacute;culo se lista si tiene saldo en al menos un dep&oacute;sito visible (no se netea entre dep&oacute;sitos).
+                        @if (\App\Support\Stock\UnidadesCajaPiezaSupport::mostrarEnExistencias())
+                            En El Bierzo cada celda muestra <strong>kg, caja y pieza</strong> (igual que pedido y factura).
+                            Son tres cantidades en paralelo: no se convierten entre s&iacute;. El ATP sigue siendo kilos.
+                        @endif
                     </p>
 
                     @php

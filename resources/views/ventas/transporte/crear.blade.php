@@ -6,6 +6,7 @@
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/domicilio.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}"></script>
 @endsection
 
 @section('contenido')
@@ -26,6 +27,7 @@
                 @csrf
                 <div class="card-body">
                     @include('ventas.transporte.form')
+                    @include('includes.stock.modalconsultadeposito')
                 </div>
                 <div class="card-footer">
                     <div class="row">

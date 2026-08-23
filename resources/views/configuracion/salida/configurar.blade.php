@@ -28,6 +28,9 @@
             + encodeURIComponent(programa)
             + '/'
             + encodeURIComponent(salida_id);
+        if ($('#disparar_al_grabar').length) {
+            listarUri += '?disparar_al_grabar=' + ($('#disparar_al_grabar').is(':checked') ? '1' : '0');
+        }
 
         $.get(listarUri, function(){
             if (urlRetorno) {

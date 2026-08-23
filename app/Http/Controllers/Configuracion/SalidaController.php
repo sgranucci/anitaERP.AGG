@@ -127,6 +127,7 @@ class SalidaController extends Controller
         $seteosalida = $this->seteosalidaRepository->buscaSeteo($usuario_id, $opcion);
 
         $datas['salida_id'] = $seteosalida?->salida_id ?? '';
+        $datas['disparar_al_grabar'] = (bool) ($seteosalida?->disparar_al_grabar ?? false);
 
         $salidas_query = $this->repository->paraProgramaSeteo(
             $programa,
@@ -153,18 +154,19 @@ class SalidaController extends Controller
 
         $seteosalida = $this->seteosalidaRepository->leeSeteo($usuario_id, $programa);
 
+        $payload = [
+            'usuario_id' => $usuario_id,
+            'salida_id' => $salida_id,
+            'programa' => $programa,
+        ];
+        if ($request->has('disparar_al_grabar')) {
+            $payload['disparar_al_grabar'] = $request->boolean('disparar_al_grabar');
+        }
+
         if ($seteosalida) {
-            $seteosalida = $this->seteosalidaRepository->update([
-                'usuario_id' => $usuario_id,
-                'salida_id' => $salida_id,
-                'programa' => $programa,
-            ], $seteosalida->id);
+            $seteosalida = $this->seteosalidaRepository->update($payload, $seteosalida->id);
         } else {
-            $seteosalida = $this->seteosalidaRepository->create([
-                'usuario_id' => $usuario_id,
-                'salida_id' => $salida_id,
-                'programa' => $programa,
-            ]);
+            $seteosalida = $this->seteosalidaRepository->create($payload);
         }
 
         return ['retorno' => $seteosalida];

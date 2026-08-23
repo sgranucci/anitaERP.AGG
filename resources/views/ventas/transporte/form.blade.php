@@ -52,6 +52,23 @@
 						<input type="number" name="copiapedido" id="copiapedido" class="form-control" value="{{old('copiapedido', $data->copiapedido ?? '1')}}">
 					</div>
 				</div>
+				@php
+					$depositoTransporte = isset($data) ? $data->depositos : null;
+				@endphp
+				@include('stock.partials.campo_consulta_deposito', [
+					'prefix' => 'transporte',
+					'layout' => 'form_row',
+					'inputName' => 'deposito_id',
+					'inputId' => 'deposito_id',
+					'depositoId' => old('deposito_id', isset($data) ? ($data->deposito_id ?? '') : ''),
+					'codigo' => old('deposito_codigo', $depositoTransporte->codigo ?? ''),
+					'descripcion' => old('deposito_descripcion', $depositoTransporte->nombre ?? ''),
+					'required' => false,
+					'col_label' => 'col-lg-3 control-label text-right pr-2',
+					'col_input' => 'col-lg-8',
+					'label' => 'Depósito stock',
+					'ayuda_tooltip' => 'Vacío: la facturación usa el depósito default de ventas.',
+				])
 			</div>
 			<div class="col-sm-6">
 				<div class="form-group row">

@@ -177,4 +177,11 @@ return [
     */
     'precio_anita_sync_desde' => env('STOCK_PRECIO_ANITA_SYNC_DESDE', '20250101'),
 
+    /*
+    | Pedido DESPACHO (El Bierzo): TM desde el pedido de reposición.
+    | Vacío = se resuelve por abreviatura (TRA). El tipo define si pide aprobación.
+    */
+    'transferencia_despacho_tipotransaccion_stock_id' => env('STOCK_TRANSFERENCIA_DESPACHO_TIPOTRANSACCION_ID'),
+    'transferencia_despacho_tipotransaccion_abreviatura' => env('STOCK_TRANSFERENCIA_DESPACHO_TIPOTRANSACCION_ABREVIATURA', 'TRA'),
+
 ];

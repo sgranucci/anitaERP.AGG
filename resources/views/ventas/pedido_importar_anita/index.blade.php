@@ -30,6 +30,7 @@
                     <p class="text-muted small mb-3">
                         Consulta pedidos de Anita (<code>pendmae</code>) por fecha de entrega y reparto (transporte <code>penm_expreso</code>).
                         Luego puede importarlos al ERP: crea los faltantes y actualiza cabecera y líneas de los existentes.
+                        El cliente interno DESPACHO no se importa: el circuito vive solo en ERP y el pedido Anita se cierra.
                     </p>
 
                     <div class="form-group row">
@@ -143,6 +144,8 @@
                                         <td>
                                             @if (($fila['estado_erp'] ?? '') === 'existe')
                                                 <span class="badge badge-warning">Existe (actualizar)</span>
+                                            @elseif (($fila['estado_erp'] ?? '') === 'omitido_despacho')
+                                                <span class="badge badge-info">DESPACHO: cierra Anita, no importa</span>
                                             @else
                                                 <span class="badge badge-success">Nuevo</span>
                                             @endif

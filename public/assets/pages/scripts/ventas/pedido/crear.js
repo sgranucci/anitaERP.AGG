@@ -1695,6 +1695,21 @@
 		abrirModalEmisionPedidoSiPadronOk();
 	}
 
+	function transferirPedidoDespacho()
+	{
+		var form = document.getElementById('form-transferir-despacho');
+		if (!form) {
+			return;
+		}
+		if (!confirm('¿Transferir la pesada guardada al depósito del despacho?\nNo se factura este pedido. Guarde la pesada antes si acaba de pesarla.')) {
+			return;
+		}
+		if (window.PedidoProcesoOverlay && typeof window.PedidoProcesoOverlay.iniciar === 'function') {
+			window.PedidoProcesoOverlay.iniciar(['Generando transferencia al despacho…'], 'Transferir al despacho');
+		}
+		form.submit();
+	}
+
 	function pesadaNumericaFilaPedido($tr) {
 		var raw = (($tr.find('.pesada').val() || '') + '').replace(',', '.');
 		var n = parseFloat(raw);
@@ -2595,6 +2610,9 @@
 				$('#transporte_id').val(transporte_id);
 				$('#codigotransporte').val(codigotransporte);
 				$('#nombretransporte').val(nombretransporte);
+				if (typeof window.actualizarAvisoDepositoFacturacion === 'function') {
+					window.actualizarAvisoDepositoFacturacion(transporte_id);
+				}
 				$('#condicionventa_id').val(condicionventa_id);
 				$('#descuento').val(descuento);
 				if ($('#fl_cliente_tiene_entrega').val() !== '1') {

@@ -20,6 +20,7 @@ switch(config('app.empresa'))
                         'NO_FACTURAR' => '4'
                 ],
             'CLIENTE_STOCK_ID' => '620',
+            'CLIENTE_DESPACHO_ID' => (int) env('CLIENTE_DESPACHO_ID', 0),
             'MAIL_CLIENTE_PROVISORIO' => 'fherber@interforming.com.ar',
             'TOPE_DESCUENTO' => 20,
             'CATEGORIA_SECOS_ID' => 10,
@@ -48,6 +49,7 @@ switch(config('app.empresa'))
                         'NO_FACTURAR' => '4'
                 ],
             'CLIENTE_STOCK_ID' => '620',
+            'CLIENTE_DESPACHO_ID' => (int) env('CLIENTE_DESPACHO_ID', 0),
             'MAIL_CLIENTE_PROVISORIO' => 'info@elbierzo.com.ar',
             'TOPE_DESCUENTO' => 20,
             'CATEGORIA_SECOS_ID' => 10,
@@ -77,6 +79,7 @@ switch(config('app.empresa'))
                         'NO_FACTURAR' => '4'
                 ],
             'CLIENTE_STOCK_ID' => '620',
+            'CLIENTE_DESPACHO_ID' => (int) env('CLIENTE_DESPACHO_ID', 0),
             'MAIL_CLIENTE_PROVISORIO' => 'impuestosBSA@grupoagg.com',
             'TOPE_DESCUENTO' => 20,
             'CATEGORIA_SECOS_ID' => 10,

@@ -3,264 +3,174 @@
 <head>
     <meta charset="UTF-8">
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-    <title>Pedido {{ $pedido->id ?? '' }}</title>
+    <title>Pedido {{ $pedido->codigo ?? $pedido->id ?? '' }}</title>
 	<style type="text/css">
+		@page { margin: 10mm; }
+		html, body { height: auto; margin: 0; padding: 0; }
 		body {
 			font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
-			font-size: 15px;
+			font-size: 13px;
 			color: #1a1a1a;
-			margin: 8px;
 		}
+		.pedido-pagina { page-break-inside: avoid; }
+		.salto-pagina { page-break-before: always; }
 		table.pedido-header {
 			width: 100%;
 			border-collapse: collapse;
-			margin-bottom: 10px;
+			margin-bottom: 8px;
 		}
-		table.pedido-header td,
-		table.pedido-header th {
-			border: none;
-			vertical-align: middle;
-		}
+		table.pedido-header td { border: none; vertical-align: top; padding: 0 4px 0 0; }
+		.pedido-logo { width: 50%; }
 		.pedido-meta {
-			font-size: 14px;
+			width: 50%;
+			font-size: 13px;
 			text-align: right;
 			line-height: 1.4;
 		}
-		.pedido-cliente {
-			font-size: 15px;
-			line-height: 1.5;
-			margin-bottom: 12px;
-		}
-		table.pedido-cliente-block {
-			width: 100%;
-			border-collapse: collapse;
-			margin-bottom: 12px;
-		}
-		table.pedido-cliente-block td {
-			border: none;
-			vertical-align: top;
-			padding: 0;
-		}
+		.pedido-cliente { margin-top: 8px; font-size: 13px; line-height: 1.35; }
 		.pedido-totales-division {
 			font-size: 12px;
 			text-align: right;
-			line-height: 1.5;
-			white-space: nowrap;
-			width: 1%;
-		}
-		.pedido-entrega {
-			font-size: 15px;
-			text-align: right;
-			line-height: 1.5;
+			line-height: 1.4;
+			margin-top: 4px;
 		}
 		table.pedido-items {
-			font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
 			border-collapse: collapse;
 			width: 100%;
-			font-size: 15px;
+			font-size: 10px;
 			table-layout: fixed;
 		}
 		table.pedido-items td,
 		table.pedido-items th {
 			border: 1px solid #cccccc;
-			padding: 5px 4px;
+			padding: 3px 2px;
 			vertical-align: middle;
 			word-wrap: break-word;
 		}
-		table.pedido-items thead tr {
-			background-color: #e8e8e8;
-		}
-		table.pedido-items th {
-			font-size: 14px;
-			font-weight: bold;
-		}
-		table.pedido-items tbody tr:nth-child(even) {
-			background-color: #f5f5f5;
-		}
-		.pedido-leyenda {
-			font-size: 14px;
-			margin-top: 14px;
-		}
-		.pedido-leyenda label {
-			font-weight: bold;
-			font-size: 15px;
-		}
+		table.pedido-items thead { display: table-row-group; }
+		table.pedido-items tr.pedido-items-head { background-color: #e8e8e8; }
+		table.pedido-items tr.pedido-items-head td { font-size: 10px; font-weight: bold; }
+		table.pedido-items tbody tr:nth-child(even) { background-color: #f5f5f5; }
+		.pedido-continua { font-size: 11px; text-align: right; margin: 4px 0 0 0; }
+		.pedido-leyenda { font-size: 12px; margin-top: 8px; }
+		.pedido-leyenda label { font-weight: bold; }
 	</style>
 </head>
 <body>
-<table class="pedido-header">
-	<thead>
-		<tr>
-			<th style="width: 50%; text-align: left;">
-				<img style="margin: 8px 0;" width="180" height="80" src="data:image/png;base64,{{ base64_encode(file_get_contents('/var/www/html/anitaERP/public/storage/imagenes/logos/logo-bierzo.png')) }}">
-			</th>
-			<th class="pedido-meta">
-				<strong>Pedido Nro.: {{ $pedido->id ?? '' }}</strong><br>
-				<strong>Fecha: {{ date('d/m/Y', strtotime($pedido->fecha ?? '')) }}</strong><br>
-				<strong>Fecha de Entrega: {{ date('d/m/Y', strtotime($pedido->fechaentrega ?? '')) }}</strong>
-			</th>
-		</tr>
-	</thead>
-</table>
 @php
+	use App\Support\Ventas\FacturaPdfPaginacionSupport;
+
 	$mostrarTotalesDivision = config('app.empresa') === 'EL BIERZO'
 		&& optional($pedido->transportes)->tipoexpreso === '4';
 	$totalNetoDivision = 0.;
 	$ajusteDivision = 0.;
 	$totalDivision = 0.;
+	$codigoClientePedido = trim((string) ($pedido->clientes->codigo ?? ''));
+	$nombreClientePedido = trim((string) ($pedido->clientes->nombre ?? ''));
+	$clientePedidoDisplay = $codigoClientePedido !== '' && $nombreClientePedido !== ''
+		? $codigoClientePedido.' - '.$nombreClientePedido
+		: ($nombreClientePedido !== '' ? $nombreClientePedido : $codigoClientePedido);
+	$numeroPedido = trim((string) ($pedido->codigo ?? ''));
+	if ($numeroPedido === '') {
+		$numeroPedido = (string) ($pedido->id ?? '');
+	}
+	$repartoNombre = trim((string) ($pedido->transportes->nombre ?? ''));
+
+	$lineasPdf = \App\Support\Ventas\PedidoRemitoPdfLineasSupport::armar($pedido->pedido_articulos);
+	$filas = $lineasPdf['filas'];
+	$totales = $lineasPdf['totales'];
 	if ($mostrarTotalesDivision) {
 		$coeficienteDivision = (float) config('facturacion.COEFICIENTE_EXTRA_REPARTO_101', 1.10);
-		foreach ($pedido->pedido_articulos as $itemDivision) {
-			$totalNetoDivision += (float) ($itemDivision->precio ?? 0) * (float) ($itemDivision->pesada ?? 0);
+		foreach ($filas as $filaDiv) {
+			$totalNetoDivision += (float) $filaDiv['precio'] * (float) $filaDiv['pesada'];
 		}
 		$totalNetoDivision = round($totalNetoDivision, 2);
 		$ajusteDivision = round($totalNetoDivision * ($coeficienteDivision - 1), 2);
 		$totalDivision = round($totalNetoDivision + $ajusteDivision, 2);
 	}
+	$paginasPedido = FacturaPdfPaginacionSupport::paginas($filas, 'remito');
 @endphp
-@if ($mostrarTotalesDivision)
-<table class="pedido-cliente-block">
-	<tr>
-		<td class="pedido-cliente">
-			@php
-				$codigoClientePedido = trim((string) ($pedido->clientes->codigo ?? ''));
-				$nombreClientePedido = trim((string) ($pedido->clientes->nombre ?? ''));
-				$clientePedidoDisplay = $codigoClientePedido !== '' && $nombreClientePedido !== ''
-					? $codigoClientePedido.' - '.$nombreClientePedido
-					: ($nombreClientePedido !== '' ? $nombreClientePedido : $codigoClientePedido);
-			@endphp
-			<strong>Cliente: {{ $clientePedidoDisplay }}</strong><br>
-			<strong>Zona de Vta.: {{ $pedido->zonavtas->nombre ?? '' }}</strong>
-		</td>
-		<td class="pedido-entrega">
-			<strong>Reparto: {{ $pedido->transportes->nombre ?? '' }}</strong><br>
-			<strong>Lugar de entrega: {{ $pedido->lugarentrega ?? '' }}</strong>
-			<div class="pedido-totales-division">
-				{{ number_format($totalNetoDivision, 2) }}<br>
-				{{ number_format($ajusteDivision, 2) }}<br>
-				{{ number_format($totalDivision, 2) }}
-			</div>
-		</td>
-	</tr>
-</table>
-@else
-<table class="pedido-cliente-block">
-	<tr>
-		<td class="pedido-cliente">
-			@php
-				$codigoClientePedido = trim((string) ($pedido->clientes->codigo ?? ''));
-				$nombreClientePedido = trim((string) ($pedido->clientes->nombre ?? ''));
-				$clientePedidoDisplay = $codigoClientePedido !== '' && $nombreClientePedido !== ''
-					? $codigoClientePedido.' - '.$nombreClientePedido
-					: ($nombreClientePedido !== '' ? $nombreClientePedido : $codigoClientePedido);
-			@endphp
-			<strong>Cliente: {{ $clientePedidoDisplay }}</strong><br>
-			<strong>Zona de Vta.: {{ $pedido->zonavtas->nombre ?? '' }}</strong>
-		</td>
-		<td class="pedido-entrega">
-			<strong>Reparto: {{ $pedido->transportes->nombre ?? '' }}</strong><br>
-			<strong>Lugar de entrega: {{ $pedido->lugarentrega ?? '' }}</strong>
-		</td>
-	</tr>
-</table>
-@endif
-<table class="pedido-items">
-	<thead>
-		<tr>
-			<th style="width: 7%;">Sku</th>
-			<th style="width: 7%;">Unid.</th>
-			<th style="width: 7%;">Kg.</th>
-			<th style="width: 10%;">Descuento</th>
-			<th style="width: 22%;">Descripción</th>
-			<th style="width: 6%;">UMD</th>
-			<th style="width: 8%;">Cajas</th>
-			<th style="width: 9%;">Precio</th>
-			<th style="width: 9%;">Pesada</th>
-			<th style="width: 9%;">Bonificación</th>
-		</tr>
-	</thead>
-	<tbody>
-		@foreach ($pedido->pedido_articulos as $item)
-			@php
-				$pesadaBruta = (float) ($item->pesada ?? 0);
-				$pctBonificacion = (float) optional($item->descuentoventa_ids)->porcentajedescuento ?? 0;
-				$bonificacion = 0.;
-				$pesadaNeta = $pesadaBruta;
-				if ($pctBonificacion > 0 && $pesadaBruta > 0) {
-					$bonificacion = round($pesadaBruta * $pctBonificacion / 100, 1);
-					$pesadaNeta = $pesadaBruta - $bonificacion;
-				}
-			@endphp
+@foreach ($paginasPedido as $pagIdx => $itemsPagina)
+	@php
+		$esUltima = $pagIdx === array_key_last($paginasPedido);
+	@endphp
+	<div class="pedido-pagina {{ $pagIdx > 0 ? 'salto-pagina' : '' }}">
+		<table class="pedido-header">
 			<tr>
-				<td>{{ $item->articulos->sku ?? '' }}</td>
-				<td>{{ number_format($item->pieza, 2) }}</td>
-				<td>{{ number_format($item->kilo, 2) }}</td>
-				<td>{{ $item->descuentoventa_ids->nombre ?? '' }}</td>
-				<td>{{ $item->articulos->descripcion ?? '' }}</td>
-				<td>{{ optional(optional($item->articulos)->unidadesdemedidas)->abreviatura ?? '' }}</td>
-				<td>{{ number_format($item->caja, 2) }}</td>
-				<td>{{ number_format($item->precio, 2) }}</td>
-				<td>
-					@if ($pesadaBruta > 0)
-						{{ number_format($pesadaNeta, 2) }}
-					@endif
+				<td class="pedido-logo">
+					<img style="margin: 4px 0;" width="160" height="70" src="data:image/png;base64,{{ base64_encode(file_get_contents('/var/www/html/anitaERP/public/storage/imagenes/logos/logo-bierzo.png')) }}">
+					<div class="pedido-cliente">
+						<strong>Cliente: {{ $clientePedidoDisplay }}</strong><br>
+						<strong>Zona de Vta.: {{ $pedido->zonavtas->nombre ?? '' }}</strong>
+					</div>
 				</td>
-				<td>
-					@if ($bonificacion > 0)
-						{{ number_format($bonificacion, 1) }}
+				<td class="pedido-meta">
+					<strong>Pedido Nro.: {{ $numeroPedido }}</strong><br>
+					<strong>Fecha: {{ date('d/m/Y', strtotime($pedido->fecha ?? '')) }}</strong><br>
+					<strong>Fecha de Entrega: {{ date('d/m/Y', strtotime($pedido->fechaentrega ?? '')) }}</strong><br>
+					<strong>Reparto: {{ $repartoNombre }}</strong><br>
+					<strong>Lugar de entrega: {{ $pedido->lugarentrega ?? '' }}</strong>
+					@if ($mostrarTotalesDivision)
+						<div class="pedido-totales-division">
+							{{ number_format($totalNetoDivision, 2) }}<br>
+							{{ number_format($ajusteDivision, 2) }}<br>
+							{{ number_format($totalDivision, 2) }}
+						</div>
 					@endif
 				</td>
 			</tr>
-		@endforeach
-		<tr>
-			<td><strong>Totales</strong></td>
-			@php
-				$kilos = 0.;
-				$cajas = 0.;
-				$piezas = 0.;
-				$pesadaNetaTotal = 0.;
-				$bonificacionTotal = 0.;
-			@endphp
-			@foreach ($pedido->pedido_articulos as $item)
-				@php
-					$pesadaBruta = (float) ($item->pesada ?? 0);
-					$pctBonificacion = (float) optional($item->descuentoventa_ids)->porcentajedescuento ?? 0;
-					$bonificacion = 0.;
-					$pesadaNeta = $pesadaBruta;
-					if ($pctBonificacion > 0 && $pesadaBruta > 0) {
-						$bonificacion = round($pesadaBruta * $pctBonificacion / 100, 1);
-						$pesadaNeta = $pesadaBruta - $bonificacion;
-					}
-					$kilos += ($item->kilo);
-					$piezas += ($item->pieza);
-					$cajas += ($item->caja);
-					$pesadaNetaTotal += $pesadaNeta;
-					$bonificacionTotal += $bonificacion;
-				@endphp
+		</table>
+		<table class="pedido-items">
+			<tr class="pedido-items-head">
+				<td style="width: 8%;">Sku</td>
+				<td style="width: 8%;">Unid.</td>
+				<td style="width: 8%;">Kg.</td>
+				<td style="width: 11%;">Descuento</td>
+				<td style="width: 22%;">Descripción</td>
+				<td style="width: 6%;">UMD</td>
+				<td style="width: 8%;">Cajas</td>
+				<td style="width: 10%;">Precio</td>
+				<td style="width: 9%;">Pesada</td>
+				<td style="width: 10%;">Bonificación</td>
+			</tr>
+			@foreach ($itemsPagina as $item)
+				<tr>
+					<td>{{ $item['sku'] }}</td>
+					<td>{{ number_format($item['pieza'], 2) }}</td>
+					<td>{{ number_format($item['kilo'], 2) }}</td>
+					<td>{{ $item['descuento'] }}</td>
+					<td>{{ $item['descripcion'] }}</td>
+					<td>{{ $item['umd'] }}</td>
+					<td>{{ number_format($item['caja'], 2) }}</td>
+					<td>{{ number_format($item['precio'], 2) }}</td>
+					<td>@if ($item['pesada'] > 0){{ number_format($item['pesada'], 2) }}@endif</td>
+					<td>@if ($item['bonificacion'] > 0){{ number_format($item['bonificacion'], 1) }}@endif</td>
+				</tr>
 			@endforeach
-			<td><strong>{{ number_format($piezas, 2) }}</strong></td>
-			<td><strong>{{ number_format($kilos, 2) }}</strong></td>
-			<td></td>
-			<td></td>
-			<td></td>
-			<td><strong>{{ number_format($cajas, 2) }}</strong></td>
-			<td></td>
-			<td>
-				@if ($pesadaNetaTotal > 0)
-					<strong>{{ number_format($pesadaNetaTotal, 2) }}</strong>
-				@endif
-			</td>
-			<td>
-				@if ($bonificacionTotal > 0)
-					<strong>{{ number_format($bonificacionTotal, 1) }}</strong>
-				@endif
-			</td>
-		</tr>
-	</tbody>
-</table>
-<div class="pedido-leyenda">
-	<label>Leyendas</label>
-	<p>{{ $pedido->leyenda }}</p>
-</div>
+			@if ($esUltima)
+				<tr>
+					<td><strong>Totales</strong></td>
+					<td><strong>{{ number_format($totales['pieza'], 2) }}</strong></td>
+					<td><strong>{{ number_format($totales['kilo'], 2) }}</strong></td>
+					<td></td>
+					<td></td>
+					<td></td>
+					<td><strong>{{ number_format($totales['caja'], 2) }}</strong></td>
+					<td></td>
+					<td>@if ($totales['pesada'] > 0)<strong>{{ number_format($totales['pesada'], 2) }}</strong>@endif</td>
+					<td>@if ($totales['bonificacion'] > 0)<strong>{{ number_format($totales['bonificacion'], 1) }}</strong>@endif</td>
+				</tr>
+			@endif
+		</table>
+		@if (! $esUltima)
+			<p class="pedido-continua">Continúa en la página siguiente…</p>
+		@elseif (trim((string) ($pedido->leyenda ?? '')) !== '')
+			<div class="pedido-leyenda">
+				<label>Leyendas</label>
+				<p>{{ $pedido->leyenda }}</p>
+			</div>
+		@endif
+	</div>
+@endforeach
 </body>
 </html>

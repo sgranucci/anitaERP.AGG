@@ -26,7 +26,10 @@ use App\Support\Ventas\KiloPedidoListadoFiltros;
 use App\Support\Ventas\KiloCategoriaListadoFiltros;
 use App\Support\Ventas\ListadoRepartoFechaEntregaSupport;
 use App\Support\Ventas\PedidoListadoFiltros;
+use App\Support\Ventas\ClienteDespachoSupport;
+use App\Support\Ventas\PedidoEstadoErpSupport;
 use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
+use App\Services\Ventas\PedidoTransferenciaDespachoService;
 use Illuminate\Http\RedirectResponse;
 use App\Models\Configuracion\Moneda;
 use App\Models\Ventas\Cliente;
@@ -72,11 +75,13 @@ class PedidoController extends Controller
 	private $incotermRepository;
 	private $formpagoRepository;
 	private $actividad_arcaRepository;
+	private PedidoTransferenciaDespachoService $pedidoTransferenciaDespachoService;
 
     public function __construct(PedidoService $pedidoservice,
     							PedidoListadoPdfService $pedidoListadoPdfService,
     							KiloPedidoReporteService $kiloPedidoReporteService,
     							KiloCategoriaReporteService $kiloCategoriaReporteService,
+    							PedidoTransferenciaDespachoService $pedidoTransferenciaDespachoService,
     							TransporteRepositoryInterface $transporterepository,
 								TiposuspensionclienteRepositoryInterface $tiposuspensionclienteRepository,
 								MotivocierrepedidoRepositoryInterface $motivocierrepedidoRepository,
@@ -104,6 +109,7 @@ class PedidoController extends Controller
 		$this->incotermRepository = $incotermrepository;
 		$this->formapagoRepository = $formpagorepository;
         $this->actividad_arcaRepository = $actividad_arcarepository;
+        $this->pedidoTransferenciaDespachoService = $pedidoTransferenciaDespachoService;
     }
 
     /**
@@ -780,7 +786,11 @@ class PedidoController extends Controller
 	/* Lista el pedido en PDF */
 	public function listarPedidoPdf($id, $cliente_id = null)
 	{
-		return $this->pedidoService->listarPedidoPdf($id);
+		return redirect()->route('sesion_impresion_pedido', [
+			'id' => $id,
+			'auto' => 1,
+			'solo_formulario' => 'PEDIDO',
+		]);
 	}
 
 	/* Lista el prefactura */
@@ -925,6 +935,12 @@ class PedidoController extends Controller
 		$ocultarVolver = $soloConsulta;
 		$puedeActualizarPedido = can('actualizar-pedidos', false);
 		$filtrosQuery = QueryRetornoListado::desdeRequestSiIndex(request(), PedidoListadoFiltros::class);
+		$esPedidoDespacho = ClienteDespachoSupport::esPedidoDespacho((int) ($pedido->cliente_id ?? 0));
+		$pedidoTransferido = PedidoEstadoErpSupport::esTransferido($pedido->estado ?? null, $pedido->estadopedido ?? null);
+		$mostrarFacturarPedido = ! $esPedidoDespacho && ! $pedidoTransferido;
+		$mostrarTransferirDespacho = ClienteDespachoSupport::pedidoPuedeTransferirse($pedido)
+			&& can('transferir-pedido-despacho', false)
+			&& empty($soloConsulta);
 
 		return view('ventas.pedido.editar', compact('pedido', 'cliente_query', 'condicionventa_query', 
 			'vendedor_query', 
@@ -933,7 +949,23 @@ class PedidoController extends Controller
 			'puntoventa_query', 'puntoventadefault_id', 'tipotransaccion_query', 'descuentoventa_query',
 			'tipotransacciondefault_id', 'puntoventaremitodefault_id', 'formapago_query', 'incoterm_query',
 			'unidadmedida_query', 'actividad_arca_query', 'soloConsulta', 'ocultarVolver', 'puedeActualizarPedido',
-			'filtrosQuery'));
+			'filtrosQuery', 'esPedidoDespacho', 'pedidoTransferido', 'mostrarFacturarPedido', 'mostrarTransferirDespacho'));
+    }
+
+    public function transferirAlDespacho(int $id)
+    {
+        can('transferir-pedido-despacho');
+
+        $resultado = $this->pedidoTransferenciaDespachoService->transferir($id);
+        if (! ($resultado['ok'] ?? false)) {
+            return redirect()
+                ->route('editar_pedido', $id)
+                ->with('errores', [$resultado['mensaje'] ?? 'No se pudo transferir el pedido.']);
+        }
+
+        return redirect()
+            ->route('editar_pedido', $id)
+            ->with('mensaje', $resultado['mensaje'] ?? 'Pedido transferido al despacho.');
     }
 
     /**

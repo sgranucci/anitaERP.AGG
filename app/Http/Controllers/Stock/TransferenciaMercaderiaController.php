@@ -416,6 +416,8 @@ class TransferenciaMercaderiaController extends Controller
                 $lineas[] = [
                     'articulo_id' => (int) $linea['articulo_id'],
                     'cantidad' => $cantidad,
+                    'caja' => (float) ($linea['caja'] ?? 0),
+                    'pieza' => (float) ($linea['pieza'] ?? 0),
                 ];
             }
         }

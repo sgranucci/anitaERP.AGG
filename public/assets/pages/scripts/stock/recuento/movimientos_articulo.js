@@ -79,8 +79,12 @@
         var um = data && data.articulo ? String(data.articulo.unidad_medida || '').trim() : '';
         var $hint = $panel.find('.saldos-articulo-um-hint');
         var $thSaldo = $panel.find('.saldos-th-saldo');
+        var triple = !!(data && data.mostrar_caja_pieza);
 
-        if (um) {
+        if (triple) {
+            $hint.text('(kg, caja y pieza)').removeClass('d-none');
+            $thSaldo.text('Kilos');
+        } else if (um) {
             $hint.text('(' + um + ')').removeClass('d-none');
             $thSaldo.text('Saldo (' + um + ')');
         } else {
@@ -194,8 +198,11 @@
         var $tbody = $panel.find('.saldos-articulo-tbody');
         var $total = $panel.find('.saldos-articulo-total');
         var mostrarEmpresa = !!(data && data.mostrar_empresa);
+        var mostrarCajaPieza = !!(data && data.mostrar_caja_pieza);
 
         $panel.find('.saldos-col-empresa, .saldos-footer-empresa').toggleClass('d-none', !mostrarEmpresa);
+        $panel.find('.saldos-th-caja, .saldos-th-pieza, .saldos-articulo-total-caja, .saldos-articulo-total-pieza')
+            .toggleClass('d-none', !mostrarCajaPieza);
 
         $loading.addClass('d-none');
         $error.addClass('d-none').text('');
@@ -207,6 +214,8 @@
             $wrap.addClass('d-none');
             $vacio.removeClass('d-none');
             $total.text((data && data.total_fmt) ? data.total_fmt : '0');
+            $panel.find('.saldos-articulo-total-caja').text((data && data.total_caja_fmt) ? data.total_caja_fmt : '0');
+            $panel.find('.saldos-articulo-total-pieza').text((data && data.total_pieza_fmt) ? data.total_pieza_fmt : '0');
             actualizarEtiquetasUnidadMedidaSaldos($panel, data);
             return;
         }
@@ -214,6 +223,8 @@
         $vacio.addClass('d-none');
         $wrap.removeClass('d-none');
         $total.text((data && data.total_fmt) ? data.total_fmt : '0');
+        $panel.find('.saldos-articulo-total-caja').text((data && data.total_caja_fmt) ? data.total_caja_fmt : '0');
+        $panel.find('.saldos-articulo-total-pieza').text((data && data.total_pieza_fmt) ? data.total_pieza_fmt : '0');
 
         filas.forEach(function (fila) {
             var depId = parseInt(fila.deposito_id, 10) || 0;
@@ -224,6 +235,10 @@
                 $tr.append($('<td class="small saldos-col-empresa"></td>').text(fila.empresa_nombre || ''));
             }
             $tr.append($('<td class="text-right text-monospace small"></td>').text(fila.saldo_fmt || ''));
+            if (mostrarCajaPieza) {
+                $tr.append($('<td class="text-right text-monospace small"></td>').text(fila.caja_fmt || '0'));
+                $tr.append($('<td class="text-right text-monospace small"></td>').text(fila.pieza_fmt || '0'));
+            }
             var $btn = $('<button type="button" class="btn btn-outline-info btn-xs btn-sm py-0 px-1 btn-saldo-fila-kardex" title="Abrir kardex en este dep\u00f3sito"></button>');
             $btn.attr('data-deposito-id', String(depId));
             $btn.html('<i class="fa fa-list-alt"></i>');

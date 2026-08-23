@@ -413,6 +413,12 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(45)
             ->appendOutputTo(storage_path('logs/flash-calculo-diario-schedule.log'))
             ->when(fn () => (bool) config('caja.flash_calculo_diario.habilitado', false));
+
+        $schedule->command('ventas:reenviar-impresion-pendiente', ['--ejecutar' => true])
+            ->dailyAt((string) config('impresion_comprobante.cron_hora', '06:20'))
+            ->runInBackground()
+            ->withoutOverlapping(20)
+            ->appendOutputTo(storage_path('logs/impresion-comprobante-reintento.log'));
     }
 
     /**

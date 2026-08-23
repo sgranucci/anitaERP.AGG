@@ -116,11 +116,20 @@ class RemitoService
 
     public function listarRemitoPdf($id)
     {
+        return response()->download($this->generarPdfRemitoArchivo($id));
+    }
+
+    public function generarPdfRemitoArchivo($id): string
+    {
         ini_set('memory_limit', '512M');
 
         $data = $this->remitoQuery->leeRemitoporId($id);
-        $remito = $data[0];
-        $nombre_pdf = 'remito-'.$id.'-'.$remito->clientes->nombre;
+        $remito = $data[0] ?? null;
+        if (! $remito) {
+            throw new \RuntimeException('Remito no encontrado');
+        }
+        $nombreCliente = preg_replace('/[^\w\-]+/', '_', (string) optional($remito->clientes)->nombre);
+        $nombre_pdf = 'remito-'.$id.'-'.$nombreCliente;
 
         $view = View::make('exports.ventas.remito', compact('remito'))->render();
         $path = storage_path('pdf/remito');
@@ -132,7 +141,7 @@ class RemitoService
         $pdf->setPaper('legal', 'landscape');
         $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
 
-        return response()->download($path.'/'.$nombre_pdf.'.pdf');
+        return $path.'/'.$nombre_pdf.'.pdf';
     }
 
     public function guardaRemito($data, $funcion, $id = null)

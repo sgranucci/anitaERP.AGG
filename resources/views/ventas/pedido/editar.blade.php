@@ -19,6 +19,7 @@
 <script src="{{asset("assets/pages/scripts/ventas/zonavta/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/pedido/proceso-overlay.js")}}" type="text/javascript"></script>
 @include('includes.ventas.preferencias_facturacion_scripts')
+@include('ventas.partials.aviso_deposito_facturacion')
 <script src="{{asset("assets/pages/scripts/ventas/pedido/crear.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/crear.js')) ?: time() }}" type="text/javascript"></script>
 
 <script>
@@ -92,11 +93,24 @@
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                     @endif
+                    @if (empty($pedidoTransferido) && $pedido->estadopedido != "Facturado")
 					<button type="submit" onclick="pesada()" class="btn btn-success">
                     	<i class="fa fa-fw fa-check"></i>
 						Pesada
 					</button>
-                    @if ($pedido->estadopedido != "Facturado" && $pedido->estadopedido != "Suspendido")
+                    @endif
+                    @if (!empty($mostrarTransferirDespacho))
+                        <button type="button" onclick="transferirPedidoDespacho()" class="btn btn-success">
+                            <i class="fa fa-fw fa-exchange-alt"></i>
+                            Transferir al despacho
+                        </button>
+                    @endif
+                    @if (!empty($pedidoTransferido) && !empty($pedido->transferencia_mercaderia_id) && can('crear-transferencia-mercaderia', false))
+                        <a href="{{ route('transferencia_mercaderia') }}" class="btn btn-outline-success btn-sm" title="Ver transferencias de mercadería" target="_blank" rel="noopener">
+                            <i class="fa fa-fw fa-exchange-alt"></i> TM #{{ $pedido->transferencia_mercaderia_id }}
+                        </a>
+                    @endif
+                    @if (!empty($mostrarFacturarPedido) && $pedido->estadopedido != "Facturado" && $pedido->estadopedido != "Suspendido")
                         <button type="button" onclick="generaFactura()" class="btn btn-primary" data-padron-accion-factura="1">
                             <i class="fa fa-fw fa-print"></i>
                             Factura
@@ -108,7 +122,7 @@
                         </button>
                         @endif
                     @endif
-                    @if ($pedido->estadopedido != "Facturado")
+                    @if ($pedido->estadopedido != "Facturado" && empty($pedidoTransferido))
                         <button type="submit" onclick="suspendePedido()" id="suspendepedido" class="btn btn-warning">
                             <i class="fa fa-fw fa-cross"></i>
                             Suspender el Pedido
@@ -149,7 +163,7 @@
                     @include('ventas.pedido.form', $datos)
                 </div>
                 <div class="card-footer">
-                    @if ($pedido->estadopedido != "Facturado")
+                    @if ($pedido->estadopedido != "Facturado" && empty($pedidoTransferido))
                         <div class="row">
                             <div class="col-lg-6">
                                 @if (!empty($puedeActualizarPedido))
@@ -167,6 +181,11 @@
                     @endif
                 </div>
             </form>
+            @if (!empty($mostrarTransferirDespacho))
+            <form id="form-transferir-despacho" action="{{ route('transferir_pedido_despacho', $pedido->id) }}" method="POST" class="d-none">
+                @csrf
+            </form>
+            @endif
         </div>
     </div>
 </div>

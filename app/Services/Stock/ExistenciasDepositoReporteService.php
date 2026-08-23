@@ -12,6 +12,7 @@ use App\Models\Stock\Usoarticulo;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Stock\ArticuloSaldosDepositoSupport;
 use App\Support\Stock\ExistenciasDepositoFiltroDepositosSupport;
+use App\Support\Stock\UnidadesCajaPiezaSupport;
 use App\Support\Stock\ExistenciasDepositoListadoFiltros;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -59,7 +60,11 @@ class ExistenciasDepositoReporteService
         'totales' => [
           'total_articulos' => 0,
           'totales_deposito' => array_fill_keys($depositoIdsActivos, 0.0),
+          'totales_deposito_caja' => array_fill_keys($depositoIdsActivos, 0.0),
+          'totales_deposito_pieza' => array_fill_keys($depositoIdsActivos, 0.0),
           'total_general' => 0.0,
+          'total_general_caja' => 0.0,
+          'total_general_pieza' => 0.0,
         ],
       ];
     }
@@ -85,7 +90,8 @@ class ExistenciasDepositoReporteService
       $paginator = $query->paginate($porPagina);
       $idsPagina = $paginator->getCollection()->pluck('id')->map(fn ($id) => (int) $id)->all();
       $saldosMap = $this->saldosPorArticulo($idsPagina, $depositoIdsActivos, $fechaHasta);
-      $filas = $paginator->getCollection()->map(fn (Articulo $articulo) => $this->mapFila($articulo, $depositos, $saldosMap));
+      $unidadesMap = UnidadesCajaPiezaSupport::saldosCajaPiezaPorArticuloDeposito($idsPagina, $depositoIdsActivos, $fechaHasta);
+      $filas = $paginator->getCollection()->map(fn (Articulo $articulo) => $this->mapFila($articulo, $depositos, $saldosMap, $unidadesMap));
       $paginator->setCollection($filas);
 
       return [
@@ -98,7 +104,8 @@ class ExistenciasDepositoReporteService
     $articulos = $query->get();
     $articuloIdsPagina = $articulos->pluck('id')->map(fn ($id) => (int) $id)->all();
     $saldosMap = $this->saldosPorArticulo($articuloIdsPagina, $depositoIdsActivos, $fechaHasta);
-    $filas = $articulos->map(fn (Articulo $articulo) => $this->mapFila($articulo, $depositos, $saldosMap));
+    $unidadesMap = UnidadesCajaPiezaSupport::saldosCajaPiezaPorArticuloDeposito($articuloIdsPagina, $depositoIdsActivos, $fechaHasta);
+    $filas = $articulos->map(fn (Articulo $articulo) => $this->mapFila($articulo, $depositos, $saldosMap, $unidadesMap));
 
     return [
       'depositos' => $depositos,
@@ -110,7 +117,15 @@ class ExistenciasDepositoReporteService
   /**
    * @param  array<string, mixed>  $filtros
    * @param  list<int>  $depositoIds
-   * @return array{total_articulos: int, totales_deposito: array<int, float>, total_general: float}
+   * @return array{
+   *     total_articulos: int,
+   *     totales_deposito: array<int, float>,
+   *     totales_deposito_caja: array<int, float>,
+   *     totales_deposito_pieza: array<int, float>,
+   *     total_general: float,
+   *     total_general_caja: float,
+   *     total_general_pieza: float
+   * }
    */
   public function totales(array $filtros, array $depositoIds, ?string $fechaHasta = null): array
   {
@@ -118,7 +133,11 @@ class ExistenciasDepositoReporteService
       return [
         'total_articulos' => 0,
         'totales_deposito' => [],
+        'totales_deposito_caja' => [],
+        'totales_deposito_pieza' => [],
         'total_general' => 0.0,
+        'total_general_caja' => 0.0,
+        'total_general_pieza' => 0.0,
       ];
     }
 
@@ -130,7 +149,11 @@ class ExistenciasDepositoReporteService
       return [
         'total_articulos' => 0,
         'totales_deposito' => array_fill_keys($depositoIds, 0.0),
+        'totales_deposito_caja' => array_fill_keys($depositoIds, 0.0),
+        'totales_deposito_pieza' => array_fill_keys($depositoIds, 0.0),
         'total_general' => 0.0,
+        'total_general_caja' => 0.0,
+        'total_general_pieza' => 0.0,
       ];
     }
 
@@ -146,7 +169,11 @@ class ExistenciasDepositoReporteService
       ->get();
 
     $totalesDeposito = array_fill_keys($depositoIds, 0.0);
+    $totalesDepositoCaja = array_fill_keys($depositoIds, 0.0);
+    $totalesDepositoPieza = array_fill_keys($depositoIds, 0.0);
     $totalGeneral = 0.0;
+    $totalGeneralCaja = 0.0;
+    $totalGeneralPieza = 0.0;
 
     foreach ($rows as $row) {
       $depId = (int) $row->deposito_id;
@@ -155,10 +182,29 @@ class ExistenciasDepositoReporteService
       $totalGeneral += $saldo;
     }
 
+    if (UnidadesCajaPiezaSupport::mostrarEnExistencias()) {
+      $unidades = UnidadesCajaPiezaSupport::saldosCajaPiezaPorArticuloDeposito($articuloIds, $depositoIds, $fechaHasta);
+      foreach ($unidades as $porDeposito) {
+        foreach ($porDeposito as $depId => $u) {
+          $depId = (int) $depId;
+          $caja = (float) ($u['caja'] ?? 0);
+          $pieza = (float) ($u['pieza'] ?? 0);
+          $totalesDepositoCaja[$depId] = ($totalesDepositoCaja[$depId] ?? 0) + $caja;
+          $totalesDepositoPieza[$depId] = ($totalesDepositoPieza[$depId] ?? 0) + $pieza;
+          $totalGeneralCaja += $caja;
+          $totalGeneralPieza += $pieza;
+        }
+      }
+    }
+
     return [
       'total_articulos' => count($articuloIds),
       'totales_deposito' => $totalesDeposito,
+      'totales_deposito_caja' => $totalesDepositoCaja,
+      'totales_deposito_pieza' => $totalesDepositoPieza,
       'total_general' => $totalGeneral,
+      'total_general_caja' => $totalGeneralCaja,
+      'total_general_pieza' => $totalGeneralPieza,
     ];
   }
 
@@ -433,19 +479,30 @@ class ExistenciasDepositoReporteService
   /**
    * @param  Collection<int, Depmae>  $depositos
    * @param  array<int, array<int, float>>  $saldosMap
+   * @param  array<int, array<int, array{caja: float, pieza: float}>>  $unidadesMap
    * @return array<string, mixed>
    */
-  private function mapFila(Articulo $articulo, Collection $depositos, array $saldosMap): array
+  private function mapFila(Articulo $articulo, Collection $depositos, array $saldosMap, array $unidadesMap = []): array
   {
     $articuloId = (int) $articulo->id;
     $saldos = [];
+    $saldosCaja = [];
+    $saldosPieza = [];
     $total = 0.0;
+    $totalCaja = 0.0;
+    $totalPieza = 0.0;
 
     foreach ($depositos as $dep) {
       $depId = (int) $dep->id;
       $saldo = (float) ($saldosMap[$articuloId][$depId] ?? 0.0);
+      $caja = (float) ($unidadesMap[$articuloId][$depId]['caja'] ?? 0.0);
+      $pieza = (float) ($unidadesMap[$articuloId][$depId]['pieza'] ?? 0.0);
       $saldos[$depId] = $saldo;
+      $saldosCaja[$depId] = $caja;
+      $saldosPieza[$depId] = $pieza;
       $total += $saldo;
+      $totalCaja += $caja;
+      $totalPieza += $pieza;
     }
 
     return [
@@ -457,7 +514,11 @@ class ExistenciasDepositoReporteService
       'tipo' => (string) ($articulo->tipoarticulos?->nombre ?? ''),
       'nombreempresa' => (string) ($depositos->first()?->empresas?->nombre ?? ''),
       'saldos' => $saldos,
+      'saldos_caja' => $saldosCaja,
+      'saldos_pieza' => $saldosPieza,
       'total' => $total,
+      'total_caja' => $totalCaja,
+      'total_pieza' => $totalPieza,
       'total_fmt' => ArticuloSaldosDepositoSupport::formatSaldo($total),
     ];
   }
@@ -485,11 +546,15 @@ class ExistenciasDepositoReporteService
     return [
       'depositos' => $depositos,
       'filas' => $filas,
-      'totales' => [
-        'total_articulos' => 0,
-        'totales_deposito' => [],
-        'total_general' => 0.0,
-      ],
+        'totales' => [
+          'total_articulos' => 0,
+          'totales_deposito' => [],
+          'totales_deposito_caja' => [],
+          'totales_deposito_pieza' => [],
+          'total_general' => 0.0,
+          'total_general_caja' => 0.0,
+          'total_general_pieza' => 0.0,
+        ],
     ];
   }
 

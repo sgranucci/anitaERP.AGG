@@ -374,6 +374,9 @@
 				$('#condicionventa_id').val(condicionventa_id);
 				$('#descuentopie').val(descuento);
 				descuentoCliente = $('#descuentopie').val();
+				if (typeof window.actualizarAvisoDepositoFacturacion === 'function') {
+					window.actualizarAvisoDepositoFacturacion(transporte_id);
+				}
 			}
 			$('#tiposuspension_id').val(tiposuspension_id);
 		});

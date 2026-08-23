@@ -7,6 +7,7 @@ use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Listaprecio;
 use App\Models\Stock\Lote;
+use App\Models\Stock\Unidadmedida;
 use App\Traits\Ventas\Remito_ArticuloTrait;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -34,6 +35,11 @@ class Remito_Articulo extends Model implements Auditable
             ->with('lineas')
             ->with('mventas')
             ->with('unidadesdemedidas');
+    }
+
+    public function unidadesdemedidas()
+    {
+        return $this->belongsTo(Unidadmedida::class, 'unidadmedida_id');
     }
 
     public function remitos()

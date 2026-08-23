@@ -181,12 +181,17 @@ class RemitoQuery implements RemitoQueryInterface
 
     public function leeRemitoporId($id)
     {
-        return $this->model->with('clientes:id,nombre')
-            ->with('mventas:id,nombre')
-            ->with('transportes')
-            ->with('vendedores')
-            ->with('zonavtas')
-            ->with('remito_articulos')
+        return $this->model->with([
+            'clientes:id,nombre',
+            'mventas:id,nombre',
+            'transportes',
+            'vendedores',
+            'zonavtas',
+            'puntoventas',
+            'remito_articulos.articulos.unidadesdemedidas',
+            'remito_articulos.unidadesdemedidas',
+            'remito_articulos.descuentoventa_ids',
+        ])
             ->where('id', $id)
             ->get();
     }

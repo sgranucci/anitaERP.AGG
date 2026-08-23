@@ -29,7 +29,7 @@ class PedidoPdfService
 
         $html = View::make('exports.ventas.pedido', compact('pedido'))->render();
         $pdf = App::make('dompdf.wrapper');
-        $pdf->setPaper('legal', 'landscape');
+        $pdf->setPaper('a4', 'portrait');
         $pdf->loadHTML($html, 'UTF-8');
 
         return [

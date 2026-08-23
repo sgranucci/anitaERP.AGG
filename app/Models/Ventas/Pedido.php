@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasManyThrough;
 use App\Models\Stock\Mventa;
 use App\Models\Stock\Lote;
+use App\Models\Stock\Transferencia_Mercaderia;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Cliente_Entrega;
 use App\Models\Ventas\Condicionventa;
@@ -24,7 +25,8 @@ class Pedido extends Model implements Auditable
 
     protected $fillable = ['fecha', 'fechaentrega', 'cliente_id', 'condicionventa_id', 'vendedor_id', 'transporte_id', 
 							'mventa_id', 'estado', 'usuario_id', 'leyenda', 'descuento', 'descuentointegrado', 
-							'cliente_entrega_id', 'lugarentrega', 'codigo', 'estadopedido', 'caja_reales', 'zonavta_id'];
+							'cliente_entrega_id', 'lugarentrega', 'codigo', 'estadopedido', 'caja_reales', 'zonavta_id',
+							'transferencia_mercaderia_id'];
     protected $table = 'pedido';
 	protected $casts = ['fecha' => 'datetime:d-m-Y',
 						'fechaentrega' => 'datetime'];
@@ -86,6 +88,11 @@ class Pedido extends Model implements Auditable
     public function zonavtas()
     {
         return $this->belongsTo(Zonavta::class, 'zonavta_id');
+    }
+
+    public function transferencia_mercaderia()
+    {
+        return $this->belongsTo(Transferencia_Mercaderia::class, 'transferencia_mercaderia_id');
     }
 
     public function usuarios()

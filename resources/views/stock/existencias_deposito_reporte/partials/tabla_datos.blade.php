@@ -1,7 +1,11 @@
 @php
     use App\Models\Stock\Depmae;
     use App\Support\Stock\ArticuloSaldosDepositoSupport;
+    use App\Support\Stock\UnidadesCajaPiezaSupport;
     use Illuminate\Support\Str;
+
+    $mostrarCajaPieza = UnidadesCajaPiezaSupport::mostrarEnExistencias();
+    $sepUnidades = ! empty($exportar_numeros_excel) ? "\n" : '<br>';
 
     $depositos = $depositos ?? collect();
     $puedeVerKardex = (bool) ($puede_ver_kardex ?? false);
@@ -83,9 +87,14 @@
                     @php
                         $depId = (int) $dep->id;
                         $saldo = (float) ($saldos[$depId] ?? 0);
-                        $tieneSaldo = abs($saldo) >= 0.0000001;
+                        $caja = (float) (($fila['saldos_caja'][$depId] ?? 0));
+                        $pieza = (float) (($fila['saldos_pieza'][$depId] ?? 0));
+                        $tieneSaldo = abs($saldo) >= 0.0000001
+                            || ($mostrarCajaPieza && (abs($caja) >= 0.0000001 || abs($pieza) >= 0.0000001));
                         $saldoFmt = $tieneSaldo
-                            ? ArticuloSaldosDepositoSupport::formatSaldo($saldo)
+                            ? ($mostrarCajaPieza
+                                ? ArticuloSaldosDepositoSupport::formatTriple($saldo, $caja, $pieza, $sepUnidades)
+                                : ArticuloSaldosDepositoSupport::formatSaldo($saldo))
                             : '';
                     @endphp
                     <td class="text-right{{ ($puedeVerKardex && $tieneSaldo && $articuloId > 0) ? ' celda-saldo-kardex' : '' }}"
@@ -98,8 +107,10 @@
                             style="cursor:pointer;"
                         @endif>
                         @if ($tieneSaldo)
-                            @if (! empty($exportar_numeros_excel))
+                            @if (! empty($exportar_numeros_excel) && ! $mostrarCajaPieza)
                                 {{ $saldo }}
+                            @elseif ($mostrarCajaPieza && empty($exportar_numeros_excel))
+                                {!! $saldoFmt !!}
                             @else
                                 {{ $saldoFmt }}
                             @endif
@@ -107,11 +118,24 @@
                     </td>
                 @endforeach
                 <td class="text-right">
-                    @if (abs((float) ($fila['total'] ?? 0)) >= 0.0000001)
-                        @if (! empty($exportar_numeros_excel))
-                            {{ (float) ($fila['total'] ?? 0) }}
+                    @php
+                        $totalKg = (float) ($fila['total'] ?? 0);
+                        $totalCaja = (float) ($fila['total_caja'] ?? 0);
+                        $totalPieza = (float) ($fila['total_pieza'] ?? 0);
+                        $tieneTotal = abs($totalKg) >= 0.0000001
+                            || ($mostrarCajaPieza && (abs($totalCaja) >= 0.0000001 || abs($totalPieza) >= 0.0000001));
+                    @endphp
+                    @if ($tieneTotal)
+                        @if ($mostrarCajaPieza)
+                            @if (! empty($exportar_numeros_excel))
+                                {{ ArticuloSaldosDepositoSupport::formatTriple($totalKg, $totalCaja, $totalPieza, "\n") }}
+                            @else
+                                {!! ArticuloSaldosDepositoSupport::formatTriple($totalKg, $totalCaja, $totalPieza, '<br>') !!}
+                            @endif
+                        @elseif (! empty($exportar_numeros_excel))
+                            {{ $totalKg }}
                         @else
-                            {{ $fila['total_fmt'] ?? ArticuloSaldosDepositoSupport::formatSaldo((float) ($fila['total'] ?? 0)) }}
+                            {{ $fila['total_fmt'] ?? ArticuloSaldosDepositoSupport::formatSaldo($totalKg) }}
                         @endif
                     @endif
                 </td>
@@ -130,11 +154,28 @@
                     @php
                         $depId = (int) $dep->id;
                         $saldoTotal = (float) (($totales['totales_deposito'][$depId] ?? 0));
+                        $cajaTotal = (float) (($totales['totales_deposito_caja'][$depId] ?? 0));
+                        $piezaTotal = (float) (($totales['totales_deposito_pieza'][$depId] ?? 0));
                     @endphp
-                    <td class="text-right">{{ ArticuloSaldosDepositoSupport::formatSaldo($saldoTotal) }}</td>
+                    <td class="text-right">
+                        @if ($mostrarCajaPieza)
+                            {!! ArticuloSaldosDepositoSupport::formatTriple($saldoTotal, $cajaTotal, $piezaTotal, $sepUnidades) !!}
+                        @else
+                            {{ ArticuloSaldosDepositoSupport::formatSaldo($saldoTotal) }}
+                        @endif
+                    </td>
                 @endforeach
                 <td class="text-right">
-                    {{ ArticuloSaldosDepositoSupport::formatSaldo((float) ($totales['total_general'] ?? 0)) }}
+                    @if ($mostrarCajaPieza)
+                        {!! ArticuloSaldosDepositoSupport::formatTriple(
+                            (float) ($totales['total_general'] ?? 0),
+                            (float) ($totales['total_general_caja'] ?? 0),
+                            (float) ($totales['total_general_pieza'] ?? 0),
+                            $sepUnidades
+                        ) !!}
+                    @else
+                        {{ ArticuloSaldosDepositoSupport::formatSaldo((float) ($totales['total_general'] ?? 0)) }}
+                    @endif
                 </td>
             </tr>
         @endif

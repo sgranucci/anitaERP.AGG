@@ -31,6 +31,8 @@ class RecuentoMovimientosArticuloExport implements FromView, ShouldAutoSize, Wit
 
     private bool $modoTodosDepositos = false;
 
+    private bool $mostrarCajaPieza = false;
+
     private string $colUltima = 'H';
 
     private bool $hayFilaLogos = false;
@@ -57,7 +59,8 @@ class RecuentoMovimientosArticuloExport implements FromView, ShouldAutoSize, Wit
     {
         $this->contexto = $contexto;
         $this->modoTodosDepositos = (bool) ($contexto['modo_todos_depositos'] ?? false);
-        $this->colUltima = $this->modoTodosDepositos ? 'I' : 'H';
+        $this->mostrarCajaPieza = (bool) ($contexto['mostrar_caja_pieza'] ?? false);
+        $this->colUltima = $this->letraColumna($this->cantidadColumnas() - 1);
         $this->movimientos = collect($movimientos);
 
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($this->movimientos);
@@ -96,12 +99,29 @@ class RecuentoMovimientosArticuloExport implements FromView, ShouldAutoSize, Wit
         return $formats;
     }
 
+    private function cantidadColumnas(): int
+    {
+        return ($this->modoTodosDepositos ? 9 : 8) + ($this->mostrarCajaPieza ? 4 : 0);
+    }
+
+    private function letraColumna(int $indiceCero): string
+    {
+        return chr(ord('A') + $indiceCero);
+    }
+
     /**
      * @return list<string>
      */
     private function columnasCantidad(): array
     {
-        return $this->modoTodosDepositos ? ['D', 'E'] : ['C', 'D'];
+        $desde = $this->modoTodosDepositos ? 3 : 2;
+        $cuantas = $this->mostrarCajaPieza ? 6 : 2;
+        $letras = [];
+        for ($i = 0; $i < $cuantas; $i++) {
+            $letras[] = $this->letraColumna($desde + $i);
+        }
+
+        return $letras;
     }
 
     /**
@@ -109,7 +129,9 @@ class RecuentoMovimientosArticuloExport implements FromView, ShouldAutoSize, Wit
      */
     private function columnasPrecio(): array
     {
-        return [$this->modoTodosDepositos ? 'F' : 'E'];
+        $indice = ($this->modoTodosDepositos ? 5 : 4) + ($this->mostrarCajaPieza ? 4 : 0);
+
+        return [$this->letraColumna($indice)];
     }
 
     public function styles(Worksheet $sheet)
@@ -132,30 +154,28 @@ class RecuentoMovimientosArticuloExport implements FromView, ShouldAutoSize, Wit
 
     public function columnWidths(): array
     {
+        $anchos = ['A' => 11];
+        $i = 1;
         if ($this->modoTodosDepositos) {
-            return [
-                'A' => 11,
-                'B' => 16,
-                'C' => 8,
-                'D' => 10,
-                'E' => 10,
-                'F' => 11,
-                'G' => 22,
-                'H' => 12,
-                'I' => 28,
-            ];
+            $anchos[$this->letraColumna($i++)] = 16;
         }
+        $anchos[$this->letraColumna($i++)] = 8;
+        $anchos[$this->letraColumna($i++)] = 10;
+        if ($this->mostrarCajaPieza) {
+            $anchos[$this->letraColumna($i++)] = 8;
+            $anchos[$this->letraColumna($i++)] = 8;
+        }
+        $anchos[$this->letraColumna($i++)] = 10;
+        if ($this->mostrarCajaPieza) {
+            $anchos[$this->letraColumna($i++)] = 8;
+            $anchos[$this->letraColumna($i++)] = 8;
+        }
+        $anchos[$this->letraColumna($i++)] = 11;
+        $anchos[$this->letraColumna($i++)] = 22;
+        $anchos[$this->letraColumna($i++)] = 12;
+        $anchos[$this->letraColumna($i)] = 28;
 
-        return [
-            'A' => 11,
-            'B' => 8,
-            'C' => 10,
-            'D' => 10,
-            'E' => 11,
-            'F' => 26,
-            'G' => 12,
-            'H' => 32,
-        ];
+        return $anchos;
     }
 
     public function registerEvents(): array

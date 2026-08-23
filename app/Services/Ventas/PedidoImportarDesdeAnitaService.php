@@ -11,7 +11,9 @@ use App\Models\Ventas\Pedido_Articulo_Caja;
 use App\Models\Ventas\Transporte;
 use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Zonavta;
+use App\Support\Ventas\ClienteDespachoSupport;
 use App\Support\Ventas\KiloPedidoListadoFiltros;
+use App\Support\Ventas\PedidoDespachoAnitaCierreSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -71,6 +73,7 @@ class PedidoImportarDesdeAnitaService
             $codigoCliente = ltrim(trim((string) ($cab->penm_cliente ?? '')), '0');
             $nombreCliente = $this->nombreCliente($codigoCliente, $clientesCache);
             $existe = array_key_exists($codigo, $existentes);
+            $esDespacho = ClienteDespachoSupport::esCodigoAnita($codigoCliente);
 
             $out[] = [
                 'codigo' => $codigo,
@@ -84,7 +87,7 @@ class PedidoImportarDesdeAnitaService
                 'reparto' => (string) (int) ($cab->penm_expreso ?? 0),
                 'estado_anita' => trim((string) ($cab->penm_estado ?? '')),
                 'leyenda' => trim((string) ($cab->penm_leyenda ?? '')),
-                'estado_erp' => $existe ? 'existe' : 'nuevo',
+                'estado_erp' => $esDespacho ? 'omitido_despacho' : ($existe ? 'existe' : 'nuevo'),
                 'pedido_id' => $existe ? (int) $existentes[$codigo] : null,
             ];
         }
@@ -97,6 +100,7 @@ class PedidoImportarDesdeAnitaService
      * @return array{
      *   creados: int,
      *   actualizados: int,
+     *   cerrados: int,
      *   errores: int,
      *   total: int,
      *   detalle: list<array{codigo: string, estado: string, mensaje: string|null}>
@@ -115,6 +119,7 @@ class PedidoImportarDesdeAnitaService
         $resumen = [
             'creados' => 0,
             'actualizados' => 0,
+            'cerrados' => 0,
             'errores' => 0,
             'total' => count($cabeceras),
             'detalle' => [],
@@ -128,6 +133,8 @@ class PedidoImportarDesdeAnitaService
                     $resumen['creados']++;
                 } elseif ($resultado['estado'] === 'actualizado') {
                     $resumen['actualizados']++;
+                } elseif ($resultado['estado'] === 'cerrado') {
+                    $resumen['cerrados']++;
                 } else {
                     $resumen['errores']++;
                 }
@@ -165,6 +172,32 @@ class PedidoImportarDesdeAnitaService
             return [
                 'estado' => 'error',
                 'mensaje' => 'Cliente Anita '.trim((string) ($cab->penm_cliente ?? '')).' no existe en ERP.',
+                'pedido_id' => null,
+            ];
+        }
+
+        if (ClienteDespachoSupport::es((int) $cliente->id)) {
+            $cierre = PedidoDespachoAnitaCierreSupport::cerrarPorClave(
+                PedidoDespachoAnitaCierreSupport::claveDesdeCabeceraAnita($cab)
+            );
+            if (! ($cierre['ok'] ?? false)) {
+                return [
+                    'estado' => 'error',
+                    'mensaje' => $cierre['mensaje'] !== ''
+                        ? $cierre['mensaje']
+                        : 'No se pudo cerrar el pedido DESPACHO en Anita.',
+                    'pedido_id' => null,
+                ];
+            }
+
+            return [
+                'estado' => 'cerrado',
+                'mensaje' => 'Cliente DESPACHO: no se importa (circuito solo ERP). '
+                    .(($cierre['cerrado'] ?? false)
+                        ? 'Pedido cerrado en Anita.'
+                        : (($cierre['existia'] ?? false)
+                            ? 'Ya estaba cerrado en Anita.'
+                            : 'No había pedido abierto en Anita.')),
                 'pedido_id' => null,
             ];
         }

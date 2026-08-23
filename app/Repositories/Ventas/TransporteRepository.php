@@ -35,7 +35,7 @@ class TransporteRepository implements TransporteRepositoryInterface
 		if (!$hay_transportes)
 			self::sincronizarConAnita();
 
-        return $this->model->with('provincias:id,nombre')->with('localidades:id,nombre')->with('condicionivas:id,nombre')->orderBy('codigo','ASC')->get();
+        return $this->model->with('provincias:id,nombre')->with('localidades:id,nombre')->with('condicionivas:id,nombre')->with('depositos:id,codigo,nombre')->orderBy('codigo','ASC')->get();
     }
 
     public function create(array $data)
@@ -87,7 +87,7 @@ class TransporteRepository implements TransporteRepositoryInterface
 
     public function findOrFail($id)
     {
-        if (null == $transporte = $this->model->findOrFail($id)) {
+        if (null == $transporte = $this->model->with('depositos')->findOrFail($id)) {
             throw new ModelNotFoundException("Registro no encontrado");
         }
 

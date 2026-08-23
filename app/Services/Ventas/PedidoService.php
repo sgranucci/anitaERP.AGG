@@ -262,7 +262,7 @@ class PedidoService
 			}
 
 	        $pdf = App::make('dompdf.wrapper');
-	        $pdf->setPaper('legal', 'landscape');
+	        $pdf->setPaper('a4', 'portrait');
 	        $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
 
 			$nombreReporte = $path.'/'.$nombre_pdf.'.pdf';
@@ -343,14 +343,22 @@ class PedidoService
 
 	public function listarPedidoPdf($id)
 	{
-	  	ini_set('memory_limit', '512M');
+		$ruta = $this->generarPdfPedidoArchivo($id);
+		if ($ruta === '') {
+			return back()->with('errores', ['Pedido no encontrado']);
+		}
 
-		//$pdfMerger = PDFMerger::init();
+		return response()->download($ruta);
+	}
+
+	public function generarPdfPedidoArchivo($id): string
+	{
+	  	ini_set('memory_limit', '512M');
 
 		$data = $this->pedidoQuery->leePedidoporId($id);
 		$pedido = $data[0] ?? null;
 		if (! $pedido) {
-			return back()->with('errores', ['Pedido no encontrado']);
+			return '';
 		}
 
 		$nombreCliente = preg_replace('/[^\w\-]+/', '_', (string) optional($pedido->clientes)->nombre);
@@ -364,10 +372,10 @@ class PedidoService
 		}
 
         $pdf = App::make('dompdf.wrapper');
-        $pdf->setPaper('legal', 'landscape');
+        $pdf->setPaper('a4', 'portrait');
         $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
 
-		return response()->download($path.'/'.$nombre_pdf.'.pdf');
+		return $path.'/'.$nombre_pdf.'.pdf';
 	}
 
 	public function listarPreFactura($id, $items_id, $descuentoLinea = null)

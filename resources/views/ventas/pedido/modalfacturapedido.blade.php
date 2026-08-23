@@ -75,6 +75,7 @@
                         </div>
                     </div>
                 </div>
+                <div id="aviso-deposito-facturacion-pedido" class="alert alert-info aviso-deposito-facturacion d-none mb-2" role="status"></div>
                 <div id="alert-preview-factura-pedido" class="alert alert-warning d-none mb-2" role="alert"></div>
                 <div class="form-group">
                     <label for="recipient-name" class="col-form-label">Items a Facturar</label>

@@ -24,6 +24,8 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
         .($modoTodosDepositos ? ' active font-weight-bold' : '');
     $sufijoUm = \App\Support\Stock\MovimientosArticuloDepositoSupport::sufijoColumnaCantidad($art['unidad_medida'] ?? '');
     $empresaIdFiltrada = (int) ($empresaIdFiltrada ?? ($contexto['empresa_id'] ?? 0));
+    $mostrarCajaPieza = (bool) ($contexto['mostrar_caja_pieza'] ?? false);
+    $colspanKardex = ($modoTodosDepositos ? 9 : 8) + ($mostrarCajaPieza ? 4 : 0);
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -66,6 +68,9 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
                     </dt>
                     <dd class="col-sm-10 text-monospace">
                         {{ $contexto['saldo_fmt'] ?? '0' }}{{ $sufijoUm }}
+                        @if ($mostrarCajaPieza)
+                            <span class="d-block text-muted font-weight-normal">Tres cantidades en paralelo (como pedido/factura): kilos, caja y pieza. El ATP es kilos; caja y pieza no se convierten.</span>
+                        @endif
                     </dd>
                 </dl>
                 <div id="filtro-deposito-movimientos-articulo" class="border-top pt-3">
@@ -128,7 +133,15 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
                             @endif
                             <th style="width:7%">Tipo</th>
                             <th class="text-right" style="width:8%">Entrada{!! $sufijoUm !!}</th>
+                            @if ($mostrarCajaPieza)
+                            <th class="text-right" style="width:6%">Caja E</th>
+                            <th class="text-right" style="width:6%">Pieza E</th>
+                            @endif
                             <th class="text-right" style="width:8%">Salida{!! $sufijoUm !!}</th>
+                            @if ($mostrarCajaPieza)
+                            <th class="text-right" style="width:6%">Caja S</th>
+                            <th class="text-right" style="width:6%">Pieza S</th>
+                            @endif
                             <th class="text-right" style="width:9%" title="Precio de venta en facturas; costo unitario (última compra) en el resto">Precio unit.</th>
                             <th style="width:18%">Concepto</th>
                             <th style="width:8%">Mov. stock</th>
@@ -144,7 +157,15 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
                                 @endif
                                 <td title="{{ $m->tipo_nombre ?? '' }}">{{ $m->tipo ?? '—' }}</td>
                                 <td class="text-right text-monospace text-success">{{ $m->entrada_fmt ?: '—' }}</td>
+                                @if ($mostrarCajaPieza)
+                                <td class="text-right text-monospace text-success">{{ $m->entrada_caja_fmt ?: '—' }}</td>
+                                <td class="text-right text-monospace text-success">{{ $m->entrada_pieza_fmt ?: '—' }}</td>
+                                @endif
                                 <td class="text-right text-monospace text-danger">{{ $m->salida_fmt ?: '—' }}</td>
+                                @if ($mostrarCajaPieza)
+                                <td class="text-right text-monospace text-danger">{{ $m->salida_caja_fmt ?: '—' }}</td>
+                                <td class="text-right text-monospace text-danger">{{ $m->salida_pieza_fmt ?: '—' }}</td>
+                                @endif
                                 <td class="text-right text-monospace" title="{{ $m->precio_unitario_etiqueta ?? '' }}">
                                     {{ $m->precio_unitario_fmt ?: '—' }}
                                 </td>
@@ -168,7 +189,7 @@ Kardex — {{ $contexto['articulo']['sku'] ?? '' }}
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="{{ $modoTodosDepositos ? 9 : 8 }}" class="text-muted text-center">
+                                <td colspan="{{ $colspanKardex }}" class="text-muted text-center">
                                     @if ($modoTodosDepositos)
                                         @if ($empresaIdFiltrada > 0)
                                             Sin movimientos en los dep&oacute;sitos de la empresa del reporte.

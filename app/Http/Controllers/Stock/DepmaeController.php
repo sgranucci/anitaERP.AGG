@@ -67,7 +67,11 @@ class DepmaeController extends Controller
             || can('editar-factura', false)
             || can('actualizar-factura', false)
             || can('listar-factura', false)
-            || can('generar-nota-de-credito', false);
+            || can('generar-nota-de-credito', false)
+            || can('listar-transportes', false)
+            || can('crear-transportes', false)
+            || can('editar-transportes', false)
+            || can('actualizar-transportes', false);
     }
 
     /**

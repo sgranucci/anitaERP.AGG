@@ -33,3 +33,17 @@
 @include('includes.configuracion.modal-seleccion-salida', ['salidas' => $salidas_query])
 <input type="hidden" name="programa" id="programa" class="form-control" value="{{ $programa }}"/>
 <input type="hidden" name="urlretorno" id="urlretorno" class="form-control" value="{{ $urlRetorno ?? '' }}"/>
+@if (($programa ?? '') === \App\Support\Configuracion\SeteoSalidaProgramaSupport::VENTAS_FACTURA)
+<div class="form-group row">
+    <label class="col-lg-3 col-form-label">Al grabar factura</label>
+    <div class="col-lg-6">
+        <div class="form-check">
+            <input type="checkbox" name="disparar_al_grabar" id="disparar_al_grabar" class="form-check-input" value="1"
+                {{ !empty($datas['disparar_al_grabar']) ? 'checked' : '' }}>
+            <label class="form-check-label" for="disparar_al_grabar">
+                Disparar el programa de impresión al grabar (también debe estar habilitado en el programa)
+            </label>
+        </div>
+    </div>
+</div>
+@endif

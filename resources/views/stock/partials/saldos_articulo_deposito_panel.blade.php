@@ -22,6 +22,8 @@
                     <th>Dep&oacute;sito</th>
                     <th class="saldos-col-empresa d-none" style="width:22%">Empresa</th>
                     <th class="text-right saldos-th-saldo" style="width:16%">Saldo</th>
+                    <th class="text-right saldos-th-caja d-none" style="width:12%">Caja</th>
+                    <th class="text-right saldos-th-pieza d-none" style="width:12%">Pieza</th>
                     <th style="width:12%" class="text-center">Kardex</th>
                 </tr>
             </thead>
@@ -31,6 +33,8 @@
                     <td colspan="2" class="text-right saldos-footer-label">Total autorizado</td>
                     <td class="saldos-col-empresa saldos-footer-empresa d-none"></td>
                     <td class="text-right text-monospace saldos-articulo-total"></td>
+                    <td class="text-right text-monospace saldos-articulo-total-caja d-none"></td>
+                    <td class="text-right text-monospace saldos-articulo-total-pieza d-none"></td>
                     <td></td>
                 </tr>
             </tfoot>

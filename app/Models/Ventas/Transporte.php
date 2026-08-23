@@ -7,13 +7,14 @@ use Illuminate\Support\Facades\Storage;
 use App\Models\Configuracion\Localidad;
 use App\Models\Configuracion\Provincia;
 use App\Models\Configuracion\Condicioniva;
+use App\Models\Stock\Depmae;
 use App\Traits\Ventas\TransporteTrait;
 
 class Transporte extends Model
 {
     use TransporteTrait;
     protected $fillable = ['nombre', 'codigo', 'domicilio', 'provincia_id', 'localidad_id', 'codigopostal', 'telefono', 'email', 'nroinscripcion', 'condicioniva_id', 'patentevehiculo', 'patenteacoplado', 'cuit_chofer', 'horarioentrega',
-                            'tipoexpreso', 'copiaremito', 'copiapedido'];
+                            'tipoexpreso', 'copiaremito', 'copiapedido', 'deposito_id'];
 
     protected $table = 'transporte';
 
@@ -30,6 +31,11 @@ class Transporte extends Model
     public function condicionivas()
     {
         return $this->belongsTo(Condicioniva::class, 'condicioniva_id');
+    }
+
+    public function depositos()
+    {
+        return $this->belongsTo(Depmae::class, 'deposito_id');
     }
 
 }

@@ -8,7 +8,11 @@ use Illuminate\Support\Str;
 
 class Seteosalida extends Model
 {
-    protected $fillable = ['usuario_id', 'salida_id', 'programa'];
+    protected $fillable = ['usuario_id', 'salida_id', 'programa', 'disparar_al_grabar'];
+
+    protected $casts = [
+        'disparar_al_grabar' => 'boolean',
+    ];
     protected $table = 'seteosalida';
     protected $keyField = 'id';
 

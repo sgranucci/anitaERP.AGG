@@ -61,14 +61,25 @@ final class ArticuloSaldosDepositoSupport
         $saldosMap = $depositoIds !== []
             ? $saldoRepo->saldosArticuloPorDeposito($articuloId, $depositoIds)
             : [];
+        $unidadesMap = UnidadesCajaPiezaSupport::saldosCajaPiezaPorArticuloDeposito(
+            [$articuloId],
+            $depositoIds
+        );
+        $mostrarCajaPieza = UnidadesCajaPiezaSupport::mostrarEnExistencias();
 
         $filas = [];
         $total = 0.0;
+        $totalCaja = 0.0;
+        $totalPieza = 0.0;
 
         foreach ($depositos as $dep) {
             $depId = (int) $dep->id;
             $saldo = (float) ($saldosMap[$depId] ?? 0.0);
+            $caja = (float) ($unidadesMap[$articuloId][$depId]['caja'] ?? 0.0);
+            $pieza = (float) ($unidadesMap[$articuloId][$depId]['pieza'] ?? 0.0);
             $total += $saldo;
+            $totalCaja += $caja;
+            $totalPieza += $pieza;
 
             $filas[] = [
                 'deposito_id' => $depId,
@@ -78,6 +89,10 @@ final class ArticuloSaldosDepositoSupport
                 'empresa_nombre' => (string) (optional($dep->empresas)->nombre ?? ''),
                 'saldo' => $saldo,
                 'saldo_fmt' => self::formatSaldo($saldo),
+                'caja' => $caja,
+                'pieza' => $pieza,
+                'caja_fmt' => self::formatSaldo($caja),
+                'pieza_fmt' => self::formatSaldo($pieza),
             ];
         }
 
@@ -99,13 +114,25 @@ final class ArticuloSaldosDepositoSupport
             'articulo' => MovimientosArticuloDepositoSupport::articuloResumen($articulo),
             'filas' => $filas,
             'mostrar_empresa' => $mostrarEmpresa,
+            'mostrar_caja_pieza' => $mostrarCajaPieza,
             'total' => $total,
+            'total_caja' => $totalCaja,
+            'total_pieza' => $totalPieza,
             'total_fmt' => self::formatSaldo($total),
+            'total_caja_fmt' => self::formatSaldo($totalCaja),
+            'total_pieza_fmt' => self::formatSaldo($totalPieza),
         ];
     }
 
     public static function formatSaldo(float $valor): string
     {
         return rtrim(rtrim(number_format($valor, 4, ',', '.'), '0'), ',');
+    }
+
+    public static function formatTriple(float $kg, float $caja, float $pieza, string $separador = "\n"): string
+    {
+        return self::formatSaldo($kg).' kg'
+            .$separador.self::formatSaldo($caja).' cj'
+            .$separador.self::formatSaldo($pieza).' pz';
     }
 }

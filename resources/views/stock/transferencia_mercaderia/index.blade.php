@@ -110,12 +110,19 @@
         font-weight: 700;
         color: #17a2b8;
     }
-    .tm-item input.tm-cant {
+    .tm-item input.tm-cant,
+    .tm-item input.tm-caja,
+    .tm-item input.tm-pieza {
         font-size: 1.25rem;
         font-weight: 700;
         text-align: center;
         min-height: 2.75rem;
         max-width: 6rem;
+    }
+    .tm-item input.tm-caja,
+    .tm-item input.tm-pieza {
+        font-size: 1.05rem;
+        max-width: 4.5rem;
     }
     .tm-barra {
         margin-top: 0.75rem;
@@ -256,6 +263,7 @@
         decodificarFoto: @json(route('transferencia_mercaderia_decodificar_foto')),
         articuloConsultaUrl: {!! json_encode(route('editar_articulo', ['id' => '__ID__', 'origen' => 'modal_consulta', 'vista' => 'consulta'])) !!},
     };
+    window.TM_CAJA_PIEZA = @json(\App\Support\Stock\UnidadesCajaPiezaSupport::mostrarEnTransferencia());
 </script>
 <script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/depmae/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
