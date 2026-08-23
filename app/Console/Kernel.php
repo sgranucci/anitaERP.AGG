@@ -155,6 +155,20 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/compras-contratos-vencimiento-schedule.log'))
             ->when(fn () => (bool) config('compras.contratos_vencimiento.habilitado', true));
 
+        $schedule->command('seguridad:recordatorio-tickets-ingreso')
+            ->dailyAt((string) config('ingreso_proveedor.recordatorio_hora', '08:45'))
+            ->runInBackground()
+            ->withoutOverlapping(30)
+            ->appendOutputTo(storage_path('logs/seguridad-recordatorio-tickets-ingreso.log'))
+            ->when(fn () => (bool) config('ingreso_proveedor.recordatorio_habilitado', true));
+
+        $schedule->command('seguridad:alerta-abono-sin-ingresos')
+            ->monthlyOn((int) config('ingreso_proveedor.abono_alerta_dia', 25), (string) config('ingreso_proveedor.abono_alerta_hora', '09:00'))
+            ->runInBackground()
+            ->withoutOverlapping(30)
+            ->appendOutputTo(storage_path('logs/seguridad-alerta-abono-sin-ingresos.log'))
+            ->when(fn () => (bool) config('ingreso_proveedor.abono_alerta_habilitado', true));
+
         $schedule->command('contable:verificar-saldos-cuenta-mes', ['--mail' => true])
             ->dailyAt((string) config('contable.saldos_cuenta_mes.integridad_diaria.hora', '06:10'))
             ->runInBackground()
@@ -233,6 +247,17 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(120)
             ->appendOutputTo(storage_path('logs/comprobante-proveedor-mayor-cc-schedule.log'))
             ->when(fn () => (bool) config('comprobante_proveedor_anita.conciliacion_mayor_cc.habilitada', true));
+
+        $ventanaImputacionAp = max(1, (int) config('comprobante_proveedor_anita.imputacion_ap_diaria.ventana_dias', 7));
+        $schedule->command('comprobante-proveedor:auditar-imputacion-ap', [
+            '--desde' => Carbon::today()->subDays($ventanaImputacionAp - 1)->toDateString(),
+            '--hasta' => Carbon::today()->toDateString(),
+        ])
+            ->dailyAt((string) config('comprobante_proveedor_anita.imputacion_ap_diaria.hora', '08:40'))
+            ->runInBackground()
+            ->withoutOverlapping(180)
+            ->appendOutputTo(storage_path('logs/comprobante-proveedor-imputacion-ap-schedule.log'))
+            ->when(fn () => (bool) config('comprobante_proveedor_anita.imputacion_ap_diaria.habilitada', true));
 
         $schedule->command('rendicion-estacionamiento:auditoria-anita')
             ->dailyAt((string) config('rendicion_estacionamiento_anita.auditoria_diaria.hora', '07:30'))

@@ -14,8 +14,8 @@ return new class extends Migration
             Schema::table('ingreso_proveedor', function (Blueprint $table) {
                 $table->dropForeign('fk_ingprov_proveedor');
             });
-            DB::statement('ALTER TABLE ingreso_proveedor MODIFY proveedor_id BIGINT UNSIGNED NULL');
             Schema::table('ingreso_proveedor', function (Blueprint $table) {
+                $table->unsignedBigInteger('proveedor_id')->nullable()->change();
                 $table->foreign('proveedor_id', 'fk_ingprov_proveedor')
                     ->references('id')->on('proveedor')->onDelete('restrict');
                 $table->string('visitante_tipo', 20)->default('PROVEEDOR')->after('proveedor_id');

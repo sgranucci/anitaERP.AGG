@@ -88,15 +88,15 @@ return [
             'parrafos' => [
                 'Pantalla: Caja → Posición financiera (caja/posicion-financiera). Es el informe mensual de tesorería, port del programa legacy l-posfinanc.c implementado en EfePosicionFinancieraSupport.',
                 'Seleccione empresa y mes/año, luego pulse Consultar. La grilla muestra una columna por cada día del mes más la columna Total mensual.',
-                'Los datos provienen del bridge Anita (rendbingo, rendmaquina, rendgastro, rendvalor, valormae, rememae, saldoposf) complementado con remesas ERP y rendiciones de máquinas ERP cuando corresponde.',
+                'Los datos provienen del bridge Anita (rendbingo, rendmaquina, rendgastro, rendvalor, valormae, rememae, saldoposf) complementado con remesas ERP, rendiciones ERP y, en gastronomía, las facturas del Cierre Waitry (PV CAEA) con su cobranza.',
             ],
             'tabla' => [
                 'caption' => 'Bloques del informe (orden de impresión)',
                 'headers' => ['Bloque', 'Contenido típico'],
                 'rows' => [
                     ['Bingo', 'Recaudación, premios, cartones, conceptos rendbingo/concbingo'],
-                    ['Gastronomía', 'Totales por sucursal/PV de rendgastro + rendvalor gastronomía'],
-                    ['Estacionamiento', 'Totales de jornadas estacionamiento (signo invertido vs gastro)'],
+                    ['Gastronomía', 'Rendiciones de salón + Cierre Waitry (factura CAEA y cobranza por jornada)'],
+                    ['Estacionamiento', 'Totales de jornadas estacionamiento (Anita niega redondeo ya negativo; ERP no)'],
                     ['Vending', 'Rendiciones maquinavending ERP (bloque agregado respecto al .c legacy)'],
                     ['Máquinas', 'Drop, win, soft/hard count, impuestos — excluye turnos M/T/N sueltos post-marzo/2010'],
                     ['Medios', 'Apertura por tipo valormae: efectivo pesos/dólar/euro, bancos, cripto'],
@@ -107,6 +107,7 @@ return [
             'items' => [
                 'Saldo inicial: toma el último saldo confirmado en ERP (PosicionFinancieraSaldoSupport); si no existe, el último saldoposf Anita anterior al mes.',
                 'Saldo final: calculado por el support a partir de ingresos, egresos y bloques del mes.',
+                'Orden de conceptos: herramienta de la misma pantalla. Agrupa cuentas por uso y deja el mismo orden (número) en Biyemas, Kandiko y Rebisco. Plantilla = Biyemas.',
                 'Confirmar saldo: solo disponible si el mes ya finalizó y tiene permiso confirmar-saldo-posicion-financiera. Graba saldo inicial/final oficial para encadenar meses.',
                 'Diferencia vs EFE contable: el EFE completo vive en Contable; tesorería usa solo esta solapa. Compare totales con Contable → EFE si hay desvío.',
             ],
@@ -245,7 +246,7 @@ return [
                 'Flash ayb = neto gastronomía ERP del día (facturas − NC).',
                 'Flash estac / cant_vehic = jornadas estacionamiento cerradas.',
                 'Flash vending = Σ total_ventas rendiciones maquinavending.',
-                'Posición financiera incluye bloques gastro, estac y vending con la misma lógica que l-posfinanc.c (+ vending ERP).',
+                'Posición financiera incluye bloques gastro, estac y vending con la misma lógica que l-posfinanc.c (+ vending ERP). En gastronomía también entra el Cierre Waitry (factura CAEA y su cobranza, por fecha de jornada). Estacionamiento no aplica redistribución de FISERV/QR a efectivo.',
             ],
         ],
         [
@@ -255,6 +256,7 @@ return [
                 'headers' => ['Permiso', 'Pantalla'],
                 'rows' => [
                     ['listar-posicion-financiera', 'Posición financiera — consulta y export'],
+                    ['configurar-orden-posicion-financiera', 'Posición financiera — orden de conceptos'],
                     ['confirmar-saldo-posicion-financiera', 'Posición financiera — confirmar/anular saldo'],
                     ['listar-flash-caja / crear-flash-caja / editar-flash-caja', 'Flash — listado y ABM'],
                     ['listar-flash-parametro / crear-flash-parametro', 'Parámetros Flash'],

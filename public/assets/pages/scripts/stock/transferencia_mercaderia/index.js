@@ -188,6 +188,35 @@
         });
     }
 
+    var tipoIdAntesTrcontAuto = 0;
+    var trcontAutoAplicado = false;
+
+    function tipoTraId() {
+        var encontrado = 0;
+        $('#tipotransaccion_stock_id option').each(function () {
+            if (String($(this).attr('data-abreviatura') || '').toUpperCase() === 'TRA' && this.value) {
+                encontrado = parseInt(this.value, 10) || 0;
+                return false;
+            }
+        });
+        return encontrado;
+    }
+
+    function esFalloSinComDeposito(resp) {
+        return !!(resp && resp.sin_recepcion_deposito);
+    }
+
+    function revertirATraPorSinCom(resp) {
+        var traId = tipoIdAntesTrcontAuto > 0 ? tipoIdAntesTrcontAuto : tipoTraId();
+        trcontAutoAplicado = false;
+        tipoIdAntesTrcontAuto = 0;
+        if (traId > 0 && tipotransaccionStockId() !== traId) {
+            $('#tipotransaccion_stock_id').val(String(traId)).trigger('change');
+        }
+        var detalle = (resp && resp.motivo) ? resp.motivo : 'El depósito de salida no tiene COM de este artículo.';
+        setEstado(detalle + ' Se registra como TRA.');
+    }
+
     function aplicarTipoTrcontSiCorresponde(resp) {
         var tipoTrcontId = parseInt(resp && resp.tipo_trcont_id, 10) || 0;
         var familia = String((resp && resp.familia) || '');
@@ -195,11 +224,16 @@
         if (!resp || !esOtrosActivos || !resp.es_contabilizable || tipoManejaContabilidad() || tipoTrcontId <= 0) {
             return false;
         }
+        if (esFalloSinComDeposito(resp)) {
+            return false;
+        }
         var $tipo = $('#tipotransaccion_stock_id');
         if (!$tipo.find('option[value="' + tipoTrcontId + '"]').length) {
             return false;
         }
+        tipoIdAntesTrcontAuto = tipotransaccionStockId();
         $tipo.val(String(tipoTrcontId)).trigger('change');
+        trcontAutoAplicado = true;
         setEstado('Artículo de otros activos: se seleccionó TRCONT para no omitir la contabilidad.');
         return true;
     }
@@ -509,10 +543,8 @@
 
         cargando = true;
         $('#tm_btn_pickeo').prop('disabled', true);
-        if (!camaraPickeoActiva()) {
-            $('#tm_pickeo_codigo').val('');
-        }
-        setEstado('Buscando ' + codigo + '…');
+        $('#tm_pickeo_codigo').val(codigo);
+        setEstado('Leído: ' + codigo + '. Buscando en el ERP…');
 
         $.ajax({
             url: window.TM_URLS.resolverArticulo,
@@ -526,9 +558,12 @@
         })
             .done(function (resp) {
                 if (!resp || !resp.ok) {
-                    var msgNo = (resp && resp.mensaje) || 'Artículo no encontrado.';
+                    var msgNo = 'Se leyó ' + codigo + '. No hay un artículo activo con ese SKU o código de barras.';
+                    if (resp && resp.mensaje) {
+                        msgNo = 'Se leyó ' + codigo + '. ' + resp.mensaje;
+                    }
                     setEstado(msgNo, true);
-                    mostrarAlertaBanner(msgNo, 'Artículo no encontrado');
+                    mostrarAlertaBanner(msgNo, 'Código leído — no está en el ERP');
                     vibrarPickeo(false);
                     return;
                 }
@@ -540,12 +575,12 @@
                 });
             })
             .fail(function (xhr) {
-                var msg = 'Artículo no encontrado.';
+                var msg = 'Se leyó ' + codigo + '. No hay un artículo activo con ese SKU o código de barras.';
                 if (xhr.responseJSON && xhr.responseJSON.mensaje) {
-                    msg = xhr.responseJSON.mensaje;
+                    msg = 'Se leyó ' + codigo + '. ' + xhr.responseJSON.mensaje;
                 }
                 setEstado(msg, true);
-                mostrarAlertaBanner(msg, 'Artículo no encontrado');
+                mostrarAlertaBanner(msg, 'Código leído — no está en el ERP');
                 vibrarPickeo(false);
             })
             .always(function () {
@@ -636,6 +671,14 @@
     }
 
     function procesarValidacionFilaManual(f, resp) {
+        if (resp.contabilidad_activa && !resp.permitido && esFalloSinComDeposito(resp)) {
+            revertirATraPorSinCom(resp);
+            f.contable_valido = true;
+            f.familia_contable = resp.familia || '';
+            agregarFilaManualConfirmado(f);
+            setEstado((resp.motivo || 'Sin COM en el depósito de salida.') + ' Se registra como TRA.');
+            return;
+        }
         if (resp.contabilidad_activa && !resp.permitido) {
             var msgContable = resp.motivo || 'Línea no válida para TRCONT.';
             setEstado(msgContable, true);
@@ -645,6 +688,9 @@
         f.contable_valido = !resp.contabilidad_activa || !!resp.permitido;
         f.familia_contable = resp.familia || '';
         agregarFilaManualConfirmado(f);
+        if (!resp.contabilidad_activa && esFalloSinComDeposito(resp) && String(resp.familia || '') === 'otros_activos') {
+            setEstado('Artículo de otros activos sin COM en este depósito: se registra como TRA.');
+        }
     }
 
     function evaluarTipoAutomaticoFila($card) {
@@ -656,7 +702,15 @@
         if (cantidad <= 0 || articuloId <= 0) {
             return;
         }
-        validarLineaContableAsync(articuloId).done(aplicarTipoTrcontSiCorresponde);
+        validarLineaContableAsync(articuloId).done(function (resp) {
+            if (aplicarTipoTrcontSiCorresponde(resp)) {
+                validarLineaContableAsync(articuloId).done(function (respTrcont) {
+                    if (respTrcont.contabilidad_activa && !respTrcont.permitido && esFalloSinComDeposito(respTrcont)) {
+                        revertirATraPorSinCom(respTrcont);
+                    }
+                });
+            }
+        });
     }
 
     function agregarFilaManualConfirmado(f) {

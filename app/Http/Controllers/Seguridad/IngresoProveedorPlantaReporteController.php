@@ -46,7 +46,7 @@ class IngresoProveedorPlantaReporteController extends Controller
             'consultado' => $consultado,
             'resultado' => $resultado,
             'filasPaginadas' => $filasPaginadas,
-        ]);
+        ] + IngresoProveedorReporteService::permisosEnlacesPantalla());
     }
 
     public function exportar(Request $request, ?string $formato = null)

@@ -15,6 +15,7 @@ use Auth;
 use DB;
 use Carbon\Carbon;
 use Exception;
+use Illuminate\Support\Facades\Schema;
 
 class CuentacajaRepository implements CuentacajaRepositoryInterface
 {
@@ -120,7 +121,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
         try 
         {
             $cuentacaja = $this->model->create($data);
-            $cuentacaja->usocuentacajas()->sync($usoIds);
+            $this->sincronizarUsosPreservandoOrden($cuentacaja, $usoIds);
 
             // Graba anita
 		    $anita = self::guardarAnita($data);
@@ -155,7 +156,7 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
             $cuentacaja = $this->model->findOrFail($id);
             $cuentacaja->update($data);
             if (is_array($usoIds)) {
-                $cuentacaja->usocuentacajas()->sync($usoIds);
+                $this->sincronizarUsosPreservandoOrden($cuentacaja, $usoIds);
             }
 
             // Actualiza anita
@@ -548,7 +549,37 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
             $data['descripcion_operaciones'] = $desc !== '' ? mb_substr($desc, 0, 60) : null;
         }
 
+        if (array_key_exists('orden', $data)) {
+            $data['orden'] = max(0, (int) ($data['orden'] ?? 0));
+        }
+
         return $data;
+    }
+
+    /**
+     * @param  list<int|string>  $usoIds
+     */
+    private function sincronizarUsosPreservandoOrden(Cuentacaja $cuentacaja, array $usoIds): void
+    {
+        $usoIds = array_values(array_unique(array_filter(
+            array_map('intval', $usoIds),
+            static fn (int $id) => $id > 0
+        )));
+
+        $actuales = [];
+        if (Schema::hasColumn('cuentacaja_usocuentacaja', 'orden')) {
+            $cuentacaja->loadMissing('usocuentacajas');
+            foreach ($cuentacaja->usocuentacajas as $uso) {
+                $actuales[(int) $uso->id] = (int) ($uso->pivot->orden ?? 0);
+            }
+        }
+
+        $payload = [];
+        foreach ($usoIds as $usoId) {
+            $payload[$usoId] = ['orden' => (int) ($actuales[$usoId] ?? 0)];
+        }
+
+        $cuentacaja->usocuentacajas()->sync($payload);
     }
 
     private function convierteDatosParaAnita($data, &$banco, &$tipoCuenta, &$fecha, &$cuentaContable, &$empresa, &$moneda)

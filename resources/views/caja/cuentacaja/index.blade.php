@@ -56,6 +56,7 @@ use App\Support\Caja\CuentacajaListadoFiltros; ?>
                             <th>Nombre</th>
                             <th>Desc. operaciones</th>
                             <th>Código</th>
+                            <th>Orden</th>
                             <th>Tipo cuenta</th>
                             <th>Banco</th>
                             <th>Empresa</th>
@@ -74,6 +75,7 @@ use App\Support\Caja\CuentacajaListadoFiltros; ?>
                             <td>{{$data->nombre}}</td>
                             <td>{{ $data->descripcion_operaciones }}</td>
                             <td>{{$data->codigo}}</td>
+                            <td>{{ $data->orden ?? 0 }}</td>
                             <td>@foreach($tipocuenta_enum as $tipocuenta)
 									@if ($tipocuenta['valor'] == $data->tipocuenta)
 										{{ $tipocuenta['nombre'] }}

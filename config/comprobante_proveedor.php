@@ -49,4 +49,10 @@ return [
     ],
 
     'tipoasiento_abreviatura' => env('COMPROBANTE_PROVEEDOR_TIPOASIENTO', 'COM'),
+
+    /*
+    | Fecha del comprobante: tope a futuro respecto del día de carga.
+    | Evita errores de tipeo (año 2027, mes siguiente). El pasado no se limita.
+    */
+    'fecha_comprobante_max_dias_futuro' => max(0, (int) env('COMPROBANTE_PROVEEDOR_FECHA_MAX_DIAS_FUTURO', 30)),
 ];

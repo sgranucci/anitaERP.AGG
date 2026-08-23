@@ -4,17 +4,18 @@
 <table>
     @if (!empty($reservarFilaLogoExcel))
         <tr>
-            <td colspan="11" style="height: 52px;"></td>
+            <td colspan="12" style="height: 52px;"></td>
         </tr>
     @endif
     <tr>
-        <td colspan="11"><strong>Carga de Tickets - Ingreso de Proveedores</strong></td>
+        <td colspan="12"><strong>Carga de Tickets - Ingreso de Proveedores</strong></td>
     </tr>
     <thead>
         <tr>
             <th>ID</th>
             <th>Fecha</th>
             <th>Proveedor / Empresa</th>
+            <th>OC</th>
             <th>Motivo de visita</th>
             <th>Sala / Punto de ingreso</th>
             <th>Sector</th>
@@ -31,6 +32,7 @@
                 <td>{{ $data->id }}</td>
                 <td>{{ optional($data->fecha)->format('d/m/Y') }}</td>
                 <td>{{ \App\Support\Seguridad\IngresoProveedorVisitanteSupport::etiquetaOrigen($data) }}{{ \App\Support\Seguridad\IngresoProveedorVisitanteSupport::esVisitante($data) ? ' (Visitante)' : '' }}</td>
+                <td>{{ $data->ordencompras->numeroordencompra ?? '' }}</td>
                 <td>{{ $data->motivos->nombre ?? '' }}</td>
                 <td>{{ $data->puntos->nombre ?? '' }}</td>
                 <td>{{ $data->sectores->nombre ?? '' }}</td>

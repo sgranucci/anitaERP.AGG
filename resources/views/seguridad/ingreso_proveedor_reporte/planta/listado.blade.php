@@ -46,6 +46,11 @@
     <table class="data">
         @include('seguridad.ingreso_proveedor_reporte.planta.partials.tabla_datos', [
             'filas' => $filas,
+            'en_pantalla' => false,
+            'puede_ver_ticket' => false,
+            'puede_ver_proveedor' => false,
+            'puede_ver_empresa' => false,
+            'puede_ver_usuario' => false,
         ])
     </table>
 </body>

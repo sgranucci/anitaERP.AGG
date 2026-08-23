@@ -50,7 +50,7 @@ final class CompraCabeceraAnitaMapper
             '".$ctx->letra()."',
             '".$ctx->sucursal()."',
             '".$ctx->numero()."',
-            '".$ctx->fechaYmd()."',
+            '".$ctx->fechaComprobanteYmd()."',
             '".$ctx->fechaIvaYmd()."',
             '".$ctx->decimal($ctx->comprobante->total)."',
             '".$ctx->monedaCodigoAnita()."',
@@ -77,7 +77,7 @@ final class CompraCabeceraAnitaMapper
     public static function valoresUpdate(ComprobanteProveedorAnitaContext $ctx): string
     {
         return "
-            com_fecha = '".$ctx->fechaYmd()."',
+            com_fecha = '".$ctx->fechaComprobanteYmd()."',
             com_fecha_iva = '".$ctx->fechaIvaYmd()."',
             com_monto = '".$ctx->decimal($ctx->comprobante->total)."',
             com_cod_mon = '".$ctx->monedaCodigoAnita()."',

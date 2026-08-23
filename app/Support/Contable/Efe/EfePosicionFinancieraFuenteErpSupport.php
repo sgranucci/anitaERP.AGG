@@ -11,10 +11,13 @@ use App\Models\Caja\RendicionMaquina;
 use App\Models\Caja\Cuentacaja;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoRendvalorCodigoSupport;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaRendvalorCodigoSupport;
+use App\Support\Caja\PosicionFinancieraOrdenConceptoSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaTurno;
 use App\Support\Contable\CierreRendicionBingoConceptoTipos;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoFacturaFechajornadaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
 /**
@@ -317,18 +320,23 @@ class EfePosicionFinancieraFuenteErpSupport
             'Diferencia abandono de pago' => $this->vector($diasMes),
             'Redondeo' => $this->vector($diasMes),
             'Diferencia de caja' => $this->vector($diasMes),
-            $etiquetaTotal => $this->vector($diasMes),
         ];
-        foreach ($valormae as $codigo => $meta) {
-            if (isset($codigosPermitidos[$codigo])) {
-                $filas[$meta['desc']] = $this->vector($diasMes);
-            }
-        }
-        $dias = [];
-
         $mapperClass = $bloque === 'estac'
             ? RendicionEstacionamientoRendvalorCodigoSupport::class
             : RendicionGastronomiaRendvalorCodigoSupport::class;
+        foreach (PosicionFinancieraOrdenConceptoSupport::ordenarValormaePermitidos(
+            $empresaId,
+            $valormae,
+            $codigosPermitidos,
+            $mapperClass,
+        ) as $meta) {
+            $desc = trim((string) ($meta['desc'] ?? ''));
+            if ($desc !== '') {
+                $filas[$desc] = $this->vector($diasMes);
+            }
+        }
+        $filas[$etiquetaTotal] = $this->vector($diasMes);
+        $dias = [];
 
         if ($bloque === 'estac') {
             $query = RendicionEstacionamientoCaja::query()
@@ -400,6 +408,20 @@ class EfePosicionFinancieraFuenteErpSupport
             }
         }
 
+        if ($bloque === 'gastro') {
+            $this->sumarCierresWaitry(
+                $empresaId,
+                $desde,
+                $hasta,
+                $diasMes,
+                $filas,
+                $dias,
+                $etiquetaZ,
+                $valormae,
+                $codigosPermitidos,
+            );
+        }
+
         foreach ($diasMes as $dia) {
             if (! isset($dias[$dia])) {
                 continue;
@@ -415,6 +437,81 @@ class EfePosicionFinancieraFuenteErpSupport
         }
 
         return ['filas' => $filas, 'dias' => $dias];
+    }
+
+    /**
+     * Factura CAEA del proceso Cierre Waitry: no vive en rendición de salón.
+     * Solo gastronomía ( Anita sucursal 20 / PV CAEA ). Estacionamiento no entra.
+     *
+     * @param  list<int>  $diasMes
+     * @param  array<string, array<int, float>>  $filas
+     * @param  array<int, true>  $dias
+     * @param  array<int, array{desc: string, tipo: string}>  $valormae
+     * @param  array<int, true>  $codigosPermitidos
+     */
+    private function sumarCierresWaitry(
+        int $empresaId,
+        Carbon $desde,
+        Carbon $hasta,
+        array $diasMes,
+        array &$filas,
+        array &$dias,
+        string $etiquetaZ,
+        array $valormae,
+        array $codigosPermitidos,
+    ): void {
+        $ventas = DB::table('venta as v')
+            ->join('puntoventa as p', 'p.id', '=', 'v.puntoventa_id')
+            ->where('p.empresa_id', $empresaId)
+            ->where('v.leyenda', 'like', CierreJornadaProcesoFacturaFechajornadaSupport::LEYENDA_PREFIJO.'%')
+            ->whereBetween('v.fechajornada', [$desde->toDateString(), $hasta->toDateString()])
+            ->orderBy('v.id')
+            ->get(['v.id', 'v.fechajornada', 'v.total']);
+
+        if ($ventas->isEmpty()) {
+            return;
+        }
+
+        $ventaIds = $ventas->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $cuentasPorVenta = DB::table('caja_movimiento as cm')
+            ->join('caja_movimiento_cuentacaja as cmc', 'cmc.caja_movimiento_id', '=', 'cm.id')
+            ->whereIn('cm.venta_id', $ventaIds)
+            ->get(['cm.venta_id', 'cmc.cuentacaja_id', 'cmc.monto']);
+
+        $cuentaIds = $cuentasPorVenta->pluck('cuentacaja_id')->unique()->filter()->map(fn ($id) => (int) $id)->all();
+        $cuentas = $cuentaIds === []
+            ? collect()
+            : Cuentacaja::query()->whereIn('id', $cuentaIds)->get()->keyBy('id');
+
+        $mediosPorVenta = $cuentasPorVenta->groupBy(fn ($row) => (int) $row->venta_id);
+
+        foreach ($ventas as $venta) {
+            $dia = (int) Carbon::parse((string) $venta->fechajornada)->day;
+            if (! in_array($dia, $diasMes, true)) {
+                continue;
+            }
+            $dias[$dia] = true;
+            $this->sumar($filas, $etiquetaZ, $dia, (float) $venta->total);
+
+            foreach ($mediosPorVenta->get((int) $venta->id, collect()) as $linea) {
+                $cuenta = $cuentas->get((int) $linea->cuentacaja_id);
+                if (! $cuenta instanceof Cuentacaja) {
+                    continue;
+                }
+                try {
+                    if (RendicionGastronomiaRendvalorCodigoSupport::omitirEnRendvalorAnita($cuenta)) {
+                        continue;
+                    }
+                    $codigo = RendicionGastronomiaRendvalorCodigoSupport::codigoDesdeCuentacaja($empresaId, $cuenta);
+                } catch (RuntimeException) {
+                    continue;
+                }
+                if (! isset($valormae[$codigo], $codigosPermitidos[$codigo])) {
+                    continue;
+                }
+                $this->sumar($filas, $valormae[$codigo]['desc'], $dia, (float) $linea->monto);
+            }
+        }
     }
 
     /**

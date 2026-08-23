@@ -21,6 +21,8 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/formulario.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/formulario.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/enviar-proveedor.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/modal.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/seguridad/ingreso_proveedor/modal.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/autorizar.js') }}" type="text/javascript"></script>
 <script>
 $(function () {
     if (window.OcCambiarSectorLegajo) {
@@ -159,10 +161,10 @@ $(function () {
                             <i class="fa fa-file-text-o"></i> Facturar proveedor
                         </a>
                     @endif
-                    @if (!empty($url_nuevo_ticket_ingreso))
-                        <a href="{{ $url_nuevo_ticket_ingreso }}" class="btn btn-outline-light btn-sm" target="_blank" rel="noopener" title="Solicitar ticket de ingreso a planta">
+                    @if (can('crear-ingreso-proveedor', false) && !empty($mostrar_solapa_ingresos))
+                        <button type="button" class="btn btn-outline-light btn-sm js-ingreso-ticket-nuevo" title="Solicitar ticket de ingreso a planta">
                             <i class="fa fa-id-badge"></i> Ticket de ingreso
-                        </a>
+                        </button>
                     @endif
                     @if (isset($data) && $data && empty($visualizar))
                         @if (can('actualizar-ordencompra', false))
@@ -228,9 +230,7 @@ $(function () {
                         @if (!empty($mostrar_solapa_ingresos))
                             <button type="button" id="oc-boton-ingresos" class="btn btn-info btn-sm mx-1 oc-tab-solapa">
                                 <span class="fa fa-id-badge"></span> Ingresos
-                                @if (($tickets_ingreso ?? collect())->count())
-                                    <span class="badge badge-light ml-1">{{ $tickets_ingreso->count() }}</span>
-                                @endif
+                                <span class="badge badge-light ml-1 ingreso-solapa-badge-count">{{ ($tickets_ingreso ?? collect())->count() }}</span>
                             </button>
                         @endif
                     @endif

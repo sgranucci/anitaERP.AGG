@@ -13,6 +13,8 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Repositories\Stock\Tipotransaccion_StockRepository;
 use App\Services\Stock\TransferenciaMercaderiaService;
+use App\Support\Stock\TransferenciaMercaderiaDepositoRecepcionSupport;
+use App\Support\Stock\CodigoBarrasImagenSupport;
 use App\Support\Stock\TransferenciaMercaderiaLineaContableSupport;
 use App\Support\Stock\TransferenciaMercaderiaAprobacionSupport;
 use App\Support\Stock\TransferenciaMercaderiaDestinatarioSupport;
@@ -273,6 +275,41 @@ class TransferenciaMercaderiaController extends Controller
         return response()->json($resultado, ! empty($resultado['ok']) ? 200 : 422);
     }
 
+    public function decodificarFoto(Request $request): JsonResponse
+    {
+        can('crear-transferencia-mercaderia');
+
+        $foto = $request->file('foto');
+        if (! $foto || ! $foto->isValid()) {
+            return response()->json([
+                'ok' => false,
+                'codigos' => [],
+                'mensaje' => 'No llegó la foto.',
+            ], 422);
+        }
+
+        $mime = (string) $foto->getMimeType();
+        if (! str_starts_with($mime, 'image/')) {
+            return response()->json([
+                'ok' => false,
+                'codigos' => [],
+                'mensaje' => 'El archivo no es una imagen.',
+            ], 422);
+        }
+
+        try {
+            $resultado = CodigoBarrasImagenSupport::decodificarDesdePath((string) $foto->getRealPath());
+        } catch (\Throwable $e) {
+            return response()->json([
+                'ok' => false,
+                'codigos' => [],
+                'mensaje' => $e->getMessage(),
+            ], 422);
+        }
+
+        return response()->json($resultado, ! empty($resultado['ok']) ? 200 : 422);
+    }
+
     public function saldoArticulo(Request $request): JsonResponse
     {
         can('crear-transferencia-mercaderia');
@@ -327,6 +364,13 @@ class TransferenciaMercaderiaController extends Controller
                 && (bool) ($item->maneja_contabilidad ?? false));
         $familia = TransferenciaMercaderiaLineaContableSupport::resolverFamilia($articulo, $empresaId);
         $esContabilizable = $familia !== TransferenciaMercaderiaLineaContableSupport::FAMILIA_NO_CONTABILIZABLE;
+        $sinRecepcionDeposito = $familia === TransferenciaMercaderiaLineaContableSupport::FAMILIA_OTROS_ACTIVOS
+            && $depositoOrigenId > 0
+            && ! TransferenciaMercaderiaDepositoRecepcionSupport::existeEnDeposito(
+                $articuloId,
+                $empresaId,
+                $depositoOrigenId
+            );
 
         if ($tipo === null || ! TransferenciaMercaderiaAprobacionSupport::manejaContabilidad($tipo)) {
             return response()->json([
@@ -337,6 +381,7 @@ class TransferenciaMercaderiaController extends Controller
                 'familia' => $familia,
                 'motivo' => '',
                 'tipo_trcont_id' => $tipoTrcont?->id,
+                'sin_recepcion_deposito' => $sinRecepcionDeposito,
             ]);
         }
 
@@ -356,6 +401,7 @@ class TransferenciaMercaderiaController extends Controller
             'tipo_trcont_id' => $tipoTrcont?->id,
             'deposito_recepcion_id' => $resultado['deposito_recepcion_id'],
             'deposito_recepcion_codigo' => $resultado['deposito_recepcion_codigo'],
+            'sin_recepcion_deposito' => ! empty($resultado['sin_recepcion_deposito']),
         ]);
     }
 

@@ -9,9 +9,10 @@
         $operadoresJson[$key] = ComprobanteProveedorListadoFiltros::operadoresParaCampo($key);
     }
     $tieneCriteriosPanel = ComprobanteProveedorListadoFiltros::tieneCriteriosTexto($f);
-    $limpiarUrlPanel = $limpiarUrl ?? route('comprobante_proveedor', ComprobanteProveedorListadoFiltros::paraQueryStringEmpresa($f));
+    $limpiarUrlPanel = $limpiarUrl ?? route('comprobante_proveedor', ComprobanteProveedorListadoFiltros::paraQueryStringExternos($f));
     $fScope = $f['empresa_scope'] ?? 'una';
     $fEmp = (int) ($f['empresa_id'] ?? 0);
+    $fEstado = (string) ($f['estado'] ?? \App\Support\Compras\ComprobanteProveedorEstados::FILTRO_TODOS);
 @endphp
 <div class="collapse border-bottom" id="panel-filtros-comprobante-proveedor" data-listado-filtros-panel>
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
@@ -19,6 +20,11 @@
         <input type="hidden" name="empresa_todas" value="1">
     @elseif ($fEmp > 0)
         <input type="hidden" name="empresa_id" value="{{ $fEmp }}">
+    @endif
+    @if ($fEstado === \App\Support\Compras\ComprobanteProveedorEstados::FILTRO_TODOS)
+        <input type="hidden" name="estado_todas" value="1">
+    @else
+        <input type="hidden" name="estado" value="{{ $fEstado }}">
     @endif
     <div class="card-body bg-light py-2 text-body">
         @if($tieneCriteriosPanel)

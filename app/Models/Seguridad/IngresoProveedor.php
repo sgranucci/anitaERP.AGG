@@ -21,13 +21,15 @@ class IngresoProveedor extends Model implements Auditable
     protected $fillable = [
         'empresa_id', 'fecha', 'proveedor_id', 'visitante_tipo', 'visitante_nombre', 'ordencompra_id',
         'motivo_id', 'punto_id', 'area_id', 'sector_id',
-        'patente', 'estado', 'titulo', 'comentario',
+        'patente', 'estado', 'titulo', 'comentario', 'motivo_otro', 'fecha_prevista',
+        'hashvisualizar',
         'fecha_ingreso', 'hora_ingreso', 'fecha_egreso', 'hora_egreso', 'minutos_en_planta',
         'usuario_id', 'usuario_autorizo_id', 'autorizado_at',
     ];
 
     protected $casts = [
         'fecha' => 'date',
+        'fecha_prevista' => 'date',
         'fecha_ingreso' => 'date',
         'fecha_egreso' => 'date',
         'autorizado_at' => 'datetime',

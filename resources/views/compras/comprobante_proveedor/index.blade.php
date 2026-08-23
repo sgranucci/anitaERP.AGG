@@ -17,7 +17,7 @@ use App\Support\Listado\QueryRetornoListado;
 @section('contenido')
 @php
     $retornoListadoQuery = QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
-    $limpiarUrl = route('comprobante_proveedor', ComprobanteProveedorListadoFiltros::paraQueryStringEmpresa($filtros ?? []));
+    $limpiarUrl = route('comprobante_proveedor', ComprobanteProveedorListadoFiltros::paraQueryStringExternos($filtros ?? []));
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -69,6 +69,7 @@ use App\Support\Listado\QueryRetornoListado;
                             <th>Número</th>
                             <th>OC</th>
                             <th>Fecha</th>
+                            <th title="Fecha de carga: asiento, período e IVA compras">F. IVA / contabiliz.</th>
                             <th>Total</th>
                             <th>Estado</th>
                             <th>Origen</th>
@@ -80,6 +81,11 @@ use App\Support\Listado\QueryRetornoListado;
                         @php
                             $numeroOc = $row->ordencompras->numeroordencompra ?? null;
                             $ordencompraId = (int) ($row->ordencompra_id ?? 0);
+                            $errorAnita = ($row->anita_sync_estado ?? '') === \App\Support\Compras\ComprobanteProveedorAnitaSyncEstado::ERROR;
+                            $badgeEstado = \App\Support\Compras\ComprobanteProveedorEstados::badge($row->estado ?? '');
+                            $badgeError = $errorAnita
+                                ? \App\Support\Compras\ComprobanteProveedorEstados::badge(null, true)
+                                : null;
                         @endphp
                         <tr>
                             <td>{{ $row->id }}</td>
@@ -100,8 +106,18 @@ use App\Support\Listado\QueryRetornoListado;
                                 @endif
                             </td>
                             <td><small>{{ $row->fechacomprobante ? $row->fechacomprobante->format('d/m/Y') : '' }}</small></td>
+                            <td>
+                                @if ($row->fechaiva)
+                                <span class="badge badge-info" title="Fecha de contabilización e IVA compras">{{ $row->fechaiva->format('d/m/Y') }}</span>
+                                @endif
+                            </td>
                             <td><small>{{ number_format((float) $row->total, 2, ',', '.') }}</small></td>
-                            <td><small>{{ $row->estado }}</small></td>
+                            <td>
+                                <span class="{{ $badgeEstado['class'] }}">{{ $badgeEstado['label'] }}</span>
+                                @if ($badgeError)
+                                <span class="{{ $badgeError['class'] }}" title="{{ $row->anita_sync_error }}">{{ $badgeError['label'] }}</span>
+                                @endif
+                            </td>
                             <td><small>{{ \App\Support\Compras\ComprobanteProveedorOrigenEntrada::etiqueta($row->origen_entrada ?? '') }}</small></td>
                             <td class="text-nowrap">
                                 @if (can('editar-comprobante-proveedor', false))
@@ -112,7 +128,7 @@ use App\Support\Listado\QueryRetornoListado;
                                 @if (($row->estado ?? '') !== \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO
                                     && ($row->estado ?? '') !== \App\Support\Compras\ComprobanteProveedorEstados::ANULADO
                                     && can('contabilizar-comprobante-proveedor', false))
-                                <form action="{{ route('contabilizar_comprobante_proveedor', ['id' => $row->id]) }}" method="POST" class="d-inline"
+                                <form action="{{ route('contabilizar_comprobante_proveedor', ['id' => $row->id] + $retornoListadoQuery) }}" method="POST" class="d-inline"
                                     onsubmit="return confirm('¿Confirmar / contabilizar el comprobante #{{ $row->id }}?');">
                                     @csrf
                                     <button type="submit" class="btn-accion-tabla tooltipsC text-success" title="Confirmar / Contabilizar">
@@ -121,7 +137,7 @@ use App\Support\Listado\QueryRetornoListado;
                                 </form>
                                 @endif
                                 @if (can('borrar-comprobante-proveedor', false))
-                                <form action="{{ route('eliminar_comprobante_proveedor', ['id' => $row->id]) }}" method="POST" class="d-inline form-eliminar">
+                                <form action="{{ route('eliminar_comprobante_proveedor', ['id' => $row->id] + $retornoListadoQuery) }}" method="POST" class="d-inline form-eliminar">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Borrar factura (ERP + Anita)">

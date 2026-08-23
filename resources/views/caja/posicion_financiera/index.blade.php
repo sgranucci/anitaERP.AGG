@@ -308,6 +308,11 @@
                 <h3 class="card-title">Posición financiera</h3>
                 <div class="card-tools">
                     @include('includes.caja.boton-manual')
+                    @if (can('configurar-orden-posicion-financiera', false))
+                        <a href="{{ route('posicion_financiera_orden_conceptos') }}" class="btn btn-outline-primary btn-sm" title="Orden de conceptos por uso de cuenta">
+                            <i class="fa fa-sort-amount-down"></i> Orden de conceptos
+                        </a>
+                    @endif
                     <a href="{{ route('posicion_financiera') }}" class="btn btn-outline-secondary btn-sm" title="Limpiar filtros">
                         <i class="fa fa-eraser"></i> Limpiar
                     </a>

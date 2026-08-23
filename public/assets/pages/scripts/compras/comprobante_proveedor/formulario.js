@@ -1,4 +1,9 @@
 $(function () {
+    var $alertaContabilizar = $('#cp-alerta-contabilizar');
+    if ($alertaContabilizar.length && $alertaContabilizar.offset()) {
+        $('html, body').animate({ scrollTop: Math.max(0, $alertaContabilizar.offset().top - 80) }, 250);
+    }
+
     if (!$('#form-comprobante-proveedor').length) {
         return;
     }

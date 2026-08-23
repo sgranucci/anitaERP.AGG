@@ -106,7 +106,7 @@ class ContratoValidacionAbonoService
         $validacion = $this->asegurarParaRecepcion($recepcion);
         $resultado = ContratoValidacionAbonoCumplimientoSupport::evaluar(
             $politica,
-            $validacion ? $this->aSnapshot($validacion) : null
+            $validacion ? $this->aSnapshotConIngresosVivos($validacion, $politica) : null
         );
         if ($resultado['puede_confirmar_com']) {
             return;
@@ -128,7 +128,7 @@ class ContratoValidacionAbonoService
         $validacion = $this->asegurarParaComprobante($comprobante);
         $resultado = ContratoValidacionAbonoCumplimientoSupport::evaluar(
             $politica,
-            $validacion ? $this->aSnapshot($validacion) : null
+            $validacion ? $this->aSnapshotConIngresosVivos($validacion, $politica) : null
         );
         if ($resultado['puede_contabilizar_fac']) {
             return;
@@ -167,7 +167,7 @@ class ContratoValidacionAbonoService
         foreach ($incumplidas as $validacion) {
             $resultado = ContratoValidacionAbonoCumplimientoSupport::evaluar(
                 $politica,
-                $this->aSnapshot($validacion)
+                $this->aSnapshotConIngresosVivos($validacion, $politica)
             );
             if (! $resultado['puede_enviar_cxp']) {
                 return $resultado['errores'];
@@ -236,14 +236,11 @@ class ContratoValidacionAbonoService
                 (int) ($oc->proveedor_id ?? 0),
                 (string) ($validacion->periodo_desde?->format('Y-m-d') ?? ''),
                 (string) ($validacion->periodo_hasta?->format('Y-m-d') ?? ''),
-                (int) ($oc->empresa_id ?? 0) ?: null
+                (int) ($oc->empresa_id ?? 0) ?: null,
+                (int) ($oc->id ?? 0) ?: null
             );
             $ingresos = $conteoTickets;
             $fuente = 'ingreso_proveedor';
-            if ($conteoTickets === 0 && $ticketRespondidoSi) {
-                $ingresos = $minimo;
-                $fuente = 'manual_p0';
-            }
 
             $validacion->forceFill([
                 'estado' => ContratoValidacionAbonoEstados::COMPLETA,
@@ -345,6 +342,32 @@ class ContratoValidacionAbonoService
             'estado' => (string) $validacion->estado,
             'ingresos_informados' => (int) $validacion->ingresos_informados,
         ];
+    }
+
+    /**
+     * Al cortar COM/FAC se cuenta el ingreso real, no el número guardado en el cuestionario.
+     *
+     * @param  array<string, mixed>  $politica
+     * @return array{estado: string, ingresos_informados: int}
+     */
+    private function aSnapshotConIngresosVivos(Contrato_Validacion_Abono $validacion, array $politica): array
+    {
+        $snapshot = $this->aSnapshot($validacion);
+        if (! ($politica['exige_ingresos'] ?? false)) {
+            return $snapshot;
+        }
+
+        $validacion->loadMissing('ordencompras');
+        $oc = $validacion->ordencompras;
+        $snapshot['ingresos_informados'] = IngresoProveedorConsultaSupport::cantidadEnPeriodo(
+            (int) ($oc->proveedor_id ?? 0),
+            (string) ($validacion->periodo_desde?->format('Y-m-d') ?? ''),
+            (string) ($validacion->periodo_hasta?->format('Y-m-d') ?? ''),
+            (int) ($oc->empresa_id ?? 0) ?: null,
+            (int) ($oc->id ?? $validacion->ordencompra_id ?? 0) ?: null
+        );
+
+        return $snapshot;
     }
 
     public function usuarioActualId(): int

@@ -14,10 +14,18 @@ class Cuentacaja extends Model implements Auditable
     use CuentacajaTrait;
     use \OwenIt\Auditing\Auditable;
 
-    protected $fillable = ['nombre', 'descripcion_operaciones', 'codigo', 'tipocuenta', 'banco_id',
+    protected $fillable = ['nombre', 'descripcion_operaciones', 'orden', 'codigo', 'tipocuenta', 'banco_id',
         'empresa_id', 'cuentacontable_id', 'moneda_id', 'cbu', 'cuenta_interbanking'];
 
     protected $table = 'cuentacaja';
+
+    protected $casts = [
+        'orden' => 'integer',
+    ];
+
+    protected $attributes = [
+        'orden' => 0,
+    ];
 
     /**
      * Etiqueta corta para pantallas operativas (rendición máquinas, etc.).
@@ -52,7 +60,8 @@ class Cuentacaja extends Model implements Auditable
 
     public function usocuentacajas()
     {
-        return $this->belongsToMany(Usocuentacaja::class, 'cuentacaja_usocuentacaja', 'cuentacaja_id', 'usocuentacaja_id');
+        return $this->belongsToMany(Usocuentacaja::class, 'cuentacaja_usocuentacaja', 'cuentacaja_id', 'usocuentacaja_id')
+            ->withPivot('orden');
     }
 
     /**

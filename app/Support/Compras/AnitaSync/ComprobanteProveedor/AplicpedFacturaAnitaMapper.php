@@ -4,6 +4,7 @@ namespace App\Support\Compras\AnitaSync\ComprobanteProveedor;
 
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Ordencompra_Articulo;
+use App\Support\Compras\ComprobanteProveedorFacturaAnticipadaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
 
 /**
@@ -45,12 +46,37 @@ final class AplicpedFacturaAnitaMapper
     }
 
     /**
+     * a-compprov.c graba_aplicped_factura_anticipada: una fila, orden -1.
+     *
+     * @return array{
+     *     orden_com: int,
+     *     penvp_orden: int,
+     *     sku: string,
+     *     cantidad: float,
+     *     penvp_nro_interno: int,
+     *     anticipada: bool
+     * }
+     */
+    public static function lineaAnticipadaAnita(): array
+    {
+        return [
+            'orden_com' => RecepcionProveedorAnitaEscrituraSupport::APLICPED_ORDEN_ANTICIPADA,
+            'penvp_orden' => RecepcionProveedorAnitaEscrituraSupport::APLICPED_ORDEN_ANTICIPADA,
+            'sku' => RecepcionProveedorAnitaEscrituraSupport::APLICPED_ARTICULO_ANTICIPADA,
+            'cantidad' => 0.0,
+            'penvp_nro_interno' => 0,
+            'anticipada' => true,
+        ];
+    }
+
+    /**
      * @return list<array{
      *     orden_com: int,
      *     penvp_orden: int,
      *     sku: string,
      *     cantidad: float,
-     *     penvp_nro_interno: int
+     *     penvp_nro_interno: int,
+     *     anticipada?: bool
      * }>
      */
     public static function lineas(Comprobante_Proveedor $comprobante): array
@@ -59,6 +85,10 @@ final class AplicpedFacturaAnitaMapper
             'comprobante_proveedor_articulos.articulos',
             'ordencompras.ordencompra_articulos.articulos',
         ]);
+
+        if (ComprobanteProveedorFacturaAnticipadaSupport::aplica($comprobante)) {
+            return [self::lineaAnticipadaAnita()];
+        }
 
         $lineasOc = $comprobante->ordencompras?->ordencompra_articulos ?? collect();
         $porArticuloId = [];

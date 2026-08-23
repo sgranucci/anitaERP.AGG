@@ -64,6 +64,10 @@ final class ContratoValidacionAbonoPoliticaSupport
     /** @param Politica $politica */
     public static function cortaRecepcion(array $politica): bool
     {
+        if ($politica['exige_ingresos'] ?? false) {
+            return true;
+        }
+
         return $politica['aplica'] && $politica['requiere_recepcion'];
     }
 

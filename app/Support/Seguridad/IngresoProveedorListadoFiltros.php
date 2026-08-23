@@ -102,6 +102,11 @@ class IngresoProveedorListadoFiltros
             'busqueda_rapida' => $busquedaRapida,
             'empresa_id' => $empresaId,
             'empresa_scope' => $empresaScope,
+            'fecha_desde' => self::fechaFiltro($request->input('fecha_desde')),
+            'fecha_hasta' => self::fechaFiltro($request->input('fecha_hasta')),
+            'estado' => self::estadoFiltro($request->input('estado')),
+            'sector_id' => self::enteroFiltro($request->input('sector_id')),
+            'area_id' => self::enteroFiltro($request->input('area_id')),
         ];
     }
 
@@ -146,7 +151,16 @@ class IngresoProveedorListadoFiltros
 
     public static function tieneCriteriosAplicados(array $filtros): bool
     {
-        return self::tieneCriteriosTexto($filtros);
+        return self::tieneCriteriosTexto($filtros) || self::tieneCriteriosEstructurados($filtros);
+    }
+
+    public static function tieneCriteriosEstructurados(array $filtros): bool
+    {
+        return ! empty($filtros['fecha_desde'])
+            || ! empty($filtros['fecha_hasta'])
+            || ! empty($filtros['estado'])
+            || ! empty($filtros['sector_id'])
+            || ! empty($filtros['area_id']);
     }
 
     public static function filtrosVacios(): array
@@ -160,6 +174,11 @@ class IngresoProveedorListadoFiltros
             'busqueda' => '',
             'empresa_id' => null,
             'empresa_scope' => 'una',
+            'fecha_desde' => null,
+            'fecha_hasta' => null,
+            'estado' => '',
+            'sector_id' => null,
+            'area_id' => null,
         ];
     }
 
@@ -200,8 +219,45 @@ class IngresoProveedorListadoFiltros
         if (! empty($filtros['valor_hasta'])) {
             $params['filtro_valor_hasta'] = $filtros['valor_hasta'];
         }
+        if (! empty($filtros['fecha_desde'])) {
+            $params['fecha_desde'] = $filtros['fecha_desde'];
+        }
+        if (! empty($filtros['fecha_hasta'])) {
+            $params['fecha_hasta'] = $filtros['fecha_hasta'];
+        }
+        if (! empty($filtros['estado'])) {
+            $params['estado'] = $filtros['estado'];
+        }
+        if (! empty($filtros['sector_id'])) {
+            $params['sector_id'] = (int) $filtros['sector_id'];
+        }
+        if (! empty($filtros['area_id'])) {
+            $params['area_id'] = (int) $filtros['area_id'];
+        }
 
         return $params;
+    }
+
+    /**
+     * @param  Builder<\App\Models\Seguridad\IngresoProveedor>  $query
+     */
+    public static function aplicarEstructurados(Builder $query, array $filtros): void
+    {
+        if (! empty($filtros['fecha_desde'])) {
+            $query->whereDate('ingreso_proveedor.fecha', '>=', $filtros['fecha_desde']);
+        }
+        if (! empty($filtros['fecha_hasta'])) {
+            $query->whereDate('ingreso_proveedor.fecha', '<=', $filtros['fecha_hasta']);
+        }
+        if (! empty($filtros['estado'])) {
+            $query->where('ingreso_proveedor.estado', $filtros['estado']);
+        }
+        if (! empty($filtros['sector_id'])) {
+            $query->where('ingreso_proveedor.sector_id', (int) $filtros['sector_id']);
+        }
+        if (! empty($filtros['area_id'])) {
+            $query->where('ingreso_proveedor.area_id', (int) $filtros['area_id']);
+        }
     }
 
     public static function aplicar(Builder $query, array $filtros): void
@@ -346,5 +402,35 @@ class IngresoProveedorListadoFiltros
         $type = self::CAMPOS[$campoKey]['type'] ?? 'texto';
 
         return $type === 'entero' ? self::OPERADORES_ENTERO : self::OPERADORES_TEXTO;
+    }
+
+    private static function fechaFiltro($valor): ?string
+    {
+        $v = trim((string) $valor);
+        if ($v === '' || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) {
+            return null;
+        }
+
+        return $v;
+    }
+
+    private static function estadoFiltro($valor): string
+    {
+        $estado = strtoupper(trim((string) $valor));
+        if ($estado === '' || ! in_array($estado, IngresoProveedorEstados::todos(), true)) {
+            return '';
+        }
+
+        return $estado;
+    }
+
+    private static function enteroFiltro($valor): ?int
+    {
+        if ($valor === null || $valor === '') {
+            return null;
+        }
+        $n = (int) $valor;
+
+        return $n > 0 ? $n : null;
     }
 }

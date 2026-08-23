@@ -38,6 +38,7 @@ use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
+use App\Support\Listado\QueryRetornoListado;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
@@ -149,7 +150,10 @@ class Comprobante_ProveedorController extends Controller
 
         return view('compras.comprobante_proveedor.crear', array_merge(
             $this->datosFormulario($prefill),
-            ['facturaYaEnAnita' => $facturaYaEnAnita]
+            [
+                'facturaYaEnAnita' => $facturaYaEnAnita,
+                'retornoListadoQuery' => $this->queryRetornoListado($request),
+            ]
         ));
     }
 
@@ -228,7 +232,8 @@ class Comprobante_ProveedorController extends Controller
                 return redirect()
                     ->route('editar_comprobante_proveedor', ['id' => $comprobante->id])
                     ->with('errores', [
-                        'El comprobante se guardó en borrador, pero no se pudo contabilizar: '.$e->getMessage(),
+                        'El comprobante se guardó en borrador, pero no se pudo contabilizar. '
+                        .'El aviso permanece en esta pantalla hasta que se complete. Motivo: '.$e->getMessage(),
                     ]);
             }
 
@@ -243,7 +248,7 @@ class Comprobante_ProveedorController extends Controller
             ->with('mensaje', $mensaje);
     }
 
-    public function editar(int $id)
+    public function editar(Request $request, int $id)
     {
         can('editar-comprobante-proveedor');
 
@@ -254,7 +259,9 @@ class Comprobante_ProveedorController extends Controller
 
         $prefill = $this->prefillService->paraEdicion($comprobante);
 
-        return view('compras.comprobante_proveedor.editar', $this->datosFormulario($prefill));
+        return view('compras.comprobante_proveedor.editar', $this->datosFormulario($prefill) + [
+            'retornoListadoQuery' => $this->queryRetornoListado($request),
+        ]);
     }
 
     public function actualizar(ValidacionComprobante_Proveedor $request, int $id)
@@ -280,9 +287,7 @@ class Comprobante_ProveedorController extends Controller
             $mensaje .= ' '.implode(' ', $avisos);
         }
 
-        return redirect()
-            ->route('comprobante_proveedor')
-            ->with('mensaje', $mensaje);
+        return $this->redirectIndexConMensaje($request, $mensaje);
     }
 
     /**
@@ -380,9 +385,7 @@ class Comprobante_ProveedorController extends Controller
             return response()->json(['mensaje' => 'ok', 'detalle' => $resultado['mensaje']]);
         }
 
-        return redirect()
-            ->route('comprobante_proveedor')
-            ->with('mensaje', $resultado['mensaje']);
+        return $this->redirectIndexConMensaje($request, $resultado['mensaje']);
     }
 
     public function eliminarConPrecarga(Request $request, int $id)
@@ -408,9 +411,7 @@ class Comprobante_ProveedorController extends Controller
             return response()->json(['mensaje' => 'ok', 'detalle' => $resultado['mensaje']]);
         }
 
-        return redirect()
-            ->route('comprobante_proveedor')
-            ->with('mensaje', $resultado['mensaje']);
+        return $this->redirectIndexConMensaje($request, $resultado['mensaje']);
     }
 
     public function generarDesdePrecarga(int $precargaId)
@@ -438,7 +439,7 @@ class Comprobante_ProveedorController extends Controller
         return redirect()->route('crear_comprobante_proveedor', ['precarga_id' => $precargaId]);
     }
 
-    public function contabilizar(int $id)
+    public function contabilizar(Request $request, int $id)
     {
         can('contabilizar-comprobante-proveedor');
 
@@ -446,13 +447,17 @@ class Comprobante_ProveedorController extends Controller
             $this->contabilizarService->contabilizar($id);
         } catch (\Throwable $e) {
             return redirect()
-                ->route('editar_comprobante_proveedor', ['id' => $id])
-                ->with('errores', ['No se pudo contabilizar: '.$e->getMessage()]);
+                ->route('editar_comprobante_proveedor', ['id' => $id] + $this->queryRetornoListado($request))
+                ->with('errores', [
+                    'No se pudo contabilizar. El comprobante quedó en borrador y el error permanece visible '
+                    .'hasta que se complete. Motivo: '.$e->getMessage(),
+                ]);
         }
 
-        return redirect()
-            ->route('comprobante_proveedor')
-            ->with('mensaje', 'Comprobante contabilizado: asiento, cuenta corriente y sync Anita.');
+        return $this->redirectIndexConMensaje(
+            $request,
+            'Comprobante contabilizado: asiento, cuenta corriente y sync Anita.'
+        );
     }
 
     public function verFacturaPdf(Request $request, int $id): BinaryFileResponse
@@ -956,6 +961,21 @@ class Comprobante_ProveedorController extends Controller
             'validacionAbonoCompleta' => $validacionAbonoCompleta,
             'mostrarContabilizarAbono' => $mostrarContabilizarAbono,
         ]);
+    }
+
+    /**
+     * @return array<string, string|int>
+     */
+    private function queryRetornoListado(Request $request): array
+    {
+        return QueryRetornoListado::desdeRequestSiIndex($request, ComprobanteProveedorListadoFiltros::class);
+    }
+
+    private function redirectIndexConMensaje(Request $request, string $mensaje)
+    {
+        return redirect()
+            ->route('comprobante_proveedor', $this->queryRetornoListado($request))
+            ->with('mensaje', $mensaje);
     }
 
     private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array

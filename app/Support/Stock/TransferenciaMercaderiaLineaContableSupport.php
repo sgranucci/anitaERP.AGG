@@ -101,6 +101,68 @@ final class TransferenciaMercaderiaLineaContableSupport
             );
     }
 
+    /**
+     * @param  list<int>  $articuloIds
+     */
+    public static function todosOtrosActivosConRecepcionEnDeposito(
+        array $articuloIds,
+        int $empresaId,
+        int $depositoOrigenId,
+    ): bool {
+        if ($depositoOrigenId <= 0 || ! self::todosOtrosActivos($articuloIds, $empresaId)) {
+            return false;
+        }
+
+        foreach ($articuloIds as $articuloId) {
+            if (! TransferenciaMercaderiaDepositoRecepcionSupport::existeEnDeposito(
+                (int) $articuloId,
+                $empresaId,
+                $depositoOrigenId
+            )) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * @param  list<int>  $articuloIds
+     */
+    public static function algunaSinRecepcionEnDeposito(
+        array $articuloIds,
+        int $empresaId,
+        int $depositoOrigenId,
+    ): bool {
+        $articuloIds = array_values(array_unique(array_filter(
+            array_map('intval', $articuloIds),
+            static fn (int $id): bool => $id > 0
+        )));
+        if ($empresaId <= 0 || $depositoOrigenId <= 0 || $articuloIds === []) {
+            return false;
+        }
+
+        $articulos = Articulo::query()
+            ->with('articulo_cuentacontables')
+            ->whereIn('id', $articuloIds)
+            ->get();
+
+        foreach ($articulos as $articulo) {
+            if (self::resolverFamilia($articulo, $empresaId) !== self::FAMILIA_OTROS_ACTIVOS) {
+                continue;
+            }
+            if (! TransferenciaMercaderiaDepositoRecepcionSupport::existeEnDeposito(
+                (int) $articulo->id,
+                $empresaId,
+                $depositoOrigenId
+            )) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public static function lineaGeneraAsiento(
         Articulo $articulo,
         int $empresaId,
@@ -126,7 +188,8 @@ final class TransferenciaMercaderiaLineaContableSupport
      *     familia: string,
      *     motivo: string,
      *     deposito_recepcion_id: ?int,
-     *     deposito_recepcion_codigo: ?string
+     *     deposito_recepcion_codigo: ?string,
+     *     sin_recepcion_deposito: bool
      * }
      */
     public static function validarLinea(
@@ -176,7 +239,8 @@ final class TransferenciaMercaderiaLineaContableSupport
                     $familia,
                     'Artículo '.$sku.': no tiene recepción de compra confirmada para determinar depósito.',
                     null,
-                    $depositoRecepcionCodigo
+                    $depositoRecepcionCodigo,
+                    true
                 );
             }
 
@@ -210,7 +274,8 @@ final class TransferenciaMercaderiaLineaContableSupport
                     $familia,
                     $motivo,
                     $depositoRecepcionId,
-                    $depositoRecepcionCodigo
+                    $depositoRecepcionCodigo,
+                    $familia === self::FAMILIA_OTROS_ACTIVOS
                 );
             }
         }
@@ -375,6 +440,7 @@ final class TransferenciaMercaderiaLineaContableSupport
         string $motivo,
         ?int $depositoRecepcionId = null,
         ?string $depositoRecepcionCodigo = null,
+        bool $sinRecepcionDeposito = false,
     ): array {
         return [
             'permitido' => $permitido,
@@ -382,6 +448,7 @@ final class TransferenciaMercaderiaLineaContableSupport
             'motivo' => $motivo,
             'deposito_recepcion_id' => $depositoRecepcionId,
             'deposito_recepcion_codigo' => $depositoRecepcionCodigo,
+            'sin_recepcion_deposito' => $sinRecepcionDeposito,
         ];
     }
 }

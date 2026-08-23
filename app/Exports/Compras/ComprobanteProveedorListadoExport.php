@@ -24,7 +24,7 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'K';
+    private const COL_ULTIMA = 'L';
 
     /** Congela también ID y Empresa (columnas A y B): el freeze arranca en C. */
     private const COL_FREEZE = 'C';
@@ -99,8 +99,8 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
             'A' => NumberFormat::FORMAT_TEXT,
             'E' => NumberFormat::FORMAT_TEXT,
             'F' => NumberFormat::FORMAT_TEXT,
-            // H = Total: número real con máscara neutra (sumable/adaptable).
-            'H' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
+            // I = Total (tras F. IVA / contabilización).
+            'I' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
         ];
     }
 
@@ -140,10 +140,11 @@ class ComprobanteProveedorListadoExport implements FromView, ShouldAutoSize, Wit
             'E' => 18,
             'F' => 12,
             'G' => 12,
-            'H' => 12,
-            'I' => 16,
+            'H' => 16,
+            'I' => 12,
             'J' => 16,
-            'K' => 22,
+            'K' => 16,
+            'L' => 22,
         ];
     }
 

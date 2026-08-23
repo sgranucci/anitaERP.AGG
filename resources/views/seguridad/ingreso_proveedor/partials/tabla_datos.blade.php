@@ -11,6 +11,7 @@
             <th>Fecha</th>
             <th>Empresa</th>
             <th>Proveedor</th>
+            <th>OC</th>
             <th>Motivo de visita</th>
             <th>Sala / Punto de ingreso</th>
             <th>Sector</th>
@@ -20,7 +21,7 @@
             <th>T&iacute;tulo</th>
             <th>Comentario</th>
             @if ($puedeVerEditar)
-                <th class="width80" data-orderable="false"></th>
+                <th class="width120 text-nowrap" data-orderable="false"></th>
             @endif
         </tr>
     </thead>
@@ -42,6 +43,15 @@
                         <span class="badge badge-secondary">Visitante</span>
                     @endif
                 </td>
+                <td>
+                    @if ($data->ordencompra_id && ($data->ordencompras->numeroordencompra ?? null))
+                        @if (can('editar-ordencompra', false) || can('listar-ordencompra', false))
+                            <a href="{{ route('editar_ordencompra', ['id' => $data->ordencompra_id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}" class="text-primary" target="_blank" rel="noopener">{{ $data->ordencompras->numeroordencompra }}</a>
+                        @else
+                            {{ $data->ordencompras->numeroordencompra }}
+                        @endif
+                    @endif
+                </td>
                 <td>{{ $data->motivos->nombre ?? '' }}</td>
                 <td>{{ $data->puntos->nombre ?? '' }}</td>
                 <td>{{ $data->sectores->nombre ?? '' }}</td>
@@ -55,7 +65,20 @@
                 <td>{{ $data->titulo }}</td>
                 <td>{{ $data->comentario }}</td>
                 @if ($puedeVerEditar)
-                    <td>
+                    <td class="text-nowrap">
+                        @if (can('autorizar-ingreso-proveedor', false) && IngresoProveedorEstados::puedeAutorizarORechazar((string) $data->estado))
+                            <form action="{{ route('autorizar_ingreso_proveedor', $data->id) }}" method="POST" class="d-inline js-ingreso-autorizar-form">
+                                @csrf
+                                <button type="submit" class="btn-accion-tabla tooltipsC" title="Autorizar">
+                                    <i class="fa fa-check text-success"></i>
+                                </button>
+                            </form>
+                            <button type="button" class="btn-accion-tabla tooltipsC js-ingreso-abrir-rechazo" title="Rechazar"
+                                    data-ticket-id="{{ $data->id }}"
+                                    data-url="{{ route('rechazar_ingreso_proveedor', $data->id) }}">
+                                <i class="fa fa-ban text-danger"></i>
+                            </button>
+                        @endif
                         @if (can('editar-ingreso-proveedor', false))
                             <a href="{{ route('editar_ingreso_proveedor', ['id' => $data->id] + $retorno) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                 <i class="fa fa-edit"></i>

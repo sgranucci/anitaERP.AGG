@@ -11,6 +11,7 @@ use App\Models\Caja\RendicionMaquina;
 use App\Models\Ventas\Puntoventa;
 use App\Support\Caja\AnitaSync\RendicionEstacionamientoRendvalorCodigoSupport;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaRendvalorCodigoSupport;
+use App\Support\Caja\PosicionFinancieraOrdenConceptoSupport;
 use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
 use App\Support\Caja\PosicionFinancieraSaldoSupport;
 use App\Support\Caja\Remesa\RemesaSupport;
@@ -270,11 +271,12 @@ class EfePosicionFinancieraSupport
             self::BLOQUE_GASTRO, 'GASTRONOMIA Z', 'Total Gastronomia',
             $valormae, $codigosUsoGastronomia, $clasificar,
         );
+        // Anita guarda rendg_tot_redondeo de estac ya negativo; ERP guarda el
+        // centavo en positivo (igual que gastronomía). No negar la fuente ERP.
         $estacErp = $this->fuenteErp->gastroEstac(
             $empresaId, $inicioMes, $finMes, $this->dias,
             self::BLOQUE_ESTAC, 'ESTACIONAMIENTO Z', 'Total Estacionamiento',
             $valormae, $codigosUsoEstacionamiento, $clasificar,
-            redondeoNegado: true,
         );
         $vendingErp = $this->fuenteErp->gastroEstac(
             $empresaId, $inicioMes, $finMes, $this->dias,
@@ -329,6 +331,34 @@ class EfePosicionFinancieraSupport
                 $vendingAnita,
             );
         }
+
+        $gastronomia = PosicionFinancieraOrdenConceptoSupport::reordenarBloqueGastro(
+            $gastronomia,
+            $empresaId,
+            $valormae,
+            $codigosUsoGastronomia,
+            RendicionGastronomiaRendvalorCodigoSupport::class,
+            'GASTRONOMIA Z',
+            'Total Gastronomia',
+        );
+        $estacionamiento = PosicionFinancieraOrdenConceptoSupport::reordenarBloqueGastro(
+            $estacionamiento,
+            $empresaId,
+            $valormae,
+            $codigosUsoEstacionamiento,
+            RendicionEstacionamientoRendvalorCodigoSupport::class,
+            'ESTACIONAMIENTO Z',
+            'Total Estacionamiento',
+        );
+        $vending = PosicionFinancieraOrdenConceptoSupport::reordenarBloqueGastro(
+            $vending,
+            $empresaId,
+            $valormae,
+            $codigosUsoGastronomia,
+            RendicionGastronomiaRendvalorCodigoSupport::class,
+            'VENDING Z',
+            'Total Vending',
+        );
 
         $filasMaquina = $this->bridgeReader->listarRendmaquina($empresaId, $fechaDesde, $fechaHasta);
         $opsMaquina = [];
@@ -385,8 +415,12 @@ class EfePosicionFinancieraSupport
                 );
             }
         }
-        $maquinasMedios = $this->fuenteErp->mergePorDia(
-            $maquinasMediosAnita, $maquinasErp['medios'], $maquinasErp['dias'], $this->dias,
+        $maquinasMedios = PosicionFinancieraOrdenConceptoSupport::reordenarMapaMedios(
+            $empresaId,
+            $this->fuenteErp->mergePorDia(
+                $maquinasMediosAnita, $maquinasErp['medios'], $maquinasErp['dias'], $this->dias,
+            ),
+            $valormae,
         );
         $maquinasGastos = $this->fuenteErp->mergePorDia(
             $maquinasGastosAnita, $maquinasErp['gastos'], $maquinasErp['dias'], $this->dias,
@@ -1172,7 +1206,17 @@ class EfePosicionFinancieraSupport
                     'rendbingo / concbingo / rendpremio Anita (prioridad por día)',
                     'rendicion_bingo_caja ERP (solo días sin Anita)',
                 ],
-            self::BLOQUE_GASTRO, self::BLOQUE_ESTAC, self::BLOQUE_VENDING => $this->fuenteErpPura
+            self::BLOQUE_GASTRO => $this->fuenteErpPura
+                ? [
+                    'rendicion_gastronomia_caja ERP',
+                    'Cierre Waitry (factura CAEA + cobranza, por jornada)',
+                ]
+                : [
+                    'rendicion_gastronomia_caja ERP (días con turno) + huecos Anita (MEP, etc.)',
+                    'Cierre Waitry (factura CAEA + cobranza, por jornada)',
+                    'rendgastro / rendvalor / valormae Anita (días sin ERP)',
+                ],
+            self::BLOQUE_ESTAC, self::BLOQUE_VENDING => $this->fuenteErpPura
                 ? ['rendicion_*_caja ERP']
                 : [
                     'rendicion_*_caja ERP (días con turno) + huecos Anita (MEP, etc.)',
@@ -1566,17 +1610,25 @@ class EfePosicionFinancieraSupport
     ): array {
         $totales = [
             $etiquetaZ => $this->vectorDias(),
+            'Notas de credito' => $this->vectorDias(),
+            'Diferencia abandono de pago' => $this->vectorDias(),
+            'Redondeo' => $this->vectorDias(),
+            'Diferencia de caja' => $this->vectorDias(),
         ];
-        foreach ($valormae as $codigo => $meta) {
-            if (! isset($codigosValormaePermitidos[$codigo])) {
-                continue;
+        $mapperClass = $bloque === 'estac'
+            ? RendicionEstacionamientoRendvalorCodigoSupport::class
+            : RendicionGastronomiaRendvalorCodigoSupport::class;
+        foreach (PosicionFinancieraOrdenConceptoSupport::ordenarValormaePermitidos(
+            $empresaId,
+            $valormae,
+            $codigosValormaePermitidos,
+            $mapperClass,
+        ) as $meta) {
+            $desc = trim((string) ($meta['desc'] ?? ''));
+            if ($desc !== '') {
+                $totales[$desc] = $this->vectorDias();
             }
-            $totales[$meta['desc']] = $this->vectorDias();
         }
-        $totales['Notas de credito'] = $this->vectorDias();
-        $totales['Diferencia abandono de pago'] = $this->vectorDias();
-        $totales['Redondeo'] = $this->vectorDias();
-        $totales['Diferencia de caja'] = $this->vectorDias();
         $totales[$etiquetaTotal] = $this->vectorDias();
 
         foreach ($cabeceras as $fila) {

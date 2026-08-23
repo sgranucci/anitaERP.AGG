@@ -33,6 +33,18 @@ final class IngresoProveedorEstados
         return self::META[strtoupper($estado)]['badge'] ?? 'light';
     }
 
+    public static function puedeAutorizarORechazar(string $estado): bool
+    {
+        return strtoupper($estado) === self::PENDIENTE;
+    }
+
+    public static function permiteEntro(string $estado): bool
+    {
+        $estado = strtoupper($estado);
+
+        return $estado === self::AUTORIZADO || $estado === self::INGRESADO;
+    }
+
     /** @return list<string> */
     public static function todos(): array
     {

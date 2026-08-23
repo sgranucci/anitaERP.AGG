@@ -29,6 +29,7 @@ class ComprobanteProveedorListadoFiltros
         'numerocomprobante' => ['column' => 'comprobante_proveedor.numerocomprobante', 'type' => 'entero', 'label' => 'Número comprobante'],
         'numeroordencompra' => ['column' => 'ordencompra.numeroordencompra', 'type' => 'entero', 'label' => 'Nº orden de compra'],
         'fechacomprobante' => ['column' => 'comprobante_proveedor.fechacomprobante', 'type' => 'fecha', 'label' => 'Fecha comprobante'],
+        'fechaiva' => ['column' => 'comprobante_proveedor.fechaiva', 'type' => 'fecha', 'label' => 'Fecha IVA / contabilización'],
         'total' => ['column' => 'comprobante_proveedor.total', 'type' => 'texto', 'label' => 'Total'],
         'estado' => ['column' => 'comprobante_proveedor.estado', 'type' => 'texto', 'label' => 'Estado'],
         'origen_entrada' => ['column' => 'comprobante_proveedor.origen_entrada', 'type' => 'texto', 'label' => 'Origen'],
@@ -74,11 +75,13 @@ class ComprobanteProveedorListadoFiltros
     public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
     {
         [$empresaId, $empresaScope] = self::resolverEmpresaExterna($request, $empresaDefault);
+        $estado = self::resolverEstadoExterno($request);
 
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
             return array_merge(self::filtrosVacios(), [
                 'empresa_id' => $empresaId,
                 'empresa_scope' => $empresaScope,
+                'estado' => $estado,
             ]);
         }
 
@@ -114,6 +117,7 @@ class ComprobanteProveedorListadoFiltros
             'busqueda_rapida' => $busquedaRapida,
             'empresa_id' => $empresaId,
             'empresa_scope' => $empresaScope,
+            'estado' => $estado,
         ];
     }
 
@@ -133,6 +137,20 @@ class ComprobanteProveedorListadoFiltros
         }
 
         return [null, 'todas'];
+    }
+
+    private static function resolverEstadoExterno(Request $request): string
+    {
+        if ($request->boolean('estado_todas') || $request->input('estado_scope') === ComprobanteProveedorEstados::FILTRO_TODOS) {
+            return ComprobanteProveedorEstados::FILTRO_TODOS;
+        }
+
+        $estado = trim((string) $request->input('estado', ComprobanteProveedorEstados::FILTRO_TODOS));
+        if (! ComprobanteProveedorEstados::esFiltroListadoValido($estado)) {
+            return ComprobanteProveedorEstados::FILTRO_TODOS;
+        }
+
+        return $estado;
     }
 
     public static function tieneCriteriosTexto(array $filtros): bool
@@ -166,7 +184,7 @@ class ComprobanteProveedorListadoFiltros
     }
 
     /**
-     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string, empresa_id: ?int, empresa_scope: string}
+     * @return array{modo: string, campo: string, operador: string, valor: string, valor_hasta: string, busqueda: string, empresa_id: ?int, empresa_scope: string, estado: string}
      */
     public static function filtrosVacios(): array
     {
@@ -179,6 +197,7 @@ class ComprobanteProveedorListadoFiltros
             'busqueda' => '',
             'empresa_id' => null,
             'empresa_scope' => 'una',
+            'estado' => ComprobanteProveedorEstados::FILTRO_TODOS,
         ];
     }
 
@@ -187,7 +206,7 @@ class ComprobanteProveedorListadoFiltros
      */
     public static function paraQueryString(array $filtros): array
     {
-        $params = self::paraQueryStringEmpresa($filtros);
+        $params = self::paraQueryStringExternos($filtros);
 
         if (($filtros['modo'] ?? self::MODO_TODOS) !== self::MODO_TODOS) {
             $params['filtro_modo'] = $filtros['modo'];
@@ -224,12 +243,42 @@ class ComprobanteProveedorListadoFiltros
     }
 
     /**
+     * Empresa + estado (chips externos). Limpiar texto no los pierde.
+     *
+     * @return array<string, int|string>
+     */
+    public static function paraQueryStringExternos(array $filtros): array
+    {
+        return array_merge(self::paraQueryStringEmpresa($filtros), self::paraQueryStringEstado($filtros));
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function paraQueryStringEstado(array $filtros): array
+    {
+        $estado = (string) ($filtros['estado'] ?? ComprobanteProveedorEstados::FILTRO_TODOS);
+        if ($estado === '' || $estado === ComprobanteProveedorEstados::FILTRO_TODOS) {
+            return [];
+        }
+
+        return ['estado' => $estado];
+    }
+
+    /**
      * @param  Builder<\App\Models\Compras\Comprobante_Proveedor>  $query
      */
     public static function aplicar(Builder $query, array $filtros): void
     {
         if (! empty($filtros['empresa_id'])) {
             $query->where('comprobante_proveedor.empresa_id', (int) $filtros['empresa_id']);
+        }
+
+        $estado = (string) ($filtros['estado'] ?? ComprobanteProveedorEstados::FILTRO_TODOS);
+        if ($estado === ComprobanteProveedorEstados::FILTRO_ERROR_ANITA) {
+            $query->where('comprobante_proveedor.anita_sync_estado', ComprobanteProveedorAnitaSyncEstado::ERROR);
+        } elseif ($estado !== '' && $estado !== ComprobanteProveedorEstados::FILTRO_TODOS) {
+            $query->where('comprobante_proveedor.estado', $estado);
         }
 
         if (! self::tieneCriteriosTexto($filtros)) {
@@ -284,7 +333,8 @@ class ComprobanteProveedorListadoFiltros
 
             $fecha = self::parsearFecha($valor);
             if ($fecha) {
-                $q->orWhereDate('comprobante_proveedor.fechacomprobante', '=', $fecha);
+                $q->orWhereDate('comprobante_proveedor.fechacomprobante', '=', $fecha)
+                    ->orWhereDate('comprobante_proveedor.fechaiva', '=', $fecha);
             }
         });
     }

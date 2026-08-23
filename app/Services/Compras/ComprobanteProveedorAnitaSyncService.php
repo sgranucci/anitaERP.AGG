@@ -12,6 +12,7 @@ use App\Support\Compras\AnitaSync\ComprobanteProveedor\ComprobanteProveedorConcm
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\ConcmovLineaAnitaMapper;
 use App\Support\Compras\AnitaSync\ComprobanteProveedor\PromovCuotaAnitaMapper;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
+use App\Support\Compras\ComprobanteProveedorFacturaAnticipadaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
 use App\Support\Stock\RecepcionProveedorAnitaWhereSupport;
 use RuntimeException;
@@ -263,8 +264,28 @@ class ComprobanteProveedorAnitaSyncService
         $tabla = (string) config('recepcion_proveedor.anita.tablas.aplicacion_oc', 'aplicped');
         $api = new ApiAnita;
         $codigoProveedor = $ctx->proveedorCodigo();
+        $comprobante = $ctx->comprobante;
+        $comprobante->loadMissing(['ordencompras.ordencompra_articulos']);
 
-        foreach (AplicpedFacturaAnitaMapper::lineas($ctx->comprobante) as $linea) {
+        if (ComprobanteProveedorFacturaAnticipadaSupport::aplica($comprobante)) {
+            $insert = RecepcionProveedorAnitaEscrituraSupport::aplicpedFacturaAnticipadaInsert(
+                $codigoProveedor,
+                $claveFactura,
+                $clavePep,
+                (int) $ctx->nroInterno,
+            );
+            $api->apiCallEscritura([
+                'acc' => 'insert',
+                'tabla' => $tabla,
+                'sistema' => self::SISTEMA_COMPRAS,
+                'campos' => $insert['campos'],
+                'valores' => $insert['valores'],
+            ], 'aplicped insert factura anticipada');
+
+            return;
+        }
+
+        foreach (AplicpedFacturaAnitaMapper::lineas($comprobante) as $linea) {
             // aplp_nro_interno = com_nro_interno de la factura (no penvp de la OC).
             $insert = RecepcionProveedorAnitaEscrituraSupport::aplicpedFacturaLineaInsert(
                 $codigoProveedor,

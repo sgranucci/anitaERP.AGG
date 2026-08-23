@@ -1389,6 +1389,7 @@ Route::get('stock/transferencia-mercaderia/validar-destinatario', 'Stock\Transfe
 Route::post('stock/transferencia-mercaderia/preferencias', 'Stock\TransferenciaMercaderiaController@preferencias')->name('transferencia_mercaderia_preferencias');
 Route::get('stock/transferencia-mercaderia/inventario', 'Stock\TransferenciaMercaderiaController@inventario')->name('transferencia_mercaderia_inventario');
 Route::get('stock/transferencia-mercaderia/resolver-articulo', 'Stock\TransferenciaMercaderiaController@resolverArticulo')->name('transferencia_mercaderia_resolver_articulo');
+Route::post('stock/transferencia-mercaderia/decodificar-foto', 'Stock\TransferenciaMercaderiaController@decodificarFoto')->name('transferencia_mercaderia_decodificar_foto');
 Route::get('stock/transferencia-mercaderia/saldo-articulo', 'Stock\TransferenciaMercaderiaController@saldoArticulo')->name('transferencia_mercaderia_saldo_articulo');
 Route::get('stock/transferencia-mercaderia/validar-linea-contable', 'Stock\TransferenciaMercaderiaController@validarLineaContable')->name('transferencia_mercaderia_validar_linea_contable');
 Route::post('stock/transferencia-mercaderia', 'Stock\TransferenciaMercaderiaController@guardar')->name('transferencia_mercaderia_guardar');
@@ -2717,6 +2718,9 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::get('caja/posicion-financiera', 'Caja\PosicionFinancieraController@index')->name('posicion_financiera');
     Route::get('caja/listar-posicion-financiera/{formato}', 'Caja\PosicionFinancieraController@exportar')->name('listar_posicion_financiera');
     Route::get('caja/posicion-financiera/auditoria', 'Caja\PosicionFinancieraController@auditoria')->name('posicion_financiera_auditoria');
+    Route::get('caja/posicion-financiera/orden-conceptos', 'Caja\PosicionFinancieraController@ordenConceptos')->name('posicion_financiera_orden_conceptos');
+    Route::post('caja/posicion-financiera/orden-conceptos', 'Caja\PosicionFinancieraController@guardarOrdenConceptos')->name('posicion_financiera_guardar_orden_conceptos');
+    Route::post('caja/posicion-financiera/orden-conceptos/biyemas', 'Caja\PosicionFinancieraController@aplicarOrdenBiyemas')->name('posicion_financiera_aplicar_orden_biyemas');
     Route::post('caja/posicion-financiera/confirmar-saldo', 'Caja\PosicionFinancieraController@confirmarSaldo')->name('posicion_financiera_confirmar_saldo');
     Route::delete('caja/posicion-financiera/saldo/{id}', 'Caja\PosicionFinancieraController@anularSaldo')->name('posicion_financiera_anular_saldo');
 
@@ -4982,14 +4986,28 @@ Route::get('seguridad/reporte-tickets-ingreso', 'Seguridad\IngresoProveedorKpiRe
 Route::get('seguridad/listar-reporte-tickets-ingreso/{formato?}', 'Seguridad\IngresoProveedorKpiReporteController@exportar')->name('listar_reporte_tickets_ingreso');
 Route::get('seguridad/reporte-ingresos-planta', 'Seguridad\IngresoProveedorPlantaReporteController@index')->name('reporte_ingresos_planta');
 Route::get('seguridad/listar-reporte-ingresos-planta/{formato?}', 'Seguridad\IngresoProveedorPlantaReporteController@exportar')->name('listar_reporte_ingresos_planta');
+Route::get('seguridad/reporte-abono-sin-ingresos', 'Seguridad\IngresoProveedorAbonoReporteController@index')->name('reporte_abono_sin_ingresos');
+Route::get('seguridad/listar-reporte-abono-sin-ingresos/{formato?}', 'Seguridad\IngresoProveedorAbonoReporteController@exportar')->name('listar_reporte_abono_sin_ingresos');
 
-Route::get('seguridad/ingreso-proveedor', 'Seguridad\IngresoProveedorController@index')->name('ingreso_proveedor');
-Route::get('seguridad/lista-ingreso-proveedor/{formato?}/{busqueda?}', 'Seguridad\IngresoProveedorController@listar')->name('lista_ingreso_proveedor');
-Route::get('seguridad/ingreso-proveedor/crear', 'Seguridad\IngresoProveedorController@crear')->name('crear_ingreso_proveedor')->middleware('modo.consulta');
-Route::post('seguridad/ingreso-proveedor', 'Seguridad\IngresoProveedorController@guardar')->name('guardar_ingreso_proveedor');
-Route::get('seguridad/ingreso-proveedor/{id}/editar', 'Seguridad\IngresoProveedorController@editar')->name('editar_ingreso_proveedor')->middleware('modo.consulta');
-Route::put('seguridad/ingreso-proveedor/{id}', 'Seguridad\IngresoProveedorController@actualizar')->name('actualizar_ingreso_proveedor')->middleware('modo.consulta');
-Route::delete('seguridad/ingreso-proveedor/{id}', 'Seguridad\IngresoProveedorController@eliminar')->name('eliminar_ingreso_proveedor');
+    Route::get('seguridad/ingreso-proveedor', 'Seguridad\IngresoProveedorController@index')->name('ingreso_proveedor');
+    Route::get('seguridad/lista-ingreso-proveedor/{formato?}/{busqueda?}', 'Seguridad\IngresoProveedorController@listar')->name('lista_ingreso_proveedor');
+    Route::get('seguridad/ingreso-proveedor-pendientes', 'Seguridad\IngresoProveedorController@pendientes')->name('pendientes_ingreso_proveedor');
+    Route::get('seguridad/ingreso-proveedor/pendientes', 'Seguridad\IngresoProveedorController@pendientes');
+    Route::get('seguridad/ingreso-proveedor/crear', 'Seguridad\IngresoProveedorController@crear')->name('crear_ingreso_proveedor')->middleware('modo.consulta');
+    Route::get('seguridad/ingreso-proveedor/formulario-modal', 'Seguridad\IngresoProveedorController@formularioModal')->name('formulario_modal_ingreso_proveedor');
+    Route::get('seguridad/ingreso-proveedor/grilla-vinculada', 'Seguridad\IngresoProveedorController@grillaVinculada')->name('grilla_vinculada_ingreso_proveedor');
+    Route::post('seguridad/ingreso-proveedor/consulta-contrato', 'Seguridad\IngresoProveedorController@consultaContrato')->name('consultar_contrato_ingreso_proveedor');
+    Route::get('seguridad/ingreso-proveedor/resolver-contrato', 'Seguridad\IngresoProveedorController@resolverContrato')->name('resolver_contrato_ingreso_proveedor');
+    Route::post('seguridad/ingreso-proveedor', 'Seguridad\IngresoProveedorController@guardar')->name('guardar_ingreso_proveedor');
+    Route::get('seguridad/ingreso-proveedor/visualizar/{id}/{hash}', 'Seguridad\IngresoProveedorController@visualizar')->name('visualizar_ingreso_proveedor');
+    Route::get('seguridad/ingreso-proveedor/visualizar/{id}/{hash}/archivo/{archivo}', 'Seguridad\IngresoProveedorController@visualizarArchivo')->name('visualizar_archivo_ingreso_proveedor');
+    Route::get('seguridad/ingreso-proveedor/buscar-proveedor-rapido', 'Seguridad\IngresoProveedorController@buscarProveedorRapido')->name('buscar_proveedor_rapido_ingreso_proveedor');
+    Route::get('seguridad/ingreso-proveedor/{id}/consultar', 'Seguridad\IngresoProveedorController@consultar')->name('consultar_ingreso_proveedor')->middleware('modo.consulta');
+    Route::get('seguridad/ingreso-proveedor/{id}/editar', 'Seguridad\IngresoProveedorController@editar')->name('editar_ingreso_proveedor')->middleware('modo.consulta');
+    Route::post('seguridad/ingreso-proveedor/{id}/autorizar', 'Seguridad\IngresoProveedorController@autorizar')->name('autorizar_ingreso_proveedor');
+    Route::post('seguridad/ingreso-proveedor/{id}/rechazar', 'Seguridad\IngresoProveedorController@rechazar')->name('rechazar_ingreso_proveedor');
+    Route::put('seguridad/ingreso-proveedor/{id}', 'Seguridad\IngresoProveedorController@actualizar')->name('actualizar_ingreso_proveedor')->middleware('modo.consulta');
+    Route::delete('seguridad/ingreso-proveedor/{id}', 'Seguridad\IngresoProveedorController@eliminar')->name('eliminar_ingreso_proveedor');
 
 foreach (['punto', 'area', 'motivo', 'sector'] as $tipoCatalogo) {
     Route::get("seguridad/ingreso-proveedor-{$tipoCatalogo}", 'Seguridad\IngresoProveedorCatalogoController@index')

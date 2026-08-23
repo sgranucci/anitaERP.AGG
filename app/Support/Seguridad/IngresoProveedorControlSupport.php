@@ -30,11 +30,65 @@ final class IngresoProveedorControlSupport
             return null;
         }
 
-        $base = IngresoProveedorPersona::query()
+        $base = self::queryBasePorDni($dni, $empresaId);
+        $abierto = (clone $base)->whereHas(
+            'ingreso',
+            static fn ($q) => $q->where('estado', '!=', IngresoProveedorEstados::RECHAZADO)
+        );
+
+        $enPlanta = (clone $abierto)
+            ->whereNotNull('fecha_ingreso')
+            ->whereNull('fecha_egreso')
+            ->orderByDesc('fecha_ingreso')
+            ->orderByDesc('id')
+            ->first();
+        if ($enPlanta) {
+            return $enPlanta;
+        }
+
+        $hoy = (clone $abierto)
+            ->whereHas('ingreso', fn ($q) => $q->whereDate('fecha', now()->toDateString()))
+            ->whereNull('fecha_egreso')
+            ->orderByDesc('id')
+            ->first();
+        if ($hoy) {
+            return $hoy;
+        }
+
+        $abiertoReciente = (clone $abierto)
+            ->whereNull('fecha_egreso')
+            ->orderByDesc('id')
+            ->first();
+        if ($abiertoReciente) {
+            return $abiertoReciente;
+        }
+
+        $rechazadoHoy = (clone $base)
+            ->whereHas('ingreso', static function ($q) {
+                $q->where('estado', IngresoProveedorEstados::RECHAZADO)
+                    ->whereDate('fecha', now()->toDateString());
+            })
+            ->orderByDesc('id')
+            ->first();
+        if ($rechazadoHoy) {
+            return $rechazadoHoy;
+        }
+
+        return (clone $base)
+            ->whereHas('ingreso', static fn ($q) => $q->where('estado', IngresoProveedorEstados::RECHAZADO))
+            ->orderByDesc('id')
+            ->first();
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<IngresoProveedorPersona>
+     */
+    private static function queryBasePorDni(string $dni, ?int $empresaId)
+    {
+        return IngresoProveedorPersona::query()
             ->where('documento_norm', $dni)
             ->whereHas('ingreso', function ($q) use ($empresaId) {
                 app(EmpresaRepository::class)->aplicarFiltroEmpresasAsignadas($q, 'empresa_id');
-                $q->where('estado', '!=', IngresoProveedorEstados::RECHAZADO);
                 if ($empresaId && $empresaId > 0) {
                     $q->where('empresa_id', $empresaId);
                 }
@@ -47,31 +101,8 @@ final class IngresoProveedorControlSupport
                 'ingreso.sectores:id,nombre',
                 'ingreso.empresas:id,nombre',
                 'ingreso.usuarios:id,nombre',
+                'ingreso.usuarioAutorizo:id,nombre',
             ]);
-
-        $enPlanta = (clone $base)
-            ->whereNotNull('fecha_ingreso')
-            ->whereNull('fecha_egreso')
-            ->orderByDesc('fecha_ingreso')
-            ->orderByDesc('id')
-            ->first();
-        if ($enPlanta) {
-            return $enPlanta;
-        }
-
-        $hoy = (clone $base)
-            ->whereHas('ingreso', fn ($q) => $q->whereDate('fecha', now()->toDateString()))
-            ->whereNull('fecha_egreso')
-            ->orderByDesc('id')
-            ->first();
-        if ($hoy) {
-            return $hoy;
-        }
-
-        return (clone $base)
-            ->whereNull('fecha_egreso')
-            ->orderByDesc('id')
-            ->first();
     }
 
     public static function marcarEntro(int $personaId): IngresoProveedorPersona
@@ -83,6 +114,12 @@ final class IngresoProveedorControlSupport
         }
         if ((string) $ticket->estado === IngresoProveedorEstados::RECHAZADO) {
             throw new RuntimeException('El ticket está rechazado.');
+        }
+        if (! IngresoProveedorEstados::permiteEntro((string) $ticket->estado)) {
+            throw new RuntimeException(
+                'El ticket todavía no está autorizado por Seguridad. Estado: '
+                .IngresoProveedorEstados::etiqueta((string) $ticket->estado).'.'
+            );
         }
         if ($persona->fecha_ingreso && ! $persona->fecha_egreso) {
             throw new RuntimeException('Esta persona ya está en planta.');
@@ -101,10 +138,6 @@ final class IngresoProveedorControlSupport
         if (! $ticket->fecha_ingreso) {
             $ticket->fecha_ingreso = $ahora->toDateString();
             $ticket->hora_ingreso = $ahora->format('H:i:s');
-        }
-        if (! $ticket->autorizado_at) {
-            $ticket->usuario_autorizo_id = Auth::id();
-            $ticket->autorizado_at = $ahora;
         }
         $ticket->estado = IngresoProveedorEstados::INGRESADO;
         $ticket->save();
@@ -146,7 +179,8 @@ final class IngresoProveedorControlSupport
 
     public static function sincronizarEstadoTicket(IngresoProveedor $ticket): void
     {
-        $ticket->loadMissing('personas');
+        $ticket->unsetRelation('personas');
+        $ticket->load('personas');
         $enPlanta = $ticket->personas->filter(fn ($p) => $p->fecha_ingreso && ! $p->fecha_egreso)->count();
         $algunaEntrada = $ticket->personas->filter(fn ($p) => $p->fecha_ingreso)->count();
 
@@ -202,6 +236,7 @@ final class IngresoProveedorControlSupport
                 'ingreso.areas:id,nombre',
                 'ingreso.sectores:id,nombre',
                 'ingreso.usuarios:id,nombre',
+                'ingreso.usuarioAutorizo:id,nombre',
             ])
             ->orderByRaw('ingreso_proveedor_persona.fecha_egreso IS NULL DESC')
             ->orderByDesc('ingreso_proveedor.fecha')
@@ -220,6 +255,14 @@ final class IngresoProveedorControlSupport
         $ticket = $persona->ingreso;
         $enPlanta = (bool) ($persona->fecha_ingreso && ! $persona->fecha_egreso);
         $finalizada = (bool) ($persona->fecha_ingreso && $persona->fecha_egreso);
+        $estadoCodigo = (string) ($ticket?->estado ?? '');
+        $puedeEntro = ! $enPlanta && ! $finalizada && IngresoProveedorEstados::permiteEntro($estadoCodigo);
+        $mensajeBloqueo = null;
+        if (! $puedeEntro && ! $enPlanta && ! $finalizada && $estadoCodigo === IngresoProveedorEstados::PENDIENTE) {
+            $mensajeBloqueo = 'Ticket pendiente de autorización de Seguridad. No puede ingresar.';
+        } elseif ($estadoCodigo === IngresoProveedorEstados::RECHAZADO) {
+            $mensajeBloqueo = self::mensajeRechazo($ticket);
+        }
 
         return [
             'persona_id' => (int) $persona->id,
@@ -235,17 +278,32 @@ final class IngresoProveedorControlSupport
             'patente' => $ticket?->patente,
             'titulo' => $ticket?->titulo,
             'comentario' => $ticket?->comentario,
-            'estado' => IngresoProveedorEstados::etiqueta((string) ($ticket?->estado ?? '')),
-            'estado_codigo' => (string) ($ticket?->estado ?? ''),
+            'estado' => IngresoProveedorEstados::etiqueta($estadoCodigo),
+            'estado_codigo' => $estadoCodigo,
             'empresa' => $ticket?->empresas?->nombre,
             'empresa_id' => (int) ($ticket?->empresa_id ?? 0),
             'generado_por' => $ticket?->usuarios?->nombre,
             'hora_ingreso' => $persona->hora_ingreso ? substr((string) $persona->hora_ingreso, 0, 5) : null,
             'hora_egreso' => $persona->hora_egreso ? substr((string) $persona->hora_egreso, 0, 5) : null,
             'minutos_en_planta' => $persona->minutos_en_planta,
-            'puede_entro' => ! $enPlanta && ! $finalizada,
+            'puede_entro' => $puedeEntro,
             'puede_salio' => $enPlanta,
+            'mensaje_bloqueo' => $mensajeBloqueo,
             'en_planta' => $enPlanta,
         ];
+    }
+
+    private static function mensajeRechazo(?IngresoProveedor $ticket): string
+    {
+        $quien = trim((string) (optional($ticket?->usuarioAutorizo)->nombre ?? ''));
+        $texto = $quien !== ''
+            ? 'Ticket rechazado por '.$quien.'. No puede ingresar.'
+            : 'Ticket rechazado por Seguridad. No puede ingresar.';
+        $comentario = trim((string) ($ticket?->comentario ?? ''));
+        if ($comentario !== '') {
+            $texto .= ' Motivo: '.$comentario;
+        }
+
+        return $texto;
     }
 }

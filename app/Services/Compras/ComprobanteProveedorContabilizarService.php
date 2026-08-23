@@ -7,6 +7,7 @@ use App\Models\Compras\Comprobante_Proveedor_Estado;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Contable\AsientoEloquentDeleteSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
@@ -53,6 +54,11 @@ class ComprobanteProveedorContabilizarService
         if ($comprobante->comprobante_proveedor_conceptos()->count() === 0) {
             throw new RuntimeException('Agregue al menos un concepto IVA antes de contabilizar.');
         }
+
+        ComprobanteProveedorFechaContableSupport::assertPeriodoContablePermitido(
+            (int) ($comprobante->empresa_id ?? 0),
+            ComprobanteProveedorFechaContableSupport::fechaYmd($comprobante)
+        );
 
         // Limpia ctamov huérfanos de intentos previos (mismo patrón que recepción COM).
         $this->asientoService->eliminarCtamovAnitaDeComprobante($comprobante);
@@ -130,6 +136,14 @@ class ComprobanteProveedorContabilizarService
                 'anita_sync_error' => $e->getMessage(),
                 'anita_sync_at' => now(),
             ])->save();
+
+            Comprobante_Proveedor_Estado::query()->create([
+                'comprobante_proveedor_id' => $comprobante->id,
+                'fecha' => now()->format('Y-m-d'),
+                'estado' => ComprobanteProveedorEstados::BORRADOR,
+                'usuario_id' => Auth::id(),
+                'observacion' => 'Contabilización revertida: '.mb_substr($e->getMessage(), 0, 450),
+            ]);
 
             throw $e;
         }

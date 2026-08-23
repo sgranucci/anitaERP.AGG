@@ -291,9 +291,10 @@ class TransferenciaMercaderiaService
         );
         if ($seleccionAutomaticaTrcont
             && strtoupper(trim((string) ($tipoTransferencia->abreviatura ?? ''))) === 'TRA'
-            && TransferenciaMercaderiaLineaContableSupport::todosOtrosActivos(
+            && TransferenciaMercaderiaLineaContableSupport::todosOtrosActivosConRecepcionEnDeposito(
                 array_column($lineas, 'articulo_id'),
-                $empresaId
+                $empresaId,
+                $depositoSalidaId
             )) {
             $tipoTrcont = $this->tipotransaccionStockRepository
                 ->all(['T'], ['A'])
@@ -481,7 +482,22 @@ class TransferenciaMercaderiaService
                     $fecha
                 );
             } catch (\Throwable $e) {
-                return ['ok' => false, 'mensaje' => $e->getMessage()];
+                $tipoTra = $this->resolverTipoTraActivo();
+                $volverATra = $seleccionAutomaticaTrcont
+                    && $tipoTra !== null
+                    && TransferenciaMercaderiaLineaContableSupport::algunaSinRecepcionEnDeposito(
+                        array_column($lineas, 'articulo_id'),
+                        $empresaId,
+                        $depositoSalidaId
+                    );
+                if (! $volverATra) {
+                    return ['ok' => false, 'mensaje' => $e->getMessage()];
+                }
+                $tipoTransferencia = $tipoTra;
+                $tipotransaccionId = (int) $tipoTra->id;
+                $cabecera['tipotransaccion_stock_id'] = $tipotransaccionId;
+                $manejaContabilidad = false;
+                $ccDestinoId = 0;
             }
         }
 
@@ -1389,6 +1405,13 @@ class TransferenciaMercaderiaService
             ->value('id');
 
         return $id ? (int) $id : null;
+    }
+
+    private function resolverTipoTraActivo(): ?Tipotransaccion_Stock
+    {
+        return $this->tipotransaccionStockRepository
+            ->all(['T'], ['A'])
+            ->first(static fn ($tipo): bool => strtoupper(trim((string) ($tipo->abreviatura ?? ''))) === 'TRA');
     }
 
     private function confirmarAsientoContable(Transferencia_Mercaderia $transferencia): void

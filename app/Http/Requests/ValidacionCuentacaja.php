@@ -26,6 +26,7 @@ class ValidacionCuentacaja extends FormRequest
         return [
             'nombre' => 'required|max:255|unique:cuentacaja,nombre,' . $this->route('id'),
             'descripcion_operaciones' => 'nullable|max:60',
+            'orden' => 'nullable|integer|min:0|max:9999',
             'banco_id' => ['integer', 'nullable'],
             'cuentacontable_id' => 'required|integer',
             'empresa_id' => ['integer', 'nullable'],
@@ -44,6 +45,7 @@ class ValidacionCuentacaja extends FormRequest
             'cbu' => 'CBU',
             'banco_id' => 'banco',
             'descripcion_operaciones' => 'descripción para operaciones',
+            'orden' => 'orden en posición financiera',
         ];
     }
 }

@@ -15,6 +15,14 @@
     </div>
 </div>
 <div class="form-group row">
+    <label for="orden" class="col-lg-3 col-form-label text-right">Orden pos. financiera</label>
+    <div class="col-lg-2">
+        <input type="number" name="orden" id="orden" class="form-control" min="0" max="9999" step="1"
+               value="{{ old('orden', $data->orden ?? 0) }}"/>
+        <small class="form-text text-muted">Respaldo. El orden por uso (gastronom&iacute;a, m&aacute;quinas, etc.) se configura en Posici&oacute;n financiera &rarr; Orden de conceptos.</small>
+    </div>
+</div>
+<div class="form-group row">
     <label for="codigo" class="col-lg-3 col-form-label requerido">Código</label>
     <div class="col-lg-2">
     <input type="text" name="codigo" id="codigo" class="form-control" value="{{old('codigo', $data->codigo ?? '')}}" required/>

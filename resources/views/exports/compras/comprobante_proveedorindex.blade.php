@@ -11,6 +11,10 @@
     } elseif (($filtros['empresa_scope'] ?? '') === 'todas') {
         $partesSub[] = 'Todas las empresas asignadas';
     }
+    $estadoFiltro = (string) ($filtros['estado'] ?? '');
+    if ($estadoFiltro !== '' && $estadoFiltro !== \App\Support\Compras\ComprobanteProveedorEstados::FILTRO_TODOS) {
+        $partesSub[] = 'Estado: '.\App\Support\Compras\ComprobanteProveedorEstados::etiqueta($estadoFiltro);
+    }
     $subtitulo = implode(' — ', $partesSub);
     $formatoNumero = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
     $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoNumero);
@@ -27,13 +31,13 @@
 @endphp
 <table>
     @if ($reservarFilaLogoExcel ?? false)
-    <tr><td colspan="11" style="height: 52px;">&#160;</td></tr>
+    <tr><td colspan="12" style="height: 52px;">&#160;</td></tr>
     @endif
     <tr>
-        <td colspan="11"><strong style="font-size: 16pt;">Listado de comprobantes de proveedor</strong></td>
+        <td colspan="12"><strong style="font-size: 16pt;">Listado de comprobantes de proveedor</strong></td>
     </tr>
     <tr>
-        <td colspan="11"><strong>{{ $subtitulo }}</strong></td>
+        <td colspan="12"><strong>{{ $subtitulo }}</strong></td>
     </tr>
     <thead>
         <tr>
@@ -44,6 +48,7 @@
             <th>N&uacute;mero</th>
             <th>OC</th>
             <th>Fecha</th>
+            <th>F. IVA / contabiliz.</th>
             <th>Total</th>
             <th>Estado</th>
             <th>Origen</th>
@@ -60,6 +65,7 @@
             <td>{{ $row->letra }}{{ $row->sucursal }}-{{ $row->numerocomprobante }}</td>
             <td>{{ $row->ordencompras->numeroordencompra ?? '' }}</td>
             <td>{{ $row->fechacomprobante ? $row->fechacomprobante->format('d/m/Y') : '' }}</td>
+            <td>{{ $row->fechaiva ? $row->fechaiva->format('d/m/Y') : '' }}</td>
             <td>{{ $fmtMonto($row->total) }}</td>
             <td>{{ $row->estado }}</td>
             <td>{{ \App\Support\Compras\ComprobanteProveedorOrigenEntrada::etiqueta($row->origen_entrada ?? '') }}</td>

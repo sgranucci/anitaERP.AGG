@@ -58,6 +58,18 @@
     margin-bottom: 1.25rem;
     border: 1px solid #d6eaf8;
 }
+.porteria-ticket.is-rechazado {
+    border-color: #c0392b;
+    background: #fdedec;
+}
+.porteria-ticket.is-pendiente {
+    border-color: #d4ac0d;
+    background: #fef9e7;
+}
+.porteria-estado-linea .badge {
+    font-size: 0.95rem;
+    padding: 0.35rem 0.7rem;
+}
 .porteria-ticket-head {
     display: flex;
     justify-content: space-between;

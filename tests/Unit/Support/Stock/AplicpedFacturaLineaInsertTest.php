@@ -50,4 +50,22 @@ class AplicpedFacturaLineaInsertTest extends TestCase
         // cantfact sigue en 0 para COM
         $this->assertMatchesRegularExpression('/12\.500000.*, 7001, 0\.000000/', $insert['valores']);
     }
+
+    public function test_factura_anticipada_pone_orden_menos_uno(): void
+    {
+        $insert = RecepcionProveedorAnitaEscrituraSupport::aplicpedFacturaAnticipadaInsert(
+            '3593',
+            ['tipo' => 'FIU', 'letra' => 'C', 'sucursal' => 1, 'nro' => 105],
+            ['tipo' => 'PEP', 'letra' => 'X', 'sucursal' => 0, 'nro' => 222177],
+            427819,
+        );
+
+        $this->assertStringContainsString('aplp_orden_com', $insert['campos']);
+        $this->assertStringContainsString('aplp_orden', $insert['campos']);
+        $this->assertStringContainsString('OC ANTICIPADA', $insert['valores']);
+        $this->assertStringContainsString('-1', $insert['valores']);
+        $this->assertStringContainsString('427819', $insert['valores']);
+        $this->assertStringContainsString("'FIU'", $insert['valores']);
+        $this->assertStringContainsString('222177', $insert['valores']);
+    }
 }

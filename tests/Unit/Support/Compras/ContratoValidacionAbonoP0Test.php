@@ -74,6 +74,20 @@ class ContratoValidacionAbonoP0Test extends TestCase
         $this->assertFalse(ContratoValidacionAbonoPoliticaSupport::cortaRecepcion($politica));
     }
 
+    public function test_exige_ingresos_corta_com_aunque_no_requiera_recepcion(): void
+    {
+        $oc = (object) [
+            'es_contrato' => true,
+            'contrato_requiere_recepcion' => false,
+            'contrato_requiere_validacion_abono' => false,
+            'contrato_exige_ingresos' => true,
+        ];
+        $politica = ContratoValidacionAbonoPoliticaSupport::desdeOc($oc);
+
+        $this->assertTrue($politica['exige_ingresos']);
+        $this->assertTrue(ContratoValidacionAbonoPoliticaSupport::cortaRecepcion($politica));
+    }
+
     public function test_sin_validacion_completa_no_se_confirma_com(): void
     {
         $politica = ContratoValidacionAbonoPoliticaSupport::desdeOc((object) [

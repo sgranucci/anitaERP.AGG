@@ -225,23 +225,37 @@
         <div class="form-group row">
             <label for="fechacomprobante" class="{{ $cpColLabel }} requerido">Fecha comprobante</label>
             <div class="col-lg-5">
+                @php
+                    $fechaCompMax = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::fechaComprobanteMaximaYmd();
+                    $diasCompMax = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::maxDiasFuturoComprobante();
+                @endphp
                 <input type="date" name="fechacomprobante" id="fechacomprobante" class="form-control"
+                    max="{{ $fechaCompMax }}"
                     value="{{ old('fechacomprobante', $data->fechacomprobante instanceof \DateTimeInterface ? $data->fechacomprobante->format('Y-m-d') : ($data->fechacomprobante ?? date('Y-m-d'))) }}" required>
+                <small class="form-text text-muted">
+                    Fecha impresa de la factura (libro IVA). No puede ser m&aacute;s de {{ $diasCompMax }} d&iacute;as a futuro.
+                </small>
             </div>
         </div>
         <div class="form-group row">
-            <label for="fechaiva" class="{{ $cpColLabel }} requerido">Fecha IVA</label>
-            <div class="col-lg-5">
+            <label for="fechaiva" class="{{ $cpColLabel }}">Fecha IVA / contabilizaci&oacute;n</label>
+            <div class="col-lg-7">
                 @php
-                    $fechaIvaDefault = date('Y-m-d');
-                    if ($esEdicion ?? false) {
-                        $fechaIvaDefault = $data->fechaiva instanceof \DateTimeInterface
-                            ? $data->fechaiva->format('Y-m-d')
-                            : ($data->fechaiva ?? date('Y-m-d'));
-                    }
+                    $fechaIvaCarga = \App\Support\Compras\ComprobanteProveedorFechaContableSupport::inmodificableEnCarga(
+                        ($esEdicion ?? false) ? $data : null
+                    );
+                    $fechaIvaCargaTxt = \Carbon\Carbon::parse($fechaIvaCarga)->format('d/m/Y');
                 @endphp
-                <input type="date" name="fechaiva" id="fechaiva" class="form-control"
-                    value="{{ old('fechaiva', $fechaIvaDefault) }}" required>
+                <input type="hidden" name="fechaiva" id="fechaiva" value="{{ $fechaIvaCarga }}">
+                <p class="form-control-plaintext mb-1">
+                    <span class="badge badge-info">{{ $fechaIvaCargaTxt }}</span>
+                    <span class="badge badge-primary ml-1">Contabilizaci&oacute;n</span>
+                    <span class="badge badge-secondary ml-1">IVA compras</span>
+                </p>
+                <small class="form-text text-muted">
+                    D&iacute;a de carga: entra al asiento, al per&iacute;odo contable y al libro IVA compras.
+                    No se puede modificar.
+                </small>
             </div>
         </div>
         <div class="form-group row">

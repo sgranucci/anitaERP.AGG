@@ -18,7 +18,8 @@
 @endif
 @if (session("errores"))
     <div class="alert alert-danger">
-        <ul>
+        <h4 class="mb-2"><i class="icon fa fa-ban"></i> No se pudo completar la operación</h4>
+        <ul class="mb-0">
             @foreach (\Illuminate\Support\Arr::wrap(session("errores")) as $error)
                 <li>{{ $error }}</li>
             @endforeach

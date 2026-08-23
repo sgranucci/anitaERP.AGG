@@ -205,12 +205,34 @@
     .tm-camara-footer .btn {
         min-height: 2.75rem;
     }
+    #tm_camara_preview {
+        width: 100%;
+        max-height: 40vh;
+        object-fit: contain;
+        background: #000;
+        display: none;
+    }
+    #tm_camara_preview.tm-camara-preview-visible {
+        display: block;
+    }
     #tm_camara_reader_foto {
-        position: absolute;
-        width: 1px;
-        height: 1px;
-        overflow: hidden;
-        opacity: 0;
+        min-height: 1px;
+    }
+    #tm_camara_codigos {
+        display: none;
+        margin: 0.5rem 0 0;
+        max-height: 28vh;
+        overflow-y: auto;
+    }
+    #tm_camara_codigos.tm-camara-codigos-visible {
+        display: block;
+    }
+    #tm_camara_codigos button {
+        display: block;
+        width: 100%;
+        margin-bottom: 0.35rem;
+        text-align: left;
+        font-family: monospace;
     }
     @media (min-width: 768px) {
         .tm-lista {
@@ -231,6 +253,7 @@
         validarLineaContable: @json(route('transferencia_mercaderia_validar_linea_contable')),
         saldoArticulo: @json(route('transferencia_mercaderia_saldo_articulo')),
         resolverArticulo: @json(route('transferencia_mercaderia_resolver_articulo')),
+        decodificarFoto: @json(route('transferencia_mercaderia_decodificar_foto')),
         articuloConsultaUrl: {!! json_encode(route('editar_articulo', ['id' => '__ID__', 'origen' => 'modal_consulta', 'vista' => 'consulta'])) !!},
     };
 </script>
@@ -338,6 +361,7 @@
                                         data-destino-bien-uso="{{ $t->destino_bien_uso ? '1' : '0' }}"
                                         data-origen-bien-uso="{{ $t->origen_bien_uso ? '1' : '0' }}"
                                         data-maneja-contabilidad="{{ $t->maneja_contabilidad ? '1' : '0' }}"
+                                        data-abreviatura="{{ strtoupper(trim((string) $t->abreviatura)) }}"
                                         @if ((int) ($defaults['tipotransaccion_stock_id'] ?? 0) === (int) $t->id) selected @endif>
                                         {{ $t->nombre }}
                                         @if ($t->origen_bien_uso)
@@ -418,6 +442,8 @@
                             <i class="fa fa-camera"></i>
                             <span class="d-none d-sm-inline"> Cámara</span>
                         </button>
+                        <input type="file" id="tm_camara_foto" accept="image/*" capture="environment"
+                            class="d-none" tabindex="-1">
                         <button type="button" id="tm_btn_pickeo_lupa" class="btn btn-outline-primary flex-shrink-0"
                             title="Consulta artículos (F1)">
                             <i class="fa fa-search"></i>
@@ -430,7 +456,7 @@
                         </button>
                     </div>
                     <small class="text-muted d-block mt-1">
-                        Cámara, lector Bluetooth o SKU a mano. Cada lectura suma 1 hasta el stock.
+                        Cámara (en HTTP abre la cámara del celular y saca foto), lector Bluetooth o SKU a mano.
                     </small>
                 </div>
 
@@ -460,14 +486,15 @@
         </button>
     </div>
     <div id="tm_camara_reader" class="tm-camara-reader"></div>
+    <img id="tm_camara_preview" alt="Foto del código">
     <div id="tm_camara_reader_foto"></div>
     <div class="tm-camara-footer">
         <div id="tm_camara_feedback" class="small mb-2">Apuntá al código de barras…</div>
+        <div id="tm_camara_codigos"></div>
         <div id="tm_camara_foto_wrap" class="d-none">
-            <label class="btn btn-warning btn-block mb-0">
-                <i class="fa fa-camera"></i> Sacar foto del código
-                <input type="file" id="tm_camara_foto" accept="image/*" capture="environment" class="d-none">
-            </label>
+            <button type="button" id="tm_btn_otra_foto" class="btn btn-warning btn-block">
+                <i class="fa fa-camera"></i> Sacar otra foto
+            </button>
         </div>
     </div>
 </div>

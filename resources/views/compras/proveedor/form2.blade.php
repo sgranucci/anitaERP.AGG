@@ -5,7 +5,7 @@
 			<div class="form-group row">
 				<label for="nroinscripcion" class="col-lg-4 col-form-label requerido">C.U.I.T.</label>
 				<div class="col-lg-3">
-					<input type="text" id="nroinscripcion" name="nroinscripcion" class="form-control" placeholder="XX-XXXXXXXX-X" maxlength="13" oninput="formatarCUIT(this)" value="{{old('nroinscripcion', $data->nroinscripcion ?? '')}}" required>
+					<input type="text" id="nroinscripcion" name="nroinscripcion" class="form-control" placeholder="XX-XXXXXXXX-X" maxlength="13" oninput="formatarCUIT(this)" value="{{old('nroinscripcion', $data->nroinscripcion ?? request('nroinscripcion'))}}" required>
 				</div>
 				<button type="button" id="btn-consulta-arca-proveedor" title="Consultar padrón ARCA" class="btn-accion-tabla tooltipsC" style="padding:1px;" onclick="return window.consultaArcaProveedor?.(event)">
 					<i class="fa fa-search text-primary"></i>

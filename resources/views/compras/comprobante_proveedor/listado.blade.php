@@ -60,6 +60,9 @@
                 @elseif (($filtros['empresa_scope'] ?? '') === 'todas')
                     <div class="meta">Todas las empresas asignadas</div>
                 @endif
+                @if (! empty($filtros['estado'] ?? null) && ($filtros['estado'] ?? '') !== \App\Support\Compras\ComprobanteProveedorEstados::FILTRO_TODOS)
+                    <div class="meta">Estado: {{ \App\Support\Compras\ComprobanteProveedorEstados::etiqueta($filtros['estado']) }}</div>
+                @endif
                 <div class="meta">{{ $totalFilas }} registro(s)</div>
             </td>
             <td style="width: 25%;"></td>
@@ -76,7 +79,8 @@
                 <th style="width: 9%;">Número</th>
                 <th style="width: 7%;">OC</th>
                 <th style="width: 7%;">Fecha</th>
-                <th style="width: 8%;">Total</th>
+                <th style="width: 8%;">F. IVA / contabiliz.</th>
+                <th style="width: 7%;">Total</th>
                 <th style="width: 9%;">Estado</th>
                 <th style="width: 10%;">Origen</th>
                 <th style="width: 11%;">Modo carga</th>
@@ -92,6 +96,7 @@
                 <td>{{ $row->letra }}{{ $row->sucursal }}-{{ $row->numerocomprobante }}</td>
                 <td>{{ $row->ordencompras->numeroordencompra ?? '' }}</td>
                 <td>{{ $row->fechacomprobante ? $row->fechacomprobante->format('d/m/Y') : '' }}</td>
+                <td>{{ $row->fechaiva ? $row->fechaiva->format('d/m/Y') : '' }}</td>
                 <td>{{ number_format((float) $row->total, 2, ',', '.') }}</td>
                 <td>{{ $row->estado }}</td>
                 <td>{{ \App\Support\Compras\ComprobanteProveedorOrigenEntrada::etiqueta($row->origen_entrada ?? '') }}</td>

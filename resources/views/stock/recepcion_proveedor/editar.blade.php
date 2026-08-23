@@ -16,6 +16,8 @@ Recepción {{ $recepcion->numerorecepcion }}
 @if (can('cambiar-cotizacion-recepcion-proveedor', false))
 <script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/cambiar_cotizacion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recepcion_proveedor/cambiar_cotizacion.js')) ?: time() }}" type="text/javascript"></script>
 @endif
+<script src="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/modal.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/seguridad/ingreso_proveedor/modal.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/autorizar.js') }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -57,10 +59,10 @@ Recepción {{ $recepcion->numerorecepcion }}
                         <i class="fa fa-check"></i> Confirmar
                     </button>
                     @endif
-                    @if (!empty($url_nuevo_ticket_ingreso))
-                    <a href="{{ $url_nuevo_ticket_ingreso }}" class="btn btn-outline-light btn-sm mr-2" target="_blank" rel="noopener" title="Solicitar ticket de ingreso a planta">
+                    @if (can('crear-ingreso-proveedor', false) && !empty($mostrar_solapa_ingresos))
+                    <button type="button" class="btn btn-outline-light btn-sm mr-2 js-ingreso-ticket-nuevo" title="Solicitar ticket de ingreso a planta">
                         <i class="fa fa-id-badge"></i> Ticket de ingreso
-                    </a>
+                    </button>
                     @endif
                     @if (empty($ocultarVolver))
                     <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
@@ -144,4 +146,14 @@ Recepción {{ $recepcion->numerorecepcion }}
 @include('includes.stock.modalconsultadeposito')
 @include('includes.stock.modalconsultaordencompra_recepcion')
 @include('stock.recepcion_proveedor.partials.modal_cambiar_cotizacion')
+@if (!empty($mostrar_solapa_ingresos))
+    @include('includes.seguridad.modal_ingreso_proveedor', [
+        'ingresoContexto' => [
+            'empresa_id' => optional($recepcion->ordencompras)->empresa_id ?? $recepcion->empresa_id ?? null,
+            'proveedor_id' => optional($recepcion->ordencompras)->proveedor_id ?? optional($recepcion->proveedores)->id ?? null,
+            'ordencompra_id' => $recepcion->ordencompra_id ?? null,
+        ],
+    ])
+    @include('seguridad.ingreso_proveedor.partials.modal_rechazo')
+@endif
 @endsection

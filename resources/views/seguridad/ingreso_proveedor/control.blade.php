@@ -4,13 +4,13 @@
 @endsection
 
 @section('styles')
-<link rel="stylesheet" href="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/control.css') }}">
+<link rel="stylesheet" href="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/control.css') }}?v={{ @filemtime(public_path('assets/pages/scripts/seguridad/ingreso_proveedor/control.css')) ?: time() }}">
 @endsection
 
 @section('scripts')
 <script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/seguridad/ingreso_proveedor/filtro.js")}}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/control.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/control.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/seguridad/ingreso_proveedor/control.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -49,7 +49,10 @@
     <div id="porteria-ticket" class="porteria-ticket" hidden>
         <div class="porteria-ticket-head">
             <div>
-                <p class="porteria-kicker" id="porteria-estado">Ticket</p>
+                <p class="porteria-kicker">Ticket</p>
+                <p class="porteria-estado-linea mb-1">
+                    <span id="porteria-estado" class="badge badge-secondary">—</span>
+                </p>
                 <h2 id="porteria-nombre">—</h2>
                 <p class="porteria-dni-mostrar">DNI <strong id="porteria-doc">—</strong> &middot; <span id="porteria-empresa">—</span></p>
             </div>

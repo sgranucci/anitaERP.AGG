@@ -20,7 +20,7 @@
 
     function pintarTicket(p) {
         if (!p) {
-            $('#porteria-ticket').prop('hidden', true);
+            $('#porteria-ticket').removeClass('is-rechazado is-pendiente').prop('hidden', true);
             return;
         }
         $('#porteria-ticket').prop('hidden', false);
@@ -29,7 +29,13 @@
         setTexto($('#porteria-doc'), p.documento);
         setTexto($('#porteria-empresa'), p.empresa);
         setTexto($('#porteria-ticket-id'), p.ticket_id);
-        setTexto($('#porteria-estado'), p.estado);
+        var $estado = $('#porteria-estado');
+        $estado.text(p.estado || '—')
+            .removeClass('badge-warning badge-success badge-info badge-secondary badge-danger badge-light')
+            .addClass('badge badge-' + badgeClase(p.estado_codigo));
+        $('#porteria-ticket')
+            .toggleClass('is-rechazado', p.estado_codigo === 'RECHAZADO')
+            .toggleClass('is-pendiente', p.estado_codigo === 'PENDIENTE');
         setTexto($('#porteria-fecha'), p.fecha);
         setTexto($('#porteria-proveedor'), p.proveedor);
         setTexto($('#porteria-motivo'), p.motivo);
@@ -41,6 +47,9 @@
         $('#porteria-comentario').text(p.comentario || '');
         $('#porteria-btn-entro').prop('disabled', !p.puede_entro);
         $('#porteria-btn-salio').prop('disabled', !p.puede_salio);
+        if (p.mensaje_bloqueo && !p.puede_entro) {
+            alerta(p.mensaje_bloqueo, false);
+        }
         var reloj = [];
         if (p.hora_ingreso) {
             reloj.push('Entró ' + p.hora_ingreso);
@@ -136,7 +145,9 @@
             postJson(urlBuscar, { documento: $('#porteria-dni').val() })
                 .done(function (res) {
                     pintarTicket(res.persona);
-                    alerta('');
+                    if (!res.persona || !res.persona.mensaje_bloqueo) {
+                        alerta('');
+                    }
                     $('#porteria-dni').trigger('select');
                 })
                 .fail(function (xhr) {

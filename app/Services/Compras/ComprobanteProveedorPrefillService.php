@@ -9,6 +9,7 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
+use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
@@ -522,10 +523,10 @@ class ComprobanteProveedorPrefillService
         }, $cuotas);
     }
 
-    /** Fecha IVA en alta: siempre el día de carga; el operador puede cambiarla en el form. */
+    /** Fecha IVA = fecha de carga: siempre el día de alta; no se edita en el form. */
     private function fechaIvaDefaultAlta(): string
     {
-        return now()->format('Y-m-d');
+        return ComprobanteProveedorFechaContableSupport::fechaCargaHoy();
     }
 
     private function fechaYmdDesdePrecarga(mixed $valor): ?string

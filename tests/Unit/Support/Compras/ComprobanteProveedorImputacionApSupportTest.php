@@ -150,6 +150,70 @@ class ComprobanteProveedorImputacionApSupportTest extends TestCase
         $this->assertContains('Distorsión en AP/anticipo', $eval['alertas']);
     }
 
+    public function test_tres_patas_cuadran(): void
+    {
+        $eval = ComprobanteProveedorImputacionApSupport::evaluarTresPatas(
+            1500.0,
+            1500.0,
+            1500.0,
+            true,
+            true,
+            true
+        );
+        $this->assertTrue($eval['ok']);
+        $this->assertSame([], $eval['alertas']);
+        $this->assertSame(0.0, $eval['diff_cc_asiento']);
+        $this->assertSame(0.0, $eval['diff_asiento_ctamov']);
+    }
+
+    public function test_tres_patas_desvio_asiento_ctamov(): void
+    {
+        $eval = ComprobanteProveedorImputacionApSupport::evaluarTresPatas(
+            1500.0,
+            1500.0,
+            1490.0,
+            true,
+            true,
+            true
+        );
+        $this->assertFalse($eval['ok']);
+        $this->assertContains('Asiento ≠ ctamov', $eval['alertas']);
+        $this->assertContains('CC ≠ ctamov', $eval['alertas']);
+        $this->assertSame(-10.0, $eval['diff_asiento_ctamov']);
+    }
+
+    public function test_tres_patas_sin_ctamov(): void
+    {
+        $eval = ComprobanteProveedorImputacionApSupport::evaluarTresPatas(
+            100.0,
+            100.0,
+            0.0,
+            true,
+            true,
+            false
+        );
+        $this->assertFalse($eval['ok']);
+        $this->assertContains('Sin ctamov Anita', $eval['alertas']);
+    }
+
+    public function test_clasificar_codigo_ap(): void
+    {
+        $catalogo = [
+            'codigo_mn' => [211010001 => true],
+            'codigo_me' => [211010011 => true],
+            'codigo_anticipo' => [113010020 => true],
+        ];
+        $this->assertSame(
+            ComprobanteProveedorImputacionApSupport::CUBETA_MN,
+            ComprobanteProveedorImputacionApSupport::clasificarCodigo(211010001, $catalogo)
+        );
+        $this->assertSame(
+            ComprobanteProveedorImputacionApSupport::CUBETA_ME,
+            ComprobanteProveedorImputacionApSupport::clasificarCodigo(211010011, $catalogo)
+        );
+        $this->assertNull(ComprobanteProveedorImputacionApSupport::clasificarCodigo(111010001, $catalogo));
+    }
+
     /**
      * @return array{mn: array<int, true>, me: array<int, true>, anticipo: array<int, true>}
      */

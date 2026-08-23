@@ -2,7 +2,11 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Compras\Ordencompra;
+use App\Models\Seguridad\IngresoProveedor;
+use App\Models\Seguridad\IngresoProveedorMotivo;
 use App\Repositories\Configuracion\EmpresaRepository;
+use App\Support\Seguridad\IngresoProveedorVinculoSupport;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
 
@@ -17,17 +21,19 @@ class ValidacionIngresoProveedor extends FormRequest
     {
         return [
             'empresa_id' => 'required|integer|exists:empresa,id',
-            'fecha' => 'required|date',
+            'fecha' => 'nullable|date',
+            'fecha_prevista' => 'nullable|date',
             'es_visitante' => 'nullable|boolean',
             'visitante_nombre' => 'nullable|string|max:180',
             'proveedor_id' => 'nullable|integer|exists:proveedor,id',
             'ordencompra_id' => 'nullable|integer|exists:ordencompra,id',
             'motivo_id' => 'required|integer|exists:ingreso_proveedor_motivo,id',
+            'motivo_otro' => 'nullable|string|max:180',
             'punto_id' => 'required|integer|exists:ingreso_proveedor_punto,id',
             'area_id' => 'required|integer|exists:ingreso_proveedor_area,id',
             'sector_id' => 'required|integer|exists:ingreso_proveedor_sector,id',
             'patente' => 'nullable|string|max:20',
-            'titulo' => 'nullable|string|max:180',
+            'titulo' => 'required|string|max:180',
             'comentario' => 'nullable|string',
             'persona_nombres' => 'required|array|min:1',
             'persona_nombres.*' => 'nullable|string|max:160',
@@ -67,6 +73,28 @@ class ValidacionIngresoProveedor extends FormRequest
             } elseif ((int) $this->input('proveedor_id') <= 0) {
                 $v->errors()->add('proveedor_id', 'Seleccione un proveedor o marque que no es proveedor.');
             }
+
+            $motivoId = (int) $this->input('motivo_id');
+            if ($motivoId > 0) {
+                $codigo = strtoupper((string) (IngresoProveedorMotivo::query()->whereKey($motivoId)->value('codigo') ?? ''));
+                if ($codigo === 'OTRO' && trim((string) $this->input('motivo_otro', '')) === '') {
+                    $v->errors()->add('motivo_otro', 'Indique el motivo cuando elige Otro.');
+                }
+            }
+
+            $ocId = (int) $this->input('ordencompra_id');
+            if ($ocId > 0) {
+                $oc = Ordencompra::query()->find($ocId);
+                $ticketId = (int) $this->route('id');
+                $yaVinculada = $ticketId > 0
+                    && IngresoProveedor::query()->whereKey($ticketId)->where('ordencompra_id', $ocId)->exists();
+                if (! $yaVinculada && ! IngresoProveedorVinculoSupport::ocPermiteCargarPersonas($oc)) {
+                    $v->errors()->add(
+                        'ordencompra_id',
+                        'Solo se puede vincular un contrato activo (aprobado o cumplido y vigente).'
+                    );
+                }
+            }
         });
     }
 
@@ -81,6 +109,10 @@ class ValidacionIngresoProveedor extends FormRequest
             'area_id' => 'área de destino',
             'sector_id' => 'sector',
             'persona_nombres' => 'personas que visitan',
+            'titulo' => 'título',
+            'fecha_prevista' => 'fecha prevista de visita',
+            'motivo_otro' => 'otro motivo',
+            'ordencompra_id' => 'contrato / abono',
         ];
     }
 }

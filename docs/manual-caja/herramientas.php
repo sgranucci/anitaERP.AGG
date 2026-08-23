@@ -56,6 +56,12 @@ return [
             'permiso' => 'listar-posicion-financiera',
         ],
         [
+            'herramienta' => 'Orden de conceptos',
+            'ubicacion' => 'Toolbar de la tarjeta',
+            'accion' => 'Preview por uso de cuenta (gastronomía/vending, estacionamiento, máquinas) y configura el mismo orden en las 3 empresas. Plantilla Biyemas.',
+            'permiso' => 'configurar-orden-posicion-financiera',
+        ],
+        [
             'herramienta' => 'Exportar PDF / Excel',
             'ubicacion' => 'Toolbar sobre la grilla',
             'accion' => 'Descarga el informe completo del período filtrado.',

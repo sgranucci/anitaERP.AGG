@@ -96,11 +96,24 @@
                         'ruta' => 'listar_reporte_tickets_ingreso',
                         'queryparams' => $filtrosQuery ?? [],
                     ])
+                    <style>
+                        #tabla-paginada tbody tr.ingreso-reporte-rechazado td {
+                            background-color: #fdedec !important;
+                        }
+                        #tabla-paginada tbody tr.ingreso-reporte-rechazado:hover td {
+                            background-color: #f5b7b1 !important;
+                        }
+                    </style>
                     <div class="table-responsive">
                         <table id="tabla-paginada" class="table table-bordered table-hover table-sm mb-0" style="font-size: 0.8rem;">
                             @include('seguridad.ingreso_proveedor_reporte.kpi.partials.tabla_datos', [
                                 'filas' => $filasPaginadas ?? [],
+                                'en_pantalla' => true,
                                 'puede_ver_ticket' => $puede_ver_ticket ?? false,
+                                'puede_ver_oc' => $puede_ver_oc ?? false,
+                                'puede_ver_proveedor' => $puede_ver_proveedor ?? false,
+                                'puede_ver_empresa' => $puede_ver_empresa ?? false,
+                                'puede_ver_usuario' => $puede_ver_usuario ?? false,
                             ])
                         </table>
                     </div>

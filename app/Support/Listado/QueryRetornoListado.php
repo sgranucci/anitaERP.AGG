@@ -32,6 +32,8 @@ class QueryRetornoListado
             'fecha_entrega_hasta',
             'empresa_id',
             'empresa_todas',
+            'estado',
+            'estado_todas',
             'vista',
             'mostrar_totalizadoras',
             'filtro_tipocuenta',

@@ -1162,7 +1162,12 @@
         <div id="oc-solapa-ingresos" class="oc-solapa" style="display:none;">
             @include('seguridad.ingreso_proveedor.partials.solapa_vinculada', [
                 'tickets' => $tickets_ingreso ?? collect(),
-                'urlNuevo' => $url_nuevo_ticket_ingreso ?? null,
+                'url_nuevo_ticket_ingreso' => $url_nuevo_ticket_ingreso ?? null,
+                'ingresoContexto' => [
+                    'empresa_id' => $data->empresa_id ?? null,
+                    'proveedor_id' => $data->proveedor_id ?? null,
+                    'ordencompra_id' => $data->id ?? null,
+                ],
             ])
         </div>
     @endif

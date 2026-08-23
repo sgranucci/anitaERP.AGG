@@ -6,7 +6,7 @@
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/proveedor/consulta.js')) ?: time() }}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/seguridad/ingreso_proveedor/form.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/seguridad/ingreso_proveedor/form.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -57,4 +57,6 @@
     </div>
 </div>
 @include('includes.compras.modalconsultaproveedor')
+@include('seguridad.ingreso_proveedor.partials.modal_consulta_contrato')
+@include('seguridad.ingreso_proveedor.partials.modal_alta_rapida_proveedor')
 @endsection

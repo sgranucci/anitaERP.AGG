@@ -26,6 +26,7 @@ use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Compras\ProveedorCuentaContableMonedaSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use RuntimeException;
 use Illuminate\Http\Request;
 
@@ -327,13 +328,6 @@ class ComprobanteProveedorAsientoService
 
             $diferenciaNeto = round($totalNetoConceptos - $totalProvision, 2);
 
-            if ($diferenciaNeto < -ComprobanteProveedorAsientoCuadreSupport::TOLERANCIA) {
-                throw new RuntimeException(
-                    'El neto de la factura ('.number_format($totalNetoConceptos, 2)
-                    .') es menor que la provisión COM ('.number_format($totalProvision, 2).').'
-                );
-            }
-
             if ($totalProvision > 0) {
                 $cuentaProvisionId = $this->resolverCuentaProvision((int) $comprobante->empresa_id);
                 $lineasDebe[] = [
@@ -344,8 +338,26 @@ class ComprobanteProveedorAsientoService
                 ];
             }
 
-            // Incluir también 0,01–0,05: si se omite, FAR no cierra vs COM y Anita rechaza el asiento.
+            // Hasta 5% sobre la COM: prorrateo a cuentas de artículos (no cortar la grabación).
             if (ComprobanteProveedorAsientoCuadreSupport::hayDiferenciaAImputar($diferenciaNeto)) {
+                if (! ComprobanteProveedorAsientoCuadreSupport::diferenciaDentroDePorcentaje(
+                    $diferenciaNeto,
+                    $totalProvision
+                )) {
+                    $pct = ComprobanteProveedorAsientoCuadreSupport::porcentajeDiferencia(
+                        $diferenciaNeto,
+                        $totalProvision
+                    );
+                    throw new RuntimeException(
+                        'La diferencia entre el neto de la factura ('
+                        .number_format($totalNetoConceptos, 2, ',', '.')
+                        .') y la provisión COM ('.number_format($totalProvision, 2, ',', '.')
+                        .') es del '.number_format($pct, 2, ',', '.')
+                        .'%, mayor al '.number_format(ComprobanteProveedorAsientoCuadreSupport::TOLERANCIA_PCT, 0)
+                        .'%. Revise precios o cantidades; no se puede imputar automáticamente.'
+                    );
+                }
+
                 $lineasDiff = $this->lineasDebeDiferenciaArticulosProrrateada(
                     $comprobante,
                     abs($diferenciaNeto),
@@ -432,6 +444,7 @@ class ComprobanteProveedorAsientoService
             'empresa_id' => $comprobante->empresa_id,
             'tipoasiento_id' => $tipoAsiento->id,
             'fecha' => ComprobanteProveedorFechaContableSupport::fechaYmd($comprobante),
+            'alcance_cierre_contable' => PeriodoContableCierreSupport::ALCANCE_CUENTAS_PAGAR,
             'comprobante_proveedor_id' => $comprobante->id,
             'ordencompra_id' => $comprobante->ordencompra_id,
             'observacion' => ComprobanteProveedorAsientoDescripcionSupport::descripcionAsientoErp($comprobante),

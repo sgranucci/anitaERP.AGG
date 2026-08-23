@@ -11,7 +11,24 @@
             @php
                 $safeName = $arch->nombre_original;
                 $ext = strtolower(pathinfo($arch->nombre_archivo, PATHINFO_EXTENSION));
-                $urlInline = $arch->urlPublica();
+                $hashPublico = $hashPublico ?? null;
+                if ($hashPublico && isset($data) && $data && $data->id) {
+                    $urlDescarga = \App\Support\Seguridad\IngresoProveedorEnlacePublicoSupport::urlArchivo(
+                        (int) $data->id,
+                        (int) $arch->id,
+                        (string) $hashPublico,
+                        false
+                    );
+                    $urlInline = \App\Support\Seguridad\IngresoProveedorEnlacePublicoSupport::urlArchivo(
+                        (int) $data->id,
+                        (int) $arch->id,
+                        (string) $hashPublico,
+                        true
+                    );
+                } else {
+                    $urlInline = $arch->urlPublica();
+                    $urlDescarga = $urlInline;
+                }
                 $esImagen = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
                 $esPdf = $ext === 'pdf';
             @endphp
@@ -38,7 +55,7 @@
                             </div>
                         @endif
                         <div class="mt-auto pt-1">
-                            <a href="{{ $urlInline }}" class="btn btn-sm btn-outline-primary" download="{{ $safeName }}">
+                            <a href="{{ $urlDescarga }}" class="btn btn-sm btn-outline-primary" download="{{ $safeName }}">
                                 <i class="fa fa-download"></i> Descargar
                             </a>
                             <a href="{{ $urlInline }}" class="btn btn-sm btn-outline-secondary ml-1" target="_blank" rel="noopener noreferrer">

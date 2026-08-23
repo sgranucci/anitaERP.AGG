@@ -10,6 +10,8 @@ use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Seguridad\IngresoProveedorControlSupport;
 use App\Support\Seguridad\IngresoProveedorEstados;
 use App\Support\Seguridad\IngresoProveedorListadoFiltros;
+use App\Services\Configuracion\ModuloAvisoService;
+use App\Support\Seguridad\IngresoProveedorVisibilidadSupport;
 use App\Support\Seguridad\IngresoProveedorVisitanteSupport;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Http\UploadedFile;
@@ -45,10 +47,15 @@ class IngresoProveedorRepository implements IngresoProveedorRepositoryInterface
                 'areas:id,nombre',
                 'usuarios:id,nombre',
                 'empresas:id,nombre',
+                'ordencompras:id,numeroordencompra,fecha,estadoordencompra,es_contrato,contrato_exige_ingresos',
             ]);
 
         app(EmpresaRepository::class)->aplicarFiltroEmpresasAsignadas($query, 'ingreso_proveedor.empresa_id');
         IngresoProveedorListadoFiltros::aplicarEmpresa($query, $filtros);
+        IngresoProveedorListadoFiltros::aplicarEstructurados($query, $filtros);
+        if (empty($filtros['omitir_alcance'])) {
+            IngresoProveedorVisibilidadSupport::aplicarFiltroAlcance($query);
+        }
 
         if (IngresoProveedorListadoFiltros::tieneCriteriosTexto($filtros)) {
             IngresoProveedorListadoFiltros::aplicar($query, $filtros);
@@ -61,7 +68,7 @@ class IngresoProveedorRepository implements IngresoProveedorRepositoryInterface
 
     public function create(array $data): IngresoProveedor
     {
-        return DB::transaction(function () use ($data) {
+        $ticket = DB::transaction(function () use ($data) {
             $personas = $this->extraerPersonas($data);
             $archivos = $data['nombrearchivos'] ?? [];
             unset($data['nombrearchivos'], $data['nombresanteriores'], $data['persona_nombres'], $data['persona_documentos']);
@@ -69,6 +76,8 @@ class IngresoProveedorRepository implements IngresoProveedorRepositoryInterface
             $data = IngresoProveedorVisitanteSupport::normalizarAlGuardar($data);
             $data['estado'] = IngresoProveedorEstados::PENDIENTE;
             $data['usuario_id'] = Auth::id();
+            $data['fecha'] = now()->toDateString();
+            $data['hashvisualizar'] = $data['hashvisualizar'] ?? Str::lower(Str::random(48));
             $data['fecha_ingreso'] = null;
             $data['hora_ingreso'] = null;
             $data['fecha_egreso'] = null;
@@ -81,6 +90,14 @@ class IngresoProveedorRepository implements IngresoProveedorRepositoryInterface
 
             return $ticket->fresh(['personas', 'archivos', 'proveedores']);
         });
+
+        app(ModuloAvisoService::class)->enviar(
+            'seguridad',
+            'ingreso_proveedor_creado',
+            (int) $ticket->id
+        );
+
+        return $ticket;
     }
 
     public function update(array $data, int $id): IngresoProveedor
@@ -93,7 +110,7 @@ class IngresoProveedorRepository implements IngresoProveedorRepositoryInterface
             unset($data['nombrearchivos'], $data['nombresanteriores'], $data['persona_nombres'], $data['persona_documentos']);
             $data = IngresoProveedorVisitanteSupport::normalizarAlGuardar($data);
 
-            unset($data['estado'], $data['usuario_id'], $data['fecha_ingreso'], $data['hora_ingreso'], $data['fecha_egreso'], $data['hora_egreso'], $data['minutos_en_planta']);
+            unset($data['estado'], $data['usuario_id'], $data['fecha'], $data['fecha_ingreso'], $data['hora_ingreso'], $data['fecha_egreso'], $data['hora_egreso'], $data['minutos_en_planta']);
 
             $ticket->update($this->soloFillable($data));
             $this->sincronizarPersonas($ticket, $personas);
@@ -121,7 +138,15 @@ class IngresoProveedorRepository implements IngresoProveedorRepositoryInterface
 
     public function findOrFail(int $id): IngresoProveedor
     {
-        return $this->model->with(['personas', 'archivos', 'proveedores', 'ordencompras', 'empresas'])->findOrFail($id);
+        return $this->model->with([
+            'personas.usuarioIngreso:id,nombre',
+            'personas.usuarioEgreso:id,nombre',
+            'archivos',
+            'proveedores' => static fn ($q) => $q->withTrashed(),
+            'ordencompras:id,numeroordencompra,fecha,estadoordencompra,es_contrato,contrato_exige_ingresos',
+            'empresas',
+            'usuarioAutorizo:id,nombre',
+        ])->findOrFail($id);
     }
 
     /**

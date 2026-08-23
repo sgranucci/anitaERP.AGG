@@ -14,6 +14,8 @@
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/arca-apoc-validacion-abm.js') }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/proveedor/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/admin/imprimirHtml.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/modal.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/seguridad/ingreso_proveedor/modal.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/autorizar.js') }}" type="text/javascript"></script>
 <script>
     $(function () {
         $("#botontipoalta").click(function(){
@@ -68,10 +70,10 @@
                             <i class="fa fa-compress-alt"></i> Aplicar CC
                         </a>
                     @endif
-                    @if (!empty($url_nuevo_ticket_ingreso))
-                        <a href="{{ $url_nuevo_ticket_ingreso }}" target="_blank" rel="noopener" class="btn btn-outline-light btn-sm mr-1" title="Solicitar ticket de ingreso a planta">
+                    @if (can('crear-ingreso-proveedor', false) && !empty($mostrar_solapa_ingresos))
+                        <button type="button" class="btn btn-outline-light btn-sm mr-1 js-ingreso-ticket-nuevo" title="Solicitar ticket de ingreso a planta">
                             <i class="fa fa-id-badge"></i> Ticket de ingreso
-                        </a>
+                        </button>
                     @endif
                     @if (can('listar-encuesta-proveedor', false))
                         <a href="{{route('listar_encuesta_proveedor', ['id' => $data->id, 'origen' => 'modal_consulta', 'vista' => 'consulta'])}}" target="_blank" rel="noopener" class="btn btn-outline-light btn-sm mr-1" title="Encuestas del Proveedor">
@@ -135,6 +137,14 @@
             @include('compras.proveedor.arca-cuit-entry-modal')
             @include('includes.compras.arca_impuestos_validacion_modal')
             @include('includes.compras.arca_apoc_validacion_modal')
+            @if (!empty($mostrar_solapa_ingresos))
+                @include('includes.seguridad.modal_ingreso_proveedor', [
+                    'ingresoContexto' => [
+                        'proveedor_id' => $data->id ?? null,
+                    ],
+                ])
+                @include('seguridad.ingreso_proveedor.partials.modal_rechazo')
+            @endif
         </div>
     </div>
 </div>

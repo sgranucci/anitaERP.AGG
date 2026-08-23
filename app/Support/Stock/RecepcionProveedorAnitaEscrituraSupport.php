@@ -11,6 +11,12 @@ use App\Support\Anita\AnitaTextoSanitizer;
  */
 final class RecepcionProveedorAnitaEscrituraSupport
 {
+    /** a-compprov.c: aplp_orden / aplp_ref_orden = -1 en factura anticipada. */
+    public const APLICPED_ORDEN_ANTICIPADA = -1;
+
+    /** a-compprov.c: aplp_articulo = "OC ANTICIPADA" (13). */
+    public const APLICPED_ARTICULO_ANTICIPADA = 'OC ANTICIPADA';
+
     public static function escSql(string $value): string
     {
         return str_replace("'", "''", AnitaTextoSanitizer::sanitizar($value));
@@ -262,6 +268,40 @@ final class RecepcionProveedorAnitaEscrituraSupport
             'aplp_cantentr' => self::decimalSql(0),
             'aplp_nro_interno' => self::enteroSql($comNroInterno),
             'aplp_cantfact' => self::decimalSql($cantidadFacturada),
+        ]);
+    }
+
+    /**
+     * aplicped de factura anticipada (a-compprov.c graba_aplicped_factura_anticipada):
+     * aplp_orden_com = -1, aplp_orden = -1, artículo "OC ANTICIPADA".
+     * Anita (tiene_oc_anticipada / hop Capex) detecta la anticipada por orden = -1.
+     *
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $claveFactura
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int}  $ocFac
+     * @return array{campos: string, valores: string}
+     */
+    public static function aplicpedFacturaAnticipadaInsert(
+        string $codigoProveedor,
+        array $claveFactura,
+        array $ocFac,
+        int $comNroInterno,
+    ): array {
+        return self::insert([
+            'aplp_proveedor' => self::proveedorSql($codigoProveedor),
+            'aplp_tipo' => self::textoSql($claveFactura['tipo'], 3),
+            'aplp_letra' => self::textoSql($claveFactura['letra'], 1),
+            'aplp_sucursal' => self::enteroSql((int) $claveFactura['sucursal']),
+            'aplp_nro' => self::enteroSql((int) $claveFactura['nro']),
+            'aplp_ref_tipo' => self::textoSql($ocFac['tipo'], 3),
+            'aplp_ref_letra' => self::textoSql($ocFac['letra'], 1),
+            'aplp_ref_sucursal' => self::enteroSql((int) $ocFac['sucursal']),
+            'aplp_ref_nro' => self::enteroSql((int) $ocFac['nro']),
+            'aplp_orden_com' => self::enteroSql(self::APLICPED_ORDEN_ANTICIPADA),
+            'aplp_orden' => self::enteroSql(self::APLICPED_ORDEN_ANTICIPADA),
+            'aplp_articulo' => self::textoSql(self::APLICPED_ARTICULO_ANTICIPADA, 13),
+            'aplp_cantentr' => self::decimalSql(0),
+            'aplp_nro_interno' => self::enteroSql($comNroInterno),
+            'aplp_cantfact' => self::decimalSql(0),
         ]);
     }
 

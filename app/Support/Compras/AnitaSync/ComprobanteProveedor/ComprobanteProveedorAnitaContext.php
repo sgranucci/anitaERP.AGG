@@ -3,8 +3,8 @@
 namespace App\Support\Compras\AnitaSync\ComprobanteProveedor;
 
 use App\Models\Compras\Comprobante_Proveedor;
+use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
-use Carbon\Carbon;
 
 /**
  * Valores comunes para sync Anita (compra, concmov, promov).
@@ -48,22 +48,24 @@ final class ComprobanteProveedorAnitaContext
         return (int) $this->comprobante->numerocomprobante;
     }
 
+    /** Fecha de contabilización (asiento, promov, ctamov). */
     public function fechaYmd(): string
     {
-        $fecha = $this->comprobante->fechacomprobante
-            ? Carbon::parse($this->comprobante->fechacomprobante)
-            : now();
-
-        return $fecha->format('Ymd');
+        return str_replace('-', '', ComprobanteProveedorFechaContableSupport::fechaYmd($this->comprobante));
     }
 
+    /** Fecha impresa del comprobante: informativa para el libro IVA compras (com_fecha). */
+    public function fechaComprobanteYmd(): string
+    {
+        $fecha = ComprobanteProveedorFechaContableSupport::formatear($this->comprobante->fechacomprobante ?? null);
+
+        return str_replace('-', '', $fecha ?? ComprobanteProveedorFechaContableSupport::fechaYmd($this->comprobante));
+    }
+
+    /** Período IVA / contabilización (com_fecha_iva). */
     public function fechaIvaYmd(): string
     {
-        $fecha = $this->comprobante->fechaiva
-            ? Carbon::parse($this->comprobante->fechaiva)
-            : ($this->comprobante->fechacomprobante ? Carbon::parse($this->comprobante->fechacomprobante) : now());
-
-        return $fecha->format('Ymd');
+        return $this->fechaYmd();
     }
 
     public function monedaCodigoAnita(): string

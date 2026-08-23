@@ -1,6 +1,6 @@
 @php
     use App\Support\Seguridad\IngresoProveedorEstados;
-    $data = $data ?? null;
+    $data = $data ?? new \App\Models\Seguridad\IngresoProveedor();
     $personasOld = old('persona_nombres');
     $personas = [];
     if (is_array($personasOld)) {
@@ -20,7 +20,10 @@
     }
     $estado = old('estado', $data->estado ?? IngresoProveedorEstados::PENDIENTE);
     $prefill = $prefill ?? [];
-    $proveedor = $data->proveedores ?? ($prefill['proveedor'] ?? null);
+    $proveedor = $data?->proveedores ?? ($prefill['proveedor'] ?? null);
+    if (! $proveedor && (int) ($data?->proveedor_id ?? $prefill['proveedor_id'] ?? 0) > 0) {
+        $proveedor = \App\Models\Compras\Proveedor::withTrashed()->find((int) ($data?->proveedor_id ?? $prefill['proveedor_id']));
+    }
 @endphp
 
 <ul class="nav nav-tabs" role="tablist">
@@ -44,10 +47,11 @@
         <div class="row">
             <div class="col-md-6">
                 <div class="form-group row">
-                    <label for="fecha" class="col-lg-4 control-label text-right pr-2 requerido">Fecha</label>
+                    <label for="fecha" class="col-lg-4 control-label text-right pr-2 requerido">Fecha de carga</label>
                     <div class="col-lg-8">
-                        <input type="date" name="fecha" id="fecha" class="form-control" required
-                               value="{{ old('fecha', optional($data->fecha ?? null)->format('Y-m-d') ?: date('Y-m-d')) }}">
+                        <input type="date" id="fecha" class="form-control" readonly
+                               value="{{ optional($data->fecha ?? null)->format('Y-m-d') ?: date('Y-m-d') }}">
+                        <small class="text-muted">Se graba al crear el ticket. No se edita.</small>
                     </div>
                 </div>
 
@@ -112,10 +116,17 @@
                     </div>
                 </div>
 
+                @php
+                    $ordencompraIdForm = old('ordencompra_id', $data->ordencompra_id ?? $prefill['ordencompra_id'] ?? '');
+                    $ordencompraLocked = (int) ($prefill['ordencompra_id'] ?? 0) > 0 && ! $data;
+                    $ocForm = $data?->ordencompras ?? ($prefill['ordencompra'] ?? null);
+                @endphp
+                <input type="hidden" name="ordencompra_id" id="ordencompra_id" value="{{ $ordencompraIdForm }}"
+                       @if ($ordencompraLocked) data-locked="1" @endif>>
+
                 <div class="form-group row ingreso-campo-proveedor" @if($esVisitante) style="display:none" @endif>
                     <label for="codigoproveedor" class="col-lg-4 control-label text-right pr-2 requerido">Proveedor / Empresa</label>
                     <div class="col-lg-8">
-                        <input type="hidden" name="ordencompra_id" id="ordencompra_id" value="{{ old('ordencompra_id', $data->ordencompra_id ?? $prefill['ordencompra_id'] ?? '') }}">
                         <input type="hidden" id="proveedor_id" name="proveedor_id" value="{{ old('proveedor_id', $data->proveedor_id ?? $prefill['proveedor_id'] ?? '') }}">
                         <div class="d-flex flex-wrap align-items-center">
                             <input type="text" class="form-control codigoproveedor mr-2" id="codigoproveedor" name="codigoproveedor"
@@ -125,9 +136,41 @@
                             <button type="button" title="Consulta proveedores (F1)" class="btn-accion-tabla consultaproveedor tooltipsC flex-shrink-0">
                                 <i class="fa fa-search text-primary"></i>
                             </button>
+                            <button type="button" class="btn btn-outline-secondary btn-sm ml-2" id="ingreso-alta-rapida-proveedor"
+                                    title="Buscar por nombre o CUIT; si no est&aacute;, alta en maestro o visitante">
+                                Alta r&aacute;pida
+                            </button>
                         </div>
                     </div>
                 </div>
+
+                <div class="form-group row ingreso-campo-contrato" @if($esVisitante) style="display:none" @endif>
+                    <label for="numero_contrato" class="col-lg-4 control-label text-right pr-2">Contrato / Abono</label>
+                    <div class="col-lg-8">
+                        <div class="d-flex flex-wrap align-items-center">
+                            <input type="text" class="form-control mr-2" id="numero_contrato" name="numero_contrato"
+                                   value="{{ old('numero_contrato', $ocForm->numeroordencompra ?? '') }}"
+                                   style="width: 8rem;" placeholder="Nro."
+                                   @if ($ordencompraLocked) readonly @endif
+                                   title="Contratos activos del proveedor (F1)">
+                            <input type="text" class="form-control mr-2" id="descripcion_contrato" readonly
+                                   value="{{ $ocForm ? trim(($ocForm->estadoordencompra ?? '').((!empty($ocForm->es_contrato)) ? ' · Contrato' : '')) : '' }}"
+                                   placeholder="Solo contratos activos" style="min-width: 8rem; flex: 1;">
+                            @unless ($ordencompraLocked)
+                                <button type="button" title="Consulta contratos activos (F1)" class="btn-accion-tabla consultacontrato tooltipsC flex-shrink-0">
+                                    <i class="fa fa-search text-primary"></i>
+                                </button>
+                            @endunless
+                        </div>
+                        <small class="text-muted">Opcional. Solo OC contrato aprobada/cumplida y vigente.</small>
+                    </div>
+                </div>
+
+                @include('seguridad.ingreso_proveedor.partials.datos_ordencompra', [
+                    'ordencompra' => $ocForm,
+                    'col_label' => 'col-lg-4',
+                    'col_input' => 'col-lg-8',
+                ])
 
                 <div class="form-group row ingreso-campo-visitante" @unless($esVisitante) style="display:none" @endunless>
                     <label for="visitante_nombre" class="col-lg-4 control-label text-right pr-2 requerido">Qui&eacute;n visita</label>
@@ -144,9 +187,17 @@
                         <select name="motivo_id" id="motivo_id" class="form-control" required>
                             <option value="">-- Seleccionar motivo --</option>
                             @foreach ($motivos as $item)
-                                <option value="{{ $item->id }}" {{ (string) old('motivo_id', $data->motivo_id ?? '') === (string) $item->id ? 'selected' : '' }}>{{ $item->nombre }}</option>
+                                <option value="{{ $item->id }}" data-codigo="{{ $item->codigo }}"
+                                    {{ (string) old('motivo_id', $data->motivo_id ?? '') === (string) $item->id ? 'selected' : '' }}>{{ $item->nombre }}</option>
                             @endforeach
                         </select>
+                    </div>
+                </div>
+                <div class="form-group row ingreso-campo-motivo-otro" style="display:none">
+                    <label for="motivo_otro" class="col-lg-4 control-label text-right pr-2 requerido">Otro motivo</label>
+                    <div class="col-lg-8">
+                        <input type="text" name="motivo_otro" id="motivo_otro" class="form-control" maxlength="180"
+                               value="{{ old('motivo_otro', $data->motivo_otro ?? '') }}" placeholder="Describa el motivo">
                     </div>
                 </div>
 
@@ -179,42 +230,19 @@
             </div>
         </div>
 
-        <hr>
-        <h5 class="mb-2">Estad&iacute;sticas de ingreso</h5>
-        <p class="text-muted small">
-            Fecha y hora se completan cuando Seguridad marca el ticket como Ingresado o Finalizado.
-            El tiempo en planta es egreso menos ingreso.
-        </p>
-        <div class="row">
-            <div class="col-md-2">
-                <label class="small">Fecha ingreso</label>
-                <input type="text" class="form-control" readonly value="{{ optional($data->fecha_ingreso ?? null)->format('d/m/Y') }}">
-            </div>
-            <div class="col-md-2">
-                <label class="small">Hora ingreso</label>
-                <input type="text" class="form-control" readonly value="{{ $data->hora_ingreso ?? '' }}">
-            </div>
-            <div class="col-md-2">
-                <label class="small">Fecha egreso</label>
-                <input type="text" class="form-control" readonly value="{{ optional($data->fecha_egreso ?? null)->format('d/m/Y') }}">
-            </div>
-            <div class="col-md-2">
-                <label class="small">Hora egreso</label>
-                <input type="text" class="form-control" readonly value="{{ $data->hora_egreso ?? '' }}">
-            </div>
-            <div class="col-md-2">
-                <label class="small">Tiempo en planta</label>
-                <div class="input-group">
-                    <input type="text" class="form-control" readonly value="{{ $data->minutos_en_planta ?? '' }}">
-                    <div class="input-group-append"><span class="input-group-text">min</span></div>
-                </div>
-            </div>
-        </div>
+        @include('seguridad.ingreso_proveedor.partials.movimiento_planta', ['data' => $data])
 
         <div class="form-group row mt-3">
-            <label for="titulo" class="col-lg-2 control-label text-right pr-2">T&iacute;tulo</label>
+            <label for="fecha_prevista" class="col-lg-2 control-label text-right pr-2">Fecha prevista de visita</label>
+            <div class="col-lg-3">
+                <input type="date" name="fecha_prevista" id="fecha_prevista" class="form-control"
+                       value="{{ old('fecha_prevista', optional($data->fecha_prevista ?? null)->format('Y-m-d')) }}">
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="titulo" class="col-lg-2 control-label text-right pr-2 requerido">T&iacute;tulo</label>
             <div class="col-lg-10">
-                <input type="text" name="titulo" id="titulo" class="form-control" maxlength="180"
+                <input type="text" name="titulo" id="titulo" class="form-control" maxlength="180" required
                        value="{{ old('titulo', $data->titulo ?? '') }}" placeholder="Resumen breve del motivo de la visita">
             </div>
         </div>

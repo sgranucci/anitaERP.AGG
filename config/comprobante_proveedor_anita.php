@@ -47,4 +47,24 @@ return [
             ))
         ))),
     ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Control diario factura a factura: CC ERP ↔ asiento ERP ↔ ctamov Anita
+    |--------------------------------------------------------------------------
+    */
+    'imputacion_ap_diaria' => [
+        'habilitada' => filter_var(env('COMPROBANTE_PROVEEDOR_IMPUTACION_AP_HABILITADA', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('COMPROBANTE_PROVEEDOR_IMPUTACION_AP_HORA', '08:40'),
+        'email' => env('COMPROBANTE_PROVEEDOR_IMPUTACION_AP_EMAIL', env('COMPROBANTE_PROVEEDOR_AUDITORIA_ANITA_EMAIL', 'sergiogranucci@gmail.com')),
+        'ventana_dias' => max(1, (int) env('COMPROBANTE_PROVEEDOR_IMPUTACION_AP_VENTANA_DIAS', 7)),
+        'tolerancia' => (float) env('COMPROBANTE_PROVEEDOR_IMPUTACION_AP_TOLERANCIA', 0.05),
+        'mail_siempre' => filter_var(env('COMPROBANTE_PROVEEDOR_IMPUTACION_AP_MAIL_SIEMPRE', true), FILTER_VALIDATE_BOOLEAN),
+        'max_filas_mail' => max(10, (int) env('COMPROBANTE_PROVEEDOR_IMPUTACION_AP_MAX_FILAS_MAIL', 80)),
+        'anita_reintentos_bridge' => max(1, (int) env('COMPROBANTE_PROVEEDOR_IMPUTACION_AP_ANITA_REINTENTOS', 3)),
+        'empresas_ids' => array_values(array_filter(array_map(
+            'intval',
+            explode(',', (string) env('COMPROBANTE_PROVEEDOR_IMPUTACION_AP_EMPRESAS_IDS', '1,2,3'))
+        ))),
+    ],
 ];

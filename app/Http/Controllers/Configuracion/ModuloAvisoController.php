@@ -209,6 +209,14 @@ class ModuloAvisoController extends Controller
             ]);
         }
 
+        if ($modulo === 'seguridad' && str_starts_with($codigo, 'ingreso_proveedor_')) {
+            return array_merge($comunes, [
+                '{id}', '{numero}', '{titulo}', '{proveedor}', '{motivo}',
+                '{punto}', '{sector}', '{area}', '{usuario}', '{comentario}',
+                '{fecha}', '{estado}', '{empresa}',
+            ]);
+        }
+
         return array_merge($comunes, ['{numero}', '{solicitante}', '{empresa}', '{centro_costo}', '{fecha}']);
     }
 }

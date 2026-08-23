@@ -8,10 +8,18 @@
                 && empty($tiene_pagos)
             )
         );
+    $retornoListadoQuery = $retornoListadoQuery ?? \App\Support\Listado\QueryRetornoListado::desdeRequestSiIndex(
+        request(),
+        \App\Support\Compras\ComprobanteProveedorListadoFiltros::class
+    );
+    $rutaContabilizar = ($esEdicion ?? false)
+        ? route('contabilizar_comprobante_proveedor', ['id' => $data->id] + $retornoListadoQuery)
+        : null;
 @endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
+        @include('compras.comprobante_proveedor.partials.aviso_error_contabilizar')
         @include('includes.mensaje')
         @include('compras.precarga_comprobante_proveedor.partials.aviso_ya_en_anita')
 
@@ -20,7 +28,13 @@
                 <h3 class="card-title">
                     @if ($esEdicion)
                         Comprobante proveedor #{{ $data->id }}
-                        <span class="badge badge-secondary ml-2">{{ $data->estado }}</span>
+                        @php
+                            $badgeEstadoForm = \App\Support\Compras\ComprobanteProveedorEstados::badge($data->estado ?? '');
+                        @endphp
+                        <span class="{{ $badgeEstadoForm['class'] }} ml-2">{{ $badgeEstadoForm['label'] }}</span>
+                        @if (($data->anita_sync_estado ?? '') === \App\Support\Compras\ComprobanteProveedorAnitaSyncEstado::ERROR)
+                        <span class="badge badge-danger ml-1" title="{{ $data->anita_sync_error }}">Error Anita</span>
+                        @endif
                     @else
                         Nuevo comprobante de proveedor
                     @endif
@@ -28,7 +42,7 @@
                 <div class="card-tools">
                     @if ($mostrarContabilizar && ($mostrarContabilizarAbono ?? true))
                         @if ($esEdicion)
-                        <form action="{{ route('contabilizar_comprobante_proveedor', ['id' => $data->id]) }}" method="POST" class="d-inline"
+                        <form action="{{ $rutaContabilizar }}" method="POST" class="d-inline"
                             onsubmit="return confirm('¿Confirmar / contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
                             @csrf
                             <button type="submit" class="btn btn-warning btn-sm">
@@ -47,7 +61,7 @@
                             <i class="fa fa-lock"></i> Contabilizar (bloqueado)
                         </button>
                     @endif
-                    <a href="{{ route('comprobante_proveedor') }}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ route('comprobante_proveedor', $retornoListadoQuery) }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                     @if ($esEdicion && filled($ruta_factura_pdf ?? null))
@@ -57,7 +71,7 @@
                     </a>
                     @endif
                     @if ($esEdicion && ! ($tiene_pagos ?? false) && can('borrar-comprobante-proveedor', false))
-                    <form action="{{ route('eliminar_comprobante_proveedor', ['id' => $data->id]) }}" method="POST" class="d-inline"
+                    <form action="{{ route('eliminar_comprobante_proveedor', ['id' => $data->id] + $retornoListadoQuery) }}" method="POST" class="d-inline"
                         onsubmit="return confirm('¿Borrar el comprobante #{{ $data->id }} en anitaERP y Anita (asiento, CC, compra/promov/ctamov)? Esta acción no se puede deshacer.');">
                         @csrf
                         @method('DELETE')
@@ -66,7 +80,7 @@
                         </button>
                     </form>
                     @if (($data->precarga_comprobante_proveedor_id ?? null) && can('borrar-precarga-proveedores', false))
-                    <form action="{{ route('eliminar_comprobante_proveedor_con_precarga', ['id' => $data->id]) }}" method="POST" class="d-inline"
+                    <form action="{{ route('eliminar_comprobante_proveedor_con_precarga', ['id' => $data->id] + $retornoListadoQuery) }}" method="POST" class="d-inline"
                         onsubmit="return confirm('¿Borrar el comprobante #{{ $data->id }} y también la precarga #{{ $data->precarga_comprobante_proveedor_id }} (ERP + Anita)? Esta acción no se puede deshacer.');">
                         @csrf
                         @method('DELETE')
@@ -80,7 +94,7 @@
             </div>
 
             <form
-                action="{{ $esEdicion ? route('actualizar_comprobante_proveedor', ['id' => $data->id]) : route('guardar_comprobante_proveedor') }}"
+                action="{{ $esEdicion ? route('actualizar_comprobante_proveedor', ['id' => $data->id] + $retornoListadoQuery) : route('guardar_comprobante_proveedor', $retornoListadoQuery) }}"
                 method="POST"
                 id="form-comprobante-proveedor"
                 class="form-horizontal form--label-right"
@@ -314,7 +328,7 @@
                             @endif
                         >Actualizar</button>
                         @if ($mostrarContabilizar)
-                        <form action="{{ route('contabilizar_comprobante_proveedor', ['id' => $data->id]) }}" method="POST" class="d-inline mb-1"
+                        <form action="{{ $rutaContabilizar }}" method="POST" class="d-inline mb-1"
                             onsubmit="return confirm('¿Confirmar / contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
                             @csrf
                             <button type="submit" class="btn btn-primary">
@@ -342,7 +356,7 @@
                 <div class="row">
                     <div class="col-lg-3"></div>
                     <div class="col-lg-6">
-                        <form action="{{ route('contabilizar_comprobante_proveedor', ['id' => $data->id]) }}" method="POST" class="d-inline"
+                        <form action="{{ $rutaContabilizar }}" method="POST" class="d-inline"
                             onsubmit="return confirm('¿Confirmar / contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
                             @csrf
                             <button type="submit" class="btn btn-primary">

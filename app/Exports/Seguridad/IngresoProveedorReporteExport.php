@@ -50,9 +50,11 @@ class IngresoProveedorReporteExport implements FromView, ShouldAutoSize, WithCol
 
     public function view(): View
     {
-        $vista = $this->modo === 'planta'
-            ? 'exports.seguridad.ingreso_planta_reporte'
-            : 'exports.seguridad.ingreso_kpi_reporte';
+        $vista = match ($this->modo) {
+            'planta' => 'exports.seguridad.ingreso_planta_reporte',
+            'abono' => 'exports.seguridad.ingreso_abono_reporte',
+            default => 'exports.seguridad.ingreso_kpi_reporte',
+        };
 
         return view($vista, [
             'filas' => $this->filas,
@@ -74,7 +76,11 @@ class IngresoProveedorReporteExport implements FromView, ShouldAutoSize, WithCol
 
     private function columnaUltima(): string
     {
-        return $this->modo === 'planta' ? 'S' : 'AA';
+        return match ($this->modo) {
+            'planta' => 'S',
+            'abono' => 'I',
+            default => 'AA',
+        };
     }
 
     /** @return list<string> */
@@ -150,6 +156,10 @@ class IngresoProveedorReporteExport implements FromView, ShouldAutoSize, WithCol
 
     public function title(): string
     {
-        return $this->modo === 'planta' ? 'Ingresos planta' : 'Tickets ingresos';
+        return match ($this->modo) {
+            'planta' => 'Ingresos planta',
+            'abono' => 'Abono sin ingresos',
+            default => 'Tickets ingresos',
+        };
     }
 }

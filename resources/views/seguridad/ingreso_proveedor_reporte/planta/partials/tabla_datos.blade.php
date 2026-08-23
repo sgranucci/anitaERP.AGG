@@ -1,5 +1,10 @@
 @php
+    $enPantalla = $en_pantalla ?? false;
     $filasVista = $filas ?? [];
+    $puedeVerTicket = $enPantalla && ($puede_ver_ticket ?? false);
+    $puedeVerProveedor = $enPantalla && ($puede_ver_proveedor ?? false);
+    $puedeVerEmpresa = $enPantalla && ($puede_ver_empresa ?? false);
+    $puedeVerUsuario = $enPantalla && ($puede_ver_usuario ?? false);
 @endphp
 <thead style="background:#85C1E9;color:#17202A;">
     <tr>
@@ -25,10 +30,34 @@
 <tbody>
 @forelse ($filasVista as $fila)
     <tr>
-        <td>{{ $fila['ticket_id'] ?? '' }}</td>
+        <td>
+            @include('presupuesto.partials.celda_link_consulta', [
+                'mostrarLinks' => $enPantalla,
+                'puede' => $puedeVerTicket,
+                'id' => $fila['ticket_id'] ?? 0,
+                'routeName' => 'editar_ingreso_proveedor',
+                'texto' => $fila['ticket_id'] ?? '',
+            ])
+        </td>
         <td>{{ $fila['fecha'] ?? '' }}</td>
-        <td>{{ $fila['nombreempresa'] ?? '' }}</td>
-        <td>{{ $fila['origen'] ?? '' }}</td>
+        <td>
+            @include('presupuesto.partials.celda_link_consulta', [
+                'mostrarLinks' => $enPantalla,
+                'puede' => $puedeVerEmpresa,
+                'id' => $fila['empresa_id'] ?? 0,
+                'routeName' => 'editar_empresa',
+                'texto' => $fila['nombreempresa'] ?? '',
+            ])
+        </td>
+        <td>
+            @include('presupuesto.partials.celda_link_consulta', [
+                'mostrarLinks' => $enPantalla,
+                'puede' => $puedeVerProveedor,
+                'id' => $fila['proveedor_id'] ?? 0,
+                'routeName' => 'editar_proveedor',
+                'texto' => $fila['origen'] ?? '',
+            ])
+        </td>
         <td>{{ $fila['motivo'] ?? '' }}</td>
         <td>{{ $fila['punto'] ?? '' }}</td>
         <td>{{ $fila['area'] ?? '' }}</td>
@@ -40,8 +69,24 @@
         <td>{{ trim(($fila['fecha_egreso'] ?? '').' '.($fila['hora_egreso'] ?? '')) }}</td>
         <td>{{ $fila['minutos_fmt'] ?? '' }}</td>
         <td>{{ $fila['en_planta'] ?? '' }}</td>
-        <td>{{ $fila['usuario_ingreso'] ?? '' }}</td>
-        <td>{{ $fila['usuario_egreso'] ?? '' }}</td>
+        <td>
+            @include('presupuesto.partials.celda_link_consulta', [
+                'mostrarLinks' => $enPantalla,
+                'puede' => $puedeVerUsuario,
+                'id' => $fila['usuario_ingreso_id'] ?? 0,
+                'routeName' => 'editar_usuario',
+                'texto' => $fila['usuario_ingreso'] ?? '',
+            ])
+        </td>
+        <td>
+            @include('presupuesto.partials.celda_link_consulta', [
+                'mostrarLinks' => $enPantalla,
+                'puede' => $puedeVerUsuario,
+                'id' => $fila['usuario_egreso_id'] ?? 0,
+                'routeName' => 'editar_usuario',
+                'texto' => $fila['usuario_egreso'] ?? '',
+            ])
+        </td>
     </tr>
 @empty
     <tr>

@@ -180,6 +180,27 @@ final class ComprobanteProveedorImputacionApSupport
         return null;
     }
 
+    /**
+     * @param  array{codigo_mn?: array<int, true>, codigo_me?: array<int, true>, codigo_anticipo?: array<int, true>}  $catalogo
+     */
+    public static function clasificarCodigo(int $codigo, array $catalogo): ?string
+    {
+        if ($codigo <= 0) {
+            return null;
+        }
+        if (! empty($catalogo['codigo_anticipo'][$codigo])) {
+            return self::CUBETA_ANTICIPO;
+        }
+        if (! empty($catalogo['codigo_me'][$codigo])) {
+            return self::CUBETA_ME;
+        }
+        if (! empty($catalogo['codigo_mn'][$codigo])) {
+            return self::CUBETA_MN;
+        }
+
+        return null;
+    }
+
     public static function cubetaDesdeImportes(float $apMn, float $apMe, float $anticipo): string
     {
         $hits = [];
@@ -255,6 +276,56 @@ final class ComprobanteProveedorImputacionApSupport
             'diferencia' => $diferencia,
             'ok' => $alertas === [],
             'alertas' => $alertas,
+        ];
+    }
+
+    /**
+     * Control diario: CC ERP vs asiento ERP vs ctamov Anita (Haber−Debe en $).
+     *
+     * @return array{
+     *     ok: bool,
+     *     alertas: list<string>,
+     *     diff_cc_asiento: float,
+     *     diff_asiento_ctamov: float,
+     *     diff_cc_ctamov: float
+     * }
+     */
+    public static function evaluarTresPatas(
+        float $ccArs,
+        float $asientoArs,
+        float $ctamovArs,
+        bool $tieneCc,
+        bool $tieneAsiento,
+        bool $tieneCtamov,
+        float $tolerancia = self::TOLERANCIA,
+    ): array {
+        $alertas = [];
+        if (! $tieneCc) {
+            $alertas[] = 'Sin CC';
+        }
+        if (! $tieneAsiento) {
+            $alertas[] = 'Sin asiento';
+        }
+        if (! $tieneCtamov) {
+            $alertas[] = 'Sin ctamov Anita';
+        }
+
+        if ($tieneCc && $tieneAsiento && self::desvia($asientoArs, $ccArs, $tolerancia)) {
+            $alertas[] = 'CC ≠ asiento';
+        }
+        if ($tieneAsiento && $tieneCtamov && self::desvia($ctamovArs, $asientoArs, $tolerancia)) {
+            $alertas[] = 'Asiento ≠ ctamov';
+        }
+        if ($tieneCc && $tieneCtamov && self::desvia($ctamovArs, $ccArs, $tolerancia)) {
+            $alertas[] = 'CC ≠ ctamov';
+        }
+
+        return [
+            'ok' => $alertas === [],
+            'alertas' => $alertas,
+            'diff_cc_asiento' => round($asientoArs - $ccArs, 2),
+            'diff_asiento_ctamov' => round($ctamovArs - $asientoArs, 2),
+            'diff_cc_ctamov' => round($ctamovArs - $ccArs, 2),
         ];
     }
 

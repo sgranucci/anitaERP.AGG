@@ -8,12 +8,47 @@ use App\Repositories\Configuracion\EmpresaRepository;
 use App\Support\Seguridad\IngresoProveedorEstados;
 use App\Support\Seguridad\IngresoProveedorVisitanteSupport;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 
 class IngresoProveedorReporteService
 {
     public const MODO_KPI = 'kpi';
 
     public const MODO_PLANTA = 'planta';
+
+    /**
+     * Flags de links azules en pantalla (PDF/Excel los apagan).
+     *
+     * @return array<string, bool>
+     */
+    public static function permisosEnlacesPantalla(): array
+    {
+        return [
+            'en_pantalla' => true,
+            'puede_ver_ticket' => can('editar-ingreso-proveedor', false) || can('listar-ingreso-proveedor', false),
+            'puede_ver_oc' => can('editar-ordencompra', false) || can('listar-ordencompra', false),
+            'puede_ver_proveedor' => can('editar-proveedor', false) || can('listar-proveedor', false),
+            'puede_ver_empresa' => can('editar-empresas', false) || can('listar-empresas', false),
+            'puede_ver_usuario' => self::puedeAbrirAbmUsuario(),
+        ];
+    }
+
+    private static function puedeAbrirAbmUsuario(): bool
+    {
+        if (session('rol_nombre') === 'administrador') {
+            return true;
+        }
+        $rolId = (int) session('rol_id', 0);
+        if ($rolId <= 0) {
+            return false;
+        }
+
+        return DB::table('menu as m')
+            ->join('menu_rol as mr', 'mr.menu_id', '=', 'm.id')
+            ->where('m.url', 'admin/usuario')
+            ->where('mr.rol_id', $rolId)
+            ->exists();
+    }
 
     /**
      * @param  array<string, mixed>  $filtros
@@ -119,6 +154,8 @@ class IngresoProveedorReporteService
 
         $base = [
             'ticket_id' => (int) $ticket->id,
+            'empresa_id' => (int) ($ticket->empresa_id ?? 0),
+            'proveedor_id' => $esVisitante ? 0 : (int) ($ticket->proveedor_id ?? 0),
             'fecha' => optional($ticket->fecha)->format('d/m/Y'),
             'nombreempresa' => (string) ($ticket->empresas->nombre ?? ''),
             'tipo' => IngresoProveedorVisitanteSupport::etiquetaTipo($ticket),
@@ -139,7 +176,9 @@ class IngresoProveedorReporteService
             'minutos' => $minutos,
             'minutos_fmt' => $this->fmtMinutos($minutos),
             'en_planta' => $enPlanta ? 'Sí' : 'No',
+            'usuario_ingreso_id' => (int) ($persona?->usuario_ingreso_id ?? 0),
             'usuario_ingreso' => (string) ($persona?->usuarioIngreso->nombre ?? ''),
+            'usuario_egreso_id' => (int) ($persona?->usuario_egreso_id ?? 0),
             'usuario_egreso' => (string) ($persona?->usuarioEgreso->nombre ?? ''),
         ];
 
@@ -151,11 +190,13 @@ class IngresoProveedorReporteService
             'proveedor_codigo' => $esVisitante ? '' : (string) ($ticket->proveedores->codigo ?? ''),
             'proveedor_nombre' => $esVisitante ? '' : (string) ($ticket->proveedores->nombre ?? ''),
             'visitante_nombre' => $esVisitante ? IngresoProveedorVisitanteSupport::etiquetaOrigen($ticket) : '',
-            'oc_id' => $ticket->ordencompra_id,
+            'oc_id' => (int) ($ticket->ordencompra_id ?? 0),
             'oc_numero' => (string) ($ticket->ordencompras->numeroordencompra ?? ''),
             'titulo' => (string) ($ticket->titulo ?? ''),
             'comentario' => (string) ($ticket->comentario ?? ''),
+            'usuario_id' => (int) ($ticket->usuario_id ?? 0),
             'usuario_genero' => (string) ($ticket->usuarios->nombre ?? ''),
+            'usuario_autorizo_id' => (int) ($ticket->usuario_autorizo_id ?? 0),
             'usuario_autorizo' => (string) ($ticket->usuarioAutorizo->nombre ?? ''),
             'autorizado_at' => optional($ticket->autorizado_at)->format('d/m/Y H:i'),
             'minutos_ticket' => $ticket->minutos_en_planta,

@@ -145,12 +145,12 @@ class RecepcionProveedorController extends Controller
         $accionValidacionAbono = 'confirmar la recepción';
         $validacionAbonoCompleta = $validacionAbono?->estaCompleta() ?? ! ($politicaValidacionAbono['aplica'] ?? false);
 
-        $mostrar_solapa_ingresos = IngresoProveedorVinculoSupport::usuarioPuedeVerSolapa();
-        $tickets_ingreso = $mostrar_solapa_ingresos
-            ? IngresoProveedorVinculoSupport::ticketsDeRecepcion($recepcion)
-            : collect();
         $ocRecepcion = $recepcion->ordencompras ?? null;
-        $url_nuevo_ticket_ingreso = $mostrar_solapa_ingresos
+        $tickets_ingreso = IngresoProveedorVinculoSupport::ticketsDeRecepcion($recepcion);
+        $ocPermiteIngresos = IngresoProveedorVinculoSupport::ocPermiteCargarPersonas($ocRecepcion);
+        $mostrar_solapa_ingresos = IngresoProveedorVinculoSupport::usuarioPuedeVerSolapa()
+            && ($ocPermiteIngresos || $tickets_ingreso->isNotEmpty());
+        $url_nuevo_ticket_ingreso = $mostrar_solapa_ingresos && $ocPermiteIngresos
             ? IngresoProveedorVinculoSupport::urlNuevoTicket([
                 'empresa_id' => $ocRecepcion->empresa_id ?? $recepcion->empresa_id ?? null,
                 'proveedor_id' => $ocRecepcion->proveedor_id ?? optional($recepcion->proveedores)->id ?? null,

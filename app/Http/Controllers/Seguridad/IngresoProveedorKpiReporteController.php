@@ -38,13 +38,13 @@ class IngresoProveedorKpiReporteController extends Controller
 
         return view('seguridad.ingreso_proveedor_reporte.kpi.index', array_merge(
             $this->catalogos(),
+            IngresoProveedorReporteService::permisosEnlacesPantalla(),
             [
                 'filtros' => $filtros,
                 'filtrosQuery' => IngresoProveedorReporteFiltros::paraQueryString($filtros),
                 'consultado' => $consultado,
                 'resultado' => $resultado,
                 'filasPaginadas' => $filasPaginadas,
-                'puede_ver_ticket' => can('editar-ingreso-proveedor', false),
             ]
         ));
     }

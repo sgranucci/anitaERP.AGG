@@ -168,9 +168,7 @@
     @if (!empty($mostrar_solapa_ingresos))
     <button type="button" id="rp-boton-ingresos" class="btn btn-info btn-sm mx-1 rp-tab-solapa">
         <span class="fa fa-id-badge"></span> Ingresos
-        @if (($tickets_ingreso ?? collect())->count())
-        <span class="badge badge-light ml-1">{{ $tickets_ingreso->count() }}</span>
-        @endif
+        <span class="badge badge-light ml-1 ingreso-solapa-badge-count">{{ ($tickets_ingreso ?? collect())->count() }}</span>
     </button>
     @endif
     @endif
@@ -635,7 +633,12 @@
 <div id="rp-solapa-ingresos" class="rp-solapa" style="display:none;">
     @include('seguridad.ingreso_proveedor.partials.solapa_vinculada', [
         'tickets' => $tickets_ingreso ?? collect(),
-        'urlNuevo' => $url_nuevo_ticket_ingreso ?? null,
+        'url_nuevo_ticket_ingreso' => $url_nuevo_ticket_ingreso ?? null,
+        'ingresoContexto' => [
+            'empresa_id' => optional($recepcion->ordencompras)->empresa_id ?? $recepcion->empresa_id ?? null,
+            'proveedor_id' => optional($recepcion->ordencompras)->proveedor_id ?? optional($recepcion->proveedores)->id ?? null,
+            'ordencompra_id' => $recepcion->ordencompra_id ?? null,
+        ],
     ])
 </div>
 @endif

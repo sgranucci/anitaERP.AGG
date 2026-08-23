@@ -29,4 +29,4 @@ use App\Support\Database\SqlDialectSupport;
 
 ## Migraciones
 
-Charset/collation/`information_schema`: regla `migraciones-portables-motor.mdc` (no este helper).
+Charset/collation/`information_schema`/`ALTER TABLE … MODIFY`/`UNSIGNED` en SQL crudo: regla `migraciones-portables-motor.mdc` (no este helper). El CI postgres-lab falla con dialecto MySQL.

@@ -16,8 +16,7 @@ final class IngresoProveedorVisitanteSupport
             return false;
         }
 
-        return strtoupper((string) ($ticket->visitante_tipo ?? self::PROVEEDOR)) === self::VISITANTE
-            || (int) ($ticket->proveedor_id ?? 0) <= 0;
+        return strtoupper((string) ($ticket->visitante_tipo ?? self::PROVEEDOR)) === self::VISITANTE;
     }
 
     public static function etiquetaOrigen(?IngresoProveedor $ticket): string
@@ -45,8 +44,13 @@ final class IngresoProveedorVisitanteSupport
      */
     public static function normalizarAlGuardar(array $data): array
     {
-        $esVisitante = ! empty($data['es_visitante'])
+        $flagVisitante = $data['es_visitante'] ?? null;
+        $esVisitante = filter_var($flagVisitante, FILTER_VALIDATE_BOOLEAN)
             || strtoupper((string) ($data['visitante_tipo'] ?? '')) === self::VISITANTE;
+
+        if ((int) ($data['proveedor_id'] ?? 0) > 0) {
+            $esVisitante = false;
+        }
 
         if ($esVisitante) {
             $data['visitante_tipo'] = self::VISITANTE;

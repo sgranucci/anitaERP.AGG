@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Caja;
 
 use App\Exports\Caja\PosicionFinancieraExport;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ValidacionPosicionFinancieraOrdenConceptos;
 use App\Models\Caja\PosicionFinancieraSaldo;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Caja\PosicionFinancieraOrdenConceptoSupport;
 use App\Support\Caja\PosicionFinancieraSaldoSupport;
 use App\Support\Contable\Efe\EfePosicionFinancieraSupport;
 use App\Support\Contable\EfeMensualListadoFiltros;
@@ -102,6 +104,45 @@ class PosicionFinancieraController extends Controller
             'mes_actual' => (int) date('n'),
             'anio_actual' => (int) date('Y'),
         ]);
+    }
+
+    public function ordenConceptos()
+    {
+        can('configurar-orden-posicion-financiera');
+
+        $empresas = PosicionFinancieraOrdenConceptoSupport::empresasParaPreview();
+        $bloques = PosicionFinancieraOrdenConceptoSupport::armarPreview($empresas);
+
+        return view('caja.posicion_financiera.orden_conceptos', [
+            'empresas' => $empresas,
+            'bloques' => $bloques,
+        ]);
+    }
+
+    public function guardarOrdenConceptos(ValidacionPosicionFinancieraOrdenConceptos $request)
+    {
+        can('configurar-orden-posicion-financiera');
+
+        $actualizados = PosicionFinancieraOrdenConceptoSupport::guardarFilas(
+            $request->validated('filas')
+        );
+
+        return redirect()->route('posicion_financiera_orden_conceptos')
+            ->with('mensaje', $actualizados === 0
+                ? 'El orden ya estaba guardado.'
+                : 'Orden de conceptos actualizado ('.$actualizados.' cuentas).');
+    }
+
+    public function aplicarOrdenBiyemas()
+    {
+        can('configurar-orden-posicion-financiera');
+
+        $actualizados = PosicionFinancieraOrdenConceptoSupport::aplicarOrdenBiyemas();
+
+        return redirect()->route('posicion_financiera_orden_conceptos')
+            ->with('mensaje', $actualizados === 0
+                ? 'Las cuentas ya tenían el orden de Biyemas.'
+                : 'Se aplicó el orden de Biyemas ('.$actualizados.' cuentas).');
     }
 
     public function confirmarSaldo(Request $request)

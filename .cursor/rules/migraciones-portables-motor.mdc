@@ -1,5 +1,5 @@
 ---
-description: Migraciones nuevas neutrales al motor (MySQL/MariaDB/Postgres)
+description: Migraciones nuevas neutrales al motor (MySQL/MariaDB/Postgres). CI postgres-lab falla con SQL MySQL-only.
 globs: database/migrations/**/*.php
 alwaysApply: false
 ---
@@ -8,49 +8,57 @@ alwaysApply: false
 
 Aplica a **migraciones nuevas** desde 2026-07-27. No reescribir históricas salvo que el PR las toque. Ver `docs/arquitectura/portabilidad-base-datos.md`.
 
+El workflow **PostgreSQL lab** (`.github/workflows/postgres-lab.yml`) corre `migrate` en Postgres ante cualquier cambio en `database/migrations/**`. SQL de MySQL tumba el push.
+
 ## Obligatorio
 
 1. Usar **Schema Builder** (`Schema::create` / `table` / `hasTable` / `hasColumn`).
 2. **No** fijar charset/collation en el Blueprint (`$table->charset`, `$table->collation`).
-3. **No** SQL MySQL-only: `information_schema` + `DATABASE()`, `SHOW INDEX`, `ENGINE=`, `utf8mb4_spanish_ci`, `ON DUPLICATE KEY`, etc.
-4. Comprobar FKs/índices con `Schema` / try-catch al dropear, no introspección MySQL cruda.
-5. Seeds/updates de datos: Query Builder (`DB::table`) sin funciones de fecha/casteo dialectales.
+3. **No** SQL MySQL-only: `MODIFY`, `CHANGE COLUMN`, `UNSIGNED` en `DB::statement`, `information_schema` + `DATABASE()`, `SHOW INDEX`, `ENGINE=`, `utf8mb4_spanish_ci`, `ON DUPLICATE KEY`, `AUTO_INCREMENT`.
+4. Cambiar nullabilidad/tipo: `->change()` del Schema Builder (Laravel 12 lo traduce). Dropear FK antes si existe; recrearla después.
+5. Comprobar FKs/índices con `Schema` / try-catch al dropear, no introspección MySQL cruda.
+6. Seeds/updates de datos: Query Builder (`DB::table`) sin funciones de fecha/casteo dialectales.
 
 ## Preferir
 
 | En lugar de | Usar |
 |---|---|
-| `$table->charset` / `collation` | Defaults de conexión (`DB_CHARSET` / `DB_COLLATION` → hoy `utf8mb4` + `utf8mb4_spanish_ci`) |
+| `ALTER TABLE … MODIFY col BIGINT UNSIGNED NULL` | `$table->unsignedBigInteger('col')->nullable()->change()` |
+| `$table->charset` / `collation` | Defaults de conexión (`DB_CHARSET` / `DB_COLLATION`) |
 | `DB::select("… information_schema …")` | `Schema::hasColumn` / `hasTable`; drop FK en try-catch |
 | `DB::statement` dialectal | Schema Builder; si es inevitable → `if (Schema::getConnection()->getDriverName() === 'pgsql')` / `mysql` |
 | `enum()` de negocio complejo | `string` + validación app (enums PG ≠ MySQL) |
 
 ## Permitido (Laravel lo traduce)
 
-- `unsignedBigInteger`, `foreign()`, `unique()`, `index()`, `nullable()`, `default()`
+- `unsignedBigInteger`, `foreign()`, `unique()`, `index()`, `nullable()`, `default()`, `->change()`
 - `->after('col')` (solo afecta orden en MySQL; en PG se ignora — OK)
 
 ## Prohibido en migraciones nuevas
 
 ```php
-// ❌
+// ❌ CI postgres-lab: syntax error at or near "MODIFY"
+DB::statement('ALTER TABLE ingreso_proveedor MODIFY proveedor_id BIGINT UNSIGNED NULL');
 $table->charset = 'utf8mb4';
-$table->collation = 'utf8mb4_spanish_ci';
 DB::select("SELECT … FROM information_schema.TABLE_CONSTRAINTS WHERE TABLE_SCHEMA = DATABASE()");
 ```
 
 ```php
 // ✅
-Schema::create('ejemplo', function (Blueprint $table) {
-    $table->bigIncrements('id');
-    $table->unsignedBigInteger('usuario_id');
-    $table->foreign('usuario_id')->references('id')->on('usuario')->cascadeOnDelete();
+Schema::table('ingreso_proveedor', function (Blueprint $table) {
+    $table->dropForeign('fk_ingprov_proveedor');
+});
+Schema::table('ingreso_proveedor', function (Blueprint $table) {
+    $table->unsignedBigInteger('proveedor_id')->nullable()->change();
+    $table->foreign('proveedor_id', 'fk_ingprov_proveedor')
+        ->references('id')->on('proveedor')->onDelete('restrict');
 });
 ```
 
 ## Comprobación rápida
 
 ```bash
-rg "charset|collation|information_schema|utf8mb4_spanish|DATABASE\(\)" database/migrations/ARCHIVO_NUEVO.php
-# debe estar vacío en migraciones nuevas
+rg "MODIFY|CHANGE COLUMN|UNSIGNED|ENGINE=|charset|collation|information_schema|utf8mb4_spanish|DATABASE\\(\\)|ON DUPLICATE|AUTO_INCREMENT" database/migrations/ARCHIVO_NUEVO.php
+# debe estar vacío en migraciones nuevas (UNSIGNED en Schema Builder va como unsignedBigInteger, no en SQL crudo)
+php -l database/migrations/ARCHIVO_NUEVO.php
 ```

@@ -3,16 +3,21 @@
 namespace App\Support\Compras;
 
 /**
- * Cuadre de centavos en el asiento del comprobante de proveedor.
+ * Cuadre de centavos y diferencia de precio factura vs COM.
  *
- * La tolerancia 0,05 permite redondeo neto vs COM / conceptos vs total, pero Anita
- * exige Debe = Haber (tol. 0,009). Si se ignora un desvío de 0,01–0,05 el asiento
- * no sincroniza (p. ej. FGA #48: provisión COM 110015,67 vs neto 110015,70).
+ * Anita exige Debe = Haber (tol. 0,009). Un desvío de 0,01–0,05 que no se imputa
+ * deja el asiento desbalanceado (p. ej. FGA #48: COM 110015,67 vs neto 110015,70).
+ *
+ * Diferencia de precio / redondeo vs COM: hasta TOLERANCIA_PCT sobre la provisión
+ * se prorratea a las cuentas de los artículos de la COM (no se detiene la grabación).
  */
 final class ComprobanteProveedorAsientoCuadreSupport
 {
-    /** Desvío máximo neto vs COM o conceptos vs total antes de rechazar. */
+    /** Desvío máximo de centavos Debe vs Haber (conceptos vs total) antes de rechazar. */
     public const TOLERANCIA = 0.05;
+
+    /** Diferencia neta factura vs COM absorbible en cuentas de artículos (% sobre provisión). */
+    public const TOLERANCIA_PCT = 5.0;
 
     /** A partir de 1 centavo hay que imputar la diferencia (no tragarla). */
     public const MIN_CENTAVO = 0.01;
@@ -20,6 +25,24 @@ final class ComprobanteProveedorAsientoCuadreSupport
     public static function hayDiferenciaAImputar(float $diferencia): bool
     {
         return abs(round($diferencia, 2)) >= self::MIN_CENTAVO;
+    }
+
+    public static function porcentajeDiferencia(float $diferencia, float $base): float
+    {
+        $baseAbs = abs($base);
+        if ($baseAbs < self::MIN_CENTAVO) {
+            return abs(round($diferencia, 2)) >= self::MIN_CENTAVO ? 100.0 : 0.0;
+        }
+
+        return abs(round($diferencia, 2)) / $baseAbs * 100.0;
+    }
+
+    public static function diferenciaDentroDePorcentaje(
+        float $diferencia,
+        float $base,
+        float $porcentajeMax = self::TOLERANCIA_PCT,
+    ): bool {
+        return self::porcentajeDiferencia($diferencia, $base) <= $porcentajeMax + 0.000001;
     }
 
     /**

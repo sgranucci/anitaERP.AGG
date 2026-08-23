@@ -8,7 +8,7 @@
     foreach (IngresoProveedorListadoFiltros::CAMPOS as $key => $meta) {
         $operadoresJson[$key] = IngresoProveedorListadoFiltros::operadoresParaCampo($key);
     }
-    $tieneCriteriosPanel = IngresoProveedorListadoFiltros::tieneCriteriosTexto($f);
+    $tieneCriteriosPanel = IngresoProveedorListadoFiltros::tieneCriteriosAplicados($f);
     $limpiarUrlPanel = $limpiarUrl ?? route('ingreso_proveedor');
     $fScope = $f['empresa_scope'] ?? 'una';
     $fEmp = (int) ($f['empresa_id'] ?? 0);
@@ -68,6 +68,43 @@
                 <button type="submit" class="btn btn-primary btn-sm" data-aplicar-filtros-panel="1">
                     <i class="fa fa-search"></i> Aplicar filtros
                 </button>
+            </div>
+        </div>
+        <div class="form-row align-items-end">
+            <div class="form-group col-md-2 col-sm-6 mb-2">
+                <label class="small mb-1" for="fecha_desde">Fecha desde</label>
+                <input type="date" name="fecha_desde" id="fecha_desde" class="form-control form-control-sm" value="{{ $f['fecha_desde'] ?? '' }}">
+            </div>
+            <div class="form-group col-md-2 col-sm-6 mb-2">
+                <label class="small mb-1" for="fecha_hasta">Fecha hasta</label>
+                <input type="date" name="fecha_hasta" id="fecha_hasta" class="form-control form-control-sm" value="{{ $f['fecha_hasta'] ?? '' }}">
+            </div>
+            <div class="form-group col-md-2 col-sm-6 mb-2">
+                <label class="small mb-1" for="filtro_estado">Estado</label>
+                <select name="estado" id="filtro_estado" class="form-control form-control-sm">
+                    <option value="">Todos</option>
+                    @foreach ($estados ?? [] as $cod => $meta)
+                        <option value="{{ $cod }}" @selected(($f['estado'] ?? '') === $cod)>{{ $meta['label'] }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="form-group col-md-3 col-sm-6 mb-2">
+                <label class="small mb-1" for="filtro_sector_id">Sector</label>
+                <select name="sector_id" id="filtro_sector_id" class="form-control form-control-sm">
+                    <option value="">Todos</option>
+                    @foreach ($sectores ?? [] as $item)
+                        <option value="{{ $item->id }}" @selected((int) ($f['sector_id'] ?? 0) === (int) $item->id)>{{ $item->nombre }}</option>
+                    @endforeach
+                </select>
+            </div>
+            <div class="form-group col-md-3 col-sm-6 mb-2">
+                <label class="small mb-1" for="filtro_area_id">&Aacute;rea</label>
+                <select name="area_id" id="filtro_area_id" class="form-control form-control-sm">
+                    <option value="">Todas</option>
+                    @foreach ($areas ?? [] as $item)
+                        <option value="{{ $item->id }}" @selected((int) ($f['area_id'] ?? 0) === (int) $item->id)>{{ $item->nombre }}</option>
+                    @endforeach
+                </select>
             </div>
         </div>
     </div>

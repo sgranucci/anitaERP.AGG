@@ -27,9 +27,7 @@
     @if ($mostrarIngresos)
         <button type="button" id="botonform8" class="btn btn-info btn-sm mx-1 prov-tab-solapa">
             <span class="fa fa-id-badge"></span> Ingresos
-            @if ($cantTickets)
-                <span class="badge badge-light ml-1">{{ $cantTickets }}</span>
-            @endif
+            <span class="badge badge-light ml-1 ingreso-solapa-badge-count">{{ $cantTickets }}</span>
         </button>
     @endif
     <button type="button" id="btn-consulta-arca-padron-crear" class="btn btn-outline-secondary btn-sm mx-1" title="Ingresá el CUIT y consultá el padrón ARCA">

@@ -1075,11 +1075,15 @@ class OrdencompraController extends Controller
             ? OrdencompraContratoVencimientoSupport::resumenParaFormulario($id)
             : null;
 
-        $mostrar_solapa_ingresos = $id !== null && $data && IngresoProveedorVinculoSupport::usuarioPuedeVerSolapa();
-        $tickets_ingreso = $mostrar_solapa_ingresos
+        $tickets_ingreso = ($id !== null && $data)
             ? IngresoProveedorVinculoSupport::ticketsDeOc((int) $data->id)
             : collect();
-        $url_nuevo_ticket_ingreso = $mostrar_solapa_ingresos
+        $ocPermiteIngresos = $id !== null && $data
+            && IngresoProveedorVinculoSupport::ocPermiteCargarPersonas($data);
+        $mostrar_solapa_ingresos = $id !== null && $data
+            && IngresoProveedorVinculoSupport::usuarioPuedeVerSolapa()
+            && ($ocPermiteIngresos || $tickets_ingreso->isNotEmpty());
+        $url_nuevo_ticket_ingreso = $mostrar_solapa_ingresos && $ocPermiteIngresos
             ? IngresoProveedorVinculoSupport::urlNuevoTicket([
                 'empresa_id' => $data->empresa_id,
                 'proveedor_id' => $data->proveedor_id,

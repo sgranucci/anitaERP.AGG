@@ -41,4 +41,22 @@ class ComprobanteProveedorAsientoCuadreSupportTest extends TestCase
 
         $this->assertSame(100.00, $iguales[0]['importe']);
     }
+
+    public function test_diferencia_menor_al_cinco_porciento_se_imputa(): void
+    {
+        $this->assertTrue(
+            ComprobanteProveedorAsientoCuadreSupport::diferenciaDentroDePorcentaje(0.03, 110015.67)
+        );
+        $this->assertTrue(
+            ComprobanteProveedorAsientoCuadreSupport::diferenciaDentroDePorcentaje(-5500.00, 110015.67)
+        );
+        $this->assertFalse(
+            ComprobanteProveedorAsientoCuadreSupport::diferenciaDentroDePorcentaje(6000.00, 110015.67)
+        );
+        $this->assertEqualsWithDelta(
+            0.000027,
+            ComprobanteProveedorAsientoCuadreSupport::porcentajeDiferencia(0.03, 110015.67),
+            0.00001
+        );
+    }
 }
