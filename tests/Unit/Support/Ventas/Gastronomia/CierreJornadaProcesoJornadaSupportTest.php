@@ -329,4 +329,29 @@ final class CierreJornadaProcesoJornadaSupportTest extends TestCase
 
         $this->assertSame(0., $pct);
     }
+
+    public function test_emision_sin_facturas_para_rendgastro_acepta_solo_ajuste(): void
+    {
+        $this->assertTrue(CierreJornadaProcesoJornadaSupport::emisionSinFacturasParaRendgastro(
+            CierreJornadaProcesoJornadaSupport::emisionOmitidaPayload(0.),
+        ));
+
+        $this->assertTrue(CierreJornadaProcesoJornadaSupport::emisionSinFacturasParaRendgastro([
+            'solo_ajuste' => true,
+            'facturas' => [],
+            'venta_id' => null,
+            'emitido_en' => '2026-08-23T13:26:53-03:00',
+        ]));
+
+        $this->assertFalse(CierreJornadaProcesoJornadaSupport::emisionSinFacturasParaRendgastro([
+            'solo_ajuste' => true,
+            'facturas' => [['venta_id' => 10]],
+            'venta_id' => 10,
+        ]));
+
+        $this->assertFalse(CierreJornadaProcesoJornadaSupport::emisionProcesoOmitida([
+            'solo_ajuste' => true,
+            'facturas' => [],
+        ]));
+    }
 }

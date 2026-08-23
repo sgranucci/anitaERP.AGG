@@ -408,6 +408,28 @@ final class CierreJornadaProcesoJornadaSupport
     }
 
     /**
+     * Emisión sin facturas CF: omitida (cero comandas) o solo ajuste de insumos (Waitry cash).
+     * El rendgastro CIERRE-WAITRY puede ir en $0; no mezclar con omitida en el resto del proceso
+     * (un reanálisis no debe borrar el ajuste de insumos).
+     *
+     * @param  array<string, mixed>|null  $emision
+     */
+    public static function emisionSinFacturasParaRendgastro(?array $emision): bool
+    {
+        if (! is_array($emision)) {
+            return false;
+        }
+
+        if (self::emisionProcesoOmitida($emision)) {
+            return true;
+        }
+
+        return ! empty($emision['solo_ajuste'])
+            && empty($emision['facturas'])
+            && empty($emision['venta_id']);
+    }
+
+    /**
      * Emisión real o marcada como omitida (sin comandas Waitry sin facturar).
      *
      * @param  array<string, mixed>|null  $emision

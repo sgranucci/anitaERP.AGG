@@ -76,9 +76,9 @@ final class GastronomiaCierreJornadaProcesoRendicionAnitaService
         $emision = is_array($payload['factura_proceso_emision'] ?? null)
             ? $payload['factura_proceso_emision']
             : [];
-        $emisionOmitida = CierreJornadaProcesoJornadaSupport::emisionProcesoOmitida($emision);
+        $emisionSinFacturas = CierreJornadaProcesoJornadaSupport::emisionSinFacturasParaRendgastro($emision);
         $ventaIds = CierreJornadaProcesoFacturaRecuperacionSupport::ventaIdsDesdeRecuperacion($emision);
-        if ($ventaIds === [] && ! $emisionOmitida) {
+        if ($ventaIds === [] && ! $emisionSinFacturas) {
             throw new InvalidArgumentException('No hay facturas del proceso para rendir en Anita.');
         }
 

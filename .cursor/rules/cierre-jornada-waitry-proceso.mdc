@@ -72,7 +72,7 @@ Consola: `php artisan gastronomia:diagnostico-cuadro-cierre {empresa} {fecha} {f
 | Preview asientos (sin grabar) | OK | `CierreJornadaProcesoAsientosPreviewSupport` — requiere **Recalcular** |
 | Grabado asientos | **Implementado** | `GastronomiaCierreJornadaAsientosGrabacionService` → cuelga de ventas/cuadro; botón manual aparte; automático lo ejecuta después de emitir |
 | Facturación única proceso | **Implementado** | `GastronomiaCierreJornadaFacturaProcesoEmisionService`; al emitir, `emitirFacturaProceso` graba `rendgastro` CIERRE-WAITRY (no asientos) |
-| Rendgastro post-cierre | **Implementado** | Cuelga de **ventas** emitidas; si Anita falla post-emisión **no** revierte la factura (`ok` + warning + log `cierre_jornada_waitry.proceso.rendgastro.fallo_post_emision`); asientos reintentan |
+| Rendgastro post-cierre | **Implementado** | Cuelga de **ventas** emitidas; `omitida` o `solo_ajuste` (Waitry cash, sin CF) → CIERRE-WAITRY en $0 (`emisionSinFacturasParaRendgastro`). Si Anita falla post-emisión **no** revierte la factura (`ok` + warning + log `cierre_jornada_waitry.proceso.rendgastro.fallo_post_emision`); asientos reintentan |
 | Logs proceso | **Obligatorio** | Prefijo `cierre_jornada_waitry.proceso.*` (emitir/rendgastro/asientos). Los 422 del controller también loguean; no devolver error sin `Log::` |
 | Facturación unitaria | **Pendiente** | una factura por permiso → alivio de carga servidor |
 
