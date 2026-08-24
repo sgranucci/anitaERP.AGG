@@ -76,9 +76,12 @@
         <div class="row">
             <div class="col-sm-6">
                 <div class="form-group row">
-    				<label for="codigobarra" class="col-lg-4 col-form-label text-right pr-2">C&oacute;digo de barra</label>
+    				@php
+    					$codigobarraRequerido = \App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo();
+    				@endphp
+    				<label for="codigobarra" class="col-lg-4 col-form-label text-right pr-2{{ $codigobarraRequerido ? ' requerido' : '' }}">C&oacute;digo de barra</label>
     				<div class="col-lg-5">
-    					<input type="text" name="codigobarra" id="codigobarra" class="form-control" maxlength="50" value="{{old('codigobarra', $producto->codigobarra ?? '')}}"/>
+    					<input type="text" name="codigobarra" id="codigobarra" class="form-control" maxlength="50" value="{{old('codigobarra', $producto->codigobarra ?? '')}}" {{ $codigobarraRequerido ? 'required' : '' }}/>
                 	</div>
                 </div>
 				<div class="form-group row">

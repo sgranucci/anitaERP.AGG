@@ -28,8 +28,10 @@ class ValidacionArticulo extends FormRequest
             }
         }
 
+        $codigobarra = trim((string) $this->input('codigobarra', ''));
         $this->merge([
             'maneja_stock_color_talle' => $this->boolean('maneja_stock_color_talle'),
+            'codigobarra' => $codigobarra === '' ? null : $codigobarra,
         ]);
 
         if (EntornoEmpresaSupport::esElBierzo()) {
@@ -76,8 +78,24 @@ class ValidacionArticulo extends FormRequest
 
         if (EntornoEmpresaSupport::esElBierzo()) {
             $rules['codigosenasa_id'] = ['nullable', 'integer', 'exists:codigosenasa,id'];
+            // WSMTXCA codigoMtx: nomenclador si existe; si no, articulo.codigobarra.
+            $rules['codigobarra'] = 'required|max:50';
         }
 
         return $rules;
+    }
+
+    public function attributes(): array
+    {
+        return [
+            'codigobarra' => 'código de barra',
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'codigobarra.required' => 'En El Bierzo el código de barra es obligatorio: ARCA (WSMTXCA) lo usa como codigoMtx del ítem.',
+        ];
     }
 }
