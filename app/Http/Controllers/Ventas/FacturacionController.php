@@ -231,7 +231,7 @@ class FacturacionController extends Controller
                 $data = $this->facturacionService->generaComprobanteGeneral($request->all());
 
 			if (is_array($data) && ! empty($data['error'])) {
-				return back()->withInput()->with('errores', [$data['error']]);
+				return $this->responderComprobanteMostrador($request, false, $data['error']);
 			}
 
 			if (is_array($data) && ! empty($data['factura'])) {
@@ -240,13 +240,22 @@ class FacturacionController extends Controller
 					$mensaje .= ' '.$data['aviso_caea'];
 				}
 
-				return redirect('ventas/factura')->with('mensaje', $mensaje);
+				return $this->responderComprobanteMostrador(
+					$request,
+					true,
+					null,
+					(string) $data['factura'],
+					isset($data['venta_id']) ? (int) $data['venta_id'] : null,
+					isset($data['aviso_caea']) ? (string) $data['aviso_caea'] : null,
+					url('ventas/factura'),
+					$mensaje,
+				);
 			}
 
-			return back()->withInput()->with('errores', ['No se pudo generar el comprobante']);
+			return $this->responderComprobanteMostrador($request, false, 'No se pudo generar el comprobante');
 		} catch (\Exception $e)
 		{
-			return back()->withInput()->with('errores', [$e->getMessage()]);
+			return $this->responderComprobanteMostrador($request, false, $e->getMessage());
 		}
     }
 
@@ -395,9 +404,11 @@ class FacturacionController extends Controller
                 'puntoventa_id' => $request->input('puntoventa_id'),
             ]);
 
-            return redirect()->back()->withInput()->with('errores', [
+            return $this->responderComprobanteMostrador(
+                $request,
+                false,
                 $e->getMessage() !== '' ? $e->getMessage() : 'No se pudo generar el comprobante.',
-            ]);
+            );
         }
 
         if (! empty($comprobante['error'])) {
@@ -414,7 +425,11 @@ class FacturacionController extends Controller
                 'puntoventa_id' => $request->input('puntoventa_id'),
             ]);
 
-            return redirect()->back()->withInput()->with('errores', [$detalle !== '' ? $detalle : 'No se pudo generar el comprobante.']);
+            return $this->responderComprobanteMostrador(
+                $request,
+                false,
+                $detalle !== '' ? $detalle : 'No se pudo generar el comprobante.',
+            );
         }
 
         try {
@@ -432,7 +447,16 @@ class FacturacionController extends Controller
             $mensaje .= ' '.$comprobante['aviso_caea'];
         }
 
-        return redirect()->back()->with('mensaje', $mensaje);
+        return $this->responderComprobanteMostrador(
+            $request,
+            true,
+            null,
+            (string) ($comprobante['factura'] ?? ''),
+            isset($comprobante['venta_id']) ? (int) $comprobante['venta_id'] : null,
+            isset($comprobante['aviso_caea']) ? (string) $comprobante['aviso_caea'] : null,
+            url('ventas/factura'),
+            $mensaje,
+        );
     }
 
     /**
@@ -456,7 +480,58 @@ class FacturacionController extends Controller
             return null;
         }
 
-        return back()->withInput()->with('errores', [$bloqueo['error']]);
+        return $this->responderComprobanteMostrador($request, false, (string) $bloqueo['error']);
+    }
+
+    private function requestQuiereJsonOverlay(Request $request): bool
+    {
+        return $request->ajax()
+            || $request->wantsJson()
+            || $request->boolean('ajax_overlay');
+    }
+
+    /**
+     * @return \Illuminate\Http\JsonResponse|\Illuminate\Http\RedirectResponse
+     */
+    private function responderComprobanteMostrador(
+        Request $request,
+        bool $ok,
+        ?string $error = null,
+        ?string $factura = null,
+        ?int $ventaId = null,
+        ?string $avisoCaea = null,
+        ?string $redirect = null,
+        ?string $mensajeFlash = null,
+    ) {
+        if ($this->requestQuiereJsonOverlay($request)) {
+            if ($ok) {
+                return response()->json([[
+                    'factura' => $factura,
+                    'venta_id' => $ventaId,
+                    'aviso_caea' => $avisoCaea,
+                    'redirect' => $redirect,
+                ]]);
+            }
+
+            return response()->json([[
+                'error' => $error !== null && $error !== '' ? $error : 'No se pudo generar el comprobante.',
+            ]], 422);
+        }
+
+        if ($ok) {
+            $mensaje = $mensajeFlash
+                ?: ('Comprobante '.$factura.' generado con éxito');
+
+            if ($redirect) {
+                return redirect($redirect)->with('mensaje', $mensaje);
+            }
+
+            return redirect()->back()->with('mensaje', $mensaje);
+        }
+
+        return back()->withInput()->with('errores', [
+            $error !== null && $error !== '' ? $error : 'No se pudo generar el comprobante.',
+        ]);
     }
 
 }

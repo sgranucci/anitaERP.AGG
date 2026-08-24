@@ -9,6 +9,7 @@ use App\Repositories\Configuracion\Padron_Iibb_CabaRepositoryInterface;
 use App\Repositories\Configuracion\Padron_Coeficiente_TucumanRepositoryInterface;
 use App\Repositories\Configuracion\CondicionIIBBRepositoryInterface;
 use App\Repositories\Configuracion\ProvinciaRepositoryInterface;
+use App\Support\Ventas\ClienteExclusionPercepcionSupport;
 
 class IIBBService 
 {
@@ -176,7 +177,7 @@ class IIBBService
 
 	// Calcula percepciones de ingresos brutos para ventas
 
-	public function calculaPercepcionIIBB($totalNeto, $numeroDocumento, $condicioniibb_id, $provincia_id, $cm05, $fechaFactura)
+	public function calculaPercepcionIIBB($totalNeto, $numeroDocumento, $condicioniibb_id, $provincia_id, $cm05, $fechaFactura, $cliente_id = null)
 	{
 		$percepcionesIIBB = [];
 
@@ -267,6 +268,18 @@ class IIBBService
 							if ($jurisdiccionesPercepcion[$i] == $jurisdiccionCliente)
 								$tasa = $tasasDescarte[$i];
 						}
+
+						// Solapa del cliente: reemplaza padron/descarte; si no hay padron, igual aplica.
+						$tasaExclusion = ClienteExclusionPercepcionSupport::tasaIibb(
+							$cliente_id !== null ? (int) $cliente_id : null,
+							(int) $provincia->id,
+							$fechaFactura
+						);
+						if ($tasaExclusion !== null)
+							$tasa = $tasaExclusion;
+
+						if ($tasa <= 0.00001)
+							continue;
 
 						$importePercepcion = round($totalNeto * $tasa / 100. * $coeficienteCm05, 2);
 						//if ($i == 1)

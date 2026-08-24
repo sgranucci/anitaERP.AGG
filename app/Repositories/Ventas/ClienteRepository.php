@@ -188,6 +188,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 
         $cliente = $this->model->with("cliente_entregas.zonavtas")->with("cliente_seguimientos")
 										->with("cliente_cm05s.provincias")
+										->with("cliente_exclusion_percepcions.provincias")
 										->with("cliente_articulo_suspendidos")->with("cliente_archivos")
 										->with("provincias")->with("localidades")->with("paises")
 										->with("tipossuspensioncliente")->with('zonavtas')
@@ -213,6 +214,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 		$cliente = $this->model->with("cliente_entregas.zonavtas")->with("cliente_seguimientos")
 										->with("cliente_cm05s.provincias")
+										->with("cliente_exclusion_percepcions.provincias")
 										->with("cliente_articulo_suspendidos")->with("cliente_archivos")
 										->with("provincias")->with("localidades")->with("paises")
 										->with("tipossuspensioncliente")->with('zonavtas')
@@ -235,6 +237,7 @@ class ClienteRepository implements ClienteRepositoryInterface
     {
 		$cliente = $this->model->with("cliente_entregas.zonavtas")->with("cliente_seguimientos")
 										->with("cliente_cm05s.provincias")
+										->with("cliente_exclusion_percepcions.provincias")
 										->with("cliente_articulo_suspendidos")->with("cliente_archivos")
 										->with("provincias")->with("localidades")->with("paises")
 										->with("tipossuspensioncliente")->with('zonavtas')
@@ -251,6 +254,7 @@ class ClienteRepository implements ClienteRepositoryInterface
     {
         if (null == $cliente = $this->model->with("cliente_entregas.zonavtas")->with("cliente_seguimientos")
 											->with("cliente_cm05s.provincias")
+										->with("cliente_exclusion_percepcions.provincias")
 											->with("cliente_articulo_suspendidos")->with("cliente_archivos")
 											->with("provincias")->with("localidades")->with("paises")
 											->with("tipossuspensioncliente")->with('zonavtas')
@@ -1347,9 +1351,29 @@ class ClienteRepository implements ClienteRepositoryInterface
 	}
 
 	/**
-	 * Normaliza una fecha de exclusión de percepción de IVA al formato Ymd que espera Anita.
-	 * Acepta Carbon/DateTime, string ("2026-07-17", "2026-07-17 00:00:00") o vacío.
+	 * Fechas históricas en cliente (Anita). Nunca leer el request ni la solapa nueva.
+	 *
+	 * @return array{0: string, 1: string}
 	 */
+	private function fechasExclusionPivaPersistidasParaAnita(array $request): array
+	{
+		$cliente = null;
+		if (! empty($request['id'])) {
+			$cliente = $this->model->find((int) $request['id']);
+		}
+		if ($cliente === null) {
+			$codigo = trim((string) ($request['codigo'] ?? ''));
+			if ($codigo !== '') {
+				$cliente = $this->queryClientePorCodigo($codigo)->first();
+			}
+		}
+
+		return [
+			$this->fechaExclusionPivaParaAnita($cliente->desdefecha_exclusionpercepcioniva ?? null),
+			$this->fechaExclusionPivaParaAnita($cliente->hastafecha_exclusionpercepcioniva ?? null),
+		];
+	}
+
 	private function fechaExclusionPivaParaAnita(mixed $valor): string
 	{
 		if ($valor instanceof \DateTimeInterface) {
@@ -1743,8 +1767,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 		$fecha = Carbon::now()->format('Ymd');
 
 		if (config('app.empresa') == 'EL BIERZO') {
-			$dfexcl_piva = $this->fechaExclusionPivaParaAnita($request['desdefecha_exclusionpercepcioniva'] ?? null);
-			$hfexcl_piva = $this->fechaExclusionPivaParaAnita($request['hastafecha_exclusionpercepcioniva'] ?? null);
+			[$dfexcl_piva, $hfexcl_piva] = $this->fechasExclusionPivaPersistidasParaAnita($request);
 		}
 
 		$nombre = preg_replace('([^A-Za-z0-9 ])', '', $request['nombre'] ?? '');
@@ -2076,8 +2099,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 		$fecha = Carbon::now()->format('Ymd');
 
 		if (config('app.empresa') == 'EL BIERZO') {
-			$dfexcl_piva = $this->fechaExclusionPivaParaAnita($request['desdefecha_exclusionpercepcioniva'] ?? null);
-			$hfexcl_piva = $this->fechaExclusionPivaParaAnita($request['hastafecha_exclusionpercepcioniva'] ?? null);
+			[$dfexcl_piva, $hfexcl_piva] = $this->fechasExclusionPivaPersistidasParaAnita($request);
 		}
 
 		$this->setCamposAnita($request, $cuentacontable, $condicioniva, $condicioniibb, $codigotransporte,

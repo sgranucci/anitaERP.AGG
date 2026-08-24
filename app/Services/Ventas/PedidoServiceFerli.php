@@ -694,6 +694,7 @@ class PedidoService
 						  "retieneiva" => $cliente->retieneiva,
 						  "condicioniibb" => $cliente->condicioniibb,
 						  "provincia" => $cliente->provincia_id,
+						  "id" => $cliente->id,
 						];
 
 		// Calcula impuestos

@@ -67,6 +67,11 @@ class Cliente extends Model implements Auditable
     	return $this->hasMany(Cliente_Cm05::class, 'cliente_id');
 	}
 
+	public function cliente_exclusion_percepcions()
+	{
+    	return $this->hasMany(Cliente_Exclusion_Percepcion::class, 'cliente_id');
+	}
+
     public function cliente_articulo_suspendidos()
 	{
     	return $this->hasMany(Cliente_Articulo_Suspendido::class, 'cliente_id');

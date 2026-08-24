@@ -80,7 +80,7 @@
                     </a>
                 </div>
             </div>
-            <form action="{{route('guardar_factura')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" data-factura-proceso="factura" onsubmit="return typeof validarSubmitFacturaConOverlay === 'function' ? validarSubmitFacturaConOverlay(event) : (typeof validarPadronOperacionAntesSubmitForm === 'function' ? validarPadronOperacionAntesSubmitForm(event) : true);">
+            <form action="{{route('guardar_factura')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" data-factura-proceso="factura" data-sin-bloqueo-grabacion="1" data-factura-redirect="{{ route('factura') }}" onsubmit="return typeof validarSubmitFacturaConOverlay === 'function' ? validarSubmitFacturaConOverlay(event) : (typeof validarPadronOperacionAntesSubmitForm === 'function' ? validarPadronOperacionAntesSubmitForm(event) : true);">
                 @csrf
                 <div class="card-body">
                     @php $datos = ["funcion" => "crear", "layoutItemsPedido" => $layoutItemsPedido]; @endphp
@@ -96,4 +96,5 @@
     </div>
 </div>
 @include('includes.compras.arca_apoc_validacion_modal')
+@include('includes.proceso-overlay-factura')
 @endsection

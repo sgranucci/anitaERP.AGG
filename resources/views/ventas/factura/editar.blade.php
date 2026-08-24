@@ -54,10 +54,15 @@
             return false;
         }
 
+        if (typeof enviarComprobanteFacturaMostradorAjax === 'function') {
+            enviarComprobanteFacturaMostradorAjax();
+            return false;
+        }
         if (typeof iniciarOverlayProcesoFactura === 'function') {
             iniciarOverlayProcesoFactura();
         }
         $('#formgeneral').submit();
+        return false;
     }
     $(function () {
         $("#cliente_id").change(function(){
@@ -112,7 +117,7 @@
                     </a>
                 </div>
             </div>
-            <form action="{{route('grabar_comprobante')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" data-factura-proceso="{{ isset($flGeneraNotaDeCredito) ? 'nc' : 'factura' }}" onsubmit="return typeof validarSubmitFacturaConOverlay === 'function' ? validarSubmitFacturaConOverlay(event) : (typeof validarPadronOperacionAntesSubmitForm === 'function' ? validarPadronOperacionAntesSubmitForm(event) : true);">
+            <form action="{{route('grabar_comprobante')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" data-factura-proceso="{{ isset($flGeneraNotaDeCredito) ? 'nc' : 'factura' }}" data-sin-bloqueo-grabacion="1" data-factura-redirect="{{ route('factura') }}" onsubmit="return typeof validarSubmitFacturaConOverlay === 'function' ? validarSubmitFacturaConOverlay(event) : (typeof validarPadronOperacionAntesSubmitForm === 'function' ? validarPadronOperacionAntesSubmitForm(event) : true);">
                 @csrf @method("put")
                 @include('includes.tabs-activas-estilos')
                 <div class="tabs-activas px-3 pt-2">
@@ -138,7 +143,7 @@
                 </div>
                 <div class="card-footer">
                     @if (isset($flGeneraNotaDeCredito))
-                        <button type="submit" onclick="sub()" class="btn btn-success factura-carga-bloqueable" data-padron-accion-factura="1">
+                        <button type="button" onclick="sub()" class="btn btn-success factura-carga-bloqueable" data-padron-accion-factura="1">
                             <i class="fa fa-undo"></i> Generar nota de cr&eacute;dito
                         </button>
                     @endif
@@ -148,4 +153,5 @@
     </div>
 </div>
 @include('includes.compras.arca_apoc_validacion_modal')
+@include('includes.proceso-overlay-factura')
 @endsection

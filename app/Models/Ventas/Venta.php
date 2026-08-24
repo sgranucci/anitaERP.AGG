@@ -26,7 +26,7 @@ class Venta extends Model implements Auditable
 	];
     protected $fillable = [
             'fecha', 'fechajornada', 'tipotransaccion_id',
-            'puntoventa_id', 'numerocomprobante', 'actividad_arca_id', 'cliente_id', 'condicionventa_id',
+            'puntoventa_id', 'numerocomprobante', 'codigo_afip', 'actividad_arca_id', 'cliente_id', 'condicionventa_id',
             'vendedor_id', 'transporte_id', 'total', 'moneda_id', 'cotizacion', 'estado',
             'usuario_id', 'leyenda', 'descuento', 'descuentointegrado', 'lugarentrega',
             'cliente_entrega_id', 'codigo', 'nombre', 'domicilio', 'localidad_id', 'provincia_id',
@@ -141,6 +141,11 @@ class Venta extends Model implements Auditable
     {
         return $this->hasOne(Cliente::class, 'id', 'cliente_id')
                     ->with("condicionivas");
+    }
+
+    public function condicionventas()
+    {
+        return $this->belongsTo(Condicionventa::class, 'condicionventa_id');
     }
 
     public function ordenventas()

@@ -14,6 +14,8 @@ use App\Repositories\Ventas\AbastoRepositoryInterface;
 use App\Services\Ventas\FacturacionService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\ExclusionPercepcionIvaSupport;
+use App\Support\Ventas\ClienteExclusionPercepcionSupport;
+use App\Support\Ventas\VentaImporteDosDecimalesSupport;
 use App\Support\Stock\FormulaArticuloFactorCosto;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -78,7 +80,7 @@ class ImpuestoService extends FacturacionService
 		$retieneIva = $dataCliente['retieneiva'];
 		$condicioniibb_id = $dataCliente['condicioniibb_id'];
 		$provincia = $dataCliente['provincia'];
-		$cliente_id = $dataCliente['id'];
+		$cliente_id = $dataCliente['id'] ?? null;
 		$porcDescuento = 0;
 
 		if (isset($dataCliente['descuentoimportepie']))
@@ -137,8 +139,23 @@ class ImpuestoService extends FacturacionService
 		$tasaPercepcionIva = (float) config('anita.tasa_percepcion_iva', 0);
 		$aplicaPercepcionIva = ! $omitirPercepciones
 			&& config('anita.agente_percepcion_iva') == 'si'
-			&& $retieneIva != 'S'
-			&& ! ExclusionPercepcionIvaSupport::estaExcluidoEnFecha($nroInscripcion, $fechaFactura ?? null);
+			&& $retieneIva != 'S';
+
+		if ($aplicaPercepcionIva) {
+			if (ExclusionPercepcionIvaSupport::estaExcluidoEnFecha($nroInscripcion, $fechaFactura ?? null)) {
+				$tasaPercepcionIva = 0;
+			}
+			$tasaExclusionIva = ClienteExclusionPercepcionSupport::tasaIva(
+				$cliente_id !== null ? (int) $cliente_id : null,
+				$fechaFactura
+			);
+			if ($tasaExclusionIva !== null) {
+				$tasaPercepcionIva = $tasaExclusionIva;
+			}
+			if ($tasaPercepcionIva <= 0.00001) {
+				$aplicaPercepcionIva = false;
+			}
+		}
 
 		// Calcula las tasas de percepcion para agregar a la tasa de detraccion
         if ($aplicaPercepcionIva && config('facturacion.USA_DETRACCION') == 'S')
@@ -148,7 +165,7 @@ class ImpuestoService extends FacturacionService
 		$percepcionesIIBB = [];
 		if (! $omitirPercepciones && ! $flGrabaComprobanteDividido) {
 			$percepcionesIIBB = $this->IIBBService->calculaPercepcionIIBB($totalBrutoAuxiliar, $nroInscripcion,
-				$condicioniibb_id, $provincia, $cm05, $fechaFactura);
+				$condicioniibb_id, $provincia, $cm05, $fechaFactura, $cliente_id);
 		}
 
 		if (config('facturacion.USA_DETRACCION') == 'S' && ! $omitirPercepciones)
@@ -202,8 +219,8 @@ class ImpuestoService extends FacturacionService
 				{
 					$totalCantidad += $item['cantidad'];
 
-					// Calcula importe del item
-					$totalItem = $neto['totalSinDescuento'];
+					// Calcula importe del item (al centavo, igual que Exento/Gravado).
+					$totalItem = VentaImporteDosDecimalesSupport::redondear($neto['totalSinDescuento']);
 
 					// Acumula subtotales
 					self::agregaItemTotales("Subtotal", 0, $totalItem, 0, 0, 0, $subtotales);
@@ -231,7 +248,7 @@ class ImpuestoService extends FacturacionService
 						$impuesto_codigoarca = $impuesto->codigoarca;
 					}
 
-					$totalNeto = round($neto['totalConDescuento'], 2);
+					$totalNeto = VentaImporteDosDecimalesSupport::redondear($neto['totalConDescuento']);
 
 					// Asigna total neto para calculos posteriores
 					$dataItem[$off-1]['totalcondescuento'] = $totalNeto;
@@ -392,7 +409,7 @@ class ImpuestoService extends FacturacionService
 					$importeNeto += $netos[$i]['importe'];
 			}	
 			$percepcionesIIBB = $this->IIBBService->calculaPercepcionIIBB($importeNeto, $nroInscripcion, 
-																		$condicioniibb_id, $provincia, $cm05, $fechaFactura);
+																		$condicioniibb_id, $provincia, $cm05, $fechaFactura, $cliente_id);
 		}
 
 		// Abasto El Bierzo (a-comprob: kilos × tasa; MTXCA tributo 99).
@@ -485,8 +502,8 @@ class ImpuestoService extends FacturacionService
 			if (($neto['totalSinDescuento'] ?? 0) == 0) {
 				continue;
 			}
-			$subtotalBruto += (float) $neto['totalSinDescuento'];
-			$totalItem = $neto['totalSinDescuento'];
+			$totalItem = VentaImporteDosDecimalesSupport::redondear($neto['totalSinDescuento']);
+			$subtotalBruto += $totalItem;
 			self::agregaItemTotales('Subtotal', 0, $totalItem, 0, 0, 0, $subtotales);
 			$descuentoFinal += $neto['totalDescuento'];
 			$porcDescuento = $neto['porcentajeDescuento'];

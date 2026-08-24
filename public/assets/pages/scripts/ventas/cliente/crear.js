@@ -274,6 +274,10 @@
             if (target === '#tab-cm05') {
                 $('#cm05-table').find('tr').last().find('.codigoprovincia').focus();
             }
+
+            if (target === '#tab-exclusion-percepcion') {
+                $('#exclusion-percepcion-table').find('tr').last().find('.tipoexclusion').focus();
+            }
         });
 	                     
         muestraEmiteNotaDeCredito();
@@ -366,6 +370,17 @@
         $(document).on('blur', '#cm05-table .coeficiente', formatearCoeficienteCm05Input);
         aplicarFormatoCoeficientesCm05();
         $('#form-general').on('submit', aplicarFormatoCoeficientesCm05);
+        $('#agrega_renglon_exclusion_percepcion').on('click', agregaRenglonExclusionPercepcion);
+        $(document).on('click', '.eliminar_exclusion_percepcion', borraRenglonExclusionPercepcion);
+        $(document).on('change', '#exclusion-percepcion-table .tipoexclusion', function () {
+            aplicarTipoExclusionFila($(this).closest('tr'));
+        });
+        $(document).on('blur', '#exclusion-percepcion-table .porcentajeexclusion', formatearPorcentajeExclusionInput);
+        $('#exclusion-percepcion-table tbody tr').each(function () {
+            aplicarTipoExclusionFila($(this));
+        });
+        aplicarFormatoPorcentajesExclusion();
+        $('#form-general').on('submit', aplicarFormatoPorcentajesExclusion);
     });
 
 	function activa_eventos(flInicio)
@@ -600,4 +615,78 @@
     	$("#tbody-tabla-cm05 .iicm05").each(function() {
     		$(this).val(item++);
     	});
-	}    
+	}
+
+    function formatearPorcentajeExclusion(valor) {
+        if (valor === undefined || valor === null) {
+            return '';
+        }
+        var texto = String(valor).trim().replace(',', '.');
+        if (texto === '') {
+            return '';
+        }
+        var num = parseFloat(texto);
+        if (isNaN(num)) {
+            return valor;
+        }
+        if (num < 0) {
+            num = 0;
+        } else if (num > 100) {
+            num = 100;
+        }
+        return num.toFixed(4);
+    }
+
+    function formatearPorcentajeExclusionInput() {
+        var formateado = formatearPorcentajeExclusion($(this).val());
+        if (formateado !== '') {
+            $(this).val(formateado);
+        }
+    }
+
+    function aplicarFormatoPorcentajesExclusion() {
+        $('#exclusion-percepcion-table .porcentajeexclusion').each(function () {
+            var formateado = formatearPorcentajeExclusion($(this).val());
+            if (formateado !== '') {
+                $(this).val(formateado);
+            }
+        });
+    }
+
+    function aplicarTipoExclusionFila($fila) {
+        if (!$fila || !$fila.length) {
+            return;
+        }
+        var tipo = ($fila.find('.tipoexclusion').val() || '').toUpperCase();
+        var esIva = tipo === 'IVA';
+        var $codigo = $fila.find('.codigoprovincia');
+        var $nombre = $fila.find('.nombreprovincia');
+        var $id = $fila.find('.provincia_id');
+        var $idPrevia = $fila.find('.provincia_id_previa');
+        var $codigoPrevio = $fila.find('.codigo_previo_provincia');
+        var $lupa = $fila.find('.consultaprovincia');
+        $codigo.prop('readonly', esIva);
+        $lupa.prop('disabled', esIva);
+        if (esIva) {
+            $id.val('');
+            $idPrevia.val('');
+            $codigo.val('');
+            $codigoPrevio.val('');
+            $nombre.val('');
+        }
+    }
+
+    function agregaRenglonExclusionPercepcion() {
+        event.preventDefault();
+        var renglon = $('#template-renglon-exclusion-percepcion').html();
+        $("#tbody-tabla-exclusion-percepcion").append(renglon);
+        activa_eventos(false);
+        var $fila = $('#exclusion-percepcion-table').find('tr').last();
+        aplicarTipoExclusionFila($fila);
+        $fila.find('.tipoexclusion').focus();
+    }
+
+    function borraRenglonExclusionPercepcion(event) {
+        event.preventDefault();
+        $(this).parents('tr').remove();
+    }    

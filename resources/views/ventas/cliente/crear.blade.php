@@ -95,6 +95,7 @@ $( "#botonform0" ).click(function() {
                         @include('ventas.cliente.form6')
                         @include('ventas.cliente.form7')
                         @include('ventas.cliente.form8')
+                        @include('ventas.cliente.form10')
                     </div>
                     @include('ventas.cliente.partials.arca_padron_support')
                 </div>

@@ -3,15 +3,18 @@
 namespace App\Repositories\Ventas;
 
 use App\Models\Ventas\Venta;
+use App\Models\Ventas\Tipotransaccion;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\FacturaListadoFiltros;
+use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
 use Auth;
 use App\ApiAnita;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
 class VentaRepository implements VentaRepositoryInterface
@@ -86,12 +89,60 @@ class VentaRepository implements VentaRepositoryInterface
 
     public function create(array $data)
     {
+        $data = $this->aplicarCodigoAfipElBierzo($data);
+
         return $this->model->create($data);
     }
 
     public function update(array $data, $id)
     {
+        $data = $this->aplicarCodigoAfipElBierzo($data, (int) $id);
+
         return $this->model->findOrFail($id)->update($data);
+    }
+
+    /**
+     * El Bierzo PV manual/CAEA: tipo ARCA efectivo (001+letra, 003 NC, 201 FCE…) para unique y max()+1.
+     * AGG no tiene la columna ni el unique.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function aplicarCodigoAfipElBierzo(array $data, ?int $ventaId = null): array
+    {
+        if (! EntornoEmpresaSupport::esElBierzo()) {
+            unset($data['codigo_afip']);
+
+            return $data;
+        }
+
+        if (! Schema::hasColumn('venta', 'codigo_afip')) {
+            unset($data['codigo_afip']);
+
+            return $data;
+        }
+
+        if ((int) ($data['codigo_afip'] ?? 0) > 0) {
+            return $data;
+        }
+
+        $tipoId = (int) ($data['tipotransaccion_id'] ?? 0);
+        $codigoVenta = (string) ($data['codigo'] ?? '');
+        if ($tipoId <= 0 || $codigoVenta === '') {
+            $existente = $ventaId !== null && $ventaId > 0
+                ? $this->model->query()->whereKey($ventaId)->first(['tipotransaccion_id', 'codigo'])
+                : null;
+            $tipoId = $tipoId > 0 ? $tipoId : (int) ($existente->tipotransaccion_id ?? 0);
+            $codigoVenta = $codigoVenta !== '' ? $codigoVenta : (string) ($existente->codigo ?? '');
+        }
+
+        $codigoAlmacenado = $tipoId > 0
+            ? (string) (Tipotransaccion::query()->whereKey($tipoId)->value('codigo') ?? '')
+            : '';
+        $afip = TipotransaccionCodigoAfipSupport::codigoAfipDesdeVentaGrabada($codigoAlmacenado, $codigoVenta);
+        $data['codigo_afip'] = $afip > 0 ? $afip : null;
+
+        return $data;
     }
 
     public function delete($id)
@@ -197,7 +248,7 @@ class VentaRepository implements VentaRepositoryInterface
                 compe_numero
 			' , 
             'whereArmado' => " WHERE compe_tipo='".$tipo."' and compe_letra='".$letra."' 
-                                    and compe_sucursal='".$sucursal."' " 
+                                    and ".$this->sqlSucursalAnita('compe_sucursal', (string) $sucursal) 
         );
         if (isset($path_sistema))
             $data['path_sistema'] = $path_sistema;
@@ -259,6 +310,46 @@ class VentaRepository implements VentaRepositoryInterface
         return $numero;
     }
 
+    /**
+     * Último número en Anita (MAX venta + numerador compemis), sin incrementar.
+     * Misma fuente que AGG usaba con Informix vivo: tipo + letra + sucursal.
+     */
+    public function maxNumeroComprobanteAnitaBridge(
+        string $tipo,
+        string $letra,
+        string $sucursal,
+        $path_sistema = null,
+    ): int {
+        $tipo = strtoupper(trim($tipo));
+        $letra = strtoupper(trim($letra));
+        $sucursal = trim($sucursal);
+        if ($tipo === '' || $letra === '' || $sucursal === '') {
+            return 0;
+        }
+
+        $apiAnita = new ApiAnita();
+        $data = [
+            'acc' => 'list',
+            'tabla' => 'venta',
+            'campos' => 'max(ven_nro) as ultimonumero',
+            'whereArmado' => " WHERE ven_tipo = '".$tipo."' AND
+									ven_letra = '".$letra."' AND
+									".$this->sqlSucursalAnita('ven_sucursal', $sucursal),
+        ];
+        if ($path_sistema !== null && $path_sistema !== '') {
+            $data['path_sistema'] = $path_sistema;
+        }
+        $filaUltimo = ApiAnita::primeraFilaLista($apiAnita->apiCall($data));
+        $maxVenta = 0;
+        if ($filaUltimo !== null && isset($filaUltimo->ultimonumero)) {
+            $maxVenta = (int) $filaUltimo->ultimonumero;
+        }
+
+        $maxNumerador = $this->leerUltimoNumeradorCompemis($tipo, $letra, $sucursal, $path_sistema);
+
+        return max($maxVenta, $maxNumerador);
+    }
+
     public function traeUltimoComprobanteVenta($tipotransaccion_id, $puntoventa_id, ?int $empresa_id = null)
     {
         $query = $this->model->select('venta.numerocomprobante')
@@ -298,7 +389,7 @@ class VentaRepository implements VentaRepositoryInterface
             'tabla' => 'compemis',
             'campos' => 'compe_numero',
             'whereArmado' => " WHERE compe_tipo='".$tipo."' and compe_letra='".$letra."'
-                                    and compe_sucursal='".$sucursal."' ",
+                                    and ".$this->sqlSucursalAnita('compe_sucursal', $sucursal),
         ];
         if (isset($path_sistema)) {
             $data['path_sistema'] = $path_sistema;
@@ -346,6 +437,36 @@ class VentaRepository implements VentaRepositoryInterface
         }
 
         return max(0, (int) $filaNumerador->num_ult_numero);
+    }
+
+    /**
+     * Anita guarda sucursal como 15 o 00015 según la tabla. El ERP usa siempre 5 dígitos.
+     */
+    private function sqlSucursalAnita(string $campo, string $sucursal): string
+    {
+        $sucursal = trim($sucursal);
+        $variantes = [$sucursal];
+        if ($sucursal !== '' && ctype_digit($sucursal)) {
+            $sinCeros = ltrim($sucursal, '0');
+            if ($sinCeros === '') {
+                $sinCeros = '0';
+            }
+            $variantes[] = $sinCeros;
+            $variantes[] = str_pad($sinCeros, 5, '0', STR_PAD_LEFT);
+        }
+        $variantes = array_values(array_unique(array_filter(
+            $variantes,
+            static fn ($v) => $v !== ''
+        )));
+        if ($variantes === []) {
+            return $campo." = ''";
+        }
+        $in = implode(', ', array_map(
+            static fn (string $v): string => "'".str_replace("'", "''", $v)."'",
+            $variantes
+        ));
+
+        return $campo.' IN ('.$in.')';
     }
 
     public function leeComprobantePorOrdenVenta($ordenventa_id)

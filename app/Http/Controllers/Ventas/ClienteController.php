@@ -8,6 +8,7 @@ use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Cliente_Entrega;
 use App\Models\Ventas\Cliente_Archivo;
 use App\Models\Ventas\Cliente_Cm05;
+use App\Models\Ventas\Cliente_Exclusion_Percepcion;
 use App\Models\Ventas\Zonavta;
 use App\Models\Ventas\Subzonavta;
 use App\Models\Ventas\Vendedor;
@@ -30,6 +31,7 @@ use App\Repositories\Ventas\ClienteRepositoryInterface;
 use App\Repositories\Ventas\Cliente_EntregaRepositoryInterface;
 use App\Repositories\Ventas\Cliente_SeguimientoRepositoryInterface;
 use App\Repositories\Ventas\Cliente_Cm05RepositoryInterface;
+use App\Repositories\Ventas\Cliente_Exclusion_PercepcionRepositoryInterface;
 use App\Repositories\Ventas\Cliente_Articulo_SuspendidoRepositoryInterface;
 use App\Repositories\Ventas\Cliente_ArchivoRepositoryInterface;
 use App\Repositories\Ventas\Cliente_CuentacorrienteRepositoryInterface;
@@ -73,6 +75,7 @@ class ClienteController extends Controller
 	private $cliente_entregaRepository;
     private $cliente_seguimientoRepository;
     private $cliente_cm05Repository;
+    private $cliente_exclusion_percepcionRepository;
     private $cliente_articulo_suspendidoRepository;
     private $cliente_cuentacorrienteRepository;
 	private $cliente_archivoRepository;
@@ -96,6 +99,7 @@ class ClienteController extends Controller
         Cliente_SeguimientoRepositoryInterface $cliente_seguimientorepository,
         Cliente_CuentacorrienteRepositoryInterface $cliente_cuentacorrienterepository,
         Cliente_Cm05RepositoryInterface $cliente_cm05repository,
+        Cliente_Exclusion_PercepcionRepositoryInterface $cliente_exclusion_percepcionrepository,
         Cliente_Articulo_SuspendidoRepositoryInterface $cliente_articulo_suspendidorepository,
         DescuentoventaRepositoryInterface $descuentoventarepository,
         TipodocumentoRepositoryInterface $tipodocumentoRepository,
@@ -115,6 +119,7 @@ class ClienteController extends Controller
         $this->cliente_seguimientoRepository = $cliente_seguimientorepository;
         $this->cliente_cuentacorrienteRepository = $cliente_cuentacorrienterepository;
         $this->cliente_cm05Repository = $cliente_cm05repository;
+        $this->cliente_exclusion_percepcionRepository = $cliente_exclusion_percepcionrepository;
         $this->cliente_articulo_suspendidoRepository = $cliente_articulo_suspendidorepository;
         $this->cliente_archivoRepository = $cliente_archivoRepository;
         $this->descuentoventaRepository = $descuentoventarepository;
@@ -348,6 +353,8 @@ class ClienteController extends Controller
 
                 $cliente_cm05 = $this->cliente_cm05Repository->create($request->all(), $cliente->id);
 
+                $this->cliente_exclusion_percepcionRepository->create($request->all(), $cliente->id);
+
                 $cliente_articulo_suspendido = $this->cliente_articulo_suspendidoRepository->create($request->all(), $cliente->id);
 
                 $cliente_archivo = $this->cliente_archivoRepository->create($request, $cliente->id);
@@ -398,6 +405,8 @@ class ClienteController extends Controller
                 $cliente_seguimiento = $this->cliente_seguimientoRepository->create($request->all(), $cliente->id);
 
                 $cliente_cm05 = $this->cliente_cm05Repository->create($request->all(), $cliente->id);
+
+                $this->cliente_exclusion_percepcionRepository->create($request->all(), $cliente->id);
 
                 $cliente_articulo_suspendido = $this->cliente_articulo_suspendidoRepository->create($request->all(), $cliente->id);
 
@@ -663,6 +672,8 @@ class ClienteController extends Controller
             $cliente_seguimiento = $this->cliente_seguimientoRepository->update($request->all(), $id);
             
             $cliente_cm05 = $this->cliente_cm05Repository->update($request->all(), $id);
+
+            $this->cliente_exclusion_percepcionRepository->update($request->all(), $id);
 
             $cliente_articulo_suspendido = $this->cliente_articulo_suspendidoRepository->update($request->all(), $id);
 

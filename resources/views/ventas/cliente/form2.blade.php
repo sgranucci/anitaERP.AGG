@@ -455,27 +455,6 @@
 			</div>
 		</div>
 	</div>
-	@if (config('app.empresa') == 'EL BIERZO')
-		@if (can('modificar-exclusion-percepcion-iva-cliente', false))
-			<div class="row">
-				<div class="col-sm-12">
-					<div class="form-group row align-items-center">
-						<label for="desdefecha_exclusionpercepcioniva" class="col-lg-2 control-label text-right pr-2">Desde excl. perc. IVA</label>
-						<div class="col-lg-2">
-							<input type="date" name="desdefecha_exclusionpercepcioniva" id="desdefecha_exclusionpercepcioniva" class="form-control" value="{{substr(old('desdefecha_exclusionpercepcioniva', $data->desdefecha_exclusionpercepcioniva ?? ''),0,10)}}">
-						</div>
-						<label for="hastafecha_exclusionpercepcioniva" class="col-lg-2 control-label text-right pr-2">Hasta excl. perc. IVA</label>
-						<div class="col-lg-2">
-							<input type="date" name="hastafecha_exclusionpercepcioniva" id="hastafecha_exclusionpercepcioniva" class="form-control" value="{{substr(old('hastafecha_exclusionpercepcioniva', $data->hastafecha_exclusionpercepcioniva ?? ''),0,10)}}">
-						</div>
-					</div>
-				</div>
-			</div>
-		@else
-			<input type="hidden" name="desdefecha_exclusionpercepcioniva" value="{{substr(old('desdefecha_exclusionpercepcioniva', $data->desdefecha_exclusionpercepcioniva ?? ''),0,10)}}">
-			<input type="hidden" name="hastafecha_exclusionpercepcioniva" value="{{substr(old('hastafecha_exclusionpercepcioniva', $data->hastafecha_exclusionpercepcioniva ?? ''),0,10)}}">
-		@endif
-	@endif
 </div>
 @include('includes.ventas.modalconsultatransporte')
 @include('includes.ventas.modalconsultazonavta')

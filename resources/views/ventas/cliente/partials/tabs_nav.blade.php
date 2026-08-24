@@ -39,6 +39,11 @@
             <i class="fa fa-map"></i> CM05
         </a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link" id="tab-exclusion-percepcion-link" data-toggle="tab" href="#tab-exclusion-percepcion" role="tab">
+            <i class="fa fa-percent"></i> Exclusiones percepci&oacute;n
+        </a>
+    </li>
     @if (!empty($mostrarSuitecrm))
     <li class="nav-item">
         <a class="nav-link" id="tab-suitecrm-link" data-toggle="tab" href="#tab-suitecrm" role="tab">

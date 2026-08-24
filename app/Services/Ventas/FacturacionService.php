@@ -111,6 +111,8 @@ use App\Support\Ventas\GastronomiaEmisionProfiler;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
 use App\Support\Ventas\VentaNumeracionEmpresaSupport;
+use App\Support\Ventas\VentaNotaCreditoPrecioLiteralSupport;
+use App\Support\Ventas\VentaImporteDosDecimalesSupport;
 use App\Support\Ventas\VentaNumerocomprobanteUnicidadSupport;
 use Exception;
 use Illuminate\Database\QueryException;
@@ -881,15 +883,13 @@ class FacturacionService
 				}
 				break;
 			case 'M':
-				$venta = $this->ventaRepository->traeUltimoComprobanteVenta(
-					$tipoTransaccion_id,
-					$puntoventa_id,
-					(int) ($puntoventa->empresa_id ?? 0) ?: null,
+				$numero = $this->ultimoNumeroBaseModoManual(
+					$puntoventa,
+					$tipotransaccion,
+					$letra,
+					$cliente,
+					$totalComprobante,
 				);
-				if ($venta)
-					$numero = $venta->numerocomprobante;
-				else	
-					$numero = 0;
 				break;
 			}
 
@@ -1391,6 +1391,38 @@ class FacturacionService
 		$this->descuentoImportePie = 0;
 	}
 
+	private function activarGrabacionAnitaVillafrancaSiNotaCreditoDivision(int $puntoventaId, int $tipotransaccionId): void
+	{
+		if (! PedidoFacturaAnitaArchivosSupport::esPuntoVentaDivision($puntoventaId) || $tipotransaccionId <= 0) {
+			return;
+		}
+
+		$tipo = $this->tipotransaccionRepository->find($tipotransaccionId);
+		if (! $tipo || ($tipo->signo ?? 'S') === 'S') {
+			return;
+		}
+
+		$this->flGrabaComprobanteDividido = true;
+	}
+
+	private function activarGrabacionAnitaVillafrancaSiSignoDivision(int $puntoventaId, $signo): void
+	{
+		if ((float) $signo >= 0 || ! PedidoFacturaAnitaArchivosSupport::esPuntoVentaDivision($puntoventaId)) {
+			return;
+		}
+
+		$this->flGrabaComprobanteDividido = true;
+	}
+
+	private function debeReplicarAnitaVillafrancaAunqueModoManual($puntoventa): bool
+	{
+		if ($this->flGrabaComprobanteDividido) {
+			return true;
+		}
+
+		return PedidoFacturaAnitaArchivosSupport::esPuntoVentaDivision((int) ($puntoventa->id ?? 0));
+	}
+
 	private function ocultarComprobanteDivididoEnMensaje($retorno)
 	{
 		if (! is_array($retorno) || ! empty($retorno['error'])) {
@@ -1649,15 +1681,13 @@ class FacturacionService
 					
 					break;
 				case 'M':
-					$venta = $this->ventaRepository->traeUltimoComprobanteVenta(
-						$tipoTransaccion_id,
-						$puntoventa_id,
-						(int) ($puntoventa->empresa_id ?? 0) ?: null,
+					$numero = $this->ultimoNumeroBaseModoManual(
+						$puntoventa,
+						$tipotransaccion,
+						$letra,
+						$cliente,
+						$totalComprobante,
 					);
-					if ($venta)
-						$numero = $venta->numerocomprobante;
-					else	
-						$numero = 0;
 					break;
 			}			
 			if ($numero != -1)
@@ -1958,6 +1988,7 @@ class FacturacionService
 	public function calculaFacturaGeneral($data)
 	{
 		$data = $this->normalizaItemsFacturaGeneralDesdePedido($data);
+		VentaNotaCreditoPrecioLiteralSupport::aplicarPreciosFacturaOrigen($data);
 
 		UsuarioPreferenciaFacturacionSupport::guardar($data);
 
@@ -1969,6 +2000,10 @@ class FacturacionService
 		$this->descuentoLinea = 0;
 		$this->descuentoImportePie = $data['descuentoimportepie'];
 		$fechaFactura = $data['fechafactura'];
+		$this->activarGrabacionAnitaVillafrancaSiNotaCreditoDivision(
+			(int) $puntoventa_id,
+			(int) ($data['tipotransaccion_id'] ?? 0)
+		);
 
 		// Trae el cliente
 		$cliente = $this->clienteQuery->traeClienteporId($cliente_id);
@@ -2211,6 +2246,11 @@ class FacturacionService
 
 		UsuarioPreferenciaFacturacionSupport::guardar($data);
 
+		$this->activarGrabacionAnitaVillafrancaSiNotaCreditoDivision(
+			(int) ($data['puntoventa_id'] ?? 0),
+			(int) ($data['tipotransaccion_id'] ?? 0)
+		);
+
 		// Recalcula factura
 		$calculoFactura = Self::calculaFacturaGeneral($data);
 
@@ -2406,16 +2446,13 @@ class FacturacionService
 					if ($numeroForzado > 0) {
 						$numero = $numeroForzado - 1;
 					} else {
-						$venta = $this->ventaRepository->traeUltimoComprobanteVenta(
-							$tipoTransaccion_id,
-							$puntoventa_id,
-							(int) ($puntoventa->empresa_id ?? 0) ?: null,
+						$numero = $this->ultimoNumeroBaseModoManual(
+							$puntoventa,
+							$tipotransaccion,
+							$letra,
+							$cliente,
+							$totalComprobante,
 						);
-						if ($venta) {
-							$numero = $venta->numerocomprobante;
-						} else {
-							$numero = 0;
-						}
 					}
 					break;
 			}			
@@ -2428,18 +2465,17 @@ class FacturacionService
 					$factura->loadMissing(['asientos.asiento_movimientos']);
 					$asientoFactura = $factura->asientos;
 					if ($asientoFactura) {
-						$asientoContable = [];
-						foreach ($asientoFactura->asiento_movimientos as $movimiento)
-						{
-							// monto firmado invertido: positivo=Debe, negativo=Haber.
-							// grabaAsientoContable detecta signos cruzados y no vuelve a
-							// volcar todo al Debe ni agrega deudores otra vez.
-							$asientoContable[] = ['empresa_id' => $asientoFactura->empresa_id,
-												'cuentacontable_id' => $movimiento->cuentacontable_id,
-												'monto' => ((float) $movimiento->monto) * -1
-												];
-
-							$centrocosto_id = $movimiento->centrocosto_id;
+						$asientoContable = $this->asientoInvertidoDesdeFactura(
+							$asientoFactura,
+							(float) $totalComprobante,
+							(int) $empresa->id
+						);
+						$ultimoMov = $asientoFactura->asiento_movimientos->last();
+						if ($ultimoMov) {
+							$centrocosto_id = $ultimoMov->centrocosto_id;
+						}
+						if ($asientoContable === []) {
+							$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
 						}
 					} else {
 						$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
@@ -2453,11 +2489,12 @@ class FacturacionService
 				// Arma detalle
 				$detalleContable = $tipoAnita." ".$letra." ".$puntoventa->codigo." ".$numero;
 
-				// Procesa Factura electronica
-				if ($puntoventa->modofacturacion != 'M')
+				// Procesa Factura electronica (o NC Villafranca: Anita usa el mismo payload).
+				if ($puntoventa->modofacturacion != 'M' || $this->flGrabaComprobanteDividido)
 				{
 					// Arma tributos
 					$tributos = [];
+					$totalTributo = 0;
 					$this->facturaelectronicaService->armaTributo($conceptosTotales, $tributos, $totalTributo);
 
 					// Arma impuestos
@@ -2474,9 +2511,10 @@ class FacturacionService
 					
 					// Lee moneda
 					$moneda = Moneda::find($moneda_id);
-					$codigomoneda = 'PES';
-					if ($moneda)
-						$codigoMoneda = $moneda->abreviatura;
+					$codigoMoneda = 'PES';
+					if ($moneda) {
+						$codigoMoneda = $moneda->abreviatura ?: 'PES';
+					}
 
 					$arcaTipodoc = $cliente->tipodocumentos->codigoexterno;
 					$arcaNumerodoc = $cliente->numerodocumento;
@@ -2862,17 +2900,15 @@ class FacturacionService
 
 				//$numero = 74405;
 			}
-			else // Numera manualmente
+			else // Numera manualmente: max+1 por tipo, letra y punto de venta
 			{
-				$venta = $this->ventaRepository->traeUltimoComprobanteVenta(
-					$tipoTransaccion_id,
-					$puntoventa_id,
-					(int) ($puntoventa->empresa_id ?? 0) ?: null,
+				$numero = $this->ultimoNumeroBaseModoManual(
+					$puntoventa,
+					$tipotransaccion,
+					$letra,
+					$cliente,
+					$totalComprobante,
 				);
-				if ($venta)
-					$numero = $venta->numerocomprobante;
-				else	
-					$numero = 0;
 			}
 
 			if ($numero != -1)
@@ -3214,10 +3250,19 @@ class FacturacionService
 		$omitirSincronizacionAnita = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_sincronizacion_anita']);
 		$omitirStkmovAnita = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_stkmov_anita']);
 		$omitirNumeraAnitaFin = is_array($opcionesEmision) && ! empty($opcionesEmision['omitir_numera_anita_fin']);
-		// CAE/CAEA (PV C/E/A): el número fiscal lo asigna ARCA o ERP; Anita no debe avanzar compemis al cierre.
+		$this->activarGrabacionAnitaVillafrancaSiSignoDivision((int) ($puntoventa->id ?? 0), $signo);
+		// CAE (C/E): el número lo asigna ARCA; Anita no debe avanzar compemis.
+		// CAEA AGG: el ERP ya numeró. El Bierzo CAEA: Anita sigue vivo, numeraAnita al cierre.
 		if (
 			! $omitirNumeraAnitaFin
-			&& in_array((string) ($puntoventa->modofacturacion ?? ''), ['C', 'E', 'A'], true)
+			&& in_array((string) ($puntoventa->modofacturacion ?? ''), ['C', 'E'], true)
+		) {
+			$omitirNumeraAnitaFin = true;
+		}
+		if (
+			! $omitirNumeraAnitaFin
+			&& ($puntoventa->modofacturacion ?? '') === 'A'
+			&& ! EntornoEmpresaSupport::esElBierzo()
 		) {
 			$omitirNumeraAnitaFin = true;
 		}
@@ -3292,9 +3337,12 @@ class FacturacionService
 					$vta = $this->ventaRepository->create($venta);
 					break;
 				} catch (QueryException $e) {
+					$modoPv = (string) ($puntoventa->modofacturacion ?? '');
+					$puedeRenumerarErp = $modoPv === 'A'
+						|| ($modoPv === 'M' && EntornoEmpresaSupport::esElBierzo());
 					if (
 						$intentoCreateVenta > 0
-						|| ($puntoventa->modofacturacion ?? '') !== 'A'
+						|| ! $puedeRenumerarErp
 						|| ! VentaNumerocomprobanteUnicidadSupport::esViolacionNumerocomprobante($e)
 					) {
 						throw $e;
@@ -3511,7 +3559,7 @@ class FacturacionService
 				'venta_id' => $vta->id,
 			];
 
-			if ($puntoventa->modofacturacion != 'M')
+			if ($puntoventa->modofacturacion != 'M' || $this->flGrabaComprobanteDividido)
 			{
 				if (! $omitirSincronizacionAnita) {
 					$modoMinimoAnita = is_array($opcionesEmision)
@@ -3540,6 +3588,9 @@ class FacturacionService
 							'omitir_stkmov_anita' => $omitirStkmovAnita,
 							'omitir_numera_anita_fin' => $omitirNumeraAnitaFin,
 							'modo_facturacion_puntoventa' => $puntoventa->modofacturacion ?? null,
+							'path_sistema' => $this->flGrabaComprobanteDividido
+								? PedidoFacturaAnitaArchivosSupport::PATH_VILLAFRANCA
+								: null,
 						];
 					} else {
 						$replicacionAnitaIntentada = true;
@@ -3566,23 +3617,25 @@ class FacturacionService
 					}
 				}
 
-				if ($omitirSolicitudArcaCae) {
-					$ret['cae_pendiente'] = [
-						'empresa' => $empresa,
-						'codigo_tipo_transaccion' => $codigoTipoTransaccion,
-						'tipo_anita' => substr($venta['codigo'], 0, 3),
-						'letra' => $letra,
-						'puntoventa' => $puntoventa,
-						'numero_comprobante' => $numero,
-						'fecha_factura' => $fechaFactura,
-						'data_cae' => $dataCAE,
-						'venta_id' => $vta->id,
-						'opciones_emision_arca' => is_array($opcionesEmision) ? $opcionesEmision : [],
-					];
-				} else {
-					// Solicita CAE/CAEA en ARCA (último paso del flujo estándar).
-					Self::solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, substr($venta['codigo'], 0, 3),
-						$letra, $puntoventa, $venta['numerocomprobante'], $fechaFactura, $dataCAE, $vta->id);
+				if ($puntoventa->modofacturacion != 'M') {
+					if ($omitirSolicitudArcaCae) {
+						$ret['cae_pendiente'] = [
+							'empresa' => $empresa,
+							'codigo_tipo_transaccion' => $codigoTipoTransaccion,
+							'tipo_anita' => substr($venta['codigo'], 0, 3),
+							'letra' => $letra,
+							'puntoventa' => $puntoventa,
+							'numero_comprobante' => $numero,
+							'fecha_factura' => $fechaFactura,
+							'data_cae' => $dataCAE,
+							'venta_id' => $vta->id,
+							'opciones_emision_arca' => is_array($opcionesEmision) ? $opcionesEmision : [],
+						];
+					} else {
+						// Solicita CAE/CAEA en ARCA (último paso del flujo estándar).
+						Self::solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, substr($venta['codigo'], 0, 3),
+							$letra, $puntoventa, $venta['numerocomprobante'], $fechaFactura, $dataCAE, $vta->id);
+					}
 				}
 			}
 
@@ -3640,7 +3693,13 @@ class FacturacionService
 			return;
 		}
 
-		if (! $puntoventa || ($puntoventa->modofacturacion ?? '') === 'M') {
+		if (! $puntoventa) {
+			return;
+		}
+		if (PedidoFacturaAnitaArchivosSupport::esPuntoVentaDivision((int) ($puntoventa->id ?? 0))) {
+			$this->flGrabaComprobanteDividido = true;
+		}
+		if (($puntoventa->modofacturacion ?? '') === 'M' && ! $this->debeReplicarAnitaVillafrancaAunqueModoManual($puntoventa)) {
 			return;
 		}
 
@@ -3671,7 +3730,13 @@ class FacturacionService
 		}
 
 		$puntoventa = $this->puntoventaRepository->find($venta->puntoventa_id);
-		if (! $puntoventa || ($puntoventa->modofacturacion ?? '') === 'M') {
+		if (! $puntoventa) {
+			return;
+		}
+		if (PedidoFacturaAnitaArchivosSupport::esPuntoVentaDivision((int) $puntoventa->id)) {
+			$this->flGrabaComprobanteDividido = true;
+		}
+		if (($puntoventa->modofacturacion ?? '') === 'M' && ! $this->debeReplicarAnitaVillafrancaAunqueModoManual($puntoventa)) {
 			return;
 		}
 
@@ -4996,10 +5061,19 @@ class FacturacionService
 				$puntoventa,
 				($this->flGrabaComprobanteDividido ? '/usr2/villafranca' : null),
 			);
+			// El número ya se eligió ANTES de grabar (ERP + MAX/numerador). Esto solo
+			// avanza compemis. Si no hay fila (NCD Villafranca suc. 15), AGG dejaba 0 y seguía.
+			if (is_string($resultadoNumera) && stripos($resultadoNumera, 'Error') === 0) {
+				return ['error' => 'Error numerador comprobante', 'mensaje' => 'No pudo numerar comprobante: '.$resultadoNumera];
+			}
 			if (! is_int($resultadoNumera) || $resultadoNumera <= 0) {
-				$detalle = is_string($resultadoNumera) ? $resultadoNumera : 'respuesta inválida del numerador';
-
-				return ['error' => 'Error numerador comprobante', 'mensaje' => 'No pudo numerar comprobante: '.$detalle];
+				Log::warning('facturacion.anita.numerador_ausente_post_grabacion', [
+					'tipo' => substr((string) ($venta['codigo'] ?? ''), 0, 3),
+					'letra' => $letra,
+					'sucursal' => $puntoventa,
+					'numero' => $venta['numerocomprobante'] ?? null,
+					'resultado' => $resultadoNumera,
+				]);
 			}
 		}
 
@@ -5402,6 +5476,53 @@ class FacturacionService
 		);
 
 		return CaeaEmisionNumeracionSupport::aplicarPisoCaea((int) ($puntoventa->id ?? 0), $ultimoErp);
+	}
+
+	/**
+	 * PV modo M. El Bierzo: max(ERP ARCA+letra+PV, Anita tipo+letra+sucursal); el caller suma 1.
+	 * AGG y resto: último comprobante del tipotransaccion_id en el PV (sin cambiar).
+	 */
+	private function ultimoNumeroBaseModoManual(
+		object $puntoventa,
+		object $tipotransaccion,
+		string $letra,
+		?object $cliente = null,
+		$totalComprobante = null,
+	): int {
+		if (! EntornoEmpresaSupport::esElBierzo()) {
+			$venta = $this->ventaRepository->traeUltimoComprobanteVenta(
+				(int) ($tipotransaccion->id ?? 0),
+				(int) ($puntoventa->id ?? 0),
+				(int) ($puntoventa->empresa_id ?? 0) ?: null,
+			);
+
+			return $venta ? (int) $venta->numerocomprobante : 0;
+		}
+
+		$ultimoErp = VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpDesdeTipotransaccion(
+			(int) ($puntoventa->id ?? 0),
+			$tipotransaccion->codigo ?? 0,
+			$letra,
+			(int) ($puntoventa->empresa_id ?? 0) ?: null,
+			is_object($cliente) ? ($cliente->modoFacturacion ?? null) : null,
+			$totalComprobante !== null ? (float) $totalComprobante : null,
+		);
+
+		$tipoAnita = ((string) ($tipotransaccion->codigo ?? '')) >= '200'
+			? substr((string) ($tipotransaccion->abreviatura ?? ''), 0, 1).'CE'
+			: (string) ($tipotransaccion->abreviatura ?? 'FAC');
+		$path = PedidoFacturaAnitaArchivosSupport::esPuntoVentaDivision((int) ($puntoventa->id ?? 0))
+			? PedidoFacturaAnitaArchivosSupport::PATH_VILLAFRANCA
+			: null;
+
+		$ultimoAnita = $this->ventaRepository->maxNumeroComprobanteAnitaBridge(
+			$tipoAnita,
+			$letra,
+			(string) ($puntoventa->codigo ?? ''),
+			$path,
+		);
+
+		return max($ultimoErp, $ultimoAnita);
 	}
 
 	/**
@@ -5893,6 +6014,53 @@ class FacturacionService
 		return $numeroOperacion;
 	}
 
+	/**
+	 * Invierte el asiento de la factura origen para la NC.
+	 * Si las piernas tienen el mismo absoluto (caso típico 2 cuentas), usa el total
+	 * del comprobante al centavo: round(suma cruda) puede dar .39 y el total .38.
+	 *
+	 * @return list<array{empresa_id:int, cuentacontable_id:mixed, monto:float}>
+	 */
+	private function asientoInvertidoDesdeFactura($asientoFactura, float $totalComprobante, int $empresaId): array
+	{
+		$movimientos = $asientoFactura->asiento_movimientos ?? collect();
+		if ($movimientos->isEmpty()) {
+			return [];
+		}
+
+		$totalAbs = VentaImporteDosDecimalesSupport::redondear(abs($totalComprobante));
+		$absMontos = [];
+		foreach ($movimientos as $movimiento) {
+			$abs = abs((float) $movimiento->monto);
+			if ($abs > 0.009) {
+				$absMontos[] = $abs;
+			}
+		}
+		$mismoAbsoluto = $absMontos !== []
+			&& (max($absMontos) - min($absMontos)) < 0.02;
+
+		$asientoContable = [];
+		$empresaAsiento = (int) ($asientoFactura->empresa_id ?? $empresaId);
+		foreach ($movimientos as $movimiento) {
+			$montoFac = (float) $movimiento->monto;
+			if (abs($montoFac) < 0.009) {
+				continue;
+			}
+			$signoFac = $montoFac >= 0 ? 1. : -1.;
+			$montoNc = $mismoAbsoluto
+				? (-1 * $signoFac * $totalAbs)
+				: VentaImporteDosDecimalesSupport::redondear($montoFac * -1);
+
+			$asientoContable[] = [
+				'empresa_id' => $empresaAsiento,
+				'cuentacontable_id' => $movimiento->cuentacontable_id,
+				'monto' => $montoNc,
+			];
+		}
+
+		return $asientoContable;
+	}
+
 	public function armaContabilidad($dataFactura, $conceptostotales, $empresa_id, $total)
 	{
 		$asientoContable = [];
@@ -5945,7 +6113,7 @@ class FacturacionService
 		{
 			foreach ($dataFactura as $item)
 			{
-				$monto = $item['cantidad'] * $item['precio'];
+				$monto = VentaImporteDosDecimalesSupport::redondear($item['cantidad'] * $item['precio']);
 
 				if ($monto != 0)
 				{
@@ -6388,6 +6556,7 @@ class FacturacionService
 			'gastronomiaEmision',
 			'clientes.tipodocumentos',
 			'clientes.condicioniibbs',
+			'condicionventas',
 			'clientes.condicionventas',
 			'clientes.localidades',
 			'clientes.provincias',

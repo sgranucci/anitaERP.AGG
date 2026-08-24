@@ -43,7 +43,7 @@
     <tr>
         <td>Remito: {{ $venta->numeroremito }}</td>
         <td>@if (isset($venta->transportes->codigo)) Reparto: {{ $venta->transportes->codigo }} @endif</td>
-        <td class="text-right">Condicion de Venta: {{ $venta->clientes->condicionesventa->nombre ?? 'CONTADO' }}</td>
+        <td class="text-right">Condicion de Venta: {{ $venta->condicionventas->nombre ?? $venta->clientes->condicionventas->nombre ?? 'CONTADO' }}</td>
     </tr>
     @endif
 </table>
@@ -100,7 +100,7 @@
     <tr>
         <td>Remito: {{ $venta->numeroremito }}</td>
         <td class="text-center">@if (isset($venta->transportes->codigo)) Reparto: {{ $venta->transportes->codigo }} @endif</td>
-        <td class="text-right">Condicion de Venta: {{ $venta->clientes->condicionesventa->nombre ?? 'CONTADO' }}</td>
+        <td class="text-right">Condicion de Venta: {{ $venta->condicionventas->nombre ?? $venta->clientes->condicionventas->nombre ?? 'CONTADO' }}</td>
     </tr>
 </table>
 @else

@@ -23,6 +23,10 @@
 	window.sincronizarCantidadesItemsFactura = sincronizarCantidadesItemsFactura;
 
 	window.asignaPrecio = function (ptr, Particulo_id, Ptalle_id) {
+		if ($('#formgeneral').attr('data-factura-proceso') === 'nc') {
+			return;
+		}
+
 		var cliente_id = $('#cliente_id').val();
 		var articulo_id = $(ptr).parents('tr').find('.articulo_id').val();
 

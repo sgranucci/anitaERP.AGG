@@ -406,7 +406,7 @@
                 			</td>
 							@endif								
                 			<td>
-                				<input type="text" style="text-align: right;" name="precios[]" class="form-control precio" readonly value="{{ number_format($numeroOldIndice('precios', $idxItem, optional($item)->precio ?? 0), 2) }}" />
+                				<input type="text" style="text-align: right;" name="precios[]" class="form-control precio" readonly value="{{ \App\Support\Ventas\VentaNotaCreditoPrecioLiteralSupport::formatLiteral($valorOldIndice('precios', $idxItem, optional($item)->precio ?? 0)) }}" />
                 			</td>							
                 			<td>
 								<button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar tooltipsC">
@@ -521,10 +521,3 @@
 @include('includes.ventas.modalconsultacliente')
 @include('includes.ventas.modalconsultavendedor')
 @include('includes.ventas.modalconsultatransporte')
-@include('includes.proceso_overlay_aviso', [
-	'overlayId' => 'factura-procesando-overlay',
-	'tituloId' => 'factura-procesando-titulo',
-	'subtituloId' => 'factura-procesando-subtitulo',
-	'titulo' => 'Generando comprobante…',
-	'subtitulo' => 'Por favor espere. No cierre ni recargue la página.',
-])

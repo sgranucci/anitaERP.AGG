@@ -10,19 +10,32 @@ use App\Support\Database\DbContencionSupport;
 use Throwable;
 
 /**
- * Defensa ante colisión de numerocomprobante en el mismo punto de venta (índice único venta).
+ * Defensa ante colisión de numerocomprobante (índice único venta).
+ *
+ * AGG / CAEA gastro: unique (puntoventa_id, numerocomprobante) — no se toca.
+ * El Bierzo: unique (codigo_afip, puntoventa_id, numerocomprobante).
+ * codigo_afip es el tipo ARCA efectivo (001+letra, 002 ND, 003 NC, 201 FCE, 202 NDE, 203 NCE):
+ * FAC A y FAG A (ambas 001) no pueden repetir sucursal+número; FAC A 10-1 y FAC B 10-1 sí (001 vs 006).
  */
 final class VentaNumerocomprobanteUnicidadSupport
 {
     public const UNIQUE_INDEX = 'venta_puntoventa_numerocomprobante_unique';
+
+    public const UNIQUE_INDEX_ELBIERZO_TIPO = 'venta_puntoventa_tipotransaccion_numerocomprobante_unique';
+
+    public const UNIQUE_INDEX_ELBIERZO_AFIP = 'venta_codigo_afip_puntoventa_numerocomprobante_unique';
 
     public static function esViolacionNumerocomprobante(Throwable $e): bool
     {
         return DbContencionSupport::esViolacionUnicidad(
             $e,
             self::UNIQUE_INDEX,
+            self::UNIQUE_INDEX_ELBIERZO_TIPO,
+            self::UNIQUE_INDEX_ELBIERZO_AFIP,
             'numerocomprobante',
             'puntoventa_numerocomprobante',
+            'puntoventa_tipotransaccion_numerocomprobante',
+            'codigo_afip_puntoventa_numerocomprobante',
         );
     }
 

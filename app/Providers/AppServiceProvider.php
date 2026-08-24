@@ -153,6 +153,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Ventas\Cliente_Exclusion_PercepcionRepositoryInterface',
+            'App\Repositories\Ventas\Cliente_Exclusion_PercepcionRepository',
+        );
+
+        $this->app->bind(
             'App\Queries\Ventas\ClienteQueryInterface',
             'App\Queries\Ventas\ClienteQuery',
         );

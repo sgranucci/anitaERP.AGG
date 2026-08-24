@@ -156,6 +156,11 @@ final class PedidoFacturaAnitaArchivosSupport
         ]));
     }
 
+    public static function esPuntoVentaDivision(int $puntoventaId): bool
+    {
+        return $puntoventaId > 0 && in_array($puntoventaId, self::idsPuntoVentaDivision(), true);
+    }
+
     /**
      * Facturas del pedido visibles en el ABM: solo El Bierzo, no Villafranca.
      *

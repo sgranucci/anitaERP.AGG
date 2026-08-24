@@ -140,6 +140,7 @@
                         @include('ventas.cliente.form6')
                         @include('ventas.cliente.form7')
                         @include('ventas.cliente.form8')
+                        @include('ventas.cliente.form10')
                         @if (config('suitecrm.habilitado'))
                             @include('ventas.cliente.form9')
                         @endif

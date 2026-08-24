@@ -4,13 +4,15 @@ namespace App\Support\Ventas;
 
 use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
+use App\Repositories\Ventas\VentaRepositoryInterface;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use InvalidArgumentException;
 
 /**
- * Numeración CAEA (PV mod A) exclusivamente en anitaERP (tabla venta).
+ * Numeración CAEA (PV mod A).
  *
- * Reserva bajo lock de PV; gastronomía/estacionamiento mantienen ese lock hasta
- * completar la emisión para evitar duplicados entre módulos en el mismo PV.
+ * AGG / gastronomía: reserva en ERP (max venta.numerocomprobante).
+ * El Bierzo: max(ERP, Anita bridge) mientras Informix sigue vivo; al grabar se avanza compemis.
  */
 final class CaeaEmisionNumeracionSupport
 {
@@ -45,6 +47,22 @@ final class CaeaEmisionNumeracionSupport
             $modoFacturacionCliente,
             $totalComprobante,
         );
+
+        if (EntornoEmpresaSupport::esElBierzo()) {
+            $puntoventa = Puntoventa::query()->find($puntoventaId);
+            $sucursal = trim((string) ($puntoventa->codigo ?? ''));
+            $tipoAnita = self::tipoAnitaDesdeTipotransaccion($tipotransaccion);
+            $path = PedidoFacturaAnitaArchivosSupport::esPuntoVentaDivision($puntoventaId)
+                ? PedidoFacturaAnitaArchivosSupport::PATH_VILLAFRANCA
+                : null;
+            $ultimoAnita = app(VentaRepositoryInterface::class)->maxNumeroComprobanteAnitaBridge(
+                $tipoAnita,
+                $letraComprobante,
+                $sucursal,
+                $path,
+            );
+            $ultimoErp = max($ultimoErp, $ultimoAnita);
+        }
 
         return self::aplicarPisoCaea($puntoventaId, $ultimoErp) + 1;
     }
@@ -93,7 +111,7 @@ final class CaeaEmisionNumeracionSupport
         }
 
         if (! empty($payload['numerocomprobante_forzado'])) {
-            $payload['_omitir_numera_anita_fin'] = true;
+            $payload['_omitir_numera_anita_fin'] = ! EntornoEmpresaSupport::esElBierzo();
 
             return null;
         }
@@ -130,7 +148,9 @@ final class CaeaEmisionNumeracionSupport
             }
 
             $payload['numerocomprobante_forzado'] = $numero;
-            $payload['_omitir_numera_anita_fin'] = true;
+            // AGG CAEA: el ERP ya numeró; no tocar compemis.
+            // El Bierzo: Anita sigue vivo; numeraAnita al cierre mantiene el numerador.
+            $payload['_omitir_numera_anita_fin'] = ! EntornoEmpresaSupport::esElBierzo();
         } finally {
             if (! $lockYaAdquirido) {
                 PuntoventaEmisionLock::liberar($lock);
