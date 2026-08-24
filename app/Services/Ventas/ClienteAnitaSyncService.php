@@ -82,6 +82,17 @@ class ClienteAnitaSyncService
     }
 
     /**
+     * @return array{en_anita:int, actualizados:int, omitidos:int, sin_cliente:int, sin_mapeo:int, errores:list<string>, ejemplos:list<array<string, mixed>>}
+     */
+    public function actualizarCoeficienteIdDesdeAnita(bool $persistir = false): array
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        return $this->clienteRepository->actualizarCoeficienteIdDesdeAnita($persistir);
+    }
+
+    /**
      * @return list<object>
      */
     public function listarDesdeAnita(): array

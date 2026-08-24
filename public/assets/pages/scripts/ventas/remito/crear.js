@@ -1658,6 +1658,10 @@
 
 	function generaFactura()
 	{
+		if (typeof window.clienteEsDespacho === 'function' && window.clienteEsDespacho($('#cliente_id').val())) {
+			alert(window.mensajeClienteDespachoNoFacturable());
+			return;
+		}
 		if (typeof validarLugarEntregaAntesGuardar === 'function' && !validarLugarEntregaAntesGuardar()) {
 			return;
 		}

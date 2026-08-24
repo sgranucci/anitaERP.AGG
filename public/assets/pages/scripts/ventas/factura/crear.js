@@ -187,6 +187,13 @@
 			return;
 		}
 
+		if (typeof window.clienteEsDespacho === 'function' && window.clienteEsDespacho($('#cliente_id').val())) {
+			alert(typeof window.mensajeClienteDespachoNoFacturable === 'function'
+				? window.mensajeClienteDespachoNoFacturable()
+				: 'El cliente DESPACHO no se factura. Use Transferir al despacho.');
+			return;
+		}
+
         var tipotransaccion_id = $("#tipotransaccion_id").val();
 		var puntoventa_id = $("#puntoventa_id").val();
 
@@ -375,7 +382,7 @@
 				$('#descuentopie').val(descuento);
 				descuentoCliente = $('#descuentopie').val();
 				if (typeof window.actualizarAvisoDepositoFacturacion === 'function') {
-					window.actualizarAvisoDepositoFacturacion(transporte_id);
+					window.actualizarAvisoDepositoFacturacion(transporte_id, { sincronizarCampo: true });
 				}
 			}
 			$('#tiposuspension_id').val(tiposuspension_id);

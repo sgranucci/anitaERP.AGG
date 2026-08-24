@@ -25,6 +25,8 @@ use App\Services\Ventas\RemitoListadoPdfService;
 use App\Services\Ventas\RemitoService;
 use App\Support\Ventas\RemitoListadoFiltros;
 use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
+use App\Support\Ventas\ClienteDespachoSupport;
+use App\Support\Ventas\RemitoEstadosSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -329,6 +331,8 @@ class RemitoController extends Controller
 
         $ocultarVolver = $soloConsulta;
         $puedeActualizarRemito = can('actualizar-remitos', false);
+        $mostrarFacturarRemito = RemitoEstadosSupport::puedeFacturarCabecera($remito)
+            && ! ClienteDespachoSupport::esPedidoDespacho((int) ($remito->cliente_id ?? 0));
 
         return view('ventas.remito.editar', compact(
             'remito',
@@ -352,7 +356,8 @@ class RemitoController extends Controller
             'actividad_arca_query',
             'soloConsulta',
             'ocultarVolver',
-            'puedeActualizarRemito'
+            'puedeActualizarRemito',
+            'mostrarFacturarRemito'
         ));
     }
 

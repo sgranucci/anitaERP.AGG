@@ -18,6 +18,7 @@
 <script src="{{asset("assets/pages/scripts/ventas/transporte/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/zonavta/consulta.js")}}" type="text/javascript"></script>
 @include('includes.ventas.preferencias_facturacion_scripts')
+@include('includes.ventas.cliente_despacho_js')
 <script src="{{ asset('assets/pages/scripts/ventas/remito/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/remito/crear.js')) ?: time() }}" type="text/javascript"></script>
 
 <script>
@@ -82,10 +83,7 @@
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                     @endif
-                    @php
-                        $puedeFacturarRemito = \App\Support\Ventas\RemitoEstadosSupport::puedeFacturarCabecera($remito);
-                    @endphp
-                    @if ($puedeFacturarRemito)
+                    @if (!empty($mostrarFacturarRemito))
                         <button type="button" onclick="generaFactura()" class="btn btn-primary" data-padron-accion-factura="1">
                             <i class="fa fa-fw fa-print"></i>
                             Factura

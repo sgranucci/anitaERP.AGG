@@ -19,6 +19,7 @@
 <script src="{{asset("assets/pages/scripts/ventas/zonavta/consulta.js")}}" type="text/javascript"></script>
 @include('includes.ventas.preferencias_facturacion_scripts')
 @include('ventas.partials.aviso_deposito_facturacion')
+@include('includes.ventas.cliente_despacho_js')
 <script src="{{asset("assets/pages/scripts/ventas/pedido/crear.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/crear.js')) ?: time() }}" type="text/javascript"></script>
 <script>
     var CLIENTE_STOCK_ID = "{{ config('cliente.CLIENTE_STOCK_ID') }}";

@@ -62,6 +62,7 @@ use App\Support\Ventas\PedidoItemCierreFaltaStockSupport;
 use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use App\Support\Ventas\VentaEmisionCajaPiezaSupport;
 use App\Support\Ventas\ArcaCaeaAnitaTipoAfipSupport;
+use App\Support\Ventas\ElBierzoFacturacionCaeaSaltoSupport;
 use App\Models\Stock\Talle;
 use App\Models\Stock\Material;
 use App\Models\Stock\Materialcapellada;
@@ -361,6 +362,10 @@ class FacturacionService
 
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
+
+		if ($errorDespacho = $this->errorClienteDespachoNoFacturable($data, $cliente_id)) {
+			return $errorDespacho;
+		}
 		
 		if ($cliente->numerodocumento == null)
 			return ['error' => 'No tiene Documento'];
@@ -603,8 +608,8 @@ class FacturacionService
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
 
-		if (ClienteDespachoSupport::es((int) $cliente_id)) {
-			return ['error' => 'El pedido del cliente DESPACHO no se factura. Use Transferir al despacho.'];
+		if ($errorDespacho = $this->errorClienteDespachoNoFacturable($data, $cliente_id)) {
+			return $errorDespacho;
 		}
 
 		// Lee el tipo de transaccion
@@ -727,6 +732,16 @@ class FacturacionService
 
 	public function generaUnaFacturaPorPedido(array $data, $cliente, $pedido)
 	{
+		if (empty($data[ElBierzoFacturacionCaeaSaltoSupport::FLAG_INTERNO])) {
+			$data[ElBierzoFacturacionCaeaSaltoSupport::FLAG_INTERNO] = true;
+
+			return ElBierzoFacturacionCaeaSaltoSupport::ejecutarConReintento(
+				$data,
+				fn (array $dataSalto) => $this->generaUnaFacturaPorPedido($dataSalto, $cliente, $pedido)
+			);
+		}
+		unset($data[ElBierzoFacturacionCaeaSaltoSupport::FLAG_INTERNO]);
+
 		// Recibe datos para facturar
 		$pedido_articulo_ids = $data['pedido_articulo_ids'];
 
@@ -1960,6 +1975,10 @@ class FacturacionService
 
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
+
+		if ($errorDespacho = $this->errorClienteDespachoNoFacturable($data, $cliente_id)) {
+			return $errorDespacho;
+		}
 		
 		if (! isset($data['arca_receptor']) && $cliente->numerodocumento == null)
 			return ['error' => 'No tiene Documento'];
@@ -2178,6 +2197,16 @@ class FacturacionService
 
 	public function generaComprobanteGeneral(array $data)
 	{
+		if (empty($data[ElBierzoFacturacionCaeaSaltoSupport::FLAG_INTERNO])) {
+			$data[ElBierzoFacturacionCaeaSaltoSupport::FLAG_INTERNO] = true;
+
+			return ElBierzoFacturacionCaeaSaltoSupport::ejecutarConReintento(
+				$data,
+				fn (array $dataSalto) => $this->generaComprobanteGeneral($dataSalto)
+			);
+		}
+		unset($data[ElBierzoFacturacionCaeaSaltoSupport::FLAG_INTERNO]);
+
 		$data = $this->normalizaItemsFacturaGeneralDesdePedido($data);
 
 		UsuarioPreferenciaFacturacionSupport::guardar($data);
@@ -2272,8 +2301,8 @@ class FacturacionService
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
 
-		if (! $this->esEmisionPos($data) && ClienteDespachoSupport::es((int) $cliente_id)) {
-			return ['error' => 'El cliente DESPACHO no se factura. Use Transferir al despacho.'];
+		if ($errorDespacho = $this->errorClienteDespachoNoFacturable($data, $cliente_id)) {
+			return $errorDespacho;
 		}
 
 		$clienteGraba = clone $cliente;
@@ -6035,6 +6064,20 @@ class FacturacionService
 	}
 
 	/**
+	 * El Bierzo: cliente DESPACHO no factura (ventas / pedido / remito). POS gastronomía no aplica.
+	 *
+	 * @return array{error: string}|null
+	 */
+	private function errorClienteDespachoNoFacturable(array $data, mixed $clienteId): ?array
+	{
+		if ($this->esEmisionPos($data)) {
+			return null;
+		}
+
+		return ClienteDespachoSupport::errorNoFacturable((int) $clienteId);
+	}
+
+	/**
 	 * POS gastronomía, estacionamiento o canje: no usa depósito ni transporte de reparto.
 	 *
 	 * @param  array<string, mixed>  $data
@@ -7221,6 +7264,9 @@ class FacturacionService
 		if (! $cliente) {
 			return ['error' => 'Cliente inexistente'];
 		}
+		if ($errorDespacho = $this->errorClienteDespachoNoFacturable($data, $cliente_id)) {
+			return $errorDespacho;
+		}
 		if ($cliente->numerodocumento == null) {
 			return ['error' => 'No tiene Documento'];
 		}
@@ -7374,6 +7420,9 @@ class FacturacionService
 		$cliente = $this->clienteQuery->traeClienteporId($cliente_id);
 		if (! $cliente) {
 			return ['error' => 'Cliente inexistente'];
+		}
+		if ($errorDespacho = $this->errorClienteDespachoNoFacturable($data, $cliente_id)) {
+			return $errorDespacho;
 		}
 
 		$errorEntrega = $this->validarLugarEntregaPedido($cliente, $remito);

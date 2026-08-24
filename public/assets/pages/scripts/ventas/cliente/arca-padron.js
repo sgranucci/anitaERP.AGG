@@ -436,6 +436,9 @@
 		if (!box || !msg) return;
 
 		if (!validacion || validacion.ok || !validacion.aplica) {
+			if (typeof window.marcarPadronArcaClienteConProblemas === 'function') {
+				window.marcarPadronArcaClienteConProblemas(false);
+			}
 			box.style.display = 'none';
 			msg.textContent = '';
 			if (det) {
@@ -449,6 +452,9 @@
 		}
 
 		box.style.display = 'block';
+		if (typeof window.marcarPadronArcaClienteConProblemas === 'function') {
+			window.marcarPadronArcaClienteConProblemas(true);
+		}
 		msg.textContent = validacion.mensaje || 'Problemas en ARCA: el cliente no tiene impuestos activos.';
 		if (det) {
 			det.innerHTML = '';

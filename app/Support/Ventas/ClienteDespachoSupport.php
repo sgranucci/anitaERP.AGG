@@ -33,6 +33,31 @@ final class ClienteDespachoSupport
         return self::circuitoHabilitado() && self::es($clienteId);
     }
 
+    /**
+     * El Bierzo: DESPACHO solo carga pedidos (reposición); no entra en factura de ventas, pedido ni remito.
+     */
+    public static function noFacturable(?int $clienteId): bool
+    {
+        return self::esPedidoDespacho($clienteId);
+    }
+
+    public static function mensajeNoFacturable(): string
+    {
+        return 'El cliente DESPACHO no se factura. Use Transferir al despacho.';
+    }
+
+    /**
+     * @return array{error: string}|null
+     */
+    public static function errorNoFacturable(?int $clienteId): ?array
+    {
+        if (! self::noFacturable($clienteId)) {
+            return null;
+        }
+
+        return ['error' => self::mensajeNoFacturable()];
+    }
+
     public static function codigoErp(): string
     {
         $id = self::id();

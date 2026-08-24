@@ -6,6 +6,7 @@
 @section("scripts")
 <script>window.VALIDACION_PADRON_POST_CARGA = true;</script>
 <script>window.REQUIERE_VALIDACION_PADRON_OPERACION = true;</script>
+@include('includes.ventas.cliente_despacho_js', ['clienteDespachoNoFacturar' => true])
 @php
     $requiereValidacionApocOperacion = filter_var(config('arca_wsapoc.validar_factura_cliente', true), FILTER_VALIDATE_BOOLEAN)
         && filter_var(config('arca_wsapoc.habilitado', true), FILTER_VALIDATE_BOOLEAN);
@@ -43,6 +44,13 @@
             } else {
                 alert('Problemas en ARCA: no puede operar con este cliente.');
             }
+            return false;
+        }
+
+        if (typeof window.clienteEsDespacho === 'function' && window.clienteEsDespacho($('#cliente_id').val())) {
+            alert(typeof window.mensajeClienteDespachoNoFacturable === 'function'
+                ? window.mensajeClienteDespachoNoFacturable()
+                : 'El cliente DESPACHO no se factura. Use Transferir al despacho.');
             return false;
         }
 

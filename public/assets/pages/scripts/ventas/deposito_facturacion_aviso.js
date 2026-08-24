@@ -50,27 +50,56 @@
         return '';
     }
 
-    window.actualizarAvisoDepositoFacturacion = function (transporteId) {
-        var $targets = $('.aviso-deposito-facturacion');
-        if (!$targets.length) {
+    function $campoDepositoFactura() {
+        var $ctx = $('#tm_deposito_factura');
+        if ($ctx.length) {
+            return $ctx;
+        }
+        var $hidden = $('#deposito_id');
+        if ($hidden.length && $hidden.closest('.tm-deposito-campo').length) {
+            return $hidden.closest('.tm-deposito-campo');
+        }
+
+        return $();
+    }
+
+    function aplicarCampoDepositoDesdeReparto(info) {
+        var $ctx = $campoDepositoFactura();
+        if (!$ctx.length || !info || !info.id) {
             return;
         }
+        $ctx.find('.deposito_id').val(info.id);
+        $ctx.find('.codigodeposito').val(info.codigo || '');
+        $ctx.find('.descripciondeposito').val(info.nombre || '');
+        if (typeof actualizarLinkEditarDeposito === 'function') {
+            actualizarLinkEditarDeposito($ctx, info.id);
+        }
+    }
+
+    window.actualizarAvisoDepositoFacturacion = function (transporteId, opciones) {
+        opciones = opciones || {};
+        var $targets = $('.aviso-deposito-facturacion');
         var info = infoDeposito(transporteId != null ? transporteId : transporteIdActual());
-        var texto = mensaje(info);
-        $targets.each(function () {
-            var $el = $(this);
-            if (!texto) {
-                $el.addClass('d-none').text('');
-                return;
-            }
-            $el.removeClass('d-none').text(texto);
-        });
+        if ($targets.length) {
+            var texto = mensaje(info);
+            $targets.each(function () {
+                var $el = $(this);
+                if (!texto) {
+                    $el.addClass('d-none').text('');
+                    return;
+                }
+                $el.removeClass('d-none').text(texto);
+            });
+        }
+        if (opciones.sincronizarCampo) {
+            aplicarCampoDepositoDesdeReparto(info);
+        }
     };
 
     $(function () {
         window.actualizarAvisoDepositoFacturacion();
         $(document).on('change', '#transporte_id, .transporte_id', function () {
-            window.actualizarAvisoDepositoFacturacion($(this).val());
+            window.actualizarAvisoDepositoFacturacion($(this).val(), { sincronizarCampo: true });
         });
         $(document).on('hidden.bs.modal', '#consultatransporteModal', function () {
             window.actualizarAvisoDepositoFacturacion();

@@ -82,6 +82,12 @@ switch(strtoupper(config('app.empresa')))
             "IMPUESTO_INTERNO_TIPOARTICULO_NOMBRE" => $impuestoInternoTipoArticulo,
             // Candado anti-doble factura del mismo pedido (segundos).
             "pedido_facturacion_lock_segundos" => 180,
+            // Salto CAE→CAEA en mostrador / pedido / remito (solo este case EL BIERZO).
+            "SALTO_CAEA_ADMINISTRATIVA" => filter_var(env('FACTURACION_SALTO_CAEA_ADMINISTRATIVA', true), FILTER_VALIDATE_BOOLEAN),
+            "SALTO_CAEA_MAPEO_CODIGOS" => [
+                '00010' => (string) env('FACTURACION_SALTO_CAEA_PARA_00010', '00005'),
+                '00009' => (string) env('FACTURACION_SALTO_CAEA_PARA_00009', '00005'),
+            ],
             // Anita de factura pedido: después de responder. ARCA (número + CAE) sigue síncrono.
             "ANITA_TRAS_RESPUESTA_PEDIDO" => filter_var(env('BIERZO_PEDIDO_ANITA_TRAS_RESPUESTA', true), FILTER_VALIDATE_BOOLEAN),
             "ANITA_PEDIDO_REGRABAR_HABILITADO" => filter_var(env('BIERZO_PEDIDO_ANITA_REGRABAR', true), FILTER_VALIDATE_BOOLEAN),

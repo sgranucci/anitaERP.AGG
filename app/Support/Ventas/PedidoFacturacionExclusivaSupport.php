@@ -87,6 +87,9 @@ final class PedidoFacturacionExclusivaSupport
             if ($estado === PedidoEstadoErpSupport::TRANSFERIDO) {
                 return 'El pedido ya fue transferido al despacho.';
             }
+            if (ClienteDespachoSupport::noFacturable((int) ($pedido->cliente_id ?? 0))) {
+                return ClienteDespachoSupport::mensajeNoFacturable();
+            }
 
             if (self::tieneFacturaEmitida($pedidoId)) {
                 return self::MSG_YA_TIENE_FACTURA;

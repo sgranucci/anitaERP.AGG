@@ -29,12 +29,15 @@ input:invalid {
 @php
     $clienteModalesAbmJs = public_path('assets/pages/scripts/ventas/cliente/consultas-modales-abm.js');
     $arcaPadronJs = public_path('assets/pages/scripts/ventas/cliente/arca-padron.js');
+    $arcaPadronAsyncJs = public_path('assets/pages/scripts/compras/arca-padron-validacion-async.js');
+    $arcaValidacionAbmJs = public_path('assets/pages/scripts/ventas/cliente/arca-validacion-abm.js');
+    $clienteCrearJs = public_path('assets/pages/scripts/ventas/cliente/crear.js');
 @endphp
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/consultas-modales-abm.js') }}?v={{ file_exists($clienteModalesAbmJs) ? filemtime($clienteModalesAbmJs) : time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/arca-padron.js') }}?v={{ file_exists($arcaPadronJs) ? filemtime($arcaPadronJs) : time() }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/compras/arca-padron-validacion-async.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/ventas/cliente/arca-validacion-abm.js') }}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ventas/cliente/crear.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/arca-padron-validacion-async.js') }}?v={{ file_exists($arcaPadronAsyncJs) ? filemtime($arcaPadronAsyncJs) : time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/arca-validacion-abm.js') }}?v={{ file_exists($arcaValidacionAbmJs) ? filemtime($arcaValidacionAbmJs) : time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/crear.js') }}?v={{ file_exists($clienteCrearJs) ? filemtime($clienteCrearJs) : time() }}" type="text/javascript"></script>
 <script>
 $( "#botonform0" ).click(function() {
   $( "#form-general" ).submit();

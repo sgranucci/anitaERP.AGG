@@ -235,7 +235,12 @@ class FacturacionController extends Controller
 			}
 
 			if (is_array($data) && ! empty($data['factura'])) {
-				return redirect('ventas/factura')->with('mensaje', 'Comprobante '.$data['factura'].' generado con éxito');
+				$mensaje = 'Comprobante '.$data['factura'].' generado con éxito';
+				if (! empty($data['aviso_caea'])) {
+					$mensaje .= ' '.$data['aviso_caea'];
+				}
+
+				return redirect('ventas/factura')->with('mensaje', $mensaje);
 			}
 
 			return back()->withInput()->with('errores', ['No se pudo generar el comprobante']);
@@ -422,7 +427,12 @@ class FacturacionController extends Controller
             ]);
         }
 
-        return redirect()->back()->with('mensaje', 'Comprobante '.$comprobante['factura'].' generado con éxito');
+        $mensaje = 'Comprobante '.$comprobante['factura'].' generado con éxito';
+        if (! empty($comprobante['aviso_caea'])) {
+            $mensaje .= ' '.$comprobante['aviso_caea'];
+        }
+
+        return redirect()->back()->with('mensaje', $mensaje);
     }
 
     /**

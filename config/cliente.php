@@ -63,6 +63,8 @@ switch(config('app.empresa'))
             'SINCRONIZA_CLIMA_ANITA' => true,
             // EL BIERZO: permite CUIT duplicados por defecto (override con CLIENTE_PERMITIR_CUIT_DUPLICADO=false)
             'permitir_cuit_duplicado' => filter_var(env('CLIENTE_PERMITIR_CUIT_DUPLICADO', true), FILTER_VALIDATE_BOOLEAN),
+            // Coeficiente extra (clim_coef_extra). Solo lectura en ABM; se asigna en altas.
+            'COEFICIENTE_EXTRA' => (float) env('CLIENTE_COEFICIENTE_EXTRA', 1.05),
             ];
         break;
 

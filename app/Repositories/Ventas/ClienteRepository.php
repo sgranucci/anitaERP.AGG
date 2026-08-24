@@ -35,6 +35,9 @@ use App\Support\Ventas\ClienteAnitaNumeracionSupport;
 use App\Support\Ventas\ClienteAnitaVillafrancaSupport;
 use App\Support\Ventas\ClienteAnitaZonamultSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Ventas\ClienteCuentacontableDefaultSupport;
+use App\Support\Ventas\ClienteCoeficienteExtraSupport;
+use App\Support\Ventas\ClienteDespachoSupport;
 use App\Services\Ventas\ClienteAnitaSyncService;
 use App\Traits\AnitaBridgeEscritura;
 use Carbon\Carbon;
@@ -79,9 +82,19 @@ class ClienteRepository implements ClienteRepositoryInterface
 				$data['agregabonificacion'] = Cliente::$enumAgregaBonificacion['S'];
 			}
 			$data['coeficiente_id'] = $data['coeficiente_id'] ?? null;
-			$data['coeficienteextra'] = $data['coeficienteextra'] ?? 0;
+			$data['coeficienteextra'] = ClienteCoeficienteExtraSupport::valorParaGrabar(
+				isset($data['coeficienteextra']) ? (float) $data['coeficienteextra'] : null
+			);
 			$data['porcentajelogistica'] = $data['porcentajelogistica'] ?? 0;
 			$data['emitecertificado'] = Cliente::normalizarEmiteCertificado($data['emitecertificado'] ?? 'N');
+		}
+
+		$cuentaIdAlta = $data['cuentacontable_id'] ?? null;
+		if ($cuentaIdAlta === '' || $cuentaIdAlta === null || (int) $cuentaIdAlta === 0) {
+			$cuentaDefault = ClienteCuentacontableDefaultSupport::find();
+			if ($cuentaDefault) {
+				$data['cuentacontable_id'] = $cuentaDefault->id;
+			}
 		}
 
 		if ($data['retieneiva'] == null)
@@ -117,8 +130,13 @@ class ClienteRepository implements ClienteRepositoryInterface
 
 		$data = $this->alinearProvinciaConLocalidad($data);
 
-		if (EntornoEmpresaSupport::esElBierzo() && array_key_exists('emitecertificado', $data)) {
-			$data['emitecertificado'] = Cliente::normalizarEmiteCertificado($data['emitecertificado']);
+		if (EntornoEmpresaSupport::esElBierzo()) {
+			if (array_key_exists('emitecertificado', $data)) {
+				$data['emitecertificado'] = Cliente::normalizarEmiteCertificado($data['emitecertificado']);
+			}
+			$data['coeficienteextra'] = ClienteCoeficienteExtraSupport::valorParaGrabar(
+				isset($data['coeficienteextra']) ? (float) $data['coeficienteextra'] : null
+			);
 		}
 
         $cliente = $this->model->findOrFail($id)
@@ -434,6 +452,102 @@ class ClienteRepository implements ClienteRepositoryInterface
     }
 
     /**
+     * Alinea cliente.coeficiente_id con clim_coef de Anita (Anita manda). No escribe en Informix.
+     *
+     * @return array{
+     *   en_anita:int,
+     *   actualizados:int,
+     *   omitidos:int,
+     *   sin_cliente:int,
+     *   sin_mapeo:int,
+     *   errores:list<string>,
+     *   ejemplos:list<array{codigo:string, clim_coef:string, coeficiente_id_erp:?int, coeficiente_id_anita:?int}>
+     * }
+     */
+    public function actualizarCoeficienteIdDesdeAnita(bool $persistir = false): array
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $ret = [
+            'en_anita' => 0,
+            'actualizados' => 0,
+            'omitidos' => 0,
+            'sin_cliente' => 0,
+            'sin_mapeo' => 0,
+            'errores' => [],
+            'ejemplos' => [],
+        ];
+
+        $api = new ApiAnita();
+        $payload = [
+            'acc' => 'list',
+            'tabla' => $this->tableAnita[0],
+            'campos' => $this->keyFieldAnita.', clim_coef',
+            'sistema' => 'ventas',
+        ];
+        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall($payload));
+        if ($parsed['error_lectura'] !== null) {
+            throw new \RuntimeException($parsed['error_lectura']);
+        }
+
+        foreach ($parsed['filas'] as $row) {
+            $ret['en_anita']++;
+            $codigo = trim((string) ($row->{$this->keyFieldAnita} ?? ''));
+            if ($codigo === '') {
+                $ret['omitidos']++;
+
+                continue;
+            }
+
+            try {
+                $cliente = $this->queryClientePorCodigo($codigo)->first();
+                if ($cliente === null) {
+                    $ret['sin_cliente']++;
+
+                    continue;
+                }
+
+                $climCoef = $row->clim_coef ?? null;
+                $coeficienteIdAnita = $this->resolverCoeficienteIdDesdeClimCoef($climCoef);
+                $rawCoef = trim((string) ($climCoef ?? ''));
+                if ($rawCoef !== '' && $rawCoef !== '0' && $coeficienteIdAnita === null) {
+                    $ret['sin_mapeo']++;
+                    $ret['errores'][] = "Cliente {$codigo}: clim_coef={$rawCoef} no tiene coeficiente.codigo en el ERP.";
+
+                    continue;
+                }
+
+                $actual = $cliente->coeficiente_id !== null ? (int) $cliente->coeficiente_id : null;
+                if ($actual === $coeficienteIdAnita) {
+                    $ret['omitidos']++;
+
+                    continue;
+                }
+
+                if (count($ret['ejemplos']) < 25) {
+                    $ret['ejemplos'][] = [
+                        'codigo' => $codigo,
+                        'clim_coef' => $rawCoef,
+                        'coeficiente_id_erp' => $actual,
+                        'coeficiente_id_anita' => $coeficienteIdAnita,
+                    ];
+                }
+
+                if ($persistir) {
+                    $cliente->coeficiente_id = $coeficienteIdAnita;
+                    $cliente->save();
+                }
+                $ret['actualizados']++;
+            } catch (\Throwable $e) {
+                $ret['errores'][] = "Cliente Anita {$this->keyFieldAnita}={$codigo}: ".$e->getMessage();
+            }
+        }
+
+        return $ret;
+    }
+
+    /**
      * @return 'importado'|'actualizado'|'omitido'
      */
     public function traerRegistroDeAnita($key, $fl_crea_registro = null)
@@ -656,11 +770,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				else
 					$abasto_id = NULL;
 					
-				$coeficiente = Coeficiente::select('id')->where('codigo' , $data->clim_coef)->first();
-				if ($coeficiente)
-					$coeficiente_id = $coeficiente->id;
-				else
-					$coeficiente_id = NULL;
+				$coeficiente_id = $this->resolverCoeficienteIdDesdeClimCoef($data->clim_coef ?? null);
 								
 				$distribuidor_id = Distribuidor::resolverIdPorCodigoAnita($data->clim_distribuidor ?? null);
 			}
@@ -1344,6 +1454,44 @@ class ClienteRepository implements ClienteRepositoryInterface
 	}
 
 	/**
+	 * clim_coef (Anita) → coeficiente.id (ERP). Tolera ceros a la izquierda.
+	 */
+	private function resolverCoeficienteIdDesdeClimCoef(mixed $climCoef): ?int
+	{
+		$raw = trim((string) ($climCoef ?? ''));
+		if ($raw === '' || $raw === '0') {
+			return null;
+		}
+
+		$sinCeros = ltrim($raw, '0');
+		$variantes = array_values(array_unique(array_filter([
+			$raw,
+			$sinCeros === '' ? '0' : $sinCeros,
+			$sinCeros === '' ? $raw : str_pad($sinCeros, strlen($raw), '0', STR_PAD_LEFT),
+		], static fn ($v) => $v !== '')));
+
+		$id = Coeficiente::query()->whereIn('codigo', $variantes)->value('id');
+
+		return $id !== null ? (int) $id : null;
+	}
+
+	/**
+	 * @param  array<string, mixed>  $request
+	 */
+	private function coeficienteExtraHaciaAnita(array $request): string
+	{
+		if (ClienteCoeficienteExtraSupport::aplica()) {
+			return (string) ClienteCoeficienteExtraSupport::valorParaGrabar(
+				isset($request['coeficienteextra']) ? (float) $request['coeficienteextra'] : null
+			);
+		}
+
+		$valor = $request['coeficienteextra'] ?? $request['coeficienteextra'] ?? 0;
+
+		return (string) $valor;
+	}
+
+	/**
 	 * @return list<int|string>
 	 */
 	private function resolverArticuloSuspendidoIdsDesdeRequest(array $request): array
@@ -1702,7 +1850,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				'".($request['porcentajelogistica'] ?? 0)."',
 				'".$emitecertificado."',
 				'".$emitenotadecredito."',
-				'".($request['coeficienteextra'] ?? 0)."'".
+				'".$this->coeficienteExtraHaciaAnita($request)."'".
 				($esVillafranca ? ' ' : ",
 				'0',
 				'".$codigolocalidad."',
@@ -2005,7 +2153,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 				clim_logistica                  = '".$request['porcentajelogistica']."',
 				clim_emite_cert                 = '".$emitecertificado."',
 				clim_emite_nc                   = '".$emitenotadecredito."',
-				clim_coef_extra                 = '".$request['coeficienteextra']."'".
+				clim_coef_extra                 = '".$this->coeficienteExtraHaciaAnita($request)."'".
 				($esVillafranca ? ' ' : ",
 				clim_referencia                 = '0',
 				clim_cod_localidad              = '".$codigolocalidad."',
@@ -2671,7 +2819,7 @@ class ClienteRepository implements ClienteRepositoryInterface
         return $cliente;
     }
 
-	public function consultaCliente($consulta)
+	public function consultaCliente($consulta, bool $omitirClienteDespacho = false)
     {
 		$columns = ['cliente.id', 'cliente.nombre', 'cliente.codigo', 'cliente.domicilio', 'cliente.numerodocumento', 'provincia.nombre', 'localidad.nombre'];
         $columnsOut = ['id', 'nombre', 'codigo', 'domicilio', 'numerodocumento', 'provincia', 'localidad'];
@@ -2704,6 +2852,13 @@ class ClienteRepository implements ClienteRepositoryInterface
 							->leftjoin('localidad', 'localidad.id', '=', 'cliente.localidad_id')
 							->activos()
 							->whereNull('cliente.deleted_at');
+
+		if ($omitirClienteDespacho && ClienteDespachoSupport::circuitoHabilitado()) {
+			$despachoId = ClienteDespachoSupport::id();
+			if ($despachoId > 0) {
+				$data = $data->where('cliente.id', '!=', $despachoId);
+			}
+		}
 
 		// Filtra vendedores
 		$vendedores = $this->vendedorRepository->leeVendedoresAsociados();

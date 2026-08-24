@@ -14,7 +14,7 @@
 @if (!empty($clienteId))
 <div
     id="cliente-arca-validacion-config"
-    class="d-none"
+    class="d-none js-cliente-arca-validacion-config"
     aria-hidden="true"
     data-arca-validar-impuestos="{{ filter_var(config('arca.padron_validacion_cliente.habilitado', true), FILTER_VALIDATE_BOOLEAN) ? '1' : '0' }}"
     data-arca-validar-url="{{ route('validar_cliente_arca_padron', ['id' => $clienteId]) }}"

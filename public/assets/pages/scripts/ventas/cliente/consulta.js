@@ -10,6 +10,36 @@ if (typeof window.clienteEstaHabilitadoParaFacturacion !== 'function') {
     };
 }
 
+window.clienteDespachoId = function () {
+    return parseInt(window.CLIENTE_DESPACHO_ID || 0, 10) || 0;
+};
+
+window.clienteEsDespacho = function (clienteId) {
+    var id = window.clienteDespachoId();
+    return id > 0 && parseInt(clienteId, 10) === id;
+};
+
+window.mensajeClienteDespachoNoFacturable = function () {
+    return 'El cliente DESPACHO no se factura. Use Transferir al despacho.';
+};
+
+window.bloquearClienteDespachoEnFacturacion = function (clienteId) {
+    if (!window.CLIENTE_DESPACHO_NO_FACTURAR) {
+        return false;
+    }
+    if (!window.clienteEsDespacho(clienteId)) {
+        return false;
+    }
+    if (typeof window.limpiarSeleccionClienteOperacion === 'function') {
+        window.limpiarSeleccionClienteOperacion();
+    } else if (typeof window.invalidarEstadoPadronOperacion === 'function') {
+        window.invalidarEstadoPadronOperacion();
+    }
+    alert(window.mensajeClienteDespachoNoFacturable());
+    $('#codigocliente').focus();
+    return true;
+};
+
 function enfocarCampoTrasClienteCargado() {
     if ($('#codigotransporte').length > 0) {
         $('#codigotransporte').focus();
@@ -159,6 +189,7 @@ function buscar_datos_cliente(consulta) {
     	},
         data: {
             consulta: termino,
+            omitir_cliente_despacho: window.CLIENTE_DESPACHO_NO_FACTURAR ? 1 : 0,
         },
     })
     .done (function(respuesta) {
@@ -355,6 +386,9 @@ function leeUnCliente(cliente_id, codigocliente)
                     $('#codigocliente').val(data.codigo);
                     $('#cliente_id').val(data.id);
                     $('#nombrecliente').val(data.nombre || '');
+                    return;
+                }
+                if (window.bloquearClienteDespachoEnFacturacion(data.id)) {
                     return;
                 }
                 if (!window.clienteEstaHabilitadoParaFacturacion(data.estado))

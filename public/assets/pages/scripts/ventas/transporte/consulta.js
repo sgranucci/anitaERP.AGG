@@ -32,6 +32,9 @@ function aplicarTransporteEnContexto($ctx, data) {
     $('#transporte_id').val(data.id);
     $('#codigotransporte').val(data.codigo);
     $('#nombretransporte').val(data.nombre);
+    if (typeof window.actualizarAvisoDepositoFacturacion === 'function') {
+        window.actualizarAvisoDepositoFacturacion(data.id, { sincronizarCampo: true });
+    }
 }
 
 function limpiarTransporteEnContexto($ctx) {
@@ -44,6 +47,9 @@ function limpiarTransporteEnContexto($ctx) {
     $('#transporte_id').val('');
     $('#codigotransporte').val('');
     $('#nombretransporte').val('');
+    if (typeof window.actualizarAvisoDepositoFacturacion === 'function') {
+        window.actualizarAvisoDepositoFacturacion(0, { sincronizarCampo: true });
+    }
 }
 
 function resolverPorCodigoTransporte(codigo, $ctx, opciones) {
@@ -242,13 +248,7 @@ function activa_eventos_consultatransporte()
             codigo: $.trim($tr.find(".codigo").html()),
         };
 
-        if (ptrTransporteContext && ptrTransporteContext.length) {
-            aplicarTransporteEnContexto(ptrTransporteContext, data);
-        } else {
-            $("#transporte_id").val(data.id);
-            $("#nombretransporte").val(data.nombre);
-            $("#codigotransporte").val(data.codigo);
-        }
+        aplicarTransporteEnContexto(ptrTransporteContext, data);
 
         var enAsignaKilos = contextoTransporteEnAsignaKilos();
         $('#consultatransporteModal').modal('hide');

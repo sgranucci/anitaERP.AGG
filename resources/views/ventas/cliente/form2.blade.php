@@ -1,10 +1,13 @@
 <div id="tab-datos-facturacion" class="tab-pane fade form2" role="tabpanel">
+	@php
+		$data = $data ?? (object) [];
+	@endphp
 	<div class="row">
 		<div class="col-sm-6">
 			<div class="form-group row">
 				<label for="tipodocumento_id" class="col-lg-4 control-label text-right pr-2 requerido">Documento</label>
 				<div class="col-lg-8">
-					<div class="d-flex flex-wrap align-items-center" style="gap: 4px;">
+					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
 						<select name="tipodocumento_id" id="tipodocumento_id" data-placeholder="Tipo de documento" class="form-control flex-shrink-0" required data-fouc style="width: 5.5rem;">
 							<option value="">--</option>
 							@foreach($tipodocumento_query as $key => $value)
@@ -12,16 +15,9 @@
 							@endforeach
 						</select>
 						<input type="hidden" id="condicioniva_query" value="{{$condicioniva_query}}">
-						<span class="input-group-text">#</span>
-						<input type="text" name="numerodocumento" id="numerodocumento" class="form-control" style="min-width: 8rem; flex: 1 1 auto;" value="{{ old('numerodocumento', $data->numerodocumento ?? '') }}">
-						@if (!empty($data->facturas_apocrifas))
-							<span id="cliente-apoc-estado-badge" class="badge badge-danger align-self-center">Facturas ap&oacute;crifas (ARCA)</span>
-						@elseif (!empty($data->facturas_apocrifas_consulta_at))
-							<span id="cliente-apoc-estado-badge" class="badge badge-success align-self-center">Sin registro APOC ({{ $data->facturas_apocrifas_consulta_at->format('d/m/Y H:i') }})</span>
-						@else
-							<span id="cliente-apoc-estado-badge" class="badge badge-secondary align-self-center" style="display: none;"></span>
-						@endif
-						<span class="d-inline-block position-relative align-middle">
+						<span class="input-group-text flex-shrink-0">#</span>
+						<input type="text" name="numerodocumento" id="numerodocumento" class="form-control" style="min-width: 0; flex: 1 1 auto;" value="{{ old('numerodocumento', $data->numerodocumento ?? '') }}">
+						<span class="d-inline-block position-relative align-middle flex-shrink-0">
 							<button type="button" id="btn-consulta-arca-cliente" title="Consultar padrón ARCA" class="btn-accion-tabla tooltipsC" style="padding:1;" onclick="return window.consultaArcaCliente?.(event)">
 								<i class="fa fa-search text-primary"></i>
 							</button>
@@ -29,6 +25,15 @@
 								<i class="fa fa-spinner fa-spin" aria-hidden="true"></i> Consultando a ARCA...
 							</span>
 						</span>
+					</div>
+					<div class="mt-1">
+						@if (!empty($data->facturas_apocrifas))
+							<span id="cliente-apoc-estado-badge" class="badge badge-danger">Facturas ap&oacute;crifas (ARCA)</span>
+						@elseif (!empty($data->facturas_apocrifas_consulta_at))
+							<span id="cliente-apoc-estado-badge" class="badge badge-success">Sin registro APOC ({{ $data->facturas_apocrifas_consulta_at->format('d/m/Y H:i') }})</span>
+						@else
+							<span id="cliente-apoc-estado-badge" class="badge badge-secondary" style="display: none;"></span>
+						@endif
 					</div>
 				</div>
 			</div>
@@ -325,10 +330,8 @@
 					$cuentaContableId = old('cuentacontable_id', $data->cuentacontable_id ?? '');
 					$cuentaContableCodigo = old('codigocuentacontable', optional($data->cuentascontables ?? null)->codigo ?? '');
 					$cuentaContableNombre = old('nombrecuentacontable', optional($data->cuentascontables ?? null)->nombre ?? '');
-					if ($cuentaContableId === '' && $cuentaContableCodigo === '') {
-						$cuentaDefault = \App\Models\Contable\Cuentacontable::where('empresa_id', config('cliente.EMPRESA_DEFAULT_ID'))
-							->where('codigo', (string) config('cliente.DEUDORES_POR_VENTAS'))
-							->first();
+					if ((string) $cuentaContableId === '' && (string) $cuentaContableCodigo === '') {
+						$cuentaDefault = \App\Support\Ventas\ClienteCuentacontableDefaultSupport::find();
 						if ($cuentaDefault) {
 							$cuentaContableId = $cuentaDefault->id;
 							$cuentaContableCodigo = $cuentaDefault->codigo;
@@ -393,6 +396,12 @@
 				@endif
 			@endif
 			@if (config('app.empresa') == 'EL BIERZO')
+				@php
+					$coeficienteExtraValor = old(
+						'coeficienteextra',
+						\App\Support\Ventas\ClienteCoeficienteExtraSupport::valor()
+					);
+				@endphp
 				<input type="hidden" name="descuentoventa_id" id="descuentoventa_id" class="form-control" value="{{old('descuentoventa_id', $data->descuentoventa_id ?? '')}}">
 				@if (can('cargar-coeficiente-cliente', false))
 					<div class="form-group row">
@@ -406,21 +415,20 @@
 							</select>
 						</div>
 					</div>
-					<div class="form-group row">
-						<label for="coeficienteextra" class="col-lg-4 control-label text-right pr-2">Coeficiente extra</label>
-						<div class="col-lg-8">
-							<div class="input-group">
-								<div class="input-group-prepend">
-									<span class="input-group-text"><i class="fas fa-percent"></i></span>
-								</div>
-								<input type="number" min="0" max="100" name="coeficienteextra" id="coeficienteextra" class="form-control" value="{{old('coeficienteextra', $data->coeficienteextra ?? '0')}}">
-							</div>
-						</div>
-					</div>
 				@else
 					<input type="hidden" name="coeficiente_id" value="{{ old('coeficiente_id', $data->coeficiente_id ?? '') }}">
-					<input type="hidden" name="coeficienteextra" value="{{ old('coeficienteextra', $data->coeficienteextra ?? '0') }}">
 				@endif
+				<div class="form-group row">
+					<label for="coeficienteextra" class="col-lg-4 control-label text-right pr-2">Coeficiente extra</label>
+					<div class="col-lg-8">
+						<div class="input-group">
+							<div class="input-group-prepend">
+								<span class="input-group-text"><i class="fas fa-percent"></i></span>
+							</div>
+							<input type="number" step="0.01" min="0" max="100" name="coeficienteextra" id="coeficienteextra" class="form-control" value="{{ $coeficienteExtraValor }}" readonly>
+						</div>
+					</div>
+				</div>
 			@endif
 			@if (strtoupper(config('app.empresa')) == 'CALZADOS FERLI')
 				<div class="form-group row">

@@ -829,7 +829,10 @@ class ClienteController extends Controller
     
     public function consultaCliente(Request $request)
     {
-        return ($this->clienteRepository->consultaCliente($request->consulta));
+        return $this->clienteRepository->consultaCliente(
+            $request->consulta,
+            $request->boolean('omitir_cliente_despacho')
+        );
 	}
 
     public function verificarDocumentoAlta(Request $request)

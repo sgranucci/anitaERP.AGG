@@ -19,7 +19,7 @@
                 </p>
             </div>
             <div class="modal-footer">
-                <button type="button" id="btn-regularizar-arca-modal" class="btn btn-warning d-none">
+                <button type="button" id="btn-regularizar-arca-modal" class="btn btn-warning d-none js-btn-regularizar-cliente">
                     <i class="fa fa-check-circle"></i> Regularizar cliente (R)
                 </button>
                 <button type="button" class="btn btn-primary" data-dismiss="modal">Entendido</button>

@@ -24,7 +24,9 @@
             cuitField: String($el.data('cuit-field') || '').trim(),
             tiposuspensionBajaId: parseInt($el.data('tiposuspension-baja-id') || '0', 10),
             suspenderEnAbm: String($el.data('suspender-en-abm') || '0') === '1',
-            esCliente: $el.attr('id') === 'cliente-arca-validacion-config',
+            esCliente: $el.hasClass('js-cliente-arca-validacion-config')
+                || $el.attr('id') === 'cliente-arca-validacion-config'
+                || parseInt($el.data('cliente-id') || '0', 10) > 0,
         };
     }
 
@@ -72,11 +74,18 @@
             $det.hide();
         }
         $('#arca-imp-validacion-nota').show();
-        var $btnReg = $('#btn-regularizar-arca-modal');
-        if ($btnReg.length && $('#cliente-arca-validacion-config').length
-            && typeof window.actualizarUiRegularizarCliente === 'function') {
+        var esAbmCliente = $('.js-cliente-arca-validacion-config, #cliente-arca-validacion-config').length > 0
+            || $('#btn-regularizar-cliente').length > 0;
+        if (esAbmCliente && typeof window.marcarPadronArcaClienteConProblemas === 'function') {
+            window.marcarPadronArcaClienteConProblemas(true);
+        } else if (esAbmCliente && typeof window.actualizarUiRegularizarCliente === 'function') {
+            window.clientePadronArcaConProblemas = true;
             window.actualizarUiRegularizarCliente();
-        } else if ($btnReg.length) {
+        }
+        var $btnReg = $('#btn-regularizar-arca-modal');
+        if ($btnReg.length && esAbmCliente) {
+            $btnReg.removeClass('d-none').show();
+        } else if ($btnReg.length && !esAbmCliente) {
             $btnReg.addClass('d-none');
         }
         $modal.modal('show');
@@ -177,7 +186,7 @@
     window.ArcaPadronValidacionAsync = {
         encolar: function (opts) {
             opts = opts || {};
-            var $cfgEl = opts.$config || $('#cliente-arca-validacion-config, #proveedor-arca-validacion-config, #cp-proveedor-arca-config').first();
+            var $cfgEl = opts.$config || $('.js-cliente-arca-validacion-config, #cliente-arca-validacion-config, #proveedor-arca-validacion-config, #cp-proveedor-arca-config').first();
             var cfg = cfgDesde($cfgEl);
             if (!cfg || !cfg.habilitado) {
                 return;
@@ -245,6 +254,9 @@
             xhrActivo.done(function (json) {
                 if (json && json.skipped) {
                     return;
+                }
+                if (json && json.validacion && json.validacion.ok && typeof window.marcarPadronArcaClienteConProblemas === 'function') {
+                    window.marcarPadronArcaClienteConProblemas(false);
                 }
                 if (json && json.validacion) {
                     mostrarModalValidacion(json.validacion, json.message);

@@ -2,7 +2,8 @@
  * ABM cliente: validación impuestos ARCA en background al abrir edición o cambiar CUIT / condición IVA.
  */
 $(function () {
-    if (!$('#cliente-arca-validacion-config').length) {
+    var $cfg = $('.js-cliente-arca-validacion-config, #cliente-arca-validacion-config').first();
+    if (!$cfg.length) {
         return;
     }
 
@@ -13,7 +14,7 @@ $(function () {
             return;
         }
         window.ArcaPadronValidacionAsync.encolar({
-            $config: $('#cliente-arca-validacion-config'),
+            $config: $('.js-cliente-arca-validacion-config, #cliente-arca-validacion-config').first(),
             suspenderUi: false,
         });
     }
@@ -25,7 +26,7 @@ $(function () {
         timer = setTimeout(dispararValidacionBackground, 400);
     }
 
-    var clienteId = parseInt($('#cliente-arca-validacion-config').data('cliente-id') || '0', 10);
+    var clienteId = parseInt($cfg.data('cliente-id') || '0', 10);
     if (clienteId > 0) {
         programarValidacion();
     }

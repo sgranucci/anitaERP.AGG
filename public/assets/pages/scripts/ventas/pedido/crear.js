@@ -1678,6 +1678,10 @@
 	function generaFactura()
 	{
 		window.modoEmisionPedido = 'factura';
+		if (typeof window.clienteEsDespacho === 'function' && window.clienteEsDespacho($('#cliente_id').val())) {
+			alert(window.mensajeClienteDespachoNoFacturable());
+			return;
+		}
 		if (typeof validarLugarEntregaAntesGuardar === 'function' && !validarLugarEntregaAntesGuardar()) {
 			return;
 		}
@@ -2611,7 +2615,7 @@
 				$('#codigotransporte').val(codigotransporte);
 				$('#nombretransporte').val(nombretransporte);
 				if (typeof window.actualizarAvisoDepositoFacturacion === 'function') {
-					window.actualizarAvisoDepositoFacturacion(transporte_id);
+					window.actualizarAvisoDepositoFacturacion(transporte_id, { sincronizarCampo: true });
 				}
 				$('#condicionventa_id').val(condicionventa_id);
 				$('#descuento').val(descuento);

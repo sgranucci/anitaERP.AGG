@@ -110,7 +110,7 @@
         });
 
         function condicionivaBajaImpuestosId() {
-            var $cfg = $('#cliente-arca-config, #cliente-arca-validacion-config').first();
+            var $cfg = $('#cliente-arca-config, #cliente-arca-validacion-config, .js-cliente-arca-validacion-config').first();
             if (!$cfg.length) {
                 return 7;
             }
@@ -123,13 +123,26 @@
             return bajaId > 0 && condId === bajaId;
         }
 
+        function $cfgClienteArcaValidacion() {
+            return $('.js-cliente-arca-validacion-config, #cliente-arca-validacion-config').first();
+        }
+
+        function $botonesRegularizarCliente() {
+            return $('.js-btn-regularizar-cliente, #btn-regularizar-cliente, #btn-regularizar-arca, #btn-regularizar-suspension');
+        }
+
         function puedeRegularizarClienteSegunReglas() {
             if (clienteTieneCondicionivaBajaImpuestos()) {
                 return false;
             }
             var estado = String($('#estado').val() || '0');
-            var arcaAlertVisible = $('#arca-impuestos-alerta').is(':visible');
-            return estado !== 'R' && (estado === '1' || arcaAlertVisible);
+            if (estado === 'R') {
+                return false;
+            }
+            var padronConProblemas = window.clientePadronArcaConProblemas === true;
+            var alertaPadronVisible = $('#arca-impuestos-alerta').is(':visible');
+            // Activo con problemas de padrón ARCA, o suspendido, o ya no Regularizado.
+            return padronConProblemas || alertaPadronVisible || estado === '1' || estado !== 'R';
         }
 
         function descripcionEstadoCliente(estado) {
@@ -187,17 +200,30 @@
         function actualizarUiRegularizarCliente() {
             var puedeRegularizar = puedeRegularizarClienteSegunReglas();
 
-            $('#btn-regularizar-cliente, #btn-regularizar-arca, #btn-regularizar-suspension').toggle(puedeRegularizar);
+            $botonesRegularizarCliente().each(function () {
+                var $el = $(this);
+                if (puedeRegularizar) {
+                    $el.removeClass('d-none').css('display', 'inline-block');
+                } else {
+                    $el.hide();
+                }
+            });
 
             var $btnModal = $('#btn-regularizar-arca-modal');
             if ($btnModal.length) {
-                if ($('#cliente-arca-validacion-config').length && puedeRegularizar) {
-                    $btnModal.removeClass('d-none');
+                if ($cfgClienteArcaValidacion().length && puedeRegularizar) {
+                    $btnModal.removeClass('d-none').show();
                 } else {
                     $btnModal.addClass('d-none');
                 }
             }
         }
+
+        window.marcarPadronArcaClienteConProblemas = function (conProblemas) {
+            window.clientePadronArcaConProblemas = !!conProblemas;
+            actualizarUiRegularizarCliente();
+        };
+        window.marcarPadronArcaClienteConProblemas = window.marcarPadronArcaClienteConProblemas;
 
         window.aplicarEstadoClienteEnFormulario = aplicarEstadoClienteEnFormulario;
         window.regularizarClienteEnFormulario = regularizarClienteEnFormulario;

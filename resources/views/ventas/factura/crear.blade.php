@@ -6,6 +6,7 @@
 @section("scripts")
 <script>window.VALIDACION_PADRON_POST_CARGA = true;</script>
 <script>window.REQUIERE_VALIDACION_PADRON_OPERACION = true;</script>
+@include('includes.ventas.cliente_despacho_js', ['clienteDespachoNoFacturar' => true])
 @php
     $requiereValidacionApocOperacion = filter_var(config('arca_wsapoc.validar_factura_cliente', true), FILTER_VALIDATE_BOOLEAN)
         && filter_var(config('arca_wsapoc.habilitado', true), FILTER_VALIDATE_BOOLEAN);

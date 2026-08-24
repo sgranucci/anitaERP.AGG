@@ -21,14 +21,17 @@
 @php
     $clienteModalesAbmJs = public_path('assets/pages/scripts/ventas/cliente/consultas-modales-abm.js');
     $arcaPadronJs = public_path('assets/pages/scripts/ventas/cliente/arca-padron.js');
+    $arcaPadronAsyncJs = public_path('assets/pages/scripts/compras/arca-padron-validacion-async.js');
+    $arcaValidacionAbmJs = public_path('assets/pages/scripts/ventas/cliente/arca-validacion-abm.js');
+    $clienteCrearJs = public_path('assets/pages/scripts/ventas/cliente/crear.js');
 @endphp
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/consultas-modales-abm.js') }}?v={{ file_exists($clienteModalesAbmJs) ? filemtime($clienteModalesAbmJs) : time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/arca-padron.js') }}?v={{ file_exists($arcaPadronJs) ? filemtime($arcaPadronJs) : time() }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/compras/arca-padron-validacion-async.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/ventas/cliente/arca-validacion-abm.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/arca-padron-validacion-async.js') }}?v={{ file_exists($arcaPadronAsyncJs) ? filemtime($arcaPadronAsyncJs) : time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/arca-validacion-abm.js') }}?v={{ file_exists($arcaValidacionAbmJs) ? filemtime($arcaValidacionAbmJs) : time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/arca-apoc-validacion-async.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/cliente/arca-apoc-validacion-abm.js') }}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ventas/cliente/crear.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/crear.js') }}?v={{ file_exists($clienteCrearJs) ? filemtime($clienteCrearJs) : time() }}" type="text/javascript"></script>
 @if (config('suitecrm.habilitado'))
 @php
     $suitecrmNotasJs = public_path('assets/pages/scripts/ventas/cliente/suitecrm-notas.js');
@@ -94,12 +97,14 @@
                         <button type="button" id="botonestado" class="btn btn-info btn-sm">
                             <i class="fa fa-bell"></i> Estado {{ $data->descripcionestado }}
                         </button>
-                        <button type="button" id="btn-regularizar-cliente" class="btn btn-warning btn-sm" title="Regularizado: facturaci&oacute;n permitida pese a ARCA" style="display: {{ $data->estado === 'R' ? 'none' : 'inline-block' }};">
-                            <i class="fa fa-check-circle"></i> Regularizar
-                        </button>
                     @else
                         <button type="button" id="_" class="btn btn-info btn-sm">
                             <i class="fa fa-bell"></i> Estado {{ $data->descripcionestado }}
+                        </button>
+                    @endif
+                    @if (\App\Support\Ventas\ClienteRegularizacionAbmSupport::usuarioPuedeRegularizar())
+                        <button type="button" id="btn-regularizar-cliente" class="btn btn-warning btn-sm js-btn-regularizar-cliente" title="Regularizado: facturaci&oacute;n permitida pese a ARCA" style="display: {{ $data->estado === 'R' ? 'none' : 'inline-block' }};">
+                            <i class="fa fa-check-circle"></i> Regularizar
                         </button>
                     @endif
                     @if (isset($urlOrigen))
