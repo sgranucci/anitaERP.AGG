@@ -32,6 +32,14 @@
         @endforeach
     @endforeach
 </div>
+@if (count($sesion['pack'] ?? []) > 1)
+    <p class="small text-muted mb-2">
+        Marcá las copias a imprimir.
+        <a href="#" class="sesion-marcar-copias" data-marcar="1">Todas</a>
+        ·
+        <a href="#" class="sesion-marcar-copias" data-marcar="0">Ninguna</a>
+    </p>
+@endif
 <div class="d-flex flex-wrap" style="gap: 16px;">
     @foreach ($porFormulario as $grupo)
         <div class="sesion-ruta-columna">
@@ -46,6 +54,12 @@
                     }
                 @endphp
                 <div class="sesion-ruta-hoja {{ $estado }}">
+                    @if (count($sesion['pack'] ?? []) > 1)
+                        <label class="sesion-copia-check mb-1">
+                            <input type="checkbox" name="pack_idx[]" value="{{ $item['i'] }}" form="form-ejecutar-sesion" class="sesion-copia-idx" checked>
+                            Incluir
+                        </label>
+                    @endif
                     <div><strong>{{ $linea['leyenda'] }}</strong> <span class="text-muted">({{ $linea['copia_codigo'] }})</span></div>
                     @if (! empty($linea['destinatario']))
                         <div>{{ $linea['destinatario'] }}</div>
@@ -58,6 +72,13 @@
                             Pendiente
                         @endif
                     </div>
+                    @if (count($sesion['pack'] ?? []) > 1)
+                        <div class="mt-2">
+                            <button type="button" class="btn btn-outline-primary btn-sm btn-solo-copia" data-pack-idx="{{ $item['i'] }}">
+                                <i class="fa fa-print"></i> Solo esta
+                            </button>
+                        </div>
+                    @endif
                 </div>
             @endforeach
         </div>

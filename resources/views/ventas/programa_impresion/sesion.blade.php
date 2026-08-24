@@ -61,8 +61,8 @@ window.impresionSesionAuto = @json((bool) ($autoEjecutar ?? false));
                     <div class="alert alert-danger">{{ $resultado['error'] }}</div>
                 @endif
 
-                <div class="mt-3">
-                    <form action="{{ route('ejecutar_impresion_sesion') }}" method="POST" class="d-inline" id="form-ejecutar-sesion">
+                <div class="mt-3 d-flex flex-wrap align-items-center" style="gap: 8px;">
+                    <form action="{{ route('ejecutar_impresion_sesion') }}" method="POST" class="form-inline mb-0" id="form-ejecutar-sesion" style="gap: 8px;">
                         @csrf
                         <button type="submit" class="btn btn-primary" id="btn-ejecutar-sesion" {{ empty($sesion['pack']) ? 'disabled' : '' }}>
                             <i class="fa fa-print"></i> Ejecutar sesión

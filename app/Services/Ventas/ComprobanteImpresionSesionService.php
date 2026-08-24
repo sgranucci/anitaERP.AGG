@@ -70,18 +70,26 @@ class ComprobanteImpresionSesionService
      * @param  array<string, mixed>  $sesion
      * @return array<string, mixed>
      */
-    public function ejecutar(array $sesion): array
+    /**
+     * @param  list<int>|null  $soloPackIdxs
+     */
+    public function ejecutar(array $sesion, ?array $soloPackIdxs = null): array
     {
         ini_set('memory_limit', '512M');
         $modo = (string) ($sesion['modo'] ?? 'OPERATIVO');
         $resultados = [];
         $pdfsSesion = [];
         $usuarioId = Auth::id();
+        $pack = $sesion['pack'] ?? [];
+        $soloPackIdxs = $this->normalizarPackIdxs($soloPackIdxs, $pack);
 
-        $pdfsLote = $this->generarPdfsLoteFactura($sesion);
-        foreach ($sesion['pack'] ?? [] as $idx => $linea) {
+        $pdfsLote = $this->generarPdfsLoteFactura($sesion, $soloPackIdxs);
+        foreach ($pack as $idx => $linea) {
+            if ($soloPackIdxs !== null && ! in_array($idx, $soloPackIdxs, true)) {
+                continue;
+            }
             $resultado = $this->ejecutarLinea($linea, $modo, $usuarioId, null, $pdfsLote[$idx] ?? null);
-            $resultados[] = $resultado;
+            $resultados[$idx] = $resultado;
             if (! empty($resultado['pdf_path']) && is_file($resultado['pdf_path'])) {
                 $pdfsSesion[] = $resultado['pdf_path'];
             }
@@ -385,10 +393,16 @@ class ComprobanteImpresionSesionService
      * @param  array<string, mixed>  $sesion
      * @return array<int, string>
      */
-    private function generarPdfsLoteFactura(array $sesion): array
+    /**
+     * @param  list<int>|null  $soloPackIdxs
+     */
+    private function generarPdfsLoteFactura(array $sesion, ?array $soloPackIdxs = null): array
     {
         $trabajos = [];
         foreach ($sesion['pack'] ?? [] as $idx => $linea) {
+            if ($soloPackIdxs !== null && ! in_array($idx, $soloPackIdxs, true)) {
+                continue;
+            }
             $formulario = (string) ($linea['formulario'] ?? '');
             if ($formulario === ComprobanteImpresionFormulario::FACTURA) {
                 $trabajos[$idx] = [
@@ -500,6 +514,29 @@ class ComprobanteImpresionSesionService
         $seteo = $this->seteosalidaRepository->buscaSeteo($usuarioId, $programa);
 
         return $seteo?->salidas;
+    }
+
+    /**
+     * @param  list<int>|null  $idxs
+     * @param  array<int, mixed>  $pack
+     * @return list<int>|null
+     */
+    private function normalizarPackIdxs(?array $idxs, array $pack): ?array
+    {
+        if ($idxs === null) {
+            return null;
+        }
+        $normalizados = array_values(array_unique(array_map('intval', $idxs)));
+        if ($normalizados === []) {
+            throw new \InvalidArgumentException('Elegí al menos una copia para imprimir.');
+        }
+        foreach ($normalizados as $idx) {
+            if (! array_key_exists($idx, $pack)) {
+                throw new \InvalidArgumentException('La copia elegida no está en la ruta de impresión.');
+            }
+        }
+
+        return $normalizados;
     }
 
     /**

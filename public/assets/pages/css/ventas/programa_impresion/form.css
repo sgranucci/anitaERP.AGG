@@ -156,6 +156,21 @@
 .sesion-ruta-hoja.pendiente {
     border-left: 4px solid #f4d03f;
 }
+.sesion-ruta-hoja .btn-solo-copia {
+    padding: 2px 8px;
+    font-size: 11px;
+}
+.sesion-copia-check {
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    color: #17202A;
+    cursor: pointer;
+}
+.sesion-copia-check input {
+    margin-right: 4px;
+    vertical-align: middle;
+}
 .impresion-sesion-overlay {
     position: fixed;
     inset: 0;

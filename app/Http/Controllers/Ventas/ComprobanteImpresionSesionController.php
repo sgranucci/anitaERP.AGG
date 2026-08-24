@@ -65,7 +65,9 @@ class ComprobanteImpresionSesionController extends Controller
         }
 
         try {
-            $resultado = $this->sesionService->ejecutar($sesion);
+            $resultado = $this->sesionService->ejecutar($sesion, $this->soloPackIdxs($request, $sesion));
+        } catch (\InvalidArgumentException $e) {
+            return $this->redirectSesion($sesion)->with('errores', [$e->getMessage()]);
         } catch (\Throwable $e) {
             Log::error('ventas.impresion_sesion.ejecutar', ['error' => $e->getMessage()]);
 
@@ -158,6 +160,33 @@ class ComprobanteImpresionSesionController extends Controller
             'REMITO' => redirect()->route('sesion_impresion_remito', $params),
             default => redirect()->route('sesion_impresion_factura', $params),
         };
+    }
+
+    /**
+     * @param  array<string, mixed>  $sesion
+     * @return list<int>|null
+     */
+    private function soloPackIdxs(Request $request, array $sesion): ?array
+    {
+        if (! $request->exists('pack_idx')) {
+            return null;
+        }
+        $raw = $request->input('pack_idx');
+        if (! is_array($raw)) {
+            if ($raw === null || $raw === '') {
+                return null;
+            }
+            $raw = [$raw];
+        }
+        $idxs = [];
+        foreach ($raw as $valor) {
+            if ($valor === '' || $valor === null) {
+                continue;
+            }
+            $idxs[] = (int) $valor;
+        }
+
+        return $idxs;
     }
 
     private function modo(Request $request): string
