@@ -110,8 +110,9 @@ final class LibroIvaDigitalVentasConsumidorFinalSupport
                 ];
             }
 
+            // Sin DNI no se puede informar 96/0: ARCA rechaza documento 0 si el código no es 99.
             return [
-                'codigo_documento' => '96',
+                'codigo_documento' => '99',
                 'numero_identificacion' => '0',
                 'nombre' => $nombre !== '' ? $nombre : '-CONSUMIDOR FINAL-',
             ];
@@ -138,9 +139,11 @@ final class LibroIvaDigitalVentasConsumidorFinalSupport
             STR_PAD_LEFT,
         );
 
+        $id = LibroIvaDigitalIdentificacionSupport::asegurar($codigoDoc, $documento);
+
         return [
-            'codigo_documento' => $codigoDoc,
-            'numero_identificacion' => $documento !== '' ? $documento : '0',
+            'codigo_documento' => $id['codigo_documento'],
+            'numero_identificacion' => $id['numero_identificacion'],
             'nombre' => $nombre,
         ];
     }

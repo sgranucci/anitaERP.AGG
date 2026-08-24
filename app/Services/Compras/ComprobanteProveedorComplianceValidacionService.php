@@ -12,6 +12,7 @@ use App\Services\Configuracion\IIBBService;
 use App\Support\Arca\WscdcImporteMargenSupport;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
+use App\Support\Compras\ComprobanteProveedorIibbPadronFechaSupport;
 use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\ProveedorFacturasApocrifasSupport;
@@ -364,6 +365,12 @@ class ComprobanteProveedorComplianceValidacionService
             $tasaPadron = $this->iibbService->tasaPercepcionDesdePadron($padron);
 
             if ($tasaPadron === null) {
+                if (ComprobanteProveedorIibbPadronFechaSupport::omitirPorFacturaAnterior(
+                    $fecha ?: null,
+                    $this->iibbService->minDesdefechaPercepcion($cuitEmpresa, $jurisdiccion)
+                )) {
+                    continue;
+                }
                 $resultado['errores'][] = sprintf(
                     'Percepción IIBB «%s» (jur. %s): el CUIT %s no figura en el padrón descargado o no hay alícuota vigente.',
                     $concepto->nombre,

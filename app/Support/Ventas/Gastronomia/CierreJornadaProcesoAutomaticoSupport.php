@@ -58,6 +58,42 @@ final class CierreJornadaProcesoAutomaticoSupport
     }
 
     /**
+     * Horario diario por empresa (escalonado). Clave = empresa_id, valor = H:i.
+     *
+     * @return array<int, string>
+     */
+    public static function horariosPorEmpresa(): array
+    {
+        $ids = self::empresasHabilitadas();
+        $horasCfg = config('gastronomia.cierre_jornada_automatico.horas', []);
+        $horas = [];
+        if (is_array($horasCfg)) {
+            foreach ($horasCfg as $h) {
+                $h = trim((string) $h);
+                if ($h !== '') {
+                    $horas[] = $h;
+                }
+            }
+        }
+        $base = trim((string) config('gastronomia.cierre_jornada_automatico.hora', '09:00'));
+        if ($base === '') {
+            $base = '09:00';
+        }
+
+        $out = [];
+        foreach ($ids as $i => $empresaId) {
+            $hora = $horas[$i] ?? '';
+            if ($hora === '') {
+                $ts = strtotime($base.' + '.($i * 5).' minutes');
+                $hora = $ts !== false ? date('H:i', $ts) : $base;
+            }
+            $out[$empresaId] = $hora;
+        }
+
+        return $out;
+    }
+
+    /**
      * @return list<string>
      */
     public static function destinatariosEmail(): array

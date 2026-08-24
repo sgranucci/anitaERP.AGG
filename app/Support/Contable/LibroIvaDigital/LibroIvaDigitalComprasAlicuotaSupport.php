@@ -25,6 +25,7 @@ final class LibroIvaDigitalComprasAlicuotaSupport
             (string) ($cabecera['numero_identificacion'] ?? ''),
             (string) ($cabecera['nombre_vendedor'] ?? ''),
         );
+        $cabecera = LibroIvaDigitalIdentificacionSupport::aplicarACabecera($cabecera);
         $tipo = str_pad((string) ($cabecera['tipo_comprobante'] ?? ''), 3, '0', STR_PAD_LEFT);
         $pv = (int) ($cabecera['punto_venta'] ?? 0);
         if ($pv < 1 && ! in_array($tipo, self::TIPOS_PV_CERO, true)) {
@@ -47,7 +48,7 @@ final class LibroIvaDigitalComprasAlicuotaSupport
         $cuit = (string) ($registro['cabecera']['numero_identificacion'] ?? '0');
         foreach ($registro['alicuotas'] as $i => $fila) {
             $registro['alicuotas'][$i]['punto_venta'] = (int) $registro['cabecera']['punto_venta'];
-            $registro['alicuotas'][$i]['codigo_documento'] = $fila['codigo_documento'] ?? $doc;
+            $registro['alicuotas'][$i]['codigo_documento'] = $doc;
             $registro['alicuotas'][$i]['numero_identificacion'] = $cuit;
         }
 

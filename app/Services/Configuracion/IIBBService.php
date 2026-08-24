@@ -70,6 +70,33 @@ class IIBBService
 	}
 
 	/**
+	 * Primera vigencia descargada para el CUIT en la jurisdicción (ARBA/CABA).
+	 * Sirve para omitir el cotejo cuando la factura es anterior al padrón que hay.
+	 */
+	public function minDesdefechaPercepcion($nroinscripcion, $jurisdiccion): ?string
+	{
+		$cuit = str_replace('-', '', (string) $nroinscripcion);
+
+		switch ((int) $jurisdiccion) {
+			case 901:
+				$min = $this->padron_iibb_cabaRepository->minDesdefechaPorCuit($cuit);
+				break;
+			case 902:
+				$min = $this->padron_iibb_arbaRepository->minDesdefechaPorCuit($cuit);
+				break;
+			default:
+				$min = null;
+				break;
+		}
+
+		if ($min === null || $min === '') {
+			return null;
+		}
+
+		return substr((string) $min, 0, 10);
+	}
+
+	/**
 	 * Alícuota de percepción del padrón, normalizada.
 	 *
 	 * ARBA y CABA devuelven un modelo con "tasapercepcion"; las demás jurisdicciones

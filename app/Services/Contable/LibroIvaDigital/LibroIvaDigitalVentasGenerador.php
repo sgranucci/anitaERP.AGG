@@ -11,6 +11,7 @@ use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasConsumidorFinalSup
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasFslAnitaArmadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasFslAnitaBridgeReader;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasPeriodoSupport;
+use App\Support\Contable\CierreRendicionMaquinaConfigSupport;
 use App\Support\Database\SqlDialectSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -43,6 +44,7 @@ class LibroIvaDigitalVentasGenerador
         $contenidoAlicuotas = '';
         $totalImporte = 0.0;
         $totalIva = 0.0;
+        $totalExento = 0.0;
         $conteoVentas = 0;
         $conteoRegistros = 0;
         $conteoConAlicuotas = 0;
@@ -123,12 +125,17 @@ class LibroIvaDigitalVentasGenerador
             });
 
         if ($completarFslAnita) {
+            $pvFslDefault = CierreRendicionMaquinaConfigSupport::puntoventaFsl($empresaId);
             foreach ($this->fslAnitaBridgeReader->listarPeriodo($empresaId, $desde, $hasta, $porFechaJornada) as $filaAnita) {
-                $clave = LibroIvaDigitalVentasFslAnitaArmadoSupport::claveDesdeFilaAnita($filaAnita);
+                $clave = LibroIvaDigitalVentasFslAnitaArmadoSupport::claveDesdeFilaAnita($filaAnita, $pvFslDefault);
                 if (isset($clavesErpFsl[$clave])) {
                     continue;
                 }
-                $registro = LibroIvaDigitalVentasFslAnitaArmadoSupport::armarRegistroLibro($filaAnita, $porFechaJornada);
+                $registro = LibroIvaDigitalVentasFslAnitaArmadoSupport::armarRegistroLibro(
+                    $filaAnita,
+                    $porFechaJornada,
+                    $pvFslDefault,
+                );
                 if ($registro === null) {
                     continue;
                 }
@@ -153,6 +160,7 @@ class LibroIvaDigitalVentasGenerador
 
         foreach ($registrosFinales as $registro) {
             $contenidoCbte .= LibroIvaDigitalFormatoSupport::registroVentasCbte($registro['cabecera'])."\r\n";
+            $totalExento += abs((float) ($registro['cabecera']['operaciones_exentas'] ?? 0));
             if ($registro['alicuotas'] !== []) {
                 $conteoConAlicuotas++;
             }
@@ -175,6 +183,7 @@ class LibroIvaDigitalVentasGenerador
                 'alicuotas' => $conteoAlicuotas,
                 'importe_total' => round($totalImporte, 2),
                 'total_iva' => round($totalIva, 2),
+                'total_exento' => round($totalExento, 2),
                 'ventas_rmv' => $conteoRmv,
                 'ventas_fbi_fsl' => $conteoFbiFsl,
                 'ventas_fsl_anita' => $conteoFslAnita,

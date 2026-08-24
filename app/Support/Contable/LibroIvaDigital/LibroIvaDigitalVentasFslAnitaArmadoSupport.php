@@ -18,21 +18,21 @@ final class LibroIvaDigitalVentasFslAnitaArmadoSupport
         return $sucursal.'|'.$numero;
     }
 
-    public static function claveDesdeFilaAnita(array $fila): string
+    public static function claveDesdeFilaAnita(array $fila, int $puntoVentaDefault = 0): string
     {
         return self::claveNatural(
-            (int) preg_replace('/\D+/', '', (string) ($fila['ven_sucursal'] ?? '0')),
-            (int) preg_replace('/\D+/', '', (string) ($fila['ven_nro'] ?? '0')),
+            self::puntoVentaDesdeFila($fila, $puntoVentaDefault),
+            self::enteroCampo($fila, 'ven_nro', 'nro', 'numero', 'numerocomprobante'),
         );
     }
 
     /**
      * @return array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}|null
      */
-    public static function armarRegistroLibro(array $fila, bool $porFechaJornada): ?array
+    public static function armarRegistroLibro(array $fila, bool $porFechaJornada, int $puntoVentaDefault = 0): ?array
     {
-        $monto = abs((float) ($fila['ven_monto'] ?? 0));
-        $exento = abs((float) ($fila['ven_exento'] ?? 0));
+        $monto = abs(self::importeCampo($fila, 'ven_monto', 'monto', 'importe'));
+        $exento = abs(self::importeCampo($fila, 'ven_exento', 'exento'));
         if ($exento <= 0.0001) {
             $exento = $monto;
         }
@@ -43,21 +43,23 @@ final class LibroIvaDigitalVentasFslAnitaArmadoSupport
             return null;
         }
 
-        $puntoVenta = (int) preg_replace('/\D+/', '', (string) ($fila['ven_sucursal'] ?? '0'));
-        $numero = (int) preg_replace('/\D+/', '', (string) ($fila['ven_nro'] ?? '0'));
+        $puntoVenta = self::puntoVentaDesdeFila($fila, $puntoVentaDefault);
+        $numero = self::enteroCampo($fila, 'ven_nro', 'nro', 'numero', 'numerocomprobante');
         if ($puntoVenta <= 0 || $numero <= 0) {
             return null;
         }
 
         $fechaRaw = $porFechaJornada
-            ? (string) ($fila['ven_fecha_vto'] ?: $fila['ven_fecha'] ?? '')
-            : (string) ($fila['ven_fecha'] ?: $fila['ven_fecha_vto'] ?? '');
+            ? (string) (self::campo($fila, 'ven_fecha_vto', 'fecha_vto', 'fechajornada')
+                ?: self::campo($fila, 'ven_fecha', 'fecha'))
+            : (string) (self::campo($fila, 'ven_fecha', 'fecha')
+                ?: self::campo($fila, 'ven_fecha_vto', 'fecha_vto', 'fechajornada'));
         $fecha = self::fechaYmdAnita($fechaRaw);
         if ($fecha === '') {
             return null;
         }
 
-        $nombre = trim((string) ($fila['ven_nombre_cliente'] ?? ''));
+        $nombre = trim((string) (self::campo($fila, 'ven_nombre_cliente', 'nombre_cliente', 'nombre') ?? ''));
         if ($nombre === '') {
             $nombre = (string) config(
                 'rendicion_maquina_anita.cierre_rendicion_contable.cliente_nombre',
@@ -111,11 +113,17 @@ final class LibroIvaDigitalVentasFslAnitaArmadoSupport
     /**
      * @return array<string, mixed>
      */
-    public static function filaIvaSimpleExento(array $fila): ?array
-    {
-        $exento = abs((float) ($fila['ven_exento'] ?? 0));
+    public static function filaIvaSimpleExento(
+        array $fila,
+        bool $porFechaJornada = false,
+        int $puntoVentaDefault = 0,
+    ): ?array {
+        if (self::armarRegistroLibro($fila, $porFechaJornada, $puntoVentaDefault) === null) {
+            return null;
+        }
+        $exento = abs(self::importeCampo($fila, 'ven_exento', 'exento'));
         if ($exento <= 0.0001) {
-            $exento = abs((float) ($fila['ven_monto'] ?? 0));
+            $exento = abs(self::importeCampo($fila, 'ven_monto', 'monto', 'importe'));
         }
         if ($exento <= 0.0001) {
             return null;
@@ -142,16 +150,8 @@ final class LibroIvaDigitalVentasFslAnitaArmadoSupport
      */
     private static function resolverComprador(float $importeTotal, string $nombre): array
     {
-        // Umbral RG 5700 (default config arca_wsfe.receptor.consumidor_final_umbral_monto).
-        $sobreUmbral = abs($importeTotal) >= 10_000_000.0;
-        if ($sobreUmbral) {
-            return [
-                'codigo_documento' => '96',
-                'numero_identificacion' => '0',
-                'nombre' => $nombre !== '' ? $nombre : '-CONSUMIDOR FINAL-',
-            ];
-        }
-
+        unset($importeTotal);
+        // FSL no trae DNI del apostador. 96/0 lo rechaza ARCA; 99/0 es venta sin identificar.
         return [
             'codigo_documento' => '99',
             'numero_identificacion' => '0',
@@ -174,5 +174,51 @@ final class LibroIvaDigitalVentasFslAnitaArmadoSupport
     public static function esFslTipo(?string $tipo): bool
     {
         return strtoupper(trim((string) $tipo)) === MaquinaFslTipoSupport::ABREVIATURA;
+    }
+
+    public static function puntoVentaDesdeFila(array $fila, int $puntoVentaDefault = 0): int
+    {
+        $pv = self::enteroCampo($fila, 'ven_sucursal', 'sucursal', 'sucursal', 'puntoventa');
+        if ($pv <= 0 && $puntoVentaDefault > 0) {
+            return $puntoVentaDefault;
+        }
+
+        return $pv;
+    }
+
+    private static function enteroCampo(array $fila, string ...$claves): int
+    {
+        $raw = self::campo($fila, ...$claves);
+        if ($raw === null || $raw === '') {
+            return 0;
+        }
+
+        return (int) preg_replace('/\D+/', '', (string) $raw);
+    }
+
+    private static function importeCampo(array $fila, string ...$claves): float
+    {
+        $raw = self::campo($fila, ...$claves);
+        if ($raw === null || $raw === '') {
+            return 0.0;
+        }
+
+        return (float) str_replace(',', '.', (string) $raw);
+    }
+
+    private static function campo(array $fila, string ...$claves): mixed
+    {
+        $porClave = [];
+        foreach ($fila as $k => $v) {
+            $porClave[strtolower(trim((string) $k))] = $v;
+        }
+        foreach ($claves as $clave) {
+            $norm = strtolower(trim($clave));
+            if (array_key_exists($norm, $porClave) && $porClave[$norm] !== null && $porClave[$norm] !== '') {
+                return $porClave[$norm];
+            }
+        }
+
+        return null;
     }
 }

@@ -85,8 +85,23 @@
                         <tbody>
                             @foreach ($cumplimiento->articulos as $linea)
                             <tr>
-                                <td>#{{ $linea->requisicionSala?->numerorequisicion ?? $linea->requisicion_sala_id }}</td>
-                                <td>{{ $linea->articulo?->sku ?? '' }} — {{ $linea->articulo?->descripcion ?? '' }}</td>
+                                <td>
+                                    @php $reqLineaId = (int) ($linea->requisicionSala?->id ?? $linea->requisicion_sala_id ?? 0); @endphp
+                                    @if ($reqLineaId > 0 && can('editar-requisicion-sala', false))
+                                        <a href="{{ route('editar_requisicion_sala', ['id' => $reqLineaId]) }}" class="text-primary" target="_blank" rel="noopener">#{{ $linea->requisicionSala?->numerorequisicion ?? $reqLineaId }}</a>
+                                    @else
+                                        #{{ $linea->requisicionSala?->numerorequisicion ?? $linea->requisicion_sala_id }}
+                                    @endif
+                                </td>
+                                <td>
+                                    @php $artIdLinea = (int) ($linea->articulo_id ?? $linea->articulo?->id ?? 0); @endphp
+                                    @if ($artIdLinea > 0 && \App\Support\Stock\ArticuloConsultaDesdeModal::puedeConsultar())
+                                        <a href="{{ \App\Support\Stock\ArticuloConsultaDesdeModal::urlEditar($artIdLinea) }}" class="text-primary" target="_blank" rel="noopener" title="Editar art&iacute;culo">{{ $linea->articulo?->sku ?? '' }}</a>
+                                    @else
+                                        {{ $linea->articulo?->sku ?? '' }}
+                                    @endif
+                                    — {{ $linea->articulo?->descripcion ?? '' }}
+                                </td>
                                 <td class="text-right">{{ number_format((float) $linea->cantidad_entrega, 2, ',', '.') }}</td>
                                 <td>{{ $linea->uid }}</td>
                                 <td>{{ $linea->numeroparte }}</td>

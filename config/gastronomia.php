@@ -619,10 +619,6 @@ return [
     })(),
 
     /**
-     * Proceso automático de cierre Waitry (gastronomia:cierre-jornada-waitry-automatico).
-     * Deshabilitado por defecto hasta validar en producción con el botón de prueba.
-     */
-    /**
      * Auto-sanado del Informe Z desde el proceso (idempotente).
      * Regenera el Z solo cuando el recomputo Waitry (MP/QR) coincide con lo contabilizado en esas cuentas
      * (Z desactualizado por órdenes tardías). Si no coincide → no toca el Z (revisar asiento).
@@ -663,9 +659,18 @@ return [
         'tolerancia' => (float) env('GASTRONOMIA_AUDITORIA_MEDIOS_MENSUAL_TOLERANCIA', 0.02),
     ],
 
+    /**
+     * Proceso automático de cierre Waitry (gastronomia:cierre-jornada-waitry-automatico).
+     * Schedule diario escalonado por empresa (horas en el mismo orden que empresas_ids).
+     */
     'cierre_jornada_automatico' => [
         'habilitado' => filter_var(env('GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_HABILITADO', false), FILTER_VALIDATE_BOOLEAN),
         'hora' => env('GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_HORA', '09:00'),
+        /** Horarios H:i en el mismo orden que empresas_ids (escalonado). Vacío: hora + 5 min por empresa. */
+        'horas' => array_values(array_filter(array_map(
+            'trim',
+            explode(',', (string) env('GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_HORAS', '09:00,09:05,09:10')),
+        ))),
         'empresas_ids' => array_values(array_filter(array_map(
             'intval',
             explode(',', (string) env('GASTRONOMIA_CIERRE_JORNADA_AUTOMATICO_EMPRESAS_IDS', '1,2,3')),

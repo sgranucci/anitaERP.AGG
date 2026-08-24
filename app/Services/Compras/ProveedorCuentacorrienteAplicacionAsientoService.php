@@ -15,6 +15,7 @@ use App\Support\Compras\ProveedorCuentacorrienteAplicacionDcSupport;
 use App\Support\Compras\ProveedorCuentacorrienteAplicacionFilaSupport;
 use App\Support\Compras\ProveedorCuentacorrienteCuentaApImputadaSupport;
 use App\Support\Contable\AsientoReversoSupport;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaEmisorSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use Illuminate\Support\Facades\Auth;
 use RuntimeException;
@@ -108,6 +109,7 @@ class ProveedorCuentacorrienteAplicacionAsientoService
         $tipoAsiento = $this->resolverTipoAsiento();
         $monedaLocalId = (int) config('cotizacion.ID_MONEDA_DEFAULT', 1);
         $obs = $this->observacion($deuda, $credito, $dc, $cruzada, $reclasifica);
+        $emisor = MayorPlanoCuentaEmisorSupport::normalizarCodigo((string) ($proveedor?->codigo ?? ''));
 
         $payload = [
             'empresa_id' => $empresaId,
@@ -116,6 +118,9 @@ class ProveedorCuentacorrienteAplicacionAsientoService
             'observacion' => $obs,
             'usuario_id' => Auth::id(),
             'alcance_cierre_contable' => PeriodoContableCierreSupport::MODULO_COMPRAS,
+            // El mayor plano lee anita_emisor; sin esto Emisor/CUIT quedan en blanco.
+            'anita_emisor' => $emisor !== '' ? $emisor : null,
+            'anita_sistema' => (int) ($credito->pagoproveedor_id ?? 0) > 0 ? 'T' : 'C',
             'cuentacontable_ids' => [],
             'moneda_ids' => [],
             'centrocosto_ids' => [],

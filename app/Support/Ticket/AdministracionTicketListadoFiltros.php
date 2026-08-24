@@ -350,6 +350,7 @@ class AdministracionTicketListadoFiltros
     {
         return [
             ['valor' => self::FILTRO_ESTADO_EN_CURSO, 'label' => 'En curso'],
+            ['valor' => 'Sin Asignar', 'label' => 'Sin asignar'],
             ['valor' => 'Pendiente', 'label' => 'Pendiente'],
             ['valor' => 'En ejecución', 'label' => 'En ejecución'],
             ['valor' => 'Finalizado', 'label' => 'Finalizado'],

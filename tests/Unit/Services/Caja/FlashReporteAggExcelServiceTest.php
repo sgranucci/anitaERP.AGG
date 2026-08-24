@@ -25,10 +25,19 @@ class FlashReporteAggExcelServiceTest extends TestCase
         try {
             $tabla = $spreadsheet->getSheetByName('Tabla');
             $this->assertNotNull($tabla);
-            $this->assertTrue($tabla->getColumnDimension('D')->getVisible(), 'Tabla D debe verse (vs año ant)');
-            foreach (['G', 'H', 'I', 'J', 'K', 'L'] as $col) {
+            foreach (['B', 'C', 'D', 'F'] as $col) {
+                $this->assertTrue($tabla->getColumnDimension($col)->getVisible(), "Tabla {$col} debe verse (Slots/Ruletas/Electronic/vs año ant)");
+            }
+            foreach (['I', 'J', 'K', 'L'] as $col) {
                 $this->assertFalse($tabla->getColumnDimension($col)->getVisible(), "Tabla {$col} debe permanecer oculta");
             }
+            $this->assertSame('Slots', (string) $tabla->getCell('B2')->getValue());
+            $this->assertSame('Ruletas', (string) $tabla->getCell('C2')->getValue());
+            $this->assertSame('=INDEX(\'Biyemas S.A.\'!G7:G37,\'Biyemas S.A.\'!D1)', $tabla->getCell('B4')->getValue());
+            $this->assertSame('=INDEX(\'Biyemas S.A.\'!O7:O37,\'Biyemas S.A.\'!D1)', $tabla->getCell('C4')->getValue());
+            $this->assertStringContainsString('Biyemas S.A.\'!G39', (string) $tabla->getCell('B10')->getValue());
+            $this->assertStringContainsString('Biyemas S.A.\'!O39', (string) $tabla->getCell('C10')->getValue());
+            $this->assertStringContainsString('HLOOKUP(J3,', (string) $tabla->getCell('D3')->getValue());
 
             $resumen = $spreadsheet->getSheetByName('Resumen');
             $this->assertNotNull($resumen);
@@ -45,10 +54,7 @@ class FlashReporteAggExcelServiceTest extends TestCase
     {
         $service = new FlashReporteAggExcelService;
         $spreadsheet = IOFactory::load($service->rutaPlantilla());
-        $dir = storage_path('app/tmp');
-        if (! is_dir($dir)) {
-            mkdir($dir, 0775, true);
-        }
+        $dir = sys_get_temp_dir();
         $path = $dir.'/flash-reporte-agg-test-'.uniqid('', true).'.xlsx';
 
         try {

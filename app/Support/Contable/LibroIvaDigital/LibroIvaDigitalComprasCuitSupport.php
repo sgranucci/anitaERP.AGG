@@ -28,6 +28,7 @@ final class LibroIvaDigitalComprasCuitSupport
         'FIRST DATA' => self::CUIT_FISERV,
         'FISERV' => self::CUIT_FISERV,
         'FISE' => self::CUIT_FISERV,
+        'FISE' => self::CUIT_FISERV,
     ];
 
     public static function resolver(?string $cuit, ?string $nombreVendedor): string

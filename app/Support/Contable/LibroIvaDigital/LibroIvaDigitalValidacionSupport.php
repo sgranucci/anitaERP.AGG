@@ -159,6 +159,15 @@ final class LibroIvaDigitalValidacionSupport
                 self::agregar($avisos, "VENTAS_CBTE línea {$nroLinea}: punto de venta {$pv} fuera de 00001-09997.");
             }
 
+            $codDoc = substr($linea, 56, 2);
+            $nroDoc = ltrim(substr($linea, 58, 20), '0');
+            if ($nroDoc === '' && $codDoc !== '99') {
+                self::agregar(
+                    $avisos,
+                    "VENTAS_CBTE línea {$nroLinea}: nro. de documento 0 solo es válido con código 99 (tiene {$codDoc}).",
+                );
+            }
+
             $nroInt = (int) ($nro === '' ? '0' : $nro);
             $hastaInt = (int) ($hasta === '' ? '0' : $hasta);
             if ($hastaInt < $nroInt) {
@@ -258,6 +267,14 @@ final class LibroIvaDigitalValidacionSupport
             $tipo = substr($linea, 8, 3);
             $cantAlic = (int) substr($linea, 237, 1);
             $esTipoC = in_array($tipo, LibroIvaDigitalVentasAlicuotaSupport::TIPOS_SIN_ALICUOTA, true);
+            $codDoc = substr($linea, 52, 2);
+            $nroDoc = ltrim(substr($linea, 54, 20), '0');
+            if ($nroDoc === '' && $codDoc !== '99') {
+                self::agregar(
+                    $avisos,
+                    'COMPRAS_CBTE línea '.($i + 1).": nro. de documento 0 solo es válido con código 99 (tiene {$codDoc}).",
+                );
+            }
 
             if ($moneda === 'PES' && abs($tipoCambio - 1.0) > 0.000001) {
                 $pesTipoCambioMal++;
@@ -296,6 +313,28 @@ final class LibroIvaDigitalValidacionSupport
                     $totalIvaSimple,
                 );
             }
+        }
+
+        $exentoApuestas = 0.0;
+        foreach ($resultado['iva_simple']['resumen_por_actividad'] ?? [] as $actividad) {
+            $codigo = preg_replace('/\D+/', '', (string) ($actividad['actividad_codigo'] ?? ''));
+            if ($codigo === LibroIvaDigitalVentasFslAnitaArmadoSupport::ACTIVIDAD_APUESTAS_CODIGO) {
+                $exentoApuestas += (float) ($actividad['exento'] ?? 0);
+            }
+        }
+        $exentoVentas = (float) ($resultado['ventas']['resumen']['total_exento'] ?? 0);
+        $fbiFsl = (int) ($resultado['ventas']['resumen']['ventas_fbi_fsl'] ?? 0);
+        if ($exentoApuestas > 1 && $fbiFsl === 0) {
+            $avisos[] = sprintf(
+                'IVA Simple tiene $%s exento en actividad 920009 (apuestas) pero el Libro IVA Digital no incluye comprobantes FBI/FSL. En ARCA no hay código de actividad: buscar Factura B tipo 006 del PV de máquinas (no «venta global diaria»).',
+                number_format($exentoApuestas, 2, ',', '.'),
+            );
+        } elseif ($exentoApuestas > $exentoVentas + 1) {
+            $avisos[] = sprintf(
+                'IVA Simple apuestas 920009 ($%s exento) supera las operaciones exentas del VENTAS_CBTE ($%s). Las FSL deben ir al libro como Factura B 006, no solo a IVA Simple.',
+                number_format($exentoApuestas, 2, ',', '.'),
+                number_format($exentoVentas, 2, ',', '.'),
+            );
         }
 
         $totalIvaCompras = (float) ($resultado['compras']['resumen']['total_iva'] ?? 0);

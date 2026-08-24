@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Mail;
 use Throwable;
 
 /**
- * Informe diario factura a factura: CC ERP ↔ asiento ERP ↔ ctamov Anita.
+ * Informe diario factura a factura: CC ERP ↔ haber AP asiento ↔ haber AP ctamov.
  */
 final class ComprobanteProveedorImputacionApDiariaService
 {
@@ -120,7 +120,8 @@ final class ComprobanteProveedorImputacionApDiariaService
             'mail_destino' => null,
             'mail_error' => null,
             'notas' => [
-                'Cada factura compara CC ERP, asiento ERP (AP MN + AP ME + anticipo) y ctamov Anita.',
+                'Cada factura compara CC ERP vs haber a proveedores (AP MN + AP ME) del asiento y de ctamov Anita.',
+                'El debe a anticipo de una factura anticipada no se netea contra la CC; se controla aparte vs ctamov.',
                 'Importes en $ con la cotización de la operación. Haber suma, Debe resta.',
                 'No incluye OPA ni aplicaciones: solo comprobantes de proveedor.',
             ],
@@ -197,15 +198,20 @@ final class ComprobanteProveedorImputacionApDiariaService
             }
             $ccArs = round($ccArs, 2);
 
-            $asientoArs = round((float) ($fila['imputado_ars'] ?? 0), 2);
+            $asientoArs = ComprobanteProveedorImputacionApSupport::haberAp([
+                'ap_mn' => (float) ($fila['ap_mn_ars'] ?? 0),
+                'ap_me' => (float) ($fila['ap_me_ars'] ?? 0),
+            ]);
+            $asientoAnticipoArs = round((float) ($fila['anticipo_ars'] ?? 0), 2);
             $tieneAsiento = (int) ($fila['asiento_id'] ?? 0) > 0
                 && trim((string) ($fila['numeroasiento'] ?? '')) !== '';
 
             $empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita((int) ($fila['empresa_id'] ?? 0));
             $nroAsiento = (int) ($fila['numeroasiento'] ?? 0);
             $ctamov = $ctamovPorAsiento[ComprobanteProveedorImputacionApCtamovSupport::clave($empresaAnita, $nroAsiento)]
-                ?? ['trio' => 0.0, 'lineas' => 0, 'encontrado' => false];
-            $ctamovArs = round((float) $ctamov['trio'], 2);
+                ?? ['trio' => 0.0, 'ap' => 0.0, 'anticipo' => 0.0, 'lineas' => 0, 'encontrado' => false];
+            $ctamovArs = round((float) ($ctamov['ap'] ?? 0), 2);
+            $ctamovAnticipoArs = round((float) ($ctamov['anticipo'] ?? 0), 2);
             $tieneCtamov = ! empty($ctamov['encontrado']);
 
             $eval = ComprobanteProveedorImputacionApSupport::evaluarTresPatas(
@@ -215,7 +221,9 @@ final class ComprobanteProveedorImputacionApDiariaService
                 $tieneCc,
                 $tieneAsiento,
                 $tieneCtamov,
-                $tolerancia
+                $tolerancia,
+                $asientoAnticipoArs,
+                $ctamovAnticipoArs,
             );
 
             $fila['cc_ars'] = $ccArs;

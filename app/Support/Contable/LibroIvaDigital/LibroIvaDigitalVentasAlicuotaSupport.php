@@ -55,6 +55,7 @@ final class LibroIvaDigitalVentasAlicuotaSupport
         $tipo = str_pad((string) ($cabecera['tipo_comprobante'] ?? ''), 3, '0', STR_PAD_LEFT);
         if (in_array($tipo, self::TIPOS_SIN_ALICUOTA, true)) {
             $cabecera['cantidad_alicuotas'] = 0;
+            $cabecera = LibroIvaDigitalIdentificacionSupport::aplicarACabecera($cabecera);
             $registro['cabecera'] = $cabecera;
             $registro['alicuotas'] = [];
 
@@ -75,6 +76,7 @@ final class LibroIvaDigitalVentasAlicuotaSupport
 
         $cabecera['cantidad_alicuotas'] = count($alicuotas);
         $cabecera['codigo_operacion'] = self::codigoOperacionDesdeAlicuotas($alicuotas, $cabecera);
+        $cabecera = LibroIvaDigitalIdentificacionSupport::aplicarACabecera($cabecera);
         $registro['cabecera'] = $cabecera;
         $registro['alicuotas'] = $alicuotas;
 

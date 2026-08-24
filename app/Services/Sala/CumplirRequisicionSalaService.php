@@ -16,6 +16,8 @@ use App\Services\Stock\TransferenciaMercaderiaService;
 use App\Traits\Sala\RequisicionSalaArticuloEstadoParcialTrait;
 use App\Traits\Sala\RequisicionSalaArticuloEstadoTrait;
 use App\Support\Sala\RequisicionSalaDepositoLaboratorioSupport;
+use App\Support\Stock\ArticuloParteUnicaDisponibilidadSupport;
+use App\Support\Stock\RecepcionProveedorParteUnicaSupport;
 use Auth;
 use Carbon\Carbon;
 use DB;
@@ -592,21 +594,21 @@ class CumplirRequisicionSalaService
         }
 
         $npu = trim((string) ($fila['numeroparte'] ?? $linea->numeroparte ?? ''));
-        if ($npu === '') {
+        // 0 / 0000 es placeholder (Anita / líneas sin parte única), no un NPU real.
+        if ($npu === '' || (ctype_digit($npu) && (int) $npu <= 0)) {
             return null;
         }
         if (strlen($npu) > 50) {
             throw new \RuntimeException('El NPU no puede superar 50 caracteres.');
         }
 
+        $articulo = $linea->articulos;
         $articuloId = (int) $linea->articulo_id;
-        if ($articuloId > 0) {
-            try {
-                \App\Support\Stock\ArticuloParteUnicaDisponibilidadSupport::assertActivaParaUso($npu, $articuloId);
-            } catch (\RuntimeException $e) {
-                throw $e;
-            }
-        } elseif (\App\Support\Stock\ArticuloParteUnicaDisponibilidadSupport::estaDadaDeBaja($npu)) {
+        $articuloManejaNpu = RecepcionProveedorParteUnicaSupport::articuloManejaParteUnica($articulo);
+
+        if ($articuloManejaNpu && $articuloId > 0) {
+            ArticuloParteUnicaDisponibilidadSupport::assertActivaParaUso($npu, $articuloId);
+        } elseif ($articuloManejaNpu && ArticuloParteUnicaDisponibilidadSupport::estaDadaDeBaja($npu)) {
             throw new \RuntimeException('El NPU '.$npu.' fue dado de baja y no puede utilizarse.');
         }
 

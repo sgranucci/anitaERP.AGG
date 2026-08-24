@@ -50,8 +50,14 @@
                 @endif
                 <br>
                 El total de cuentas de caja (y cheques) debe coincidir exactamente con ese monto; no puede ser ni mayor ni menor.
-                Tipo de transacción: {{ config('caja.ingresoegreso_sp_tipotransaccion_abreviatura', 'OPP') }}.
-                El asiento contable se arma con las cuentas de la solicitud.
+                @if (\App\Support\Caja\IngresoEgresoSolicitudpagoSupport::esPagoOpa($solicitudpagoOrigen))
+                    Tipo de transacción: {{ \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::abreviaturaTipoPago($solicitudpagoOrigen) }}
+                    (solicitud anticipada). Se genera una OPA impaga en la cuenta corriente del proveedor
+                    y el asiento imputa anticipos a proveedores.
+                @else
+                    Tipo de transacción: {{ \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::abreviaturaTipoPago($solicitudpagoOrigen) }}.
+                    El asiento contable se arma con las cuentas de la solicitud.
+                @endif
                 Al guardar, la solicitud AUTORIZADA pasa a PAGADA, se emite el PDF de la orden de pago y se vuelve al listado de solicitudes.
                 <a href="{{ route('editar_solicitudpago', $solicitudpagoOrigen->id) }}" target="_blank" rel="noopener">
                     Abrir solicitud

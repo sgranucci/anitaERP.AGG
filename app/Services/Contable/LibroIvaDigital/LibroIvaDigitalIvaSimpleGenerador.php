@@ -12,6 +12,7 @@ use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasFslAnitaArmadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasFslAnitaBridgeReader;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasPeriodoSupport;
+use App\Support\Contable\CierreRendicionMaquinaConfigSupport;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -286,13 +287,18 @@ class LibroIvaDigitalIvaSimpleGenerador
         }
 
         if ($completarFslAnita) {
+            $pvFslDefault = CierreRendicionMaquinaConfigSupport::puntoventaFsl($empresaId);
             $clavesErpFsl = $this->clavesFslErp($empresaId, $desde, $hasta, $porFechaJornada);
             foreach ($this->fslAnitaBridgeReader->listarPeriodo($empresaId, $desde, $hasta, $porFechaJornada) as $filaAnita) {
-                $claveNat = LibroIvaDigitalVentasFslAnitaArmadoSupport::claveDesdeFilaAnita($filaAnita);
+                $claveNat = LibroIvaDigitalVentasFslAnitaArmadoSupport::claveDesdeFilaAnita($filaAnita, $pvFslDefault);
                 if (isset($clavesErpFsl[$claveNat])) {
                     continue;
                 }
-                $fila = LibroIvaDigitalVentasFslAnitaArmadoSupport::filaIvaSimpleExento($filaAnita);
+                $fila = LibroIvaDigitalVentasFslAnitaArmadoSupport::filaIvaSimpleExento(
+                    $filaAnita,
+                    $porFechaJornada,
+                    $pvFslDefault,
+                );
                 if ($fila === null) {
                     continue;
                 }

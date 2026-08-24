@@ -13,9 +13,10 @@ use Illuminate\Support\Facades\Schema;
  * corresponde al subsistema de Anita: proveedor, cliente o cuenta de caja.
  *
  * Para proveedor manda el documento origen del asiento ERP (comprobante, recepción,
- * pago, orden de compra) y recién después el código de Anita. Un código deducido de
- * la descripción que no corresponde a ningún proveedor se descarta: solía mostrar el
- * número de comprobante COM en la columna Emisor.
+ * pago, orden de compra), luego la aplicación de cuenta corriente ligada al asiento
+ * y recién después el código de Anita. Un código deducido de la descripción que no
+ * corresponde a ningún proveedor se descarta: solía mostrar el número de comprobante
+ * COM en la columna Emisor.
  */
 class MayorPlanoCuentaEmisorEnricher
 {
@@ -40,6 +41,9 @@ class MayorPlanoCuentaEmisorEnricher
     /** @var array<string, int> tabla|id => proveedor_id */
     private array $cacheProveedorDeDocumento = [];
 
+    /** @var array<int, int> asiento_id => proveedor_id */
+    private array $cacheProveedorDeAplicacion = [];
+
     /**
      * @param  list<array<string, mixed>>  $filas
      * @return list<array<string, mixed>>
@@ -48,6 +52,7 @@ class MayorPlanoCuentaEmisorEnricher
     {
         $codigosPorEntidad = [];
         $documentos = [];
+        $asientoIds = [];
 
         foreach ($filas as $fila) {
             if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
@@ -59,11 +64,18 @@ class MayorPlanoCuentaEmisorEnricher
                 $codigosPorEntidad[$this->entidadDeFila($fila)][$codigo] = true;
             }
 
+            $tieneDocumento = false;
             foreach (self::TABLAS_ORIGEN as $campo => $tabla) {
                 $id = (int) ($fila[$campo] ?? 0);
                 if ($id > 0) {
                     $documentos[$tabla][$id] = $id;
+                    $tieneDocumento = true;
                 }
+            }
+
+            $asientoId = (int) ($fila['asiento_id'] ?? 0);
+            if ($asientoId > 0 && $codigo === '' && ! $tieneDocumento) {
+                $asientoIds[$asientoId] = $asientoId;
             }
         }
 
@@ -71,6 +83,7 @@ class MayorPlanoCuentaEmisorEnricher
             $this->precargarPorCodigo((string) $entidad, array_keys($codigos));
         }
         $this->precargarProveedoresDeDocumentos($documentos);
+        $this->precargarProveedoresDeAplicacionCc(array_values($asientoIds));
 
         foreach ($filas as $idx => $fila) {
             if (($fila['tipo_fila'] ?? 'detalle') !== 'detalle') {
@@ -84,6 +97,9 @@ class MayorPlanoCuentaEmisorEnricher
             $registro = $entidad === MayorPlanoCuentaEmisorSupport::ENTIDAD_PROVEEDOR
                 ? $this->proveedorPorDocumentoOrigen($fila)
                 : null;
+            if ($registro === null && $entidad === MayorPlanoCuentaEmisorSupport::ENTIDAD_PROVEEDOR) {
+                $registro = $this->proveedorPorAplicacionCc($fila);
+            }
             if ($registro === null && $codigo !== '') {
                 $registro = $this->registroPorCodigo($entidad, $codigo, $empresaId);
             }
@@ -202,6 +218,22 @@ class MayorPlanoCuentaEmisorEnricher
     }
 
     /**
+     * @param  array<string, mixed>  $fila
+     * @return array{id: int, empresa_id: int|null, codigo: string, nombre: string, cuit: string}|null
+     */
+    private function proveedorPorAplicacionCc(array $fila): ?array
+    {
+        $asientoId = (int) ($fila['asiento_id'] ?? 0);
+        if ($asientoId <= 0) {
+            return null;
+        }
+
+        $proveedorId = (int) ($this->cacheProveedorDeAplicacion[$asientoId] ?? 0);
+
+        return $proveedorId > 0 ? ($this->cacheProveedorPorId[$proveedorId] ?? null) : null;
+    }
+
+    /**
      * @param  list<string>  $codigos
      */
     private function precargarPorCodigo(string $entidad, array $codigos): void
@@ -288,12 +320,67 @@ class MayorPlanoCuentaEmisorEnricher
             }
         }
 
-        $faltantes = array_values(array_filter(
-            $proveedorIds,
-            fn (int $id) => ! isset($this->cacheProveedorPorId[$id]),
+        $this->cargarProveedoresPorId(array_values($proveedorIds));
+    }
+
+    /**
+     * Asientos de aplicación CC no tienen factura/pago en el asiento: el proveedor
+     * está en la cuenta corriente ligada por asiento_id.
+     *
+     * @param  list<int>  $asientoIds
+     */
+    private function precargarProveedoresDeAplicacionCc(array $asientoIds): void
+    {
+        $pendientes = array_values(array_filter(
+            $asientoIds,
+            fn (int $id) => $id > 0 && ! isset($this->cacheProveedorDeAplicacion[$id]),
         ));
 
-        if ($faltantes === []) {
+        if (
+            $pendientes === []
+            || ! Schema::hasTable('proveedor_cuentacorriente_aplicacion')
+            || ! Schema::hasColumn('proveedor_cuentacorriente_aplicacion', 'asiento_id')
+            || ! Schema::hasTable('proveedor_cuentacorriente')
+            || ! Schema::hasColumn('proveedor_cuentacorriente', 'proveedor_id')
+        ) {
+            return;
+        }
+
+        foreach ($pendientes as $id) {
+            $this->cacheProveedorDeAplicacion[$id] = 0;
+        }
+
+        $proveedorIds = [];
+        $filas = DB::table('proveedor_cuentacorriente_aplicacion as apl')
+            ->join('proveedor_cuentacorriente as cc', 'cc.id', '=', 'apl.proveedor_cuentacorriente_id')
+            ->whereIn('apl.asiento_id', $pendientes)
+            ->where('apl.asiento_id', '>', 0)
+            ->get(['apl.asiento_id', 'cc.proveedor_id']);
+
+        foreach ($filas as $row) {
+            $asientoId = (int) $row->asiento_id;
+            $proveedorId = (int) ($row->proveedor_id ?? 0);
+            if ($proveedorId <= 0 || ($this->cacheProveedorDeAplicacion[$asientoId] ?? 0) > 0) {
+                continue;
+            }
+            $this->cacheProveedorDeAplicacion[$asientoId] = $proveedorId;
+            $proveedorIds[$proveedorId] = $proveedorId;
+        }
+
+        $this->cargarProveedoresPorId(array_values($proveedorIds));
+    }
+
+    /**
+     * @param  list<int>  $proveedorIds
+     */
+    private function cargarProveedoresPorId(array $proveedorIds): void
+    {
+        $faltantes = array_values(array_filter(
+            $proveedorIds,
+            fn (int $id) => $id > 0 && ! isset($this->cacheProveedorPorId[$id]),
+        ));
+
+        if ($faltantes === [] || ! Schema::hasTable('proveedor')) {
             return;
         }
 

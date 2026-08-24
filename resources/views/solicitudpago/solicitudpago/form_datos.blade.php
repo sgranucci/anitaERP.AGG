@@ -51,6 +51,7 @@
                         <option value="{{ $opt['valor'] }}" @selected($tratamientoActual === $opt['valor'])>{{ $opt['nombre'] }}</option>
                     @endforeach
                 </select>
+                <small class="form-text text-muted">Anticipada: al pagar se emite OPA, queda un crédito impago en la CC del proveedor y el asiento va a anticipos a proveedores.</small>
             </div>
         </div>
 

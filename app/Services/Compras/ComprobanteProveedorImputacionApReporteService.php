@@ -210,7 +210,7 @@ class ComprobanteProveedorImputacionApReporteService
             );
             $eval = ComprobanteProveedorImputacionApSupport::evaluar(
                 $esperado,
-                $imputado['trio'],
+                ComprobanteProveedorImputacionApSupport::haberAp($imputado),
                 $cubetaEsperada,
                 $imputado['cubeta'],
                 $asientoId > 0 && $asiento !== null,
@@ -553,7 +553,9 @@ class ComprobanteProveedorImputacionApReporteService
             'ap_mn_ars' => $imputado['ap_mn'],
             'ap_me_ars' => $imputado['ap_me'],
             'anticipo_ars' => $imputado['anticipo'],
-            'imputado_ars' => $imputado['trio'],
+            'imputado_ars' => $tipo === ComprobanteProveedorImputacionApSupport::TIPO_COMPROBANTE
+                ? ComprobanteProveedorImputacionApSupport::haberAp($imputado)
+                : $imputado['trio'],
             'diferencia' => $eval['diferencia'],
             'ok' => $eval['ok'],
             'alertas' => $eval['alertas'],

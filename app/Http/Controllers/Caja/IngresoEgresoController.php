@@ -225,7 +225,7 @@ class IngresoEgresoController extends Controller
                     $data->detalle = 'Pago SP '.$solicitudpagoOrigen->codigo
                         .($solicitudpagoOrigen->detalle ? ' — '.$solicitudpagoOrigen->detalle : '');
                 }
-                $tipoSpId = IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorConfig();
+                $tipoSpId = IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorConfig($solicitudpagoOrigen);
                 if ($tipoSpId > 0) {
                     $data->tipotransaccion_caja_id = $tipoSpId;
                     session(['tipotransaccion_caja_id' => $tipoSpId]);

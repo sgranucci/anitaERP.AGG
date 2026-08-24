@@ -137,13 +137,31 @@
         return '<td><select name="lineas[' + idx + '][tecnico_laboratorio_id]" class="form-control form-control-sm select-tecnico select-tecnico-reparacion">' + opcionesTecnicos(tecnicos) + '</select></td>';
     }
 
+    function htmlLinkRequisicion(req) {
+        var reqNro = req && req.numerorequisicion != null ? String(req.numerorequisicion) : '';
+        var reqId = parseInt(req && req.id, 10) || 0;
+        var texto = '#' + escapeHtml(reqNro);
+        if (reqId > 0 && cfg.urlEditarRequisicion) {
+            return '<a href="' + cfg.urlEditarRequisicion.replace('__ID__', String(reqId)) + '" class="text-primary" target="_blank" rel="noopener" title="Editar requisici\u00f3n">' + texto + '</a>';
+        }
+        return texto;
+    }
+
+    function htmlLinkArticulo(linea) {
+        var sku = escapeHtml(linea.sku || '');
+        var articuloId = parseInt(linea.articulo_id, 10) || 0;
+        if (articuloId > 0 && cfg.urlEditarArticulo) {
+            return '<a href="' + cfg.urlEditarArticulo.replace('__ID__', String(articuloId)) + '" class="text-primary" target="_blank" rel="noopener" title="Editar art\u00edculo">' + sku + '</a>';
+        }
+        return sku;
+    }
+
     function construirFilaLinea(linea, req, tecnicos, idx) {
-        var reqNro = req ? req.numerorequisicion : '';
         var reqId = req ? req.id : '';
         var destino = linea.destino || '';
         var html = '<tr class="fila-cumple-linea" data-linea-id="' + linea.id + '" data-articulo-id="' + (linea.articulo_id || '') + '" data-requisicion-id="' + reqId + '" data-destino="' + escapeHtml(destino) + '">';
-        html += '<td>#' + escapeHtml(String(reqNro)) + '</td>';
-        html += '<td>' + escapeHtml(linea.sku) + '</td>';
+        html += '<td>' + htmlLinkRequisicion(req) + '</td>';
+        html += '<td>' + htmlLinkArticulo(linea) + '</td>';
         html += '<td>' + escapeHtml(linea.descripcion) + '</td>';
         html += '<td class="text-right pendiente-cell">' + Number(linea.pendiente).toFixed(2) + '</td>';
         html += '<td class="align-middle text-right col-saldo-orig"><span class="ms-saldo-origen text-monospace small" title="Saldo en dep\u00f3sito origen">\u2014</span></td>';

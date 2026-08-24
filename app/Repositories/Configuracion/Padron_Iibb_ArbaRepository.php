@@ -74,6 +74,13 @@ class Padron_Iibb_ArbaRepository implements Padron_Iibb_ArbaRepositoryInterface
                 ->where('hastafecha', '>=', $fecha)->first();
     }
 
+    public function minDesdefechaPorCuit($cuit): ?string
+    {
+        $min = $this->model->where('cuit', $cuit)->min('desdefecha');
+
+        return $min !== null && $min !== '' ? (string) $min : null;
+    }
+
     public function eliminarPorHastafechaAnteriorA(CarbonInterface $corte): int
     {
         return $this->model->newQuery()

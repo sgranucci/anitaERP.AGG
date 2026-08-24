@@ -27,6 +27,7 @@ class ComprobanteProveedorImputacionApSupportTest extends TestCase
         ], $catalogo, 'test');
 
         $this->assertSame(1000.0, $imputado['trio']);
+        $this->assertSame(1000.0, $imputado['ap']);
         $this->assertSame(1000.0, $imputado['ap_mn']);
         $this->assertSame(ComprobanteProveedorImputacionApSupport::CUBETA_MN, $imputado['cubeta']);
 
@@ -194,6 +195,64 @@ class ComprobanteProveedorImputacionApSupportTest extends TestCase
         );
         $this->assertFalse($eval['ok']);
         $this->assertContains('Sin ctamov Anita', $eval['alertas']);
+    }
+
+    public function test_factura_anticipada_haber_ap_cuadra_con_cc(): void
+    {
+        $catalogo = $this->catalogo(10, 20, 30);
+        $imputado = ComprobanteProveedorImputacionApSupport::imputacionTrio([
+            ['cuentacontable_id' => 30, 'monto' => 1175000, 'moneda_id' => 1, 'cotizacion' => 1, 'fecha' => '2026-08-19'],
+            ['cuentacontable_id' => 10, 'monto' => -1175000, 'moneda_id' => 1, 'cotizacion' => 1, 'fecha' => '2026-08-19'],
+        ], $catalogo, 'anticipada');
+
+        $this->assertSame(0.0, $imputado['trio']);
+        $this->assertSame(1175000.0, $imputado['ap']);
+        $this->assertSame(-1175000.0, $imputado['anticipo']);
+        $this->assertSame(ComprobanteProveedorImputacionApSupport::CUBETA_MIXTA, $imputado['cubeta']);
+
+        $eval = ComprobanteProveedorImputacionApSupport::evaluar(
+            1175000.0,
+            ComprobanteProveedorImputacionApSupport::haberAp($imputado),
+            ComprobanteProveedorImputacionApSupport::CUBETA_MN,
+            $imputado['cubeta'],
+            true,
+            false,
+            ComprobanteProveedorImputacionApSupport::TIPO_COMPROBANTE
+        );
+        $this->assertTrue($eval['ok']);
+        $this->assertSame([], $eval['alertas']);
+
+        $tres = ComprobanteProveedorImputacionApSupport::evaluarTresPatas(
+            1175000.0,
+            $imputado['ap'],
+            1175000.0,
+            true,
+            true,
+            true,
+            ComprobanteProveedorImputacionApSupport::TOLERANCIA,
+            $imputado['anticipo'],
+            -1175000.0
+        );
+        $this->assertTrue($tres['ok']);
+        $this->assertSame([], $tres['alertas']);
+    }
+
+    public function test_tres_patas_anticipo_desfasado_en_ctamov(): void
+    {
+        $eval = ComprobanteProveedorImputacionApSupport::evaluarTresPatas(
+            1175000.0,
+            1175000.0,
+            1175000.0,
+            true,
+            true,
+            true,
+            ComprobanteProveedorImputacionApSupport::TOLERANCIA,
+            -1175000.0,
+            0.0
+        );
+        $this->assertFalse($eval['ok']);
+        $this->assertContains('Anticipo asiento ≠ ctamov', $eval['alertas']);
+        $this->assertNotContains('CC ≠ asiento', $eval['alertas']);
     }
 
     public function test_clasificar_codigo_ap(): void

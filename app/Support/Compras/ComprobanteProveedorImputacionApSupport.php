@@ -113,7 +113,7 @@ final class ComprobanteProveedorImputacionApSupport
     /**
      * @param  list<array{cuentacontable_id:int, monto:float, moneda_id:int, cotizacion:mixed, fecha?:string|null}>  $movimientos
      * @param  array{mn: array<int, true>, me: array<int, true>, anticipo: array<int, true>}  $catalogo
-     * @return array{ap_mn: float, ap_me: float, anticipo: float, trio: float, cubeta: string}
+     * @return array{ap_mn: float, ap_me: float, anticipo: float, ap: float, trio: float, cubeta: string}
      */
     public static function imputacionTrio(array $movimientos, array $catalogo, string $contexto): array
     {
@@ -154,9 +154,25 @@ final class ComprobanteProveedorImputacionApSupport
             'ap_mn' => $apMn,
             'ap_me' => $apMe,
             'anticipo' => $anticipo,
+            'ap' => round($apMn + $apMe, 2),
             'trio' => $trio,
             'cubeta' => self::cubetaDesdeImportes($apMn, $apMe, $anticipo),
         ];
+    }
+
+    /**
+     * Haber neto en proveedores (MN+ME). La CC de un comprobante se compara con esto,
+     * no con el trío: en factura anticipada el debe a anticipo cancela el haber a AP.
+     *
+     * @param  array{ap?: float, ap_mn?: float, ap_me?: float}  $imputado
+     */
+    public static function haberAp(array $imputado): float
+    {
+        if (isset($imputado['ap'])) {
+            return round((float) $imputado['ap'], 2);
+        }
+
+        return round((float) ($imputado['ap_mn'] ?? 0) + (float) ($imputado['ap_me'] ?? 0), 2);
     }
 
     /**
@@ -258,7 +274,8 @@ final class ComprobanteProveedorImputacionApSupport
         if ($tipo === self::TIPO_COMPROBANTE
             && $cubetaEsperada
             && $cubetaImputada !== self::CUBETA_NINGUNA
-            && $cubetaImputada !== $cubetaEsperada) {
+            && $cubetaImputada !== $cubetaEsperada
+            && ! self::esFacturaAnticipadaMixta($cubetaImputada, $imputado, $esperado, $tolerancia)) {
             $alertas[] = 'Cuenta distinta a la esperada (MN/ME/anticipo)';
         }
 
@@ -280,7 +297,8 @@ final class ComprobanteProveedorImputacionApSupport
     }
 
     /**
-     * Control diario: CC ERP vs asiento ERP vs ctamov Anita (Haber−Debe en $).
+     * Control diario: CC ERP vs haber AP del asiento vs haber AP de ctamov (Haber−Debe en $).
+     * El anticipo de una factura anticipada se controla aparte (no entra al neto vs CC).
      *
      * @return array{
      *     ok: bool,
@@ -298,6 +316,8 @@ final class ComprobanteProveedorImputacionApSupport
         bool $tieneAsiento,
         bool $tieneCtamov,
         float $tolerancia = self::TOLERANCIA,
+        float $asientoAnticipoArs = 0.0,
+        float $ctamovAnticipoArs = 0.0,
     ): array {
         $alertas = [];
         if (! $tieneCc) {
@@ -319,6 +339,10 @@ final class ComprobanteProveedorImputacionApSupport
         if ($tieneCc && $tieneCtamov && self::desvia($ctamovArs, $ccArs, $tolerancia)) {
             $alertas[] = 'CC ≠ ctamov';
         }
+        if ($tieneAsiento && $tieneCtamov
+            && self::desvia($asientoAnticipoArs, $ctamovAnticipoArs, $tolerancia)) {
+            $alertas[] = 'Anticipo asiento ≠ ctamov';
+        }
 
         return [
             'ok' => $alertas === [],
@@ -327,6 +351,19 @@ final class ComprobanteProveedorImputacionApSupport
             'diff_asiento_ctamov' => round($ctamovArs - $asientoArs, 2),
             'diff_cc_ctamov' => round($ctamovArs - $ccArs, 2),
         ];
+    }
+
+    /**
+     * Factura anticipada: haber AP + debe anticipo (cubeta mixta) y el AP cuadra con el total.
+     */
+    public static function esFacturaAnticipadaMixta(
+        string $cubetaImputada,
+        float $haberAp,
+        float $esperado,
+        float $tolerancia = self::TOLERANCIA,
+    ): bool {
+        return $cubetaImputada === self::CUBETA_MIXTA
+            && ! self::desvia($haberAp, $esperado, $tolerancia);
     }
 
     public static function etiquetaTipo(string $tipo): string

@@ -205,8 +205,20 @@
                                                 }
                                             @endphp
                                             <tr class="fila-cumple-linea" data-linea-id="{{ $linea->id }}" data-articulo-id="{{ $linea->articulo_id }}" data-requisicion-id="{{ $requisicion->id }}" data-destino="{{ $linea->destino ?? '' }}">
-                                                <td>#{{ $requisicion->numerorequisicion }}</td>
-                                                <td>{{ $linea->articulos->sku ?? '' }}</td>
+                                                <td>
+                                                    @if (can('editar-requisicion-sala', false))
+                                                        <a href="{{ route('editar_requisicion_sala', ['id' => $requisicion->id]) }}" class="text-primary" target="_blank" rel="noopener" title="Editar requisici&oacute;n">#{{ $requisicion->numerorequisicion }}</a>
+                                                    @else
+                                                        #{{ $requisicion->numerorequisicion }}
+                                                    @endif
+                                                </td>
+                                                <td>
+                                                    @if ((int) ($linea->articulo_id ?? 0) > 0 && \App\Support\Stock\ArticuloConsultaDesdeModal::puedeConsultar())
+                                                        <a href="{{ \App\Support\Stock\ArticuloConsultaDesdeModal::urlEditar((int) $linea->articulo_id) }}" class="text-primary" target="_blank" rel="noopener" title="Editar art&iacute;culo">{{ $linea->articulos->sku ?? '' }}</a>
+                                                    @else
+                                                        {{ $linea->articulos->sku ?? '' }}
+                                                    @endif
+                                                </td>
                                                 <td>{{ $linea->descripcionArticulo() }}</td>
                                                 <td class="text-right pendiente-cell">{{ number_format($pendiente, 2, '.', '') }}</td>
                                                 <td class="align-middle text-right col-saldo-orig">
@@ -304,6 +316,14 @@
 @endsection
 
 @section('scripts')
+@php
+    $urlEditarArticuloCumple = \App\Support\Stock\ArticuloConsultaDesdeModal::puedeConsultar()
+        ? route('editar_articulo', ['id' => '__ID__', 'origen' => 'modal_consulta', 'vista' => 'consulta'])
+        : '';
+    $urlEditarRequisicionCumple = can('editar-requisicion-sala', false)
+        ? route('editar_requisicion_sala', ['id' => '__ID__'])
+        : '';
+@endphp
 <script>
     window.cumpleRequisicionSalaConfig = {
         urlConsulta: @json(route('consulta_requisicion_sala_cumple')),
@@ -313,6 +333,8 @@
         urlGrabar: @json(route('grabar_cumplir_requisicion_sala')),
         urlSaldoOrigen: @json(route('cumplir_requisicion_sala_saldo_articulo')),
         urlPdf: @json(url('sala/cumplir-requisicion-sala/pdf')),
+        urlEditarArticulo: @json($urlEditarArticuloCumple),
+        urlEditarRequisicion: @json($urlEditarRequisicionCumple),
         depositoLabId: {{ (int) $depositoLabId }},
         depositoLabCodigo: @json($depositoLab->codigo ?? ''),
         depositoLabNombre: @json($depositoLabNombreConEmpresa ?? ($depositoLab->nombre ?? '')),

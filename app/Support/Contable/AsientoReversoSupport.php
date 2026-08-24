@@ -86,6 +86,8 @@ final class AsientoReversoSupport
                 : PeriodoContableCierreSupport::ALCANCE_CONTABLE,
             // Caller que re-sincroniza ctamov después (ej. TM) evita huérfanos por doble escritura.
             'omitir_anita' => $omitirAnita,
+            'anita_emisor' => $asientoOriginal->anita_emisor,
+            'anita_sistema' => $asientoOriginal->anita_sistema,
         ];
 
         if ($movimientostockId > 0) {

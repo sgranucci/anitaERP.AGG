@@ -6,11 +6,14 @@ use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\Tipotransaccion_Caja;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Solicitudpago\Solicitudpago;
+use App\Support\Compras\ProveedorAnticipoCuentaContableSupport;
 use App\Support\Contable\CuentacajaCuentacontableResolverSupport;
+use App\Support\Solicitudpago\SolicitudpagoTratamientos;
 use InvalidArgumentException;
 
 /**
- * Pago IE vinculado a solicitud de pago: monto fijo, tipo OPP y asiento desde cuentas SP.
+ * Pago IE vinculado a solicitud de pago: monto fijo, tipo OPP (o OPA si ANTICIPADA)
+ * y asiento desde cuentas SP o anticipo a proveedores.
  */
 class IngresoEgresoSolicitudpagoSupport
 {
@@ -23,17 +26,54 @@ class IngresoEgresoSolicitudpagoSupport
         return round(abs((float) $sp->monto), 2);
     }
 
-    /**
-     * Tipo de transacción configurable para pagos desde SP (default OPP).
-     */
-    public static function tipotransaccionCajaIdPorConfig(): int
+    public static function esPagoOpa(?Solicitudpago $sp): bool
     {
+        return $sp !== null && SolicitudpagoTratamientos::esAnticipada($sp->tratamiento ?? null);
+    }
+
+    /**
+     * Tipo de transacción para pagos desde SP (OPP, o OPA si la SP es ANTICIPADA).
+     */
+    public static function tipotransaccionCajaIdPorConfig(?Solicitudpago $sp = null): int
+    {
+        if (self::esPagoOpa($sp)) {
+            $tipoId = (int) config('caja.ingresoegreso_sp_anticipo_tipotransaccion_id', 0);
+            if ($tipoId > 0) {
+                return $tipoId;
+            }
+
+            return self::tipotransaccionCajaIdPorAbreviatura(self::abreviaturaTipoPago($sp));
+        }
+
         $tipoId = (int) config('caja.ingresoegreso_sp_tipotransaccion_id', 0);
         if ($tipoId > 0) {
             return $tipoId;
         }
 
-        $abrev = self::abreviaturaTipoPago();
+        return self::tipotransaccionCajaIdPorAbreviatura(self::abreviaturaTipoPago($sp));
+    }
+
+    public static function abreviaturaTipoPago(?Solicitudpago $sp = null): string
+    {
+        if (self::esPagoOpa($sp)) {
+            $abrev = strtoupper(trim((string) config(
+                'caja.ingresoegreso_sp_anticipo_tipotransaccion_abreviatura',
+                'OPA'
+            )));
+
+            return $abrev !== '' ? $abrev : 'OPA';
+        }
+
+        $abrev = strtoupper(trim((string) config(
+            'caja.ingresoegreso_sp_tipotransaccion_abreviatura',
+            'OPP'
+        )));
+
+        return $abrev !== '' ? $abrev : 'OPP';
+    }
+
+    private static function tipotransaccionCajaIdPorAbreviatura(string $abrev): int
+    {
         if ($abrev === '') {
             return 0;
         }
@@ -43,16 +83,6 @@ class IngresoEgresoSolicitudpagoSupport
             ->first();
 
         return $tipo ? (int) $tipo->id : 0;
-    }
-
-    public static function abreviaturaTipoPago(): string
-    {
-        $abrev = strtoupper(trim((string) config(
-            'caja.ingresoegreso_sp_tipotransaccion_abreviatura',
-            'OPP'
-        )));
-
-        return $abrev !== '' ? $abrev : 'OPP';
     }
 
     /**
@@ -71,8 +101,8 @@ class IngresoEgresoSolicitudpagoSupport
     }
 
     /**
-     * Pago desde SP: el comprobante Anita (pago/tesmov/ctamov) cierra siempre OPP,
-     * aunque el usuario haya elegido COB u otro tipo en pantalla.
+     * Pago desde SP: el comprobante Anita (pago/tesmov/ctamov) cierra OPP,
+     * o OPA si la solicitud es ANTICIPADA.
      *
      * @param  array<string, mixed>  $data
      */
@@ -84,22 +114,28 @@ class IngresoEgresoSolicitudpagoSupport
         }
 
         $data['solicitudpago_id'] = $spId;
+        $sp = Solicitudpago::query()->find($spId);
 
-        $tipoId = self::tipotransaccionCajaIdPorConfig();
+        $tipoId = self::tipotransaccionCajaIdPorConfig($sp);
+        $abrev = self::abreviaturaTipoPago($sp);
         if ($tipoId <= 0) {
             throw new InvalidArgumentException(
-                'No hay tipo de transacción '.self::abreviaturaTipoPago()
+                'No hay tipo de transacción '.$abrev
                 .' configurado para pagar solicitudes de pago.'
             );
         }
         $data['tipotransaccion_caja_id'] = $tipoId;
 
         $proveedorId = (int) ($data['proveedor_id'] ?? 0);
-        if ($proveedorId <= 0) {
-            $sp = Solicitudpago::query()->find($spId);
-            if ($sp && (int) ($sp->proveedor_id ?? 0) > 0) {
-                $data['proveedor_id'] = (int) $sp->proveedor_id;
-            }
+        if ($proveedorId <= 0 && $sp && (int) ($sp->proveedor_id ?? 0) > 0) {
+            $proveedorId = (int) $sp->proveedor_id;
+            $data['proveedor_id'] = $proveedorId;
+        }
+
+        if (self::esPagoOpa($sp) && $proveedorId <= 0) {
+            throw new InvalidArgumentException(
+                'La solicitud anticipada debe tener proveedor para generar la OPA y el crédito en cuenta corriente.'
+            );
         }
     }
 
@@ -161,6 +197,11 @@ class IngresoEgresoSolicitudpagoSupport
             $signoOperacion,
             self::centrocostoPiernaFinanciera($lineas)
         );
+
+        if (self::esPagoOpa($sp)) {
+            return self::lineasAsientoOpa($sp, $empresaAsiento, $monedaId, $cotizacion, $lineas, $lineasCaja);
+        }
+
         if ($lineasCaja === []) {
             return $lineas;
         }
@@ -172,6 +213,72 @@ class IngresoEgresoSolicitudpagoSupport
         $sinBanco = self::ajustarLineasNoBancoAlCaja($sinBanco, $lineasCaja);
 
         return array_merge($sinBanco, $lineasCaja);
+    }
+
+    /**
+     * OPA: Debe anticipo a proveedores + Haber caja (no usa el gasto de la SP).
+     *
+     * @param  list<array<string, mixed>>  $lineasSolicitud
+     * @param  list<array<string, mixed>>  $lineasCaja
+     * @return list<array<string, mixed>>
+     */
+    private static function lineasAsientoOpa(
+        Solicitudpago $sp,
+        int $empresaId,
+        int $monedaId,
+        float|int|string $cotizacion,
+        array $lineasSolicitud,
+        array $lineasCaja
+    ): array {
+        $cuentaId = ProveedorAnticipoCuentaContableSupport::cuentaAnticipoId($empresaId);
+        if ($cuentaId === null || $cuentaId <= 0) {
+            throw new InvalidArgumentException(
+                'La solicitud anticipada requiere la cuenta automática de anticipos a proveedores '
+                .'(pago.anticipo_proveedor) configurada para la empresa.'
+            );
+        }
+
+        $cuenta = Cuentacontable::query()->find($cuentaId, ['id', 'codigo', 'nombre']);
+        if ($cuenta === null) {
+            throw new InvalidArgumentException(
+                'No se encontró la cuenta contable de anticipos a proveedores configurada para la empresa.'
+            );
+        }
+
+        $monto = 0.0;
+        $monedaLinea = $monedaId > 0 ? $monedaId : (int) ($sp->moneda_id ?? 1);
+        $cotizLinea = self::cotizacionParaMoneda($monedaLinea, $cotizacion);
+        foreach ($lineasCaja as $linea) {
+            $monto += (float) ($linea['haber'] ?: 0);
+            $monto += (float) ($linea['debe'] ?: 0);
+            if ((int) ($linea['moneda_id'] ?? 0) > 0) {
+                $monedaLinea = (int) $linea['moneda_id'];
+                $cotizLinea = $linea['cotizacion'] ?? $cotizLinea;
+            }
+        }
+        if ($monto < 0.01) {
+            $monto = self::montoPendiente($sp);
+        }
+        $monto = round($monto, 2);
+
+        $anticipo = [
+            'cuentacontable_id' => $cuentaId,
+            'codigo' => $cuenta->codigo,
+            'nombre' => $cuenta->nombre,
+            'moneda_id' => $monedaLinea,
+            'cotizacion' => $cotizLinea,
+            'centrocosto_id' => self::centrocostoPiernaFinanciera($lineasSolicitud),
+            'debe' => $monto,
+            'haber' => '',
+            'observacion' => 'Anticipo a proveedores',
+            'carga_cuentacontable_manual' => 'N',
+        ];
+
+        if ($lineasCaja === []) {
+            return [$anticipo];
+        }
+
+        return array_merge([$anticipo], $lineasCaja);
     }
 
     /**

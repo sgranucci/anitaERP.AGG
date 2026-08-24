@@ -24,6 +24,9 @@
         if ($cod === AdministracionTicketListadoFiltros::FILTRO_ESTADO_EN_CURSO) {
             return $activo ? 'btn-info' : 'btn-outline-info';
         }
+        if ($cod === 'Sin Asignar') {
+            return $activo ? 'btn-danger' : 'btn-outline-danger';
+        }
         if ($cod === 'Finalizado') {
             return $activo ? 'btn-success' : 'btn-outline-success';
         }

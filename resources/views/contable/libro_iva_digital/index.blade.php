@@ -316,6 +316,9 @@
                             Agrupación desde ventas del período (con CAE o RMV vending). Actividad: comprobante
                             (<code>venta.actividad_arca_id</code>) o, si falta, punto de venta
                             (<code>puntoventa.actividad_arca_id</code>).
+                            La actividad <code>920009</code> (apuestas) <strong>no aparece como rubro</strong> en el Libro IVA Digital:
+                            son Facturas B tipo <code>006</code> del PV de cierre de máquinas/bingo (exentas).
+                            Si ARCA «no las ve», no buscar «apuestas»: buscar tipo 006 y el PV FSL (Rebisco 14).
                         </p>
                         <div class="table-responsive mb-3">
                             <table class="table table-bordered table-sm" id="tabla-iva-simple-actividad">
@@ -333,7 +336,7 @@
                                 </thead>
                                 <tbody>
                                     @foreach ($resultado['iva_simple']['resumen_por_actividad'] as $filaActividad)
-                                        <tr @if (($filaActividad['actividad_codigo'] ?? '') === '000000') class="table-warning" @endif>
+                                        <tr @if (($filaActividad['actividad_codigo'] ?? '') === '000000') class="table-warning" @elseif (($filaActividad['actividad_codigo'] ?? '') === '920009') class="table-info" @endif>
                                             <td><code>{{ $filaActividad['actividad_codigo'] ?? '' }}</code></td>
                                             <td>{{ $filaActividad['actividad_nombre'] ?? '—' }}</td>
                                             <td class="text-right">{{ number_format($filaActividad['renglones_debito'] ?? 0, 0, ',', '.') }}</td>

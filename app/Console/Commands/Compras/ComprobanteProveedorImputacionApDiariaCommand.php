@@ -12,7 +12,7 @@ class ComprobanteProveedorImputacionApDiariaCommand extends Command
                             {--hasta= : Hasta Y-m-d inclusive (default: hoy)}
                             {--sin-mail : No envía correo}';
 
-    protected $description = 'Audita factura a factura CC ERP ↔ asiento ERP ↔ ctamov Anita y notifica desvíos';
+    protected $description = 'Audita factura a factura CC ERP ↔ haber AP asiento ↔ ctamov Anita y notifica desvíos';
 
     public function handle(ComprobanteProveedorImputacionApDiariaService $service): int
     {

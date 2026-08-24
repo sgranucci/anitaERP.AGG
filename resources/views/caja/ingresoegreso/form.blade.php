@@ -29,7 +29,7 @@
                         $pagoDesdeSp = ! empty($solicitudpagoOrigen)
                             || (int) old('solicitudpago_id', $data->solicitudpago_id ?? request('solicitudpago_id')) > 0;
                         $tipoSpForzadoId = $pagoDesdeSp
-                            ? \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorConfig()
+                            ? \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorConfig($solicitudpagoOrigen ?? null)
                             : 0;
                         $tipoSpForzado = ($tipoSpForzadoId > 0 && isset($tipotransaccion_caja_query))
                             ? $tipotransaccion_caja_query->firstWhere('id', $tipoSpForzadoId)
@@ -45,7 +45,7 @@
                                     data-signo="{{ $tipoSpForzado->signo }}"
                                     selected="select">{{ $tipoSpForzado->nombre }}</option>
                         </select>
-                        <small class="form-text text-muted">Pago desde solicitud: el comprobante se cierra siempre como {{ $tipoSpForzado->abreviatura }}.</small>
+                        <small class="form-text text-muted">Pago desde solicitud: el comprobante se cierra siempre como {{ $tipoSpForzado->abreviatura }}@if(\App\Support\Caja\IngresoEgresoSolicitudpagoSupport::esPagoOpa($solicitudpagoOrigen ?? null)) (anticipo a proveedores)@endif.</small>
                     @else
                     <select name="tipotransaccion_caja_id" id="tipotransaccion_caja_id" data-placeholder="Tipo de transacción" class="form-control required" data-fouc required>
                         <option value="">-- Seleccionar --</option>

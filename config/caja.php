@@ -112,6 +112,12 @@ return [
      */
     'ingresoegreso_sp_tipotransaccion_abreviatura' => env('CAJA_IE_SP_TIPOTRANSACCION_ABREV', 'OPP'),
     'ingresoegreso_sp_tipotransaccion_id' => (int) env('CAJA_IE_SP_TIPOTRANSACCION_ID', 0),
+    /*
+     * SP con tratamiento ANTICIPADA: cierra como OPA (anticipo a proveedores).
+     * ID opcional pisa la abreviatura.
+     */
+    'ingresoegreso_sp_anticipo_tipotransaccion_abreviatura' => env('CAJA_IE_SP_ANTICIPO_TIPOTRANSACCION_ABREV', 'OPA'),
+    'ingresoegreso_sp_anticipo_tipotransaccion_id' => (int) env('CAJA_IE_SP_ANTICIPO_TIPOTRANSACCION_ID', 0),
 
     /*
      * Numeración IE alineada a Anita ventas.numerador (num_clave por empresa).
@@ -128,6 +134,12 @@ return [
             1 => (int) env('CAJA_IE_ANITA_SEMILLA_OPP_EMP1', 223),
             2 => (int) env('CAJA_IE_ANITA_SEMILLA_OPP_EMP2', 224),
             3 => (int) env('CAJA_IE_ANITA_SEMILLA_OPP_EMP3', 225),
+        ],
+        // Misma serie de OP Anita; el tipo de comprobante diferencia OPA vs OPP.
+        'OPA' => [
+            1 => (int) env('CAJA_IE_ANITA_SEMILLA_OPA_EMP1', env('CAJA_IE_ANITA_SEMILLA_OPP_EMP1', 223)),
+            2 => (int) env('CAJA_IE_ANITA_SEMILLA_OPA_EMP2', env('CAJA_IE_ANITA_SEMILLA_OPP_EMP2', 224)),
+            3 => (int) env('CAJA_IE_ANITA_SEMILLA_OPA_EMP3', env('CAJA_IE_ANITA_SEMILLA_OPP_EMP3', 225)),
         ],
         'EGR' => [
             1 => (int) env('CAJA_IE_ANITA_SEMILLA_EGR_EMP1', 361),

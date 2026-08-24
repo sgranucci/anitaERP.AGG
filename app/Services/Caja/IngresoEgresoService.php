@@ -29,6 +29,7 @@ use App\Support\Caja\IngresoEgresoChequeAsientoSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAsientoSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
+use App\Support\Caja\IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport;
 use App\Support\Caja\IngresoEgresoTransferenciaSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Models\Solicitudpago\Solicitudpago;
@@ -200,6 +201,7 @@ class IngresoEgresoService
 		}
 
 		IngresoEgresoAnitaTesmovSupport::grabarDesdeMovimiento($caja_movimiento->fresh());
+		IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport::persistirDesdeMovimiento($caja_movimiento->fresh());
 	}
 
     public function actualizaIngresoEgreso($request, $id, $origen = null)
@@ -333,6 +335,7 @@ class IngresoEgresoService
 		$mov = $this->caja_movimientoRepository->find($id);
 		IngresoEgresoAnitaTesmovSupport::eliminarDesdeMovimiento($movAntes);
 		IngresoEgresoAnitaTesmovSupport::grabarDesdeMovimiento($mov);
+		IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport::persistirDesdeMovimiento($mov);
 	}
 
 	public function copiarIngresoEgreso(Request $request)
@@ -765,7 +768,10 @@ class IngresoEgresoService
 			$spId = (int) ($movimiento->solicitudpago_id ?? 0);
 		}
 		if ($spId > 0) {
-			$tipo = IngresoEgresoSolicitudpagoSupport::abreviaturaTipoPago();
+			$sp = $movimiento
+				? ($movimiento->solicitudpagos ?? Solicitudpago::query()->find($spId))
+				: Solicitudpago::query()->find($spId);
+			$tipo = IngresoEgresoSolicitudpagoSupport::abreviaturaTipoPago($sp);
 		}
 
 		$nro = (int) ($data['numerotransaccion'] ?? ($movimiento->numerotransaccion ?? 0));

@@ -59,6 +59,12 @@ final class SolicitudpagoTratamientos
         return in_array(strtoupper(trim((string) $tratamiento)), [self::PLAN_DE_PAGO, self::RECURRENTE], true);
     }
 
+    /** Pago como OPA (anticipo a proveedores), no como OPP de gasto. */
+    public static function esAnticipada(?string $tratamiento): bool
+    {
+        return strtoupper(trim((string) $tratamiento)) === self::ANTICIPADA;
+    }
+
     /** @return list<array{valor: string, nombre: string}> */
     public static function opciones(): array
     {

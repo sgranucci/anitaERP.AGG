@@ -23,7 +23,7 @@ final class ComprobanteProveedorImputacionApCtamovSupport
     /**
      * @param  list<array{empresa_anita:int, numeroasiento:int, fecha:?string}>  $claves
      * @param  array{codigo_mn?: array<int, true>, codigo_me?: array<int, true>, codigo_anticipo?: array<int, true>}  $catalogo
-     * @return array<string, array{trio: float, lineas: int, encontrado: bool}>
+     * @return array<string, array{trio: float, ap: float, anticipo: float, lineas: int, encontrado: bool}>
      */
     public function sumarTrioPorAsiento(array $claves, array $catalogo): array
     {
@@ -36,7 +36,7 @@ final class ComprobanteProveedorImputacionApCtamovSupport
                 continue;
             }
             $key = self::clave($empresa, $nro);
-            $out[$key] = ['trio' => 0.0, 'lineas' => 0, 'encontrado' => false];
+            $out[$key] = ['trio' => 0.0, 'ap' => 0.0, 'anticipo' => 0.0, 'lineas' => 0, 'encontrado' => false];
             $porEmpresa[$empresa][$nro] = (string) ($clave['fecha'] ?? '');
         }
 
@@ -61,7 +61,8 @@ final class ComprobanteProveedorImputacionApCtamovSupport
                     }
 
                     $cuenta = (int) $imputacion['cuenta'];
-                    if (ComprobanteProveedorImputacionApSupport::clasificarCodigo($cuenta, $catalogo) === null) {
+                    $cubeta = ComprobanteProveedorImputacionApSupport::clasificarCodigo($cuenta, $catalogo);
+                    if ($cubeta === null) {
                         continue;
                     }
 
@@ -79,6 +80,11 @@ final class ComprobanteProveedorImputacionApCtamovSupport
                     );
 
                     $out[$key]['trio'] = round($out[$key]['trio'] + $ars, 2);
+                    if ($cubeta === ComprobanteProveedorImputacionApSupport::CUBETA_ANTICIPO) {
+                        $out[$key]['anticipo'] = round($out[$key]['anticipo'] + $ars, 2);
+                    } else {
+                        $out[$key]['ap'] = round($out[$key]['ap'] + $ars, 2);
+                    }
                     $out[$key]['lineas']++;
                     $out[$key]['encontrado'] = true;
                 }

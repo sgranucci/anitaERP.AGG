@@ -3,6 +3,7 @@
 namespace App\Console;
 
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAutomaticoSupport;
 use App\Support\Interbanking\InterbankingCalendarioSync;
 use Carbon\Carbon;
 use Illuminate\Console\Scheduling\Schedule;
@@ -306,12 +307,18 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/auditoria-medios-mensual-schedule.log'))
             ->when(fn () => (bool) config('gastronomia.auditoria_medios_mensual.habilitada', true));
 
-        $schedule->command('gastronomia:cierre-jornada-waitry-automatico', ['--enviar-mail'])
-            ->dailyAt((string) config('gastronomia.cierre_jornada_automatico.hora', '09:00'))
-            ->runInBackground()
-            ->withoutOverlapping(240)
-            ->appendOutputTo(storage_path('logs/cierre-jornada-waitry-automatico-schedule.log'))
-            ->when(fn () => (bool) config('gastronomia.cierre_jornada_automatico.habilitado', false));
+        foreach (CierreJornadaProcesoAutomaticoSupport::horariosPorEmpresa() as $empresaId => $horaCierre) {
+            $schedule->command('gastronomia:cierre-jornada-waitry-automatico', [
+                '--enviar-mail',
+                '--empresa' => $empresaId,
+            ])
+                ->dailyAt($horaCierre)
+                ->name('gastronomia-cierre-jornada-waitry-automatico-'.$empresaId)
+                ->runInBackground()
+                ->withoutOverlapping(240)
+                ->appendOutputTo(storage_path('logs/cierre-jornada-waitry-automatico-schedule.log'))
+                ->when(fn () => (bool) config('gastronomia.cierre_jornada_automatico.habilitado', false));
+        }
 
         $intervaloMin = max(5, (int) config('contable_cierre.job_intervalo_minutos', 15));
         $schedule->command('contable:procesar-aperturas-periodo')

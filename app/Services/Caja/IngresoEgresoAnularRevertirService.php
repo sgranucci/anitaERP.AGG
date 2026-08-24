@@ -10,6 +10,7 @@ use App\Repositories\Caja\Caja_Movimiento_CuentacajaRepositoryInterface;
 use App\Repositories\Caja\Caja_Movimiento_EstadoRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Services\Solicitudpago\SolicitudpagoPagoDesdeCajaService;
+use App\Support\Caja\IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport;
 use App\Support\Caja\CajaMovimientoEloquentDeleteSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Caja\IngresoEgresoVisibilidadSupport;
@@ -58,6 +59,7 @@ class IngresoEgresoAnularRevertirService
         $leyendaSp = 'Anulación física '.$abrev.' '.$nro.' (IE id '.$movimiento->id.')';
 
         return DB::transaction(function () use ($movimiento, $leyendaSp) {
+            IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport::eliminarDesdeMovimiento($movimiento);
             $this->solicitudpagoPagoService->revertirAAutorizada($movimiento, $leyendaSp);
 
             $asientos = Asiento::query()->where('caja_movimiento_id', (int) $movimiento->id)->get();
@@ -109,6 +111,7 @@ class IngresoEgresoAnularRevertirService
         $leyenda = 'ANULA '.$abrev.' '.$nroOrig;
 
         return DB::transaction(function () use ($movimiento, $fechaOp, $leyenda, $abrev, $nroOrig) {
+            IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport::eliminarDesdeMovimiento($movimiento);
             $payload = [
                 'empresa_id' => (int) $movimiento->empresa_id,
                 'tipotransaccion_caja_id' => (int) $movimiento->tipotransaccion_caja_id,

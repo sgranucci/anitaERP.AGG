@@ -6,6 +6,7 @@ use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAlicuotaSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasCuitSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaArmadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalFormatoSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalIdentificacionSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalValidacionSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasAgrupacionSupport;
@@ -213,7 +214,8 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         $this->assertSame('E', $reg['cabecera']['codigo_operacion']);
         $this->assertEqualsWithDelta(81952440.34, $reg['cabecera']['importe_total'], 0.01);
         $this->assertEqualsWithDelta(81952440.34, $reg['cabecera']['operaciones_exentas'], 0.01);
-        $this->assertSame('96', $reg['cabecera']['codigo_documento']); // >= umbral CF
+        $this->assertSame('99', $reg['cabecera']['codigo_documento']);
+        $this->assertSame('0', $reg['cabecera']['numero_identificacion']);
 
         $exento = LibroIvaDigitalVentasFslAnitaArmadoSupport::filaIvaSimpleExento($fila);
         $this->assertNotNull($exento);
@@ -221,6 +223,26 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         $this->assertSame('3', $exento['tipo_operacion']);
         $this->assertEqualsWithDelta(81952440.34, $exento['exento'], 0.01);
         $this->assertSame('14|6903', LibroIvaDigitalVentasFslAnitaArmadoSupport::claveDesdeFilaAnita($fila));
+    }
+
+    public function test_fsl_anita_sin_sucursal_usa_punto_venta_default(): void
+    {
+        $fila = [
+            'ven_tipo' => 'FSL',
+            'ven_nro' => '100',
+            'ven_fecha' => '20260715',
+            'ven_exento' => '500.50',
+            'ven_nombre_cliente' => 'Sala de máquinas',
+        ];
+
+        $this->assertNull(LibroIvaDigitalVentasFslAnitaArmadoSupport::armarRegistroLibro($fila, false));
+        $reg = LibroIvaDigitalVentasFslAnitaArmadoSupport::armarRegistroLibro($fila, false, 14);
+        $this->assertNotNull($reg);
+        $this->assertSame(14, $reg['cabecera']['punto_venta']);
+        $this->assertSame(100, $reg['cabecera']['numero_comprobante']);
+        $this->assertSame('99', $reg['cabecera']['codigo_documento']);
+        $this->assertNotNull(LibroIvaDigitalVentasFslAnitaArmadoSupport::filaIvaSimpleExento($fila, false, 14));
+        $this->assertNull(LibroIvaDigitalVentasFslAnitaArmadoSupport::filaIvaSimpleExento($fila));
     }
 
     public function test_fecha_jornada_usa_jornada_y_cae_si_falta(): void
@@ -270,7 +292,50 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
 
         $this->assertSame(LibroIvaDigitalComprasCuitSupport::CUIT_TOTAL_COIN, $registro['cabecera']['numero_identificacion']);
         $this->assertSame(LibroIvaDigitalComprasCuitSupport::CUIT_TOTAL_COIN, $registro['alicuotas'][0]['numero_identificacion']);
+        $this->assertSame('80', $registro['cabecera']['codigo_documento']);
         $this->assertSame(1, $registro['cabecera']['punto_venta']);
+    }
+
+    public function test_compra_sin_cuit_ni_alias_usa_documento_99(): void
+    {
+        $registro = LibroIvaDigitalComprasAlicuotaSupport::asegurarRegistro([
+            'cabecera' => [
+                'tipo_comprobante' => '002',
+                'punto_venta' => 1,
+                'numero_comprobante' => 1,
+                'codigo_documento' => '80',
+                'numero_identificacion' => '0',
+                'nombre_vendedor' => 'ICO BANCARIO SIN ALIAS 999/0',
+                'cantidad_alicuotas' => 0,
+                'codigo_operacion' => ' ',
+                'operaciones_exentas' => 50.0,
+            ],
+            'alicuotas' => [],
+        ]);
+
+        $this->assertSame('99', $registro['cabecera']['codigo_documento']);
+        $this->assertSame('0', $registro['cabecera']['numero_identificacion']);
+        $this->assertSame('99', $registro['alicuotas'][0]['codigo_documento']);
+    }
+
+    public function test_identificacion_80_o_96_con_cero_pasa_a_99(): void
+    {
+        $this->assertSame(
+            ['codigo_documento' => '99', 'numero_identificacion' => '0'],
+            LibroIvaDigitalIdentificacionSupport::asegurar('80', '0'),
+        );
+        $this->assertSame(
+            ['codigo_documento' => '99', 'numero_identificacion' => '0'],
+            LibroIvaDigitalIdentificacionSupport::asegurar('96', ''),
+        );
+        $this->assertSame(
+            ['codigo_documento' => '80', 'numero_identificacion' => '30711942838'],
+            LibroIvaDigitalIdentificacionSupport::asegurar('80', '30711942838'),
+        );
+        $this->assertSame(
+            ['codigo_documento' => '99', 'numero_identificacion' => '0'],
+            LibroIvaDigitalIdentificacionSupport::asegurar('99', '0'),
+        );
     }
 
     public function test_compra_factura_a_exenta_informa_alicuota_cero(): void
