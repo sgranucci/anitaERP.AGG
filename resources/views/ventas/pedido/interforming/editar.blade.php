@@ -22,7 +22,7 @@ Editar pedido Interforming
             <div class="card-header">
                 <h3 class="card-title">Pedido {{ $pedido->codigo }} (Interforming)</h3>
             </div>
-            <form action="{{ route('actualizar_pedido', $pedido->id) }}" method="POST" id="form-pedido-interforming" autocomplete="off"
+            <form action="{{ route('actualizar_pedido', $pedido->id) }}" method="POST" id="form-pedido-interforming" autocomplete="off" data-mensaje-grabacion="Grabando pedido…"
                   @if (!($puedeActualizarPedido ?? true) || ($soloConsulta ?? false)) class="pe-none" @endif>
                 @csrf
                 @method('PUT')

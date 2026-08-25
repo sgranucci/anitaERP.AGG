@@ -407,8 +407,8 @@ class VentaRepository implements VentaRepositoryInterface
             );
         }
 
-        $claveNumero = (int) $filaCompe->compe_numero;
-        if ($claveNumero <= 0) {
+        $claveNumero = trim((string) ($filaCompe->compe_numero ?? ''));
+        if ($claveNumero === '' || (int) $claveNumero <= 0) {
             throw new RuntimeException(
                 "compemis no tiene una clave de numerador valida para {$tipo} {$letra} sucursal {$sucursal}."
             );

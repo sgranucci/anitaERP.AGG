@@ -24,12 +24,15 @@
     var CLIENTE_STOCK_ID = "{{ config('cliente.CLIENTE_STOCK_ID') }}";
 	function sub()
 	{
+        if (window.AnitaGrabacion && window.AnitaGrabacion.enCurso()) {
+            return false;
+        }
 
         if ($('#formgeneral').hasClass('pedido-bloqueado-padron')) {
             if (typeof window.notificarBloqueoPadronCliente === 'function') {
-                window.notificarBloqueoPadronCliente('Problemas en ARCA: no puede guardar el pedido con este cliente.');
+                window.notificarBloqueoPadronCliente('Problemas en ARCA: no puede guardar el remito con este cliente.');
             } else {
-                alert('Problemas en ARCA: no puede guardar el pedido con este cliente.');
+                alert('Problemas en ARCA: no puede guardar el remito con este cliente.');
             }
             return false;
         }
@@ -52,11 +55,18 @@
 
         if (cantidadArticulo > 42)
         {
-            alert("No puede generar pedidos con mas de 42 ítems");
+            alert("No puede generar remitos con mas de 42 ítems");
             return false;
         }
 
-		$('#formgeneral').submit();
+        var form = document.getElementById('formgeneral');
+        $('.remito-carga-bloqueable').filter('button, input[type="submit"]').prop('disabled', true);
+        if (window.AnitaGrabacion && typeof window.AnitaGrabacion.enviar === 'function') {
+            window.AnitaGrabacion.enviar(form);
+        } else if (form) {
+            form.submit();
+        }
+        return false;
 	}
 
     $(function () {
@@ -97,7 +107,7 @@
                     </a>
                 </div>
             </div>
-            <form action="{{route('guardar_remito')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" onsubmit="return typeof validarLugarEntregaAntesGuardar !== 'function' || validarLugarEntregaAntesGuardar();">
+            <form action="{{route('guardar_remito')}}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" data-mensaje-grabacion="Grabando remito…" onsubmit="return typeof validarLugarEntregaAntesGuardar !== 'function' || validarLugarEntregaAntesGuardar();">
                 @csrf
                 <div class="card-body">
                     @php $datos = ["funcion" => "crear"]; @endphp
@@ -106,7 +116,7 @@
                 <div class="card-footer">
                     <div class="row">
                         <div class="col-lg-6">
-							<button type="submit" onclick="sub()" class="btn btn-success remito-carga-bloqueable">Guardar</button>
+							<button type="submit" onclick="return sub()" class="btn btn-success remito-carga-bloqueable">Guardar</button>
                         </div>
                     </div>
                 </div>

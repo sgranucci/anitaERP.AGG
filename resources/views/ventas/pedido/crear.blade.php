@@ -25,6 +25,9 @@
     var CLIENTE_STOCK_ID = "{{ config('cliente.CLIENTE_STOCK_ID') }}";
 	function sub()
 	{
+        if (window.AnitaGrabacion && window.AnitaGrabacion.enCurso()) {
+            return false;
+        }
 
         if ($('#formgeneral').hasClass('pedido-bloqueado-padron')) {
             if (typeof window.notificarBloqueoPadronCliente === 'function') {
@@ -57,7 +60,14 @@
             return false;
         }
 
-		$('#formgeneral').submit();
+        var form = document.getElementById('formgeneral');
+        $('.pedido-carga-bloqueable').filter('button, input[type="submit"]').prop('disabled', true);
+        if (window.AnitaGrabacion && typeof window.AnitaGrabacion.enviar === 'function') {
+            window.AnitaGrabacion.enviar(form);
+        } else if (form) {
+            form.submit();
+        }
+        return false;
 	}
 
     $(function () {
@@ -95,7 +105,7 @@
                     </a>
                 </div>
             </div>
-            <form action="{{ route('guardar_pedido', $filtrosQuery ?? []) }}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" onsubmit="return typeof validarLugarEntregaAntesGuardar !== 'function' || validarLugarEntregaAntesGuardar();">
+            <form action="{{ route('guardar_pedido', $filtrosQuery ?? []) }}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" data-mensaje-grabacion="Grabando pedido…" onsubmit="return typeof validarLugarEntregaAntesGuardar !== 'function' || validarLugarEntregaAntesGuardar();">
                 @csrf
                 <div class="card-body">
                     @php $datos = ["funcion" => "crear"]; @endphp
@@ -104,7 +114,7 @@
                 <div class="card-footer">
                     <div class="row">
                         <div class="col-lg-6">
-							<button type="submit" onclick="sub()" class="btn btn-success pedido-carga-bloqueable">Guardar</button>
+							<button type="submit" onclick="return sub()" class="btn btn-success pedido-carga-bloqueable">Guardar</button>
                         </div>
                     </div>
                 </div>

@@ -56,6 +56,7 @@ use App\Support\Ventas\ClienteDespachoSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
 use App\Support\Ventas\TransporteDepositoSupport;
 use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
+use App\Support\Ventas\VillafrancaFacturacionSupport;
 use App\Support\Ventas\PedidoFacturaAnitaDeferSupport;
 use App\Support\Ventas\PedidoFacturacionExclusivaSupport;
 use App\Support\Ventas\PedidoItemCierreFaltaStockSupport;
@@ -182,6 +183,8 @@ class FacturacionService
 	protected $tasaImpuesto;
 	protected $puntoVentaDivision_id;
 	protected $numeroComprobanteDivision;
+	/** Reparto 101: reserva FAC A sucursal 1 en Anita Villafranca y emite en PV 15. */
+	protected $usaNumeradorVillafrancaPropio;
 	protected $numeroRemito;
 	protected $movimientoStockService;
 	protected $flCalculaDesdeGeneracionFactura;
@@ -293,6 +296,7 @@ class FacturacionService
 		$this->tasaImpuesto = 0;
 		$this->puntoVentaDivision_id = 0;
 		$this->numeroComprobanteDivision = 0;
+		$this->usaNumeradorVillafrancaPropio = false;
 		$this->numeroRemito = 0;
 		$this->flCalculaDesdeGeneracionFactura = false;
 		$this->facturandoDesdeRemitoId = null;
@@ -662,6 +666,7 @@ class FacturacionService
 			{
 				$this->flDivide = true;
 				$this->flGrabaComprobanteDividido = false;
+				$this->usaNumeradorVillafrancaPropio = VillafrancaFacturacionSupport::esReparto101($pedido);
 
 				if ($pedido->transportes->tipoexpreso == '4') // Reparto 101 con remito en bierzo
 					$this->coeficienteCliente = 100.;
@@ -723,6 +728,7 @@ class FacturacionService
 		if ($retorno === null) {
 			$this->flGrabaComprobanteDividido = false;
 			$this->flDivide = false;
+			$this->usaNumeradorVillafrancaPropio = false;
 
 			$retorno = [PedidoFacturaAnitaDeferSupport::tomarYProgramar(
 				Self::generaUnaFacturaPorPedido($data, $cliente, $pedido)
@@ -823,6 +829,7 @@ class FacturacionService
 		$cuentaCorriente = $this->calculaCondicionVenta($fechaFactura, 
 														$totalComprobante, 
 														$pedido->condicionventa_id);
+		$cuentaCorriente = $this->aplicarVencimientoVillafrancaSiCorresponde($cuentaCorriente, $fechaFactura);
 
 		// Saca letra del comprobante
 		$condicioniva = $this->condicionivaRepository->find($cliente->condicioniva_id);
@@ -832,6 +839,7 @@ class FacturacionService
 
 		// Lee punto de venta
 		$puntoventa = $this->puntoventaRepository->find($puntoventa_id);
+		$cuentaCorriente = $this->aplicarVencimientoVillafrancaSiCorresponde($cuentaCorriente, $fechaFactura, $puntoventa);
 
 		// Lee punto de venta del remito
 		$puntoventaremito = null;
@@ -858,6 +866,14 @@ class FacturacionService
 				$tipoAnita = $tipotransaccion->abreviatura;
 
 			// Numera factura con web service si es factura electronica
+			$numeroReservadoVillafranca = false;
+			if ($this->debeUsarNumeradorVillafrancaPropio()) {
+				$numero = $this->reservarNumeroVillafrancaReparto101('FAC', $letra);
+				if (is_array($numero)) {
+					return $numero;
+				}
+				$numeroReservadoVillafranca = true;
+			} else {
 			switch($puntoventa->modofacturacion)
 			{
 			case 'C':
@@ -892,10 +908,13 @@ class FacturacionService
 				);
 				break;
 			}
+			}
 
 			if ($numero != -1)
 			{
-				$numero++;
+				if (! $numeroReservadoVillafranca) {
+					$numero++;
+				}
 
 				// Pide numero de remito
 				if ($this->flDivide)
@@ -1636,6 +1655,7 @@ class FacturacionService
 
 		// Lee punto de venta
 		$puntoventa = $this->puntoventaRepository->find($puntoventa_id);
+		$cuentacorriente = $this->aplicarVencimientoVillafrancaSiCorresponde($cuentacorriente, $fechaFactura, $puntoventa);
 
 		if ($puntoventa)
 		{
@@ -2380,6 +2400,7 @@ class FacturacionService
 
 		// Lee punto de venta
 		$puntoventa = $this->puntoventaRepository->find($puntoventa_id);
+		$cuentacorriente = $this->aplicarVencimientoVillafrancaSiCorresponde($cuentacorriente, $fechaFactura, $puntoventa);
 
 		if ($puntoventa)
 		{
@@ -2871,6 +2892,7 @@ class FacturacionService
 
 		// Lee punto de venta
 		$puntoventa = $this->puntoventaRepository->find($puntoventa_id);
+		$cuentacorriente = $this->aplicarVencimientoVillafrancaSiCorresponde($cuentacorriente, $fechaFactura, $puntoventa);
 		// Lee punto de venta del remito
 		$puntoventaremito = null;
 		if ($this->puntoventaremito_id >= 1)
@@ -5054,6 +5076,10 @@ class FacturacionService
 		) {
 			$omitirNumeraAnitaFin = true;
 		}
+		// Villafranca: Reparto 101 ya reservó FAC A 1; dividido copia el número de Bierzo.
+		if (! $omitirNumeraAnitaFin && $this->flGrabaComprobanteDividido) {
+			$omitirNumeraAnitaFin = true;
+		}
 		if (! $omitirNumeraAnitaFin && ! $this->debeOmitirTablaAnita('venta')) {
 			$resultadoNumera = $this->ventaRepository->numeraAnita(
 				substr($venta['codigo'], 0, 3),
@@ -5142,6 +5168,53 @@ class FacturacionService
 			date('Ymd', strtotime($fechaAsignacion)),
 			date('Ymd', strtotime($fechaFactura)),
 		];
+	}
+
+	private function debeUsarNumeradorVillafrancaPropio(): bool
+	{
+		return (bool) $this->usaNumeradorVillafrancaPropio && (bool) $this->flGrabaComprobanteDividido;
+	}
+
+	/**
+	 * Reserva el siguiente número en compemis FAC + letra sucursal 1 de Villafranca.
+	 *
+	 * @return int|array{error:string,mensaje:string}
+	 */
+	private function reservarNumeroVillafrancaReparto101(string $tipo, string $letra)
+	{
+		$tipoAnita = strtoupper(trim($tipo)) !== '' ? strtoupper(trim($tipo)) : 'FAC';
+		$letraAnita = strtoupper(trim($letra)) !== '' ? strtoupper(trim($letra)) : 'A';
+		$sucursal = VillafrancaFacturacionSupport::sucursalNumeradorPropio();
+		$path = VillafrancaFacturacionSupport::pathSistema();
+
+		$numero = $this->ventaRepository->numeraAnita($tipoAnita, $letraAnita, $sucursal, $path);
+		if (! is_int($numero) || $numero <= 0) {
+			$detalle = is_string($numero) ? $numero : 'sin número';
+
+			return [
+				'error' => 'Error numerador Villafranca',
+				'mensaje' => 'No se pudo reservar '.$tipoAnita.' '.$letraAnita
+					.' sucursal '.$sucursal.' en Anita Villafranca: '.$detalle,
+			];
+		}
+
+		return $numero;
+	}
+
+	/**
+	 * @param  list<array{fechavencimiento:mixed,total:mixed}>  $cuotas
+	 * @return list<array{fechavencimiento:mixed,total:mixed}>
+	 */
+	private function aplicarVencimientoVillafrancaSiCorresponde(array $cuotas, $fechaFactura, $puntoventa = null): array
+	{
+		if (! VillafrancaFacturacionSupport::debeForzarVencimientoFechaFactura(
+			(bool) $this->flGrabaComprobanteDividido,
+			$puntoventa
+		)) {
+			return $cuotas;
+		}
+
+		return VillafrancaFacturacionSupport::aplicarVencimientoFechaFactura($cuotas, $fechaFactura);
 	}
 
 	private function calculaCondicionVenta($fecha, $total, $condicionventa_id) : array
@@ -7604,6 +7677,7 @@ class FacturacionService
 		$this->flCalculaDesdeGeneracionFactura = true;
 		$this->flDivide = false;
 		$this->flGrabaComprobanteDividido = false;
+		$this->usaNumeradorVillafrancaPropio = false;
 		$this->facturandoDesdeRemitoId = (int) $remito->id;
 		$this->numeroremitoFijoDesdeRemito = (int) $remito->numero;
 

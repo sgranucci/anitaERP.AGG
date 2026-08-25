@@ -31,6 +31,10 @@
 
 	function sub()
 	{
+        if (window.AnitaGrabacion && window.AnitaGrabacion.enCurso()) {
+            return false;
+        }
+
         if ($('#formgeneral').hasClass('pedido-bloqueado-padron')) {
             if (typeof window.notificarBloqueoPadronCliente === 'function') {
                 window.notificarBloqueoPadronCliente('Problemas en ARCA: no puede guardar el pedido con este cliente.');
@@ -49,7 +53,14 @@
             return false;
         }
 
-        $('#formgeneral').submit();
+        var form = document.getElementById('formgeneral');
+        $('.pedido-carga-bloqueable').filter('button, input[type="submit"]').prop('disabled', true);
+        if (window.AnitaGrabacion && typeof window.AnitaGrabacion.enviar === 'function') {
+            window.AnitaGrabacion.enviar(form);
+        } else if (form) {
+            form.submit();
+        }
+        return false;
     }
 
     $(function () {
@@ -151,7 +162,7 @@
                     @endif                                  
                 </div>
             </div>
-            <form action="{{ route('actualizar_pedido', ['id' => $pedido->id] + ($filtrosQuery ?? [])) }}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" onsubmit="return typeof validarLugarEntregaAntesGuardar !== 'function' || validarLugarEntregaAntesGuardar();">
+            <form action="{{ route('actualizar_pedido', ['id' => $pedido->id] + ($filtrosQuery ?? [])) }}" id="formgeneral" class="form-horizontal form--label-right" method="POST" autocomplete="off" data-articulo-solo-facturable="1" data-mensaje-grabacion="Grabando pedido…" onsubmit="return typeof validarLugarEntregaAntesGuardar !== 'function' || validarLugarEntregaAntesGuardar();">
                 @csrf @method("put")
                 @if (!empty($soloConsulta))
                     <input type="hidden" name="origen" value="modal_consulta">
@@ -168,7 +179,7 @@
                         <div class="row">
                             <div class="col-lg-6">
                                 @if (!empty($puedeActualizarPedido))
-                                    <button type="submit" onclick="sub()" class="btn btn-success pedido-carga-bloqueable">Guardar</button>
+                                    <button type="submit" onclick="return sub()" class="btn btn-success pedido-carga-bloqueable">Guardar</button>
                                 @endif
                                 @if (!empty($soloConsulta))
                                     <button type="button" class="btn btn-secondary @if(!empty($puedeActualizarPedido)) ml-2 @endif" onclick="window.close()">Cerrar solapa</button>

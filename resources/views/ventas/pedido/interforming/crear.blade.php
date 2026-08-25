@@ -22,7 +22,7 @@ Nuevo pedido Interforming
             <div class="card-header">
                 <h3 class="card-title">Nuevo pedido (Interforming)</h3>
             </div>
-            <form action="{{ route('guardar_pedido') }}" method="POST" id="form-pedido-interforming" autocomplete="off">
+            <form action="{{ route('guardar_pedido') }}" method="POST" id="form-pedido-interforming" autocomplete="off" data-mensaje-grabacion="Grabando pedido…">
                 @csrf
                 <div class="card-body">
                     @include('ventas.pedido.interforming.form')

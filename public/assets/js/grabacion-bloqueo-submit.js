@@ -27,6 +27,7 @@
     var TEXTO_DEFECTO = 'Grabando\u2026';
 
     var formularioEnCurso = null;
+    var formularioPendiente = null;
     var temporizadorDemora = null;
     var subtituloOriginal = null;
 
@@ -187,9 +188,13 @@
         return !!form && form.getAttribute(ATTR_EN_CURSO) === '1';
     }
 
-    /** Mientras un envío está en vuelo, ningún otro formulario de la pantalla puede salir. */
+    /** Mientras un envío está en vuelo o a punto de salir, ningún otro submit puede pasar. */
     function hayEnvioEnCurso() {
         return formularioEnCurso !== null;
+    }
+
+    function hayEnvioBloqueado() {
+        return formularioEnCurso !== null || formularioPendiente !== null;
     }
 
     function marcarGrabando(form) {
@@ -212,6 +217,10 @@
     }
 
     function liberar() {
+        if (formularioPendiente) {
+            bloquearBotones(formularioPendiente, false);
+            formularioPendiente = null;
+        }
         if (formularioEnCurso) {
             formularioEnCurso.removeAttribute(ATTR_EN_CURSO);
             bloquearBotones(formularioEnCurso, false);
@@ -232,20 +241,30 @@
             return;
         }
 
-        if (hayEnvioEnCurso()) {
+        if (hayEnvioBloqueado()) {
             event.preventDefault();
             event.stopImmediatePropagation();
-            mostrarOverlay(textoBanner(formularioEnCurso));
+            mostrarOverlay(textoBanner(formularioEnCurso || formularioPendiente));
 
             return;
         }
 
-        // Las validaciones de pantalla corren después (están enganchadas al formulario)
-        // y pueden cancelar el envío; en el próximo tick ya se sabe si sale de verdad.
+        // Marca pendiente YA: un segundo click/Enter en el mismo tick no puede pasar.
+        // El overlay espera al próximo tick por si una validación hace preventDefault.
+        formularioPendiente = form;
+        bloquearBotones(form, true);
+
         window.setTimeout(function () {
-            if (!event.defaultPrevented) {
-                marcarGrabando(form);
+            if (formularioPendiente !== form) {
+                return;
             }
+            if (event.defaultPrevented) {
+                formularioPendiente = null;
+                bloquearBotones(form, false);
+                return;
+            }
+            formularioPendiente = null;
+            marcarGrabando(form);
         }, 0);
     }, true);
 
@@ -258,15 +277,42 @@
 
                 return undefined;
             }
+            formularioPendiente = null;
             marcarGrabando(this);
         }
 
         return submitNativo.apply(this, arguments);
     };
 
+    /**
+     * Envío programático desde onclick="sub()": banner + bloqueo inmediatos y un solo POST.
+     * Evita el doble envío type=submit + $('#form').submit().
+     */
+    function enviarFormulario(form) {
+        if (!form || form.nodeName !== 'FORM') {
+            return false;
+        }
+        if (!esFormularioDeGrabado(form)) {
+            submitNativo.apply(form, []);
+            return true;
+        }
+        if (hayEnvioEnCurso()) {
+            mostrarOverlay(textoBanner(formularioEnCurso));
+            return false;
+        }
+        formularioPendiente = null;
+        if (!marcarGrabando(form)) {
+            mostrarOverlay(textoBanner(form));
+            return false;
+        }
+        bloquearBotones(form, true);
+        submitNativo.apply(form, []);
+        return true;
+    }
+
     // Volver con «atrás» restaura la pantalla desde caché con el banner puesto.
     window.addEventListener('pageshow', function (event) {
-        if (event.persisted || formularioEnCurso) {
+        if (event.persisted || formularioEnCurso || formularioPendiente) {
             liberar();
         }
     });
@@ -276,8 +322,9 @@
         ocultar: ocultarOverlay,
         liberar: liberar,
         marcar: marcarGrabando,
+        enviar: enviarFormulario,
         enCurso: function () {
-            return formularioEnCurso !== null;
+            return hayEnvioBloqueado();
         },
     };
 })();
