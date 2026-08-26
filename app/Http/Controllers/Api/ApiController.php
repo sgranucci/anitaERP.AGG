@@ -17,6 +17,8 @@ use App\Support\Compras\ApiPrecargaProveedorLogger;
 use App\Support\Compras\ComprobanteProveedorConceptosIibbPadronCotejoSupport;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorCentrocostoDestinoSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorCuitCoincidenciaSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorOcCuitMensajeSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorResolucionSupport;
@@ -112,7 +114,7 @@ class ApiController extends Controller
             $cuitProveedor = str_replace("-", "", $cuitProveedor);
             $letraProveedor = $datosOrdenCompra->prom_letra;
 
-            if ($cuitOrdenCompra != $cuitProveedor)
+            if (! PrecargaProveedorCuitCoincidenciaSupport::coinciden($cuitOrdenCompra, $cuitProveedor))
             {
                 $status = 404;
                 $message = app(PrecargaProveedorOcCuitMensajeSupport::class)
@@ -128,7 +130,10 @@ class ApiController extends Controller
 
             if (!$flError)
             {
-                $centroCostoDestino = $datosOrdenCompra->penmp_ccosto_dest;
+                $centroCostoDestino = PrecargaProveedorCentrocostoDestinoSupport::codigoDesdeOcAnita(
+                    $datosOrdenCompra,
+                    $itemsOrdenCompra
+                );
 
                 $centrocosto = $this->centrocostoRepository->findPorCodigo($centroCostoDestino);
 
@@ -716,7 +721,7 @@ class ApiController extends Controller
         $cuitOrdenCompra = str_replace('-', '', (string) ($datosOrdenCompra->prom_cuit ?? ''));
         $cuitNormalizado = str_replace('-', '', $cuit);
 
-        if ($cuitOrdenCompra !== $cuitNormalizado) {
+        if (! PrecargaProveedorCuitCoincidenciaSupport::coinciden($cuitOrdenCompra, $cuitNormalizado)) {
             throw new \RuntimeException('OC no corresponde con el CUIT indicado');
         }
 

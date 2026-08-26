@@ -357,30 +357,39 @@ final class FlashCajaOrigenErpDetalleSupport
             $acciones = self::accionesRendicionMaquina($rendicionId);
         }
 
+        $origenVenta = (string) ($imp['origen_venta_ficha'] ?? $origen);
+        $nota = 'Venta de fichas suma a slot_d / slot_r; impuesto drop se resta una sola vez. '
+            .'Impuesto venta ya no entra a drop/win.';
+        if ($origen === 'anita') {
+            $nota = 'Origen Anita rendmaquina'
+                .($imp['nro_oper'] ? ' nro_oper '.(string) $imp['nro_oper'] : '')
+                .'. '.$nota;
+        } elseif ($origenVenta === 'wigos_sesion') {
+            $nota = 'Sin turno C: venta de fichas toma VentaTickets de sesión Wigos (M+T+N). '.$nota;
+        } else {
+            $nota = 'Preferencia Anita turno C; fallback ERP. '.$nota;
+        }
+
         return [[
-            'titulo' => 'Impuestos turno C (rendición máquinas)',
-            'nota' => $origen === 'anita'
-                ? 'Origen Anita rendmaquina'
-                    .($imp['nro_oper'] ? ' nro_oper '.(string) $imp['nro_oper'] : '')
-                    .'. Se restan una sola vez del día a slot_d / slot_r.'
-                : 'Se restan una sola vez del día a slot_d / slot_r. Preferencia Anita; fallback ERP.',
+            'titulo' => 'Rendición máquinas turno C (venta fichas e impuestos)',
+            'nota' => $nota,
             'columnas' => [
                 ['key' => 'origen', 'label' => 'Origen'],
                 ['key' => 'nro_oper', 'label' => 'Nro. oper'],
+                ['key' => 'venta_ficha', 'label' => 'Venta fichas', 'num' => true],
                 ['key' => 'impuesto_drop', 'label' => 'Imp. drop', 'num' => true],
-                ['key' => 'impuesto_venta', 'label' => 'Imp. venta', 'num' => true],
-                ['key' => 'total', 'label' => 'Total', 'num' => true],
+                ['key' => 'impuesto_venta', 'label' => 'Imp. venta (no entra)', 'num' => true],
                 ['key' => 'acciones', 'label' => 'Acciones', 'acciones' => true],
             ],
             'filas' => [[
-                'origen' => $origen,
+                'origen' => $origenVenta !== '' ? $origenVenta : $origen,
                 'nro_oper' => $imp['nro_oper'] !== null ? (string) $imp['nro_oper'] : '',
-                'impuesto_drop' => (float) ($imp['impuesto_drop'] ?? 0),
+                'venta_ficha' => (float) ($imp['venta_ficha'] ?? 0),
                 'impuesto_venta' => (float) ($imp['impuesto_venta'] ?? 0),
-                'total' => (float) ($imp['total'] ?? 0),
+                'impuesto_drop' => (float) ($imp['impuesto_drop'] ?? 0),
                 'acciones' => $acciones,
             ]],
-            'subtotal' => (float) ($imp['total'] ?? 0),
+            'subtotal' => (float) ($imp['venta_ficha'] ?? 0),
             'truncado' => false,
             'sp' => null,
             'params' => null,

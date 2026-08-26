@@ -35,6 +35,13 @@
 @endphp
 
 @section('contenido')
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'cierre-rend-bingo-overlay',
+    'tituloId' => 'cierre-rend-bingo-overlay-titulo',
+    'subtituloId' => 'cierre-rend-bingo-overlay-subtitulo',
+    'titulo' => 'Cerrando bingo…',
+    'subtitulo' => 'Escribe en Anita. No cierre la página ni vuelva a confirmar.',
+])
 @php
     $retornoListadoQuery = QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $limpiarUrl = route(

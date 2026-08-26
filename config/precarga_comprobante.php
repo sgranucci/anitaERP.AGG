@@ -6,9 +6,11 @@ return [
     | Carpeta de facturas escaneadas (precarga compras)
     |--------------------------------------------------------------------------
     |
-    | Montaje de facturas escaneadas. Los PDF se leen siempre desde
-    | {facturas_scan_base}/comprobantes/ (rutaalmacenamiento: storage:/comprobantes/...
-    | o storage:/facturas/... — ambos se normalizan a comprobantes).
+    | Montaje de facturas escaneadas. Los PDF se leen desde
+    | {facturas_scan_base}/comprobantes/ y, si el agente los dejó para revisión,
+    | {facturas_scan_base}/comprobantes-revisar/.
+    | rutaalmacenamiento: storage:/comprobantes/..., UNC //host/Facturas_scan/...,
+    | o storage:/facturas/... (alias histórico de comprobantes).
     |
     | Estructura relativa: {CUIT}/{Y-m}/{TIPO}-{letra}-{sucursal}-{nro}.pdf
     | Ejemplo absoluto: /data/facturas/comprobantes/30-65781386-5/2026-02/FGA-A-00003-00946427.pdf

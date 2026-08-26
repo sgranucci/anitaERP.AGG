@@ -27,6 +27,7 @@
             '#btn-confirmar-recepcion-proveedor',
             '#btn-modal-confirmar-recepcion-aceptar',
             'button[form="form-recepcion-confirmar"]',
+            '.js-guardar-confirmar-recepcion',
         ];
         if (selectoresExtra) {
             selectores = selectores.concat(selectoresExtra);

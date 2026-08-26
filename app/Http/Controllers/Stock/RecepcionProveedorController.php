@@ -83,10 +83,23 @@ class RecepcionProveedorController extends Controller
     {
         can('crear-recepcion-proveedor');
 
+        $confirmarAlGuardar = $this->pideConfirmarAlGuardar($request);
+        if ($confirmarAlGuardar) {
+            can('confirmar-recepcion-proveedor');
+        }
+
         try {
             $recepcion = $this->service->guardar($request->validated());
         } catch (\Throwable $e) {
             return back()->withInput()->withErrors(['general' => $e->getMessage()]);
+        }
+
+        if ($confirmarAlGuardar) {
+            return $this->confirmarTrasPersistir(
+                $request,
+                (int) $recepcion->id,
+                'La recepción se guardó en borrador, pero no se pudo confirmar. '
+            );
         }
 
         return redirect()->route('editar_recepcion_proveedor', QueryRetornoListado::paramsRutaEditar(
@@ -171,10 +184,23 @@ class RecepcionProveedorController extends Controller
     {
         can('actualizar-recepcion-proveedor');
 
+        $confirmarAlGuardar = $this->pideConfirmarAlGuardar($request);
+        if ($confirmarAlGuardar) {
+            can('confirmar-recepcion-proveedor');
+        }
+
         try {
             $this->service->actualizar($id, $request->validated(), $request);
         } catch (\Throwable $e) {
             return back()->withInput()->withErrors(['general' => $e->getMessage()]);
+        }
+
+        if ($confirmarAlGuardar) {
+            return $this->confirmarTrasPersistir(
+                $request,
+                $id,
+                'La recepción se actualizó, pero no se pudo confirmar. '
+            );
         }
 
         return redirect()->route('editar_recepcion_proveedor', QueryRetornoListado::paramsRutaEditar(
@@ -199,6 +225,39 @@ class RecepcionProveedorController extends Controller
             RecepcionProveedorListadoFiltros::class,
             $id
         ))->with('mensaje', 'Recepción confirmada. Stock y contabilidad generados.');
+    }
+
+    /**
+     * Mismo patrón que factura de proveedor: persistir y, si pidieron confirmar, generar stock/asiento/Anita.
+     * Si la confirmación falla, el borrador queda grabado y el error se muestra en editar.
+     */
+    private function confirmarTrasPersistir(Request $request, int $id, string $prefijoError)
+    {
+        $paramsEditar = QueryRetornoListado::paramsRutaEditar(
+            $request,
+            RecepcionProveedorListadoFiltros::class,
+            $id
+        );
+
+        try {
+            $this->service->confirmar($id);
+        } catch (\Throwable $e) {
+            return redirect()->route('editar_recepcion_proveedor', $paramsEditar)
+                ->with('mensaje', $prefijoError.'Motivo: '.$e->getMessage());
+        }
+
+        return redirect()->route('editar_recepcion_proveedor', $paramsEditar)
+            ->with('mensaje', 'Recepción confirmada. Stock y contabilidad generados.');
+    }
+
+    private function pideConfirmarAlGuardar(Request $request): bool
+    {
+        $accion = $request->input('accion');
+        if ($accion === 'confirmar') {
+            return true;
+        }
+
+        return is_array($accion) && in_array('confirmar', $accion, true);
     }
 
     public function cambiarCotizacion(Request $request, int $id)

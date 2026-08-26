@@ -74,7 +74,8 @@ final class ProyeccionPagosColumnasSupport
             self::col('nro_referencia', 'Nro.OC', self::GRUPO_APROBACION, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 10, anchoPdf: 2.4, ayuda: 'Orden de compra origen con enlace al ABM.'),
             self::col('requisicion', 'Requis.', self::GRUPO_APROBACION, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 10, anchoPdf: 2.4),
             self::col('usuario_requisicion', 'Confecciona requis.', self::GRUPO_APROBACION, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 24, anchoPdf: 5),
-            self::col('aprobacion_requisicion', 'Aprob. requis.', self::GRUPO_APROBACION, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 22, anchoPdf: 4.6),
+            self::col('autorizante_requisicion', 'Autorizante requis.', self::GRUPO_APROBACION, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 24, anchoPdf: 5, ayuda: 'Último usuario que aprobó la requisición origen (historia APROBADA o último firmante del árbol).'),
+            self::col('aprobacion_requisicion', 'Aprob. requis.', self::GRUPO_APROBACION, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 28, anchoPdf: 5.4, ayuda: 'Autorizante y fecha de aprobación de la requisición origen.'),
             self::col('detalle_item', 'Detalle ítem comprado', self::GRUPO_APROBACION, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 30, anchoPdf: 6),
             self::col('concepto', 'N.Con.', self::GRUPO_CASHFLOW, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 9, anchoPdf: 2.2, ayuda: 'Código del concepto de cash flow (Anita concoper) con enlace al ABM.'),
             self::col('detalle_concepto', 'Detalle del concepto', self::GRUPO_CASHFLOW, self::TIPO_TEXTO, visible: false, soloDetalle: true, anchoExcel: 26, anchoPdf: 5.4, ayuda: 'Concepto de cash flow: del pago, de la cuenta contable imputada o el asignado al proveedor.'),
@@ -181,6 +182,8 @@ final class ProyeccionPagosColumnasSupport
             }
         }
 
+        $visibles = self::insertarAutorizanteSiCorresponde($visibles, $disponibles);
+
         return array_values($visibles);
     }
 
@@ -253,6 +256,50 @@ final class ProyeccionPagosColumnasSupport
             ->pluck('clave')
             ->values()
             ->all();
+    }
+
+    /**
+     * Si el operador ya muestra origen de requisición, agrega el autorizante al lado.
+     *
+     * @param  array<string, array<string, mixed>>  $visibles
+     * @param  array<string, array<string, mixed>>  $disponibles
+     * @return array<string, array<string, mixed>>
+     */
+    private static function insertarAutorizanteSiCorresponde(array $visibles, array $disponibles): array
+    {
+        if (! isset($disponibles['autorizante_requisicion']) || isset($visibles['autorizante_requisicion'])) {
+            return $visibles;
+        }
+
+        $tieneOrigen = isset($visibles['requisicion'])
+            || isset($visibles['usuario_requisicion'])
+            || isset($visibles['aprobacion_requisicion']);
+
+        if (! $tieneOrigen) {
+            return $visibles;
+        }
+
+        $salida = [];
+        $insertado = false;
+        foreach ($visibles as $clave => $columna) {
+            if ($clave === 'aprobacion_requisicion' && ! $insertado) {
+                $salida['autorizante_requisicion'] = $disponibles['autorizante_requisicion'];
+                $insertado = true;
+            }
+            $salida[$clave] = $columna;
+            $despuesDe = $clave === 'usuario_requisicion'
+                || ($clave === 'requisicion' && ! isset($visibles['usuario_requisicion']));
+            if ($despuesDe && ! $insertado) {
+                $salida['autorizante_requisicion'] = $disponibles['autorizante_requisicion'];
+                $insertado = true;
+            }
+        }
+
+        if (! $insertado) {
+            $salida['autorizante_requisicion'] = $disponibles['autorizante_requisicion'];
+        }
+
+        return $salida;
     }
 
     /**

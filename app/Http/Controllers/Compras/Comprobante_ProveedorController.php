@@ -141,7 +141,7 @@ class Comprobante_ProveedorController extends Controller
 
         $prefill = $this->prefillService->construirDesdeRequest($request);
 
-        $facturaYaEnAnita = $this->avisoFacturaYaEnAnitaDesdePrefill($prefill);
+        $facturaYaEnAnita = $this->avisoFacturaYaMarcadaEnErpDesdePrefill($prefill);
         if (($facturaYaEnAnita['ya_marcada'] ?? false) === true) {
             return redirect()
                 ->route('precarga_comprobante_proveedor', ['estado' => PrecargaComprobanteEstados::CARGADA_ANITA])
@@ -219,33 +219,46 @@ class Comprobante_ProveedorController extends Controller
 
         $mensaje = 'Comprobante de proveedor guardado en borrador.';
         $avisos = $this->persistenciaService->ultimosAvisosControles();
-        if ($avisos !== []) {
-            $mensaje .= ' '.implode(' ', $avisos);
-        }
 
         $contabilizarAlGuardar = $request->input('accion') === 'contabilizar';
         if ($contabilizarAlGuardar) {
             can('contabilizar-comprobante-proveedor');
             try {
                 $this->contabilizarService->contabilizar((int) $comprobante->id);
+            } catch (ComprobanteProveedorYaExistenteEnAnitaException $e) {
+                return $this->respuestaFacturaYaEnAnita(
+                    $request,
+                    $e,
+                    'El comprobante se guardó en borrador, pero no se pudo confirmar. No se generó asiento ni cuenta corriente',
+                    (int) $comprobante->id,
+                );
             } catch (\Throwable $e) {
-                return redirect()
-                    ->route('editar_comprobante_proveedor', ['id' => $comprobante->id])
-                    ->with('errores', [
-                        'El comprobante se guardó en borrador, pero no se pudo contabilizar. '
-                        .'El aviso permanece en esta pantalla hasta que se complete. Motivo: '.$e->getMessage(),
-                    ]);
+                return $this->conAvisosControles(
+                    redirect()
+                        ->route('editar_comprobante_proveedor', ['id' => $comprobante->id])
+                        ->with('errores', [
+                            'El comprobante se guardó en borrador, pero no se pudo contabilizar. '
+                            .'El aviso permanece en esta pantalla hasta que se complete. Motivo: '.$e->getMessage(),
+                        ]),
+                    $avisos
+                );
             }
 
-            return redirect()
-                ->route('editar_comprobante_proveedor', ['id' => $comprobante->id])
-                ->with('mensaje', 'Comprobante contabilizado: asiento, cuenta corriente y sync Anita.');
+            return $this->conAvisosControles(
+                redirect()
+                    ->route('editar_comprobante_proveedor', ['id' => $comprobante->id])
+                    ->with('mensaje', 'Comprobante contabilizado: asiento, cuenta corriente y sync Anita.'),
+                $avisos
+            );
         }
 
         // Borrador: queda en editar para que aparezca Contabilizar (mismo patrón que recepción).
-        return redirect()
-            ->route('editar_comprobante_proveedor', ['id' => $comprobante->id])
-            ->with('mensaje', $mensaje);
+        return $this->conAvisosControles(
+            redirect()
+                ->route('editar_comprobante_proveedor', ['id' => $comprobante->id])
+                ->with('mensaje', $mensaje),
+            $avisos
+        );
     }
 
     public function editar(Request $request, int $id)
@@ -283,16 +296,111 @@ class Comprobante_ProveedorController extends Controller
 
         $mensaje = 'Comprobante de proveedor actualizado.';
         $avisos = $this->persistenciaService->ultimosAvisosControles();
-        if ($avisos !== []) {
-            $mensaje .= ' '.implode(' ', $avisos);
-        }
 
-        return $this->redirectIndexConMensaje($request, $mensaje);
+        return $this->conAvisosControles(
+            $this->redirectIndexConMensaje($request, $mensaje),
+            $avisos
+        );
     }
 
     /**
      * Cotización venta del día (tabla cotización / cron BNA) para moneda y fecha de comprobante.
      */
+    public function apiAvisoFacturaYaEnAnita(Request $request): JsonResponse
+    {
+        if (! can('crear-comprobante-proveedor', false)
+            && ! can('editar-comprobante-proveedor', false)) {
+            return response()->json(['message' => 'Sin permisos'], 403);
+        }
+
+        $precargaId = (int) $request->query('precarga_id', 0);
+        if ($precargaId <= 0) {
+            return response()->json(['ok' => true, 'aviso' => null]);
+        }
+
+        $precarga = Precarga_Comprobante_Proveedor::query()->find($precargaId);
+        if (! $precarga) {
+            return response()->json(['ok' => true, 'aviso' => null]);
+        }
+
+        $aviso = $this->marcarCargadaAnitaService->avisoSiYaExisteEnAnita($precarga);
+        if ($aviso === null) {
+            return response()->json(['ok' => true, 'aviso' => null, 'html' => '']);
+        }
+
+        $aviso['precarga_id'] = $precargaId;
+        $html = view('compras.precarga_comprobante_proveedor.partials.aviso_ya_en_anita', [
+            'facturaYaEnAnita' => $aviso,
+        ])->render();
+
+        return response()->json([
+            'ok' => true,
+            'aviso' => $aviso,
+            'html' => $html,
+            'ya_marcada' => (bool) ($aviso['ya_marcada'] ?? false),
+        ]);
+    }
+
+    public function apiSincronizarOcComAlta(Request $request): JsonResponse
+    {
+        if (! can('crear-comprobante-proveedor', false)
+            && ! can('editar-comprobante-proveedor', false)) {
+            return response()->json(['message' => 'Sin permisos'], 403);
+        }
+
+        $precargaId = (int) $request->query('precarga_id', 0);
+        $ordencompraId = (int) $request->query('ordencompra_id', 0);
+        $ocImportada = false;
+
+        if ($precargaId > 0) {
+            $precarga = Precarga_Comprobante_Proveedor::query()->find($precargaId);
+            $nro = (int) preg_replace('/\D/', '', (string) ($precarga->numeroordencompra ?? ''));
+            if ($nro > 0) {
+                $antes = Ordencompra::query()->where('numeroordencompra', $nro)->exists();
+                $oc = $this->prefillService->traerOrdencompraDesdeAnitaSiFalta($nro);
+                $ocImportada = $oc !== null && ! $antes;
+                if ($oc) {
+                    $ordencompraId = (int) $oc->id;
+                }
+            }
+        }
+
+        $stats = [
+            'claves' => 0,
+            'importadas' => 0,
+            'vinculadas' => 0,
+            'omitidas' => 0,
+            'errores' => [],
+        ];
+        if ($ordencompraId > 0) {
+            $stats = $this->recepcionesSupport->sincronizarDesdeAnita($ordencompraId);
+        }
+
+        $nuevasCom = (int) ($stats['importadas'] ?? 0) + (int) ($stats['vinculadas'] ?? 0);
+        $reload = $ocImportada || $nuevasCom > 0;
+
+        $mensaje = null;
+        if ($reload) {
+            $partes = [];
+            if ($ocImportada) {
+                $partes[] = 'se importó la orden de compra';
+            }
+            if ($nuevasCom > 0) {
+                $partes[] = $nuevasCom.' recepción(es) COM';
+            }
+            $mensaje = 'Anita: '.implode(' y ', $partes).'. Recargando el alta…';
+        }
+
+        return response()->json([
+            'ok' => true,
+            'reload' => $reload,
+            'ordencompra_id' => $ordencompraId > 0 ? $ordencompraId : null,
+            'oc_importada' => $ocImportada,
+            'com' => $stats,
+            'mensaje' => $mensaje,
+        ]);
+    }
+
     public function apiCotizacionMonedaFecha(Request $request): JsonResponse
     {
         if (! can('crear-comprobante-proveedor', false)
@@ -445,6 +553,13 @@ class Comprobante_ProveedorController extends Controller
 
         try {
             $this->contabilizarService->contabilizar($id);
+        } catch (ComprobanteProveedorYaExistenteEnAnitaException $e) {
+            return $this->respuestaFacturaYaEnAnita(
+                $request,
+                $e,
+                'No se pudo confirmar el comprobante. No se generó asiento ni cuenta corriente',
+                $id,
+            );
         } catch (\Throwable $e) {
             return redirect()
                 ->route('editar_comprobante_proveedor', ['id' => $id] + $this->queryRetornoListado($request))
@@ -666,8 +781,13 @@ class Comprobante_ProveedorController extends Controller
             ->with('errores', [$e->getMessage()]);
     }
 
-    /** @param array<string, mixed> $prefill */
-    private function avisoFacturaYaEnAnitaDesdePrefill(array $prefill): ?array
+    /**
+     * Solo estado ERP (sin bridge Anita). La consulta a tabla compra va por AJAX
+     * para no bloquear la apertura del alta.
+     *
+     * @param  array<string, mixed>  $prefill
+     */
+    private function avisoFacturaYaMarcadaEnErpDesdePrefill(array $prefill): ?array
     {
         $data = $prefill['data'] ?? null;
         $precargaId = (int) ($data->precarga_comprobante_proveedor_id ?? 0);
@@ -676,7 +796,7 @@ class Comprobante_ProveedorController extends Controller
         }
 
         $precarga = Precarga_Comprobante_Proveedor::query()->find($precargaId);
-        if (! $precarga) {
+        if (! $precarga || (string) $precarga->estado !== PrecargaComprobanteEstados::CARGADA_ANITA) {
             return null;
         }
 
@@ -694,6 +814,7 @@ class Comprobante_ProveedorController extends Controller
         Request $request,
         ComprobanteProveedorYaExistenteEnAnitaException $e,
         string $prefijo = 'No se pudo guardar el comprobante',
+        ?int $redirigirEditarId = null,
     ) {
         $precargaId = (int) $request->input('precarga_comprobante_proveedor_id', 0);
         $aviso = [
@@ -704,9 +825,14 @@ class Comprobante_ProveedorController extends Controller
             'precarga_id' => $precargaId > 0 ? $precargaId : null,
         ];
 
-        return redirect()
-            ->back()
-            ->withInput()
+        $redirect = $redirigirEditarId !== null && $redirigirEditarId > 0
+            ? redirect()->route(
+                'editar_comprobante_proveedor',
+                ['id' => $redirigirEditarId] + $this->queryRetornoListado($request)
+            )
+            : redirect()->back()->withInput();
+
+        return $redirect
             ->with('errores', [$this->mensajeErrorPersistencia($prefijo, $e)])
             ->with('factura_ya_en_anita', $aviso);
     }
@@ -855,10 +981,7 @@ class Comprobante_ProveedorController extends Controller
             $data->loadMissing('ordencompras');
             $oc = $data->ordencompras;
             if ($oc) {
-                $toleranciaPct = ComprobanteProveedorToleranciaImporteSupport::porcentajeParaOc(
-                    (int) $oc->empresa_id,
-                    (int) ($oc->centrocosto_id ?? 0) ?: null,
-                );
+                $toleranciaPct = ComprobanteProveedorToleranciaImporteSupport::porcentajeDesdeOc($oc);
             }
         }
 
@@ -914,10 +1037,12 @@ class Comprobante_ProveedorController extends Controller
             }
         }
 
+        $conceptosIva = $this->conceptoIvacompraRepository->all();
+
         return array_merge($prefill, [
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'tipotransaccion_compra_query' => $this->tipotransaccionCompraRepository->all('*'),
-            'concepto_ivacompra_query' => $this->conceptoIvacompraRepository->all(),
+            'concepto_ivacompra_query' => $conceptosIva,
             'moneda_query' => $this->monedaRepository->all(),
             'modos_carga' => ComprobanteProveedorModoCarga::todos(),
             'origenes_entrada' => ComprobanteProveedorOrigenEntrada::todos(),
@@ -948,7 +1073,7 @@ class Comprobante_ProveedorController extends Controller
                 $prefill['articulos'] ?? collect()
             ),
             'conceptos_cuenta_meta' => $this->asientoPreviewSupport->metaConceptosParaCliente(
-                $this->conceptoIvacompraRepository->all(),
+                $conceptosIva,
                 (int) ($data->empresa_id ?? 0) ?: null
             ),
             'cotizacion_dia' => $cotizacionMeta['cotizacion_dia'],
@@ -969,6 +1094,18 @@ class Comprobante_ProveedorController extends Controller
     private function queryRetornoListado(Request $request): array
     {
         return QueryRetornoListado::desdeRequestSiIndex($request, ComprobanteProveedorListadoFiltros::class);
+    }
+
+    /**
+     * @param  list<string>  $avisos
+     */
+    private function conAvisosControles(\Illuminate\Http\RedirectResponse $redirect, array $avisos): \Illuminate\Http\RedirectResponse
+    {
+        if ($avisos === []) {
+            return $redirect;
+        }
+
+        return $redirect->with('avisos', $avisos);
     }
 
     private function redirectIndexConMensaje(Request $request, string $mensaje)
@@ -997,7 +1134,7 @@ class Comprobante_ProveedorController extends Controller
         $coleccion = collect();
 
         if ($ordencompraId > 0) {
-            $coleccion = $this->recepcionesSupport->listarDisponibles($ordencompraId, $comprobanteId);
+            $coleccion = $this->recepcionesSupport->listarDisponibles($ordencompraId, $comprobanteId, false);
         }
 
         $proveedorId = (int) ($data->proveedor_id ?? 0);

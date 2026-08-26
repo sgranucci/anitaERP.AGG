@@ -87,6 +87,7 @@ $( "#botonform0" ).click(function() {
             		</div>
             	</div>
             </form>
+            @include('uif.cliente_uif.partials.modal_cumplimiento')
             @include('compras.proveedor.arca-cuit-entry-modal')
             @include('compras.proveedor.arca-padron-modals')
         </div>

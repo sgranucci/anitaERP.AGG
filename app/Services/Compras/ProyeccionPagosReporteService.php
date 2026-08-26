@@ -389,18 +389,6 @@ class ProyeccionPagosReporteService
                 '=',
                 'cp.id',
             )
-            ->leftJoin('requisicion as req', 'req.id', '=', 'oc.requisicion_id')
-            ->leftJoin('usuario as ureq', 'ureq.id', '=', 'req.creousuario_id')
-            ->leftJoinSub(
-                DB::table('requisicion_estado')
-                    ->selectRaw('requisicion_id, MAX(fecha) AS fecha_aprobacion')
-                    ->where('estado', 'APROBADA')
-                    ->groupBy('requisicion_id'),
-                'reap',
-                'reap.requisicion_id',
-                '=',
-                'req.id',
-            )
             ->leftJoinSub(
                 DB::table('ordencompra_articulo')
                     ->selectRaw('ordencompra_id, MIN(id) AS linea_id')
@@ -412,6 +400,25 @@ class ProyeccionPagosReporteService
             )
             ->leftJoin('ordencompra_articulo as oai', 'oai.id', '=', 'ocl.linea_id')
             ->leftJoin('articulo as art', 'art.id', '=', 'oai.articulo_id')
+            ->leftJoin('requisicion_articulo as raoc', 'raoc.id', '=', 'oai.requisicion_articulo_id')
+            ->leftJoin('requisicion as req', function ($join) {
+                $join->on('req.id', '=', DB::raw(SqlDialectSupport::coalesce('oc.requisicion_id', 'raoc.requisicion_id')));
+            })
+            ->leftJoin('usuario as ureq', 'ureq.id', '=', 'req.creousuario_id')
+            ->leftJoinSub(
+                $this->subqueryUltimaAprobacionRequisicion(),
+                'reap',
+                'reap.requisicion_id',
+                '=',
+                'req.id',
+            )
+            ->leftJoinSub(
+                $this->subqueryUltimoFirmanteArbolRequisicion(),
+                'arb',
+                'arb.requisicion_id',
+                '=',
+                'req.id',
+            )
             ->leftJoinSub(
                 DB::table('comprobante_proveedor_concepto')
                     ->selectRaw('comprobante_proveedor_id, MIN(id) AS concepto_linea_id')
@@ -454,6 +461,7 @@ class ProyeccionPagosReporteService
                 'req.estado as estado_requisicion',
                 'ureq.nombre as usuario_requisicion',
                 'reap.fecha_aprobacion as fecha_aprobacion_requisicion',
+                DB::raw(SqlDialectSupport::coalesce('reap.autorizante_nombre', 'arb.autorizante_nombre').' as autorizante_requisicion'),
                 DB::raw(SqlDialectSupport::coalesce('art.descripcion', 'oai.detalle').' as detalle_item'),
                 'comp.asiento_id as asiento_id',
                 'cpc.cuentacontabledebe_id as concepto_cuenta_id',
@@ -648,6 +656,7 @@ class ProyeccionPagosReporteService
             'nro_referencia' => (int) ($row->numeroordencompra ?? 0) > 0 ? (string) $row->numeroordencompra : '',
             'requisicion' => (int) ($row->numerorequisicion ?? 0) > 0 ? (string) $row->numerorequisicion : '',
             'usuario_requisicion' => (string) ($row->usuario_requisicion ?? ''),
+            'autorizante_requisicion' => (string) ($row->autorizante_requisicion ?? ''),
             'aprobacion_requisicion' => $this->textoAprobacionRequisicion($row),
             'detalle_item' => (string) ($row->detalle_item ?? ''),
             'concepto' => $this->codigoConcepto($concepto),
@@ -732,6 +741,7 @@ class ProyeccionPagosReporteService
             'nro_referencia' => '',
             'requisicion' => '',
             'usuario_requisicion' => '',
+            'autorizante_requisicion' => '',
             'aprobacion_requisicion' => '',
             'detalle_item' => '',
             'concepto' => $this->codigoConcepto($concepto),
@@ -1150,14 +1160,61 @@ class ProyeccionPagosReporteService
         return trim($codigo.' '.(string) ($concepto['cuenta_nombre'] ?? ''));
     }
 
+    /**
+     * Última fila APROBADA de la historia de la requisición, con el usuario que la firmó.
+     */
+    private function subqueryUltimaAprobacionRequisicion(): Builder
+    {
+        return DB::table('requisicion_estado as re')
+            ->leftJoin('usuario as uap', 'uap.id', '=', 're.usuario_id')
+            ->where('re.estado', 'APROBADA')
+            ->whereRaw(
+                're.id = (SELECT MAX(re2.id) FROM requisicion_estado AS re2 WHERE re2.requisicion_id = re.requisicion_id AND re2.estado = ?)',
+                ['APROBADA']
+            )
+            ->select([
+                're.requisicion_id',
+                're.fecha as fecha_aprobacion',
+                'uap.nombre as autorizante_nombre',
+            ]);
+    }
+
+    /**
+     * Último firmante del árbol (movimiento Aprobado). Cubre RQ históricas sin fila APROBADA.
+     */
+    private function subqueryUltimoFirmanteArbolRequisicion(): Builder
+    {
+        return DB::table('arbolaprobacion_movimiento as am')
+            ->leftJoin('usuario as uam', 'uam.id', '=', 'am.destinatariousuario_id')
+            ->where('am.estado', 'Aprobado')
+            ->whereNotNull('am.requisicion_id')
+            ->whereRaw(
+                'am.id = (SELECT MAX(am2.id) FROM arbolaprobacion_movimiento AS am2 WHERE am2.requisicion_id = am.requisicion_id AND am2.estado = ?)',
+                ['Aprobado']
+            )
+            ->select([
+                'am.requisicion_id',
+                'uam.nombre as autorizante_nombre',
+            ]);
+    }
+
     private function textoAprobacionRequisicion(object $row): string
     {
+        $autorizante = trim((string) ($row->autorizante_requisicion ?? ''));
         $fecha = $row->fecha_aprobacion_requisicion ?? null;
+        $estado = trim((string) ($row->estado_requisicion ?? ''));
+
+        if ($autorizante !== '') {
+            if ($fecha) {
+                return $autorizante.' ('.Carbon::parse((string) $fecha)->format('d/m/y').')';
+            }
+
+            return $autorizante;
+        }
+
         if ($fecha) {
             return 'Aprobada '.Carbon::parse((string) $fecha)->format('d/m/y');
         }
-
-        $estado = trim((string) ($row->estado_requisicion ?? ''));
 
         return $estado !== '' ? ucwords(mb_strtolower($estado)) : '';
     }

@@ -9,10 +9,11 @@ use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Numeración IE (OPP/EGR/ING/TRA) alineada a Anita ventas.numerador (num_clave por empresa).
+ * Numeración IE (OPP/OPA/EGR/ING/TRA) alineada a Anita ventas.numerador (num_clave por empresa).
  *
  * Semillas default (num_clave):
  * - OPP: 223/224/225 (emp 1/2/3) — misma semilla que OP MultiEmpresa O1/O2/O3
+ * - OPA: mismas claves que OPP (el tipo de comprobante diferencia anticipo vs pago)
  * - EGR: 361/362/363
  * - ING: 346/347/348
  * - TRA: 334/335/336
@@ -70,6 +71,7 @@ final class IngresoEgresoAnitaNumeracionSupport
     {
         return [
             'OPP' => [1 => 223, 2 => 224, 3 => 225],
+            'OPA' => [1 => 223, 2 => 224, 3 => 225],
             'EGR' => [1 => 361, 2 => 362, 3 => 363],
             'ING' => [1 => 346, 2 => 347, 3 => 348],
             'TRA' => [1 => 334, 2 => 335, 3 => 336],

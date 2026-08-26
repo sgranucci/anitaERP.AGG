@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Sala;
 use App\Http\Controllers\Controller;
 use App\Models\Sala\RequisicionSala;
 use App\Models\Sala\RequisicionSalaArticulo;
+use App\Models\Stock\Articulo;
 use App\Models\Stock\Depmae;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Sala\CumplimientoRequisicionSalaRepositoryInterface;
@@ -124,6 +125,7 @@ class CumplirRequisicionSalaController extends Controller
             'estado_linea_enum' => RequisicionSalaArticuloEstadoTrait::$enumEstado,
             'estado_parcial_enum' => self::$enumEstadoParcial,
             'estados_cumplir' => CumplirRequisicionSalaService::estadosPermitidosParaCumplir(),
+            'puedeCambiarArticulo' => can('cambiar-articulo-cumplir-requisicion-sala', false),
         ]);
     }
 
@@ -568,12 +570,24 @@ class CumplirRequisicionSalaController extends Controller
             }
 
             $pendiente = (float) $linea->cantidad - (float) ($linea->cantidadentregada ?? 0);
+            $articuloIdPosted = (int) ($lineaOld['articulo_id'] ?? 0);
+            $articuloId = $articuloIdPosted > 0 ? $articuloIdPosted : (int) $linea->articulo_id;
+            $sku = $linea->articulos?->sku;
+            $descripcion = $linea->descripcionArticulo();
+            if ($articuloIdPosted > 0 && $articuloIdPosted !== (int) $linea->articulo_id) {
+                $articuloPosted = Articulo::query()->find($articuloIdPosted);
+                if ($articuloPosted) {
+                    $sku = $articuloPosted->sku;
+                    $descripcion = trim((string) ($articuloPosted->descripcion ?? $articuloPosted->detalle ?? ''));
+                }
+            }
 
             $resultado[] = [
                 'id' => $linea->id,
-                'articulo_id' => $linea->articulo_id,
-                'sku' => $linea->articulos?->sku,
-                'descripcion' => $linea->descripcionArticulo(),
+                'articulo_id' => $articuloId,
+                'articulo_id_original' => (int) $linea->articulo_id,
+                'sku' => $sku,
+                'descripcion' => $descripcion,
                 'cantidad' => (float) $linea->cantidad,
                 'cantidadentregada' => (float) ($linea->cantidadentregada ?? 0),
                 'pendiente' => $pendiente,

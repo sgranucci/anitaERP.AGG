@@ -52,9 +52,28 @@
             theme: 'fa',
             browseClass: 'btn btn-outline-primary btn-sm',
             removeClass: 'btn btn-outline-danger btn-sm',
-        });        
+        });
+
+        mostrarModalCumplimientoPremioAltaUif();
     });
 	
+    function mostrarModalCumplimientoPremioAltaUif() {
+        var $modal = $('#uif-modal-cumplimiento');
+        if (!$modal.length || !$modal.find('#uif-modal-cumplimiento-lista li').length) {
+            return;
+        }
+        var yaMostrado = false;
+        try {
+            yaMostrado = sessionStorage.getItem('uif-cumplimiento-premio-aviso') === '1';
+            sessionStorage.removeItem('uif-cumplimiento-premio-aviso');
+        } catch (e) {}
+        var esAlta = ($('#form-general').find('input[name="_method"]').val() || '').toUpperCase() !== 'PUT';
+        if (yaMostrado || !esAlta) {
+            return;
+        }
+        $modal.modal('show');
+    }
+
     function activa_eventos(flInicio)
 	{
 		// Si esta agregando items desactiva los eventos

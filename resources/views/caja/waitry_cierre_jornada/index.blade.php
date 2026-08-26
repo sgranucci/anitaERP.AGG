@@ -56,7 +56,7 @@
 
                 <form method="get" action="{{ route('waitry_cierre_jornada') }}" class="form-inline mb-4">
                     @if (($empresas ?? collect())->count() > 1)
-                        <input type="hidden" name="empresa_id" id="empresa_id" value="{{ (int) $empresa_id }}">
+                        <input type="hidden" name="empresa_id" id="empresa_id" value="{{ $empresa_id ? (int) $empresa_id : '' }}">
                     @else
                         @include('includes.listado.filtro_empresa_asignada_inline', [
                             'empresas' => $empresas,
@@ -68,10 +68,13 @@
                     @endif
                     <label class="mr-2" for="fecha_jornada">Fecha jornada</label>
                     <input type="date" name="fecha_jornada" id="fecha_jornada" class="form-control mr-3"
-                           value="{{ $fecha_jornada }}" required>
-                    <button type="submit" class="btn btn-primary btn-sm">
+                           value="{{ $fecha_jornada }}">
+                    <button type="submit" class="btn btn-primary btn-sm" @disabled(($empresas ?? collect())->count() > 1 && (int) ($empresa_id ?? 0) <= 0)>
                         <i class="fa fa-search"></i> Consultar
                     </button>
+                    @if (($empresas ?? collect())->count() > 1 && (int) ($empresa_id ?? 0) <= 0)
+                        <span class="text-muted small ml-2">Seleccione una empresa para consultar.</span>
+                    @endif
                 </form>
 
                 @if ($error)

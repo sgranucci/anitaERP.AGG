@@ -18,7 +18,7 @@
 </div>
 <div class="form-group row">
         <label for="provincia_uif" class="col-lg-3 col-form-label">Provincia</label>
-        <input type="text" class="col-lg-1" id="provincia_uif_id" name="provincia_uif_id" value="{{$data->provincia_id??''}}" >
+        <input type="text" class="col-lg-1" id="provincia_uif_id" name="provincia_uif_id" value="{{old('provincia_uif_id', $data->provincia_uif_id ?? '')}}" >
         <button type="button" title="Consulta Provincias" style="padding:1;" class="btn-accion-tabla consultaprovincia_uif tooltipsC">
                 <i class="fa fa-search text-primary"></i>
         </button>

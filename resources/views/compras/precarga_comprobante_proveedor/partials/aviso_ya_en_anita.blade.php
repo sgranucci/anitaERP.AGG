@@ -4,7 +4,7 @@
 @endphp
 @if (! empty($avisoAnita))
 <div class="alert alert-warning">
-    <h5 class="mb-2"><i class="fa fa-info-circle"></i> Factura ya cargada en Anita</h5>
+    <h5 class="mb-2"><i class="fa fa-ban"></i> Factura ya existente en Anita — no se puede confirmar en el ERP</h5>
     <p class="mb-2">{{ $avisoAnita['mensaje'] ?? '' }}</p>
     @if ($precargaIdAviso > 0 && empty($avisoAnita['ya_marcada']))
         <p class="mb-2">Podés marcar la precarga #{{ $precargaIdAviso }} como ya cargada para sacarla de Pendientes, sin generar el comprobante en el ERP.</p>

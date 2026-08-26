@@ -12,7 +12,9 @@ use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Contable\AsientoAlcanceCierreSupport;
+use App\Support\Contable\AsientoAnitaNumeracionLock;
 use App\Support\Contable\AsientoBalanceSupport;
+use App\Support\Contable\AsientoCtamovRollbackSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -99,6 +101,12 @@ class AsientoRepository implements AsientoRepositoryInterface
 			! $omitirAnita
 			&& ($data['estado_aprobacion'] ?? Asiento::ESTADO_APROBACION_CONFIRMADO) === Asiento::ESTADO_APROBACION_CONFIRMADO
 		) {
+			// Registrar ANTES de ctamov: si guardarAnita inserta líneas y luego tira,
+			// el afterRollBack de MySQL igual borra el huérfano en Informix.
+			AsientoCtamovRollbackSupport::registrarSiHayTransaccion(
+				(int) ($data['empresa_id'] ?? 0),
+				(string) ($data['numeroasiento'] ?? ''),
+			);
 			self::guardarAnita($data);
 		}
 
@@ -1006,6 +1014,13 @@ class AsientoRepository implements AsientoRepositoryInterface
 
 	private function ultimoAsientoAnita($empresa_id) 
 	{
+		return AsientoAnitaNumeracionLock::conExclusividad((int) $empresa_id, function () use ($empresa_id) {
+			return $this->reservarNumeroAsientoAnita((int) $empresa_id);
+		});
+	}
+
+	private function reservarNumeroAsientoAnita(int $empresa_id)
+	{
 		if (strtoupper(config('app.empresa')) == 'EL BIERZO')
 		{
 			// Lee numero de operacion
@@ -1079,7 +1094,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 			}
 		}
 
-		return $numeroOperacion;		
+		return $numeroOperacion;
 	}
 
 	private function assertPeriodoContablePermitido(array $data): void

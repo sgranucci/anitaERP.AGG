@@ -97,6 +97,7 @@
                             @endif
                         @endforeach
                     </select>
+                    <small class="form-text text-muted">Si la categor&iacute;a es indumentaria, el tipo se fija en INDUMENTARIA (no bien de uso).</small>
     				</div>
               	</div>
 				<div class="form-group row">

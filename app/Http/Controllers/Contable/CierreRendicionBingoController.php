@@ -279,8 +279,12 @@ class CierreRendicionBingoController extends Controller
         try {
             $resultado = $this->service->ejecutarCierreRango($empresaId, $fechaDesde, $fechaHasta);
             $cantOk = count($resultado['ok']);
+            $cantOmit = count($resultado['omitidos'] ?? []);
             $cantErr = count($resultado['errores']);
             $mensaje = 'Cierre contable: '.$cantOk.' jornada(s) cerrada(s).';
+            if ($cantOmit > 0) {
+                $mensaje .= ' '.$cantOmit.' ya estaba(n) cerrada(s), se omitió(eron).';
+            }
             if ($cantErr > 0) {
                 $mensaje .= ' '.$cantErr.' con error.';
             }

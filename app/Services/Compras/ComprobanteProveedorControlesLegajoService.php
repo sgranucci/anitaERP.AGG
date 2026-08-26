@@ -212,10 +212,7 @@ class ComprobanteProveedorControlesLegajoService
             fn ($r) => (float) ($r->importe_provision_com ?? 0)
         ), 2);
 
-        $toleranciaPct = ComprobanteProveedorToleranciaImporteSupport::porcentajeParaOc(
-            (int) $ordencompra->empresa_id,
-            (int) ($ordencompra->centrocosto_id ?? 0) ?: null,
-        );
+        $toleranciaPct = ComprobanteProveedorToleranciaImporteSupport::porcentajeDesdeOc($ordencompra);
 
         if (ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia($importeFactura, $importeComFactura, $toleranciaPct)) {
             $detalle = sprintf(

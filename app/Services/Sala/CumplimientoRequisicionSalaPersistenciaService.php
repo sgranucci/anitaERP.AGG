@@ -45,6 +45,9 @@ class CumplimientoRequisicionSalaPersistenciaService
                 'requisicion_sala_id' => (int) $snap['requisicion_sala_id'],
                 'requisicion_sala_articulo_id' => (int) $snap['requisicion_sala_articulo_id'],
                 'articulo_id' => (int) ($snap['articulo_id'] ?? 0) ?: null,
+                'articulo_id_original' => ! empty($snap['articulo_id_original'])
+                    ? (int) $snap['articulo_id_original']
+                    : null,
                 'cantidad_entrega' => (float) ($snap['cantidad_entrega'] ?? 0),
                 'cantidad_pendiente_antes' => (float) ($snap['cantidad_pendiente_antes'] ?? 0),
                 'cantidadentregada_antes' => (float) ($snap['cantidadentregada_antes'] ?? 0),

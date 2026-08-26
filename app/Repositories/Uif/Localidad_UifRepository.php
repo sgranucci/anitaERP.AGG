@@ -6,6 +6,7 @@ use App\Models\Uif\Cliente_Uif;
 use App\Models\Uif\Localidad_Uif;
 use App\Repositories\Uif\Localidad_UifRepositoryInterface;
 use App\Repositories\Uif\Provincia_UifRepositoryInterface;
+use App\Support\Uif\LocalidadUifProvinciaAnitaSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Auth;
 use App\ApiAnita;
@@ -16,6 +17,9 @@ class Localidad_UifRepository implements Localidad_UifRepositoryInterface
     protected $table = 'localidad';
     protected $keyFieldAnita = 'loc_localidad';
     protected $provincia_uifRepository;
+
+    /** @var array<string, int>|null */
+    private ?array $mapaProvinciaUifPorCodigoAnita = null;
 
     /**
      * PostRepository constructor.
@@ -208,19 +212,14 @@ class Localidad_UifRepository implements Localidad_UifRepositoryInterface
         if (count($dataAnita) > 0) {
             $data = $dataAnita[0];
 
-            if ($data->loc_provincia == 2) {
-                $provincia_uif_id = 2;
-            } elseif ($data->loc_provincia == 1) {
-                $provincia_uif_id = 1;
-            } else {
-                $provincia_uif_id = null;
-            }
-
             $payload = [
                 'nombre' => $data->loc_desc,
                 'codigopostal' => $data->loc_cod_postal,
                 'codigo' => (string) $data->loc_localidad,
-                'provincia_uif_id' => $provincia_uif_id,
+                'provincia_uif_id' => LocalidadUifProvinciaAnitaSupport::provinciaUifIdDesdeCodigoAnita(
+                    $data->loc_provincia ?? null,
+                    $this->mapaProvinciaUifPorCodigoAnita()
+                ),
             ];
 
             $existente = $this->model->newQuery()->where('codigo', $payload['codigo'])->first();
@@ -252,7 +251,7 @@ class Localidad_UifRepository implements Localidad_UifRepositoryInterface
                                     'provincia_uif.nombre as nombreprovincia',
 									'localidad_uif.codigopostal as codigopostal',
                                     'localidad_uif.codigo as codigoanita')
-                            ->leftjoin('provincia_uif', 'provincia_uif.id', '=', 'localidad_uif.provincia_id');
+                            ->leftjoin('provincia_uif', 'provincia_uif.id', '=', 'localidad_uif.provincia_uif_id');
 
         if (isset($localidad_uif_id))
             $data = $data->where('localidad_uif.id', $localidad_uif_id);
@@ -287,5 +286,89 @@ class Localidad_UifRepository implements Localidad_UifRepositoryInterface
 			$output['data'] .= '</tr>';
 		}
 		return(json_encode($output, JSON_UNESCAPED_UNICODE));
-    }    
+    }
+
+    /**
+     * Reasigna provincia_uif_id de las localidades ya cargadas usando loc_provincia de Anita.
+     *
+     * @return array{actualizados: int, sin_cambio: int, sin_provincia_uif: int, omitidos_sin_local: int}
+     */
+    public function reasignarProvinciasDesdeAnita(): array
+    {
+        $apiAnita = new ApiAnita();
+        $data = [
+            'acc' => 'list',
+            'sistema' => 'base_admin',
+            'campos' => 'loc_localidad, loc_provincia',
+            'orderBy' => $this->keyFieldAnita,
+            'tabla' => $this->table,
+        ];
+        $dataAnita = json_decode($apiAnita->apiCall($data));
+
+        $stats = [
+            'actualizados' => 0,
+            'sin_cambio' => 0,
+            'sin_provincia_uif' => 0,
+            'omitidos_sin_local' => 0,
+        ];
+
+        if (! is_array($dataAnita)) {
+            return $stats;
+        }
+
+        $mapa = $this->mapaProvinciaUifPorCodigoAnita();
+        $locales = $this->model->newQuery()
+            ->get(['id', 'codigo', 'provincia_uif_id'])
+            ->keyBy(fn ($localidad) => (string) $localidad->codigo);
+
+        foreach ($dataAnita as $fila) {
+            $codigo = (string) ($fila->loc_localidad ?? '');
+            if ($codigo === '') {
+                continue;
+            }
+
+            $local = $locales->get($codigo);
+            if ($local === null) {
+                $stats['omitidos_sin_local']++;
+                continue;
+            }
+
+            $provinciaUifId = LocalidadUifProvinciaAnitaSupport::provinciaUifIdDesdeCodigoAnita(
+                $fila->loc_provincia ?? null,
+                $mapa
+            );
+            $actual = $local->provincia_uif_id !== null ? (int) $local->provincia_uif_id : null;
+
+            if ($actual === $provinciaUifId) {
+                $stats['sin_cambio']++;
+                if ($provinciaUifId === null) {
+                    $stats['sin_provincia_uif']++;
+                }
+                continue;
+            }
+
+            $local->provincia_uif_id = $provinciaUifId;
+            $local->save();
+            $stats['actualizados']++;
+            if ($provinciaUifId === null) {
+                $stats['sin_provincia_uif']++;
+            }
+        }
+
+        return $stats;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function mapaProvinciaUifPorCodigoAnita(): array
+    {
+        if ($this->mapaProvinciaUifPorCodigoAnita === null) {
+            $this->mapaProvinciaUifPorCodigoAnita = LocalidadUifProvinciaAnitaSupport::mapaCodigoAnitaAId(
+                $this->provincia_uifRepository->all()
+            );
+        }
+
+        return $this->mapaProvinciaUifPorCodigoAnita;
+    }
 }

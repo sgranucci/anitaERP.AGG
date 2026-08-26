@@ -7,6 +7,7 @@ Nueva recepción de proveedor
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/articulo_proveedor/operativo.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/confirmar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recepcion_proveedor/confirmar.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recepcion_proveedor/form.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/consulta_oc.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/depmae/consulta.js')) ?: time() }}" type="text/javascript"></script>
@@ -26,7 +27,10 @@ Nueva recepción de proveedor
         <div class="card card-danger">
             <div class="card-header">
                 <h3 class="card-title"><i class="fa fa-truck"></i> Nueva recepción de proveedor</h3>
-                <div class="card-tools">
+                <div class="card-tools d-flex flex-wrap align-items-center">
+                    @include('stock.recepcion_proveedor.partials.boton_guardar_confirmar', [
+                        'claseBoton' => 'btn-success btn-sm mr-2',
+                    ])
                     <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
@@ -40,8 +44,11 @@ Nueva recepción de proveedor
                 <div class="card-footer">
                     <div class="row">
                         <div class="col-lg-3"></div>
-                        <div class="col-lg-6">
-                            @include('includes.boton-form-crear')
+                        <div class="col-lg-6 d-flex flex-wrap align-items-center">
+                            <button type="submit" class="btn botonsubmit btn-primary mr-2 mb-1">Guardar</button>
+                            @include('stock.recepcion_proveedor.partials.boton_guardar_confirmar', [
+                                'claseBoton' => 'btn-success mb-1',
+                            ])
                         </div>
                     </div>
                 </div>

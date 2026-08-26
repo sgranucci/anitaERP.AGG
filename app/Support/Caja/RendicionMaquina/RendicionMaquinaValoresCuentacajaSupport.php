@@ -73,6 +73,67 @@ final class RendicionMaquinaValoresCuentacajaSupport
         return round($monto * $cot, 2);
     }
 
+    /**
+     * Línea de arqueo «efectivo pesos» (CAJA PESOS). No QR / TotalCoin / MEP / ME.
+     *
+     * @param  array<string, mixed>  $linea
+     */
+    public static function esLineaEfectivoPesos(array $linea): bool
+    {
+        $monedaId = (int) ($linea['moneda_id'] ?? 1);
+        if (self::esMonedaExtranjera($monedaId)) {
+            return false;
+        }
+
+        $texto = mb_strtolower(trim(implode(' ', [
+            (string) ($linea['codigo'] ?? ''),
+            (string) ($linea['nombre'] ?? ''),
+            (string) ($linea['descripcion_operaciones'] ?? ''),
+            (string) ($linea['nombre_maestro'] ?? ''),
+        ])));
+        if ($texto === '') {
+            return false;
+        }
+        if (str_contains($texto, 'qr')
+            || str_contains($texto, 'totalcoin')
+            || str_contains($texto, 'total coin')
+            || str_contains($texto, 'mep')) {
+            return false;
+        }
+
+        $codigo = trim((string) ($linea['codigo'] ?? ''));
+
+        return str_contains($texto, 'caja pesos')
+            || (str_contains($texto, 'efectivo') && str_contains($texto, 'pesos'))
+            || $codigo === '300';
+    }
+
+    /**
+     * Completo: CAJA PESOS = suma M+T+N + max(drop bruto Mañana − remesa interna, 0).
+     * El depósito total se recalcula solo (D25 = valores + gastos).
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     * @return list<array<string, mixed>>
+     */
+    public static function aplicarExtraDropMenosRemesa(array $lineas, float $dropBruto, float $remesa): array
+    {
+        $extra = round(max($dropBruto - $remesa, 0.0), 2);
+        if ($extra < 0.00001) {
+            return $lineas;
+        }
+
+        foreach ($lineas as $i => $linea) {
+            if (! self::esLineaEfectivoPesos($linea)) {
+                continue;
+            }
+            $lineas[$i]['monto'] = round((float) ($linea['monto'] ?? 0) + $extra, 2);
+
+            return $lineas;
+        }
+
+        return $lineas;
+    }
+
     public static function cotizacionUsable(?float $cotizacion, int $monedaId): bool
     {
         if ($cotizacion === null || $cotizacion <= 0) {

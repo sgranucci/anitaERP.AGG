@@ -160,29 +160,25 @@
         <tr>
             <td>Turno</td>
             <td>Bill slots</td>
-            <td>Ventas slots</td>
-            <td>Ventas caja</td>
+            <td>Venta fichas ses.</td>
             <td>Neto QR</td>
             <td>Pagos man.</td>
             <td>Δ slot_d</td>
             <td>Δ slot_r</td>
             <td>Bill rul</td>
-            <td>Ventas rul</td>
             <td>Δ rul_d</td>
             <td>Δ rul_r</td>
         </tr>
         @foreach (($sala['turnos'] ?? []) as $t)
             <tr>
-                <td>{{ ($t['turno'] ?? '') }}{{ !empty($t['aplica_bill_tickets_qr']) ? ' (bill/tickets/QR)' : ' (solo man./tito)' }}</td>
+                <td>{{ ($t['turno'] ?? '') }}{{ !empty($t['aplica_bill_tickets_qr']) ? ' (bill/QR)' : ' (solo man./tito)' }}</td>
                 <td>{{ $t['bill_slots'] ?? 0 }}</td>
-                <td>{{ $t['ventas_slots'] ?? 0 }}</td>
-                <td>{{ $t['ventas_caja'] ?? 0 }}</td>
+                <td>{{ $t['venta_ficha_sesion'] ?? 0 }}</td>
                 <td>{{ $t['monto_neto_qr'] ?? 0 }}</td>
                 <td>{{ $t['pagos_manuales'] ?? 0 }}</td>
                 <td>{{ $t['delta_slot_d'] ?? 0 }}</td>
                 <td>{{ $t['delta_slot_r'] ?? 0 }}</td>
                 <td>{{ $t['bill_rul'] ?? 0 }}</td>
-                <td>{{ $t['ventas_ruletas'] ?? 0 }}</td>
                 <td>{{ $t['delta_rul_d'] ?? 0 }}</td>
                 <td>{{ $t['delta_rul_r'] ?? 0 }}</td>
             </tr>
@@ -200,7 +196,7 @@
         </tr>
         @php
             $clavesRaw = [
-                'bill_slots', 'bill_rul', 'bill_poker', 'ventas_caja', 'ventas_slots', 'ventas_ruletas',
+                'bill_slots', 'bill_rul', 'bill_poker', 'venta_slots', 'ventas_caja', 'ventas_slots', 'ventas_ruletas',
                 'pagos_caja', 'pagos_slots', 'pagos_ruletas', 'monto_qr', 'monto_neto_qr', 'impuesto_qr',
                 'pagos_manuales', 'tito_slots', 'tito_rul', 'tito_poker',
                 'coin_in_slots', 'coin_in_rul', 'coin_in_poker', 'win_slots', 'win_rul',

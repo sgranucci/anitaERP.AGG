@@ -43,7 +43,11 @@
     }
 
     function skuFila($tr) {
-        return $.trim($tr.find('td').eq(1).text() || '');
+        var sku = $.trim($tr.find('.codigoarticulo').val() || '');
+        if (sku) {
+            return sku;
+        }
+        return $.trim($tr.find('.crs-sku-texto').text() || $tr.find('td').eq(1).text() || '');
     }
 
     function codigoDepositoFila($tr) {
@@ -75,6 +79,11 @@
         $tr.find('.input-fecha-entrega').val('');
         $tr.find('.input-numeroremito').val('');
         $tr.find('.input-nombreresponsable').val('');
+        if (typeof window.crsActualizarEtiquetaAutorizacion === 'function') {
+            window.crsActualizarEtiquetaAutorizacion($tr);
+        } else {
+            $tr.find('.autorizacion-linea-label').text('');
+        }
     }
 
     function forzarCantidadCero($tr) {

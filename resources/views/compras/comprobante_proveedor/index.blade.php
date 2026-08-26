@@ -22,6 +22,7 @@ use App\Support\Listado\QueryRetornoListado;
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
+        @include('compras.precarga_comprobante_proveedor.partials.aviso_ya_en_anita')
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Comprobantes de proveedor</h3>

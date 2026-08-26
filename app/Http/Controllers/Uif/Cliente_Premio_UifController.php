@@ -20,6 +20,7 @@ use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Ventas\FormapagoRepositoryInterface;
 use App\Repositories\Uif\Juego_UifRepositoryInterface;
 use App\Support\Uif\ClientePremioUifListadoFiltros;
+use App\Support\Uif\ClienteUifCumplimientoSupport;
 use App\Support\Uif\ClienteUifOrigenPcSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -152,15 +153,13 @@ class Cliente_Premio_UifController extends Controller
         $formapago_query = $this->formapagoRepository->all();
         $piderecibopago_enum = Cliente_Premio_Uif::$enumPideReciboPago;
 
-        $essupervisor = 'N';
-        $permisos = traePermisosUsuario();
-
-        if (in_array('supervisor-uif', $permisos['permisos']))  
-            $essupervisor = 'S';
+        $essupervisor = esSupervisorUif() ? 'S' : 'N';
+        $cumplimientoUif = $this->cumplimientoClienteUif($cliente_uif);
 
         return view('uif.cliente_premio_uif.crear', compact('nombrecliente', 'numerodocumento', 'moneda_query', 'juego_uif_query', 'sala_query',
                                                             'empresa_query', 'formapago_query', 'essupervisor',
-                                                            'piderecibopago_enum', 'cliente_uif_id', 'referer', 'volverAClienteUif'));
+                                                            'piderecibopago_enum', 'cliente_uif_id', 'referer', 'volverAClienteUif',
+                                                            'cumplimientoUif'));
     }
 
     /**
@@ -218,16 +217,15 @@ class Cliente_Premio_UifController extends Controller
         $formapago_query = $this->formapagoRepository->all();
         $piderecibopago_enum = Cliente_Premio_Uif::$enumPideReciboPago;
 
-        $essupervisor = 'N';
-        $permisos = traePermisosUsuario();
-
-        if (in_array('supervisor-uif', $permisos['permisos']))  
-            $essupervisor = 'S';
+        $essupervisor = esSupervisorUif() ? 'S' : 'N';
+        $clientePremio = $data ? $data->clientes_uif : null;
+        $cumplimientoUif = $this->cumplimientoClienteUif($clientePremio);
 //dd($data);
         return view('uif.cliente_premio_uif.editar', compact('data', 
                                                     'moneda_query', 'juego_uif_query', 'sala_query',
                                                     'empresa_query', 'formapago_query',
-                                                    'essupervisor', 'piderecibopago_enum', 'referer', 'volverAClienteUif'));
+                                                    'essupervisor', 'piderecibopago_enum', 'referer', 'volverAClienteUif',
+                                                    'cumplimientoUif'));
     }
 
     /**
@@ -478,6 +476,33 @@ class Cliente_Premio_UifController extends Controller
         }
 
         return response()->download($rutaPdfPremio);
+    }
+
+    /**
+     * Avisos de documentación faltante del cliente, mismos textos que el ABM.
+     *
+     * @return array{items: list<array{texto: string, tab: string, selector: string}>, titulo: string, subtitulo: string, claseBanner: string, urlsTab?: array<string, string>}
+     */
+    private function cumplimientoClienteUif(?Cliente_Uif $cliente): array
+    {
+        if (! $cliente || (int) ($cliente->id ?? 0) <= 0) {
+            return [
+                'items' => [],
+                'titulo' => 'Faltan documentos o firmas UIF',
+                'subtitulo' => '',
+                'claseBanner' => 'is-danger',
+            ];
+        }
+
+        $this->cliente_uifRepository->sincronizarArchivosAnitaSiCorresponde($cliente);
+        $cliente->load('cliente_archivos_uif');
+
+        $eval = ClienteUifCumplimientoSupport::evaluar($cliente, esSupervisorUif());
+        if ($eval['items'] !== []) {
+            $eval['urlsTab'] = ClienteUifCumplimientoSupport::urlsFichaCliente((int) $cliente->id);
+        }
+
+        return $eval;
     }
 
     /**

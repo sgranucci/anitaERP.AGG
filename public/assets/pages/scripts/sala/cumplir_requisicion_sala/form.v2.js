@@ -60,6 +60,40 @@
         return valor;
     }
 
+    function nombreEstadoLinea(valor) {
+        var lista = cfg.estadoLineaEnum || [];
+        for (var i = 0; i < lista.length; i++) {
+            if (String(lista[i].valor) === String(valor)) {
+                return lista[i].nombre;
+            }
+        }
+        return valor;
+    }
+
+    function skuDeFila($fila) {
+        var sku = $.trim($fila.find('.codigoarticulo').val() || '');
+        if (sku) {
+            return sku;
+        }
+        return $.trim($fila.find('.crs-sku-texto').text() || '');
+    }
+
+    function actualizarEtiquetaAutorizacion($fila) {
+        var estado = String($fila.find('.input-estado-linea').val() || '');
+        var $label = $fila.find('.autorizacion-linea-label');
+        $label.text(estado ? nombreEstadoLinea(estado) : '');
+    }
+
+    function htmlCeldaAutorizacion(linea) {
+        var estado = String(linea.estado_linea || '');
+        var html = '<td class="celda-autorizacion-cumple align-middle">';
+        html += '<div class="d-flex align-items-center">';
+        html += '<span class="autorizacion-linea-label small font-weight-bold">' + escapeHtml(estado ? nombreEstadoLinea(estado) : '') + '</span>';
+        html += ' <button type="button" class="btn btn-outline-secondary btn-sm ml-1 btn-editar-autorizacion-linea" title="Editar autorizaci\u00f3n de entrega"><i class="fa fa-edit"></i></button>';
+        html += '</div></td>';
+        return html;
+    }
+
     function reindexLineas() {
         $('#tbody-lineas-cumple tr.fila-cumple-linea').each(function (idx) {
             var $fila = $(this);
@@ -161,8 +195,12 @@
         var destino = linea.destino || '';
         var html = '<tr class="fila-cumple-linea" data-linea-id="' + linea.id + '" data-articulo-id="' + (linea.articulo_id || '') + '" data-requisicion-id="' + reqId + '" data-destino="' + escapeHtml(destino) + '">';
         html += '<td>' + htmlLinkRequisicion(req) + '</td>';
-        html += '<td>' + htmlLinkArticulo(linea) + '</td>';
-        html += '<td>' + escapeHtml(linea.descripcion) + '</td>';
+        if (cfg.puedeCambiarArticulo && typeof window.crsHtmlCeldaArticuloCumple === 'function') {
+            html += window.crsHtmlCeldaArticuloCumple(linea, idx);
+        } else {
+            html += '<td class="celda-articulo-cumple align-middle"><span class="crs-sku-texto">' + htmlLinkArticulo(linea) + '</span></td>';
+        }
+        html += '<td class="descripcion-articulo-celda">' + escapeHtml(linea.descripcion) + '</td>';
         html += '<td class="text-right pendiente-cell">' + Number(linea.pendiente).toFixed(2) + '</td>';
         html += '<td class="align-middle text-right col-saldo-orig"><span class="ms-saldo-origen text-monospace small" title="Saldo en dep\u00f3sito origen">\u2014</span></td>';
         html += htmlDepositoInline(idx, linea.deposito_origen_id, linea.deposito_origen_codigo, linea.deposito_origen_nombre);
@@ -178,6 +216,7 @@
         html += '<input type="hidden" name="lineas[' + idx + '][nombreresponsable]" class="input-nombreresponsable" value="' + escapeHtml(linea.nombreresponsable || '') + '">';
         html += '<input type="number" step="0.01" min="0" name="lineas[' + idx + '][cantidad_entrega]" class="form-control form-control-sm input-cantidad-entrega text-right" data-pendiente="' + linea.pendiente + '" value="' + escapeHtml(linea.cantidad_entrega != null && linea.cantidad_entrega !== '' ? String(linea.cantidad_entrega) : '') + '">';
         html += '</td>';
+        html += htmlCeldaAutorizacion(linea);
         html += '<td class="motivo-parcial-label small text-muted">' + escapeHtml(linea.estadoparcial ? nombreMotivoParcial(linea.estadoparcial) : '') + '</td>';
         html += '</tr>';
         return html;
@@ -205,6 +244,9 @@
         if (typeof activa_eventos_consultadeposito === 'function') {
             activa_eventos_consultadeposito();
         }
+        if (cfg.puedeCambiarArticulo && typeof activa_eventos_consultaarticulo === 'function') {
+            activa_eventos_consultaarticulo();
+        }
         actualizarResumenNpu();
         refrescarSaldosGrilla(false);
     }
@@ -219,6 +261,9 @@
         indiceLinea++;
         if (typeof activa_eventos_consultadeposito === 'function') {
             activa_eventos_consultadeposito();
+        }
+        if (cfg.puedeCambiarArticulo && typeof activa_eventos_consultaarticulo === 'function') {
+            activa_eventos_consultaarticulo();
         }
         actualizarResumenNpu();
         var $fila = $('#tbody-lineas-cumple tr.fila-cumple-linea').last();
@@ -339,6 +384,7 @@
         $fila.find('.input-fecha-entrega').val('');
         $fila.find('.input-numeroremito').val('');
         $fila.find('.input-nombreresponsable').val('');
+        actualizarEtiquetaAutorizacion($fila);
     }
 
     function hayModalCumpleAbierto() {
@@ -357,11 +403,13 @@
     }
 
     function finalizarValidacionFila(ok, alListo) {
-        if (typeof alListo === 'function') {
-            alListo(ok);
-        }
         validacionFilaActiva = false;
-        procesarColaValidacionFila();
+        window.setTimeout(function () {
+            if (typeof alListo === 'function') {
+                alListo(ok);
+            }
+            procesarColaValidacionFila();
+        }, 80);
     }
 
     function procesarColaValidacionFila() {
@@ -394,19 +442,28 @@
         filaModalAuth = $fila;
         authModalAceptado = false;
         onAceptarAuthCallback = alAceptar || null;
-        $('#modal-auth-estado').val(estadoDefaultPorDestino($fila, entrega, pendiente));
-        $('#modal-auth-fecha').val(new Date().toISOString().slice(0, 10));
-        $('#modal-auth-remito').val('');
-        $('#modal-auth-responsable').val('');
-        $('#modalAutorizacionLineaCumple').modal('show');
+        var estadoActual = String($fila.find('.input-estado-linea').val() || '');
+        $('#modal-auth-estado').val(estadoActual || estadoDefaultPorDestino($fila, entrega, pendiente));
+        $('#modal-auth-fecha').val($fila.find('.input-fecha-entrega').val() || new Date().toISOString().slice(0, 10));
+        $('#modal-auth-remito').val($fila.find('.input-numeroremito').val() || '');
+        $('#modal-auth-responsable').val($fila.find('.input-nombreresponsable').val() || '');
+        var sku = skuDeFila($fila);
+        $('#modal-auth-articulo').text(sku ? ('Art\u00edculo: ' + sku) : '');
+        window.setTimeout(function () {
+            $('#modalAutorizacionLineaCumple').modal('show');
+        }, 80);
     }
 
     function mostrarModalParcial($fila, entrega, pendiente, alAceptar) {
         filaModalParcial = $fila;
         onAceptarParcialCallback = alAceptar || null;
-        $('#modal-parcial-articulo').text($fila.find('td').eq(1).text() + ' \u2014 pendiente ' + pendiente + ', entrega ' + entrega);
-        $('#modal-parcial-motivo').val('');
-        $('#modalMotivoParcialCumple').modal('show');
+        var sku = skuDeFila($fila);
+        $('#modal-parcial-articulo').text((sku || 'Art\u00edculo') + ' \u2014 pendiente ' + pendiente + ', entrega ' + entrega);
+        var motivoActual = String($fila.find('.input-estadoparcial').val() || '');
+        $('#modal-parcial-motivo').val(motivoActual);
+        window.setTimeout(function () {
+            $('#modalMotivoParcialCumple').modal('show');
+        }, 80);
     }
 
     function ejecutarValidacionCantidadEnFila($fila, alListo) {
@@ -547,12 +604,26 @@
         if (linea.numeroparte !== undefined) {
             $fila.find('.input-npu-linea').val(linea.numeroparte || '');
         }
+        if (linea.articulo_id) {
+            $fila.find('.articulo_id').val(linea.articulo_id);
+            $fila.attr('data-articulo-id', linea.articulo_id);
+            if (linea.sku) {
+                $fila.find('.codigoarticulo').val(linea.sku);
+            }
+            if (linea.descripcion) {
+                $fila.find('.descripcion-articulo-celda').text(linea.descripcion);
+            }
+        }
         $fila.find('.input-estadoparcial').val(linea.estadoparcial || '');
         $fila.find('.input-estado-linea').val(linea.estado_linea || '');
         $fila.find('.input-fecha-entrega').val(linea.fecha_entrega || '');
         $fila.find('.input-numeroremito').val(linea.numeroremito || '');
         $fila.find('.input-nombreresponsable').val(linea.nombreresponsable || '');
         $fila.find('.motivo-parcial-label').text(linea.estadoparcial ? nombreMotivoParcial(linea.estadoparcial) : '');
+        actualizarEtiquetaAutorizacion($fila);
+        if (typeof window.crsMarcarCambioArticulo === 'function') {
+            window.crsMarcarCambioArticulo($fila);
+        }
     }
 
     function restaurarLineasDesdeOld() {
@@ -578,6 +649,9 @@
             });
             if (typeof activa_eventos_consultadeposito === 'function') {
                 activa_eventos_consultadeposito();
+            }
+            if (cfg.puedeCambiarArticulo && typeof activa_eventos_consultaarticulo === 'function') {
+                activa_eventos_consultaarticulo();
             }
             var numReqs = {};
             $('#tbody-lineas-cumple tr.fila-cumple-linea').each(function () {
@@ -839,6 +913,17 @@
             }
         });
 
+        $(document).on('click', '.btn-editar-autorizacion-linea', function () {
+            var $fila = $(this).closest('tr');
+            var datos = datosLinea($fila);
+            if (datos.entrega <= 0 && datos.motivo !== '6') {
+                alert('Indique una cantidad a cumplir antes de autorizar la entrega.');
+                $fila.find('.input-cantidad-entrega').focus();
+                return;
+            }
+            mostrarModalAutorizacion($fila, datos.entrega, datos.pendiente, null);
+        });
+
         $(document).on('click', '.btn-quitar-linea-cumple', function () {
             $(this).closest('tr').remove();
             reindexLineas();
@@ -941,6 +1026,7 @@
             filaModalAuth.find('.input-fecha-entrega').val($('#modal-auth-fecha').val());
             filaModalAuth.find('.input-numeroremito').val($('#modal-auth-remito').val());
             filaModalAuth.find('.input-nombreresponsable').val($('#modal-auth-responsable').val());
+            actualizarEtiquetaAutorizacion(filaModalAuth);
 
             authModalAceptado = true;
             var callback = onAceptarAuthCallback;
@@ -977,4 +1063,5 @@
     });
 }(jQuery));
 
+window.crsActualizarEtiquetaAutorizacion = actualizarEtiquetaAutorizacion;
 window.cumpleRequisicionSalaFormV = 2;

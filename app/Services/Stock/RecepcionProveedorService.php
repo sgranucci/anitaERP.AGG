@@ -1073,6 +1073,9 @@ class RecepcionProveedorService
             if (! is_array($item)) {
                 continue;
             }
+            if ((float) ($item['cantidad'] ?? 0) <= 0.000001) {
+                continue;
+            }
             $articuloId = (int) ($item['articulo_id'] ?? 0);
             if ($articuloId <= 0) {
                 continue;

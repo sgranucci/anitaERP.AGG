@@ -12,6 +12,7 @@ var PROY_PRESETS = {
     analisis: [
         'proveedor_codigo', 'proveedor_nombre', 'tipo', 'comprobante', 'fecha_comprobante',
         'fecha_vencimiento', 'nro_referencia', 'requisicion', 'usuario_requisicion',
+        'autorizante_requisicion',
         'detalle_item', 'concepto', 'detalle_concepto', 'aprobacion', 'total_adeudado',
     ],
     cashflow: [

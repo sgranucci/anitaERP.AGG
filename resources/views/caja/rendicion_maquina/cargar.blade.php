@@ -613,16 +613,16 @@
                                                value="{{ number_format((float) ($calcOrq['comprobante'] ?? 0), 2, ',', '.') }}">
                                     </div>
                                     <div class="form-group col-md-6 mb-0">
-                                        <label for="calc_vale_rep_fondo" title="Remesa interna Anita (rememae tipo I), solo turno ma&ntilde;ana">
+                                        <label for="calc_vale_rep_fondo" title="Remesa interna del d&iacute;a. En Completo, si el drop bruto de Ma&ntilde;ana &gt; remesa se suma la diferencia a CAJA PESOS.">
                                             Vale rep. fondo
                                         </label>
                                         <input type="text" inputmode="decimal" id="calc_vale_rep_fondo"
                                                class="form-control form-control-sm text-right js-calc-orq js-monto-ar"
                                                autocomplete="off"
-                                               title="Se precarga desde remesa interna Anita en turno M; editable"
+                                               title="Remesa interna del d&iacute;a; en Completo, si el drop bruto de Ma&ntilde;ana &gt; remesa se suma a CAJA PESOS (el dep&oacute;sito total se actualiza solo)"
                                                value="{{ number_format((float) ($calcOrq['vale_rep_fondo'] ?? 0), 2, ',', '.') }}">
-                                        @if (($d['previas']['origen_vale_rep_fondo'] ?? '') === 'rememae')
-                                            <small class="text-muted">Precargado desde remesa interna Anita.</small>
+                                        @if (in_array(($d['previas']['origen_vale_rep_fondo'] ?? ''), ['rememae', 'remesa_erp'], true))
+                                            <small class="text-muted">Precargado desde remesa interna.</small>
                                         @endif
                                     </div>
                                 </div>

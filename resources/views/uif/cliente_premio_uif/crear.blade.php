@@ -17,13 +17,16 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/uif/cliente_premio_uif/crear.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/uif/cliente_premio_uif/crear.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/uif/cliente_premio_uif/crear.js')) ?: time() }}" type="text/javascript"></script>
 <!-- Bootstrap Date-Picker Plugin -->
 <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.4.1/js/bootstrap-datepicker.min.js"></script>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap-datepicker/1.4.1/css/bootstrap-datepicker3.css"/>
 @endsection
 
 @section('contenido')
+@php
+    $cumplimientoUif = $cumplimientoUif ?? ['items' => []];
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -56,6 +59,7 @@
                         <span class="fa fa-copy"></span> Archivos asociados
                     </button>
                 </div>
+                @include('uif.cliente_uif.partials.banner_cumplimiento', ['cumpEsExterno' => true])
                 <div class="card-body" style="padding-bottom: 0; padding-top: 5px;">
                     @include('uif.cliente_premio_uif.form1')
                     @include('uif.cliente_premio_uif.form2')
@@ -73,6 +77,10 @@
         </div>
     </div>
 </div>
+@include('uif.cliente_uif.partials.modal_cumplimiento', [
+    'cumpEsExterno' => true,
+    'cumpHrefFicha' => ($cumplimientoUif['urlsTab']['2'] ?? ($cumplimientoUif['urlsTab']['1'] ?? '#')),
+])
 @include('includes.proceso_overlay_aviso', [
     'overlayId' => 'premio-uif-guardando-overlay',
     'tituloId' => 'premio-uif-guardando-titulo',

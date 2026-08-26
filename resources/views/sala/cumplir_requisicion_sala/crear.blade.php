@@ -31,6 +31,12 @@
             #tabla-lineas-cumple tr.fila-saldo-aviso .input-cantidad-entrega {
                 border-color: #dc3545;
             }
+            #tabla-lineas-cumple tr.fila-articulo-cambiado {
+                background-color: #fff8e1;
+            }
+            #tabla-lineas-cumple .celda-autorizacion-cumple {
+                min-width: 9rem;
+            }
         </style>
         @if (!empty($pdfToken))
             <div class="alert alert-success">
@@ -170,6 +176,7 @@
                                         <th>UID</th>
                                         <th>NPU</th>
                                         <th class="text-right">Cant. cumple</th>
+                                        <th>Autorizaci&oacute;n</th>
                                         <th>Motivo pend.</th>
                                     </tr>
                                 </thead>
@@ -191,6 +198,9 @@
                                                 $fechaEntregaOld = $oldLinea['fecha_entrega'] ?? '';
                                                 $remitoOld = $oldLinea['numeroremito'] ?? '';
                                                 $responsableOld = $oldLinea['nombreresponsable'] ?? '';
+                                                $articuloIdOld = (int) ($oldLinea['articulo_id'] ?? $linea->articulo_id);
+                                                $skuOld = $oldLinea['sku'] ?? ($linea->articulos->sku ?? '');
+                                                $descripcionOld = $oldLinea['descripcion'] ?? $linea->descripcionArticulo();
                                                 $motivoLabel = '';
                                                 if ($motivoOld !== '') {
                                                     foreach ($estado_parcial_enum as $motivoEnum) {
@@ -203,8 +213,20 @@
                                                         $motivoLabel = (string) $motivoOld;
                                                     }
                                                 }
+                                                $estadoLineaLabel = '';
+                                                if ($estadoLineaOld !== '') {
+                                                    foreach ($estado_linea_enum as $estadoEnum) {
+                                                        if ((string) ($estadoEnum['valor'] ?? '') === (string) $estadoLineaOld) {
+                                                            $estadoLineaLabel = (string) ($estadoEnum['nombre'] ?? $estadoLineaOld);
+                                                            break;
+                                                        }
+                                                    }
+                                                    if ($estadoLineaLabel === '') {
+                                                        $estadoLineaLabel = (string) $estadoLineaOld;
+                                                    }
+                                                }
                                             @endphp
-                                            <tr class="fila-cumple-linea" data-linea-id="{{ $linea->id }}" data-articulo-id="{{ $linea->articulo_id }}" data-requisicion-id="{{ $requisicion->id }}" data-destino="{{ $linea->destino ?? '' }}">
+                                            <tr class="fila-cumple-linea" data-linea-id="{{ $linea->id }}" data-articulo-id="{{ $articuloIdOld }}" data-requisicion-id="{{ $requisicion->id }}" data-destino="{{ $linea->destino ?? '' }}">
                                                 <td>
                                                     @if (can('editar-requisicion-sala', false))
                                                         <a href="{{ route('editar_requisicion_sala', ['id' => $requisicion->id]) }}" class="text-primary" target="_blank" rel="noopener" title="Editar requisici&oacute;n">#{{ $requisicion->numerorequisicion }}</a>
@@ -212,14 +234,14 @@
                                                         #{{ $requisicion->numerorequisicion }}
                                                     @endif
                                                 </td>
-                                                <td>
-                                                    @if ((int) ($linea->articulo_id ?? 0) > 0 && \App\Support\Stock\ArticuloConsultaDesdeModal::puedeConsultar())
-                                                        <a href="{{ \App\Support\Stock\ArticuloConsultaDesdeModal::urlEditar((int) $linea->articulo_id) }}" class="text-primary" target="_blank" rel="noopener" title="Editar art&iacute;culo">{{ $linea->articulos->sku ?? '' }}</a>
-                                                    @else
-                                                        {{ $linea->articulos->sku ?? '' }}
-                                                    @endif
-                                                </td>
-                                                <td>{{ $linea->descripcionArticulo() }}</td>
+                                                @include('sala.cumplir_requisicion_sala.partials.celda_articulo_linea', [
+                                                    'linea' => $linea,
+                                                    'idx' => $idx,
+                                                    'puedeCambiarArticulo' => $puedeCambiarArticulo ?? false,
+                                                    'articuloIdOverride' => $articuloIdOld,
+                                                    'skuOverride' => $skuOld,
+                                                ])
+                                                <td class="descripcion-articulo-celda">{{ $descripcionOld }}</td>
                                                 <td class="text-right pendiente-cell">{{ number_format($pendiente, 2, '.', '') }}</td>
                                                 <td class="align-middle text-right col-saldo-orig">
                                                     <span class="ms-saldo-origen text-monospace small" title="Saldo en dep&oacute;sito origen">&mdash;</span>
@@ -260,6 +282,14 @@
                                                     <input type="hidden" name="lineas[{{ $idx }}][nombreresponsable]" class="input-nombreresponsable" value="{{ $responsableOld }}">
                                                     <input type="number" step="0.01" min="0" name="lineas[{{ $idx }}][cantidad_entrega]" class="form-control form-control-sm input-cantidad-entrega text-right" data-pendiente="{{ number_format($pendiente, 4, '.', '') }}" value="{{ $cantidadOld }}">
                                                 </td>
+                                                <td class="celda-autorizacion-cumple align-middle">
+                                                    <div class="d-flex align-items-center">
+                                                        <span class="autorizacion-linea-label small font-weight-bold">{{ $estadoLineaLabel }}</span>
+                                                        <button type="button" class="btn btn-outline-secondary btn-sm ml-1 btn-editar-autorizacion-linea" title="Editar autorizaci&oacute;n de entrega">
+                                                            <i class="fa fa-edit"></i>
+                                                        </button>
+                                                    </div>
+                                                </td>
                                                 <td class="motivo-parcial-label small text-muted">{{ $motivoLabel }}</td>
                                             </tr>
                                         @endforeach
@@ -292,6 +322,9 @@
     'estado_linea_enum' => $estado_linea_enum,
 ])
 @include('includes.stock.modalconsultadeposito')
+@if (!empty($puedeCambiarArticulo))
+    @include('includes.stock.modalconsultaarticulo')
+@endif
 {{-- Lab elige depósitos de varias empresas (406 Biyemas vs Kandiko): forzar columna Empresa --}}
 <script>
     document.addEventListener('DOMContentLoaded', function () {
@@ -341,11 +374,17 @@
         forzarEmpresaDeposito: true,
         modoNpu: {{ !empty($modoNpu) ? 'true' : 'false' }},
         estadoParcialEnum: @json($estado_parcial_enum),
+        estadoLineaEnum: @json($estado_linea_enum),
+        puedeCambiarArticulo: @json($puedeCambiarArticulo ?? false),
         oldLineas: @json($oldLineas ?? []),
         tecnicosPorEmpresa: @json($tecnicosPorEmpresa ?? []),
     };
 </script>
 <script src="{{ asset('assets/pages/scripts/stock/depmae/consulta.js') }}"></script>
+@if (!empty($puedeCambiarArticulo))
+<script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}"></script>
+<script src="{{ asset('assets/pages/scripts/sala/cumplir_requisicion_sala/form-articulo-cambio.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sala/cumplir_requisicion_sala/form-articulo-cambio.js')) ?: time() }}"></script>
+@endif
 <script src="{{ asset('assets/pages/scripts/sala/cumplir_requisicion_sala/form-saldo-origen.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sala/cumplir_requisicion_sala/form-saldo-origen.js')) ?: time() }}"></script>
 <script src="{{ asset('assets/pages/scripts/sala/cumplir_requisicion_sala/form.v2.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sala/cumplir_requisicion_sala/form.v2.js')) ?: time() }}"></script>
 @endsection

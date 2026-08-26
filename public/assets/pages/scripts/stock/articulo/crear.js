@@ -658,3 +658,33 @@ function mostrarSolapaArticulo(numero) {
 		});
 	}
 
+    function tipoArticuloIdPorNombre(nombre) {
+        var buscado = $.trim(nombre || '').toUpperCase();
+        var id = '';
+        $('#tipoarticulo_id option').each(function () {
+            if ($.trim($(this).text()).toUpperCase() === buscado) {
+                id = $(this).val();
+                return false;
+            }
+        });
+        return id;
+    }
+
+    function aplicarTipoIndumentariaDesdeCategoria() {
+        var nombreCat = $.trim($('#categoria_id option:selected').text() || '');
+        if (!/INDUMENTARIA/i.test(nombreCat)) {
+            return;
+        }
+        var tipoServicioId = tipoArticuloIdPorNombre('SERVICIO');
+        var tipoActual = $('#tipoarticulo_id').val();
+        if (tipoServicioId && tipoActual === tipoServicioId) {
+            return;
+        }
+        var tipoIndumentariaId = tipoArticuloIdPorNombre('INDUMENTARIA');
+        if (tipoIndumentariaId) {
+            $('#tipoarticulo_id').val(tipoIndumentariaId);
+        }
+    }
+
+    $(document).on('change', '#categoria_id', aplicarTipoIndumentariaDesdeCategoria);
+

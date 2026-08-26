@@ -77,6 +77,7 @@
                 </button>
             </div>
             <div class="modal-body">
+                <p class="small text-muted mb-2" id="modal-auth-articulo"></p>
                 <div class="form-group">
                     <label for="modal-auth-estado">Estado de la l&iacute;nea</label>
                     <select id="modal-auth-estado" class="form-control">

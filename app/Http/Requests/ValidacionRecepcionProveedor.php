@@ -100,6 +100,7 @@ class ValidacionRecepcionProveedor extends FormRequest
             'items.*.ocr_unidad_compra' => 'nullable|string|max:30',
             'items.*.color_id' => 'nullable|integer|exists:color,id',
             'items.*.talle_id' => 'nullable|integer|exists:talle,id',
+            'items.*.maneja_stock_color_talle' => 'nullable|boolean',
         ];
     }
 
@@ -281,6 +282,9 @@ class ValidacionRecepcionProveedor extends FormRequest
             $tallesId = [];
             foreach ($items as $item) {
                 if (! is_array($item)) {
+                    continue;
+                }
+                if ((float) ($item['cantidad'] ?? 0) <= 0.000001) {
                     continue;
                 }
                 $articuloId = (int) ($item['articulo_id'] ?? 0);

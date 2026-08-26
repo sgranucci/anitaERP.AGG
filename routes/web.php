@@ -2644,6 +2644,7 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::post('caja/flash', 'Caja\Flash\FlashCajaController@guardar')->name('guardar_flash_caja');
     Route::post('caja/flash/api/calcular', 'Caja\Flash\FlashCajaController@apiCalcular')->name('flash_caja_api_calcular');
     Route::post('caja/flash/api/origen-total', 'Caja\Flash\FlashCajaController@apiOrigenTotal')->name('flash_caja_api_origen_total');
+    Route::post('caja/flash/api/estado-ayb-waitry', 'Caja\Flash\FlashCajaController@apiEstadoAybWaitry')->name('flash_caja_api_estado_ayb_waitry');
     Route::get('caja/flash/api/desglose-wigos-excel', 'Caja\Flash\FlashCajaController@exportarDesgloseWigos')->name('flash_caja_desglose_wigos_excel');
     Route::get('caja/flash/{id}/editar', 'Caja\Flash\FlashCajaController@editar')->name('editar_flash_caja');
     Route::post('caja/flash/{id}/validar', 'Caja\Flash\FlashCajaController@validar')->name('validar_flash_caja');
@@ -3230,6 +3231,8 @@ Route::get('compras/comprobante-proveedor/resolver-oc', 'Compras\Comprobante_Pro
 Route::get('compras/lista_comprobante_proveedor/{formato?}/{busqueda?}', 'Compras\Comprobante_ProveedorController@listar')->name('lista_comprobante_proveedor');
 Route::get('compras/comprobante-proveedor/crear', 'Compras\Comprobante_ProveedorController@crear')->name('crear_comprobante_proveedor');
 Route::get('compras/comprobante-proveedor/api/cotizacion-moneda-fecha', 'Compras\Comprobante_ProveedorController@apiCotizacionMonedaFecha')->name('comprobante_proveedor_cotizacion_moneda_fecha');
+Route::get('compras/comprobante-proveedor/api/aviso-factura-anita', 'Compras\Comprobante_ProveedorController@apiAvisoFacturaYaEnAnita')->name('comprobante_proveedor_aviso_factura_anita');
+Route::get('compras/comprobante-proveedor/api/sincronizar-oc-com', 'Compras\Comprobante_ProveedorController@apiSincronizarOcComAlta')->name('comprobante_proveedor_sincronizar_oc_com');
 Route::post('compras/comprobante-proveedor', 'Compras\Comprobante_ProveedorController@guardar')->name('guardar_comprobante_proveedor');
 Route::get('compras/comprobante-proveedor/{id}/editar', 'Compras\Comprobante_ProveedorController@editar')->name('editar_comprobante_proveedor');
 Route::put('compras/comprobante-proveedor/{id}', 'Compras\Comprobante_ProveedorController@actualizar')->name('actualizar_comprobante_proveedor');

@@ -152,6 +152,27 @@
         return botones;
     }
 
+    function preservarSubmitter(event, form) {
+        var submitter = event.submitter;
+        if (!submitter || !form) {
+            return;
+        }
+        var name = submitter.getAttribute('name');
+        if (!name) {
+            return;
+        }
+        var previos = form.querySelectorAll('input[data-anita-submitter="1"]');
+        Array.prototype.forEach.call(previos, function (nodo) {
+            nodo.parentNode.removeChild(nodo);
+        });
+        var hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = name;
+        hidden.value = submitter.value || '';
+        hidden.setAttribute('data-anita-submitter', '1');
+        form.appendChild(hidden);
+    }
+
     function bloquearBotones(form, bloquear) {
         botonesDeEnvio(form).forEach(function (boton) {
             if (bloquear) {
@@ -251,6 +272,11 @@
 
         // Marca pendiente YA: un segundo click/Enter en el mismo tick no puede pasar.
         // El overlay espera al próximo tick por si una validación hace preventDefault.
+        //
+        // Antes de deshabilitar botones: copiar name/value del submitter a un hidden.
+        // Si se deshabilita el botón en el evento submit, el navegador no lo incluye
+        // en el POST (Contabilizar pierde accion=contabilizar y solo graba borrador).
+        preservarSubmitter(event, form);
         formularioPendiente = form;
         bloquearBotones(form, true);
 

@@ -10,6 +10,7 @@ use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Support\Contable\CierreRendicionEstacionamientoAsientoSupport;
+use App\Support\Contable\CierreRendicionEstacionamientoCierreLock;
 use App\Support\Contable\CierreRendicionEstacionamientoConfigSupport;
 use App\Support\Contable\CierreRendicionEstacionamientoConciliacionFlashSupport;
 use App\Support\Contable\CierreRendicionEstacionamientoGrupoSupport;
@@ -138,6 +139,18 @@ class CierreRendicionEstacionamientoService
      * @return array{asiento_id: int, numeroasiento: string, rendicion_ids: list<int>}
      */
     public function ejecutarCierreGrupo(int $empresaId, string $fechaDia, int $puntoventaCaeId): array
+    {
+        return CierreRendicionEstacionamientoCierreLock::conExclusividadEmpresa(
+            $empresaId,
+            fn () => $this->ejecutarCierreGrupoExclusivo($empresaId, $fechaDia, $puntoventaCaeId),
+            true,
+        );
+    }
+
+    /**
+     * @return array{asiento_id: int, numeroasiento: string, rendicion_ids: list<int>}
+     */
+    private function ejecutarCierreGrupoExclusivo(int $empresaId, string $fechaDia, int $puntoventaCaeId): array
     {
         $rendiciones = $this->findRendicionesPendientesGrupo($empresaId, $fechaDia, $puntoventaCaeId);
         if ($rendiciones->isEmpty()) {
@@ -325,6 +338,19 @@ class CierreRendicionEstacionamientoService
     public function ejecutarCierre(int $rendicionId): array
     {
         $rendicion = $this->findParaCierre($rendicionId);
+
+        return CierreRendicionEstacionamientoCierreLock::conExclusividadEmpresa(
+            (int) $rendicion->empresa_id,
+            fn () => $this->ejecutarCierreExclusivo($rendicion),
+            true,
+        );
+    }
+
+    /**
+     * @return array{asiento_id: int, numeroasiento: string}
+     */
+    private function ejecutarCierreExclusivo(RendicionEstacionamientoCaja $rendicion): array
+    {
         CierreRendicionEstacionamientoAsientoSupport::assertRendicionCerrable($rendicion);
 
         $empresaId = (int) $rendicion->empresa_id;
@@ -562,6 +588,22 @@ class CierreRendicionEstacionamientoService
             [$desde, $hasta] = [$hasta, $desde];
         }
 
+        return CierreRendicionEstacionamientoCierreLock::conExclusividadEmpresa(
+            $empresaId,
+            fn () => $this->ejecutarCierreRangoExclusivo($empresaId, $desde, $hasta),
+            false,
+        );
+    }
+
+    /**
+     * @return array{
+     *   ok: list<array{grupo_clave: string, asiento_id: int, numeroasiento: string, rendicion_ids: list<int>}>,
+     *   omitidos: list<array{grupo_clave: string, mensaje: string}>,
+     *   errores: list<array{grupo_clave: string, mensaje: string}>
+     * }
+     */
+    private function ejecutarCierreRangoExclusivo(int $empresaId, string $desde, string $hasta): array
+    {
         $rendiciones = $this->listarPendientesEnRango($empresaId, $desde, $hasta);
         if ($rendiciones->isEmpty()) {
             throw new InvalidArgumentException('No hay rendiciones pendientes de cierre en el rango indicado.');
@@ -578,7 +620,7 @@ class CierreRendicionEstacionamientoService
         foreach ($grupos as $grupo) {
             $clave = (string) ($grupo['clave'] ?? '');
             try {
-                $resultado = $this->ejecutarCierreGrupo(
+                $resultado = $this->ejecutarCierreGrupoExclusivo(
                     (int) ($grupo['empresa_id'] ?? 0),
                     (string) ($grupo['fecha_dia'] ?? ''),
                     (int) ($grupo['puntoventa_cae_id'] ?? 0),

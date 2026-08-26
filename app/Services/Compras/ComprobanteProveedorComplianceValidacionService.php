@@ -98,8 +98,6 @@ class ComprobanteProveedorComplianceValidacionService
         if (! empty($eval['es_apocrifo'])) {
             $resultado['errores'][] = (string) ($eval['mensaje']
                 ?? 'El proveedor figura en la base de facturas apócrifas de ARCA (WSAPOC).');
-        } elseif (! empty($eval['mensaje']) && empty($eval['skipped'])) {
-            $resultado['avisos'][] = (string) $eval['mensaje'];
         }
     }
 

@@ -86,7 +86,7 @@ final class RendicionMaquinaPreviasSupport
         self::aplicarDropAnteriorCompleto($out, $empresaId, $fechaYmd, $exceptoId);
 
         // Completo: misma semilla de apertura que la mañana (fondo + comprobante del día).
-        // Vale rep. fondo no aplica en C (calcula_rendicion_turno_completo lo deja en 0).
+        // Vale/remesa sí aplica en C: D30 suma max(drop − remesa, 0) al depósito consolidado.
         $turnoFondo = RendicionMaquinaTurno::esCompleto($turno)
             ? RendicionMaquinaTurno::MANIANA
             : $turno;
@@ -97,6 +97,7 @@ final class RendicionMaquinaPreviasSupport
         if (RendicionMaquinaTurno::esCompleto($turno)) {
             $out['origen_fondo'] = 'completo_como_m:'.$out['origen_fondo'];
             $out['origen_comprobante'] = 'completo_como_m:'.$out['origen_comprobante'];
+            self::aplicarValeRepFondo($out, $empresaId, $fechaYmd);
 
             return $out;
         }
@@ -222,7 +223,7 @@ final class RendicionMaquinaPreviasSupport
     }
 
     /**
-     * Vale rep. fondo (solo M): remesa ERP → rememae Anita.
+     * Vale rep. fondo (M y Completo): remesa ERP → rememae Anita.
      *
      * @param  array<string, mixed>  $out
      */

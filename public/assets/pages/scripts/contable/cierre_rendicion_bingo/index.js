@@ -3,10 +3,44 @@
 
     var cfg = window.CIERRE_REND_BINGO || {};
     var grupoActual = null;
+    var cierreGrupoEjecutando = false;
+    var rangoEjecutando = false;
 
     function tokenCsrf() {
         var meta = document.querySelector('meta[name="csrf-token"]');
         return meta ? meta.getAttribute('content') : '';
+    }
+
+    function overlayCierre() {
+        return document.getElementById('cierre-rend-bingo-overlay');
+    }
+
+    function mostrarOverlayCierre(titulo, subtitulo) {
+        var overlay = overlayCierre();
+        if (!overlay) {
+            return;
+        }
+        var tituloEl = document.getElementById('cierre-rend-bingo-overlay-titulo');
+        var subEl = document.getElementById('cierre-rend-bingo-overlay-subtitulo');
+        if (titulo && tituloEl) {
+            tituloEl.textContent = titulo;
+        }
+        if (subtitulo && subEl) {
+            subEl.textContent = subtitulo;
+        }
+        overlay.classList.remove('d-none');
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+    }
+
+    function ocultarOverlayCierre() {
+        var overlay = overlayCierre();
+        if (!overlay) {
+            return;
+        }
+        overlay.classList.add('d-none');
+        overlay.style.display = '';
+        overlay.setAttribute('aria-hidden', 'true');
     }
 
     function formatoNumero(n) {
@@ -112,9 +146,18 @@
     }
 
     function ejecutarCierre() {
-        if (!grupoActual) {
+        if (!grupoActual || cierreGrupoEjecutando) {
             return;
         }
+        cierreGrupoEjecutando = true;
+        var btn = document.getElementById('btn-confirmar-cierre-rend-bingo');
+        if (btn) {
+            btn.disabled = true;
+        }
+        mostrarOverlayCierre(
+            'Cerrando bingo…',
+            'Escribe en Anita. No cierre la página ni vuelva a confirmar.'
+        );
         fetch(cfg.urlEjecutar, {
             method: 'POST',
             headers: {
@@ -127,6 +170,11 @@
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (!data.ok) {
+                    cierreGrupoEjecutando = false;
+                    if (btn) {
+                        btn.disabled = false;
+                    }
+                    ocultarOverlayCierre();
                     alert(data.mensaje || 'No se pudo ejecutar el cierre.');
                     return;
                 }
@@ -134,7 +182,12 @@
                 window.location.reload();
             })
             .catch(function () {
-                alert('Error de comunicación al ejecutar el cierre.');
+                cierreGrupoEjecutando = false;
+                if (btn) {
+                    btn.disabled = false;
+                }
+                ocultarOverlayCierre();
+                alert('Error de comunicación al ejecutar el cierre. Recargue la pantalla antes de reintentar: el asiento puede haberse grabado en Anita.');
             });
     }
 
@@ -373,8 +426,6 @@
             });
     }
 
-    var rangoEjecutando = false;
-
     function setBotonEjecutarRango(procesando) {
         var btn = document.getElementById('btn-rango-ejecutar');
         if (!btn) {
@@ -406,6 +457,10 @@
         }
         rangoEjecutando = true;
         setBotonEjecutarRango(true);
+        mostrarOverlayCierre(
+            'Cerrando rango de bingo…',
+            'Puede demorar varios minutos (un asiento por día). No cierre la página ni vuelva a confirmar.'
+        );
         fetch(cfg.urlEjecutarRango, {
             method: 'POST',
             headers: {
@@ -425,6 +480,7 @@
                 if (!data.ok) {
                     rangoEjecutando = false;
                     setBotonEjecutarRango(false);
+                    ocultarOverlayCierre();
                     alert(data.mensaje || 'No se pudo ejecutar el cierre del rango.');
                     return;
                 }
@@ -435,6 +491,7 @@
                         return (e.grupo_clave || '?') + ': ' + e.mensaje;
                     }).join('\n');
                 }
+                ocultarOverlayCierre();
                 alert(msg);
                 $('#modal-cierre-rango-rend-bingo').modal('hide');
                 window.location.reload();
@@ -442,7 +499,8 @@
             .catch(function () {
                 rangoEjecutando = false;
                 setBotonEjecutarRango(false);
-                alert('Error de comunicación al ejecutar el cierre del rango.');
+                ocultarOverlayCierre();
+                alert('Error de comunicación al ejecutar el cierre del rango. Recargue la pantalla antes de reintentar: el asiento puede haberse grabado en Anita.');
             });
     }
 

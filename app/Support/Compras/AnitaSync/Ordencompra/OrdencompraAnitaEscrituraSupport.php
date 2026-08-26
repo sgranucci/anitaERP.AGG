@@ -6,6 +6,7 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Ordencompra_Articulo;
 use App\Models\Compras\Ordencompra_Comprobante;
 use App\Models\Compras\Ordencompra_Comprobante_Cuota;
+use App\Support\Compras\ComprobanteProveedorCentrocostoSupport;
 use App\Support\Compras\OrdencompraDescuentoSupport;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
 use App\Support\Stock\SurmarSupport;
@@ -87,7 +88,7 @@ final class OrdencompraAnitaEscrituraSupport
             $detalle = 'OC '.(int) $oc->numeroordencompra;
         }
         $lugarentrega = trim((string) ($oc->lugarentrega ?? ''));
-        $ccDest = $ctx->codigoCentrocosto((int) ($oc->centrocosto_id ?? 0));
+        $ccDest = $ctx->codigoCentrocosto(ComprobanteProveedorCentrocostoSupport::resolverDesdeOc($oc));
         $cotizacion = $ctx->cotizacionCabecera($oc);
 
         $columnas = [

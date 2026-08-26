@@ -16,6 +16,7 @@ class CumplimientoRequisicionSalaArticulo extends Model
         'requisicion_sala_id',
         'requisicion_sala_articulo_id',
         'articulo_id',
+        'articulo_id_original',
         'cantidad_entrega',
         'cantidad_pendiente_antes',
         'cantidadentregada_antes',
@@ -65,6 +66,11 @@ class CumplimientoRequisicionSalaArticulo extends Model
     public function articulo(): BelongsTo
     {
         return $this->belongsTo(Articulo::class, 'articulo_id');
+    }
+
+    public function articuloOriginal(): BelongsTo
+    {
+        return $this->belongsTo(Articulo::class, 'articulo_id_original');
     }
 
     public function depositoOrigen(): BelongsTo

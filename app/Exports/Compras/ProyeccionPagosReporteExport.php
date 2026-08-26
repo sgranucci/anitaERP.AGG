@@ -29,7 +29,8 @@ class ProyeccionPagosReporteExport implements FromView, WithColumnFormatting, Wi
 
     /** @var list<string> Claves de columna que conviene forzar a texto (códigos y números de comprobante). */
     private const CLAVES_TEXTO = [
-        'proveedor_codigo', 'comprobante', 'cuota', 'nro_referencia', 'requisicion', 'concepto', 'moneda', 'tipo',
+        'proveedor_codigo', 'comprobante', 'cuota', 'nro_referencia', 'requisicion',
+        'usuario_requisicion', 'autorizante_requisicion', 'concepto', 'moneda', 'tipo',
     ];
 
     private bool $hayFilaLogos = false;

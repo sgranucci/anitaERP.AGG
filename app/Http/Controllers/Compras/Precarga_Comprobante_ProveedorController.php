@@ -302,7 +302,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
         $path = $this->facturaScanPathResolver->resolve($precarga->rutaalmacenamiento);
 
         if ($path === null) {
-            abort(404, 'No se encontró el PDF en /Facturas_scan/comprobantes para: '.$precarga->rutaalmacenamiento);
+            abort(404, 'No se encontró el PDF en /Facturas_scan/comprobantes ni comprobantes-revisar para: '.$precarga->rutaalmacenamiento);
         }
 
         $nombre = basename($path);

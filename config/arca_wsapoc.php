@@ -42,6 +42,8 @@ return [
     // el elemento *Result esperado). Total de intentos = reintentos (>= 1).
     'reintentos' => max(1, (int) env('ARCA_WSAPOC_REINTENTOS', 5)),
     'reintento_pausa_ms' => max(0, (int) env('ARCA_WSAPOC_REINTENTO_PAUSA_MS', 1500)),
+    // Si ARCA devolvió HTML/caída: no volver a pegarle N segundos (el alta y el JS del form).
+    'caida_cache_segundos' => max(0, (int) env('ARCA_WSAPOC_CAIDA_CACHE_SEGUNDOS', 90)),
 
     /*
     |--------------------------------------------------------------------------

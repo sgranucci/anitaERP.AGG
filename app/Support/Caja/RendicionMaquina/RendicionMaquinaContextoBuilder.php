@@ -41,8 +41,7 @@ final class RendicionMaquinaContextoBuilder
         $orquestador = is_array($payload['calc_orquestador'] ?? null) ? $payload['calc_orquestador'] : [];
         $contexto['calc.comprobante'] = round((float) ($orquestador['comprobante'] ?? 0), 2);
         $contexto['calc.vale_rep_fondo'] = round((float) ($orquestador['vale_rep_fondo'] ?? 0), 2);
-        // Completo (lee_rendiciones_del_dia): semillas desde Noche / suma M+T+N.
-        // Las fórmulas E10/E30/E40/D30 las conservan cuando meta.es_completo > 0.
+        // Completo: semillas Noche / suma M+T+N; D30 deja depósito efectivo en 0.
         if (array_key_exists('fondo_cierre', $orquestador)) {
             $contexto['calc.fondo_cierre'] = round((float) $orquestador['fondo_cierre'], 2);
         }

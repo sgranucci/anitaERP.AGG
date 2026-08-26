@@ -10,6 +10,7 @@ use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Support\Contable\CierreRendicionBingoAsientoSupport;
+use App\Support\Contable\CierreRendicionBingoCierreLock;
 use App\Support\Contable\CierreRendicionBingoConciliacionFlashSupport;
 use App\Support\Contable\CierreRendicionBingoConfigSupport;
 use App\Support\Contable\CierreRendicionBingoGrupoSupport;
@@ -125,6 +126,24 @@ class CierreRendicionBingoService
      * }
      */
     public function ejecutarCierreGrupo(int $empresaId, string $fechaDia): array
+    {
+        return CierreRendicionBingoCierreLock::conExclusividadEmpresa(
+            $empresaId,
+            fn () => $this->ejecutarCierreGrupoExclusivo($empresaId, $fechaDia),
+            true,
+        );
+    }
+
+    /**
+     * @return array{
+     *   asiento_id: int,
+     *   asiento_ids: list<int>,
+     *   numeroasiento: string,
+     *   rendicion_ids: list<int>,
+     *   fbi: array{tipo: string, letra: string, sucursal: int, nro: int, monto: float, venta_id: int, codigo: string}
+     * }
+     */
+    private function ejecutarCierreGrupoExclusivo(int $empresaId, string $fechaDia): array
     {
         $rendiciones = $this->findRendicionesPendientesGrupo($empresaId, $fechaDia);
         if ($rendiciones->isEmpty()) {
@@ -571,6 +590,7 @@ class CierreRendicionBingoService
     /**
      * @return array{
      *   ok: list<array{grupo_clave: string, asiento_id: int, numeroasiento: string, rendicion_ids: list<int>}>,
+     *   omitidos: list<array{grupo_clave: string, mensaje: string}>,
      *   errores: list<array{grupo_clave: string, mensaje: string}>
      * }
      */
@@ -582,6 +602,22 @@ class CierreRendicionBingoService
             [$desde, $hasta] = [$hasta, $desde];
         }
 
+        return CierreRendicionBingoCierreLock::conExclusividadEmpresa(
+            $empresaId,
+            fn () => $this->ejecutarCierreRangoExclusivo($empresaId, $desde, $hasta),
+            false,
+        );
+    }
+
+    /**
+     * @return array{
+     *   ok: list<array{grupo_clave: string, asiento_id: int, numeroasiento: string, rendicion_ids: list<int>}>,
+     *   omitidos: list<array{grupo_clave: string, mensaje: string}>,
+     *   errores: list<array{grupo_clave: string, mensaje: string}>
+     * }
+     */
+    private function ejecutarCierreRangoExclusivo(int $empresaId, string $desde, string $hasta): array
+    {
         $this->assertCorrelatividadCierre($empresaId, $desde);
 
         $rendiciones = $this->listarPendientesEnRango($empresaId, $desde, $hasta);
@@ -597,12 +633,13 @@ class CierreRendicionBingoService
         });
 
         $ok = [];
+        $omitidos = [];
         $errores = [];
 
         foreach ($grupos as $grupo) {
             $clave = (string) ($grupo['clave'] ?? '');
             try {
-                $resultado = $this->ejecutarCierreGrupo(
+                $resultado = $this->ejecutarCierreGrupoExclusivo(
                     (int) ($grupo['empresa_id'] ?? 0),
                     (string) ($grupo['fecha_dia'] ?? ''),
                 );
@@ -613,9 +650,20 @@ class CierreRendicionBingoService
                     'rendicion_ids' => $resultado['rendicion_ids'],
                 ];
             } catch (\Throwable $e) {
+                $mensaje = $e->getMessage();
+                if (str_contains($mensaje, 'ya fue cerrada contablemente')
+                    || str_contains($mensaje, 'No hay rendiciones pendientes')) {
+                    $omitidos[] = [
+                        'grupo_clave' => $clave,
+                        'mensaje' => $mensaje,
+                    ];
+
+                    continue;
+                }
+
                 $errores[] = [
                     'grupo_clave' => $clave,
-                    'mensaje' => $e->getMessage(),
+                    'mensaje' => $mensaje,
                 ];
             }
         }
@@ -624,7 +672,7 @@ class CierreRendicionBingoService
             throw new InvalidArgumentException($errores[0]['mensaje']);
         }
 
-        return ['ok' => $ok, 'errores' => $errores];
+        return ['ok' => $ok, 'omitidos' => $omitidos, 'errores' => $errores];
     }
 
     /**

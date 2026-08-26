@@ -240,6 +240,12 @@ class RecepcionProveedorImportarDesdeAnitaService
         }
 
         foreach ($claves as $clave) {
+            if ($this->comYaVinculadaEnErp((int) $clave['sucursal'], (int) $clave['nro'])) {
+                $stats['omitidas']++;
+
+                continue;
+            }
+
             $resultado = $this->importarCom(
                 (int) $clave['sucursal'],
                 (int) $clave['nro'],
@@ -553,6 +559,23 @@ class RecepcionProveedorImportarDesdeAnitaService
         }
 
         return $this->cacheProveedor[$codigoNorm];
+    }
+
+    private function comYaVinculadaEnErp(int $sucursal, int $nro): bool
+    {
+        if ($sucursal <= 0 || $nro <= 0) {
+            return false;
+        }
+
+        $empresaId = (int) ($this->resolverEmpresaId($sucursal) ?? 0);
+        $existente = $empresaId > 0
+            ? $this->buscarRecepcionErp($empresaId, $sucursal, $nro)
+            : Recepcion_Proveedor::query()
+                ->where('anita_sucursal', $sucursal)
+                ->where('anita_nro', $nro)
+                ->first();
+
+        return $existente !== null && (int) ($existente->ordencompra_id ?? 0) > 0;
     }
 
     private function buscarRecepcionErp(int $empresaId, int $sucursal, int $nro): ?Recepcion_Proveedor

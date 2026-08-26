@@ -36,6 +36,7 @@ class CumplimientoRequisicionSalaRepository implements CumplimientoRequisicionSa
                 'empresa',
                 'revertidoPor',
                 'articulos.articulo',
+                'articulos.articuloOriginal',
                 'articulos.depositoOrigen',
                 'articulos.tecnicoLaboratorio',
                 'articulos.requisicionSala.depositos',

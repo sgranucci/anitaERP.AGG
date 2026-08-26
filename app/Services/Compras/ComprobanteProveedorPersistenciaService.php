@@ -804,7 +804,7 @@ class ComprobanteProveedorPersistenciaService
         $modo = (string) ($payload['modo_carga'] ?? '');
         if ($ordencompra) {
             $tieneCom = $this->recepcionesSupport
-                ->listarDisponibles($ordencompraId, $excluirComprobanteId)
+                ->listarDisponibles($ordencompraId, $excluirComprobanteId, false)
                 ->isNotEmpty();
             if (! $tieneCom) {
                 $tieneCom = $this->recepcionesSupport->listarSinFacturarEnLegajo(

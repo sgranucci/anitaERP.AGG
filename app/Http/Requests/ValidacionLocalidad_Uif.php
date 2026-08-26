@@ -27,7 +27,7 @@ class ValidacionLocalidad_Uif extends FormRequest
             'nombre' => 'required|max:255|unique:localidad_uif,nombre,' . $this->route('id'),
             'codigopostal' => 'sometimes|max:50' ,
             'codigo' => 'sometimes|max:10' ,
-            'provincia_id' => 'integer' 
+            'provincia_uif_id' => 'nullable|integer|exists:provincia_uif,id',
         ];
     }
 }

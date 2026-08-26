@@ -441,7 +441,26 @@ class ComprobanteProveedorPrefillService
             return $existente;
         }
 
-        return $this->importarOrdencompraDesdeAnita($nro);
+        // No importar desde Anita al abrir el alta: eso bloquea la pantalla
+        // (primera factura del día / primera de Biyemas). Lo completa el AJAX.
+        return null;
+    }
+
+    public function traerOrdencompraDesdeAnitaSiFalta(int $numeroOc): ?Ordencompra
+    {
+        if ($numeroOc <= 0) {
+            return null;
+        }
+
+        $existente = Ordencompra::query()
+            ->where('numeroordencompra', $numeroOc)
+            ->orderByDesc('id')
+            ->first();
+        if ($existente) {
+            return $existente;
+        }
+
+        return $this->importarOrdencompraDesdeAnita($numeroOc);
     }
 
     private function importarOrdencompraDesdeAnita(int $numeroOc): ?Ordencompra

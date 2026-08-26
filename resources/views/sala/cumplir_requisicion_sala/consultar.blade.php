@@ -73,6 +73,7 @@
                             <tr>
                                 <th>Req.</th>
                                 <th>Art&iacute;culo</th>
+                                <th>Cambio</th>
                                 <th class="text-right">Entrega</th>
                                 <th>UID</th>
                                 <th>NPU</th>
@@ -101,6 +102,16 @@
                                         {{ $linea->articulo?->sku ?? '' }}
                                     @endif
                                     — {{ $linea->articulo?->descripcion ?? '' }}
+                                </td>
+                                <td>
+                                    @if ((int) ($linea->articulo_id_original ?? 0) > 0 && (int) $linea->articulo_id_original !== (int) $linea->articulo_id)
+                                        <span class="badge badge-warning" title="Art&iacute;culo anterior">
+                                            {{ $linea->articuloOriginal?->sku ?? $linea->articulo_id_original }}
+                                            &rarr; {{ $linea->articulo?->sku }}
+                                        </span>
+                                    @else
+                                        <span class="text-muted">&mdash;</span>
+                                    @endif
                                 </td>
                                 <td class="text-right">{{ number_format((float) $linea->cantidad_entrega, 2, ',', '.') }}</td>
                                 <td>{{ $linea->uid }}</td>

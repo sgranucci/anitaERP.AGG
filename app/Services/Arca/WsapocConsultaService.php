@@ -3,6 +3,7 @@
 namespace App\Services\Arca;
 
 use Exception;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use SoapClient;
 use SoapFault;
@@ -14,6 +15,8 @@ use SoapFault;
  */
 class WsapocConsultaService
 {
+    private const CACHE_SERVICIO_CAIDO = 'arca.wsapoc.servicio_caido';
+
     /** @var array{request: string, response: string}|null */
     private ?array $lastSoapTrace = null;
 
@@ -153,6 +156,10 @@ class WsapocConsultaService
     private function invocarConReintentos(string $metodo, array $args, string $resultProp): object
     {
         $this->lastSoapTrace = null;
+        if ($this->servicioMarcadoCaido()) {
+            throw new Exception(self::mensajeAvisoNoDisponible());
+        }
+
         $maxIntentos = max(1, (int) config('arca_wsapoc.reintentos', 3));
         $pausaMs = max(0, (int) config('arca_wsapoc.reintento_pausa_ms', 500));
 
@@ -167,17 +174,26 @@ class WsapocConsultaService
 
                 $result = $resp->{$resultProp} ?? null;
                 if (is_object($result)) {
+                    $this->limpiarServicioCaido();
+
                     return $result;
                 }
 
                 // HTTP 200 pero sin el elemento esperado: intermitencia de ARCA
                 // (a veces body HTML vacío/con ticket en lugar de SOAP).
                 $respBody = (string) ($this->lastSoapTrace['response'] ?? '');
-                $detalle = $this->esRespuestaHtmlOVacia($respBody)
+                $esHtml = $this->esRespuestaHtmlOVacia($respBody);
+                $detalle = $esHtml
                     ? 'WSAPOC: ARCA devolvió HTML/vacío en lugar de SOAP (sin '.$resultProp.').'
                     : "WSAPOC: respuesta inválida (sin {$resultProp}).";
                 $ultimoError = new Exception($detalle);
                 $this->logIntentoFallido($metodo, $intento, $maxIntentos, $ultimoError->getMessage(), true);
+
+                // Gateway HTML: reintentar 2–3 veces alarga 7s+ el alta y no recupera el SOAP.
+                if ($esHtml) {
+                    $this->marcarServicioCaido();
+                    throw $ultimoError;
+                }
             } catch (SoapFault $e) {
                 $this->lastSoapTrace = $this->captureSoapTrace($client);
                 $mensaje = $this->formatSoapFault($e, $client);
@@ -188,6 +204,12 @@ class WsapocConsultaService
 
                 $ultimoError = new Exception($mensaje, (int) $e->getCode(), $e);
                 $this->logIntentoFallido($metodo, $intento, $maxIntentos, $e->getMessage(), false);
+
+                $respBody = (string) ($this->lastSoapTrace['response'] ?? '');
+                if ($this->esRespuestaHtmlOVacia($respBody)) {
+                    $this->marcarServicioCaido();
+                    throw $ultimoError;
+                }
             }
 
             if ($intento < $maxIntentos && $pausaMs > 0) {
@@ -195,6 +217,7 @@ class WsapocConsultaService
             }
         }
 
+        $this->marcarServicioCaido();
         throw $ultimoError ?? new Exception("WSAPOC: respuesta inválida (sin {$resultProp}).");
     }
 
@@ -441,6 +464,36 @@ class WsapocConsultaService
     private function soloDigitos(string $v): string
     {
         return preg_replace('/\D+/', '', $v) ?? '';
+    }
+
+    private function servicioMarcadoCaido(): bool
+    {
+        $ttl = $this->caidaCacheSegundos();
+        if ($ttl <= 0) {
+            return false;
+        }
+
+        return (bool) Cache::get(self::CACHE_SERVICIO_CAIDO);
+    }
+
+    private function marcarServicioCaido(): void
+    {
+        $ttl = $this->caidaCacheSegundos();
+        if ($ttl <= 0) {
+            return;
+        }
+
+        Cache::put(self::CACHE_SERVICIO_CAIDO, true, $ttl);
+    }
+
+    private function limpiarServicioCaido(): void
+    {
+        Cache::forget(self::CACHE_SERVICIO_CAIDO);
+    }
+
+    private function caidaCacheSegundos(): int
+    {
+        return max(0, (int) config('arca_wsapoc.caida_cache_segundos', 90));
     }
 
     private function esRespuestaHtmlOVacia(string $response): bool

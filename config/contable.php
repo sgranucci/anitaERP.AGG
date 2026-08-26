@@ -61,6 +61,16 @@ return [
     ],
 
     /*
+    | Cierre rendición estacionamiento / bingo: un proceso por empresa (evita ctamov duplicado).
+    */
+    'cierre_estacionamiento_lock_segundos' => (int) env('CIERRE_ESTACIONAMIENTO_LOCK_SEGUNDOS', 600),
+    'cierre_estacionamiento_lock_espera_segundos' => (int) env('CIERRE_ESTACIONAMIENTO_LOCK_ESPERA_SEGUNDOS', 30),
+    'cierre_bingo_lock_segundos' => (int) env('CIERRE_BINGO_LOCK_SEGUNDOS', 600),
+    'cierre_bingo_lock_espera_segundos' => (int) env('CIERRE_BINGO_LOCK_ESPERA_SEGUNDOS', 30),
+    'asiento_numeracion_lock_segundos' => (int) env('ASIENTO_NUMERACION_LOCK_SEGUNDOS', 60),
+    'asiento_numeracion_lock_espera_segundos' => (int) env('ASIENTO_NUMERACION_LOCK_ESPERA_SEGUNDOS', 30),
+
+    /*
     | Balance de sumas y saldos (l-sumsal). Períodos → cuentacontable_saldo_mes; rango → asientos.
     */
     'sumas_saldos' => [

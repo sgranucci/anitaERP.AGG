@@ -22,6 +22,11 @@
         @include('compras.comprobante_proveedor.partials.aviso_error_contabilizar')
         @include('includes.mensaje')
         @include('compras.precarga_comprobante_proveedor.partials.aviso_ya_en_anita')
+        <div id="cp-aviso-anita-async-slot"></div>
+        <div id="cp-sync-oc-com-banner" class="alert alert-info py-2 d-none" role="status">
+            <i class="fa fa-spinner fa-spin"></i>
+            <span id="cp-sync-oc-com-texto">Consultando orden de compra y recepciones en Anita…</span>
+        </div>
 
         <div class="card card-primary">
             <div class="card-header">
@@ -112,7 +117,13 @@
                 data-contrato-imputacion="{{ $com_politica['contrato_imputacion'] ?? '' }}"
                 data-contrato-cuentacontable-id="{{ (int) ($com_politica['contrato_cuentacontable_id'] ?? 0) }}"
                 data-contrato-cuentacontable-codigo="{{ optional($data->ordencompras->contrato_cuentacontables ?? null)->codigo ?? '' }}"
-                data-contrato-cuentacontable-nombre="{{ optional($data->ordencompras->contrato_cuentacontables ?? null)->nombre ?? '' }}">
+                data-contrato-cuentacontable-nombre="{{ optional($data->ordencompras->contrato_cuentacontables ?? null)->nombre ?? '' }}"
+                data-precarga-id="{{ (int) ($data->precarga_comprobante_proveedor_id ?? 0) }}"
+                data-ordencompra-id="{{ (int) ($data->ordencompra_id ?? 0) }}"
+                data-numero-oc="{{ $data->ordencompras->numeroordencompra ?? (optional($data->precarga_comprobante_proveedores)->numeroordencompra ?? '') }}"
+                data-aviso-anita-url="{{ route('comprobante_proveedor_aviso_factura_anita') }}"
+                data-sync-oc-com-url="{{ route('comprobante_proveedor_sincronizar_oc_com') }}"
+                data-precarga-cargada-url="{{ route('precarga_comprobante_proveedor', ['estado' => \App\Support\Compras\PrecargaComprobanteEstados::CARGADA_ANITA]) }}">
                 @csrf
                 @if ($esEdicion)
                     @method('PUT')

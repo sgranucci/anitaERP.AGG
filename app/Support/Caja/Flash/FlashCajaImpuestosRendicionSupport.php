@@ -13,10 +13,14 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Impuesto drop + impuesto venta del turno completo (C) de rendición de máquinas.
+ * Impuesto drop, impuesto venta y venta de fichas del turno completo (C)
+ * de rendición de máquinas.
  *
  * Preferencia: Anita `rendmaquina` (turno C). Fallback: ERP `rendicion_maquina` turno C.
  * Solo turno completo: en M/T/N los impuestos se repiten o quedan en 0; el C ya consolida el día.
+ *
+ * Drop/win slots del Flash: suma venta_ficha y resta impuesto_drop.
+ * Impuesto venta ya no entra a slot_d / slot_r.
  */
 final class FlashCajaImpuestosRendicionSupport
 {
@@ -24,6 +28,7 @@ final class FlashCajaImpuestosRendicionSupport
      * @return array{
      *   impuesto_drop: float,
      *   impuesto_venta: float,
+     *   venta_ficha: float,
      *   total: float,
      *   origen: string,
      *   nro_oper: ?int,
@@ -35,6 +40,7 @@ final class FlashCajaImpuestosRendicionSupport
         $vacio = [
             'impuesto_drop' => 0.0,
             'impuesto_venta' => 0.0,
+            'venta_ficha' => 0.0,
             'total' => 0.0,
             'origen' => 'ninguno',
             'nro_oper' => null,
@@ -65,6 +71,7 @@ final class FlashCajaImpuestosRendicionSupport
      * @return array{
      *   impuesto_drop: float,
      *   impuesto_venta: float,
+     *   venta_ficha: float,
      *   total: float,
      *   origen: string,
      *   nro_oper: ?int,
@@ -83,7 +90,7 @@ final class FlashCajaImpuestosRendicionSupport
                 'acc' => 'list',
                 'sistema' => (string) config('rendicion_maquina_anita.sistema', 'caja'),
                 'tabla' => (string) config('rendicion_maquina_anita.tabla_cabecera', 'rendmaquina'),
-                'campos' => 'rendm_nro_oper,rendm_fecha,rendm_empresa,rendm_turno,rendm_imp_drop,rendm_imp_venta',
+                'campos' => 'rendm_nro_oper,rendm_fecha,rendm_empresa,rendm_turno,rendm_imp_drop,rendm_imp_venta,rendm_venta_ficha',
                 'whereArmado' => ' WHERE rendm_empresa='.$empresaAnita
                     .' AND rendm_fecha='.$fechaYmd,
             ]);
@@ -121,10 +128,12 @@ final class FlashCajaImpuestosRendicionSupport
 
         $impDrop = round((float) ($elegida->rendm_imp_drop ?? 0), 2);
         $impVenta = round((float) ($elegida->rendm_imp_venta ?? 0), 2);
+        $ventaFicha = round((float) ($elegida->rendm_venta_ficha ?? 0), 2);
 
         return [
             'impuesto_drop' => $impDrop,
             'impuesto_venta' => $impVenta,
+            'venta_ficha' => $ventaFicha,
             'total' => round($impDrop + $impVenta, 2),
             'origen' => 'anita',
             'nro_oper' => $nroMax > 0 ? $nroMax : null,
@@ -136,6 +145,7 @@ final class FlashCajaImpuestosRendicionSupport
      * @return array{
      *   impuesto_drop: float,
      *   impuesto_venta: float,
+     *   venta_ficha: float,
      *   total: float,
      *   origen: string,
      *   nro_oper: ?int,
@@ -159,10 +169,12 @@ final class FlashCajaImpuestosRendicionSupport
         $inputs = is_array($rendicion->inputs_json) ? $rendicion->inputs_json : [];
         $impDrop = round((float) ($inputs['impuesto_drop'] ?? $inputs['inputs.impuesto_drop'] ?? 0), 2);
         $impVenta = round((float) ($inputs['impuesto_venta'] ?? $inputs['inputs.impuesto_venta'] ?? 0), 2);
+        $ventaFicha = round((float) ($inputs['venta_ficha'] ?? $inputs['inputs.venta_ficha'] ?? 0), 2);
 
         return [
             'impuesto_drop' => $impDrop,
             'impuesto_venta' => $impVenta,
+            'venta_ficha' => $ventaFicha,
             'total' => round($impDrop + $impVenta, 2),
             'origen' => 'erp',
             'nro_oper' => $rendicion->nro_oper_anita !== null ? (int) $rendicion->nro_oper_anita : null,

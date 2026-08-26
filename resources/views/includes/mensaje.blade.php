@@ -29,9 +29,20 @@
 @if (session("advertencias"))
     <div class="alert alert-warning alert-dismissible">
         <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
-        <h4><i class="icon fa fa-warning"></i> Advertencia — replicación Anita</h4>
+        <h4 class="mb-2"><i class="icon fa fa-warning"></i> Advertencia — replicación Anita</h4>
         <ul class="mb-0">
             @foreach (\Illuminate\Support\Arr::wrap(session("advertencias")) as $aviso)
+                <li>{{ $aviso }}</li>
+            @endforeach
+        </ul>
+    </div>
+@endif
+@if (session("avisos"))
+    <div class="alert alert-warning alert-dismissible">
+        <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
+        <h4 class="mb-2"><i class="icon fa fa-warning"></i> Avisos de control</h4>
+        <ul class="mb-0">
+            @foreach (\Illuminate\Support\Arr::wrap(session("avisos")) as $aviso)
                 <li>{{ $aviso }}</li>
             @endforeach
         </ul>

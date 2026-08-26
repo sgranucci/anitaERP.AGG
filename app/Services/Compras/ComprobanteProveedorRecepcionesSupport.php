@@ -8,6 +8,7 @@ use App\Services\Stock\RecepcionProveedorAsientoService;
 use App\Services\Stock\RecepcionProveedorImportarDesdeAnitaService;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
+use App\Support\Stock\RecepcionProveedorConversionSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -23,13 +24,16 @@ class ComprobanteProveedorRecepcionesSupport
 
     /**
      * Recepciones CONFIRMADAS de la OC con provisión contable y sin factura contabilizada previa.
-     * Completa desde Anita las COM de la OC que aún no están en ERP (o están huérfanas).
+     * Completa desde Anita las COM de la OC que aún no están en ERP (o están huérfanas),
+     * salvo que $sincronizarAnita sea false (apertura del formulario: no bloquear la UI).
      *
      * @return Collection<int, Recepcion_Proveedor>
      */
-    public function listarDisponibles(int $ordencompraId, ?int $comprobanteId = null): Collection
+    public function listarDisponibles(int $ordencompraId, ?int $comprobanteId = null, bool $sincronizarAnita = true): Collection
     {
-        $this->asegurarRecepcionesDesdeAnita($ordencompraId);
+        if ($sincronizarAnita) {
+            $this->asegurarRecepcionesDesdeAnita($ordencompraId);
+        }
 
         $yaFacturadas = $this->recepcionIdsFacturadas($comprobanteId);
 
@@ -93,8 +97,15 @@ class ComprobanteProveedorRecepcionesSupport
     {
         $recepciones->loadMissing(['monedas']);
 
-        return $recepciones->map(function (Recepcion_Proveedor $recepcion) {
-            $me = $this->importeProvisionCom($recepcion);
+        $totalesPorAsiento = $this->totalesDebePorAsientoId($recepciones);
+
+        return $recepciones->map(function (Recepcion_Proveedor $recepcion) use ($totalesPorAsiento) {
+            $asientoId = (int) ($recepcion->asiento_id ?? 0);
+            if ($asientoId > 0 && array_key_exists($asientoId, $totalesPorAsiento)) {
+                $me = round((float) $totalesPorAsiento[$asientoId], 2);
+            } else {
+                $me = $this->importeProvisionCom($recepcion);
+            }
             $recepcion->importe_provision_com = $me;
             $recepcion->importe_provision_com_mn = $this->importeProvisionComEnMonedaLocal($recepcion, $me);
 
@@ -162,6 +173,19 @@ class ComprobanteProveedorRecepcionesSupport
      */
     public function importeProvisionCom(Recepcion_Proveedor $recepcion): float
     {
+        $asientoId = (int) ($recepcion->asiento_id ?? 0);
+        if ($asientoId > 0) {
+            $totales = $this->totalesDebePorAsientoId(collect([$recepcion]));
+            if (array_key_exists($asientoId, $totales)) {
+                return round((float) $totales[$asientoId], 2);
+            }
+        }
+
+        $desdeLineas = $this->importeProvisionDesdeLineas($recepcion);
+        if ($desdeLineas > 0) {
+            return $desdeLineas;
+        }
+
         try {
             $preview = $this->recepcionAsientoService->previewAsientoContable($recepcion);
 
@@ -169,6 +193,30 @@ class ComprobanteProveedorRecepcionesSupport
         } catch (\Throwable) {
             return 0.0;
         }
+    }
+
+    private function importeProvisionDesdeLineas(Recepcion_Proveedor $recepcion): float
+    {
+        $recepcion->loadMissing('recepcion_proveedor_articulos');
+        if ($recepcion->recepcion_proveedor_articulos->isEmpty()) {
+            return 0.0;
+        }
+
+        $monedaRecepcionId = (int) ($recepcion->moneda_id ?: 1);
+        $total = 0.0;
+        foreach ($recepcion->recepcion_proveedor_articulos as $linea) {
+            $total += RecepcionProveedorConversionSupport::importeLineaEnMonedaReferencia(
+                $monedaRecepcionId,
+                (int) ($linea->moneda_id ?: $monedaRecepcionId),
+                (float) $linea->cantidad,
+                (float) $linea->precio,
+                (float) ($linea->descuento ?? 0),
+                0,
+                (float) ($linea->cotizacion ?: 1),
+            );
+        }
+
+        return round($total + (float) ($recepcion->impuesto_interno ?? 0), 2);
     }
 
     /**
@@ -285,19 +333,62 @@ class ComprobanteProveedorRecepcionesSupport
         });
     }
 
-    private function asegurarRecepcionesDesdeAnita(int $ordencompraId): void
+    /**
+     * @return array{claves: int, importadas: int, vinculadas: int, omitidas: int, errores: list<string>}
+     */
+    public function sincronizarDesdeAnita(int $ordencompraId): array
     {
+        $vacio = [
+            'claves' => 0,
+            'importadas' => 0,
+            'vinculadas' => 0,
+            'omitidas' => 0,
+            'errores' => [],
+        ];
         if ($ordencompraId <= 0) {
-            return;
+            return $vacio;
         }
 
         try {
-            $this->importarDesdeAnitaService->asegurarPorOrdencompraId($ordencompraId);
+            return $this->importarDesdeAnitaService->asegurarPorOrdencompraId($ordencompraId);
         } catch (\Throwable $e) {
             Log::warning('ComprobanteProveedorRecepciones: fallback Anita por OC', [
                 'ordencompra_id' => $ordencompraId,
                 'mensaje' => $e->getMessage(),
             ]);
+            $vacio['errores'][] = $e->getMessage();
+
+            return $vacio;
         }
+    }
+
+    private function asegurarRecepcionesDesdeAnita(int $ordencompraId): void
+    {
+        $this->sincronizarDesdeAnita($ordencompraId);
+    }
+
+    /**
+     * @param  Collection<int, Recepcion_Proveedor>  $recepciones
+     * @return array<int, float>
+     */
+    private function totalesDebePorAsientoId(Collection $recepciones): array
+    {
+        $asientoIds = $recepciones
+            ->map(fn (Recepcion_Proveedor $r) => (int) ($r->asiento_id ?? 0))
+            ->filter(fn (int $id) => $id > 0)
+            ->unique()
+            ->values()
+            ->all();
+        if ($asientoIds === []) {
+            return [];
+        }
+
+        return DB::table('asiento_movimiento')
+            ->selectRaw('asiento_id, ROUND(SUM(CASE WHEN monto > 0 THEN monto ELSE 0 END), 2) as total_debe')
+            ->whereIn('asiento_id', $asientoIds)
+            ->groupBy('asiento_id')
+            ->pluck('total_debe', 'asiento_id')
+            ->map(fn ($v) => (float) $v)
+            ->all();
     }
 }

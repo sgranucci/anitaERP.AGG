@@ -8,8 +8,10 @@ use App\Models\Compras\Ordencompra;
 /**
  * Centro de costo de la factura / asiento de compras: destino de la OC.
  *
- * Prioridad: centrocostodestino_id de las líneas → cabecera (mismo valor que
- * Anita penmp_ccosto_dest al grabar). El default del proveedor no se usa si hay OC.
+ * Prioridad: centrocostodestino_id de las líneas → cabecera origen.
+ * Al grabar Anita, penmp_ccosto_dest usa esta misma prioridad (no copiar el origen).
+ * La tolerancia factura vs COM también toma este CC (no el origen de cabecera).
+ * El default del proveedor no se usa si hay OC.
  */
 final class ComprobanteProveedorCentrocostoSupport
 {
@@ -46,7 +48,6 @@ final class ComprobanteProveedorCentrocostoSupport
             }
         }
 
-        // Cabecera local: al sync Anita se escribe en penmp_ccosto_dest.
         return (int) ($oc->centrocosto_id ?? 0);
     }
 }

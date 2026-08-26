@@ -23,6 +23,7 @@ use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorIibbPadro
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorIvaTasaInversaSupport;
 use App\Support\Compras\PrecargaProveedor\FacturaPdfIa\FacturaProveedorNumeroComprobanteSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorConceptosListaSupport;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorCuitCoincidenciaSupport;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorNumeroOcSupport;
 use App\Support\Compras\PrecargaProveedor\PrecargaProveedorResolucionSupport;
@@ -691,11 +692,11 @@ final class ComprobanteProveedorPdfIaService
         $provDig = preg_replace('/\D/', '', (string) ($extraido['cuit_proveedor'] ?? '')) ?? '';
         $destDig = preg_replace('/\D/', '', (string) ($extraido['cuit_destinatario'] ?? '')) ?? '';
 
-        if ($cuitOcDig === '' || $provDig === $cuitOcDig) {
+        if ($cuitOcDig === '' || PrecargaProveedorCuitCoincidenciaSupport::coinciden($provDig, $cuitOcDig)) {
             return $extraido;
         }
 
-        if ($destDig === $cuitOcDig) {
+        if (PrecargaProveedorCuitCoincidenciaSupport::coinciden($destDig, $cuitOcDig)) {
             $leidoComoProv = (string) ($extraido['cuit_proveedor'] ?? '');
             $extraido['cuit_destinatario'] = $leidoComoProv !== '' ? $leidoComoProv : null;
             $extraido['cuit_proveedor'] = $cuitOc;

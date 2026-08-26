@@ -40,7 +40,7 @@ class ComprobanteProveedorComLegajoResolucionService
     {
         $sectorLegajoId = $this->resolverSectorLegajo($precarga, $ordencompra);
         if ($ordencompra) {
-            $recepciones = $this->recepcionesSupport->listarDisponibles((int) $ordencompra->id);
+            $recepciones = $this->recepcionesSupport->listarDisponibles((int) $ordencompra->id, null, false);
         } else {
             $recepciones = $this->recepcionesSupport->listarSinFacturarEnLegajo(
                 (int) $precarga->proveedor_id,
@@ -213,10 +213,7 @@ class ComprobanteProveedorComLegajoResolucionService
             ];
         }
 
-        $toleranciaPct = ComprobanteProveedorToleranciaImporteSupport::porcentajeParaOc(
-            (int) $ordencompra->empresa_id,
-            (int) ($ordencompra->centrocosto_id ?? 0) ?: null,
-        );
+        $toleranciaPct = ComprobanteProveedorToleranciaImporteSupport::porcentajeDesdeOc($ordencompra);
 
         $exactas = $recepciones->filter(function (Recepcion_Proveedor $rec) use ($importe, $provisionFactura) {
             return ComprobanteProveedorImporteComparacionComSupport::coinciden($importe, $provisionFactura($rec));

@@ -3,12 +3,26 @@
 namespace App\Support\Compras;
 
 use App\Models\Compras\Configuracion_ComprobanteProveedorTolerancia;
+use App\Models\Compras\Ordencompra;
 
 /**
- * Tolerancia % de importe factura vs provisión COM, por empresa y centro de costo de la OC.
+ * Tolerancia % de importe factura vs provisión COM, por empresa y centro de costo destino de la OC.
  */
 final class ComprobanteProveedorToleranciaImporteSupport
 {
+    public static function porcentajeDesdeOc(object $ordencompra): float
+    {
+        if ($ordencompra instanceof Ordencompra) {
+            $ordencompra->loadMissing('ordencompra_articulos');
+        }
+        $ccId = ComprobanteProveedorCentrocostoSupport::resolverDesdeOc($ordencompra);
+
+        return self::porcentajeParaOc(
+            (int) ($ordencompra->empresa_id ?? 0),
+            $ccId > 0 ? $ccId : null
+        );
+    }
+
     public static function porcentajeParaOc(int $empresaId, ?int $centrocostoId): float
     {
         if ($empresaId <= 0) {

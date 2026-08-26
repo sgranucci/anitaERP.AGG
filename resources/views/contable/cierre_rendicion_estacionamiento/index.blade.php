@@ -42,6 +42,13 @@
 @endphp
 
 @section('contenido')
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'cierre-rend-est-overlay',
+    'tituloId' => 'cierre-rend-est-overlay-titulo',
+    'subtituloId' => 'cierre-rend-est-overlay-subtitulo',
+    'titulo' => 'Cerrando estacionamiento…',
+    'subtitulo' => 'Escribe en Anita. No cierre la página ni vuelva a confirmar.',
+])
 @php
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $limpiarUrl = route(

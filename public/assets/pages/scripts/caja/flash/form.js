@@ -32,9 +32,14 @@
         bill_slots: 'Drop efectivo billetes slots (BRUTO)',
         bill_rul: 'Drop efectivo billetes ruletas (BRUTO)',
         bill_poker: 'Bill poker (BRUTO)',
-        ventas_caja: 'Ventas caja (tickets, BRUTO)',
-        ventas_slots: 'Ventas slots (tickets, BRUTO)',
-        ventas_ruletas: 'Ventas ruletas (tickets, BRUTO)',
+        ventas_caja: 'Ventas caja (tickets, BRUTO) — no entra a drop/win',
+        ventas_slots: 'Ventas slots (tickets, BRUTO) — no entra a drop/win',
+        ventas_ruletas: 'Ventas ruletas (tickets, BRUTO) — no entra a drop/win',
+        venta_ficha: 'Venta de fichas (slots)',
+        venta_ficha_sesion: 'Venta fichas sesión Wigos',
+        venta_slots: 'VentaTickets sesión (Wigos)',
+        impuesto_drop: 'Impuesto drop (turno C)',
+        impuesto_venta: 'Impuesto venta (turno C, no entra a drop/win)',
         pagos_caja: 'Pagos caja (tickets)',
         pagos_slots: 'Pagos slots (tickets)',
         pagos_ruletas: 'Pagos ruletas (tickets)',
@@ -277,24 +282,22 @@
         html += '<h6 class="mt-3 mb-2">Por turno (valores aplicados a la fórmula)</h6>';
         html += '<div class="table-responsive"><table class="table table-sm table-bordered">';
         html += '<thead style="background:#85C1E9;color:#17202A;"><tr>'
-            + '<th>Turno</th><th class="text-right">Bill slots</th><th class="text-right">Ventas slots</th>'
-            + '<th class="text-right">Ventas caja</th><th class="text-right">Neto QR</th>'
+            + '<th>Turno</th><th class="text-right">Bill slots</th><th class="text-right">Venta fichas ses.</th>'
+            + '<th class="text-right">Neto QR</th>'
             + '<th class="text-right">Pagos man.</th><th class="text-right">Δ slot_d</th>'
             + '<th class="text-right">Δ slot_r</th><th class="text-right">Bill rul</th>'
-            + '<th class="text-right">Ventas rul</th><th class="text-right">Δ rul_d</th>'
+            + '<th class="text-right">Δ rul_d</th>'
             + '<th class="text-right">Δ rul_r</th></tr></thead><tbody>';
         (sala.turnos || []).forEach(function (t) {
             html += '<tr>'
-                + '<td>' + escaparHtml(t.turno) + (t.aplica_bill_tickets_qr ? ' (bill/tickets/QR)' : ' (solo man./tito)') + '</td>'
+                + '<td>' + escaparHtml(t.turno) + (t.aplica_bill_tickets_qr ? ' (bill/QR)' : ' (solo man./tito)') + '</td>'
                 + '<td class="text-right text-monospace">' + escaparHtml(fmtDecimal(t.bill_slots)) + '</td>'
-                + '<td class="text-right text-monospace">' + escaparHtml(fmtDecimal(t.ventas_slots)) + '</td>'
-                + '<td class="text-right text-monospace">' + escaparHtml(fmtDecimal(t.ventas_caja)) + '</td>'
+                + '<td class="text-right text-monospace">' + escaparHtml(fmtDecimal(t.venta_ficha_sesion)) + '</td>'
                 + '<td class="text-right text-monospace">' + escaparHtml(fmtDecimal(t.monto_neto_qr)) + '</td>'
                 + '<td class="text-right text-monospace">' + escaparHtml(fmtDecimal(t.pagos_manuales)) + '</td>'
                 + '<td class="text-right text-monospace">' + escaparHtml(fmtDecimal(t.delta_slot_d)) + '</td>'
                 + '<td class="text-right text-monospace">' + escaparHtml(fmtDecimal(t.delta_slot_r)) + '</td>'
                 + '<td class="text-right text-monospace">' + escaparHtml(fmtDecimal(t.bill_rul)) + '</td>'
-                + '<td class="text-right text-monospace">' + escaparHtml(fmtDecimal(t.ventas_ruletas)) + '</td>'
                 + '<td class="text-right text-monospace">' + escaparHtml(fmtDecimal(t.delta_rul_d)) + '</td>'
                 + '<td class="text-right text-monospace">' + escaparHtml(fmtDecimal(t.delta_rul_r)) + '</td>'
                 + '</tr>';
@@ -306,7 +309,7 @@
         html += '<thead style="background:#85C1E9;color:#17202A;"><tr><th>Clave</th><th class="text-right">M</th>'
             + '<th class="text-right">T</th><th class="text-right">N</th></tr></thead><tbody>';
         var clavesRaw = [
-            'bill_slots', 'bill_rul', 'bill_poker', 'ventas_caja', 'ventas_slots', 'ventas_ruletas',
+            'bill_slots', 'bill_rul', 'bill_poker', 'venta_slots', 'ventas_caja', 'ventas_slots', 'ventas_ruletas',
             'pagos_caja', 'pagos_slots', 'pagos_ruletas', 'monto_qr', 'monto_neto_qr', 'impuesto_qr',
             'pagos_manuales', 'tito_slots', 'tito_rul', 'tito_poker',
             'coin_in_slots', 'coin_in_rul', 'coin_in_poker', 'win_slots', 'win_rul',
@@ -336,10 +339,13 @@
         }
         var html = '<h6 class="mt-3 mb-2">Origen de componentes Wigos (cómo se obtienen)</h6>';
         html += '<p class="small text-muted mb-2">Detalle de SP, parámetros, filtro y si el monto es bruto o neto. '
-            + 'Usar esta sección para conciliar Drop efectivo y Ventas tickets.</p>';
+            + 'Usar esta sección para conciliar drop, venta de fichas y QR.</p>';
         (origen || []).forEach(function (item) {
             var base = String(item.base || '').toUpperCase();
-            var badge = base === 'NETO' ? 'success' : (base === 'BRUTO' ? 'warning' : 'secondary');
+            var badge = base === 'NETO' ? 'success'
+                : (base === 'BRUTO' ? 'warning'
+                    : (base === 'RENDICION' ? 'info'
+                        : (base === 'DESCUENTO' ? 'danger' : 'secondary')));
             html += '<div class="border rounded p-2 mb-2">';
             html += '<div class="d-flex justify-content-between align-items-start flex-wrap">';
             html += '<div><strong>' + escaparHtml(item.etiqueta || item.clave || '') + '</strong>';
@@ -444,7 +450,7 @@
                 + escaparHtml(fmtDecimal(origen.valor_pantalla)) + '</td></tr>';
         }
         html += '<tr><td>Valor según fórmula ERP actual (Wigos'
-            + (String(origen.origen || '').indexOf('rendicion') >= 0 ? ' − impuestos turno C' : '')
+            + (String(origen.origen || '').indexOf('rendicion') >= 0 ? ' + rendición turno C' : '')
             + ')</td><td class="text-right text-monospace">'
             + escaparHtml(fmtDecimal(origen.total_formula != null ? origen.total_formula : origen.total_flash))
             + '</td></tr>';
@@ -474,13 +480,14 @@
             + (origen.coincide ? 'Cuenta = fórmula ERP' : 'Diferencia entre cuenta y fórmula ERP') + '</span></p>';
 
         if (origen.impuestos_rendicion && (Number(origen.impuestos_rendicion.total || 0) !== 0
+            || Number(origen.impuestos_rendicion.venta_ficha || 0) !== 0
             || origen.impuestos_rendicion.origen)) {
             var imp = origen.impuestos_rendicion;
-            html += '<div class="small text-muted mb-3">Impuestos turno C ('
-                + escaparHtml(imp.origen || 'ninguno') + '): drop '
-                + escaparHtml(fmtDecimal(imp.impuesto_drop)) + ' + venta '
-                + escaparHtml(fmtDecimal(imp.impuesto_venta)) + ' = '
-                + escaparHtml(fmtDecimal(imp.total));
+            html += '<div class="small text-muted mb-3">Rendición turno C ('
+                + escaparHtml(imp.origen_venta_ficha || imp.origen || 'ninguno') + '): venta fichas '
+                + escaparHtml(fmtDecimal(imp.venta_ficha)) + ' · imp. drop '
+                + escaparHtml(fmtDecimal(imp.impuesto_drop)) + ' (resta) · imp. venta '
+                + escaparHtml(fmtDecimal(imp.impuesto_venta)) + ' (no entra)';
             if (imp.nro_oper) {
                 html += ' · nro_oper ' + escaparHtml(imp.nro_oper);
             }
@@ -582,7 +589,7 @@
         if (campo === 'slot_d' || campo === 'slot_r') {
             return {
                 titulo: 'Consultando origen…',
-                subtitulo: 'Recalculando gaming Wigos + impuestos turno C y listando movimientos. No cierra el flash ERP (AyB/estac/bingo).'
+                subtitulo: 'Recalculando gaming Wigos + venta fichas / impuesto drop turno C y listando movimientos. No cierra el flash ERP (AyB/estac/bingo).'
             };
         }
         return {
@@ -679,6 +686,7 @@
                 if (resp.datos.advertencias_wigos && resp.datos.advertencias_wigos.length && !opciones.silenciarAdvertencias) {
                     alert('Flash calculado con advertencias Wigos:\n' + resp.datos.advertencias_wigos.join('\n'));
                 }
+                aplicarAvisoAybWaitry(resp.aviso_ayb_waitry || null);
             } else {
                 alert((resp && resp.message) ? resp.message : 'No se recibieron datos de cálculo.');
             }
@@ -751,6 +759,7 @@
     $('#empresa_id, #fecha').on('change', function () {
         ultimoDesgloseWigos = null;
         cacheOrigenTotal = {};
+        consultarEstadoAybWaitry();
     });
 
     $(document).on('click', '.flash-btn-origen', function () {
@@ -788,7 +797,59 @@
         $('#btn-flash-desglose-excel').prop('disabled', false);
     });
 
+    function claseAlertaAyb(nivel) {
+        if (nivel === 'corto') {
+            return 'alert-danger';
+        }
+        if (nivel === 'incluido') {
+            return 'alert-success';
+        }
+        return 'alert-warning';
+    }
+
+    function aplicarAvisoAybWaitry(aviso) {
+        var $box = $('#flash-aviso-ayb-waitry');
+        if (!$box.length) {
+            return;
+        }
+        $box.removeClass('alert-warning alert-danger alert-success alert-info d-none');
+        if (!aviso || !aviso.mensaje) {
+            $box.addClass('d-none').text('');
+            return;
+        }
+        $box.addClass(claseAlertaAyb(aviso.nivel)).text(aviso.mensaje);
+    }
+
+    function consultarEstadoAybWaitry() {
+        var url = window.flashEstadoAybWaitryUrl;
+        var empresaId = $('#empresa_id').val();
+        var fecha = $('#fecha').val();
+        if (!url || !empresaId || !fecha) {
+            aplicarAvisoAybWaitry(null);
+            return;
+        }
+        $.ajax({
+            url: url,
+            method: 'POST',
+            data: {
+                _token: $('meta[name="csrf-token"]').attr('content') || $('input[name="_token"]').val(),
+                empresa_id: empresaId,
+                fecha: fecha,
+                ayb: parseDecimal($('#ayb').val(), 2)
+            }
+        }).done(function (resp) {
+            if (resp && resp.ok) {
+                aplicarAvisoAybWaitry(resp.aviso_ayb_waitry || null);
+            }
+        });
+    }
+
     $(function () {
         initFormatoCampos();
+        if (window.flashAvisoAybWaitryInicial) {
+            aplicarAvisoAybWaitry(window.flashAvisoAybWaitryInicial);
+        } else {
+            consultarEstadoAybWaitry();
+        }
     });
 })(jQuery);

@@ -28,6 +28,7 @@ final class ComprobanteProveedorYaExistenteEnAnitaException extends RuntimeExcep
         string $letra,
         int $sucursal,
         int $numerocomprobante,
+        ?string $tipoArca = null,
     ): self {
         $nroInterno = (int) ($fila['com_nro_interno'] ?? 0);
 
@@ -37,6 +38,7 @@ final class ComprobanteProveedorYaExistenteEnAnitaException extends RuntimeExcep
                 $letra,
                 $sucursal,
                 $numerocomprobante,
+                $tipoArca,
             ),
             $fila,
             $nroInterno > 0 ? $nroInterno : null,

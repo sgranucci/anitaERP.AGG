@@ -31,6 +31,11 @@ use RuntimeException;
  * Vending no existe en l-posfinanc.c: se agrega como bloque ERP (PV Maquina N
  * / sucursal ≥ 1000 / nombre vending) que antes se omitía.
  *
+ * Conceptos de medios: solo cuentas de caja con uso (Gastronomía,
+ * Estacionamiento, Rendición de máquinas) de la empresa. No se listan
+ * valormae huérfanos (Pedido Ya, PlayUzu, etc. sin uso asignado).
+ * Máquinas suma esos medios a los renglones fijos (VENTAS, CAJA, vales…).
+ *
  * Fuentes:
  * - Hasta jul/2026: híbrido (Anita completa huecos; bingo Anita-first).
  * - Desde ago/2026: todo anitaERP (bingo, gastro, estac, vending, apertura).
@@ -233,6 +238,14 @@ class EfePosicionFinancieraSupport
             'Estacionamiento',
             RendicionEstacionamientoRendvalorCodigoSupport::class,
         );
+        $codigosUsoMaquinas = $this->codigosValormaePorEtiquetaDeUso(
+            $empresaId,
+            PosicionFinancieraOrdenConceptoSupport::USO_MAQUINAS,
+            $valormae,
+        );
+        $codigosMediosOperativos = $codigosUsoGastronomia
+            + $codigosUsoEstacionamiento
+            + $codigosUsoMaquinas;
         $gastronomiaAnita = $this->agregarBloqueGastroEstac(
             $cabGastro,
             $valoresPorOper,
@@ -380,6 +393,7 @@ class EfePosicionFinancieraSupport
             $valoresPorOper,
             $valormae,
             $fechaPorOper,
+            $codigosUsoMaquinas,
         );
         $maquinasGastosAnita = $this->agregarGastosMaquina(
             array_keys($opsMaquina),
@@ -389,6 +403,29 @@ class EfePosicionFinancieraSupport
         );
         $maquinasErp = $this->fuenteErp->maquinasCompletas(
             $empresaId, $inicioMes, $finMes, $this->dias, $valormae, $apgastoDesc,
+        );
+        $etiquetasMediosMaquina = $this->etiquetasMediosDeUso(
+            $empresaId,
+            PosicionFinancieraOrdenConceptoSupport::USO_MAQUINAS,
+            $valormae,
+            $codigosUsoMaquinas,
+        );
+        $etiquetasMediosOperativos = $etiquetasMediosMaquina
+            + $this->etiquetasMediosDeUso(
+                $empresaId,
+                PosicionFinancieraOrdenConceptoSupport::USO_GASTRONOMIA,
+                $valormae,
+                $codigosUsoGastronomia,
+            )
+            + $this->etiquetasMediosDeUso(
+                $empresaId,
+                PosicionFinancieraOrdenConceptoSupport::USO_ESTACIONAMIENTO,
+                $valormae,
+                $codigosUsoEstacionamiento,
+            );
+        $maquinasErp['medios'] = $this->filtrarMapaPorEtiquetas(
+            $maquinasErp['medios'] ?? [],
+            $etiquetasMediosMaquina,
         );
         $maquinasBase = $this->fuenteErp->mergePorDia(
             $maquinasBaseAnita, $maquinasErp['base'], $maquinasErp['dias'], $this->dias,
@@ -417,8 +454,11 @@ class EfePosicionFinancieraSupport
         }
         $maquinasMedios = PosicionFinancieraOrdenConceptoSupport::reordenarMapaMedios(
             $empresaId,
-            $this->fuenteErp->mergePorDia(
-                $maquinasMediosAnita, $maquinasErp['medios'], $maquinasErp['dias'], $this->dias,
+            $this->filtrarMapaPorEtiquetas(
+                $this->fuenteErp->mergePorDia(
+                    $maquinasMediosAnita, $maquinasErp['medios'], $maquinasErp['dias'], $this->dias,
+                ),
+                $etiquetasMediosMaquina,
             ),
             $valormae,
         );
@@ -475,7 +515,12 @@ class EfePosicionFinancieraSupport
                 $opsMaquina,
                 $empresaId,
                 $fechaPorOper,
+                $codigosMediosOperativos,
             );
+        $abiertosNoEfectivo = $this->filtrarMapaPorEtiquetas(
+            $abiertosNoEfectivo,
+            $etiquetasMediosOperativos,
+        );
         $egresos = $this->agregarEgresos(
             $empresaId,
             $fechaDesde,
@@ -1450,6 +1495,142 @@ class EfePosicionFinancieraSupport
     }
 
     /**
+     * Códigos valormae que corresponden a cuentas de caja con el uso indicado
+     * (etiqueta / nombre). Así no entran medios del catálogo Anita sin cuenta operativa.
+     *
+     * @param  array<int, array{desc: string, tipo: string}>  $valormae
+     * @return array<int, true>
+     */
+    private function codigosValormaePorEtiquetaDeUso(int $empresaId, string $usoNombre, array $valormae): array
+    {
+        $cuentas = Cuentacaja::query()
+            ->paraEmpresa($empresaId)
+            ->whereHas('usocuentacajas', fn ($query) => $query->where('usocuentacaja.nombre', $usoNombre))
+            ->get();
+
+        $codigos = [];
+        foreach ($cuentas as $cuenta) {
+            if (RendicionGastronomiaRendvalorCodigoSupport::omitirEnRendvalorAnita($cuenta)) {
+                continue;
+            }
+            foreach ($valormae as $codigo => $meta) {
+                if (! $this->valormaeCoincideConCuenta((string) ($meta['desc'] ?? ''), $cuenta)) {
+                    continue;
+                }
+                $codigo = (int) $codigo;
+                if ($codigo > 0) {
+                    $codigos[$codigo] = true;
+                }
+            }
+        }
+
+        return $codigos;
+    }
+
+    /**
+     * @param  array<int, array{desc: string, tipo: string}>  $valormae
+     * @param  array<int, true>  $codigos
+     * @return array<string, true>
+     */
+    private function etiquetasMediosDeUso(
+        int $empresaId,
+        string $usoNombre,
+        array $valormae,
+        array $codigos,
+    ): array {
+        $etiquetas = [];
+        foreach ($codigos as $codigo => $_) {
+            $desc = trim((string) ($valormae[$codigo]['desc'] ?? ''));
+            if ($desc !== '') {
+                $etiquetas[$desc] = true;
+            }
+        }
+
+        $cuentas = Cuentacaja::query()
+            ->paraEmpresa($empresaId)
+            ->whereHas('usocuentacajas', fn ($query) => $query->where('usocuentacaja.nombre', $usoNombre))
+            ->get();
+        foreach ($cuentas as $cuenta) {
+            if (RendicionGastronomiaRendvalorCodigoSupport::omitirEnRendvalorAnita($cuenta)) {
+                continue;
+            }
+            $etiqueta = trim($cuenta->etiquetaOperaciones());
+            $nombre = trim((string) $cuenta->nombre);
+            if ($etiqueta !== '') {
+                $etiquetas[$etiqueta] = true;
+            }
+            if ($nombre !== '') {
+                $etiquetas[$nombre] = true;
+            }
+        }
+
+        return $etiquetas;
+    }
+
+    /**
+     * @param  array<string, array<int, float>>  $mapa
+     * @param  array<string, true>  $etiquetasPermitidas
+     * @return array<string, array<int, float>>
+     */
+    private function filtrarMapaPorEtiquetas(array $mapa, array $etiquetasPermitidas): array
+    {
+        if ($etiquetasPermitidas === []) {
+            return $mapa;
+        }
+
+        $out = [];
+        foreach ($mapa as $etiqueta => $porDia) {
+            if (isset($etiquetasPermitidas[$etiqueta])) {
+                $out[$etiqueta] = $porDia;
+            }
+        }
+
+        return $out;
+    }
+
+    private function valormaeCoincideConCuenta(string $desc, Cuentacaja $cuenta): bool
+    {
+        $descN = $this->normalizarEtiquetaMedio($desc);
+        if ($descN === '') {
+            return false;
+        }
+
+        $etiq = $this->normalizarEtiquetaMedio($cuenta->etiquetaOperaciones());
+        $nom = $this->normalizarEtiquetaMedio((string) $cuenta->nombre);
+        if ($descN === $etiq || $descN === $nom) {
+            return true;
+        }
+
+        $descC = str_replace(' ', '', $descN);
+        foreach ([$etiq, $nom] as $cuentaN) {
+            $cuentaC = str_replace(' ', '', $cuentaN);
+            if ($cuentaC === '' || $descC === '') {
+                continue;
+            }
+            if ($descC === $cuentaC) {
+                return true;
+            }
+            $corta = min(strlen($descC), strlen($cuentaC));
+            if ($corta < 10) {
+                continue;
+            }
+            if (str_contains($cuentaC, $descC) || str_contains($descC, $cuentaC)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function normalizarEtiquetaMedio(string $texto): string
+    {
+        $texto = mb_strtoupper(trim($texto));
+        $texto = str_replace(['Á', 'É', 'Í', 'Ó', 'Ú', '.'], ['A', 'E', 'I', 'O', 'U', ''], $texto);
+
+        return preg_replace('/\s+/', ' ', $texto) ?? $texto;
+    }
+
+    /**
      * Alinea nombres de conceptos ERP bingo a las etiquetas Anita (l-posfinanc).
      *
      * @param  array<string, array<int, float>>  $premios
@@ -1870,6 +2051,7 @@ class EfePosicionFinancieraSupport
      * @param  array<int, list<object>>  $valoresPorOper
      * @param  array<int, array{desc: string, tipo: string}>  $valormae
      * @param  array<int, int>  $fechaPorOper
+     * @param  array<int, true>  $codigosPermitidos
      * @return array<string, array<int, float>>
      */
     private function agregarMediosPorOperaciones(
@@ -1877,6 +2059,7 @@ class EfePosicionFinancieraSupport
         array $valoresPorOper,
         array $valormae,
         array $fechaPorOper,
+        array $codigosPermitidos = [],
     ): array {
         $totales = [];
         foreach ($nrosOper as $nroOper) {
@@ -1887,6 +2070,9 @@ class EfePosicionFinancieraSupport
                     continue;
                 }
                 if ($codigo === 15) {
+                    continue;
+                }
+                if ($codigosPermitidos !== [] && ! isset($codigosPermitidos[$codigo])) {
                     continue;
                 }
                 $dia = (int) ($valor->rendv_fecha ?? 0) > 0
@@ -2523,6 +2709,7 @@ class EfePosicionFinancieraSupport
      * @param  list<object>  $cabGastro
      * @param  array<int, true>  $opsMaquina
      * @param  array<int, int>  $fechaPorOper
+     * @param  array<int, true>  $codigosPermitidos
      * @return array<string, array<int, float>>
      */
     private function acumularAbiertosNoEfectivo(
@@ -2532,6 +2719,7 @@ class EfePosicionFinancieraSupport
         array $opsMaquina,
         int $empresaId,
         array $fechaPorOper,
+        array $codigosPermitidos = [],
     ): array {
         $ops = $opsMaquina;
         foreach ($cabGastro as $fila) {
@@ -2547,6 +2735,9 @@ class EfePosicionFinancieraSupport
             foreach ($valoresPorOper[$nroOper] ?? [] as $valor) {
                 $codigo = (int) ($valor->rendv_codigo ?? 0);
                 if (! isset($valormae[$codigo])) {
+                    continue;
+                }
+                if ($codigosPermitidos !== [] && ! isset($codigosPermitidos[$codigo])) {
                     continue;
                 }
                 $tipo = $valormae[$codigo]['tipo'];

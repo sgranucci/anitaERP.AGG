@@ -6,6 +6,7 @@ use App\Models\Sala\RequisicionSala;
 use App\Models\Sala\RequisicionSalaArticulo;
 use App\Models\Sala\RequisicionSalaEstado;
 use App\Models\Sala\TecnicoLaboratorio;
+use App\Models\Stock\Articulo;
 use App\Models\Stock\Articulo_ParteUnica;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Transferencia_Mercaderia;
@@ -33,6 +34,7 @@ class CumplirRequisicionSalaService
         private TransferenciaMercaderiaService $transferenciaService,
         private EmpresaRepositoryInterface $empresaRepository,
         private CumplimientoRequisicionSalaPersistenciaService $persistenciaService,
+        private RequisicionSalaArticuloCambioService $articuloCambioService,
     ) {
     }
 
@@ -188,6 +190,7 @@ class CumplirRequisicionSalaService
         $cabecerasImpresion = [];
         $snapshotsPersistencia = [];
         $empresasGrabar = [];
+        $cambiosArticuloPendientes = [];
         $depositoOrigenImpresion = Depmae::query()->find($depositoLabDefault);
 
         DB::beginTransaction();
@@ -217,7 +220,8 @@ class CumplirRequisicionSalaService
                         $transferenciasPorOrigen,
                         $filasImpresion,
                         $cabecerasImpresion[$reqId],
-                        $snapshotsPersistencia
+                        $snapshotsPersistencia,
+                        $cambiosArticuloPendientes
                     );
                     if ($resultado) {
                         $hayMovimiento = true;
@@ -264,6 +268,18 @@ class CumplirRequisicionSalaService
                 $transferenciaIds,
                 $empresaPersistir
             );
+
+            foreach ($cambiosArticuloPendientes as $cambio) {
+                $this->articuloCambioService->registrar(
+                    (int) $cambio['requisicion_sala_id'],
+                    (int) $cambio['requisicion_sala_articulo_id'],
+                    (int) $cambio['articulo_id_anterior'],
+                    (int) $cambio['articulo_id_nuevo'],
+                    $usuarioId,
+                    (int) $cumplimiento->id,
+                    $cambio['motivo'] ?? null
+                );
+            }
 
             DB::commit();
         } catch (\Throwable $e) {
@@ -332,6 +348,7 @@ class CumplirRequisicionSalaService
      * @param  array<int, list<array{articulo_id: int, cantidad: float}>>  $transferenciasPorOrigen
      * @param  list<array<string, mixed>>  $filasImpresion
      * @param  array<string, mixed>  $cabeceraReq
+     * @param  list<array<string, mixed>>  $cambiosArticuloPendientes
      */
     private function procesarLineaCumple(
         RequisicionSalaArticulo $linea,
@@ -340,7 +357,8 @@ class CumplirRequisicionSalaService
         array &$transferenciasPorOrigen,
         array &$filasImpresion,
         array $cabeceraReq,
-        array &$snapshotsPersistencia
+        array &$snapshotsPersistencia,
+        array &$cambiosArticuloPendientes
     ): bool {
         $pendiente = (float) $linea->cantidad - (float) ($linea->cantidadentregada ?? 0);
         if ($pendiente <= 0) {
@@ -372,6 +390,27 @@ class CumplirRequisicionSalaService
             throw new \RuntimeException('Dep&oacute;sito de origen inv&aacute;lido.');
         }
 
+        $articuloOriginalId = (int) $linea->articulo_id;
+        $articuloEfectivoId = (int) ($fila['articulo_id'] ?? 0) ?: $articuloOriginalId;
+        $huboCambioArticulo = $articuloEfectivoId > 0 && $articuloEfectivoId !== $articuloOriginalId;
+        if ($huboCambioArticulo) {
+            if (! can('cambiar-articulo-cumplir-requisicion-sala', false)) {
+                throw new \RuntimeException('No tiene permiso para cambiar el art&iacute;culo en el cumplimiento.');
+            }
+            if (! Articulo::query()->whereKey($articuloEfectivoId)->exists()) {
+                throw new \RuntimeException('El art&iacute;culo sustituto indicado no es v&aacute;lido.');
+            }
+            $linea->update(['articulo_id' => $articuloEfectivoId]);
+            $linea->load('articulos');
+            $cambiosArticuloPendientes[] = [
+                'requisicion_sala_id' => (int) $linea->requisicion_sala_id,
+                'requisicion_sala_articulo_id' => (int) $linea->id,
+                'articulo_id_anterior' => $articuloOriginalId,
+                'articulo_id_nuevo' => $articuloEfectivoId,
+                'motivo' => 'Cambio de art&iacute;culo al cumplir requisici&oacute;n sala #'.($cabeceraReq['numerorequisicion'] ?? $linea->requisicion_sala_id),
+            ];
+        }
+
         $estadoLinea = trim((string) ($fila['estado_linea'] ?? ''));
         if ($estadoLinea === '' && $entrega > 0) {
             $estadoLinea = $entrega >= $pendiente ? 'E' : 'A';
@@ -396,7 +435,8 @@ class CumplirRequisicionSalaService
         $snapshotsPersistencia[] = [
             'requisicion_sala_id' => (int) $linea->requisicion_sala_id,
             'requisicion_sala_articulo_id' => (int) $linea->id,
-            'articulo_id' => (int) $linea->articulo_id,
+            'articulo_id' => $articuloEfectivoId,
+            'articulo_id_original' => $huboCambioArticulo ? $articuloOriginalId : null,
             'cantidad_entrega' => $entrega,
             'cantidad_pendiente_antes' => $pendiente,
             'cantidadentregada_antes' => (float) ($linea->cantidadentregada ?? 0),
@@ -459,7 +499,7 @@ class CumplirRequisicionSalaService
 
         if ($entrega > 0 && ! $cierraItem) {
             $transferenciasPorOrigen[$depositoOrigenId][] = [
-                'articulo_id' => (int) $linea->articulo_id,
+                'articulo_id' => $articuloEfectivoId,
                 'cantidad' => $entrega,
                 'numeroparte' => $numeroparteGrabar,
             ];

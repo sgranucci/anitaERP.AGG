@@ -203,11 +203,14 @@ final class RendicionMaquinaService
             }
         }
 
+        $valeGuardado = (float) ($rendicion?->calc_json['variables']['calc.vale_rep_fondo'] ?? 0);
+        $vale = abs($valeGuardado) > 0.00001
+            ? $valeGuardado
+            : (float) ($previas['vale_rep_fondo'] ?? 0);
         $calcOrquestador = [
             'comprobante' => (float) ($rendicion?->calc_json['variables']['calc.comprobante']
                 ?? $previas['comprobante']),
-            'vale_rep_fondo' => (float) ($rendicion?->calc_json['variables']['calc.vale_rep_fondo']
-                ?? $previas['vale_rep_fondo']),
+            'vale_rep_fondo' => $vale,
         ];
 
         $payloadDemo = [
@@ -299,9 +302,8 @@ final class RendicionMaquinaService
         }
 
         // Si vienen en 0 (cambio de fecha blanqueó inputs), completar desde previas.
-        // Completo: apertura = misma semilla que M (fondo + comprobante); vale = 0.
+        // Completo: apertura = misma semilla que M (fondo + comprobante + remesa).
         if (RendicionMaquinaTurno::esCompleto($turnoPayload)) {
-            $orq['vale_rep_fondo'] = 0.0;
             if (abs((float) ($inputs['fondo_inicial'] ?? $inputs['inputs.fondo_inicial'] ?? 0)) < 0.00001
                 && abs((float) ($previas['fondo_inicial'] ?? 0)) > 0.00001) {
                 $inputs['fondo_inicial'] = round((float) $previas['fondo_inicial'], 2);
@@ -309,6 +311,10 @@ final class RendicionMaquinaService
             if (abs((float) ($orq['comprobante'] ?? 0)) < 0.00001
                 && abs((float) ($previas['comprobante'] ?? 0)) > 0.00001) {
                 $orq['comprobante'] = round((float) $previas['comprobante'], 2);
+            }
+            if (abs((float) ($orq['vale_rep_fondo'] ?? 0)) < 0.00001
+                && abs((float) ($previas['vale_rep_fondo'] ?? 0)) > 0.00001) {
+                $orq['vale_rep_fondo'] = round((float) $previas['vale_rep_fondo'], 2);
             }
             $faltaCierre = abs((float) ($orq['fondo_cierre'] ?? 0)) < 0.00001
                 || abs((float) ($orq['resultado_turno'] ?? 0)) < 0.00001
@@ -324,6 +330,9 @@ final class RendicionMaquinaService
                 $orq['transferencia'] = round((float) ($completo['orquestador']['transferencia'] ?? 0), 2);
                 if (abs((float) ($orq['comprobante'] ?? 0)) < 0.00001) {
                     $orq['comprobante'] = round((float) ($completo['orquestador']['comprobante'] ?? 0), 2);
+                }
+                if (abs((float) ($orq['vale_rep_fondo'] ?? 0)) < 0.00001) {
+                    $orq['vale_rep_fondo'] = round((float) ($completo['orquestador']['vale_rep_fondo'] ?? 0), 2);
                 }
                 if (abs((float) ($inputs['fondo_inicial'] ?? 0)) < 0.00001) {
                     $inputs['fondo_inicial'] = round((float) ($completo['inputs']['fondo_inicial'] ?? 0), 2);
@@ -413,9 +422,7 @@ final class RendicionMaquinaService
                 'previas' => $previasStub,
                 'calc_orquestador' => [
                     'comprobante' => round((float) ($previasStub['comprobante'] ?? 0), 2),
-                    'vale_rep_fondo' => $esCompleto
-                        ? 0.0
-                        : round((float) ($previasStub['vale_rep_fondo'] ?? 0), 2),
+                    'vale_rep_fondo' => round((float) ($previasStub['vale_rep_fondo'] ?? 0), 2),
                 ],
                 'meta' => [
                     'modo_wigos' => RendicionMaquinaTurno::modoWigos($turnoNorm),
@@ -445,6 +452,7 @@ final class RendicionMaquinaService
                 $stub['meta']['completo_del_dia'] = $completo['meta'];
                 $stub['meta']['origen_fondo'] = (string) ($completo['meta']['origen_fondo'] ?? $previasStub['origen_fondo']);
                 $stub['meta']['origen_comprobante'] = (string) ($completo['meta']['origen_comprobante'] ?? 'ninguno');
+                $stub['meta']['origen_vale_rep_fondo'] = (string) ($completo['meta']['origen_vale_rep_fondo'] ?? $previasStub['origen_vale_rep_fondo']);
             }
 
             return $stub;
@@ -501,13 +509,13 @@ final class RendicionMaquinaService
         $resultado['wigos_json'] = $inputs;
         $resultado['previas'] = $previas;
         if ($esCompleto) {
-            // Apertura = M; cierre/resultado = Noche; transfer = suma M+T+N; vale = 0
+            // Apertura = M (fondo + comprobante + remesa); cierre/resultado = Noche; transfer = suma M+T+N
             $orqCompleto = is_array($resultado['calc_orquestador'] ?? null)
                 ? $resultado['calc_orquestador']
                 : [];
             $resultado['calc_orquestador'] = [
                 'comprobante' => round((float) ($orqCompleto['comprobante'] ?? $previas['comprobante'] ?? 0), 2),
-                'vale_rep_fondo' => 0.0,
+                'vale_rep_fondo' => round((float) ($orqCompleto['vale_rep_fondo'] ?? $previas['vale_rep_fondo'] ?? 0), 2),
                 'fondo_cierre' => round((float) ($orqCompleto['fondo_cierre'] ?? 0), 2),
                 'resultado_turno' => round((float) ($orqCompleto['resultado_turno'] ?? 0), 2),
                 'transferencia' => round((float) ($orqCompleto['transferencia'] ?? 0), 2),
@@ -528,7 +536,7 @@ final class RendicionMaquinaService
             ? (string) ($resultado['crudo']['completo_del_dia']['origen_impuesto_drop'] ?? 'ninguno')
             : $previas['origen_impuesto_drop'];
         $resultado['meta']['origen_vale_rep_fondo'] = $esCompleto
-            ? 'completo_sin_vale'
+            ? (string) ($resultado['crudo']['completo_del_dia']['origen_vale_rep_fondo'] ?? $previas['origen_vale_rep_fondo'])
             : $previas['origen_vale_rep_fondo'];
         $resultado['meta']['origen_drop_ant_completo'] = $esCompleto
             ? (string) ($resultado['crudo']['drop_ant_origen'] ?? $previas['origen_drop_ant_completo'] ?? 'ninguno')

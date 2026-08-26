@@ -28,6 +28,11 @@
 @section('contenido')
 @php
     $volverListadoUrl = route('consulta_cliente_uif', $filtrosQuery ?? []);
+    $clienteUifIdEditar = (int) ($data->id ?? 0);
+    $suffixAltaPremioEditar = ! empty($ocultarVolver ?? false) ? '&origen=modal_consulta&vista=consulta' : '';
+    $urlAltaPremioUif = ($clienteUifIdEditar > 0 && can('crear-cliente-premio-uif', false))
+        ? route('crea_cliente_premio_uif', ['id' => $clienteUifIdEditar]).'?return_cliente_tab=3'.$suffixAltaPremioEditar
+        : null;
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -87,9 +92,7 @@
                     </div>
                     @endif
                 </div>
-                @if (empty($soloSolapaPremios))
-                    @include('uif.cliente_uif.partials.banner_cumplimiento')
-                @endif
+                @include('uif.cliente_uif.partials.banner_cumplimiento')
                 <div id="tab2" class="d-none" data-arca-constancia-url="{{ route('arca_constancia_inscripcion') }}" aria-hidden="true"></div>
                 <div class="card-body" style="padding-bottom: 0; padding-top: 5px;">
                     @include('uif.cliente_uif.form1')
@@ -112,6 +115,10 @@
             		@endif
             	</div>
             </form>
+            @include('uif.cliente_uif.partials.modal_cumplimiento', [
+                'cumpHrefContinuar' => $urlAltaPremioUif ?? '#',
+                'cumpHrefFicha' => route('edita_cliente_uif', ['id' => $data->id, 'uif_tab' => 2]),
+            ])
             @include('compras.proveedor.arca-cuit-entry-modal')
             @include('compras.proveedor.arca-padron-modals')
         </div>

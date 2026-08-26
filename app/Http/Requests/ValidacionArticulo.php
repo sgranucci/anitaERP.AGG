@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Stock\ArticuloIndumentariaTipoSupport;
 use Illuminate\Foundation\Http\FormRequest;
 
 class ValidacionArticulo extends FormRequest
@@ -42,6 +43,14 @@ class ValidacionArticulo extends FormRequest
         } else {
             $this->request->remove('codigosenasa_id');
         }
+
+        $forzado = ArticuloIndumentariaTipoSupport::mergeTipoForzado(
+            $this->input('categoria_id'),
+            $this->input('tipoarticulo_id')
+        );
+        if ($forzado !== []) {
+            $this->merge($forzado);
+        }
     }
 
     /**
@@ -56,6 +65,7 @@ class ValidacionArticulo extends FormRequest
             'descripcion' => 'required|max:100|',
             'codigobarra' => 'nullable|max:50',
             'categoria_id' => 'required|numeric',
+            'tipoarticulo_id' => 'required|numeric|exists:tipoarticulo,id',
             'unidadmedida_id' => 'required|numeric',
             'usoarticulo_id' => 'required|numeric',
             'tipoproducto_id' => 'nullable|numeric|exists:tipoproducto,id',

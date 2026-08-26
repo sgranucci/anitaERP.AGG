@@ -27,6 +27,7 @@ class FlashContableReporteSupportTest extends TestCase
             'bingo_resultado' => 400.4,
             'ayb' => 250.1,
             'estac' => 33.3,
+            'vending' => 44.4,
             'validado' => true,
         ]);
 
@@ -44,6 +45,7 @@ class FlashContableReporteSupportTest extends TestCase
         $this->assertEquals(400.4, $m['net_win_bingo']);
         $this->assertEquals(250.1, $m['ventas_ayb']);
         $this->assertEquals(33.3, $m['ventas_parking']);
+        $this->assertEquals(44.4, $m['ventas_vending']);
         $this->assertTrue($m['flash_cerrado']);
     }
 
@@ -68,7 +70,7 @@ class FlashContableReporteSupportTest extends TestCase
         $this->assertCount(2, $reporte['empresas']);
         $this->assertCount(3, $reporte['filas']);
         $this->assertSame(2, $reporte['cantidad_dias']);
-        $this->assertSame(27, $reporte['cantidad_columnas']);
+        $this->assertSame(29, $reporte['cantidad_columnas']);
 
         $dia1 = $reporte['filas'][0];
         $this->assertSame('01/07/2026', $dia1['fecha']);
@@ -142,6 +144,7 @@ class FlashContableReporteSupportTest extends TestCase
             'bingo_resultado' => 0,
             'ayb' => 0,
             'estac' => 0,
+            'vending' => 0,
             'validado' => $validado,
         ]);
         $flash->setRelation('empresa', $empresa);

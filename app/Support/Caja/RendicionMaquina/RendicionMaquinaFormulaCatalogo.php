@@ -20,7 +20,7 @@ namespace App\Support\Caja\RendicionMaquina;
  */
 final class RendicionMaquinaFormulaCatalogo
 {
-    public const VERSION = 2;
+    public const VERSION = 3;
 
     /**
      * @return list<FormulaDef>
@@ -125,7 +125,8 @@ final class RendicionMaquinaFormulaCatalogo
             [
                 'codigo' => 'D30',
                 'destino' => 'calc.deposito_efectivo',
-                // Completo (calcula_rendicion_turno_completo): fuerza deposito_efectivo = 0.
+                // Completo (calcula_rendicion_turno_completo): deposito_efectivo = 0.
+                // El extra drop−remesa va a la línea CAJA PESOS del arqueo (deposito total).
                 'expresion' => 'meta.es_completo > 0 ? 0 : (calc.drop_bill_rodillo + calc.drop_bill_ruleta - calc.vale_rep_fondo + calc.deposito - inputs.sobrantes)',
                 'seccion' => 'salidas',
                 'orden' => 130,
@@ -144,11 +145,12 @@ final class RendicionMaquinaFormulaCatalogo
             [
                 'codigo' => 'D50',
                 'destino' => 'calc.total_salida',
-                'expresion' => 'calc.tito_rodillo + calc.tito_ruleta + calc.vale_rep_fondo + inputs.salida_ruleta + inputs.pago_manual + calc.deposito_efectivo + inputs.hopper',
+                // Completo: la remesa no suma a salidas; el extra (si drop bruto M > remesa) va a CAJA PESOS.
+                'expresion' => 'meta.es_completo > 0 ? (calc.tito_rodillo + calc.tito_ruleta + inputs.salida_ruleta + inputs.pago_manual + calc.deposito_efectivo + inputs.hopper) : (calc.tito_rodillo + calc.tito_ruleta + calc.vale_rep_fondo + inputs.salida_ruleta + inputs.pago_manual + calc.deposito_efectivo + inputs.hopper)',
                 'seccion' => 'salidas',
                 'orden' => 150,
                 'activo' => true,
-                'detalle' => 'Total salidas',
+                'detalle' => 'Total salidas (en C sin vale: la remesa ajusta CAJA PESOS del arqueo)',
             ],
             [
                 'codigo' => 'E10',

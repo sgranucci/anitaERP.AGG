@@ -153,6 +153,12 @@ class RecepcionProveedorFormItemsSupport
                 $articulosProveedor->get($articuloId)
             );
 
+            $colorId = (int) ($item['color_id'] ?? 0) ?: null;
+            $talleId = (int) ($item['talle_id'] ?? 0) ?: null;
+            $manejaColorTalle = ArticuloStockColorTalleSupport::articuloManejaColorTalle($articulo)
+                || $colorId !== null
+                || $talleId !== null;
+
             $enriquecidos[] = array_merge($item, [
                 'moneda_id' => (int) ($item['moneda_id'] ?? 1) ?: 1,
                 'cotizacion' => (float) ($item['cotizacion'] ?? 1) ?: 1,
@@ -174,6 +180,9 @@ class RecepcionProveedorFormItemsSupport
                 'maneja_parte_unica' => array_key_exists('maneja_parte_unica', $item)
                     ? (bool) $item['maneja_parte_unica']
                     : RecepcionProveedorParteUnicaSupport::articuloManejaParteUnica($articulo),
+                'color_id' => $colorId,
+                'talle_id' => $talleId,
+                'maneja_stock_color_talle' => $manejaColorTalle,
                 'tipo_linea' => $item['tipo_linea'] ?? RecepcionProveedorDiferenciaSupport::TIPO_OC,
             ]);
         }
@@ -360,6 +369,17 @@ class RecepcionProveedorFormItemsSupport
         }
         if (array_key_exists('cantidad_oc', $lineaOc) && ($lineaGrilla['cantidad_oc'] ?? null) === null) {
             $lineaGrilla['cantidad_oc'] = $lineaOc['cantidad_oc'];
+        }
+        if ((int) ($lineaGrilla['color_id'] ?? 0) <= 0 && (int) ($lineaOc['color_id'] ?? 0) > 0) {
+            $lineaGrilla['color_id'] = (int) $lineaOc['color_id'];
+            $lineaGrilla['color_nombre'] = (string) ($lineaOc['color_nombre'] ?? $lineaGrilla['color_nombre'] ?? '');
+        }
+        if ((int) ($lineaGrilla['talle_id'] ?? 0) <= 0 && (int) ($lineaOc['talle_id'] ?? 0) > 0) {
+            $lineaGrilla['talle_id'] = (int) $lineaOc['talle_id'];
+            $lineaGrilla['talle_nombre'] = (string) ($lineaOc['talle_nombre'] ?? $lineaGrilla['talle_nombre'] ?? '');
+        }
+        if (! empty($lineaOc['maneja_stock_color_talle'])) {
+            $lineaGrilla['maneja_stock_color_talle'] = true;
         }
 
         return $lineaGrilla;

@@ -683,7 +683,7 @@
 @include('stock.recepcion_proveedor.partials.modal_articulo_proveedor')
 @endif
 @include('stock.recepcion_proveedor.partials.modal_linea_precio')
-@if($recepcion && ($recepcion->estado ?? '') === 'BORRADOR' && !($soloLectura ?? false))
+@if(!($soloLectura ?? false) && !($modoDevolucion ?? false) && (! $recepcion || ($recepcion->estado ?? '') === 'BORRADOR'))
 @include('stock.recepcion_proveedor.partials.modal_confirmar_diferencias')
 @endif
 @include('includes.stock.modalconsultaarticulo')

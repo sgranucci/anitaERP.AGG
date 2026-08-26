@@ -20,7 +20,7 @@ return [
 
     'tabla_gasto' => env('RENDICION_MAQUINA_ANITA_TABLA_GASTO', 'rendmapgasto'),
 
-    /** Remesas (REMEM_lee_remesa_interna → vale_rep_fondo en turno mañana). */
+    /** Remesas (REMEM_lee_remesa_interna → vale_rep_fondo en turno mañana y Completo). */
     'tabla_remesa' => env('RENDICION_MAQUINA_ANITA_TABLA_REMESA', 'rememae'),
 
     /**

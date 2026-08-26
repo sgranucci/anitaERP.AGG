@@ -12,7 +12,9 @@ use App\Models\Caja\Flash\FlashCaja;
 use App\Repositories\Caja\Flash\FlashCajaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\Flash\FlashCajaAnitaExportService;
+use App\Services\Caja\Flash\FlashCajaAybRecalculoService;
 use App\Services\Caja\Flash\FlashCajaCalculoService;
+use App\Support\Caja\Flash\FlashCajaAybCierreWaitrySupport;
 use App\Support\Caja\Flash\FlashCajaHistoricoFiltros;
 use App\Support\Caja\Flash\FlashCajaListadoFiltros;
 use App\Support\Caja\Flash\FlashCajaValidacionSupport;
@@ -34,6 +36,7 @@ class FlashCajaController extends Controller
         private readonly EmpresaRepositoryInterface $empresaRepository,
         private readonly FlashCajaCalculoService $calculoService,
         private readonly FlashCajaAnitaExportService $exportAnitaService,
+        private readonly FlashCajaAybRecalculoService $aybRecalculoService,
     ) {}
 
     public function index(Request $request)
@@ -106,6 +109,8 @@ class FlashCajaController extends Controller
         can('crear-flash-caja');
 
         $payload = $this->armarPayload($request);
+        $ajusteAyb = $this->aybRecalculoService->aplicarAybAlPayload($payload);
+        $payload = $ajusteAyb['payload'];
         $flash = $this->repository->create($payload);
         $syncAnita = $this->exportAnitaService->enviarSiNoExisteEnAnita($flash);
         $mensaje = 'Flash diario creado con éxito';
@@ -114,6 +119,7 @@ class FlashCajaController extends Controller
         } elseif ($syncAnita['resultado'] === FlashCajaAnitaExportService::RESULTADO_ERROR) {
             $mensaje .= '. No se pudo enviar a Anita: '.$syncAnita['mensaje'];
         }
+        $mensaje = $this->anexarAvisoAyb($mensaje, $ajusteAyb);
 
         return redirect()->route('flash_caja', QueryRetornoListado::desdeRequest($request, FlashCajaListadoFiltros::class))
             ->with('mensaje', $mensaje);
@@ -133,6 +139,11 @@ class FlashCajaController extends Controller
             'empresa_query' => $empresa_query,
             'filtrosQuery' => $filtrosQuery,
             'puedeValidarFlash' => FlashCajaValidacionSupport::usuarioPuedeValidar(),
+            'avisoAybWaitry' => $this->aybRecalculoService->estadoFormulario(
+                (int) $data->empresa_id,
+                (string) $data->fecha?->format('Y-m-d'),
+                (float) $data->ayb,
+            ),
         ]);
     }
 
@@ -170,6 +181,8 @@ class FlashCajaController extends Controller
         $this->assertAccesoEmpresa((int) $data->empresa_id);
 
         $payload = $this->armarPayload($request, $data);
+        $ajusteAyb = $this->aybRecalculoService->aplicarAybAlPayload($payload);
+        $payload = $ajusteAyb['payload'];
         $empresaAnterior = (int) $data->empresa_id;
         $fechaAnterior = $data->fecha?->format('Y-m-d');
         $this->repository->update($payload, $id);
@@ -182,6 +195,7 @@ class FlashCajaController extends Controller
         } elseif ($syncAnita['resultado'] === FlashCajaAnitaExportService::RESULTADO_ERROR) {
             $mensaje .= '. No se pudo actualizar Anita: '.$syncAnita['mensaje'];
         }
+        $mensaje = $this->anexarAvisoAyb($mensaje, $ajusteAyb);
 
         return redirect()->route('flash_caja', QueryRetornoListado::desdeRequest($request, FlashCajaListadoFiltros::class))
             ->with('mensaje', $mensaje);
@@ -238,6 +252,38 @@ class FlashCajaController extends Controller
         return response()->json([
             'ok' => true,
             'datos' => $calculado,
+            'aviso_ayb_waitry' => $this->aybRecalculoService->estadoFormulario(
+                $empresaId,
+                $fecha,
+                isset($calculado['ayb']) ? (float) $calculado['ayb'] : null,
+            ),
+        ]);
+    }
+
+    public function apiEstadoAybWaitry(Request $request)
+    {
+        if (! can('crear-flash-caja', false) && ! can('actualizar-flash-caja', false)) {
+            abort(403);
+        }
+
+        $request->validate([
+            'empresa_id' => ['required', 'integer', 'min:1'],
+            'fecha' => ['required', 'date'],
+            'ayb' => ['nullable', 'numeric'],
+        ]);
+
+        $empresaId = (int) $request->input('empresa_id');
+        $this->assertAccesoEmpresa($empresaId);
+
+        $ayb = $request->filled('ayb') ? (float) $request->input('ayb') : null;
+
+        return response()->json([
+            'ok' => true,
+            'aviso_ayb_waitry' => $this->aybRecalculoService->estadoFormulario(
+                $empresaId,
+                (string) $request->input('fecha'),
+                $ayb,
+            ),
         ]);
     }
 
@@ -691,6 +737,23 @@ class FlashCajaController extends Controller
         $retorno = QueryRetornoListado::desdeRequest($request, FlashCajaListadoFiltros::class);
 
         return redirect()->route('flash_caja', $retorno)->with('mensaje', $mensaje);
+    }
+
+    /**
+     * @param  array{aviso: string, nivel: string, ayb_ajustado: bool}  $ajuste
+     */
+    private function anexarAvisoAyb(string $mensaje, array $ajuste): string
+    {
+        $aviso = trim((string) ($ajuste['aviso'] ?? ''));
+        if ($aviso === '') {
+            return $mensaje;
+        }
+        if (! ($ajuste['ayb_ajustado'] ?? false)
+            && ($ajuste['nivel'] ?? '') === FlashCajaAybCierreWaitrySupport::NIVEL_INCLUIDO) {
+            return $mensaje;
+        }
+
+        return $mensaje.' '.$aviso;
     }
 
     private function assertAccesoEmpresa(int $empresaId): void

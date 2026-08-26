@@ -33,6 +33,10 @@ class Articulo extends Model implements Auditable
 
     protected $table = 'articulo';
 
+    protected $casts = [
+        'maneja_stock_color_talle' => 'boolean',
+    ];
+
     protected $tableAnita = 'stkmae';
 
     protected $keyField = 'sku';

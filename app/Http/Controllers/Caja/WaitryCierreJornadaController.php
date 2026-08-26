@@ -16,6 +16,7 @@ use App\Support\Ventas\Gastronomia\CierreJornadaProcesoConfigSupport;
 use App\Support\Ventas\CaeaEmisionFechaCorrelatividadSupport;
 use App\Models\Ventas\JornadaGastronomia;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 use Throwable;
@@ -36,16 +37,18 @@ class WaitryCierreJornadaController extends Controller
         can('listar-waitry-cierre-jornada-caja');
 
         $empresas = $this->empresaRepository->allFiltrado();
-        $empresaId = (int) $request->input('empresa_id', $empresas->first()->id ?? 0);
-        if ($empresaId > 0 && $empresas->firstWhere('id', $empresaId) === null) {
-            $empresaId = (int) ($empresas->first()->id ?? 0);
-        }
-        $fechaJornada = $this->resolverFechaJornadaConsulta($request, $empresaId);
+        $empresaId = $this->resolverEmpresaIdConsulta($request, $empresas);
+        $pidioEmpresa = $request->exists('empresa_id') && $empresaId > 0;
 
         $payload = null;
         $error = null;
+        $fechaJornada = '';
 
-        if ($request->has('empresa_id') && $request->has('fecha_jornada') && $empresaId > 0) {
+        if ($request->exists('empresa_id') && $empresaId <= 0 && $empresas->count() > 1) {
+            $error = 'Seleccione una empresa para consultar.';
+            $fechaJornada = trim((string) $request->input('fecha_jornada', ''));
+        } elseif ($pidioEmpresa) {
+            $fechaJornada = $this->resolverFechaJornadaConsulta($request, $empresaId);
             try {
                 $this->prepararEntornoProcesoApi();
                 $payload = $this->cierreJornadaService->conciliar($empresaId, $fechaJornada);
@@ -55,6 +58,8 @@ class WaitryCierreJornadaController extends Controller
             } catch (InvalidArgumentException $e) {
                 $error = $e->getMessage();
             }
+        } else {
+            $fechaJornada = trim((string) $request->input('fecha_jornada', ''));
         }
 
         $empresaNombre = $empresas->firstWhere('id', $empresaId)?->nombre ?? '';
@@ -66,13 +71,13 @@ class WaitryCierreJornadaController extends Controller
             'fecha_jornada' => $fechaJornada,
             'payload' => $payload,
             'error' => $error,
-            'consultado' => $request->has('empresa_id') && $request->has('fecha_jornada'),
+            'consultado' => $pidioEmpresa,
             'proceso_habilitado' => $this->procesoService->habilitado(),
             'puede_proceso_cierre' => can('proceso-cierre-jornada-waitry-caja', false),
-            'config_contable' => $empresaId > 0
+            'config_contable' => $pidioEmpresa
                 ? CierreJornadaProcesoConfigSupport::paraEmpresaConDetalle($empresaId)
                 : [],
-            'porcentaje_proceso_config' => $empresaId > 0
+            'porcentaje_proceso_config' => $pidioEmpresa
                 ? CierreJornadaProcesoConfigSupport::resolverPorcentajeParaEmpresa($empresaId)
                 : (float) config('gastronomia.cierre_jornada_porcentaje', 25),
             'url_movimientos_proceso_base' => str_replace(
@@ -566,6 +571,16 @@ class WaitryCierreJornadaController extends Controller
         @set_time_limit(max(60, $timeLimitSegundos));
     }
 
+    private function resolverEmpresaIdConsulta(Request $request, Collection $empresas): int
+    {
+        $empresaId = (int) $request->input('empresa_id', 0);
+        if ($empresaId > 0 && $empresas->firstWhere('id', $empresaId) === null) {
+            return 0;
+        }
+
+        return $empresaId;
+    }
+
     private function resolverFechaJornadaConsulta(Request $request, int $empresaId): string
     {
         $fechaJornada = trim((string) $request->input('fecha_jornada', ''));
@@ -591,9 +606,11 @@ class WaitryCierreJornadaController extends Controller
         ini_set('max_execution_time', '0');
 
         $empresas = $this->empresaRepository->allFiltrado();
-        $empresaId = (int) $request->input('empresa_id', $empresas->first()->id ?? 0);
-        if ($empresaId > 0 && $empresas->firstWhere('id', $empresaId) === null) {
-            $empresaId = (int) ($empresas->first()->id ?? 0);
+        $empresaId = $this->resolverEmpresaIdConsulta($request, $empresas);
+        if ($empresaId <= 0) {
+            return redirect()
+                ->route('waitry_cierre_jornada')
+                ->with('mensaje', 'Seleccione una empresa para exportar el cierre.');
         }
         $fechaJornada = $this->resolverFechaJornadaConsulta($request, $empresaId);
         $empresaNombre = $empresas->firstWhere('id', $empresaId)?->nombre ?? '';

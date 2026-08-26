@@ -5,6 +5,7 @@ namespace App\Services\Compras;
 use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Comprobante_Proveedor_Estado;
 use App\Models\Compras\Proveedor_Cuentacorriente;
+use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
@@ -59,6 +60,9 @@ class ComprobanteProveedorContabilizarService
             (int) ($comprobante->empresa_id ?? 0),
             ComprobanteProveedorFechaContableSupport::fechaYmd($comprobante)
         );
+
+        // Antes de asentar ERP: si Anita ya tiene la misma clave fiscal, no confirmar.
+        ComprobanteProveedorAnitaCompraExistenciaSupport::assertDesdeComprobante($comprobante);
 
         // Limpia ctamov huérfanos de intentos previos (mismo patrón que recepción COM).
         $this->asientoService->eliminarCtamovAnitaDeComprobante($comprobante);

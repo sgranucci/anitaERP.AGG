@@ -258,14 +258,43 @@
         $(document).on('click', '#agrega_renglon_premio', function (event) {
             var $btn = $(this);
             if ($btn.is('a') && $btn.attr('href')) {
+                if (mostrarModalCumplimientoPremioUif($btn.attr('href'))) {
+                    event.preventDefault();
+                }
                 return;
             }
             event.preventDefault();
+            if (mostrarModalCumplimientoPremioUif('#', true)) {
+                return;
+            }
             if (!window.confirm('Se guardará el cliente y luego podrá cargar el premio. ¿Continuar?')) {
                 return;
             }
             $('#ir_a_agregar_premio').val('1');
             $('#form-general').trigger('submit');
+        });
+        $('#uif-modal-cumplimiento-continuar').on('click', function (event) {
+            try {
+                sessionStorage.setItem('uif-cumplimiento-premio-aviso', '1');
+            } catch (e) {}
+            var href = ($(this).attr('href') || '').trim();
+            if (href && href !== '#') {
+                return;
+            }
+            event.preventDefault();
+            $('#uif-modal-cumplimiento').modal('hide');
+            if ($('#ir_a_agregar_premio').length) {
+                $('#ir_a_agregar_premio').val('1');
+                $('#form-general').trigger('submit');
+            }
+        });
+        $('#uif-modal-cumplimiento-ficha').on('click', function (event) {
+            var tab = $(this).attr('data-uif-ir-tab') || '2';
+            if ($('#botonform' + tab).length) {
+                event.preventDefault();
+                $('#uif-modal-cumplimiento').modal('hide');
+                irAPendienteUif(tab, $(this).attr('data-uif-selector') || '');
+            }
         });
         $('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
@@ -306,8 +335,18 @@
         ].join(', '), verificaAlertaUif);
         $(document).on('change', '#tbody-tabla-archivo input[type=file]', verificaAlertaUif);
         $(document).on('click', '.uif-banner-item-link, [data-uif-ir-tab]', function (event) {
+            if ($(this).is('#uif-modal-cumplimiento-ficha, #uif-modal-cumplimiento-continuar')) {
+                return;
+            }
+            var tab = $(this).attr('data-uif-ir-tab');
+            var selector = $(this).attr('data-uif-selector');
+            var href = ($(this).attr('href') || '').trim();
+            if (!tab && href && href !== '#') {
+                return;
+            }
             event.preventDefault();
-            irAPendienteUif($(this).attr('data-uif-ir-tab'), $(this).attr('data-uif-selector'));
+            $('#uif-modal-cumplimiento').modal('hide');
+            irAPendienteUif(tab, selector);
         });
 
         setTimeout(verificaAlertaUif, 200);
@@ -936,8 +975,15 @@
 
     function irAPendienteUif(tab, selector) {
         var n = parseInt(tab, 10);
-        if (n >= 1 && n <= 5) {
-            $('#botonform' + n).trigger('click');
+        var $btnTab = n >= 1 && n <= 5 ? $('#botonform' + n) : $();
+        if ($btnTab.length) {
+            $btnTab.trigger('click');
+        } else {
+            var cid = ($('#cliente_uif_id').val() || '').trim();
+            if (cid && cid !== '0' && n >= 1 && n <= 5) {
+                window.location.href = carpetaBase + '/uif/cliente_uif/' + cid + '/editar?uif_tab=' + n;
+                return;
+            }
         }
         if (!selector) {
             return;
@@ -948,6 +994,47 @@
                 el.scrollIntoView({ behavior: 'smooth', block: 'center' });
             }
         }, 80);
+    }
+
+    function mostrarModalCumplimientoPremioUif(hrefContinuar, paraGuardarCliente) {
+        verificaAlertaUif();
+        var $box = $('#uif-alertas-cumplimiento');
+        var $lista = $('#uif-alertas-cumplimiento-lista');
+        var $modal = $('#uif-modal-cumplimiento');
+        if (!$modal.length || !$box.length || $box.hasClass('d-none') || !$lista.children().length) {
+            return false;
+        }
+        $('#uif-modal-cumplimiento-titulo').text($('#uif-alertas-cumplimiento-titulo').text() || 'Faltan documentos o firmas UIF');
+        var subtitulo = ($('#uif-alertas-cumplimiento-subtitulo').text() || '').trim();
+        $('#uif-modal-cumplimiento-subtitulo').text(subtitulo).toggleClass('d-none', !subtitulo);
+        $('#uif-modal-cumplimiento-contador').text($lista.children().length);
+        $('#uif-modal-cumplimiento-lista').html($lista.html());
+        var $header = $('#uif-modal-cumplimiento-header');
+        $header.removeClass('bg-warning bg-danger text-dark text-white');
+        if ($box.hasClass('is-warning')) {
+            $header.addClass('bg-warning text-dark');
+            $header.find('.close').removeClass('text-white').addClass('text-dark');
+        } else {
+            $header.addClass('bg-danger text-white');
+            $header.find('.close').removeClass('text-dark').addClass('text-white');
+        }
+        var $continuar = $('#uif-modal-cumplimiento-continuar');
+        hrefContinuar = (hrefContinuar || '#').trim() || '#';
+        $continuar.attr('href', hrefContinuar);
+        if (hrefContinuar !== '#' || paraGuardarCliente) {
+            $continuar.removeClass('d-none');
+            $continuar.text(paraGuardarCliente ? 'Guardar cliente y continuar' : 'Continuar con el premio');
+        } else {
+            $continuar.addClass('d-none');
+        }
+        var $ficha = $('#uif-modal-cumplimiento-ficha');
+        var primerTab = $lista.find('[data-uif-ir-tab]').first().attr('data-uif-ir-tab') || '2';
+        $ficha.attr('data-uif-ir-tab', primerTab);
+        if ($('#botonform' + primerTab).length || (($ficha.attr('href') || '#') !== '#')) {
+            $ficha.removeClass('d-none');
+        }
+        $modal.modal('show');
+        return true;
     }
 
     function renderAlertasCumplimientoUif(items, opciones) {

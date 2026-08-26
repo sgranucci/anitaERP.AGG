@@ -203,7 +203,7 @@ final class PrecargaProveedorResolucionSupport
         $datos = $ordencompra['ordencompra'];
         $cuitOc = str_replace('-', '', (string) ($datos->prom_cuit ?? ''));
         $cuit = str_replace('-', '', $cuitProveedor);
-        if ($cuitOc !== $cuit) {
+        if (! PrecargaProveedorCuitCoincidenciaSupport::coinciden($cuitOc, $cuit)) {
             throw new RuntimeException('El CUIT del proveedor no coincide con la OC '.$numeroOc);
         }
 

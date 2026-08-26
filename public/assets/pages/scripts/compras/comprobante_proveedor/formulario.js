@@ -1210,6 +1210,67 @@ $(function () {
         refrescarCotizacionDia({ forzarCampo: false });
     })();
 
+    (function initAvisoAnitaYSyncOcCom() {
+        if (comprobanteId > 0) {
+            return;
+        }
+        var precargaId = parseInt($form.attr('data-precarga-id') || '0', 10) || 0;
+        var ordencompraId = parseInt($form.attr('data-ordencompra-id') || '0', 10) || 0;
+        var numeroOc = String($form.attr('data-numero-oc') || '').replace(/\D/g, '');
+        var avisoUrl = String($form.attr('data-aviso-anita-url') || '').trim();
+        var syncUrl = String($form.attr('data-sync-oc-com-url') || '').trim();
+        var precargaCargadaUrl = String($form.attr('data-precarga-cargada-url') || '').trim();
+        var formPristine = true;
+        $form.on('input change', function () {
+            formPristine = false;
+        });
+
+        if (precargaId > 0 && avisoUrl) {
+            $.getJSON(avisoUrl, { precarga_id: precargaId }).done(function (res) {
+                if (!res || !res.html) {
+                    return;
+                }
+                $('#cp-aviso-anita-async-slot').html(res.html);
+                if (res.ya_marcada && precargaCargadaUrl) {
+                    window.location.href = precargaCargadaUrl;
+                }
+            });
+        }
+
+        if (!syncUrl || (ordencompraId <= 0 && numeroOc === '')) {
+            return;
+        }
+
+        var $banner = $('#cp-sync-oc-com-banner');
+        var $texto = $('#cp-sync-oc-com-texto');
+        $banner.removeClass('d-none');
+        $.getJSON(syncUrl, {
+            precarga_id: precargaId > 0 ? precargaId : undefined,
+            ordencompra_id: ordencompraId > 0 ? ordencompraId : undefined
+        }).done(function (res) {
+            if (!res || !res.ok) {
+                $banner.addClass('d-none');
+                return;
+            }
+            if (res.reload) {
+                $texto.text(res.mensaje || 'Se actualizó la OC/COM desde Anita. Recargando…');
+                if (formPristine) {
+                    window.location.reload();
+                    return;
+                }
+                $banner.removeClass('alert-info').addClass('alert-warning');
+                $texto.text((res.mensaje || 'Se importó OC/COM desde Anita.') + ' Recargá la pantalla para verlas.');
+                $banner.find('.fa-spinner').removeClass('fa-spinner fa-spin').addClass('fa-exclamation-triangle');
+                return;
+            }
+            $banner.addClass('d-none');
+        }).fail(function () {
+            $banner.removeClass('alert-info').addClass('alert-warning');
+            $texto.text('No se pudo consultar OC/COM en Anita. Podés seguir cargando la factura.');
+            $banner.find('.fa-spinner').removeClass('fa-spinner fa-spin').addClass('fa-exclamation-triangle');
+        });
+    })();
+
     if (!contabilizado) {
         marcarAvisosConceptosLocales();
         programarPreviewAsiento();

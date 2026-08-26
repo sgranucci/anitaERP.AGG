@@ -5,6 +5,7 @@ namespace App\Services\Compras;
 use App\ApiAnita;
 use App\Queries\Compras\ProveedorQueryInterface;
 use App\Support\Compras\AnitaSync\Ordencompra\AnitaOcClave;
+use App\Support\Compras\PrecargaProveedor\PrecargaProveedorCentrocostoDestinoSupport;
 use Illuminate\Support\Facades\Log;
 
 class OrdencompraService 
@@ -31,6 +32,10 @@ class OrdencompraService
 		$claveOc = AnitaOcClave::desdePendmaep($cabecera);
 		$ordenCompra = $this->enriquecerCabeceraConPromae($cabecera);
 		$itemOrdenCompra = $this->consultarItemsOrdenCompra($claveOc);
+		$ordenCompra = PrecargaProveedorCentrocostoDestinoSupport::aplicarDestinoEnCabecera(
+			$ordenCompra,
+			$itemOrdenCompra
+		);
 
 		return ['ordencompra' => $ordenCompra, 'item' => $itemOrdenCompra];
 	}
@@ -46,6 +51,7 @@ class OrdencompraService
 			'tabla' => 'pendmaep',
 			'campos' => implode(', ', [
 				'penmp_proveedor',
+				'penmp_ccosto',
 				'penmp_ccosto_dest',
 				'penmp_tipo',
 				'penmp_letra',
@@ -102,6 +108,7 @@ class OrdencompraService
 			'campos' => '
 				penvp_articulo,
 				penvp_cantidad,
+				penvp_ccosto,
 				stkm_tipo_articulo,
 				stkm_agrupacion
 			',

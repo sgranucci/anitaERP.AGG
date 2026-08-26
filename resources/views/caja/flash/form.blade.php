@@ -34,6 +34,13 @@
     </div>
 </div>
 
+<div class="form-group row" id="flash-aviso-ayb-waitry-row">
+    <div class="col-lg-3"></div>
+    <div class="col-lg-8">
+        <div id="flash-aviso-ayb-waitry" class="alert d-none mb-0" role="alert"></div>
+    </div>
+</div>
+
 @include('includes.proceso_overlay_aviso', [
     'overlayId' => 'flash-calculo-aviso',
     'tituloId' => 'flash-calculo-aviso-titulo',

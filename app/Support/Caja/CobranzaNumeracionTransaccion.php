@@ -55,7 +55,13 @@ final class CobranzaNumeracionTransaccion
 
     public static function usaNumeracionSecuencial(int $tipotransaccionCajaId): bool
     {
-        return in_array($tipotransaccionCajaId, self::tiposTransaccionSecuencial(), true);
+        if (in_array($tipotransaccionCajaId, self::tiposTransaccionSecuencial(), true)) {
+            return true;
+        }
+
+        // OPP/OPA/EGR/ING/TRA: secuenciales aunque el id no esté en el .env
+        // (OPA se dio de alta después de la lista fija COB/REM/RMI/TRA/ING/EGR/OPP).
+        return SistemaNumeradorSupport::aplicaTipoCaja($tipotransaccionCajaId);
     }
 
     /**

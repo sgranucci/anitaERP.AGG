@@ -41,11 +41,14 @@ final class PrecargaProveedorConceptosListaSupport
         $cuitOrdenCompra = str_replace('-', '', (string) ($datosOrdenCompra->prom_cuit ?? ''));
         $cuitProveedor = str_replace('-', '', $cuitProveedor);
 
-        if ($cuitOrdenCompra !== $cuitProveedor) {
+        if (! PrecargaProveedorCuitCoincidenciaSupport::coinciden($cuitOrdenCompra, $cuitProveedor)) {
             throw new RuntimeException('OC no corresponde con el CUIT del proveedor indicado');
         }
 
-        $centroCostoDestino = (string) ($datosOrdenCompra->penmp_ccosto_dest ?? '');
+        $centroCostoDestino = PrecargaProveedorCentrocostoDestinoSupport::codigoDesdeOcAnita(
+            $datosOrdenCompra,
+            $itemsOrdenCompra
+        );
         $centrocosto = $this->centrocostoRepository->findPorCodigo($centroCostoDestino);
         if (! $centrocosto) {
             throw new RuntimeException('No existe centro de costo de la OC');

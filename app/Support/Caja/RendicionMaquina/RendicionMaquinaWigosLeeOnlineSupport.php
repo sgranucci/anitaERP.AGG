@@ -95,6 +95,19 @@ final class RendicionMaquinaWigosLeeOnlineSupport
             $valores = $completo['valores'];
             $gastos = $completo['gastos'];
             $orquestadorCompleto = $completo['orquestador'];
+            $dropBrutoM = round((float) ($completo['meta']['drop_bruto_maniana'] ?? 0), 2);
+            if (abs($dropBrutoM) < 0.00001) {
+                $dropBrutoM = round($billSlotsAnt + $billRulAnt, 2);
+                $remesa = round((float) ($orquestadorCompleto['vale_rep_fondo'] ?? 0), 2);
+                $valores = RendicionMaquinaValoresCuentacajaSupport::aplicarExtraDropMenosRemesa(
+                    $valores,
+                    $dropBrutoM,
+                    $remesa
+                );
+                $completo['meta']['drop_bruto_maniana'] = $dropBrutoM;
+                $completo['meta']['extra_efectivo_pesos'] = round(max($dropBrutoM - $remesa, 0.0), 2);
+                $completo['meta']['origen_drop_bruto_extra'] = 'wigos_bill_anterior';
+            }
             $crudo['completo_del_dia'] = $completo['meta'];
             $crudo['drop_ant_origen'] = $completo['meta']['origen_drop_ant'] ?? 'ninguno';
         } else {

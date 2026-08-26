@@ -45,7 +45,7 @@
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
                         Recorte diario del flash principal para Contaduría e Impuestos: slots, ruletas, win,
-                        bingo, F&amp;B, parking y tilde de flash cerrado. Cada empresa queda en su bloque de columnas.
+                        bingo, F&amp;B, parking, vending y tilde de flash cerrado. Cada empresa queda en su bloque de columnas.
                     </p>
 
                     @include('includes.reportes.asignacion_empresas_checkboxes', [

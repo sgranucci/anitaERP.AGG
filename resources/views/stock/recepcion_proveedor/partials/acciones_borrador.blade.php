@@ -13,6 +13,7 @@
     <button type="submit" class="btn btn-primary mr-2 mb-2" form="form-recepcion-proveedor">
         <i class="fa fa-save"></i> Guardar
     </button>
+    @include('stock.recepcion_proveedor.partials.boton_guardar_confirmar')
     @endif
     @if($puedeConfirmar && ($validacionAbonoCompleta ?? true))
     <button type="submit" class="btn btn-success mr-2 mb-2" form="form-recepcion-confirmar"

@@ -13,7 +13,7 @@ use Throwable;
  * Equivalente a REMEM_lee_remesa_interna() del C (a-rendmaquina.c).
  *
  * Suma remem_importe de remesas internas (tipo I) de la fecha/empresa.
- * Solo aplica al turno mañana; T/N/C dejan vale_rep_fondo en 0.
+ * Aplica a turno mañana y Completo (CAJA PESOS: max(drop bruto M − remesa, 0)); T/N dejan vale_rep_fondo en 0.
  */
 final class RendicionMaquinaRemesaAnitaSupport
 {

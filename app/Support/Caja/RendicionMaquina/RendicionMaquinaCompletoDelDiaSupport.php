@@ -81,6 +81,8 @@ final class RendicionMaquinaCompletoDelDiaSupport
             'origen_gastos' => 'ninguno',
             'origen_noche' => 'ninguno',
             'origen_transferencia' => 'ninguno',
+            'drop_bruto_maniana' => 0.0,
+            'extra_efectivo_pesos' => 0.0,
         ];
 
         if ($empresaId <= 0 || ! preg_match('/^\d{4}-\d{2}-\d{2}$/', $fechaYmd)) {
@@ -124,7 +126,8 @@ final class RendicionMaquinaCompletoDelDiaSupport
         self::aplicarBillemAnterior($inputs, $meta, $empresaId, $fechaYmd, $exceptoId);
 
         // Apertura del día (igual que turno M): fondo inicial + comprobante.
-        // Vale rep. fondo = 0 en Completo. Cierre/resultado = Noche; transfer = suma M+T+N.
+        // Vale = remesa interna del día (D30: + max(drop − remesa, 0)).
+        // Cierre/resultado = Noche; transfer = suma M+T+N.
         $previasM = RendicionMaquinaPreviasSupport::resolver(
             $empresaId,
             $fechaYmd,
@@ -133,21 +136,35 @@ final class RendicionMaquinaCompletoDelDiaSupport
         );
         $inputs['fondo_inicial'] = round((float) ($previasM['fondo_inicial'] ?? 0), 2);
         $orquestador['comprobante'] = round((float) ($previasM['comprobante'] ?? 0), 2);
-        $orquestador['vale_rep_fondo'] = 0.0;
+        $orquestador['vale_rep_fondo'] = round((float) ($previasM['vale_rep_fondo'] ?? 0), 2);
         $meta['origen_fondo'] = 'completo_como_m:'.(string) ($previasM['origen_fondo'] ?? 'ninguno');
         $meta['origen_comprobante'] = 'completo_como_m:'.(string) ($previasM['origen_comprobante'] ?? 'ninguno');
+        $meta['origen_vale_rep_fondo'] = (string) ($previasM['origen_vale_rep_fondo'] ?? 'ninguno');
 
         // Si ERP M/T/N no traían venta_ruleta (campo ausente en pantallas viejas),
         // completar desde Anita del mismo día (lee_rendiciones_del_dia).
         self::completarVentasDesdeAnitaSiFaltan($inputs, $meta, $empresaId, $fechaYmd);
 
+        $valores = RendicionMaquinaValoresCuentacajaSupport::enriquecerLineas(
+            RendicionMaquinaValoresCuentacajaSupport::anularCotizacionDivisa($valores),
+            $fechaYmd,
+            $empresaId
+        );
+
+        // CAJA PESOS Completo: suma M+T+N + max(drop bruto Mañana − remesa, 0).
+        // El drop de Completo (WIGOS del día) es otra jornada; no se usa acá.
+        $dropBrutoM = round((float) ($meta['drop_bruto_maniana'] ?? 0), 2);
+        $remesa = round((float) ($orquestador['vale_rep_fondo'] ?? 0), 2);
+        $valores = RendicionMaquinaValoresCuentacajaSupport::aplicarExtraDropMenosRemesa(
+            $valores,
+            $dropBrutoM,
+            $remesa
+        );
+        $meta['extra_efectivo_pesos'] = round(max($dropBrutoM - $remesa, 0.0), 2);
+
         return [
             'inputs' => $inputs,
-            'valores' => RendicionMaquinaValoresCuentacajaSupport::enriquecerLineas(
-                RendicionMaquinaValoresCuentacajaSupport::anularCotizacionDivisa($valores),
-                $fechaYmd,
-                $empresaId
-            ),
+            'valores' => $valores,
             'gastos' => $gastos,
             'orquestador' => $orquestador,
             'meta' => $meta,
@@ -202,6 +219,7 @@ final class RendicionMaquinaCompletoDelDiaSupport
                 }
                 $inputs['drop_bill_ant'] = round($dr, 2);
                 $inputs['drop_rul_ant'] = round(self::leerInput($raw, 'drop_ruleta'), 2);
+                $meta['drop_bruto_maniana'] = self::dropBrutoManianaDesdeInputs($raw);
                 // Anita: RENDM_vale_anterior ← COMPROBANTE del M
                 if (isset($vars['calc.comprobante'])) {
                     $comp = (float) $vars['calc.comprobante'];
@@ -299,6 +317,15 @@ final class RendicionMaquinaCompletoDelDiaSupport
                 $inputs['drop_bill_ant'] = round((float) ($fila->rendm_dr_bill_rod ?? 0), 2);
                 $inputs['drop_rul_ant'] = round((float) ($fila->rendm_drop_ruleta ?? 0), 2);
                 $inputs['vale_anterior'] = round((float) ($fila->rendm_comprobante ?? 0), 2);
+                $billBruto = (float) ($fila->rendm_drop_billete ?? 0);
+                if (abs($billBruto) < 0.00001) {
+                    $billBruto = (float) ($fila->rendm_dr_bill_rod ?? 0)
+                        + (float) ($fila->rendm_imp_drop ?? 0);
+                }
+                $meta['drop_bruto_maniana'] = round(
+                    $billBruto + (float) ($fila->rendm_drop_ruleta ?? 0),
+                    2
+                );
                 $meta['origen_drop_ant'] = 'anita_m#'.$nro;
             }
 
@@ -680,7 +707,7 @@ final class RendicionMaquinaCompletoDelDiaSupport
                 'campos' => 'rendm_nro_oper,rendm_turno,rendm_venta_ficha,rendm_venta_ruleta,'
                     .'rendm_tito,rendm_tito_ruleta,rendm_salida_rul,rendm_pago_manual,rendm_hopper,'
                     .'rendm_imp_drop,rendm_imp_venta,rendm_impuesto_qr,rendm_variacion_ff,'
-                    .'rendm_sobrantes,rendm_dr_bill_rod,rendm_drop_ruleta,rendm_comprobante,'
+                    .'rendm_sobrantes,rendm_drop_billete,rendm_dr_bill_rod,rendm_drop_ruleta,rendm_comprobante,'
                     .'rendm_billem_rod,rendm_billem_rul,rendm_fondo_cierre,rendm_resul_turno,rendm_transfer',
                 'whereArmado' => ' WHERE rendm_empresa='.$empresaAnita
                     .' AND rendm_fecha='.$fechaEntera,
@@ -749,6 +776,28 @@ final class RendicionMaquinaCompletoDelDiaSupport
             $inputs['venta_ruleta'] = round($sumaRuleta, 2);
             $meta['origen_venta_ruleta'] = 'anita_mtn';
         }
+    }
+
+    /**
+     * Drop bruto de Mañana (bill + ruleta) para el extra de CAJA PESOS del Completo.
+     * Misma jornada que la remesa interna del día; no el drop WIGOS del Completo.
+     *
+     * @param  array<string, mixed>  $raw
+     */
+    private static function dropBrutoManianaDesdeInputs(array $raw): float
+    {
+        $billBruto = (float) ($raw['drop_billete_bruto'] ?? 0);
+        if (abs($billBruto) < 0.00001) {
+            $bill = (float) ($raw['drop_billete'] ?? 0);
+            if (array_key_exists('drop_billete_bruto', $raw)) {
+                $billBruto = round($bill + (float) ($raw['impuesto_drop'] ?? 0), 2);
+            } else {
+                $billBruto = $bill;
+            }
+        }
+        $ruleta = (float) ($raw['drop_ruleta'] ?? 0);
+
+        return round($billBruto + $ruleta, 2);
     }
 
     /**

@@ -54,6 +54,7 @@ class ArticuloConsultaDesdeModal
             || can('actualizar-requisicion-sala', false)
             || can('listar-requisicion-sala', false)
             || can('cambiar-articulo-cumplir-requisicion-compra', false)
+            || can('cambiar-articulo-cumplir-requisicion-sala', false)
             || can('listar-prenda-sueldos', false)
             || can('crear-prenda-sueldos', false)
             || can('editar-prenda-sueldos', false)

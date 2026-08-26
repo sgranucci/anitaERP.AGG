@@ -19,16 +19,16 @@ final class FlashCajaOrigenTotalSupport
         'slot_d' => [
             'titulo' => 'Drop slots (slot_d)',
             'origen' => 'wigos+rendicion',
-            'formula' => 'BillSlots + VentasSlots + VentasCaja + MontoNetoQR − ImpuestoDrop − ImpuestoVenta',
-            'explicacion' => 'Drop financiero de slots del día. Bill y tickets entran brutos desde Wigos (solo turno M); QR entra neto; impuestos se restan una sola vez desde el turno completo (C) de rendmaquina.',
-            'grupos_wigos' => ['drop', 'tickets_venta', 'qr'],
+            'formula' => FlashCajaDropWinFormulaSupport::SLOT_D,
+            'explicacion' => 'Drop financiero de slots del día. Bill entra bruto desde Wigos (solo turno M); QR entra neto; venta de fichas e impuesto drop se toman una sola vez del turno completo (C) de rendición de máquinas. No entran ventas tickets slots/caja ni impuesto venta.',
+            'grupos_wigos' => ['drop', 'qr'],
         ],
         'slot_r' => [
             'titulo' => 'Win slots (slot_r)',
             'origen' => 'wigos+rendicion',
-            'formula' => 'BillSlots + VentasSlots + VentasCaja + MontoNetoQR − PagosSlots − PagosCaja − PagosManuales(M+T+N) − ImpuestoDrop − ImpuestoVenta',
-            'explicacion' => 'Resultado / win financiero de slots. Misma base del drop menos pagos de tickets y pagos manuales de sesión, y menos impuestos del turno C.',
-            'grupos_wigos' => ['drop', 'tickets_venta', 'tickets_pago', 'qr', 'sesiones'],
+            'formula' => FlashCajaDropWinFormulaSupport::SLOT_R,
+            'explicacion' => 'Resultado / win financiero de slots. Misma base del drop menos pagos de tickets y pagos manuales de sesión, y menos impuesto drop del turno C. No entran ventas tickets slots/caja ni impuesto venta.',
+            'grupos_wigos' => ['drop', 'tickets_pago', 'qr', 'sesiones'],
         ],
         'slot_coin_in' => [
             'titulo' => 'Coin in slots',
@@ -68,16 +68,16 @@ final class FlashCajaOrigenTotalSupport
         'rul_d' => [
             'titulo' => 'Drop ruletas (rul_d)',
             'origen' => 'wigos',
-            'formula' => 'BillRul + VentasRuletas',
-            'explicacion' => 'Drop de ruletas electrónicas: billetes del SP drop + tickets de venta TerminalType=2 (turno M).',
-            'grupos_wigos' => ['drop', 'tickets_venta'],
+            'formula' => FlashCajaDropWinFormulaSupport::RUL_D,
+            'explicacion' => 'Drop de ruletas electrónicas: solo billetes del SP drop (turno M). No entran tickets de venta.',
+            'grupos_wigos' => ['drop'],
         ],
         'rul_r' => [
             'titulo' => 'Win ruletas (rul_r)',
             'origen' => 'wigos',
-            'formula' => 'BillRul + VentasRuletas − PagosRuletas',
-            'explicacion' => 'Win financiero de ruletas: drop menos pagos de tickets de ruleta.',
-            'grupos_wigos' => ['drop', 'tickets_venta', 'tickets_pago'],
+            'formula' => FlashCajaDropWinFormulaSupport::RUL_R,
+            'explicacion' => 'Win financiero de ruletas: bill menos pagos de tickets de ruleta. No entran tickets de venta.',
+            'grupos_wigos' => ['drop', 'tickets_pago'],
         ],
         'rul_coin_in' => [
             'titulo' => 'Coin in ruletas',
@@ -117,8 +117,8 @@ final class FlashCajaOrigenTotalSupport
         'ayb' => [
             'titulo' => 'AyB (food & beverage)',
             'origen' => 'erp',
-            'formula' => 'Neto gastronomía ERP del día (facturas − NC)',
-            'explicacion' => 'No viene de Wigos. Se calcula desde ventas de gastronomía del ERP para la empresa/fecha.',
+            'formula' => 'Neto gastronomía ERP del día (facturas − NC), incluye CAEA de cierre Waitry',
+            'explicacion' => 'No viene de Wigos. Se calcula desde ventas de gastronomía del ERP para la empresa/fecha, incluido el CAEA del proceso de cierre Waitry (CIERRE-JORNADA-WAITRY). Si el flash se armó antes de ese CAEA, hay que recalcular AyB.',
             'grupos_wigos' => [],
         ],
         'estac' => [
@@ -217,7 +217,7 @@ final class FlashCajaOrigenTotalSupport
                     'params' => null,
                 ];
             }
-            // Impuestos turno C como sección extra para slot_d / slot_r.
+            // Impuestos / venta fichas turno C como sección extra para slot_d / slot_r.
             foreach (FlashCajaOrigenErpDetalleSupport::secciones($campo, $empresaId, $fechaSql, $calculado) as $extra) {
                 $secciones[] = $extra;
             }
@@ -293,35 +293,29 @@ final class FlashCajaOrigenTotalSupport
     {
         $g = static fn (string $k): float => round((float) ($comp[$k] ?? 0), 2);
         $impDrop = round((float) ($imp['impuesto_drop'] ?? 0), 2);
-        $impVenta = round((float) ($imp['impuesto_venta'] ?? 0), 2);
+        $ventaFicha = round((float) ($imp['venta_ficha'] ?? 0), 2);
 
         return match ($campo) {
             'slot_d' => [
                 self::linea('Bill slots (bruto)', $g('bill_slots'), '+'),
-                self::linea('Ventas slots (tickets)', $g('ventas_slots'), '+'),
-                self::linea('Ventas caja (tickets)', $g('ventas_caja'), '+'),
+                self::linea('Venta de fichas (slots)', $ventaFicha, '+'),
                 self::linea('QR neto', $g('monto_neto_qr'), '+'),
                 self::linea('Impuesto drop (turno C)', -$impDrop, '−'),
-                self::linea('Impuesto venta (turno C)', -$impVenta, '−'),
             ],
             'slot_r' => [
                 self::linea('Bill slots (bruto)', $g('bill_slots'), '+'),
-                self::linea('Ventas slots (tickets)', $g('ventas_slots'), '+'),
-                self::linea('Ventas caja (tickets)', $g('ventas_caja'), '+'),
+                self::linea('Venta de fichas (slots)', $ventaFicha, '+'),
                 self::linea('QR neto', $g('monto_neto_qr'), '+'),
                 self::linea('Pagos slots (tickets)', -$g('pagos_slots'), '−'),
                 self::linea('Pagos caja (tickets)', -$g('pagos_caja'), '−'),
                 self::linea('Pagos manuales (M+T+N)', -$g('pagos_manuales'), '−'),
                 self::linea('Impuesto drop (turno C)', -$impDrop, '−'),
-                self::linea('Impuesto venta (turno C)', -$impVenta, '−'),
             ],
             'rul_d' => [
                 self::linea('Bill ruletas (bruto)', $g('bill_rul'), '+'),
-                self::linea('Ventas ruletas (tickets)', $g('ventas_ruletas'), '+'),
             ],
             'rul_r' => [
                 self::linea('Bill ruletas (bruto)', $g('bill_rul'), '+'),
-                self::linea('Ventas ruletas (tickets)', $g('ventas_ruletas'), '+'),
                 self::linea('Pagos ruletas (tickets)', -$g('pagos_ruletas'), '−'),
             ],
             'soft_count' => [

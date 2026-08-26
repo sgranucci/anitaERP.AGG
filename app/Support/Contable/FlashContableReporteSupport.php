@@ -9,7 +9,7 @@ use Illuminate\Support\Collection;
 
 /**
  * Flash unificado Contaduría + Impuestos: recorte diario del flash principal,
- * empresas en columnas (slots/ruletas, win, bingo, F&B, parking y tilde de cerrado).
+ * empresas en columnas (slots/ruletas, win, bingo, F&B, parking, vending y tilde de cerrado).
  */
 final class FlashContableReporteSupport
 {
@@ -27,6 +27,7 @@ final class FlashContableReporteSupport
         'net_win_bingo',
         'ventas_ayb',
         'ventas_parking',
+        'ventas_vending',
         'flash_cerrado',
     ];
 
@@ -52,6 +53,7 @@ final class FlashContableReporteSupport
         'net_win_bingo' => 'Net Win Bingo',
         'ventas_ayb' => 'Ventas F&B',
         'ventas_parking' => 'Ventas Parking',
+        'ventas_vending' => 'Ventas Vending',
         'flash_cerrado' => 'Cerrado',
     ];
 
@@ -173,6 +175,7 @@ final class FlashContableReporteSupport
             'net_win_bingo' => (float) ($m['bingo_win'] ?? 0),
             'ventas_ayb' => (float) ($m['ayb'] ?? 0),
             'ventas_parking' => (float) ($m['estac'] ?? 0),
+            'ventas_vending' => (float) ($m['vending'] ?? 0),
             'flash_cerrado' => (bool) ($flash->validado ?? false),
             'tiene_flash' => true,
         ];
@@ -196,6 +199,7 @@ final class FlashContableReporteSupport
             'net_win_bingo' => 0.0,
             'ventas_ayb' => 0.0,
             'ventas_parking' => 0.0,
+            'ventas_vending' => 0.0,
             'flash_cerrado' => false,
             'tiene_flash' => false,
         ];

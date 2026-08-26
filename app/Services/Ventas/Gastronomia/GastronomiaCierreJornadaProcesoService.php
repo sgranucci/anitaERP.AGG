@@ -21,6 +21,7 @@ use App\Support\Ventas\Gastronomia\CierreJornadaProcesoFacturaRecuperacionSuppor
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoJornadaSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoRedistribucionSupport;
 use App\Support\Ventas\GastronomiaCuentacajaTotem;
+use App\Services\Caja\Flash\FlashCajaAybRecalculoService;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryAnalyticsOrdenesService;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService;
 use App\Support\Ventas\Gastronomia\VentaGastronomiaEmisionWaitrySupport;
@@ -198,6 +199,7 @@ final class GastronomiaCierreJornadaProcesoService
         // Manual: emitir ≠ asientos. Rendgastro cuelga de las ventas emitidas.
         // Automático sigue grabando asientos en su propio paso.
         $resultado = $this->completarRendgastroTrasEmision($jornadaId, $resultado);
+        $resultado = $this->recalcularFlashAybTrasCierreWaitry($jornada, $resultado);
 
         Log::info('cierre_jornada_waitry.proceso.emitir.fin', [
             'jornada_id' => $jornadaId,
@@ -208,6 +210,7 @@ final class GastronomiaCierreJornadaProcesoService
             'rendicion_anita_ok' => (bool) (($resultado['rendicion_anita']['ok'] ?? false)
                 || (($resultado['jornada_proceso']['rendicion_anita_grabada'] ?? false))),
             'rendicion_anita_error' => $resultado['rendicion_anita_error'] ?? null,
+            'flash_ayb_estado' => $resultado['flash_ayb']['estado'] ?? null,
         ]);
 
         return $resultado;
@@ -292,6 +295,48 @@ final class GastronomiaCierreJornadaProcesoService
             ->where('jornada_gastronomia_id', $jornadaId)
             ->first();
         $resultadoEmision['jornada_proceso'] = CierreJornadaProcesoJornadaSupport::contexto($jornada, $snapshot);
+
+        return $resultadoEmision;
+    }
+
+    /**
+     * Si tesorería ya armó el flash del día, completa AyB con el CAEA recién emitido.
+     *
+     * @param  array<string, mixed>  $resultadoEmision
+     * @return array<string, mixed>
+     */
+    private function recalcularFlashAybTrasCierreWaitry(JornadaGastronomia $jornada, array $resultadoEmision): array
+    {
+        if (! ($resultadoEmision['ok'] ?? false)) {
+            return $resultadoEmision;
+        }
+
+        $fecha = $jornada->fecha_jornada?->format('Y-m-d') ?? '';
+        if ($fecha === '') {
+            return $resultadoEmision;
+        }
+
+        try {
+            $flashAyb = app(FlashCajaAybRecalculoService::class)
+                ->recalcularDesdeJornadaWaitry((int) $jornada->empresa_id, $fecha);
+            $resultadoEmision['flash_ayb'] = $flashAyb;
+            $msgFlash = trim((string) ($flashAyb['mensaje'] ?? ''));
+            if ($msgFlash !== '' && ($flashAyb['estado'] ?? '') === FlashCajaAybRecalculoService::ESTADO_ACTUALIZADO) {
+                $base = trim((string) ($resultadoEmision['mensaje'] ?? ''));
+                $resultadoEmision['mensaje'] = $base === '' ? $msgFlash : ($base.' '.$msgFlash);
+            }
+        } catch (Throwable $e) {
+            Log::warning('cierre_jornada_waitry.proceso.flash_ayb.fallo', [
+                'jornada_id' => (int) $jornada->id,
+                'empresa_id' => (int) $jornada->empresa_id,
+                'fecha_jornada' => $fecha,
+                'error' => $e->getMessage(),
+            ]);
+            $resultadoEmision['flash_ayb'] = [
+                'estado' => FlashCajaAybRecalculoService::ESTADO_ERROR,
+                'mensaje' => $e->getMessage(),
+            ];
+        }
 
         return $resultadoEmision;
     }
