@@ -20,8 +20,9 @@ Importar recuento {{ $recuento->codigo }}
                 @csrf
                 <div class="card-body">
                     <p class="text-muted">
-                        Suba un archivo Excel/CSV con encabezados en la primera fila.
-                        Indique el nombre de cada columna según su planilla (no distingue mayúsculas; espacios se convierten en guión bajo).
+                        Suba un archivo Excel/CSV. El sistema detecta la fila de encabezados
+                        (aunque haya un título arriba) y reconoce alias como
+                        <code>sku</code>/<code>codigo</code> y <code>cantidad_contada</code>/<code>contado</code>.
                     </p>
                     <div class="form-group">
                         <label class="requerido">Archivo</label>

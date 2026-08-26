@@ -85,8 +85,9 @@ Recuento {{ $recuento->codigo }}
 @if (! $soloLectura)
     @include('stock.recuento.partials.modal_importar_excel', [
         'recuento' => $recuento,
-        'modoPreview' => false,
-        'importUrl' => route('importar_recuento', ['id' => $recuento->id]),
+        'modoPreview' => true,
+        'importUrl' => route('importar_recuento_preview'),
+        'previewUrl' => route('importar_recuento_preview'),
     ])
 @endif
 @endsection

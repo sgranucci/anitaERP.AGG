@@ -24,6 +24,7 @@ use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
 use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
 use App\Support\Stock\ArticuloStockColorTalleSupport;
 use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
+use App\Support\Stock\RecuentoImportColumnasSupport;
 use App\Support\Stock\RecuentoModoCierreSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use InvalidArgumentException;
@@ -530,44 +531,86 @@ class RecuentoService
     }
 
     /**
-     * @param  array<int, array{sku:string, cantidad_contada:float, detalle?:string, color?:string|null, talle?:string|null}>  $filas
+     * @param  array<int, array{sku?:string, cantidad_contada?:float, detalle?:string|null, color?:string|null, talle?:string|null, fila_excel?:int}>  $filas
+     * @return array{
+     *     lineas: list<array<string, mixed>>,
+     *     evaluaciones: list<array<string, mixed>>,
+     *     resumen: array{total_filas_datos: int, importables: int, omitidas: int},
+     *     advertencias: list<string>
+     * }
      */
-    public function lineasDesdeImportacion(int $depositoId, array $filas): array
+    public function evaluarFilasImportacion(?int $depositoId, array $filas): array
     {
-        $this->resolverDeposito($depositoId);
+        if ($depositoId !== null && $depositoId > 0) {
+            $this->resolverDeposito($depositoId);
+        }
+
         $lineas = [];
+        $evaluaciones = [];
         $clavesVistas = [];
         $articulosId = [];
         $coloresId = [];
         $tallesId = [];
+        $advertencias = [];
 
-        foreach ($filas as $fila) {
-            $sku = trim((string) ($fila['sku'] ?? ''));
+        foreach ($filas as $idx => $fila) {
+            $filaExcel = (int) ($fila['fila_excel'] ?? ($idx + 2));
+            $sku = RecuentoImportColumnasSupport::normalizarSkuCelda($fila['sku'] ?? '');
+            $cantidad = RecuentoImportColumnasSupport::normalizarCantidad($fila['cantidad_contada'] ?? 0);
+            $colorTexto = RecuentoImportColumnasSupport::esValorVacioColorTalle($fila['color'] ?? null)
+                ? ''
+                : trim((string) ($fila['color'] ?? ''));
+            $talleTexto = RecuentoImportColumnasSupport::esValorVacioColorTalle($fila['talle'] ?? null)
+                ? ''
+                : trim((string) ($fila['talle'] ?? ''));
+
+            $base = [
+                'fila_excel' => $filaExcel,
+                'sku' => $sku,
+                'cantidad_contada' => $cantidad ?? 0.0,
+                'cantidad_texto' => $cantidad === null ? '' : (string) $cantidad,
+                'color' => $colorTexto,
+                'talle' => $talleTexto,
+                'detalle' => trim((string) ($fila['detalle'] ?? '')),
+                'articulo_descripcion' => '',
+            ];
+
             if ($sku === '') {
+                $evaluaciones[] = $base + ['estado' => 'omitido', 'mensaje' => 'SKU vacío'];
                 continue;
             }
-            $articulo = ArticuloSeleccionOperativaSupport::aplicarSoloActivosTablaArticulo(
-                Articulo::query()
-                    ->with('unidadesdemedidas:id,abreviatura,nombre')
-                    ->where('sku', $sku)
-            )->first();
+
+            $articulo = $this->buscarArticuloImport($sku);
             if (! $articulo) {
-                throw new \RuntimeException("Artículo no encontrado o inactivo con SKU: {$sku}");
+                $evaluaciones[] = $base + ['estado' => 'omitido', 'mensaje' => 'Artículo no encontrado o inactivo'];
+                continue;
             }
 
-            $colorId = $this->resolverColorImport($fila['color'] ?? null);
-            $talleId = $this->resolverTalleImport($fila['talle'] ?? null);
-            $maneja = (bool) ($articulo->maneja_stock_color_talle ?? false);
+            $base['sku'] = (string) $articulo->sku;
+            $base['articulo_descripcion'] = (string) ($articulo->descripcion ?? '');
 
+            try {
+                $colorId = $this->resolverColorImport($colorTexto !== '' ? $colorTexto : null);
+                $talleId = $this->resolverTalleImport($talleTexto !== '' ? $talleTexto : null);
+            } catch (\RuntimeException $e) {
+                $evaluaciones[] = $base + ['estado' => 'omitido', 'mensaje' => $e->getMessage()];
+                continue;
+            }
+
+            $maneja = (bool) ($articulo->maneja_stock_color_talle ?? false);
             if ($maneja && ($colorId <= 0 || $talleId <= 0)) {
-                throw new \RuntimeException(
-                    "El artículo «{$sku}» maneja color/talle: indique ambas columnas en el archivo."
-                );
+                $evaluaciones[] = $base + [
+                    'estado' => 'omitido',
+                    'mensaje' => 'Maneja color/talle: indique ambas columnas',
+                ];
+                continue;
             }
             if (! $maneja && ($colorId > 0 || $talleId > 0)) {
-                throw new \RuntimeException(
-                    "El artículo «{$sku}» no maneja color/talle: no informe esas columnas."
-                );
+                $evaluaciones[] = $base + [
+                    'estado' => 'omitido',
+                    'mensaje' => 'No maneja color/talle: no informe esas columnas',
+                ];
+                continue;
             }
 
             [$colorKey, $talleKey] = ArticuloStockColorTalleSupport::claveSaldo(
@@ -576,18 +619,25 @@ class RecuentoService
             );
             $clave = $this->claveVariante((int) $articulo->id, $colorKey, $talleKey);
             if (isset($clavesVistas[$clave])) {
-                throw new \RuntimeException(
-                    "La variante de «{$sku}» está repetida en el archivo importado. "
-                    .'Cada combinación artículo/color/talle debe figurar una sola vez.'
-                );
+                $evaluaciones[] = $base + [
+                    'estado' => 'omitido',
+                    'mensaje' => 'Variante repetida en el archivo',
+                ];
+                continue;
             }
             $clavesVistas[$clave] = true;
 
-            $articulosId[] = (int) $articulo->id;
-            $coloresId[] = $colorKey;
-            $tallesId[] = $talleKey;
+            $saldo = 0.0;
+            if ($depositoId !== null && $depositoId > 0) {
+                $saldo = $this->saldoRepository->saldoVariante(
+                    (int) $articulo->id,
+                    $depositoId,
+                    $colorKey > 0 ? $colorKey : null,
+                    $talleKey > 0 ? $talleKey : null
+                );
+            }
 
-            $lineas[] = [
+            $linea = [
                 'articulo_id' => $articulo->id,
                 'sku' => $articulo->sku,
                 'descripcion' => $articulo->descripcion,
@@ -597,33 +647,108 @@ class RecuentoService
                 'color_id' => $colorKey,
                 'talle_id' => $talleKey,
                 'maneja_stock_color_talle' => $maneja,
-                'saldo_sistema' => $this->saldoRepository->saldoVariante(
-                    (int) $articulo->id,
-                    $depositoId,
-                    $colorKey > 0 ? $colorKey : null,
-                    $talleKey > 0 ? $talleKey : null
-                ),
-                'cantidad_contada' => (float) ($fila['cantidad_contada'] ?? 0),
+                'saldo_sistema' => $saldo,
+                'cantidad_contada' => $cantidad ?? 0.0,
+            ];
+
+            $articulosId[] = (int) $articulo->id;
+            $coloresId[] = $colorKey;
+            $tallesId[] = $talleKey;
+            $lineas[] = $linea;
+            $evaluaciones[] = $base + [
+                'estado' => 'ok',
+                'mensaje' => 'Se importará',
+                'linea' => $linea,
             ];
         }
 
-        if ($lineas === []) {
-            throw new \RuntimeException('No se importó ninguna línea válida.');
+        if ($lineas !== []) {
+            try {
+                MovimientoStockColorTalleExclusividadSupport::validarLineas($articulosId, $coloresId, $tallesId);
+            } catch (InvalidArgumentException $e) {
+                $advertencias[] = $e->getMessage();
+                foreach ($evaluaciones as &$ev) {
+                    if (($ev['estado'] ?? '') === 'ok') {
+                        $ev['estado'] = 'omitido';
+                        $ev['mensaje'] = $e->getMessage();
+                    }
+                }
+                unset($ev);
+                $lineas = [];
+            }
         }
 
-        try {
-            MovimientoStockColorTalleExclusividadSupport::validarLineas($articulosId, $coloresId, $tallesId);
-        } catch (InvalidArgumentException $e) {
-            throw new \RuntimeException($e->getMessage(), 0, $e);
+        $importables = count($lineas);
+        $total = count($evaluaciones);
+
+        return [
+            'lineas' => $lineas,
+            'evaluaciones' => $evaluaciones,
+            'resumen' => [
+                'total_filas_datos' => $total,
+                'importables' => $importables,
+                'omitidas' => max(0, $total - $importables),
+            ],
+            'advertencias' => $advertencias,
+        ];
+    }
+
+    /**
+     * @param  array<int, array{sku:string, cantidad_contada:float, detalle?:string, color?:string|null, talle?:string|null}>  $filas
+     * @return array<int, array<string, mixed>>
+     */
+    public function lineasDesdeImportacion(int $depositoId, array $filas): array
+    {
+        $resultado = $this->evaluarFilasImportacion($depositoId, $filas);
+        if ($resultado['lineas'] === []) {
+            $detalle = [];
+            foreach ($resultado['evaluaciones'] as $ev) {
+                if (($ev['estado'] ?? '') !== 'ok' && ($ev['mensaje'] ?? '') !== '') {
+                    $ref = trim((string) ($ev['sku'] ?? ''));
+                    $detalle[] = ($ref !== '' ? $ref.': ' : '').$ev['mensaje'];
+                    if (count($detalle) >= 5) {
+                        break;
+                    }
+                }
+            }
+            $extra = $detalle !== [] ? ' '.implode(' · ', $detalle) : '';
+            throw new \RuntimeException('No se importó ninguna línea válida.'.$extra);
         }
 
-        return $lineas;
+        return $resultado['lineas'];
+    }
+
+    private function buscarArticuloImport(string $sku): ?Articulo
+    {
+        $candidatos = RecuentoImportColumnasSupport::candidatosSku($sku);
+        if ($candidatos === []) {
+            return null;
+        }
+
+        $encontrados = ArticuloSeleccionOperativaSupport::aplicarSoloActivosTablaArticulo(
+            Articulo::query()
+                ->with('unidadesdemedidas:id,abreviatura,nombre')
+                ->whereIn('sku', $candidatos)
+        )->get();
+
+        if ($encontrados->isEmpty()) {
+            return null;
+        }
+
+        foreach ($candidatos as $candidato) {
+            $hit = $encontrados->firstWhere('sku', $candidato);
+            if ($hit) {
+                return $hit;
+            }
+        }
+
+        return $encontrados->first();
     }
 
     private function resolverColorImport(?string $valor): int
     {
         $valor = trim((string) $valor);
-        if ($valor === '') {
+        if ($valor === '' || RecuentoImportColumnasSupport::esValorVacioColorTalle($valor)) {
             return 0;
         }
         if (ctype_digit($valor)) {
@@ -644,7 +769,7 @@ class RecuentoService
     private function resolverTalleImport(?string $valor): int
     {
         $valor = trim((string) $valor);
-        if ($valor === '') {
+        if ($valor === '' || RecuentoImportColumnasSupport::esValorVacioColorTalle($valor)) {
             return 0;
         }
         if (ctype_digit($valor)) {

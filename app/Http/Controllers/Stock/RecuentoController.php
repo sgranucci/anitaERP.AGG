@@ -6,7 +6,6 @@ use App\Exports\Stock\RecuentoDetalleExport;
 use App\Exports\Stock\RecuentoExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionRecuento;
-use App\Imports\Stock\RecuentoImport;
 use App\Models\Stock\Color;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Recuento;
@@ -14,6 +13,7 @@ use App\Models\Stock\Talle;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Repositories\Stock\RecuentoRepositoryInterface;
+use App\Services\Stock\RecuentoImportPreviewService;
 use App\Services\Stock\RecuentoService;
 use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
 use App\Support\Stock\MovimientosArticuloDepositoSupport;
@@ -23,8 +23,7 @@ use App\Support\Stock\RecuentoModoCierreSupport;
 use App\Support\Stock\RecuentoVisibilidadSupport;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Maatwebsite\Excel\Facades\Excel;
-use Maatwebsite\Excel\HeadingRowImport;
+use Illuminate\Support\Facades\Log;
 
 class RecuentoController extends Controller
 {
@@ -33,6 +32,7 @@ class RecuentoController extends Controller
         private readonly RecuentoRepositoryInterface $recuentoRepository,
         private readonly DepmaeRepositoryInterface $depmaeRepository,
         private readonly EmpresaRepositoryInterface $empresaRepository,
+        private readonly RecuentoImportPreviewService $importPreviewService,
     ) {}
 
     public function index(Request $request)
@@ -341,36 +341,33 @@ class RecuentoController extends Controller
     public function importarPreview(Request $request)
     {
         can('importar-recuento');
-        $request->validate([
-            'deposito_id' => 'required|integer|min:1',
-            'archivo' => 'required|file|mimes:xlsx,xls,csv|max:10240',
-            'col_sku' => 'required|string|max:100',
-            'col_cantidad' => 'required|string|max:100',
-            'col_detalle' => 'nullable|string|max:100',
-            'col_color' => 'nullable|string|max:100',
-            'col_talle' => 'nullable|string|max:100',
-        ]);
+        $request->validate($this->reglasArchivoImportacion([
+            'deposito_id' => 'nullable|integer|min:1',
+        ]));
 
         try {
-            $import = new RecuentoImport(
-                $request->input('col_sku'),
-                $request->input('col_cantidad'),
+            $preview = $this->importPreviewService->previsualizar(
+                $request->file('archivo'),
+                $request->filled('deposito_id') ? (int) $request->input('deposito_id') : null,
+                (string) $request->input('col_sku', 'sku'),
+                (string) $request->input('col_cantidad', 'cantidad_contada'),
                 $request->input('col_detalle'),
                 $request->input('col_color'),
-                $request->input('col_talle')
+                $request->input('col_talle'),
+                $request->filled('fila_encabezado') ? (int) $request->input('fila_encabezado') : null,
+                $request->filled('hoja_indice') ? (int) $request->input('hoja_indice') : null
             );
-            Excel::import($import, $request->file('archivo'));
-            $lineas = $this->service->lineasDesdeImportacion((int) $request->input('deposito_id'), $import->filas());
-            $mensaje = count($lineas).' líneas importadas.';
 
-            return response()->json([
-                'ok' => true,
-                'preview' => true,
-                'mensaje' => $mensaje,
-                'lineas' => $this->lineasArrayParaFormulario($lineas),
-            ]);
+            $preview['lineas'] = $this->lineasArrayParaFormulario($preview['lineas'] ?? []);
+
+            return response()->json($preview);
         } catch (\Throwable $e) {
-            return response()->json(['message' => 'Error al importar: '.$e->getMessage()], 422);
+            Log::warning('recuento.importar_excel.preview_fallo', [
+                'mensaje' => $e->getMessage(),
+                'archivo' => $request->file('archivo')?->getClientOriginalName(),
+            ]);
+
+            return response()->json(['message' => 'Error al analizar el Excel: '.$e->getMessage()], 422);
         }
     }
 
@@ -389,14 +386,7 @@ class RecuentoController extends Controller
     public function importar(Request $request, int $id)
     {
         can('importar-recuento');
-        $request->validate([
-            'archivo' => 'required|file|mimes:xlsx,xls,csv|max:10240',
-            'col_sku' => 'required|string|max:100',
-            'col_cantidad' => 'required|string|max:100',
-            'col_detalle' => 'nullable|string|max:100',
-            'col_color' => 'nullable|string|max:100',
-            'col_talle' => 'nullable|string|max:100',
-        ]);
+        $request->validate($this->reglasArchivoImportacion());
 
         $recuento = $this->service->buscar($id);
         if (! $recuento->esEditable()) {
@@ -409,18 +399,38 @@ class RecuentoController extends Controller
         }
 
         try {
-            $import = new RecuentoImport(
-                $request->input('col_sku'),
-                $request->input('col_cantidad'),
+            $preview = $this->importPreviewService->previsualizar(
+                $request->file('archivo'),
+                (int) $recuento->deposito_id,
+                (string) $request->input('col_sku', 'sku'),
+                (string) $request->input('col_cantidad', 'cantidad_contada'),
                 $request->input('col_detalle'),
                 $request->input('col_color'),
-                $request->input('col_talle')
+                $request->input('col_talle'),
+                $request->filled('fila_encabezado') ? (int) $request->input('fila_encabezado') : null,
+                $request->filled('hoja_indice') ? (int) $request->input('hoja_indice') : null
             );
-            Excel::import($import, $request->file('archivo'));
-            $recuento = $this->service->importarLineas($id, $import->filas());
+
+            $lineasOk = $preview['lineas'] ?? [];
+            if ($lineasOk === []) {
+                throw new \RuntimeException($preview['mensaje'] ?? 'No se importó ninguna línea válida.');
+            }
+
+            $filasParaGrabar = array_map(static fn (array $ln) => [
+                'sku' => $ln['sku'] ?? '',
+                'cantidad_contada' => (float) ($ln['cantidad_contada'] ?? 0),
+                'detalle' => $ln['detalle'] ?? null,
+                'color' => ((int) ($ln['color_id'] ?? 0) > 0) ? (string) $ln['color_id'] : null,
+                'talle' => ((int) ($ln['talle_id'] ?? 0) > 0) ? (string) $ln['talle_id'] : null,
+            ], $lineasOk);
+
+            $recuento = $this->service->importarLineas($id, $filasParaGrabar);
             $recuento->load(['items.articulos', 'items.unidadmedida', 'items.color', 'items.talle']);
 
             $mensaje = $recuento->items->count().' líneas importadas.';
+            if ((int) ($preview['resumen']['omitidas'] ?? 0) > 0) {
+                $mensaje .= ' '.$preview['resumen']['omitidas'].' fila(s) omitida(s).';
+            }
             session()->flash('mensaje', $mensaje);
 
             if ($request->expectsJson()) {
@@ -428,9 +438,15 @@ class RecuentoController extends Controller
                     'ok' => true,
                     'mensaje' => $mensaje,
                     'lineas' => $this->lineasParaFormulario($recuento),
+                    'resumen' => $preview['resumen'] ?? null,
                 ]);
             }
         } catch (\Throwable $e) {
+            Log::warning('recuento.importar_excel.fallo', [
+                'recuento_id' => $id,
+                'mensaje' => $e->getMessage(),
+                'archivo' => $request->file('archivo')?->getClientOriginalName(),
+            ]);
             $mensaje = 'Error al importar: '.$e->getMessage();
             if ($request->expectsJson()) {
                 return response()->json(['message' => $mensaje], 422);
@@ -440,6 +456,34 @@ class RecuentoController extends Controller
         }
 
         return redirect('stock/recuento/'.$id.'/editar');
+    }
+
+    /**
+     * @param  array<string, mixed>  $extra
+     * @return array<string, mixed>
+     */
+    private function reglasArchivoImportacion(array $extra = []): array
+    {
+        return array_merge([
+            'archivo' => [
+                'required',
+                'file',
+                'max:10240',
+                function (string $attribute, mixed $value, \Closure $fail): void {
+                    $ext = strtolower((string) $value->getClientOriginalExtension());
+                    if (! in_array($ext, ['xlsx', 'xls', 'csv'], true)) {
+                        $fail('El archivo debe ser Excel (.xlsx, .xls) o CSV.');
+                    }
+                },
+            ],
+            'col_sku' => 'required|string|max:100',
+            'col_cantidad' => 'required|string|max:100',
+            'col_detalle' => 'nullable|string|max:100',
+            'col_color' => 'nullable|string|max:100',
+            'col_talle' => 'nullable|string|max:100',
+            'fila_encabezado' => 'nullable|integer|min:1|max:50',
+            'hoja_indice' => 'nullable|integer|min:1|max:50',
+        ], $extra);
     }
 
     /**

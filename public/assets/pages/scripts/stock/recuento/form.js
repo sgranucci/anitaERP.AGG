@@ -462,36 +462,193 @@
 
         const formImportExcel = document.getElementById('form-importar-recuento-excel');
         if (formImportExcel) {
-            formImportExcel.addEventListener('submit', function (e) {
-                e.preventDefault();
-                const errBox = document.getElementById('importar-recuento-excel-error');
-                const btnSubmit = document.getElementById('btn-importar-recuento-excel-submit');
-                const esPreview = formImportExcel.dataset.preview === '1';
-                const formData = new FormData(formImportExcel);
+            let previewTimer = null;
+            let previewAbort = null;
+            let ultimoPreview = null;
+            let ultimasHojas = null;
 
+            const errBox = document.getElementById('importar-recuento-excel-error');
+            const btnSubmit = document.getElementById('btn-importar-recuento-excel-submit');
+            const btnPreview = document.getElementById('btn-preview-recuento-excel');
+            const inputArchivo = document.getElementById('importar-recuento-archivo');
+            const previewUrl = formImportExcel.getAttribute('data-preview-url') || formImportExcel.action;
+            const $panelPreview = $('#panel-preview-import-recuento');
+            const $contenidoPreview = $('#preview-import-recuento-contenido');
+            const $estadoPreview = $('#preview-import-recuento-estado');
+            const $panelHoja = $('#panel-hoja-recuento-excel');
+            const $selectHoja = $('#importar-recuento-hoja-select');
+            const $hiddenHoja = $('#importar-recuento-hoja-indice');
+
+            function escHtml(texto) {
+                return $('<div/>').text(texto == null ? '' : String(texto)).html();
+            }
+
+            function mostrarErrorImport(msg) {
                 if (errBox) {
-                    errBox.classList.add('d-none');
-                    errBox.textContent = '';
+                    errBox.textContent = msg;
+                    errBox.classList.remove('d-none');
+                } else {
+                    alert(msg);
+                }
+            }
+
+            function limpiarErrorImport() {
+                if (!errBox) return;
+                errBox.classList.add('d-none');
+                errBox.textContent = '';
+            }
+
+            function archivoSeleccionado() {
+                return inputArchivo && inputArchivo.files && inputArchivo.files.length > 0;
+            }
+
+            function depositoImportId() {
+                const fijo = document.getElementById('importar-recuento-deposito-id');
+                if (fijo && parseInt(fijo.value, 10) > 0) {
+                    return parseInt(fijo.value, 10);
+                }
+                return depositoId();
+            }
+
+            function badgeColumna(col) {
+                if (!col) {
+                    return '<span class="badge badge-danger">No encontrada</span>';
+                }
+                if (col.encontrada) {
+                    return '<span class="badge badge-success">«' + escHtml(col.titulo) + '»</span>';
+                }
+                return '<span class="badge badge-danger">No encontrada' + (col.requerida ? ' (requerida)' : '') + '</span>';
+            }
+
+            function actualizarSelectorHojas(data) {
+                const hojas = (data && data.hojas && data.hojas.length) ? data.hojas : ultimasHojas;
+                if (!hojas || hojas.length <= 1) {
+                    $panelHoja.addClass('d-none');
+                    return;
+                }
+                ultimasHojas = hojas;
+                const seleccionada = parseInt((data && data.hoja_seleccionada) || $hiddenHoja.val() || 1, 10);
+                $selectHoja.empty();
+                hojas.forEach(function (hoja) {
+                    $selectHoja.append(
+                        $('<option></option>').val(hoja.indice).text(hoja.indice + ' — ' + hoja.nombre)
+                            .prop('selected', parseInt(hoja.indice, 10) === seleccionada)
+                    );
+                });
+                $hiddenHoja.val(String(seleccionada));
+                $('#importar-recuento-hoja-ayuda').text('Este archivo tiene ' + hojas.length + ' hojas.');
+                $panelHoja.removeClass('d-none');
+            }
+
+            function renderPreview(data) {
+                $panelPreview.show();
+                actualizarSelectorHojas(data);
+                ultimoPreview = data && data.resumen ? data : null;
+
+                if (!data || (data.mensaje && !data.resumen)) {
+                    $estadoPreview.removeClass().addClass('badge badge-danger').text('Error');
+                    $contenidoPreview.html('<p class="text-danger small mb-0">' + escHtml(data && data.mensaje ? data.mensaje : 'No se pudo analizar el archivo.') + '</p>');
+                    if (btnSubmit) btnSubmit.disabled = true;
+                    return;
                 }
 
-                if (esPreview) {
-                    const depId = depositoId();
-                    if (!depId) {
-                        const msg = 'Seleccione el depósito antes de importar desde Excel.';
-                        if (errBox) {
-                            errBox.textContent = msg;
-                            errBox.classList.remove('d-none');
-                        } else {
-                            alert(msg);
-                        }
-                        return;
+                if (data.ok) {
+                    $estadoPreview.removeClass().addClass('badge badge-success').text('Listo para cargar');
+                } else {
+                    $estadoPreview.removeClass().addClass('badge badge-warning').text('Revisar');
+                }
+
+                if (btnSubmit) {
+                    btnSubmit.disabled = !(data.ok && data.lineas && data.lineas.length && depositoImportId());
+                }
+
+                let html = '';
+                if (data.hoja_nombre) {
+                    html += '<p class="small mb-2">Hoja: <strong>' + escHtml(data.hoja_seleccionada) + ' — ' + escHtml(data.hoja_nombre) + '</strong></p>';
+                }
+                html += '<p class="small mb-2">Encabezado detectado en fila <strong>' + escHtml(data.fila_encabezado) + '</strong>';
+                if (data.fila_encabezado_automatica) {
+                    html += ' (automático)';
+                }
+                html += '.</p>';
+
+                if (data.columnas) {
+                    html += '<div class="row small mb-2">';
+                    html += '<div class="col-md-4"><strong>SKU</strong> (' + escHtml(data.columnas.sku.configurado) + '): ' + badgeColumna(data.columnas.sku) + '</div>';
+                    html += '<div class="col-md-4"><strong>Cantidad</strong> (' + escHtml(data.columnas.cantidad.configurado) + '): ' + badgeColumna(data.columnas.cantidad) + '</div>';
+                    html += '<div class="col-md-4"><strong>Detalle</strong> (' + escHtml(data.columnas.detalle.configurado) + '): ' + badgeColumna(data.columnas.detalle) + '</div>';
+                    html += '<div class="col-md-4"><strong>Color</strong> (' + escHtml(data.columnas.color.configurado) + '): ' + badgeColumna(data.columnas.color) + '</div>';
+                    html += '<div class="col-md-4"><strong>Talle</strong> (' + escHtml(data.columnas.talle.configurado) + '): ' + badgeColumna(data.columnas.talle) + '</div>';
+                    html += '</div>';
+                }
+
+                if (data.advertencias && data.advertencias.length) {
+                    html += '<div class="alert alert-warning py-2 small mb-2"><ul class="mb-0 pl-3">';
+                    data.advertencias.forEach(function (msg) {
+                        html += '<li>' + escHtml(msg) + '</li>';
+                    });
+                    html += '</ul></div>';
+                }
+
+                if (data.resumen) {
+                    html += '<p class="small mb-2">';
+                    html += 'Filas: <strong>' + data.resumen.total_filas_datos + '</strong> · ';
+                    html += 'Importables: <strong class="text-success">' + data.resumen.importables + '</strong> · ';
+                    html += 'Omitidas: <strong class="text-muted">' + data.resumen.omitidas + '</strong>';
+                    html += '</p>';
+                }
+
+                if (data.filas && data.filas.length) {
+                    html += '<div class="table-responsive"><table class="table table-sm table-bordered mb-0">';
+                    html += '<thead style="background-color:#85C1E9;color:#17202A;"><tr>';
+                    html += '<th>Fila</th><th>SKU</th><th>Artículo</th><th>Color</th><th>Talle</th><th class="text-right">Cantidad</th><th>Resultado</th>';
+                    html += '</tr></thead><tbody>';
+                    data.filas.forEach(function (fila) {
+                        const cls = fila.estado === 'ok' ? 'table-success' : '';
+                        html += '<tr class="' + cls + '">';
+                        html += '<td>' + escHtml(fila.fila_excel) + '</td>';
+                        html += '<td>' + escHtml(fila.sku) + '</td>';
+                        html += '<td><small>' + escHtml(fila.articulo_descripcion || fila.detalle || '—') + '</small></td>';
+                        html += '<td>' + escHtml(fila.color || '—') + '</td>';
+                        html += '<td>' + escHtml(fila.talle || '—') + '</td>';
+                        html += '<td class="text-right">' + escHtml(fila.cantidad_texto || fila.cantidad_contada || '') + '</td>';
+                        html += '<td><small>' + escHtml(fila.mensaje) + '</small></td>';
+                        html += '</tr>';
+                    });
+                    html += '</tbody></table></div>';
+                    if (data.hay_mas_filas) {
+                        html += '<p class="text-muted small mt-2 mb-0">Mostrando las primeras ' + data.filas.length + ' filas de datos.</p>';
                     }
-                    formData.set('deposito_id', String(depId));
                 }
 
-                if (btnSubmit) btnSubmit.disabled = true;
+                $contenidoPreview.html(html);
+            }
 
-                fetch(formImportExcel.action, {
+            function solicitarPreview() {
+                if (!archivoSeleccionado()) {
+                    return;
+                }
+                if (previewAbort) {
+                    previewAbort.abort();
+                }
+                previewAbort = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+
+                limpiarErrorImport();
+                $panelPreview.show();
+                $estadoPreview.removeClass().addClass('badge badge-secondary').text('Analizando…');
+                $contenidoPreview.html('<p class="text-muted small mb-0"><i class="fa fa-spinner fa-spin"></i> Leyendo archivo…</p>');
+                if (btnSubmit) btnSubmit.disabled = true;
+                ultimoPreview = null;
+
+                const formData = new FormData(formImportExcel);
+                const depId = depositoImportId();
+                if (depId) {
+                    formData.set('deposito_id', String(depId));
+                } else {
+                    formData.delete('deposito_id');
+                }
+
+                const fetchOpts = {
                     method: 'POST',
                     headers: {
                         'X-CSRF-TOKEN': csrf,
@@ -499,7 +656,12 @@
                         'Accept': 'application/json'
                     },
                     body: formData
-                })
+                };
+                if (previewAbort) {
+                    fetchOpts.signal = previewAbort.signal;
+                }
+
+                fetch(previewUrl, fetchOpts)
                     .then(function (r) {
                         return r.json().then(function (data) {
                             if (!r.ok) {
@@ -507,40 +669,104 @@
                                 if (!msg && data.errors) {
                                     msg = Object.values(data.errors).flat().join(' ');
                                 }
-                                throw { message: msg || 'Error al importar el archivo.' };
+                                throw { message: msg || 'Error al analizar el archivo.' };
                             }
                             return data;
                         });
                     })
                     .then(function (data) {
-                        repoblarLineas(data.lineas || []);
-                        formImportExcel.reset();
-                        $('#modal-importar-recuento-excel').modal('hide');
-                        if (data.preview) {
-                            const tipoInput = document.getElementById('recuento-tipo');
-                            if (tipoInput) tipoInput.value = 'IMPORTADO';
-                        }
-                        if (data.mensaje) {
-                            const alertBox = document.querySelector('.alert-success, .mensaje-flash');
-                            if (typeof window.mostrarMensaje === 'function') {
-                                window.mostrarMensaje(data.mensaje, 'success');
-                            } else {
-                                alert(data.mensaje);
-                            }
-                        }
+                        renderPreview(data);
                     })
                     .catch(function (err) {
-                        const msg = (err && (err.message || err.mensaje)) || 'Error al importar el archivo.';
-                        if (errBox) {
-                            errBox.textContent = msg;
-                            errBox.classList.remove('d-none');
-                        } else {
-                            alert(msg);
+                        if (err && err.name === 'AbortError') {
+                            return;
                         }
+                        const msg = (err && (err.message || err.mensaje)) || 'Error al analizar el archivo.';
+                        renderPreview({ mensaje: msg });
+                        mostrarErrorImport(msg);
                     })
                     .finally(function () {
-                        if (btnSubmit) btnSubmit.disabled = false;
+                        previewAbort = null;
                     });
+            }
+
+            function programarPreview() {
+                clearTimeout(previewTimer);
+                previewTimer = setTimeout(solicitarPreview, 450);
+            }
+
+            function aplicarPreviewAGrilla() {
+                if (!ultimoPreview || !ultimoPreview.lineas || !ultimoPreview.lineas.length) {
+                    mostrarErrorImport('No hay líneas importables. Revise la vista previa.');
+                    return;
+                }
+                const depId = depositoImportId();
+                if (!depId) {
+                    mostrarErrorImport('Seleccione el depósito antes de cargar las líneas.');
+                    return;
+                }
+                repoblarLineas(ultimoPreview.lineas);
+                const tipoInput = document.getElementById('recuento-tipo');
+                if (tipoInput) tipoInput.value = 'IMPORTADO';
+                if (typeof $ !== 'undefined') {
+                    $('#modal-importar-recuento-excel').modal('hide');
+                }
+                if (ultimoPreview.mensaje && typeof window.mostrarMensaje === 'function') {
+                    window.mostrarMensaje(ultimoPreview.mensaje, 'success');
+                } else if (ultimoPreview.mensaje) {
+                    alert(ultimoPreview.mensaje);
+                }
+            }
+
+            if (inputArchivo) {
+                inputArchivo.addEventListener('change', function () {
+                    const tiene = archivoSeleccionado();
+                    if (btnPreview) btnPreview.disabled = !tiene;
+                    if (tiene) {
+                        $hiddenHoja.val(1);
+                        ultimasHojas = null;
+                        $panelHoja.removeClass('d-none');
+                        $selectHoja.prop('disabled', true).html('<option value="">Detectando hojas…</option>');
+                        programarPreview();
+                    } else {
+                        $panelPreview.hide();
+                        $panelHoja.addClass('d-none');
+                        ultimoPreview = null;
+                        if (btnSubmit) btnSubmit.disabled = true;
+                    }
+                });
+            }
+
+            if (btnPreview) {
+                btnPreview.addEventListener('click', function () {
+                    solicitarPreview();
+                });
+            }
+
+            $selectHoja.on('change', function () {
+                $hiddenHoja.val($(this).val());
+                if (archivoSeleccionado()) {
+                    programarPreview();
+                }
+            });
+
+            $(formImportExcel).on('change input', 'input[name="col_sku"], input[name="col_cantidad"], input[name="col_detalle"], input[name="col_color"], input[name="col_talle"], #importar-recuento-fila-encabezado', function () {
+                if (archivoSeleccionado()) {
+                    programarPreview();
+                }
+            });
+
+            if (selDeposito) {
+                selDeposito.addEventListener('change', function () {
+                    if (archivoSeleccionado()) {
+                        programarPreview();
+                    }
+                });
+            }
+
+            formImportExcel.addEventListener('submit', function (e) {
+                e.preventDefault();
+                aplicarPreviewAGrilla();
             });
         }
 
