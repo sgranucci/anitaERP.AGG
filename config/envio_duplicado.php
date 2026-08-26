@@ -32,6 +32,13 @@ return [
         'ajax-sesion',
         'login',
         'logout',
+        // Reimprimir remito/factura es un POST idéntico a propósito.
+        'ventas/impresion-sesion/ejecutar',
+        '*/impresion-sesion/ejecutar',
+    ],
+
+    'rutas_nombre_excluidas' => [
+        'ejecutar_impresion_sesion',
     ],
 
 ];

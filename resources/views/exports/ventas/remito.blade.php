@@ -55,6 +55,12 @@
 		.remito-leyenda { font-size: 12px; margin-top: 8px; }
 		.remito-leyenda label { font-weight: bold; }
 		.remito-cai { font-size: 13px; text-align: right; margin-top: 8px; line-height: 1.35; }
+		.remito-valor-asegurado {
+			font-size: 13px;
+			text-align: right;
+			margin-top: 8px;
+			font-weight: bold;
+		}
 	</style>
 </head>
 <body>
@@ -71,15 +77,21 @@
 	$clienteRemitoDisplay = $codigoClienteRemito !== '' && $nombreClienteRemito !== ''
 		? $codigoClienteRemito.' - '.$nombreClienteRemito
 		: ($nombreClienteRemito !== '' ? $nombreClienteRemito : $codigoClienteRemito);
-	$numeroRemito = trim((string) ($remito->codigo ?? ''));
+	$numeroRemito = \App\Support\Ventas\VentaNumeracionEmpresaSupport::formatearPuntoVentaNumero(
+		(string) ($remito->puntoventas->codigo ?? ''),
+		(int) ($remito->numero ?? 0)
+	);
 	if ($numeroRemito === '') {
-		$numeroRemito = (string) ($remito->id ?? '');
+		$numeroRemito = trim((string) ($remito->codigo ?? $remito->id ?? ''));
 	}
 	$repartoNombre = trim((string) ($remito->transportes->nombre ?? ''));
 
 	$lineasPdf = \App\Support\Ventas\PedidoRemitoPdfLineasSupport::armar($remito->remito_articulos);
 	$filas = $lineasPdf['filas'];
 	$totales = $lineasPdf['totales'];
+	$valorAsegurado = \App\Support\Ventas\RemitoValorAseguradoSupport::desdeArticulos(
+		$remito->remito_articulos ?? []
+	);
 	if ($mostrarTotalesDivision) {
 		$coeficienteDivision = (float) config('facturacion.COEFICIENTE_EXTRA_REPARTO_101', 1.10);
 		foreach ($filas as $filaDiv) {
@@ -112,6 +124,8 @@
 					<strong>Fecha de Entrega: {{ date('d/m/Y', strtotime($remito->fechaentrega ?? '')) }}</strong><br>
 					<strong>Reparto: {{ $repartoNombre }}</strong><br>
 					<strong>Lugar de entrega: {{ $remito->lugarentrega ?? '' }}</strong>
+					<br>
+					<strong>Valor asegurado: {{ number_format($valorAsegurado, 2) }}</strong>
 					@if ($mostrarTotalesDivision)
 						<div class="remito-totales-division">
 							{{ number_format($totalNetoDivision, 2) }}<br>
@@ -167,6 +181,9 @@
 		@if (! $esUltima)
 			<p class="remito-continua">Continúa en la página siguiente…</p>
 		@else
+			<div class="remito-valor-asegurado">
+				Valor asegurado: {{ number_format($valorAsegurado, 2) }}
+			</div>
 			@if (trim((string) ($remito->leyenda ?? '')) !== '')
 				<div class="remito-leyenda">
 					<label>Leyendas</label>

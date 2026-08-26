@@ -157,6 +157,93 @@ function enfocarCantidadLineaArticulo($tr, unidadmedida) {
     return true;
 }
 
+function abreviaturaUnidadMedidaArticulo(data) {
+    if (!data) {
+        return '';
+    }
+    if (data.unidadesdemedidas && data.unidadesdemedidas.abreviatura) {
+        return String(data.unidadesdemedidas.abreviatura);
+    }
+    if (data.unidadmedida && typeof data.unidadmedida === 'object' && data.unidadmedida.abreviatura) {
+        return String(data.unidadmedida.abreviatura);
+    }
+    if (typeof data.unidadmedida === 'string') {
+        return data.unidadmedida;
+    }
+    return '';
+}
+
+/**
+ * Aplica la UM del artículo al renglón. Si el maestro no tiene UM (casi todo El Bierzo),
+ * no deja el select vacío: usa la abreviatura o KG / primera opción.
+ */
+function aplicarUnidadMedidaLineaArticulo($tr, unidadmedidaId, unidadmedidaAbrev) {
+    if (!$tr || !$tr.length) {
+        return '';
+    }
+    var $sel = $tr.find('.unidadmedida_id').first();
+    var id = parseInt(unidadmedidaId, 10) || 0;
+    var abr = (unidadmedidaAbrev || '').toString().trim();
+
+    function seleccionarPorValor(valor) {
+        if (!$sel.length || valor === '' || valor == null) {
+            return false;
+        }
+        var $opt = $sel.find('option').filter(function () {
+            return String($(this).val()) === String(valor);
+        });
+        if (!$opt.length) {
+            return false;
+        }
+        $sel.val(String($opt.first().val()));
+        return true;
+    }
+
+    function seleccionarPorAbreviatura(texto) {
+        var t = (texto || '').toString().trim().toUpperCase();
+        if (!$sel.length || !t) {
+            return false;
+        }
+        var $opt = $sel.find('option').filter(function () {
+            return $(this).text().trim().toUpperCase() === t;
+        }).first();
+        if (!$opt.length) {
+            return false;
+        }
+        $sel.val(String($opt.val()));
+        return true;
+    }
+
+    var ok = false;
+    if (id > 0) {
+        ok = seleccionarPorValor(id);
+    }
+    if (!ok) {
+        ok = seleccionarPorAbreviatura(abr);
+    }
+    if (!ok) {
+        ok = seleccionarPorAbreviatura('KG');
+    }
+    if (!ok && $sel.length && !$sel.val()) {
+        var $first = $sel.find('option').filter(function () {
+            return String($(this).val() || '') !== '';
+        }).first();
+        if ($first.length) {
+            $sel.val(String($first.val()));
+        }
+    }
+
+    var texto = '';
+    if ($sel.length) {
+        texto = ($sel.find('option:selected').text() || '').trim();
+    }
+    if (!texto) {
+        texto = abr;
+    }
+    $tr.find('.unidadmedida').val(texto);
+    return texto;
+}
+
 function consultaArticuloResolverListaprecio() {
     var modal = $('#consultaarticuloModal');
     var idModal = parseInt(modal.data('articuloListaprecioId'), 10);
@@ -483,12 +570,12 @@ function activa_eventos_consultaarticulo()
         var $ctxArt = (ptrarticulo_id && ptrarticulo_id.length)
             ? consultaArticuloContextoLinea(ptrarticulo_id)
             : $();
-        $ctxArt.find('.unidadmedida_id').val(unidadmedida_id);
+        var unidadmedidaAplicada = aplicarUnidadMedidaLineaArticulo($ctxArt, unidadmedida_id, unidadmedida);
 
         $(ptrarticulo_id).val(seleccion);
         $(ptrcodigoarticulo).val(codigo);
         $(ptrnombrearticulo).val(nombre);
-        $(ptrunidadmedida).val(unidadmedida);
+        $(ptrunidadmedida).val(unidadmedidaAplicada || unidadmedida);
         $(ptrcategoria_id).val(categoria_id);
         $(ptrsubcategoria_id).val(subcategoria_id);
 
@@ -530,7 +617,7 @@ function activa_eventos_consultaarticulo()
             if (esPosGastronomia) {
                 return;
             }
-            enfocarCantidadLineaArticulo($trElegida, unidadmedida);
+            enfocarCantidadLineaArticulo($trElegida, unidadmedidaAplicada || unidadmedida);
         });
         $('#consultaarticuloModal').modal('hide');
 
@@ -631,24 +718,21 @@ function activa_eventos_consultaarticulo()
 
             $tr.find('.articulo_id').val(data.id);
             $tr.find('.descripcionarticulo').val(data.descripcion);
-            $tr.find('.unidadmedida_id').val(data.unidadmedida_id);
             $tr.find('.categoria_id').val(data.categoria_id);
             $tr.find('.subcategoria_id').val(data.subcategoria_id);
             actualizarLinkEditarArticulo($tr, data.id);
 
-            $.each(data.unidadesdemedidas, function (index, value) {
-                if (index == 'abreviatura') {
-                    $tr.find('.unidadmedida').val(value);
-                }
-            });
+            let unidadmedida = aplicarUnidadMedidaLineaArticulo(
+                $tr,
+                data.unidadmedida_id,
+                abreviaturaUnidadMedidaArticulo(data)
+            );
 
             $("#articulo_id").val(data.id);
             $("#descripcionarticulo").val(data.descripcion);
             $("#nombrearticulo").val(data.descripcion);
-            $("#unidadmedida").val(data.unidadmedida);
+            $("#unidadmedida").val(unidadmedida);
             $("#codigoarticulo").val(data.sku);
-
-            let unidadmedida = $tr.find('.unidadmedida').val();
 
             if (window.asignaPrecio) {
                 asignaPrecio(ptrrenglon, data.id, '');
@@ -693,8 +777,11 @@ function activa_eventos_consultaarticulo()
     $('#codigoarticulo').on('change', function (event) {
         event.preventDefault();
 
-
         let sku = $(this).val();
+        let $ctxCodigo = consultaArticuloContextoLinea(this);
+        if (!$ctxCodigo.length) {
+            $ctxCodigo = $(this).closest('form');
+        }
         let url_res = urlLeerArticuloPorSku(sku);
 
         $.get(url_res, function(data){
@@ -703,7 +790,11 @@ function activa_eventos_consultaarticulo()
                 $("#articulo_id").val(data.id);
                 $("#descripcionarticulo").val(data.descripcion);
                 $("#nombrearticulo").val(data.descripcion);
-                $("#unidadmedida").val(data.unidadmedida);
+                $("#unidadmedida").val(aplicarUnidadMedidaLineaArticulo(
+                    $ctxCodigo,
+                    data.unidadmedida_id,
+                    abreviaturaUnidadMedidaArticulo(data)
+                ) || abreviaturaUnidadMedidaArticulo(data));
                 $("#codigoarticulo").val(data.sku);
 
                 if (window.rellenaAtributosArticuloOrdenProduccion) {

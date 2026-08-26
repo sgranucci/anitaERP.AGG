@@ -13,6 +13,7 @@ use App\Queries\Ventas\ClienteQueryInterface;
 use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Repositories\Ventas\TransporteRepositoryInterface;
 use App\Support\Ventas\PedidoReferenciaAnitaSupport;
+use App\Support\Ventas\VillafrancaFacturacionSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use Carbon\Carbon;
@@ -254,6 +255,8 @@ class PedidoRepository implements PedidoRepositoryInterface
 		$sucursalFactura = (int) ($request['sucursalfactura'] ?? 0) ?: $referenciaPedido['sucursalfactura'];
 		$numeroFactura = $referenciaPedido['numerofactura'];
 		$subzona = (int) ($request['subzona'] ?? 0);
+		// Reparto 101: penm_ref_* = FAC Villafranca (tipo/letra/sucursal emisión/número).
+		$referenciaVillafranca = VillafrancaFacturacionSupport::referenciaPendmaeDesdeRequest($request);
 
 		$data = array( 'tabla' => $this->tableAnita, 'acc' => 'insert',
             'campos' => ' 
@@ -297,10 +300,10 @@ class PedidoRepository implements PedidoRepositoryInterface
 				'".$letra."', 
 				'".$sucursal."', 
 				'".$nro."', 
-				'".' '."', 
-				'".' '."', 
-				'".'0'."', 
-				'".'0'."', 
+				'".$referenciaVillafranca['tipo']."', 
+				'".$referenciaVillafranca['letra']."', 
+				'".$referenciaVillafranca['sucursal']."', 
+				'".$referenciaVillafranca['nro']."', 
 				'".$fechapedido."', 
 				'".$fechaentrega."', 
 				'".$request['condicionventa_id']."', 

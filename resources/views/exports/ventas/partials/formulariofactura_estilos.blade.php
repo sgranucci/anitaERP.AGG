@@ -32,6 +32,12 @@
     .factura-continua { font-size: 11px; text-align: right; margin: 4px 0 0 0; }
     .factura-pie-bloque { page-break-inside: avoid; page-break-before: avoid; }
     .factura-pie-cai, .factura-pie-cae { font-size: 13px; text-align: right; white-space: nowrap; }
+    .factura-valor-asegurado {
+        font-size: 13px;
+        text-align: right;
+        margin: 8px 0 4px 0;
+        font-weight: bold;
+    }
     .factura-pie-leyendas { font-size: 9px; }
     .factura-leyenda { font-size: 11px; margin: 4px 0 0 0; }
     table.tabla-items-factura {

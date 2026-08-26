@@ -4,6 +4,7 @@ namespace App\Services\Ventas\CotElectronico;
 
 use App\Models\Ventas\CotRemitoEnvio;
 use App\Models\Ventas\CotSesionEnvio;
+use App\Support\Ventas\CotImporteRemitoSupport;
 use App\Support\Ventas\CuitFormatoValidacionSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -54,6 +55,24 @@ class CotElectronicoService
             ];
         }
 
+        $sinImporte = collect($remitos)
+            ->filter(fn ($fila) => empty($fila['importe_ok'])
+                || ! CotImporteRemitoSupport::esValidoParaCot((float) ($fila['importe'] ?? 0)))
+            ->map(fn ($fila) => (int) ($fila['numero_remito'] ?? 0))
+            ->filter(fn ($nro) => $nro > 0)
+            ->values()
+            ->all();
+        if ($sinImporte !== []) {
+            return [
+                'ok' => false,
+                'mensaje' => 'No se genera el COT: hay remitos sin importe de factura ni de remito '
+                    .'(neto/seguro/líneas). No se envía $1 de relleno. Remitos: '
+                    .implode(', ', $sinImporte)
+                    .'. Desmarcalos o volvé a consultar.',
+                'resultados' => [],
+            ];
+        }
+
         $empresa = $this->consultaService->resolverEmpresaEmisora();
         if (! $empresa) {
             return [
@@ -63,7 +82,15 @@ class CotElectronicoService
             ];
         }
 
-        $archivo = $this->archivoService->generarArchivo($fecha, $empresa, $remitos);
+        try {
+            $archivo = $this->archivoService->generarArchivo($fecha, $empresa, $remitos);
+        } catch (\RuntimeException $e) {
+            return [
+                'ok' => false,
+                'mensaje' => $e->getMessage(),
+                'resultados' => [],
+            ];
+        }
         if ((int) ($archivo['cantidad_remitos'] ?? 0) < 1) {
             return [
                 'ok' => false,

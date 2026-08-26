@@ -108,6 +108,29 @@
 		return cantidadItems > 1 && esCodigoSucursalVillafranca(codigo);
 	}
 
+	function extraerUrlImpresionSesion(data) {
+		var items = Array.isArray(data) ? data : [data];
+		for (var i = 0; i < items.length; i++) {
+			var item = items[i];
+			if (item && typeof item === 'object' && item.impresion_url) {
+				var url = String(item.impresion_url).trim();
+				if (url !== '') {
+					return url;
+				}
+			}
+		}
+		return null;
+	}
+
+	function irASesionImpresionORecargar(data) {
+		var url = extraerUrlImpresionSesion(data);
+		if (url) {
+			window.location = url;
+			return;
+		}
+		window.history.go(0);
+	}
+
 	function facturasGeneradasPedido(data) {
 		var items = Array.isArray(data) ? data : [data];
 		var facturas = [];
@@ -564,9 +587,33 @@
 		form.addEventListener('keydown', avanzarCampoPedidoConEnter, true);
 	}
 	
+	function etiquetaLugarEntrega(entrega) {
+		if (!entrega) {
+			return '';
+		}
+		if (entrega.etiqueta) {
+			return String(entrega.etiqueta);
+		}
+		var nombre = String(entrega.nombre || '').trim();
+		if (nombre) {
+			return nombre;
+		}
+		var domicilio = String(entrega.domicilio || '').trim();
+		if (domicilio) {
+			return domicilio;
+		}
+		return String(entrega.localidad || '').trim();
+	}
+
+	function entregasNombradasCliente(entregas) {
+		return (entregas || []).filter(function (entrega) {
+			return String(entrega.nombre || '').trim() !== '' || entrega.nombre_usable === true;
+		});
+	}
+
 	function actualizarEstadoRequeridoLugarEntrega() {
 		var obligatorio = $('#fl_cliente_tiene_entrega').val() === '1';
-		var seleccionado = !!$('#cliente_entrega_id').val();
+		var seleccionado = !!$('#cliente_entrega_id').val() || String($('#lugarentrega').val() || '').trim() !== '';
 
 		$('#label-lugarentrega').toggleClass('requerido', obligatorio);
 		$('#aviso-lugarentrega-obligatorio').toggle(obligatorio && !seleccionado);
@@ -582,18 +629,27 @@
 			});
 
 			window._entregasClienteActual = entr;
-			fl_tiene_entrega = entr.length > 0;
+			var nombradas = entregasNombradasCliente(entr);
+			fl_tiene_entrega = nombradas.length > 0;
 			$('#fl_cliente_tiene_entrega').val(fl_tiene_entrega ? '1' : '0');
 
 			if (!fl_tiene_entrega) {
-				$('#cliente_entrega_id').val('');
-				$('#entrega_nombre').val('');
 				$('#div-cambiar-lugarentrega').hide();
-				$('#lugarentrega').prop('readonly', false).attr('placeholder', '');
+				$('#lugarentrega').prop('readonly', false).attr('placeholder', 'Puede cargarlo aquí si el cliente no tiene lugares en el ABM');
 
-				$.get(carpetaBase+'/ventas/leercliente/'+cliente_id, function(clienteData){
-					$('#lugarentrega').val(clienteData.lugarentrega || '');
-				});
+				if (entr.length === 1) {
+					aplicarLugarEntregaCliente(entr[0]);
+					actualizarEstadoRequeridoLugarEntrega();
+					return;
+				}
+
+				if (!$('#lugarentrega').val()) {
+					$.get(carpetaBase+'/ventas/leercliente/'+cliente_id, function(clienteData){
+						if (!$('#lugarentrega').val()) {
+							$('#lugarentrega').val(clienteData.lugarentrega || '');
+						}
+					});
+				}
 				actualizarEstadoRequeridoLugarEntrega();
 				return;
 			}
@@ -643,10 +699,11 @@
 			return;
 		}
 
+		var etiqueta = etiquetaLugarEntrega(entrega);
 		$('#cliente_entrega_id').val(entrega.id);
 		$('#cliente_entrega_id_previa').val(entrega.id);
-		$('#entrega_nombre').val(entrega.nombre);
-		$('#lugarentrega').val(entrega.nombre).prop('readonly', true);
+		$('#entrega_nombre').val(etiqueta);
+		$('#lugarentrega').val(etiqueta).prop('readonly', $('#fl_cliente_tiene_entrega').val() === '1');
 		actualizarEstadoRequeridoLugarEntrega();
 	}
 
@@ -655,7 +712,7 @@
 
 		$.each(entregas, function(index, value){
 			html += '<tr>';
-			html += '<td class="nombre">'+ (value.nombre || '') +'</td>';
+			html += '<td class="nombre">'+ (etiquetaLugarEntrega(value) || '') +'</td>';
 			html += '<td class="domicilio">'+ (value.domicilio || '') +'</td>';
 			html += '<td class="localidad">'+ (value.localidad || '') +'</td>';
 			html += '<td class="provincia">'+ (value.provincia || '') +'</td>';
@@ -676,7 +733,8 @@
 	}
 
 	function validarLugarEntregaAntesGuardar() {
-		if ($('#fl_cliente_tiene_entrega').val() === '1' && !$('#cliente_entrega_id').val()) {
+		var tieneTexto = String($('#lugarentrega').val() || '').trim() !== '';
+		if ($('#fl_cliente_tiene_entrega').val() === '1' && !$('#cliente_entrega_id').val() && !tieneTexto) {
 			actualizarEstadoRequeridoLugarEntrega();
 			if (window.toastr) {
 				toastr.error('Debe seleccionar un lugar de entrega del cliente.', '', { timeOut: 8000, closeButton: true });
@@ -1316,6 +1374,33 @@
 				totPesada += parseFloat($(this).val());
 		});
 		$("#totalkilospesados").val(totPesada.toFixed(2));
+		calcularValorAsegurado();
+	}
+
+	function calcularValorAsegurado()
+	{
+		let totNeto = 0;
+		$("#tbody-tabla tr").each(function() {
+			let estado = String($(this).find(".estados").val() || "");
+			if (estado === "A") {
+				return;
+			}
+			let kilo = parseFloat($(this).find(".kilo").val());
+			let precio = parseFloat($(this).find(".precio").val());
+			if (isNaN(kilo) || isNaN(precio)) {
+				return;
+			}
+			totNeto += kilo * precio;
+		});
+		let pct = parseFloat($("#porcentaje_valor_asegurado").val());
+		if (isNaN(pct) || pct < 0) {
+			pct = 0;
+		}
+		if (pct > 100) {
+			pct = 100;
+		}
+		let valorAsegurado = totNeto * (1 - pct / 100);
+		$("#valoraseguradoremito").val(valorAsegurado.toFixed(2));
 	}
 
 	function sumaanulacionPares()
@@ -2216,7 +2301,7 @@
 					$('#facturarPedidoModal').modal('hide');
 					$('#estadoremito').val('Facturado');
 					TotalPedido();
-					window.history.go(0);
+					irASesionImpresionORecargar(data);
 				});
 			})
 			.fail(function (xhr) {
@@ -2792,6 +2877,7 @@
 		$.post(carpetaBase + '/ventas/remito/asignarkilos', {
 			transporte_id: transporteId,
 			porcentaje: porcentaje,
+			cliente_id: $('#cliente_id').val() || 0,
 			_token: token
 		}, function (data) {
 			if (data.error) {
@@ -2803,6 +2889,10 @@
 
 			if ($('#transporte_id').val() === '' || $('#transporte_id').val() === '0') {
 				$('#transporte_id').val(data.transporte_id);
+			}
+
+			if (data.fecha) {
+				$('#fecha').val(data.fecha);
 			}
 
 			$('#origen_remito').val('asignakilos');
@@ -2841,10 +2931,17 @@
 				TotalPedido();
 			}
 
+			var nItems = (data.items || []).length;
+			var nComp = data.comprobantes || 0;
+			var omitidos = data.omitidos || [];
+			var msg = 'Kilos de Villafranca (' + nItems + ' ítems, ' + nComp + ' comprobantes). Revise y guarde el remito.';
+			if (omitidos.length) {
+				msg += ' Sin artículo ERP: ' + omitidos.join(', ');
+			}
 			if (window.toastr) {
-				toastr.success('Kilos asignados (' + (data.items || []).length + ' ítems). Revise y guarde el remito.', 'F5');
+				toastr.success(msg, 'F5');
 			} else {
-				alert('Kilos asignados. Revise líneas y guarde el remito.');
+				alert(msg);
 			}
 		}).fail(function (xhr) {
 			var msg = (xhr.responseJSON && xhr.responseJSON.error) ? xhr.responseJSON.error : 'Error asignando kilos';

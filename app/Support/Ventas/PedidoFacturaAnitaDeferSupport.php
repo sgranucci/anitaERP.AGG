@@ -89,6 +89,9 @@ final class PedidoFacturaAnitaDeferSupport
         );
 
         app()->terminating(function () use ($ventaId, $anitaPendiente, $vencaePendiente): void {
+            if (function_exists('fastcgi_finish_request')) {
+                @fastcgi_finish_request();
+            }
             app(PedidoFacturaAnitaDeferEjecucionService::class)->ejecutar(
                 $ventaId,
                 $anitaPendiente,

@@ -7,6 +7,9 @@ Remitos de Clientes
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/remito/filtro.js') }}" type="text/javascript"></script>
+@if (\App\Services\Ventas\RemitoImportarDesdeAnitaService::esElBierzo() && can('ejecutar-importar-remito-anita', false))
+<script src="{{ asset('assets/pages/scripts/ventas/remito/importar_anita_index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/remito/importar_anita_index.js')) ?: time() }}" type="text/javascript"></script>
+@endif
 <script>
 function eliminarRemito(event) {
   if(!confirm("Desea eliminar el remito?")) {
@@ -42,6 +45,15 @@ function eliminarRemito(event) {
                         'nuevoRegistroUrl' => route('crear_remito', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-remitos',
                     ])
+                    @if (\App\Services\Ventas\RemitoImportarDesdeAnitaService::esElBierzo() && can('ejecutar-importar-remito-anita', false))
+                        <button type="button"
+                                class="btn btn-outline-light btn-sm ml-1"
+                                data-toggle="modal"
+                                data-target="#modalImportarRemitoAnita"
+                                title="Importar remitos Anita REM R 1 por fecha y repartos">
+                            <i class="fa fa-fw fa-download"></i> Importar Anita
+                        </button>
+                    @endif
                 </div>
             </div>
             <form method="get" action="{{ route('remito') }}" id="form-filtros-remito" class="mb-0">
@@ -172,4 +184,8 @@ function eliminarRemito(event) {
     </div>
 </div>
 {{ $remitos->appends($filtrosQuery ?? [])->links() }}
+
+@if (\App\Services\Ventas\RemitoImportarDesdeAnitaService::esElBierzo() && can('ejecutar-importar-remito-anita', false))
+    @include('ventas.remito.partials.modal_importar_anita')
+@endif
 @endsection

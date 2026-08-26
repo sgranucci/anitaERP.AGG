@@ -401,10 +401,7 @@ class Kernel extends ConsoleKernel
             ->when(fn () => (bool) config('caja.flash_reporte_agg.distribucion_habilitada', true));
 
         $limiteRegrabarAnitaPedido = max(1, (int) config('facturacion.ANITA_PEDIDO_REGRABAR_LIMITE', 20));
-        $schedule->command('ventas:regrabar-anita-pedido', [
-            '--ejecutar' => true,
-            '--limite' => $limiteRegrabarAnitaPedido,
-        ])
+        $schedule->command('ventas:regrabar-anita-pedido --ejecutar --limite='.$limiteRegrabarAnitaPedido)
             ->everyTenMinutes()
             ->runInBackground()
             ->withoutOverlapping(15)
@@ -421,7 +418,7 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/flash-calculo-diario-schedule.log'))
             ->when(fn () => (bool) config('caja.flash_calculo_diario.habilitado', false));
 
-        $schedule->command('ventas:reenviar-impresion-pendiente', ['--ejecutar' => true])
+        $schedule->command('ventas:reenviar-impresion-pendiente --ejecutar')
             ->dailyAt((string) config('impresion_comprobante.cron_hora', '06:20'))
             ->runInBackground()
             ->withoutOverlapping(20)

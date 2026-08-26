@@ -31,6 +31,18 @@ window.impresionSesionAuto = @json((bool) ($autoEjecutar ?? false));
                 </div>
             </div>
             <div class="card-body">
+                @php
+                    $origenTipo = $sesion['origen_tipo'] ?? '';
+                    $docOrigen = $sesion['documentos'][$origenTipo] ?? null;
+                @endphp
+                @if ($docOrigen)
+                    <p class="mb-1 h5">
+                        {{ $docOrigen['codigo'] ?? ('#'.($sesion['origen_id'] ?? '')) }}
+                        @if (!empty($docOrigen['nombre']))
+                            <span class="text-muted font-weight-normal">— {{ $docOrigen['nombre'] }}</span>
+                        @endif
+                    </p>
+                @endif
                 <p class="mb-1">
                     <strong>Programa:</strong>
                     {{ $sesion['programa']['nombre'] ?? 'Sin programa' }}
@@ -64,6 +76,14 @@ window.impresionSesionAuto = @json((bool) ($autoEjecutar ?? false));
                 <div class="mt-3 d-flex flex-wrap align-items-center" style="gap: 8px;">
                     <form action="{{ route('ejecutar_impresion_sesion') }}" method="POST" class="form-inline mb-0" id="form-ejecutar-sesion" style="gap: 8px;">
                         @csrf
+                        <input type="hidden" name="origen_tipo" value="{{ $sesion['origen_tipo'] ?? '' }}">
+                        <input type="hidden" name="origen_id" value="{{ (int) ($sesion['origen_id'] ?? 0) }}">
+                        <input type="hidden" name="modo" value="{{ $sesion['modo'] ?? 'OPERATIVO' }}">
+                        @if (!empty($sesion['solo_formulario']))
+                            <input type="hidden" name="solo_formulario" value="{{ $sesion['solo_formulario'] }}">
+                        @elseif (($sesion['origen_tipo'] ?? '') !== 'FACTURA')
+                            <input type="hidden" name="pack" value="1">
+                        @endif
                         <button type="submit" class="btn btn-primary" id="btn-ejecutar-sesion" {{ empty($sesion['pack']) ? 'disabled' : '' }}>
                             <i class="fa fa-print"></i> Ejecutar sesión
                         </button>

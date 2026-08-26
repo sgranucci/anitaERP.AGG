@@ -57,4 +57,30 @@ class VillafrancaFacturacionSupportTest extends TestCase
             (object) ['id' => 8]
         ));
     }
+
+    public function test_referencia_pendmae_usa_sucursal_de_emision(): void
+    {
+        $ref = VillafrancaFacturacionSupport::referenciaPendmaeDesdeFactura('FAC', 'A', '00015', 145761);
+
+        $this->assertSame('FAC', $ref['tipo']);
+        $this->assertSame('A', $ref['letra']);
+        $this->assertSame(15, $ref['sucursal']);
+        $this->assertSame(145761, $ref['nro']);
+
+        $data = VillafrancaFacturacionSupport::aplicarReferenciaPendmae([], $ref);
+        $this->assertSame('FAC', $data['penm_ref_tipo']);
+        $this->assertSame('A', $data['penm_ref_letra']);
+        $this->assertSame(15, $data['penm_ref_sucursal']);
+        $this->assertSame(145761, $data['penm_ref_nro']);
+    }
+
+    public function test_referencia_pendmae_desde_request_vacia_queda_en_blanco(): void
+    {
+        $ref = VillafrancaFacturacionSupport::referenciaPendmaeDesdeRequest([]);
+
+        $this->assertSame(' ', $ref['tipo']);
+        $this->assertSame(' ', $ref['letra']);
+        $this->assertSame(0, $ref['sucursal']);
+        $this->assertSame(0, $ref['nro']);
+    }
 }

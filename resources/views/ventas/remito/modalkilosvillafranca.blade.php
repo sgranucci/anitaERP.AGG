@@ -1,4 +1,4 @@
-{{-- F5 Anita: asignar kilos por reparto / porcentaje (solo remitos Bierzo) --}}
+{{-- F5 remito Z: kilos de hoy en Villafranca (comprob/compaux). FAC+ND-NC. --}}
 <div class="modal fade" id="asignarKilosRemitoModal" tabindex="-1" role="dialog" aria-labelledby="asignarKilosRemitoLabel" aria-hidden="true">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
@@ -32,7 +32,7 @@
                         <input type="number" min="0" max="100" step="0.1" id="asigna_kilos_porcentaje" class="form-control" value="0">
                     </div>
                     <div class="col-sm-4 col-form-label text-muted">
-                        Se aplica (1 - %/100) sobre kilos del d&iacute;a
+                        Sobre kilos de hoy en Villafranca (FAC+ND&minus;NC)
                     </div>
                 </div>
                 <div id="asigna_kilos_aviso" class="alert alert-warning d-none" role="alert"></div>

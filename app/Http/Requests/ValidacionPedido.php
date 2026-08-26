@@ -48,7 +48,8 @@ class ValidacionPedido extends FormRequest
 
             $error = ClienteEntregaPedidoSupport::validarSeleccionParaCliente(
                 $clienteId,
-                (int) $this->input('cliente_entrega_id', 0) ?: null
+                (int) $this->input('cliente_entrega_id', 0) ?: null,
+                $this->input('lugarentrega')
             );
 
             if ($error !== null) {

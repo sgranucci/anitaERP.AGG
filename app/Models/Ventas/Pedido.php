@@ -110,6 +110,11 @@ class Pedido extends Model implements Auditable
     	return $this->hasMany(Venta::class, 'pedido_id')->with('cliente_cuentacorrientes');
 	}
 
+    public function remitos()
+    {
+        return $this->hasMany(Remito::class, 'pedido_id');
+    }
+
 	public function getEntregaNombreAttribute()
 	{
 		$data = Cliente_entrega::find($this->cliente_entrega_id);

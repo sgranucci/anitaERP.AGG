@@ -5,7 +5,9 @@ namespace App\Services\Ventas\CotElectronico;
 use App\Models\Configuracion\Empresa;
 use App\Models\Ventas\Puntoventa;
 use App\Support\Ventas\ArbaCotProvinciaSupport;
+use App\Support\Ventas\CotImporteRemitoSupport;
 use Carbon\Carbon;
+use RuntimeException;
 
 class CotArchivoArbaService
 {
@@ -45,6 +47,13 @@ class CotArchivoArbaService
             }
 
             $importe = (float) ($filaRemito['importe'] ?? 0);
+            if (empty($filaRemito['importe_ok']) || ! CotImporteRemitoSupport::esValidoParaCot($importe)) {
+                throw new RuntimeException(
+                    'No se arma el archivo COT: el remito '
+                    .(int) ($filaRemito['numero_remito'] ?? 0)
+                    .' no tiene el neto gravado + exento de la factura.'
+                );
+            }
             $lineas[] = $this->registroRemito($filaRemito, $importe, $empresa);
             foreach ($productos as $producto) {
                 $lineas[] = $this->registroProducto($producto);

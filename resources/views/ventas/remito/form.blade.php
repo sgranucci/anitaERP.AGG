@@ -3,6 +3,7 @@
 	<div class="col-sm-6" id="datosfactura" data-puntoventa="{{$puntoventa_query}}" data-tipotransaccion="{{$tipotransaccion_query}}" data-incoterm="{{$incoterm_query}}" data-formapago="{{$formapago_query}}">
         <input type="hidden" id="codigoremito" class="form-control" value="{{old('codigoremito', $remito->codigo ?? '')}}" />
 		<input type="hidden" id="topedescuento" class="form-control" value="{{config('cliente.TOPE_DESCUENTO')}}" />
+		<input type="hidden" id="porcentaje_valor_asegurado" value="{{ \App\Support\Ventas\RemitoValorAseguradoSupport::porcentaje() }}" />
 		<input type="hidden" id="categoria_secos_id" class="form-control" value="{{config('cliente.CATEGORIA_SECOS_ID')}}" />
 		<input type="hidden" id="subcategoria_maquina_id" class="form-control" value="{{config('cliente.SUBCATEGORIA_MAQUINA_ID')}}" />
 		<input type="hidden" id="subcategoria_tira_id" class="form-control" value="{{config('cliente.SUBCATEGORIA_TIRA_ID')}}" />
@@ -255,6 +256,15 @@
                 <input type="text" id="totalpiezasremito" name="totalpiezasremito" class="form-control col-sm-3" readonly value="" />
 				<label style="margin-top: 6px;">Total kilos:&nbsp</label>
                 <input type="text" id="totalkilosremito" name="totalkilosremito" class="form-control col-sm-3" readonly value="" />
+            </div>
+        </div>
+        <div class="row col-md-12 mt-2">
+            <div class="col-md-8"></div>
+            <div class="col-md-4">
+                <div class="form-group row align-items-center mb-0">
+                    <label for="valoraseguradoremito" class="col-form-label pr-2">Valor asegurado</label>
+                    <input type="text" id="valoraseguradoremito" name="valor_asegurado" class="form-control col-sm-6" readonly value="" style="text-align: right; font-weight: 600;" />
+                </div>
             </div>
         </div>
     </div>

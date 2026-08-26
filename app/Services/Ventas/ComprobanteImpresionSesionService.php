@@ -13,6 +13,7 @@ use App\Support\Ventas\ComprobanteImpresionDespachoSupport;
 use App\Support\Ventas\ComprobanteImpresionFormulario;
 use App\Support\Ventas\ComprobanteImpresionNasPathSupport;
 use App\Support\Ventas\ComprobanteImpresionResolverSupport;
+use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Jurosh\PDFMerge\PDFMerger;
@@ -46,8 +47,9 @@ class ComprobanteImpresionSesionService
     public function armarDesdePedido(Pedido $pedido, string $modo = 'OPERATIVO', ?string $soloFormulario = null, bool $packCompleto = false): array
     {
         $contexto = ComprobanteImpresionResolverSupport::contextoDesdePedido($pedido);
-        $docs = $this->documentosDesdePedido($pedido, $packCompleto);
-        $formulario = $packCompleto ? $soloFormulario : ($soloFormulario ?? ComprobanteImpresionFormulario::PEDIDO);
+        $incluirHermanos = $packCompleto || $soloFormulario === null;
+        $docs = $this->documentosDesdePedido($pedido, $incluirHermanos);
+        $formulario = $incluirHermanos ? $soloFormulario : ($soloFormulario ?? ComprobanteImpresionFormulario::PEDIDO);
         $pack = $this->packDesdeContexto($contexto, $docs, $modo, $formulario);
 
         return $this->payload($contexto, $pack, 'PEDIDO', (int) $pedido->id, $modo, $formulario, $docs);
@@ -59,8 +61,9 @@ class ComprobanteImpresionSesionService
     public function armarDesdeRemito(Remito $remito, string $modo = 'OPERATIVO', ?string $soloFormulario = null, bool $packCompleto = false): array
     {
         $contexto = ComprobanteImpresionResolverSupport::contextoDesdeRemito($remito);
-        $docs = $this->documentosDesdeRemito($remito, $packCompleto);
-        $formulario = $packCompleto ? $soloFormulario : ($soloFormulario ?? ComprobanteImpresionFormulario::REMITO);
+        $incluirHermanos = $packCompleto || $soloFormulario === null;
+        $docs = $this->documentosDesdeRemito($remito, $incluirHermanos);
+        $formulario = $incluirHermanos ? $soloFormulario : ($soloFormulario ?? ComprobanteImpresionFormulario::REMITO);
         $pack = $this->packDesdeContexto($contexto, $docs, $modo, $formulario);
 
         return $this->payload($contexto, $pack, 'REMITO', (int) $remito->id, $modo, $formulario, $docs);
@@ -230,6 +233,7 @@ class ComprobanteImpresionSesionService
                 'id' => (int) $venta->id,
                 'codigo' => (string) $venta->codigo,
                 'fecha' => $this->fechaYmd($venta->fecha),
+                'nombre' => (string) ($venta->nombre ?? ''),
             ],
         ];
         if ($venta->remito_id) {
@@ -266,14 +270,24 @@ class ComprobanteImpresionSesionService
                 'id' => (int) $pedido->id,
                 'codigo' => (string) ($pedido->codigo ?: $pedido->id),
                 'fecha' => $this->fechaYmd($pedido->fecha),
+                'nombre' => (string) (optional($pedido->clientes)->nombre ?? ''),
             ],
         ];
         if (! $packCompleto) {
             return $docs;
         }
-        $venta = Venta::query()->where('pedido_id', $pedido->id)->orderByDesc('id')->first();
-        if ($venta) {
-            $docs = array_merge($this->documentosDesdeVenta($venta), $docs);
+        $ventas = Venta::query()->where('pedido_id', $pedido->id)->orderByDesc('id')->get();
+        $ventaVisible = PedidoFacturaAnitaArchivosSupport::ventasVisiblesEnPedido($ventas)->first();
+        if ($ventaVisible) {
+            return array_merge($this->documentosDesdeVenta($ventaVisible), $docs);
+        }
+        $remito = Remito::query()->where('pedido_id', $pedido->id)->orderByDesc('id')->first();
+        if ($remito) {
+            $docs[ComprobanteImpresionFormulario::REMITO] = [
+                'id' => (int) $remito->id,
+                'codigo' => (string) ($remito->codigo ?: $remito->id),
+                'fecha' => $this->fechaYmd($remito->fecha),
+            ];
         }
 
         return $docs;
@@ -289,14 +303,13 @@ class ComprobanteImpresionSesionService
                 'id' => (int) $remito->id,
                 'codigo' => (string) ($remito->codigo ?: $remito->id),
                 'fecha' => $this->fechaYmd($remito->fecha),
+                'nombre' => (string) (optional($remito->clientes)->nombre ?? ''),
             ],
         ];
         if (! $packCompleto) {
             return $docs;
         }
-        $venta = $remito->venta_id
-            ? Venta::query()->find($remito->venta_id)
-            : Venta::query()->where('remito_id', $remito->id)->orderByDesc('id')->first();
+        $venta = $this->ventaOperativaDeRemito($remito);
         if ($venta) {
             $docs = array_merge($this->documentosDesdeVenta($venta), $docs);
         } elseif ($remito->pedido_id) {
@@ -311,6 +324,18 @@ class ComprobanteImpresionSesionService
         }
 
         return $docs;
+    }
+
+    private function ventaOperativaDeRemito(Remito $remito): ?Venta
+    {
+        $venta = $remito->venta_id
+            ? Venta::query()->find($remito->venta_id)
+            : Venta::query()->where('remito_id', $remito->id)->orderByDesc('id')->first();
+        if (! $venta || ! PedidoFacturaAnitaArchivosSupport::esVentaVisible($venta)) {
+            return null;
+        }
+
+        return $venta;
     }
 
     /**
@@ -466,11 +491,14 @@ class ComprobanteImpresionSesionService
             return 0;
         }
         $ventaId = (int) (Venta::query()->where('remito_id', $remitoId)->value('id') ?? 0);
-        if ($ventaId > 0) {
-            return $ventaId;
+        if ($ventaId <= 0) {
+            $ventaId = (int) (Remito::query()->whereKey($remitoId)->value('venta_id') ?? 0);
+        }
+        if ($ventaId <= 0 || ! PedidoFacturaAnitaArchivosSupport::esVentaIdVisible($ventaId)) {
+            return 0;
         }
 
-        return (int) (Remito::query()->whereKey($remitoId)->value('venta_id') ?? 0);
+        return $ventaId;
     }
 
     private function generarPdf(string $formulario, int $documentoId, string $leyenda): string
@@ -598,10 +626,7 @@ class ComprobanteImpresionSesionService
 
     private function generarPdfRemito(int $documentoId, string $leyenda): string
     {
-        $ventaId = (int) (Venta::query()->where('remito_id', $documentoId)->value('id') ?? 0);
-        if ($ventaId <= 0) {
-            $ventaId = (int) (Remito::query()->whereKey($documentoId)->value('venta_id') ?? 0);
-        }
+        $ventaId = $this->ventaIdDeRemito($documentoId);
         if ($ventaId > 0) {
             return $this->facturacionService->generarPdfFacturaArchivo($ventaId, $leyenda, false, true);
         }

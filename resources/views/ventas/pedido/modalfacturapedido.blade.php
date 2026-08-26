@@ -31,6 +31,16 @@
                             <label for="recipient-name" class="col-lg-4 col-form-label">Cliente</label>
                             <input type="text" id="nombrecliente" name="nombrecliente" class="col-lg-7 form-control" value=""></input>
                         </div>
+                        <div class="form-group row" id="div-lugarentrega-factura-pedido">
+                            <label for="factura_pedido_lugarentrega" id="label-factura-pedido-lugarentrega" class="col-lg-4 col-form-label">Lugar de entrega</label>
+                            <div class="col-lg-7">
+                                <select id="factura_pedido_cliente_entrega_id" class="form-control mb-1" style="display: none;">
+                                    <option value="">-- Seleccionar --</option>
+                                </select>
+                                <input type="text" id="factura_pedido_lugarentrega" class="form-control" placeholder="Lugar de entrega" autocomplete="off">
+                                <small id="aviso-lugarentrega-factura-pedido" class="form-text text-muted"></small>
+                            </div>
+                        </div>
                     </div>
                     <div class="col-sm-6">
                         @if (config('app.empresa') == "EL BIERZO")

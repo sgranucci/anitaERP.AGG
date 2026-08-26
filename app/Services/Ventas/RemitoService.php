@@ -2,8 +2,9 @@
 
 namespace App\Services\Ventas;
 
-use App\Models\Ventas\Venta;
-use App\Models\Ventas\Venta_Emision;
+use App\Models\Stock\Articulo;
+use App\Models\Ventas\Cliente;
+use App\Models\Ventas\Transporte;
 use App\Queries\Ventas\ClienteQueryInterface;
 use App\Queries\Ventas\PedidoQueryInterface;
 use App\Queries\Ventas\RemitoQueryInterface;
@@ -16,12 +17,14 @@ use App\Repositories\Ventas\Remito_ArticuloRepositoryInterface;
 use App\Repositories\Ventas\VentaRepositoryInterface;
 use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
 use App\Services\Stock\MovimientoStockService;
+use App\Support\Ventas\ClienteEntregaPedidoSupport;
+use App\Support\Ventas\RemitoValorAseguradoSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
+use App\Support\Ventas\RemitoKilosVillafrancaSupport;
 use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\View;
-use Carbon\Carbon;
 use Auth;
 
 class RemitoService
@@ -154,9 +157,10 @@ class RemitoService
             return ['error' => 'Cliente inexistente'];
         }
 
-        $errorEntrega = \App\Support\Ventas\ClienteEntregaPedidoSupport::validarSeleccionParaCliente(
+        $errorEntrega = ClienteEntregaPedidoSupport::validarSeleccionParaCliente(
             (int) $data['cliente_id'],
-            (int) ($data['cliente_entrega_id'] ?? 0) ?: null
+            (int) ($data['cliente_entrega_id'] ?? 0) ?: null,
+            $data['lugarentrega'] ?? null
         );
         if ($errorEntrega !== null) {
             return $errorEntrega;
@@ -172,10 +176,10 @@ class RemitoService
         }
 
         $entregasCliente = $this->cliente_entregaRepository->leeClienteEntrega($data['cliente_id']);
-        if ($entregasCliente->count() > 0) {
-            $entrega = $entregasCliente->firstWhere('id', (int) $data['cliente_entrega_id']);
-            $data['lugarentrega'] = $entrega->nombre;
-        } else {
+        $entrega = $entregasCliente->firstWhere('id', (int) ($data['cliente_entrega_id'] ?? 0));
+        if ($entrega) {
+            $data['lugarentrega'] = ClienteEntregaPedidoSupport::etiquetaEntrega($entrega);
+        } elseif ((int) ($data['cliente_entrega_id'] ?? 0) <= 0) {
             $data['cliente_entrega_id'] = null;
         }
 
@@ -212,6 +216,9 @@ class RemitoService
                 $data['estado'] = 'P';
                 $data['estadoremito'] = 'Pendiente';
                 $data['origen'] = $data['origen'] ?? 'manual';
+                if (($data['origen'] ?? '') === 'asignakilos') {
+                    $data['fecha'] = RemitoKilosVillafrancaSupport::fechaHoy()->toDateString();
+                }
 
                 $remito = $this->remitoRepository->create($data);
                 $id = $remito->id;
@@ -470,6 +477,17 @@ class RemitoService
             return ['error' => 'Cliente inexistente'];
         }
 
+        $errorEntrega = ClienteEntregaPedidoSupport::resolverParaDocumento(
+            $pedido,
+            (int) $cliente->id,
+            array_key_exists('cliente_entrega_id', $data) ? ((int) $data['cliente_entrega_id'] ?: null) : null,
+            array_key_exists('lugarentrega', $data) ? (string) $data['lugarentrega'] : null
+        );
+        if ($errorEntrega !== null) {
+            return $errorEntrega;
+        }
+        ClienteEntregaPedidoSupport::persistirDocumento($pedido);
+
         $ids = $data['pedido_articulo_ids'] ?? [];
         if (! is_array($ids) || $ids === []) {
             return ['error' => 'Sin ítems para remito'];
@@ -640,7 +658,7 @@ class RemitoService
                 'partida' => 0,
                 'empresa' => $puntoventa->empresas->codigo ?? config('app.empresa'),
                 'codigoabasto' => $cliente->abastos->codigo ?? 0,
-                'totalseguro' => $totalNeto,
+                'totalseguro' => RemitoValorAseguradoSupport::desdeNeto($totalNeto),
                 'totalneto' => $totalNeto,
                 'totalcaja' => $totalCaja,
                 'totalkilo' => $totalKilo,
@@ -665,9 +683,9 @@ class RemitoService
     }
 
     /**
-     * F5 Anita: agrega kilos de facturas del día por reparto y aplica porcentaje.
+     * F5 remito Z: kilos de hoy en Villafranca (comprob/compaux). FAC y ND suman, NC resta.
      */
-    public function asignarKilosVillafranca(int $transporteId, float $porcentaje): array
+    public function asignarKilosVillafranca(int $transporteId, float $porcentaje, int $clienteId = 0): array
     {
         if ($transporteId <= 0) {
             return ['error' => 'Reparto inválido'];
@@ -676,60 +694,62 @@ class RemitoService
             return ['error' => 'Porcentaje inválido'];
         }
 
-        $fecha = Carbon::today()->toDateString();
-        $ventaIds = Venta::query()
-            ->whereDate('fecha', $fecha)
-            ->where('transporte_id', $transporteId)
-            ->pluck('id');
-
-        if ($ventaIds->isEmpty()) {
-            return ['error' => 'No hay comprobantes del día para ese reparto'];
+        $transporte = Transporte::query()->find($transporteId);
+        $codigoReparto = (int) ($transporte->codigo ?? 0);
+        if (! $transporte || $codigoReparto <= 0) {
+            return ['error' => 'Reparto sin código Anita'];
         }
 
-        $agg = [];
-        $emisiones = Venta_Emision::query()
-            ->whereIn('venta_id', $ventaIds)
-            ->with('articulos')
-            ->get();
-
-        foreach ($emisiones as $em) {
-            $aid = (int) $em->articulo_id;
-            if ($aid <= 0) {
-                continue;
-            }
-            if (! isset($agg[$aid])) {
-                $agg[$aid] = [
-                    'articulo_id' => $aid,
-                    'sku' => $em->articulos->sku ?? '',
-                    'descripcion' => $em->detalle ?? ($em->articulos->descripcion ?? ''),
-                    'kilo' => 0.0,
-                    'pieza' => 0.0,
-                    'caja' => 0.0,
-                    'precio' => (float) $em->precio,
-                    'incluyeimpuesto' => $em->incluyeimpuesto ?? 'N',
-                    'moneda_id' => $em->moneda_id,
-                    'listaprecio_id' => $em->listaprecio_id ?? null,
-                    'descuento' => (float) ($em->descuento ?? 0),
-                    'unidadmedida_id' => $em->articulos->unidadmedida_id ?? null,
-                ];
-            }
-            $agg[$aid]['kilo'] += (float) $em->cantidad;
-            $agg[$aid]['pieza'] += (float) ($em->pieza ?? 0);
-            $agg[$aid]['caja'] += (float) ($em->caja ?? 0);
+        $leido = RemitoKilosVillafrancaSupport::agregarKilosDelDia($codigoReparto);
+        if (! ($leido['ok'] ?? false)) {
+            return ['error' => (string) ($leido['error'] ?? 'No se pudieron leer los kilos de Villafranca')];
         }
 
-        $factor = 1.0 - ($porcentaje / 100.0);
+        $listaprecioId = null;
+        if ($clienteId > 0) {
+            $listaprecioId = Cliente::query()->whereKey($clienteId)->value('listaprecio_id');
+            $listaprecioId = (int) $listaprecioId > 0 ? (int) $listaprecioId : null;
+        }
+
+        $articulos = $this->resolverArticulosPorSku(
+            array_map(static fn (array $row): string => (string) $row['sku'], $leido['items'])
+        );
+
         $items = [];
-        foreach ($agg as $row) {
-            $row['kilo'] = round($row['kilo'] * $factor, 1);
-            $row['pieza'] = round($row['pieza'] * $factor, 1);
-            $row['caja'] = round($row['caja'] * $factor, 1);
-            if ($row['kilo'] == 0.0 && $row['pieza'] == 0.0) {
+        $omitidos = [];
+        foreach ($leido['items'] as $row) {
+            $sku = (string) $row['sku'];
+            $articulo = $articulos[$sku] ?? $articulos[strtolower($sku)] ?? null;
+            if ($articulo === null) {
+                $omitidos[] = $sku;
+
                 continue;
             }
-            $items[] = $row;
+            $items[] = [
+                'articulo_id' => (int) $articulo->id,
+                'sku' => (string) ($articulo->sku ?? $sku),
+                'descripcion' => (string) ($articulo->descripcion ?? $row['descripcion'] ?? ''),
+                'kilo' => (float) $row['kilo'],
+                'pieza' => (float) ($row['pieza'] ?? 0),
+                'caja' => (float) ($row['caja'] ?? 0),
+                'precio' => (float) ($row['precio'] ?? 0),
+                'incluyeimpuesto' => $row['incluyeimpuesto'] ?? 'N',
+                'moneda_id' => 1,
+                'listaprecio_id' => $listaprecioId,
+                'descuento' => 0.0,
+                'unidadmedida_id' => $articulo->unidadmedida_id ?? null,
+            ];
         }
 
+        if ($items === []) {
+            $detalle = $omitidos !== []
+                ? 'Ningún SKU de Villafranca existe en el ERP ('.implode(', ', $omitidos).')'
+                : 'Sin kilos resultantes';
+
+            return ['error' => $detalle];
+        }
+
+        $items = RemitoKilosVillafrancaSupport::aplicarPorcentaje($items, $porcentaje);
         if ($items === []) {
             return ['error' => 'Sin kilos resultantes tras aplicar el porcentaje'];
         }
@@ -741,10 +761,47 @@ class RemitoService
         return [
             'transporte_id' => $transporteId,
             'porcentaje' => $porcentaje,
-            'fecha' => $fecha,
+            'fecha' => $leido['fecha'],
             'origen' => 'asignakilos',
+            'fuente' => 'villafranca_comprob',
+            'comprobantes' => (int) ($leido['comprobantes'] ?? 0),
+            'omitidos' => $omitidos,
             'items' => $items,
         ];
+    }
+
+    /**
+     * @param  list<string>  $skus
+     * @return array<string, Articulo>
+     */
+    private function resolverArticulosPorSku(array $skus): array
+    {
+        $skus = array_values(array_unique(array_filter(array_map('strval', $skus))));
+        if ($skus === []) {
+            return [];
+        }
+
+        $variantes = [];
+        foreach ($skus as $sku) {
+            $variantes[] = $sku;
+            $padded = str_pad($sku, 13, '0', STR_PAD_LEFT);
+            if ($padded !== $sku) {
+                $variantes[] = $padded;
+            }
+        }
+
+        $encontrados = Articulo::query()
+            ->whereIn('sku', $variantes)
+            ->get(['id', 'sku', 'descripcion', 'unidadmedida_id']);
+
+        $porSku = [];
+        foreach ($encontrados as $articulo) {
+            $sku = (string) $articulo->sku;
+            $porSku[$sku] = $articulo;
+            $porSku[RemitoKilosVillafrancaSupport::normalizarSku($sku)] = $articulo;
+        }
+
+        return $porSku;
     }
 
     public function marcarFacturado(int $remitoId, int $ventaId): void

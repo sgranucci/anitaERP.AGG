@@ -1,5 +1,15 @@
 @php
     $esRemitoHoja = (bool) ($esRemitoHoja ?? false);
+    $codigoPvRemito = trim((string) (
+        $venta->puntoventaremito?->codigo
+        ?? $venta->remitos?->puntoventas?->codigo
+        ?? ''
+    ));
+    $numeroRemitoPdf = (int) ($venta->numeroremito ?? $venta->remitos?->numero ?? 0);
+    $nroRemitoFormateado = \App\Support\Ventas\VentaNumeracionEmpresaSupport::formatearPuntoVentaNumero(
+        $codigoPvRemito,
+        $numeroRemitoPdf
+    );
 @endphp
 <table class="table borderless factura-cabecera {{ $facturaPdfRemitoDebajoCliente && ! $esRemitoHoja ? 'factura-cabecera-admin' : '' }}">
     <tr>
@@ -23,7 +33,7 @@
         </td>
         <td class="factura-cabecera-comprobante">
             <strong>{{ $esRemitoHoja ? 'REMITO' : ($venta->tipotransacciones->nombre ?? '') }}</strong><br>
-            <strong>Nro. {{ $esRemitoHoja ? $venta->numeroremito : $venta->codigo }}</strong>
+            <strong>Nro. {{ $esRemitoHoja ? $nroRemitoFormateado : $venta->codigo }}</strong>
             <p>
                 Fecha emisi&oacute;n: {{ date('d/m/Y', strtotime($venta->fecha ?? '')) }}<br>
                 C.U.I.T.: {{ $venta->puntoventas->empresas->nroinscripcion }}<br>
@@ -36,12 +46,18 @@
     @if ($esRemitoHoja)
     <tr>
         <td>Factura: {{ $venta->codigo }}</td>
-        <td>@if (isset($venta->transportes->codigo)) Reparto: {{ $venta->transportes->codigo }} @endif</td>
-        <td></td>
+        <td>
+            @if (isset($venta->transportes->codigo))
+                Reparto: {{ $venta->transportes->codigo }}
+            @endif
+        </td>
+        <td class="text-right">
+            <strong>Valor asegurado: {{ number_format($valorAsegurado ?? 0, 2) }}</strong>
+        </td>
     </tr>
     @elseif (! $facturaPdfRemitoDebajoCliente)
     <tr>
-        <td>Remito: {{ $venta->numeroremito }}</td>
+        <td>Remito: {{ $nroRemitoFormateado }}</td>
         <td>@if (isset($venta->transportes->codigo)) Reparto: {{ $venta->transportes->codigo }} @endif</td>
         <td class="text-right">Condicion de Venta: {{ $venta->condicionventas->nombre ?? $venta->clientes->condicionventas->nombre ?? 'CONTADO' }}</td>
     </tr>
@@ -98,7 +114,7 @@
 @if ($facturaPdfRemitoDebajoCliente && ! $esRemitoHoja)
 <table class="table borderless factura-remito-caja-admin">
     <tr>
-        <td>Remito: {{ $venta->numeroremito }}</td>
+        <td>Remito: {{ $nroRemitoFormateado }}</td>
         <td class="text-center">@if (isset($venta->transportes->codigo)) Reparto: {{ $venta->transportes->codigo }} @endif</td>
         <td class="text-right">Condicion de Venta: {{ $venta->condicionventas->nombre ?? $venta->clientes->condicionventas->nombre ?? 'CONTADO' }}</td>
     </tr>

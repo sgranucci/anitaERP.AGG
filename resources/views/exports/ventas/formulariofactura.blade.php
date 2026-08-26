@@ -64,6 +64,10 @@
     $mostrarHojaFactura = ! ($facturaPdfSoloHojaRemito ?? false);
     $mostrarHojaRemito = ($facturaPdfEsElBierzo && ! ($facturaPdfOmitirHojaRemito ?? false))
         || ($facturaPdfSoloHojaRemito ?? false);
+    $valorAsegurado = \App\Support\Ventas\RemitoValorAseguradoSupport::desdeRemitoOItemsFactura(
+        $venta->remitos?->remito_articulos,
+        $itemsFactura
+    );
 @endphp
 <div id="area-pdf">
     @if ($mostrarHojaFactura)

@@ -1336,7 +1336,28 @@ class ArticuloController extends Controller
             return response()->json(null);
         }
 
+        $this->aplicarUnidadMedidaDefaultSeleccion($articulo);
+
         return $articulo;
+    }
+
+    /**
+     * En El Bierzo casi ningún artículo tiene UM en el maestro. Sin fallback el
+     * select del pedido queda vacío al hacer .val(null).
+     */
+    private function aplicarUnidadMedidaDefaultSeleccion(?Articulo $articulo): void
+    {
+        if ($articulo === null || (int) ($articulo->unidadmedida_id ?? 0) > 0) {
+            return;
+        }
+
+        $kg = Unidadmedida::query()->where('abreviatura', 'KG')->first();
+        if ($kg === null) {
+            return;
+        }
+
+        $articulo->setAttribute('unidadmedida_id', (int) $kg->id);
+        $articulo->setRelation('unidadesdemedidas', $kg);
     }
 
     /**

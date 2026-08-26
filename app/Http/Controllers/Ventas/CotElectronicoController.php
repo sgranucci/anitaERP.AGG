@@ -82,7 +82,12 @@ class CotElectronicoController extends Controller
             'fecha' => $fecha,
             'repartos' => $repartos,
             'remitos' => $remitos,
-            'cantidadRemitosPendientes' => collect($remitos)->filter(fn ($r) => empty($r['ya_enviado']))->count(),
+            'cantidadRemitosPendientes' => collect($remitos)->filter(
+                fn ($r) => empty($r['ya_enviado']) && ! empty($r['importe_ok'])
+            )->count(),
+            'cantidadRemitosBloqueados' => collect($remitos)->filter(
+                fn ($r) => empty($r['ya_enviado']) && empty($r['importe_ok'])
+            )->count(),
             'cantidadRemitosEmitidos' => collect($remitos)->filter(fn ($r) => ! empty($r['ya_enviado']))->count(),
             'consultado' => $consultado || $procesado,
             'resultadoProceso' => $resultadoProceso,

@@ -3,6 +3,7 @@
 namespace App\Queries\Ventas;
 
 use App\Models\Ventas\Cliente_Entrega;
+use App\Support\Ventas\ClienteEntregaPedidoSupport;
 
 class Cliente_EntregaQuery implements Cliente_EntregaQueryInterface
 {
@@ -27,9 +28,17 @@ class Cliente_EntregaQuery implements Cliente_EntregaQueryInterface
             ->orderBy('nombre')
             ->get()
             ->map(function ($entrega) {
+                $etiqueta = ClienteEntregaPedidoSupport::etiquetaDesdePartes(
+                    $entrega->nombre,
+                    $entrega->domicilio,
+                    $entrega->desc_localidades
+                );
+
                 return [
                     'id' => $entrega->id,
                     'nombre' => $entrega->nombre,
+                    'etiqueta' => $etiqueta,
+                    'nombre_usable' => ClienteEntregaPedidoSupport::nombreEsUsable($entrega->nombre),
                     'domicilio' => $entrega->domicilio,
                     'localidad_id' => $entrega->localidad_id,
                     'provincia_id' => $entrega->provincia_id,

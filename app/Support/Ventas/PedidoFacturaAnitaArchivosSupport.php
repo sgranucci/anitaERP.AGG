@@ -4,6 +4,7 @@ namespace App\Support\Ventas;
 
 use App\ApiAnita;
 use App\Models\Ventas\Puntoventa;
+use App\Models\Ventas\Venta;
 use Illuminate\Support\Collection;
 
 /**
@@ -159,6 +160,26 @@ final class PedidoFacturaAnitaArchivosSupport
     public static function esPuntoVentaDivision(int $puntoventaId): bool
     {
         return $puntoventaId > 0 && in_array($puntoventaId, self::idsPuntoVentaDivision(), true);
+    }
+
+    public static function esVentaVisible($venta): bool
+    {
+        if (! is_object($venta)) {
+            return false;
+        }
+
+        return ! self::esPuntoVentaDivision((int) ($venta->puntoventa_id ?? 0));
+    }
+
+    public static function esVentaIdVisible(int $ventaId): bool
+    {
+        if ($ventaId <= 0) {
+            return false;
+        }
+
+        $puntoventaId = (int) (Venta::query()->whereKey($ventaId)->value('puntoventa_id') ?? 0);
+
+        return ! self::esPuntoVentaDivision($puntoventaId);
     }
 
     /**

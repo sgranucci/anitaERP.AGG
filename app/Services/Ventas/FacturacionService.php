@@ -52,10 +52,13 @@ use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use setasign\Fpdi\Fpdi;
 use App\Support\Ventas\CaiRemitoVigenteSupport;
+use App\Support\Ventas\RemitoValorAseguradoSupport;
 use App\Support\Ventas\ClienteDespachoSupport;
+use App\Support\Ventas\ClienteEntregaPedidoSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
 use App\Support\Ventas\TransporteDepositoSupport;
 use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
+use App\Support\Ventas\ComprobanteImpresionSesionUrlSupport;
 use App\Support\Ventas\VillafrancaFacturacionSupport;
 use App\Support\Ventas\PedidoFacturaAnitaDeferSupport;
 use App\Support\Ventas\PedidoFacturacionExclusivaSupport;
@@ -185,6 +188,8 @@ class FacturacionService
 	protected $numeroComprobanteDivision;
 	/** Reparto 101: reserva FAC A sucursal 1 en Anita Villafranca y emite en PV 15. */
 	protected $usaNumeradorVillafrancaPropio;
+	/** @var int Número FAC Villafranca ya reservado (reparto 101) para no volver a numerar. */
+	protected $numeroReservadoVillafrancaReparto101;
 	protected $numeroRemito;
 	protected $movimientoStockService;
 	protected $flCalculaDesdeGeneracionFactura;
@@ -297,6 +302,7 @@ class FacturacionService
 		$this->puntoVentaDivision_id = 0;
 		$this->numeroComprobanteDivision = 0;
 		$this->usaNumeradorVillafrancaPropio = false;
+		$this->numeroReservadoVillafrancaReparto101 = 0;
 		$this->numeroRemito = 0;
 		$this->flCalculaDesdeGeneracionFactura = false;
 		$this->facturandoDesdeRemitoId = null;
@@ -320,12 +326,19 @@ class FacturacionService
 
 	private function sincronizarLugarEntregaPedido($pedido): void
 	{
-		if ($pedido->lugarentrega == null && (int) ($pedido->cliente_entrega_id ?? 0) > 0) {
-			$cliente_entrega = $this->cliente_entregaRepository->find($pedido->cliente_entrega_id);
+		if ((int) ($pedido->cliente_entrega_id ?? 0) <= 0) {
+			return;
+		}
 
-			if ($cliente_entrega) {
-				$pedido->lugarentrega = $cliente_entrega->nombre;
-			}
+		$cliente_entrega = $this->cliente_entregaRepository->find($pedido->cliente_entrega_id);
+		if (! $cliente_entrega) {
+			return;
+		}
+
+		$etiqueta = ClienteEntregaPedidoSupport::etiquetaEntrega($cliente_entrega);
+		if (! ClienteEntregaPedidoSupport::nombreEsUsable($pedido->lugarentrega ?? null)
+			&& $etiqueta !== '') {
+			$pedido->lugarentrega = $etiqueta;
 		}
 	}
 
@@ -342,9 +355,25 @@ class FacturacionService
 		return $cliente->provincia_id;
 	}
 
-	private function validarLugarEntregaPedido($cliente, $pedido): ?array
+	private function resolverLugarEntregaPedido($cliente, $documento, array $data, bool $persistir): ?array
 	{
-		return \App\Support\Ventas\ClienteEntregaPedidoSupport::validarPedido($cliente, $pedido);
+		$error = ClienteEntregaPedidoSupport::resolverParaDocumento(
+			$documento,
+			(int) $cliente->id,
+			array_key_exists('cliente_entrega_id', $data) ? ((int) $data['cliente_entrega_id'] ?: null) : null,
+			array_key_exists('lugarentrega', $data) ? (string) $data['lugarentrega'] : null
+		);
+		if ($error !== null) {
+			return $error;
+		}
+
+		if ($persistir) {
+			ClienteEntregaPedidoSupport::persistirDocumento($documento);
+		}
+
+		$this->sincronizarLugarEntregaPedido($documento);
+
+		return null;
 	}
 
 	// Calcula la factura por pedido
@@ -390,12 +419,10 @@ class FacturacionService
 		else	
 			$pedido = $pedido_query[0];
 
-		$errorEntrega = $this->validarLugarEntregaPedido($cliente, $pedido);
+		$errorEntrega = $this->resolverLugarEntregaPedido($cliente, $pedido, $data, false);
 		if ($errorEntrega) {
 			return $errorEntrega;
 		}
-
-		$this->sincronizarLugarEntregaPedido($pedido);
 
 		// Lee los items a facturar
 		$dataFactura = [];
@@ -633,13 +660,15 @@ class FacturacionService
 			return ['error' => 'El pedido ya fue transferido al despacho.'];
 		}
 
-		$errorEntrega = $this->validarLugarEntregaPedido($cliente, $pedido);
+		$errorEntrega = $this->resolverLugarEntregaPedido($cliente, $pedido, $data, true);
 		if ($errorEntrega) {
 			return $errorEntrega;
 		}
 
 		return PedidoFacturacionExclusivaSupport::ejecutar((int) $pedido->id, function () use ($data, $cliente, $pedido, $tipotransaccion) {
-			return $this->emitirFacturasDePedido($data, $cliente, $pedido, $tipotransaccion);
+			return $this->anexarUrlImpresionSesion(
+				$this->emitirFacturasDePedido($data, $cliente, $pedido, $tipotransaccion)
+			);
 		});
 	}
 
@@ -701,6 +730,14 @@ class FacturacionService
 					if ($this->puntoventaremito_id >= 1)
 						$puntoventaremito = $this->puntoventaRepository->find($this->puntoventaremito_id);
 
+					if (VillafrancaFacturacionSupport::esReparto101($pedido)) {
+						$refPendmae = $this->reservarReferenciaPendmaeVillafrancaReparto101($cliente);
+						if (isset($refPendmae['error'])) {
+							return [$refPendmae];
+						}
+						$data = VillafrancaFacturacionSupport::aplicarReferenciaPendmae($data, $refPendmae);
+					}
+
 					// Genera remito
 					$retorno1 = Self::generaUnRemito($data, $cliente, $pedido, config('facturacion.TIPO_REMITO'), 
 						config('facturacion.LETRA_REMITO'), $puntoventaremito->codigo, $puntoventaremito->empresas->codigo);
@@ -729,6 +766,7 @@ class FacturacionService
 			$this->flGrabaComprobanteDividido = false;
 			$this->flDivide = false;
 			$this->usaNumeradorVillafrancaPropio = false;
+			$this->numeroReservadoVillafrancaReparto101 = 0;
 
 			$retorno = [PedidoFacturaAnitaDeferSupport::tomarYProgramar(
 				Self::generaUnaFacturaPorPedido($data, $cliente, $pedido)
@@ -868,9 +906,14 @@ class FacturacionService
 			// Numera factura con web service si es factura electronica
 			$numeroReservadoVillafranca = false;
 			if ($this->debeUsarNumeradorVillafrancaPropio()) {
-				$numero = $this->reservarNumeroVillafrancaReparto101('FAC', $letra);
-				if (is_array($numero)) {
-					return $numero;
+				if ((int) $this->numeroReservadoVillafrancaReparto101 > 0) {
+					$numero = (int) $this->numeroReservadoVillafrancaReparto101;
+				} else {
+					$numero = $this->reservarNumeroVillafrancaReparto101('FAC', $letra);
+					if (is_array($numero)) {
+						return $numero;
+					}
+					$this->numeroReservadoVillafrancaReparto101 = (int) $numero;
 				}
 				$numeroReservadoVillafranca = true;
 			} else {
@@ -1335,8 +1378,16 @@ class FacturacionService
 					DB::commit();
 
 					$ok = $this->respuestaFacturaPedidoOk($venta['codigo'] ?? '');
+					$ok['venta_id'] = (int) $vta->id;
+					if ((int) ($vta->remito_id ?? 0) > 0) {
+						$ok['remito_id'] = (int) $vta->remito_id;
+					} elseif ($this->facturandoDesdeRemitoId) {
+						$ok['remito_id'] = (int) $this->facturandoDesdeRemitoId;
+					}
+					if ($pedidoIdMarcar) {
+						$ok['pedido_id'] = (int) $pedidoIdMarcar;
+					}
 					if ($deferAnitaPedido && ($anitaPendientePedido !== null || $vencaePendientePedido !== null)) {
-						$ok['venta_id'] = $vta->id;
 						$ok['anita_pendiente'] = $anitaPendientePedido;
 						$ok['vencae_pendiente'] = $vencaePendientePedido;
 					}
@@ -1388,6 +1439,55 @@ class FacturacionService
 		$payload = ['factura' => $codigo];
 
 		return $this->ocultarComprobanteDivididoEnMensaje($payload);
+	}
+
+	/**
+	 * @param  array<int|string, mixed>  $retorno
+	 * @return array<int|string, mixed>
+	 */
+	private function anexarUrlImpresionSesion($retorno)
+	{
+		if (! is_array($retorno) || $retorno === []) {
+			return $retorno;
+		}
+		if (isset($retorno['error']) && ! array_is_list($retorno)) {
+			return $retorno;
+		}
+
+		$items = array_is_list($retorno) ? $retorno : [$retorno];
+		$ventaId = 0;
+		$remitoId = 0;
+		$pedidoId = 0;
+		foreach ($items as $item) {
+			if (! is_array($item) || ! empty($item['error'])) {
+				continue;
+			}
+			$itemVentaId = (int) ($item['venta_id'] ?? 0);
+			if ($itemVentaId > 0 && empty($item['ocultar_mensaje']) && PedidoFacturaAnitaArchivosSupport::esVentaIdVisible($itemVentaId)) {
+				$ventaId = $itemVentaId;
+			}
+			if ((int) ($item['remito_id'] ?? 0) > 0) {
+				$remitoId = (int) $item['remito_id'];
+			}
+			if ((int) ($item['pedido_id'] ?? 0) > 0) {
+				$pedidoId = (int) $item['pedido_id'];
+			}
+		}
+
+		$url = ComprobanteImpresionSesionUrlSupport::postFacturacion($ventaId, $remitoId, $pedidoId);
+		if ($url === null) {
+			return $retorno;
+		}
+
+		foreach ($items as $i => $item) {
+			if (! is_array($item) || ! empty($item['error']) || ! empty($item['ocultar_mensaje'])) {
+				continue;
+			}
+			$items[$i]['impresion_url'] = $url;
+			break;
+		}
+
+		return array_is_list($retorno) ? $items : $items[0];
 	}
 
 	private function resultadoFacturaPedidoConError($retorno): bool
@@ -2747,12 +2847,10 @@ class FacturacionService
 						}
 						else
 						{
-							$errorEntrega = $this->validarLugarEntregaPedido($cliente, $pedido);
+							$errorEntrega = $this->resolverLugarEntregaPedido($cliente, $pedido, [], true);
 							if ($errorEntrega) {
 								return $errorEntrega;
 							}
-
-							$this->sincronizarLugarEntregaPedido($pedido);
 						}
 						// Trae el lote
 						$lotestock_id = $item->ordentrabajo_stock_id;
@@ -5176,6 +5274,46 @@ class FacturacionService
 	}
 
 	/**
+	 * Reserva FAC Villafranca (reparto 101) y arma penm_ref_* del remito en pendmae.
+	 * Sucursal de referencia = PV de emisión (15), no la del numerador (1).
+	 *
+	 * @return array{tipo: string, letra: string, sucursal: int, nro: int}|array{error: string, mensaje?: string}
+	 */
+	private function reservarReferenciaPendmaeVillafrancaReparto101($cliente): array
+	{
+		$letra = 'A';
+		$condicioniva = $this->condicionivaRepository->find($cliente->condicioniva_id ?? 0);
+		if ($condicioniva && trim((string) ($condicioniva->letra ?? '')) !== '') {
+			$letra = strtoupper(substr(trim((string) $condicioniva->letra), 0, 1));
+		}
+
+		$numero = $this->reservarNumeroVillafrancaReparto101('FAC', $letra);
+		if (is_array($numero)) {
+			return $numero;
+		}
+
+		$this->numeroReservadoVillafrancaReparto101 = (int) $numero;
+
+		$puntoventaEmision = $this->puntoventaRepository->find(
+			(int) config('facturacion.PUNTOVENTA_DIVISION_ID')
+		);
+		$sucursalEmision = (int) ($puntoventaEmision->codigo ?? 0);
+		if ($sucursalEmision <= 0) {
+			return [
+				'error' => 'Error punto de venta Villafranca',
+				'mensaje' => 'No se pudo resolver la sucursal de emisión de Villafranca para pendmae.',
+			];
+		}
+
+		return VillafrancaFacturacionSupport::referenciaPendmaeDesdeFactura(
+			'FAC',
+			$letra,
+			$sucursalEmision,
+			(int) $numero
+		);
+	}
+
+	/**
 	 * Reserva el siguiente número en compemis FAC + letra sucursal 1 de Villafranca.
 	 *
 	 * @return int|array{error:string,mensaje:string}
@@ -6636,6 +6774,8 @@ class FacturacionService
 			'clientes.paises',
 			'transportes',
 			'remitos.puntoventas',
+			'remitos.remito_articulos',
+			'puntoventaremito',
 		]);
 
 		$codigoTipoTransaccion = intval($venta->tipotransacciones->codigo);
@@ -7426,7 +7566,7 @@ class FacturacionService
 		$data['partida'] = 0;
 		$data['empresa'] = $codigoEmpresa;
 		$data['codigoabasto'] = $cliente->abastos->codigo ?? 0;
-		$data['totalseguro'] = $totalNeto;
+		$data['totalseguro'] = RemitoValorAseguradoSupport::desdeNeto($totalNeto);
 		$data['totalneto'] = $totalNeto;
 		$data['totalcaja'] = $totalCaja;
 		$data['totalkilo'] = $totalKilo;
@@ -7485,7 +7625,11 @@ class FacturacionService
 			return ['error' => 'Error grabando remito ERP: '.$persistRemito['error']];
 		}
 
-		return ['factura' => $data['codigo'], 'remito_id' => $persistRemito['id'] ?? null];
+		return [
+			'factura' => $data['codigo'],
+			'remito_id' => $persistRemito['id'] ?? null,
+			'pedido_id' => (int) ($pedido->id ?? 0),
+		];
 	}
 
 	/**
@@ -7667,7 +7811,7 @@ class FacturacionService
 			return $errorDespacho;
 		}
 
-		$errorEntrega = $this->validarLugarEntregaPedido($cliente, $remito);
+		$errorEntrega = $this->resolverLugarEntregaPedido($cliente, $remito, $data, true);
 		if ($errorEntrega) {
 			return $errorEntrega;
 		}
@@ -7678,6 +7822,7 @@ class FacturacionService
 		$this->flDivide = false;
 		$this->flGrabaComprobanteDividido = false;
 		$this->usaNumeradorVillafrancaPropio = false;
+		$this->numeroReservadoVillafrancaReparto101 = 0;
 		$this->facturandoDesdeRemitoId = (int) $remito->id;
 		$this->numeroremitoFijoDesdeRemito = (int) $remito->numero;
 
@@ -7704,10 +7849,12 @@ class FacturacionService
 
 		$pedidoId = (int) ($remito->pedido_id ?: 0);
 		if ($pedidoId > 0) {
-			return PedidoFacturacionExclusivaSupport::ejecutar($pedidoId, $emitir);
+			return $this->anexarUrlImpresionSesion(
+				PedidoFacturacionExclusivaSupport::ejecutar($pedidoId, $emitir)
+			);
 		}
 
-		return $emitir();
+		return $this->anexarUrlImpresionSesion($emitir());
 	}
 
 	/**

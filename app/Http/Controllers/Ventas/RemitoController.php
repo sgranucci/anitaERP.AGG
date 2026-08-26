@@ -202,11 +202,17 @@ class RemitoController extends Controller
     {
         can('listar-remitos');
 
-        return redirect()->route('sesion_impresion_remito', [
+        $params = [
             'id' => $id,
             'auto' => 1,
-            'solo_formulario' => 'REMITO',
-        ]);
+        ];
+        if (request()->boolean('pack')) {
+            $params['pack'] = 1;
+        } else {
+            $params['solo_formulario'] = 'REMITO';
+        }
+
+        return redirect()->route('sesion_impresion_remito', $params);
     }
 
     public function crear()
@@ -459,7 +465,7 @@ class RemitoController extends Controller
     }
 
     /**
-     * F5: asigna kilos por reparto/porcentaje (algoritmo Anita Villafranca).
+     * F5 remito Z: kilos de hoy en Villafranca (comprob/compaux). FAC+ND suman, NC resta.
      */
     public function asignarKilos(Request $request)
     {
@@ -467,7 +473,8 @@ class RemitoController extends Controller
 
         return response()->json($this->remitoService->asignarKilosVillafranca(
             (int) $request->input('transporte_id', 0),
-            (float) $request->input('porcentaje', 0)
+            (float) $request->input('porcentaje', 0),
+            (int) $request->input('cliente_id', 0)
         ));
     }
 }

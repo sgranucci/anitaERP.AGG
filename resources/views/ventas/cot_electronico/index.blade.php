@@ -201,10 +201,20 @@
                         @else
                             <p class="mb-2">
                                 <span class="badge badge-success">{{ $cantidadRemitosPendientes }} pendientes listos para presentar</span>
+                                @if (($cantidadRemitosBloqueados ?? 0) > 0)
+                                    <span class="badge badge-warning">{{ $cantidadRemitosBloqueados }} sin importe</span>
+                                @endif
                                 @if ($cantidadRemitosEmitidos > 0)
                                     <span class="badge badge-secondary">{{ $cantidadRemitosEmitidos }} ya emitidos (no se vuelven a enviar)</span>
                                 @endif
                             </p>
+                            @if (($cantidadRemitosBloqueados ?? 0) > 0)
+                                <div class="alert alert-warning">
+                                    Hay {{ $cantidadRemitosBloqueados }} remito(s) sin importe usable
+                                    (ni factura Anita/ERP ni neto/seguro/líneas del remito).
+                                    Esos remitos no se presentan: el COT no sale con $1 de relleno.
+                                </div>
+                            @endif
                             <div class="table-responsive">
                                 <table class="table table-sm table-bordered" id="tabla-remitos-cot">
                                     <thead style="background-color:#85C1E9;color:#17202A;">
@@ -225,12 +235,22 @@
                                     </thead>
                                     <tbody>
                                         @foreach ($remitos as $remito)
-                                            <tr class="{{ !empty($remito['ya_enviado']) ? 'table-secondary' : '' }}">
+                                            @php $remitoImporteOk = ! empty($remito['importe_ok']); @endphp
+                                            <tr class="{{ !empty($remito['ya_enviado']) ? 'table-secondary' : (! $remitoImporteOk ? 'table-warning' : '') }}">
                                                 <td class="text-center">
-                                                    @if (empty($remito['ya_enviado']))
+                                                    @if (empty($remito['ya_enviado']) && $remitoImporteOk)
                                                         <input type="checkbox" name="remitos_seleccionados[]"
                                                             class="check-remito-cot-pendiente"
-                                                            value="{{ $remito['clave'] }}" checked>
+                                                            value="{{ $remito['clave'] }}"
+                                                            data-importe-ok="1"
+                                                            checked>
+                                                    @elseif (empty($remito['ya_enviado']))
+                                                        <input type="checkbox" name="remitos_seleccionados[]"
+                                                            class="check-remito-cot-bloqueado"
+                                                            value="{{ $remito['clave'] }}"
+                                                            data-importe-ok="0"
+                                                            disabled
+                                                            title="{{ $remito['importe_motivo'] ?? 'Sin importe de factura' }}">
                                                     @else
                                                         <span class="text-muted">—</span>
                                                     @endif
@@ -240,8 +260,22 @@
                                                 <td>{{ $remito['cliente_codigo'] }} {{ $remito['cliente_nombre'] }}</td>
                                                 <td>{{ $remito['transporte_codigo'] }} {{ $remito['transporte_nombre'] }}</td>
                                                 <td class="text-right">{{ number_format((float) $remito['kilos'], 2, ',', '.') }}</td>
-                                                <td class="text-right">{{ number_format((float) $remito['importe'], 2, ',', '.') }}</td>
-                                                <td>{{ $remito['desde_factura'] ? ($remito['factura_codigo'] ?? '') : 'Remito directo' }}</td>
+                                                <td class="text-right @if (! $remitoImporteOk) table-warning font-weight-bold @endif">
+                                                    {{ number_format((float) $remito['importe'], 2, ',', '.') }}
+                                                    @if (! $remitoImporteOk)
+                                                        <div class="small text-danger">
+                                                            {{ $remito['importe_motivo'] ?? 'Sin neto gravado + exento de la factura' }}
+                                                        </div>
+                                                    @endif
+                                                </td>
+                                                <td>
+                                                    @if (! empty($remito['factura_codigo']))
+                                                        {{ $remito['factura_codigo'] }}
+                                                    @endif
+                                                    <div class="small text-muted">
+                                                        {{ $remito['importe_origen_etiqueta'] ?? ($remito['desde_factura'] ? 'Factura' : 'Remito directo') }}
+                                                    </div>
+                                                </td>
                                                 <td>
                                                     @if (!empty($remito['ya_enviado']))
                                                         <span class="badge badge-secondary">Ya emitido</span>

@@ -74,6 +74,8 @@ switch(strtoupper(config('app.empresa')))
             "TIPO_REMITO" => 'REM',
             "LETRA_REMITO" => 'R',
             "TIPO_REMITO_ID" => 9,
+            // % a descontar del neto del remito para valor asegurado (Anita tot_seguro).
+            "PORCENTAJE_VALOR_ASEGURADO" => (float) env('REMITO_PORCENTAJE_VALOR_ASEGURADO', 15),
             // Unidad enviada a Anita cuando el articulo no tiene unidadmedida_id en el ERP
             "UNIDADMEDIDA_DEFAULT" => 'Kg',
             // Remito en stock: se resuelve por abreviatura TIPO_REMITO en tipotransaccion_stock
@@ -108,6 +110,8 @@ switch(strtoupper(config('app.empresa')))
             "LIMITE_FCE" => 3958316,
             "PUNTOVENTA_FACTURACION" => [19,2,3], // Por empresa BSA/KSA/RSA
             "PUNTOVENTA_REMITO" => 1,
+            // Sin precarga: valor asegurado = neto salvo override .env.
+            "PORCENTAJE_VALOR_ASEGURADO" => (float) env('REMITO_PORCENTAJE_VALOR_ASEGURADO', 0),
             "CUENTACONTABLE_PERCEPCION_IVA" => '',
             "CUENTACONTABLE_VENTA" => '415010002',
             'USA_DETRACCION' => 'S',

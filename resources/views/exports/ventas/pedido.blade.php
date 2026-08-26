@@ -5,7 +5,7 @@
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <title>Pedido {{ $pedido->codigo ?? $pedido->id ?? '' }}</title>
 	<style type="text/css">
-		@page { margin: 10mm; }
+		@page { margin: 10mm 10mm 12mm 10mm; }
 		html, body { height: auto; margin: 0; padding: 0; }
 		body {
 			font-family: DejaVu Sans, Helvetica, Arial, sans-serif;
@@ -54,9 +54,36 @@
 		.pedido-continua { font-size: 11px; text-align: right; margin: 4px 0 0 0; }
 		.pedido-leyenda { font-size: 12px; margin-top: 8px; }
 		.pedido-leyenda label { font-weight: bold; }
+		.pedido-espacio-superior { height: 16mm; width: 100%; }
+		table.pedido-kilos-cuadro {
+			border-collapse: collapse;
+			width: 42%;
+			margin: 8px 0 0 auto;
+			font-size: 11px;
+		}
+		table.pedido-kilos-cuadro td {
+			border: 1px solid #1a1a1a;
+			padding: 4px 6px;
+			vertical-align: middle;
+		}
+		table.pedido-kilos-cuadro td.pedido-kilos-cuadro-etiq {
+			width: 68%;
+			background-color: #e8e8e8;
+			font-weight: bold;
+		}
+		table.pedido-kilos-cuadro td.pedido-kilos-cuadro-valor {
+			width: 32%;
+			text-align: right;
+		}
+		table.pedido-kilos-cuadro tr.pedido-kilos-cuadro-total td {
+			background-color: #d6eaf8;
+			font-weight: bold;
+			font-size: 12px;
+		}
 	</style>
 </head>
 <body>
+<div class="pedido-espacio-superior"></div>
 @php
 	use App\Support\Ventas\FacturaPdfPaginacionSupport;
 
@@ -79,6 +106,7 @@
 	$lineasPdf = \App\Support\Ventas\PedidoRemitoPdfLineasSupport::armar($pedido->pedido_articulos);
 	$filas = $lineasPdf['filas'];
 	$totales = $lineasPdf['totales'];
+	$totalKilosPesadaBonificacion = (float) ($totales['pesada'] ?? 0) + (float) ($totales['bonificacion'] ?? 0);
 	if ($mostrarTotalesDivision) {
 		$coeficienteDivision = (float) config('facturacion.COEFICIENTE_EXTRA_REPARTO_101', 1.10);
 		foreach ($filas as $filaDiv) {
@@ -88,7 +116,7 @@
 		$ajusteDivision = round($totalNetoDivision * ($coeficienteDivision - 1), 2);
 		$totalDivision = round($totalNetoDivision + $ajusteDivision, 2);
 	}
-	$paginasPedido = FacturaPdfPaginacionSupport::paginas($filas, 'remito');
+	$paginasPedido = FacturaPdfPaginacionSupport::paginas($filas, 'pedido');
 @endphp
 @foreach ($paginasPedido as $pagIdx => $itemsPagina)
 	@php
@@ -162,6 +190,22 @@
 				</tr>
 			@endif
 		</table>
+		@if ($esUltima)
+			<table class="pedido-kilos-cuadro">
+				<tr>
+					<td class="pedido-kilos-cuadro-etiq">Kilos pesada</td>
+					<td class="pedido-kilos-cuadro-valor">{{ number_format((float) ($totales['pesada'] ?? 0), 2) }}</td>
+				</tr>
+				<tr>
+					<td class="pedido-kilos-cuadro-etiq">Kilos bonificación</td>
+					<td class="pedido-kilos-cuadro-valor">{{ number_format((float) ($totales['bonificacion'] ?? 0), 1) }}</td>
+				</tr>
+				<tr class="pedido-kilos-cuadro-total">
+					<td class="pedido-kilos-cuadro-etiq">Total kilos (pesada + bonificación)</td>
+					<td class="pedido-kilos-cuadro-valor">{{ number_format($totalKilosPesadaBonificacion, 2) }}</td>
+				</tr>
+			</table>
+		@endif
 		@if (! $esUltima)
 			<p class="pedido-continua">Continúa en la página siguiente…</p>
 		@elseif (trim((string) ($pedido->leyenda ?? '')) !== '')

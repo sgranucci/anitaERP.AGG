@@ -560,7 +560,14 @@
             return false;
         }
 
-        var seleccionados = $('#tabla-remitos-cot tbody input[type=checkbox]:checked').length;
+        var $invalidos = $('#tabla-remitos-cot tbody input[data-importe-ok="0"]:checked');
+        if ($invalidos.length) {
+            e.preventDefault();
+            alert('Hay remitos seleccionados sin el neto gravado + exento de la factura. No se genera el COT. Desmarcalos o corregí la factura.');
+            return false;
+        }
+
+        var seleccionados = $('#tabla-remitos-cot tbody .check-remito-cot-pendiente:checked').length;
         if (seleccionados < 1) {
             e.preventDefault();
             alert('Seleccione al menos un remito para procesar.');

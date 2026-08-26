@@ -4681,6 +4681,13 @@ Route::post('ventas/importar-pedido-anita', 'Ventas\PedidoImportarAnitaControlle
 Route::post('ventas/pedido/importar-anita', 'Ventas\PedidoImportarAnitaController@importarDesdeIndex')->name('pedido_importar_anita_index');
 
 /*
+ * Importar remitos Anita REM R 1 (pendmae/pendmov) por fecha y reparto
+ */
+Route::get('ventas/importar-remito-anita', 'Ventas\RemitoImportarAnitaController@index')->name('importar_remito_anita');
+Route::post('ventas/importar-remito-anita', 'Ventas\RemitoImportarAnitaController@importar')->name('ejecutar_importar_remito_anita');
+Route::post('ventas/remito/importar-anita', 'Ventas\RemitoImportarAnitaController@importarDesdeIndex')->name('remito_importar_anita_index');
+
+/*
  * Abasto
  */
 

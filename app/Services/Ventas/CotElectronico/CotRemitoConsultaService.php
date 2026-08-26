@@ -8,7 +8,10 @@ use App\Models\Stock\Articulo;
 use App\Models\Ventas\Cliente;
 use App\Models\Ventas\CotRemitoEnvio;
 use App\Models\Ventas\Remito;
+use App\Models\Ventas\Venta;
 use App\Support\Ventas\ArbaCotProvinciaSupport;
+use App\Support\Ventas\CotImporteRemitoSupport;
+use App\Support\Ventas\IvaVentas\IvaVentasDesgloseSupport;
 use App\Support\Ventas\RemitoEstadosSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
@@ -24,12 +27,17 @@ use Illuminate\Support\Facades\Log;
  */
 class CotRemitoConsultaService
 {
+    /** @var array<int, float> importe Anita venta indexado por número de remito */
+    private array $importesAnitaPorNumeroRemito = [];
+
     /**
      * @param  list<array{transporte_id:int,codigo:string,nombre:string,patente:?string,cuit_chofer:?string}>  $repartos
      * @return list<array<string, mixed>>
      */
     public function listarRemitosDelDia(Carbon $fecha, array $repartos): array
     {
+        $this->importesAnitaPorNumeroRemito = [];
+
         $transporteIds = collect($repartos)
             ->pluck('transporte_id')
             ->filter(fn ($id) => (int) $id > 0)
@@ -68,6 +76,8 @@ class CotRemitoConsultaService
 
         // Físico primero: pendmae > ERP > factura Anita (sucursal 1 no debe tapar REM R 99 N).
         $filas = $this->fusionarRemitosSinDuplicar([$pendmae, $erp, $comprob]);
+        $filas = $this->aplicarImportesVentaAnita($filas);
+        $filas = $this->completarImportesDesdeVentaErp($filas);
         $filas = $this->marcarEnviosPrevios($filas);
         usort($filas, function ($a, $b) {
             $enviadoA = ! empty($a['ya_enviado']) ? 1 : 0;
@@ -104,10 +114,16 @@ class CotRemitoConsultaService
         }
 
         $filas = [];
+        $comprobs = $this->cargarComprobConRemito($fechaAnita, $codigosReparto);
+        $importesVentaPorFactura = $this->cargarImportesVentaAnita($comprobs);
+        $this->importesAnitaPorNumeroRemito = $this->indexarImportesVentaPorRemito(
+            $comprobs,
+            $importesVentaPorFactura
+        );
 
         // Facturas con remito en comprob: solo si no hay REM físico con ese número
         // (cualquier sucursal; p-cot buscaba solo sucursal 1).
-        foreach ($this->cargarComprobConRemito($fechaAnita, $codigosReparto) as $comp) {
+        foreach ($comprobs as $comp) {
             $numeroRemito = (int) ($comp->comp_remito ?? 0);
             if ($numeroRemito <= 0) {
                 continue;
@@ -117,7 +133,18 @@ class CotRemitoConsultaService
                 continue;
             }
 
-            $fila = $this->mapearFilaDesdeAnitaComprob($comp, $repartosPorCodigo, $fecha);
+            $claveFactura = $this->claveFacturaAnita(
+                trim((string) ($comp->comp_tipo ?? '')),
+                trim((string) ($comp->comp_letra ?? '')),
+                (int) ($comp->comp_sucursal ?? 0),
+                (int) ($comp->comp_nro_fact ?? 0),
+            );
+            $fila = $this->mapearFilaDesdeAnitaComprob(
+                $comp,
+                $repartosPorCodigo,
+                $fecha,
+                (float) ($importesVentaPorFactura[$claveFactura] ?? 0),
+            );
             if ($fila !== null) {
                 $filas[] = $fila;
             }
@@ -222,6 +249,7 @@ class CotRemitoConsultaService
                 'transportes',
                 'puntoventas',
                 'ventas.venta_impuestos',
+                'ventas.tipotransacciones',
                 'remito_articulos.articulos.unidadesdemedidas',
             ])
             ->orderBy('numero')
@@ -239,7 +267,12 @@ class CotRemitoConsultaService
      * @param  Collection<int|string, array<string, mixed>>  $repartosPorCodigo
      * @return array<string, mixed>|null
      */
-    private function mapearFilaDesdeAnitaComprob(object $row, Collection $repartosPorCodigo, Carbon $fecha): ?array
+    private function mapearFilaDesdeAnitaComprob(
+        object $row,
+        Collection $repartosPorCodigo,
+        Carbon $fecha,
+        float $importeVentaAnita = 0.0,
+    ): ?array
     {
         $numeroRemito = (int) ($row->comp_remito ?? 0);
         if ($numeroRemito <= 0) {
@@ -265,13 +298,11 @@ class CotRemitoConsultaService
             (int) ($row->comp_nro_fact ?? 0),
         );
 
-        // p-cot genera_cot factura: ven_gravado + ven_gravado_ot + ven_exento ≈ gravado+exento de comprob
-        $importe = abs((float) ($row->comp_gravado ?? 0)) + abs((float) ($row->comp_exento ?? 0));
-        if ($importe <= 0) {
-            $importe = abs((float) ($row->comp_total ?? 0)) - abs((float) ($row->comp_iva ?? 0));
-        }
+        $resuelto = CotImporteRemitoSupport::resolver([
+            'factura_anita' => $importeVentaAnita,
+        ]);
 
-        return [
+        return CotImporteRemitoSupport::aplicarAFila([
             'clave' => $this->claveRemito('REM', 'R', $sucursal, $numeroRemito),
             'origen' => 'anita_comprob',
             'remito_id' => null,
@@ -306,14 +337,14 @@ class CotRemitoConsultaService
             'patente' => (string) ($reparto['patente'] ?? ''),
             'cuit_chofer' => (string) ($reparto['cuit_chofer'] ?? ''),
             'kilos' => round($kilos, 2),
-            'importe' => round($importe, 2),
+            'importe' => $resuelto['importe'] ?? 0.0,
             'ya_enviado' => false,
             'cot_previo' => null,
             'nro_unico_previo' => null,
             'error_previo' => null,
             'seleccionado' => true,
             'destinatario' => $this->destinatarioDesdeCliente($cliente, $codigoClienteAnita),
-        ];
+        ], $resuelto['importe'], $resuelto['origen']);
     }
 
     /**
@@ -349,11 +380,22 @@ class CotRemitoConsultaService
             $numeroRemito,
         );
 
-        // p-cot un_remito: penm_tot_seguro == 0 ? penm_neto : penm_tot_seguro
-        $totSeguro = (float) ($row->penm_tot_seguro ?? 0);
-        $importe = $totSeguro == 0.0 ? (float) ($row->penm_neto ?? 0) : $totSeguro;
+        $resuelto = CotImporteRemitoSupport::resolver([
+            'factura_anita' => $this->importesAnitaPorNumeroRemito[(int) $numeroRemito] ?? 0.0,
+            'remito_anita' => CotImporteRemitoSupport::desdeAnitaPendmae($row),
+        ]);
+        if ($resuelto['importe'] === null) {
+            $resuelto = CotImporteRemitoSupport::resolver([
+                'remito_lineas' => $this->importeDesdePendmov(
+                    trim((string) ($row->penm_tipo ?? 'REM')),
+                    $letra,
+                    $sucursal,
+                    $numeroRemito,
+                ),
+            ]);
+        }
 
-        return [
+        $fila = [
             'clave' => $this->claveRemito('REM', $letra, $sucursal, $numeroRemito),
             'origen' => 'anita_pendmae',
             'remito_id' => null,
@@ -383,7 +425,7 @@ class CotRemitoConsultaService
             'patente' => (string) ($reparto['patente'] ?? ''),
             'cuit_chofer' => (string) ($reparto['cuit_chofer'] ?? ''),
             'kilos' => round($kilos, 2),
-            'importe' => round(abs($importe), 2),
+            'importe' => $resuelto['importe'] ?? 0.0,
             'ya_enviado' => false,
             'cot_previo' => null,
             'nro_unico_previo' => null,
@@ -391,6 +433,8 @@ class CotRemitoConsultaService
             'seleccionado' => true,
             'destinatario' => $this->destinatarioDesdeCliente($cliente, $codigoClienteAnita),
         ];
+
+        return CotImporteRemitoSupport::aplicarAFila($fila, $resuelto['importe'], $resuelto['origen']);
     }
 
     /**
@@ -407,9 +451,13 @@ class CotRemitoConsultaService
 
         $cliente = $remito->clientes;
         $kilos = $this->calcularKilosRemito($remito);
-        $importe = $this->calcularImporteRemito($remito);
+        $resuelto = CotImporteRemitoSupport::resolver([
+            'factura_erp' => $this->calcularImporteFacturaRemito($remito),
+            'factura_anita' => $this->importesAnitaPorNumeroRemito[$numeroRemito] ?? 0.0,
+            'remito_erp' => $this->calcularImporteLineasRemito($remito),
+        ]);
 
-        return [
+        return CotImporteRemitoSupport::aplicarAFila([
             'clave' => $this->claveRemito('REM', 'R', $sucursal, $numeroRemito),
             'origen' => 'erp',
             'remito_id' => (int) $remito->id,
@@ -432,14 +480,14 @@ class CotRemitoConsultaService
             'patente' => (string) ($reparto['patente'] ?? $remito->transportes->patentevehiculo ?? ''),
             'cuit_chofer' => (string) ($reparto['cuit_chofer'] ?? ''),
             'kilos' => round($kilos, 2),
-            'importe' => round($importe, 2),
+            'importe' => $resuelto['importe'] ?? 0.0,
             'ya_enviado' => false,
             'cot_previo' => null,
             'nro_unico_previo' => null,
             'error_previo' => null,
             'seleccionado' => true,
             'destinatario' => $this->destinatarioDesdeCliente($cliente),
-        ];
+        ], $resuelto['importe'], $resuelto['origen']);
     }
 
     private function kilosDesdeCompa(string $tipo, string $letra, int $sucursal, int $nroFact): float
@@ -719,6 +767,209 @@ class CotRemitoConsultaService
         return $filas;
     }
 
+    /**
+     * @param  list<object>  $comprobs
+     * @return array<string, float>
+     */
+    private function cargarImportesVentaAnita(array $comprobs): array
+    {
+        $grupos = [];
+        foreach ($comprobs as $comp) {
+            $tipo = trim((string) ($comp->comp_tipo ?? ''));
+            $letra = trim((string) ($comp->comp_letra ?? ''));
+            $sucursal = (int) ($comp->comp_sucursal ?? 0);
+            $nro = (int) ($comp->comp_nro_fact ?? 0);
+            if ($tipo === '' || $nro <= 0) {
+                continue;
+            }
+            $grupos[$tipo.'|'.$letra.'|'.$sucursal][] = $nro;
+        }
+
+        if ($grupos === []) {
+            return [];
+        }
+
+        $api = new ApiAnita();
+        $mapa = [];
+        foreach ($grupos as $grupo => $numeros) {
+            [$tipo, $letra, $sucursal] = explode('|', $grupo);
+            $numeros = array_values(array_unique(array_map('intval', $numeros)));
+            $data = [
+                'acc' => 'list',
+                'sistema' => 'ventas',
+                'tabla' => 'venta',
+                'campos' => 'ven_tipo, ven_letra, ven_sucursal, ven_nro, ven_gravado, ven_gravado_ot, ven_exento',
+                'whereArmado' => " WHERE ven_tipo = '".$this->esc($tipo)
+                    ."' AND ven_letra = '".$this->esc($letra)
+                    ."' AND ven_sucursal = ".(int) $sucursal
+                    .' AND ven_nro IN ('.implode(',', $numeros).') ',
+            ];
+            $parseado = ApiAnita::parsearRespuestaLista($api->apiCall($data));
+            if ($parseado['error_lectura'] !== null) {
+                Log::warning('cot_electronico.anita_venta_importe', [
+                    'mensaje' => $parseado['error_lectura'],
+                    'grupo' => $grupo,
+                ]);
+
+                continue;
+            }
+
+            foreach ($parseado['filas'] as $venta) {
+                $clave = $this->claveFacturaAnita(
+                    trim((string) ($venta->ven_tipo ?? $tipo)),
+                    trim((string) ($venta->ven_letra ?? $letra)),
+                    (int) ($venta->ven_sucursal ?? $sucursal),
+                    (int) ($venta->ven_nro ?? 0),
+                );
+                $mapa[$clave] = CotImporteRemitoSupport::desdeAnitaVenta($venta);
+            }
+        }
+
+        return $mapa;
+    }
+
+    /**
+     * @param  list<object>  $comprobs
+     * @param  array<string, float>  $importesVentaPorFactura
+     * @return array<int, float>
+     */
+    private function indexarImportesVentaPorRemito(array $comprobs, array $importesVentaPorFactura): array
+    {
+        $porRemito = [];
+        foreach ($comprobs as $comp) {
+            $numeroRemito = (int) ($comp->comp_remito ?? 0);
+            if ($numeroRemito <= 0) {
+                continue;
+            }
+            $clave = $this->claveFacturaAnita(
+                trim((string) ($comp->comp_tipo ?? '')),
+                trim((string) ($comp->comp_letra ?? '')),
+                (int) ($comp->comp_sucursal ?? 0),
+                (int) ($comp->comp_nro_fact ?? 0),
+            );
+            $importe = CotImporteRemitoSupport::preferir(
+                (float) ($importesVentaPorFactura[$clave] ?? 0),
+                CotImporteRemitoSupport::desdeAnitaComprob($comp),
+            );
+            if (CotImporteRemitoSupport::esPlaceholder($importe)) {
+                continue;
+            }
+            $porRemito[$numeroRemito] = $importe;
+        }
+
+        return $porRemito;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private function aplicarImportesVentaAnita(array $filas): array
+    {
+        foreach ($filas as $i => $fila) {
+            $numero = (int) ($fila['numero_remito'] ?? 0);
+            $reemplazo = (float) ($this->importesAnitaPorNumeroRemito[$numero] ?? 0);
+            if (! CotImporteRemitoSupport::esValidoParaCot($reemplazo)) {
+                continue;
+            }
+
+            $actual = (float) ($fila['importe'] ?? 0);
+            $filas[$i] = CotImporteRemitoSupport::aplicarAFila($fila, $reemplazo, 'factura_anita');
+            if (! CotImporteRemitoSupport::esValidoParaCot($actual) || abs($actual - $reemplazo) > 0.02) {
+                Log::info('cot_electronico.importe_desde_venta_anita', [
+                    'numero_remito' => $numero,
+                    'importe_anterior' => $actual,
+                    'importe' => $filas[$i]['importe'],
+                ]);
+            }
+        }
+
+        return $filas;
+    }
+
+    /**
+     * Si Anita no trajo gravado+exento, intenta la factura ERP del remito.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<array<string, mixed>>
+     */
+    private function completarImportesDesdeVentaErp(array $filas): array
+    {
+        $numeros = [];
+        $remitoIds = [];
+        foreach ($filas as $fila) {
+            if (! empty($fila['importe_ok'])) {
+                continue;
+            }
+            $numero = (int) ($fila['numero_remito'] ?? 0);
+            if ($numero > 0) {
+                $numeros[] = $numero;
+            }
+            $remitoId = (int) ($fila['remito_id'] ?? 0);
+            if ($remitoId > 0) {
+                $remitoIds[] = $remitoId;
+            }
+        }
+        $numeros = array_values(array_unique($numeros));
+        $remitoIds = array_values(array_unique($remitoIds));
+        if ($numeros === [] && $remitoIds === []) {
+            return $filas;
+        }
+
+        $ventas = Venta::query()
+            ->with(['venta_impuestos', 'tipotransacciones'])
+            ->where(function ($q) use ($numeros, $remitoIds) {
+                if ($numeros !== []) {
+                    $q->orWhereIn('numeroremito', $numeros);
+                }
+                if ($remitoIds !== []) {
+                    $q->orWhereIn('remito_id', $remitoIds);
+                }
+            })
+            ->get();
+
+        $porNumero = [];
+        $porRemitoId = [];
+        foreach ($ventas as $venta) {
+            $importe = CotImporteRemitoSupport::desdeDesgloseErp(
+                IvaVentasDesgloseSupport::columnasDesdeVenta($venta)
+            );
+            if (! CotImporteRemitoSupport::esValidoParaCot($importe)) {
+                continue;
+            }
+            $numero = (int) ($venta->numeroremito ?? 0);
+            if ($numero > 0) {
+                $porNumero[$numero] = $importe;
+            }
+            $remitoId = (int) ($venta->remito_id ?? 0);
+            if ($remitoId > 0) {
+                $porRemitoId[$remitoId] = $importe;
+            }
+        }
+
+        foreach ($filas as $i => $fila) {
+            if (! empty($fila['importe_ok'])) {
+                continue;
+            }
+            $importe = $porRemitoId[(int) ($fila['remito_id'] ?? 0)]
+                ?? $porNumero[(int) ($fila['numero_remito'] ?? 0)]
+                ?? null;
+            if ($importe === null) {
+                $filas[$i] = CotImporteRemitoSupport::aplicarAFila($fila, null);
+
+                continue;
+            }
+            $filas[$i] = CotImporteRemitoSupport::aplicarAFila($fila, $importe, 'factura_erp');
+        }
+
+        return $filas;
+    }
+
+    private function claveFacturaAnita(string $tipo, string $letra, int $sucursal, int $numero): string
+    {
+        return implode('|', [$tipo, $letra, $sucursal, $numero]);
+    }
+
     private function calcularKilosRemito(Remito $remito): float
     {
         $total = 0.0;
@@ -751,22 +1002,19 @@ class CotRemitoConsultaService
         return $total;
     }
 
-    private function calcularImporteRemito(Remito $remito): float
+    private function calcularImporteFacturaRemito(Remito $remito): float
     {
-        if ($remito->ventas) {
-            $venta = $remito->ventas;
-            $desglose = \App\Support\Ventas\IvaVentas\IvaVentasDesgloseSupport::columnasDesdeVenta($venta);
-            $total = (float) ($desglose['neto_gravado'] ?? 0)
-                + (float) ($desglose['exento'] ?? 0)
-                + (float) ($desglose['no_gravado'] ?? 0);
-            if ($total > 0) {
-                return $total;
-            }
-            if (abs((float) ($venta->total ?? 0)) > 0) {
-                return abs((float) $venta->total);
-            }
+        if (! $remito->ventas) {
+            return 0.0;
         }
 
+        return CotImporteRemitoSupport::desdeDesgloseErp(
+            IvaVentasDesgloseSupport::columnasDesdeVenta($remito->ventas)
+        );
+    }
+
+    private function calcularImporteLineasRemito(Remito $remito): float
+    {
         $total = 0.0;
         foreach ($remito->remito_articulos as $item) {
             $articulo = $item->articulos;
@@ -774,6 +1022,55 @@ class CotRemitoConsultaService
                 continue;
             }
             $total += (float) ($item->kilo ?? 0) * (float) ($item->precio ?? 0);
+        }
+
+        return $total;
+    }
+
+    private function importeDesdePendmov(string $tipo, string $letra, int $sucursal, int $nro): float
+    {
+        if ($nro <= 0) {
+            return 0.0;
+        }
+
+        $api = new ApiAnita();
+        $data = [
+            'acc' => 'list',
+            'sistema' => 'ventas',
+            'tabla' => 'pendmov',
+            'campos' => 'penv_articulo, penv_cantidad, penv_precio, penv_kilos_reales, penv_dto_art',
+            'whereArmado' => " WHERE penv_tipo = '".$this->esc($tipo)
+                ."' AND penv_letra = '".$this->esc($letra)
+                ."' AND penv_sucursal = ".$sucursal
+                .' AND penv_nro = '.$nro.' ',
+        ];
+        $parseado = ApiAnita::parsearRespuestaLista($api->apiCall($data));
+        if ($parseado['error_lectura'] !== null) {
+            Log::warning('cot_electronico.anita_pendmov_importe', ['mensaje' => $parseado['error_lectura']]);
+
+            return 0.0;
+        }
+
+        $total = 0.0;
+        foreach ($parseado['filas'] as $linea) {
+            $sku = trim((string) ($linea->penv_articulo ?? ''));
+            if ($this->esLineaExcluida($sku)) {
+                continue;
+            }
+            $cantidad = (float) ($linea->penv_kilos_reales ?? 0);
+            if ($cantidad <= 0) {
+                $cantidad = (float) ($linea->penv_cantidad ?? 0);
+            }
+            $precio = (float) ($linea->penv_precio ?? 0);
+            $dto = (float) ($linea->penv_dto_art ?? 0);
+            if ($cantidad <= 0 || $precio <= 0) {
+                continue;
+            }
+            $netoLinea = $cantidad * $precio;
+            if ($dto > 0 && $dto < 100) {
+                $netoLinea *= (1 - $dto / 100);
+            }
+            $total += $netoLinea;
         }
 
         return $total;

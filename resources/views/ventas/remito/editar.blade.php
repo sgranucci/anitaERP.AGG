@@ -100,12 +100,15 @@
                             Factura
                         </button>
                     @endif
-                    @if ($remito->estadoremito == "Facturado" && $remito->venta_id)
-                        @if (can('listar-factura', false))
-                            <a href="{{route('lista_una_factura', ['id' => $remito->venta_id])}}" class="btn btn-primary" title="Listar la factura">
-                                <i class="fas fa-file-pdf"> Listar Factura</i>
-                            </a>
-                        @endif
+                    @php
+                        $ventaRemitoVisible = $remito->estadoremito == 'Facturado'
+                            && $remito->venta_id
+                            && \App\Support\Ventas\PedidoFacturaAnitaArchivosSupport::esVentaVisible($remito->ventas);
+                    @endphp
+                    @if ($ventaRemitoVisible && can('listar-factura', false))
+                        <a href="{{route('lista_una_factura', ['id' => $remito->venta_id])}}" class="btn btn-primary" title="Listar la factura">
+                            <i class="fas fa-file-pdf"> Listar Factura</i>
+                        </a>
                     @endif
                     <a href="{{route('listar_remito_pdf', ['id' => $remito->id])}}" class="btn btn-primary" title="Listar el remito en PDF">
                         <i class="fas fa-file-pdf"> Listar Remito</i>

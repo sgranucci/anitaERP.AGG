@@ -15,6 +15,7 @@ use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
 use App\Models\Configuracion\Salida;
 use App\Support\Configuracion\SalidaImpresionFallbackSupport;
 use App\Support\Configuracion\SeteoSalidaProgramaSupport;
+use App\Support\Ventas\ClienteEntregaPedidoSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
 use App\Support\Ventas\PedidoItemCierreFaltaStockSupport;
 use App\Services\Configuracion\ImpuestoService;
@@ -553,9 +554,10 @@ class PedidoService
 		if (!$cliente)
 			return ['error' => 'Cliente inexistente'];
 
-		$errorEntrega = \App\Support\Ventas\ClienteEntregaPedidoSupport::validarSeleccionParaCliente(
+		$errorEntrega = ClienteEntregaPedidoSupport::validarSeleccionParaCliente(
 			(int) $data['cliente_id'],
-			(int) ($data['cliente_entrega_id'] ?? 0) ?: null
+			(int) ($data['cliente_entrega_id'] ?? 0) ?: null,
+			$data['lugarentrega'] ?? null
 		);
 		if ($errorEntrega !== null) {
 			return $errorEntrega;
@@ -571,10 +573,10 @@ class PedidoService
 		}
 
 		$entregasCliente = $this->cliente_entregaRepository->leeClienteEntrega($data['cliente_id']);
-		if ($entregasCliente->count() > 0) {
-			$entrega = $entregasCliente->firstWhere('id', (int) $data['cliente_entrega_id']);
-			$data['lugarentrega'] = $entrega->nombre;
-		} else {
+		$entrega = $entregasCliente->firstWhere('id', (int) ($data['cliente_entrega_id'] ?? 0));
+		if ($entrega) {
+			$data['lugarentrega'] = ClienteEntregaPedidoSupport::etiquetaEntrega($entrega);
+		} elseif ((int) ($data['cliente_entrega_id'] ?? 0) <= 0) {
 			$data['cliente_entrega_id'] = null;
 		}
 

@@ -108,6 +108,29 @@
 		return cantidadItems > 1 && esCodigoSucursalVillafranca(codigo);
 	}
 
+	function extraerUrlImpresionSesion(data) {
+		var items = Array.isArray(data) ? data : [data];
+		for (var i = 0; i < items.length; i++) {
+			var item = items[i];
+			if (item && typeof item === 'object' && item.impresion_url) {
+				var url = String(item.impresion_url).trim();
+				if (url !== '') {
+					return url;
+				}
+			}
+		}
+		return null;
+	}
+
+	function irASesionImpresionORecargar(data) {
+		var url = extraerUrlImpresionSesion(data);
+		if (url) {
+			window.location = url;
+			return;
+		}
+		window.history.go(0);
+	}
+
 	function facturasGeneradasPedido(data) {
 		var items = Array.isArray(data) ? data : [data];
 		var facturas = [];
@@ -564,9 +587,33 @@
 		form.addEventListener('keydown', avanzarCampoPedidoConEnter, true);
 	}
 	
+	function etiquetaLugarEntrega(entrega) {
+		if (!entrega) {
+			return '';
+		}
+		if (entrega.etiqueta) {
+			return String(entrega.etiqueta);
+		}
+		var nombre = String(entrega.nombre || '').trim();
+		if (nombre) {
+			return nombre;
+		}
+		var domicilio = String(entrega.domicilio || '').trim();
+		if (domicilio) {
+			return domicilio;
+		}
+		return String(entrega.localidad || '').trim();
+	}
+
+	function entregasNombradasCliente(entregas) {
+		return (entregas || []).filter(function (entrega) {
+			return String(entrega.nombre || '').trim() !== '' || entrega.nombre_usable === true;
+		});
+	}
+
 	function actualizarEstadoRequeridoLugarEntrega() {
 		var obligatorio = $('#fl_cliente_tiene_entrega').val() === '1';
-		var seleccionado = !!$('#cliente_entrega_id').val();
+		var seleccionado = !!$('#cliente_entrega_id').val() || String($('#lugarentrega').val() || '').trim() !== '';
 
 		$('#label-lugarentrega').toggleClass('requerido', obligatorio);
 		$('#aviso-lugarentrega-obligatorio').toggle(obligatorio && !seleccionado);
@@ -582,18 +629,27 @@
 			});
 
 			window._entregasClienteActual = entr;
-			fl_tiene_entrega = entr.length > 0;
+			var nombradas = entregasNombradasCliente(entr);
+			fl_tiene_entrega = nombradas.length > 0;
 			$('#fl_cliente_tiene_entrega').val(fl_tiene_entrega ? '1' : '0');
 
 			if (!fl_tiene_entrega) {
-				$('#cliente_entrega_id').val('');
-				$('#entrega_nombre').val('');
 				$('#div-cambiar-lugarentrega').hide();
-				$('#lugarentrega').prop('readonly', false).attr('placeholder', '');
+				$('#lugarentrega').prop('readonly', false).attr('placeholder', 'Puede cargarlo aquí si el cliente no tiene lugares en el ABM');
 
-				$.get(carpetaBase+'/ventas/leercliente/'+cliente_id, function(clienteData){
-					$('#lugarentrega').val(clienteData.lugarentrega || '');
-				});
+				if (entr.length === 1) {
+					aplicarLugarEntregaCliente(entr[0]);
+					actualizarEstadoRequeridoLugarEntrega();
+					return;
+				}
+
+				if (!$('#lugarentrega').val()) {
+					$.get(carpetaBase+'/ventas/leercliente/'+cliente_id, function(clienteData){
+						if (!$('#lugarentrega').val()) {
+							$('#lugarentrega').val(clienteData.lugarentrega || '');
+						}
+					});
+				}
 				actualizarEstadoRequeridoLugarEntrega();
 				return;
 			}
@@ -643,10 +699,11 @@
 			return;
 		}
 
+		var etiqueta = etiquetaLugarEntrega(entrega);
 		$('#cliente_entrega_id').val(entrega.id);
 		$('#cliente_entrega_id_previa').val(entrega.id);
-		$('#entrega_nombre').val(entrega.nombre);
-		$('#lugarentrega').val(entrega.nombre).prop('readonly', true);
+		$('#entrega_nombre').val(etiqueta);
+		$('#lugarentrega').val(etiqueta).prop('readonly', $('#fl_cliente_tiene_entrega').val() === '1');
 		actualizarEstadoRequeridoLugarEntrega();
 	}
 
@@ -655,7 +712,7 @@
 
 		$.each(entregas, function(index, value){
 			html += '<tr>';
-			html += '<td class="nombre">'+ (value.nombre || '') +'</td>';
+			html += '<td class="nombre">'+ (etiquetaLugarEntrega(value) || '') +'</td>';
 			html += '<td class="domicilio">'+ (value.domicilio || '') +'</td>';
 			html += '<td class="localidad">'+ (value.localidad || '') +'</td>';
 			html += '<td class="provincia">'+ (value.provincia || '') +'</td>';
@@ -676,7 +733,8 @@
 	}
 
 	function validarLugarEntregaAntesGuardar() {
-		if ($('#fl_cliente_tiene_entrega').val() === '1' && !$('#cliente_entrega_id').val()) {
+		var tieneTexto = String($('#lugarentrega').val() || '').trim() !== '';
+		if ($('#fl_cliente_tiene_entrega').val() === '1' && !$('#cliente_entrega_id').val() && !tieneTexto) {
 			actualizarEstadoRequeridoLugarEntrega();
 			if (window.toastr) {
 				toastr.error('Debe seleccionar un lugar de entrega del cliente.', '', { timeOut: 8000, closeButton: true });
@@ -945,6 +1003,11 @@
 
 		activa_eventos(true);
 		TotalPedido();
+
+		var clienteIdInicial = $('#cliente_id').val();
+		if (clienteIdInicial && $.isNumeric(clienteIdInicial) && parseInt(clienteIdInicial, 10) > 0) {
+			completarCliente_Entrega(clienteIdInicial);
+		}
 	});
 
 	function activa_eventos(flInicio)
@@ -1771,6 +1834,110 @@
 		$("#facturarPedidoModal").modal('show');
 	}
 
+	function datosLugarEntregaFacturaPedido() {
+		var modal = $('#facturarPedidoModal');
+		return {
+			cliente_entrega_id: modal.find('#factura_pedido_cliente_entrega_id').val() || $('#cliente_entrega_id').val() || '',
+			lugarentrega: String(modal.find('#factura_pedido_lugarentrega').val() || $('#lugarentrega').val() || '').trim()
+		};
+	}
+
+	function sincronizarLugarEntregaPedidoDesdeModal() {
+		var datos = datosLugarEntregaFacturaPedido();
+		if (datos.cliente_entrega_id) {
+			$('#cliente_entrega_id').val(datos.cliente_entrega_id);
+			$('#cliente_entrega_id_previa').val(datos.cliente_entrega_id);
+		}
+		if (datos.lugarentrega) {
+			$('#lugarentrega').val(datos.lugarentrega);
+			$('#entrega_nombre').val(datos.lugarentrega);
+		}
+	}
+
+	function hidratarLugarEntregaFacturaPedido(modal) {
+		var clienteId = $('#cliente_id').val();
+		var $sel = modal.find('#factura_pedido_cliente_entrega_id');
+		var $txt = modal.find('#factura_pedido_lugarentrega');
+		var $aviso = modal.find('#aviso-lugarentrega-factura-pedido');
+		var $label = modal.find('#label-factura-pedido-lugarentrega');
+		var idActual = $sel.val() || $('#cliente_entrega_id').val() || '';
+		var textoActual = String($txt.val() || $('#lugarentrega').val() || '').trim();
+
+		$aviso.text('');
+		$label.removeClass('requerido');
+
+		if (!clienteId) {
+			$sel.hide().empty();
+			$txt.prop('readonly', false).val(textoActual);
+			return;
+		}
+
+		$.get(carpetaBase + '/ventas/leercliente_entrega/' + clienteId, function (data) {
+			var entr = $.map(data, function (value) { return [value]; });
+			window._entregasClienteActual = entr;
+			var nombradas = entregasNombradasCliente(entr);
+
+			$sel.empty().append($('<option></option>').val('').text('-- Seleccionar --'));
+			$.each(entr, function (_, entrega) {
+				$sel.append($('<option></option>').val(entrega.id).text(etiquetaLugarEntrega(entrega)));
+			});
+
+			if (entr.length) {
+				$sel.show();
+				if (idActual && $sel.find('option[value="' + idActual + '"]').length) {
+					$sel.val(idActual);
+				} else if (entr.length === 1) {
+					$sel.val(entr[0].id);
+				}
+				if ($sel.val()) {
+					var elegida = null;
+					$.each(entr, function (_, entrega) {
+						if (String(entrega.id) === String($sel.val())) {
+							elegida = entrega;
+						}
+					});
+					$txt.val(etiquetaLugarEntrega(elegida) || textoActual);
+				} else {
+					$txt.val(textoActual);
+				}
+				$txt.prop('readonly', nombradas.length > 0);
+				if (nombradas.length) {
+					$label.addClass('requerido');
+					if (!$sel.val() && !String($txt.val() || '').trim()) {
+						$aviso.text('Este cliente tiene lugares de entrega. Elija uno para facturar.');
+					}
+				} else {
+					$aviso.text('El lugar del ABM no tiene nombre. Puede completarlo aquí o cargarlo en el cliente.');
+				}
+			} else {
+				$sel.hide().val('');
+				$txt.prop('readonly', false).val(textoActual);
+				$aviso.html('El cliente no tiene lugares de entrega en el ABM. Puede cargarlo aquí; conviene cargarlo también en el cliente.');
+			}
+
+			sincronizarLugarEntregaPedidoDesdeModal();
+			recalcularPreviewFacturaPedido(modal, { silencioso: true });
+		});
+	}
+
+	function validarLugarEntregaFacturaPedido() {
+		var datos = datosLugarEntregaFacturaPedido();
+		var obligatorio = $('#fl_cliente_tiene_entrega').val() === '1'
+			|| $('#label-factura-pedido-lugarentrega').hasClass('requerido');
+		if (obligatorio && !datos.cliente_entrega_id && !datos.lugarentrega) {
+			var msg = 'Debe seleccionar o cargar un lugar de entrega.';
+			if (window.toastr) {
+				toastr.error(msg, '', { timeOut: 8000, closeButton: true });
+			} else {
+				alert(msg);
+			}
+			$('#factura_pedido_lugarentrega').focus();
+			return false;
+		}
+		sincronizarLugarEntregaPedidoDesdeModal();
+		return true;
+	}
+
 	function aplicarUiModalEmisionPedido(modal)
 	{
 		var esRemito = window.modoEmisionPedido === 'remito';
@@ -2005,8 +2172,27 @@
 				$('#actividad_arca_id').attr('readonly', false);
 		});
 
-		recalcularPreviewFacturaPedido(modal);
+		hidratarLugarEntregaFacturaPedido(modal);
 
+	});
+
+	$(document).on('change', '#factura_pedido_cliente_entrega_id', function () {
+		var entregaId = $(this).val();
+		var entrega = null;
+		$.each(window._entregasClienteActual || [], function (_, value) {
+			if (String(value.id) === String(entregaId)) {
+				entrega = value;
+			}
+		});
+		if (entrega) {
+			$('#factura_pedido_lugarentrega').val(etiquetaLugarEntrega(entrega));
+		}
+		sincronizarLugarEntregaPedidoDesdeModal();
+		programarRecalculoPreviewFacturaPedido();
+	});
+
+	$(document).on('input', '#factura_pedido_lugarentrega', function () {
+		sincronizarLugarEntregaPedidoDesdeModal();
 	});
 
 	var previewFacturaPedidoXhr = null;
@@ -2034,6 +2220,7 @@
 		var clienteIdPreview = $('#cliente_id').val();
 		var pedido_id = $('#pedido_id').val();
 		var totalcajaspedido = modal.find('#cantidadbulto').val();
+		var lugarEntregaPreview = datosLugarEntregaFacturaPedido();
 		var seq = ++previewFacturaPedidoSeq;
 
 		if (previewFacturaPedidoXhr && previewFacturaPedidoXhr.readyState !== 4) {
@@ -2055,6 +2242,8 @@
 				incoterm_id: incoterm_id,
 				mercaderia: mercaderia,
 				totalcajaspedido: totalcajaspedido,
+				cliente_entrega_id: lugarEntregaPreview.cliente_entrega_id,
+				lugarentrega: lugarEntregaPreview.lugarentrega,
 				_token: token
 			},
 			success: function(data){
@@ -2256,6 +2445,10 @@
 
 	// Acepta modal
 	$('#aceptaFacturarOrdenTrabajoModal').on('click', function () {
+		if (!validarLugarEntregaFacturaPedido()) {
+			return;
+		}
+
 		// Factura el item
 		var token = $('#csrf_token').val();
 		var puntoventa_id = $('#puntoventa_id').val();
@@ -2344,6 +2537,7 @@
 		var fechafactura = $('#fechafactura').val();
 		let cliente_id = $('#cliente_id').val();
 		let pedido_id = $('#pedido_id').val();
+		var lugarEntregaRemito = datosLugarEntregaFacturaPedido();
 
 		$('#facturarPedidoModal').modal('hide');
 		if (typeof iniciarProcesoFacturaPedido === 'function') {
@@ -2360,6 +2554,8 @@
 				pedido_id: pedido_id,
 				puntoventaremito_id: puntoventaremito_id,
 				fecharemito: fechafactura,
+				cliente_entrega_id: lugarEntregaRemito.cliente_entrega_id,
+				lugarentrega: lugarEntregaRemito.lugarentrega,
 				_token: token
 			},
 		})
@@ -2430,6 +2626,7 @@
 		let cliente_id = $('#cliente_id').val();
 		let actividad_arca_id = $('#actividad_arca_id').val();
 		let pedido_id = $('#pedido_id').val();
+		var lugarEntregaFactura = datosLugarEntregaFacturaPedido();
 		
 		$('#facturarPedidoModal').modal('hide');
 
@@ -2458,6 +2655,8 @@
 				mercaderia: mercaderia,
 				leyendaexportacion: leyendaexportacion,
 				actividad_arca_id: actividad_arca_id,
+				cliente_entrega_id: lugarEntregaFactura.cliente_entrega_id,
+				lugarentrega: lugarEntregaFactura.lugarentrega,
 				_token: token
 			},
 		})
@@ -2471,7 +2670,7 @@
 					$('#facturarPedidoModal').modal('hide');
 					$('#estadopedido').val('Facturado');
 					TotalPedido();
-					window.history.go(0);
+					irASesionImpresionORecargar(data);
 				});
 			})
 			.fail(function (xhr) {

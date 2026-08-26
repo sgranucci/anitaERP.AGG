@@ -144,11 +144,19 @@
                     @endif
                     @php
                         $ventasPedido = \App\Support\Ventas\PedidoFacturaAnitaArchivosSupport::ventasVisiblesEnPedido($pedido->ventas ?? []);
+                        $remitosPedido = $pedido->remitos ?? collect();
                     @endphp
                     @if ($ventasPedido->isNotEmpty() && can('listar-factura', false))
                         @foreach ($ventasPedido as $ventaPedido)
                             <a href="{{ route('lista_una_factura', ['id' => $ventaPedido->id]) }}" class="btn btn-primary" title="Listar {{ $ventaPedido->codigo }}" target="_blank" rel="noopener">
                                 <i class="fas fa-file-pdf"></i> {{ $ventaPedido->codigo }}
+                            </a>
+                        @endforeach
+                    @endif
+                    @if ($remitosPedido->isNotEmpty() && can('listar-remitos', false))
+                        @foreach ($remitosPedido as $remitoPedido)
+                            <a href="{{ route('listar_remito_pdf', ['id' => $remitoPedido->id, 'pack' => 1]) }}" class="btn btn-primary" title="Listar remito {{ $remitoPedido->codigo }}">
+                                <i class="fas fa-file-pdf"></i> {{ $remitoPedido->codigo ?: 'Remito' }}
                             </a>
                         @endforeach
                     @endif

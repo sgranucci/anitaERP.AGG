@@ -86,9 +86,32 @@ class PrevenirEnvioDuplicado
             return false;
         }
 
-        $excluidas = (array) config('envio_duplicado.rutas_excluidas', []);
+        if ($this->estaExcluida($request)) {
+            return false;
+        }
 
-        return $excluidas === [] || ! $request->is(...$excluidas);
+        return true;
+    }
+
+    private function estaExcluida(Request $request): bool
+    {
+        $nombres = (array) config('envio_duplicado.rutas_nombre_excluidas', []);
+        if ($nombres !== [] && $request->routeIs(...$nombres)) {
+            return true;
+        }
+
+        // Reimprimir sesión: el POST es idéntico a propósito (auto=1 + botón).
+        if ($request->routeIs('ejecutar_impresion_sesion')
+            || str_contains($request->decodedPath(), 'impresion-sesion/ejecutar')) {
+            return true;
+        }
+
+        $excluidas = (array) config('envio_duplicado.rutas_excluidas', []);
+        if ($excluidas === []) {
+            return false;
+        }
+
+        return $request->is(...$excluidas);
     }
 
     /** Mismo usuario + misma sesión + misma URL + mismo contenido = mismo envío. */

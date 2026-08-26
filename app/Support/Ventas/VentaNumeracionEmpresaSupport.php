@@ -134,4 +134,17 @@ final class VentaNumeracionEmpresaSupport
     ): string {
         return trim($tipoAnita).' '.trim($letra).' '.trim($sucursal).'-'.$numero;
     }
+
+    public static function formatearPuntoVentaNumero(?string $codigoPuntoventa, int $numero): string
+    {
+        $digitosSucursal = (int) config('facturacion.DIGITOS_SUCURSAL', 5);
+        $digitosComprobante = (int) config('facturacion.DIGITOS_COMPROBANTE', 8);
+        $sucursal = preg_replace('/\D+/', '', (string) $codigoPuntoventa);
+        $nro = str_pad((string) max(0, $numero), $digitosComprobante, '0', STR_PAD_LEFT);
+        if ($sucursal === '') {
+            return $numero > 0 ? $nro : '';
+        }
+
+        return str_pad($sucursal, $digitosSucursal, '0', STR_PAD_LEFT).'-'.$nro;
+    }
 }
