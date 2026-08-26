@@ -104,6 +104,11 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                                 @else
                                     {{ \App\Support\Compras\PrecargaComprobanteEstados::etiquetaRegistro((string) ($data->estado ?? '')) }}
                                 @endif
+                                @if (filled($data->marca_error ?? null))
+                                    <br><span class="badge badge-danger" title="{{ $data->aviso_error ?? '' }}">
+                                        {{ \App\Support\Compras\ComprobanteProveedorCotizacionIngresoSupport::etiquetaMarca($data->marca_error) ?: $data->marca_error }}
+                                    </span>
+                                @endif
                                 @if (!empty($data->comprobante_proveedor_id))
                                     @php
                                         $cpEstado = $data->comprobante_proveedor_estado ?? null;

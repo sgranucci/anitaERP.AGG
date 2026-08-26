@@ -118,7 +118,10 @@ final class MayorPlanoCuentaEmisorSupport
             return '';
         }
 
-        if (! in_array(strtoupper(trim($tipoComprobante)), self::TIPOS_EMISOR_EN_DESCRIPCION, true)) {
+        $tipo = strtoupper(trim($tipoComprobante));
+        $esTipoConocido = in_array($tipo, self::TIPOS_EMISOR_EN_DESCRIPCION, true);
+        $esAplicacionCc = preg_match('/aplicaci|anticipo\s*cc/i', $descripcion) === 1;
+        if (! $esTipoConocido && ! $esAplicacionCc) {
             return '';
         }
 

@@ -9,8 +9,8 @@ use App\Queries\Configuracion\CotizacionQueryInterface;
  *
  * Default: cotización venta del día (fecha comprobante) para moneda extranjera.
  * Pesos (moneda id 1): siempre 1.
- * Precarga: si trae cotización > 1 en moneda extranjera, se respeta en el campo;
- * la del día se muestra como referencia.
+ * Precarga: la cotización se pasa por ComprobanteProveedorCotizacionIngresoSupport
+ * (deduce escala 1,51→1510 o toma la del día si no encaja).
  */
 class ComprobanteProveedorCotizacionSupport
 {
@@ -49,12 +49,13 @@ class ComprobanteProveedorCotizacionSupport
             return 1.0;
         }
 
-        $cotPrecarga = (float) ($cotizacionPrecarga ?? 0);
-        if ($cotPrecarga > 1.0) {
-            return $cotPrecarga;
-        }
+        $ingreso = ComprobanteProveedorCotizacionIngresoSupport::resolverParaFecha(
+            $monedaId,
+            $cotizacionPrecarga,
+            $fechaComprobanteYmd,
+        );
 
-        return self::cotizacionVentaDelDia($cotizacionQuery, $fechaComprobanteYmd, $monedaId);
+        return $ingreso['cotizacion'];
     }
 
     public static function resolverParaMonedaYFecha(
@@ -93,21 +94,49 @@ class ComprobanteProveedorCotizacionSupport
         $cotPrecarga = (float) ($cotizacionPrecarga ?? 0);
         $cotActual = (float) ($cotizacionActual ?? 0);
 
-        if ($cotPrecarga > 1.0) {
+        if ($cotPrecarga > 0) {
+            $ingreso = ComprobanteProveedorCotizacionIngresoSupport::resolverParaFecha(
+                $monedaId,
+                $cotPrecarga,
+                $fechaComprobanteYmd,
+            );
+            if ($ingreso['marca_error'] !== null || $ingreso['origen'] !== 'recibida') {
+                return [
+                    'cotizacion' => $ingreso['cotizacion'],
+                    'cotizacion_dia' => $dia,
+                    'cotizacion_origen' => $ingreso['origen'],
+                    'cotizacion_factura' => $cotPrecarga,
+                ];
+            }
+
             return [
-                'cotizacion' => $cotPrecarga,
+                'cotizacion' => $ingreso['cotizacion'],
                 'cotizacion_dia' => $dia,
                 'cotizacion_origen' => 'precarga',
-                'cotizacion_factura' => $cotPrecarga,
+                'cotizacion_factura' => $ingreso['cotizacion'],
             ];
         }
 
-        if ($cotActual > 1.0) {
+        if ($cotActual > 0) {
+            $ingreso = ComprobanteProveedorCotizacionIngresoSupport::resolverParaFecha(
+                $monedaId,
+                $cotActual,
+                $fechaComprobanteYmd,
+            );
+            if ($ingreso['marca_error'] !== null || $ingreso['origen'] !== 'recibida') {
+                return [
+                    'cotizacion' => $ingreso['cotizacion'],
+                    'cotizacion_dia' => $dia,
+                    'cotizacion_origen' => $ingreso['origen'],
+                    'cotizacion_factura' => $cotActual,
+                ];
+            }
+
             return [
-                'cotizacion' => $cotActual,
+                'cotizacion' => $ingreso['cotizacion'],
                 'cotizacion_dia' => $dia,
                 'cotizacion_origen' => 'factura',
-                'cotizacion_factura' => $cotActual,
+                'cotizacion_factura' => $ingreso['cotizacion'],
             ];
         }
 

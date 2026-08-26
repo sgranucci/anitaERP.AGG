@@ -64,6 +64,11 @@ Recepción {{ $recepcion->numerorecepcion }}
                         <i class="fa fa-id-badge"></i> Ticket de ingreso
                     </button>
                     @endif
+                    @if (!empty($mostrar_solapa_validacion))
+                    <button type="button" class="btn btn-outline-light btn-sm mr-2 js-rp-abrir-validacion" title="Ver la última carga de respuestas de la validación de abono">
+                        <i class="fa fa-check-square-o"></i> Ver validación
+                    </button>
+                    @endif
                     @if (empty($ocultarVolver))
                     <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
@@ -106,6 +111,7 @@ Recepción {{ $recepcion->numerorecepcion }}
             @endif
             @else
             <div class="card-body">
+                @include('compras.contrato_validacion_abono.partials.banner')
                 @include('stock.recepcion_proveedor.form', [
                     'modoEdicion' => false,
                     'recepcion' => $recepcion,

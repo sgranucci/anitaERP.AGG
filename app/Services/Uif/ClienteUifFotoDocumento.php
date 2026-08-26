@@ -7,6 +7,7 @@ use App\Repositories\Uif\AnitaUifArchivosSync;
 use App\Support\Uif\ClienteUifArchivoStorage;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\File;
+use Symfony\Component\HttpFoundation\Response;
 
 class ClienteUifFotoDocumento
 {
@@ -626,5 +627,25 @@ class ClienteUifFotoDocumento
         }
 
         return null;
+    }
+
+    /** @see ClienteUifArchivoStorage::versionCache() */
+    public static function versionCache(?string $absolutePath): string
+    {
+        return ClienteUifArchivoStorage::versionCache($absolutePath);
+    }
+
+    /**
+     * @return array{v: string}
+     */
+    public static function queryVersion(?string $absolutePath): array
+    {
+        return ClienteUifArchivoStorage::queryVersion($absolutePath);
+    }
+
+    /** @see ClienteUifArchivoStorage::aplicarAntiCacheNavegador() */
+    public static function aplicarAntiCacheNavegador(Response $response): Response
+    {
+        return ClienteUifArchivoStorage::aplicarAntiCacheNavegador($response);
     }
 }

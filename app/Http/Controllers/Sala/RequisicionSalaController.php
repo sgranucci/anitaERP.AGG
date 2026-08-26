@@ -21,6 +21,7 @@ use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Sala\RequisicionSalaArbolIntegracionService;
 use App\Services\Sala\RequisicionSalaPdfService;
 use App\Services\Sala\RequisicionSalaService;
+use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
 use App\Support\Sala\RecpunicaAnitaSupport;
 use App\Support\Sala\RequisicionSalaEdicionSupport;
 use App\Support\Sala\RequisicionSalaListadoFiltros;
@@ -206,7 +207,7 @@ class RequisicionSalaController extends Controller
             abort(404);
         }
         if (request()->boolean('inline')) {
-            return response()->file($path);
+            return ArchivoAdjuntoCacheSupport::aplicarAntiCacheNavegador(response()->file($path));
         }
 
         return response()->download($path, $arch->nombrearchivo);

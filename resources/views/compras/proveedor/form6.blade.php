@@ -24,7 +24,9 @@
                                     $est = method_exists($doc, 'estadoVigencia') ? $doc->estadoVigencia() : 'sin_fecha';
                                     $url = method_exists($doc, 'urlArchivo')
                                         ? $doc->urlArchivo()
-                                        : asset('storage/archivos/proveedores/'.$data->id.'/fiscal/'.$doc->nombrearchivo);
+                                        : \App\Support\Archivos\ArchivoAdjuntoCacheSupport::urlStoragePublico(
+                                            'archivos/proveedores/'.$data->id.'/fiscal/'.$doc->nombrearchivo
+                                        );
                                     $badge = match ($est) {
                                         'vigente' => 'badge-success',
                                         'proximo' => 'badge-warning',

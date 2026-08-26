@@ -3,10 +3,8 @@
 namespace App\Support\Compras;
 
 use App\Models\Compras\Ordencompra;
-use App\Models\Compras\Ordencompra_Articulo;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Models\Compras\Sector_Legajocompra;
-use App\Models\Stock\Recepcion_Proveedor;
 use App\Services\Compras\ComprobanteProveedorRecepcionesSupport;
 use Illuminate\Support\Facades\DB;
 
@@ -45,21 +43,23 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
      *     tiene_factura: bool,
      *     tiene_com: bool,
      *     exige_com: bool,
+     *     exige_flujo_empresa: bool,
      *     precarga_id: int|null
      * }
      */
     public static function evaluar(Ordencompra $oc): array
     {
         $factura = self::resolverPrecargaConPdf($oc);
-        $exigeCom = self::exigeRecepcionCom($oc);
-        $tieneCom = ! $exigeCom || self::tieneComDisponible((int) $oc->id);
+        $tieneCom = self::tieneComDisponible((int) $oc->id);
+        $politica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica($oc, $tieneCom);
+        $exigeCom = self::exigeRecepcionSegunPolitica($politica);
 
         $errores = [];
         if ($factura === null) {
             $errores[] = 'Debe asignar una factura (precarga o PDF escaneado) al legajo antes de enviarlo a Cuentas a pagar.';
         }
         if ($exigeCom && ! $tieneCom) {
-            $errores[] = 'Debe existir al menos una recepción COM confirmada con provisión contable (sin facturar) para esta orden de compra.';
+            $errores[] = self::mensajeFaltaCom($politica);
         }
 
         $erroresContrato = app(\App\Services\Compras\ContratoValidacionAbonoService::class)
@@ -75,8 +75,37 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
             'tiene_factura' => $factura !== null,
             'tiene_com' => $tieneCom,
             'exige_com' => $exigeCom,
+            'exige_flujo_empresa' => (bool) ($politica['exige_flujo'] ?? false),
             'precarga_id' => $factura?->id,
         ];
+    }
+
+    /**
+     * Gate al mandar el legajo a Cuentas a pagar (paquete + autorización Gastronomía si aplica).
+     *
+     * @return array{
+     *     ok: bool,
+     *     errores: list<string>,
+     *     requiere_pdf: bool,
+     *     tiene_factura: bool,
+     *     tiene_com: bool,
+     *     exige_com: bool,
+     *     exige_flujo_empresa: bool,
+     *     precarga_id: int|null,
+     *     requiere_gastronomia: bool
+     * }
+     */
+    public static function evaluarCuentasAPagar(Ordencompra $oc): array
+    {
+        $gate = self::evaluar($oc);
+        $erroresGastro = OrdencompraLegajoGastronomiaSupport::erroresEnvioCuentasAPagar($oc);
+        foreach ($erroresGastro as $errorGastro) {
+            $gate['errores'][] = $errorGastro;
+        }
+        $gate['ok'] = $gate['errores'] === [];
+        $gate['requiere_gastronomia'] = OrdencompraLegajoGastronomiaSupport::requiereCircuito($oc);
+
+        return $gate;
     }
 
     public static function resolverPrecargaConPdf(Ordencompra $oc): ?Precarga_Comprobante_Proveedor
@@ -101,32 +130,42 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
     }
 
     /**
-     * ¿El envío a CxP exige COM?
-     * - Empresa con flujo OC/COM/FAC: sí, salvo OC anticipada (factura anticipada sin COM aún)
-     *   o OC solo de gasto/servicio (sin artículo de stock).
-     * - Empresa sin ese flujo: no exige COM en el gate (COM queda optativa en la factura).
+     * ¿El envío del legajo exige COM asociada a la factura?
+     *
+     * 1) Contrato vigente: manda su circuito (con o sin recepción).
+     * 2) Si no: configuración de Cuentas a pagar de la empresa
+     *    (exige_flujo_oc_com_fac: OC→COM→FAC vs COM optativa).
+     * 3) En flujo flexible, si igual hay COM disponible, hay que asociarla.
+     *
+     * @param  bool|null  $tieneComDisponibles  Si viene informado, no consulta recepciones.
      */
-    public static function exigeRecepcionCom(Ordencompra $oc): bool
+    public static function exigeRecepcionCom(Ordencompra $oc, ?bool $tieneComDisponibles = null): bool
     {
-        $ocId = (int) $oc->id;
-        if ($ocId <= 0) {
+        if ((int) ($oc->id ?? 0) <= 0) {
             return false;
         }
+        $tiene = $tieneComDisponibles ?? self::tieneComDisponible((int) $oc->id);
+        $politica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica($oc, $tiene);
 
-        $empresaId = (int) ($oc->empresa_id ?? 0);
-        if (! ComprobanteProveedorFlujoOcComFacSupport::exigeFlujo($empresaId)) {
-            return false;
+        return self::exigeRecepcionSegunPolitica($politica);
+    }
+
+    /** @param  array<string, mixed>  $politica */
+    public static function exigeRecepcionSegunPolitica(array $politica): bool
+    {
+        return (bool) ($politica['bloquea_sin_com'] ?? false)
+            || (bool) ($politica['debe_asignar_com'] ?? false);
+    }
+
+    /** @param  array<string, mixed>  $politica */
+    private static function mensajeFaltaCom(array $politica): string
+    {
+        if (! empty($politica['contrato_vigente']) && ($politica['contrato_requiere_recepcion'] ?? false)) {
+            return 'El contrato vigente exige recepción COM asociada a la factura.';
         }
 
-        if (ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($oc)) {
-            return false;
-        }
-
-        return Ordencompra_Articulo::query()
-            ->where('ordencompra_id', $ocId)
-            ->whereNotNull('articulo_id')
-            ->where('articulo_id', '>', 0)
-            ->exists();
+        return 'La factura debe tener una recepción COM confirmada asociada (con provisión contable). '
+            .'La empresa tiene configurado el flujo OC → COM → factura.';
     }
 
     public static function tieneComDisponible(int $ordencompraId): bool

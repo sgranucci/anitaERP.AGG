@@ -48,7 +48,10 @@ class ContratoValidacionAbonoController extends Controller
             return redirect()->route('editar_recepcion_proveedor', ['id' => $id]);
         }
 
-        return $this->persistir($request, $validacion, route('editar_recepcion_proveedor', ['id' => $id]));
+        return $this->persistir($request, $validacion, route('editar_recepcion_proveedor', [
+            'id' => $id,
+            'solapa' => 'validacion',
+        ]));
     }
 
     public function editarComprobante(int $id)
@@ -127,7 +130,10 @@ class ContratoValidacionAbonoController extends Controller
         );
 
         $volverUrl = $origen === 'recepcion'
-            ? route('editar_recepcion_proveedor', ['id' => $validacion->recepcion_proveedor_id])
+            ? route('editar_recepcion_proveedor', [
+                'id' => $validacion->recepcion_proveedor_id,
+                'solapa' => 'validacion',
+            ])
             : route('editar_comprobante_proveedor', ['id' => $validacion->comprobante_proveedor_id]);
 
         $guardarUrl = $origen === 'recepcion'

@@ -636,6 +636,12 @@ class ApiController extends Controller
             'estado' => 'PENDIENTE',
             'origen_entrada' => \App\Support\Compras\PrecargaComprobanteOrigenEntrada::API,
         ];
+        $cotizacionIngreso = app(\App\Services\Compras\PrecargaComprobanteCotizacionIngresoService::class);
+        $data = $cotizacionIngreso->aplicarAPayload($data);
+        $pararevisar = (bool) ($data['pararevisar'] ?? $pararevisar);
+        if (! empty($data['aviso_error'])) {
+            $avisosConceptos[] = $data['aviso_error'];
+        }
 
         try {
             ComprobanteProveedorUnicidadSupport::assertUnicoPrecarga(
@@ -684,6 +690,8 @@ class ApiController extends Controller
                 'precarga_id' => $precarga_comprobante_proveedor->id,
                 'status' => 201,
             ]);
+
+            $cotizacionIngreso->notificarSiMarca($precarga_comprobante_proveedor->fresh());
 
             return response()->json([
                 'id' => $precarga_comprobante_proveedor->id,

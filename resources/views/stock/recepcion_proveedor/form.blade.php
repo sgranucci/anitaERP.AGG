@@ -171,6 +171,16 @@
         <span class="badge badge-light ml-1 ingreso-solapa-badge-count">{{ ($tickets_ingreso ?? collect())->count() }}</span>
     </button>
     @endif
+    @if (!empty($mostrar_solapa_validacion))
+    <button type="button" id="rp-boton-validacion" class="btn btn-info btn-sm mx-1 rp-tab-solapa">
+        <span class="fa fa-check-square-o"></span> Validación
+        @if (!empty($validacionAbonoCompleta) && ($validacionAbono ?? null))
+        <span class="badge badge-light ml-1">OK</span>
+        @elseif ($validacionAbono ?? null)
+        <span class="badge badge-warning ml-1">Pendiente</span>
+        @endif
+    </button>
+    @endif
     @endif
 </div>
 
@@ -631,6 +641,16 @@
 </div>
 @if (!empty($mostrar_solapa_ingresos))
 <div id="rp-solapa-ingresos" class="rp-solapa" style="display:none;">
+    @if (!empty($mostrar_solapa_validacion))
+        <div class="alert alert-info py-2">
+            La última carga de respuestas de la consulta de ingresos está en la solapa
+            <button type="button" class="btn btn-link btn-sm p-0 align-baseline js-rp-abrir-validacion">Validación</button>.
+            @if (! empty($urlValidacionAbono))
+                También puede
+                <a href="{{ $urlValidacionAbono }}">abrir el formulario completo</a>.
+            @endif
+        </div>
+    @endif
     @include('seguridad.ingreso_proveedor.partials.solapa_vinculada', [
         'tickets' => $tickets_ingreso ?? collect(),
         'url_nuevo_ticket_ingreso' => $url_nuevo_ticket_ingreso ?? null,
@@ -640,6 +660,11 @@
             'ordencompra_id' => $recepcion->ordencompra_id ?? null,
         ],
     ])
+</div>
+@endif
+@if (!empty($mostrar_solapa_validacion))
+<div id="rp-solapa-validacion" class="rp-solapa" style="display:none;">
+    @include('stock.recepcion_proveedor.partials.solapa_validacion_abono')
 </div>
 @endif
 @endif

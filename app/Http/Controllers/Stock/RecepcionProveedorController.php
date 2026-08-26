@@ -20,6 +20,7 @@ use App\Services\Stock\RecepcionProveedorOrdencompraResolverService;
 use App\Services\Stock\RecepcionProveedorPdfService;
 use App\Services\Stock\RecepcionProveedorService;
 use App\Services\Compras\ContratoValidacionAbonoService;
+use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
 use App\Support\Compras\OrdencompraDescuentoSupport;
 use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Support\Stock\RecepcionProveedorArticuloProveedorSyncSupport;
@@ -28,6 +29,7 @@ use App\Support\Stock\RecepcionProveedorListadoFiltros;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Stock\RecepcionProveedorOcPendienteSupport;
 use App\Support\Compras\ContratoValidacionAbonoPoliticaSupport;
+use App\Support\Seguridad\IngresoProveedorConsultaSupport;
 use App\Support\Seguridad\IngresoProveedorVinculoSupport;
 use App\Support\Configuracion\OperacionPublicaTokenSupport;
 use Illuminate\Http\JsonResponse;
@@ -149,16 +151,28 @@ class RecepcionProveedorController extends Controller
             && $recepcion->estado === 'BORRADOR'
         ) {
             $validacionAbono = $this->contratoValidacionAbonoService->asegurarParaRecepcion($recepcion);
-            $validacionAbono?->loadMissing('usuarios');
-        } elseif ($politicaValidacionAbono['aplica'] ?? false) {
+        } else {
             $validacionAbono = $this->contratoValidacionAbonoService->deRecepcion($recepcion);
-            $validacionAbono?->loadMissing('usuarios');
         }
+        $validacionAbono?->loadMissing(['usuarios', 'plantillas.preguntas', 'respuestas']);
         $urlValidacionAbono = route('editar_validacion_abono_recepcion', ['id' => $recepcion->id]);
         $accionValidacionAbono = 'confirmar la recepción';
         $validacionAbonoCompleta = $validacionAbono?->estaCompleta() ?? ! ($politicaValidacionAbono['aplica'] ?? false);
+        $esDevolucion = ($recepcion->tipo ?? '') === Recepcion_Proveedor::TIPO_DEVOLUCION;
+        $mostrar_solapa_validacion = ! $esDevolucion
+            && ($validacionAbono !== null || (bool) ($politicaValidacionAbono['aplica'] ?? false));
 
         $ocRecepcion = $recepcion->ordencompras ?? null;
+        $ingresosValidacionVivos = 0;
+        if ($validacionAbono && $ocRecepcion) {
+            $ingresosValidacionVivos = IngresoProveedorConsultaSupport::cantidadEnPeriodo(
+                (int) ($ocRecepcion->proveedor_id ?? 0),
+                (string) ($validacionAbono->periodo_desde?->format('Y-m-d') ?? ''),
+                (string) ($validacionAbono->periodo_hasta?->format('Y-m-d') ?? ''),
+                (int) ($ocRecepcion->empresa_id ?? 0) ?: null,
+                (int) ($ocRecepcion->id ?? $validacionAbono->ordencompra_id ?? 0) ?: null
+            );
+        }
         $tickets_ingreso = IngresoProveedorVinculoSupport::ticketsDeRecepcion($recepcion);
         $ocPermiteIngresos = IngresoProveedorVinculoSupport::ocPermiteCargarPersonas($ocRecepcion);
         $mostrar_solapa_ingresos = IngresoProveedorVinculoSupport::usuarioPuedeVerSolapa()
@@ -176,6 +190,7 @@ class RecepcionProveedorController extends Controller
             'soloConsulta', 'ocultarVolver', 'puedeActualizarRecepcion', 'filtrosQuery',
             'politicaValidacionAbono', 'validacionAbono', 'urlValidacionAbono',
             'accionValidacionAbono', 'validacionAbonoCompleta',
+            'mostrar_solapa_validacion', 'ingresosValidacionVivos',
             'mostrar_solapa_ingresos', 'tickets_ingreso', 'url_nuevo_ticket_ingreso',
         ));
     }
@@ -415,9 +430,9 @@ class RecepcionProveedorController extends Controller
         }
 
         if ($request->query('inline') === '1') {
-            return response()->file($ruta, [
+            return ArchivoAdjuntoCacheSupport::aplicarAntiCacheNavegador(response()->file($ruta, [
                 'Content-Disposition' => 'inline; filename="'.addslashes($registro->nombre).'"',
-            ]);
+            ]));
         }
 
         return response()->download($ruta, $registro->nombre);

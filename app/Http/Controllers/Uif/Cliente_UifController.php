@@ -362,10 +362,12 @@ class Cliente_UifController extends Controller
         }
 
         if (request()->query('disposition') === 'attachment') {
-            return response()->download($path, basename($path));
+            return ClienteUifFotoDocumento::aplicarAntiCacheNavegador(
+                response()->download($path, basename($path))
+            );
         }
 
-        return response()->file($path);
+        return ClienteUifFotoDocumento::aplicarAntiCacheNavegador(response()->file($path));
     }
 
     /**
@@ -388,10 +390,12 @@ class Cliente_UifController extends Controller
         }
 
         if (request()->query('disposition') === 'attachment') {
-            return response()->download($path, basename($path));
+            return ClienteUifArchivoStorage::aplicarAntiCacheNavegador(
+                response()->download($path, basename($path))
+            );
         }
 
-        return response()->file($path);
+        return ClienteUifArchivoStorage::aplicarAntiCacheNavegador(response()->file($path));
     }
 
     /**

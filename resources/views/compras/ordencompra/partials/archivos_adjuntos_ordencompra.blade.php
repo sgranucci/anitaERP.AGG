@@ -20,7 +20,10 @@
                     $urlDescarga .= '?'.http_build_query($qsBase);
                 }
                 $qsInline = array_merge($qsBase, ['inline' => '1']);
-                $urlInline = route('ordencompra_archivo', ['id' => $data->id, 'archivo' => $arch->id]).'?'.http_build_query($qsInline);
+                $urlInline = \App\Support\Archivos\ArchivoAdjuntoCacheSupport::conVersion(
+                    route('ordencompra_archivo', ['id' => $data->id, 'archivo' => $arch->id]).'?'.http_build_query($qsInline),
+                    public_path('storage/archivos/ordencompras/'.$data->id.'/'.basename($safeName))
+                );
                 $esImagen = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
                 $esPdf = $ext === 'pdf';
             @endphp

@@ -25,7 +25,13 @@
             <label for="observacion">Motivo u observaciones <span class="text-danger">*</span></label>
             <textarea class="form-control" id="observacion" name="observacion" rows="5" required minlength="3" maxlength="4000" placeholder="Indique el motivo del rechazo…">{{ old('observacion') }}</textarea>
         </div>
-        <button type="submit" class="btn btn-danger btn-block btn-lg">Rechazar orden de compra (quedará suspendida)</button>
+        <button type="submit" class="btn btn-danger btn-block btn-lg">
+            @if (!empty($es_circuito_legajo_gastronomia))
+                Rechazar legajo (vuelve a Compras)
+            @else
+                Rechazar orden de compra (quedará suspendida)
+            @endif
+        </button>
     </form>
 </div>
 @endsection

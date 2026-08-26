@@ -58,5 +58,18 @@ return [
             env('REQUISICION_ANITA_SYNC_ACTIVO', true),
             FILTER_VALIDATE_BOOLEAN
         ),
+        // Snapshot Aprobado en aprobcomp (l-proy AA). Nunca pisa un árbol Anita existente.
+        'sync_aprobcomp_activo' => filter_var(
+            env('REQUISICION_ANITA_SYNC_APROBCOMP', true),
+            FILTER_VALIDATE_BOOLEAN
+        ),
+        // aprobc_nro_int_ap: mismo numerador que a-compprov (shared numabm código 73).
+        'numerador_aprobcomp' => [
+            'tabla' => 'numabm',
+            'codigo' => (int) env('REQUISICION_ANITA_APROBCOMP_NUMA_CODIGO', 73),
+            'programa' => env('REQUISICION_ANITA_APROBCOMP_NUMA_PROGRAMA', 'a-compprov'),
+            'sistema_abm' => env('REQUISICION_ANITA_APROBCOMP_NUMA_SISTEMA', 'compras'),
+            'referencia' => env('REQUISICION_ANITA_APROBCOMP_NUMA_REFERENCIA', '1'),
+        ],
     ],
 ];

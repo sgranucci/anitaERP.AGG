@@ -75,5 +75,21 @@ final class OcArbolTriggerAccionFinalService
             'leyenda' => $trigger->nombre ?: 'Acción final trigger OC',
             'creousuario_id' => $usuarioHistoriaId,
         ]);
+
+        if (OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar($sectorDestinoId)) {
+            $ocActualizada = Ordencompra::query()->find($ordencompraId);
+            if ($ocActualizada) {
+                $firmante = (string) (\App\Models\Configuracion\Arbolaprobacion_Movimiento::query()
+                    ->with('destinatariousuarios:id,nombre')
+                    ->where('ordencompra_id', $ordencompraId)
+                    ->where('estado', 'Aprobado')
+                    ->orderByDesc('id')
+                    ->first()
+                    ?->destinatariousuarios
+                    ?->nombre ?? '');
+                app(\App\Services\Compras\OrdencompraLegajoAutorizadoNotificacionService::class)
+                    ->notificarAutorizacion($ocActualizada, $firmante);
+            }
+        }
     }
 }

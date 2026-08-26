@@ -13,6 +13,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaNumeracionSupport;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraListadoFiltros;
+use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
 use App\Support\Compras\OrdencompraTotalesCabecera;
 use App\Support\Compras\PortalProveedorOrdencompraListadoFiltros;
 use App\Support\Compras\PortalProveedorPagosListadoFiltros;
@@ -103,6 +104,9 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
         return $this->model->query()->exists();
     }
 
+    /**
+     * @param  int|null  $sectorUsuarioId  null = todos los sectores; 0 = ninguno; >0 = ese sector
+     */
     public function listadoIndex($filtros, ?int $sectorUsuarioId, bool $paginar = false)
     {
         $q = $this->queryListadoIndex($filtros, $sectorUsuarioId);
@@ -266,9 +270,11 @@ class OrdencompraRepository implements OrdencompraRepositoryInterface
      */
     private function aplicarFiltrosListado($q, array $filtros, ?int $sectorUsuarioId): void
     {
-        if ($sectorUsuarioId !== null && $sectorUsuarioId > 0) {
-            $q->where('ordencompra.sector_legajocompra_id', $sectorUsuarioId);
-        }
+        OrdencompraSectorVisibilidadSupport::aplicarFiltroConId(
+            $q,
+            'ordencompra.sector_legajocompra_id',
+            $sectorUsuarioId
+        );
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($q, 'ordencompra.empresa_id');
 

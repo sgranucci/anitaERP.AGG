@@ -31,6 +31,7 @@ use App\Services\Compras\OrdencompraGestionService;
 use App\Services\Compras\RequisicionArticuloCambioService;
 use App\Services\Compras\RequisicionService;
 use App\Services\Configuracion\ArbolaprobacionService;
+use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
 use App\Support\Configuracion\AnitaSyncIndexSupport;
 use App\Support\Compras\RequisicionLineasOcSupport;
 use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
@@ -1143,7 +1144,7 @@ class RequisicionController extends Controller
         }
 
         if ($request->boolean('inline')) {
-            return response()->file($path);
+            return ArchivoAdjuntoCacheSupport::aplicarAntiCacheNavegador(response()->file($path));
         }
 
         return response()->download($path, $basename);

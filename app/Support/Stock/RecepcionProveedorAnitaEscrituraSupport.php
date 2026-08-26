@@ -36,6 +36,11 @@ final class RecepcionProveedorAnitaEscrituraSupport
 
     public static function enteroSql(int $value): string
     {
+        if ($value > RecepcionProveedorAnitaReferenciaSupport::INFORMIX_INTEGER_MAX
+            || $value < -RecepcionProveedorAnitaReferenciaSupport::INFORMIX_INTEGER_MAX) {
+            return '0';
+        }
+
         return (string) $value;
     }
 

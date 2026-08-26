@@ -122,6 +122,7 @@ class ComprobanteProveedorPrefillService
             $monedaId,
             $precarga->cotizacion
         );
+        $this->persistirMarcaCotizacionPrecargaSiCorresponde($precarga, $monedaId, $fechacomprobante);
 
         $subtotal = (float) $precarga->subtotal;
         $total = (float) $precarga->total;
@@ -526,6 +527,40 @@ class ComprobanteProveedorPrefillService
             $monedaId,
             $cotizacionPrecarga
         );
+    }
+
+    private function persistirMarcaCotizacionPrecargaSiCorresponde(
+        Precarga_Comprobante_Proveedor $precarga,
+        int $monedaId,
+        string $fechaComprobanteYmd,
+    ): void {
+        if (filled($precarga->marca_error)) {
+            return;
+        }
+
+        $ingreso = \App\Support\Compras\ComprobanteProveedorCotizacionIngresoSupport::resolverParaFecha(
+            $monedaId,
+            $precarga->cotizacion,
+            $fechaComprobanteYmd,
+        );
+        if ($ingreso['marca_error'] === null) {
+            return;
+        }
+
+        Precarga_Comprobante_Proveedor::query()->whereKey($precarga->id)->update([
+            'cotizacion' => $ingreso['cotizacion'],
+            'pararevisar' => 1,
+            'marca_error' => $ingreso['marca_error'],
+            'aviso_error' => $ingreso['aviso'],
+        ]);
+        $precarga->forceFill([
+            'cotizacion' => $ingreso['cotizacion'],
+            'pararevisar' => 1,
+            'marca_error' => $ingreso['marca_error'],
+            'aviso_error' => $ingreso['aviso'],
+        ]);
+
+        app(PrecargaComprobanteCotizacionIngresoService::class)->notificarSiMarca($precarga);
     }
 
     /**

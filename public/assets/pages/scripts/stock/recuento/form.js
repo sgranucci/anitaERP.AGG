@@ -858,12 +858,50 @@
             return resultado;
         }
 
+        function serializarItemsRecuento() {
+            const items = [];
+            tbody.querySelectorAll('tr.recuento-item-row').forEach(function (tr) {
+                const aid = parseInt((tr.querySelector('.articulo_id') || {}).value, 10) || 0;
+                if (aid <= 0) {
+                    return;
+                }
+                const ct = colorTalleFila(tr);
+                items.push({
+                    recuento_item_id: (tr.querySelector('.recuento_item_id') || {}).value || '',
+                    articulo_id: aid,
+                    unidadmedida_id: (tr.querySelector('.unidadmedida_id') || {}).value || '',
+                    saldo_sistema: (tr.querySelector('.saldo_sistema_input') || {}).value || '',
+                    detalle: (tr.querySelector('.descripcionarticulo') || {}).value || '',
+                    color_id: ct.colorId,
+                    talle_id: ct.talleId,
+                    cantidad_contada: (tr.querySelector('.input-cantidad-contada') || {}).value || 0
+                });
+            });
+            return items;
+        }
+
+        function prepararItemsJsonParaEnvio(form) {
+            const ta = document.getElementById('recuento-items-json');
+            if (!ta) {
+                return;
+            }
+            ta.value = JSON.stringify(serializarItemsRecuento());
+            form.querySelectorAll(
+                'input[name="recuento_item_ids[]"], input[name="articulo_ids[]"], input[name="unidadmedida_ids[]"],'
+                + ' input[name="saldos_sistema[]"], input[name="detalle_articulos[]"], select[name="colores_id[]"],'
+                + ' select[name="talles_id[]"], input[name="cantidades_contadas[]"]'
+            ).forEach(function (el) {
+                el.disabled = true;
+            });
+        }
+
         const formRecuento = document.getElementById('form-recuento');
         if (formRecuento) {
             formRecuento.setAttribute('novalidate', 'novalidate');
             formRecuento.addEventListener('submit', function (e) {
                 var resultado = validarRecuentoAntesDeEnviar(formRecuento);
                 if (resultado.valido) {
+                    prepararItemsJsonParaEnvio(formRecuento);
                     return;
                 }
                 e.preventDefault();

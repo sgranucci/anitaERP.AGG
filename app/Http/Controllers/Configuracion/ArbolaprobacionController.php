@@ -821,6 +821,9 @@ class ArbolaprobacionController extends Controller
             ) {
                 return $this->portalFinOrdencompra(false, 'No se pudo confirmar el rechazo: enlace inválido o ya fue procesado.');
             }
+            if (! empty($datos['es_circuito_legajo_gastronomia']) && mb_strlen(trim((string) $observacion)) < 3) {
+                return back()->withErrors(['observacion' => 'El comentario es obligatorio al rechazar el legajo.'])->withInput();
+            }
         }
 
         if ($portalPublico && in_array($tipocomprobante, ['OV', 'SP', 'PE'], true) && filled($request->hash_rechazo)) {

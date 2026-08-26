@@ -10,6 +10,7 @@ use App\Repositories\Compras\Requisicion_Presupuesto_ArchivoRepositoryInterface;
 use App\Repositories\Compras\Requisicion_Presupuesto_ArticuloRepositoryInterface;
 use App\Repositories\Compras\Requisicion_PresupuestoRepositoryInterface;
 use App\Repositories\Compras\RequisicionRepositoryInterface;
+use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\File;
@@ -137,14 +138,19 @@ class RequisicionPresupuestoService
             'estado' => $p->estado,
             'archivos' => $p->requisicion_presupuesto_archivos
                 ? $p->requisicion_presupuesto_archivos->map(function (Requisicion_Presupuesto_Archivo $a) use ($requisicionId, $p) {
+                    $urlVer = route('requisicion_presupuesto_archivo_ver', [
+                        'requisicion' => $requisicionId,
+                        'presupuesto' => $p->id,
+                        'archivo' => $a->id,
+                    ]);
+
                     return [
                         'id' => $a->id,
                         'nombrearchivo' => $a->nombrearchivo,
-                        'url_ver' => route('requisicion_presupuesto_archivo_ver', [
-                            'requisicion' => $requisicionId,
-                            'presupuesto' => $p->id,
-                            'archivo' => $a->id,
-                        ]),
+                        'url_ver' => ArchivoAdjuntoCacheSupport::conVersion(
+                            $urlVer,
+                            $this->rutaFisicaArchivo((int) $requisicionId, (int) $p->id, $a)
+                        ),
                     ];
                 })->values()->all()
                 : [],

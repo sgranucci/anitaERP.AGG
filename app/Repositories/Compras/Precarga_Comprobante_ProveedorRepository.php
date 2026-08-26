@@ -212,6 +212,8 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
             'precarga_comprobante_proveedor.anita_nro_interno as anita_nro_interno',
             'precarga_comprobante_proveedor.origen_entrada as origen_entrada',
             'precarga_comprobante_proveedor.rutaalmacenamiento as rutaalmacenamiento',
+            'precarga_comprobante_proveedor.marca_error as marca_error',
+            'precarga_comprobante_proveedor.aviso_error as aviso_error',
         ];
 
         $precarga_comprobante_proveedors = $this->model->select($select)

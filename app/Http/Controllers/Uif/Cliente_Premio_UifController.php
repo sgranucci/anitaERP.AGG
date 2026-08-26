@@ -380,10 +380,12 @@ class Cliente_Premio_UifController extends Controller
         }
 
         if (request()->query('disposition') === 'attachment') {
-            return response()->download($path, basename($path));
+            return ClienteUifArchivoStorage::aplicarAntiCacheNavegador(
+                response()->download($path, basename($path))
+            );
         }
 
-        return response()->file($path);
+        return ClienteUifArchivoStorage::aplicarAntiCacheNavegador(response()->file($path));
     }
 
     /** Sirve foto pago_* / foto ERP desde /scan (o legacy). */
@@ -398,7 +400,7 @@ class Cliente_Premio_UifController extends Controller
             abort(404);
         }
 
-        return response()->file($path);
+        return ClienteUifArchivoStorage::aplicarAntiCacheNavegador(response()->file($path));
     }
 
     public function listarUnPremio(Request $request, $id)

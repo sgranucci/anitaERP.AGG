@@ -23,6 +23,7 @@ use App\Services\Compras\ComprobanteProveedorContabilizarService;
 use App\Services\Compras\ComprobanteProveedorEliminarService;
 use App\Services\Compras\ComprobanteProveedorAsientoService;
 use App\Queries\Configuracion\CotizacionQueryInterface;
+use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoPathSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorControlesConfigSupport;
@@ -601,10 +602,10 @@ class Comprobante_ProveedorController extends Controller
         $nombre = basename($path);
 
         if ($request->boolean('inline')) {
-            return response()->file($path, [
+            return ArchivoAdjuntoCacheSupport::aplicarAntiCacheNavegador(response()->file($path, [
                 'Content-Type' => 'application/pdf',
                 'Content-Disposition' => 'inline; filename="'.$nombre.'"',
-            ]);
+            ]));
         }
 
         return response()->download($path, $nombre);
@@ -638,7 +639,10 @@ class Comprobante_ProveedorController extends Controller
         }
 
         if ($request->boolean('inline')) {
-            return response()->file($path);
+            $response = response()->file($path);
+            ArchivoAdjuntoCacheSupport::aplicarAntiCacheNavegador($response);
+
+            return $response;
         }
 
         return response()->download($path, $basename);

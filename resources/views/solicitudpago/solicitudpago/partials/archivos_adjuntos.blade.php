@@ -16,6 +16,10 @@
                 $esImagen = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
                 $esPdf = $ext === 'pdf';
                 $existeArchivo = \App\Support\Solicitudpago\SolicitudpagoArchivoStorageSupport::existe($arch, (int) ($data->codigo ?? 0));
+                $urlInline = \App\Support\Archivos\ArchivoAdjuntoCacheSupport::conVersion(
+                    $urlInline,
+                    \App\Support\Solicitudpago\SolicitudpagoArchivoStorageSupport::rutaAbsoluta($arch, (int) ($data->codigo ?? 0))
+                );
             @endphp
             <div class="col-md-6 col-lg-4 mb-3 solicitudpago-archivo-item">
                 <div class="card card-outline card-secondary h-100 mb-0">

@@ -22,7 +22,7 @@ class OrdencompraDevolverAComprasNotificacionService
     /**
      * @return array{ok: bool, mensaje: string, emails: list<string>}
      */
-    public function devolver(int $ordencompraId, string $motivo, string $detalle = ''): array
+    public function devolver(int $ordencompraId, string $motivo, string $detalle = '', ?int $usuarioHistoriaId = null): array
     {
         $oc = Ordencompra::query()
             ->with(['proveedores', 'empresas'])
@@ -40,8 +40,11 @@ class OrdencompraDevolverAComprasNotificacionService
         }
 
         $sectorActual = (int) ($oc->sector_legajocompra_id ?? 0);
+        $usuarioId = $usuarioHistoriaId && $usuarioHistoriaId > 0
+            ? $usuarioHistoriaId
+            : (int) (Auth::id() ?: ($oc->creousuario_id ?: 1));
         if ($sectorActual !== $sectorComprasId) {
-            DB::transaction(function () use ($oc, $sectorComprasId, $motivo, $detalle) {
+            DB::transaction(function () use ($oc, $sectorComprasId, $motivo, $detalle, $usuarioId) {
                 $oc->update(['sector_legajocompra_id' => $sectorComprasId]);
                 Ordencompra_Historia::create([
                     'ordencompra_id' => $oc->id,
@@ -49,7 +52,7 @@ class OrdencompraDevolverAComprasNotificacionService
                     'fecha' => Carbon::now(),
                     'observacion' => mb_substr($motivo, 0, 255),
                     'leyenda' => mb_substr($detalle !== '' ? $detalle : $motivo, 0, 2000),
-                    'creousuario_id' => Auth::id() ?: ($oc->creousuario_id ?: 1),
+                    'creousuario_id' => $usuarioId,
                 ]);
             });
         }

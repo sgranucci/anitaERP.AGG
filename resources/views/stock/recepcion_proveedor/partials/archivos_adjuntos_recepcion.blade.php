@@ -16,7 +16,13 @@
                 $safeName = $arch->nombre;
                 $ext = strtolower(pathinfo($safeName, PATHINFO_EXTENSION));
                 $urlDescarga = route('recepcion_proveedor_archivo', ['id' => $recepcion->id, 'archivo' => $arch->id]);
-                $urlInline = $urlDescarga.'?'.http_build_query(['inline' => '1']);
+                $pathRecepcion = ! empty($arch->ruta)
+                    ? \App\Support\Stock\RecepcionProveedorArchivoSupport::rutaAbsoluta($arch)
+                    : null;
+                $urlInline = \App\Support\Archivos\ArchivoAdjuntoCacheSupport::conVersion(
+                    $urlDescarga.'?'.http_build_query(['inline' => '1']),
+                    $pathRecepcion
+                );
                 $esImagen = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
                 $esPdf = $ext === 'pdf';
                 $esOcr = $arch->tipo_archivo === Recepcion_Proveedor_Archivo::TIPO_OCR;

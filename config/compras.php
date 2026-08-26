@@ -90,4 +90,14 @@ return [
         'limite_filas_mail' => max(10, (int) env('COMPRAS_CC_CONCILIACION_LIMITE_MAIL', 80)),
     ],
 
+    /*
+    | Legajo de compras / autorización Gastronomía.
+    */
+    'legajo' => [
+        'link_dias_vencimiento' => max(1, (int) env('COMPRAS_LEGAJO_LINK_DIAS', 3)),
+        'recordatorio_habilitado' => filter_var(env('COMPRAS_LEGAJO_RECORDATORIO_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'recordatorio_hora' => env('COMPRAS_LEGAJO_RECORDATORIO_HORA', '09:15'),
+        'recordatorio_dias' => max(1, (int) env('COMPRAS_LEGAJO_RECORDATORIO_DIAS', 3)),
+    ],
+
 ];

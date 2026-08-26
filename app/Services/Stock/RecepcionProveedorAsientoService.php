@@ -311,7 +311,10 @@ class RecepcionProveedorAsientoService
             throw new \RuntimeException('La recepción no tiene asiento contable asociado.');
         }
 
-        $recepcion->loadMissing(['asientos.asiento_movimientos.monedas', 'ordencompras']);
+        // Tras recuadrar, asiento_movimientos en memoria puede estar stale (2 líneas
+        // vs las 3 ya persistidas). Recargar siempre, no loadMissing.
+        $recepcion->unsetRelation('asientos');
+        $recepcion->load(['asientos.asiento_movimientos.monedas', 'ordencompras']);
         $asiento = $recepcion->asientos;
         if (! $asiento) {
             throw new \RuntimeException('No se encontró el asiento id '.$asientoId.' de la recepción.');
@@ -923,6 +926,7 @@ class RecepcionProveedorAsientoService
         foreach ($this->buscarComprobantesAplicadosOc($numeroOc, excluirCom: true) as $factura) {
             foreach ($this->leerSubdiarioComprobante($factura) as $linea) {
                 $cotSubd = (float) ($linea->subd_cotizacion ?? 1);
+                $codigoMonSubd = $linea->subd_cod_mon ?? '1';
                 foreach (AnitaSubdiarioMayorSupport::imputacionesLineaSubdiario($linea) as $imp) {
                     $codigo = $codigoPorInt[(int) $imp['cuenta']] ?? null;
                     if ($codigo === null) {
@@ -931,7 +935,8 @@ class RecepcionProveedorAsientoService
                     $importeConv = RecepcionProveedorConversionSupport::convertirMoneda(
                         (float) $imp['importe'],
                         $cotSubd,
-                        $cotizacionRecepcion
+                        $cotizacionRecepcion,
+                        $codigoMonSubd
                     );
                     if ($imp['dh'] === 'D') {
                         $saldos[$codigo] += $importeConv;
@@ -976,7 +981,8 @@ class RecepcionProveedorAsientoService
                 $importeConv = RecepcionProveedorConversionSupport::convertirMoneda(
                     (float) $imp['importe'],
                     $cot,
-                    $cotizacionRecepcion
+                    $cotizacionRecepcion,
+                    $linea->ctav_cod_mon ?? '1'
                 );
                 // HABER en COM = anticipo ya revertido → reduce saldo disponible.
                 if ($imp['dh'] === 'H') {
@@ -1057,7 +1063,7 @@ class RecepcionProveedorAsientoService
             'acc' => 'list',
             'sistema' => config('recepcion_proveedor.anita.sistema_contab'),
             'tabla' => config('recepcion_proveedor.anita.tablas.subdiario'),
-            'campos' => 'subd_tipo, subd_letra, subd_sucursal, subd_nro, subd_cuenta, subd_contrapartida, subd_importe, subd_tipo_mov, subd_cotizacion',
+            'campos' => 'subd_tipo, subd_letra, subd_sucursal, subd_nro, subd_cuenta, subd_contrapartida, subd_importe, subd_tipo_mov, subd_cotizacion, subd_cod_mon',
             'whereArmado' => " WHERE
                 subd_tipo='{$tipo}' and
                 subd_letra='{$letra}' and
@@ -1080,7 +1086,7 @@ class RecepcionProveedorAsientoService
             'acc' => 'list',
             'sistema' => config('recepcion_proveedor.anita.sistema_contab'),
             'tabla' => 'ctamov',
-            'campos' => 'ctav_cuenta, ctav_d_h, ctav_importe, ctav_cotizacion, ctav_tipo, ctav_letra, ctav_sucursal, ctav_nro',
+            'campos' => 'ctav_cuenta, ctav_d_h, ctav_importe, ctav_cotizacion, ctav_cod_mon, ctav_tipo, ctav_letra, ctav_sucursal, ctav_nro',
             'whereArmado' => " WHERE
                 ctav_tipo='{$tipo}' and
                 ctav_letra='{$letra}' and

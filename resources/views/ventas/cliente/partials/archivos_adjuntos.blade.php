@@ -11,7 +11,7 @@
             @php
                 $safeName = $arch->nombrearchivo;
                 $ext = strtolower(pathinfo($safeName, PATHINFO_EXTENSION));
-                $urlInline = asset('storage/archivos/clientes/'.$data->id.'/'.$safeName);
+                $urlInline = \App\Support\Archivos\ArchivoAdjuntoCacheSupport::urlStoragePublico('archivos/clientes/'.$data->id.'/'.$safeName);
                 $urlDescarga = $urlInline;
                 $esImagen = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
                 $esPdf = $ext === 'pdf';

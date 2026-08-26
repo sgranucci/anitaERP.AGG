@@ -25,12 +25,14 @@ use App\Repositories\Configuracion\ArbolaprobacionRepositoryInterface;
 use App\Repositories\Ordenventa\Ordenventa_EstadoRepositoryInterface;
 use App\Repositories\Ordenventa\OrdenventaRepositoryInterface;
 use App\Support\Compras\OrdencompraEstados;
+use App\Support\Compras\OrdencompraLegajoGastronomiaSupport;
 use App\Support\Compras\OrdencompraTotalesCabecera;
 use App\Support\Compras\RequisicionCentrocostoArbolOrigenSupport;
 use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Services\Ai\AiPolicy;
 use App\Services\Ai\Skills\AiSkillContext;
 use App\Services\Ai\Skills\AiSkillRegistry;
+use App\Services\Compras\RequisicionAnitaAprobcompSyncService;
 use App\Services\Configuracion\Ai\ExplicarContextoArbolAprobacionSkill;
 use App\Support\Configuracion\ArbolAprobacionContextoSupport;
 use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
@@ -1353,6 +1355,7 @@ class ArbolaprobacionService
             'Requisición aprobada (árbol completo)'
         );
         $this->requisicionRepository->update(['estado' => $aprobada], $requisicion_id);
+        $this->sincronizarAprobcompRequisicion($requisicion_id);
     }
 
     private function finalizaOrdencompraTrasArbolCompleto(int $ordencompra_id, $usuarioHistoriaId): void
@@ -1401,6 +1404,21 @@ class ArbolaprobacionService
             'leyenda' => 'Árbol de aprobación OC — circuito cambio de sector',
             'creousuario_id' => $usuarioHistoriaId,
         ]);
+
+        $ocActualizada = $this->ordencompraRepository->find($ordencompra_id);
+        if ($ocActualizada) {
+            $firmante = (string) (Arbolaprobacion_Movimiento::query()
+                ->with('destinatariousuarios:id,nombre')
+                ->where('ordencompra_id', $ordencompra_id)
+                ->where('circuito_oc', self::CIRCUITO_OC_CAMBIO_SECTOR)
+                ->where('estado', 'Aprobado')
+                ->orderByDesc('id')
+                ->first()
+                ?->destinatariousuarios
+                ?->nombre ?? '');
+            app(\App\Services\Compras\OrdencompraLegajoAutorizadoNotificacionService::class)
+                ->notificarAutorizacion($ocActualizada, $firmante);
+        }
     }
 
     private function finalizaOrdencompraTrasArbolTriggerCompleto(int $ordencompra_id, $usuarioHistoriaId, Arbolaprobacion_OcTrigger $trigger): void
@@ -1540,6 +1558,17 @@ class ArbolaprobacionService
             $observacion
         );
         $this->requisicionRepository->update(['estado' => $estadoNombre], $requisicion_id);
+        $this->sincronizarAprobcompRequisicion($requisicion_id);
+    }
+
+    private function sincronizarAprobcompRequisicion(int $requisicionId): void
+    {
+        $requisicion = $this->requisicionRepository->find($requisicionId);
+        if ($requisicion === null) {
+            return;
+        }
+
+        app(RequisicionAnitaAprobcompSyncService::class)->asegurarSnapshot($requisicion);
     }
 
     private function usuarioHistoriaRequisicion($requisicion): int
@@ -1701,6 +1730,16 @@ class ArbolaprobacionService
                         ->rechazaPorRechazo((int) $comprobante_id, $usuario_id, $observacion);
                     break;
                 case 'OC':
+                    if ($this->esRechazoCircuitoSectorLegajo($movimientoPre)) {
+                        app(\App\Services\Compras\OrdencompraDevolverAComprasNotificacionService::class)
+                            ->devolver(
+                                (int) $comprobante_id,
+                                'Rechazo Gastronomía',
+                                (string) ($observacion ?? ''),
+                                (int) $usuario_id
+                            );
+                        break;
+                    }
                     $estadoOc = OrdencompraEstados::SUSPENDIDA;
                     $this->ordencompra_estadoRepository->creaEstado(
                         (int) $comprobante_id,
@@ -2474,6 +2513,36 @@ class ArbolaprobacionService
         return $arbol !== null && (int) ($arbol->oc_sector_cambio_centrocosto_id ?? 0) > 0;
     }
 
+    private function enlaceSectorLegajoVencido(Arbolaprobacion_Movimiento $movimiento): bool
+    {
+        if (! $this->esRechazoCircuitoSectorLegajo($movimiento)) {
+            return false;
+        }
+        $envio = $movimiento->fechaenvio ?? $movimiento->created_at;
+        if (! $envio) {
+            return false;
+        }
+        $fecha = $envio instanceof \DateTimeInterface
+            ? $envio
+            : Carbon::parse((string) $envio);
+
+        return OrdencompraLegajoGastronomiaSupport::enlaceVencido($fecha);
+    }
+
+    private function esRechazoCircuitoSectorLegajo(Arbolaprobacion_Movimiento $movimiento): bool
+    {
+        if (($movimiento->circuito_oc ?? '') === self::CIRCUITO_OC_CAMBIO_SECTOR) {
+            return true;
+        }
+        $triggerId = (int) ($movimiento->arbolaprobacion_oc_trigger_id ?? 0);
+        if ($triggerId <= 0) {
+            return false;
+        }
+        $evento = Arbolaprobacion_OcTrigger::query()->whereKey($triggerId)->value('evento');
+
+        return (string) $evento === OcArbolTriggerCatalog::EVENTO_CAMBIO_SECTOR;
+    }
+
     private function sectorDisparaCircuitoCambio(Arbolaprobacion $arbol, int $sectorLegajocompraId): bool
     {
         $disparoId = (int) ($arbol->oc_sector_disparo_aprobacion_id ?? 0);
@@ -2622,9 +2691,17 @@ class ArbolaprobacionService
                 continue;
             }
             if ($modo === 'aprobacion' && ArbolAprobacionEnlaceSupport::hashesCoinciden($hash, (string) $movimiento->hashaprobacion)) {
+                if ($this->enlaceSectorLegajoVencido($movimiento)) {
+                    continue;
+                }
+
                 return $movimiento;
             }
             if ($modo === 'rechazo' && ArbolAprobacionEnlaceSupport::hashesCoinciden($hash, (string) $movimiento->hashrechazo)) {
+                if ($this->enlaceSectorLegajoVencido($movimiento)) {
+                    continue;
+                }
+
                 return $movimiento;
             }
         }
@@ -2649,6 +2726,10 @@ class ArbolaprobacionService
             $estadoTrasAprobar = $this->estadoTrasAprobarSegunMovimientoOrdencompra($ordencompra, $mov);
         }
 
+        $hashPortal = $modo === 'rechazo'
+            ? (string) ($mov->hashrechazo ?? $mov->hashvisualizar ?? '')
+            : (string) ($mov->hashvisualizar ?? $mov->hashaprobacion ?? '');
+
         return [
             'ordencompra' => $ordencompra,
             'movimiento' => $mov,
@@ -2656,6 +2737,11 @@ class ArbolaprobacionService
             'monto_items' => (float) ($totales['monto'] ?? 0),
             'moneda_abrev_items' => (string) ($totales['monedacabecera_abreviatura'] ?? '—'),
             'ai_contexto_arbol' => $this->panelIaContextoArbol('OC', $ordencompra, $mov, $estadoTrasAprobar),
+            'es_circuito_legajo_gastronomia' => $this->esRechazoCircuitoSectorLegajo($mov),
+            'paquete_legajo' => OrdencompraLegajoGastronomiaSupport::paqueteParaPortal(
+                $ordencompra,
+                (string) ($mov->hashvisualizar ?? $hashPortal)
+            ),
         ];
     }
 

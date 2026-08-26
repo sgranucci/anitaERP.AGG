@@ -156,6 +156,13 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/compras-contratos-vencimiento-schedule.log'))
             ->when(fn () => (bool) config('compras.contratos_vencimiento.habilitado', true));
 
+        $schedule->command('compras:recordatorio-legajo-gastronomia')
+            ->dailyAt((string) config('compras.legajo.recordatorio_hora', '09:15'))
+            ->runInBackground()
+            ->withoutOverlapping(30)
+            ->appendOutputTo(storage_path('logs/compras-legajo-recordatorio-schedule.log'))
+            ->when(fn () => (bool) config('compras.legajo.recordatorio_habilitado', true));
+
         $schedule->command('seguridad:recordatorio-tickets-ingreso')
             ->dailyAt((string) config('ingreso_proveedor.recordatorio_hora', '08:45'))
             ->runInBackground()

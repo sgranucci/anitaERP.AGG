@@ -3,6 +3,7 @@
 namespace App\Support\Configuracion;
 
 use App\ApiAnita;
+use App\Models\Configuracion\Empresa;
 use App\Models\Configuracion\SistemaNumerador;
 use App\Support\Caja\IngresoEgresoAnitaNumeracionSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
@@ -18,6 +19,23 @@ final class SistemaNumeradorSupport
     public static function codigoCaja(string $abreviatura): string
     {
         return 'caja.'.strtoupper(trim($abreviatura));
+    }
+
+    public static function codigoStockTransferencia(): string
+    {
+        $codigo = trim((string) config('stock.transferencia_numerador_codigo', 'stock.transferencia'));
+
+        return $codigo !== '' ? $codigo : 'stock.transferencia';
+    }
+
+    /**
+     * Reserva el siguiente número de transferencia de mercadería (secuencia global).
+     */
+    public static function reservarSiguienteStockTransferencia(int $pisoErp = 0): int
+    {
+        $row = self::asegurarFilaStockTransferencia();
+
+        return self::reservarSiguiente($row->id, $pisoErp);
     }
 
     public static function aplicaTipoCaja(int $tipotransaccionCajaId): bool
@@ -229,6 +247,44 @@ final class SistemaNumeradorSupport
                 ? 'Creado automáticamente al numerar (empresa Anita '.$empresaAnita.').'
                 : 'Creado automáticamente al numerar.',
         ]);
+    }
+
+    private static function asegurarFilaStockTransferencia(): SistemaNumerador
+    {
+        $codigo = self::codigoStockTransferencia();
+        $empresaId = self::empresaIdNumeradorStock();
+
+        $existente = SistemaNumerador::query()
+            ->where('codigo', $codigo)
+            ->where('empresa_id', $empresaId)
+            ->first();
+
+        if ($existente !== null) {
+            return $existente;
+        }
+
+        return SistemaNumerador::query()->create([
+            'codigo' => $codigo,
+            'nombre' => 'Transferencia de mercadería',
+            'empresa_id' => $empresaId,
+            'modulo' => 'stock',
+            'ultimo_numero' => 0,
+            'anita_sistema' => null,
+            'anita_fuente' => null,
+            'anita_clave' => null,
+            'activo' => true,
+            'observacion' => 'Secuencia única global (el código TR- es unique).',
+        ]);
+    }
+
+    private static function empresaIdNumeradorStock(): int
+    {
+        $cfg = (int) config('stock.transferencia_numerador_empresa_id', 1);
+        if ($cfg > 0 && Empresa::query()->whereKey($cfg)->exists()) {
+            return $cfg;
+        }
+
+        return (int) (Empresa::query()->orderBy('id')->value('id') ?: 1);
     }
 
     private static function escSqlLiteral(string $valor): string

@@ -50,4 +50,29 @@ class RecepcionProveedorConversionSupportTest extends TestCase
 
         $this->assertSame(150000.0, $importe);
     }
+
+    public function test_convertir_moneda_codigo_1_no_reconvierte_aunque_haya_cotizacion(): void
+    {
+        $this->assertTrue(RecepcionProveedorConversionSupport::esCodigoMonedaPesos('1'));
+        $this->assertTrue(RecepcionProveedorConversionSupport::esCodigoMonedaPesos(1));
+        $this->assertTrue(RecepcionProveedorConversionSupport::esCodigoMonedaPesos(''));
+        $this->assertFalse(RecepcionProveedorConversionSupport::esCodigoMonedaPesos('2'));
+
+        $this->assertSame(
+            10235947.6,
+            RecepcionProveedorConversionSupport::convertirMoneda(10235947.6, 1415, 1, '1')
+        );
+        $this->assertSame(
+            10235947.6,
+            RecepcionProveedorConversionSupport::convertirMoneda(10235947.6, 1415, 1, 1)
+        );
+    }
+
+    public function test_convertir_moneda_codigo_extranjero_aplica_cotizacion(): void
+    {
+        $this->assertSame(
+            141500.0,
+            RecepcionProveedorConversionSupport::convertirMoneda(100.0, 1415, 1, '2')
+        );
+    }
 }

@@ -6,6 +6,7 @@ use App\Models\Stock\Articulo;
 use App\Models\Stock\Depmae;
 use App\Support\Stock\ArticuloStockColorTalleSupport;
 use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
+use App\Support\Stock\RecuentoItemsRequestSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Illuminate\Foundation\Http\FormRequest;
 use InvalidArgumentException;
@@ -15,6 +16,21 @@ class ValidacionRecuento extends FormRequest
     public function authorize(): bool
     {
         return true;
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $raw = $this->input('items_json');
+        if ($raw === null || $raw === '') {
+            return;
+        }
+
+        $arrays = RecuentoItemsRequestSupport::arraysDesdeItemsJson($raw);
+        if ($arrays === null) {
+            return;
+        }
+
+        $this->merge($arrays);
     }
 
     public function rules(): array
@@ -67,6 +83,21 @@ class ValidacionRecuento extends FormRequest
 
             if (! UsuarioDepositoAutorizado::depositoAutorizado($depositoId)) {
                 $validator->errors()->add('deposito_id', 'No tiene permiso para operar sobre este depósito.');
+            }
+
+            if ($this->filled('items_json') && RecuentoItemsRequestSupport::arraysDesdeItemsJson($this->input('items_json')) === null) {
+                $validator->errors()->add('items_json', 'No se pudieron leer las líneas del recuento. Vuelva a guardar.');
+
+                return;
+            }
+
+            if (! $this->filled('items_json') && RecuentoItemsRequestSupport::postTruncado($this->all())) {
+                $validator->errors()->add(
+                    'articulo_ids',
+                    'El recuento tiene demasiadas líneas para el envío clásico del formulario y se cortó el último ítem. Recargue la página y vuelva a guardar.'
+                );
+
+                return;
             }
 
             $articuloIds = $this->input('articulo_ids', []);

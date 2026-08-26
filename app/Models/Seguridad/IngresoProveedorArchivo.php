@@ -32,6 +32,11 @@ class IngresoProveedorArchivo extends Model implements Auditable
 
     public function urlPublica(): string
     {
-        return Storage::disk(self::DISCO)->url($this->rutaRelativa());
+        $url = Storage::disk(self::DISCO)->url($this->rutaRelativa());
+
+        return \App\Support\Archivos\ArchivoAdjuntoCacheSupport::conVersion(
+            $url,
+            Storage::disk(self::DISCO)->path($this->rutaRelativa())
+        );
     }
 }

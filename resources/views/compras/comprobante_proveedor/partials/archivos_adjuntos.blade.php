@@ -11,7 +11,10 @@
                 $safeName = $arch->nombrearchivo;
                 $ext = strtolower(pathinfo($safeName, PATHINFO_EXTENSION));
                 $urlDescarga = route('comprobante_proveedor_archivo', ['id' => $data->id, 'archivo' => $arch->id]);
-                $urlInline = $urlDescarga.'?inline=1';
+                $urlInline = \App\Support\Archivos\ArchivoAdjuntoCacheSupport::conVersion(
+                    $urlDescarga.'?inline=1',
+                    public_path('storage/archivos/comprobantes_proveedor/'.$data->id.'/'.basename($safeName))
+                );
                 $esImagen = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
                 $esPdf = $ext === 'pdf';
             @endphp

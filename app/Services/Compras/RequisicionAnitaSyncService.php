@@ -31,6 +31,7 @@ class RequisicionAnitaSyncService
 
     public function __construct(
         private RequisicionAnitaNroInternoSupport $nroInternoSupport,
+        private RequisicionAnitaAprobcompSyncService $aprobcompSyncService,
     ) {}
 
     /**
@@ -52,6 +53,7 @@ class RequisicionAnitaSyncService
         $this->insertarCabecera($ctx);
         $this->insertarReferenciasPresupuesto($ctx);
         RequisicionAnitaNumeracionSupport::registrarNumeroAsignadoEnNumerador($ctx->numeroRequisicion());
+        $this->aprobcompSyncService->asegurarSnapshot($requisicion);
     }
 
     /**
@@ -74,6 +76,7 @@ class RequisicionAnitaSyncService
         $this->insertarLineasMovimiento($ctx);
         $this->insertarReferenciasPresupuesto($ctx);
         RequisicionAnitaNumeracionSupport::registrarNumeroAsignadoEnNumerador($ctx->numeroRequisicion());
+        $this->aprobcompSyncService->asegurarSnapshot($requisicion);
     }
 
     /**

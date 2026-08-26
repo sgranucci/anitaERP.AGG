@@ -1,8 +1,9 @@
 @php
     $prefix = $prefix ?? 'oc';
+    $tituloBloque = $tituloBloque ?? 'Factura del legajo (obligatoria para Cuentas a pagar)';
 @endphp
 <div class="form-group d-none js-oc-bloque-factura-legajo" id="{{ $prefix }}_bloque_factura_legajo">
-    <label class="font-weight-bold">Factura del legajo (obligatoria para Cuentas a pagar)</label>
+    <label class="font-weight-bold">{{ $tituloBloque }}</label>
     <div class="alert alert-info py-2 mb-2 js-oc-gate-ok d-none">
         <i class="fa fa-check-circle"></i> Hay factura (precarga/PDF) asignada al legajo.
         <span class="js-oc-gate-com-ok"></span>

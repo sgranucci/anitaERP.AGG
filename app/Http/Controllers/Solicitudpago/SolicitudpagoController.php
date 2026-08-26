@@ -18,6 +18,7 @@ use App\Services\Solicitudpago\SolicitudpagoCargaMasivaCsvService;
 use App\Services\Solicitudpago\SolicitudpagoComprobantePdfService;
 use App\Services\Solicitudpago\SolicitudpagoPaqueteMailPdfService;
 use App\Services\Caja\IngresoEgresoAnularRevertirService;
+use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
 use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
 use App\Support\Solicitudpago\SolicitudpagoArchivoStorageSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
@@ -581,9 +582,9 @@ class SolicitudpagoController extends Controller
 
         $nombre = $arch->nombre_original ?: basename((string) $arch->archivo);
         if ($request->boolean('inline')) {
-            return response()->file($ruta, [
+            return ArchivoAdjuntoCacheSupport::aplicarAntiCacheNavegador(response()->file($ruta, [
                 'Content-Disposition' => 'inline; filename="'.$nombre.'"',
-            ]);
+            ]));
         }
 
         return response()->download($ruta, $nombre);

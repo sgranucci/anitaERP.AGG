@@ -12,7 +12,7 @@
                 $safeName = $arch->nombrearchivo;
                 $ext = strtolower(pathinfo($safeName, PATHINFO_EXTENSION));
                 $urlDescarga = route('formula_articulo_archivo', ['id' => $data->id, 'archivo' => $arch->id]);
-                $urlPublica = asset('storage/archivos/formulas_articulo/'.$data->id.'/'.basename($safeName));
+                $urlPublica = \App\Support\Archivos\ArchivoAdjuntoCacheSupport::urlStoragePublico('archivos/formulas_articulo/'.$data->id.'/'.basename($safeName));
                 $esImagen = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
                 $esPdf = $ext === 'pdf';
             @endphp

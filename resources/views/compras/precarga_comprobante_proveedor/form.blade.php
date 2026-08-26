@@ -113,7 +113,18 @@
 			<div class="col-lg-3">
 				<input type="text" name="pararevisar" id="pararevisar" class="form-control" value="{{$data->pararevisar ?? 0 == 1 ? 'PARA REVISAR' : 'SIN ERRORES'}}" readonly>
 			</div>
-		</div>       
+		</div>
+        @if (filled($data->marca_error ?? null))
+        <div class="form-group row">
+            <label class="col-lg-4 col-form-label">Marca de error</label>
+            <div class="col-lg-8">
+                <span class="badge badge-danger">{{ \App\Support\Compras\ComprobanteProveedorCotizacionIngresoSupport::etiquetaMarca($data->marca_error) ?: $data->marca_error }}</span>
+                @if (filled($data->aviso_error ?? null))
+                    <p class="text-danger mb-0 mt-1">{{ $data->aviso_error }}</p>
+                @endif
+            </div>
+        </div>
+        @endif       
     	<div class="form-group row">
 			<label for="Subtotal" class="col-lg-4 col-form-label">Subtotal</label>
             <div class="col-lg-3">

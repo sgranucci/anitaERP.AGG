@@ -83,6 +83,8 @@
     Este recuento usa stock por color y talle: todas las líneas deben tener color y talle.
 </div>
 <input type="hidden" name="modo_stock_color_talle" id="modo_stock_color_talle" value="{{ $modoStockColorTalleInicial }}">
+{{-- Un solo campo JSON: con 125+ líneas el POST clásico supera max_input_vars y el último ítem llega en 0. --}}
+<textarea name="items_json" id="recuento-items-json" class="d-none" autocomplete="off" aria-hidden="true" tabindex="-1" rows="1" cols="20">{{ old('items_json', '') }}</textarea>
 
 <div class="card">
     <div class="card-header py-2">

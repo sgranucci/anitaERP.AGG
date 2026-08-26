@@ -1,7 +1,7 @@
 @php
     $fotoUrl = null;
     if (isset($data) && $data->foto) {
-        $fotoUrl = asset('storage/archivos/empleados/'.$data->id.'/'.$data->foto);
+        $fotoUrl = \App\Support\Archivos\ArchivoAdjuntoCacheSupport::urlStoragePublico('archivos/empleados/'.$data->id.'/'.$data->foto);
     }
 @endphp
 <div class="form-group row">

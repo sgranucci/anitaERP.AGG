@@ -13,7 +13,6 @@ use App\Models\Compras\Ordencompra_Articulo;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Requisicion;
 use App\Models\Compras\Requisicion_Estado;
-use App\Models\Compras\Sector_Legajocompra;
 use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Color;
 use App\Models\Stock\Talle;
@@ -37,6 +36,7 @@ use App\Services\Compras\OrdencompraRecepcionesListadoService;
 use App\Services\Compras\OrdencompraRecepcionPrecioSyncService;
 use App\Services\Compras\OrdencompraRevertirCierreLineaService;
 use App\Services\Stock\RecepcionProveedorPrecioPendienteService;
+use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
 use App\Support\Compras\OrdencompraArticuloPrecioHistoriaOrigen;
 use App\Support\Compras\OrdencompraContratoVencimientoSupport;
 use App\Support\Compras\OrdencompraTratamientoMovimientosSupport;
@@ -46,7 +46,10 @@ use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\ImpuestoService;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraEstados;
+use App\Support\Compras\OrdencompraLegajoGastronomiaSupport;
+use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use App\Support\Compras\OrdencompraListadoFiltros;
+use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
 use Illuminate\Http\JsonResponse;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Compras\OrdencompraPdfContextoRequisicion;
@@ -97,15 +100,14 @@ class OrdencompraController extends Controller
             null,
             $empresaDefault ? (int) $empresaDefault : null
         );
-        $sectorUsuario = Auth::user()->sector_legajocompra_id ?? null;
-        $sectorId = $sectorUsuario ? (int) $sectorUsuario : null;
+        $sectorId = OrdencompraSectorVisibilidadSupport::idSectorParaFiltro();
         $ordencompra = $this->ordencompraRepository->listadoIndex(
             $filtros,
             $sectorId,
             true,
         );
         $estados = OrdencompraEstados::todos();
-        $sectores = Sector_Legajocompra::orderBy('nombre')->get();
+        $sectores = OrdencompraLegajoGastronomiaSupport::sectoresParaCambio();
 
         return view('compras.ordencompra.index', [
             'ordencompra' => $ordencompra,
@@ -116,7 +118,8 @@ class OrdencompraController extends Controller
             'empresa_query' => $this->empresaRepository->allFiltrado(),
             'estados' => $estados,
             'sectores' => $sectores,
-            'sectorUsuario' => $sectorId,
+            'sectorUsuario' => ($sectorId !== null && $sectorId > 0) ? $sectorId : null,
+            'alcanceSector' => OrdencompraSectorVisibilidadSupport::etiquetaAlcance(),
         ]);
     }
 
@@ -209,8 +212,7 @@ class OrdencompraController extends Controller
     {
         can('listar-ordencompra');
 
-        $sectorUsuario = Auth::user()->sector_legajocompra_id ?? null;
-        $sectorId = $sectorUsuario ? (int) $sectorUsuario : null;
+        $sectorId = OrdencompraSectorVisibilidadSupport::idSectorParaFiltro();
         $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
         $filtros = OrdencompraListadoFiltros::resolverDesdeRequest(
             $request,
@@ -245,7 +247,10 @@ class OrdencompraController extends Controller
 
     public function soloConsulta($id)
     {
-        if (! can('listar-ordencompra', false) && ! can('editar-ordencompra', false)) {
+        if (! can('listar-ordencompra', false)
+            && ! can('editar-ordencompra', false)
+            && ! can('listar-legajo-compra', false)
+        ) {
             can('listar-ordencompra');
         }
 
@@ -749,6 +754,83 @@ class OrdencompraController extends Controller
         return redirect()->back()->with('errores', [$ret['errores'] ?? 'Error']);
     }
 
+    public function enviarGastronomia(Request $request, $id)
+    {
+        can('actualizar-ordencompra');
+        $request->validate([
+            'observacion' => 'nullable|string|max:255',
+            'leyenda' => 'nullable|string|max:2000',
+            'factura_pdf' => 'nullable|file|mimes:pdf|max:20480',
+        ]);
+        $ret = $this->ordencompraGestionService->enviarAGastronomia(
+            (int) $id,
+            $request->observacion,
+            $request->leyenda,
+            $request->file('factura_pdf'),
+        );
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json($ret, ($ret['mensaje'] ?? '') === 'ok' ? 200 : 422);
+        }
+
+        if (($ret['mensaje'] ?? '') === 'ok') {
+            return redirect()->back()->with('mensaje', 'Legajo enviado a Gastronomía');
+        }
+
+        return redirect()->back()->with('errores', [$ret['errores'] ?? 'Error']);
+    }
+
+    public function enviarCuentasAPagar(Request $request, $id)
+    {
+        can('actualizar-ordencompra');
+        $request->validate([
+            'observacion' => 'nullable|string|max:255',
+            'leyenda' => 'nullable|string|max:2000',
+            'factura_pdf' => 'nullable|file|mimes:pdf|max:20480',
+        ]);
+        $ret = $this->ordencompraGestionService->enviarACuentasAPagar(
+            (int) $id,
+            $request->observacion,
+            $request->leyenda,
+            $request->file('factura_pdf'),
+        );
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json($ret, ($ret['mensaje'] ?? '') === 'ok' ? 200 : 422);
+        }
+
+        if (($ret['mensaje'] ?? '') === 'ok') {
+            return redirect()->back()->with('mensaje', 'Legajo enviado a Cuentas a pagar');
+        }
+
+        return redirect()->back()->with('errores', [$ret['errores'] ?? 'Error']);
+    }
+
+    public function finalizarLegajo(Request $request, $id)
+    {
+        if (! can('actualizar-ordencompra', false)
+            && ! can('editar-pagoproveedor', false)
+            && ! can('crear-pagoproveedor', false)
+            && ! can('listar-legajo-compra', false)
+        ) {
+            can('actualizar-ordencompra');
+        }
+        $request->validate([
+            'observacion' => 'nullable|string|max:255',
+        ]);
+        $ret = $this->ordencompraGestionService->finalizarLegajo((int) $id, $request->observacion);
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json($ret, ($ret['mensaje'] ?? '') === 'ok' ? 200 : 422);
+        }
+
+        if (($ret['mensaje'] ?? '') === 'ok') {
+            return redirect()->back()->with('mensaje', 'Legajo archivado');
+        }
+
+        return redirect()->back()->with('errores', [$ret['errores'] ?? 'Error']);
+    }
+
     public function gateCuentasAPagar(int $id): JsonResponse
     {
         can('actualizar-ordencompra');
@@ -758,12 +840,53 @@ class OrdencompraController extends Controller
             return response()->json(['ok' => false, 'errores' => ['Orden de compra inexistente.']], 404);
         }
 
-        $gate = OrdencompraEnvioCuentasAPagarGateSupport::evaluar($oc);
+        $paquete = OrdencompraEnvioCuentasAPagarGateSupport::evaluar($oc);
+        $gate = OrdencompraEnvioCuentasAPagarGateSupport::evaluarCuentasAPagar($oc);
         $gate['sector_cuentas_a_pagar_id'] = OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre(
             OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_CUENTAS_A_PAGAR
         );
+        $gate['sector_gastronomia_id'] = OrdencompraLegajoGastronomiaSupport::sectorGastronomiaId();
+        $gate['requiere_gastronomia'] = OrdencompraLegajoGastronomiaSupport::requiereCircuito($oc);
+        $gate['puede_enviar_gastronomia'] = OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviar($oc);
+        $gate['paquete_ok'] = $paquete['ok'];
+        $gate['paquete_errores'] = $paquete['errores'];
+        $gate['requiere_pdf'] = $paquete['requiere_pdf'];
+        $gate['tiene_factura'] = $paquete['tiene_factura'];
+        $gate['tiene_com'] = $paquete['tiene_com'];
+        $gate['exige_com'] = $paquete['exige_com'];
 
         return response()->json($gate);
+    }
+
+    public function visualizarFacturaLegajo(Request $request, int $id, string $hash)
+    {
+        if (! OrdencompraLegajoGastronomiaSupport::hashVisualizarValido($id, $hash)) {
+            abort(403, 'El enlace de la factura no es válido.');
+        }
+
+        $oc = Ordencompra::query()->find($id);
+        if (! $oc) {
+            abort(404);
+        }
+        $factura = OrdencompraEnvioCuentasAPagarGateSupport::resolverPrecargaConPdf($oc);
+        if (! $factura) {
+            abort(404, 'El legajo no tiene factura PDF.');
+        }
+
+        $path = app(PrecargaFacturaScanPathResolver::class)->resolve($factura->rutaalmacenamiento);
+        if ($path === null) {
+            abort(404, 'No se encontró el PDF de la factura.');
+        }
+
+        $nombre = basename($path);
+        if ($request->boolean('inline')) {
+            return response()->file($path, [
+                'Content-Type' => 'application/pdf',
+                'Content-Disposition' => 'inline; filename="'.$nombre.'"',
+            ]);
+        }
+
+        return response()->download($path, $nombre);
     }
 
     /**
@@ -806,7 +929,7 @@ class OrdencompraController extends Controller
         }
 
         if ($request->boolean('inline')) {
-            return response()->file($path);
+            return ArchivoAdjuntoCacheSupport::aplicarAntiCacheNavegador(response()->file($path));
         }
 
         return response()->download($path, $basename);
@@ -1024,7 +1147,7 @@ class OrdencompraController extends Controller
         $condicionpago_query = Condicionpago::orderBy('nombre')->get();
         $condicionentrega_query = Condicionentrega::orderBy('nombre')->get();
         $condicioncompra_query = Condicioncompra::orderBy('nombre')->get();
-        $sectores_legajo = Sector_Legajocompra::orderBy('nombre')->get();
+        $sectores_legajo = OrdencompraLegajoGastronomiaSupport::sectoresParaCambio();
         $transporte_query = Transporte::orderBy('nombre')->get();
         $tratamiento_enum = Ordencompra::$enumTratamientoCompra;
         $estados_oc = OrdencompraEstados::todos();
@@ -1091,6 +1214,23 @@ class OrdencompraController extends Controller
             ])
             : null;
 
+        $oc_puede_enviar_gastronomia = $id !== null && $data
+            && empty($visualizar)
+            && $puedeActualizarOrdencompra
+            && OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviar($data);
+        $oc_puede_enviar_cuentas_a_pagar = $id !== null && $data
+            && empty($visualizar)
+            && $puedeActualizarOrdencompra
+            && OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviarCuentasAPagar($data);
+        $oc_puede_finalizar_legajo = $id !== null && $data
+            && empty($visualizar)
+            && $puedeActualizarOrdencompra
+            && OrdencompraLegajoGastronomiaSupport::puedeFinalizar($data);
+        $oc_sector_gastronomia_id = OrdencompraLegajoGastronomiaSupport::sectorGastronomiaId();
+        $oc_sector_cuentas_a_pagar_id = OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre(
+            OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_CUENTAS_A_PAGAR
+        );
+
         return view('compras.ordencompra.editar', compact(
             'data',
             'empresa_query',
@@ -1126,6 +1266,11 @@ class OrdencompraController extends Controller
             'mostrar_solapa_ingresos',
             'tickets_ingreso',
             'url_nuevo_ticket_ingreso',
+            'oc_puede_enviar_gastronomia',
+            'oc_puede_enviar_cuentas_a_pagar',
+            'oc_puede_finalizar_legajo',
+            'oc_sector_gastronomia_id',
+            'oc_sector_cuentas_a_pagar_id',
         ));
     }
 }

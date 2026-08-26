@@ -23,6 +23,7 @@ use App\Support\Stock\MovimientoStockSalidaSaldoSupport;
 use App\Support\Stock\RecuentoBloqueoSalidaDepositoSupport;
 use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Stock\TransferenciaMercaderiaAprobacionSupport;
+use App\Support\Stock\TransferenciaMercaderiaCodigoSupport;
 use App\Support\Stock\TransferenciaMercaderiaDestinatarioSupport;
 use App\Support\Stock\TransferenciaMercaderiaEstados;
 use App\Support\Stock\TransferenciaMercaderiaLineaContableSupport;
@@ -438,9 +439,6 @@ class TransferenciaMercaderiaService
             ];
         }
 
-        $lote = (int) $ahora->format('ymdHis');
-        $codigoBase = 'TR-'.$ahora->format('YmdHis');
-
         $this->persistirPreferencias($cabecera);
 
         try {
@@ -520,29 +518,35 @@ class TransferenciaMercaderiaService
         }
 
         try {
-            return DB::transaction(function () use (
-                $cabecera,
-                $lineasResueltas,
-                $tipoTransferencia,
-                $depositoSalida,
-                $depositoEntrada,
-                $depositoSalidaId,
-                $depositoEntradaId,
-                $bienUsoDestinoId,
-                $bienUsoOrigenId,
-                $destinoBienUso,
-                $origenBienUso,
-                $empresaId,
-                $fecha,
-                $lote,
-                $codigoBase,
-                $requiereAprobacion,
-                $usuarioDestino,
-                $etiquetaDestino,
-                $etiquetaOrigen,
-                $ccDestinoId,
-                $manejaContabilidad
-            ) {
+            $intentoCodigo = 0;
+            $maxIntentosCodigo = 5;
+            while (true) {
+                try {
+                    return DB::transaction(function () use (
+                        $cabecera,
+                        $lineasResueltas,
+                        $tipoTransferencia,
+                        $depositoSalida,
+                        $depositoEntrada,
+                        $depositoSalidaId,
+                        $depositoEntradaId,
+                        $bienUsoDestinoId,
+                        $bienUsoOrigenId,
+                        $destinoBienUso,
+                        $origenBienUso,
+                        $empresaId,
+                        $fecha,
+                        $requiereAprobacion,
+                        $usuarioDestino,
+                        $etiquetaDestino,
+                        $etiquetaOrigen,
+                        $ccDestinoId,
+                        $manejaContabilidad
+                    ) {
+                $asignado = TransferenciaMercaderiaCodigoSupport::reservar();
+                $codigoBase = $asignado['codigo'];
+                $lote = $asignado['lote'];
+
                 $transferencia = Transferencia_Mercaderia::create([
                     'codigo' => $codigoBase,
                     'lote' => $lote,
@@ -625,7 +629,15 @@ class TransferenciaMercaderiaService
                     'tipotransaccion_stock_id' => (int) $tipoTransferencia->id,
                     'requiere_aprobacion' => $requiereAprobacion,
                 ];
-            });
+                    });
+                } catch (\Throwable $e) {
+                    if (! TransferenciaMercaderiaCodigoSupport::esCodigoDuplicado($e)
+                        || ++$intentoCodigo >= $maxIntentosCodigo) {
+                        throw $e;
+                    }
+                    usleep(50000 * $intentoCodigo);
+                }
+            }
         } catch (\Throwable $e) {
             Log::warning('TransferenciaMercaderia: error al grabar', ['error' => $e->getMessage()]);
 

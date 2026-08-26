@@ -31,6 +31,9 @@
                 }
                 $esImagen = in_array($ext, ['jpg', 'jpeg', 'png', 'gif', 'webp'], true);
                 $esPdf = $ext === 'pdf';
+                $pathAdjunto = \Illuminate\Support\Facades\Storage::disk(\App\Models\Seguridad\IngresoProveedorArchivo::DISCO)
+                    ->path($arch->rutaRelativa());
+                $urlInline = \App\Support\Archivos\ArchivoAdjuntoCacheSupport::conVersion($urlInline, $pathAdjunto);
             @endphp
             <div class="col-md-6 col-lg-4 mb-3 ingreso-archivo-item">
                 <div class="card card-outline card-secondary h-100 mb-0">

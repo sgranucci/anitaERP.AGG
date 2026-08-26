@@ -272,7 +272,26 @@
 						$fotoNombre = $data['fotodocumento'];
 						$fotoBasename = basename($fotoNombre);
 						$fid = $data->id ?? null;
-						$rutaVerDocumento = $fid ? route('cliente_uif_fotodocumento', ['id' => $fid]) : '#';
+						$pathFoto = $fid
+							? \App\Services\Uif\ClienteUifFotoDocumento::absolutePathForCliente(
+								$fotoNombre,
+								(string) ($data->numerodocumento ?? ''),
+								$data->inroclienteid !== null ? (int) $data->inroclienteid : null
+							)
+							: null;
+						$rutaVerDocumento = $fid
+							? route('cliente_uif_fotodocumento', array_merge(
+								['id' => $fid],
+								\App\Services\Uif\ClienteUifFotoDocumento::queryVersion($pathFoto)
+							))
+							: '#';
+						$rutaDescargarDocumento = $fid
+							? route('cliente_uif_fotodocumento', array_merge(
+								['id' => $fid],
+								\App\Services\Uif\ClienteUifFotoDocumento::queryVersion($pathFoto),
+								['disposition' => 'attachment']
+							))
+							: '#';
 						$esImagen = preg_match('/\.(jpe?g|png|gif|webp)$/i', $fotoNombre);
 						$esPdf = preg_match('/\.pdf$/i', $fotoNombre);
 					@endphp
@@ -297,7 +316,7 @@
 							</div>
 						@endif
 						<div class="d-flex flex-wrap align-items-center mt-3 pt-2 border-top" style="gap: 8px;">
-							<a class="btn btn-sm btn-outline-primary" href="{{ route('cliente_uif_fotodocumento', ['id' => $fid]) }}?disposition=attachment">
+							<a class="btn btn-sm btn-outline-primary" href="{{ $rutaDescargarDocumento }}">
 								<i class="fa fa-download"></i> Descargar
 							</a>
 							<a class="btn btn-sm btn-outline-secondary" href="{{ $rutaVerDocumento }}" target="_blank" rel="noopener noreferrer" title="Abrir en nueva pestaña">

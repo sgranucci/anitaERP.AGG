@@ -34,6 +34,7 @@ use App\Support\Compras\OrdencompraCondicionesContratacionGenerator;
 use App\Support\Compras\OrdencompraDescuentoSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraEstados;
+use App\Support\Compras\OrdencompraLegajoGastronomiaSupport;
 use App\Support\Compras\OrdencompraTotalesResumen;
 use App\Support\Compras\OrdencompraTratamientoMovimientosSupport;
 use App\Support\Compras\RequisicionLineasOcSupport;
@@ -701,14 +702,24 @@ class OrdencompraGestionService
         }
         $sectorAnteriorId = (int) ($ocPrev->sector_legajocompra_id ?? 0);
 
-        if (OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar($sectorLegajocompraId)) {
+        if (OrdencompraLegajoGastronomiaSupport::esSectorFinalizado($sectorLegajocompraId)
+            && ! OrdencompraLegajoGastronomiaSupport::puedeFinalizar($ocPrev)) {
+            return ['mensaje' => 'error', 'errores' => 'El legajo solo se puede finalizar desde Cuentas a pagar.'];
+        }
+
+        $exigePaquete = OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar($sectorLegajocompraId)
+            || $this->cambioExigePaqueteGastronomia($ocPrev, $sectorLegajocompraId);
+
+        if ($exigePaquete) {
             try {
                 if ($facturaPdf) {
                     $this->legajoFacturaPdfService->adjuntarPdfAlLegajo($ocPrev, $facturaPdf);
                     $ocPrev = $this->ordencompraRepository->find($id) ?: $ocPrev;
                 }
 
-                $gate = OrdencompraEnvioCuentasAPagarGateSupport::evaluar($ocPrev);
+                $gate = OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar($sectorLegajocompraId)
+                    ? OrdencompraEnvioCuentasAPagarGateSupport::evaluarCuentasAPagar($ocPrev)
+                    : OrdencompraEnvioCuentasAPagarGateSupport::evaluar($ocPrev);
                 if (! $gate['ok']) {
                     return [
                         'mensaje' => 'error',
@@ -749,6 +760,103 @@ class OrdencompraGestionService
         }
 
         return ['mensaje' => 'ok'];
+    }
+
+    /**
+     * @return array{mensaje: string, errores?: string, requiere_pdf?: bool, gate?: array<string, mixed>}
+     */
+    public function enviarAGastronomia(
+        int $id,
+        ?string $observacion,
+        ?string $leyenda,
+        ?UploadedFile $facturaPdf = null,
+    ): array {
+        $oc = $this->ordencompraRepository->find($id);
+        if (! $oc) {
+            return ['mensaje' => 'error', 'errores' => 'Orden de compra inexistente.'];
+        }
+
+        $erroresCircuito = OrdencompraLegajoGastronomiaSupport::erroresEnvioGastronomia($oc);
+        if ($erroresCircuito !== []) {
+            return ['mensaje' => 'error', 'errores' => implode(' ', $erroresCircuito)];
+        }
+
+        $circuito = OrdencompraLegajoGastronomiaSupport::circuitoDeEmpresa((int) ($oc->empresa_id ?? 0));
+        $sectorId = (int) $circuito['sector_disparo_id'];
+        if ($sectorId <= 0) {
+            return ['mensaje' => 'error', 'errores' => 'No está configurado el sector GASTRONOMIA.'];
+        }
+
+        $obs = trim((string) $observacion);
+        if ($obs === '') {
+            $obs = 'Enviar a Gastronomía para autorización del legajo';
+        }
+
+        return $this->cambiarSector($id, $sectorId, $obs, $leyenda, $facturaPdf);
+    }
+
+    /**
+     * @return array{mensaje: string, errores?: string, requiere_pdf?: bool, gate?: array<string, mixed>}
+     */
+    public function enviarACuentasAPagar(
+        int $id,
+        ?string $observacion,
+        ?string $leyenda,
+        ?UploadedFile $facturaPdf = null,
+    ): array {
+        $oc = $this->ordencompraRepository->find($id);
+        if (! $oc) {
+            return ['mensaje' => 'error', 'errores' => 'Orden de compra inexistente.'];
+        }
+        if (! OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviarCuentasAPagar($oc)) {
+            return ['mensaje' => 'error', 'errores' => 'Este legajo no se puede enviar a Cuentas a pagar.'];
+        }
+        $sectorId = OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre(
+            OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_CUENTAS_A_PAGAR
+        );
+        if ($sectorId <= 0) {
+            return ['mensaje' => 'error', 'errores' => 'No está configurado el sector CUENTAS A PAGAR.'];
+        }
+        $obs = trim((string) $observacion);
+        if ($obs === '') {
+            $obs = 'Enviar a Cuentas a pagar';
+        }
+
+        return $this->cambiarSector($id, $sectorId, $obs, $leyenda, $facturaPdf);
+    }
+
+    /**
+     * @return array{mensaje: string, errores?: string}
+     */
+    public function finalizarLegajo(int $id, ?string $observacion): array
+    {
+        $oc = $this->ordencompraRepository->find($id);
+        if (! $oc) {
+            return ['mensaje' => 'error', 'errores' => 'Orden de compra inexistente.'];
+        }
+        if (! OrdencompraLegajoGastronomiaSupport::puedeFinalizar($oc)) {
+            return ['mensaje' => 'error', 'errores' => 'Solo se puede finalizar un legajo que está en Cuentas a pagar.'];
+        }
+        $sectorId = OrdencompraLegajoGastronomiaSupport::sectorFinalizadoId();
+        $obs = trim((string) $observacion);
+        if ($obs === '') {
+            $obs = 'Cierre del legajo';
+        }
+
+        return $this->cambiarSector($id, $sectorId, $obs, null);
+    }
+
+    private function cambioExigePaqueteGastronomia(object $oc, int $sectorDestinoId): bool
+    {
+        if ($sectorDestinoId <= 0 || ! $oc instanceof Ordencompra) {
+            return false;
+        }
+        if (! OrdencompraLegajoGastronomiaSupport::requiereCircuito($oc)) {
+            return false;
+        }
+        $circuito = OrdencompraLegajoGastronomiaSupport::circuitoDeEmpresa((int) ($oc->empresa_id ?? 0));
+
+        return $circuito['sector_disparo_id'] > 0 && $circuito['sector_disparo_id'] === $sectorDestinoId;
     }
 
     public function leerHistoriaLegajo(int $ordencompraId)

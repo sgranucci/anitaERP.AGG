@@ -3439,9 +3439,21 @@ Route::post('compras/ordencompra/{id}/cambiar-estado', 'Compras\OrdencompraContr
 Route::post('compras/ordencompra/{id}/reactivar', 'Compras\OrdencompraController@reactivarSuspendida')->name('ordencompra_reactivar');
 Route::post('compras/ordencompra/{id}/revertir-cierre-lineas', 'Compras\OrdencompraController@revertirCierreLineas')->name('ordencompra_revertir_cierre_lineas');
 Route::post('compras/ordencompra/{id}/cambiar-sector', 'Compras\OrdencompraController@cambiarSector')->name('ordencompra_cambiar_sector');
+Route::post('compras/ordencompra/{id}/enviar-gastronomia', 'Compras\OrdencompraController@enviarGastronomia')->name('ordencompra_enviar_gastronomia');
+Route::post('compras/ordencompra/{id}/enviar-cuentas-a-pagar', 'Compras\OrdencompraController@enviarCuentasAPagar')->name('ordencompra_enviar_cuentas_a_pagar');
+Route::post('compras/ordencompra/{id}/finalizar-legajo', 'Compras\OrdencompraController@finalizarLegajo')->name('ordencompra_finalizar_legajo');
 Route::get('compras/ordencompra/{id}/gate-cuentas-a-pagar', 'Compras\OrdencompraController@gateCuentasAPagar')->name('ordencompra_gate_cuentas_a_pagar');
+Route::get('compras/legajos', 'Compras\OrdencompraLegajoBandejaController@index')->name('consultar_legajo_compra');
+Route::get('compras/lista-legajos/{formato?}', 'Compras\OrdencompraLegajoBandejaController@exportar')->name('listar_legajo_compra');
+Route::get('compras/legajos/{id}/historia', 'Compras\OrdencompraLegajoBandejaController@historia')->name('ordencompra_legajo_bandeja_historia');
+Route::get('compras/legajos/{id}/paquete', 'Compras\OrdencompraLegajoBandejaController@paquete')->name('ordencompra_legajo_bandeja_paquete');
+Route::post('compras/legajos/{id}/asignar-com', 'Compras\OrdencompraLegajoBandejaController@asignarCom')->name('ordencompra_legajo_bandeja_asignar_com');
+Route::get('compras/legajos/{id}/factura-pdf/{precarga}', 'Compras\OrdencompraLegajoBandejaController@verFacturaPdf')->name('ordencompra_legajo_bandeja_factura_pdf');
+Route::get('compras/legajos/{id}/factura-anita-pdf/{documento}', 'Compras\OrdencompraLegajoBandejaController@verFacturaAnitaPdf')->name('ordencompra_legajo_bandeja_factura_anita_pdf');
+Route::get('compras/legajos/{id}/com-pdf/{recepcion}', 'Compras\OrdencompraLegajoBandejaController@verComPdf')->name('ordencompra_legajo_bandeja_com_pdf');
 Route::get('compras/ordencompra/soloconsulta/{id}', 'Compras\OrdencompraController@soloConsulta')->name('solo_consulta_ordencompra');
 Route::get('compras/ordencompra/visualizar/{id}/{hash}', 'Compras\OrdencompraController@visualizar')->name('visualizar_ordencompra');
+Route::get('compras/ordencompra/visualizar/{id}/{hash}/factura-pdf', 'Compras\OrdencompraController@visualizarFacturaLegajo')->name('visualizar_factura_legajo_ordencompra');
 
 /*
  * Centro de ayuda (manuales por módulo)

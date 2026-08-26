@@ -27,6 +27,12 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
 $(function () {
     if (window.OcCambiarSectorLegajo) {
         window.OcCambiarSectorLegajo.initForm($('#formOcCambiarSector'));
+        if ($('#formOcEnviarGastronomia').length) {
+            window.OcCambiarSectorLegajo.initForm($('#formOcEnviarGastronomia'), { forzarPaquete: true });
+        }
+        if ($('#formOcEnviarCuentasAPagar').length) {
+            window.OcCambiarSectorLegajo.initForm($('#formOcEnviarCuentasAPagar'), { forzarCxp: true });
+        }
     }
 });
 </script>
@@ -90,7 +96,8 @@ $(function () {
                         <form method="POST" action="{{ route('ordencompra_cambiar_sector', ['id' => $data->id]) }}"
                               id="formOcCambiarSector"
                               enctype="multipart/form-data"
-                              data-ordencompra-id="{{ $data->id }}">
+                              data-ordencompra-id="{{ $data->id }}"
+                              data-sector-gastronomia-id="{{ (int) ($oc_sector_gastronomia_id ?? 0) }}">
                             @csrf
                             <div class="modal-header">
                                 <h5 class="modal-title">Cambiar sector de legajo</h5>
@@ -123,6 +130,115 @@ $(function () {
                     </div>
                 </div>
             </div>
+
+            @if (!empty($oc_puede_enviar_gastronomia))
+            <div class="modal fade" id="modalOcEnviarGastronomia" tabindex="-1" role="dialog" aria-hidden="true">
+                <div class="modal-dialog" role="document">
+                    <div class="modal-content">
+                        <form method="POST" action="{{ route('ordencompra_enviar_gastronomia', ['id' => $data->id]) }}"
+                              id="formOcEnviarGastronomia"
+                              enctype="multipart/form-data"
+                              data-ordencompra-id="{{ $data->id }}"
+                              data-sector-gastronomia-id="{{ (int) ($oc_sector_gastronomia_id ?? 0) }}">
+                            @csrf
+                            <div class="modal-header">
+                                <h5 class="modal-title">Enviar a Gastronomía</h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="text-muted small">El referente verá la factura, la OC y la recepción. Al autorizar, el legajo pasa a Cuentas a pagar.</p>
+                                @include('compras.ordencompra.partials.bloque_factura_legajo_sector', [
+                                    'prefix' => 'ocg',
+                                    'tituloBloque' => 'Factura y recepción del legajo (igual que para Cuentas a pagar)',
+                                ])
+                                <div class="form-group">
+                                    <label for="ocg_sector_obs">Comentario al referente</label>
+                                    <input type="text" name="observacion" id="ocg_sector_obs" class="form-control" maxlength="255" placeholder="Opcional">
+                                </div>
+                                <div class="form-group">
+                                    <label for="ocg_sector_leyenda">Leyenda / detalle</label>
+                                    <textarea name="leyenda" id="ocg_sector_leyenda" class="form-control" rows="2" maxlength="2000"></textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                                <button type="submit" class="btn btn-primary">Enviar a Gastronomía</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            @endif
+            @if (!empty($oc_puede_enviar_cuentas_a_pagar))
+            <div class="modal fade" id="modalOcEnviarCuentasAPagar" tabindex="-1" role="dialog" aria-hidden="true">
+                <div class="modal-dialog" role="document">
+                    <div class="modal-content">
+                        <form method="POST" action="{{ route('ordencompra_enviar_cuentas_a_pagar', ['id' => $data->id]) }}"
+                              id="formOcEnviarCuentasAPagar"
+                              enctype="multipart/form-data"
+                              data-ordencompra-id="{{ $data->id }}"
+                              data-sector-gastronomia-id="{{ (int) ($oc_sector_gastronomia_id ?? 0) }}">
+                            @csrf
+                            <div class="modal-header">
+                                <h5 class="modal-title">Enviar a Cuentas a pagar</h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="text-muted small">
+                                    @if (!empty($oc_puede_enviar_gastronomia))
+                                        En Gastronomía (CC 85) primero hay que enviar al referente. Este envío directo a Cuentas a pagar queda bloqueado hasta que autoricen.
+                                    @else
+                                        Pasa el legajo a Cuentas a pagar. Exige factura. La COM es obligatoria según la configuración de Cuentas a pagar de la empresa, salvo que un contrato vigente indique otra ruta.
+                                    @endif
+                                </p>
+                                @include('compras.ordencompra.partials.bloque_factura_legajo_sector', [
+                                    'prefix' => 'ocx',
+                                    'tituloBloque' => 'Factura y recepción del legajo',
+                                ])
+                                <div class="form-group">
+                                    <label for="ocx_sector_obs">Observación</label>
+                                    <input type="text" name="observacion" id="ocx_sector_obs" class="form-control" maxlength="255" placeholder="Opcional">
+                                </div>
+                                <div class="form-group">
+                                    <label for="ocx_sector_leyenda">Leyenda / detalle</label>
+                                    <textarea name="leyenda" id="ocx_sector_leyenda" class="form-control" rows="2" maxlength="2000"></textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                                <button type="submit" class="btn btn-primary">Enviar a Cuentas a pagar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            @endif
+            @if (!empty($oc_puede_finalizar_legajo))
+            <div class="modal fade" id="modalOcFinalizarLegajo" tabindex="-1" role="dialog" aria-hidden="true">
+                <div class="modal-dialog" role="document">
+                    <div class="modal-content">
+                        <form method="POST" action="{{ route('ordencompra_finalizar_legajo', ['id' => $data->id]) }}">
+                            @csrf
+                            <div class="modal-header">
+                                <h5 class="modal-title">Finalizar legajo</h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="text-muted small">Pasa el legajo de Cuentas a pagar a <strong>FINALIZADO</strong>. Queda en el histórico.</p>
+                                <div class="form-group">
+                                    <label for="ocf_obs">Observación</label>
+                                    <input type="text" name="observacion" id="ocf_obs" class="form-control" maxlength="255" placeholder="Opcional">
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                                <button type="submit" class="btn btn-primary">Finalizar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            @endif
         @endif
 
         <div class="card card-danger">
@@ -174,6 +290,21 @@ $(function () {
                             <button type="button" class="btn btn-outline-light btn-sm" data-toggle="modal" data-target="#modalOcCambiarSector">
                                 <i class="fa fa-folder-open"></i> Cambiar sector
                             </button>
+                            @if (!empty($oc_puede_enviar_gastronomia))
+                            <button type="button" class="btn btn-outline-light btn-sm" data-toggle="modal" data-target="#modalOcEnviarGastronomia">
+                                <i class="fa fa-cutlery"></i> Enviar a Gastronomía
+                            </button>
+                            @endif
+                            @if (!empty($oc_puede_enviar_cuentas_a_pagar))
+                            <button type="button" class="btn btn-outline-light btn-sm" data-toggle="modal" data-target="#modalOcEnviarCuentasAPagar">
+                                <i class="fa fa-share"></i> Enviar a Cuentas a pagar
+                            </button>
+                            @endif
+                            @if (!empty($oc_puede_finalizar_legajo))
+                            <button type="button" class="btn btn-outline-light btn-sm" data-toggle="modal" data-target="#modalOcFinalizarLegajo">
+                                <i class="fa fa-check"></i> Finalizar legajo
+                            </button>
+                            @endif
                         @endif
                         @if (!empty($data->requisicion_id) && (can('editar-requisicion', false) || can('listar-requisicion', false)))
                             <a href="{{ route('editar_requisicion', ['id' => $data->requisicion_id]) }}" class="btn btn-outline-warning btn-sm" target="_blank" rel="noopener noreferrer" title="Abre la requisición que originó esta OC">

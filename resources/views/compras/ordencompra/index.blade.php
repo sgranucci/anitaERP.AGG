@@ -89,7 +89,8 @@ $(function () {
 <div class="modal fade" id="modalIndexOcCambiarSector" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog" role="document">
         <div class="modal-content">
-            <form method="POST" id="formIndexOcSector" action="" enctype="multipart/form-data">
+            <form method="POST" id="formIndexOcSector" action="" enctype="multipart/form-data"
+                  data-sector-gastronomia-id="{{ (int) \App\Support\Compras\OrdencompraLegajoGastronomiaSupport::sectorGastronomiaId() }}">
                 @csrf
                 <div class="modal-header">
                     <h5 class="modal-title">Cambiar sector de legajo</h5>
@@ -126,14 +127,21 @@ $(function () {
 <div class="row">
     <div class="col-lg-12">
         @include('includes.mensaje')
-        @if (!empty($sectorUsuario))
-            <p class="text-muted small mb-2">Filtrado por su sector de legajo de compras asignado.</p>
+        @if (!empty($alcanceSector))
+            <p class="text-muted small mb-2">{{ $alcanceSector }}</p>
         @endif
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Órdenes de compra</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @include('includes.compras.boton-manual')
+                    @if (can('listar-legajo-compra', false) || can('listar-ordencompra', false))
+                        <a href="{{ route('consultar_legajo_compra') }}"
+                           class="btn btn-outline-light btn-sm mr-1"
+                           title="Bandeja de pendientes, estados e histórico de legajos">
+                            <i class="fa fa-folder-open"></i> Bandeja de legajos
+                        </a>
+                    @endif
                     @if (can('listar-kpi-compras', false))
                         <a href="{{ route('consultar_kpi_compras') }}"
                            class="btn btn-outline-success btn-sm mr-1"

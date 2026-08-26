@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Compras;
 
 use App\Http\Controllers\Controller;
+use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
 use App\Http\Requests\ValidacionRequisicionPresupuesto;
 use App\Models\Compras\Requisicion;
 use App\Repositories\Compras\Requisicion_Presupuesto_ArchivoRepositoryInterface;
@@ -135,7 +136,7 @@ class RequisicionPresupuestoController extends Controller
             abort(Response::HTTP_NOT_FOUND);
         }
 
-        return response()->file($path);
+        return ArchivoAdjuntoCacheSupport::aplicarAntiCacheNavegador(response()->file($path));
     }
 
     public function pdfPresupuesto(Requisicion $requisicion, int $presupuesto)

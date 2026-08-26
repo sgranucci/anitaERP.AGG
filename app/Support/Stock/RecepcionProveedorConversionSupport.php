@@ -136,8 +136,21 @@ class RecepcionProveedorConversionSupport
         return 1.0 - ($descuentoCabeceraOc / 100.0);
     }
 
-    public static function convertirMoneda(float $monto, float $cotizacionOrigen, float $cotizacionDestino): float
-    {
+    /**
+     * Convierte un importe entre cotizaciones.
+     * Código Anita/ERP '1' = pesos: el importe ya está en moneda local, no reconvertir
+     * aunque subd_cotizacion / ctav_cotizacion traiga la tasa USD del comprobante.
+     */
+    public static function convertirMoneda(
+        float $monto,
+        float $cotizacionOrigen,
+        float $cotizacionDestino,
+        string|int|null $codigoMonedaOrigen = null,
+    ): float {
+        if (self::esCodigoMonedaPesos($codigoMonedaOrigen)) {
+            return round($monto, 2);
+        }
+
         if ($cotizacionDestino <= 0) {
             $cotizacionDestino = 1.0;
         }
@@ -146,6 +159,14 @@ class RecepcionProveedorConversionSupport
         }
 
         return round($monto * ($cotizacionOrigen / $cotizacionDestino), 2);
+    }
+
+    /** Código '1' (o vacío) = pesos. Anita guarda la tasa USD igual en comprobantes en ARS. */
+    public static function esCodigoMonedaPesos(string|int|null $codigo): bool
+    {
+        $c = trim((string) ($codigo ?? ''));
+
+        return $c === '' || $c === '1';
     }
 
     /**

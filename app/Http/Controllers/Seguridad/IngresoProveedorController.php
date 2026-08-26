@@ -16,6 +16,7 @@ use App\Models\Seguridad\IngresoProveedorSector;
 use App\Traits\Compras\ProveedorTrait;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Seguridad\IngresoProveedorRepositoryInterface;
+use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Seguridad\IngresoProveedorAutorizacionSupport;
 use App\Support\Seguridad\IngresoProveedorEnlacePublicoSupport;
@@ -245,7 +246,10 @@ class IngresoProveedorController extends Controller
         }
 
         if (request()->boolean('inline')) {
-            return response()->file($path, $headers);
+            $response = response()->file($path, $headers);
+            ArchivoAdjuntoCacheSupport::aplicarAntiCacheNavegador($response);
+
+            return $response;
         }
 
         return response()->download($path, $nombre, $headers);

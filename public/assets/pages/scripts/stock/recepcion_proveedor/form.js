@@ -551,15 +551,8 @@
     }
 
     function lineaRequiereDefinicionEnGuardado(item) {
-        if (!lineaEsDeOc(item)) {
-            return false;
-        }
-        if (cantidadTotalRecibida(item) > 0.000001) {
-            return false;
-        }
-        var explicita = String((item && item.accion_linea_oc) || '').toUpperCase();
-
-        return explicita !== 'PENDIENTE' && explicita !== 'CERRAR' && !(item && item.fl_cerrar_linea_oc);
+        // Sin cantidad queda pendiente para otra entrega; no se obliga a cerrar la OC.
+        return false;
     }
 
     function lineasQueRequierenDefinicionEnGuardado() {
@@ -652,7 +645,7 @@
         itemsActuales.forEach(function (item) {
             sincronizarAccionEnItem(item);
             var accion = accionLineaItem(item);
-            if (accion === 'CERRAR') {
+            if (accion === 'CERRAR' && cantidadTotalRecibida(item) > 0.000001) {
                 hay = true;
             }
             if (lineaTieneDiferenciaCantidad(item)) {
@@ -3199,6 +3192,12 @@
         $('#rp-boton-ingresos').on('click', function () {
             rpMostrarSolapa('#rp-solapa-ingresos', 'rp-boton-ingresos');
         });
+        $('#rp-boton-validacion').on('click', function () {
+            rpMostrarSolapa('#rp-solapa-validacion', 'rp-boton-validacion');
+        });
+        $(document).on('click', '.js-rp-abrir-validacion', function () {
+            rpMostrarSolapa('#rp-solapa-validacion', 'rp-boton-validacion');
+        });
 
         $('#btn-cambiar-oc-recepcion').on('click', function () {
             rpMostrarSolapa('#rp-solapa-principal', 'rp-boton-principal');
@@ -3216,6 +3215,8 @@
             rpMostrarSolapa('#rp-solapa-asiento-contable', 'rp-boton-asiento-contable');
         } else if (paramsUrl.get('solapa') === 'ingresos') {
             rpMostrarSolapa('#rp-solapa-ingresos', 'rp-boton-ingresos');
+        } else if (paramsUrl.get('solapa') === 'validacion') {
+            rpMostrarSolapa('#rp-solapa-validacion', 'rp-boton-validacion');
         }
 
         programarFocoInicialNumeroOc(paramsUrl);

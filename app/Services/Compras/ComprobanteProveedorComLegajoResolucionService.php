@@ -4,6 +4,7 @@ namespace App\Services\Compras;
 
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
+use App\Models\Compras\Precarga_Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Proveedor;
 use App\Models\Compras\Concepto_Ivacompra;
 use App\Models\Stock\Recepcion_Proveedor;
@@ -70,6 +71,11 @@ class ComprobanteProveedorComLegajoResolucionService
         );
         // Manda la moneda de la factura: comparar en esa moneda (no forzar a pesos).
         $importeFactura = (float) $importeMeta['importe'];
+
+        $forzada = $this->resolverSeleccionAsignadaBandeja($precarga, $recepciones, $importeFactura, $importeMeta['etiqueta']);
+        if ($forzada !== null) {
+            return $forzada;
+        }
 
         $seleccion = $this->resolverSeleccion($recepciones, $importeFactura);
 
@@ -332,6 +338,70 @@ class ComprobanteProveedorComLegajoResolucionService
         }
 
         return Concepto_Ivacompra::query()->whereIn('id', $ids)->get()->keyBy('id');
+    }
+
+    /**
+     * COM persistida desde la bandeja de legajos: CxP abre la precarga con esa recepción ya elegida.
+     *
+     * @param  Collection<int, Recepcion_Proveedor>  $recepciones
+     * @return array{
+     *     recepciones_disponibles: Collection<int, Recepcion_Proveedor>,
+     *     recepciones_seleccionadas: list<int>,
+     *     com_resolucion: array{
+     *         ambigua: bool,
+     *         mensaje: string|null,
+     *         importe_comparacion: float,
+     *         importe_comparacion_etiqueta: string,
+     *         ordencompra_id: int|null
+     *     }
+     * }|null
+     */
+    private function resolverSeleccionAsignadaBandeja(
+        Precarga_Comprobante_Proveedor $precarga,
+        Collection $recepciones,
+        float $importeFactura,
+        string $etiqueta,
+    ): ?array {
+        if ($recepciones->isEmpty()) {
+            return null;
+        }
+
+        if (! \Illuminate\Support\Facades\Schema::hasTable('precarga_comprobante_proveedor_recepcion')) {
+            return null;
+        }
+
+        $asignadas = Precarga_Comprobante_Proveedor_Recepcion::query()
+            ->where('precarga_comprobante_proveedor_id', $precarga->id)
+            ->orderBy('orden')
+            ->orderBy('id')
+            ->pluck('recepcion_proveedor_id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn (int $id) => $id > 0)
+            ->values()
+            ->all();
+        if ($asignadas === []) {
+            return null;
+        }
+
+        $disponibles = $recepciones->pluck('id')->map(static fn ($id) => (int) $id)->all();
+        $ids = array_values(array_intersect($asignadas, $disponibles));
+        if ($ids === []) {
+            return null;
+        }
+
+        $primera = $recepciones->first(static fn (Recepcion_Proveedor $r) => in_array((int) $r->id, $ids, true));
+
+        return [
+            'recepciones_disponibles' => $recepciones,
+            'recepciones_seleccionadas' => $ids,
+            'com_resolucion' => [
+                'ambigua' => false,
+                'mensaje' => 'COM asignada desde la bandeja de legajos.',
+                'importe_comparacion' => $importeFactura,
+                'importe_comparacion_etiqueta' => $etiqueta,
+                'ordencompra_id' => $primera ? ((int) ($primera->ordencompra_id ?? 0) ?: null) : null,
+            ],
+        ];
     }
 
     /**

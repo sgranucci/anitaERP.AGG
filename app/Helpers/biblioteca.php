@@ -602,7 +602,11 @@ if (! function_exists('puedeVerPrecargaFacturaPdf')) {
     function puedeVerPrecargaFacturaPdf(): bool
     {
         return can('listar-precarga-proveedores', false)
-            || can('editar-precarga-proveedores', false);
+            || can('editar-precarga-proveedores', false)
+            || can('listar-legajo-compra', false)
+            || can('listar-ordencompra', false)
+            || can('listar-comprobante-proveedor', false)
+            || can('crear-comprobante-proveedor', false);
     }
 }
 

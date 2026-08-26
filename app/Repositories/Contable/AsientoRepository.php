@@ -15,6 +15,7 @@ use App\Support\Contable\AsientoAlcanceCierreSupport;
 use App\Support\Contable\AsientoAnitaNumeracionLock;
 use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Contable\AsientoCtamovRollbackSupport;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaEmisorSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -708,7 +709,10 @@ class AsientoRepository implements AsientoRepositoryInterface
 		try {
 			for ($i_movimiento=0; $i_movimiento < $qMovimiento; $i_movimiento++) 
 			{
-				$observacion = preg_replace('([^A-Za-z0-9 ])', '', (string) ($observaciones[$i_movimiento] ?? ''));
+				$observacion = $this->descripcionCtamovConEmisor(
+					(string) ($observaciones[$i_movimiento] ?? ''),
+					$request['anita_emisor'] ?? null,
+				);
 
 				$d_h = null;
 				$monto = 0;
@@ -897,6 +901,22 @@ class AsientoRepository implements AsientoRepositoryInterface
 		}
 
 		return 'Success';
+	}
+
+	/**
+	 * ctav_desc_mov tiene 30 caracteres y no hay campo emisor en ctamov.
+	 * El código del proveedor va primero para que el mayor (Anita y ERP) lo vea.
+	 */
+	private function descripcionCtamovConEmisor(string $observacion, mixed $emisor): string
+	{
+		$texto = preg_replace('([^A-Za-z0-9 ])', '', $observacion) ?? '';
+		$texto = trim((string) preg_replace('/\s+/', ' ', $texto));
+		$codigo = MayorPlanoCuentaEmisorSupport::normalizarCodigo((string) $emisor);
+		if ($codigo !== '' && ! preg_match('/^'.preg_quote($codigo, '/').'\b/', $texto)) {
+			$texto = trim($codigo.' '.$texto);
+		}
+
+		return mb_substr($texto, 0, 30);
 	}
 
 	private function assertPayloadCtamovGrabable(array $request): void

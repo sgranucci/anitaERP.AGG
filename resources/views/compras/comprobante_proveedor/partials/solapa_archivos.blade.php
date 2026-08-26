@@ -46,7 +46,10 @@
                 @foreach ($archivosSubidos as $arch)
                     @php
                         $urlArchivo = route('comprobante_proveedor_archivo', ['id' => $data->id, 'archivo' => $arch->id]);
-                        $urlInline = $urlArchivo.'?inline=1';
+                        $urlInline = \App\Support\Archivos\ArchivoAdjuntoCacheSupport::conVersion(
+                            $urlArchivo.'?inline=1',
+                            public_path('storage/archivos/comprobantes_proveedor/'.$data->id.'/'.basename((string) $arch->nombrearchivo))
+                        );
                     @endphp
                     <tr>
                         <td>{{ \App\Support\Compras\ComprobanteProveedorArchivoTipos::etiqueta($arch->tipo) }}</td>

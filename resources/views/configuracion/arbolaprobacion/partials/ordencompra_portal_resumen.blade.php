@@ -43,7 +43,54 @@
             <dt class="col-sm-4">Detalle</dt>
             <dd class="col-sm-8 text-break">{{ $oc->detalle !== null && $oc->detalle !== '' ? $oc->detalle : '—' }}</dd>
         </dl>
+        @php
+            $paquete = $paquete_legajo ?? ['factura' => null, 'recepciones' => []];
+            $facturaLegajo = $paquete['factura'] ?? null;
+            $recepcionesLegajo = $paquete['recepciones'] ?? [];
+        @endphp
         <div class="px-3 pb-3">
+            <h3 class="h6 text-muted mb-2">Factura del legajo</h3>
+            @if ($facturaLegajo)
+                <dl class="row kv mb-2">
+                    <dt class="col-sm-4">Número</dt>
+                    <dd class="col-sm-8">{{ $facturaLegajo['numero'] }}</dd>
+                    <dt class="col-sm-4">Fecha</dt>
+                    <dd class="col-sm-8">{{ $facturaLegajo['fecha'] ?? '—' }}</dd>
+                    @if ($facturaLegajo['total'] !== null)
+                    <dt class="col-sm-4">Importe</dt>
+                    <dd class="col-sm-8">{{ number_format((float) $facturaLegajo['total'], 2, ',', '.') }}</dd>
+                    @endif
+                </dl>
+                @if (!empty($facturaLegajo['url_pdf']))
+                    <a href="{{ $facturaLegajo['url_pdf'] }}" class="btn btn-outline-primary btn-sm btn-block mb-3" target="_blank" rel="noopener noreferrer">
+                        <i class="fa fa-file-pdf-o"></i> Ver PDF de la factura
+                    </a>
+                @endif
+            @else
+                <p class="text-muted small mb-3">No hay factura PDF asociada al legajo.</p>
+            @endif
+
+            <h3 class="h6 text-muted mb-2">Recepción (COM)</h3>
+            @if (count($recepcionesLegajo) > 0)
+                <ul class="list-unstyled mb-3">
+                    @foreach ($recepcionesLegajo as $com)
+                        <li class="mb-2">
+                            <strong>{{ $com['numero'] }}</strong>
+                            — {{ $com['fecha'] ?? '—' }}
+                            <span class="text-muted">({{ $com['estado'] }})</span>
+                            @if (!empty($com['diferencias']))
+                                <br><span class="text-danger">Diferencias: {{ implode(', ', $com['diferencias']) }}</span>
+                            @endif
+                            @if (!empty($com['resumen_diferencias']))
+                                <br><span class="small">{{ $com['resumen_diferencias'] }}</span>
+                            @endif
+                        </li>
+                    @endforeach
+                </ul>
+            @else
+                <p class="text-muted small mb-3">No hay recepción COM confirmada en este legajo.</p>
+            @endif
+
             @if($mov && !empty($mov->hashvisualizar))
             <a href="{{ route('visualizar_ordencompra', ['id' => $oc->id, 'hash' => $mov->hashvisualizar]) }}" class="btn btn-outline-secondary btn-sm btn-block mb-2" target="_blank" rel="noopener noreferrer">
                 <i class="fa fa-eye"></i> Ver orden de compra (solo lectura)

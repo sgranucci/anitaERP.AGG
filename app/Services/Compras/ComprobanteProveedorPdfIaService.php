@@ -13,7 +13,7 @@ use App\Services\Ai\Skills\AiSkillContext;
 use App\Services\Ai\Skills\AiSkillRegistry;
 use App\Services\Compras\Ai\ExtraerFacturaProveedorSkill;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
-use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
+use App\Support\Compras\ComprobanteProveedorCotizacionIngresoSupport;
 use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Queries\Configuracion\CotizacionQueryInterface;
@@ -261,10 +261,12 @@ final class ComprobanteProveedorPdfIaService
             'total' => (float) ($resuelto['total'] ?? 0),
             'moneda' => (string) ($resuelto['moneda'] ?? 'PESOS'),
             'moneda_id' => (int) ($resuelto['moneda_id'] ?? 1),
-            'cotizacion' => $this->resolverCotizacionParaGrabar($resuelto),
+            'cotizacion' => $resuelto['cotizacion_recibida'] ?? $resuelto['cotizacion'] ?? 1,
             'estado' => 'PENDIENTE',
             'origen_entrada' => $origenEntrada,
         ];
+        $cotizacionIngreso = app(PrecargaComprobanteCotizacionIngresoService::class);
+        $data = $cotizacionIngreso->aplicarAPayload($data);
 
         DB::beginTransaction();
         try {
@@ -321,6 +323,8 @@ final class ComprobanteProveedorPdfIaService
             }
 
             DB::commit();
+
+            $cotizacionIngreso->notificarSiMarca($precarga->fresh());
 
             $this->resolverDecisionConfirmada($payloadConfirmacion, (int) $precarga->id, $resuelto);
 
@@ -507,6 +511,7 @@ final class ComprobanteProveedorPdfIaService
             'moneda' => strtoupper((string) ($extraido['moneda'] ?? 'PESOS')),
             'moneda_id' => $this->resolverMonedaId($extraido['moneda'] ?? 'PESOS'),
             'cotizacion' => $this->parsearImporte($extraido['cotizacion'] ?? null) ?? 1.0,
+            'cotizacion_recibida' => $this->parsearImporte($extraido['cotizacion'] ?? null) ?? 1.0,
             'conceptos_candidatos' => $listaConceptos['conceptos'],
             'conceptos_asignados' => $conceptosAsignados,
             'articulos' => $this->normalizarArticulosExtraidos(
@@ -517,7 +522,7 @@ final class ComprobanteProveedorPdfIaService
             'pararevisar' => $totalFactura > 0 && abs($totalAsignado - $totalFactura) > 0.05,
         ];
 
-        $resuelto['cotizacion'] = $this->resolverCotizacionParaGrabar($resuelto);
+        $resuelto = $this->aplicarCotizacionIngresoAlResuelto($resuelto);
         if (empty($resuelto['fecha_factura'])) {
             $advertencias[] = 'No se detectó fecha de factura en el PDF; se usará la fecha de recepción al confirmar.';
             $resuelto['advertencias'] = $advertencias;
@@ -818,24 +823,32 @@ final class ComprobanteProveedorPdfIaService
     /**
      * @param  array<string, mixed>  $resuelto
      */
-    private function resolverCotizacionParaGrabar(array $resuelto): float
+    /**
+     * @param  array<string, mixed>  $resuelto
+     * @return array<string, mixed>
+     */
+    private function aplicarCotizacionIngresoAlResuelto(array $resuelto): array
     {
-        $monedaId = (int) ($resuelto['moneda_id'] ?? 1);
-        $cot = (float) ($resuelto['cotizacion'] ?? 0);
-        if (! ComprobanteProveedorCotizacionSupport::esMonedaExtranjera($monedaId)) {
-            return 1.0;
-        }
-        if ($cot > 1.0) {
-            return $cot;
-        }
-
-        $fecha = $this->resolverFechaFacturaParaGrabar($resuelto);
-
-        return ComprobanteProveedorCotizacionSupport::cotizacionVentaDelDia(
-            $this->cotizacionQuery,
-            $fecha,
-            $monedaId
+        $raw = (float) ($resuelto['cotizacion_recibida'] ?? $resuelto['cotizacion'] ?? 0);
+        $resuelto['cotizacion_recibida'] = $raw;
+        $ingreso = ComprobanteProveedorCotizacionIngresoSupport::resolverParaFecha(
+            (int) ($resuelto['moneda_id'] ?? 1),
+            $raw,
+            $this->resolverFechaFacturaParaGrabar($resuelto),
         );
+        $resuelto['cotizacion'] = $ingreso['cotizacion'];
+        if ($ingreso['marca_error'] !== null) {
+            $resuelto['pararevisar'] = true;
+            $resuelto['marca_error'] = $ingreso['marca_error'];
+            $resuelto['aviso_error'] = $ingreso['aviso'];
+            $advertencias = $resuelto['advertencias'] ?? [];
+            if (is_array($advertencias) && $ingreso['aviso'] !== null) {
+                $advertencias[] = $ingreso['aviso'];
+            }
+            $resuelto['advertencias'] = $advertencias;
+        }
+
+        return $resuelto;
     }
 
     /**

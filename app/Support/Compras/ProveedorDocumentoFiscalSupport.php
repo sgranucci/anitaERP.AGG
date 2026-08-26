@@ -47,7 +47,9 @@ final class ProveedorDocumentoFiscalSupport
 
     public static function urlArchivo(int $proveedorId, string $nombrearchivo): string
     {
-        return asset('storage/archivos/proveedores/'.$proveedorId.'/fiscal/'.$nombrearchivo);
+        return \App\Support\Archivos\ArchivoAdjuntoCacheSupport::urlStoragePublico(
+            'archivos/proveedores/'.$proveedorId.'/fiscal/'.$nombrearchivo
+        );
     }
 
     /**

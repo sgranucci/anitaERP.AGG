@@ -14,6 +14,14 @@ return [
     'transferencia_horas_validez_token' => (int) env('STOCK_TRANSFERENCIA_HORAS_TOKEN', 168),
 
     /*
+    | Numerador secuencial de transferencia de mercadería (sistema_numerador).
+    | Una sola semilla global: el codigo TR- es unique en toda la tabla.
+    | empresa_id solo ubica la fila del numerador (no cambia el correlativo).
+    */
+    'transferencia_numerador_codigo' => env('STOCK_TRANSFERENCIA_NUMERADOR_CODIGO', 'stock.transferencia'),
+    'transferencia_numerador_empresa_id' => (int) env('STOCK_TRANSFERENCIA_NUMERADOR_EMPRESA', 1),
+
+    /*
     | Defaults de la pantalla ágil (Stock → Transferencia) para pickeo nocturno
     | depósito central → gastronomía. El usuario puede cambiarlos; se recuerdan
     | en cache. Códigos de depmae, no IDs (los IDs varían entre instalaciones).

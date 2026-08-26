@@ -76,4 +76,18 @@ class RecepcionProveedorAccionLineaOcTest extends TestCase
         $this->assertSame(RecepcionProveedorAccionLineaOc::PENDIENTE, RecepcionProveedorAccionLineaOc::resolver($item));
         $this->assertFalse(RecepcionProveedorAccionLineaOc::requiereDefinicionEnGuardado($item));
     }
+
+    public function test_linea_sin_cantidad_queda_pendiente_sin_exigir_cierre(): void
+    {
+        $item = [
+            'tipo_linea' => RecepcionProveedorDiferenciaSupport::TIPO_OC,
+            'cantidad_oc' => 2,
+            'cantidad' => 0,
+            'cantidad_rechazada' => 0,
+        ];
+
+        $this->assertSame(RecepcionProveedorAccionLineaOc::PENDIENTE, RecepcionProveedorAccionLineaOc::resolver($item));
+        $this->assertFalse(RecepcionProveedorAccionLineaOc::requiereDefinicionEnGuardado($item));
+        $this->assertTrue(RecepcionProveedorAccionLineaOc::esPendiente($item));
+    }
 }

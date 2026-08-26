@@ -300,6 +300,10 @@ class MayorPlanoCuentaProcesador
                 $cuentas,
             );
 
+            $anita['ctamov'] = MayorPlanoCuentaAnitaErpMetadatosSupport::adjuntarEmisorDesdeAsientoErp(
+                $anita['ctamov'] ?? []
+            );
+
             return array_merge($anita, [
                 'fuente_erp_hasta' => 0,
                 'tramo_erp_desde' => 0,
@@ -391,6 +395,8 @@ class MayorPlanoCuentaProcesador
             $errores = array_merge($errores, $anita['errores'] ?? []);
             $timings = array_merge($timings, $anita['timings'] ?? []);
         }
+
+        $ctamov = MayorPlanoCuentaAnitaErpMetadatosSupport::adjuntarEmisorDesdeAsientoErp($ctamov);
 
         return [
             'ctamov' => $ctamov,

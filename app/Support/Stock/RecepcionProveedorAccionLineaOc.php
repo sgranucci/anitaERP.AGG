@@ -61,24 +61,13 @@ final class RecepcionProveedorAccionLineaOc
             && $cantRec + 0.000001 < $cantOc;
     }
 
-    /** Línea OC sin cantidad y sin pendiente/cierre ya elegido (modal al guardar borrador). */
+    /**
+     * Sin cantidad no se exige elegir pendiente/cierre: queda pendiente para otra entrega.
+     * El cierre de línea OC es una acción explícita (selector o "Cerrar saldo").
+     */
     public static function requiereDefinicionEnGuardado(array $item): bool
     {
-        $tipo = (string) ($item['tipo_linea'] ?? RecepcionProveedorDiferenciaSupport::TIPO_OC);
-        if ($tipo === RecepcionProveedorDiferenciaSupport::TIPO_EXTRA) {
-            return false;
-        }
-
-        $cantidad = (float) ($item['cantidad'] ?? 0);
-        $rechazada = (float) ($item['cantidad_rechazada'] ?? 0);
-        if ($cantidad > 0.000001 || $rechazada > 0.000001) {
-            return false;
-        }
-
-        $explicito = strtoupper(trim((string) ($item['accion_linea_oc'] ?? '')));
-
-        return ! in_array($explicito, [self::PENDIENTE, self::CERRAR], true)
-            && empty($item['fl_cerrar_linea_oc']);
+        return false;
     }
 
     public static function esPendiente(array $item): bool

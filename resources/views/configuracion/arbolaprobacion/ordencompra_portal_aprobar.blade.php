@@ -22,7 +22,13 @@
             <label for="observacion">Observaciones <span class="text-muted font-weight-normal">(opcional)</span></label>
             <textarea class="form-control" id="observacion" name="observacion" rows="4" maxlength="4000" placeholder="Comentarios internos sobre esta aprobación…">{{ old('observacion') }}</textarea>
         </div>
-        <button type="submit" class="btn btn-success btn-block btn-lg">Aprobar orden de compra</button>
+        <button type="submit" class="btn btn-success btn-block btn-lg">
+            @if (!empty($es_circuito_legajo_gastronomia))
+                Autorizar legajo (pasa a Cuentas a pagar)
+            @else
+                Aprobar orden de compra
+            @endif
+        </button>
     </form>
 </div>
 @endsection

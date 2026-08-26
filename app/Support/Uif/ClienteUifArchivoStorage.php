@@ -2,6 +2,9 @@
 
 namespace App\Support\Uif;
 
+use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
+use Symfony\Component\HttpFoundation\Response;
+
 /**
  * Storage UIF en file server /scan (mismo árbol que Anita).
  * Sync: solo registra en BD; no copia a disco del ERP.
@@ -226,20 +229,44 @@ final class ClienteUifArchivoStorage
         return null;
     }
 
+    public static function versionCache(?string $absolutePath): string
+    {
+        return ArchivoAdjuntoCacheSupport::versionCache($absolutePath);
+    }
+
+    /**
+     * @return array{v: string}
+     */
+    public static function queryVersion(?string $absolutePath): array
+    {
+        return ArchivoAdjuntoCacheSupport::queryVersion($absolutePath);
+    }
+
+    public static function aplicarAntiCacheNavegador(Response $response): Response
+    {
+        return ArchivoAdjuntoCacheSupport::aplicarAntiCacheNavegador($response);
+    }
+
     public static function urlClienteAdjunto(int $clienteUifId, string $nombrearchivo): string
     {
-        return route('cliente_uif_archivo', [
-            'id' => $clienteUifId,
-            'archivo' => basename($nombrearchivo),
-        ]);
+        $base = basename($nombrearchivo);
+        $path = self::absoluteClienteAdjunto($clienteUifId, $base);
+
+        return route('cliente_uif_archivo', array_merge(
+            ['id' => $clienteUifId, 'archivo' => $base],
+            self::queryVersion($path)
+        ));
     }
 
     public static function urlPremioAdjunto(int $premioLocalId, string $nombrearchivo): string
     {
-        return route('cliente_premio_uif_archivo', [
-            'id' => $premioLocalId,
-            'archivo' => basename($nombrearchivo),
-        ]);
+        $base = basename($nombrearchivo);
+        $path = self::absolutePremioAdjunto($premioLocalId, $base);
+
+        return route('cliente_premio_uif_archivo', array_merge(
+            ['id' => $premioLocalId, 'archivo' => $base],
+            self::queryVersion($path)
+        ));
     }
 
     public static function urlFotoPremio(?string $basename): ?string
@@ -247,13 +274,15 @@ final class ClienteUifArchivoStorage
         if ($basename === null || $basename === '') {
             return null;
         }
-        if (self::absoluteFotoPremio($basename) === null) {
+        $path = self::absoluteFotoPremio($basename);
+        if ($path === null) {
             return null;
         }
 
-        return route('cliente_premio_uif_foto_archivo', [
-            'archivo' => basename($basename),
-        ]);
+        return route('cliente_premio_uif_foto_archivo', array_merge(
+            ['archivo' => basename($basename)],
+            self::queryVersion($path)
+        ));
     }
 
     /** No borrar originales Anita pago_* del file server compartido. */
