@@ -1385,6 +1385,10 @@ class ArticuloController extends Controller
         // Lee el articulo
         $articulo = $this->articuloRepository->find($articulo_id);
 
+        // Facturación mostrador (El Bierzo): vende por kilo y no debe completar a caja/pieza.
+        $sinRedondeoCaja = request()->boolean('sin_redondeo_caja');
+        $unidadEsCaja = $this->unidadMedidaEsCaja($unidadmedida);
+
         $cajaCalculo = $piezaCalculo = $kiloCalculo = 0;
         if ($articulo) {
             $unidadesxenvase = $articulo->unidadesxenvase;
@@ -1393,6 +1397,7 @@ class ArticuloController extends Controller
             $kilo = floatval($kilo);
             $peso = floatval($peso);
             $caja = floatval($caja);
+            $pieza = floatval($pieza);
 
             switch ($opcion) {
                 case 1: // ingresa cajas
@@ -1401,28 +1406,24 @@ class ArticuloController extends Controller
                     $kiloCalculo = $piezaCalculo * $peso;
                     break;
                 case 2: // ingresa unidades
-                    // Convierte unidades a cajas
-                    if (strtoupper($unidadmedida) == 'CAJ' || strtoupper($unidadmedida) == 'CJ' || strtoupper($unidadmedida) == 'C') {
+                    if ($unidadEsCaja && ! $sinRedondeoCaja) {
                         self::redondeaPieza($pieza, $peso, $unidadesxenvase, $cajaCalculo, $piezaCalculo, $kiloCalculo);
                     } else {
                         $piezaCalculo = $pieza;
                         $kiloCalculo = $pieza * $peso;
-
-                        if ($peso != 0 && $unidadesxenvase != 0) {
-                            $cajaCalculo = $kiloCalculo / $peso / $unidadesxenvase;
-                        } else {
-                            $cajaCalculo = 0;
-                        }
+                        $cajaCalculo = $this->cajasDesdeKilo($kiloCalculo, $peso, $unidadesxenvase);
                     }
                     break;
                 case 3: // ingresa kilos
-                    // Convierte los kilos a cajas
-                    if (strtoupper($unidadmedida) == 'CAJ' || strtoupper($unidadmedida) == 'CJ' || strtoupper($unidadmedida) == 'C') {
-                        if ($peso != 0 && $unidadesxenvase != 0) {
-                            $cajas = $kilo / $peso / $unidadesxenvase;
-                        } else {
-                            $cajas = 0;
-                        }
+                    if ($sinRedondeoCaja) {
+                        $kiloCalculo = $kilo;
+                        $piezaCalculo = $peso != 0 ? $kilo / $peso : 0;
+                        $cajaCalculo = $this->cajasDesdeKilo($kilo, $peso, $unidadesxenvase);
+                        break;
+                    }
+
+                    if ($unidadEsCaja) {
+                        $cajas = $this->cajasDesdeKilo($kilo, $peso, $unidadesxenvase);
 
                         // Si el resto no da 0 ajusta a la siguiente caja
                         if (abs($cajas - floor($cajas)) < 0.0000001) {
@@ -1469,16 +1470,12 @@ class ArticuloController extends Controller
                         // Lo suma a las piezas calculadas
                         $pieza = $piezaCalculo + $piezaDescuento;
 
-                        // Redondea las piezas a caja
-                        if (strtoupper($unidadmedida) == 'CAJ' || strtoupper($unidadmedida) == 'CJ' || strtoupper($unidadmedida) == 'C') {
+                        if ($unidadEsCaja && ! $sinRedondeoCaja) {
                             self::redondeaPieza($pieza, $peso, $unidadesxenvase, $cajaCalculo, $piezaCalculo, $kiloCalculo);
                         } else {
                             $piezaCalculo = $pieza;
                             $kiloCalculo = $piezaCalculo * $peso;
-
-                            if ($unidadesxenvase != 0) {
-                                $cajaCalculo = $piezaCalculo / $unidadesxenvase;
-                            }
+                            $cajaCalculo = $this->cajasDesdeKilo($kiloCalculo, $peso, $unidadesxenvase);
                         }
                     }
                 }
@@ -1486,6 +1483,22 @@ class ArticuloController extends Controller
         }
 
         return ['caja' => $cajaCalculo, 'pieza' => $piezaCalculo, 'kilo' => $kiloCalculo];
+    }
+
+    private function unidadMedidaEsCaja($unidadmedida): bool
+    {
+        $um = strtoupper(trim((string) $unidadmedida));
+
+        return in_array($um, ['CAJ', 'CJ', 'C'], true);
+    }
+
+    private function cajasDesdeKilo(float $kilo, float $peso, $unidadesxenvase): float
+    {
+        if ($peso == 0 || $unidadesxenvase == 0) {
+            return 0;
+        }
+
+        return $kilo / $peso / (float) $unidadesxenvase;
     }
 
     private function redondeaPieza($pieza, $peso, $unidadesxenvase, &$cajaCalculo, &$piezaCalculo, &$kiloCalculo)

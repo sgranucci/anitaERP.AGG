@@ -15,7 +15,7 @@
 					? $codigoClientePedidoForm.' - '.$nombreClientePedidoForm
 					: $nombreClientePedidoForm;
 			@endphp
-			<input type="text" class="col-lg-2 codigocliente" id="codigocliente" name="codigocliente" value="{{$pedido->clientes->codigo??''}}" placeholder="N&ordm;" title="N&uacute;mero de cliente">
+			<input type="text" class="col-lg-2 codigocliente" id="codigocliente" name="codigocliente" value="{{$pedido->clientes->codigo??''}}" placeholder="N&ordm;" title="C&oacute;digo; Enter valida; F1 consulta">
 			<input type="text" class="col-lg-5 form-control" id="nombrecliente" name="nombrecliente" value="{{ $nombreClientePedidoDisplay }}" readonly>
 			<div class="form-group boton-alta-cliente" style="display: none">
 				<button type="button" id="botonaltacliente" class="btn btn-primary btn-sm">
@@ -27,7 +27,7 @@
                 	<i class="fa fa-user"></i>
             	</a>
 			@endif	
-			<button type="button" title="Consulta clientes" style="padding:1;" class="btn-accion-tabla consultacliente tooltipsC">
+			<button type="button" title="Consulta clientes (F1)" style="padding:1;" class="btn-accion-tabla consultacliente tooltipsC">
 					<i class="fa fa-search text-primary"></i>
 			</button>			
 			<label for="Tiposuspension" id="nombretiposuspension" style="padding: 0px;" class="col-form-label text-danger"></label>		

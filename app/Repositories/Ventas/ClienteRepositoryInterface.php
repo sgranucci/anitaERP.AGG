@@ -18,6 +18,7 @@ interface ClienteRepositoryInterface extends RepositoryInterface
     public function findPorCodigo($codigo);
     public function actualizaPadronMipyme($modo);
     public function actualizaPadronMipymePorCuit($cuit, $modo);
+    public function actualizaPadronMipymeDesdePadron(string $modo): int;
 
 }
 

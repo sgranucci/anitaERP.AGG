@@ -4,25 +4,17 @@ namespace App\Http\Controllers\Configuracion;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Storage;
-use Maatwebsite\Excel\Facades\Excel;
-use Maatwebsite\Excel\HeadingRowImport;
-use App\Imports\Configuracion\Padron_MipymeImport;
 use App\Http\Requests\ValidacionPadron_Mipyme;
 use App\Repositories\Configuracion\Padron_MipymeRepositoryInterface;
-use App\Repositories\Ventas\ClienteRepositoryInterface;
-use DB;
+use App\Services\Configuracion\PadronMipymeImportadorService;
 
 class Padron_MipymeController extends Controller
 {
 	private $repository;
-    private $clienteRepository;
 
-    public function __construct(Padron_MipymeRepositoryInterface $repository,
-                                ClienteRepositoryInterface $clienteRepository)
+    public function __construct(Padron_MipymeRepositoryInterface $repository)
     {
         $this->repository = $repository;
-        $this->clienteRepository = $clienteRepository;
     }
 
     /**
@@ -162,45 +154,41 @@ class Padron_MipymeController extends Controller
         }
     }
 
-    // Importar clientes congelados desde excel
-
     public function crearImportacionPadron_Mipyme()
     {
-        can('importar-cliente-congelado-uif');
-		
+        can('importar-padron-mipyme');
+
         return view('configuracion.padron_mipyme.crearimportacion');
     }
 
-	public function importarPadron_Mipyme(Request $request)
+    public function preanalizarPadron_Mipyme(Request $request, PadronMipymeImportadorService $importador)
     {
-        $this->validate(request(), [
-            'file' => 'mimes:csv,txt'
+        can('importar-padron-mipyme');
+
+        $request->validate([
+            'file' => 'required|file',
         ]);
 
-        try {
-            set_time_limit(0);
+        ini_set('memory_limit', '-1');
+        set_time_limit(120);
 
-            DB::beginTransaction();
+        return response()->json($importador->analizar($request->file('file')));
+    }
 
-            // Actualiza todos los clientes normalizando modo de facturacion
-            $this->clienteRepository->actualizaPadronMipyme('N');
+    public function importarPadron_Mipyme(Request $request, PadronMipymeImportadorService $importador)
+    {
+        can('importar-padron-mipyme');
 
-            // Borra todo el padron
-            DB::table('padron_mipyme')->delete();
+        $request->validate([
+            'file' => 'required|file',
+        ]);
 
-            // Importa csv
-            Excel::import(new Padron_MipymeImport, request("file"));
+        ini_set('memory_limit', '-1');
+        set_time_limit(0);
 
-            DB::commit();
+        $resultado = $importador->importarDesdeArchivo($request->file('file'));
 
-            return back()
-                ->with('mensaje', 'Padrón Mipyme importado correctamente');
-        } catch (\Exception $exception) {
-            DB::rollBack();
-            
-            return back()
-                ->with('mensaje', $exception->getMessage());
-        }
+        return back()->with('mensaje', $resultado['mensaje']);
     }
 
 }

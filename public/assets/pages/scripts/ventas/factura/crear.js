@@ -1692,7 +1692,26 @@
 		if (window.FL_FACTURA_LAYOUT_PEDIDO && typeof initFacturaEnterNavigation === 'function') {
 			initFacturaEnterNavigation();
 		}
+
+		enfocarCodigoClienteFacturaAlCargar();
     });
+
+	function enfocarCodigoClienteFacturaAlCargar() {
+		window.setTimeout(function () {
+			var el = document.getElementById('codigocliente');
+			if (!el || el.disabled || el.readOnly || el.offsetParent === null) {
+				return;
+			}
+			try {
+				el.focus({ preventScroll: true });
+			} catch (e) {
+				el.focus();
+			}
+			if (typeof el.select === 'function') {
+				el.select();
+			}
+		}, 150);
+	}
 
     function agregaRenglon(event, opciones){
 		if (typeof window.formularioVentasBloqueadoPorPadron === 'function' && window.formularioVentasBloqueadoPorPadron()) {
@@ -2160,6 +2179,9 @@
 		}
 	}
 
+	var calculaFacturaSeq = 0;
+	var calculaFacturaXhr = null;
+
 	function calculaFactura()
 	{
 		if (window.FL_FACTURA_LAYOUT_PEDIDO && typeof sincronizarCantidadesItemsFactura === 'function') {
@@ -2171,7 +2193,11 @@
 
 	function calculaFacturaAjax()
 	{
-		$('#tbody-tabla-total-factura').empty();
+		var seq = ++calculaFacturaSeq;
+
+		if (calculaFacturaXhr && calculaFacturaXhr.readyState !== 4) {
+			calculaFacturaXhr.abort();
+		}
 
 		const tiempoTranscurrido = Date.now();
 		const hoy = new Date(tiempoTranscurrido);
@@ -2197,17 +2223,23 @@
 		
 		let url = carpetaBase+"/ventas/calcula_factura_general";
 
-		$.ajax({
+		calculaFacturaXhr = $.ajax({
 			type: "POST",
 			url: url,
 			data: parametros,
 			contentType: false, //importante enviar este parametro en false
 			processData: false, //importante enviar este parametro en false
 			success: function (data) {
+				if (seq !== calculaFacturaSeq) {
+					return;
+				}
+
 				if (data && data.error) {
 					alert(data.error);
 					return;
 				}
+
+				$('#tbody-tabla-total-factura').empty();
 
 				$.each(data.conceptostotales, function(index, item) {
 					// index es la posición del elemento en el array
@@ -2234,6 +2266,12 @@
 				$('.importetotal').css('text-align', 'right');
 			},
 			error :function( data ) {
+				if (seq !== calculaFacturaSeq) {
+					return;
+				}
+				if (data && data.statusText === 'abort') {
+					return;
+				}
 				if (data.error)
 					alert(data.error);
 			}

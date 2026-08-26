@@ -42,6 +42,7 @@ use App\Services\Ventas\ClienteAnitaSyncService;
 use App\Traits\AnitaBridgeEscritura;
 use Carbon\Carbon;
 use Auth;
+use Illuminate\Support\Facades\DB;
 
 class ClienteRepository implements ClienteRepositoryInterface
 {
@@ -275,6 +276,39 @@ class ClienteRepository implements ClienteRepositoryInterface
 	public function actualizaPadronMipyme($modo)
 	{
 		$this->model->query()->update(['modofacturacion' => $modo]);
+	}
+
+	public function actualizaPadronMipymeDesdePadron(string $modo): int
+	{
+		$actualizados = 0;
+		$tabla = $this->model->getTable();
+
+		DB::table('padron_mipyme')
+			->select('id', 'cuit')
+			->orderBy('id')
+			->chunkById(1000, function ($filas) use ($modo, $tabla, &$actualizados) {
+				$cuits = [];
+				foreach ($filas as $fila) {
+					$cuit = preg_replace('/\D+/', '', (string) ($fila->cuit ?? '')) ?? '';
+					if ($cuit !== '') {
+						$cuits[$cuit] = true;
+					}
+				}
+				$cuits = array_keys($cuits);
+				if ($cuits === []) {
+					return;
+				}
+
+				$placeholders = implode(',', array_fill(0, count($cuits), '?'));
+				$actualizados += $this->model
+					->whereRaw(
+						"REPLACE(REPLACE(REPLACE({$tabla}.numerodocumento, '-', ''), '.', ''), ' ', '') IN ({$placeholders})",
+						$cuits
+					)
+					->update(['modofacturacion' => $modo]);
+			});
+
+		return $actualizados;
 	}
 
 	/**

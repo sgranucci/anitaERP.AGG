@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Replica venta + vencae en Anita tras responder la factura de pedido (El Bierzo).
+ * Replica venta + vencae en Anita tras responder la factura (pedido / remito / mostrador, El Bierzo).
  * Antes de grabar inspecciona archivos: si está completo no escribe; si falta alguno, solo esos.
  */
 final class PedidoFacturaAnitaDeferEjecucionService

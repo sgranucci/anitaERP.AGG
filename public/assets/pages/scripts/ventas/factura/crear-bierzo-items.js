@@ -8,6 +8,7 @@
 	}
 
 	var flSaltarFocusDescuentoFactura = false;
+	var flAgregarRenglonTrasDescuentoFactura = false;
 
 	function sincronizarCantidadRenglon($tr) {
 		var kilo = ($tr.find('.kilo').val() || '').toString().replace(',', '.');
@@ -28,13 +29,16 @@
 		}
 
 		var cliente_id = $('#cliente_id').val();
+		var codigoCliente = ($('#codigocliente').val() || '').toString().trim();
 		var articulo_id = $(ptr).parents('tr').find('.articulo_id').val();
 
-		if (!cliente_id || !articulo_id) {
+		if ((!codigoCliente && !cliente_id) || !articulo_id) {
 			return;
 		}
 
-		$.get(carpetaBase + '/stock/asignapreciocliente/' + articulo_id + '/' + cliente_id, function (data) {
+		var claveCliente = codigoCliente || cliente_id;
+
+		$.get(carpetaBase + '/stock/asignapreciocliente/' + articulo_id + '/' + encodeURIComponent(claveCliente), function (data) {
 			var prec = $.map(data, function (value) {
 				return [value];
 			});
@@ -83,6 +87,21 @@
 		}
 	};
 
+	function unidadMedidaCajaFactura(unidadmedida) {
+		var um = (unidadmedida || '').toString().trim().toUpperCase();
+		return um === 'CAJ' || um === 'CJ' || um === 'C';
+	}
+
+	function opcionCantidadSegunUnidadFactura(unidadmedida) {
+		if (unidadMedidaCajaFactura(unidadmedida)) {
+			return 1;
+		}
+		if (typeof unidadMedidaEsKilos === 'function' && unidadMedidaEsKilos(unidadmedida)) {
+			return 3;
+		}
+		return 2;
+	}
+
 	function redondeaCajaFactura(ptr, opcion) {
 		var caja = $(ptr).parents('tr').find('.caja').val();
 		var pieza = $(ptr).parents('tr').find('.pieza').val();
@@ -105,7 +124,7 @@
 		}
 
 		if (opcion > 0 && articulo_id > 0) {
-			var url = carpetaBase + '/stock/redondeacaja/' + articulo_id + '/' + unidadmedida + '/' + caja + '/' + pieza + '/' + kilo + '/' + descuentoventa_id + '/' + opcion;
+			var url = carpetaBase + '/stock/redondeacaja/' + articulo_id + '/' + encodeURIComponent(unidadmedida || 'KG') + '/' + caja + '/' + pieza + '/' + kilo + '/' + descuentoventa_id + '/' + opcion + '?sin_redondeo_caja=1';
 
 			$.get(url, function (data) {
 				var cajaR = typeof data.caja !== 'string' ? redondearDecimales(data.caja, 2) : data.caja;
@@ -118,7 +137,10 @@
 
 				sincronizarCantidadRenglon($(ptr).parents('tr'));
 
-				if (flSaltarFocusDescuentoFactura) {
+				if (flAgregarRenglonTrasDescuentoFactura) {
+					flAgregarRenglonTrasDescuentoFactura = false;
+					agregarRenglonFacturaTrasDescuento($(ptr).parents('tr'));
+				} else if (flSaltarFocusDescuentoFactura) {
 					var $kilo = $(ptr).parents('tr').find('.kilo');
 
 					if ($kilo.length && !$kilo.prop('readonly')) {
@@ -134,6 +156,9 @@
 					calculaFactura();
 				}
 			});
+		} else if (flAgregarRenglonTrasDescuentoFactura) {
+			flAgregarRenglonTrasDescuentoFactura = false;
+			agregarRenglonFacturaTrasDescuento($(ptr).parents('tr'));
 		}
 	}
 
@@ -178,9 +203,13 @@
 			var unidadmedida = $(this).find('option:selected').text();
 			$(this).parents('tr').find('.unidadmedida').val(unidadmedida);
 
-			if (unidadmedida.toUpperCase() === 'CAJ') {
+			if (typeof enfocarCantidadLineaArticulo === 'function') {
+				enfocarCantidadLineaArticulo($(this).parents('tr'), unidadmedida);
+			} else if (typeof unidadMedidaEsKilos === 'function' && unidadMedidaEsKilos(unidadmedida)) {
+				$(this).parents('tr').find('.kilo').focus();
+			} else if (unidadmedida.toUpperCase() === 'CAJ') {
 				$(this).parents('tr').find('.caja').focus();
-			} else if (unidadmedida.toUpperCase() === 'UN' || unidadmedida.toUpperCase() === 'KG') {
+			} else if (unidadmedida.toUpperCase() === 'UN') {
 				$(this).parents('tr').find('.pieza').focus();
 			} else {
 				$(this).parents('tr').find('.kilo').focus();
@@ -211,13 +240,14 @@
 
 			if (categoria_id == categoria_secos_id && subcategoria_id == subcategoria_maquina_id &&
 				parseFloat(pieza) < parseFloat(cantidadDescuento)) {
+				flAgregarRenglonTrasDescuentoFactura = false;
 				alert('No puede usar descuento mayor a las piezas pedidas. Descuento Piezas ' + cantidadDescuento + ' Piezas ' + pieza);
 				$(this).parents('tr').find('.descuentoventa_id').val('');
 				return;
 			}
 
 			$(this).parents('tr').find('.descuentoventaanterior_id').val($(this).val());
-			redondeaCajaFactura(this, 2);
+			redondeaCajaFactura(this, opcionCantidadSegunUnidadFactura($(this).parents('tr').find('.unidadmedida').val()));
 		});
 
 		$('.precio').on('change', function () {
@@ -329,6 +359,143 @@
 		return null;
 	}
 
+	function esSelectDescuentoFactura(el) {
+		return !!(el && el.tagName === 'SELECT' && el.classList.contains('descuentoventa_id') && !el.disabled);
+	}
+
+	function opcionesNavegablesDescuentoFactura(select) {
+		return Array.prototype.filter.call(select.options, function (opt) {
+			return !opt.disabled;
+		});
+	}
+
+	function navegarDescuentoFacturaConFlechas(event) {
+		if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') {
+			return;
+		}
+		if (!esSelectDescuentoFactura(event.target)) {
+			return;
+		}
+
+		event.preventDefault();
+		event.stopPropagation();
+
+		var select = event.target;
+		var opts = opcionesNavegablesDescuentoFactura(select);
+
+		if (!opts.length) {
+			return;
+		}
+
+		var idx = -1;
+
+		for (var i = 0; i < opts.length; i++) {
+			if (opts[i].selected || String(opts[i].value) === String(select.value)) {
+				idx = i;
+				break;
+			}
+		}
+
+		if (event.key === 'ArrowDown') {
+			idx = idx < 0 ? 0 : Math.min(idx + 1, opts.length - 1);
+		} else {
+			idx = idx < 0 ? opts.length - 1 : Math.max(idx - 1, 0);
+		}
+
+		select.selectedIndex = Array.prototype.indexOf.call(select.options, opts[idx]);
+	}
+
+	function agregarRenglonFacturaTrasDescuento($tr) {
+		if ($tr && $tr.length) {
+			var $siguiente = $tr.nextAll('tr.item-pedido').first();
+			var skuSiguiente = $siguiente.length
+				? ($siguiente.find('.codigoarticulo').val() || '').trim()
+				: '';
+
+			if ($siguiente.length && !skuSiguiente) {
+				var codigo = $siguiente.find('.codigoarticulo')[0];
+				if (codigo && esCampoFacturaEnfocable(codigo)) {
+					focuseCampoFactura(codigo);
+					return;
+				}
+			}
+		}
+
+		if (typeof agregaRenglon === 'function') {
+			agregaRenglon();
+		}
+	}
+
+	function confirmarDescuentoFacturaConEnter(event) {
+		if (!esSelectDescuentoFactura(event.target)) {
+			return false;
+		}
+
+		event.preventDefault();
+		event.stopPropagation();
+
+		var $tr = $(event.target).closest('#itemspedido-table tr.item-pedido');
+
+		if (!event.target.value) {
+			agregarRenglonFacturaTrasDescuento($tr);
+			return true;
+		}
+
+		flAgregarRenglonTrasDescuentoFactura = true;
+		$(event.target).trigger('change');
+		return true;
+	}
+
+	function hayModalFacturaAbierto() {
+		return document.querySelector('.modal.show, .modal.in') !== null;
+	}
+
+	function eliminarRenglonFacturaSkuVacio($tr) {
+		if (!$tr || !$tr.length) {
+			return;
+		}
+
+		var $filas = $('#tbody-tabla tr.item-pedido');
+		if ($filas.length <= 1) {
+			var codigoUnico = $tr.find('.codigoarticulo')[0];
+			if (codigoUnico && esCampoFacturaEnfocable(codigoUnico)) {
+				focuseCampoFactura(codigoUnico);
+			}
+			return;
+		}
+
+		var $siguiente = $tr.nextAll('tr.item-pedido').first();
+		var $previo = $tr.prevAll('tr.item-pedido').first();
+
+		$tr.remove();
+
+		if (typeof actualizaRenglones === 'function') {
+			actualizaRenglones();
+		}
+		if (typeof calculaFactura === 'function') {
+			calculaFactura();
+		}
+
+		if ($siguiente.length) {
+			var codigoSig = $siguiente.find('.codigoarticulo')[0];
+			if (codigoSig && esCampoFacturaEnfocable(codigoSig)) {
+				focuseCampoFactura(codigoSig);
+			}
+			return;
+		}
+
+		var descuentoPrev = $previo.find('.descuentoventa_id')[0];
+		if (descuentoPrev && esCampoFacturaEnfocable(descuentoPrev)) {
+			focuseCampoFactura(descuentoPrev);
+			return;
+		}
+
+		var codigoPrev = $previo.find('.codigoarticulo')[0];
+		if (codigoPrev && esCampoFacturaEnfocable(codigoPrev)) {
+			focuseCampoFactura(codigoPrev);
+		}
+	}
+
 	function avanzarCampoFacturaConEnter(event) {
 		if (event.key !== 'Enter' && event.which !== 13) {
 			return;
@@ -336,10 +503,24 @@
 		if (!esCampoFacturaEnfocable(event.target)) {
 			return;
 		}
-		event.preventDefault();
+		if (confirmarDescuentoFacturaConEnter(event)) {
+			return;
+		}
 
 		var $target = $(event.target);
 		var $tr = $target.closest('#itemspedido-table tr.item-pedido');
+
+		if ($tr.length && event.target.classList.contains('codigoarticulo')
+			&& !(event.target.value || '').trim()
+			&& !hayModalFacturaAbierto()) {
+			event.preventDefault();
+			event.stopPropagation();
+			eliminarRenglonFacturaSkuVacio($tr);
+			return;
+		}
+
+		event.preventDefault();
+
 		var accion = obtenerSiguienteCampoFactura(event.target);
 
 		if (accion === 'defer') {
@@ -367,6 +548,7 @@
 			return;
 		}
 		form.dataset.facturaEnterNav = '1';
+		form.addEventListener('keydown', navegarDescuentoFacturaConFlechas, true);
 		form.addEventListener('keydown', avanzarCampoFacturaConEnter, true);
 	};
 

@@ -52,17 +52,55 @@ function limpiarTransporteEnContexto($ctx) {
     }
 }
 
+function opcionesFocusTrasEnterTransporte() {
+    var opts = {};
+    if ($('#codigozonavta').length) {
+        opts.focusSiguiente = '#codigozonavta';
+    } else if (window.FL_FACTURA_LAYOUT_PEDIDO) {
+        opts.focusSiguiente = '#itemspedido-table tr.item-pedido .codigoarticulo';
+        opts.focusPrimerArticuloFactura = true;
+    }
+    return opts;
+}
+
+function enfocarTrasValidarTransporte(opciones) {
+    opciones = opciones || {};
+    if (opciones.focusPrimerArticuloFactura && typeof window.enfocarPrimerCampoItemsFactura === 'function') {
+        setTimeout(function () {
+            window.enfocarPrimerCampoItemsFactura();
+        }, 0);
+        return;
+    }
+    if (!opciones.focusSiguiente) {
+        return;
+    }
+    var $next = $(opciones.focusSiguiente);
+    if ($next.length) {
+        setTimeout(function () {
+            $next.trigger('focus');
+            if ($next[0] && typeof $next[0].select === 'function') {
+                $next[0].select();
+            }
+        }, 0);
+    }
+}
+
 function resolverPorCodigoTransporte(codigo, $ctx, opciones) {
     opciones = opciones || {};
     var cod = $.trim(codigo);
+    var $codigoInput = ($ctx && $ctx.length)
+        ? $ctx.find('.codigotransporte').first()
+        : $('#codigotransporte');
     var focusSiguiente = function () {
-        if (!opciones.focusSiguiente) {
-            return;
-        }
-        var $next = $(opciones.focusSiguiente);
-        if ($next.length) {
+        enfocarTrasValidarTransporte(opciones);
+    };
+    var quedarEnCodigo = function () {
+        if ($codigoInput.length) {
             setTimeout(function () {
-                $next.trigger('focus').select();
+                $codigoInput.trigger('focus');
+                if ($codigoInput[0] && typeof $codigoInput[0].select === 'function') {
+                    $codigoInput[0].select();
+                }
             }, 0);
         }
     };
@@ -84,11 +122,11 @@ function resolverPorCodigoTransporte(codigo, $ctx, opciones) {
             focusSiguiente();
         } else {
             limpiarTransporteEnContexto($ctx);
-            focusSiguiente();
+            quedarEnCodigo();
         }
     }).fail(function() {
         limpiarTransporteEnContexto($ctx);
-        focusSiguiente();
+        quedarEnCodigo();
     });
 }
 
@@ -176,11 +214,7 @@ function manejarEnterCodigoTransporteCapture(e) {
     e.stopImmediatePropagation();
     var $input = $(target);
     var $ctx = $input.closest('.tm-transporte-campo');
-    var opts = {};
-    if ($('#codigozonavta').length) {
-        opts.focusSiguiente = '#codigozonavta';
-    }
-    resolverPorCodigoTransporte($input.val(), $ctx.length ? $ctx : null, opts);
+    resolverPorCodigoTransporte($input.val(), $ctx.length ? $ctx : null, opcionesFocusTrasEnterTransporte());
 }
 
 if (!window.__transporteF1CaptureActivo) {
@@ -276,12 +310,7 @@ function activa_eventos_consultatransporte()
         e.preventDefault();
         e.stopPropagation();
         var $ctx = $(this).closest('.tm-transporte-campo');
-        var opts = {};
-        // En pantallas con zona (certificado, pedido, etc.): Enter en reparto salta a zona.
-        if ($('#codigozonavta').length) {
-            opts.focusSiguiente = '#codigozonavta';
-        }
-        resolverPorCodigoTransporte($(this).val(), $ctx.length ? $ctx : null, opts);
+        resolverPorCodigoTransporte($(this).val(), $ctx.length ? $ctx : null, opcionesFocusTrasEnterTransporte());
     });
 
     $('.codigotransporte').off('change.transporte blur.transporte').on('change.transporte blur.transporte', function (event) {

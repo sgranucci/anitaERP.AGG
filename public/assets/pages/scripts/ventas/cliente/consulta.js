@@ -2,6 +2,7 @@ var ptrcliente_id;
 var ptrnombrecliente;
 var ultimaConsultaClienteTermino = '';
 var ultimoDatosClienteHtml = '';
+var consultaClienteModalAbriendo = false;
 
 if (typeof window.clienteEstaHabilitadoParaFacturacion !== 'function') {
     window.clienteEstaHabilitadoParaFacturacion = function (estado) {
@@ -177,6 +178,72 @@ function aplicarSeleccionClienteFactura(fila) {
     }
 }
 
+function esTeclaF1Cliente(e) {
+    return e && (e.key === 'F1' || e.code === 'F1' || e.keyCode === 112);
+}
+
+function esInputCodigoCliente(el) {
+    if (!el || !el.classList) {
+        return false;
+    }
+    if (el.id === 'consultacliente') {
+        return false;
+    }
+    return el.classList.contains('codigocliente') || el.id === 'codigocliente';
+}
+
+function modalConsultaClienteAbierto() {
+    var m = document.getElementById('consultaclienteModal');
+    return !!(m && (m.classList.contains('show') || m.classList.contains('in')));
+}
+
+function consultaClienteModalEnUso() {
+    return consultaClienteModalAbriendo || modalConsultaClienteAbierto();
+}
+
+function abrirModalConsultaClienteDesdeInput($input) {
+    consultaClienteModalAbriendo = true;
+    var $btn = $input.closest('.tm-cliente-campo, .gastro-campo-consulta, #div-cliente, .form-group, tr')
+        .find('button.consultacliente')
+        .first();
+    if ($btn.length) {
+        $btn.trigger('click');
+        return;
+    }
+    var ctx = resolverPtrClienteDesdeBoton($input);
+    ptrcliente_id = ctx.$id;
+    ptrnombrecliente = ctx.$nombre;
+    $('#consultaclienteModal').data('gastroConsultaDestino', 'factura');
+    $('#consultaclienteModal').modal('show');
+}
+
+function manejarF1CodigoClienteCapture(e) {
+    if (!esTeclaF1Cliente(e)) {
+        return;
+    }
+    var target = e.target;
+    if (!esInputCodigoCliente(target)) {
+        return;
+    }
+    if (target.readOnly || target.disabled) {
+        return;
+    }
+    if (!$('#consultaclienteModal').length) {
+        return;
+    }
+    if (modalConsultaClienteAbierto()) {
+        return;
+    }
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    abrirModalConsultaClienteDesdeInput($(target));
+}
+
+if (!window.__clienteF1CaptureActivo) {
+    document.addEventListener('keydown', manejarF1CodigoClienteCapture, true);
+    window.__clienteF1CaptureActivo = true;
+}
+
 function buscar_datos_cliente(consulta) {
     var termino = (consulta != null && consulta !== undefined) ? String(consulta).trim() : '';
 
@@ -230,6 +297,7 @@ function activa_eventos_consultacliente()
     $('.consultacliente')
         .off('click.consultaClienteAbrir')
         .on('click.consultaClienteAbrir', function () {
+            consultaClienteModalAbriendo = true;
             var ctx = resolverPtrClienteDesdeBoton($(this));
             ptrcliente_id = ctx.$id;
             ptrnombrecliente = ctx.$nombre;
@@ -238,10 +306,31 @@ function activa_eventos_consultacliente()
         });
 
     $('#consultaclienteModal')
-        .off('shown.bs.modal.consultaCliente')
+        .off('shown.bs.modal.consultaCliente hidden.bs.modal.consultaCliente')
         .on('shown.bs.modal.consultaCliente', function () {
+            consultaClienteModalAbriendo = false;
             restaurarUltimaConsultaClienteEnModal();
             $(this).find('[autofocus]').focus();
+        })
+        .on('hidden.bs.modal.consultaCliente', function () {
+            consultaClienteModalAbriendo = false;
+        });
+
+    $(document)
+        .off('keydown.clienteF1Consulta', '.codigocliente, #codigocliente')
+        .on('keydown.clienteF1Consulta', '.codigocliente, #codigocliente', function (e) {
+            if (!esTeclaF1Cliente(e)) {
+                return;
+            }
+            if (this.readOnly || this.disabled) {
+                return;
+            }
+            if (modalConsultaClienteAbierto()) {
+                return;
+            }
+            e.preventDefault();
+            e.stopPropagation();
+            abrirModalConsultaClienteDesdeInput($(this));
         });
 
     $('#aceptaconsultaclienteModal')
@@ -293,6 +382,10 @@ function activa_eventos_consultacliente()
 
     $('#codigocliente').on('change', function (event) {
         event.preventDefault();
+
+        if (consultaClienteModalEnUso()) {
+            return;
+        }
 
         let codigocliente = $("#codigocliente").val();
 

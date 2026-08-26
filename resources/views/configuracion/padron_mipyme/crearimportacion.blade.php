@@ -4,7 +4,11 @@
 @endsection
 
 @section("scripts")
+<script>
+    window.padronMipymePreanalisisUrl = @json(route('preanalizar_padron_mipyme'));
+</script>
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/configuracion/padron_mipyme/importar.js")}}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
@@ -12,7 +16,7 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
                 <h3 class="card-title">Importar Padrón Mipyme</h3>
                 <div class="card-tools">
@@ -38,4 +42,12 @@
         </div>
     </div>
 </div>
+
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'padron-mipyme-import-overlay',
+    'tituloId' => 'padron-mipyme-import-titulo',
+    'subtituloId' => 'padron-mipyme-import-subtitulo',
+    'titulo' => 'Procesando padrón…',
+    'subtitulo' => 'Si el archivo es un ZIP se descomprime primero. Puede demorar. No cierre la página.',
+])
 @endsection

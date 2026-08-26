@@ -337,6 +337,7 @@ Route::delete('configuracion/padron_mipyme/{id}', 'Configuracion\Padron_MipymeCo
 Route::get('configuracion/listapadron_mipyme/{formato?}/{busqueda?}', 'Configuracion\Padron_MipymeController@listar')->name('lista_padron_mipyme');
 
 Route::get('configuracion/crea_importacion_padron_mipyme', 'Configuracion\Padron_MipymeController@crearImportacionPadron_Mipyme')->name('crear_importacion_padron_mipyme');
+Route::post('configuracion/preanaliza_padron_mipyme', 'Configuracion\Padron_MipymeController@preanalizarPadron_Mipyme')->name('preanalizar_padron_mipyme');
 Route::post('configuracion/importa_padron_mipyme', 'Configuracion\Padron_MipymeController@importarPadron_Mipyme')->name('importar_padron_mipyme');
 
 /*

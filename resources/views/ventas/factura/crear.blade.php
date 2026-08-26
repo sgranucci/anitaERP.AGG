@@ -28,11 +28,11 @@
 @include('ventas.partials.aviso_deposito_facturacion')
 <script src="{{asset("assets/pages/scripts/ventas/factura/crear.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/crear.js')) ?: time() }}" type="text/javascript"></script>
 @if ($layoutItemsPedido)
-<script src="{{asset("assets/pages/scripts/ventas/factura/crear-bierzo-items.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/factura/crear-bierzo-items.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/crear-bierzo-items.js')) ?: time() }}" type="text/javascript"></script>
 @endif
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/depmae/consulta.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ventas/cliente/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/cliente/consulta.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/vendedor/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/transporte/consulta.js")}}" type="text/javascript"></script>
 

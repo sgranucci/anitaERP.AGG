@@ -7,7 +7,7 @@ use App\Services\Ventas\PedidoFacturaAnitaRegrabacionService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 
 /**
- * Diferimiento de Anita en factura de pedido (El Bierzo).
+ * Diferimiento de Anita en factura de pedido, remito y mostrador (El Bierzo).
  * ARCA (número + CAE) sigue síncrono; Anita corre post-respuesta como gastronomía AGG.
  */
 final class PedidoFacturaAnitaDeferSupport

@@ -417,10 +417,20 @@
 			return;
 		}
 
-		event.preventDefault();
-
 		var $target = $(event.target);
 		var $tr = $target.closest('#itemsremito-table tr.item-remito');
+
+		if ($tr.length && event.target.classList.contains('codigoarticulo')
+			&& !(event.target.value || '').trim()
+			&& !hayModalPedidoAbierto()) {
+			event.preventDefault();
+			event.stopPropagation();
+			eliminarRenglonPedidoSkuVacio($tr);
+			return;
+		}
+
+		event.preventDefault();
+
 		var accion = obtenerSiguienteCampoPedido(event.target);
 
 		if (accion === 'defer') {
@@ -490,7 +500,22 @@
 		select.selectedIndex = Array.prototype.indexOf.call(select.options, opts[idx]);
 	}
 
-	function agregarRenglonPedidoTrasDescuento() {
+	function agregarRenglonPedidoTrasDescuento($tr) {
+		if ($tr && $tr.length) {
+			var $siguiente = $tr.nextAll('tr.item-remito').first();
+			var skuSiguiente = $siguiente.length
+				? ($siguiente.find('.codigoarticulo').val() || '').trim()
+				: '';
+
+			if ($siguiente.length && !skuSiguiente) {
+				var codigo = $siguiente.find('.codigoarticulo')[0];
+				if (codigo && esCampoPedidoEnfocable(codigo)) {
+					focuseCampoPedido(codigo);
+					return;
+				}
+			}
+		}
+
 		if (!puedeAgregarRenglonPedido()) {
 			alert('No puede generar pedidos con mas de 42 ítems');
 			return;
@@ -500,20 +525,23 @@
 	}
 
 	function confirmarDescuentoPedidoConEnter(event) {
-		if (!esSelectDescuentoPedido(event.target)) {
+		var el = event.target;
+		if (!el || el.tagName !== 'SELECT' || !el.classList.contains('descuentoventa_id')) {
 			return false;
 		}
 
 		event.preventDefault();
 		event.stopPropagation();
 
-		if (!event.target.value) {
-			agregarRenglonPedidoTrasDescuento();
+		var $tr = $(el).closest('#itemsremito-table tr.item-remito');
+
+		if (el.disabled || !el.value) {
+			agregarRenglonPedidoTrasDescuento($tr);
 			return true;
 		}
 
 		flAgregarRenglonTrasDescuentoPedido = true;
-		$(event.target).trigger('change');
+		$(el).trigger('change');
 		return true;
 	}
 
@@ -527,6 +555,48 @@
 
 	function hayModalPedidoAbierto() {
 		return document.querySelector('.modal.show, .modal.in') !== null;
+	}
+
+	function eliminarRenglonPedidoSkuVacio($tr) {
+		if (!$tr || !$tr.length) {
+			return;
+		}
+
+		var $filas = $('#tbody-tabla tr.item-remito');
+		if ($filas.length <= 1) {
+			var codigoUnico = $tr.find('.codigoarticulo')[0];
+			if (codigoUnico && esCampoPedidoEnfocable(codigoUnico)) {
+				focuseCampoPedido(codigoUnico);
+			}
+			return;
+		}
+
+		var $siguiente = $tr.nextAll('tr.item-remito').first();
+		var $previo = $tr.prevAll('tr.item-remito').first();
+
+		$tr.remove();
+
+		actualizaRenglones();
+		TotalPedido();
+
+		if ($siguiente.length) {
+			var codigoSig = $siguiente.find('.codigoarticulo')[0];
+			if (codigoSig && esCampoPedidoEnfocable(codigoSig)) {
+				focuseCampoPedido(codigoSig);
+			}
+			return;
+		}
+
+		var descuentoPrev = $previo.find('.descuentoventa_id')[0];
+		if (descuentoPrev && descuentoPrev.offsetParent !== null) {
+			descuentoPrev.focus();
+			return;
+		}
+
+		var codigoPrev = $previo.find('.codigoarticulo')[0];
+		if (codigoPrev && esCampoPedidoEnfocable(codigoPrev)) {
+			focuseCampoPedido(codigoPrev);
+		}
 	}
 
 	function puedeAgregarRenglonPedido() {
@@ -2533,7 +2603,7 @@
 
 				if (flAgregarRenglonTrasDescuentoPedido) {
 					flAgregarRenglonTrasDescuentoPedido = false;
-					agregarRenglonPedidoTrasDescuento();
+					agregarRenglonPedidoTrasDescuento($(ptr).parents('tr'));
 				} else if (flSaltarFocusDescuentoPedido) {
 					var $kilo = $(ptr).parents("tr").find(".kilo");
 
@@ -2548,6 +2618,9 @@
 			});
 			setTimeout(() => {
 			}, 300);
+		} else if (flAgregarRenglonTrasDescuentoPedido) {
+			flAgregarRenglonTrasDescuentoPedido = false;
+			agregarRenglonPedidoTrasDescuento($(ptr).parents('tr'));
 		}
 	}
 

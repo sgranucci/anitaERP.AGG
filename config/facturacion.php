@@ -92,7 +92,7 @@ switch(strtoupper(config('app.empresa')))
                 '00010' => (string) env('FACTURACION_SALTO_CAEA_PARA_00010', '00005'),
                 '00009' => (string) env('FACTURACION_SALTO_CAEA_PARA_00009', '00005'),
             ],
-            // Anita de factura pedido: después de responder. ARCA (número + CAE) sigue síncrono.
+            // Anita de factura pedido / remito / mostrador: después de responder. ARCA (número + CAE) sigue síncrono.
             "ANITA_TRAS_RESPUESTA_PEDIDO" => filter_var(env('BIERZO_PEDIDO_ANITA_TRAS_RESPUESTA', true), FILTER_VALIDATE_BOOLEAN),
             "ANITA_PEDIDO_REGRABAR_HABILITADO" => filter_var(env('BIERZO_PEDIDO_ANITA_REGRABAR', true), FILTER_VALIDATE_BOOLEAN),
             "ANITA_PEDIDO_REGRABAR_MAX_INTENTOS" => max(1, (int) env('BIERZO_PEDIDO_ANITA_REGRABAR_MAX_INTENTOS', 20)),

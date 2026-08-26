@@ -124,6 +124,11 @@ function actualizarLinkEditarArticulo($ctx, articuloId) {
     }
 }
 
+function unidadMedidaEsKilos(unidadmedida) {
+    var um = (unidadmedida || '').toString().trim().toUpperCase();
+    return um === 'KG' || um === 'KIL' || um === 'KILO' || um === 'KILOS' || um === 'KGS';
+}
+
 function resolverInputCantidadLineaArticulo($tr, unidadmedida) {
     if (!$tr || !$tr.length) {
         return $();
@@ -132,7 +137,9 @@ function resolverInputCantidadLineaArticulo($tr, unidadmedida) {
     var $target = $();
     if (um === 'CAJ') {
         $target = $tr.find('.caja').filter(':visible:not([readonly])');
-    } else if (um === 'UN' || um === 'KG' || um === 'KIL') {
+    } else if (unidadMedidaEsKilos(um)) {
+        $target = $tr.find('.kilo').filter(':visible:not([readonly])');
+    } else if (um === 'UN' || um === 'UND' || um === 'UNID') {
         $target = $tr.find('.pieza').filter(':visible:not([readonly])');
     }
     if (!$target.length) {

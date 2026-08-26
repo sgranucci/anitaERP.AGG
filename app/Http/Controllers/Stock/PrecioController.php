@@ -24,6 +24,7 @@ use App\Support\Stock\ArticuloListadoFiltros;
 use App\Support\Stock\PrecioImportColumnasSupport;
 use App\Support\Stock\PrecioListadoFiltros;
 use App\Models\Stock\Categoria;
+use App\Models\Ventas\Cliente;
 use Auth;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -189,7 +190,9 @@ class PrecioController extends Controller
     {
         $fechaHoy = Carbon::now();
 
-        $cliente = $this->clienteRepository->findPorCodigo($codigocliente);
+        // Pedido/remito mandan código Anita; mostrador a veces mandaba el id ERP.
+        // Código primero: un código numérico no debe resolverse como id.
+        $cliente = $this->resolverClienteParaAsignarPrecio($codigocliente);
 
         $listaprecio_id = config('precio.listaprecio_default_id');
 
@@ -207,10 +210,11 @@ class PrecioController extends Controller
         $precio = $this->precioService->asignaPrecioPorLista($articulo_id, $listaprecio_id, $fechaHoy);
 
         if (count($precio) > 0) {
-            $precio_talle = $precio[0]['precio'];
-            $listaprecio_id = $precio[0]['listaprecio_id'];
-            $moneda_id = $precio[0]['moneda_id'];
-            $incluyeimpuesto = $precio[0]['incluyeimpuesto'];
+            $vigente = end($precio);
+            $precio_talle = $vigente['precio'];
+            $listaprecio_id = $vigente['listaprecio_id'];
+            $moneda_id = $vigente['moneda_id'];
+            $incluyeimpuesto = $vigente['incluyeimpuesto'];
         } else {
             $precio_talle = 0;
             $listaprecio_id = 0;
@@ -226,6 +230,28 @@ class PrecioController extends Controller
         ];
 
         return $array_precio;
+    }
+
+    /**
+     * Resuelve el cliente para tomar su lista: código Anita primero, id ERP si no hay código.
+     */
+    private function resolverClienteParaAsignarPrecio($codigoOId): ?Cliente
+    {
+        $raw = trim((string) $codigoOId);
+        if ($raw === '') {
+            return null;
+        }
+
+        $cliente = Cliente::query()->where('codigo', $raw)->first();
+        if ($cliente) {
+            return $cliente;
+        }
+
+        if (ctype_digit($raw)) {
+            return Cliente::query()->find((int) $raw);
+        }
+
+        return null;
     }
 
     /**

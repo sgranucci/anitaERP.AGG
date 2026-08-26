@@ -65,6 +65,7 @@ use App\Support\Ventas\PedidoFacturacionExclusivaSupport;
 use App\Support\Ventas\PedidoItemCierreFaltaStockSupport;
 use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use App\Support\Ventas\VentaEmisionCajaPiezaSupport;
+use App\Support\Stock\UnidadesCajaPiezaSupport;
 use App\Support\Ventas\ArcaCaeaAnitaTipoAfipSupport;
 use App\Support\Ventas\ElBierzoFacturacionCaeaSaltoSupport;
 use App\Models\Stock\Talle;
@@ -2283,9 +2284,22 @@ class FacturacionService
 			$omitirStkmovAnita = is_array($omitirStkmovAnitaPorItem)
 				&& ! empty($omitirStkmovAnitaPorItem[$offItem]);
 
-			$dataFactura[] = ["cantidad" => (float) str_replace(",","",$cantidad),
-				"pieza" => (float) str_replace(',', '', (string) ($piezasInput[$offItem] ?? 0)),
-				"caja" => (float) str_replace(',', '', (string) ($cajasInput[$offItem] ?? 0)),
+			$piezaLinea = (float) str_replace(',', '', (string) ($piezasInput[$offItem] ?? 0));
+			$cajaLinea = (float) str_replace(',', '', (string) ($cajasInput[$offItem] ?? 0));
+			$cantidadLinea = (float) str_replace(',', '', (string) $cantidad);
+			if (facturaUsaLayoutItemsPedido() && $articulo_id && $cantidadLinea != 0.0
+				&& $piezaLinea == 0.0 && $cajaLinea == 0.0) {
+				$pesoLinea = (float) ($articulo->peso ?? 0);
+				$unidadesEnvase = (float) ($articulo->unidadesxenvase ?? 0);
+				if ($pesoLinea != 0.0) {
+					$piezaLinea = $cantidadLinea / $pesoLinea;
+					$cajaLinea = $unidadesEnvase != 0.0 ? $piezaLinea / $unidadesEnvase : 0.0;
+				}
+			}
+
+			$dataFactura[] = ["cantidad" => $cantidadLinea,
+				"pieza" => $piezaLinea,
+				"caja" => $cajaLinea,
 				"preciosindescuento" => (float) str_replace(",","",$precioUnitario),
 				"precio" => (float) str_replace(",","",$precioConDescuento),
 				"descuento" => $this->descuentoLinea,
@@ -3623,6 +3637,13 @@ class FacturacionService
 						'incluyeimpuesto' => $itemEmision['incluyeimpuesto'],
 						'listaprecio_id' => $itemEmision['listaprecio_id'],
 					];
+					// Caja/pieza: solo El Bierzo (pedido/remito/mostrador). Gastronomía y estacionamiento no.
+					if (EntornoEmpresaSupport::esElBierzo()
+						&& UnidadesCajaPiezaSupport::articuloMovimientoTieneColumnas()) {
+						$unidades = UnidadesCajaPiezaSupport::extraerDeLinea($itemEmision);
+						$dataArticuloMovimiento['caja'] = $unidades['caja'];
+						$dataArticuloMovimiento['pieza'] = $unidades['pieza'];
+					}
 					if ($depositoIdEmision > 0) {
 						$dataArticuloMovimiento['deposito_id'] = $depositoIdEmision;
 					}
@@ -3681,17 +3702,24 @@ class FacturacionService
 
 			if ($puntoventa->modofacturacion != 'M' || $this->flGrabaComprobanteDividido)
 			{
+				$deferAnitaMostrador = ! $transaccionExterna
+					&& PedidoFacturaAnitaDeferSupport::debeDiferir();
+				$deferAnitaTrasCommit = false;
+				$modoMinimoAnita = is_array($opcionesEmision)
+					&& ! empty($opcionesEmision['anita_modo_minimo']);
+
 				if (! $omitirSincronizacionAnita) {
-					$modoMinimoAnita = is_array($opcionesEmision)
-						&& ! empty($opcionesEmision['anita_modo_minimo']);
 					$deferAnitaTrasCommit = $transaccionExterna
 						&& $modoMinimoAnita
 						&& $this->anitaTrasCommitAlFacturarHabilitado($opcionesEmision);
+					$deferAnitaAhora = $deferAnitaTrasCommit || $deferAnitaMostrador;
 
-					if ($deferAnitaTrasCommit) {
+					if ($deferAnitaAhora) {
 						$ret['anita_pendiente'] = [
 							'puntoventa_codigo' => $puntoventa->codigo,
 							'letra' => $letra,
+							'puntoventaremito_codigo' => 0,
+							'numeroremito' => 0,
 							'venta' => $venta,
 							'data_cae' => $dataCAE,
 							'conceptos_totales' => $conceptosTotales,
@@ -3699,11 +3727,12 @@ class FacturacionService
 							'data_factura' => $dataFactura,
 							'signo' => $signo,
 							'codigo_tipo_transaccion' => $codigoTipoTransaccion,
+							'pedido_id' => 0,
 							'numero_orden_venta' => $numeroOrdenventa,
 							'codigo_centrocosto' => $codigoCentrocosto,
 							'referencia_factura' => $referenciaFactura,
 							'empresa_codigo' => $empresa->codigo,
-							'modo_minimo_anita' => true,
+							'modo_minimo_anita' => $modoMinimoAnita,
 							'omitir_cuenta_corriente_anita' => $omitirCuentaCorriente,
 							'omitir_stkmov_anita' => $omitirStkmovAnita,
 							'omitir_numera_anita_fin' => $omitirNumeraAnitaFin,
@@ -3752,9 +3781,23 @@ class FacturacionService
 							'opciones_emision_arca' => is_array($opcionesEmision) ? $opcionesEmision : [],
 						];
 					} else {
+						$deferVencaeAnita = $deferAnitaTrasCommit || $deferAnitaMostrador;
 						// Solicita CAE/CAEA en ARCA (último paso del flujo estándar).
 						Self::solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, substr($venta['codigo'], 0, 3),
-							$letra, $puntoventa, $venta['numerocomprobante'], $fechaFactura, $dataCAE, $vta->id);
+							$letra, $puntoventa, $venta['numerocomprobante'], $fechaFactura, $dataCAE, $vta->id,
+							$deferVencaeAnita);
+						if ($deferVencaeAnita) {
+							$vencaePendiente = $this->armarVencaePendienteDesdeCaePendiente([
+								'venta_id' => $vta->id,
+								'tipo_anita' => substr($venta['codigo'], 0, 3),
+								'letra' => $letra,
+								'puntoventa' => $puntoventa,
+								'numero_comprobante' => $venta['numerocomprobante'],
+							]);
+							if ($vencaePendiente !== null) {
+								$ret['vencae_pendiente'] = $vencaePendiente;
+							}
+						}
 					}
 				}
 			}
@@ -3769,6 +3812,16 @@ class FacturacionService
 
 			if (! $transaccionExterna) {
 				DB::commit();
+			}
+
+			if (! $transaccionExterna && PedidoFacturaAnitaDeferSupport::debeDiferir()
+				&& (! empty($ret['anita_pendiente']) || ! empty($ret['vencae_pendiente']))) {
+				PedidoFacturaAnitaDeferSupport::programar(
+					(int) ($ret['venta_id'] ?? 0),
+					is_array($ret['anita_pendiente'] ?? null) ? $ret['anita_pendiente'] : null,
+					is_array($ret['vencae_pendiente'] ?? null) ? $ret['vencae_pendiente'] : null,
+				);
+				unset($ret['anita_pendiente'], $ret['vencae_pendiente']);
 			}
 
 			return $ret;
@@ -5845,15 +5898,17 @@ class FacturacionService
 				$anitaPendiente['codigo_tipo_transaccion'] ?? '',
 				(int) ($anitaPendiente['pedido_id'] ?? 0),
 				true,
-				0,
-				0,
+				(int) ($anitaPendiente['numero_orden_venta'] ?? 0),
+				(int) ($anitaPendiente['codigo_centrocosto'] ?? 0),
 				(string) ($anitaPendiente['referencia_factura'] ?? ''),
 				null,
 				null,
-				false,
-				false,
-				false,
-				true,
+				! empty($anitaPendiente['modo_minimo_anita']),
+				! empty($anitaPendiente['omitir_cuenta_corriente_anita']),
+				! empty($anitaPendiente['omitir_stkmov_anita']),
+				array_key_exists('omitir_numera_anita_fin', $anitaPendiente)
+					? ! empty($anitaPendiente['omitir_numera_anita_fin'])
+					: true,
 				$anitaPendiente['modo_facturacion_puntoventa'] ?? null,
 			);
 		} finally {

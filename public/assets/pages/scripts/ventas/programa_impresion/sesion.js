@@ -33,10 +33,9 @@
                     return;
                 }
             }
-            var boton = document.getElementById('btn-ejecutar-sesion');
-            if (boton) {
+            document.querySelectorAll('.btn-ejecutar-sesion').forEach(function (boton) {
                 boton.disabled = true;
-            }
+            });
             document.querySelectorAll('.btn-solo-copia').forEach(function (b) {
                 b.disabled = true;
             });

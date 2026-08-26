@@ -14,6 +14,7 @@ use App\Repositories\Ventas\AbastoRepositoryInterface;
 use App\Services\Ventas\FacturacionService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\ExclusionPercepcionIvaSupport;
+use App\Support\Configuracion\PercepcionIvaSujetoSupport;
 use App\Support\Ventas\ClienteExclusionPercepcionSupport;
 use App\Support\Ventas\VentaImporteDosDecimalesSupport;
 use App\Support\Stock\FormulaArticuloFactorCosto;
@@ -139,7 +140,8 @@ class ImpuestoService extends FacturacionService
 		$tasaPercepcionIva = (float) config('anita.tasa_percepcion_iva', 0);
 		$aplicaPercepcionIva = ! $omitirPercepciones
 			&& config('anita.agente_percepcion_iva') == 'si'
-			&& $retieneIva != 'S';
+			&& $retieneIva != 'S'
+			&& PercepcionIvaSujetoSupport::correspondePercepcionIva($condicioniva);
 
 		if ($aplicaPercepcionIva) {
 			if (ExclusionPercepcionIvaSupport::estaExcluidoEnFecha($nroInscripcion, $fechaFactura ?? null)) {
@@ -375,7 +377,7 @@ class ImpuestoService extends FacturacionService
 			}
 		}
 
-		// Agrega percepcion de iva si es agente de percepcion, el cliente no lo es y no está excluido en el padrón AFIP
+		// Percepción IVA: agente + comprador RI + no "No percibir" + no excluido en padrón/cliente
         if ($aplicaPercepcionIva && !$flGrabaComprobanteDividido)
 		{
 			$importeNeto = $importePercepcion = 0.;

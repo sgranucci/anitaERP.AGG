@@ -22,6 +22,11 @@ window.impresionSesionAuto = @json((bool) ($autoEjecutar ?? false));
             <div class="card-header">
                 <h3 class="card-title">Sesión de impresión de comprobantes</h3>
                 <div class="card-tools">
+                    @if (! empty($resultado['pdf_sesion'] ?? null))
+                        <a href="{{ route('descargar_impresion_sesion', ['t' => basename((string) $resultado['pdf_sesion'])]) }}" class="btn btn-outline-primary btn-sm">
+                            <i class="fa fa-file-pdf"></i> Descargar PDF
+                        </a>
+                    @endif
                     <a href="{{ $volverUrl ?? route('factura') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver
                     </a>
@@ -52,6 +57,25 @@ window.impresionSesionAuto = @json((bool) ($autoEjecutar ?? false));
                 </p>
                 <p class="text-muted small mb-3">{{ $sesion['motivo'] ?? '' }} — modo {{ $sesion['modo'] ?? 'OPERATIVO' }}</p>
 
+                <form action="{{ route('ejecutar_impresion_sesion') }}" method="POST" class="d-none" id="form-ejecutar-sesion">
+                    @csrf
+                    <input type="hidden" name="origen_tipo" value="{{ $sesion['origen_tipo'] ?? '' }}">
+                    <input type="hidden" name="origen_id" value="{{ (int) ($sesion['origen_id'] ?? 0) }}">
+                    <input type="hidden" name="modo" value="{{ $sesion['modo'] ?? 'OPERATIVO' }}">
+                    @if (!empty($sesion['solo_formulario']))
+                        <input type="hidden" name="solo_formulario" value="{{ $sesion['solo_formulario'] }}">
+                    @elseif (($sesion['origen_tipo'] ?? '') !== 'FACTURA')
+                        <input type="hidden" name="pack" value="1">
+                    @endif
+                </form>
+
+                @include('ventas.programa_impresion.partials.acciones_sesion', [
+                    'sesion' => $sesion,
+                    'resultado' => $resultado ?? null,
+                    'botonEjecutarId' => 'btn-ejecutar-sesion',
+                    'claseContenedor' => 'mb-3',
+                ])
+
                 @if (!empty($sesion['tiene_venta']) && ($sesion['origen_tipo'] ?? '') !== 'FACTURA')
                     <p>
                         <a href="{{ route('sesion_impresion_factura', ['id' => $sesion['documentos']['FACTURA']['id'] ?? 0, 'auto' => 1]) }}" class="btn btn-outline-primary btn-sm">
@@ -73,27 +97,11 @@ window.impresionSesionAuto = @json((bool) ($autoEjecutar ?? false));
                     <div class="alert alert-danger">{{ $resultado['error'] }}</div>
                 @endif
 
-                <div class="mt-3 d-flex flex-wrap align-items-center" style="gap: 8px;">
-                    <form action="{{ route('ejecutar_impresion_sesion') }}" method="POST" class="form-inline mb-0" id="form-ejecutar-sesion" style="gap: 8px;">
-                        @csrf
-                        <input type="hidden" name="origen_tipo" value="{{ $sesion['origen_tipo'] ?? '' }}">
-                        <input type="hidden" name="origen_id" value="{{ (int) ($sesion['origen_id'] ?? 0) }}">
-                        <input type="hidden" name="modo" value="{{ $sesion['modo'] ?? 'OPERATIVO' }}">
-                        @if (!empty($sesion['solo_formulario']))
-                            <input type="hidden" name="solo_formulario" value="{{ $sesion['solo_formulario'] }}">
-                        @elseif (($sesion['origen_tipo'] ?? '') !== 'FACTURA')
-                            <input type="hidden" name="pack" value="1">
-                        @endif
-                        <button type="submit" class="btn btn-primary" id="btn-ejecutar-sesion" {{ empty($sesion['pack']) ? 'disabled' : '' }}>
-                            <i class="fa fa-print"></i> Ejecutar sesión
-                        </button>
-                    </form>
-                    @if (!empty($resultado['pdf_sesion']))
-                        <a href="{{ route('descargar_impresion_sesion', ['t' => basename((string) $resultado['pdf_sesion'])]) }}" class="btn btn-outline-primary">
-                            <i class="fa fa-file-pdf"></i> Descargar PDF
-                        </a>
-                    @endif
-                </div>
+                @include('ventas.programa_impresion.partials.acciones_sesion', [
+                    'sesion' => $sesion,
+                    'resultado' => $resultado ?? null,
+                    'claseContenedor' => 'mt-3',
+                ])
             </div>
         </div>
     </div>
