@@ -192,10 +192,25 @@
         actualizarAvisoFormulaInsumo();
     }
 
+    function actualizarLinkArticuloDestinoFila($tr, articuloId) {
+        var id = parseInt(articuloId, 10) || 0;
+        var $link = $tr.find('.btn-link-articulo-destino');
+        $tr.find('.ms-articulo-destino-id').val(id > 0 ? String(id) : '');
+        if (!$link.length) {
+            return;
+        }
+        if (id > 0 && typeof urlEditarArticuloConsulta === 'function') {
+            $link.attr('href', urlEditarArticuloConsulta(id)).removeClass('d-none');
+        } else {
+            $link.attr('href', '#').addClass('d-none');
+        }
+    }
+
     function limpiarColumnasDestinoFila($tr) {
         $tr.find('.ms-insumo-destino-sku').val('').attr('title', '').attr('placeholder', '—');
         $tr.find('.ms-cantidad-destino').val('').attr('placeholder', '—');
         $tr.find('.ms-um-destino').text('');
+        actualizarLinkArticuloDestinoFila($tr, 0);
     }
 
     function aplicarColumnasDestinoFila($tr, data, cantidadReal) {
@@ -205,11 +220,13 @@
         var cantConv = parseFloat(data.cantidad_convertida);
         var visible = textoVisibleInsumoDestino(sku, desc);
         var titleFull = textoCompletoInsumoDestino(sku, desc);
+        var destId = parseInt(data.articulo_convertido_id || data.articulo_compra_id || 0, 10) || 0;
 
         $tr.find('.ms-insumo-destino-sku')
             .val(visible)
             .attr('title', titleFull || visible)
             .attr('placeholder', visible ? '' : '—');
+        actualizarLinkArticuloDestinoFila($tr, destId);
 
         $tr.find('.ms-um-destino').text(um);
 

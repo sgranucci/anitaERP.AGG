@@ -92,7 +92,16 @@ class Localidad_UifRepository implements Localidad_UifRepositoryInterface
 
 	public function leerLocalidades($id)
     {
-        return $this->model->select('id','nombre')->where('provincia_uif_id',$id)->orderBy('nombre','asc')->get()->toArray();
+        $id = (int) $id;
+        if ($id <= 0) {
+            return [];
+        }
+
+        return $this->model->select('id', 'nombre')
+            ->where('provincia_uif_id', $id)
+            ->orderBy('nombre', 'asc')
+            ->get()
+            ->toArray();
     }
 
     public function leerCodigoPostal($id)

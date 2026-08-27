@@ -112,7 +112,11 @@ function actualizarLinkEditarArticulo($ctx, articuloId) {
     if (!$ctx || !$ctx.length) {
         return;
     }
-    var $link = $ctx.find('.btn-link-articulo, a[href*="editar_articulo"], a[href*="/stock/articulo/"][href*="/editar"]');
+    var $link = $ctx.find('.btn-link-articulo');
+    if (!$link.length) {
+        $link = $ctx.find('a[href*="editar_articulo"], a[href*="/stock/articulo/"][href*="/editar"]')
+            .not('.btn-link-articulo-destino');
+    }
     if (!$link.length) {
         return;
     }
@@ -821,7 +825,10 @@ $(function () {
     $('tr, .tm-articulo-campo').each(function () {
         var $ctx = $(this);
         var articuloId = parseInt($ctx.find('.articulo_id').val(), 10) || 0;
-        if (articuloId > 0 && ($ctx.find('.btn-link-articulo').length || $ctx.find('a[href*="editar_articulo"]').length)) {
+        if (articuloId > 0 && (
+            $ctx.find('.btn-link-articulo').length
+            || $ctx.find('a[href*="editar_articulo"], a[href*="/stock/articulo/"][href*="/editar"]').not('.btn-link-articulo-destino').length
+        )) {
             actualizarLinkEditarArticulo($ctx, articuloId);
         }
     });

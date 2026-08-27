@@ -170,6 +170,7 @@ final class MovimientoStockFormulaConversionSupport
             'sentido' => self::SENTIDO_SALIDA,
             'articulo_linea_sku' => (string) $articuloInsumo->sku,
             'articulo_convertido_sku' => (string) $compra->sku,
+            'articulo_convertido_id' => (int) $compra->id,
             'articulo_compra_id' => (int) $compra->id,
             'articulo_convertido_descripcion' => (string) ($compra->descripcion ?? $compra->nombre ?? ''),
             'cantidad_linea' => $cantidadLinea,

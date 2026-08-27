@@ -63,10 +63,15 @@ final class ComprobanteProveedorImputacionApDiariaService
         $generado = $this->reporte->generar($filtros);
         $filas = $this->enriquecerConCcYCtamov($generado['filas'] ?? [], $tolerancia);
 
+        $partes = ComprobanteProveedorImputacionApSupport::particionarControlDiario($filas);
+        $desvios = $partes['desvios'];
+        $borradores = $partes['borradores'];
+
         $totales = [
             'total_filas' => count($filas),
-            'ok' => 0,
-            'con_desvio' => 0,
+            'ok' => count($partes['ok']),
+            'con_desvio' => count($desvios),
+            'en_borrador' => count($borradores),
             'sin_cc' => 0,
             'sin_asiento' => 0,
             'sin_ctamov' => 0,
@@ -74,14 +79,7 @@ final class ComprobanteProveedorImputacionApDiariaService
             'asiento_ars' => 0.0,
             'ctamov_ars' => 0.0,
         ];
-        $desvios = [];
-        foreach ($filas as $fila) {
-            if (! empty($fila['ok'])) {
-                $totales['ok']++;
-            } else {
-                $totales['con_desvio']++;
-                $desvios[] = $fila;
-            }
+        foreach ($desvios as $fila) {
             if (in_array('Sin CC', $fila['alertas'] ?? [], true)) {
                 $totales['sin_cc']++;
             }
@@ -91,6 +89,8 @@ final class ComprobanteProveedorImputacionApDiariaService
             if (in_array('Sin ctamov Anita', $fila['alertas'] ?? [], true)) {
                 $totales['sin_ctamov']++;
             }
+        }
+        foreach ($filas as $fila) {
             $totales['cc_ars'] += (float) ($fila['cc_ars'] ?? 0);
             $totales['asiento_ars'] += (float) ($fila['asiento_ars'] ?? 0);
             $totales['ctamov_ars'] += (float) ($fila['ctamov_ars'] ?? 0);
@@ -114,6 +114,9 @@ final class ComprobanteProveedorImputacionApDiariaService
             'desvios' => $desvios,
             'desvios_mail' => array_slice($desvios, 0, $maxFilasMail),
             'desvios_omitidos' => max(0, count($desvios) - $maxFilasMail),
+            'borradores' => $borradores,
+            'borradores_mail' => array_slice($borradores, 0, $maxFilasMail),
+            'borradores_omitidos' => max(0, count($borradores) - $maxFilasMail),
             'errores' => $errores,
             'requiere_alerta' => $errores !== [] || $totales['con_desvio'] > 0,
             'mail_enviado' => false,
@@ -121,6 +124,7 @@ final class ComprobanteProveedorImputacionApDiariaService
             'mail_error' => null,
             'notas' => [
                 'Cada factura compara CC ERP vs haber a proveedores (AP MN + AP ME) del asiento y de ctamov Anita.',
+                'Los comprobantes en BORRADOR se listan aparte: todavía no se contabilizaron, no son un desvío de cuadre.',
                 'El debe a anticipo de una factura anticipada no se netea contra la CC; se controla aparte vs ctamov.',
                 'Importes en $ con la cotización de la operación. Haber suma, Debe resta.',
                 'No incluye OPA ni aplicaciones: solo comprobantes de proveedor.',

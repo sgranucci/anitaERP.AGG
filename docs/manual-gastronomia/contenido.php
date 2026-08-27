@@ -225,8 +225,8 @@ return [
             'titulo' => '11. Informe gerente',
             'herramientas_clave' => 'informe_gerente',
             'parrafos' => [
-                'Dashboard gerencial por empresa y fecha de jornada. Ruta: ventas/gastronomia/informe-gerente.',
-                'Muestra total de ventas netas de la jornada, top 10 artículos por cantidad y por valor, distribución por categoría, medios de pago y gráficos comparativos.',
+                'Dashboard gerencial por empresa y rango de fechas de jornada. Ruta: ventas/gastronomia/informe-gerente.',
+                'Muestra total de ventas netas del período, top 10 artículos por cantidad y por valor, distribución por turno, punto de venta, medio de pago (torta con %) y descuentos, más recepciones y gráficos comparativos.',
             ],
             'items' => [
                 'Seleccione empresa y fecha de jornada en la cabecera y presione Generar.',

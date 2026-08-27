@@ -250,6 +250,105 @@ final class GastronomiaInformeGerenteQuery
     }
 
     /**
+     * Facturación cobrada del período, agrupada por cuenta de caja (medio de pago).
+     * Une cobranzas por venta_id y por caja_movimiento.venta_id sin duplicar líneas.
+     *
+     * @return list<array{cuentacaja_id:int,codigo:string,nombre:string,etiqueta:string,total:float,cantidad:int,porcentaje:float}>
+     */
+    public function ventasPorMedioPago(int $empresaId, string $fechaDesde, string $fechaHasta): array
+    {
+        $viaCobranzaDirecta = $this->baseEmisionesPeriodo($empresaId, $fechaDesde, $fechaHasta)
+            ->join('cobranza as cob', 'cob.venta_id', '=', 'v.id')
+            ->join('caja_movimiento as cm', 'cm.cobranza_id', '=', 'cob.id')
+            ->join('caja_movimiento_cuentacaja as cmc', 'cmc.caja_movimiento_id', '=', 'cm.id')
+            ->join('cuentacaja as cc', 'cc.id', '=', 'cmc.cuentacaja_id')
+            ->select([
+                'cmc.id as linea_id',
+                'cc.id as cuentacaja_id',
+                'cc.codigo',
+                'cc.nombre',
+                'cmc.monto',
+                'cm.cobranza_id',
+            ]);
+
+        $viaCajaMovimiento = $this->baseEmisionesPeriodo($empresaId, $fechaDesde, $fechaHasta)
+            ->join('caja_movimiento as cm', function ($join) {
+                $join->on('cm.venta_id', '=', 'v.id')
+                    ->whereNotNull('cm.cobranza_id')
+                    ->where('cm.cobranza_id', '>', 0);
+            })
+            ->join('caja_movimiento_cuentacaja as cmc', 'cmc.caja_movimiento_id', '=', 'cm.id')
+            ->join('cuentacaja as cc', 'cc.id', '=', 'cmc.cuentacaja_id')
+            ->select([
+                'cmc.id as linea_id',
+                'cc.id as cuentacaja_id',
+                'cc.codigo',
+                'cc.nombre',
+                'cmc.monto',
+                'cm.cobranza_id',
+            ]);
+
+        $rows = DB::query()
+            ->fromSub($viaCobranzaDirecta->union($viaCajaMovimiento), 'mp')
+            ->select([
+                'mp.cuentacaja_id',
+                'mp.codigo',
+                'mp.nombre',
+                DB::raw('COALESCE(SUM(mp.monto), 0) as total'),
+                DB::raw('COUNT(DISTINCT mp.cobranza_id) as cantidad'),
+            ])
+            ->groupBy('mp.cuentacaja_id', 'mp.codigo', 'mp.nombre')
+            ->orderByDesc('total')
+            ->get();
+
+        $filas = [];
+        $totalAbs = 0.0;
+        foreach ($rows as $row) {
+            $importe = round((float) $row->total, 2);
+            if (abs($importe) <= 0.0001) {
+                continue;
+            }
+            $codigo = trim((string) ($row->codigo ?? ''));
+            $nombre = trim((string) ($row->nombre ?? ''));
+            $etiqueta = $codigo !== ''
+                ? ($nombre !== '' ? $codigo.' — '.$nombre : $codigo)
+                : ($nombre !== '' ? $nombre : 'Medio #'.(int) $row->cuentacaja_id);
+            $filas[] = [
+                'cuentacaja_id' => (int) $row->cuentacaja_id,
+                'codigo' => $codigo,
+                'nombre' => $nombre !== '' ? $nombre : $etiqueta,
+                'etiqueta' => $etiqueta,
+                'total' => $importe,
+                'cantidad' => (int) $row->cantidad,
+                'porcentaje' => 0.0,
+            ];
+            $totalAbs += abs($importe);
+        }
+
+        if ($totalAbs > 0.0001) {
+            foreach ($filas as &$fila) {
+                $fila['porcentaje'] = round((abs($fila['total']) / $totalAbs) * 100, 1);
+            }
+            unset($fila);
+        }
+
+        return $filas;
+    }
+
+    /**
+     * @return \Illuminate\Database\Query\Builder
+     */
+    private function baseEmisionesPeriodo(int $empresaId, string $fechaDesde, string $fechaHasta)
+    {
+        return DB::table('venta_gastronomia_emision as vge')
+            ->join('venta as v', 'v.id', '=', 'vge.venta_id')
+            ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
+            ->where('pv.empresa_id', $empresaId)
+            ->whereDate('v.fechajornada', '>=', $fechaDesde)
+            ->whereDate('v.fechajornada', '<=', $fechaHasta);
+    }
+
+    /**
      * @return Collection<int, object>
      */
     private function ventanasTurnoOperativoRango(int $empresaId, string $fechaDesde, string $fechaHasta): Collection

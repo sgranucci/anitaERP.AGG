@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Models\Compras\Tiposervicio_Proveedor;
 use App\Models\Ventas\Formapago;
 use App\Rules\Compras\RuleProveedor;
+use App\Support\Configuracion\LocalidadProvinciaSupport;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -23,6 +24,14 @@ class ValidacionProveedor extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $localidadId = LocalidadProvinciaSupport::idConFallback(
+            $this->input('localidad_id'),
+            $this->input('localidad_id_previa')
+        );
+        if ($localidadId !== null) {
+            $this->merge(['localidad_id' => $localidadId]);
+        }
+
         if (! config('proveedor.filtro_empresa')) {
             $this->request->remove('empresa_id');
 

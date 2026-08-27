@@ -48,6 +48,7 @@ final class GastronomiaInformeGerenteService
         }
 
         $descuentos = $this->query->facturasPorDescuento($empresaId, $desde, $hasta);
+        $porMedioPago = $this->query->ventasPorMedioPago($empresaId, $desde, $hasta);
         $top20ArticulosCosto = $this->topArticulosService->top20DelPeriodoConCostos($empresaId, $desde, $hasta);
         $recepciones = $this->recepcionesAnita->resumen($empresaId, $desde, $hasta);
 
@@ -80,6 +81,7 @@ final class GastronomiaInformeGerenteService
             'top10_mes_cantidad' => $topMesCantidad,
             'ventas_por_turno' => $porTurno,
             'ventas_por_puntoventa' => $porPv,
+            'ventas_por_medio_pago' => $porMedioPago,
             'facturas_por_descuento' => $descuentos,
             'top20_articulos_costo' => $top20ArticulosCosto,
             'recepciones' => $recepciones,
@@ -87,6 +89,7 @@ final class GastronomiaInformeGerenteService
             'charts' => [
                 'turno' => $this->pieDesdeFilas($porTurno, 'etiqueta', 'total'),
                 'puntoventa' => $this->pieDesdeFilas($porPv, 'nombre', 'total'),
+                'medio_pago' => $this->pieDesdeFilas($porMedioPago, 'etiqueta', 'total'),
                 'descuento' => $this->pieDescuentos($descuentos),
                 'recepciones_dia' => $this->pieRecepcionesPorProveedor($recepciones['dia'] ?? []),
                 'recepciones_mes' => $this->pieRecepcionesPorProveedor($recepciones['mes'] ?? []),

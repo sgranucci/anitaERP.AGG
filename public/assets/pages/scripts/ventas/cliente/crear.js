@@ -248,18 +248,12 @@
             if (target === '#tab-lugares-entrega') {
                 activaEventoEntrega();
 
-                $("#tbody-tabla .localidades").each(function(index) {
-                    var provincia = $(this).parents("tr").find(".provincias");
-                    var localidad = $(this).parents("tr").find(".localidades");
-                    completarLocalidadesEntrega(provincia);
-
-                    var localidad_id_previa = $(this).parents("tr").find(".localidad_id_previas").val();
-                    if (localidad_id_previa != "") {
-                        setTimeout(() => {
-                            $(localidad).val(localidad_id_previa);
-                            $("this option[value="+localidad_id_previa+"]").attr("selected",true);
-                        }, 1000);
-                    }
+                $("#tbody-tabla .localidades").each(function() {
+                    var $tr = $(this).closest("tr");
+                    completarLocalidadesEntrega(
+                        $tr.find(".provincias"),
+                        $tr.find(".localidad_id_previas").val()
+                    );
                 });
             }
 

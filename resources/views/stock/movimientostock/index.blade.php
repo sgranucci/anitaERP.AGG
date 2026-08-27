@@ -11,7 +11,7 @@
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/movimientostock/filtro.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/stock/movimientostock/revertir.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/movimientostock/revertir.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/movimientostock/revertir.js')) ?: time() }}" type="text/javascript"></script>
 @php $surmarImprimir = session('surmar_imprimir_etiquetas', []); @endphp
 @if (is_array($surmarImprimir) && count($surmarImprimir))
 <script>

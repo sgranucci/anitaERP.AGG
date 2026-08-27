@@ -3,9 +3,11 @@
 namespace App\Support\Stock;
 
 use App\Models\Stock\Articulo;
+use App\Models\Stock\Articulo_Proveedor;
 
 /**
- * Resolución de artículo para el pickeo de transferencia (SKU o código de barras).
+ * Resolución de artículo para el pickeo de transferencia
+ * (SKU, código de barras del artículo o del catálogo proveedor).
  */
 final class TransferenciaMercaderiaPickeoSupport
 {
@@ -52,7 +54,69 @@ final class TransferenciaMercaderiaPickeoSupport
             return $porBarra;
         }
 
+        $porCatalogo = self::resolverPorCatalogoProveedor($variantes);
+        if ($porCatalogo !== null) {
+            return $porCatalogo;
+        }
+
         return self::resolverPorCampo('skualternativo', $variantes);
+    }
+
+    /**
+     * Código de barras o código de artículo cargado en la solapa Proveedores.
+     *
+     * @param  list<string>  $variantes
+     */
+    private static function resolverPorCatalogoProveedor(array $variantes): ?Articulo
+    {
+        if ($variantes === []) {
+            return null;
+        }
+
+        $normas = [];
+        foreach ($variantes as $valor) {
+            $norm = ArticuloSkuMatchSupport::normalizar($valor);
+            if ($norm !== '') {
+                $normas[] = $norm;
+            }
+        }
+        $normas = array_values(array_unique($normas));
+
+        $filas = Articulo_Proveedor::query()
+            ->with('articulos')
+            ->where('activo', true)
+            ->where(function ($q) use ($variantes, $normas) {
+                $q->whereIn('codigobarra', $variantes)
+                    ->orWhereIn('codigo_articulo_proveedor', $variantes);
+                foreach ($normas as $norm) {
+                    $q->orWhereRaw('UPPER(TRIM(codigobarra)) = ?', [$norm])
+                        ->orWhereRaw('UPPER(TRIM(codigo_articulo_proveedor)) = ?', [$norm]);
+                }
+            })
+            ->orderByDesc('preferido')
+            ->orderBy('id')
+            ->get();
+
+        $elegibles = [];
+        foreach ($filas as $fila) {
+            $articulo = $fila->articulos;
+            if (! ArticuloSeleccionOperativaSupport::esSeleccionable($articulo)) {
+                continue;
+            }
+            $elegibles[(int) $articulo->id] = $articulo;
+        }
+
+        if ($elegibles === []) {
+            return null;
+        }
+
+        if (count($elegibles) === 1) {
+            return array_values($elegibles)[0];
+        }
+
+        $sku = (string) (array_values($elegibles)[0]->sku ?? '');
+
+        return ArticuloSkuMatchSupport::resolverCanonico($sku) ?? array_values($elegibles)[0];
     }
 
     /**

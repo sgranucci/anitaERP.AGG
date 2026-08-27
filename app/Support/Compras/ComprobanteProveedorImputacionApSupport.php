@@ -353,6 +353,46 @@ final class ComprobanteProveedorImputacionApSupport
         ];
     }
 
+    public static function esBorrador(?string $estado): bool
+    {
+        return strtoupper(trim((string) $estado)) === ComprobanteProveedorEstados::BORRADOR;
+    }
+
+    /**
+     * El control diario no trata un BORRADOR como desvío: aún no se contabilizó.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @return array{
+     *     ok: list<array<string, mixed>>,
+     *     desvios: list<array<string, mixed>>,
+     *     borradores: list<array<string, mixed>>
+     * }
+     */
+    public static function particionarControlDiario(array $filas): array
+    {
+        $ok = [];
+        $desvios = [];
+        $borradores = [];
+
+        foreach ($filas as $fila) {
+            if (self::esBorrador((string) ($fila['estado'] ?? ''))) {
+                $borradores[] = $fila;
+                continue;
+            }
+            if (! empty($fila['ok'])) {
+                $ok[] = $fila;
+                continue;
+            }
+            $desvios[] = $fila;
+        }
+
+        return [
+            'ok' => $ok,
+            'desvios' => $desvios,
+            'borradores' => $borradores,
+        ];
+    }
+
     /**
      * Factura anticipada: haber AP + debe anticipo (cubeta mixta) y el AP cuadra con el total.
      */

@@ -3,6 +3,7 @@
 
     var filas = [];
     var cargando = false;
+    var grabandoTransferencia = false;
 
     function depositoSalidaId() {
         return parseInt($('#deposito_salida_id').val(), 10) || 0;
@@ -379,6 +380,7 @@
         }
         $.post(window.TM_URLS.preferencias, {
             _token: $('meta[name="csrf-token"]').attr('content'),
+            empresa_id: empresaId() || '',
             deposito_salida_id: tipoOrigenBienUso() ? '' : (depositoSalidaId() || ''),
             deposito_entrada_id: tipoDestinoBienUso() ? '' : (depositoEntradaId() || ''),
             bien_uso_destino_id: tipoDestinoBienUso() ? (bienUsoDestinoId() || '') : '',
@@ -393,14 +395,49 @@
         $e.toggleClass('text-danger', !!esError);
     }
 
-    function mostrarAlertaBanner(mensaje, titulo) {
-        $('#tm_alerta_titulo').text(titulo || 'No se pudo completar la operación');
+    var alertaOnCerrar = null;
+
+    function mostrarAlertaGrabando(mensaje) {
+        alertaOnCerrar = null;
+        var $alert = $('#tm_alerta_overlay .alert');
+        $alert.removeClass('alert-danger alert-success').addClass('alert-warning');
+        $('#tm_alerta_cerrar').hide();
+        $('#tm_alerta_titulo').text('Grabando transferencia');
+        $('#tm_alerta_texto').text(mensaje || 'Enviando… Esperá, no toques de nuevo.');
+        $('#tm_alerta_overlay')
+            .addClass('tm-alerta-visible tm-alerta-bloqueante')
+            .attr('aria-busy', 'true');
+    }
+
+    function mostrarAlertaBanner(mensaje, titulo, esOk, onCerrar) {
+        var $alert = $('#tm_alerta_overlay .alert');
+        var ok = !!esOk;
+        $alert.removeClass('alert-warning alert-danger alert-success');
+        $alert.toggleClass('alert-danger', !ok);
+        $alert.toggleClass('alert-success', ok);
+        $('#tm_alerta_cerrar')
+            .show()
+            .toggleClass('btn-danger', !ok)
+            .toggleClass('btn-success', ok);
+        $('#tm_alerta_titulo').text(titulo || (ok ? 'Transferencia generada' : 'No se pudo completar la operación'));
         $('#tm_alerta_texto').text(mensaje || '');
-        $('#tm_alerta_overlay').addClass('tm-alerta-visible');
+        alertaOnCerrar = typeof onCerrar === 'function' ? onCerrar : null;
+        $('#tm_alerta_overlay')
+            .addClass('tm-alerta-visible')
+            .removeClass('tm-alerta-bloqueante')
+            .removeAttr('aria-busy');
     }
 
     function ocultarAlertaBanner() {
+        if ($('#tm_alerta_overlay').hasClass('tm-alerta-bloqueante')) {
+            return;
+        }
         $('#tm_alerta_overlay').removeClass('tm-alerta-visible');
+        var fn = alertaOnCerrar;
+        alertaOnCerrar = null;
+        if (fn) {
+            fn();
+        }
     }
 
     function consultarSaldoErp(articuloId, done) {
@@ -457,9 +494,15 @@
         var n = lineasConCantidad().length;
         var $btn = $('#tm_btn_transferir');
         var bloqueadoContable = tipoManejaContabilidad() && !tipoOrigenBienUso() && !todasLineasContablesValidas();
-        $btn.prop('disabled', n === 0 || cargando || bloqueadoContable);
-        var label = tipoRequiereAprobacion() ? 'Enviar (' + n + ')' : 'Transferir (' + n + ')';
-        $btn.text(label);
+        var ocupado = cargando || grabandoTransferencia;
+        $btn.prop('disabled', n === 0 || ocupado || bloqueadoContable);
+        if (cargando && grabandoTransferencia) {
+            $btn.text('Grabando…');
+        } else {
+            var label = tipoRequiereAprobacion() ? 'Enviar (' + n + ')' : 'Transferir (' + n + ')';
+            $btn.text(label);
+        }
+        $('#tm_btn_camara_otro').toggle(filas.length > 0);
     }
 
     function urlConsultaArticulo(id) {
@@ -481,6 +524,31 @@
         setTimeout(function () {
             $pickeo.trigger('focus').trigger('select');
         }, 0);
+    }
+
+    function cerrarCamaraTrasPickeo() {
+        if (typeof window.tmCerrarCamaraPickeo === 'function') {
+            window.tmCerrarCamaraPickeo();
+        }
+    }
+
+    function focarCantidadArticulo(articuloId) {
+        setTimeout(function () {
+            var $input = $('#tm_lista .tm-item[data-articulo-id="' + articuloId + '"] .tm-cant');
+            if (!$input.length) {
+                return;
+            }
+            var el = $input[0];
+            $input.trigger('focus');
+            try {
+                el.select();
+            } catch (e) {
+                // ignore
+            }
+            if (el.scrollIntoView) {
+                el.scrollIntoView({ block: 'center' });
+            }
+        }, 280);
     }
 
     function vibrarPickeo(ok) {
@@ -581,7 +649,7 @@
         })
             .done(function (resp) {
                 if (!resp || !resp.ok) {
-                    var msgNo = 'Se leyó ' + codigo + '. No hay un artículo activo con ese SKU o código de barras.';
+                    var msgNo = 'Se leyó ' + codigo + '. No hay un artículo activo con ese SKU, código de barras o código de proveedor.';
                     if (resp && resp.mensaje) {
                         msgNo = 'Se leyó ' + codigo + '. ' + resp.mensaje;
                     }
@@ -598,7 +666,7 @@
                 });
             })
             .fail(function (xhr) {
-                var msg = 'Se leyó ' + codigo + '. No hay un artículo activo con ese SKU o código de barras.';
+                var msg = 'Se leyó ' + codigo + '. No hay un artículo activo con ese SKU, código de barras o código de proveedor.';
                 if (xhr.responseJSON && xhr.responseJSON.mensaje) {
                     msg = 'Se leyó ' + codigo + '. ' + xhr.responseJSON.mensaje;
                 }
@@ -610,9 +678,6 @@
                 cargando = false;
                 $('#tm_btn_pickeo').prop('disabled', false);
                 actualizarBotonTransferir();
-                if (!camaraPickeoActiva()) {
-                    focarPickeo();
-                }
             });
     }
 
@@ -644,8 +709,11 @@
             resaltarCard(f.articulo_id);
         }
         actualizarBotonTransferir();
-        setEstado((f.sku || '') + ' — cantidad ' + f.cantidad + ' (saldo ' + max + ')');
+        setEstado('Mismo artículo: cantidad ' + f.cantidad + ' (saldo ' + max + ').');
         vibrarPickeo(true);
+        $('#tm_pickeo_codigo').val('');
+        cerrarCamaraTrasPickeo();
+        focarCantidadArticulo(f.articulo_id);
         return true;
     }
 
@@ -762,16 +830,38 @@
         f.pieza = parseFloat(f.pieza) || 0;
         f.saldo = saldo;
         filas.unshift(f);
-        renderLista(filas);
+        renderLista(filas, { omitirFocoPickeo: true });
         resaltarCard(articuloId);
         setEstado((f.sku || '') + ' — cantidad 1 (saldo ' + saldo + ')');
         vibrarPickeo(true);
-        if (!camaraPickeoActiva()) {
-            focarPickeo();
-        }
+        $('#tm_pickeo_codigo').val('');
+        cerrarCamaraTrasPickeo();
+        focarCantidadArticulo(articuloId);
     }
 
-    function renderLista(data) {
+    function ajustarCantidadArticulo(articuloId, delta) {
+        var f = filas.find(function (x) {
+            return parseInt(x.articulo_id, 10) === parseInt(articuloId, 10);
+        });
+        if (!f) {
+            return;
+        }
+        var max = cantidadMaximaFila(f);
+        var actual = parseFloat(f.cantidad) || 0;
+        var siguiente = actual + delta;
+        if (siguiente < 0) {
+            siguiente = 0;
+        }
+        if (max > 0 && siguiente > max + 0.000001) {
+            siguiente = max;
+        }
+        f.cantidad = siguiente;
+        var $card = $('#tm_lista .tm-item[data-articulo-id="' + articuloId + '"]');
+        $card.find('.tm-cant').val(siguiente > 0 ? siguiente : '').trigger('change');
+        focarCantidadArticulo(articuloId);
+    }
+
+    function renderLista(data, opts) {
         filas = data || [];
         var $lista = $('#tm_lista').empty();
 
@@ -781,6 +871,7 @@
             );
             $('#tm_panel_filtro').hide();
             actualizarBotonTransferir();
+            $('#tm_btn_camara_otro').hide();
             return;
         }
 
@@ -857,13 +948,31 @@
                 .prop('disabled', sinErp)
                 .val(cantidad > 0 ? cantidad : '')
                 .attr('placeholder', '0');
-            var $btnTodo = $('<button type="button" class="btn btn-outline-primary btn-sm ml-2"/>')
+            var $btnMenos = $('<button type="button" class="btn btn-outline-secondary tm-cant-step"/>')
+                .attr('title', 'Bajar cantidad')
+                .prop('disabled', sinErp)
+                .text('−')
+                .on('click', function () {
+                    ajustarCantidadArticulo(articuloId, -1);
+                });
+            var $btnMas = $('<button type="button" class="btn btn-outline-secondary tm-cant-step"/>')
+                .attr('title', 'Subir cantidad')
+                .prop('disabled', sinErp || saldo <= 0)
+                .text('+')
+                .on('click', function () {
+                    ajustarCantidadArticulo(articuloId, 1);
+                });
+            var $btnTodo = $('<button type="button" class="btn btn-outline-primary btn-sm"/>')
                 .text('Todo')
                 .prop('disabled', sinErp || saldo <= 0)
                 .on('click', function () {
                     $input.val(saldo).trigger('change');
+                    focarCantidadArticulo(articuloId);
                 });
-            $cantRow.append($('<div class="d-flex align-items-center"/>').append($input, $btnTodo));
+            $cantRow.append(
+                $('<div class="d-flex align-items-center tm-cant-wrap"/>')
+                    .append($btnMenos, $input, $btnMas, $btnTodo)
+            );
             $card.append($cantRow);
 
             if (mostrarCajaPieza() && !sinErp) {
@@ -899,7 +1008,9 @@
         });
 
         aplicarFiltro();
-        focarFiltroSku();
+        if (!opts || !opts.omitirFocoPickeo) {
+            focarFiltroSku();
+        }
     }
 
     function cargarInventario() {
@@ -971,6 +1082,10 @@
     }
 
     function grabarTransferencia() {
+        if (grabandoTransferencia || cargando) {
+            return;
+        }
+
         var depSal = depositoSalidaId();
         var depEnt = depositoEntradaId();
         var bienDest = bienUsoDestinoId();
@@ -1060,10 +1175,15 @@
             lineas: lineas,
         };
 
+        grabandoTransferencia = true;
+        actualizarBotonTransferir();
+
         if (tipoAvisoOpcional() && typeof window.msPreguntarEnvioAviso === 'function') {
             window.msPreguntarEnvioAviso(function (decision) {
                 if (decision === null) {
-                    return; // cancelado
+                    grabandoTransferencia = false;
+                    actualizarBotonTransferir();
+                    return;
                 }
                 ejecutarGrabado(contexto, decision);
             });
@@ -1088,6 +1208,8 @@
             ? '¿Confirma el envío de ' + lineas.length + ' artículo(s)? Quedará pendiente de aprobación.'
             : '¿Confirma la transferencia de ' + lineas.length + ' artículo(s)?';
         if (!confirm(msgConfirm)) {
+            grabandoTransferencia = false;
+            actualizarBotonTransferir();
             return;
         }
 
@@ -1101,6 +1223,7 @@
         cargando = true;
         actualizarBotonTransferir();
         setEstado('Grabando movimiento de stock…');
+        mostrarAlertaGrabando('Enviando la transferencia.\nEsperá, no toques Transferir de nuevo: el celular puede tardar unos segundos.');
 
         $.ajax({
             url: window.TM_URLS.guardar,
@@ -1122,14 +1245,20 @@
         })
             .done(function (resp) {
                 if (resp.ok) {
-                    ocultarAlertaBanner();
-                    setEstado(resp.mensaje || 'Transferencia registrada.');
-                    if (resp.requiere_aprobacion) {
-                        window.location.href = $('a[href*="pendientes"]').attr('href') || window.location.href;
-                        return;
-                    }
+                    var codigo = resp.codigo || '';
+                    var msgOk = resp.mensaje || ('Se generó ' + (codigo || 'la transferencia') + '.');
+                    setEstado(msgOk);
                     vaciarListaPickeo();
-                    focarPickeo();
+                    mostrarAlertaBanner(msgOk, codigo ? ('Generada ' + codigo) : 'Transferencia generada', true, function () {
+                        if (resp.requiere_aprobacion) {
+                            var hrefPend = $('a[href*="pendientes"]').attr('href');
+                            if (hrefPend) {
+                                window.location.href = hrefPend;
+                                return;
+                            }
+                        }
+                        focarPickeo();
+                    });
                 } else {
                     var msgError = resp.mensaje || 'No se pudo grabar.';
                     setEstado(msgError, true);
@@ -1146,6 +1275,7 @@
             })
             .always(function () {
                 cargando = false;
+                grabandoTransferencia = false;
                 actualizarBotonTransferir();
             });
     }
@@ -1243,12 +1373,20 @@
             });
             vaciarListaPickeo();
             setEstado('');
+            guardarPreferencias();
         });
 
         $('#tm_btn_agregar_articulo, #tm_btn_pickeo_lupa').on('click', function () {
             abrirModalArticulo();
         });
 
+        $('#tm_btn_camara_otro').on('click', function () {
+            if (typeof window.tmAbrirCamaraPickeo === 'function') {
+                window.tmAbrirCamaraPickeo();
+            } else {
+                $('#tm_btn_camara').trigger('click');
+            }
+        });
         $('#tm_btn_pickeo').on('click', function () {
             resolverPickeo();
         });
@@ -1280,6 +1418,9 @@
         };
 
         $('#tm_alerta_cerrar, #tm_alerta_overlay').on('click', function (e) {
+            if ($('#tm_alerta_overlay').hasClass('tm-alerta-bloqueante')) {
+                return;
+            }
             if (e.target === this) {
                 ocultarAlertaBanner();
             }

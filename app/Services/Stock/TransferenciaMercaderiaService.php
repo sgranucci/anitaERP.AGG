@@ -46,6 +46,8 @@ use Illuminate\Support\Str;
 
 class TransferenciaMercaderiaService
 {
+    public const CACHE_EMPRESA = 'transferencia-empresa';
+
     public const CACHE_DEPOSITO_SALIDA = 'transferencia-deposito-salida';
 
     public const CACHE_DEPOSITO_ENTRADA = 'transferencia-deposito-entrada';
@@ -65,11 +67,22 @@ class TransferenciaMercaderiaService
         private AsientoReversoSupport $asientoReversoSupport,
     ) {}
 
-    public function defaultsUsuario(?int $empresaId = null): array
+    /**
+     * @param  list<int>  $empresaIdsPermitidos
+     * @return array{empresa_id: int|null, deposito_salida_id: int|null, deposito_entrada_id: int|null, bien_uso_destino_id: mixed, bien_uso_origen_id: mixed, tipotransaccion_stock_id: int|null}
+     */
+    public function defaultsUsuario(?int $empresaId = null, array $empresaIdsPermitidos = []): array
     {
         $empresaId = (int) $empresaId;
+        if ($empresaId <= 0) {
+            $empresaId = (int) cache()->get(generaKey(self::CACHE_EMPRESA));
+        }
+        if ($empresaIdsPermitidos !== [] && ($empresaId <= 0 || ! in_array($empresaId, $empresaIdsPermitidos, true))) {
+            $empresaId = (int) ($empresaIdsPermitidos[0] ?? 0);
+        }
 
         return [
+            'empresa_id' => $empresaId > 0 ? $empresaId : null,
             'deposito_salida_id' => $this->resolverDepositoDefaultId(
                 cache()->get(generaKey(self::CACHE_DEPOSITO_SALIDA)),
                 (string) config('stock.transferencia_pickeo.deposito_salida_codigo', '1'),
@@ -90,6 +103,10 @@ class TransferenciaMercaderiaService
 
     public function persistirPreferencias(array $data): void
     {
+        $empresaId = (int) ($data['empresa_id'] ?? 0);
+        if ($empresaId > 0) {
+            Cache::forever(generaKey(self::CACHE_EMPRESA), $empresaId);
+        }
         if (! empty($data['deposito_salida_id'])) {
             Cache::forever(generaKey(self::CACHE_DEPOSITO_SALIDA), (int) $data['deposito_salida_id']);
         }
@@ -166,7 +183,7 @@ class TransferenciaMercaderiaService
 
         $articulo = TransferenciaMercaderiaPickeoSupport::resolver($codigo);
         if ($articulo === null || ! ArticuloSeleccionOperativaSupport::esSeleccionable($articulo)) {
-            return ['ok' => false, 'mensaje' => 'No se encontró un artículo activo con ese SKU o código de barras.'];
+            return ['ok' => false, 'mensaje' => 'No se encontró un artículo activo con ese SKU, código de barras o código de proveedor.'];
         }
 
         $saldo = $this->saldoArticuloEnDeposito((int) $articulo->id, $depositoSalidaId);
@@ -618,8 +635,8 @@ class TransferenciaMercaderiaService
                 }
 
                 $mensaje = $requiereAprobacion
-                    ? 'Transferencia enviada. Pendiente de aprobación por el depósito destino ('.count($lineasResueltas).' artículos).'
-                    : 'Transferencia registrada ('.count($lineasResueltas).' artículos).';
+                    ? 'Se generó '.$codigoBase.'. Pendiente de aprobación por el depósito destino ('.count($lineasResueltas).' artículos).'
+                    : 'Se generó '.$codigoBase.' ('.count($lineasResueltas).' artículos).';
 
                 return [
                     'ok' => true,
@@ -1221,7 +1238,8 @@ class TransferenciaMercaderiaService
         array $payloadLineas,
         bool $esSalida,
         ?int $bienUsoId = null,
-        ?int $empresaId = null
+        ?int $empresaId = null,
+        bool $omitirValidacionSaldo = false
     ): array {
         $data = array_merge($payloadLineas, [
             'tipotransaccion_stock_id' => $tipotransaccionId,
@@ -1247,6 +1265,7 @@ class TransferenciaMercaderiaService
             'pedido' => '',
             'empresa' => config('app.empresa'),
             'omitir_asiento_contable' => true,
+            'omitir_validacion_saldo' => $omitirValidacionSaldo,
         ]);
 
         $resultado = $this->movimientoStockService->guardaMovimientoStock($data, 'create');
@@ -1490,7 +1509,8 @@ class TransferenciaMercaderiaService
     }
 
     /**
-     * Revierte una transferencia confirmada: movimientos inversos (insumo→compra si hubo fórmulas) y asiento al revés si es contable.
+     * Revierte una transferencia confirmada: deshace el -S y el -E por separado
+     * (mismas líneas de cada movimiento, signo invertido) y asiento al revés si es contable.
      */
     public function revertirTransferenciaConfirmada(int $id, ?string $fecha = null): Transferencia_Mercaderia
     {
@@ -1504,6 +1524,9 @@ class TransferenciaMercaderiaService
         }
         if ((int) ($transferencia->transferencia_origen_id ?? 0) > 0) {
             throw new \RuntimeException('No se puede revertir una transferencia que es compensación de otra.');
+        }
+        if ((int) ($transferencia->movimientostock_salida_id ?? 0) <= 0) {
+            throw new \RuntimeException('La transferencia no tiene movimiento de salida.');
         }
         if ((int) ($transferencia->movimientostock_entrada_id ?? 0) <= 0) {
             throw new \RuntimeException('La transferencia no tiene movimiento de entrada confirmado.');
@@ -1529,15 +1552,17 @@ class TransferenciaMercaderiaService
             throw new \RuntimeException('No se puede revertir: falta depósito origen de la transferencia original.');
         }
 
-        $lineasInvertidas = TransferenciaMercaderiaLineaReversoSupport::invertirLineas($transferencia->articulos->all());
-
-        if ($esDestinoBien) {
-            $this->validarCantidadesContraSaldoBien((int) $transferencia->bien_uso_destino_id, $lineasInvertidas);
-        } elseif ($esOrigenBien) {
-            $this->validarCantidadesContraSaldo((int) $transferencia->deposito_destino_id, $lineasInvertidas);
-        } else {
-            $this->validarCantidadesContraSaldo($depositoSalidaId, $lineasInvertidas);
+        $salidaOriginal = MovimientoStock::query()
+            ->with('articulos_movimiento')
+            ->find((int) $transferencia->movimientostock_salida_id);
+        $entradaOriginal = MovimientoStock::query()
+            ->with('articulos_movimiento')
+            ->find((int) $transferencia->movimientostock_entrada_id);
+        if ($salidaOriginal === null || $entradaOriginal === null) {
+            throw new \RuntimeException('No se encontraron los movimientos de la transferencia para revertir.');
         }
+
+        $reverso = TransferenciaMercaderiaLineaReversoSupport::desdeMovimientos($salidaOriginal, $entradaOriginal);
 
         $tipo = $transferencia->tipotransaccion_stock;
         $manejaContabilidad = TransferenciaMercaderiaAprobacionSupport::manejaContabilidad($tipo);
@@ -1553,7 +1578,7 @@ class TransferenciaMercaderiaService
 
         return DB::transaction(function () use (
             $transferencia,
-            $lineasInvertidas,
+            $reverso,
             $fechaOperacion,
             $lote,
             $codigoReverso,
@@ -1591,43 +1616,38 @@ class TransferenciaMercaderiaService
                 'transferencia_origen_id' => (int) $transferencia->id,
             ]);
 
-            $this->persistirLineasTransferencia($revert, $lineasInvertidas);
+            $this->persistirLineasTransferencia($revert, $reverso['lineas_documento']);
 
-            $payloadSalida = $this->armarPayloadMovimiento($lineasInvertidas, 'salida');
+            $depositoQuitarId = (int) $reverso['deposito_quitar_id'];
+            $bienQuitarId = (int) $reverso['bien_quitar_id'];
             $salida = $this->grabarMovimiento(
                 (int) $transferencia->tipotransaccion_stock_id,
-                $esDestinoBien
-                    ? null
-                    : ($esOrigenBien
-                        ? (int) $transferencia->deposito_destino_id
-                        : ($depositoSalidaId > 0 ? $depositoSalidaId : null)),
+                $depositoQuitarId > 0 ? $depositoQuitarId : null,
                 $fechaOperacion,
                 $lote,
                 $codigoReverso.'-S',
                 'Reversión: salida desde '.$etiquetaOrigenRev,
-                $payloadSalida,
+                $reverso['payload_quitar_destino'],
                 esSalida: true,
-                bienUsoId: $esDestinoBien ? (int) $transferencia->bien_uso_destino_id : null,
-                empresaId: (int) $transferencia->empresa_id
+                bienUsoId: $bienQuitarId > 0 ? $bienQuitarId : null,
+                empresaId: (int) $transferencia->empresa_id,
+                omitirValidacionSaldo: true
             );
             $revert->movimientostock_salida_id = (int) $salida['id'];
             $revert->save();
 
-            $payloadEntrada = $this->armarPayloadMovimiento($lineasInvertidas, 'entrada');
+            $depositoDevolverId = (int) $reverso['deposito_devolver_id'];
+            $bienDevolverId = (int) $reverso['bien_devolver_id'];
             $entrada = $this->grabarMovimiento(
                 (int) $transferencia->tipotransaccion_stock_id,
-                $esOrigenBien
-                    ? null
-                    : ($esDestinoBien
-                        ? (int) $transferencia->deposito_origen_id
-                        : ($depositoEntradaId > 0 ? $depositoEntradaId : null)),
+                $depositoDevolverId > 0 ? $depositoDevolverId : null,
                 $fechaOperacion,
                 $lote,
                 $codigoReverso.'-E',
                 'Reversión: ingreso a '.$etiquetaDestinoRev,
-                $payloadEntrada,
+                $reverso['payload_devolver_origen'],
                 esSalida: false,
-                bienUsoId: $esOrigenBien ? (int) $transferencia->bien_uso_origen_id : null,
+                bienUsoId: $bienDevolverId > 0 ? $bienDevolverId : null,
                 empresaId: (int) $transferencia->empresa_id
             );
             $revert->movimientostock_entrada_id = (int) $entrada['id'];

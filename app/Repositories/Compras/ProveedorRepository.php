@@ -26,6 +26,7 @@ use App\Repositories\Configuracion\LocalidadRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Support\Compras\ProveedorExclusionAnitaSupport;
+use App\Support\Configuracion\LocalidadProvinciaSupport;
 use App\Support\Compras\ProveedorListadoFiltros;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Models\Seguridad\Usuario;
@@ -135,6 +136,9 @@ class ProveedorRepository implements ProveedorRepositoryInterface
 
 		if ($data['retienesuss'] == null)
 			$data['retienesuss'] = 'N';
+
+		$data = LocalidadProvinciaSupport::aplicar($data);
+
         $proveedor = $this->model->create($data);
 
 		self::guardarAnita($data);
@@ -146,6 +150,7 @@ class ProveedorRepository implements ProveedorRepositoryInterface
     {
 		$data = \App\Support\Compras\ProveedorImpuestosRetencionRules::normalizar($data);
 		$data = $this->normalizarEmpresaId($data);
+		$data = LocalidadProvinciaSupport::aplicar($data);
 
         $proveedor = $this->model->findOrFail($id)
             ->update($data);

@@ -1,56 +1,46 @@
-// Carga de domicilio provincia/localidad/codigo postal
-// Para abm de clientes en carga de lugares de Entrega sobre tabla
+// Localidad de lugares de entrega (ABM cliente)
 
-    function completarLocalidadesEntrega(provincia){
-        var loc_id;
-		var provincia_id = $(provincia).val();
-        $.get(carpetaBase+'/configuracion/leerlocalidades/'+provincia_id, function(data){
-            var loc = $.map(data, function(value, index){
-                return [value];
-            });
-			$(provincia).parents("tr").find(".localidades").empty();
-			$(provincia).parents("tr").find(".localidades").append('<option value=""></option>');
-            $.each(loc, function(index,value){
-				$(provincia).parents("tr").find(".localidades").append('<option value="'+value.id+'">'+value.nombre+'</option>');
-            });
-        });
-        setTimeout(() => {
-                var loc_id = $(provincia).parents("tr").find(".localidades").val();
-				var codigopostal = $(provincia).parents("tr").find(".codigospostales");
-                if (loc_id != undefined) {
-                    completarCPEntrega(loc_id, codigopostal);
-                }
-        }, 3000);
+    function completarLocalidadesEntrega(provincia, localidadIdSeleccionar) {
+        var $prov = $(provincia);
+        var $tr = $prov.closest('tr');
+        var $sel = $tr.find('.localidades');
+        var restaurar = localidadIdSeleccionar !== undefined
+            ? localidadIdSeleccionar
+            : $tr.find('.localidad_id_previas').val();
+        var key = 'entrega-' + $tr.index();
+        LocalidadCascada.completar(
+            $sel,
+            $prov.val(),
+            restaurar,
+            $tr.find('.desc_localidades').val(),
+            key
+        );
     }
 
-    function completarCPEntrega(localidad_id, codigopostal){
-        $.get(carpetaBase+'/configuracion/leercodigopostal/'+localidad_id, function(data){
-            if(data!=0){
-                $(codigopostal).val(data);
+    function completarCPEntrega(localidad_id, codigopostal) {
+        LocalidadCascada.completarCP(localidad_id, $(codigopostal));
+    }
+
+    function activaEventoEntrega() {
+        $(".provincias").off('change.localidadCascada');
+        $(".localidades").off('change.localidadCascada');
+
+        $(".provincias").on('change.localidadCascada', function () {
+            completarLocalidadesEntrega(this, '');
+        });
+
+        $(".localidades").on('change.localidadCascada', function () {
+            var $sel = $(this);
+            var $tr = $sel.closest('tr');
+            var localidad_id = $sel.val();
+            $tr.find('.localidad_id_previas').val(localidad_id || '');
+            $tr.find('.desc_localidades').val($sel.children('option:selected').text());
+            if (!$sel.data('aplicandoLocalidadCascada')) {
+                completarCPEntrega(localidad_id, $tr.find('.codigospostales'));
             }
         });
+
+        if (typeof activa_eventos_consultazonavta === 'function') {
+            activa_eventos_consultazonavta();
+        }
     }
-
-	function activaEventoEntrega()
-	{
-		$(".provincias").off('change');
-		$(".localidades").off('change');
-
-       	$(".provincias").on('change', function() {
-           	var  provincia = $(this);
-           	completarLocalidadesEntrega(provincia);
-       	});
-	
-       	$(".localidades").change(function(){
-           	var localidad_id = $(this).val();
-			var codigopostal = $(this).parents("tr").find(".codigospostales");
-			var localidad_id_previa = $(this).parents("tr").find(".localidad_id_previas");
-
-			$(localidad_id_previa).val(localidad_id);
-           	completarCPEntrega(localidad_id, codigopostal);
-       	});
-
-		if (typeof activa_eventos_consultazonavta === 'function') {
-			activa_eventos_consultazonavta();
-		}
-	}

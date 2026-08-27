@@ -1,0 +1,25 @@
+# Certificado autofirmado para probar HTTPS en 10.20.30.210.
+# No es de una CA pública: el teléfono va a mostrar aviso.
+
+[req]
+default_bits       = 2048
+prompt             = no
+default_md         = sha256
+distinguished_name = dn
+x509_extensions    = v3_req
+
+[dn]
+C  = AR
+O  = AnitaERP
+OU = Prueba camara pickeo
+CN = 10.20.30.210
+
+[v3_req]
+basicConstraints     = CA:FALSE
+keyUsage             = digitalSignature, keyEncipherment
+extendedKeyUsage     = serverAuth
+subjectAltName       = @alt_names
+
+[alt_names]
+IP.1  = 10.20.30.210
+DNS.1 = anitaERP

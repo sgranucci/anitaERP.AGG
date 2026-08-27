@@ -273,6 +273,23 @@ class ComprobanteProveedorImputacionApSupportTest extends TestCase
         $this->assertNull(ComprobanteProveedorImputacionApSupport::clasificarCodigo(111010001, $catalogo));
     }
 
+    public function test_borrador_no_cuenta_como_desvio(): void
+    {
+        $partes = ComprobanteProveedorImputacionApSupport::particionarControlDiario([
+            ['estado' => 'CONTABILIZADO', 'ok' => true, 'comprobante_etiqueta' => 'OK-1'],
+            ['estado' => 'BORRADOR', 'ok' => false, 'comprobante_etiqueta' => 'FGA A 0006-481'],
+            ['estado' => 'CONTABILIZADO', 'ok' => false, 'comprobante_etiqueta' => 'DESVIO-1'],
+        ]);
+
+        $this->assertCount(1, $partes['ok']);
+        $this->assertCount(1, $partes['desvios']);
+        $this->assertCount(1, $partes['borradores']);
+        $this->assertSame('FGA A 0006-481', $partes['borradores'][0]['comprobante_etiqueta']);
+        $this->assertSame('DESVIO-1', $partes['desvios'][0]['comprobante_etiqueta']);
+        $this->assertTrue(ComprobanteProveedorImputacionApSupport::esBorrador('borrador'));
+        $this->assertFalse(ComprobanteProveedorImputacionApSupport::esBorrador('CONTABILIZADO'));
+    }
+
     /**
      * @return array{mn: array<int, true>, me: array<int, true>, anticipo: array<int, true>}
      */

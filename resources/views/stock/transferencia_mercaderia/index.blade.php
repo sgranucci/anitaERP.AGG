@@ -119,6 +119,17 @@
         min-height: 2.75rem;
         max-width: 6rem;
     }
+    .tm-cant-step {
+        min-width: 2.75rem;
+        min-height: 2.75rem;
+        padding: 0;
+        font-size: 1.45rem;
+        font-weight: 700;
+        line-height: 1;
+    }
+    .tm-cant-wrap {
+        gap: 0.3rem;
+    }
     .tm-item input.tm-caja,
     .tm-item input.tm-pieza {
         font-size: 1.05rem;
@@ -130,11 +141,15 @@
         background: #fff;
         border-top: 1px solid #dee2e6;
     }
-    .tm-barra .btn-transferir {
+    .tm-barra .btn-transferir,
+    .tm-barra .btn-camara-otro {
         font-size: 1.1rem;
         font-weight: 700;
         min-height: 3rem;
         width: 100%;
+    }
+    .tm-barra .btn-camara-otro {
+        margin-bottom: 0.5rem;
     }
     .tm-vacio {
         text-align: center;
@@ -153,6 +168,9 @@
     }
     .tm-alerta-overlay.tm-alerta-visible {
         display: flex;
+    }
+    .tm-alerta-overlay.tm-alerta-bloqueante {
+        z-index: 1080;
     }
     .tm-alerta-banner {
         max-width: min(92vw, 540px);
@@ -194,16 +212,35 @@
         padding: 0.6rem 0.75rem;
         background: #1a1a1a;
     }
-    .tm-camara-reader {
+    .tm-camara-reader-wrap {
         flex: 1 1 auto;
         min-height: 220px;
         position: relative;
+        overflow: hidden;
+        background: #000;
+    }
+    .tm-camara-reader {
+        width: 100%;
+        height: 100%;
+        min-height: 220px;
     }
     .tm-camara-reader video,
     .tm-camara-reader canvas {
         width: 100% !important;
         height: 100% !important;
         object-fit: cover;
+    }
+    .tm-camara-mira {
+        position: absolute;
+        left: 6%;
+        right: 6%;
+        top: 34%;
+        height: 22%;
+        border: 2px solid #4caf50;
+        border-radius: 10px;
+        pointer-events: none;
+        box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.28);
+        z-index: 2;
     }
     .tm-camara-footer {
         padding: 0.75rem;
@@ -253,15 +290,15 @@
 @section('scripts')
 <script>
     window.TM_URLS = {
-        inventario: @json(route('transferencia_mercaderia_inventario')),
-        preferencias: @json(route('transferencia_mercaderia_preferencias')),
-        guardar: @json(route('transferencia_mercaderia_guardar')),
-        destinatarios: @json(route('transferencia_mercaderia_destinatarios')),
-        validarLineaContable: @json(route('transferencia_mercaderia_validar_linea_contable')),
-        saldoArticulo: @json(route('transferencia_mercaderia_saldo_articulo')),
-        resolverArticulo: @json(route('transferencia_mercaderia_resolver_articulo')),
-        decodificarFoto: @json(route('transferencia_mercaderia_decodificar_foto')),
-        articuloConsultaUrl: {!! json_encode(route('editar_articulo', ['id' => '__ID__', 'origen' => 'modal_consulta', 'vista' => 'consulta'])) !!},
+        inventario: @json(urlAppDesdeRoute('transferencia_mercaderia_inventario')),
+        preferencias: @json(urlAppDesdeRoute('transferencia_mercaderia_preferencias')),
+        guardar: @json(urlAppDesdeRoute('transferencia_mercaderia_guardar')),
+        destinatarios: @json(urlAppDesdeRoute('transferencia_mercaderia_destinatarios')),
+        validarLineaContable: @json(urlAppDesdeRoute('transferencia_mercaderia_validar_linea_contable')),
+        saldoArticulo: @json(urlAppDesdeRoute('transferencia_mercaderia_saldo_articulo')),
+        resolverArticulo: @json(urlAppDesdeRoute('transferencia_mercaderia_resolver_articulo')),
+        decodificarFoto: @json(urlAppDesdeRoute('transferencia_mercaderia_decodificar_foto')),
+        articuloConsultaUrl: @json(urlAppDesdeRoute('editar_articulo', ['id' => '__ID__']).'?origen=modal_consulta&vista=consulta'),
     };
     window.TM_CAJA_PIEZA = @json(\App\Support\Stock\UnidadesCajaPiezaSupport::mostrarEnTransferencia());
 </script>
@@ -464,7 +501,7 @@
                         </button>
                     </div>
                     <small class="text-muted d-block mt-1">
-                        Cámara (en HTTP abre la cámara del celular y saca foto), lector Bluetooth o SKU a mano.
+                        Cámara en vivo (HTTPS). Tras cada lectura se cierra para cargar la cantidad. El mismo código otra vez suma 1. «Leer otro artículo» para seguir.
                     </small>
                 </div>
 
@@ -477,6 +514,9 @@
                 <div id="tm_lista" class="tm-lista"></div>
 
                 <div class="tm-barra">
+                    <button type="button" id="tm_btn_camara_otro" class="btn btn-outline-success btn-camara-otro" style="display:none;">
+                        <i class="fa fa-camera"></i> Leer otro artículo
+                    </button>
                     <button type="button" id="tm_btn_transferir" class="btn btn-success btn-transferir" disabled>
                         Transferir (0)
                     </button>
@@ -493,7 +533,10 @@
             Cerrar
         </button>
     </div>
-    <div id="tm_camara_reader" class="tm-camara-reader"></div>
+    <div class="tm-camara-reader-wrap">
+        <div id="tm_camara_reader" class="tm-camara-reader"></div>
+        <div id="tm_camara_mira" class="tm-camara-mira d-none" aria-hidden="true"></div>
+    </div>
     <img id="tm_camara_preview" alt="Foto del código">
     <div id="tm_camara_reader_foto"></div>
     <div class="tm-camara-footer">
@@ -501,7 +544,7 @@
         <div id="tm_camara_codigos"></div>
         <div id="tm_camara_foto_wrap" class="d-none">
             <button type="button" id="tm_btn_otra_foto" class="btn btn-warning btn-block">
-                <i class="fa fa-camera"></i> Sacar otra foto
+                <i class="fa fa-camera"></i> Sacar foto
             </button>
         </div>
     </div>

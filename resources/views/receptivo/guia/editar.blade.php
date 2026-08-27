@@ -6,7 +6,8 @@
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/receptivo/guia/crear.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/admin/domicilio.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/admin/localidad-cascada.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/admin/localidad-cascada.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/admin/domicilio.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/admin/domicilio.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')

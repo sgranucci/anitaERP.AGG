@@ -154,12 +154,47 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
         $origen = ClienteUifOrigenPcSupport::origenDeCliente($cliente) ?? 'biyemas';
 
         try {
-            ClienteUifArchivoStorage::withOrigen($origen, function () use ($clienteId, $inro) {
+            ClienteUifArchivoStorage::withOrigen($origen, function () use ($clienteId, $inro, $cliente) {
                 $this->cliente_archivo_uifRepository->traerArchivosDeAnita($clienteId, $inro);
+                $this->relinkFotodocumentoDesdeDisco($cliente);
             });
         } catch (Throwable $e) {
             // No bloquear la edición si el montaje Anita no responde; el banner sigue indicando faltantes.
             report($e);
+        }
+    }
+
+    /**
+     * Si fotodocumento está vacío o el archivo no está en disco, busca el DNI
+     * en /scan (incl. Kandiko/rebisco) y lo referencia en BD.
+     */
+    private function relinkFotodocumentoDesdeDisco(Cliente_Uif $cliente_uif): void
+    {
+        $cid = (int) $cliente_uif->id;
+        $nroDocumento = trim((string) ($cliente_uif->numerodocumento ?? ''));
+        $inro = (int) ($cliente_uif->inroclienteid ?? 0);
+        $inroclienteidParaGuardar = $inro > 0 ? $inro : null;
+        $storedBasename = trim((string) ($cliente_uif->fotodocumento ?? ''));
+        $resolvedPath = $storedBasename !== ''
+            ? ClienteUifFotoDocumento::absolutePathForBasename($storedBasename)
+            : null;
+        if ($resolvedPath !== null && is_file($resolvedPath)) {
+            ClienteUifFotoDocumento::promoverADniMountCanonico($resolvedPath, $nroDocumento);
+
+            return;
+        }
+        $path = ClienteUifFotoDocumento::findFirstMatchingPath($nroDocumento, $inroclienteidParaGuardar);
+        $fotoBasename = null;
+        if ($path !== null && is_file($path)) {
+            $promoted = ClienteUifFotoDocumento::promoverADniMountCanonico($path, $nroDocumento);
+            $fotoBasename = basename(($promoted !== null && is_file($promoted)) ? $promoted : $path);
+        }
+        if ($fotoBasename === null && $cid > 0 && $nroDocumento !== '') {
+            $fotoBasename = ClienteUifFotoDocumento::copyFirstClienteAdjuntoImageToFotodocumento($cid, $nroDocumento);
+        }
+        if ($fotoBasename !== null && $fotoBasename !== $storedBasename) {
+            $cliente_uif->update(['fotodocumento' => $fotoBasename]);
+            $cliente_uif->fotodocumento = $fotoBasename;
         }
     }
 
@@ -402,17 +437,19 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                 $tipodocumento_id = $tipodocumento->id;
             }
 
-            // Lee la localidad de nacimiento
+            // Lee la localidad de nacimiento (y la provincia, que Anita no manda aparte)
+            $localidadNacimiento_id = null;
+            $provinciaNacimiento_id = null;
             try {
                 $localidad = $this->localidad_uifRepository->findPorCodigo($data->ilocalidadnac);
 
-                $localidadNacimiento_id = null;
-
                 if ($localidad) {
                     $localidadNacimiento_id = $localidad->id;
+                    $provinciaNacimiento_id = $localidad->provincia_uif_id ? (int) $localidad->provincia_uif_id : null;
                 }
             } catch (Exception $e) {
                 $localidadNacimiento_id = null;
+                $provinciaNacimiento_id = null;
             }
 
             // Lee pais de nacimiento
@@ -616,6 +653,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
                 'cuit' => $data->ccuit,
                 'fechanacimiento' => $data->ifechanac,
                 'localidadnacimiento_id' => $localidadNacimiento_id,
+                'provincianacimiento_id' => $provinciaNacimiento_id,
                 'paisnacimiento_id' => $paisNacimiento_id,
                 'sexo' => $sexo,
                 'estadocivil_uif_id' => $estadoCivil_id,
@@ -785,22 +823,8 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
             );
 
             // Foto DNI: referenciar archivo en montaje / legacy; reparar basename si en BD no coincide con disco.
-            $cid = (int) $cliente_uif->id;
-            $storedBasename = trim((string) ($cliente_uif->fotodocumento ?? ''));
-            $resolvedPath = $storedBasename !== ''
-                ? ClienteUifFotoDocumento::absolutePathForBasename($storedBasename)
-                : null;
-            if ($resolvedPath === null || ! is_file($resolvedPath)) {
-                $path = ClienteUifFotoDocumento::findFirstMatchingPath($nroDocumento, $inroclienteidParaGuardar);
-                $fotoBasename = ($path !== null && is_file($path)) ? basename($path) : null;
-                if ($fotoBasename === null) {
-                    $fotoBasename = ClienteUifFotoDocumento::copyFirstClienteAdjuntoImageToFotodocumento($cid, $nroDocumento);
-                }
-                if ($fotoBasename !== null && $fotoBasename !== $storedBasename) {
-                    $cliente_uif->update(['fotodocumento' => $fotoBasename]);
-                    $cliente_uif = $cliente_uif->fresh();
-                }
-            }
+            $this->relinkFotodocumentoDesdeDisco($cliente_uif);
+            $cliente_uif = $cliente_uif->fresh() ?? $cliente_uif;
         }
     }
 

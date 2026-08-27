@@ -56,8 +56,16 @@ return [
 	 */
 	'anita_uif_archivos' => [
 		'mount' => env('ANITA_UIF_ARCHIVOS_MOUNT', '/scan/uif/archivos'),
-		/* DNI PDF (Anita: /scan/tesoreria/dni_uif/{nro}.pdf). */
+		/* DNI canónico: /scan/tesoreria/dni_uif/{nro}.pdf. Altas y relink copian aquí. */
 		'dni_mount' => env('ANITA_UIF_DNI_MOUNT', '/scan/tesoreria/dni_uif'),
+		/*
+		 * Lectura legacy: Rebisco/Kandiko dejaron el PDF en subcarpetas.
+		 * Si falta en la raíz, se copia (sin pisar). Relativas a dni_mount.
+		 */
+		'dni_extra_dirs' => array_values(array_filter(array_map(
+			'trim',
+			explode(',', (string) env('ANITA_UIF_DNI_EXTRA_DIRS', 'Kandiko/rebisco,Kandiko/DNI'))
+		))),
 		'sistema' => env('ANITA_UIF_ARCHIVOS_SISTEMA', 'base_admin'),
 		'tabla_cliente' => env('ANITA_UIF_ARCHIVOS_TABLA_CLIENTE', ''),
 		'campos_cliente' => env('ANITA_UIF_ARCHIVOS_CAMPOS_CLIENTE', 'inroclienteid, inrolinea, carchivo'),

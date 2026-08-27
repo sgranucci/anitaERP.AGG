@@ -1,5 +1,8 @@
 # HTTPS para anitaERP (test .211 → luego prod .210)
 
+> **Prueba por IP en .210 (cámara pickeo, sin tocar HTTP ni `.env`)**:
+> [`README-HTTPS-IP-210.md`](README-HTTPS-IP-210.md).
+
 > **El Bierzo (público `anitaerp.elbierzo.com.ar`)**: guía completa en
 > [`README-HTTPS-EL-BIERZO.md`](README-HTTPS-EL-BIERZO.md)
 > (conf `anitaERP-anitaerp-elbierzo-com-ar-ssl.conf` + script aplicar).

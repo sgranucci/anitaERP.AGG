@@ -463,8 +463,10 @@ final class ArticuloPrecioUltimaCompraSupport
             ];
         }
 
-        $recepcionesQuery = DB::table('recepcion_proveedor_articulo as rpa')
-            ->join('recepcion_proveedor as rp', 'rp.id', '=', 'rpa.recepcion_proveedor_id')
+        $recepcionesQuery = DB::query()
+            ->from(DB::raw(
+                '`recepcion_proveedor_articulo` as `rpa` STRAIGHT_JOIN `recepcion_proveedor` as `rp` ON `rp`.`id` = `rpa`.`recepcion_proveedor_id`'
+            ))
             ->whereIn('rpa.articulo_id', $articuloIds)
             ->where('rp.estado', RecepcionProveedorEstados::CONFIRMADA)
             ->where('rp.tipo', Recepcion_Proveedor::TIPO_RECEPCION);

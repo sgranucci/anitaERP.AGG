@@ -94,12 +94,36 @@ Transferencia {{ $transferencia->codigo }}
                         @foreach ($transferencia->articulos as $item)
                             <tr>
                                 <td>{{ $item->item }}</td>
-                                <td>{{ $item->articuloOrigen->sku ?? '' }}</td>
-                                <td>{{ $item->articuloOrigen->descripcion ?? '' }}</td>
+                                <td>
+                                    @include('stock.partials.link_articulo_consulta', [
+                                        'articuloId' => (int) ($item->articulo_origen_id ?? optional($item->articuloOrigen)->id ?? 0),
+                                        'texto' => $item->articuloOrigen->sku ?? '',
+                                        'titulo' => 'Consultar artículo origen',
+                                    ])
+                                </td>
+                                <td>
+                                    @include('stock.partials.link_articulo_consulta', [
+                                        'articuloId' => (int) ($item->articulo_origen_id ?? optional($item->articuloOrigen)->id ?? 0),
+                                        'texto' => $item->articuloOrigen->descripcion ?? '',
+                                        'titulo' => 'Consultar artículo origen',
+                                    ])
+                                </td>
                                 <td class="text-right">{{ number_format((float) $item->cantidad_origen, 2, ',', '.') }}</td>
                                 <td class="text-right">{{ number_format((float) $item->precio_costo_origen, 4, ',', '.') }}</td>
-                                <td>{{ $item->articuloDestino->sku ?? '' }}</td>
-                                <td>{{ $item->articuloDestino->descripcion ?? '' }}</td>
+                                <td>
+                                    @include('stock.partials.link_articulo_consulta', [
+                                        'articuloId' => (int) ($item->articulo_destino_id ?? optional($item->articuloDestino)->id ?? 0),
+                                        'texto' => $item->articuloDestino->sku ?? '',
+                                        'titulo' => 'Consultar artículo destino / insumo',
+                                    ])
+                                </td>
+                                <td>
+                                    @include('stock.partials.link_articulo_consulta', [
+                                        'articuloId' => (int) ($item->articulo_destino_id ?? optional($item->articuloDestino)->id ?? 0),
+                                        'texto' => $item->articuloDestino->descripcion ?? '',
+                                        'titulo' => 'Consultar artículo destino / insumo',
+                                    ])
+                                </td>
                                 <td class="text-right">{{ number_format((float) $item->cantidad_destino, 2, ',', '.') }}</td>
                                 <td class="text-right">{{ number_format((float) $item->precio_costo_destino, 4, ',', '.') }}</td>
                             </tr>
@@ -113,5 +137,5 @@ Transferencia {{ $transferencia->codigo }}
 @endsection
 
 @section('scripts')
-<script src="{{ asset('assets/pages/scripts/stock/movimientostock/revertir.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/movimientostock/revertir.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/movimientostock/revertir.js')) ?: time() }}" type="text/javascript"></script>
 @endsection

@@ -16,6 +16,10 @@ class MovimientoStockListadoFiltros
 
     public const MODO_CAMPO = 'campo';
 
+    public const SESSION_FILTROS = 'movimientostock_listado_filtros';
+
+    public const SESSION_FILTROS_SURMAR = 'movimiento_surmar_listado_filtros';
+
     /** @var array<string, array{column: string, type: string, label: string}> */
     public const CAMPOS = [
         'id' => ['column' => 'movimientostock.id', 'type' => 'entero', 'label' => 'ID'],
@@ -225,6 +229,63 @@ class MovimientoStockListadoFiltros
         }
 
         return $params;
+    }
+
+    public static function claveSesion(bool $modoSurmar = false): string
+    {
+        return $modoSurmar ? self::SESSION_FILTROS_SURMAR : self::SESSION_FILTROS;
+    }
+
+    /**
+     * true si la request trae parámetros de filtro/paginación del listado.
+     */
+    public static function requestTraeFiltros(Request $request): bool
+    {
+        foreach ([
+            'filtro_valor',
+            'filtro_campo',
+            'filtro_operador',
+            'filtro_modo',
+            'filtro_valor_hasta',
+            'filtro_busqueda_rapida',
+            'filtro_limpiar',
+            'deposito_id',
+            'empresa_id',
+            'empresa_todas',
+            'empresa_scope',
+            'page',
+        ] as $key) {
+            if ($request->query->has($key)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @param  array<string, string|int|bool>  $filtrosQuery
+     */
+    public static function persistir(array $filtrosQuery, bool $modoSurmar = false): void
+    {
+        $clave = self::claveSesion($modoSurmar);
+        if ($filtrosQuery === []) {
+            session()->forget($clave);
+
+            return;
+        }
+
+        session([$clave => $filtrosQuery]);
+    }
+
+    /**
+     * @return array<string, string|int|bool>
+     */
+    public static function guardados(bool $modoSurmar = false): array
+    {
+        $guardados = session(self::claveSesion($modoSurmar), []);
+
+        return is_array($guardados) ? $guardados : [];
     }
 
     /**

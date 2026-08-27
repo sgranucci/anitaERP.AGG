@@ -19,6 +19,7 @@ use App\Services\Uif\ClienteUifFotoDocumento;
 use App\Services\Uif\ClienteUifSexoAprendizajeService;
 use App\Support\Uif\ClienteUifArchivoStorage;
 use App\Support\Uif\ClienteUifCamposPorDefecto;
+use App\Support\Uif\ClienteUifLocalidadSupport;
 use App\Support\Uif\ClienteUifOrigenPcSupport;
 use App\Models\Uif\Cliente_Uif;
 use App\Models\Uif\Cliente_Premio_Uif;
@@ -102,6 +103,7 @@ class Cliente_UifService
 			}
 
 			$data = ClienteUifCamposPorDefecto::aplicarEnAlta($data);
+			$data = ClienteUifLocalidadSupport::aplicar($data);
 
 			$cliente_uif = $this->cliente_uifRepository->create($data);
 
@@ -184,6 +186,7 @@ class Cliente_UifService
 			}
 
 			$data = ClienteUifCamposPorDefecto::aplicarEnActualizacion($data);
+			$data = ClienteUifLocalidadSupport::aplicar($data);
 
 			$actualizarRiesgo = ! esCajeroUifSinSupervisor();
 

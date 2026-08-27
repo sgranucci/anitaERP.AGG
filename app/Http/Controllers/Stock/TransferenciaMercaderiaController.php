@@ -40,8 +40,12 @@ class TransferenciaMercaderiaController extends Controller
 
         $tipotransacciones = $this->tipotransaccionStockRepository->all(['T'], ['A']);
         $empresa_query = $this->empresaRepository->allFiltrado();
-        $empresa_id = old('empresa_id', $empresa_query->first()->id ?? null);
-        $defaults = $this->transferenciaService->defaultsUsuario((int) $empresa_id);
+        $empresaIdsPermitidos = $empresa_query->pluck('id')->map(static fn ($id) => (int) $id)->all();
+        $defaults = $this->transferenciaService->defaultsUsuario(
+            old('empresa_id') !== null && old('empresa_id') !== '' ? (int) old('empresa_id') : null,
+            $empresaIdsPermitidos
+        );
+        $empresa_id = $defaults['empresa_id'] ?? $empresa_query->first()->id ?? null;
 
         $depSalida = $this->resolverDepositoDefault($defaults['deposito_salida_id'] ?? null, $empresa_id, true);
         $depEntrada = $this->resolverDepositoDefault($defaults['deposito_entrada_id'] ?? null, $empresa_id, false);
@@ -208,6 +212,7 @@ class TransferenciaMercaderiaController extends Controller
         can('crear-transferencia-mercaderia');
 
         $this->transferenciaService->persistirPreferencias($request->only([
+            'empresa_id',
             'deposito_salida_id',
             'deposito_entrada_id',
             'bien_uso_destino_id',

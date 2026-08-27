@@ -150,6 +150,36 @@
     <tr><td colspan="8">Sin puntos de venta.</td></tr>
 @endforelse
 
+{{-- Medio de pago --}}
+<tr><td colspan="8"></td></tr>
+<tr>
+    <td colspan="8"><strong>Facturación por medio de pago</strong></td>
+</tr>
+<tr>
+    <th>Código</th>
+    <th></th>
+    <th>Medio de pago</th>
+    <th>Cobranzas</th>
+    <th>%</th>
+    <th>Total cobrado</th>
+    <th></th>
+    <th></th>
+</tr>
+@forelse (($informe['ventas_por_medio_pago'] ?? []) as $fila)
+    <tr>
+        <td>{{ $fila['codigo'] !== '' ? $fila['codigo'] : '—' }}</td>
+        <td></td>
+        <td>{{ $fila['nombre'] ?? '' }}</td>
+        <td>{{ (int) ($fila['cantidad'] ?? 0) }}</td>
+        <td>{{ number_format((float) ($fila['porcentaje'] ?? 0), 1, ',', '.') }}%</td>
+        <td>{{ number_format((float) ($fila['total'] ?? 0), 2, ',', '.') }}</td>
+        <td></td>
+        <td></td>
+    </tr>
+@empty
+    <tr><td colspan="8">Sin cobranzas con medio de pago en el período.</td></tr>
+@endforelse
+
 {{-- Descuentos --}}
 <tr><td colspan="8"></td></tr>
 <tr>

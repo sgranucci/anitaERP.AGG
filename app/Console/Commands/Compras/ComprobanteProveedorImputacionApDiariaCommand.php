@@ -51,6 +51,7 @@ class ComprobanteProveedorImputacionApDiariaCommand extends Command
             [
                 ['Facturas', (string) ($totales['total_filas'] ?? 0)],
                 ['OK', (string) ($totales['ok'] ?? 0)],
+                ['En borrador', (string) ($totales['en_borrador'] ?? 0)],
                 ['Con desvío', (string) ($totales['con_desvio'] ?? 0)],
                 ['Sin CC', (string) ($totales['sin_cc'] ?? 0)],
                 ['Sin asiento', (string) ($totales['sin_asiento'] ?? 0)],
@@ -60,6 +61,15 @@ class ComprobanteProveedorImputacionApDiariaCommand extends Command
                 ['ctamov $', number_format((float) ($totales['ctamov_ars'] ?? 0), 2, ',', '.')],
             ],
         );
+
+        foreach (array_slice($informe['borradores'] ?? [], 0, 20) as $fila) {
+            $this->comment(sprintf(
+                'Borrador · %s %s | $ %s',
+                (string) ($fila['nombreempresa'] ?? ''),
+                (string) ($fila['comprobante_etiqueta'] ?? '#' . ($fila['id'] ?? '')),
+                number_format((float) ($fila['total_ars'] ?? $fila['total_origen'] ?? 0), 2, ',', '.'),
+            ));
+        }
 
         foreach (array_slice($informe['desvios'] ?? [], 0, 20) as $fila) {
             $this->warn(sprintf(

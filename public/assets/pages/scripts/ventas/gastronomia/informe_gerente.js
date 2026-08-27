@@ -14,7 +14,7 @@
         return Number(n || 0).toLocaleString('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
     }
 
-    function renderPie(canvasId, chartData) {
+    function renderPie(canvasId, chartData, options) {
         var canvas = document.getElementById(canvasId);
         if (!canvas || typeof Chart === 'undefined') {
             return;
@@ -22,6 +22,9 @@
 
         var labels = (chartData && chartData.labels) ? chartData.labels : [];
         var values = (chartData && chartData.values) ? chartData.values : [];
+        var opts = options || {};
+        var chartType = opts.type || 'pie';
+        var withPct = !!opts.withPct;
 
         if (!labels.length) {
             var parent = canvas.parentElement;
@@ -36,7 +39,7 @@
         });
 
         new Chart(canvas.getContext('2d'), {
-            type: 'pie',
+            type: chartType,
             data: {
                 labels: labels,
                 datasets: [{
@@ -55,7 +58,16 @@
                         label: function (item, data) {
                             var label = data.labels[item.index] || '';
                             var val = data.datasets[0].data[item.index] || 0;
-                            return label + ': ' + fmtMoney(val);
+                            var text = label + ': ' + fmtMoney(val);
+                            if (withPct) {
+                                var total = (data.datasets[0].data || []).reduce(function (acc, n) {
+                                    return acc + Math.abs(Number(n) || 0);
+                                }, 0);
+                                if (total > 0) {
+                                    text += ' (' + ((Math.abs(val) / total) * 100).toFixed(1).replace('.', ',') + '%)';
+                                }
+                            }
+                            return text;
                         },
                     },
                 },
@@ -261,6 +273,7 @@
 
         renderPie('chart-ventas-turno', informe.charts.turno);
         renderPie('chart-ventas-pv', informe.charts.puntoventa);
+        renderPie('chart-medio-pago', informe.charts.medio_pago, { type: 'doughnut', withPct: true });
         renderPie('chart-descuentos', informe.charts.descuento);
         renderPie('chart-recepciones-dia', informe.charts.recepciones_dia);
         renderPie('chart-recepciones-mes', informe.charts.recepciones_mes);

@@ -122,6 +122,13 @@ final class GastronomiaInformeGerentePowerpointService
         );
         $this->agregarSlidePie(
             $presentation,
+            'Facturación por medio de pago',
+            $periodoLabel,
+            $charts['medio_pago'] ?? [],
+            'Total cobrado',
+        );
+        $this->agregarSlidePie(
+            $presentation,
             'Facturas por código de descuento',
             $periodoLabel,
             $charts['descuento'] ?? [],
@@ -312,6 +319,16 @@ final class GastronomiaInformeGerentePowerpointService
             $this->filasPuntoventa($informe['ventas_por_puntoventa'] ?? []),
             [70, 280, 100, 80, 150, 160],
             [false, false, true, true, true, true],
+        );
+
+        $this->agregarSlideTabla(
+            $presentation,
+            'Facturación por medio de pago',
+            $periodoLabel,
+            ['Código', 'Medio de pago', 'Cobranzas', '%', 'Total cobrado'],
+            $this->filasMedioPago($informe['ventas_por_medio_pago'] ?? []),
+            [100, 340, 140, 90, 210],
+            [false, false, true, true, true],
         );
 
         $this->agregarSlideTabla(
@@ -544,6 +561,27 @@ final class GastronomiaInformeGerentePowerpointService
                 (string) ((int) ($fila['cantidad_facturas'] ?? 0)),
                 (string) ((int) ($fila['cantidad_notas_credito'] ?? 0)),
                 $waitry > 0 ? $this->moneda($waitry) : '—',
+                $this->moneda((float) ($fila['total'] ?? 0)),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     * @return list<list<string>>
+     */
+    private function filasMedioPago(array $filas): array
+    {
+        $out = [];
+        foreach ($filas as $fila) {
+            $codigo = trim((string) ($fila['codigo'] ?? ''));
+            $out[] = [
+                $codigo !== '' ? $codigo : '—',
+                $this->truncar((string) ($fila['nombre'] ?? ''), 42),
+                (string) ((int) ($fila['cantidad'] ?? 0)),
+                number_format((float) ($fila['porcentaje'] ?? 0), 1, ',', '.').'%',
                 $this->moneda((float) ($fila['total'] ?? 0)),
             ];
         }

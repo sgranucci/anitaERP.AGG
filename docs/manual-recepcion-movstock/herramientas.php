@@ -252,7 +252,7 @@ return [
         [
             'herramienta' => 'Depósito salida / entrada',
             'ubicacion' => 'Cabecera sticky',
-            'accion' => 'Modal depósito; filtra por empresa del formulario.',
+            'accion' => 'Modal depósito; filtra por empresa del formulario. Se guarda al elegir (junto con empresa y tipo).',
             'permiso' => 'transferir-mercaderia-entre-depositos',
         ],
         [
@@ -270,7 +270,7 @@ return [
         [
             'herramienta' => 'Pickeo SKU / código de barras',
             'ubicacion' => 'Caja principal bajo la cabecera',
-            'accion' => 'Cámara (vivo o foto), lector Bluetooth o SKU + Enter. Suma 1 (tope = saldo). Rescan incrementa. F1 o lupa abre el modal.',
+            'accion' => 'Cámara en vivo (HTTPS, como un QR) o foto (HTTP). Al leer cierra la cámara y deja el foco en la cantidad (− / + o teclado). «Leer otro artículo» o Cámara suma más ítems. Lector Bluetooth o SKU + Enter. Busca SKU, barra del artículo o barra/código de la solapa Proveedores. Suma 1 (tope = saldo). F1 o lupa abre el modal.',
             'permiso' => 'crear-transferencia-mercaderia',
         ],
         [
@@ -288,7 +288,7 @@ return [
         [
             'herramienta' => 'Transferir (N)',
             'ubicacion' => $barraTransferencia,
-            'accion' => 'Envía transferencia con cantidades > 0.',
+            'accion' => 'Envía transferencia con cantidades > 0. Mientras graba bloquea el botón y muestra aviso para no tocar dos veces.',
             'permiso' => 'transferir-mercaderia-entre-depositos',
         ],
         [

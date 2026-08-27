@@ -6,7 +6,8 @@
 @section("scripts")
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/compras/proveedor/domicilio.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/admin/localidad-cascada.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/admin/localidad-cascada.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/compras/proveedor/domicilio.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/compras/proveedor/domicilio.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/proveedor/arca-padron.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/arca-padron-validacion-async.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/arca-apoc-validacion-async.js') }}" type="text/javascript"></script>

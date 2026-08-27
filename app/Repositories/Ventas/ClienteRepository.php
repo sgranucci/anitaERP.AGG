@@ -35,6 +35,7 @@ use App\Support\Ventas\ClienteAnitaNumeracionSupport;
 use App\Support\Ventas\ClienteAnitaVillafrancaSupport;
 use App\Support\Ventas\ClienteAnitaZonamultSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Configuracion\LocalidadProvinciaSupport;
 use App\Support\Ventas\ClienteCuentacontableDefaultSupport;
 use App\Support\Ventas\ClienteCoeficienteExtraSupport;
 use App\Support\Ventas\ClienteDespachoSupport;
@@ -104,7 +105,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 		if ($data['condicioniibb_id'] == null)
 			$data['condicioniibb_id'] = '4';
 
-		$data = $this->alinearProvinciaConLocalidad($data);
+		$data = LocalidadProvinciaSupport::aplicar($data);
 
         $cliente = $this->model->create($data);
 
@@ -129,7 +130,7 @@ class ClienteRepository implements ClienteRepositoryInterface
             $data['tiposuspension_id'] = null;
         }
 
-		$data = $this->alinearProvinciaConLocalidad($data);
+		$data = LocalidadProvinciaSupport::aplicar($data);
 
 		if (EntornoEmpresaSupport::esElBierzo()) {
 			if (array_key_exists('emitecertificado', $data)) {
@@ -1711,30 +1712,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 	 */
 	private function alinearProvinciaConLocalidad(array $data): array
 	{
-		$localidadId = (int) ($data['localidad_id'] ?? 0);
-		if ($localidadId <= 0) {
-			return $data;
-		}
-
-		$localidad = Localidad::query()
-			->with('provincias:id,nombre')
-			->find($localidadId);
-		if ($localidad === null || (int) $localidad->provincia_id <= 0) {
-			return $data;
-		}
-
-		$provinciaLocalidad = (int) $localidad->provincia_id;
-		if ((int) ($data['provincia_id'] ?? 0) === $provinciaLocalidad) {
-			return $data;
-		}
-
-		$data['provincia_id'] = $provinciaLocalidad;
-		$nombreProvincia = trim((string) ($localidad->provincias?->nombre ?? ''));
-		if ($nombreProvincia !== '') {
-			$data['desc_provincia'] = $nombreProvincia;
-		}
-
-		return $data;
+		return LocalidadProvinciaSupport::alinearProvinciaConLocalidad($data);
 	}
 
 	/**

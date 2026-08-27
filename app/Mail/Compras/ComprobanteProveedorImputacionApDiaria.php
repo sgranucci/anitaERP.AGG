@@ -23,7 +23,14 @@ class ComprobanteProveedorImputacionApDiaria extends Mailable
         $fecha = (string) ($this->informe['fecha_calendario'] ?? '');
         $alerta = ! empty($this->informe['requiere_alerta']);
         $desvios = (int) (($this->informe['totales']['con_desvio'] ?? 0));
-        $estado = $alerta ? 'ALERTA ('.$desvios.' desvíos)' : 'OK';
+        $borradores = (int) (($this->informe['totales']['en_borrador'] ?? 0));
+        if ($alerta) {
+            $estado = 'ALERTA ('.$desvios.' desvíos)';
+        } elseif ($borradores > 0) {
+            $estado = 'OK · '.$borradores.' en borrador';
+        } else {
+            $estado = 'OK';
+        }
 
         $asunto = sprintf(
             '[%s] CC / asiento / ctamov por factura — %s — %s',

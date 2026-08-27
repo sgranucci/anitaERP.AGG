@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Models\Uif\Cliente_Uif;
 use App\Repositories\Uif\Cliente_Riesgo_UifRepository;
+use App\Support\Uif\ClienteUifLocalidadSupport;
 use App\Support\Uif\ClienteUifOrigenPcSupport;
 use Illuminate\Foundation\Http\FormRequest;
 
@@ -32,6 +33,8 @@ class ValidacionCliente_Uif extends FormRequest
             'localidad_uif_id' => 'required|integer|exists:localidad_uif,id',
             'provincia_uif_id' => 'required|integer|exists:provincia_uif,id',
             'pais_uif_id' => 'required|integer|exists:pais_uif,id',
+            'provincianacimiento_id' => 'nullable|integer|exists:provincia_uif,id',
+            'localidadnacimiento_id' => 'nullable|integer|exists:localidad_uif,id',
             'actividad_uif_id' => 'required|integer|exists:actividad_uif,id',
             'pep_uif_id' => 'required|integer|exists:pep_uif,id',
             'so_uif_id' => 'required|integer|exists:so_uif,id',
@@ -179,10 +182,29 @@ class ValidacionCliente_Uif extends FormRequest
 
     protected function prepareForValidation()
     {
+        $merge = [];
+
         if ($this->has('numerodocumento')) {
-            $this->merge([
-                'numerodocumento' => trim((string) $this->input('numerodocumento')),
-            ]);
+            $merge['numerodocumento'] = trim((string) $this->input('numerodocumento'));
+        }
+
+        $localidadResidencia = ClienteUifLocalidadSupport::idConFallback(
+            $this->input('localidad_uif_id'),
+            $this->input('localidad_uif_id_previa')
+        );
+        if ($localidadResidencia !== null) {
+            $merge['localidad_uif_id'] = $localidadResidencia;
+        }
+
+        if ($this->exists('localidadnacimiento_id') || $this->exists('localidadnacimiento_id_previa')) {
+            $merge['localidadnacimiento_id'] = ClienteUifLocalidadSupport::idConFallback(
+                $this->input('localidadnacimiento_id'),
+                $this->input('localidadnacimiento_id_previa')
+            );
+        }
+
+        if ($merge !== []) {
+            $this->merge($merge);
         }
     }
 

@@ -13,13 +13,23 @@
             <input type="text" name="piezas[]" class="form-control form-control-sm cant-unidad text-right" value="{{ $cantUnidad ?? '' }}" autocomplete="off">
         </td>
         <td class="align-middle col-insumo-dest-celda ms-col-conversion-formula">
-            <input type="text"
-                   class="form-control form-control-sm ms-insumo-destino-sku"
-                   value="{{ $insumoDestinoSku ?? '' }}"
-                   readonly
-                   tabindex="-1"
-                   title="{{ $insumoDestinoDescripcion ?? '' }}"
-                   placeholder="—">
+            <div class="d-flex align-items-center flex-nowrap">
+                <a href="#"
+                   class="btn btn-xs btn-link-articulo-destino d-none flex-shrink-0"
+                   target="_blank"
+                   rel="noopener"
+                   title="Consultar artículo destino / insumo">
+                    <i class="fa fa-external-link text-primary"></i>
+                </a>
+                <input type="hidden" class="ms-articulo-destino-id" value="">
+                <input type="text"
+                       class="form-control form-control-sm ms-insumo-destino-sku flex-grow-1"
+                       value="{{ $insumoDestinoSku ?? '' }}"
+                       readonly
+                       tabindex="-1"
+                       title="{{ $insumoDestinoDescripcion ?? '' }}"
+                       placeholder="—">
+            </div>
         </td>
         <td class="align-middle ms-col-conversion-formula">
             <input type="text"

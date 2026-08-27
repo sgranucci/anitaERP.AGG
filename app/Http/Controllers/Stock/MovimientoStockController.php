@@ -101,16 +101,28 @@ class MovimientoStockController extends Controller
         $this->aplicarModoSurmarAlRequest($request);
 
         $empresaDefault = $this->empresaDefaultParaListado($request);
+        $modoSurmar = $this->esModoSurmar($request);
+
+        if (! MovimientoStockListadoFiltros::requestTraeFiltros($request)) {
+            $guardados = MovimientoStockListadoFiltros::guardados($modoSurmar);
+            if ($guardados !== []) {
+                return redirect()->route(
+                    $modoSurmar ? 'movimiento_surmar' : 'movimientostock',
+                    $guardados
+                );
+            }
+        }
+
         $filtros = MovimientoStockListadoFiltros::resolverDesdeRequest(
             $request,
             null,
             $empresaDefault
         );
+        $this->persistirFiltrosListado($request, $filtros, $modoSurmar);
         $datas = $this->movimientoStockService->leeMovimientoStockListado($filtros, true);
         $estado_enum = $this->movimientoStockService->estadoEnum();
         $empresa_query = $this->empresaRepository->allFiltrado();
         $deposito_query = $this->depmaeRepository->allFiltrado();
-        $modoSurmar = $this->esModoSurmar($request);
 
         return view('stock.movimientostock.index', [
             'datas' => $datas,
@@ -455,11 +467,7 @@ class MovimientoStockController extends Controller
             return redirect()->back()->with('mensaje', $e->getMessage());
         }
 
-        if ($request->ajax() || $request->wantsJson()) {
-            return response()->json(['mensaje' => 'ok', 'resultado' => $resultado]);
-        }
-
-        return redirect($this->urlIndexMovimientoStock($request))->with('mensaje', $resultado['mensaje'] ?? 'Movimiento revertido.');
+        return $this->respuestaRevertirOk($request, $resultado, 'Movimiento revertido.');
     }
 
     public function revertirTransferencia(Request $request, int $id)
@@ -479,11 +487,7 @@ class MovimientoStockController extends Controller
             return redirect()->back()->with('mensaje', $e->getMessage());
         }
 
-        if ($request->ajax() || $request->wantsJson()) {
-            return response()->json(['mensaje' => 'ok', 'resultado' => $resultado]);
-        }
-
-        return redirect('stock/movimientostock')->with('mensaje', $resultado['mensaje'] ?? 'Transferencia revertida.');
+        return $this->respuestaRevertirOk($request, $resultado, 'Transferencia revertida.');
     }
 
     public function previewAsientoContable(Request $request, ?int $id = null): JsonResponse
@@ -1098,10 +1102,57 @@ class MovimientoStockController extends Controller
         return $empresaDefault ? (int) $empresaDefault : null;
     }
 
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function persistirFiltrosListado(Request $request, array $filtros, bool $modoSurmar): void
+    {
+        if (! MovimientoStockListadoFiltros::requestTraeFiltros($request)) {
+            return;
+        }
+
+        $filtrosQuery = MovimientoStockListadoFiltros::paraQueryString($filtros);
+        $page = (int) $request->input('page', 0);
+        if ($page > 1) {
+            $filtrosQuery['page'] = $page;
+        }
+
+        MovimientoStockListadoFiltros::persistir($filtrosQuery, $modoSurmar);
+    }
+
     private function urlIndexMovimientoStock(?Request $request = null): string
     {
-        return $this->esModoSurmar($request)
-            ? route('movimiento_surmar', ['empresa_id' => SurmarSupport::EMPRESA_ID])
-            : url('stock/movimientostock');
+        $modoSurmar = $this->esModoSurmar($request);
+        $query = MovimientoStockListadoFiltros::guardados($modoSurmar);
+
+        if ($modoSurmar) {
+            return route('movimiento_surmar', array_merge(
+                ['empresa_id' => SurmarSupport::EMPRESA_ID],
+                $query
+            ));
+        }
+
+        return route('movimientostock', $query);
+    }
+
+    /**
+     * @param  array{mensaje?: string}  $resultado
+     */
+    private function respuestaRevertirOk(Request $request, array $resultado, string $fallback): \Illuminate\Http\RedirectResponse|\Illuminate\Http\JsonResponse
+    {
+        $urlIndex = $this->urlIndexMovimientoStock($request);
+        $texto = (string) ($resultado['mensaje'] ?? $fallback);
+
+        if ($request->ajax() || $request->wantsJson()) {
+            session()->flash('mensaje-aviso', $texto);
+
+            return response()->json([
+                'mensaje' => 'ok',
+                'redirect' => $urlIndex,
+                'resultado' => $resultado,
+            ]);
+        }
+
+        return redirect($urlIndex)->with('mensaje-aviso', $texto);
     }
 }

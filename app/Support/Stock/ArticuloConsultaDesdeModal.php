@@ -28,6 +28,8 @@ class ArticuloConsultaDesdeModal
             || can('editar-movimientos-de-stock', false)
             || can('actualizar-movimientos-de-stock', false)
             || can('crear-transferencia-mercaderia', false)
+            || can('listar-transferencia-mercaderia', false)
+            || can('listar-transferencias-pendientes', false)
             || can('listar-formula-articulo', false)
             || can('crear-formula-articulo', false)
             || can('editar-formula-articulo', false)

@@ -220,3 +220,34 @@
 .btn {
     border-radius: 0.3rem;
 }
+
+/* Celular: tipografía y toques a tamaño real. Escritorio no cambia. */
+@media (max-width: 767.98px) {
+    html {
+        -webkit-text-size-adjust: 100%;
+        text-size-adjust: 100%;
+    }
+    .main-header.navbar {
+        flex-wrap: nowrap;
+        min-height: 3.25rem;
+        padding-left: 0.2rem;
+        padding-right: 0.2rem;
+    }
+    .main-header .navbar-nav .nav-link {
+        padding: 0.65rem 0.55rem;
+        font-size: 1.05rem;
+    }
+    .main-header .navbar-nav .nav-link i {
+        font-size: 1.15rem;
+    }
+    .content-wrapper > .content {
+        padding: 0.45rem 0.35rem 1rem;
+    }
+    .content-wrapper > .content > .container-fluid {
+        padding-left: 0.25rem;
+        padding-right: 0.25rem;
+    }
+    .card-header {
+        padding: 0.6rem 0.7rem;
+    }
+}

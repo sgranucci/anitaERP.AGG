@@ -12,7 +12,7 @@ $modoConsulta = request()->input('vista') === 'consulta';
             </li>
         </ul>
         <!-- SEARCH FORM -->
-        <form class="form-inline ml-3">
+        <form class="form-inline ml-3 d-none d-md-flex">
             <div class="input-group input-group-sm">
                 <input class="form-control form-control-navbar" type="search" placeholder="Buscar" aria-label="Buscar">
                 <div class="input-group-append">
@@ -42,17 +42,17 @@ $modoConsulta = request()->input('vista') === 'consulta';
             @if (!$modoConsulta)
                 <li class="nav-item">
                     <a href="{{ $urlCentroAyuda }}" class="nav-link font-weight-bold" title="Manual de usuario del sistema" target="_blank" rel="noopener">
-                        <i class="fas fa-book-open"></i> Centro de ayuda
+                        <i class="fas fa-book-open"></i> <span class="d-none d-md-inline">Centro de ayuda</span>
                     </a>
                 </li>
                 <li class="nav-item dropdown">
-                    <a href="{{route('cambia_password')}}" class="nav-link">
-                        <i class="fa fa-lock"></i> Cambia password
+                    <a href="{{route('cambia_password')}}" class="nav-link" title="Cambia password">
+                        <i class="fa fa-lock"></i> <span class="d-none d-md-inline">Cambia password</span>
                     </a>
                 </li>
                 <li class="nav-item dropdown">
-                    <a class="nav-link" data-toggle="dropdown" href="#">
-                        <i class="far fa-user"></i> {{session()->get('nombre_usuario', 'Invitado')}} - {{session()->get('rol_nombre', 'Guest')}}
+                    <a class="nav-link" data-toggle="dropdown" href="#" title="{{session()->get('nombre_usuario', 'Invitado')}} - {{session()->get('rol_nombre', 'Guest')}}">
+                        <i class="far fa-user"></i> <span class="d-none d-md-inline">{{session()->get('nombre_usuario', 'Invitado')}} - {{session()->get('rol_nombre', 'Guest')}}</span>
                     </a>
                     <div class="dropdown-menu dropdown-menu-lg dropdown-menu-right">
                         <a href="{{route('logout')}}" class="nav-link">

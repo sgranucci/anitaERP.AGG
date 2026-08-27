@@ -6,8 +6,8 @@
 @section("scripts")
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/uif/cliente_uif/domicilio.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/uif/cliente_uif/domicilionacimiento.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/uif/cliente_uif/domicilio.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/uif/cliente_uif/domicilio.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/uif/cliente_uif/domicilionacimiento.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/uif/cliente_uif/domicilionacimiento.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/uif/actividad_uif/consulta.js")}}" type="text/javascript"></script>
 @include('uif.cliente_uif.partials.sexo_aprendizaje_script')
 <script src="{{asset("assets/pages/scripts/uif/cliente_uif/arca-padron.js")}}" type="text/javascript"></script>

@@ -1,65 +1,45 @@
-// Carga de domicilio provincia/localidad/codigo postal
-// Para abm de clientes en carga de lugares de entrega sobre tabla
+// Carga de domicilio provincia/localidad/codigo postal (ABM cliente)
 
-    function completarLocalidades(provincia_id){
-        var loc_id;
-        $.get(carpetaBase+'/configuracion/leerlocalidades/'+provincia_id, function(data){
-            var loc = $.map(data, function(value, index){
-                return [value];
-            });
-			$("#localidad_id").empty();
-			$("#localidad_id").append('<option value=""></option>');
-            $.each(loc, function(index,value){
-				$("#localidad_id").append('<option value="'+value.id+'">'+value.nombre+'</option>');
-            });
-        });
-        setTimeout(() => {
-                var loc_id = $("#localidad_id").val();
-                if (loc_id != undefined) {
-                    completarCP(loc_id);
-                }
-        }, 3000);
+    function completarLocalidades(provincia_id, localidadIdSeleccionar) {
+        var restaurar = localidadIdSeleccionar !== undefined
+            ? localidadIdSeleccionar
+            : $("#localidad_id_previa").val();
+        LocalidadCascada.completar(
+            $("#localidad_id"),
+            provincia_id,
+            restaurar,
+            $("#desc_localidad").val(),
+            'localidad_id'
+        );
     }
 
-    function completarCP(localidad_id){
-        $.get(carpetaBase+'/configuracion/leercodigopostal/'+localidad_id, function(data){
-            if(data!=0){
-                $("#codigopostal").val(data);
-            }
-        });
+    function completarCP(localidad_id) {
+        LocalidadCascada.completarCP(localidad_id, $("#codigopostal"));
     }
 
     $(function () {
-        $("#provincia_id").change(function(){
-            var  provincia_id = $(this).val();
-            completarLocalidades(provincia_id);
-        });
-
-        $("#localidad_id").change(function(){
-            var  localidad_id = $(this).val();
-            completarCP(localidad_id);
-        });
-
-        var  provincia_id = $("#provincia_id").val();
-        completarLocalidades(provincia_id);
-        if ($("#localidad_id_previa").val() != "") {
-           	setTimeout(() => {
-                   	$("#localidad_id").val($("#localidad_id_previa").val());
-           	}, 1000);
+        if (!$("#localidad_id").length) {
+            return;
         }
 
-		// Llena variable desc_localidad
-		$(document).on('change', '#localidad_id', function(event) {
-			var desc = $(this).children("option:selected").text();
-        	$("#desc_localidad").val(desc);
-		});
+        completarLocalidades($("#provincia_id").val(), $("#localidad_id_previa").val());
 
-		$(document).on('change', '#provincia_id', function(event) {
-			$('#desc_provincia').val($('#provincia_id option:selected').text());
-		});
+        $("#provincia_id").on('change', function () {
+            $('#desc_provincia').val($(this).children("option:selected").text());
+            completarLocalidades($(this).val(), '');
+        });
 
-		if ($('#provincia_id').val() && !$('#desc_provincia').val()) {
-			$('#desc_provincia').val($('#provincia_id option:selected').text());
-		}
+        $("#localidad_id").on('change', function () {
+            var $sel = $(this);
+            var localidad_id = $sel.val();
+            $("#localidad_id_previa").val(localidad_id || '');
+            $("#desc_localidad").val($sel.children("option:selected").text());
+            if (!$sel.data('aplicandoLocalidadCascada')) {
+                completarCP(localidad_id);
+            }
+        });
+
+        if ($('#provincia_id').val() && !$('#desc_provincia').val()) {
+            $('#desc_provincia').val($('#provincia_id option:selected').text());
+        }
     });
-

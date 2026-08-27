@@ -7,6 +7,7 @@ use App\Rules\Ventas\RuleCliente;
 use App\Rules\Ventas\RuleClienteDocumentoUnico;
 use App\Models\Ventas\Cliente;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Configuracion\LocalidadProvinciaSupport;
 
 class ValidacionCliente extends FormRequest
 {
@@ -77,6 +78,17 @@ class ValidacionCliente extends FormRequest
             }
 
             return $reglas;
+        }
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $localidadId = LocalidadProvinciaSupport::idConFallback(
+            $this->input('localidad_id'),
+            $this->input('localidad_id_previa')
+        );
+        if ($localidadId !== null) {
+            $this->merge(['localidad_id' => $localidadId]);
         }
     }
 }

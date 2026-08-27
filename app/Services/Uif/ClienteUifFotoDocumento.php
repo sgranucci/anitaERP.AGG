@@ -105,11 +105,28 @@ class ClienteUifFotoDocumento
     }
 
     /**
-     * Directorio de grabación: siempre {@see basePath()} (/scan) salvo fallback explícito en config.
+     * Directorio de grabación: {@see anitaDniMount()} si admite escritura;
+     * si no, la carpeta de fotos del origen (fotos_clientes / _KSA / _RSA).
      */
     public static function writableBasePath(): string
     {
+        $canonical = self::writableDniCanonicalPath();
+        if ($canonical !== null) {
+            return $canonical;
+        }
+
         return self::ensurePrimaryWritePathReady();
+    }
+
+    /** Raíz plana de DNI si existe y www-data puede escribir. */
+    public static function writableDniCanonicalPath(): ?string
+    {
+        $mount = self::anitaDniMount();
+        if ($mount === '' || ! is_dir($mount)) {
+            return null;
+        }
+
+        return self::directoryAcceptsUploads($mount) ? $mount : null;
     }
 
     /**
@@ -138,6 +155,168 @@ class ClienteUifFotoDocumento
         $cfg = config('uif.anita_uif_archivos', []);
 
         return rtrim((string) ($cfg['dni_mount'] ?? ''), DIRECTORY_SEPARATOR);
+    }
+
+    /**
+     * Subcarpetas de dni_mount (Rebisco/Kandiko guardan el PDF dos niveles más abajo).
+     *
+     * @return array<int, string>
+     */
+    public static function dniMountExtraRelDirs(): array
+    {
+        $defaults = ['Kandiko/rebisco', 'Kandiko/DNI'];
+        try {
+            $cfg = config('uif.anita_uif_archivos.dni_extra_dirs', $defaults);
+        } catch (\Throwable $e) {
+            return $defaults;
+        }
+
+        if (! is_array($cfg) || $cfg === []) {
+            return $defaults;
+        }
+
+        $out = [];
+        foreach ($cfg as $rel) {
+            $rel = trim(str_replace(['\\', '..'], ['/', ''], (string) $rel), '/');
+            if ($rel !== '') {
+                $out[] = $rel;
+            }
+        }
+
+        return $out !== [] ? array_values(array_unique($out)) : $defaults;
+    }
+
+    /**
+     * Busca {stem}.* en la raíz de dni_mount y en subcarpetas conocidas (Kandiko/rebisco, etc.).
+     */
+    public static function findInDniMountTree(string $dniMount, string $stem): ?string
+    {
+        $dniMount = rtrim($dniMount, DIRECTORY_SEPARATOR);
+        $stem = self::sanitizeNumeroDocumento($stem);
+        if ($dniMount === '' || $stem === '' || ! is_dir($dniMount)) {
+            return null;
+        }
+
+        $dirs = [$dniMount];
+        foreach (self::dniMountExtraRelDirs() as $rel) {
+            $dirs[] = $dniMount.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $rel);
+        }
+
+        foreach (array_unique($dirs) as $dir) {
+            $found = self::findFirstFileByStemGlob($dir, [$stem]);
+            if ($found !== null) {
+                return $found;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Busca un basename exacto en la raíz de dni_mount y en subcarpetas conocidas.
+     */
+    public static function findBasenameInDniMountTree(string $dniMount, string $basename): ?string
+    {
+        $dniMount = rtrim($dniMount, DIRECTORY_SEPARATOR);
+        $basename = basename($basename);
+        if ($dniMount === '' || $basename === '' || ! is_dir($dniMount)) {
+            return null;
+        }
+
+        $dirs = [$dniMount];
+        foreach (self::dniMountExtraRelDirs() as $rel) {
+            $dirs[] = $dniMount.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $rel);
+        }
+
+        foreach (array_unique($dirs) as $dir) {
+            $candidate = $dir.DIRECTORY_SEPARATOR.$basename;
+            if (is_file($candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Copia un DNI hallado en subcarpeta (o fotos_*) a dni_mount/{documento}.{ext}.
+     * No pisa un archivo que ya esté en la raíz (mismo DNI, otro scan).
+     */
+    public static function promoverADniMountCanonico(string $srcPath, string $numerodocumento, ?string $dniMount = null): ?string
+    {
+        $dniMount = rtrim((string) ($dniMount ?? self::anitaDniMount()), DIRECTORY_SEPARATOR);
+        $stem = self::sanitizeNumeroDocumento($numerodocumento);
+        if ($dniMount === '' || $stem === '' || ! is_file($srcPath) || ! is_readable($srcPath)) {
+            return null;
+        }
+        $ext = strtolower((string) pathinfo($srcPath, PATHINFO_EXTENSION));
+        if (! in_array($ext, self::EXTENSIONES_PERMITIDAS, true)) {
+            return null;
+        }
+
+        $dest = $dniMount.DIRECTORY_SEPARATOR.$stem.'.'.$ext;
+        $srcReal = realpath($srcPath) ?: $srcPath;
+        if (is_file($dest)) {
+            $destReal = realpath($dest) ?: $dest;
+
+            return $destReal;
+        }
+        if ($srcReal === $dest) {
+            return $srcReal;
+        }
+        if (! is_dir($dniMount) || ! is_writable($dniMount)) {
+            return null;
+        }
+        if (! @copy($srcPath, $dest)) {
+            return null;
+        }
+        @chmod($dest, 0664);
+
+        return $dest;
+    }
+
+    /**
+     * Copia a la raíz los PDF/imagen nombrados {DNI}.* que están en subcarpetas conocidas.
+     *
+     * @return array{copiados:int, ya_estaban:int, omitidos:int}
+     */
+    public static function promoverNumeradosDesdeExtraDirs(?string $dniMount = null): array
+    {
+        $dniMount = rtrim((string) ($dniMount ?? self::anitaDniMount()), DIRECTORY_SEPARATOR);
+        $stats = ['copiados' => 0, 'ya_estaban' => 0, 'omitidos' => 0];
+        if ($dniMount === '' || ! is_dir($dniMount)) {
+            return $stats;
+        }
+
+        foreach (self::dniMountExtraRelDirs() as $rel) {
+            $dir = $dniMount.DIRECTORY_SEPARATOR.str_replace('/', DIRECTORY_SEPARATOR, $rel);
+            if (! is_dir($dir)) {
+                continue;
+            }
+            foreach (scandir($dir, SCANDIR_SORT_NONE) ?: [] as $entry) {
+                if ($entry === '.' || $entry === '..') {
+                    continue;
+                }
+                if (! preg_match('/^(\d+)\.(pdf|jpe?g|png|gif|webp)$/i', $entry, $m)) {
+                    $stats['omitidos']++;
+                    continue;
+                }
+                $src = $dir.DIRECTORY_SEPARATOR.$entry;
+                if (! is_file($src)) {
+                    continue;
+                }
+                $dest = $dniMount.DIRECTORY_SEPARATOR.$entry;
+                if (is_file($dest)) {
+                    $stats['ya_estaban']++;
+                    continue;
+                }
+                if (self::promoverADniMountCanonico($src, $m[1], $dniMount) !== null && is_file($dest)) {
+                    $stats['copiados']++;
+                }
+            }
+        }
+
+        return $stats;
     }
 
     public static function sanitizeNumeroDocumento(string $numerodocumento): string
@@ -240,7 +419,7 @@ class ClienteUifFotoDocumento
             self::deleteStoredFile($previousBasename);
         }
 
-        $primary = self::ensurePrimaryWritePathReady();
+        $primary = self::writableBasePath();
         $saved = self::persistUploadToDirectory($file, $primary, $basename);
         if ($saved) {
             return $basename;
@@ -320,9 +499,9 @@ class ClienteUifFotoDocumento
 
         $dniMount = self::anitaDniMount();
         if ($dniMount !== '') {
-            $flat = $dniMount.DIRECTORY_SEPARATOR.$base;
-            if (is_file($flat)) {
-                return $flat;
+            $nested = self::findBasenameInDniMountTree($dniMount, $base);
+            if ($nested !== null) {
+                return $nested;
             }
             foreach (glob($dniMount.DIRECTORY_SEPARATOR.'*'.DIRECTORY_SEPARATOR.$base, GLOB_NOSORT) ?: [] as $p) {
                 if (is_file($p)) {
@@ -377,10 +556,9 @@ class ClienteUifFotoDocumento
 
         $dniMount = self::anitaDniMount();
         if ($dniMount !== '' && is_dir($dniMount)) {
-            foreach (glob($dniMount.DIRECTORY_SEPARATOR.$stem.'.*') ?: [] as $path) {
-                if (is_file($path)) {
-                    return $path;
-                }
+            $nested = self::findInDniMountTree($dniMount, $stem);
+            if ($nested !== null) {
+                return $nested;
             }
         }
 

@@ -395,7 +395,24 @@
 		}
 
 		if (df.localidad_id) {
+			setVal('localidad_id_previa', df.localidad_id);
+			const inicio = Date.now();
+			while (Date.now() - inicio < 7000) {
+				const loc = byId('localidad_id');
+				if (loc && loc.querySelector('option[value="' + String(df.localidad_id) + '"]')) {
+					break;
+				}
+				await new Promise(function (resolve) { setTimeout(resolve, 100); });
+			}
+			const loc = byId('localidad_id');
+			if (loc && !loc.querySelector('option[value="' + String(df.localidad_id) + '"]')) {
+				const opt = document.createElement('option');
+				opt.value = String(df.localidad_id);
+				opt.textContent = df.localidad || String(df.localidad_id);
+				loc.appendChild(opt);
+			}
 			setVal('localidad_id', df.localidad_id);
+			triggerChange('localidad_id');
 		}
 		if (df.localidad) {
 			setVal('desc_localidad', df.localidad);

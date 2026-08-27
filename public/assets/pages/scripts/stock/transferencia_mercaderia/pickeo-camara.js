@@ -2,10 +2,20 @@
     'use strict';
 
     var scanner = null;
+    var videoStream = null;
+    var detectTimer = null;
+    var iniciandoCamara = false;
     var ultimoCodigo = '';
     var ultimoTs = 0;
     var DEBOUNCE_MS = 1600;
     var MAX_LADO_FOTO = 1600;
+    var FORMATOS_DETECTOR = ['ean_13', 'ean_8', 'code_128', 'code_39', 'upc_a', 'upc_e', 'itf', 'qr_code'];
+
+    function puedeCamaraViva() {
+        return !!(window.isSecureContext
+            && navigator.mediaDevices
+            && typeof navigator.mediaDevices.getUserMedia === 'function');
+    }
 
     function formatosSoportados() {
         if (typeof Html5QrcodeSupportedFormats === 'undefined') {
@@ -114,8 +124,23 @@
         });
     }
 
+    function detenerStreamNativo() {
+        if (detectTimer) {
+            clearInterval(detectTimer);
+            detectTimer = null;
+        }
+        if (videoStream) {
+            videoStream.getTracks().forEach(function (track) {
+                track.stop();
+            });
+            videoStream = null;
+        }
+        $('#tm_camara_reader video').remove();
+    }
+
     function detenerScanner() {
         window.tmCamaraPickeoActiva = false;
+        detenerStreamNativo();
         if (!scanner) {
             return $.Deferred().resolve().promise();
         }
@@ -136,6 +161,7 @@
         detenerScanner().always(function () {
             $('#tm_camara_overlay').removeClass('tm-camara-visible');
             $('#tm_camara_foto_wrap').addClass('d-none');
+            $('#tm_camara_mira').addClass('d-none');
             mostrarPreview('');
             limpiarCodigosLeidos();
             setFeedback('');
@@ -150,26 +176,72 @@
         }
     }
 
-    function mostrarFotoFallback(motivo, abrirNativa) {
+    function mostrarFotoFallback(motivo) {
         window.tmCamaraPickeoActiva = true;
         $('#tm_camara_overlay').addClass('tm-camara-visible');
+        $('#tm_camara_mira').addClass('d-none');
         $('#tm_camara_foto_wrap').removeClass('d-none');
         setFeedback(motivo || 'Sacá una foto del código de barras.', false);
-        if (abrirNativa) {
-            abrirFotoNativa();
-        }
     }
 
-    function iniciarCamaraViva() {
-        window.tmCamaraPickeoActiva = true;
-        $('#tm_camara_overlay').addClass('tm-camara-visible');
-        $('#tm_camara_foto_wrap').addClass('d-none');
-        mostrarPreview('');
-        setFeedback('Apuntá al código de barras…');
+    function crearBarcodeDetector() {
+        if (typeof BarcodeDetector === 'undefined') {
+            return Promise.reject(new Error('sin BarcodeDetector'));
+        }
+        if (!BarcodeDetector.getSupportedFormats) {
+            return Promise.resolve(new BarcodeDetector({ formats: FORMATOS_DETECTOR }));
+        }
+        return BarcodeDetector.getSupportedFormats().then(function (soportados) {
+            var usar = FORMATOS_DETECTOR.filter(function (f) {
+                return soportados.indexOf(f) !== -1;
+            });
+            return new BarcodeDetector(usar.length ? { formats: usar } : undefined);
+        });
+    }
 
+    function iniciarBarcodeDetectorVivo() {
+        return crearBarcodeDetector().then(function (detector) {
+            var $reader = $('#tm_camara_reader');
+            $reader.find('video').remove();
+            var video = document.createElement('video');
+            video.setAttribute('playsinline', 'true');
+            video.setAttribute('autoplay', 'true');
+            video.setAttribute('muted', 'true');
+            video.muted = true;
+            $reader.prepend(video);
+
+            return navigator.mediaDevices.getUserMedia({
+                audio: false,
+                video: {
+                    facingMode: { ideal: 'environment' },
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                },
+            }).then(function (stream) {
+                videoStream = stream;
+                video.srcObject = stream;
+                return video.play().then(function () {
+                    detectTimer = setInterval(function () {
+                        if (!video.videoWidth) {
+                            return;
+                        }
+                        detector.detect(video).then(function (hallados) {
+                            if (!hallados || !hallados.length || !hallados[0].rawValue) {
+                                return;
+                            }
+                            aplicarCodigo(hallados[0].rawValue);
+                        }).catch(function () {
+                            // frame sin código
+                        });
+                    }, 180);
+                });
+            });
+        });
+    }
+
+    function iniciarHtml5QrcodeVivo() {
         if (typeof Html5Qrcode === 'undefined') {
-            mostrarFotoFallback('No se pudo cargar el lector. Se abre la cámara para sacar foto.', true);
-            return;
+            return Promise.reject(new Error('sin Html5Qrcode'));
         }
 
         scanner = new Html5Qrcode('tm_camara_reader', {
@@ -177,18 +249,73 @@
             verbose: false,
         });
 
-        scanner.start(
+        var $reader = $('#tm_camara_reader');
+        var ancho = Math.max(280, $reader.width() || 320);
+        var alto = Math.max(180, $reader.height() || 240);
+
+        return scanner.start(
             { facingMode: 'environment' },
-            { fps: 10, qrbox: { width: 260, height: 140 }, aspectRatio: 1.333 },
+            {
+                fps: 15,
+                qrbox: {
+                    width: Math.min(ancho - 24, Math.floor(ancho * 0.9)),
+                    height: Math.min(140, Math.max(96, Math.floor(alto * 0.28))),
+                },
+                aspectRatio: 1.777,
+                experimentalFeatures: { useBarCodeDetectorIfSupported: true },
+            },
             function (decodedText) {
                 aplicarCodigo(decodedText);
             },
             function () {
                 // frame sin código
             }
-        ).catch(function () {
-            scanner = null;
-            mostrarFotoFallback('Sacá una foto del código, bien de cerca y con luz.', true);
+        );
+    }
+
+    function iniciarCamaraViva() {
+        if (iniciandoCamara) {
+            return;
+        }
+        iniciandoCamara = true;
+
+        detenerScanner().always(function () {
+            window.tmCamaraPickeoActiva = true;
+            $('#tm_camara_overlay').addClass('tm-camara-visible');
+            $('#tm_camara_foto_wrap').removeClass('d-none');
+            $('#tm_camara_mira').removeClass('d-none');
+            $('#tm_camara_reader').find('video, canvas').remove();
+            mostrarPreview('');
+            limpiarCodigosLeidos();
+            ultimoCodigo = '';
+
+            if (!puedeCamaraViva()) {
+                iniciandoCamara = false;
+                $('#tm_camara_mira').addClass('d-none');
+                mostrarFotoFallback(
+                    'El teléfono no deja leer en vivo (como un QR) en HTTP. Abrí el ERP por HTTPS o sacá una foto.'
+                );
+                return;
+            }
+
+            setFeedback('Apuntá al código de barras, como un QR…');
+
+            setTimeout(function () {
+                iniciarBarcodeDetectorVivo().catch(function () {
+                    detenerStreamNativo();
+                    return iniciarHtml5QrcodeVivo();
+                }).catch(function () {
+                    scanner = null;
+                    $('#tm_camara_mira').addClass('d-none');
+                    mostrarFotoFallback(
+                        'No se pudo abrir la cámara en vivo. Permití el acceso o sacá una foto, bien de cerca y con luz.'
+                    );
+                }).then(function () {
+                    iniciandoCamara = false;
+                }, function () {
+                    iniciandoCamara = false;
+                });
+            }, 180);
         });
     }
 
@@ -356,6 +483,9 @@
                 setFeedback(msg, true);
             });
     }
+
+    window.tmCerrarCamaraPickeo = cerrarCamara;
+    window.tmAbrirCamaraPickeo = iniciarCamaraViva;
 
     $(function () {
         $('#tm_btn_camara').on('click', iniciarCamaraViva);

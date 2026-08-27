@@ -30,7 +30,11 @@
         <td>OK</td>
         <td align="right">{{ (int) ($informe['totales']['ok'] ?? 0) }}</td>
     </tr>
-    <tr style="background:{{ ! empty($informe['requiere_alerta']) ? '#fadbd8' : '#d5f5e3' }};">
+    <tr style="background:{{ ((int) ($informe['totales']['en_borrador'] ?? 0)) > 0 ? '#fcf3cf' : '#fff' }};">
+        <td>En borrador (sin contabilizar)</td>
+        <td align="right">{{ (int) ($informe['totales']['en_borrador'] ?? 0) }}</td>
+    </tr>
+    <tr style="background:{{ ((int) ($informe['totales']['con_desvio'] ?? 0)) > 0 ? '#fadbd8' : '#d5f5e3' }};">
         <td><strong>Con desvío</strong></td>
         <td align="right"><strong>{{ (int) ($informe['totales']['con_desvio'] ?? 0) }}</strong></td>
     </tr>
@@ -55,6 +59,38 @@
         </td>
     </tr>
 </table>
+
+@if (! empty($informe['borradores_mail']))
+    <h3 style="margin:18px 0 6px 0;">Facturas en borrador</h3>
+    <p style="margin:0 0 8px 0; color:#555; font-size:12px;">
+        Todavía no se contabilizaron: no generan CC, asiento ni ctamov. No son un error de cuadre.
+    </p>
+    <table cellpadding="5" cellspacing="0" border="1" style="border-collapse:collapse; font-size:12px; width:100%;">
+        <tr style="background:#f9e79f; color:#17202A;">
+            <th align="left">Empresa</th>
+            <th align="left">Comprobante</th>
+            <th align="left">Proveedor</th>
+            <th align="left">Fecha</th>
+            <th align="right">Total $</th>
+            <th align="left">Estado</th>
+        </tr>
+        @foreach ($informe['borradores_mail'] as $fila)
+            <tr>
+                <td>{{ $fila['nombreempresa'] ?? '' }}</td>
+                <td>{{ $fila['comprobante_etiqueta'] ?? '' }}</td>
+                <td>{{ $fila['nombre_proveedor'] ?? '' }}</td>
+                <td>{{ $fila['fecha'] ?? '' }}</td>
+                <td align="right">{{ number_format((float) ($fila['total_ars'] ?? $fila['total_origen'] ?? 0), 2, ',', '.') }}</td>
+                <td>{{ $fila['estado'] ?? 'BORRADOR' }}</td>
+            </tr>
+        @endforeach
+    </table>
+    @if ((int) ($informe['borradores_omitidos'] ?? 0) > 0)
+        <p style="margin:8px 0; color:#555; font-size:12px;">
+            Y {{ (int) $informe['borradores_omitidos'] }} factura(s) más en borrador (no caben en el mail).
+        </p>
+    @endif
+@endif
 
 @if (! empty($informe['desvios_mail']))
     <h3 style="margin:18px 0 6px 0;">Facturas con desvío</h3>

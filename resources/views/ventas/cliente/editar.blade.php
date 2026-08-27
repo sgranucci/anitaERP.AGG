@@ -6,8 +6,9 @@
 @section("scripts")
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ventas/cliente/domicilio.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/ventas/cliente/domicilioentrega.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/admin/localidad-cascada.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/admin/localidad-cascada.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/cliente/domicilio.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/domicilio.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/cliente/domicilioentrega.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/domicilioentrega.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/localidad/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/provincia/consulta.js")}}" type="text/javascript"></script>

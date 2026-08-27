@@ -50,7 +50,16 @@ class LocalidadController extends Controller
 
 	public function leerLocalidades($id)
     {
-        return Localidad::select('id','nombre')->where('provincia_id',$id)->orderBy('nombre','asc')->get()->toArray();
+        $id = (int) $id;
+        if ($id <= 0) {
+            return [];
+        }
+
+        return Localidad::select('id', 'nombre')
+            ->where('provincia_id', $id)
+            ->orderBy('nombre', 'asc')
+            ->get()
+            ->toArray();
     }
 
     public function listar(Request $request, $formato = null, $busqueda = null)

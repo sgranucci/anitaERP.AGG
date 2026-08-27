@@ -6,6 +6,7 @@ use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Cliente_Entrega;
 use App\Models\Configuracion\Localidad;
 use App\Models\Configuracion\Provincia;
+use App\Support\Configuracion\LocalidadProvinciaSupport;
 use App\Models\Ventas\Zonavta;
 use App\Models\Ventas\Subzonavta;
 use App\Models\Ventas\Vendedor;
@@ -101,7 +102,12 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
 			if ($data['localidades_id'] ?? '')
 				$localidades_id = $data['localidades_id'];
 			else
-				$localidades_id = $data['localidad_id_previas'];
+				$localidades_id = $data['localidad_id_previas'] ?? [];
+
+			$localidades_id = LocalidadProvinciaSupport::recuperarIdsEnLista(
+				$localidades_id,
+				$data['localidad_id_previas'] ?? []
+			);
 
 			$provincias_id = $data['provincias_id'];
 			$codigospostales = $data['codigospostales'];
