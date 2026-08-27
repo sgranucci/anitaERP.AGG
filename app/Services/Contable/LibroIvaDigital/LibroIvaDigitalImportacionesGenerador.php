@@ -15,6 +15,7 @@ class LibroIvaDigitalImportacionesGenerador
      *     compras_cbte_importacion: list<string>,
      *     importacion_bienes_alicuotas: string,
      *     importacion_servicios: string,
+     *     registros: list<array<string, mixed>>,
      *     resumen: array<string, int>
      * }
      */
@@ -25,6 +26,7 @@ class LibroIvaDigitalImportacionesGenerador
                 'compras_cbte_importacion' => [],
                 'importacion_bienes_alicuotas' => '',
                 'importacion_servicios' => '',
+                'registros' => [],
                 'resumen' => ['bienes' => 0, 'servicios' => 0],
             ];
         }
@@ -35,6 +37,7 @@ class LibroIvaDigitalImportacionesGenerador
 
         $cabecerasImportacion = [];
         $lineasAlicuotas = [];
+        $registros = [];
 
         $bienes = DB::table('libro_iva_importacion_bien')
             ->where('empresa_id', $empresaId)
@@ -78,6 +81,21 @@ class LibroIvaDigitalImportacionesGenerador
                 'alicuota_iva' => $row->alicuota_lid,
                 'impuesto_liquidado' => (float) $row->impuesto_liquidado,
             ]);
+            $registros[] = [
+                'cabecera' => [
+                    'tipo_comprobante' => '066',
+                    'operaciones_exentas' => 0.0,
+                    'no_integra_neto' => 0.0,
+                    'importe_total' => (float) $row->importe_total,
+                ],
+                'alicuotas' => [[
+                    'neto_gravado' => (float) $row->neto_gravado,
+                    'impuesto_liquidado' => (float) $row->impuesto_liquidado,
+                    'alicuota_iva' => (string) $row->alicuota_lid,
+                    'concepto_iva_simple' => 1,
+                ]],
+                'iva_simple' => ['restitucion' => false],
+            ];
         }
 
         $lineasServicios = [];
@@ -107,6 +125,23 @@ class LibroIvaDigitalImportacionesGenerador
                     'identificacion_pago' => $row->identificacion_pago ?? '',
                     'cuit_entidad_pago' => preg_replace('/\D+/', '', (string) ($row->cuit_entidad_pago ?? '0')),
                 ]);
+                $cotizacion = (float) ($row->tipo_cambio ?: 1);
+                $neto = round((float) $row->monto_moneda_original * $cotizacion, 2);
+                $registros[] = [
+                    'cabecera' => [
+                        'tipo_comprobante' => str_pad((string) $row->tipo_comprobante, 3, '0', STR_PAD_LEFT),
+                        'operaciones_exentas' => 0.0,
+                        'no_integra_neto' => 0.0,
+                        'importe_total' => $neto,
+                    ],
+                    'alicuotas' => [[
+                        'neto_gravado' => $neto,
+                        'impuesto_liquidado' => (float) $row->monto_impuesto_ingresado,
+                        'alicuota_iva' => (string) $row->alicuota_lid,
+                        'concepto_iva_simple' => 3,
+                    ]],
+                    'iva_simple' => ['restitucion' => false],
+                ];
             }
         }
 
@@ -114,6 +149,7 @@ class LibroIvaDigitalImportacionesGenerador
             'compras_cbte_importacion' => $cabecerasImportacion,
             'importacion_bienes_alicuotas' => implode("\r\n", $lineasAlicuotas),
             'importacion_servicios' => implode("\r\n", $lineasServicios),
+            'registros' => $registros,
             'resumen' => [
                 'bienes' => count($lineasAlicuotas),
                 'servicios' => count($lineasServicios),

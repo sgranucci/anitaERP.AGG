@@ -59,12 +59,21 @@ final class LibroIvaDigitalConceptoIvacompraSupport
             ];
         }
 
-        $cantidad = strtoupper($letra) === 'C' ? 0 : count($filasAlicuota);
+        $esC = strtoupper($letra) === 'C';
+        $cantidad = $esC ? 0 : count($filasAlicuota);
         $credito = array_sum(array_column($filasAlicuota, 'iva'));
 
         $resultado['alicuotas'] = $cantidad > 0 ? $filasAlicuota : [];
         $resultado['cantidad_alicuotas'] = $cantidad;
         $resultado['credito_computable'] = $cantidad > 0 ? $credito : 0.0;
+        if ($esC) {
+            // Tipo C (monotributo): el libro no tiene columna propia; el tipo 011-016
+            // lo identifica. No mezclar el total en exento / no gravado.
+            $resultado['exento'] = 0.0;
+            $resultado['no_integra'] = 0.0;
+            $resultado['neto_gravado'] = 0.0;
+            $resultado['iva'] = 0.0;
+        }
 
         return $resultado;
     }

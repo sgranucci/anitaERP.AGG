@@ -249,12 +249,13 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             ];
         }
 
-        $cantidad = strtoupper($letra) === 'C' ? 0 : count($filas);
+        $esC = strtoupper($letra) === 'C';
+        $cantidad = $esC ? 0 : count($filas);
         $credito = array_sum(array_column($filas, 'iva'));
 
         return [
-            'no_integra' => $noIntegra,
-            'exento' => $exento,
+            'no_integra' => $esC ? 0.0 : $noIntegra,
+            'exento' => $esC ? 0.0 : $exento,
             'perc_iva' => $percIva,
             'perc_nacional' => $percNac,
             'perc_iibb' => $percIibb,
@@ -282,7 +283,21 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             return false;
         }
 
-        return (int) $tipo->getRawOriginal('signo') < 0;
+        if ((int) $tipo->getRawOriginal('signo') < 0) {
+            return true;
+        }
+
+        $abrev = strtoupper(substr(trim((string) $tipo->abreviatura), 0, 3));
+        if (str_starts_with($abrev, 'NC')) {
+            return true;
+        }
+
+        $codigoAfip = (string) ($tipo->codigoafip ?? '');
+        $letra = 'A';
+
+        return LibroIvaDigitalMapeosSupport::esTipoNotaCredito(
+            LibroIvaDigitalMapeosSupport::tipoComprobanteVentas($codigoAfip, $letra),
+        );
     }
 
     /**

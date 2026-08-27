@@ -68,6 +68,21 @@ final class LibroIvaDigitalMapeosSupport
         return self::ALICUOTA_IVA_SIMPLE_POR_TASA[$keyInt] ?? self::ALICUOTA_IVA_SIMPLE_POR_TASA[$key] ?? 3;
     }
 
+    /** Tipos ARCA de nota de crédito (Portal los resta del neto / IVA). */
+    private const TIPOS_NOTA_CREDITO = [
+        '003', '008', '013', '021', '022', '038', '043', '044', '048',
+        '050', '052', '054', '058', '060', '070', '080', '082', '090',
+        '091', '093', '096', '097', '101', '103', '104', '105', '109',
+        '110', '112', '113', '114', '119', '120', '203', '208', '213',
+    ];
+
+    public static function esTipoNotaCredito(string $tipoComprobante): bool
+    {
+        $tipo = str_pad(preg_replace('/\D+/', '', $tipoComprobante) ?: '0', 3, '0', STR_PAD_LEFT);
+
+        return in_array($tipo, self::TIPOS_NOTA_CREDITO, true);
+    }
+
     public static function codigoAlicuotaIvaSimpleDesdeLid(string $codigoLid): int
     {
         $codigo = str_pad(preg_replace('/\D+/', '', $codigoLid) ?: '3', 4, '0', STR_PAD_LEFT);

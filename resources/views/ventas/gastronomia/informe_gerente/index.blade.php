@@ -172,7 +172,7 @@
                         <div class="col-lg-6 mb-3">
                             <div class="card card-outline card-success h-100">
                                 <div class="card-header py-2">
-                                    <strong>Facturación por medio de pago</strong>
+                                    <strong>Facturación por medio de pago — período</strong>
                                     <span class="float-right small text-muted">Participación del período</span>
                                 </div>
                                 <div class="card-body">
@@ -184,10 +184,39 @@
                         </div>
                         <div class="col-lg-6 mb-3">
                             <div class="card card-outline card-success h-100">
-                                <div class="card-header py-2"><strong>Detalle por medio de pago</strong></div>
+                                <div class="card-header py-2">
+                                    <strong>Facturación por medio de pago — mes</strong>
+                                    <span class="float-right small text-muted">{{ $informe['mes_jornada_label'] ?? '' }}</span>
+                                </div>
+                                <div class="card-body">
+                                    <div class="informe-gerente-chart-wrap">
+                                        <canvas id="chart-medio-pago-mes"></canvas>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-lg-6 mb-3">
+                            <div class="card card-outline card-success">
+                                <div class="card-header py-2"><strong>Detalle por medio de pago — período</strong></div>
                                 <div class="card-body p-0 informe-gerente-tabla-scroll">
                                     @include('ventas.gastronomia.informe_gerente.partials.tabla_medio_pago', [
                                         'filas' => $informe['ventas_por_medio_pago'] ?? [],
+                                    ])
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-lg-6 mb-3">
+                            <div class="card card-outline card-success">
+                                <div class="card-header py-2">
+                                    <strong>Detalle por medio de pago — mes</strong>
+                                    <span class="float-right small text-muted">{{ $informe['mes_jornada_label'] ?? '' }}</span>
+                                </div>
+                                <div class="card-body p-0 informe-gerente-tabla-scroll">
+                                    @include('ventas.gastronomia.informe_gerente.partials.tabla_medio_pago', [
+                                        'filas' => $informe['ventas_por_medio_pago_mes'] ?? [],
                                     ])
                                 </div>
                             </div>

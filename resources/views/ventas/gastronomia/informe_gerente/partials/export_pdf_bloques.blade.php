@@ -129,7 +129,7 @@
     </tbody>
 </table>
 
-<h3 class="seccion">Facturación por medio de pago</h3>
+<h3 class="seccion">Facturación por medio de pago — período</h3>
 <table class="data">
     <thead>
         <tr>
@@ -151,6 +151,32 @@
             </tr>
         @empty
             <tr><td colspan="5">Sin cobranzas con medio de pago en el período.</td></tr>
+        @endforelse
+    </tbody>
+</table>
+
+<h3 class="seccion">Facturación por medio de pago — mes {{ $informe['mes_jornada_label'] ?? '' }}</h3>
+<table class="data">
+    <thead>
+        <tr>
+            <th>Código</th>
+            <th>Medio de pago</th>
+            <th class="text-right">Cobranzas</th>
+            <th class="text-right">%</th>
+            <th class="text-right">Total cobrado</th>
+        </tr>
+    </thead>
+    <tbody>
+        @forelse (($informe['ventas_por_medio_pago_mes'] ?? []) as $fila)
+            <tr>
+                <td>{{ $fila['codigo'] !== '' ? $fila['codigo'] : '—' }}</td>
+                <td>{{ $fila['nombre'] ?? '' }}</td>
+                <td class="text-right">{{ (int) ($fila['cantidad'] ?? 0) }}</td>
+                <td class="text-right">{{ number_format((float) ($fila['porcentaje'] ?? 0), 1, ',', '.') }}%</td>
+                <td class="text-right">${{ number_format((float) ($fila['total'] ?? 0), 2, ',', '.') }}</td>
+            </tr>
+        @empty
+            <tr><td colspan="5">Sin cobranzas con medio de pago en el mes.</td></tr>
         @endforelse
     </tbody>
 </table>

@@ -74,6 +74,7 @@ class LibroIvaDigitalIvaSimpleSupportTest extends TestCase
         $this->assertSame(1, $resumen[0]['renglones_credito']);
         $this->assertSame(1, $resumen[0]['renglones_restitucion']);
         $this->assertSame(100.0, $resumen[0]['neto_gravado']);
+        $this->assertSame(10.0, $resumen[0]['neto_restitucion']);
         $this->assertSame(21.0, $resumen[0]['iva_credito']);
         $this->assertSame(2.1, $resumen[0]['iva_restitucion']);
     }
@@ -144,7 +145,7 @@ class LibroIvaDigitalIvaSimpleSupportTest extends TestCase
                 'iva_simple' => ['restitucion' => false],
                 'cabecera' => [
                     'tipo_comprobante' => '011',
-                    'operaciones_exentas' => 0.0,
+                    'operaciones_exentas' => 80.0,
                     'no_integra_neto' => 0.0,
                     'importe_total' => 80.0,
                 ],
@@ -158,5 +159,38 @@ class LibroIvaDigitalIvaSimpleSupportTest extends TestCase
         $this->assertSame(50.0, $armado['total_exento']);
         $this->assertSame(10.0, $armado['total_no_integra']);
         $this->assertSame(80.0, $armado['total_monotributo']);
+    }
+
+    public function test_nota_credito_por_tipo_003_se_resta_como_en_portal(): void
+    {
+        $armado = LibroIvaDigitalIvaSimpleSupport::creditoDesdeRegistrosLibro([
+            [
+                'iva_simple' => ['restitucion' => false],
+                'cabecera' => ['tipo_comprobante' => '001'],
+                'alicuotas' => [[
+                    'neto_gravado' => 200.0,
+                    'impuesto_liquidado' => 42.0,
+                    'alicuota_iva' => '0005',
+                    'concepto_iva_simple' => 1,
+                ]],
+            ],
+            [
+                'iva_simple' => ['restitucion' => false],
+                'cabecera' => ['tipo_comprobante' => '003'],
+                'alicuotas' => [[
+                    'neto_gravado' => 50.0,
+                    'impuesto_liquidado' => 10.5,
+                    'alicuota_iva' => '0005',
+                    'concepto_iva_simple' => 1,
+                ]],
+            ],
+        ]);
+
+        $this->assertSame(200.0, $armado['total_neto_facturas']);
+        $this->assertSame(50.0, $armado['total_neto_nc']);
+        $this->assertSame(150.0, $armado['total_neto_portal']);
+        $this->assertSame(42.0, $armado['total_iva_facturas']);
+        $this->assertSame(10.5, $armado['total_iva_nc']);
+        $this->assertSame(31.5, $armado['total_iva_portal']);
     }
 }

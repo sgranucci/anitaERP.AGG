@@ -266,7 +266,12 @@
                                 <tr>
                                     <td><code>{{ LibroIvaDigitalArchivosSupport::COMPRAS_ALICUOTAS }}</code></td>
                                     <td class="text-right">{{ number_format($resultado['compras']['resumen']['alicuotas'] ?? 0, 0, ',', '.') }}</td>
-                                    <td class="text-muted">Mismo orden que cabeceras compras</td>
+                                    <td class="text-muted">
+                                        Neto Portal ${{ number_format($resultado['compras']['resumen']['neto_portal'] ?? 0, 2, ',', '.') }}
+                                        (facturas ${{ number_format($resultado['compras']['resumen']['neto_facturas'] ?? 0, 2, ',', '.') }}
+                                        − NC ${{ number_format($resultado['compras']['resumen']['neto_nc'] ?? 0, 2, ',', '.') }});
+                                        IVA Portal ${{ number_format($resultado['compras']['resumen']['iva_portal'] ?? 0, 2, ',', '.') }}
+                                    </td>
                                 </tr>
                                 <tr>
                                     <td><code>{{ LibroIvaDigitalArchivosSupport::COMPRAS_ANULADOS }}</code></td>
@@ -315,10 +320,11 @@
                         <p class="text-muted small">
                             Misma fuente que el Libro IVA Digital de ventas. El gravado/IVA sale de las alícuotas
                             del <code>VENTAS_CBTE</code>; el exento/no gravado es el campo
-                            <code>operaciones_exentas</code> (tipo operación 3, RG 5705 / apertura IVA Simple).
-                            Actividad: comprobante o, si falta, punto de venta.
-                            La actividad <code>920009</code> (apuestas) en el libro son Facturas B tipo <code>006</code>
-                            del PV de cierre (exentas).
+                            <code>operaciones_exentas</code> (tipo operación 3, RG 5705).
+                            <strong>Neto gravado</strong> e <strong>IVA débito</strong> son solo facturas;
+                            las NC van en <strong>Neto NC</strong> e <strong>IVA restitución</strong>.
+                            Para cruzar con Portal: neto gravado − neto NC, IVA débito − IVA restitución.
+                            Actividad <code>920009</code> (apuestas): Facturas B tipo <code>006</code> del PV de cierre.
                         </p>
                         <div class="table-responsive mb-3">
                             <table class="table table-bordered table-sm" id="tabla-iva-simple-actividad">
@@ -329,6 +335,7 @@
                                         <th class="text-right">Rengl. débito</th>
                                         <th class="text-right">Rengl. restitución</th>
                                         <th class="text-right">Neto gravado</th>
+                                        <th class="text-right">Neto NC</th>
                                         <th class="text-right">IVA débito</th>
                                         <th class="text-right">Exento / no grav.</th>
                                         <th class="text-right">IVA restitución</th>
@@ -342,6 +349,7 @@
                                             <td class="text-right">{{ number_format($filaActividad['renglones_debito'] ?? 0, 0, ',', '.') }}</td>
                                             <td class="text-right">{{ number_format($filaActividad['renglones_restitucion'] ?? 0, 0, ',', '.') }}</td>
                                             <td class="text-right">${{ number_format($filaActividad['neto_gravado'] ?? 0, 2, ',', '.') }}</td>
+                                            <td class="text-right">${{ number_format($filaActividad['neto_restitucion'] ?? 0, 2, ',', '.') }}</td>
                                             <td class="text-right">${{ number_format($filaActividad['iva_debito'] ?? 0, 2, ',', '.') }}</td>
                                             <td class="text-right">${{ number_format($filaActividad['exento'] ?? 0, 2, ',', '.') }}</td>
                                             <td class="text-right">${{ number_format($filaActividad['iva_restitucion'] ?? 0, 2, ',', '.') }}</td>
@@ -353,6 +361,9 @@
                                         <td colspan="4">Total período</td>
                                         <td class="text-right">
                                             ${{ number_format(collect($resultado['iva_simple']['resumen_por_actividad'])->sum('neto_gravado'), 2, ',', '.') }}
+                                        </td>
+                                        <td class="text-right">
+                                            ${{ number_format(collect($resultado['iva_simple']['resumen_por_actividad'])->sum('neto_restitucion'), 2, ',', '.') }}
                                         </td>
                                         <td class="text-right">
                                             ${{ number_format($resultado['iva_simple']['resumen']['total_iva_debito'] ?? 0, 2, ',', '.') }}
@@ -373,9 +384,11 @@
                         <h5 class="mb-2">IVA Simple — crédito fiscal por concepto (compras)</h5>
                         <p class="text-muted small">
                             Misma fuente que el Libro IVA Digital de compras (ERP + Anita sin solapar).
-                            El CSV de crédito fiscal de ARCA solo admite gravado + IVA (concepto × alícuota):
-                            no hay campo de exento. El exento, no gravado y monotributo quedan en
-                            <code>COMPRAS_CBTE</code> y se muestran acá para cruzar con el libro / Portal.
+                            El CSV de crédito solo admite gravado + IVA. Las NC van en <strong>Neto NC</strong>
+                            e <strong>IVA restitución</strong> (Portal = gravado − NC).
+                            Las facturas C (monotributo) no se escriben en exento/no gravado del TXT:
+                            el tipo 011-016 las identifica. Portal suele sumarlas en «No gravado + exento»;
+                            acá van aparte para cruzar con el Libro IVA Compras de Anita.
                         </p>
                         <div class="table-responsive mb-3">
                             <table class="table table-bordered table-sm" id="tabla-iva-simple-concepto">
@@ -385,6 +398,7 @@
                                         <th class="text-right">Rengl. crédito</th>
                                         <th class="text-right">Rengl. restitución</th>
                                         <th class="text-right">Neto gravado</th>
+                                        <th class="text-right">Neto NC</th>
                                         <th class="text-right">IVA crédito</th>
                                         <th class="text-right">IVA computable</th>
                                         <th class="text-right">IVA restitución</th>
@@ -402,6 +416,7 @@
                                             <td class="text-right">{{ number_format($filaConcepto['renglones_credito'] ?? 0, 0, ',', '.') }}</td>
                                             <td class="text-right">{{ number_format($filaConcepto['renglones_restitucion'] ?? 0, 0, ',', '.') }}</td>
                                             <td class="text-right">${{ number_format($filaConcepto['neto_gravado'] ?? 0, 2, ',', '.') }}</td>
+                                            <td class="text-right">${{ number_format($filaConcepto['neto_restitucion'] ?? 0, 2, ',', '.') }}</td>
                                             <td class="text-right">${{ number_format($filaConcepto['iva_credito'] ?? 0, 2, ',', '.') }}</td>
                                             <td class="text-right">${{ number_format($filaConcepto['iva_computable'] ?? 0, 2, ',', '.') }}</td>
                                             <td class="text-right">${{ number_format($filaConcepto['iva_restitucion'] ?? 0, 2, ',', '.') }}</td>
@@ -415,6 +430,9 @@
                                         <td colspan="3">Total período</td>
                                         <td class="text-right">
                                             ${{ number_format(collect($resultado['iva_simple']['resumen_por_concepto'])->sum('neto_gravado'), 2, ',', '.') }}
+                                        </td>
+                                        <td class="text-right">
+                                            ${{ number_format(collect($resultado['iva_simple']['resumen_por_concepto'])->sum('neto_restitucion'), 2, ',', '.') }}
                                         </td>
                                         <td class="text-right">
                                             ${{ number_format($resultado['iva_simple']['resumen']['total_iva_credito'] ?? 0, 2, ',', '.') }}
@@ -434,6 +452,19 @@
                                         </td>
                                         <td class="text-right">
                                             ${{ number_format($resultado['iva_simple']['resumen']['total_monotributo_compras'] ?? 0, 2, ',', '.') }}
+                                        </td>
+                                    </tr>
+                                    <tr class="table-info">
+                                        <td colspan="3">A cruzar con Portal (facturas − NC)</td>
+                                        <td class="text-right">
+                                            ${{ number_format($resultado['iva_simple']['resumen']['total_neto_portal'] ?? 0, 2, ',', '.') }}
+                                        </td>
+                                        <td class="text-right">—</td>
+                                        <td class="text-right">
+                                            ${{ number_format($resultado['iva_simple']['resumen']['total_iva_portal'] ?? 0, 2, ',', '.') }}
+                                        </td>
+                                        <td colspan="4" class="text-muted small">
+                                            Incluye importaciones del libro. Portal informa el neto, no el bruto de facturas.
                                         </td>
                                     </tr>
                                 </tfoot>

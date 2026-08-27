@@ -122,9 +122,16 @@ final class GastronomiaInformeGerentePowerpointService
         );
         $this->agregarSlidePie(
             $presentation,
-            'Facturación por medio de pago',
+            'Facturación por medio de pago — período',
             $periodoLabel,
             $charts['medio_pago'] ?? [],
+            'Total cobrado',
+        );
+        $this->agregarSlidePie(
+            $presentation,
+            'Facturación por medio de pago — mes',
+            $mesLabel !== '' ? $mesLabel : $periodoLabel,
+            $charts['medio_pago_mes'] ?? [],
             'Total cobrado',
         );
         $this->agregarSlidePie(
@@ -323,10 +330,20 @@ final class GastronomiaInformeGerentePowerpointService
 
         $this->agregarSlideTabla(
             $presentation,
-            'Facturación por medio de pago',
+            'Facturación por medio de pago — período',
             $periodoLabel,
             ['Código', 'Medio de pago', 'Cobranzas', '%', 'Total cobrado'],
             $this->filasMedioPago($informe['ventas_por_medio_pago'] ?? []),
+            [100, 340, 140, 90, 210],
+            [false, false, true, true, true],
+        );
+
+        $this->agregarSlideTabla(
+            $presentation,
+            'Facturación por medio de pago — mes',
+            $mesLabel !== '' ? $mesLabel : $periodoLabel,
+            ['Código', 'Medio de pago', 'Cobranzas', '%', 'Total cobrado'],
+            $this->filasMedioPago($informe['ventas_por_medio_pago_mes'] ?? []),
             [100, 340, 140, 90, 210],
             [false, false, true, true, true],
         );

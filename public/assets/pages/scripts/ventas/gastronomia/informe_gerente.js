@@ -274,6 +274,7 @@
         renderPie('chart-ventas-turno', informe.charts.turno);
         renderPie('chart-ventas-pv', informe.charts.puntoventa);
         renderPie('chart-medio-pago', informe.charts.medio_pago, { type: 'doughnut', withPct: true });
+        renderPie('chart-medio-pago-mes', informe.charts.medio_pago_mes, { type: 'doughnut', withPct: true });
         renderPie('chart-descuentos', informe.charts.descuento);
         renderPie('chart-recepciones-dia', informe.charts.recepciones_dia);
         renderPie('chart-recepciones-mes', informe.charts.recepciones_mes);

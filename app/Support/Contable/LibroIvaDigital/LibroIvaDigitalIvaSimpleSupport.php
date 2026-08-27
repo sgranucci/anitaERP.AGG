@@ -257,23 +257,23 @@ final class LibroIvaDigitalIvaSimpleSupport
 
         foreach ($registros as $registro) {
             $meta = is_array($registro['iva_simple'] ?? null) ? $registro['iva_simple'] : [];
-            $restitucion = (bool) ($meta['restitucion'] ?? false);
             $cabecera = is_array($registro['cabecera'] ?? null) ? $registro['cabecera'] : [];
             $tipo = str_pad((string) ($cabecera['tipo_comprobante'] ?? ''), 3, '0', STR_PAD_LEFT);
+            $restitucion = (bool) ($meta['restitucion'] ?? false)
+                || LibroIvaDigitalMapeosSupport::esTipoNotaCredito($tipo);
             $esTipoC = in_array($tipo, LibroIvaDigitalVentasAlicuotaSupport::TIPOS_SIN_ALICUOTA, true);
 
             $exento = abs((float) ($cabecera['operaciones_exentas'] ?? 0));
             $noIntegra = abs((float) ($cabecera['no_integra_neto'] ?? 0));
-            if ($restitucion) {
+            if ($esTipoC) {
+                $montoC = abs((float) ($cabecera['importe_total'] ?? 0));
+                $totalMonotributo += $restitucion ? -$montoC : $montoC;
+            } elseif ($restitucion) {
                 $totalExento -= $exento;
                 $totalNoIntegra -= $noIntegra;
             } else {
                 $totalExento += $exento;
                 $totalNoIntegra += $noIntegra;
-            }
-            if ($esTipoC) {
-                $montoC = abs((float) ($cabecera['importe_total'] ?? 0));
-                $totalMonotributo += $restitucion ? -$montoC : $montoC;
             }
 
             foreach ($registro['alicuotas'] ?? [] as $alicuota) {
@@ -302,6 +302,10 @@ final class LibroIvaDigitalIvaSimpleSupport
 
         $credito = self::lineasDesdeAcumuladoCredito($acum, false);
         $restitucion = self::lineasDesdeAcumuladoCredito($acumRest, true);
+        $netoFacturas = round(array_sum(array_column($credito['detalle'], 'neto')), 2);
+        $ivaFacturas = round(array_sum(array_column($credito['detalle'], 'iva')), 2);
+        $netoNc = round(array_sum(array_column($restitucion['detalle'], 'neto')), 2);
+        $ivaNc = round(array_sum(array_column($restitucion['detalle'], 'iva')), 2);
 
         return [
             'detalle' => $credito['detalle'],
@@ -309,6 +313,12 @@ final class LibroIvaDigitalIvaSimpleSupport
             'total_exento' => round($totalExento, 2),
             'total_no_integra' => round($totalNoIntegra, 2),
             'total_monotributo' => round($totalMonotributo, 2),
+            'total_neto_facturas' => $netoFacturas,
+            'total_neto_nc' => $netoNc,
+            'total_neto_portal' => round($netoFacturas - $netoNc, 2),
+            'total_iva_facturas' => $ivaFacturas,
+            'total_iva_nc' => $ivaNc,
+            'total_iva_portal' => round($ivaFacturas - $ivaNc, 2),
         ];
     }
 
@@ -364,6 +374,7 @@ final class LibroIvaDigitalIvaSimpleSupport
                 'renglones_credito' => 0,
                 'renglones_restitucion' => 0,
                 'neto_gravado' => 0.0,
+                'neto_restitucion' => 0.0,
                 'iva_credito' => 0.0,
                 'iva_computable' => 0.0,
                 'iva_restitucion' => 0.0,
@@ -372,6 +383,7 @@ final class LibroIvaDigitalIvaSimpleSupport
 
         if ($restitucion) {
             $acumulado[$concepto]['renglones_restitucion']++;
+            $acumulado[$concepto]['neto_restitucion'] += (float) ($fila['neto'] ?? 0);
             $acumulado[$concepto]['iva_restitucion'] += (float) ($fila['iva'] ?? 0);
         } else {
             $acumulado[$concepto]['renglones_credito']++;
@@ -380,6 +392,7 @@ final class LibroIvaDigitalIvaSimpleSupport
             $acumulado[$concepto]['iva_computable'] += (float) ($fila['iva_computable'] ?? $fila['iva'] ?? 0);
         }
         $acumulado[$concepto]['neto_gravado'] = round($acumulado[$concepto]['neto_gravado'], 2);
+        $acumulado[$concepto]['neto_restitucion'] = round($acumulado[$concepto]['neto_restitucion'], 2);
         $acumulado[$concepto]['iva_credito'] = round($acumulado[$concepto]['iva_credito'], 2);
         $acumulado[$concepto]['iva_computable'] = round($acumulado[$concepto]['iva_computable'], 2);
         $acumulado[$concepto]['iva_restitucion'] = round($acumulado[$concepto]['iva_restitucion'], 2);
@@ -432,6 +445,7 @@ final class LibroIvaDigitalIvaSimpleSupport
                     'renglones_debito' => 0,
                     'renglones_restitucion' => 0,
                     'neto_gravado' => 0.0,
+                    'neto_restitucion' => 0.0,
                     'iva_debito' => 0.0,
                     'exento' => 0.0,
                     'iva_restitucion' => 0.0,
@@ -441,20 +455,21 @@ final class LibroIvaDigitalIvaSimpleSupport
             $esRestitucion = (bool) ($fila['restitucion'] ?? false);
             if ($esRestitucion) {
                 $acumulado[$codigo]['renglones_restitucion']++;
+                $acumulado[$codigo]['neto_restitucion'] += (float) ($fila['neto'] ?? 0);
                 $acumulado[$codigo]['iva_restitucion'] += (float) ($fila['iva'] ?? 0);
             } else {
                 $acumulado[$codigo]['renglones_debito']++;
+                $acumulado[$codigo]['neto_gravado'] += (float) ($fila['neto'] ?? 0);
+                $acumulado[$codigo]['iva_debito'] += (float) ($fila['iva'] ?? 0);
+                $acumulado[$codigo]['exento'] += (float) ($fila['exento'] ?? 0);
             }
-
-            $acumulado[$codigo]['neto_gravado'] += (float) ($fila['neto'] ?? 0);
-            $acumulado[$codigo]['iva_debito'] += (float) ($fila['iva'] ?? 0);
-            $acumulado[$codigo]['exento'] += (float) ($fila['exento'] ?? 0);
         }
 
         ksort($acumulado);
 
         return array_values(array_map(static function (array $row): array {
             $row['neto_gravado'] = round($row['neto_gravado'], 2);
+            $row['neto_restitucion'] = round($row['neto_restitucion'], 2);
             $row['iva_debito'] = round($row['iva_debito'], 2);
             $row['exento'] = round($row['exento'], 2);
             $row['iva_restitucion'] = round($row['iva_restitucion'], 2);

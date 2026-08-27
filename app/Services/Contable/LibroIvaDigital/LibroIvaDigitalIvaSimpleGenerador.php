@@ -166,6 +166,8 @@ class LibroIvaDigitalIvaSimpleGenerador
                 'total_exento_compras' => round((float) ($compras['total_exento'] ?? 0), 2),
                 'total_no_integra_compras' => round((float) ($compras['total_no_integra'] ?? 0), 2),
                 'total_monotributo_compras' => round((float) ($compras['total_monotributo'] ?? 0), 2),
+                'total_neto_portal' => round((float) ($compras['total_neto_portal'] ?? 0), 2),
+                'total_iva_portal' => round((float) ($compras['total_iva_portal'] ?? 0), 2),
                 'sin_actividad_arca' => $sinActividad,
                 'actividades' => count($resumenPorActividad),
             ],

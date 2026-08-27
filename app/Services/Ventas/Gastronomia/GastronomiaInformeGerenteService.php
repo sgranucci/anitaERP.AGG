@@ -49,6 +49,10 @@ final class GastronomiaInformeGerenteService
 
         $descuentos = $this->query->facturasPorDescuento($empresaId, $desde, $hasta);
         $porMedioPago = $this->query->ventasPorMedioPago($empresaId, $desde, $hasta);
+        $hastaCarbon = Carbon::parse($hasta);
+        $mesDesde = $hastaCarbon->copy()->startOfMonth()->format('Y-m-d');
+        $mesHasta = $hastaCarbon->copy()->endOfMonth()->format('Y-m-d');
+        $porMedioPagoMes = $this->query->ventasPorMedioPago($empresaId, $mesDesde, $mesHasta);
         $top20ArticulosCosto = $this->topArticulosService->top20DelPeriodoConCostos($empresaId, $desde, $hasta);
         $recepciones = $this->recepcionesAnita->resumen($empresaId, $desde, $hasta);
 
@@ -57,7 +61,6 @@ final class GastronomiaInformeGerenteService
             $totalPeriodo = round($totalPeriodo + (float) ($waitrySinFacturar['total'] ?? 0), 2);
         }
 
-        $hastaCarbon = Carbon::parse($hasta);
         $periodoLabel = GastronomiaInformeGerenteFiltros::formatearPeriodoTexto([
             'fecha_desde' => $desde,
             'fecha_hasta' => $hasta,
@@ -82,6 +85,7 @@ final class GastronomiaInformeGerenteService
             'ventas_por_turno' => $porTurno,
             'ventas_por_puntoventa' => $porPv,
             'ventas_por_medio_pago' => $porMedioPago,
+            'ventas_por_medio_pago_mes' => $porMedioPagoMes,
             'facturas_por_descuento' => $descuentos,
             'top20_articulos_costo' => $top20ArticulosCosto,
             'recepciones' => $recepciones,
@@ -90,6 +94,7 @@ final class GastronomiaInformeGerenteService
                 'turno' => $this->pieDesdeFilas($porTurno, 'etiqueta', 'total'),
                 'puntoventa' => $this->pieDesdeFilas($porPv, 'nombre', 'total'),
                 'medio_pago' => $this->pieDesdeFilas($porMedioPago, 'etiqueta', 'total'),
+                'medio_pago_mes' => $this->pieDesdeFilas($porMedioPagoMes, 'etiqueta', 'total'),
                 'descuento' => $this->pieDescuentos($descuentos),
                 'recepciones_dia' => $this->pieRecepcionesPorProveedor($recepciones['dia'] ?? []),
                 'recepciones_mes' => $this->pieRecepcionesPorProveedor($recepciones['mes'] ?? []),

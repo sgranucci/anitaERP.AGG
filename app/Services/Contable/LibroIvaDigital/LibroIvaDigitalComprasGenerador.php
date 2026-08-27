@@ -9,6 +9,7 @@ use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaArmadoSuppor
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaBridgeReader;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalConceptoIvacompraSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalFormatoSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalIvaSimpleSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use Illuminate\Database\Eloquent\Builder;
 
@@ -151,6 +152,8 @@ class LibroIvaDigitalComprasGenerador
             }
         }
 
+        $totalesPortal = LibroIvaDigitalIvaSimpleSupport::creditoDesdeRegistrosLibro($registros, $prorrateoGlobal);
+
         return [
             'compras_cbte' => implode("\r\n", $lineasCbte),
             'compras_alicuotas' => implode("\r\n", $lineasAlicuotas),
@@ -161,6 +164,10 @@ class LibroIvaDigitalComprasGenerador
                 'alicuotas' => count($lineasAlicuotas),
                 'importe_total' => round($totalImporte, 2),
                 'total_iva' => round($totalIva, 2),
+                'neto_portal' => $totalesPortal['total_neto_portal'],
+                'iva_portal' => $totalesPortal['total_iva_portal'],
+                'neto_facturas' => $totalesPortal['total_neto_facturas'],
+                'neto_nc' => $totalesPortal['total_neto_nc'],
                 'prorrateo_cf_global' => $prorrateoGlobal,
                 'completar_compras_anita' => $completarAnita,
             ],
