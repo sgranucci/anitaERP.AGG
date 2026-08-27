@@ -369,9 +369,15 @@ final class CierreRendicionBingoConciliacionFlashSupport
             if (
                 $tipo === CierreRendicionBingoConceptoTipos::PREMIO
                 || $tipo === CierreRendicionBingoConceptoTipos::BINGO
-                || $tipo === CierreRendicionBingoConceptoTipos::PORC_RECAUD
             ) {
                 $valores['c'.$concepto.'_real'] = $real;
+            } elseif ($tipo === CierreRendicionBingoConceptoTipos::PORC_RECAUD) {
+                // Extra de catálogo (no vive en la rendición): % sobre recaudación.
+                $valores['c'.$concepto.'_real'] = CierreRendicionBingoTotalesSupport::importePagoConcepto(
+                    $meta,
+                    $acum,
+                    $recaudacion,
+                );
             } elseif (
                 $tipo === CierreRendicionBingoConceptoTipos::PORC_POZO
                 || $tipo === CierreRendicionBingoConceptoTipos::ULT_BOLA

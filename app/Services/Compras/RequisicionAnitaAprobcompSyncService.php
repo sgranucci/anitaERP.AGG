@@ -111,6 +111,141 @@ class RequisicionAnitaAprobcompSyncService
     }
 
     /**
+     * Cruza requisiciones ERP con historia APROBADA contra aprobcomp Anita (lecturas por lote).
+     *
+     * @return array{
+     *     erp_aprobadas: int,
+     *     lecturas_bridge: int,
+     *     con_aprobcomp: int,
+     *     con_estado_aprobado: int,
+     *     sin_aprobcomp: int,
+     *     sin_aprobcomp_vivo: int,
+     *     sin_aprobcomp_escribible: int,
+     *     faltantes: list<array{id: int, numerorequisicion: int, estado: string}>,
+     *     por_estado_sin: array<string, int>
+     * }
+     */
+    public function controlarAprobadas(int $lote = 120, int $desdeNro = 0, bool $soloOrigenErp = true): array
+    {
+        $lote = max(20, min(200, $lote));
+        $query = Requisicion::query()
+            ->where('numerorequisicion', '>', 0)
+            ->whereExists(function ($sub) {
+                $sub->selectRaw('1')
+                    ->from('requisicion_estado as re')
+                    ->whereColumn('re.requisicion_id', 'requisicion.id')
+                    ->where('re.estado', 'APROBADA');
+            })
+            ->orderBy('numerorequisicion');
+        if ($soloOrigenErp) {
+            $query->whereExists(function ($sub) {
+                $sub->selectRaw('1')
+                    ->from('requisicion_estado as re')
+                    ->whereColumn('re.requisicion_id', 'requisicion.id')
+                    ->whereRaw('re.id = (SELECT MIN(re2.id) FROM requisicion_estado AS re2 WHERE re2.requisicion_id = requisicion.id)')
+                    ->where(function ($obs) {
+                        $obs->where('re.observacion', 'like', 'Alta en provisorio%')
+                            ->orWhere(function ($alta) {
+                                $alta->where('re.observacion', 'like', 'Alta de requisición%')
+                                    ->where('re.observacion', 'not like', '%Anita%');
+                            });
+                    });
+            });
+        }
+        if ($desdeNro > 0) {
+            $query->where('numerorequisicion', '>=', $desdeNro);
+        }
+
+        $erp = $query->get(['id', 'numerorequisicion', 'estado']);
+        $nros = $erp->pluck('numerorequisicion')->map(static fn ($n) => (int) $n)->unique()->values()->all();
+        $anita = $this->mapaAprobcompPorNros($nros, $lote);
+
+        $faltantes = [];
+        $porEstadoSin = [];
+        $con = 0;
+        $conAprobado = 0;
+        $vivo = 0;
+        $escribible = 0;
+        foreach ($erp as $req) {
+            $nro = (int) $req->numerorequisicion;
+            $fila = $anita[$nro] ?? null;
+            if ($fila !== null) {
+                $con++;
+                if ($fila['tiene_aprobado']) {
+                    $conAprobado++;
+                }
+
+                continue;
+            }
+            $estado = trim((string) $req->estado);
+            $porEstadoSin[$estado] = ($porEstadoSin[$estado] ?? 0) + 1;
+            $esVivo = in_array($estado, RequisicionAnitaAprobcompMapper::ESTADOS_ANITA_VIVO, true);
+            if ($esVivo) {
+                $vivo++;
+            } else {
+                $escribible++;
+            }
+            $faltantes[] = [
+                'id' => (int) $req->id,
+                'numerorequisicion' => $nro,
+                'estado' => $estado,
+            ];
+        }
+
+        return [
+            'erp_aprobadas' => $erp->count(),
+            'lecturas_bridge' => (int) ceil(count($nros) / $lote) ?: 0,
+            'con_aprobcomp' => $con,
+            'con_estado_aprobado' => $conAprobado,
+            'sin_aprobcomp' => count($faltantes),
+            'sin_aprobcomp_vivo' => $vivo,
+            'sin_aprobcomp_escribible' => $escribible,
+            'faltantes' => $faltantes,
+            'por_estado_sin' => $porEstadoSin,
+        ];
+    }
+
+    /**
+     * @param  list<int>  $nros
+     * @return array<int, array{tiene_aprobado: bool, estados: list<int>, motivo: string}>
+     */
+    private function mapaAprobcompPorNros(array $nros, int $lote = 120): array
+    {
+        $lote = max(20, min(200, $lote));
+        $out = [];
+        $api = new ApiAnita;
+        foreach (array_chunk($nros, $lote) as $chunk) {
+            $raw = $api->apiCall([
+                'acc' => 'list',
+                'sistema' => RequisicionAnitaColisionSupport::sistemaCompras(),
+                'tabla' => RequisicionAnitaAprobcompMapper::TABLA,
+                'campos' => 'aprobc_nro, aprobc_estado, aprobc_motivo',
+                'whereArmado' => RequisicionAnitaAprobcompMapper::whereReqIn($chunk),
+            ]);
+            $err = ApiAnita::extraerMensajeError($raw);
+            if ($err !== null) {
+                throw new \RuntimeException('No se pudo leer aprobcomp lote: '.$err);
+            }
+            foreach (ApiAnita::decodificarListaFilas($raw) as $fila) {
+                $nro = (int) ($fila->aprobc_nro ?? 0);
+                if ($nro <= 0) {
+                    continue;
+                }
+                if (! isset($out[$nro])) {
+                    $out[$nro] = ['tiene_aprobado' => false, 'estados' => [], 'motivo' => trim((string) ($fila->aprobc_motivo ?? ''))];
+                }
+                $estado = (int) ($fila->aprobc_estado ?? 0);
+                $out[$nro]['estados'][] = $estado;
+                if ($estado === RequisicionAnitaAprobcompMapper::ESTADO_APROBADO) {
+                    $out[$nro]['tiene_aprobado'] = true;
+                }
+            }
+        }
+
+        return $out;
+    }
+
+    /**
      * Completa nro_int_ap / fechas en snapshots ERP ya insertados incompletos.
      * No toca filas nativas de Anita (motivo <> ERP).
      *
@@ -154,6 +289,57 @@ class RequisicionAnitaAprobcompSyncService
         }
 
         return $stats;
+    }
+
+    /**
+     * Snapshot Aprobado para requisiciones históricas Anita sin árbol/aprobcomp.
+     * Usa el código de usuario Anita (reqm_usuario) sin exigir historia APROBADA en ERP.
+     */
+    public function insertarSnapshotHistorico(
+        Requisicion $requisicion,
+        int $usuarioAnita,
+        string $usuarioNombre,
+        int $fechaYmd
+    ): string {
+        $nro = (int) $requisicion->numerorequisicion;
+        if ($nro <= 0 || $usuarioAnita <= 0) {
+            return self::RESULTADO_OMITIDO;
+        }
+        if ($this->existeReqEnAprobcomp($nro)) {
+            return self::RESULTADO_OMITIDO;
+        }
+        if (! RequisicionAnitaColisionSupport::existeNroEnReqmae($nro)) {
+            return self::RESULTADO_OMITIDO;
+        }
+
+        $requisicion->loadMissing(['empresas', 'proveedores']);
+        $datos = [
+            'numerorequisicion' => $nro,
+            'empresa' => (int) ($requisicion->empresas?->codigo ?? $requisicion->empresa_id ?? 1),
+            'proveedor' => (string) ($requisicion->proveedores?->codigo ?? '0'),
+            'usuario_anita' => $usuarioAnita,
+            'usuario_nombre' => $usuarioNombre,
+            'fecha_ymd' => $fechaYmd > 19900101 ? $fechaYmd : (int) now()->format('Ymd'),
+            'hora_hm' => '00:00',
+            'nro_int_ap' => RequisicionAnitaAprobcompNumeracionSupport::reservarSiguiente(),
+        ];
+
+        $api = new ApiAnita;
+        $api->apiCallEscritura([
+            'acc' => 'insert',
+            'sistema' => RequisicionAnitaColisionSupport::sistemaCompras(),
+            'tabla' => RequisicionAnitaAprobcompMapper::TABLA,
+            'campos' => implode(', ', RequisicionAnitaAprobcompMapper::camposInsert()),
+            'valores' => RequisicionAnitaAprobcompMapper::valoresInsert($datos),
+        ], 'aprobcomp insert histórico REQ '.$nro);
+
+        Log::info('RequisicionAnitaAprobcomp: snapshot histórico escrito', [
+            'requisicion_id' => $requisicion->id,
+            'numerorequisicion' => $nro,
+            'usuario_anita' => $usuarioAnita,
+        ]);
+
+        return self::RESULTADO_INSERTADO;
     }
 
     private function asegurarSnapshotOrFail(Requisicion $requisicion): string

@@ -10,9 +10,9 @@ use Illuminate\Console\Command;
 use Throwable;
 
 /**
- * Regenera el Informe Z de las jornadas cuyo Z MP/QR quedó desactualizado (órdenes tardías)
- * y cuyo recomputo Waitry COINCIDE con lo contabilizado en esas cuentas. Las que no coinciden
- * se listan aparte para revisión del asiento (no se toca el Z).
+ * Regenera el Informe Z solo si el recomputo del proceso coincide con la venta Waitry del cierre
+ * (MP/QR). No usa el asiento: a las 07:45 todavía no está. Si el recomputo da $0 y hay venta
+ * Waitry/ERP, no se toca el Z.
  */
 class GastronomiaRegenerarZDesdeProceso extends Command
 {
@@ -23,7 +23,7 @@ class GastronomiaRegenerarZDesdeProceso extends Command
                             {--tolerancia= : Tolerancia en pesos (default: config)}
                             {--aplicar : Persistir cambios (por defecto es dry-run)}';
 
-    protected $description = 'Regenera Informe Z desde el proceso donde el recomputo = contabilizado; lista aparte las jornadas a revisar en el asiento';
+    protected $description = 'Regenera Informe Z si el recomputo = venta Waitry del cierre; no pisa a $0 si hay venta Waitry/ERP';
 
     public function handle(GastronomiaCierreTotemInformeZService $service): int
     {
@@ -66,6 +66,7 @@ class GastronomiaRegenerarZDesdeProceso extends Command
             ->sortBy(fn ($c) => [(int) $c->empresa_id, (string) ($c->jornada?->fecha_jornada?->format('Y-m-d') ?? '')]);
 
         $regenerar = [];
+        $omitidosCero = [];
         $revisar = [];
         $errores = [];
 
@@ -81,33 +82,49 @@ class GastronomiaRegenerarZDesdeProceso extends Command
             $decision = (string) ($r['decision'] ?? '');
             if ($decision === 'regenerar') {
                 $regenerar[] = $r;
-            } elseif ($decision === 'revisar_asiento') {
+            } elseif ($decision === 'omitido_recomputo_cero') {
+                $omitidosCero[] = $r;
+            } elseif (in_array($decision, ['revisar_venta', 'revisar_asiento'], true)) {
                 $revisar[] = $r;
             }
         }
 
         $this->newLine();
-        $this->info(sprintf('== Z REGENERADOS (recomputo Waitry = MP contabilizado)%s: %d ==', $persistir ? '' : ' [dry-run]', count($regenerar)));
+        $this->info(sprintf('== Z REGENERADOS (recomputo = venta Waitry)%s: %d ==', $persistir ? '' : ' [dry-run]', count($regenerar)));
         foreach ($regenerar as $r) {
             $this->line(sprintf(
-                '  emp %d · %s (j#%d): MP Z %s → recomputo %s  (MP contab %s | total Z %s)%s',
+                '  emp %d · %s (j#%d): Z %s → recomputo %s  (Waitry %s | ERP %s)%s',
                 $r['empresa_id'], $r['fecha_jornada'], $r['jornada_id'],
                 $this->fmt($r['mp_z'] ?? $r['z_actual']), $this->fmt($r['z_recomputado']),
-                $this->fmt($r['mp_contabilizado'] ?? $r['contabilizado']),
-                $this->fmt($r['z_actual']),
+                $this->fmt($r['venta_waitry'] ?? null),
+                $this->fmt($r['venta_erp'] ?? null),
                 $persistir ? ('  '.(($r['conciliacion_ok'] ?? false) ? 'OK' : 'DIF')) : '',
             ));
         }
 
         $this->newLine();
-        $this->warn(sprintf('== A REVISAR EN EL ASIENTO (recomputo Waitry ≠ MP contabilizado): %d ==', count($revisar)));
+        $this->warn(sprintf('== NO SE PISÓ EL Z (recomputo $0 pero hay venta Waitry/ERP): %d ==', count($omitidosCero)));
+        foreach ($omitidosCero as $r) {
+            $this->warn(sprintf(
+                '  emp %d · %s (j#%d): recomputo %s | Waitry %s | ERP %s | Z actual %s',
+                $r['empresa_id'], $r['fecha_jornada'], $r['jornada_id'],
+                $this->fmt($r['z_recomputado'] ?? null),
+                $this->fmt($r['venta_waitry'] ?? null),
+                $this->fmt($r['venta_erp'] ?? null),
+                $this->fmt($r['mp_z'] ?? $r['z_actual'] ?? null),
+            ));
+        }
+
+        $this->newLine();
+        $this->warn(sprintf('== A REVISAR (recomputo ≠ venta Waitry): %d ==', count($revisar)));
         foreach ($revisar as $r) {
             $this->warn(sprintf(
-                '  emp %d · %s (j#%d): MP Z %s | recomputo %s | MP contab %s | total Z %s | Δ recomputo↔MP contab %s',
+                '  emp %d · %s (j#%d): Z %s | recomputo %s | Waitry %s | ERP %s | Δ recomputo↔Waitry %s',
                 $r['empresa_id'], $r['fecha_jornada'], $r['jornada_id'],
                 $this->fmt($r['mp_z'] ?? null), $this->fmt($r['z_recomputado']),
-                $this->fmt($r['mp_contabilizado'] ?? null), $this->fmt($r['z_actual']),
-                $this->fmt($r['diff_recomputado_contab']),
+                $this->fmt($r['venta_waitry'] ?? null),
+                $this->fmt($r['venta_erp'] ?? null),
+                $this->fmt($r['diff_recomputado_waitry'] ?? null),
             ));
         }
 
@@ -121,8 +138,8 @@ class GastronomiaRegenerarZDesdeProceso extends Command
 
         $this->newLine();
         $this->info(sprintf(
-            'Resumen: %d regenerad%s, %d a revisar asiento, %d error(es).',
-            count($regenerar), $persistir ? 'os' : 'os (simulado)', count($revisar), count($errores),
+            'Resumen: %d regenerad%s, %d omitidos por recomputo $0, %d a revisar, %d error(es).',
+            count($regenerar), $persistir ? 'os' : 'os (simulado)', count($omitidosCero), count($revisar), count($errores),
         ));
 
         return self::SUCCESS;

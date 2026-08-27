@@ -54,13 +54,13 @@
                                 <input type="hidden" name="origen" value="{{ $retornoLegajo['origen'] }}">
                                 <input type="hidden" name="legajo_oc_id" value="{{ (int) ($data->ordencompra_id ?? 0) }}">
                             @endif
-                            <button type="submit" class="btn btn-warning btn-sm">
+                            <button type="submit" class="btn btn-warning btn-sm js-cp-contabilizar">
                                 <i class="fa fa-check"></i> Contabilizar
                             </button>
                         </form>
                         @else
                         <button type="submit" form="form-comprobante-proveedor" name="accion" value="contabilizar"
-                            class="btn btn-warning btn-sm"
+                            class="btn btn-warning btn-sm js-cp-contabilizar"
                             onclick="return confirm('¿Guardar y contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
                             <i class="fa fa-check"></i> Contabilizar
                         </button>
@@ -85,21 +85,24 @@
                     </a>
                     @endif
                     @if ($esEdicion && ! ($tiene_pagos ?? false) && can('borrar-comprobante-proveedor', false))
+                    @php
+                        $huellaAnitaBorrar = \App\Support\Compras\ComprobanteProveedorEstados::tieneHuellaAnita($data);
+                    @endphp
                     <form action="{{ route('eliminar_comprobante_proveedor', ['id' => $data->id] + $retornoListadoQuery) }}" method="POST" class="d-inline"
-                        onsubmit="return confirm('¿Borrar el comprobante #{{ $data->id }} en anitaERP y Anita (asiento, CC, compra/promov/ctamov)? Esta acción no se puede deshacer.');">
+                        onsubmit="return confirm(@json(\App\Support\Compras\ComprobanteProveedorEstados::textoBorrarConfirm((int) $data->id, $huellaAnitaBorrar)));">
                         @csrf
                         @method('DELETE')
-                        <button type="submit" class="btn btn-outline-danger btn-sm">
-                            <i class="fa fa-times-circle"></i> Borrar factura
+                        <button type="submit" class="btn btn-outline-danger btn-sm" title="{{ \App\Support\Compras\ComprobanteProveedorEstados::textoBorrarTooltip($huellaAnitaBorrar) }}">
+                            <i class="fa fa-times-circle"></i> {{ $huellaAnitaBorrar ? 'Borrar factura' : 'Borrar borrador' }}
                         </button>
                     </form>
                     @if (($data->precarga_comprobante_proveedor_id ?? null) && can('borrar-precarga-proveedores', false))
                     <form action="{{ route('eliminar_comprobante_proveedor_con_precarga', ['id' => $data->id] + $retornoListadoQuery) }}" method="POST" class="d-inline"
-                        onsubmit="return confirm('¿Borrar el comprobante #{{ $data->id }} y también la precarga #{{ $data->precarga_comprobante_proveedor_id }} (ERP + Anita)? Esta acción no se puede deshacer.');">
+                        onsubmit="return confirm(@json(\App\Support\Compras\ComprobanteProveedorEstados::textoBorrarConfirm((int) $data->id, $huellaAnitaBorrar, (int) $data->precarga_comprobante_proveedor_id)));">
                         @csrf
                         @method('DELETE')
-                        <button type="submit" class="btn btn-danger btn-sm">
-                            <i class="fa fa-trash"></i> Borrar factura y precarga
+                        <button type="submit" class="btn btn-danger btn-sm" title="{{ $huellaAnitaBorrar ? 'Borrar factura y precarga (ERP + Anita)' : 'Borrar borrador y precarga (solo ERP)' }}">
+                            <i class="fa fa-trash"></i> {{ $huellaAnitaBorrar ? 'Borrar factura y precarga' : 'Borrar borrador y precarga' }}
                         </button>
                     </form>
                     @endif
@@ -130,6 +133,7 @@
                 data-precarga-id="{{ (int) ($data->precarga_comprobante_proveedor_id ?? 0) }}"
                 data-ordencompra-id="{{ (int) ($data->ordencompra_id ?? 0) }}"
                 data-numero-oc="{{ $data->ordencompras->numeroordencompra ?? (optional($data->precarga_comprobante_proveedores)->numeroordencompra ?? '') }}"
+                data-anita-nro="{{ (int) ($data->anita_nro_interno ?? 0) }}"
                 data-aviso-anita-url="{{ route('comprobante_proveedor_aviso_factura_anita') }}"
                 data-sync-oc-com-url="{{ route('comprobante_proveedor_sincronizar_oc_com') }}"
                 data-precarga-cargada-url="{{ route('precarga_comprobante_proveedor', ['estado' => \App\Support\Compras\PrecargaComprobanteEstados::CARGADA_ANITA]) }}">

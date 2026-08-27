@@ -80,6 +80,7 @@ final class OrdencompraLegajoBandejaFiltros
             'vista' => $vista,
             'tab' => $tab,
             'atajo' => $atajo,
+            'nro_oc' => trim((string) $request->query('nro_oc', '')),
             'nro_factura' => trim((string) $request->query('nro_factura', '')),
             'nro_com' => trim((string) $request->query('nro_com', '')),
             'nro_op' => trim((string) $request->query('nro_op', '')),
@@ -97,6 +98,9 @@ final class OrdencompraLegajoBandejaFiltros
         $params['tab'] = $filtros['tab'] ?? self::TAB_TODOS;
         if (! empty($filtros['atajo'])) {
             $params['atajo'] = $filtros['atajo'];
+        }
+        if (! empty($filtros['nro_oc'])) {
+            $params['nro_oc'] = $filtros['nro_oc'];
         }
         if (! empty($filtros['nro_factura'])) {
             $params['nro_factura'] = $filtros['nro_factura'];

@@ -12,6 +12,8 @@
         urlAnular: @json(route('api_cierre_rendicion_bingo_anular')),
         urlPreviewRango: @json(route('api_cierre_rendicion_bingo_preview_rango')),
         urlEjecutarRango: @json(route('api_cierre_rendicion_bingo_ejecutar_rango')),
+        urlPreviewAnularRango: @json(route('api_cierre_rendicion_bingo_preview_anular_rango')),
+        urlAnularRango: @json(route('api_cierre_rendicion_bingo_anular_rango')),
         puedeEjecutar: @json(can('ejecutar-cierre-rendicion-bingo-contable', false)),
         puedeAnular: @json(can('anular-cierre-rendicion-bingo-contable', false)),
     };
@@ -71,6 +73,12 @@
                         <button type="button" class="btn btn-sm btn-success mr-2 mb-1" id="btn-abrir-cierre-rango"
                                 title="Cerrar jornadas pendientes por rango de fechas">
                             <i class="fa fa-calendar-check-o"></i> Cierre por rango
+                        </button>
+                    @endif
+                    @if (can('anular-cierre-rendicion-bingo-contable', false))
+                        <button type="button" class="btn btn-sm btn-outline-danger mr-2 mb-1" id="btn-abrir-anular-rango"
+                                title="Anular jornadas cerradas por rango (borra asientos ERP y ctamov)">
+                            <i class="fa fa-unlock"></i> Anular por rango
                         </button>
                     @endif
                     @include('includes.listado.filtros_toolbar', [
@@ -222,5 +230,8 @@
 @endif
 @if (can('ejecutar-cierre-rendicion-bingo-contable', false))
     @include('contable.cierre_rendicion_bingo.modal_cierre_rango')
+@endif
+@if (can('anular-cierre-rendicion-bingo-contable', false))
+    @include('contable.cierre_rendicion_bingo.modal_anular_rango')
 @endif
 @endsection

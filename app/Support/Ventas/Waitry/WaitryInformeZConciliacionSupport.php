@@ -111,8 +111,21 @@ final class WaitryInformeZConciliacionSupport
         // Tras el cierre de jornada el Informe Z es histórico: no recalcular Sistema desde
         // snapshot/proceso posterior (facturas lote post-cierre, relecturas Waitry, etc.).
         $informeZ = $detalle['resumen_informe_z'] ?? null;
-        if (is_array($informeZ) && is_array($informeZ['por_totem'] ?? null)) {
-            return self::reconstruirResumenInformeZConDesglose($informeZ, $empresaId);
+        if (is_array($informeZ) && is_array($informeZ['por_totem'] ?? null)
+            && self::resumenInformeZPersistidoEsConfiable($informeZ, $detalle)) {
+            $reconstruido = self::reconstruirResumenInformeZConDesglose($informeZ, $empresaId);
+            $totalReconstruido = round((float) ($reconstruido['total_general']['total_ingreso'] ?? 0), 2);
+            $totalPersistido = round((float) ($informeZ['total_general']['total_ingreso'] ?? 0), 2);
+            if ($totalReconstruido > 0.0001 || $totalPersistido <= 0.0001) {
+                return $reconstruido;
+            }
+
+            return [
+                'por_totem' => is_array($informeZ['por_totem'] ?? null) ? $informeZ['por_totem'] : [],
+                'total_general' => is_array($informeZ['total_general'] ?? null)
+                    ? $informeZ['total_general']
+                    : $reconstruido['total_general'],
+            ];
         }
 
         if ($jornadaId !== null && $jornadaId > 0 && $empresaId > 0) {
@@ -127,6 +140,39 @@ final class WaitryInformeZConciliacionSupport
         );
 
         return self::reconstruirResumenInformeZConDesglose($filtrado, $empresaId);
+    }
+
+    /**
+     * Un resumen_informe_z en $0 no es histórico si el cierre Waitry ({@see resumen_totems}) sí tiene MP/QR.
+     *
+     * @param  array<string, mixed>  $informeZ
+     * @param  array<string, mixed>  $detalle
+     */
+    public static function resumenInformeZPersistidoEsConfiable(array $informeZ, array $detalle): bool
+    {
+        $total = round((float) ($informeZ['total_general']['total_ingreso'] ?? 0), 2);
+        if ($total > 0.0001 || ($informeZ['por_totem'] ?? []) !== []) {
+            return true;
+        }
+
+        return self::totalInformeZDesdeResumenTotems($detalle) <= 0.0001;
+    }
+
+    /**
+     * Venta Waitry del cierre (MP/QR/Posnet) desde {@see resumen_totems}, sin pasar por el Z pisado.
+     *
+     * @param  array<string, mixed>  $detalle
+     */
+    public static function totalInformeZDesdeResumenTotems(array $detalle): float
+    {
+        $filtrado = self::filtrarResumenSoloCreditCardPosnet(
+            is_array($detalle['resumen_totems'] ?? null)
+                ? $detalle['resumen_totems']
+                : ['por_totem' => [], 'total_general' => []],
+        );
+        $reconstruido = self::reconstruirResumenInformeZConDesglose($filtrado);
+
+        return round((float) ($reconstruido['total_general']['total_ingreso'] ?? 0), 2);
     }
 
     /**

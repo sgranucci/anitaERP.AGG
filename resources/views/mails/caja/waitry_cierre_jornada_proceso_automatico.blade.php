@@ -76,8 +76,8 @@
                 @if (! empty($ef['omitida']))
                     sin comandas Waitry (emisión omitida)
                 @else
-                    {{ (int) ($ef['cantidad_facturas'] ?? 0) }} lote(s)
-                    · total $ {{ $fmt($ef['total_factura'] ?? 0) }}
+                    {{ (int) ($ef['cantidad_facturas'] ?? count($ef['facturas'] ?? [])) }} lote(s)
+                    · total $ {{ $fmt(\App\Support\Ventas\Gastronomia\CierreJornadaProcesoAutomaticoSupport::totalFacturasDesdeEmision($ef)) }}
                 @endif
             </p>
             @if (! empty($ef['facturas']))

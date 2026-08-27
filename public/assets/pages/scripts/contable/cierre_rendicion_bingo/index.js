@@ -5,6 +5,7 @@
     var grupoActual = null;
     var cierreGrupoEjecutando = false;
     var rangoEjecutando = false;
+    var anularRangoEjecutando = false;
 
     function tokenCsrf() {
         var meta = document.querySelector('meta[name="csrf-token"]');
@@ -504,6 +505,232 @@
             });
     }
 
+    function limpiarPreviewAnularRango() {
+        var box = document.getElementById('anular-rango-preview-box');
+        var err = document.getElementById('anular-rango-error-box');
+        var btnEj = document.getElementById('btn-anular-rango-ejecutar');
+        var porDiaBox = document.getElementById('anular-rango-preview-por-dia-box');
+        if (box) {
+            box.classList.add('d-none');
+        }
+        if (err) {
+            err.classList.add('d-none');
+            err.textContent = '';
+        }
+        if (btnEj) {
+            btnEj.classList.add('d-none');
+        }
+        if (porDiaBox) {
+            porDiaBox.classList.add('d-none');
+        }
+    }
+
+    function mostrarPreviewAnularRango(preview) {
+        var box = document.getElementById('anular-rango-preview-box');
+        var resumen = document.getElementById('anular-rango-preview-resumen');
+        var tbody = document.getElementById('anular-rango-preview-tbody');
+        var btnEj = document.getElementById('btn-anular-rango-ejecutar');
+        var porDiaBox = document.getElementById('anular-rango-preview-por-dia-box');
+        var porDiaTbody = document.getElementById('anular-rango-preview-por-dia-tbody');
+        if (!box || !resumen || !tbody) {
+            return;
+        }
+        var cantGrupos = preview.cantidad_grupos || 0;
+        resumen.textContent = (preview.cantidad || 0) + ' rendición(es) cerrada(s) → '
+            + cantGrupos + ' cierre(s) a anular. Recaudación: '
+            + formatoNumero(preview.total_cobrado || 0)
+            + '. Se borran asientos en ERP y ctamov.';
+
+        tbody.innerHTML = '';
+        (preview.grupos || []).forEach(function (g, idx) {
+            var detalleId = 'anular-rango-detalle-bingo-' + idx;
+            var rends = g.rendiciones || [];
+            var tr = document.createElement('tr');
+            tr.innerHTML = '<td class="text-center align-middle">'
+                + (rends.length > 1
+                    ? '<button type="button" class="btn btn-link btn-sm p-0 js-toggle-anular-rango-detalle" data-target="#'
+                        + detalleId + '" title="Ver rendiciones"><i class="fa fa-chevron-down"></i></button>'
+                    : '')
+                + '</td>'
+                + '<td>' + escapeHtml(g.fecha_dia_fmt || formatoFechaIso(g.fecha_dia)) + '</td>'
+                + '<td><small>' + escapeHtml(g.puntoventa_label || g.asiento_numero || 'Cierre diario') + '</small></td>'
+                + '<td class="text-center">' + (g.cantidad_rendiciones || 0) + '</td>'
+                + '<td class="text-right">' + formatoNumero(g.total_cobrado || 0) + '</td>';
+            tbody.appendChild(tr);
+
+            if (rends.length > 1) {
+                var detalleHtml = rends.map(function (r) {
+                    return '<tr>'
+                        + '<td>' + escapeHtml(r.id) + '</td>'
+                        + '<td>' + escapeHtml(r.codigo || '—') + '</td>'
+                        + '<td>' + escapeHtml(r.asiento_numero || '—') + '</td>'
+                        + '<td class="text-right">' + formatoNumero(r.total_cobrado || 0) + '</td>'
+                        + '</tr>';
+                }).join('');
+                var trDet = document.createElement('tr');
+                trDet.className = 'rango-grupo-detalle collapse';
+                trDet.id = detalleId;
+                trDet.innerHTML = '<td colspan="5" class="p-0 bg-light">'
+                    + '<table class="table table-sm table-bordered mb-0">'
+                    + '<thead class="thead-light"><tr>'
+                    + '<th>ID</th><th>Ticket</th><th>Asiento</th><th class="text-right">Recaudación</th>'
+                    + '</tr></thead><tbody>' + detalleHtml + '</tbody></table></td>';
+                tbody.appendChild(trDet);
+            }
+        });
+
+        tbody.querySelectorAll('.js-toggle-anular-rango-detalle').forEach(function (btn) {
+            btn.addEventListener('click', function () {
+                toggleDetalleRango(btn);
+            });
+        });
+
+        if (porDiaTbody && porDiaBox) {
+            var porDia = preview.por_dia || [];
+            if (porDia.length > 1) {
+                porDiaTbody.innerHTML = '';
+                porDia.forEach(function (d) {
+                    var trDia = document.createElement('tr');
+                    trDia.innerHTML = '<td>' + escapeHtml(formatoFechaIso(d.fecha_jornada)) + '</td>'
+                        + '<td class="text-center">' + (d.cantidad || 0) + '</td>'
+                        + '<td class="text-center">' + (d.cantidad_grupos || 0) + '</td>'
+                        + '<td class="text-right">' + formatoNumero(d.total_cobrado || 0) + '</td>';
+                    porDiaTbody.appendChild(trDia);
+                });
+                porDiaBox.classList.remove('d-none');
+            } else {
+                porDiaBox.classList.add('d-none');
+                porDiaTbody.innerHTML = '';
+            }
+        }
+
+        box.classList.remove('d-none');
+        if (btnEj && cantGrupos > 0) {
+            btnEj.classList.remove('d-none');
+        }
+    }
+
+    function previewAnularCierreRango() {
+        limpiarPreviewAnularRango();
+        var empresaId = parseInt((document.getElementById('anular-rango-empresa-id') || {}).value || '0', 10);
+        var desde = (document.getElementById('anular-rango-fecha-desde') || {}).value || '';
+        var hasta = (document.getElementById('anular-rango-fecha-hasta') || {}).value || '';
+        if (empresaId <= 0 || !desde || !hasta) {
+            alert('Indique empresa y rango de fechas.');
+            return;
+        }
+        if (!cfg.urlPreviewAnularRango) {
+            alert('No hay permiso o ruta de anulación por rango.');
+            return;
+        }
+        fetch(cfg.urlPreviewAnularRango, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': tokenCsrf(),
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify({
+                empresa_id: empresaId,
+                fecha_desde: desde,
+                fecha_hasta: hasta,
+            }),
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.ok) {
+                    var err = document.getElementById('anular-rango-error-box');
+                    if (err) {
+                        err.textContent = data.mensaje || 'No se pudo obtener el preview.';
+                        err.classList.remove('d-none');
+                    }
+                    return;
+                }
+                mostrarPreviewAnularRango(data.preview || {});
+            })
+            .catch(function () {
+                alert('Error de comunicación al consultar cierres del rango.');
+            });
+    }
+
+    function setBotonEjecutarAnularRango(procesando) {
+        var btn = document.getElementById('btn-anular-rango-ejecutar');
+        if (!btn) {
+            return;
+        }
+        btn.disabled = procesando;
+        if (procesando) {
+            if (!btn.getAttribute('data-label-original')) {
+                btn.setAttribute('data-label-original', btn.innerHTML);
+            }
+            btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Anulando…';
+        } else if (btn.getAttribute('data-label-original')) {
+            btn.innerHTML = btn.getAttribute('data-label-original');
+        }
+    }
+
+    function ejecutarAnularCierreRango() {
+        if (anularRangoEjecutando) {
+            return;
+        }
+        var empresaId = parseInt((document.getElementById('anular-rango-empresa-id') || {}).value || '0', 10);
+        var desde = (document.getElementById('anular-rango-fecha-desde') || {}).value || '';
+        var hasta = (document.getElementById('anular-rango-fecha-hasta') || {}).value || '';
+        if (empresaId <= 0 || !desde || !hasta) {
+            return;
+        }
+        if (!confirm('¿Anular los cierres del rango? Se borran físicamente los asientos en ERP y ctamov, y el FBI.')) {
+            return;
+        }
+        anularRangoEjecutando = true;
+        setBotonEjecutarAnularRango(true);
+        mostrarOverlayCierre(
+            'Anulando rango de bingo…',
+            'Borra asientos en ERP y ctamov. Puede demorar. No cierre la página ni vuelva a confirmar.'
+        );
+        fetch(cfg.urlAnularRango, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRF-TOKEN': tokenCsrf(),
+                'Accept': 'application/json',
+            },
+            body: JSON.stringify({
+                empresa_id: empresaId,
+                fecha_desde: desde,
+                fecha_hasta: hasta,
+                confirmar: true,
+            }),
+        })
+            .then(function (r) { return r.json(); })
+            .then(function (data) {
+                if (!data.ok) {
+                    anularRangoEjecutando = false;
+                    setBotonEjecutarAnularRango(false);
+                    ocultarOverlayCierre();
+                    alert(data.mensaje || 'No se pudo anular el rango.');
+                    return;
+                }
+                var msg = data.mensaje || 'Anulación del rango completada.';
+                var errores = (data.resultado && data.resultado.errores) ? data.resultado.errores : [];
+                if (errores.length) {
+                    msg += '\n\nErrores:\n' + errores.map(function (e) {
+                        return (e.grupo_clave || '?') + ': ' + e.mensaje;
+                    }).join('\n');
+                }
+                ocultarOverlayCierre();
+                alert(msg);
+                $('#modal-anular-rango-rend-bingo').modal('hide');
+                window.location.reload();
+            })
+            .catch(function () {
+                anularRangoEjecutando = false;
+                setBotonEjecutarAnularRango(false);
+                ocultarOverlayCierre();
+                alert('Error de comunicación al anular el rango. Recargue y verifique qué jornadas quedaron pendientes.');
+            });
+    }
+
     window.CIERRE_REND_abrirRangoDesdePendientes = function (empresaId, desde, hasta) {
         var empRango = document.getElementById('rango-empresa-id');
         var inputDesde = document.getElementById('rango-fecha-desde');
@@ -578,6 +805,36 @@
         if (btnEjecutarRango) {
             btnEjecutarRango.addEventListener('click', ejecutarCierreRango);
         }
+
+        var btnAbrirAnularRango = document.getElementById('btn-abrir-anular-rango');
+        if (btnAbrirAnularRango) {
+            btnAbrirAnularRango.addEventListener('click', function () {
+                anularRangoEjecutando = false;
+                setBotonEjecutarAnularRango(false);
+                limpiarPreviewAnularRango();
+                $('#modal-anular-rango-rend-bingo').modal('show');
+            });
+        }
+
+        var btnPreviewAnularRango = document.getElementById('btn-anular-rango-preview');
+        if (btnPreviewAnularRango) {
+            btnPreviewAnularRango.addEventListener('click', function () {
+                this.blur();
+                previewAnularCierreRango();
+            });
+        }
+
+        var btnEjecutarAnularRango = document.getElementById('btn-anular-rango-ejecutar');
+        if (btnEjecutarAnularRango) {
+            btnEjecutarAnularRango.addEventListener('click', ejecutarAnularCierreRango);
+        }
+
+        ['anular-rango-empresa-id', 'anular-rango-fecha-desde', 'anular-rango-fecha-hasta'].forEach(function (id) {
+            var elAnular = document.getElementById(id);
+            if (elAnular) {
+                elAnular.addEventListener('change', limpiarPreviewAnularRango);
+            }
+        });
 
         ['rango-empresa-id', 'rango-fecha-desde', 'rango-fecha-hasta'].forEach(function (id) {
             var el = document.getElementById(id);

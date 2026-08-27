@@ -29,6 +29,7 @@ use App\Support\Compras\ComprobanteProveedorArchivoTipos;
 use App\Support\Compras\ComprobanteProveedorControlesConfigSupport;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
 use App\Support\Compras\ComprobanteProveedorDuplicadoException;
+use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
 use App\Support\Compras\ComprobanteProveedorYaExistenteEnAnitaException;
 use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\ComprobanteProveedorEstados;
@@ -325,6 +326,30 @@ class Comprobante_ProveedorController extends Controller
         if (! can('crear-comprobante-proveedor', false)
             && ! can('editar-comprobante-proveedor', false)) {
             return response()->json(['message' => 'Sin permisos'], 403);
+        }
+
+        $comprobanteId = (int) $request->query('comprobante_id', 0);
+        if ($comprobanteId > 0) {
+            $comprobante = Comprobante_Proveedor::query()->find($comprobanteId);
+            if (! $comprobante) {
+                return response()->json(['ok' => true, 'aviso' => null, 'html' => '']);
+            }
+
+            $aviso = ComprobanteProveedorAnitaCompraExistenciaSupport::avisoDuplicadoDesdeComprobante($comprobante);
+            if ($aviso === null) {
+                return response()->json(['ok' => true, 'aviso' => null, 'html' => '']);
+            }
+
+            $html = view('compras.precarga_comprobante_proveedor.partials.aviso_ya_en_anita', [
+                'facturaYaEnAnita' => $aviso,
+            ])->render();
+
+            return response()->json([
+                'ok' => true,
+                'aviso' => $aviso,
+                'html' => $html,
+                'ya_marcada' => false,
+            ]);
         }
 
         $precargaId = (int) $request->query('precarga_id', 0);

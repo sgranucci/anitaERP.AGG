@@ -143,4 +143,43 @@ final class ComprobanteProveedorEstados
 
         return $activo ? $lleno : $outline;
     }
+
+    /**
+     * El comprobante ya escribió asiento/CC/compra en Anita (no es un borrador local).
+     */
+    public static function tieneHuellaAnita(object|array|null $comprobante): bool
+    {
+        if ($comprobante === null) {
+            return false;
+        }
+
+        $nro = is_array($comprobante)
+            ? ($comprobante['anita_nro_interno'] ?? 0)
+            : ($comprobante->anita_nro_interno ?? 0);
+        $asiento = is_array($comprobante)
+            ? ($comprobante['asiento_id'] ?? 0)
+            : ($comprobante->asiento_id ?? 0);
+
+        return (int) $nro > 0 || (int) $asiento > 0;
+    }
+
+    public static function textoBorrarTooltip(bool $huellaAnita): string
+    {
+        return $huellaAnita
+            ? 'Borrar factura (ERP + Anita)'
+            : 'Borrar borrador (solo ERP)';
+    }
+
+    public static function textoBorrarConfirm(int $id, bool $huellaAnita, ?int $precargaId = null): string
+    {
+        if ($precargaId !== null && $precargaId > 0) {
+            return $huellaAnita
+                ? '¿Borrar el comprobante #'.$id.' y también la precarga #'.$precargaId.' en ERP y Anita? Esta acción no se puede deshacer.'
+                : '¿Borrar el borrador #'.$id.' y la precarga #'.$precargaId.' del ERP? No se toca Anita (la factura nativa, si existe, queda). Esta acción no se puede deshacer.';
+        }
+
+        return $huellaAnita
+            ? '¿Borrar el comprobante #'.$id.' en anitaERP y Anita (asiento, CC, compra/promov/ctamov)? Esta acción no se puede deshacer.'
+            : '¿Borrar el borrador #'.$id.' del ERP? No se toca Anita. Esta acción no se puede deshacer.';
+    }
 }

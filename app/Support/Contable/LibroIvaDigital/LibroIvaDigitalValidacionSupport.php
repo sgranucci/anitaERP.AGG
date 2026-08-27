@@ -323,6 +323,15 @@ final class LibroIvaDigitalValidacionSupport
             }
         }
         $exentoVentas = (float) ($resultado['ventas']['resumen']['total_exento'] ?? 0);
+        $exentoIvaSimple = (float) collect($resultado['iva_simple']['resumen_por_actividad'] ?? [])
+            ->sum('exento');
+        if ($exentoVentas > 1 && abs($exentoVentas - $exentoIvaSimple) > max(1.0, $exentoVentas * 0.02)) {
+            $avisos[] = sprintf(
+                'Exento/no gravado del Libro IVA Digital (%.2f) difiere del IVA Simple tipo 3 (%.2f). Deben coincidir (RG 5705).',
+                $exentoVentas,
+                $exentoIvaSimple,
+            );
+        }
         $fbiFsl = (int) ($resultado['ventas']['resumen']['ventas_fbi_fsl'] ?? 0);
         if ($exentoApuestas > 1 && $fbiFsl === 0) {
             $avisos[] = sprintf(

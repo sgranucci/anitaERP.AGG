@@ -68,6 +68,20 @@ final class LibroIvaDigitalMapeosSupport
         return self::ALICUOTA_IVA_SIMPLE_POR_TASA[$keyInt] ?? self::ALICUOTA_IVA_SIMPLE_POR_TASA[$key] ?? 3;
     }
 
+    public static function codigoAlicuotaIvaSimpleDesdeLid(string $codigoLid): int
+    {
+        $codigo = str_pad(preg_replace('/\D+/', '', $codigoLid) ?: '3', 4, '0', STR_PAD_LEFT);
+
+        return match ($codigo) {
+            '0009' => 9,
+            '0008' => 8,
+            '0004' => 4,
+            '0005' => 5,
+            '0006' => 6,
+            default => 3,
+        };
+    }
+
     public static function tipoComprobanteVentas(string $codigoBase, string $letra, ?string $abreviatura = null): string
     {
         // RMV / FBI / FSL: codigo ERP no numérico; informan como Factura B (006).

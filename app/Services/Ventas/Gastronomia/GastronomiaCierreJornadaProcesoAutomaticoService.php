@@ -364,7 +364,9 @@ final class GastronomiaCierreJornadaProcesoAutomaticoService
                     ],
                     array_filter($em['facturas'] ?? [], 'is_array'),
                 )),
-                'total_factura' => round((float) ($em['total_factura'] ?? 0), 2),
+                'total_factura' => CierreJornadaProcesoAutomaticoSupport::totalFacturasDesdeEmision(
+                    is_array($em) ? $em : [],
+                ),
             ];
         }
 

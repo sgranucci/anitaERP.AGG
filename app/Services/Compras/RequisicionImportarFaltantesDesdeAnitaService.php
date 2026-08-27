@@ -127,6 +127,174 @@ class RequisicionImportarFaltantesDesdeAnitaService
     }
 
     /**
+     * Importa requisiciones puntuales desde Anita (3 lecturas: mae/mov/ref).
+     *
+     * @param  list<int>  $nros
+     * @return array{importadas: int, omitidas: int, errores: list<string>}
+     */
+    public function importarPorNumeros(array $nros, int $usuarioId): array
+    {
+        $nros = array_values(array_unique(array_filter(array_map('intval', $nros), static fn (int $n) => $n > 0)));
+        $stats = ['importadas' => 0, 'omitidas' => 0, 'errores' => []];
+        if ($nros === []) {
+            return $stats;
+        }
+
+        $existentes = DB::table('requisicion')
+            ->whereIn('numerorequisicion', $nros)
+            ->pluck('id', 'numerorequisicion')
+            ->all();
+
+        $faltan = array_values(array_filter($nros, static fn (int $n) => ! isset($existentes[$n])));
+        if ($faltan === []) {
+            $stats['omitidas'] = count($nros);
+
+            return $stats;
+        }
+
+        $lote = $this->leerLotePorNros($faltan);
+        $mapas = $this->mapasErp();
+        foreach ($faltan as $nro) {
+            if (! isset($lote['cabeceras'][$nro])) {
+                $stats['errores'][] = $nro.': no está en reqmae Anita';
+
+                continue;
+            }
+            try {
+                $this->importarUna($lote['cabeceras'][$nro], $lote['lineas'][$nro] ?? [], $lote['refs'][$nro] ?? null, $mapas, $usuarioId);
+                $stats['importadas']++;
+            } catch (\Throwable $e) {
+                $stats['errores'][] = $nro.': '.$e->getMessage();
+            }
+        }
+
+        return $stats;
+    }
+
+    /**
+     * Vincula OC ERP a requisición por número Anita (no reescribe Anita).
+     *
+     * @param  array<int, int>  $ocAReq  numeroordencompra => numerorequisicion
+     * @return array{vinculadas: int, omitidas: int, errores: list<string>}
+     */
+    public function vincularParesOcReq(array $ocAReq): array
+    {
+        $stats = ['vinculadas' => 0, 'omitidas' => 0, 'errores' => []];
+        $reqIds = DB::table('requisicion')
+            ->whereIn('numerorequisicion', array_values($ocAReq))
+            ->pluck('id', 'numerorequisicion')
+            ->mapWithKeys(static fn ($id, $nro) => [(int) $nro => (int) $id])
+            ->all();
+
+        $lineasReq = Requisicion_Articulo::query()
+            ->whereIn('requisicion_id', array_values($reqIds) ?: [0])
+            ->whereNotNull('anita_nro_interno')
+            ->where('anita_nro_interno', '>', 0)
+            ->get(['id', 'requisicion_id', 'anita_nro_interno']);
+        $porInterno = [];
+        foreach ($lineasReq as $linea) {
+            $porInterno[(int) $linea->anita_nro_interno] = (int) $linea->id;
+        }
+
+        foreach ($ocAReq as $ocNro => $reqNro) {
+            $ocNro = (int) $ocNro;
+            $reqNro = (int) $reqNro;
+            $reqId = $reqIds[$reqNro] ?? 0;
+            if ($reqId <= 0) {
+                $stats['errores'][] = "OC {$ocNro}: requisición {$reqNro} no está en ERP";
+
+                continue;
+            }
+            $oc = Ordencompra::query()->where('numeroordencompra', $ocNro)->first();
+            if ($oc === null) {
+                $stats['errores'][] = "OC {$ocNro}: no está en ERP";
+
+                continue;
+            }
+            if ((int) $oc->requisicion_id === $reqId) {
+                $stats['omitidas']++;
+
+                continue;
+            }
+            try {
+                DB::transaction(function () use ($oc, $reqId, $porInterno) {
+                    $oc->forceFill(['requisicion_id' => $reqId])->save();
+                    foreach ($oc->ordencompra_articulos as $linea) {
+                        $nroInt = (int) ($linea->penvp_nro_interno ?? 0);
+                        if ($nroInt > 0 && isset($porInterno[$nroInt]) && ! $linea->requisicion_articulo_id) {
+                            $linea->forceFill(['requisicion_articulo_id' => $porInterno[$nroInt]])->save();
+                        }
+                    }
+                });
+                $stats['vinculadas']++;
+            } catch (\Throwable $e) {
+                $stats['errores'][] = "OC {$ocNro}: ".$e->getMessage();
+            }
+        }
+
+        return $stats;
+    }
+
+    /**
+     * @param  list<int>  $nros
+     * @return array{cabeceras: array<int, object>, lineas: array<int, list<object>>, refs: array<int, object>}
+     */
+    private function leerLotePorNros(array $nros): array
+    {
+        $api = new ApiAnita;
+        $in = implode(',', $nros);
+        $rawMae = $api->apiCall([
+            'acc' => 'list',
+            'sistema' => 'compras',
+            'tabla' => 'reqmae',
+            'campos' => 'reqm_nro, reqm_fecha, reqm_fecha_ent, reqm_ccosto, reqm_estado, reqm_leyenda, reqm_empresa, reqm_proveedor, reqm_cod_mon, reqm_ccosto_dest, reqm_cond_pago, reqm_es_urgente, reqm_mot_urgencia, reqm_cont_directa, reqm_usuario, reqm_fecha_ing, reqm_hora_ing',
+            'whereArmado' => ' WHERE reqm_nro IN ('.$in.')',
+        ]);
+        $this->assertListOk($rawMae, 'reqmae nros');
+        $cabeceras = [];
+        foreach (ApiAnita::decodificarListaFilas($rawMae) as $fila) {
+            $nro = (int) ($fila->reqm_nro ?? 0);
+            if ($nro > 0) {
+                $cabeceras[$nro] = $fila;
+            }
+        }
+
+        $rawMov = $api->apiCall([
+            'acc' => 'list',
+            'sistema' => 'compras',
+            'tabla' => 'reqmov',
+            'campos' => 'reqv_nro, reqv_nro_orden, reqv_articulo, reqv_desc, reqv_cantidad, reqv_precio, reqv_fecha_ent, reqv_ccosto, reqv_cant_unid, reqv_nro_interno, reqv_precio_ori, reqv_motivo_ahorro, reqv_proveedor',
+            'whereArmado' => ' WHERE reqv_nro IN ('.$in.')',
+        ]);
+        $this->assertListOk($rawMov, 'reqmov nros');
+        $lineas = [];
+        foreach (ApiAnita::decodificarListaFilas($rawMov) as $fila) {
+            $nro = (int) ($fila->reqv_nro ?? 0);
+            if ($nro > 0) {
+                $lineas[$nro][] = $fila;
+            }
+        }
+
+        $rawRef = $api->apiCall([
+            'acc' => 'list',
+            'sistema' => 'compras',
+            'tabla' => 'reqmref',
+            'campos' => 'reqr_nro_requi, reqr_partida, reqr_proyecto',
+            'whereArmado' => ' WHERE reqr_nro_requi IN ('.$in.')',
+        ]);
+        $this->assertListOk($rawRef, 'reqmref nros');
+        $refs = [];
+        foreach (ApiAnita::decodificarListaFilas($rawRef) as $fila) {
+            $nro = (int) ($fila->reqr_nro_requi ?? 0);
+            if ($nro > 0 && ! isset($refs[$nro])) {
+                $refs[$nro] = $fila;
+            }
+        }
+
+        return compact('cabeceras', 'lineas', 'refs');
+    }
+
+    /**
      * @return array{cabeceras: array<int, object>, lineas: array<int, list<object>>, refs: array<int, object>, lecturas: int}
      */
     private function leerLoteAnita(int $desdeYmd): array

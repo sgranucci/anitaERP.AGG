@@ -123,6 +123,19 @@ final class RequisicionAnitaAprobcompMapper
         return " WHERE aprobc_tipo MATCHES 'R*' AND aprobc_nro = ".(int) $numerorequisicion;
     }
 
+    /**
+     * @param  list<int>  $nros
+     */
+    public static function whereReqIn(array $nros): string
+    {
+        $limpios = array_values(array_unique(array_filter(array_map('intval', $nros), static fn (int $n) => $n > 0)));
+        if ($limpios === []) {
+            return ' WHERE 1=0';
+        }
+
+        return " WHERE aprobc_tipo MATCHES 'R*' AND aprobc_nro IN (".implode(',', $limpios).')';
+    }
+
     public static function whereSnapshotErp(int $numerorequisicion): string
     {
         return self::whereReq($numerorequisicion)

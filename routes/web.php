@@ -1167,6 +1167,8 @@ Route::post('contable/cierre-rendiciones-bingo/api/preview-cierre-rango', 'Conta
 Route::post('contable/cierre-rendiciones-bingo/api/ejecutar-cierre', 'Contable\CierreRendicionBingoController@apiEjecutarCierre')->name('api_cierre_rendicion_bingo_ejecutar');
 Route::post('contable/cierre-rendiciones-bingo/api/ejecutar-cierre-rango', 'Contable\CierreRendicionBingoController@apiEjecutarCierreRango')->name('api_cierre_rendicion_bingo_ejecutar_rango');
 Route::post('contable/cierre-rendiciones-bingo/api/anular-cierre', 'Contable\CierreRendicionBingoController@apiAnularCierre')->name('api_cierre_rendicion_bingo_anular');
+Route::post('contable/cierre-rendiciones-bingo/api/preview-anular-rango', 'Contable\CierreRendicionBingoController@apiPreviewAnularCierreRango')->name('api_cierre_rendicion_bingo_preview_anular_rango');
+Route::post('contable/cierre-rendiciones-bingo/api/anular-cierre-rango', 'Contable\CierreRendicionBingoController@apiAnularCierreRango')->name('api_cierre_rendicion_bingo_anular_rango');
 
 Route::get('contable/cierre-rendiciones-maquina', 'Contable\CierreRendicionMaquinaController@index')->name('cierre_rendicion_maquina_contable');
 Route::get('contable/cierre-rendiciones-maquina/conciliacion-flash', 'Contable\CierreRendicionMaquinaController@conciliacionFlash')->name('cierre_rendicion_maquina_conciliacion_flash');

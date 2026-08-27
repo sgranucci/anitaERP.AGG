@@ -34,7 +34,9 @@ class LibroIvaDigitalIvaSimpleGenerador
      *     por_fecha_jornada?: bool,
      *     prorrateo_cf_global?: bool,
      *     completar_compras_anita?: bool,
-     *     completar_fsl_anita?: bool
+     *     completar_fsl_anita?: bool,
+     *     ventas_registros?: list<array<string, mixed>>,
+     *     compras_registros?: list<array<string, mixed>>
      * }  $opciones
      * @return array{
      *     debito_fiscal: string,
@@ -59,15 +61,44 @@ class LibroIvaDigitalIvaSimpleGenerador
         $completarFslAnita = (bool) ($opciones['completar_fsl_anita'] ?? true);
         $prorrateoGlobal = (bool) ($opciones['prorrateo_cf_global'] ?? false);
 
-        $ventasDebito = $this->ventasDebitoFiscal($empresaId, $desde, $hasta, false, $porFechaJornada, $completarFslAnita);
-        $ventasRestitucion = $this->ventasDebitoFiscal($empresaId, $desde, $hasta, true, $porFechaJornada, false);
-        $compras = $this->comprasCreditoFiscal(
-            $empresaId,
-            $desde,
-            $hasta,
-            $completarAnita,
-            $prorrateoGlobal,
-        );
+        $ventasRegistros = $opciones['ventas_registros'] ?? null;
+        $comprasRegistros = $opciones['compras_registros'] ?? null;
+
+        if (is_array($ventasRegistros)) {
+            $desdeLibro = LibroIvaDigitalIvaSimpleSupport::debitoDesdeRegistrosLibro($ventasRegistros);
+            $ventasDebito = [
+                'lineas' => array_map(
+                    static fn (array $fila) => LibroIvaDigitalIvaSimpleSupport::lineaDebitoFiscal($fila),
+                    $desdeLibro['detalle'],
+                ),
+                'detalle' => $desdeLibro['detalle'],
+            ];
+            $ventasRestitucion = [
+                'lineas' => array_map(
+                    static fn (array $fila) => LibroIvaDigitalIvaSimpleSupport::lineaDebitoFiscal($fila, true),
+                    $desdeLibro['detalle_restitucion'],
+                ),
+                'detalle' => $desdeLibro['detalle_restitucion'],
+            ];
+        } else {
+            $ventasDebito = $this->ventasDebitoFiscal($empresaId, $desde, $hasta, false, $porFechaJornada, $completarFslAnita);
+            $ventasRestitucion = $this->ventasDebitoFiscal($empresaId, $desde, $hasta, true, $porFechaJornada, false);
+        }
+
+        if (is_array($comprasRegistros)) {
+            $compras = LibroIvaDigitalIvaSimpleSupport::creditoDesdeRegistrosLibro(
+                $comprasRegistros,
+                $prorrateoGlobal,
+            );
+        } else {
+            $compras = $this->comprasCreditoFiscal(
+                $empresaId,
+                $desde,
+                $hasta,
+                $completarAnita,
+                $prorrateoGlobal,
+            );
+        }
 
         $ajustes = $this->agregarAjustesManuales($empresaId, $anio, $mes);
 
@@ -132,6 +163,9 @@ class LibroIvaDigitalIvaSimpleGenerador
                 'total_iva_debito' => round($totalIvaDebito, 2),
                 'total_iva_credito' => round(array_sum(array_column($credito['detalle'], 'iva')), 2),
                 'total_iva_restitucion_credito' => round(array_sum(array_column($restitucionCredito['detalle'], 'iva')), 2),
+                'total_exento_compras' => round((float) ($compras['total_exento'] ?? 0), 2),
+                'total_no_integra_compras' => round((float) ($compras['total_no_integra'] ?? 0), 2),
+                'total_monotributo_compras' => round((float) ($compras['total_monotributo'] ?? 0), 2),
                 'sin_actividad_arca' => $sinActividad,
                 'actividades' => count($resumenPorActividad),
             ],

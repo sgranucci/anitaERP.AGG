@@ -163,6 +163,13 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/compras-legajo-recordatorio-schedule.log'))
             ->when(fn () => (bool) config('compras.legajo.recordatorio_habilitado', true));
 
+        $schedule->command('compras:avisar-comprobantes-borrador')
+            ->dailyAt((string) config('compras.factura_borrador_aviso.hora', '09:30'))
+            ->runInBackground()
+            ->withoutOverlapping(30)
+            ->appendOutputTo(storage_path('logs/compras-factura-borrador-aviso-schedule.log'))
+            ->when(fn () => (bool) config('compras.factura_borrador_aviso.habilitado', true));
+
         $schedule->command('seguridad:recordatorio-tickets-ingreso')
             ->dailyAt((string) config('ingreso_proveedor.recordatorio_hora', '08:45'))
             ->runInBackground()
@@ -284,9 +291,8 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/conciliacion-diaria-schedule.log'))
             ->when(fn () => (bool) config('gastronomia.conciliacion_diaria_reporte.habilitada', true));
 
-        // Auto-sanado del Informe Z desde el proceso (idempotente): regenera solo las jornadas cuyo
-        // recomputo desde las órdenes del proceso coincide con lo contabilizado (Z desactualizado por
-        // órdenes tardías). Corre antes de la conciliación para que el mail de la mañana ya esté sano.
+        // Auto-sanado del Informe Z: regenera solo si el recomputo = venta Waitry del cierre.
+        // No usa el asiento (todavía no está a las 07:45). No pisa a $0 si hay venta Waitry/ERP.
         $diasAtrasZ = max(1, (int) config('gastronomia.regenerar_z_desde_proceso.dias_atras', 2));
         $schedule->command('gastronomia:regenerar-z-desde-proceso', [
             '--fecha-desde' => Carbon::today()->subDays($diasAtrasZ)->toDateString(),

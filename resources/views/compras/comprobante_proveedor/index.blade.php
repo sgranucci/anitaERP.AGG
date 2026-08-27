@@ -141,7 +141,7 @@ use App\Support\Listado\QueryRetornoListado;
                                 <form action="{{ route('eliminar_comprobante_proveedor', ['id' => $row->id] + $retornoListadoQuery) }}" method="POST" class="d-inline form-eliminar">
                                     @csrf
                                     @method('DELETE')
-                                    <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Borrar factura (ERP + Anita)">
+                                    <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="{{ \App\Support\Compras\ComprobanteProveedorEstados::textoBorrarTooltip(\App\Support\Compras\ComprobanteProveedorEstados::tieneHuellaAnita($row)) }}">
                                         <i class="fa fa-times-circle text-danger"></i>
                                     </button>
                                 </form>

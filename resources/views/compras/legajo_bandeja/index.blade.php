@@ -314,12 +314,13 @@ Bandeja de legajos
                         'formId' => 'form-filtros-legajo',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => OrdencompraListadoFiltros::tieneCriteriosTexto($filtros ?? [])
+                            || !empty($filtros['nro_oc'])
                             || !empty($filtros['nro_factura'])
                             || !empty($filtros['nro_com'])
                             || !empty($filtros['nro_op'])
                             || !empty($atajo),
                         'limpiarUrl' => $limpiarUrl,
-                        'placeholder' => 'OC, proveedor, factura, COM u OP…',
+                        'placeholder' => 'Nº OC, proveedor, factura, COM u OP…',
                         'toggleTarget' => '#panel-filtros-ordencompra',
                         'toggleId' => 'btn-toggle-filtros-ordencompra',
                         'inputId' => 'filtro_valor',
@@ -335,12 +336,17 @@ Bandeja de legajos
                 @include('compras.ordencompra.partials.filtros_listado', ['limpiarUrl' => $limpiarUrl])
                 <div class="card-body py-2 border-bottom bg-light">
                     <div class="form-row align-items-end">
-                        <div class="form-group col-md-3 col-sm-6 mb-2">
+                        <div class="form-group col-md-2 col-sm-6 mb-2">
+                            <label class="small mb-1" for="nro_oc">Nº OC</label>
+                            <input type="text" name="nro_oc" id="nro_oc" class="form-control form-control-sm"
+                                   value="{{ $filtros['nro_oc'] ?? '' }}" placeholder="Orden de compra" autocomplete="off">
+                        </div>
+                        <div class="form-group col-md-2 col-sm-6 mb-2">
                             <label class="small mb-1" for="nro_factura">Nº factura</label>
                             <input type="text" name="nro_factura" id="nro_factura" class="form-control form-control-sm"
                                    value="{{ $filtros['nro_factura'] ?? '' }}" placeholder="Número o dígitos" autocomplete="off">
                         </div>
-                        <div class="form-group col-md-3 col-sm-6 mb-2">
+                        <div class="form-group col-md-2 col-sm-6 mb-2">
                             <label class="small mb-1" for="nro_com">Nº COM</label>
                             <input type="text" name="nro_com" id="nro_com" class="form-control form-control-sm"
                                    value="{{ $filtros['nro_com'] ?? '' }}" placeholder="Número o ID" autocomplete="off">
@@ -348,7 +354,7 @@ Bandeja de legajos
                         <div class="form-group col-md-3 col-sm-6 mb-2">
                             <label class="small mb-1" for="nro_op">Nº orden de pago</label>
                             <input type="text" name="nro_op" id="nro_op" class="form-control form-control-sm"
-                                   value="{{ $filtros['nro_op'] ?? '' }}" placeholder="Número de OP" autocomplete="off">
+                                   value="{{ $filtros['nro_op'] ?? '' }}" placeholder="Cuando el legajo está pago" autocomplete="off">
                         </div>
                         <div class="form-group col-md-3 col-sm-6 mb-2">
                             <button type="submit" class="btn btn-primary btn-sm">
@@ -365,7 +371,7 @@ Bandeja de legajos
                 'filtrosQuery' => $filtrosQuery ?? [],
                 'empresa_query' => $empresa_query ?? collect(),
             ])
-            <div class="card-body pb-2">
+            <div class="card-body py-2">
                 <p class="text-muted small mb-2">
                     El legajo es la OC (sector, historia, factura y COM).
                     Compras envía; Cuentas a pagar carga la factura y envía a Pagos; Pagos ve solo lo que está en Pagos y archiva.
@@ -373,32 +379,37 @@ Bandeja de legajos
                 @if (!empty($alcanceSector))
                     <p class="text-muted small mb-2">{{ $alcanceSector }}</p>
                 @endif
-                <ul class="nav nav-pills mb-2 flex-wrap">
-                    @foreach ($vistas as $key => $label)
-                        <li class="nav-item">
-                            <a class="nav-link {{ $vista === $key ? 'active' : '' }}" href="{{ $qs(['vista' => $key]) }}">{{ $label }}</a>
-                        </li>
-                    @endforeach
-                </ul>
-                <ul class="nav nav-pills nav-sm mb-2">
-                    <li class="nav-item">
-                        <a class="nav-link {{ $tab === OrdencompraLegajoBandejaFiltros::TAB_TODOS ? 'active' : '' }}"
-                           href="{{ $qs(['tab' => OrdencompraLegajoBandejaFiltros::TAB_TODOS]) }}">Todos</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {{ $tab === OrdencompraLegajoBandejaFiltros::TAB_GASTRONOMIA ? 'active' : '' }}"
-                           href="{{ $qs(['tab' => OrdencompraLegajoBandejaFiltros::TAB_GASTRONOMIA]) }}">Gastronomía</a>
-                    </li>
-                    <li class="nav-item">
-                        <a class="nav-link {{ $tab === OrdencompraLegajoBandejaFiltros::TAB_RESTO ? 'active' : '' }}"
-                           href="{{ $qs(['tab' => OrdencompraLegajoBandejaFiltros::TAB_RESTO]) }}">Resto</a>
-                    </li>
-                </ul>
-                <div class="mb-2">
-                    @foreach ($atajos as $key => $label)
-                        <a href="{{ $qsAtajo($key) }}"
-                           class="btn btn-xs {{ $atajo === $key ? 'btn-info' : 'btn-outline-secondary' }} mb-1">{{ $label }}</a>
-                    @endforeach
+                <div class="d-flex flex-wrap align-items-center">
+                    <div class="d-flex flex-wrap align-items-center mb-2">
+                        <span class="text-muted small mr-2 mb-0"><i class="fa fa-filter"></i> Estado:</span>
+                        <div class="btn-group btn-group-sm flex-wrap" role="group" aria-label="Estado del legajo">
+                            @foreach ($vistas as $key => $label)
+                                <a href="{{ $qs(['vista' => $key]) }}"
+                                   class="btn {{ $vista === $key ? 'btn-primary' : 'btn-outline-primary' }}">{{ $label }}</a>
+                            @endforeach
+                        </div>
+                    </div>
+                    <div class="d-none d-md-block mx-3 mb-2 align-self-center" style="width:1px;height:28px;background:#dee2e6;"></div>
+                    <div class="d-flex flex-wrap align-items-center mb-2">
+                        <span class="text-muted small mr-2 mb-0"><i class="fa fa-cutlery"></i> Ámbito:</span>
+                        <div class="btn-group btn-group-sm" role="group" aria-label="Ámbito gastronomía">
+                            <a href="{{ $qs(['tab' => OrdencompraLegajoBandejaFiltros::TAB_TODOS]) }}"
+                               class="btn {{ $tab === OrdencompraLegajoBandejaFiltros::TAB_TODOS ? 'btn-info' : 'btn-outline-info' }}">Todas</a>
+                            <a href="{{ $qs(['tab' => OrdencompraLegajoBandejaFiltros::TAB_GASTRONOMIA]) }}"
+                               class="btn {{ $tab === OrdencompraLegajoBandejaFiltros::TAB_GASTRONOMIA ? 'btn-info' : 'btn-outline-info' }}">Gastronomía</a>
+                            <a href="{{ $qs(['tab' => OrdencompraLegajoBandejaFiltros::TAB_RESTO]) }}"
+                               class="btn {{ $tab === OrdencompraLegajoBandejaFiltros::TAB_RESTO ? 'btn-info' : 'btn-outline-info' }}">Resto</a>
+                        </div>
+                    </div>
+                </div>
+                <div class="d-flex flex-wrap align-items-center">
+                    <span class="text-muted small mr-2 mb-1">Atajos:</span>
+                    <div class="btn-group btn-group-sm flex-wrap mb-1" role="group" aria-label="Atajos de documentos">
+                        @foreach ($atajos as $key => $label)
+                            <a href="{{ $qsAtajo($key) }}"
+                               class="btn {{ $atajo === $key ? 'btn-secondary' : 'btn-outline-secondary' }}">{{ $label }}</a>
+                        @endforeach
+                    </div>
                 </div>
             </div>
             <div class="card-body table-responsive p-0">
@@ -465,7 +476,7 @@ Bandeja de legajos
                                         <span class="badge badge-info">cargada</span>
                                     @endif
                                     @if (!empty($row['tiene_pago']))
-                                        <span class="badge badge-success" title="{{ $row['etiqueta_pago'] ?? '' }}">OP</span>
+                                        <span class="badge badge-success" title="Orden de pago">{{ !empty($row['etiqueta_pago']) ? $row['etiqueta_pago'] : 'OP' }}</span>
                                     @endif
                                 </td>
                                 @if ($vista !== OrdencompraLegajoBandejaFiltros::VISTA_PENDIENTES)

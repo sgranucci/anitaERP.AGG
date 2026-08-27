@@ -95,6 +95,13 @@ final class CierreRendicionBingoTotalesSupport
             $totDifCaja = round($totDifCaja + $difRend, 2);
         }
 
+        [$acumConcepto, $totPorcRecaud] = self::completarPorcRecaudCatalogo(
+            $concbIndex,
+            $totRecaudacion,
+            $acumConcepto,
+            $totPorcRecaud,
+        );
+
         $canones = self::calcularCanones($concbIndex, $totRecaudacion, $acumConcepto);
         $ventaAcumulada = self::ventaAcumuladaMes($empresaId, $fechaDia);
         $ventaAcumuladaAnterior = round($ventaAcumulada - $totRecaudacion, 2);
@@ -161,7 +168,47 @@ final class CierreRendicionBingoTotalesSupport
     }
 
     /**
-     * Importe a mostrar de un concepto PAGO: real de premios, o % de recaudación si no hay premio.
+     * Premio % recaudación (p-vtabingo tipo 2 / concbingo 3): no se carga en la rendición.
+     * Si no hay real importado, se calcula % sobre recaudación del día (p. ej. 5 %).
+     *
+     * @param  array<int, array<string, mixed>>  $concbIndex
+     * @param  array<int, array{pagado: float, real: float}>  $acumConcepto
+     * @return array{0: array<int, array{pagado: float, real: float}>, 1: float}
+     */
+    public static function completarPorcRecaudCatalogo(
+        array $concbIndex,
+        float $recaudacion,
+        array $acumConcepto,
+        float $totPorcRecaud,
+    ): array {
+        foreach ($concbIndex as $concepto => $meta) {
+            if (($meta['tipo_conc'] ?? '') !== CierreRendicionBingoConceptoTipos::PORC_RECAUD) {
+                continue;
+            }
+
+            $concepto = (int) $concepto;
+            $ya = round((float) ($acumConcepto[$concepto]['real'] ?? 0), 2);
+            if (abs($ya) > 0.0001) {
+                continue;
+            }
+
+            $importe = self::importePagoConcepto($meta, $acumConcepto, $recaudacion);
+            if (abs($importe) <= 0.0001) {
+                continue;
+            }
+
+            $acumConcepto[$concepto] = [
+                'pagado' => $importe,
+                'real' => $importe,
+            ];
+            $totPorcRecaud = round($totPorcRecaud + $importe, 2);
+        }
+
+        return [$acumConcepto, $totPorcRecaud];
+    }
+
+    /**
+     * Importe de un concepto PAGO o PORC_RECAUD: real de premios, o % de recaudación si no hay premio.
      *
      * @param  array<string, mixed>  $meta
      * @param  array<int, array{pagado: float, real: float}>  $acumConcepto

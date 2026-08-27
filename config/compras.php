@@ -100,4 +100,15 @@ return [
         'recordatorio_dias' => max(1, (int) env('COMPRAS_LEGAJO_RECORDATORIO_DIAS', 3)),
     ],
 
+    /*
+    | Aviso diario de facturas de proveedor en BORRADOR (compras:avisar-comprobantes-borrador).
+    | Destinatarios y plantilla: Configuración → Avisos por módulo
+    | (compras / comprobante_proveedor_borrador_pendiente).
+    */
+    'factura_borrador_aviso' => [
+        'habilitado' => filter_var(env('COMPRAS_FACTURA_BORRADOR_AVISO_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('COMPRAS_FACTURA_BORRADOR_AVISO_HORA', '09:30'),
+        'limite_mail' => max(10, (int) env('COMPRAS_FACTURA_BORRADOR_AVISO_LIMITE_MAIL', 80)),
+    ],
+
 ];

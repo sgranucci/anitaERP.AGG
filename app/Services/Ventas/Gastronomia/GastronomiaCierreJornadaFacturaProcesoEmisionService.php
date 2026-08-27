@@ -17,6 +17,7 @@ use App\Services\Stock\Articulo_MovimientoService;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryAnalyticsOrdenesService;
 use App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAsientosPreviewSupport;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAutomaticoSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoFacturaComandasSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoFacturaItemsSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoFacturaLotesSupport;
@@ -467,6 +468,9 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                 'factura' => (string) ($primera['factura'] ?? ''),
                 'facturas' => $facturas,
                 'cantidad_lotes' => $cantLotes,
+                'total_factura' => CierreJornadaProcesoAutomaticoSupport::totalFacturasDesdeEmision([
+                    'facturas' => $facturas,
+                ]),
                 'pdf_url' => ! empty($primera['venta_id'])
                     ? url('ventas/listaunafactura/'.$primera['venta_id'])
                     : null,
@@ -795,6 +799,9 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
                 'facturas' => $facturas,
                 'venta_id' => (int) ($facturas[0]['venta_id'] ?? 0),
                 'factura' => (string) ($facturas[0]['factura'] ?? ''),
+                'total_factura' => CierreJornadaProcesoAutomaticoSupport::totalFacturasDesdeEmision([
+                    'facturas' => $facturas,
+                ]),
                 'caea_fecha_correlatividad' => $correlatividad,
                 'jornada_proceso' => $this->contextoJornadaProcesoTrasEmision($jornadaId),
             ];

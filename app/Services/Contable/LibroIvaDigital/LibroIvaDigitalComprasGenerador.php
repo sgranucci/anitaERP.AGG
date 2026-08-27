@@ -39,6 +39,7 @@ class LibroIvaDigitalComprasGenerador
 
         $lineasCbte = [];
         $lineasAlicuotas = [];
+        $registros = [];
         $conteo = 0;
         $conteoAnita = 0;
         $totalImporte = 0.0;
@@ -69,6 +70,7 @@ class LibroIvaDigitalComprasGenerador
                 &$clavesErp,
                 &$nrosInternosErp,
                 $prorrateoGlobal,
+                &$registros,
             ): void {
                 $clave = $this->claveErp($cp);
                 if ($clave !== '') {
@@ -84,6 +86,7 @@ class LibroIvaDigitalComprasGenerador
                     return;
                 }
 
+                $registros[] = $registro;
                 $lineasCbte[] = LibroIvaDigitalFormatoSupport::registroComprasCbte($registro['cabecera']);
                 foreach ($registro['alicuotas'] as $alicuota) {
                     $lineasAlicuotas[] = LibroIvaDigitalFormatoSupport::registroComprasAlicuota($alicuota);
@@ -128,6 +131,14 @@ class LibroIvaDigitalComprasGenerador
                     $nrosInternosErp[$nroInterno] = true;
                 }
 
+                $tipo = LibroIvaDigitalComprasAnitaArmadoSupport::tipoPorAbreviatura(
+                    strtoupper(substr(trim((string) ($compra['com_tipo'] ?? '')), 0, 3)),
+                );
+                $registro['iva_simple'] = [
+                    'restitucion' => LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoTipo($tipo),
+                ];
+                $this->adjuntarConceptoIvaSimple($registro, $fila['conceptos'], (string) ($compra['com_letra'] ?? 'A'));
+                $registros[] = $registro;
                 $lineasCbte[] = LibroIvaDigitalFormatoSupport::registroComprasCbte($registro['cabecera']);
                 foreach ($registro['alicuotas'] as $alicuota) {
                     $lineasAlicuotas[] = LibroIvaDigitalFormatoSupport::registroComprasAlicuota($alicuota);
@@ -143,6 +154,7 @@ class LibroIvaDigitalComprasGenerador
         return [
             'compras_cbte' => implode("\r\n", $lineasCbte),
             'compras_alicuotas' => implode("\r\n", $lineasAlicuotas),
+            'registros' => $registros,
             'resumen' => [
                 'comprobantes' => $conteo,
                 'comprobantes_anita' => $conteoAnita,
@@ -247,12 +259,39 @@ class LibroIvaDigitalComprasGenerador
                 'neto_gravado' => $row['neto'],
                 'alicuota_iva' => $row['codigo_lid'],
                 'impuesto_liquidado' => $row['iva'],
+                'concepto_iva_simple' => (int) ($row['concepto_iva_simple'] ?? 1),
+                'tasa' => (float) ($row['tasa'] ?? 0),
             ];
         }
 
-        return LibroIvaDigitalComprasAlicuotaSupport::asegurarRegistro([
+        $registro = LibroIvaDigitalComprasAlicuotaSupport::asegurarRegistro([
             'cabecera' => $cabecera,
             'alicuotas' => $alicuotas,
         ]);
+        $registro['iva_simple'] = [
+            'restitucion' => LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoTipo($cp->tipotransaccion_compras),
+        ];
+
+        return $registro;
+    }
+
+    /**
+     * @param  array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}  $registro
+     * @param  list<array{concepto: int, importe: float}>  $conceptos
+     */
+    private function adjuntarConceptoIvaSimple(array &$registro, array $conceptos, string $letra): void
+    {
+        $alicuotas = LibroIvaDigitalComprasAnitaArmadoSupport::alicuotasIvaSimple($conceptos, $letra);
+        $porLid = [];
+        foreach ($alicuotas as $row) {
+            $codigo = LibroIvaDigitalMapeosSupport::codigoAlicuotaLid((float) ($row['tasa'] ?? 0));
+            $porLid[$codigo] = (int) ($row['concepto_iva_simple'] ?? 1);
+        }
+        foreach ($registro['alicuotas'] as $i => $alicuota) {
+            $codigo = (string) ($alicuota['alicuota_iva'] ?? '');
+            if (isset($porLid[$codigo])) {
+                $registro['alicuotas'][$i]['concepto_iva_simple'] = $porLid[$codigo];
+            }
+        }
     }
 }

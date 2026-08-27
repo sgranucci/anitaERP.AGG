@@ -31,6 +31,7 @@ class OrdencompraLegajoBandejaFiltrosTest extends TestCase
                 'vista' => OrdencompraLegajoBandejaFiltros::VISTA_CXP,
                 'tab' => OrdencompraLegajoBandejaFiltros::TAB_GASTRONOMIA,
                 'atajo' => OrdencompraLegajoBandejaFiltros::ATAJO_LISTO_CARGAR,
+                'nro_oc' => '4012',
                 'nro_factura' => '1234',
                 'nro_com' => '88',
                 'nro_op' => '55',
@@ -41,6 +42,7 @@ class OrdencompraLegajoBandejaFiltrosTest extends TestCase
         $this->assertSame(OrdencompraLegajoBandejaFiltros::VISTA_CXP, $filtros['vista']);
         $this->assertSame(OrdencompraLegajoBandejaFiltros::TAB_GASTRONOMIA, $filtros['tab']);
         $this->assertSame(OrdencompraLegajoBandejaFiltros::ATAJO_LISTO_CARGAR, $filtros['atajo']);
+        $this->assertSame('4012', $filtros['nro_oc']);
         $this->assertSame('1234', $filtros['nro_factura']);
         $this->assertSame('88', $filtros['nro_com']);
         $this->assertSame('55', $filtros['nro_op']);

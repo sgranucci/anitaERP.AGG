@@ -265,17 +265,20 @@ final class GastronomiaCierreJornadaAsientosGrabacionService
                 'jornada_id' => $jornadaId,
                 'fecha_jornada' => $fechaJornada,
                 'mp_z_antes' => $resultado['mp_z'] ?? null,
-                'mp_contabilizado' => $resultado['mp_contabilizado'] ?? null,
+                'venta_waitry' => $resultado['venta_waitry'] ?? null,
+                'venta_erp' => $resultado['venta_erp'] ?? null,
                 'z_recomputado' => $resultado['z_recomputado'] ?? null,
                 'z_nuevo' => $resultado['z_nuevo'] ?? null,
             ]);
-        } elseif ($decision === 'revisar_asiento') {
-            Log::warning('Cierre jornada gastro: DIF medios no auto-alineable (revisar asiento)', [
+        } elseif (in_array($decision, ['revisar_venta', 'revisar_asiento', 'omitido_recomputo_cero'], true)) {
+            Log::warning('Cierre jornada gastro: DIF medios no auto-alineable (revisar venta Waitry/ERP)', [
                 'empresa_id' => $empresaId,
                 'jornada_id' => $jornadaId,
                 'fecha_jornada' => $fechaJornada,
+                'decision' => $decision,
                 'mp_z' => $resultado['mp_z'] ?? null,
-                'mp_contabilizado' => $resultado['mp_contabilizado'] ?? null,
+                'venta_waitry' => $resultado['venta_waitry'] ?? null,
+                'venta_erp' => $resultado['venta_erp'] ?? null,
                 'z_recomputado' => $resultado['z_recomputado'] ?? null,
             ]);
         }

@@ -620,8 +620,8 @@ return [
 
     /**
      * Auto-sanado del Informe Z desde el proceso (idempotente).
-     * Regenera el Z solo cuando el recomputo Waitry (MP/QR) coincide con lo contabilizado en esas cuentas
-     * (Z desactualizado por órdenes tardías). Si no coincide → no toca el Z (revisar asiento).
+     * Regenera el Z solo cuando el recomputo coincide con la venta Waitry del cierre (MP/QR).
+     * No usa el asiento (a las 07:45 todavía no está). Si el recomputo da $0 y hay venta Waitry/ERP, no toca el Z.
      * - Job diario (hora/dias_atras): red de seguridad.
      * - auto_alinear_al_grabar: al grabar asientos del proceso (botón automático / schedule), sin bloquear.
      */

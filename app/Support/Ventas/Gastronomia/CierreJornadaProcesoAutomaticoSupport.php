@@ -149,4 +149,28 @@ final class CierreJornadaProcesoAutomaticoSupport
 
         return abs($pctSnapshot - $porcentajeObjetivo) > 0.0001;
     }
+
+    /**
+     * Total de facturas del proceso para el mail/resumen.
+     * Si falta {@code total_factura} (emisión no lo devolvía), suma los lotes.
+     *
+     * @param  array<string, mixed>  $emision
+     */
+    public static function totalFacturasDesdeEmision(array $emision): float
+    {
+        $declarado = round((float) ($emision['total_factura'] ?? 0), 2);
+        $suma = 0.0;
+        foreach ($emision['facturas'] ?? [] as $fac) {
+            if (! is_array($fac)) {
+                continue;
+            }
+            $suma = round($suma + (float) ($fac['total'] ?? 0), 2);
+        }
+
+        if ($suma > 0.0001) {
+            return $suma;
+        }
+
+        return $declarado;
+    }
 }

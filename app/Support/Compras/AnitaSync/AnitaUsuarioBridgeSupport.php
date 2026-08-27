@@ -99,6 +99,58 @@ final class AnitaUsuarioBridgeSupport
         return self::$cachePorLogname[$cacheKey] = max(0, $codigo);
     }
 
+    /**
+     * Anita usu_usuario → id ERP (match por logname).
+     *
+     * @param  list<int>  $codigosAnita
+     * @return array<int, int>  usu_usuario => usuario.id
+     */
+    public static function mapaErpIdPorUsuUsuario(array $codigosAnita, ?string $sistema = null): array
+    {
+        $codigos = array_values(array_unique(array_filter(array_map('intval', $codigosAnita), static fn (int $n) => $n > 0)));
+        if ($codigos === []) {
+            return [];
+        }
+
+        $sistema = $sistema ?? self::sistemaCompras();
+        $api = new ApiAnita;
+        $raw = $api->apiCall([
+            'acc' => 'list',
+            'sistema' => $sistema,
+            'tabla' => 'usuario',
+            'campos' => 'usu_usuario, usu_logname, usu_nombre',
+            'whereArmado' => ' WHERE usu_usuario IN ('.implode(',', $codigos).')',
+        ]);
+        $err = ApiAnita::extraerMensajeError($raw);
+        if ($err !== null && $err !== '') {
+            Log::warning('AnitaUsuarioBridge: error leyendo usuarios Anita por código', ['error' => $err]);
+
+            return [];
+        }
+
+        $porLogname = [];
+        foreach (ApiAnita::decodificarListaFilas($raw) as $fila) {
+            $cod = (int) ($fila->usu_usuario ?? 0);
+            $log = mb_strtolower(trim((string) ($fila->usu_logname ?? '')));
+            if ($cod > 0 && $log !== '') {
+                $porLogname[$log] = $cod;
+            }
+        }
+        if ($porLogname === []) {
+            return [];
+        }
+
+        $out = [];
+        foreach (Usuario::query()->get(['id', 'usuario']) as $u) {
+            $log = mb_strtolower(trim((string) $u->usuario));
+            if ($log !== '' && isset($porLogname[$log])) {
+                $out[$porLogname[$log]] = (int) $u->id;
+            }
+        }
+
+        return $out;
+    }
+
     public static function limpiarCache(): void
     {
         self::$cachePorLogname = [];

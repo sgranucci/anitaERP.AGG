@@ -5,6 +5,7 @@ namespace App\Services\Contable\LibroIvaDigital;
 use App\Models\Ventas\Venta;
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalFormatoSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalIvaSimpleSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasAgrupacionSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasAlicuotaSupport;
@@ -145,6 +146,7 @@ class LibroIvaDigitalVentasGenerador
                 $conteoFbiFsl++;
                 $conteoFslAnita++;
                 $clavesErpFsl[$clave] = true;
+                $registro['iva_simple'] = LibroIvaDigitalVentasFslAnitaArmadoSupport::metaIvaSimple();
                 $registrosIndividuales[] = $registro;
             }
         }
@@ -176,6 +178,7 @@ class LibroIvaDigitalVentasGenerador
         return [
             'ventas_cbte' => rtrim($contenidoCbte, "\r\n"),
             'ventas_alicuotas' => rtrim($contenidoAlicuotas, "\r\n"),
+            'registros' => $registrosFinales,
             'resumen' => [
                 'comprobantes' => $conteoRegistros,
                 'ventas_emitidas' => $conteoVentas,
@@ -204,7 +207,9 @@ class LibroIvaDigitalVentasGenerador
                 $query->select('id', 'venta_id', 'concepto', 'importe', 'tasa');
             },
             'tipotransacciones:id,codigo,signo,abreviatura',
-            'puntoventas:id,codigo',
+            'puntoventas:id,codigo,actividad_arca_id',
+            'puntoventas.actividad_arcas:id,codigoarca,nombre',
+            'actividad_arca:id,codigoarca,nombre',
             'condicionivas:id,nombre,codigoexterno',
             'clientes:id,nombre,numerodocumento,condicioniva_id,tipodocumento_id',
             'clientes.tipodocumentos:id,codigoexterno',
@@ -308,10 +313,36 @@ class LibroIvaDigitalVentasGenerador
             ];
         }
 
-        return LibroIvaDigitalVentasAlicuotaSupport::asegurarRegistro([
+        $registro = LibroIvaDigitalVentasAlicuotaSupport::asegurarRegistro([
             'cabecera' => $cabecera,
             'alicuotas' => $alicuotas,
         ]);
+        $registro['iva_simple'] = $this->metaIvaSimpleVenta($venta, $signoRaw < 0);
+
+        return $registro;
+    }
+
+    /**
+     * @return array{actividad_codigo: string, actividad_nombre: string, tipo_sujeto: int, restitucion: bool}
+     */
+    private function metaIvaSimpleVenta(Venta $venta, bool $restitucion): array
+    {
+        $actividad = $venta->actividad_arca;
+        if ($actividad === null || trim((string) ($actividad->codigoarca ?? '')) === '') {
+            $actividad = $venta->puntoventas?->actividad_arcas;
+        }
+        $codigo = LibroIvaDigitalIvaSimpleSupport::normalizarCodigoActividad(
+            (string) ($actividad->codigoarca ?? '0'),
+        );
+
+        return [
+            'actividad_codigo' => $codigo,
+            'actividad_nombre' => (string) ($actividad->nombre ?? ''),
+            'tipo_sujeto' => LibroIvaDigitalMapeosSupport::tipoSujetoCompradorIvaSimple(
+                (string) ($venta->condicionivas->codigoexterno ?? ''),
+            ),
+            'restitucion' => $restitucion,
+        ];
     }
 
     /**

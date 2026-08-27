@@ -6,11 +6,13 @@ use App\Models\Ventas\CierreTotemJornadaGastronomia;
 use App\Models\Ventas\GastronomiaCierreJornadaProcesoSnapshot;
 use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\TotemWaitryGastronomia;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoJornadaSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaConciliacionMedioPagoSupport;
 use App\Support\Ventas\Waitry\WaitryCobrosPostCierreJornadaSupport;
 use App\Support\Ventas\Waitry\WaitryTotemJornadaResumenSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZConciliacionSupport;
 use App\Support\Ventas\Waitry\WaitryInformeZTransmisionFaltanteSupport;
+use App\Support\Ventas\Waitry\WaitryInformeZVentaRealSupport;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use Illuminate\Support\Facades\Auth;
 use InvalidArgumentException;
@@ -24,17 +26,16 @@ final class GastronomiaCierreTotemInformeZService
     }
 
     /**
-     * Regenera el Informe Z desde las LÍNEAS DEL PROCESO (fuente del asiento) y lo iguala al Sistema.
+     * Regenera el Informe Z desde las LÍNEAS DEL PROCESO y lo iguala al Sistema.
      *
      * Clasifica la jornada:
-     *  - `ok`: totales Z ↔ contabilizado ya cuadran (nada que hacer).
-     *  - `regenerar`: el Informe Z (MP/QR tótem) quedó corto/desactualizado (órdenes tardías) y el
-     *    recomputo desde el proceso COINCIDE con lo contabilizado en esas mismas cuentas → seguro regenerar.
-     *  - `revisar_asiento`: hay DIF pero el recomputo Waitry no confirma el MP contabilizado
-     *    (p. ej. reclasificación de cobranzas); NO se toca el Z.
+     *  - `ok`: recomputo = venta Waitry del cierre y el Z ya coincide.
+     *  - `regenerar`: recomputo = venta Waitry (MP/QR) y el Z persistido no; se alinea el Z.
+     *  - `omitido_recomputo_cero`: el proceso dio $0 pero Waitry/ERP tienen venta → no se toca el Z.
+     *  - `revisar_venta`: recomputo ≠ venta Waitry del cierre → no se toca el Z.
+     *  - `snapshot_invalido` / `snapshot_provisional`: el snapshot no es el tramo definitivo.
      *
-     * Importante: el recomputo del proceso es solo medios del Informe Z (MP/QR). Se compara contra el
-     * contabilizado de esas cuentas (`fuente_z=informe_z`), no contra el total de todos los medios.
+     * No se usa el asiento del proceso como confirmación: a las 07:45 todavía no está grabado.
      *
      * @return array<string, mixed>
      */
@@ -59,6 +60,14 @@ final class GastronomiaCierreTotemInformeZService
             return $base + ['decision' => 'sin_snapshot', 'persistido' => false];
         }
 
+        $jornada = $cierre->jornada;
+        if ($jornada !== null && CierreJornadaProcesoJornadaSupport::debeInvalidarSnapshot($jornada, $snap)) {
+            return $base + ['decision' => 'snapshot_invalido', 'persistido' => false];
+        }
+        if (CierreJornadaProcesoJornadaSupport::snapshotEsProvisional($snap)) {
+            return $base + ['decision' => 'snapshot_provisional', 'persistido' => false];
+        }
+
         $payload = is_array($snap->payload) ? $snap->payload : (array) json_decode((string) $snap->payload, true);
         $lineas = is_array($payload['lineas'] ?? null) ? $payload['lineas'] : [];
         if ($lineas === []) {
@@ -75,55 +84,46 @@ final class GastronomiaCierreTotemInformeZService
         $resumen = WaitryTotemJornadaResumenSupport::armarParaInformeZ($totems, $lineas, $empresaId);
         $recomputado = round((float) ($resumen['total_general']['total_ingreso'] ?? 0), 2);
 
-        $conc = $this->medioPagoSupport->conciliarJornada($empresaId, $fechaJornada, $tolerancia, $cierre);
-        $zActual = round((float) ($conc['total_z'] ?? 0), 2);
-        $contabZ = round((float) ($conc['total_contabilizado_z'] ?? 0), 2);
+        $detalle = is_array($cierre->detalle_json) ? $cierre->detalle_json : [];
+        $ventaWaitry = WaitryInformeZConciliacionSupport::totalInformeZDesdeResumenTotems($detalle);
+        $ventaErp = WaitryInformeZVentaRealSupport::totalFacturadoErp($empresaId, $fechaJornada);
+        $zMpActual = $this->totalMontosInformeZEnJson(
+            is_array($cierre->informe_z_json) ? $cierre->informe_z_json : [],
+        );
 
-        $mpZ = 0.0;
-        $mpContab = 0.0;
-        foreach ($conc['medios'] ?? [] as $medio) {
-            if (! is_array($medio) || (string) ($medio['fuente_z'] ?? '') !== 'informe_z') {
-                continue;
-            }
-            $mpZ = round($mpZ + (float) ($medio['z'] ?? 0), 2);
-            $mpContab = round($mpContab + (float) ($medio['contabilizado'] ?? 0), 2);
-        }
-
-        $zYaCoincide = abs($zActual - $contabZ) <= $tolerancia;
-        $mpZDesfasado = abs($mpZ - $mpContab) > $tolerancia;
-        // Seguro regenerar solo si el hueco es del Informe Z (MP/QR) y el proceso confirma ese MP contab.
-        $recomputadoConfirmaMpContab = abs($recomputado - $mpContab) <= $tolerancia;
+        $eval = WaitryInformeZVentaRealSupport::decidirRegeneracion(
+            $recomputado,
+            $ventaWaitry,
+            $ventaErp,
+            $zMpActual,
+            $tolerancia,
+        );
+        $decision = (string) ($eval['decision'] ?? 'revisar_venta');
 
         $base += [
-            'z_actual' => $zActual,
+            'z_actual' => $zMpActual,
             'z_recomputado' => $recomputado,
-            'contabilizado' => $contabZ,
-            'mp_z' => $mpZ,
-            'mp_contabilizado' => $mpContab,
-            'diff_recomputado_contab' => round($recomputado - $mpContab, 2),
-            'diff_recomputado_total_contab' => round($recomputado - $contabZ, 2),
+            'mp_z' => $zMpActual,
+            'venta_waitry' => $ventaWaitry,
+            'venta_erp' => $ventaErp,
+            'venta_real' => (float) ($eval['venta_real'] ?? $ventaWaitry),
+            'diff_recomputado_waitry' => round($recomputado - $ventaWaitry, 2),
         ];
 
-        if ($zYaCoincide) {
-            return $base + ['decision' => 'ok', 'persistido' => false];
-        }
-
-        if (! $mpZDesfasado || ! $recomputadoConfirmaMpContab) {
-            return $base + ['decision' => 'revisar_asiento', 'persistido' => false];
+        if ($decision !== 'regenerar') {
+            return $base + ['decision' => $decision, 'persistido' => false];
         }
 
         if (! $persistir) {
             return $base + ['decision' => 'regenerar', 'persistido' => false];
         }
 
-        // Regeneración segura (asiento MP correcto, Z desactualizado): Sistema recomputado + Z = Sistema.
-        $detalle = is_array($cierre->detalle_json) ? $cierre->detalle_json : [];
         $sistemaAnterior = (float) ($detalle['resumen_informe_z']['total_general']['total_ingreso'] ?? 0);
         $detalle['resumen_informe_z'] = $resumen;
         $aud = is_array($detalle['auditoria'] ?? null) ? $detalle['auditoria'] : [];
         $aud['resumen_informe_z_recomputado_proceso_en'] = now()->format('Y-m-d H:i:s');
         $aud['resumen_informe_z_sistema_anterior'] = round($sistemaAnterior, 2);
-        $aud['resumen_informe_z_motivo'] = 'Regeneración desde líneas del proceso (Z MP/QR desactualizado por órdenes tardías; recomputo = MP contabilizado).';
+        $aud['resumen_informe_z_motivo'] = 'Regeneración desde líneas del proceso (recomputo = venta Waitry del cierre; no se usa el asiento).';
         $detalle['auditoria'] = $aud;
         $cierre->detalle_json = $detalle;
         $cierre->save();
@@ -133,12 +133,12 @@ final class GastronomiaCierreTotemInformeZService
         $cierre->refresh();
         $iz = is_array($cierre->informe_z_json) ? $cierre->informe_z_json : [];
         $iz['correccion_masiva'] = [
-            'motivo' => 'Alinear Z con lo contabilizado recomputando desde líneas del proceso (órdenes tardías omitidas del Z congelado).',
+            'motivo' => 'Alinear Z con la venta Waitry del cierre recomputada desde el proceso.',
             'aplicada_en' => now()->format('Y-m-d H:i:s'),
-            'z_anterior' => round((float) ($out['z_anterior'] ?? $zActual), 2),
+            'z_anterior' => round((float) ($out['z_anterior'] ?? $zMpActual), 2),
             'z_nuevo' => round((float) ($out['z_nuevo'] ?? $recomputado), 2),
-            'mp_z_anterior' => $mpZ,
-            'mp_contabilizado' => $mpContab,
+            'venta_waitry' => $ventaWaitry,
+            'venta_erp' => $ventaErp,
         ];
         $cierre->informe_z_json = $iz;
         $cierre->save();
@@ -612,6 +612,66 @@ final class GastronomiaCierreTotemInformeZService
                 'total_ingreso' => round((float) ($b['total_ingreso'] ?? 0), 2),
                 'cantidad_ordenes' => (int) ($b['cantidad_ordenes'] ?? 0),
             ], $resumenInformeZ['por_totem'] ?? []),
+        ];
+    }
+
+    /**
+     * Restaura Sistema + Z desde {@see resumen_totems} del cierre (venta Waitry congelada).
+     * No usa el snapshot del proceso ni el asiento.
+     *
+     * @return array<string, mixed>
+     */
+    public function restaurarInformeZDesdeResumenTotems(int $jornadaId, bool $persistir = true): array
+    {
+        $cierre = $this->cierrePorJornada($jornadaId);
+        $detalle = is_array($cierre->detalle_json) ? $cierre->detalle_json : [];
+        $empresaId = (int) $cierre->empresa_id;
+        $resumen = WaitryInformeZConciliacionSupport::reconstruirResumenInformeZConDesglose(
+            WaitryInformeZConciliacionSupport::filtrarResumenSoloCreditCardPosnet(
+                is_array($detalle['resumen_totems'] ?? null)
+                    ? $detalle['resumen_totems']
+                    : ['por_totem' => [], 'total_general' => []],
+            ),
+            $empresaId,
+        );
+
+        $zAnterior = $this->totalMontosInformeZEnJson(
+            is_array($cierre->informe_z_json) ? $cierre->informe_z_json : [],
+        );
+        $sistemaAnterior = (float) ($detalle['resumen_informe_z']['total_general']['total_ingreso'] ?? 0);
+
+        $aud = is_array($detalle['auditoria'] ?? null) ? $detalle['auditoria'] : [];
+        $aud['resumen_informe_z_restaurado_en'] = now()->format('Y-m-d H:i:s');
+        $aud['resumen_informe_z_sistema_anterior'] = round($sistemaAnterior, 2);
+        $aud['resumen_informe_z_motivo'] = 'Restauración desde resumen_totems del cierre (venta Waitry real; no se usa el proceso ni el asiento).';
+        $detalle['resumen_informe_z'] = $resumen;
+        $detalle['auditoria'] = $aud;
+        $cierre->detalle_json = $detalle;
+
+        if ($persistir) {
+            $cierre->save();
+        }
+
+        $out = $this->igualarInformeZConSistemaEnCierre($jornadaId, $persistir);
+
+        if ($persistir) {
+            $cierre->refresh();
+            $iz = is_array($cierre->informe_z_json) ? $cierre->informe_z_json : [];
+            $iz['restauracion_venta_real'] = [
+                'motivo' => 'Restaurar Z desde venta Waitry del cierre (resumen_totems).',
+                'aplicada_en' => now()->format('Y-m-d H:i:s'),
+                'z_anterior' => $zAnterior,
+                'z_nuevo' => round((float) ($out['z_nuevo'] ?? 0), 2),
+                'venta_waitry' => round((float) ($resumen['total_general']['total_ingreso'] ?? 0), 2),
+            ];
+            $cierre->informe_z_json = $iz;
+            $cierre->save();
+        }
+
+        return $out + [
+            'origen' => 'resumen_totems',
+            'z_anterior' => $zAnterior,
+            'venta_waitry' => round((float) ($resumen['total_general']['total_ingreso'] ?? 0), 2),
         ];
     }
 

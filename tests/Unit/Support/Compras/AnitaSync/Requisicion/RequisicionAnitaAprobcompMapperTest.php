@@ -57,6 +57,15 @@ class RequisicionAnitaAprobcompMapperTest extends TestCase
         );
     }
 
+    public function test_where_req_in_arma_lote(): void
+    {
+        $this->assertSame(
+            " WHERE aprobc_tipo MATCHES 'R*' AND aprobc_nro IN (10,20,30)",
+            RequisicionAnitaAprobcompMapper::whereReqIn([10, 20, 10, 30, 0])
+        );
+        $this->assertSame(' WHERE 1=0', RequisicionAnitaAprobcompMapper::whereReqIn([]));
+    }
+
     public function test_valores_insert_incluye_nro_int_ap_fecha_y_nombre(): void
     {
         $sql = RequisicionAnitaAprobcompMapper::valoresInsert([

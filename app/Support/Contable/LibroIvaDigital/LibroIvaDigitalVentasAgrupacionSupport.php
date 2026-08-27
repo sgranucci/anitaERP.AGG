@@ -97,10 +97,15 @@ final class LibroIvaDigitalVentasAgrupacionSupport
             (string) ($b['alicuota_iva'] ?? ''),
         ));
 
-        return LibroIvaDigitalVentasAlicuotaSupport::asegurarRegistro([
+        $consolidado = LibroIvaDigitalVentasAlicuotaSupport::asegurarRegistro([
             'cabecera' => $cabecera,
             'alicuotas' => $alicuotas,
         ]);
+        if (isset($registros[0]['iva_simple']) && is_array($registros[0]['iva_simple'])) {
+            $consolidado['iva_simple'] = $registros[0]['iva_simple'];
+        }
+
+        return $consolidado;
     }
 
     /**
@@ -109,11 +114,17 @@ final class LibroIvaDigitalVentasAgrupacionSupport
      */
     private static function aplicarCompradorVentaGlobalDiaria(array $registro): array
     {
+        $meta = $registro['iva_simple'] ?? null;
         $registro['cabecera']['codigo_documento'] = '99';
         $registro['cabecera']['numero_identificacion'] = '0';
         $registro['cabecera']['nombre_comprador'] = '-VENTA GLOBAL DIARIA-';
 
-        return LibroIvaDigitalVentasAlicuotaSupport::asegurarRegistro($registro);
+        $salida = LibroIvaDigitalVentasAlicuotaSupport::asegurarRegistro($registro);
+        if (is_array($meta)) {
+            $salida['iva_simple'] = $meta;
+        }
+
+        return $salida;
     }
 
     /**

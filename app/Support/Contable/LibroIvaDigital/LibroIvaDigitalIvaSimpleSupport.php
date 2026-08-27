@@ -141,6 +141,194 @@ final class LibroIvaDigitalIvaSimpleSupport
     }
 
     /**
+     * ARCA: ventas exentas/no gravadas del Libro van a tipo operación 3,
+     * totalizando el campo operaciones_exentas del VENTAS_CBTE.
+     *
+     * @param  list<array{cabecera: array<string, mixed>, alicuotas?: list<array<string, mixed>>, iva_simple?: array<string, mixed>}>  $registros
+     * @return array{
+     *     detalle: list<array<string, mixed>>,
+     *     detalle_restitucion: list<array<string, mixed>>
+     * }
+     */
+    public static function debitoDesdeRegistrosLibro(array $registros): array
+    {
+        $acum = [];
+        $acumRest = [];
+        $acumExento = [];
+        $acumExentoRest = [];
+
+        foreach ($registros as $registro) {
+            $meta = is_array($registro['iva_simple'] ?? null) ? $registro['iva_simple'] : [];
+            $actividad = self::normalizarCodigoActividad((string) ($meta['actividad_codigo'] ?? '0'));
+            $actividadNombre = (string) ($meta['actividad_nombre'] ?? '');
+            $sujeto = (int) ($meta['tipo_sujeto'] ?? 3);
+            $restitucion = (bool) ($meta['restitucion'] ?? false);
+            $cabecera = is_array($registro['cabecera'] ?? null) ? $registro['cabecera'] : [];
+
+            foreach ($registro['alicuotas'] ?? [] as $alicuota) {
+                $neto = abs((float) ($alicuota['neto_gravado'] ?? $alicuota['neto'] ?? 0));
+                $iva = abs((float) ($alicuota['impuesto_liquidado'] ?? $alicuota['iva'] ?? 0));
+                if ($neto <= 0.0001 && $iva <= 0.0001) {
+                    continue;
+                }
+                $codigoLid = (string) ($alicuota['alicuota_iva'] ?? $alicuota['codigo_lid'] ?? '');
+                $alicuotaCodigo = isset($alicuota['alicuota_codigo'])
+                    ? (int) $alicuota['alicuota_codigo']
+                    : LibroIvaDigitalMapeosSupport::codigoAlicuotaIvaSimpleDesdeLid($codigoLid);
+                $key = $actividad.'|'.$sujeto.'|'.$alicuotaCodigo;
+                $destino = &$acum;
+                if ($restitucion) {
+                    $destino = &$acumRest;
+                }
+                if (! isset($destino[$key])) {
+                    $destino[$key] = [
+                        'actividad_codigo' => $actividad,
+                        'actividad_nombre' => $actividadNombre,
+                        'tipo_operacion' => '1',
+                        'tipo_sujeto' => $sujeto,
+                        'alicuota_codigo' => $alicuotaCodigo,
+                        'neto' => 0.0,
+                        'iva' => 0.0,
+                        'iva_computable' => 0.0,
+                        'exento' => 0.0,
+                        'restitucion' => $restitucion,
+                    ];
+                }
+                $destino[$key]['neto'] += $neto;
+                $destino[$key]['iva'] += $iva;
+                if (! $restitucion) {
+                    $destino[$key]['iva_computable'] += $iva;
+                }
+                unset($destino);
+            }
+
+            $exento = abs((float) ($cabecera['operaciones_exentas'] ?? 0));
+            if ($exento <= 0.0001) {
+                continue;
+            }
+            $destinoEx = &$acumExento;
+            if ($restitucion) {
+                $destinoEx = &$acumExentoRest;
+            }
+            if (! isset($destinoEx[$actividad])) {
+                $destinoEx[$actividad] = [
+                    'actividad_codigo' => $actividad,
+                    'actividad_nombre' => $actividadNombre,
+                    'tipo_operacion' => $restitucion ? '2' : '3',
+                    'tipo_sujeto' => null,
+                    'alicuota_codigo' => null,
+                    'neto' => 0.0,
+                    'iva' => 0.0,
+                    'iva_computable' => 0.0,
+                    'exento' => 0.0,
+                    'restitucion' => $restitucion,
+                ];
+            }
+            $destinoEx[$actividad]['exento'] += $exento;
+            unset($destinoEx);
+        }
+
+        return [
+            'detalle' => self::redondearDetalleDebito(array_merge(array_values($acum), array_values($acumExento))),
+            'detalle_restitucion' => self::redondearDetalleDebito(array_merge(array_values($acumRest), array_values($acumExentoRest))),
+        ];
+    }
+
+    /**
+     * Crédito: mismas alícuotas G+I que COMPRAS_ALICUOTAS.
+     * Exento / no gravado / monotributo quedan en el Libro (el CSV de CF no tiene esos campos).
+     *
+     * @param  list<array{cabecera: array<string, mixed>, alicuotas?: list<array<string, mixed>>, iva_simple?: array<string, mixed>}>  $registros
+     * @return array{
+     *     detalle: list<array<string, mixed>>,
+     *     detalle_restitucion: list<array<string, mixed>>,
+     *     total_exento: float,
+     *     total_no_integra: float,
+     *     total_monotributo: float
+     * }
+     */
+    public static function creditoDesdeRegistrosLibro(array $registros, bool $prorrateoGlobal = false): array
+    {
+        $acum = [];
+        $acumRest = [];
+        $totalExento = 0.0;
+        $totalNoIntegra = 0.0;
+        $totalMonotributo = 0.0;
+
+        foreach ($registros as $registro) {
+            $meta = is_array($registro['iva_simple'] ?? null) ? $registro['iva_simple'] : [];
+            $restitucion = (bool) ($meta['restitucion'] ?? false);
+            $cabecera = is_array($registro['cabecera'] ?? null) ? $registro['cabecera'] : [];
+            $tipo = str_pad((string) ($cabecera['tipo_comprobante'] ?? ''), 3, '0', STR_PAD_LEFT);
+            $esTipoC = in_array($tipo, LibroIvaDigitalVentasAlicuotaSupport::TIPOS_SIN_ALICUOTA, true);
+
+            $exento = abs((float) ($cabecera['operaciones_exentas'] ?? 0));
+            $noIntegra = abs((float) ($cabecera['no_integra_neto'] ?? 0));
+            if ($restitucion) {
+                $totalExento -= $exento;
+                $totalNoIntegra -= $noIntegra;
+            } else {
+                $totalExento += $exento;
+                $totalNoIntegra += $noIntegra;
+            }
+            if ($esTipoC) {
+                $montoC = abs((float) ($cabecera['importe_total'] ?? 0));
+                $totalMonotributo += $restitucion ? -$montoC : $montoC;
+            }
+
+            foreach ($registro['alicuotas'] ?? [] as $alicuota) {
+                $neto = abs((float) ($alicuota['neto_gravado'] ?? $alicuota['neto'] ?? 0));
+                $iva = abs((float) ($alicuota['impuesto_liquidado'] ?? $alicuota['iva'] ?? 0));
+                if ($neto <= 0.0001 && $iva <= 0.0001) {
+                    continue;
+                }
+                $fila = [
+                    'concepto' => (int) ($alicuota['concepto_iva_simple'] ?? $alicuota['concepto'] ?? 1),
+                    'alicuota_codigo' => isset($alicuota['alicuota_codigo'])
+                        ? (int) $alicuota['alicuota_codigo']
+                        : LibroIvaDigitalMapeosSupport::codigoAlicuotaIvaSimpleDesdeLid(
+                            (string) ($alicuota['alicuota_iva'] ?? $alicuota['codigo_lid'] ?? ''),
+                        ),
+                    'neto' => $neto,
+                    'iva' => $iva,
+                ];
+                if ($restitucion) {
+                    self::acumularCredito($acumRest, $fila, $prorrateoGlobal, true);
+                } else {
+                    self::acumularCredito($acum, $fila, $prorrateoGlobal, false);
+                }
+            }
+        }
+
+        $credito = self::lineasDesdeAcumuladoCredito($acum, false);
+        $restitucion = self::lineasDesdeAcumuladoCredito($acumRest, true);
+
+        return [
+            'detalle' => $credito['detalle'],
+            'detalle_restitucion' => $restitucion['detalle'],
+            'total_exento' => round($totalExento, 2),
+            'total_no_integra' => round($totalNoIntegra, 2),
+            'total_monotributo' => round($totalMonotributo, 2),
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $detalle
+     * @return list<array<string, mixed>>
+     */
+    private static function redondearDetalleDebito(array $detalle): array
+    {
+        return array_values(array_map(static function (array $fila): array {
+            $fila['neto'] = round((float) ($fila['neto'] ?? 0), 2);
+            $fila['iva'] = round((float) ($fila['iva'] ?? 0), 2);
+            $fila['iva_computable'] = round((float) ($fila['iva_computable'] ?? $fila['iva'] ?? 0), 2);
+            $fila['exento'] = round((float) ($fila['exento'] ?? 0), 2);
+
+            return $fila;
+        }, $detalle));
+    }
+
+    /**
      * @param  list<array<string, mixed>>  $detalleCredito
      * @param  list<array<string, mixed>>  $detalleRestitucion
      * @return list<array<string, mixed>>
@@ -187,11 +375,10 @@ final class LibroIvaDigitalIvaSimpleSupport
             $acumulado[$concepto]['iva_restitucion'] += (float) ($fila['iva'] ?? 0);
         } else {
             $acumulado[$concepto]['renglones_credito']++;
+            $acumulado[$concepto]['neto_gravado'] += (float) ($fila['neto'] ?? 0);
+            $acumulado[$concepto]['iva_credito'] += (float) ($fila['iva'] ?? 0);
             $acumulado[$concepto]['iva_computable'] += (float) ($fila['iva_computable'] ?? $fila['iva'] ?? 0);
         }
-
-        $acumulado[$concepto]['neto_gravado'] += (float) ($fila['neto'] ?? 0);
-        $acumulado[$concepto]['iva_credito'] += (float) ($fila['iva'] ?? 0);
         $acumulado[$concepto]['neto_gravado'] = round($acumulado[$concepto]['neto_gravado'], 2);
         $acumulado[$concepto]['iva_credito'] = round($acumulado[$concepto]['iva_credito'], 2);
         $acumulado[$concepto]['iva_computable'] = round($acumulado[$concepto]['iva_computable'], 2);

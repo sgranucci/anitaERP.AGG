@@ -318,6 +318,15 @@ class OrdencompraLegajoBandejaService
      */
     private function aplicarFiltrosDocumento(Builder $query, array $filtros): void
     {
+        $nroOc = trim((string) ($filtros['nro_oc'] ?? ''));
+        if ($nroOc !== '') {
+            $soloDigitos = preg_replace('/\D+/', '', $nroOc) ?? '';
+            if ($soloDigitos !== '') {
+                $query->where('ordencompra.numeroordencompra', (int) $soloDigitos);
+            } else {
+                $query->where('ordencompra.numeroordencompra', 'like', '%'.$nroOc.'%');
+            }
+        }
         $nroFac = trim((string) ($filtros['nro_factura'] ?? ''));
         if ($nroFac !== '') {
             $query->where(function ($q) use ($nroFac) {

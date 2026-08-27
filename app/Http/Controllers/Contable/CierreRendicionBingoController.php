@@ -301,6 +301,70 @@ class CierreRendicionBingoController extends Controller
         }
     }
 
+    public function apiPreviewAnularCierreRango(Request $request): JsonResponse
+    {
+        can('anular-cierre-rendicion-bingo-contable');
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $fechaDesde = trim((string) $request->input('fecha_desde', ''));
+        $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+
+        if ($empresaId <= 0 || $fechaDesde === '' || $fechaHasta === '') {
+            return response()->json(['ok' => false, 'mensaje' => 'Indique empresa y rango de fechas.'], 422);
+        }
+
+        try {
+            $preview = $this->service->previewAnularCierreRango($empresaId, $fechaDesde, $fechaHasta);
+
+            return response()->json(['ok' => true, 'preview' => $preview]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+    }
+
+    public function apiAnularCierreRango(Request $request): JsonResponse
+    {
+        can('anular-cierre-rendicion-bingo-contable');
+
+        $empresaId = (int) $request->input('empresa_id', 0);
+        $fechaDesde = trim((string) $request->input('fecha_desde', ''));
+        $fechaHasta = trim((string) $request->input('fecha_hasta', ''));
+
+        if ($empresaId <= 0 || $fechaDesde === '' || $fechaHasta === '') {
+            return response()->json(['ok' => false, 'mensaje' => 'Indique empresa y rango de fechas.'], 422);
+        }
+
+        if (! $request->boolean('confirmar')) {
+            return response()->json(['ok' => false, 'mensaje' => 'Debe confirmar la anulación del rango.'], 422);
+        }
+
+        try {
+            $resultado = $this->service->anularCierreRango($empresaId, $fechaDesde, $fechaHasta);
+            $cantOk = count($resultado['ok']);
+            $cantOmit = count($resultado['omitidos'] ?? []);
+            $cantErr = count($resultado['errores']);
+            $mensaje = 'Anulación: '.$cantOk.' jornada(s) anulada(s). Asientos borrados en ERP y ctamov.';
+            if ($cantOmit > 0) {
+                $mensaje .= ' '.$cantOmit.' omitida(s).';
+            }
+            if ($cantErr > 0) {
+                $mensaje .= ' '.$cantErr.' con error.';
+            }
+
+            return response()->json([
+                'ok' => true,
+                'mensaje' => $mensaje,
+                'resultado' => $resultado,
+            ]);
+        } catch (InvalidArgumentException $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        } catch (\Throwable $e) {
+            return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);
+        }
+    }
+
     public function apiPreviewAsiento(Request $request): JsonResponse
     {
         can('ejecutar-cierre-rendicion-bingo-contable');
@@ -376,11 +440,14 @@ class CierreRendicionBingoController extends Controller
         }
 
         try {
-            $this->service->anularCierreGrupo($empresaId, $fechaDia);
+            $resultado = $this->service->anularCierreGrupo($empresaId, $fechaDia);
+            $nums = $resultado['numeros_asiento'] ?? [];
 
             return response()->json([
                 'ok' => true,
-                'mensaje' => 'Cierre contable anulado. Se eliminaron los asientos en ERP y ctamov.',
+                'mensaje' => 'Cierre contable anulado. Se eliminaron los asientos en ERP y ctamov'
+                    .($nums !== [] ? ' ('.implode(', ', $nums).').' : '.'),
+                'resultado' => $resultado,
             ]);
         } catch (InvalidArgumentException $e) {
             return response()->json(['ok' => false, 'mensaje' => $e->getMessage()], 422);

@@ -209,6 +209,12 @@ class ModuloAvisoController extends Controller
             ]);
         }
 
+        if ($modulo === 'compras' && $codigo === 'comprobante_proveedor_borrador_pendiente') {
+            return array_merge($comunes, [
+                '{fecha}', '{cantidad}', '{facturas}',
+            ]);
+        }
+
         if ($modulo === 'seguridad' && str_starts_with($codigo, 'ingreso_proveedor_')) {
             return array_merge($comunes, [
                 '{id}', '{numero}', '{titulo}', '{proveedor}', '{motivo}',

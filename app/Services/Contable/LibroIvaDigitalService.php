@@ -37,7 +37,10 @@ class LibroIvaDigitalService
         $compras = $this->comprasGenerador->generar($empresaId, $anio, $mes, $opciones);
         $importaciones = $this->importacionesGenerador->generar($empresaId, $anio, $mes, $opciones);
         $anulados = $this->anuladosGenerador->generar($empresaId, $anio, $mes, $opciones);
-        $ivaSimple = $this->ivaSimpleGenerador->generar($empresaId, $anio, $mes, $opciones);
+        $ivaSimple = $this->ivaSimpleGenerador->generar($empresaId, $anio, $mes, array_merge($opciones, [
+            'ventas_registros' => $ventas['registros'] ?? [],
+            'compras_registros' => $compras['registros'] ?? [],
+        ]));
 
         $cabecerasImportacion = $importaciones['compras_cbte_importacion'] ?? [];
         if ($cabecerasImportacion !== []) {
@@ -78,8 +81,14 @@ class LibroIvaDigitalService
      */
     public function generarIvaSimple(int $empresaId, int $anio, int $mes, array $opciones = []): array
     {
+        $ventas = $this->ventasGenerador->generar($empresaId, $anio, $mes, $opciones);
+        $compras = $this->comprasGenerador->generar($empresaId, $anio, $mes, $opciones);
+
         return [
-            'iva_simple' => $this->ivaSimpleGenerador->generar($empresaId, $anio, $mes, $opciones),
+            'iva_simple' => $this->ivaSimpleGenerador->generar($empresaId, $anio, $mes, array_merge($opciones, [
+                'ventas_registros' => $ventas['registros'] ?? [],
+                'compras_registros' => $compras['registros'] ?? [],
+            ])),
             'periodo' => [
                 'anio' => $anio,
                 'mes' => $mes,

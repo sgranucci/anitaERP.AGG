@@ -63,6 +63,61 @@ final class ComprobanteProveedorAnitaCompraExistenciaSupport
     }
 
     /**
+     * Aviso para UI si Anita ya tiene esa identificación fiscal y el ERP aún no la posteó.
+     *
+     * @return array{mensaje: string, nro_interno: int|null, fila: array<string, mixed>, ya_marcada: bool, comprobante_id: int}|null
+     */
+    public static function avisoDuplicadoDesdeComprobante(Comprobante_Proveedor $comprobante): ?array
+    {
+        if (ComprobanteProveedorEstados::tieneHuellaAnita($comprobante)) {
+            return null;
+        }
+        if (in_array((string) ($comprobante->estado ?? ''), [
+            ComprobanteProveedorEstados::CONTABILIZADO,
+            ComprobanteProveedorEstados::ANULADO,
+        ], true)) {
+            return null;
+        }
+
+        $comprobante->loadMissing('tipotransaccion_compras', 'proveedores', 'empresas');
+
+        try {
+            $fila = self::buscar(
+                (int) ($comprobante->empresa_id ?? 0),
+                (int) ($comprobante->proveedor_id ?? 0),
+                (int) ($comprobante->tipotransaccion_compra_id ?? 0),
+                (string) ($comprobante->letra ?? ''),
+                (int) ($comprobante->sucursal ?? 0),
+                (int) ($comprobante->numerocomprobante ?? 0),
+                (int) ($comprobante->anita_nro_interno ?? 0) ?: null,
+            );
+        } catch (\Throwable $e) {
+            Log::warning('comprobante_proveedor.anita_compra_aviso_error', [
+                'comprobante_id' => (int) $comprobante->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        if ($fila === null) {
+            return null;
+        }
+
+        $letra = (string) ($comprobante->letra ?? '');
+        $sucursal = (int) ($comprobante->sucursal ?? 0);
+        $nro = (int) ($comprobante->numerocomprobante ?? 0);
+
+        return [
+            'mensaje' => self::mensajeDuplicado($fila, $letra, $sucursal, $nro),
+            'nro_interno' => ((int) ($fila['com_nro_interno'] ?? 0)) ?: null,
+            'fila' => $fila,
+            'ya_marcada' => false,
+            'comprobante_id' => (int) $comprobante->id,
+        ];
+    }
+
+    /**
      * @throws ComprobanteProveedorYaExistenteEnAnitaException
      * @throws RuntimeException
      */

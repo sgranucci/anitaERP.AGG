@@ -9,7 +9,7 @@ use App\Models\Configuracion\Localidad;
 use App\Models\Configuracion\Provincia;
 use App\Models\Configuracion\Pais;
 use App\Models\Configuracion\Empresa;
-use App\Models\Configuracion\ACtividad_Arca;
+use App\Models\Configuracion\Actividad_Arca;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Puntoventa extends Model

@@ -1211,13 +1211,26 @@ $(function () {
     })();
 
     (function initAvisoAnitaYSyncOcCom() {
+        var avisoUrl = String($form.attr('data-aviso-anita-url') || '').trim();
+        var anitaNro = parseInt($form.attr('data-anita-nro') || '0', 10) || 0;
+
+        function aplicarAvisoAnita(res) {
+            if (!res || !res.html) {
+                return;
+            }
+            $('#cp-aviso-anita-async-slot').html(res.html);
+            $('.js-cp-contabilizar').prop('disabled', true).attr('title', 'Ya existe en Anita: no se puede contabilizar');
+        }
+
         if (comprobanteId > 0) {
+            if (avisoUrl && !contabilizado && anitaNro <= 0) {
+                $.getJSON(avisoUrl, { comprobante_id: comprobanteId }).done(aplicarAvisoAnita);
+            }
             return;
         }
         var precargaId = parseInt($form.attr('data-precarga-id') || '0', 10) || 0;
         var ordencompraId = parseInt($form.attr('data-ordencompra-id') || '0', 10) || 0;
         var numeroOc = String($form.attr('data-numero-oc') || '').replace(/\D/g, '');
-        var avisoUrl = String($form.attr('data-aviso-anita-url') || '').trim();
         var syncUrl = String($form.attr('data-sync-oc-com-url') || '').trim();
         var precargaCargadaUrl = String($form.attr('data-precarga-cargada-url') || '').trim();
         var formPristine = true;
@@ -1227,11 +1240,8 @@ $(function () {
 
         if (precargaId > 0 && avisoUrl) {
             $.getJSON(avisoUrl, { precarga_id: precargaId }).done(function (res) {
-                if (!res || !res.html) {
-                    return;
-                }
-                $('#cp-aviso-anita-async-slot').html(res.html);
-                if (res.ya_marcada && precargaCargadaUrl) {
+                aplicarAvisoAnita(res);
+                if (res && res.ya_marcada && precargaCargadaUrl) {
                     window.location.href = precargaCargadaUrl;
                 }
             });

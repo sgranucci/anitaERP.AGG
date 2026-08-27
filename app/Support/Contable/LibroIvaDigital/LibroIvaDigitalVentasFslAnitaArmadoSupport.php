@@ -104,10 +104,26 @@ final class LibroIvaDigitalVentasFslAnitaArmadoSupport
             'impuesto_liquidado' => 0.0,
         ]];
 
-        return LibroIvaDigitalVentasAlicuotaSupport::asegurarRegistro([
+        $registro = LibroIvaDigitalVentasAlicuotaSupport::asegurarRegistro([
             'cabecera' => $cabecera,
             'alicuotas' => $alicuotas,
         ]);
+        $registro['iva_simple'] = self::metaIvaSimple();
+
+        return $registro;
+    }
+
+    /**
+     * @return array{actividad_codigo: string, actividad_nombre: string, tipo_sujeto: int, restitucion: bool}
+     */
+    public static function metaIvaSimple(): array
+    {
+        return [
+            'actividad_codigo' => self::ACTIVIDAD_APUESTAS_CODIGO,
+            'actividad_nombre' => 'Servicios de apuestas',
+            'tipo_sujeto' => 3,
+            'restitucion' => false,
+        ];
     }
 
     /**

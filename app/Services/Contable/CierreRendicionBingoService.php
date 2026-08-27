@@ -297,7 +297,34 @@ class CierreRendicionBingoService
         });
     }
 
-    public function anularCierreGrupo(int $empresaId, string $fechaDia): void
+    /**
+     * @return array{
+     *   fecha_dia: string,
+     *   rendicion_ids: list<int>,
+     *   asiento_ids: list<int>,
+     *   numeros_asiento: list<string>,
+     *   venta_ids: list<int>
+     * }
+     */
+    public function anularCierreGrupo(int $empresaId, string $fechaDia): array
+    {
+        return CierreRendicionBingoCierreLock::conExclusividadEmpresa(
+            $empresaId,
+            fn () => $this->anularCierreGrupoExclusivo($empresaId, $fechaDia),
+            true,
+        );
+    }
+
+    /**
+     * @return array{
+     *   fecha_dia: string,
+     *   rendicion_ids: list<int>,
+     *   asiento_ids: list<int>,
+     *   numeros_asiento: list<string>,
+     *   venta_ids: list<int>
+     * }
+     */
+    private function anularCierreGrupoExclusivo(int $empresaId, string $fechaDia): array
     {
         $rendiciones = $this->findRendicionesGrupo($empresaId, $fechaDia);
         if ($rendiciones->isEmpty()) {
@@ -348,7 +375,26 @@ class CierreRendicionBingoService
             Auth::id(),
         );
 
-        DB::transaction(function () use ($rendiciones, $asientoIds, $empresaId, $fechaDia) {
+        $numerosAsiento = Asiento::query()
+            ->whereIn('id', $asientoIds)
+            ->orderBy('id')
+            ->pluck('numeroasiento')
+            ->map(static fn ($n) => trim((string) $n))
+            ->filter(static fn ($n) => $n !== '')
+            ->values()
+            ->all();
+
+        $ventaIdsOut = [];
+        $rendicionIdsOut = [];
+
+        DB::transaction(function () use (
+            $rendiciones,
+            $asientoIds,
+            $empresaId,
+            $fechaDia,
+            &$ventaIdsOut,
+            &$rendicionIdsOut,
+        ) {
             $rendicionIds = $rendiciones->pluck('id')->map(fn ($id) => (int) $id)->all();
             $bloqueadas = RendicionBingoCaja::query()
                 ->whereIn('id', $rendicionIds)
@@ -363,6 +409,7 @@ class CierreRendicionBingoService
                 ->values()
                 ->all();
 
+            // Baja física: AsientoObserver borra líneas ERP; eliminarAnita borra ctamov.
             foreach ($asientoIds as $asientoId) {
                 $this->asientoRepository->delete($asientoId);
             }
@@ -392,7 +439,18 @@ class CierreRendicionBingoService
                 ]);
 
             BingoPozoAcumuladoSupport::borrarDesdeFecha($empresaId, $fechaDia);
+
+            $ventaIdsOut = $ventaIds;
+            $rendicionIdsOut = $rendicionIds;
         });
+
+        return [
+            'fecha_dia' => Carbon::parse($fechaDia)->toDateString(),
+            'rendicion_ids' => $rendicionIdsOut,
+            'asiento_ids' => $asientoIds,
+            'numeros_asiento' => $numerosAsiento,
+            'venta_ids' => $ventaIdsOut,
+        ];
     }
 
     /**
@@ -678,6 +736,197 @@ class CierreRendicionBingoService
     /**
      * @return array<string, mixed>
      */
+    public function previewAnularCierreRango(int $empresaId, string $fechaDesde, string $fechaHasta): array
+    {
+        [$desde, $hasta] = $this->normalizarRangoFechas($fechaDesde, $fechaHasta);
+        $this->assertSinCierresPosterioresAlRango($empresaId, $hasta);
+
+        $rendiciones = $this->listarCerradasEnRango($empresaId, $desde, $hasta);
+        $gruposRaw = CierreRendicionBingoGrupoSupport::agrupar(
+            new EloquentCollection($rendiciones->all()),
+        );
+        $gruposRaw = array_values(array_filter(
+            $gruposRaw,
+            static fn (array $g) => ($g['estado_grupo'] ?? '') === CierreRendicionBingoGrupoSupport::ESTADO_CERRADA,
+        ));
+
+        $porDia = [];
+        $total = 0.0;
+        foreach ($rendiciones as $r) {
+            $fecha = CierreRendicionBingoGrupoSupport::fechaDiaDesdeRendicion($r);
+            if (! isset($porDia[$fecha])) {
+                $porDia[$fecha] = [
+                    'fecha_jornada' => $fecha,
+                    'cantidad' => 0,
+                    'cantidad_grupos' => 0,
+                    'total_cobrado' => 0.0,
+                ];
+            }
+            $monto = round((float) ($r->total_cartones ?? 0), 2);
+            $porDia[$fecha]['cantidad']++;
+            $porDia[$fecha]['total_cobrado'] = round($porDia[$fecha]['total_cobrado'] + $monto, 2);
+            $total = round($total + $monto, 2);
+        }
+
+        foreach ($gruposRaw as $grupo) {
+            $fecha = (string) ($grupo['fecha_dia'] ?? '');
+            if ($fecha !== '' && isset($porDia[$fecha])) {
+                $porDia[$fecha]['cantidad_grupos']++;
+            }
+        }
+
+        ksort($porDia);
+
+        $grupos = [];
+        foreach ($gruposRaw as $grupo) {
+            /** @var Collection<int, RendicionBingoCaja> $rends */
+            $rends = $grupo['rendiciones'] ?? collect();
+            $filas = [];
+            $montoGrupo = 0.0;
+            $asientoIds = [];
+            foreach ($rends as $r) {
+                $monto = round((float) ($r->total_cartones ?? 0), 2);
+                $montoGrupo = round($montoGrupo + $monto, 2);
+                $jsonIds = is_array($r->asientos_cierre_ids_json) ? $r->asientos_cierre_ids_json : [];
+                foreach ($jsonIds as $aid) {
+                    $aid = (int) $aid;
+                    if ($aid > 0) {
+                        $asientoIds[] = $aid;
+                    }
+                }
+                $principal = (int) ($r->asiento_id ?? 0);
+                if ($principal > 0) {
+                    $asientoIds[] = $principal;
+                }
+                $filas[] = [
+                    'id' => (int) $r->id,
+                    'codigo' => (string) ($r->codigo ?? ''),
+                    'total_cobrado' => $monto,
+                    'fecharendicion_fmt' => $r->fecharendicion?->format('d/m/Y H:i'),
+                    'asiento_numero' => (string) ($r->asiento?->numeroasiento ?? ''),
+                    'factura_nro' => (int) ($r->factura_nro ?? 0),
+                ];
+            }
+            $asientoIds = array_values(array_unique($asientoIds));
+            $grupos[] = [
+                'clave' => (string) ($grupo['clave'] ?? ''),
+                'fecha_dia' => (string) ($grupo['fecha_dia'] ?? ''),
+                'fecha_dia_fmt' => (string) ($grupo['fecha_dia_fmt'] ?? ''),
+                'puntoventa_label' => (string) ($grupo['factura_label'] ?? 'Cierre diario'),
+                'cantidad_rendiciones' => $rends->count(),
+                'total_cobrado' => $montoGrupo,
+                'asiento_ids' => $asientoIds,
+                'asiento_numero' => (string) ($grupo['asiento_numero'] ?? ''),
+                'rendiciones' => $filas,
+            ];
+        }
+
+        usort($grupos, static function (array $a, array $b): int {
+            return strcmp((string) ($a['fecha_dia'] ?? ''), (string) ($b['fecha_dia'] ?? ''));
+        });
+
+        return [
+            'empresa_id' => $empresaId,
+            'fecha_desde' => $desde,
+            'fecha_hasta' => $hasta,
+            'cantidad' => $rendiciones->count(),
+            'cantidad_grupos' => count($grupos),
+            'total_cobrado' => $total,
+            'por_dia' => array_values($porDia),
+            'grupos' => $grupos,
+        ];
+    }
+
+    /**
+     * @return array{
+     *   ok: list<array{grupo_clave: string, fecha_dia: string, asiento_ids: list<int>, numeros_asiento: list<string>, rendicion_ids: list<int>}>,
+     *   omitidos: list<array{grupo_clave: string, mensaje: string}>,
+     *   errores: list<array{grupo_clave: string, mensaje: string}>
+     * }
+     */
+    public function anularCierreRango(int $empresaId, string $fechaDesde, string $fechaHasta): array
+    {
+        [$desde, $hasta] = $this->normalizarRangoFechas($fechaDesde, $fechaHasta);
+
+        return CierreRendicionBingoCierreLock::conExclusividadEmpresa(
+            $empresaId,
+            fn () => $this->anularCierreRangoExclusivo($empresaId, $desde, $hasta),
+            false,
+        );
+    }
+
+    /**
+     * @return array{
+     *   ok: list<array{grupo_clave: string, fecha_dia: string, asiento_ids: list<int>, numeros_asiento: list<string>, rendicion_ids: list<int>}>,
+     *   omitidos: list<array{grupo_clave: string, mensaje: string}>,
+     *   errores: list<array{grupo_clave: string, mensaje: string}>
+     * }
+     */
+    private function anularCierreRangoExclusivo(int $empresaId, string $desde, string $hasta): array
+    {
+        $this->assertSinCierresPosterioresAlRango($empresaId, $hasta);
+
+        $rendiciones = $this->listarCerradasEnRango($empresaId, $desde, $hasta);
+        if ($rendiciones->isEmpty()) {
+            throw new InvalidArgumentException('No hay cierres contables de bingo en el rango indicado.');
+        }
+
+        $grupos = CierreRendicionBingoGrupoSupport::agrupar(
+            new EloquentCollection($rendiciones->all()),
+        );
+        $grupos = array_values(array_filter(
+            $grupos,
+            static fn (array $g) => ($g['estado_grupo'] ?? '') === CierreRendicionBingoGrupoSupport::ESTADO_CERRADA,
+        ));
+        usort($grupos, static function (array $a, array $b): int {
+            return strcmp((string) ($b['fecha_dia'] ?? ''), (string) ($a['fecha_dia'] ?? ''));
+        });
+
+        $ok = [];
+        $omitidos = [];
+        $errores = [];
+
+        foreach ($grupos as $grupo) {
+            $clave = (string) ($grupo['clave'] ?? '');
+            $fechaDia = (string) ($grupo['fecha_dia'] ?? '');
+            try {
+                $resultado = $this->anularCierreGrupoExclusivo($empresaId, $fechaDia);
+                $ok[] = [
+                    'grupo_clave' => $clave,
+                    'fecha_dia' => $resultado['fecha_dia'],
+                    'asiento_ids' => $resultado['asiento_ids'],
+                    'numeros_asiento' => $resultado['numeros_asiento'],
+                    'rendicion_ids' => $resultado['rendicion_ids'],
+                ];
+            } catch (\Throwable $e) {
+                $mensaje = $e->getMessage();
+                if (str_contains($mensaje, 'no tiene cierre contable')
+                    || str_contains($mensaje, 'No se encontraron rendiciones')) {
+                    $omitidos[] = [
+                        'grupo_clave' => $clave,
+                        'mensaje' => $mensaje,
+                    ];
+
+                    continue;
+                }
+
+                $errores[] = [
+                    'grupo_clave' => $clave,
+                    'mensaje' => $mensaje,
+                ];
+            }
+        }
+
+        if ($ok === [] && $errores !== []) {
+            throw new InvalidArgumentException($errores[0]['mensaje']);
+        }
+
+        return ['ok' => $ok, 'omitidos' => $omitidos, 'errores' => $errores];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
     public function conciliarFlash(int $empresaId, string $fechaDesde, string $fechaHasta, ?float $tolerancia = null): array
     {
         return app(CierreRendicionBingoConciliacionFlashSupport::class)
@@ -771,6 +1020,63 @@ class CierreRendicionBingoService
             ->orderBy('fecha_jornada')
             ->orderBy('id')
             ->get();
+    }
+
+    /**
+     * @return Collection<int, RendicionBingoCaja>
+     */
+    private function listarCerradasEnRango(int $empresaId, string $desde, string $hasta): Collection
+    {
+        return $this->queryCerradasEmpresa($empresaId)
+            ->with(['turnoOperativo.turno:id,nombre', 'asiento:id,numeroasiento,fecha'])
+            ->whereDate('rendicion_bingo_caja.fecha_jornada', '>=', $desde)
+            ->whereDate('rendicion_bingo_caja.fecha_jornada', '<=', $hasta)
+            ->orderBy('fecha_jornada')
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
+     * @return Builder<RendicionBingoCaja>
+     */
+    private function queryCerradasEmpresa(int $empresaId): Builder
+    {
+        $q = RendicionBingoCaja::query()->where('empresa_id', $empresaId);
+        CierreRendicionBingoListadoFiltros::aplicarEstadoCierre($q, [
+            'estado_cierre' => CierreRendicionBingoListadoFiltros::ESTADO_CERRADA,
+        ]);
+
+        return $q;
+    }
+
+    /**
+     * @return array{0: string, 1: string}
+     */
+    private function normalizarRangoFechas(string $fechaDesde, string $fechaHasta): array
+    {
+        $desde = Carbon::parse($fechaDesde)->toDateString();
+        $hasta = Carbon::parse($fechaHasta)->toDateString();
+        if ($desde > $hasta) {
+            [$desde, $hasta] = [$hasta, $desde];
+        }
+
+        return [$desde, $hasta];
+    }
+
+    private function assertSinCierresPosterioresAlRango(int $empresaId, string $hasta): void
+    {
+        $posterior = $this->queryCerradasEmpresa($empresaId)
+            ->whereDate('rendicion_bingo_caja.fecha_jornada', '>', $hasta)
+            ->min(DB::raw(SqlDialectSupport::fecha('rendicion_bingo_caja.fecha_jornada')));
+        if ($posterior === null || trim((string) $posterior) === '') {
+            return;
+        }
+
+        throw new InvalidArgumentException(
+            'Hay jornadas cerradas posteriores al rango (desde '
+            .Carbon::parse((string) $posterior)->format('d/m/Y')
+            .'). Extienda el «hasta» hasta la última jornada cerrada: anular borra el pozo acumulado desde la primera fecha del rango.',
+        );
     }
 
     /**

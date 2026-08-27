@@ -21,4 +21,32 @@ class ComprobanteProveedorEstadosTest extends TestCase
         $this->assertTrue(ComprobanteProveedorEstados::esFiltroListadoValido(ComprobanteProveedorEstados::FILTRO_TODOS));
         $this->assertFalse(ComprobanteProveedorEstados::esFiltroListadoValido('INEXISTENTE'));
     }
+
+    public function test_borrador_sin_asiento_no_tiene_huella_anita(): void
+    {
+        $this->assertFalse(ComprobanteProveedorEstados::tieneHuellaAnita((object) [
+            'anita_nro_interno' => null,
+            'asiento_id' => null,
+        ]));
+        $this->assertSame(
+            'Borrar borrador (solo ERP)',
+            ComprobanteProveedorEstados::textoBorrarTooltip(false)
+        );
+        $this->assertStringContainsString(
+            'No se toca Anita',
+            ComprobanteProveedorEstados::textoBorrarConfirm(248, false)
+        );
+    }
+
+    public function test_contabilizado_tiene_huella_anita(): void
+    {
+        $this->assertTrue(ComprobanteProveedorEstados::tieneHuellaAnita([
+            'anita_nro_interno' => 428006,
+            'asiento_id' => 1,
+        ]));
+        $this->assertSame(
+            'Borrar factura (ERP + Anita)',
+            ComprobanteProveedorEstados::textoBorrarTooltip(true)
+        );
+    }
 }

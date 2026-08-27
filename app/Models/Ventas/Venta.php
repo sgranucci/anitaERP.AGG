@@ -117,6 +117,11 @@ class Venta extends Model implements Auditable
         return $this->belongsTo(Usuario::class, 'usuario_id');
     }
 
+    public function actividad_arca()
+    {
+        return $this->belongsTo(Actividad_Arca::class, 'actividad_arca_id');
+    }
+
     public function actividad_arcas()
 	{
     	return $this->hasMany(Actividad_Arca::class, 'actividad_arca_id');

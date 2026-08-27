@@ -313,12 +313,12 @@
                     @if (!empty($resultado['iva_simple']['resumen_por_actividad']))
                         <h5 class="mb-2">IVA Simple — débito fiscal por actividad ARCA</h5>
                         <p class="text-muted small">
-                            Agrupación desde ventas del período (con CAE o RMV vending). Actividad: comprobante
-                            (<code>venta.actividad_arca_id</code>) o, si falta, punto de venta
-                            (<code>puntoventa.actividad_arca_id</code>).
-                            La actividad <code>920009</code> (apuestas) <strong>no aparece como rubro</strong> en el Libro IVA Digital:
-                            son Facturas B tipo <code>006</code> del PV de cierre de máquinas/bingo (exentas).
-                            Si ARCA «no las ve», no buscar «apuestas»: buscar tipo 006 y el PV FSL (Rebisco 14).
+                            Misma fuente que el Libro IVA Digital de ventas. El gravado/IVA sale de las alícuotas
+                            del <code>VENTAS_CBTE</code>; el exento/no gravado es el campo
+                            <code>operaciones_exentas</code> (tipo operación 3, RG 5705 / apertura IVA Simple).
+                            Actividad: comprobante o, si falta, punto de venta.
+                            La actividad <code>920009</code> (apuestas) en el libro son Facturas B tipo <code>006</code>
+                            del PV de cierre (exentas).
                         </p>
                         <div class="table-responsive mb-3">
                             <table class="table table-bordered table-sm" id="tabla-iva-simple-actividad">
@@ -372,9 +372,10 @@
                     @if (!empty($resultado['iva_simple']['resumen_por_concepto']))
                         <h5 class="mb-2">IVA Simple — crédito fiscal por concepto (compras)</h5>
                         <p class="text-muted small">
-                            Misma fuente que el Libro IVA Digital de compras: comprobantes ERP
-                            y, si está marcado, Anita (<code>compra</code> + <code>concmov</code>)
-                            sin solapar. Gravado (G) e IVA (I) de la misma alícuota van en un solo renglón.
+                            Misma fuente que el Libro IVA Digital de compras (ERP + Anita sin solapar).
+                            El CSV de crédito fiscal de ARCA solo admite gravado + IVA (concepto × alícuota):
+                            no hay campo de exento. El exento, no gravado y monotributo quedan en
+                            <code>COMPRAS_CBTE</code> y se muestran acá para cruzar con el libro / Portal.
                         </p>
                         <div class="table-responsive mb-3">
                             <table class="table table-bordered table-sm" id="tabla-iva-simple-concepto">
@@ -387,6 +388,8 @@
                                         <th class="text-right">IVA crédito</th>
                                         <th class="text-right">IVA computable</th>
                                         <th class="text-right">IVA restitución</th>
+                                        <th class="text-right">Exento / no grav.</th>
+                                        <th class="text-right">Monotributo</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -402,6 +405,8 @@
                                             <td class="text-right">${{ number_format($filaConcepto['iva_credito'] ?? 0, 2, ',', '.') }}</td>
                                             <td class="text-right">${{ number_format($filaConcepto['iva_computable'] ?? 0, 2, ',', '.') }}</td>
                                             <td class="text-right">${{ number_format($filaConcepto['iva_restitucion'] ?? 0, 2, ',', '.') }}</td>
+                                            <td class="text-right">—</td>
+                                            <td class="text-right">—</td>
                                         </tr>
                                     @endforeach
                                 </tbody>
@@ -419,6 +424,16 @@
                                         </td>
                                         <td class="text-right">
                                             ${{ number_format(collect($resultado['iva_simple']['resumen_por_concepto'])->sum('iva_restitucion'), 2, ',', '.') }}
+                                        </td>
+                                        <td class="text-right">
+                                            ${{ number_format(
+                                                ($resultado['iva_simple']['resumen']['total_exento_compras'] ?? 0)
+                                                + ($resultado['iva_simple']['resumen']['total_no_integra_compras'] ?? 0),
+                                                2, ',', '.'
+                                            ) }}
+                                        </td>
+                                        <td class="text-right">
+                                            ${{ number_format($resultado['iva_simple']['resumen']['total_monotributo_compras'] ?? 0, 2, ',', '.') }}
                                         </td>
                                     </tr>
                                 </tfoot>
