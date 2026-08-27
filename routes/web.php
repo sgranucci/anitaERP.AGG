@@ -3441,6 +3441,9 @@ Route::post('compras/ordencompra/{id}/revertir-cierre-lineas', 'Compras\Ordencom
 Route::post('compras/ordencompra/{id}/cambiar-sector', 'Compras\OrdencompraController@cambiarSector')->name('ordencompra_cambiar_sector');
 Route::post('compras/ordencompra/{id}/enviar-gastronomia', 'Compras\OrdencompraController@enviarGastronomia')->name('ordencompra_enviar_gastronomia');
 Route::post('compras/ordencompra/{id}/enviar-cuentas-a-pagar', 'Compras\OrdencompraController@enviarCuentasAPagar')->name('ordencompra_enviar_cuentas_a_pagar');
+Route::post('compras/ordencompra/{id}/enviar-pagos', 'Compras\OrdencompraController@enviarPagos')->name('ordencompra_enviar_pagos');
+Route::post('compras/ordencompra/{id}/devolver-cuentas-a-pagar', 'Compras\OrdencompraController@devolverCuentasAPagar')->name('ordencompra_devolver_cuentas_a_pagar');
+Route::post('compras/ordencompra/{id}/devolver-compras', 'Compras\OrdencompraController@devolverCompras')->name('ordencompra_devolver_compras');
 Route::post('compras/ordencompra/{id}/finalizar-legajo', 'Compras\OrdencompraController@finalizarLegajo')->name('ordencompra_finalizar_legajo');
 Route::get('compras/ordencompra/{id}/gate-cuentas-a-pagar', 'Compras\OrdencompraController@gateCuentasAPagar')->name('ordencompra_gate_cuentas_a_pagar');
 Route::get('compras/legajos', 'Compras\OrdencompraLegajoBandejaController@index')->name('consultar_legajo_compra');

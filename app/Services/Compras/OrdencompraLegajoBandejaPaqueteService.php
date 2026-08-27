@@ -9,6 +9,8 @@ use App\Models\Compras\Precarga_Comprobante_Proveedor_Recepcion;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepository;
+use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
+use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraLegajoAnitaScanFacturaSupport;
 use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
@@ -68,8 +70,13 @@ class OrdencompraLegajoBandejaPaqueteService
             'asignadas' => $asignadas,
             'comprobantes' => $comprobantes,
             'pagos' => $pagos,
-            'url_cargar_cxp' => ($primeraPrecargaId > 0 && ! $tieneComprobante)
-                ? route('crear_comprobante_proveedor', ['precarga_id' => $primeraPrecargaId])
+            'url_cargar_cxp' => (! $tieneComprobante
+                && OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar((int) ($oc->sector_legajocompra_id ?? 0)))
+                ? route('crear_comprobante_proveedor', array_filter([
+                    'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_BANDEJA,
+                    'ordencompra_id' => (int) $oc->id,
+                    'precarga_id' => $primeraPrecargaId > 0 ? $primeraPrecargaId : null,
+                ]))
                 : null,
             'url_oc' => can('editar-ordencompra', false)
                 ? route('editar_ordencompra', ['id' => (int) $oc->id])

@@ -26,4 +26,20 @@ final class RequisicionAnitaEstadoMapper
             default => '0',
         };
     }
+
+    public static function anitaCharToErpNombre(?string $estadoAnita): string
+    {
+        return match (trim((string) $estadoAnita)) {
+            '1' => 'GENERO ORDEN COMPRA',
+            '2' => 'PARCIAL',
+            '3' => 'CUMPLIDA',
+            '4' => 'SUSPENDIDA',
+            '5' => 'EN COMPRAS',
+            '6' => 'A AUTORIZAR',
+            'T' => 'TRANSFERIDA',
+            'E' => 'AUT ESPECIAL',
+            'A' => 'EN ARBOL APROBACION',
+            default => 'PENDIENTE',
+        };
+    }
 }

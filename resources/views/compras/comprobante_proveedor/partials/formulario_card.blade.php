@@ -50,6 +50,10 @@
                         <form action="{{ $rutaContabilizar }}" method="POST" class="d-inline"
                             onsubmit="return confirm('¿Confirmar / contabilizar el comprobante? Genera asiento, cuenta corriente y sync Anita.');">
                             @csrf
+                            @if (!empty($retornoLegajo['origen']))
+                                <input type="hidden" name="origen" value="{{ $retornoLegajo['origen'] }}">
+                                <input type="hidden" name="legajo_oc_id" value="{{ (int) ($data->ordencompra_id ?? 0) }}">
+                            @endif
                             <button type="submit" class="btn btn-warning btn-sm">
                                 <i class="fa fa-check"></i> Contabilizar
                             </button>
@@ -65,6 +69,11 @@
                         <button type="button" class="btn btn-warning btn-sm" disabled title="Completá la validación de abono">
                             <i class="fa fa-lock"></i> Contabilizar (bloqueado)
                         </button>
+                    @endif
+                    @if (!empty($retornoLegajo['url']))
+                    <a href="{{ $retornoLegajo['url'] }}" class="btn btn-outline-success btn-sm">
+                        <i class="fa fa-folder-open"></i> Volver al legajo
+                    </a>
                     @endif
                     <a href="{{ route('comprobante_proveedor', $retornoListadoQuery) }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
@@ -250,6 +259,10 @@
                     @endif
 
                     <input type="hidden" name="origen_entrada" value="{{ old('origen_entrada', $origen_entrada) }}">
+                    @if (!empty($retornoLegajo['origen']))
+                    <input type="hidden" name="origen" value="{{ $retornoLegajo['origen'] }}">
+                    <input type="hidden" name="legajo_oc_id" value="{{ (int) ($data->ordencompra_id ?? 0) }}">
+                    @endif
                     <input type="hidden" name="precarga_comprobante_proveedor_id" value="{{ old('precarga_comprobante_proveedor_id', $data->precarga_comprobante_proveedor_id ?? '') }}">
                     <input type="hidden" name="ordencompra_id" value="{{ old('ordencompra_id', $data->ordencompra_id ?? '') }}">
                     <input type="hidden" name="ordencompra_comprobante_id" value="{{ old('ordencompra_comprobante_id', $data->ordencompra_comprobante_id ?? '') }}">

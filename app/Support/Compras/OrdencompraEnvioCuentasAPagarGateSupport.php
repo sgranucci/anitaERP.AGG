@@ -17,6 +17,8 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
 
     public const SECTOR_COMPRAS = 'COMPRAS';
 
+    public const SECTOR_PAGOS = 'PAGOS';
+
     public static function esSectorCuentasAPagar(int $sectorId): bool
     {
         if ($sectorId <= 0) {
@@ -110,23 +112,16 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
 
     public static function resolverPrecargaConPdf(Ordencompra $oc): ?Precarga_Comprobante_Proveedor
     {
-        $numero = trim((string) ($oc->numeroordencompra ?? ''));
-        $empresaId = (int) ($oc->empresa_id ?? 0);
-        if ($numero === '' || $empresaId <= 0) {
-            return null;
-        }
-
-        return Precarga_Comprobante_Proveedor::query()
-            ->where('empresa_id', $empresaId)
-            ->where('numeroordencompra', $numero)
+        return self::queryPrecargaDelLegajo($oc)
             ->whereNotNull('rutaalmacenamiento')
             ->where('rutaalmacenamiento', '!=', '')
-            ->where(function ($q) {
-                $q->whereNull('estado')
-                    ->orWhereRaw('UPPER(TRIM(estado)) != ?', ['ANULADA']);
-            })
-            ->orderByDesc('id')
             ->first();
+    }
+
+    public static function precargaDelLegajo(Ordencompra $oc): ?Precarga_Comprobante_Proveedor
+    {
+        return self::resolverPrecargaConPdf($oc)
+            ?? self::queryPrecargaDelLegajo($oc)->first();
     }
 
     /**
@@ -178,6 +173,28 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
         $support = app(ComprobanteProveedorRecepcionesSupport::class);
 
         return $support->listarDisponibles($ordencompraId)->isNotEmpty();
+    }
+
+    /**
+     * @return \Illuminate\Database\Eloquent\Builder<\App\Models\Compras\Precarga_Comprobante_Proveedor>
+     */
+    private static function queryPrecargaDelLegajo(Ordencompra $oc)
+    {
+        $numero = trim((string) ($oc->numeroordencompra ?? ''));
+        $empresaId = (int) ($oc->empresa_id ?? 0);
+        $query = Precarga_Comprobante_Proveedor::query()->whereRaw('1 = 0');
+        if ($numero === '' || $empresaId <= 0) {
+            return $query;
+        }
+
+        return Precarga_Comprobante_Proveedor::query()
+            ->where('empresa_id', $empresaId)
+            ->where('numeroordencompra', $numero)
+            ->where(function ($q) {
+                $q->whereNull('estado')
+                    ->orWhereRaw('UPPER(TRIM(estado)) != ?', ['ANULADA']);
+            })
+            ->orderByDesc('id');
     }
 
     /**

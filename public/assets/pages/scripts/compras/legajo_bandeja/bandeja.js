@@ -165,6 +165,30 @@
             $('#modalBandejaEnviarGastro').modal('show');
         });
 
+        $('.js-bandeja-enviar-pagos').on('click', function () {
+            var $form = $('#formBandejaEnviarPagos');
+            $form.attr('action', $(this).data('url'));
+            $form.find('input[name=observacion]').val('');
+            $form.find('textarea[name=leyenda]').val('');
+            $('#modalBandejaEnviarPagos').modal('show');
+        });
+
+        $('.js-bandeja-devolver-cxp').on('click', function () {
+            var $form = $('#formBandejaDevolverCxp');
+            $form.attr('action', $(this).data('url'));
+            $form.find('input[name=observacion]').val('');
+            $form.find('textarea[name=leyenda]').val('');
+            $('#modalBandejaDevolverCxp').modal('show');
+        });
+
+        $('.js-bandeja-devolver-compras').on('click', function () {
+            var $form = $('#formBandejaDevolverCompras');
+            $form.attr('action', $(this).data('url'));
+            $form.find('input[name=observacion]').val('');
+            $form.find('textarea[name=leyenda]').val('');
+            $('#modalBandejaDevolverCompras').modal('show');
+        });
+
         $('.js-bandeja-enviar-cxp').on('click', function () {
             var $form = $('#formBandejaEnviarCxp');
             $form.attr('action', $(this).data('url'));

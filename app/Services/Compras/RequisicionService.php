@@ -1118,9 +1118,13 @@ class RequisicionService
         ];
         $dataAnita = json_decode($apiAnita->apiCall($data));
 
-        $usuario_id = Auth::user()->id;
+        if (Requisicion::query()->where('numerorequisicion', (int) $key)->exists()) {
+            return;
+        }
 
-        if (count($dataAnita) > 0) {
+        $usuario_id = Auth::id() ?: 1;
+
+        if (is_array($dataAnita) && count($dataAnita) > 0) {
             $dataRequisicion = $dataAnita[0];
 
             // Lee el proveedor
@@ -1338,6 +1342,8 @@ class RequisicionService
                         'motivoahorro' => $data->reqv_motivo_ahorro ?? '',
                         'partidagasto_id' => $partidagasto_id,
                         'capex_id' => $capex_id,
+                        'anita_nro_interno' => (int) ($data->reqv_nro_interno ?? 0) ?: null,
+                        'anita_nro_orden' => isset($data->reqv_nro_orden) ? (int) $data->reqv_nro_orden : null,
                     ];
 
                     $requisicion_articulo = $this->requisicion_articuloRepository->createUnique($arrayCampos);

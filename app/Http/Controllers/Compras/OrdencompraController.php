@@ -806,6 +806,94 @@ class OrdencompraController extends Controller
         return redirect()->back()->with('errores', [$ret['errores'] ?? 'Error']);
     }
 
+    public function enviarPagos(Request $request, $id)
+    {
+        if (! can('actualizar-ordencompra', false)
+            && ! can('crear-comprobante-proveedor', false)
+            && ! can('listar-legajo-compra', false)
+        ) {
+            can('actualizar-ordencompra');
+        }
+        $request->validate([
+            'observacion' => 'nullable|string|max:255',
+            'leyenda' => 'nullable|string|max:2000',
+        ]);
+        $ret = $this->ordencompraGestionService->enviarAPagos(
+            (int) $id,
+            $request->observacion,
+            $request->leyenda,
+        );
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json($ret, ($ret['mensaje'] ?? '') === 'ok' ? 200 : 422);
+        }
+
+        if (($ret['mensaje'] ?? '') === 'ok') {
+            return redirect()->back()->with('mensaje', 'Legajo enviado a Pagos');
+        }
+
+        return redirect()->back()->with('errores', [$ret['errores'] ?? 'Error']);
+    }
+
+    public function devolverCuentasAPagar(Request $request, $id)
+    {
+        if (! can('actualizar-ordencompra', false)
+            && ! can('editar-pagoproveedor', false)
+            && ! can('crear-pagoproveedor', false)
+            && ! can('listar-legajo-compra', false)
+        ) {
+            can('actualizar-ordencompra');
+        }
+        $request->validate([
+            'observacion' => 'required|string|min:3|max:255',
+            'leyenda' => 'nullable|string|max:2000',
+        ]);
+        $ret = $this->ordencompraGestionService->devolverACuentasAPagar(
+            (int) $id,
+            (string) $request->observacion,
+            $request->leyenda,
+        );
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json($ret, ($ret['mensaje'] ?? '') === 'ok' ? 200 : 422);
+        }
+
+        if (($ret['mensaje'] ?? '') === 'ok') {
+            return redirect()->back()->with('mensaje', 'Legajo devuelto a Cuentas a pagar');
+        }
+
+        return redirect()->back()->with('errores', [$ret['errores'] ?? 'Error']);
+    }
+
+    public function devolverCompras(Request $request, $id)
+    {
+        if (! can('actualizar-ordencompra', false)
+            && ! can('crear-comprobante-proveedor', false)
+            && ! can('listar-legajo-compra', false)
+        ) {
+            can('actualizar-ordencompra');
+        }
+        $request->validate([
+            'observacion' => 'required|string|min:3|max:255',
+            'leyenda' => 'nullable|string|max:2000',
+        ]);
+        $ret = $this->ordencompraGestionService->devolverACompras(
+            (int) $id,
+            (string) $request->observacion,
+            $request->leyenda,
+        );
+
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json($ret, ($ret['mensaje'] ?? '') === 'ok' ? 200 : 422);
+        }
+
+        if (($ret['mensaje'] ?? '') === 'ok') {
+            return redirect()->back()->with('mensaje', 'Legajo devuelto a Compras');
+        }
+
+        return redirect()->back()->with('errores', [$ret['errores'] ?? 'Error']);
+    }
+
     public function finalizarLegajo(Request $request, $id)
     {
         if (! can('actualizar-ordencompra', false)
@@ -1222,9 +1310,29 @@ class OrdencompraController extends Controller
             && empty($visualizar)
             && $puedeActualizarOrdencompra
             && OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviarCuentasAPagar($data);
+        $oc_puede_enviar_pagos = $id !== null && $data
+            && empty($visualizar)
+            && (can('actualizar-ordencompra', false) || can('crear-comprobante-proveedor', false))
+            && OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviarPagos($data);
+        $oc_puede_devolver_cxp = $id !== null && $data
+            && empty($visualizar)
+            && (
+                can('editar-pagoproveedor', false)
+                || can('crear-pagoproveedor', false)
+                || can('actualizar-ordencompra', false)
+            )
+            && OrdencompraLegajoGastronomiaSupport::puedeDevolverACuentasAPagar($data);
+        $oc_puede_devolver_compras = $id !== null && $data
+            && empty($visualizar)
+            && (can('actualizar-ordencompra', false) || can('crear-comprobante-proveedor', false))
+            && OrdencompraLegajoGastronomiaSupport::puedeDevolverACompras($data);
         $oc_puede_finalizar_legajo = $id !== null && $data
             && empty($visualizar)
-            && $puedeActualizarOrdencompra
+            && (
+                $puedeActualizarOrdencompra
+                || can('editar-pagoproveedor', false)
+                || can('crear-pagoproveedor', false)
+            )
             && OrdencompraLegajoGastronomiaSupport::puedeFinalizar($data);
         $oc_sector_gastronomia_id = OrdencompraLegajoGastronomiaSupport::sectorGastronomiaId();
         $oc_sector_cuentas_a_pagar_id = OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre(
@@ -1268,6 +1376,9 @@ class OrdencompraController extends Controller
             'url_nuevo_ticket_ingreso',
             'oc_puede_enviar_gastronomia',
             'oc_puede_enviar_cuentas_a_pagar',
+            'oc_puede_enviar_pagos',
+            'oc_puede_devolver_cxp',
+            'oc_puede_devolver_compras',
             'oc_puede_finalizar_legajo',
             'oc_sector_gastronomia_id',
             'oc_sector_cuentas_a_pagar_id',

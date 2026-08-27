@@ -213,6 +213,96 @@ $(function () {
                 </div>
             </div>
             @endif
+            @if (!empty($oc_puede_enviar_pagos))
+            <div class="modal fade" id="modalOcEnviarPagos" tabindex="-1" role="dialog" aria-hidden="true">
+                <div class="modal-dialog" role="document">
+                    <div class="modal-content">
+                        <form method="POST" action="{{ route('ordencompra_enviar_pagos', ['id' => $data->id]) }}">
+                            @csrf
+                            <div class="modal-header">
+                                <h5 class="modal-title">Enviar a Pagos</h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="text-muted small">Pasa el legajo de Cuentas a pagar a <strong>PAGOS</strong>. Requiere la factura ya cargada.</p>
+                                <div class="form-group">
+                                    <label for="ocp_obs">Observación</label>
+                                    <input type="text" name="observacion" id="ocp_obs" class="form-control" maxlength="255" placeholder="Opcional">
+                                </div>
+                                <div class="form-group">
+                                    <label for="ocp_leyenda">Leyenda / detalle</label>
+                                    <textarea name="leyenda" id="ocp_leyenda" class="form-control" rows="2" maxlength="2000"></textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                                <button type="submit" class="btn btn-primary">Enviar a Pagos</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            @endif
+            @if (!empty($oc_puede_devolver_cxp))
+            <div class="modal fade" id="modalOcDevolverCxp" tabindex="-1" role="dialog" aria-hidden="true">
+                <div class="modal-dialog" role="document">
+                    <div class="modal-content">
+                        <form method="POST" action="{{ route('ordencompra_devolver_cuentas_a_pagar', ['id' => $data->id]) }}">
+                            @csrf
+                            <div class="modal-header">
+                                <h5 class="modal-title">Devolver a Cuentas a pagar</h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="text-muted small">Vuelve el legajo de Pagos a <strong>CUENTAS A PAGAR</strong>. El comentario es obligatorio.</p>
+                                <div class="form-group">
+                                    <label for="oc_dev_cxp_obs">Comentario / motivo</label>
+                                    <input type="text" name="observacion" id="oc_dev_cxp_obs" class="form-control" maxlength="255" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="oc_dev_cxp_leyenda">Detalle</label>
+                                    <textarea name="leyenda" id="oc_dev_cxp_leyenda" class="form-control" rows="3" maxlength="2000"></textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                                <button type="submit" class="btn btn-warning">Devolver a Cuentas a pagar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            @endif
+            @if (!empty($oc_puede_devolver_compras))
+            <div class="modal fade" id="modalOcDevolverCompras" tabindex="-1" role="dialog" aria-hidden="true">
+                <div class="modal-dialog" role="document">
+                    <div class="modal-content">
+                        <form method="POST" action="{{ route('ordencompra_devolver_compras', ['id' => $data->id]) }}">
+                            @csrf
+                            <div class="modal-header">
+                                <h5 class="modal-title">Devolver a Compras</h5>
+                                <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                            </div>
+                            <div class="modal-body">
+                                <p class="text-muted small">Vuelve el legajo de Cuentas a pagar a <strong>COMPRAS</strong>. El comentario es obligatorio.</p>
+                                <div class="form-group">
+                                    <label for="oc_dev_com_obs">Comentario / motivo</label>
+                                    <input type="text" name="observacion" id="oc_dev_com_obs" class="form-control" maxlength="255" required>
+                                </div>
+                                <div class="form-group">
+                                    <label for="oc_dev_com_leyenda">Detalle</label>
+                                    <textarea name="leyenda" id="oc_dev_com_leyenda" class="form-control" rows="3" maxlength="2000"></textarea>
+                                </div>
+                            </div>
+                            <div class="modal-footer">
+                                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                                <button type="submit" class="btn btn-warning">Devolver a Compras</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+            @endif
             @if (!empty($oc_puede_finalizar_legajo))
             <div class="modal fade" id="modalOcFinalizarLegajo" tabindex="-1" role="dialog" aria-hidden="true">
                 <div class="modal-dialog" role="document">
@@ -224,7 +314,7 @@ $(function () {
                                 <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
                             </div>
                             <div class="modal-body">
-                                <p class="text-muted small">Pasa el legajo de Cuentas a pagar a <strong>FINALIZADO</strong>. Queda en el histórico.</p>
+                                <p class="text-muted small">Pasa el legajo de Pagos a <strong>FINALIZADO</strong>. Queda en el histórico.</p>
                                 <div class="form-group">
                                     <label for="ocf_obs">Observación</label>
                                     <input type="text" name="observacion" id="ocf_obs" class="form-control" maxlength="255" placeholder="Opcional">
@@ -273,7 +363,7 @@ $(function () {
                         </button>
                     @endif
                     @if (isset($data) && $data && can('crear-comprobante-proveedor', false))
-                        <a href="{{ route('crear_comprobante_proveedor', ['ordencompra_id' => $data->id]) }}" class="btn btn-outline-success btn-sm" title="Alta de comprobante de proveedor vinculado a esta OC">
+                        <a href="{{ route('crear_comprobante_proveedor', ['ordencompra_id' => $data->id, 'origen' => 'oc']) }}" class="btn btn-outline-success btn-sm" title="Alta de comprobante de proveedor vinculado a esta OC">
                             <i class="fa fa-file-text-o"></i> Facturar proveedor
                         </a>
                     @endif
@@ -300,11 +390,26 @@ $(function () {
                                 <i class="fa fa-share"></i> Enviar a Cuentas a pagar
                             </button>
                             @endif
-                            @if (!empty($oc_puede_finalizar_legajo))
+                        @endif
+                        @if (!empty($oc_puede_enviar_pagos))
+                            <button type="button" class="btn btn-outline-light btn-sm" data-toggle="modal" data-target="#modalOcEnviarPagos">
+                                <i class="fa fa-share-square-o"></i> Enviar a Pagos
+                            </button>
+                        @endif
+                        @if (!empty($oc_puede_devolver_cxp))
+                            <button type="button" class="btn btn-outline-warning btn-sm" data-toggle="modal" data-target="#modalOcDevolverCxp">
+                                <i class="fa fa-undo"></i> Devolver a Cuentas a pagar
+                            </button>
+                        @endif
+                        @if (!empty($oc_puede_devolver_compras))
+                            <button type="button" class="btn btn-outline-warning btn-sm" data-toggle="modal" data-target="#modalOcDevolverCompras">
+                                <i class="fa fa-reply"></i> Devolver a Compras
+                            </button>
+                        @endif
+                        @if (!empty($oc_puede_finalizar_legajo))
                             <button type="button" class="btn btn-outline-light btn-sm" data-toggle="modal" data-target="#modalOcFinalizarLegajo">
                                 <i class="fa fa-check"></i> Finalizar legajo
                             </button>
-                            @endif
                         @endif
                         @if (!empty($data->requisicion_id) && (can('editar-requisicion', false) || can('listar-requisicion', false)))
                             <a href="{{ route('editar_requisicion', ['id' => $data->requisicion_id]) }}" class="btn btn-outline-warning btn-sm" target="_blank" rel="noopener noreferrer" title="Abre la requisición que originó esta OC">

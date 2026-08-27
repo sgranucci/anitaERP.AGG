@@ -15,6 +15,7 @@ use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraLegajoAnitaScanFacturaSupport;
 use App\Support\Compras\OrdencompraLegajoBandejaFiltros;
 use App\Support\Compras\OrdencompraLegajoGastronomiaSupport;
+use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
 use App\Support\Compras\OrdencompraListadoFiltros;
 use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
 use Carbon\Carbon;
@@ -109,6 +110,7 @@ class OrdencompraLegajoBandejaService
         $sectorCxp = OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre(
             OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_CUENTAS_A_PAGAR
         );
+        $sectorPagos = OrdencompraLegajoGastronomiaSupport::sectorPagosId();
         $sectorFin = OrdencompraLegajoGastronomiaSupport::sectorFinalizadoId();
 
         $vista = (string) ($filtros['vista'] ?? OrdencompraLegajoBandejaFiltros::VISTA_PENDIENTES);
@@ -120,7 +122,7 @@ class OrdencompraLegajoBandejaService
                 }
             });
         } elseif ($vista === OrdencompraLegajoBandejaFiltros::VISTA_ESTADOS) {
-            $activos = array_values(array_filter([$sectorCompras, $sectorGastro, $sectorCxp]));
+            $activos = array_values(array_filter([$sectorCompras, $sectorGastro, $sectorCxp, $sectorPagos]));
             if ($activos !== []) {
                 $query->whereIn('ordencompra.sector_legajocompra_id', $activos);
             }
@@ -129,16 +131,11 @@ class OrdencompraLegajoBandejaService
                 $query->where('ordencompra.sector_legajocompra_id', $sectorCxp);
             }
         } elseif ($vista === OrdencompraLegajoBandejaFiltros::VISTA_PAGOS) {
-            $sectoresPago = array_values(array_filter([$sectorCxp, $sectorFin]));
-            if ($sectoresPago !== []) {
-                $query->whereIn('ordencompra.sector_legajocompra_id', $sectoresPago);
+            if ($sectorPagos > 0) {
+                $query->where('ordencompra.sector_legajocompra_id', $sectorPagos);
+            } else {
+                $query->whereRaw('1 = 0');
             }
-            $query->where(function ($q) {
-                $this->whereExisteComprobante($q);
-                $q->orWhere(function ($w) {
-                    $this->whereExistePago($w);
-                });
-            });
         } elseif ($vista === OrdencompraLegajoBandejaFiltros::VISTA_ARCHIVADOS) {
             if ($sectorFin > 0) {
                 $query->where('ordencompra.sector_legajocompra_id', $sectorFin);
@@ -146,7 +143,7 @@ class OrdencompraLegajoBandejaService
                 $query->whereRaw('1 = 0');
             }
         } else {
-            $todos = array_values(array_filter([$sectorCompras, $sectorGastro, $sectorCxp, $sectorFin]));
+            $todos = array_values(array_filter([$sectorCompras, $sectorGastro, $sectorCxp, $sectorPagos, $sectorFin]));
             $query->where(function ($q) use ($todos) {
                 if ($todos !== []) {
                     $q->whereIn('ordencompra.sector_legajocompra_id', $todos);
@@ -242,6 +239,9 @@ class OrdencompraLegajoBandejaService
                 'es_gastronomia' => $esGastro,
                 'puede_enviar' => $esGastro && OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviar($oc),
                 'puede_enviar_cxp' => ! $esGastro && OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviarCuentasAPagar($oc),
+                'puede_enviar_pagos' => OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviarPagos($oc),
+                'puede_devolver_cxp' => OrdencompraLegajoGastronomiaSupport::puedeDevolverACuentasAPagar($oc),
+                'puede_devolver_compras' => OrdencompraLegajoGastronomiaSupport::puedeDevolverACompras($oc),
                 'puede_finalizar' => OrdencompraLegajoGastronomiaSupport::puedeFinalizar($oc),
                 'decision' => $decision['estado'] ?? '',
                 'firmante' => $decision['usuario'] ?? '',
@@ -255,15 +255,37 @@ class OrdencompraLegajoBandejaService
                 'url_historia' => route('ordencompra_legajo_bandeja_historia', ['id' => $id]),
                 'url_paquete' => route('ordencompra_legajo_bandeja_paquete', ['id' => $id]),
                 'url_asignar_com' => route('ordencompra_legajo_bandeja_asignar_com', ['id' => $id]),
-                'url_cargar_cxp' => empty($primeraCp) ? ($primeraFac['url_cargar_cxp'] ?? null) : null,
+                'url_cargar_cxp' => (empty($primeraCp)
+                    && OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar((int) ($oc->sector_legajocompra_id ?? 0)))
+                    ? $this->urlCargarFacturaDesdeLegajo($id, $primeraFac)
+                    : null,
                 'url_comprobante' => $primeraCp['url'] ?? null,
                 'url_pago' => $pago['url'] ?? null,
                 'etiqueta_pago' => $pago['etiqueta'] ?? '',
                 'url_enviar' => route('ordencompra_enviar_gastronomia', ['id' => $id]),
                 'url_enviar_cxp' => route('ordencompra_enviar_cuentas_a_pagar', ['id' => $id]),
+                'url_enviar_pagos' => route('ordencompra_enviar_pagos', ['id' => $id]),
+                'url_devolver_cxp' => route('ordencompra_devolver_cuentas_a_pagar', ['id' => $id]),
+                'url_devolver_compras' => route('ordencompra_devolver_compras', ['id' => $id]),
                 'url_finalizar' => route('ordencompra_finalizar_legajo', ['id' => $id]),
             ];
         });
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $primeraFac
+     */
+    private function urlCargarFacturaDesdeLegajo(int $ocId, ?array $primeraFac): string
+    {
+        $params = [
+            'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_BANDEJA,
+            'ordencompra_id' => $ocId,
+        ];
+        if (($primeraFac['origen'] ?? '') === 'precarga' && (int) ($primeraFac['id'] ?? 0) > 0) {
+            $params['precarga_id'] = (int) $primeraFac['id'];
+        }
+
+        return route('crear_comprobante_proveedor', $params);
     }
 
     /**
@@ -646,7 +668,11 @@ class OrdencompraLegajoBandejaService
                     'precarga' => $preId,
                     'inline' => 1,
                 ]),
-                'url_cargar_cxp' => route('crear_comprobante_proveedor', ['precarga_id' => $preId]),
+                'url_cargar_cxp' => route('crear_comprobante_proveedor', [
+                    'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_BANDEJA,
+                    'ordencompra_id' => $ocId,
+                    'precarga_id' => $preId,
+                ]),
             ];
         }
 

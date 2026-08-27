@@ -45,6 +45,16 @@ class OrdencompraLegajoBandejaController extends Controller
             'puede_actualizar' => can('actualizar-ordencompra', false),
             'puede_asignar_com' => $this->puedeAsignarCom(),
             'puede_cargar_cxp' => can('crear-comprobante-proveedor', false),
+            'puede_enviar_pagos' => can('crear-comprobante-proveedor', false)
+                || can('actualizar-ordencompra', false)
+                || can('listar-legajo-compra', false),
+            'puede_devolver_cxp' => can('editar-pagoproveedor', false)
+                || can('crear-pagoproveedor', false)
+                || can('actualizar-ordencompra', false)
+                || can('listar-legajo-compra', false),
+            'puede_devolver_compras' => can('crear-comprobante-proveedor', false)
+                || can('actualizar-ordencompra', false)
+                || can('listar-legajo-compra', false),
             'puede_ver_comprobante' => can('editar-comprobante-proveedor', false) || can('listar-comprobante-proveedor', false),
             'puede_ver_pago' => can('editar-pagoproveedor', false) || can('listar-pagoproveedor', false),
             'puede_archivar' => can('actualizar-ordencompra', false)

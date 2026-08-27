@@ -2,6 +2,7 @@
 
 namespace App\Support\Compras;
 
+use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
@@ -162,7 +163,68 @@ final class OrdencompraLegajoGastronomiaSupport
         return $ref->greaterThan($limite);
     }
 
-    public static function puedeFinalizar(?Ordencompra $oc): bool
+    public static function sectorPagosId(): int
+    {
+        return OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre(
+            OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_PAGOS
+        );
+    }
+
+    public static function esSectorPagos(int $sectorId): bool
+    {
+        if ($sectorId <= 0) {
+            return false;
+        }
+        $nombre = \App\Models\Compras\Sector_Legajocompra::query()->whereKey($sectorId)->value('nombre');
+
+        return strtoupper(trim((string) $nombre)) === OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_PAGOS;
+    }
+
+    public static function tieneFacturaCargada(?Ordencompra $oc): bool
+    {
+        if (! $oc || ! $oc->id) {
+            return false;
+        }
+
+        return Comprobante_Proveedor::query()
+            ->where('ordencompra_id', (int) $oc->id)
+            ->where(function ($q) {
+                $q->whereNull('estado')
+                    ->orWhere('estado', '!=', ComprobanteProveedorEstados::ANULADO);
+            })
+            ->exists();
+    }
+
+    public static function puedeMostrarEnviarPagos(?Ordencompra $oc): bool
+    {
+        if (! $oc || ! $oc->id) {
+            return false;
+        }
+        $sectorId = (int) ($oc->sector_legajocompra_id ?? 0);
+        if (! OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar($sectorId)) {
+            return false;
+        }
+        if (self::sectorPagosId() <= 0) {
+            return false;
+        }
+
+        return self::tieneFacturaCargada($oc);
+    }
+
+    public static function puedeDevolverACuentasAPagar(?Ordencompra $oc): bool
+    {
+        if (! $oc || ! $oc->id) {
+            return false;
+        }
+        $sectorId = (int) ($oc->sector_legajocompra_id ?? 0);
+
+        return self::esSectorPagos($sectorId)
+            && OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre(
+                OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_CUENTAS_A_PAGAR
+            ) > 0;
+    }
+
+    public static function puedeDevolverACompras(?Ordencompra $oc): bool
     {
         if (! $oc || ! $oc->id) {
             return false;
@@ -170,7 +232,19 @@ final class OrdencompraLegajoGastronomiaSupport
         $sectorId = (int) ($oc->sector_legajocompra_id ?? 0);
 
         return OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar($sectorId)
-            && self::sectorFinalizadoId() > 0;
+            && OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre(
+                OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_COMPRAS
+            ) > 0;
+    }
+
+    public static function puedeFinalizar(?Ordencompra $oc): bool
+    {
+        if (! $oc || ! $oc->id) {
+            return false;
+        }
+        $sectorId = (int) ($oc->sector_legajocompra_id ?? 0);
+
+        return self::esSectorPagos($sectorId) && self::sectorFinalizadoId() > 0;
     }
 
     /** Sectores disponibles para el combo de cambio (FINALIZADO se usa solo desde el botón). */
@@ -286,7 +360,7 @@ final class OrdencompraLegajoGastronomiaSupport
         if (OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar($sectorId)) {
             return false;
         }
-        if (self::esSectorFinalizado($sectorId)) {
+        if (self::esSectorPagos($sectorId) || self::esSectorFinalizado($sectorId)) {
             return false;
         }
 

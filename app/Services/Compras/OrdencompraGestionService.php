@@ -690,6 +690,7 @@ class OrdencompraGestionService
         ?string $observacion,
         ?string $leyenda,
         ?UploadedFile $facturaPdf = null,
+        bool $omitirGateYTrigger = false,
     ): array {
         $sec = Sector_Legajocompra::find($sectorLegajocompraId);
         if (! $sec) {
@@ -704,11 +705,14 @@ class OrdencompraGestionService
 
         if (OrdencompraLegajoGastronomiaSupport::esSectorFinalizado($sectorLegajocompraId)
             && ! OrdencompraLegajoGastronomiaSupport::puedeFinalizar($ocPrev)) {
-            return ['mensaje' => 'error', 'errores' => 'El legajo solo se puede finalizar desde Cuentas a pagar.'];
+            return ['mensaje' => 'error', 'errores' => 'El legajo solo se puede finalizar desde Pagos.'];
         }
 
-        $exigePaquete = OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar($sectorLegajocompraId)
-            || $this->cambioExigePaqueteGastronomia($ocPrev, $sectorLegajocompraId);
+        $exigePaquete = ! $omitirGateYTrigger
+            && (
+                OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar($sectorLegajocompraId)
+                || $this->cambioExigePaqueteGastronomia($ocPrev, $sectorLegajocompraId)
+            );
 
         if ($exigePaquete) {
             try {
@@ -745,12 +749,14 @@ class OrdencompraGestionService
                 'creousuario_id' => Auth::user()->id,
             ]);
 
-            $this->ocArbolTriggerDispatcher->dispararPorCambioSector(
-                $id,
-                $sectorAnteriorId > 0 ? $sectorAnteriorId : null,
-                $sectorLegajocompraId,
-                $observacion
-            );
+            if (! $omitirGateYTrigger) {
+                $this->ocArbolTriggerDispatcher->dispararPorCambioSector(
+                    $id,
+                    $sectorAnteriorId > 0 ? $sectorAnteriorId : null,
+                    $sectorLegajocompraId,
+                    $observacion
+                );
+            }
 
             DB::commit();
         } catch (\Exception $e) {
@@ -828,6 +834,92 @@ class OrdencompraGestionService
     /**
      * @return array{mensaje: string, errores?: string}
      */
+    public function enviarAPagos(int $id, ?string $observacion, ?string $leyenda): array
+    {
+        $oc = $this->ordencompraRepository->find($id);
+        if (! $oc) {
+            return ['mensaje' => 'error', 'errores' => 'Orden de compra inexistente.'];
+        }
+        if (! OrdencompraLegajoGastronomiaSupport::puedeMostrarEnviarPagos($oc)) {
+            return ['mensaje' => 'error', 'errores' => 'El legajo debe estar en Cuentas a pagar y tener la factura cargada.'];
+        }
+        $sectorId = OrdencompraLegajoGastronomiaSupport::sectorPagosId();
+        if ($sectorId <= 0) {
+            return ['mensaje' => 'error', 'errores' => 'No está configurado el sector PAGOS.'];
+        }
+        $obs = trim((string) $observacion);
+        if ($obs === '') {
+            $obs = 'Enviar a Pagos';
+        }
+
+        return $this->cambiarSector($id, $sectorId, $obs, $leyenda);
+    }
+
+    /**
+     * @return array{mensaje: string, errores?: string}
+     */
+    public function devolverACuentasAPagar(int $id, string $observacion, ?string $leyenda): array
+    {
+        $oc = $this->ordencompraRepository->find($id);
+        if (! $oc) {
+            return ['mensaje' => 'error', 'errores' => 'Orden de compra inexistente.'];
+        }
+        if (! OrdencompraLegajoGastronomiaSupport::puedeDevolverACuentasAPagar($oc)) {
+            return ['mensaje' => 'error', 'errores' => 'Solo se puede devolver a Cuentas a pagar un legajo que está en Pagos.'];
+        }
+        $obs = trim($observacion);
+        if ($obs === '') {
+            return ['mensaje' => 'error', 'errores' => 'Debe indicar un comentario con el motivo de la devolución.'];
+        }
+        $sectorId = OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre(
+            OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_CUENTAS_A_PAGAR
+        );
+        if ($sectorId <= 0) {
+            return ['mensaje' => 'error', 'errores' => 'No está configurado el sector CUENTAS A PAGAR.'];
+        }
+
+        return $this->cambiarSector($id, $sectorId, $obs, $leyenda, null, true);
+    }
+
+    /**
+     * @return array{mensaje: string, errores?: string}
+     */
+    public function devolverACompras(int $id, string $observacion, ?string $leyenda): array
+    {
+        $oc = $this->ordencompraRepository->find($id);
+        if (! $oc) {
+            return ['mensaje' => 'error', 'errores' => 'Orden de compra inexistente.'];
+        }
+        if (! OrdencompraLegajoGastronomiaSupport::puedeDevolverACompras($oc)) {
+            return ['mensaje' => 'error', 'errores' => 'Solo se puede devolver a Compras un legajo que está en Cuentas a pagar.'];
+        }
+        $obs = trim($observacion);
+        if ($obs === '') {
+            return ['mensaje' => 'error', 'errores' => 'Debe indicar un comentario con el motivo de la devolución.'];
+        }
+        $sectorId = OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre(
+            OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_COMPRAS
+        );
+        if ($sectorId <= 0) {
+            return ['mensaje' => 'error', 'errores' => 'No está configurado el sector COMPRAS.'];
+        }
+
+        $ret = $this->cambiarSector($id, $sectorId, $obs, $leyenda, null, true);
+        if (($ret['mensaje'] ?? '') === 'ok') {
+            try {
+                app(OrdencompraDevolverAComprasNotificacionService::class)
+                    ->devolver($id, $obs, trim((string) $leyenda));
+            } catch (\Throwable $e) {
+                // El sector ya volvió; el mail no bloquea.
+            }
+        }
+
+        return $ret;
+    }
+
+    /**
+     * @return array{mensaje: string, errores?: string}
+     */
     public function finalizarLegajo(int $id, ?string $observacion): array
     {
         $oc = $this->ordencompraRepository->find($id);
@@ -835,7 +927,7 @@ class OrdencompraGestionService
             return ['mensaje' => 'error', 'errores' => 'Orden de compra inexistente.'];
         }
         if (! OrdencompraLegajoGastronomiaSupport::puedeFinalizar($oc)) {
-            return ['mensaje' => 'error', 'errores' => 'Solo se puede finalizar un legajo que está en Cuentas a pagar.'];
+            return ['mensaje' => 'error', 'errores' => 'Solo se puede finalizar un legajo que está en Pagos.'];
         }
         $sectorId = OrdencompraLegajoGastronomiaSupport::sectorFinalizadoId();
         $obs = trim((string) $observacion);

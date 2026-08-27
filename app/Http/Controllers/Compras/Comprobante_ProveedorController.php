@@ -36,6 +36,7 @@ use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\ComprobanteProveedorListadoFiltros;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
+use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
@@ -154,6 +155,10 @@ class Comprobante_ProveedorController extends Controller
             [
                 'facturaYaEnAnita' => $facturaYaEnAnita,
                 'retornoListadoQuery' => $this->queryRetornoListado($request),
+                'retornoLegajo' => ComprobanteProveedorRetornoLegajoSupport::paraVista(
+                    $request,
+                    (int) ($prefill['data']->ordencompra_id ?? 0)
+                ),
             ]
         ));
     }
@@ -246,18 +251,17 @@ class Comprobante_ProveedorController extends Controller
             }
 
             return $this->conAvisosControles(
-                redirect()
-                    ->route('editar_comprobante_proveedor', ['id' => $comprobante->id])
-                    ->with('mensaje', 'Comprobante contabilizado: asiento, cuenta corriente y sync Anita.'),
+                $this->redirectTrasGuardarComprobante(
+                    $request,
+                    $comprobante,
+                    'Comprobante contabilizado: asiento, cuenta corriente y sync Anita.'
+                ),
                 $avisos
             );
         }
 
-        // Borrador: queda en editar para que aparezca Contabilizar (mismo patrón que recepción).
         return $this->conAvisosControles(
-            redirect()
-                ->route('editar_comprobante_proveedor', ['id' => $comprobante->id])
-                ->with('mensaje', $mensaje),
+            $this->redirectTrasGuardarComprobante($request, $comprobante, $mensaje),
             $avisos
         );
     }
@@ -275,6 +279,10 @@ class Comprobante_ProveedorController extends Controller
 
         return view('compras.comprobante_proveedor.editar', $this->datosFormulario($prefill) + [
             'retornoListadoQuery' => $this->queryRetornoListado($request),
+            'retornoLegajo' => ComprobanteProveedorRetornoLegajoSupport::paraVista(
+                $request,
+                (int) ($comprobante->ordencompra_id ?? 0)
+            ),
         ]);
     }
 
@@ -299,7 +307,12 @@ class Comprobante_ProveedorController extends Controller
         $avisos = $this->persistenciaService->ultimosAvisosControles();
 
         return $this->conAvisosControles(
-            $this->redirectIndexConMensaje($request, $mensaje),
+            $this->redirectTrasGuardarComprobante(
+                $request,
+                $this->comprobanteRepository->find($id),
+                $mensaje,
+                'index'
+            ),
             $avisos
         );
     }
@@ -570,9 +583,13 @@ class Comprobante_ProveedorController extends Controller
                 ]);
         }
 
-        return $this->redirectIndexConMensaje(
+        $comprobante = $this->comprobanteRepository->find($id);
+
+        return $this->redirectTrasGuardarComprobante(
             $request,
-            'Comprobante contabilizado: asiento, cuenta corriente y sync Anita.'
+            $comprobante,
+            'Comprobante contabilizado: asiento, cuenta corriente y sync Anita.',
+            'index'
         );
     }
 
@@ -1117,6 +1134,30 @@ class Comprobante_ProveedorController extends Controller
         return redirect()
             ->route('comprobante_proveedor', $this->queryRetornoListado($request))
             ->with('mensaje', $mensaje);
+    }
+
+    private function redirectTrasGuardarComprobante(
+        Request $request,
+        mixed $comprobante,
+        string $mensaje,
+        string $fallback = 'editar'
+    ) {
+        $ocId = (int) ($comprobante->ordencompra_id ?? 0);
+        $url = ComprobanteProveedorRetornoLegajoSupport::url($request, $ocId);
+        if ($url) {
+            return redirect()->to($url)->with('mensaje', $mensaje);
+        }
+
+        if ($fallback === 'editar' && $comprobante && (int) ($comprobante->id ?? 0) > 0) {
+            return redirect()
+                ->route(
+                    'editar_comprobante_proveedor',
+                    ['id' => (int) $comprobante->id] + $this->queryRetornoListado($request)
+                )
+                ->with('mensaje', $mensaje);
+        }
+
+        return $this->redirectIndexConMensaje($request, $mensaje);
     }
 
     private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array

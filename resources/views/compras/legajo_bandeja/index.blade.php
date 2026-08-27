@@ -111,6 +111,96 @@ Bandeja de legajos
     </div>
 </div>
 @endif
+@if (!empty($puede_enviar_pagos))
+<div class="modal fade" id="modalBandejaEnviarPagos" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form method="POST" id="formBandejaEnviarPagos" action="">
+                @csrf
+                <div class="modal-header">
+                    <h5 class="modal-title">Enviar a Pagos</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">Pasa el legajo de Cuentas a pagar a <strong>PAGOS</strong>. Requiere la factura ya cargada.</p>
+                    <div class="form-group">
+                        <label for="bandeja_ocp_obs">Observación</label>
+                        <input type="text" name="observacion" id="bandeja_ocp_obs" class="form-control" maxlength="255">
+                    </div>
+                    <div class="form-group">
+                        <label for="bandeja_ocp_leyenda">Leyenda / detalle</label>
+                        <textarea name="leyenda" id="bandeja_ocp_leyenda" class="form-control" rows="2" maxlength="2000"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-primary">Enviar a Pagos</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
+@if (!empty($puede_devolver_cxp))
+<div class="modal fade" id="modalBandejaDevolverCxp" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form method="POST" id="formBandejaDevolverCxp" action="">
+                @csrf
+                <div class="modal-header">
+                    <h5 class="modal-title">Devolver a Cuentas a pagar</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">Vuelve el legajo de Pagos a <strong>CUENTAS A PAGAR</strong>. El comentario es obligatorio.</p>
+                    <div class="form-group">
+                        <label for="bandeja_dev_cxp_obs">Comentario / motivo</label>
+                        <input type="text" name="observacion" id="bandeja_dev_cxp_obs" class="form-control" maxlength="255" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="bandeja_dev_cxp_leyenda">Detalle</label>
+                        <textarea name="leyenda" id="bandeja_dev_cxp_leyenda" class="form-control" rows="3" maxlength="2000"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning">Devolver a Cuentas a pagar</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
+@if (!empty($puede_devolver_compras))
+<div class="modal fade" id="modalBandejaDevolverCompras" tabindex="-1" role="dialog" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content">
+            <form method="POST" id="formBandejaDevolverCompras" action="">
+                @csrf
+                <div class="modal-header">
+                    <h5 class="modal-title">Devolver a Compras</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small">Vuelve el legajo de Cuentas a pagar a <strong>COMPRAS</strong>. El comentario es obligatorio.</p>
+                    <div class="form-group">
+                        <label for="bandeja_dev_com_obs">Comentario / motivo</label>
+                        <input type="text" name="observacion" id="bandeja_dev_com_obs" class="form-control" maxlength="255" required>
+                    </div>
+                    <div class="form-group">
+                        <label for="bandeja_dev_com_leyenda">Detalle</label>
+                        <textarea name="leyenda" id="bandeja_dev_com_leyenda" class="form-control" rows="3" maxlength="2000"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-warning">Devolver a Compras</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+@endif
 
 <div class="modal fade" id="modalBandejaHistoria" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog modal-lg" role="document">
@@ -278,7 +368,7 @@ Bandeja de legajos
             <div class="card-body pb-2">
                 <p class="text-muted small mb-2">
                     El legajo es la OC (sector, historia, factura y COM).
-                    Compras envía; Cuentas a pagar carga la factura; Pagos abre la orden de pago y archiva.
+                    Compras envía; Cuentas a pagar carga la factura y envía a Pagos; Pagos ve solo lo que está en Pagos y archiva.
                 </p>
                 @if (!empty($alcanceSector))
                     <p class="text-muted small mb-2">{{ $alcanceSector }}</p>
@@ -470,6 +560,27 @@ Bandeja de legajos
                                                 data-ordencompra-id="{{ $row['id'] }}"
                                                 title="Enviar a Cuentas a pagar">
                                             <i class="fa fa-share"></i>
+                                        </button>
+                                    @endif
+                                    @if (!empty($puede_enviar_pagos) && !empty($row['puede_enviar_pagos']))
+                                        <button type="button" class="btn btn-xs btn-outline-success js-bandeja-enviar-pagos"
+                                                data-url="{{ $row['url_enviar_pagos'] }}"
+                                                title="Enviar a Pagos">
+                                            <i class="fa fa-share-square-o"></i>
+                                        </button>
+                                    @endif
+                                    @if (!empty($puede_devolver_cxp) && !empty($row['puede_devolver_cxp']))
+                                        <button type="button" class="btn btn-xs btn-outline-warning js-bandeja-devolver-cxp"
+                                                data-url="{{ $row['url_devolver_cxp'] }}"
+                                                title="Devolver a Cuentas a pagar">
+                                            <i class="fa fa-undo"></i>
+                                        </button>
+                                    @endif
+                                    @if (!empty($puede_devolver_compras) && !empty($row['puede_devolver_compras']))
+                                        <button type="button" class="btn btn-xs btn-outline-warning js-bandeja-devolver-compras"
+                                                data-url="{{ $row['url_devolver_compras'] }}"
+                                                title="Devolver a Compras">
+                                            <i class="fa fa-reply"></i>
                                         </button>
                                     @endif
                                     @if (!empty($puede_archivar) && !empty($row['puede_finalizar']))

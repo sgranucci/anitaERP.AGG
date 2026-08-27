@@ -8,6 +8,8 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
+use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
+use App\Support\Compras\OrdencompraLegajoAnitaScanFacturaSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
@@ -46,11 +48,14 @@ class ComprobanteProveedorPrefillService
         $ordencompraId = (int) $request->input('ordencompra_id', 0);
 
         if ($precargaId > 0) {
-            return $this->desdePrecarga($precargaId);
+            $prefill = $this->desdePrecarga($precargaId);
+            $this->completarPdfDesdeScanAnita($prefill);
+
+            return $prefill;
         }
 
         if ($ordencompraId > 0) {
-            return $this->desdeOrdencompra($ordencompraId);
+            return $this->desdeOrdencompraConFacturaDelLegajo($ordencompraId);
         }
 
         return $this->manual();
@@ -283,6 +288,50 @@ class ComprobanteProveedorPrefillService
         );
 
         return $prefill;
+    }
+
+    /** @return array<string, mixed> */
+    public function desdeOrdencompraConFacturaDelLegajo(int $ordencompraId): array
+    {
+        $ordencompra = Ordencompra::query()
+            ->with(['empresas', 'proveedores', 'ordencompra_articulos'])
+            ->findOrFail($ordencompraId);
+        $precarga = OrdencompraEnvioCuentasAPagarGateSupport::precargaDelLegajo($ordencompra);
+        if ($precarga) {
+            $prefill = $this->desdePrecarga((int) $precarga->id);
+            $this->completarPdfDesdeScanAnita($prefill, $ordencompra);
+
+            return $prefill;
+        }
+
+        $prefill = $this->desdeOrdencompra($ordencompraId);
+        $this->completarPdfDesdeScanAnita($prefill, $ordencompra);
+
+        return $prefill;
+    }
+
+    /**
+     * @param  array<string, mixed>  $prefill
+     */
+    private function completarPdfDesdeScanAnita(array &$prefill, ?Ordencompra $ordencompra = null): void
+    {
+        if (filled($prefill['ruta_factura_pdf'] ?? null)) {
+            return;
+        }
+        $oc = $ordencompra ?? ($prefill['data']->ordencompras ?? null);
+        if (! $oc instanceof Ordencompra) {
+            return;
+        }
+        $oc->loadMissing('empresas:id,codigo,nombre');
+        $scans = OrdencompraLegajoAnitaScanFacturaSupport::facturasDeOc($oc);
+        $docId = (int) ($scans[0]['documento_id'] ?? 0);
+        if ($docId <= 0) {
+            return;
+        }
+        $path = OrdencompraLegajoAnitaScanFacturaSupport::rutaPdf($docId);
+        if ($path) {
+            $prefill['ruta_factura_pdf'] = $path;
+        }
     }
 
     /** @return array<string, mixed> */
