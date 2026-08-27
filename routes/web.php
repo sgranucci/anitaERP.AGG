@@ -855,6 +855,7 @@ Route::post('stock/crearreplistaprecio', 'Stock\RepListaPrecioController@crearRe
 Route::get('configuracion/impuesto', 'Configuracion\ImpuestoController@index')->name('impuesto');
 Route::get('configuracion/impuesto/crear', 'Configuracion\ImpuestoController@crear')->name('crear_impuesto');
 Route::post('configuracion/impuesto', 'Configuracion\ImpuestoController@guardar')->name('guardar_impuesto');
+Route::put('configuracion/impuesto/percepcion-no-categorizado', 'Configuracion\ImpuestoController@actualizarPercepcionNoCategorizado')->name('actualizar_percepcion_no_categorizado');
 Route::get('configuracion/impuesto/{id}/editar', 'Configuracion\ImpuestoController@editar')->name('editar_impuesto');
 Route::put('configuracion/impuesto/{id}', 'Configuracion\ImpuestoController@actualizar')->name('actualizar_impuesto');
 Route::delete('configuracion/impuesto/{id}', 'Configuracion\ImpuestoController@eliminar')->name('eliminar_impuesto');

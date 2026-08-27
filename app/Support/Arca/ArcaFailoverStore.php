@@ -51,12 +51,29 @@ final class ArcaFailoverStore
     private static function escribirArchivo(array $data): void
     {
         $path = self::statePath();
-        File::ensureDirectoryExists(dirname($path));
-        file_put_contents(
+        $dir = dirname($path);
+        File::ensureDirectoryExists($dir);
+        if (is_file($path) && ! is_writable($path)) {
+            if (! @unlink($path)) {
+                Log::error('ARCA failover: state.json no escribible y no se pudo reemplazar', [
+                    'path' => $path,
+                ]);
+
+                return;
+            }
+        }
+
+        $ok = @file_put_contents(
             $path,
             json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE)."\n",
             LOCK_EX
         );
+        if ($ok === false) {
+            Log::error('ARCA failover: no se pudo grabar state.json', ['path' => $path]);
+
+            return;
+        }
+        @chmod($path, 0664);
     }
 
     private static function cacheKey(string $webservice): string

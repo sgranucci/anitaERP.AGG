@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Ventas\IvaVentas;
 
 use App\Models\Ventas\Venta;
+use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 
 /**
@@ -82,6 +83,7 @@ final class IvaVentasDesgloseSupport
         $impInterno = 0.0;
         $percIibb = 0.0;
         $percIva = 0.0;
+        $percNoCateg = 0.0;
         $total = 0.0;
 
         foreach ($venta->venta_impuestos as $imp) {
@@ -107,6 +109,10 @@ final class IvaVentasDesgloseSupport
             }
             if (stripos($concepto, 'Impuesto Interno') !== false || stripos($concepto, 'Imp. interno') !== false) {
                 $impInterno += $importe;
+                continue;
+            }
+            if (PercepcionNoCategorizadoSupport::esConcepto($concepto)) {
+                $percNoCateg += $importe;
                 continue;
             }
             if (stripos($concepto, 'Percepcion IVA') !== false || stripos($concepto, 'Perc. IVA') !== false) {
@@ -151,7 +157,7 @@ final class IvaVentasDesgloseSupport
             $netoGravado = 0.0;
         }
 
-        $iva += $percIva;
+        $iva += $percIva + $percNoCateg;
 
         return [
             'no_gravado' => round($noGravado, 2),

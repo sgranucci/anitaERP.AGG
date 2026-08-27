@@ -29,4 +29,15 @@
         <input type="text" name="codigoarca" id="codigoarca" class="form-control" value="{{old('codigoarca', $data->codigoarca ?? '')}}" required/>
         </div>
     </div>
+    @if (isset($data) && ($data->codigo ?? '') === 'PNC')
+        <div class="form-group row">
+            <div class="col-lg-3"></div>
+            <div class="col-lg-8">
+                <div class="alert alert-info mb-0">
+                    Impuesto de percepción RG 2126 (sujeto no categorizado). La alícuota y el mínimo se editan
+                    en el listado de Impuestos. Acá se cargan las cuentas del asiento por empresa.
+                </div>
+            </div>
+        </div>
+    @endif
 </div>

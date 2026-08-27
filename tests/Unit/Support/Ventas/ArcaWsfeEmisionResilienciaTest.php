@@ -224,9 +224,14 @@ class ArcaWsfeEmisionResilienciaTest extends TestCase
     public function test_soap_timeout_pos_para_opciones_gastronomia(): void
     {
         config()->set('arca_wsfe.soap_timeout_pos', 18);
+        config()->set('arca_mtxca.soap_timeout_pos', 18);
         self::assertSame(
             18,
             R::soapTimeoutPosParaOpciones(['emision_pos_arca' => true], 'wsfev1'),
+        );
+        self::assertSame(
+            18,
+            R::soapTimeoutPosParaOpciones(['aplicar_timeout_pos_arca' => true], 'wsmtxca'),
         );
         self::assertNull(R::soapTimeoutPosParaOpciones([], 'wsfev1'));
     }

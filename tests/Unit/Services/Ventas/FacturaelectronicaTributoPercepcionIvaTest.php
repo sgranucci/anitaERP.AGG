@@ -62,6 +62,20 @@ class FacturaelectronicaTributoPercepcionIvaTest extends TestCase
         self::assertSame(2087.0, $total);
     }
 
+    public function test_la_percepcion_no_categorizado_entra_como_tributo_99(): void
+    {
+        [$tributos, $total] = $this->armaTributo([
+            ['concepto' => 'Gravado al 21%', 'tasa' => 21, 'importe' => 29776.21, 'baseimponible' => 0],
+            ['concepto' => 'Iva 21%', 'tasa' => 21, 'importe' => 6252.99, 'baseimponible' => 29776.21],
+            ['concepto' => 'Percepcion no categorizado 10.5%', 'tasa' => 10.5, 'importe' => 3783.07, 'baseimponible' => 36029.20],
+        ]);
+
+        self::assertCount(1, $tributos);
+        self::assertSame(99, $tributos[0]['id']);
+        self::assertSame(3783.07, $tributos[0]['importe']);
+        self::assertSame(3783.07, $total);
+    }
+
     /**
      * @param  list<array<string, mixed>>  $conceptosTotales
      * @return array{0: list<array<string, mixed>>, 1: float|int}

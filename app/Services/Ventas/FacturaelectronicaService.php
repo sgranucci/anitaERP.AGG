@@ -17,6 +17,7 @@ use App\Services\Arca\ArcaWsfeCaeaService;
 use App\Services\Arca\ArcaWsfeFacturaElectronicaService;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
+use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 
 class FacturaElectronicaService 
 {
@@ -795,6 +796,17 @@ class FacturaElectronicaService
 				// ARCA WSFE: Id=4 = "Impuestos Internos".
 				$tributos[] = [
 					'id' => 4,
+					'base_imp' => $concepto['baseimponible'] ?? 0,
+					'alicuota' => $concepto['tasa'] ?? 0,
+					'desc' => $concepto['concepto'],
+					'importe' => $concepto['importe'],
+				];
+				$totalTributo += $concepto['importe'];
+			}
+			if (PercepcionNoCategorizadoSupport::esConcepto((string) $concepto['concepto'])
+				&& (float) ($concepto['importe'] ?? 0) != 0.) {
+				$tributos[] = [
+					'id' => PercepcionNoCategorizadoSupport::CODIGO_TRIBUTO_ARCA,
 					'base_imp' => $concepto['baseimponible'] ?? 0,
 					'alicuota' => $concepto['tasa'] ?? 0,
 					'desc' => $concepto['concepto'],

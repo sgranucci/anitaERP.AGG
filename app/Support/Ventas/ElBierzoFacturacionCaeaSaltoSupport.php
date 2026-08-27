@@ -17,6 +17,9 @@ final class ElBierzoFacturacionCaeaSaltoSupport
 {
     public const FLAG_INTERNO = '__el_bierzo_caea_salto_interno';
 
+    /** Activa soap_timeout_pos (18 s) en mostrador / pedido / remito, sin marcar emision_pos_arca. */
+    public const FLAG_TIMEOUT_POS = 'aplicar_timeout_pos_arca';
+
     public static function habilitado(): bool
     {
         if (! EntornoEmpresaSupport::esElBierzo()) {
@@ -35,6 +38,8 @@ final class ElBierzoFacturacionCaeaSaltoSupport
         if (! self::habilitado()) {
             return $emitir($data);
         }
+
+        $data = self::aplicarTimeoutPosArca($data);
 
         $originalId = (int) ($data['puntoventa_id'] ?? 0);
         $ids = ($resolverIds ?? [self::class, 'resolverIdsDesdeBd'])($originalId);
@@ -135,6 +140,20 @@ final class ElBierzoFacturacionCaeaSaltoSupport
             'webservice' => $ws,
             'ya_caea' => false,
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    public static function aplicarTimeoutPosArca(array $data): array
+    {
+        if (! is_array($data['opciones_emision'] ?? null)) {
+            $data['opciones_emision'] = [];
+        }
+        $data['opciones_emision'][self::FLAG_TIMEOUT_POS] = true;
+
+        return $data;
     }
 
     public static function codigoCaeaParaCodigoCae(string $codigoCae): ?string

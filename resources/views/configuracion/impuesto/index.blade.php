@@ -77,6 +77,8 @@ Impuestos
                 </table>
             </div>
         </div>
+
+        @include('configuracion.impuesto.partials.percepcion_no_categorizado')
     </div>
 </div>
 @endsection

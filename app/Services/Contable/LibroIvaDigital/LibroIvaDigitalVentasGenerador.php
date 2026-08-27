@@ -3,6 +3,7 @@
 namespace App\Services\Contable\LibroIvaDigital;
 
 use App\Models\Ventas\Venta;
+use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalFormatoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasAgrupacionSupport;
@@ -278,7 +279,7 @@ class LibroIvaDigitalVentasGenerador
             'nombre_comprador' => $comprador['nombre'],
             'importe_total' => $signo * $totales['importe_total'],
             'no_integra_neto' => $signo * $totales['no_integra_neto'],
-            'percepcion_no_categorizados' => 0,
+            'percepcion_no_categorizados' => $signo * $totales['percepcion_no_categorizados'],
             'operaciones_exentas' => $signo * $totales['operaciones_exentas'],
             'percepciones_nacionales' => $signo * $totales['percepciones_nacionales'],
             'percepciones_iibb' => $signo * $totales['percepciones_iibb'],
@@ -319,6 +320,7 @@ class LibroIvaDigitalVentasGenerador
      *     no_integra_neto: float,
      *     no_gravado: float,
      *     operaciones_exentas: float,
+     *     percepcion_no_categorizados: float,
      *     percepciones_nacionales: float,
      *     percepciones_iibb: float,
      *     impuestos_internos: float,
@@ -333,6 +335,7 @@ class LibroIvaDigitalVentasGenerador
         $noGravado = 0.0;
         $exento = 0.0;
         $percNac = 0.0;
+        $percNoCateg = 0.0;
         $percIibb = 0.0;
         $impInterno = 0.0;
         $alicuotas = [];
@@ -358,6 +361,10 @@ class LibroIvaDigitalVentasGenerador
             }
             if (stripos($concepto, 'Impuesto Interno') !== false) {
                 $impInterno += $importe;
+                continue;
+            }
+            if (PercepcionNoCategorizadoSupport::esConcepto($concepto)) {
+                $percNoCateg += $importe;
                 continue;
             }
             if (stripos($concepto, 'Percepcion IVA') !== false || stripos($concepto, 'Perc. IVA') !== false) {
@@ -412,6 +419,7 @@ class LibroIvaDigitalVentasGenerador
                 $impInterno,
                 $percNac,
                 $percIibb,
+                $percNoCateg,
             );
         }
 
@@ -424,6 +432,7 @@ class LibroIvaDigitalVentasGenerador
             'no_integra_neto' => $noIntegra,
             'no_gravado' => $noGravado,
             'operaciones_exentas' => $exento + $noGravado,
+            'percepcion_no_categorizados' => $percNoCateg,
             'percepciones_nacionales' => $percNac,
             'percepciones_iibb' => $percIibb,
             'impuestos_internos' => $impInterno,
@@ -442,9 +451,10 @@ class LibroIvaDigitalVentasGenerador
         float $impInterno,
         float $percNac,
         float $percIibb,
+        float $percNoCateg = 0.0,
     ): array {
         $baseGravable = round(
-            $importeTotal - $exento - $noGravado - $impInterno - $percNac - $percIibb,
+            $importeTotal - $exento - $noGravado - $impInterno - $percNac - $percIibb - $percNoCateg,
             2,
         );
         if ($baseGravable <= 0.01) {

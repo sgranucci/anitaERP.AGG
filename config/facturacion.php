@@ -57,6 +57,8 @@ switch(strtoupper(config('app.empresa')))
             "PUNTOVENTA_FACTURACION_PRODUCCION_CODIGO" => "00010",
             "PUNTOVENTA_REMITO_PRODUCCION_CODIGO" => "00001",
             "CUENTACONTABLE_PERCEPCION_IVA" => '211290000',
+            // RG 2126 / Anita impcont 46: Perc. no categorizado. El ABM impuesto PNC manda; esto es fallback.
+            "CUENTACONTABLE_PERCEPCION_NO_CATEGORIZADO" => env('FACTURACION_CUENTA_PERCEPCION_NO_CATEGORIZADO', '211172000'),
             "CUENTACONTABLE_IVA" => '211170000',
             "CUENTACONTABLE_VENTA" => '301100000',
             "CUENTACONTABLE_LOGISTICA" => '301100000',
@@ -113,6 +115,7 @@ switch(strtoupper(config('app.empresa')))
             // Sin precarga: valor asegurado = neto salvo override .env.
             "PORCENTAJE_VALOR_ASEGURADO" => (float) env('REMITO_PORCENTAJE_VALOR_ASEGURADO', 0),
             "CUENTACONTABLE_PERCEPCION_IVA" => '',
+            "CUENTACONTABLE_PERCEPCION_NO_CATEGORIZADO" => env('FACTURACION_CUENTA_PERCEPCION_NO_CATEGORIZADO', ''),
             "CUENTACONTABLE_VENTA" => '415010002',
             'USA_DETRACCION' => 'S',
             "DECIMAL_CANTIDAD" => 0,

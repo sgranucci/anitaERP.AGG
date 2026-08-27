@@ -15,6 +15,7 @@ use App\Services\Ventas\FacturacionService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\ExclusionPercepcionIvaSupport;
 use App\Support\Configuracion\PercepcionIvaSujetoSupport;
+use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Ventas\ClienteExclusionPercepcionSupport;
 use App\Support\Ventas\VentaImporteDosDecimalesSupport;
 use App\Support\Stock\FormulaArticuloFactorCosto;
@@ -453,6 +454,30 @@ class ImpuestoService extends FacturacionService
 			$totalFinal -= $descuentoImportePie;
 
 			self::agregaItemTotales($detalle, 0, -$descuentoImportePie, 0, 0, 0, $conceptosTotales);
+		}
+
+		// RG 2126: sobre tot_fact (neto + IVA + otros, ya con descuento al pie).
+		if (! $omitirPercepciones && ! $flGrabaComprobanteDividido
+			&& PercepcionNoCategorizadoSupport::habilitada()
+			&& PercepcionNoCategorizadoSupport::corresponde($condicioniva)) {
+			$tasasIvaGravadas = [];
+			foreach ($conceptosTotales as $concepto) {
+				$nombre = (string) ($concepto['concepto'] ?? '');
+				if (str_starts_with($nombre, 'Iva ') || str_starts_with($nombre, 'Gravado al')) {
+					$tasasIvaGravadas[] = (float) ($concepto['tasa'] ?? 0);
+				}
+			}
+			$percNoCateg = PercepcionNoCategorizadoSupport::calcular($totalFinal, $tasasIvaGravadas);
+			if ($percNoCateg['importe'] > 0) {
+				$conceptosTotales[] = [
+					'concepto' => PercepcionNoCategorizadoSupport::concepto($percNoCateg['tasa']),
+					'baseimponible' => $percNoCateg['base'],
+					'tasa' => $percNoCateg['tasa'],
+					'importe' => $percNoCateg['importe'],
+					'impuesto_id' => $percNoCateg['impuesto_id'],
+				];
+				$totalFinal += $percNoCateg['importe'];
+			}
 		}
 
 		$totalFinal = round($totalFinal, 2);

@@ -398,11 +398,15 @@ final class ArcaWsfeEmisionResiliencia
     }
 
     /**
-     * Timeout SOAP reducido para emisión en POS (gastronomía). null = usar soap_timeout estándar.
+     * Timeout SOAP reducido para emisión en mostrador (El Bierzo) / POS.
+     * No usar emision_pos_arca en administrativa: ese flag omite depósito y stock.
      */
     public static function soapTimeoutPosParaOpciones(?array $opcionesEmision, ?string $webservice = null): ?int
     {
-        if (empty($opcionesEmision['emision_pos_arca'])) {
+        if (
+            empty($opcionesEmision['emision_pos_arca'])
+            && empty($opcionesEmision['aplicar_timeout_pos_arca'])
+        ) {
             return null;
         }
 

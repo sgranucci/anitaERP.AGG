@@ -50,6 +50,7 @@ use App\Models\Stock\Categoria;
 use App\Models\Stock\Linea;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use setasign\Fpdi\Fpdi;
 use App\Support\Ventas\CaiRemitoVigenteSupport;
 use App\Support\Ventas\RemitoValorAseguradoSupport;
@@ -4053,6 +4054,7 @@ class FacturacionService
 		$totalIngBruto2 = $totalIngBruto1 = $totalPercepcionIva = 0;
 		$totalDescuento = $porcentajeDescuento = 0;
 		$totalImpuestoInterno = 0;
+		$totalPercNoCateg = PercepcionNoCategorizadoSupport::importeDesdeConceptos($conceptostotales);
 		foreach ($conceptostotales as $concepto) {
 			if (array_key_exists('jurisdiccion', $concepto) && $concepto['jurisdiccion'] != null) {
 				if ($concepto['jurisdiccion'] == '902') {
@@ -4114,7 +4116,7 @@ class FacturacionService
 			0,
 			$totalIngBruto2,
 			0,
-			0,
+			$totalPercNoCateg,
 			$dataCAE['iva'],
 			$totalPercepcionIva,
 			abs($venta['total']),
@@ -4316,6 +4318,7 @@ class FacturacionService
 		$totalDescuento = $porcentajeDescuento = 0;
 		$totalAbasto = $totalLogistica = 0;
 		$totalImpuestoInterno = 0;
+		$totalPercNoCateg = PercepcionNoCategorizadoSupport::importeDesdeConceptos($conceptostotales);
 		foreach ($conceptostotales as $concepto)
 		{
 			if (array_key_exists('jurisdiccion', $concepto) && $concepto['jurisdiccion'] != null)
@@ -4438,7 +4441,7 @@ class FacturacionService
 							'".'0'."',
 							'".$totalIngBruto2."',
 							'".'0'."',
-							'".'0'."',
+							'".$totalPercNoCateg."',
 							'".$dataCAE['iva']."',
 							'".$totalPercepcionIva."',
 							'".abs($venta['total'])."',
@@ -6450,6 +6453,31 @@ class FacturacionService
 						$cuenta = $cuentacontable[0]->cuentacontable_id;
 				}
 				
+				// RG 2126: no usar el bloque IVA (el concepto no dice "IVA").
+				if (PercepcionNoCategorizadoSupport::esConcepto((string) $conc['concepto'])) {
+					$cuenta = 0;
+					$impuestoId = (int) ($conc['impuesto_id'] ?? 0);
+					if ($impuestoId <= 0) {
+						$impuestoId = (int) (PercepcionNoCategorizadoSupport::impuestoId() ?? 0);
+					}
+					if ($impuestoId > 0) {
+						$cuentacontable = $this->impuesto_cuentacontableRepository->leePorImpuesto($impuestoId, $empresa_id);
+						if (isset($cuentacontable[0])) {
+							$cuenta = $cuentacontable[0]->cuentacontable_id;
+						}
+					}
+					if (! $cuenta) {
+						$codigoCuenta = PercepcionNoCategorizadoSupport::codigoCuentaContable();
+						if ($codigoCuenta !== '') {
+							$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, $codigoCuenta);
+							$cuenta = $cuentacontable ? $cuentacontable->id : 0;
+						}
+					}
+					if (! $cuenta) {
+						throw new Exception('Falta la cuenta contable del impuesto PNC (percepción no categorizado) para esta empresa.');
+					}
+				}
+
 				// Percepcion iva
 				if (strpos($conc['concepto'], 'IVA') !== false)
 				{

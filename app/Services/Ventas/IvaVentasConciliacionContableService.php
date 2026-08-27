@@ -1450,7 +1450,7 @@ final class IvaVentasConciliacionContableService
         $notas = [
             'Cuadre general: mayor contable del período (incluye cierres de jornada agrupados y facturas con asiento).',
             'Cuadre por factura: solo comprobantes con asiento vinculado (venta_id). Gastronomía / estacionamiento sin asiento individual se validan contra el cuadre general.',
-            'Cuentas facturación: config/facturacion.php (CUENTACONTABLE_VENTA, CUENTACONTABLE_IVA, CUENTACONTABLE_PERCEPCION_IVA).',
+            'Cuentas facturación: config/facturacion.php (CUENTACONTABLE_VENTA, CUENTACONTABLE_IVA, CUENTACONTABLE_PERCEPCION_IVA, CUENTACONTABLE_PERCEPCION_NO_CATEGORIZADO) e impuesto PNC.',
             'Cuentas cierre jornada: tabla gastronomia_cierre_jornada_config (Caja → cierre jornada Waitry / proceso).',
             'Cuentas configurables del reporte: config/iva_ventas.php (ventas + IVA débito/crédito por empresa).',
         ];

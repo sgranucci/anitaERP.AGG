@@ -123,6 +123,27 @@ class ElBierzoFacturacionCaeaSaltoSupportTest extends TestCase
         self::assertSame(1, $llamadas);
     }
 
+    public function test_inyecta_timeout_pos_en_opciones_emision(): void
+    {
+        $visto = null;
+        S::ejecutarConReintento(
+            ['puntoventa_id' => 8],
+            function (array $d) use (&$visto) {
+                $visto = $d;
+
+                return ['factura' => 'ok', 'error' => ''];
+            },
+            fn (int $id) => [
+                'cae_id' => 8,
+                'caea_id' => 1,
+                'webservice' => 'wsmtxca',
+                'ya_caea' => false,
+            ],
+        );
+
+        self::assertTrue($visto['opciones_emision'][S::FLAG_TIMEOUT_POS] ?? false);
+    }
+
     public function test_mapeo_codigo_pv10_a_pv5(): void
     {
         self::assertSame('00005', S::codigoCaeaParaCodigoCae('00010'));

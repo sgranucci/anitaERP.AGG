@@ -6,6 +6,7 @@ namespace App\Support\Ventas;
 
 use App\Models\Configuracion\Impuesto;
 use App\Models\Ventas\Venta;
+use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaAnitaVenGravadoSupport;
 use Carbon\Carbon;
@@ -235,6 +236,19 @@ final class ArcaCaeaInformeDatosDesdeVentaSupport
             if (str_starts_with($concepto, 'Percepcion IVA')) {
                 $tributos[] = [
                     'id' => 1,
+                    'base_imp' => $base,
+                    'alicuota' => $tasa,
+                    'desc' => $concepto,
+                    'importe' => $importe,
+                ];
+                $totalTributo += $importe;
+
+                continue;
+            }
+
+            if (PercepcionNoCategorizadoSupport::esConcepto($concepto) && $importe != 0.0) {
+                $tributos[] = [
+                    'id' => PercepcionNoCategorizadoSupport::CODIGO_TRIBUTO_ARCA,
                     'base_imp' => $base,
                     'alicuota' => $tasa,
                     'desc' => $concepto,

@@ -6,6 +6,7 @@ use App\Models\Ventas\Puntoventa;
 use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use Exception;
+use Illuminate\Support\Facades\Log;
 use SoapClient;
 use SoapFault;
 
@@ -625,6 +626,8 @@ class ArcaWsfeFacturaElectronicaService
             ? max(5, $timeoutOverrideSeconds)
             : max(10, (int) config('arca_wsfe.soap_timeout', 60));
 
+        ini_set('default_socket_timeout', (string) $timeout);
+
         return new SoapClient($wsdl, [
             'soap_version' => SOAP_1_2,
             'trace' => 1,
@@ -971,67 +974,86 @@ class ArcaWsfeFacturaElectronicaService
         SoapClient $client,
         array $ctx,
     ): void {
+        $inicio = microtime(true);
+        $ok = false;
         $ts = $this->wsaa->getTokenSign((string) config('arca_wsfe.wsaa_service_id'), $ctx);
 
         try {
-            $raw = $client->FECompConsultar([
-                'Auth' => [
-                    'Token' => $ts['token'],
-                    'Sign' => $ts['sign'],
-                    'Cuit' => $cuit,
-                ],
-                'FeCompConsReq' => [
-                    'CbteTipo' => $cbteTipo,
-                    'CbteNro' => $cbteNro,
-                    'PtoVta' => $ptoVta,
-                ],
-            ]);
-        } catch (SoapFault $e) {
-            throw new Exception(
-                'WSFE — el CAE fue otorgado pero la verificación FECompConsultar falló: '.
-                $this->formatSoapFault('FECompConsultar', $e, $client).
-                ' No se debe persistir el comprobante hasta resolver la inconsistencia.'
-            );
-        }
+            try {
+                $raw = $client->FECompConsultar([
+                    'Auth' => [
+                        'Token' => $ts['token'],
+                        'Sign' => $ts['sign'],
+                        'Cuit' => $cuit,
+                    ],
+                    'FeCompConsReq' => [
+                        'CbteTipo' => $cbteTipo,
+                        'CbteNro' => $cbteNro,
+                        'PtoVta' => $ptoVta,
+                    ],
+                ]);
+            } catch (SoapFault $e) {
+                throw new Exception(
+                    'WSFE — el CAE fue otorgado pero la verificación FECompConsultar falló: '.
+                    $this->formatSoapFault('FECompConsultar', $e, $client).
+                    ' No se debe persistir el comprobante hasta resolver la inconsistencia.'
+                );
+            }
 
-        $result = $raw->FECompConsultarResult ?? null;
-        if ($result === null) {
-            throw new Exception('WSFE — FECompConsultar sin resultado tras autorizar. No persistir el comprobante.');
-        }
+            $result = $raw->FECompConsultarResult ?? null;
+            if ($result === null) {
+                throw new Exception('WSFE — FECompConsultar sin resultado tras autorizar. No persistir el comprobante.');
+            }
 
-        $errs = $this->normalizeErrCollection($result->Errors ?? null);
-        if ($errs !== []) {
-            throw new Exception(
-                'WSFE — tras autorizar, FECompConsultar devolvió errores: '.$this->formatErrList($errs).
-                ' No persistir el comprobante.'
-            );
-        }
+            $errs = $this->normalizeErrCollection($result->Errors ?? null);
+            if ($errs !== []) {
+                throw new Exception(
+                    'WSFE — tras autorizar, FECompConsultar devolvió errores: '.$this->formatErrList($errs).
+                    ' No persistir el comprobante.'
+                );
+            }
 
-        $rg = $result->ResultGet ?? null;
-        if ($rg === null) {
-            throw new Exception('WSFE — FECompConsultar sin ResultGet. No persistir el comprobante.');
-        }
+            $rg = $result->ResultGet ?? null;
+            if ($rg === null) {
+                throw new Exception('WSFE — FECompConsultar sin ResultGet. No persistir el comprobante.');
+            }
 
-        $res = (string) ($rg->Resultado ?? '');
-        if ($res !== 'A' && $res !== 'P') {
-            throw new Exception('WSFE — consulta post-emisión con Resultado='.$res.'. No persistir el comprobante.');
-        }
+            $res = (string) ($rg->Resultado ?? '');
+            if ($res !== 'A' && $res !== 'P') {
+                throw new Exception('WSFE — consulta post-emisión con Resultado='.$res.'. No persistir el comprobante.');
+            }
 
-        $caeOk = trim((string) ($rg->CodAutorizacion ?? ''));
-        if ($caeOk !== $caeEsperado) {
-            throw new Exception(
-                "WSFE — CAE divergente tras consulta (emitido {$caeEsperado}, consulta {$caeOk}). No persistir el comprobante."
-            );
-        }
+            $caeOk = trim((string) ($rg->CodAutorizacion ?? ''));
+            if ($caeOk !== $caeEsperado) {
+                throw new Exception(
+                    "WSFE — CAE divergente tras consulta (emitido {$caeEsperado}, consulta {$caeOk}). No persistir el comprobante."
+                );
+            }
 
-        $impCons = (float) ($rg->ImpTotal ?? 0);
-        if (abs($impCons - $impTotalEsperado) > 0.02) {
-            throw new Exception(
-                'WSFE — importe total divergente en consulta (enviado '.
-                number_format($impTotalEsperado, 2, '.', '').
-                ', ARCA '.number_format($impCons, 2, '.', '').
-                '). No persistir el comprobante.'
-            );
+            $impCons = (float) ($rg->ImpTotal ?? 0);
+            if (abs($impCons - $impTotalEsperado) > 0.02) {
+                throw new Exception(
+                    'WSFE — importe total divergente en consulta (enviado '.
+                    number_format($impTotalEsperado, 2, '.', '').
+                    ', ARCA '.number_format($impCons, 2, '.', '').
+                    '). No persistir el comprobante.'
+                );
+            }
+            $ok = true;
+        } finally {
+            try {
+                Log::info('arca.verificar_post_cae.timing', [
+                    'webservice' => 'wsfev1',
+                    'empresa_id' => $empresaId,
+                    'pto_vta' => $ptoVta,
+                    'cbte_tipo' => $cbteTipo,
+                    'cbte_nro' => $cbteNro,
+                    'ok' => $ok,
+                    'ms' => (int) round((microtime(true) - $inicio) * 1000),
+                ]);
+            } catch (\Throwable) {
+                // El log no puede tumbar una factura ya autorizada.
+            }
         }
     }
 

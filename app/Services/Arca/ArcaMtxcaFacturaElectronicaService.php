@@ -561,7 +561,6 @@ class ArcaMtxcaFacturaElectronicaService
             'importeNoGravado' => $nogravado,
             'importeExento' => $exento,
             'importeSubtotal' => $subtotal,
-            'importeOtrosTributos' => $this->money($datos['tributo']),
             'importeTotal' => $this->money($datos['total']),
             'codigoMoneda' => LibroIvaDigitalMapeosSupport::codigoMonedaAfip((string) ($datos['moneda'] ?? 'PES')),
             'cotizacionMoneda' => $this->moneyCotiz($this->cotizacionParaMonedaAfip($datos)),
@@ -604,8 +603,12 @@ class ArcaMtxcaFacturaElectronicaService
         }
 
         $tributos = $this->buildOtrosTributos($datos['tributos'] ?? []);
+        $importeTributos = $this->money($datos['tributo'] ?? 0);
         if ($tributos !== null) {
+            $req['importeOtrosTributos'] = $importeTributos;
             $req['arrayOtrosTributos'] = $tributos;
+        } elseif ($importeTributos > 0.00001) {
+            $req['importeOtrosTributos'] = $importeTributos;
         }
 
         $items = $this->buildArrayItems($datos['items'] ?? [], $datos, $cbteTipo);
@@ -1094,7 +1097,17 @@ class ArcaMtxcaFacturaElectronicaService
         }
 
         if ($verificarConsulta) {
-            $this->verificarConConsulta($empresaId, $ptoVta, $cbteTipo, $cbteNro, $cae, $impTotalEsperado, $client, $ctx);
+            $this->verificarConConsulta(
+                $empresaId,
+                $cuit,
+                $ptoVta,
+                $cbteTipo,
+                $cbteNro,
+                $cae,
+                $impTotalEsperado,
+                $client,
+                $ctx,
+            );
         }
 
         return [
@@ -1229,6 +1242,7 @@ class ArcaMtxcaFacturaElectronicaService
 
     private function verificarConConsulta(
         int $empresaId,
+        int $cuit,
         int $ptoVta,
         int $cbteTipo,
         int $cbteNro,
@@ -1237,43 +1251,77 @@ class ArcaMtxcaFacturaElectronicaService
         SoapClient $client,
         array $ctx,
     ): void {
+        $inicio = microtime(true);
+        $ok = false;
+        $ts = $this->wsaa->getTokenSign((string) config('arca_mtxca.wsaa_service_id'), $ctx);
+
         try {
-            $result = $this->consultarComprobante($empresaId, $ptoVta, $cbteTipo, $cbteNro);
-        } catch (Exception $e) {
-            throw new Exception(
-                'MTXCA — el CAE fue otorgado pero consultarComprobante falló: '.$e->getMessage().
-                ' No se debe persistir el comprobante hasta resolver la inconsistencia.'
-            );
-        }
+            try {
+                $raw = $client->consultarComprobante([
+                    'authRequest' => $this->authRequest($ts, $cuit),
+                    'consultaComprobanteRequest' => [
+                        'codigoTipoComprobante' => $cbteTipo,
+                        'numeroPuntoVenta' => $ptoVta,
+                        'numeroComprobante' => $cbteNro,
+                    ],
+                ]);
+            } catch (SoapFault $e) {
+                throw new Exception(
+                    'MTXCA — el CAE fue otorgado pero consultarComprobante falló: '.
+                    $this->formatSoapFault('consultarComprobante', $e, $client).
+                    ' No se debe persistir el comprobante hasta resolver la inconsistencia.'
+                );
+            }
 
-        $errs = $this->normalizeCodigoDescripcionCollection($result->arrayErrores ?? null);
-        if ($errs !== []) {
-            throw new Exception(
-                'MTXCA — tras autorizar, consultarComprobante devolvió errores: '.$this->formatCodigoDescripcionList($errs).
-                ' No persistir el comprobante.'
-            );
-        }
+            $result = $this->unwrapSoapResponse($raw, 'consultarComprobanteResponse');
+            if ($result === null) {
+                throw new Exception('MTXCA — consultarComprobante sin resultado tras autorizar. No persistir.');
+            }
 
-        $comp = $result->comprobante ?? null;
-        if ($comp === null) {
-            throw new Exception('MTXCA — consultarComprobante sin comprobante. No persistir.');
-        }
+            $errs = $this->normalizeCodigoDescripcionCollection($result->arrayErrores ?? null);
+            if ($errs !== []) {
+                throw new Exception(
+                    'MTXCA — tras autorizar, consultarComprobante devolvió errores: '.$this->formatCodigoDescripcionList($errs).
+                    ' No persistir el comprobante.'
+                );
+            }
 
-        $caeOk = trim((string) ($comp->codigoAutorizacion ?? ''));
-        if ($caeOk !== $caeEsperado) {
-            throw new Exception(
-                "MTXCA — CAE divergente tras consulta (emitido {$caeEsperado}, consulta {$caeOk}). No persistir."
-            );
-        }
+            $comp = $result->comprobante ?? null;
+            if ($comp === null) {
+                throw new Exception('MTXCA — consultarComprobante sin comprobante. No persistir.');
+            }
 
-        $impCons = (float) ($comp->importeTotal ?? 0);
-        if (abs($impCons - $impTotalEsperado) > 0.02) {
-            throw new Exception(
-                'MTXCA — importe total divergente en consulta (enviado '.
-                number_format($impTotalEsperado, 2, '.', '').
-                ', ARCA '.number_format($impCons, 2, '.', '').
-                '). No persistir.'
-            );
+            $caeOk = trim((string) ($comp->codigoAutorizacion ?? ''));
+            if ($caeOk !== $caeEsperado) {
+                throw new Exception(
+                    "MTXCA — CAE divergente tras consulta (emitido {$caeEsperado}, consulta {$caeOk}). No persistir."
+                );
+            }
+
+            $impCons = (float) ($comp->importeTotal ?? 0);
+            if (abs($impCons - $impTotalEsperado) > 0.02) {
+                throw new Exception(
+                    'MTXCA — importe total divergente en consulta (enviado '.
+                    number_format($impTotalEsperado, 2, '.', '').
+                    ', ARCA '.number_format($impCons, 2, '.', '').
+                    '). No persistir.'
+                );
+            }
+            $ok = true;
+        } finally {
+            try {
+                Log::info('arca.verificar_post_cae.timing', [
+                    'webservice' => 'wsmtxca',
+                    'empresa_id' => $empresaId,
+                    'pto_vta' => $ptoVta,
+                    'cbte_tipo' => $cbteTipo,
+                    'cbte_nro' => $cbteNro,
+                    'ok' => $ok,
+                    'ms' => (int) round((microtime(true) - $inicio) * 1000),
+                ]);
+            } catch (\Throwable) {
+                // El log no puede tumbar una factura ya autorizada.
+            }
         }
     }
 
@@ -1314,6 +1362,9 @@ class ArcaMtxcaFacturaElectronicaService
         $timeout = $timeoutOverrideSeconds !== null && $timeoutOverrideSeconds > 0
             ? max(5, $timeoutOverrideSeconds)
             : max(10, (int) config('arca_mtxca.soap_timeout', 60));
+
+        // SoapClient ignora 'default_socket_timeout' como opción; es ini.
+        ini_set('default_socket_timeout', (string) $timeout);
 
         return new SoapClient($wsdl, [
             'soap_version' => SOAP_1_2,

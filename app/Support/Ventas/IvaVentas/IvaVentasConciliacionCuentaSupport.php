@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Support\Ventas\IvaVentas;
 
+use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoConfigSupport;
 use Illuminate\Support\Facades\DB;
 
@@ -33,6 +34,7 @@ final class IvaVentasConciliacionCuentaSupport
      *   ventas_kiosco: list<int>,
      *   iva_debito: list<int>,
      *   percepcion_iva: list<int>,
+     *   percepcion_no_categorizado: list<int>,
      *   ventas_generico: list<int>,
      *   detalle: list<array{rol: string, id: int, codigo: string, nombre: string, fuente: string}>
      * }
@@ -43,6 +45,7 @@ final class IvaVentasConciliacionCuentaSupport
         $ventasKiosco = [];
         $ivaDebito = [];
         $percepcionIva = [];
+        $percepcionNoCateg = [];
         $detalle = [];
 
         $cfg = CierreJornadaProcesoConfigSupport::paraEmpresaConDetalle($empresaId);
@@ -54,6 +57,9 @@ final class IvaVentasConciliacionCuentaSupport
         self::agregarCuentaPorCodigoConfig($ventasGravadas, $detalle, 'ventas_gravadas', self::FUENTE_FACTURACION, $empresaId, trim((string) config('facturacion.CUENTACONTABLE_VENTA', '')), 'Ventas (facturación)');
         self::agregarCuentaPorCodigoConfig($ivaDebito, $detalle, 'iva_debito', self::FUENTE_FACTURACION, $empresaId, trim((string) config('facturacion.CUENTACONTABLE_IVA', '')), 'IVA débito (facturación)');
         self::agregarCuentaPorCodigoConfig($percepcionIva, $detalle, 'percepcion_iva', self::FUENTE_FACTURACION, $empresaId, trim((string) config('facturacion.CUENTACONTABLE_PERCEPCION_IVA', '')), 'Percepción IVA (facturación)');
+        foreach (PercepcionNoCategorizadoSupport::codigosCuentaContableEmpresa($empresaId) as $codigoPnc) {
+            self::agregarCuentaPorCodigoConfig($percepcionNoCateg, $detalle, 'percepcion_no_categorizado', self::FUENTE_FACTURACION, $empresaId, $codigoPnc, 'Percepción no categorizado (RG 2126)');
+        }
 
         // Rango configurable del reporte IVA ventas (config/iva_ventas.php).
         foreach (self::codigosConfigIvaVentas('cuentas_ventas_por_empresa', $empresaId) as $codigo) {
@@ -75,6 +81,7 @@ final class IvaVentasConciliacionCuentaSupport
             'ventas_kiosco' => array_values(array_unique($ventasKiosco)),
             'iva_debito' => array_values(array_unique($ivaDebito)),
             'percepcion_iva' => array_values(array_unique($percepcionIva)),
+            'percepcion_no_categorizado' => array_values(array_unique($percepcionNoCateg)),
             'iva_credito' => $ivaCredito,
             'ventas_generico' => $ventasGenerico,
             'detalle' => $detalle,
@@ -100,7 +107,7 @@ final class IvaVentasConciliacionCuentaSupport
             }
 
             $rol = (string) ($item['rol'] ?? '');
-            if (in_array($rol, ['iva_debito', 'percepcion_iva', 'iva_credito'], true)) {
+            if (in_array($rol, ['iva_debito', 'percepcion_iva', 'percepcion_no_categorizado', 'iva_credito'], true)) {
                 $iva[] = $codigo;
             } else {
                 $ventas[] = $codigo;
