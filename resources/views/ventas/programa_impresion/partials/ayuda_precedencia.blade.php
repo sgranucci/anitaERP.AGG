@@ -15,8 +15,14 @@
         Un recorrete especial lleva la misma empresa + ese reparto.
         No hace falta listar todos los repartos en el est&aacute;ndar: Default cubre &laquo;todo lo que no matche&oacute; otra regla&raquo;.
     </p>
-    <p class="mb-0 small">
+    <p class="mb-2 small">
         Si un reparto especial entrega en Tucum&aacute;n, gana la provincia.
         En AGG o en la nube, cada empresa (Biyemas, Kandiko, etc.) tiene sus propios programas.
+    </p>
+    <p class="mb-0 small">
+        <strong>Impresora:</strong> en las copias de papel dej&aacute; <em>Impresora del usuario</em>
+        para que cada operador (Omard, Daniela, etc.) imprima en su cola desde la sesi&oacute;n.
+        Si fij&aacute;s una impresora en la copia, todos salen por esa misma cola.
+        NAS / archivo sigue con salida fija del programa.
     </p>
 </div>

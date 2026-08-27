@@ -62,7 +62,42 @@
             });
         });
 
+        var btnImpresora = document.getElementById('btn-guardar-impresora-sesion');
+        if (btnImpresora) {
+            btnImpresora.addEventListener('click', function () {
+                var select = document.getElementById('sesion_salida_id');
+                var salidaId = select ? String(select.value || '') : '';
+                if (!salidaId) {
+                    window.alert('Seleccione una impresora.');
+                    return;
+                }
+                var base = btnImpresora.getAttribute('data-url-setear') || '';
+                if (!base) {
+                    return;
+                }
+                var disparar = document.getElementById('sesion_disparar_al_grabar');
+                var uri = base + '/' + encodeURIComponent(salidaId)
+                    + '?disparar_al_grabar=' + (disparar && disparar.checked ? '1' : '0');
+                btnImpresora.disabled = true;
+                fetch(uri, { credentials: 'same-origin', headers: { 'Accept': 'application/json' } })
+                    .then(function (res) {
+                        if (!res.ok) {
+                            throw new Error('No se pudo guardar la impresora.');
+                        }
+                        window.location.reload();
+                    })
+                    .catch(function (err) {
+                        btnImpresora.disabled = false;
+                        window.alert(err.message || 'No se pudo guardar la impresora.');
+                    });
+            });
+        }
+
         if (window.impresionSesionAuto) {
+            if (window.impresionSesionFaltaImpresora) {
+                window.alert('Elegí tu impresora en Mi impresora antes de imprimir las copias de papel.');
+                return;
+            }
             mostrarOverlay();
             form.submit();
         }

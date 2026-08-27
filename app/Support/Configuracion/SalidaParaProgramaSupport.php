@@ -38,6 +38,12 @@ class SalidaParaProgramaSupport
     {
         $codigos = [$programa];
 
+        if ($programa === SeteoSalidaProgramaSupport::VENTAS_COMPROBANTES) {
+            $codigos[] = SeteoSalidaProgramaSupport::VENTAS_FACTURA;
+            $codigos[] = SeteoSalidaProgramaSupport::VENTAS_REMITO;
+            $codigos[] = SeteoSalidaProgramaSupport::VENTAS_PEDIDO;
+        }
+
         foreach (SeteoSalidaProgramaSupport::codigosPrograma() as $codigoBase) {
             if ($codigoBase !== $programa && Str::startsWith($programa, $codigoBase.'_')) {
                 $codigos[] = $codigoBase;

@@ -33,7 +33,10 @@
 @include('includes.configuracion.modal-seleccion-salida', ['salidas' => $salidas_query])
 <input type="hidden" name="programa" id="programa" class="form-control" value="{{ $programa }}"/>
 <input type="hidden" name="urlretorno" id="urlretorno" class="form-control" value="{{ $urlRetorno ?? '' }}"/>
-@if (($programa ?? '') === \App\Support\Configuracion\SeteoSalidaProgramaSupport::VENTAS_FACTURA)
+@if (in_array($programa ?? '', [
+    \App\Support\Configuracion\SeteoSalidaProgramaSupport::VENTAS_FACTURA,
+    \App\Support\Configuracion\SeteoSalidaProgramaSupport::VENTAS_COMPROBANTES,
+], true))
 <div class="form-group row">
     <label class="col-lg-3 col-form-label">Al grabar factura</label>
     <div class="col-lg-6">

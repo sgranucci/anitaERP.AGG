@@ -48,7 +48,7 @@
             <input type="checkbox" name="permite_disparo_al_grabar" id="permite_disparo_al_grabar" class="form-check-input" value="1"
                 {{ old('permite_disparo_al_grabar', $data->permite_disparo_al_grabar ?? false) ? 'checked' : '' }}>
             <label class="form-check-label" for="permite_disparo_al_grabar">
-                Permite disparar la sesión al grabar la factura (también debe estar tildado en Configura salida)
+                Permite disparar la sesión al grabar la factura (también debe estar tildado en Mi impresora de la sesión)
             </label>
         </div>
     </div>
@@ -62,7 +62,7 @@
         <ol class="programa-ruta-pasos pl-3 mb-3">
             <li>Sumá a la ruta los comprobantes que tienen que salir juntos (Factura, Remito, Pedido).</li>
             <li>En cada cuadro, tocá <strong>Original / Duplicado / Triplicado…</strong> para elegir las copias de ese comprobante.</li>
-            <li>En cada hoja, indicá a quién va y si imprime o se archiva en NAS.</li>
+            <li>En cada hoja, indicá a quién va. Papel: Impresora del usuario. NAS: salida de archivo.</li>
         </ol>
 
         <div id="programa-agregar-comprobantes" class="mb-3" data-presets='@json($copiasPreset)'>

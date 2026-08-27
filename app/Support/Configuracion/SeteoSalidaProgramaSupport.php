@@ -17,6 +17,9 @@ class SeteoSalidaProgramaSupport
 
     public const VENTAS_REMITO = 'ventas_remito';
 
+    /** Impresora única de la sesión de comprobantes (factura + remito + pedido). */
+    public const VENTAS_COMPROBANTES = 'ventas_comprobantes';
+
     public const VENTAS_REPEMISIONOT = 'ventas_repemisionot';
 
     public const STOCK_ARTICULO = 'stock_articulo';
@@ -30,6 +33,7 @@ class SeteoSalidaProgramaSupport
 
     /** @var array<string, string> */
     private const ETIQUETAS = [
+        self::VENTAS_COMPROBANTES => 'Comprobantes (sesión de impresión)',
         self::VENTAS_PEDIDO => 'Pedidos de clientes',
         self::VENTAS_FACTURA => 'Facturas de administración',
         self::VENTAS_REMITO => 'Remitos de administración',
@@ -108,6 +112,7 @@ class SeteoSalidaProgramaSupport
     public static function codigosPrograma(): array
     {
         return [
+            self::VENTAS_COMPROBANTES,
             self::VENTAS_PEDIDO,
             self::VENTAS_FACTURA,
             self::VENTAS_REMITO,

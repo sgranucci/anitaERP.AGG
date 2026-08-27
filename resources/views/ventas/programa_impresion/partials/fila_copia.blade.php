@@ -47,11 +47,15 @@
     <div class="form-group mb-1">
         <label class="small">Sale por</label>
         <select name="formularios[{{ $fi }}][copias][{{ $ci }}][salida_id]" class="form-control form-control-sm copia-salida">
-            <option value="">Impresora del usuario</option>
+            <option value="">Impresora del usuario (papel)</option>
             @foreach($salidas as $salida)
                 <option value="{{ $salida->id }}" {{ $copiaSalidaId === (int) $salida->id ? 'selected' : '' }}>{{ $salida->nombre }}</option>
             @endforeach
         </select>
+        <p class="small text-muted mb-0">
+            Papel: dejá Impresora del usuario para que cada operador imprima en su cola.
+            NAS: elegí la salida de archivo.
+        </p>
     </div>
     <div class="programa-copia-acciones">
         <div class="form-check mb-0">

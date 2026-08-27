@@ -6,16 +6,19 @@ use App\Http\Controllers\Controller;
 use App\Models\Ventas\Pedido;
 use App\Models\Ventas\Remito;
 use App\Models\Ventas\Venta;
+use App\Repositories\Configuracion\SalidaRepositoryInterface;
 use App\Services\Ventas\ComprobanteImpresionSesionService;
-use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Ventas\ComprobanteImpresionFormulario;
+use App\Support\Ventas\ComprobanteImpresionSalidaUsuarioSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
 class ComprobanteImpresionSesionController extends Controller
 {
-    public function __construct(private ComprobanteImpresionSesionService $sesionService)
-    {
+    public function __construct(
+        private ComprobanteImpresionSesionService $sesionService,
+        private SalidaRepositoryInterface $salidaRepository,
+    ) {
         $this->middleware('auth');
     }
 
@@ -30,7 +33,7 @@ class ComprobanteImpresionSesionController extends Controller
             $venta,
             $this->modo($request),
             $request->query('solo_formulario')
-        ), SeteoSalidaProgramaSupport::VENTAS_FACTURA);
+        ));
     }
 
     public function pedido(Request $request, int $id)
@@ -43,7 +46,7 @@ class ComprobanteImpresionSesionController extends Controller
             $this->modo($request),
             $this->soloFormulario($request, $pack, ComprobanteImpresionFormulario::PEDIDO),
             $pack
-        ), SeteoSalidaProgramaSupport::VENTAS_PEDIDO);
+        ));
     }
 
     public function remito(Request $request, int $id)
@@ -56,7 +59,7 @@ class ComprobanteImpresionSesionController extends Controller
             $this->modo($request),
             $this->soloFormulario($request, $pack, ComprobanteImpresionFormulario::REMITO),
             $pack
-        ), SeteoSalidaProgramaSupport::VENTAS_REMITO);
+        ));
     }
 
     public function ejecutar(Request $request)
@@ -104,7 +107,7 @@ class ComprobanteImpresionSesionController extends Controller
     /**
      * @param  array<string, mixed>  $sesion
      */
-    private function mostrar(Request $request, array $sesion, string $programaSeteo)
+    private function mostrar(Request $request, array $sesion)
     {
         $request->session()->put('comprobante_impresion_sesion', $sesion);
         $forzarRegen = $request->boolean('auto');
@@ -121,7 +124,10 @@ class ComprobanteImpresionSesionController extends Controller
             $resultado = null;
             $request->session()->forget('comprobante_impresion_sesion_resultado');
         }
-        $autoEjecutar = $forzarRegen && ! empty($sesion['pack']);
+        $faltanteImpresora = ! empty($sesion['faltante_impresora_papel']);
+        $autoEjecutar = $forzarRegen && ! empty($sesion['pack']) && ! $faltanteImpresora;
+        $impresora = $sesion['impresora_usuario'] ?? [];
+        $programaSeteo = ComprobanteImpresionSalidaUsuarioSupport::programaUnificado();
 
         return view('ventas.programa_impresion.sesion', [
             'sesion' => $sesion,
@@ -129,6 +135,10 @@ class ComprobanteImpresionSesionController extends Controller
             'programaSeteo' => $programaSeteo,
             'autoEjecutar' => $autoEjecutar,
             'volverUrl' => $this->urlVolver($sesion, $request),
+            'salidasUsuario' => $this->salidaRepository->paraProgramaSeteo(
+                $programaSeteo,
+                isset($impresora['salida_id']) ? (int) $impresora['salida_id'] : null
+            ),
         ]);
     }
 

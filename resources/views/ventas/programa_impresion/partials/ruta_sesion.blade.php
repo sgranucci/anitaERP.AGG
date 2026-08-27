@@ -64,7 +64,12 @@
                     @if (! empty($linea['destinatario']))
                         <div>{{ $linea['destinatario'] }}</div>
                     @endif
-                    <div class="text-muted">{{ $linea['salida_nombre'] }} · {{ $linea['medio'] }}</div>
+                    <div class="{{ ! empty($linea['hereda_usuario']) && empty($linea['salida_usuario_ok']) ? 'text-danger' : 'text-muted' }}">
+                        @if (! empty($linea['hereda_usuario']))
+                            Impresora del usuario:
+                        @endif
+                        {{ $linea['salida_nombre'] }} · {{ $linea['medio'] }}
+                    </div>
                     <div>
                         @if ($res)
                             {{ ! empty($res['ok']) ? 'OK' : 'Error' }} — {{ $res['mensaje'] }}

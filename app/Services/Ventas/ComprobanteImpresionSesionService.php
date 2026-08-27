@@ -13,6 +13,7 @@ use App\Support\Ventas\ComprobanteImpresionDespachoSupport;
 use App\Support\Ventas\ComprobanteImpresionFormulario;
 use App\Support\Ventas\ComprobanteImpresionNasPathSupport;
 use App\Support\Ventas\ComprobanteImpresionResolverSupport;
+use App\Support\Ventas\ComprobanteImpresionSalidaUsuarioSupport;
 use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -134,8 +135,7 @@ class ComprobanteImpresionSesionService
             return;
         }
 
-        $seteo = $this->seteosalidaRepository->buscaSeteo($usuarioId, SeteoSalidaProgramaSupport::VENTAS_FACTURA);
-        if (! $seteo || ! $seteo->disparar_al_grabar) {
+        if (! $this->usuarioDisparaAlGrabar($usuarioId)) {
             return;
         }
 
@@ -201,6 +201,8 @@ class ComprobanteImpresionSesionService
         array $docs
     ): array {
         $programa = $contexto['programa'] ?? null;
+        $pack = $this->aplicarImpresoraUsuarioAlPack($pack);
+        $impresoraUsuario = $this->resumenImpresoraUsuario();
 
         return [
             'origen_tipo' => $origenTipo,
@@ -220,6 +222,8 @@ class ComprobanteImpresionSesionService
             'pack' => $pack,
             'documentos' => $docs,
             'tiene_venta' => isset($docs[ComprobanteImpresionFormulario::FACTURA]),
+            'impresora_usuario' => $impresoraUsuario,
+            'faltante_impresora_papel' => $this->packFaltaImpresoraPapel($pack),
         ];
     }
 
@@ -529,19 +533,108 @@ class ComprobanteImpresionSesionService
             return Salida::query()->find($salidaId);
         }
 
-        $usuarioId = Auth::id();
+        $usuarioId = Auth::id() ? (int) Auth::id() : null;
+
+        return $this->salidaUsuarioParaFormulario((string) ($linea['formulario'] ?? ''), $usuarioId);
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $pack
+     * @return list<array<string, mixed>>
+     */
+    private function aplicarImpresoraUsuarioAlPack(array $pack): array
+    {
+        $usuarioId = Auth::id() ? (int) Auth::id() : null;
+        foreach ($pack as $i => $linea) {
+            $hereda = ComprobanteImpresionSalidaUsuarioSupport::heredaImpresoraUsuario($linea);
+            $pack[$i]['hereda_usuario'] = $hereda;
+            if (! $hereda) {
+                $pack[$i]['salida_usuario_ok'] = true;
+                continue;
+            }
+            $salida = $this->salidaUsuarioParaFormulario((string) ($linea['formulario'] ?? ''), $usuarioId);
+            $pack[$i]['salida_nombre'] = $salida?->nombre ?? 'Sin impresora seteada';
+            $pack[$i]['salida_usuario_ok'] = $salida !== null;
+        }
+
+        return $pack;
+    }
+
+    /**
+     * @return array{programa: string, salida_id: int|null, nombre: ?string, ubicacion: string, disparar_al_grabar: bool}
+     */
+    private function resumenImpresoraUsuario(): array
+    {
+        $usuarioId = Auth::id() ? (int) Auth::id() : null;
+        $seteo = $this->seteoUsuarioComprobantes($usuarioId);
+        $salida = $seteo?->salidas;
+
+        return [
+            'programa' => ComprobanteImpresionSalidaUsuarioSupport::programaUnificado(),
+            'salida_id' => $salida?->id ? (int) $salida->id : null,
+            'nombre' => $salida?->nombre,
+            'ubicacion' => trim((string) ($salida?->ubicacion ?? '')),
+            'disparar_al_grabar' => $this->usuarioDisparaAlGrabar($usuarioId),
+        ];
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $pack
+     */
+    private function packFaltaImpresoraPapel(array $pack): bool
+    {
+        foreach ($pack as $linea) {
+            if (! empty($linea['hereda_usuario']) && empty($linea['salida_usuario_ok'])) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function salidaUsuarioParaFormulario(string $formulario, ?int $usuarioId): ?Salida
+    {
+        $seteo = $this->seteoUsuarioComprobantes($usuarioId, $formulario);
+
+        return $seteo?->salidas;
+    }
+
+    private function seteoUsuarioComprobantes(?int $usuarioId, ?string $formulario = null): mixed
+    {
         if (! $usuarioId) {
             return null;
         }
 
-        $programa = match ($linea['formulario'] ?? '') {
-            ComprobanteImpresionFormulario::PEDIDO => SeteoSalidaProgramaSupport::VENTAS_PEDIDO,
-            ComprobanteImpresionFormulario::REMITO => SeteoSalidaProgramaSupport::VENTAS_REMITO,
-            default => SeteoSalidaProgramaSupport::VENTAS_FACTURA,
-        };
-        $seteo = $this->seteosalidaRepository->buscaSeteo($usuarioId, $programa);
+        foreach (ComprobanteImpresionSalidaUsuarioSupport::programasBusqueda($formulario) as $programa) {
+            $seteo = $this->seteosalidaRepository->buscaSeteo($usuarioId, $programa);
+            if ($seteo?->salidas) {
+                return $seteo;
+            }
+        }
 
-        return $seteo?->salidas;
+        return $this->seteosalidaRepository->buscaSeteo(
+            $usuarioId,
+            ComprobanteImpresionSalidaUsuarioSupport::programaUnificado()
+        );
+    }
+
+    private function usuarioDisparaAlGrabar(?int $usuarioId): bool
+    {
+        if (! $usuarioId) {
+            return false;
+        }
+
+        $unificado = $this->seteosalidaRepository->buscaSeteo(
+            $usuarioId,
+            ComprobanteImpresionSalidaUsuarioSupport::programaUnificado()
+        );
+        if ($unificado) {
+            return (bool) $unificado->disparar_al_grabar;
+        }
+
+        $factura = $this->seteosalidaRepository->buscaSeteo($usuarioId, SeteoSalidaProgramaSupport::VENTAS_FACTURA);
+
+        return (bool) ($factura?->disparar_al_grabar);
     }
 
     /**

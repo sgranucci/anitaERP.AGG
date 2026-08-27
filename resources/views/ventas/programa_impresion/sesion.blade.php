@@ -10,6 +10,7 @@
 @section('scripts')
 <script>
 window.impresionSesionAuto = @json((bool) ($autoEjecutar ?? false));
+window.impresionSesionFaltaImpresora = @json(! empty($sesion['faltante_impresora_papel']));
 </script>
 <script src="{{ asset('assets/pages/scripts/ventas/programa_impresion/sesion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/programa_impresion/sesion.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
@@ -29,9 +30,6 @@ window.impresionSesionAuto = @json((bool) ($autoEjecutar ?? false));
                     @endif
                     <a href="{{ $volverUrl ?? route('factura') }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver
-                    </a>
-                    <a href="{{ route('configurar_salida', ['programa' => $programaSeteo, 'retorno' => url()->full()]) }}" class="btn btn-outline-secondary btn-sm">
-                        <i class="fa fa-fw fa-cog"></i> Configura salida
                     </a>
                 </div>
             </div>
@@ -56,6 +54,12 @@ window.impresionSesionAuto = @json((bool) ($autoEjecutar ?? false));
                     @endif
                 </p>
                 <p class="text-muted small mb-3">{{ $sesion['motivo'] ?? '' }} — modo {{ $sesion['modo'] ?? 'OPERATIVO' }}</p>
+
+                @include('ventas.programa_impresion.partials.mi_impresora', [
+                    'sesion' => $sesion,
+                    'programaSeteo' => $programaSeteo ?? null,
+                    'salidasUsuario' => $salidasUsuario ?? [],
+                ])
 
                 <form action="{{ route('ejecutar_impresion_sesion') }}" method="POST" class="d-none" id="form-ejecutar-sesion">
                     @csrf
