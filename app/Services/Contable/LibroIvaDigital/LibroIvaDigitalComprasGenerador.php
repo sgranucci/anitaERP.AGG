@@ -45,10 +45,63 @@ class LibroIvaDigitalComprasGenerador
         $conteoAnita = 0;
         $totalImporte = 0.0;
         $totalIva = 0.0;
-        /** @var array<string, true> $clavesErp */
-        $clavesErp = [];
-        /** @var array<int, true> $nrosInternosErp */
-        $nrosInternosErp = [];
+        /** @var array<string, true> $clavesUsadas */
+        $clavesUsadas = [];
+        /** @var array<int, true> $nrosInternosUsados */
+        $nrosInternosUsados = [];
+
+        // Anita es el libro de compras (Portal). El ERP solo aporta lo que no está en Anita:
+        // si se prioriza ERP, un comprobante con conceptos incompletos tapa el concmov de Anita
+        // y faltan gravado y NC (el cruce de ~11 M / ~7 M de IVA).
+        if ($completarAnita) {
+            foreach ($this->comprasAnitaBridgeReader->listarPeriodo($empresaId, $desde, $hasta) as $fila) {
+                $compra = $fila['compra'];
+                $registro = LibroIvaDigitalComprasAnitaArmadoSupport::armarRegistro(
+                    $compra,
+                    $fila['conceptos'],
+                    $prorrateoGlobal,
+                );
+                if ($registro === null) {
+                    continue;
+                }
+
+                $clave = LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural(
+                    (string) ($compra['com_proveedor'] ?? ''),
+                    (string) ($compra['com_tipo'] ?? ''),
+                    (string) ($compra['com_letra'] ?? ''),
+                    (int) ($compra['com_sucursal'] ?? 0),
+                    (int) ($compra['com_nro'] ?? 0),
+                );
+                $nroInterno = (int) ($compra['com_nro_interno'] ?? 0);
+                if ($clave !== '') {
+                    $clavesUsadas[$clave] = true;
+                }
+                if ($nroInterno > 0) {
+                    $nrosInternosUsados[$nroInterno] = true;
+                }
+
+                $tipoAbrev = (string) ($compra['com_tipo'] ?? '');
+                $tipo = LibroIvaDigitalComprasAnitaArmadoSupport::tipoPorAbreviatura($tipoAbrev);
+                $tipoCbte = (string) ($registro['cabecera']['tipo_comprobante'] ?? '');
+                $registro['iva_simple'] = [
+                    'restitucion' => LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoTipo($tipo)
+                        || LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoAbreviatura($tipoAbrev)
+                        || LibroIvaDigitalMapeosSupport::esTipoNotaCredito($tipoCbte),
+                ];
+                $this->adjuntarConceptoIvaSimple($registro, $fila['conceptos'], (string) ($compra['com_letra'] ?? 'A'));
+                $this->acumularRegistro(
+                    $registro,
+                    abs((float) ($compra['com_monto'] ?? 0)),
+                    $lineasCbte,
+                    $lineasAlicuotas,
+                    $registros,
+                    $conteo,
+                    $totalImporte,
+                    $totalIva,
+                );
+                $conteoAnita++;
+            }
+        }
 
         $this->queryCompras($empresaId, $desde, $hasta)
             ->with([
@@ -68,18 +121,18 @@ class LibroIvaDigitalComprasGenerador
                 &$conteo,
                 &$totalImporte,
                 &$totalIva,
-                &$clavesErp,
-                &$nrosInternosErp,
+                &$clavesUsadas,
+                &$nrosInternosUsados,
                 $prorrateoGlobal,
                 &$registros,
             ): void {
-                $clave = $this->claveErp($cp);
-                if ($clave !== '') {
-                    $clavesErp[$clave] = true;
-                }
                 $nroInterno = (int) ($cp->anita_nro_interno ?? 0);
-                if ($nroInterno > 0) {
-                    $nrosInternosErp[$nroInterno] = true;
+                if ($nroInterno > 0 && isset($nrosInternosUsados[$nroInterno])) {
+                    return;
+                }
+                $clave = $this->claveErp($cp);
+                if ($clave !== '' && isset($clavesUsadas[$clave])) {
+                    return;
                 }
 
                 $registro = $this->armarRegistroCompra($cp, $prorrateoGlobal);
@@ -87,70 +140,28 @@ class LibroIvaDigitalComprasGenerador
                     return;
                 }
 
-                $registros[] = $registro;
-                $lineasCbte[] = LibroIvaDigitalFormatoSupport::registroComprasCbte($registro['cabecera']);
-                foreach ($registro['alicuotas'] as $alicuota) {
-                    $lineasAlicuotas[] = LibroIvaDigitalFormatoSupport::registroComprasAlicuota($alicuota);
-                    $totalIva += (float) ($alicuota['impuesto_liquidado'] ?? 0);
+                if ($clave !== '') {
+                    $clavesUsadas[$clave] = true;
                 }
-
-                $conteo++;
-                $totalImporte += abs((float) $cp->total);
-            });
-
-        if ($completarAnita) {
-            $filasAnita = $this->comprasAnitaBridgeReader->listarPeriodo($empresaId, $desde, $hasta);
-            foreach ($filasAnita as $fila) {
-                $compra = $fila['compra'];
-                $nroInterno = (int) ($compra['com_nro_interno'] ?? 0);
-                if ($nroInterno > 0 && isset($nrosInternosErp[$nroInterno])) {
-                    continue;
-                }
-
-                $clave = LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural(
-                    (string) ($compra['com_proveedor'] ?? ''),
-                    (string) ($compra['com_tipo'] ?? ''),
-                    (string) ($compra['com_letra'] ?? ''),
-                    (int) ($compra['com_sucursal'] ?? 0),
-                    (int) ($compra['com_nro'] ?? 0),
-                );
-                if (isset($clavesErp[$clave])) {
-                    continue;
-                }
-
-                $registro = LibroIvaDigitalComprasAnitaArmadoSupport::armarRegistro(
-                    $compra,
-                    $fila['conceptos'],
-                    $prorrateoGlobal,
-                );
-                if ($registro === null) {
-                    continue;
-                }
-
-                $clavesErp[$clave] = true;
                 if ($nroInterno > 0) {
-                    $nrosInternosErp[$nroInterno] = true;
+                    $nrosInternosUsados[$nroInterno] = true;
                 }
 
-                $tipo = LibroIvaDigitalComprasAnitaArmadoSupport::tipoPorAbreviatura(
-                    strtoupper(substr(trim((string) ($compra['com_tipo'] ?? '')), 0, 3)),
+                $tipoCbte = (string) ($registro['cabecera']['tipo_comprobante'] ?? '');
+                $registro['iva_simple']['restitucion'] = (bool) ($registro['iva_simple']['restitucion'] ?? false)
+                    || LibroIvaDigitalMapeosSupport::esTipoNotaCredito($tipoCbte);
+
+                $this->acumularRegistro(
+                    $registro,
+                    abs((float) $cp->total),
+                    $lineasCbte,
+                    $lineasAlicuotas,
+                    $registros,
+                    $conteo,
+                    $totalImporte,
+                    $totalIva,
                 );
-                $registro['iva_simple'] = [
-                    'restitucion' => LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoTipo($tipo),
-                ];
-                $this->adjuntarConceptoIvaSimple($registro, $fila['conceptos'], (string) ($compra['com_letra'] ?? 'A'));
-                $registros[] = $registro;
-                $lineasCbte[] = LibroIvaDigitalFormatoSupport::registroComprasCbte($registro['cabecera']);
-                foreach ($registro['alicuotas'] as $alicuota) {
-                    $lineasAlicuotas[] = LibroIvaDigitalFormatoSupport::registroComprasAlicuota($alicuota);
-                    $totalIva += (float) ($alicuota['impuesto_liquidado'] ?? 0);
-                }
-
-                $conteo++;
-                $conteoAnita++;
-                $totalImporte += abs((float) ($compra['com_monto'] ?? 0));
-            }
-        }
+            });
 
         $totalesPortal = LibroIvaDigitalIvaSimpleSupport::creditoDesdeRegistrosLibro($registros, $prorrateoGlobal);
 
@@ -300,5 +311,31 @@ class LibroIvaDigitalComprasGenerador
                 $registro['alicuotas'][$i]['concepto_iva_simple'] = $porLid[$codigo];
             }
         }
+    }
+
+    /**
+     * @param  array{cabecera: array<string, mixed>, alicuotas: list<array<string, mixed>>}  $registro
+     * @param  list<string>  $lineasCbte
+     * @param  list<string>  $lineasAlicuotas
+     * @param  list<array<string, mixed>>  $registros
+     */
+    private function acumularRegistro(
+        array $registro,
+        float $importeAbs,
+        array &$lineasCbte,
+        array &$lineasAlicuotas,
+        array &$registros,
+        int &$conteo,
+        float &$totalImporte,
+        float &$totalIva,
+    ): void {
+        $registros[] = $registro;
+        $lineasCbte[] = LibroIvaDigitalFormatoSupport::registroComprasCbte($registro['cabecera']);
+        foreach ($registro['alicuotas'] as $alicuota) {
+            $lineasAlicuotas[] = LibroIvaDigitalFormatoSupport::registroComprasAlicuota($alicuota);
+            $totalIva += (float) ($alicuota['impuesto_liquidado'] ?? 0);
+        }
+        $conteo++;
+        $totalImporte += $importeAbs;
     }
 }

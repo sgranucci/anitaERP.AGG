@@ -352,7 +352,7 @@ final class LibroIvaDigitalValidacionSupport
         $renglonesCredito = (int) ($resultado['iva_simple']['resumen']['renglones_credito'] ?? 0)
             + (int) ($resultado['iva_simple']['resumen']['renglones_restitucion_credito'] ?? 0);
         if ($totalIvaCompras > 1 && $renglonesCredito === 0) {
-            $avisos[] = 'Hay IVA en compras del período pero IVA Simple crédito fiscal quedó vacío. Verifique «Completar con compras Anita» y conceptos G/I.';
+            $avisos[] = 'Hay IVA en compras del período pero IVA Simple crédito fiscal quedó vacío. Verifique «Priorizar compras Anita» y conceptos G/I.';
         } elseif ($totalIvaCompras > 0 && $totalIvaCredito > 0) {
             $diffCredito = abs($totalIvaCompras - $totalIvaCredito);
             if ($diffCredito > max(1.0, $totalIvaCompras * 0.02)) {

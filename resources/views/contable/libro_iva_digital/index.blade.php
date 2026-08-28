@@ -108,13 +108,14 @@
                                        id="completar_compras_anita" value="1"
                                        @checked(! empty($filtros['completar_compras_anita']))>
                                 <label class="form-check-label" for="completar_compras_anita">
-                                    Completar con compras Anita (sin solapar ERP)
+                                    Priorizar compras Anita (libro / Portal)
                                 </label>
                             </div>
                             <small class="form-text text-muted mb-2 d-block">
-                                Lee <code>compra</code> + <code>concmov</code> del per&iacute;odo en una pasada al bridge
-                                y agrega las que no est&eacute;n ya en anitaERP (misma clave proveedor/tipo/letra/PV/nro
-                                o <code>anita_nro_interno</code>).
+                                Toma el libro de Anita (<code>compra</code> + <code>concmov</code> por
+                                <code>com_fecha_iva</code>) y s&oacute;lo agrega comprobantes del ERP que no est&eacute;n
+                                ya ah&iacute; (misma clave proveedor/tipo/letra/PV/nro o <code>anita_nro_interno</code>).
+                                As&iacute; no se pierde gravado ni NC cuando el ERP tiene el comprobante sin conceptos G/I.
                             </small>
 
                             <input type="hidden" name="completar_fsl_anita" value="0">
@@ -170,7 +171,7 @@
                             CF computable = IVA del comprobante
                         @endif
                         @if (! empty($resultado['opciones']['completar_compras_anita']) || ! empty($resultado['compras']['resumen']['completar_compras_anita']))
-                            ; completa con Anita si faltan en ERP
+                            ; prioriza Anita (libro) y agrega ERP que no est&eacute;n
                         @endif
                         @if (! empty($resultado['opciones']['completar_fsl_anita']) || ! empty($resultado['ventas']['resumen']['completar_fsl_anita']))
                             ; FSL m&aacute;quinas completadas desde Anita

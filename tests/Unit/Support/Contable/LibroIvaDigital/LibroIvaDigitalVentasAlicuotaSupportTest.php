@@ -416,6 +416,15 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         $b = LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural('000123', 'fnu', 'a', 1, 55);
         $this->assertSame($a, $b);
         $this->assertSame('000123|FNU|A|1|55', $a);
+
+        $ncAnita = LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural('123', 'N/C', 'A', 1, 55);
+        $ncErp = LibroIvaDigitalComprasAnitaArmadoSupport::claveNatural('000123', 'NC', 'A', 1, 55);
+        $this->assertSame($ncAnita, $ncErp);
+        $this->assertSame('000123|NC|A|1|55', $ncAnita);
+        $this->assertTrue(LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoAbreviatura('N/C'));
+        $this->assertTrue(LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoAbreviatura('NCD'));
+        $this->assertTrue(LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoAbreviatura('CRE'));
+        $this->assertFalse(LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoAbreviatura('FAC'));
     }
 
     /**

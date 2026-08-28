@@ -26,9 +26,14 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         int $sucursal,
         int $numero,
     ): string {
+        $tipoNorm = self::normalizarAbreviaturaTipo($tipo);
+        if ($tipoNorm === '') {
+            $tipoNorm = strtoupper(substr(trim($tipo), 0, 3));
+        }
+
         return implode('|', [
             str_pad(trim($proveedor), 6, '0', STR_PAD_LEFT),
-            strtoupper(substr(trim($tipo), 0, 3)),
+            $tipoNorm,
             strtoupper(substr(trim($letra), 0, 1)),
             (string) $sucursal,
             (string) $numero,
@@ -47,7 +52,7 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             return null;
         }
 
-        $tipoAbrev = strtoupper(substr(trim((string) ($compra['com_tipo'] ?? '')), 0, 3));
+        $tipoAbrev = (string) ($compra['com_tipo'] ?? '');
         $tipo = self::tipoPorAbreviatura($tipoAbrev);
         if ($tipo === null) {
             return null;
@@ -267,14 +272,45 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         ];
     }
 
+    public static function normalizarAbreviaturaTipo(string $abrev): string
+    {
+        return strtoupper(substr(preg_replace('/[^A-Z0-9]/', '', $abrev) ?? '', 0, 3));
+    }
+
     public static function tipoPorAbreviatura(string $abrev): ?Tipotransaccion_Compra
     {
-        if ($abrev === '') {
+        $raw = strtoupper(substr(trim($abrev), 0, 3));
+        $norm = self::normalizarAbreviaturaTipo($abrev);
+        if ($raw === '' && $norm === '') {
             return null;
         }
         self::cargarTipos();
 
-        return self::$tiposPorAbrev[$abrev] ?? null;
+        if ($norm !== '' && isset(self::$tiposPorAbrev[$norm])) {
+            return self::$tiposPorAbrev[$norm];
+        }
+        if ($raw !== '' && isset(self::$tiposPorAbrev[$raw])) {
+            return self::$tiposPorAbrev[$raw];
+        }
+        if (str_starts_with($norm, 'NC')) {
+            foreach (self::$tiposPorAbrev as $clave => $tipo) {
+                if (str_starts_with($clave, 'NC')) {
+                    return $tipo;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    public static function esNotaCreditoAbreviatura(string $abrev): bool
+    {
+        $norm = self::normalizarAbreviaturaTipo($abrev);
+        if ($norm === '') {
+            $norm = strtoupper(preg_replace('/[^A-Z]/', '', $abrev) ?? '');
+        }
+
+        return str_starts_with($norm, 'NC') || $norm === 'CRE';
     }
 
     public static function esNotaCreditoTipo(?Tipotransaccion_Compra $tipo): bool
@@ -287,16 +323,14 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             return true;
         }
 
-        $abrev = strtoupper(substr(trim((string) $tipo->abreviatura), 0, 3));
-        if (str_starts_with($abrev, 'NC')) {
+        if (self::esNotaCreditoAbreviatura((string) $tipo->abreviatura)) {
             return true;
         }
 
         $codigoAfip = (string) ($tipo->codigoafip ?? '');
-        $letra = 'A';
 
         return LibroIvaDigitalMapeosSupport::esTipoNotaCredito(
-            LibroIvaDigitalMapeosSupport::tipoComprobanteVentas($codigoAfip, $letra),
+            LibroIvaDigitalMapeosSupport::tipoComprobanteVentas($codigoAfip, 'A'),
         );
     }
 
@@ -331,8 +365,12 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         $tipos = Tipotransaccion_Compra::query()->whereNull('deleted_at')->get();
         foreach ($tipos as $tipo) {
             $abrev = strtoupper(substr(trim((string) $tipo->abreviatura), 0, 3));
+            $norm = self::normalizarAbreviaturaTipo((string) $tipo->abreviatura);
             if ($abrev !== '') {
                 self::$tiposPorAbrev[$abrev] = $tipo;
+            }
+            if ($norm !== '' && $norm !== $abrev) {
+                self::$tiposPorAbrev[$norm] = $tipo;
             }
         }
     }
