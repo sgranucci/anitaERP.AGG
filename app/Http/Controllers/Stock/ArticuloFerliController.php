@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Stock;
 
 use App\Http\Controllers\Controller;
-use App\Http\Requests\ValidacionArticulo;
 use App\Http\Requests\ValidacionArticuloContaduria;
+use App\Http\Requests\ValidacionArticuloFerli;
 use App\Http\Requests\ValidacionArticuloTecnica;
 use App\Mail\Stock\AltaArticulo;
 use App\Models\Configuracion\Impuesto;
@@ -35,7 +35,7 @@ use App\Models\Stock\Unidadmedida;
 use App\Models\Stock\Usoarticulo;
 use App\Repositories\Stock\Articulo_CajaRepositoryInterface;
 use App\Repositories\Stock\Articulo_CostoRepositoryInterface;
-use App\Services\Stock\PrecioService;
+use App\Services\Stock\PrecioServiceFerli;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -53,7 +53,7 @@ class ArticuloFerliController extends Controller
 
     public function __construct(Articulo_CajaRepositoryInterface $articulo_cajaRepository,
         Articulo_CostoRepositoryInterface $articulo_costoRepository,
-        PrecioService $precioservice)
+        PrecioServiceFerli $precioservice)
     {
         $this->articulo_cajaRepository = $articulo_cajaRepository;
         $this->articulo_costoRepository = $articulo_costoRepository;
@@ -62,9 +62,6 @@ class ArticuloFerliController extends Controller
 
     public function index(Request $request)
     {
-
-        $busqueda = $request->busqueda;
-
         $hay_articulos = Articulo::first();
         if (! $hay_articulos) {
             $Articulo = new Articulo;
@@ -187,9 +184,14 @@ class ArticuloFerliController extends Controller
                 });
             }
         }
-        $articulos = $art_query->paginate(10);
+        $articulos = $art_query->get();
 
-        return view('stock.product.list', compact('inactive', 'articulos', 'usosArticulos', 'filtros', 'busqueda'));
+        return view('stock.product.list', compact('inactive', 'articulos', 'usosArticulos', 'filtros'));
+    }
+
+    public function list(Request $request)
+    {
+        return $this->index($request);
     }
 
     public function limpiafiltro(Request $request)
@@ -221,6 +223,7 @@ class ArticuloFerliController extends Controller
 
         $combinacion = Combinacion::select(
             'combinacion.codigo as codigo',
+            'combinacion.id as idcombinacion',
             'combinacion.nombre as nombre',
             'articulo.id as articulo_id',
             'articulo.sku as sku',
@@ -279,7 +282,8 @@ class ArticuloFerliController extends Controller
                     $precios = $this->precioService->
                         asignaPrecioPorTipoNumeracion($item->articulo_id,
                             $tiponumeracion->tiponumeracion_id,
-                            $_fecha);
+                            $_fecha,
+                            $item->idcombinacion);
 
                     // Asigna precio por vigencia
                     $item->precio4 = 0;
@@ -339,24 +343,26 @@ class ArticuloFerliController extends Controller
                 // $qr = 'https://ferlimayoristas.com.ar/index.php?route=product/allproduct&search='.$articulo->descripcion;
 
                 $cod = substr($articulo->sku, 0, -2);
-                $sku = substr($articulo->sku, -2);
-                $nombre1 = '';
-                $nombre2 = '';
+                $skuSufijo = substr($articulo->sku, -2);
                 $nombre1 = substr($comb->nombre, 0, 15);
                 $nombre2 = substr($comb->nombre, 15, 15);
+                $codSku = $cod.'-'.$skuSufijo;
+                $combNombre = $comb->codigo.'-'.$nombre1;
 
                 $etiqueta .= "\nN\n";
                 $etiqueta .= "q800\n";
+                $etiqueta .= "S4\n";
+                $etiqueta .= "D12\n";
                 $etiqueta .= 'A750,5,1,2,2,1,N,"'.$articulo->descripcion."\"\n";
-                $etiqueta .= 'A680,5,1,1,2,2,N,"'.$cod.'-'.$sku."\"\n";
-                $etiqueta .= 'A630,5,1,2,1,1,N,"'.$comb->codigo.'-'.$nombre1."\"\n";
+                $etiqueta .= 'A680,5,1,1,2,2,N,"'.$codSku."\"\n";
+                $etiqueta .= 'A630,5,1,2,1,1,N,"'.$combNombre."\"\n";
                 $etiqueta .= 'A600,5,1,2,1,1,N,"'.$nombre2."\"\n";
-                $etiqueta .= 'b450,50,Q,s3eL,"'.$qr."\"\n";
+                $etiqueta .= 'b450,50,Q,s3eM,"'.$qr."\"\n";
                 $etiqueta .= 'A330,5,1,2,2,1,N,"'.$articulo->descripcion."\"\n";
-                $etiqueta .= 'A260,5,1,1,2,2,N,"'.$cod.'-'.$sku."\"\n";
-                $etiqueta .= 'A210,5,1,2,1,1,N,"'.$comb->codigo.'-'.$nombre1."\"\n";
+                $etiqueta .= 'A260,5,1,1,2,2,N,"'.$codSku."\"\n";
+                $etiqueta .= 'A210,5,1,2,1,1,N,"'.$combNombre."\"\n";
                 $etiqueta .= 'A180,5,1,2,1,1,N,"'.$nombre2."\"\n";
-                $etiqueta .= 'b30,50,Q,s3eL,"'.$qr."\"\n";
+                $etiqueta .= 'b30,50,Q,s3eM,"'.$qr."\"\n";
                 $etiqueta .= "P1\n";
             }
         }
@@ -392,7 +398,7 @@ class ArticuloFerliController extends Controller
             'serigrafia', 'horma', 'fondo'));
     }
 
-    public function save(ValidacionArticulo $request)
+    public function save(ValidacionArticuloFerli $request)
     {
         can('crear-articulos-disenio');
 
@@ -518,7 +524,7 @@ class ArticuloFerliController extends Controller
 
     }
 
-    public function actualizar(ValidacionArticulo $request, $id)
+    public function actualizar(ValidacionArticuloFerli $request, $id)
     {
         can('actualizar-articulos-disenio');
 

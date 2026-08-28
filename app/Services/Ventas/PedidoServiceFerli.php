@@ -3,7 +3,6 @@ namespace App\Services\Ventas;
 
 use App\Repositories\Ventas\PedidoRepositoryInterface;
 use App\Repositories\Ventas\Pedido_CombinacionRepositoryInterface;
-use App\Repositories\Ventas\Pedido_ArticuloRepositoryInterface;
 use App\Repositories\Ventas\Pedido_Combinacion_TalleRepositoryInterface;
 use App\Repositories\Ventas\Pedido_Combinacion_EstadoRepositoryInterface;
 use App\Repositories\Ventas\Ordentrabajo_Combinacion_TalleRepositoryInterface;
@@ -11,10 +10,11 @@ use App\Repositories\Ventas\Ordentrabajo_TareaRepositoryInterface;
 use App\Repositories\Ventas\OrdentrabajoRepositoryInterface;
 use App\Services\Configuracion\ImpuestoService;
 use App\Services\Stock\Articulo_MovimientoService;
-use App\Services\Stock\PrecioService;
-use App\Queries\Ventas\PedidoQueryInterface;
+use App\Services\Stock\PrecioServiceFerli;
+use App\Queries\Ventas\PedidoQueryFerli;
 use App\Queries\Ventas\ClienteQueryInterface;
 use App\Queries\Ventas\OrdentrabajoQueryInterface;
+use App\Models\Ventas\Pedido;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Mventa;
 use App\Models\Stock\Combinacion;
@@ -28,11 +28,10 @@ use PDF;
 use Auth;
 use Exception;
 
-class PedidoService 
+class PedidoServiceFerli 
 {
 	protected $pedidoRepository;
 	protected $pedido_combinacionRepository;
-	protected $pedido_articuloRepository;
 	protected $pedido_combinacion_talleRepository;
 	protected $pedido_combinacion_estadoRepository;
 	protected $ordentrabajo_combinacion_talleRepository;
@@ -48,15 +47,14 @@ class PedidoService
 
     public function __construct(PedidoRepositoryInterface $pedidorepository,
     							Pedido_CombinacionRepositoryInterface $pedidocombinacionrepository,
-								Pedido_ArticuloRepositoryInterface $pedidoarticulorepository,
     							Pedido_Combinacion_TalleRepositoryInterface $pedidocombinaciontallerepository,
 								Pedido_Combinacion_EstadoRepositoryInterface $pedidocombinacionestadorepository,
     							Ordentrabajo_Combinacion_TalleRepositoryInterface $ordentrabajocombinaciontallerepository,
 								Ordentrabajo_TareaRepositoryInterface $ordentrabajotarearepository,
 								OrdentrabajoRepositoryInterface $ordentrabajorepository,
 								OrdentrabajoQueryInterface $ordentrabajoquery,
-								PedidoQueryInterface $pedidoquery,
-								PrecioService $precioservice,
+								PedidoQueryFerli $pedidoquery,
+								PrecioServiceFerli $precioservice,
 								ClienteQueryInterface $clientequery,
 								ImpuestoService $impuestoservice,
 								OrdentrabajoService $ordentrabajoservice,
@@ -65,7 +63,6 @@ class PedidoService
     {
         $this->pedidoRepository = $pedidorepository;
         $this->pedido_combinacionRepository = $pedidocombinacionrepository;
-		$this->pedido_articuloRepository = $pedidoarticulorepository;
         $this->pedido_combinacion_talleRepository = $pedidocombinaciontallerepository;
 		$this->pedido_combinacion_estadoRepository = $pedidocombinacionestadorepository;
         $this->ordentrabajo_combinacion_talleRepository = $ordentrabajocombinaciontallerepository;
@@ -82,7 +79,11 @@ class PedidoService
 
 	public function leePedido($id)
 	{
-        $pedido = $this->pedidoRepository->find($id);
+        $pedido = Pedido::with('pedido_combinaciones')->with('clientes')->find($id);
+
+        if ($pedido === null) {
+            throw new \Illuminate\Database\Eloquent\ModelNotFoundException('Registro no encontrado');
+        }
 
         return $pedido;
 	}
@@ -260,6 +261,7 @@ class PedidoService
 								'fondo_id' => $fondo_id,
 								'colorfondo_id' => $colorfondo_id,
 								'nombrecolorfondo' => $nombrecolorfondo,
+								'observacion' => $observacion,
 								'articulo_id' => $articulo_id,
 								'medidas' => $medidas
 							];
@@ -299,6 +301,7 @@ class PedidoService
 						$nombrelinea = $pedido['nombrelinea'];
 						$fondo_id = $pedido['fondo_id'];
 						$articulo_id = $pedido['articulo_id'];
+						$observacion = $pedido['observacion'];
 						$sku = $pedido['sku'];
 						$colorfondo_id = $pedido['colorfondo_id'];
 						$nombrecolorfondo = $pedido['nombrecolorfondo'];
@@ -326,6 +329,7 @@ class PedidoService
 								'nombrelinea' => $nombrelinea,
 								'fondo_id' => $fondo_id,
 								'colorfondo_id' => $colorfondo_id,
+								'observacion' => $observacion,
 								'nombrecolorfondo' => $nombrecolorfondo,
 								'articulo_id' => $articulo_id,
 								'medidas' => $medidas
@@ -594,7 +598,7 @@ class PedidoService
 		$pedido = $data[0];
 		$nombre_pdf = 'pedido-'.$id.'-'.$pedido->clientes->nombre;
 
-		$view =  \View::make('exports.ventas.pedido', compact('pedido'))
+		$view =  \View::make('exports.ventas.pedido_ferli', compact('pedido'))
 			    ->render();
 		$path = storage_path('pdf/pedido');
 
@@ -648,13 +652,13 @@ class PedidoService
 					$talle = Talle::find($item->talle_id);
 
 					$precio = $this->precioService->
-                                        asignaPrecio($articulo->id, $talle->id, Carbon::now());
+                                        asignaPrecio($articulo->id, $pedidoitem->combinacion_id, $talle->id, Carbon::now());
 
 					if ($descuentoLinea > 0)
 						$precioArticulo = $precio[0]['precio'] * (1 - ($descuentoLinea / 100));
 					else
-						$precioArticulo = $precio[0]['precio'];										
-
+						$precioArticulo = $precio[0]['precio'];			
+					
                     for ($i = 0, $flEncontro = false; $i < count($tblImpuesto); $i++)
                     {
                     	if ($tblImpuesto[$i]['precio'] == $precioArticulo &&
@@ -694,9 +698,7 @@ class PedidoService
 						  "retieneiva" => $cliente->retieneiva,
 						  "condicioniibb" => $cliente->condicioniibb,
 						  "provincia" => $cliente->provincia_id,
-						  "id" => $cliente->id,
 						];
-
 		// Calcula impuestos
 		$conceptosTotales = $this->impuestoService->calculaImpuestoVenta($tblImpuesto, $datosCliente);
 
@@ -1024,8 +1026,8 @@ class PedidoService
 								str_replace(',','',$cantidades[$i_comb]),
 								str_replace(',','',$precios[$i_comb]),
 								($listaprecios[$i_comb] == 0 ? 1 : $listaprecios[$i_comb]),
-								($incluyeimpuestos[$i_comb] == null ? 'N' : $incluyeimpuestos[$i_comb]),
-								($monedas[$i_comb] == null ? '1' : $monedas[$i_comb]),
+								($incluyeimpuestos[$i_comb] == null || $incluyeimpuestos[$i_comb] == 'NaN' ? 'N' : $incluyeimpuestos[$i_comb]),
+								($monedas[$i_comb] == null || $monedas[$i_comb] == 'NaN' ? '1' : $monedas[$i_comb]),
 								$descuentos[$i_comb],
 								$categoria_id,
 								$subcategoria_id,
@@ -1077,14 +1079,16 @@ class PedidoService
 								// Guarda apertura de talles
 								if ($value->cantidad > 0)
 								{
-									$flGraboMedidas = true;
+									$precio = $this->precioService->
+										asignaPrecio($articulos[$i_comb], $combinaciones[$i_comb], $value->talle_id, Carbon::now());
 
+									$flGraboMedidas = true;
 									$pedido_combinacion_talle = $this->pedido_combinacion_talleRepository
 																	->create(
 																				$ids[$i_comb], 
 																				$value->talle_id, 
 																				$value->cantidad, 
-																				$value->precio
+																				$precio[0]['precio']
 																				);
 									// Guarda ot
 									if ($ot_ids[$i_comb] > 0 && $funcion == 'update') 

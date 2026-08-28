@@ -20,6 +20,8 @@ use App\Models\Stock\Categoria;
 use App\Models\Stock\Subcategoria;
 use App\Models\Stock\Precio;
 use App\Services\Stock\PrecioService;
+use App\Services\Stock\PrecioServiceFerli;
+use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Repositories\Stock\MaterialcapelladaRepositoryInterface;
 use App\Repositories\Stock\MaterialavioRepositoryInterface;
 use App\Http\Requests\ValidacionCombinacion;
@@ -518,6 +520,7 @@ class CombinacionController extends Controller
 
         $combinacion = Combinacion::select(
 								'combinacion.codigo as codigo',
+								'combinacion.id as idcombinacion',
 								'combinacion.nombre as nombre',
 								'articulo.id as articulo_id',
 								'articulo.sku as sku',
@@ -593,12 +596,20 @@ class CombinacionController extends Controller
 					$tiponumeracion = Linea::select('tiponumeracion_id')->where('id',$linea_id)->first();
 					
 					// Asigna precio por vigencia
-					if ($flPrecio != 'N')
-						$precios = $this->precioService->
-							asignaPrecioPorTipoNumeracion($item->articulo_id, 
-														$tiponumeracion->tiponumeracion_id, 
-														$_fecha);
-					else
+					if ($flPrecio != 'N') {
+						if (MovimientoStockFerliSupport::esCalzadosFerli()) {
+							$precios = app(PrecioServiceFerli::class)->
+								asignaPrecioPorTipoNumeracion($item->articulo_id,
+									$tiponumeracion->tiponumeracion_id,
+									$_fecha,
+									$item->idcombinacion);
+						} else {
+							$precios = $this->precioService->
+								asignaPrecioPorTipoNumeracion($item->articulo_id,
+									$tiponumeracion->tiponumeracion_id,
+									$_fecha);
+						}
+					} else
 						$precios[] = ['listaprecio_id' => 1, 'precio' => 0];
  					
 					// Asigna precio por vigencia

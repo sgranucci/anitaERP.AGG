@@ -9,6 +9,23 @@ Art&iacute;culos
 
 <script>
 function checkState(index){
+  var confirmar = confirm("¿Desea inactivar combinaciones de forma masiva?");
+  if(confirmar){
+
+    var id = $("#producto_id").val();
+    var token = $("meta[name='csrf-token']").attr("content");
+    var estado = 'I';
+    var data = "id="+id+"&estado="+estado+"&_token="+token;
+
+    $.ajax({
+        type: "POST",
+        url: "{{ route('combinacion.updateStateAll') }}",
+        data: data,
+        success: function(response){
+          window.location.reload();
+        }
+    });
+  }
 }
 
 function limpiaFiltros(){
@@ -20,7 +37,7 @@ function limpiaFiltros(){
 
     $.ajax({
         type: "POST",
-        url: '/anitaERP/public/stock/product/limpiafiltro',
+        url: "{{ route('product.limpiafiltro') }}",
 		data: data,
         success: function(response){
 			window.location.replace(window.location.pathname);
@@ -48,28 +65,33 @@ function limpiaFiltros(){
                         	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
 						@endif
                     </a>
-                </div>
-                <div class="d-md-flex justify-content-md-end">
-					<form action="{{ route('products.index') }}" method="GET">
-						<div class="btn-group">
-							<input type="text" name="busqueda" class="form-control" placeholder="Busqueda ..."> 
-							<button type="submit" class="btn btn-default">
-								<span class="fa fa-search"></span>
-							</button>
-						</div>
-					</form>
+                    <span id="container-button-state">
+                       	@if (can('cambiar-estado-combinaciones', false))
+                            <button class="btn btn-outline-secondary btn-sm" style="color:white" onclick="checkState(0)">Inactivar combinaciones</button>
+                        @endif
+                    </span>
+                   	<a href="javascript:void(0)" class="btn btn-outline-secondary btn-sm" id='btn_advanced_filter' data-url-parameter=''
+						title='Filtros y búsquedas avanzadas' class="btn btn-sm btn-default ">
+                       	@if (can('filtrar-articulos', false))
+                       		<i class="fa fa-filter"></i> Filtros y Orden
+						@endif
+                    </a>
+					@if (session()->get('filtros') != '')
+                    	<span id="container-button-state">
+                            <button class="btn btn-outline-secondary btn-sm" style="color:white" onclick="limpiaFiltros()">Limpiar filtros</button>
+                    	</span>
+					@endif
                 </div>
             </div>
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla', ['ruta' => 'lista_articulo', 'busqueda' => $busqueda])
-                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
+                <table class="table table-striped table-bordered table-hover" id="tabla-data">
                     <thead>
                         <tr>
                             <th>C&oacute;digo</th>
                             <th>Descripci&oacute;n</th>
-                            <th>Unidad de Medida</th>
-                            <th>Categoría</th>
-                            <th>Tipo de Artículo</th>
+                            <th>Categor&iacute;a</th>
+                            <th>Marca</th>
+                            <th>L&iacute;nea</th>
                             <th>Facturable</th>
                             <th data-orderable="false"></th>
                         </tr>
@@ -78,31 +100,29 @@ function limpiaFiltros(){
 						@foreach($articulos as $articulo)
     						<tr>
         						<td>
-            						{{ $articulo->codigoarticulo ?? '' }}
+            						{{ $articulo->stkm_articulo ?? '' }}
         						</td>
         						<td>
-            						{{ $articulo->descripcion ?? '' }}
+            						{{ $articulo->stkm_desc ?? '' }}
         						</td>
         						<td>
-            						{{ $articulo->nombreunidadmedida ?? '' }}
+            						{{ $articulo->stkm_agrupacion ?? '' }}
         						</td>
         						<td>
-            						{{ $articulo->nombrecategoria ?? '' }}
+            						{{ $articulo->stkm_marca ?? '' }}
         						</td>
         						<td>
-            						{{ $articulo->nombretipoarticulo ?? '' }}
+            						{{ $articulo->stkm_linea ?? '' }}
         						</td>
                                 <td>
                                     {{ $articulo->nofactura == '0' ? 'Facturable' : 'No facturable'}}
                                 </td>
                             <td>
-                                @if (config('app.empresa') == 'Calzados Ferli')
-                                    @if ($articulo->usoarticulo_id == 1)
-                                        @if (can('editar-articulos-combinaciones', false))
-                                            <a class="btn-xs btn-primary ml-2" style="padding: 1px" href="combinacion/index/{{$articulo->id}}">Combinaciones</a>
-                                        @endif
-                                    @endif
-                                @endif
+								@if ($articulo->usoarticulo_id == 1)
+                       				@if (can('editar-articulos-combinaciones', false))
+          								<a class="btn-xs btn-primary ml-2" style="padding: 1px" href="combinacion/index/{{$articulo->id}}">Combinaciones</a>
+									@endif
+								@endif
                        			@if (can('editar-articulos-disenio', false))
           							<a class="btn-xs btn-primary ml-2" style="padding: 1px" href="product/edit/{{$articulo->id}}/disenio">Diseño</a>
 								@endif
@@ -134,5 +154,7 @@ function limpiaFiltros(){
         </div>
     </div>
 </div>
-{{ $articulos->appends(['busqueda' => $busqueda])->links() }}
+
+@include('includes.filtroarticulo')
+
 @endsection

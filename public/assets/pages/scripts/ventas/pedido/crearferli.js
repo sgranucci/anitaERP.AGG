@@ -4,6 +4,11 @@
 	var medidas_txt;
 	var precios_txt;
 	var tallesid_txt;
+	var talles2_txt;
+	var medidas2_txt;
+	var precios2_txt;
+	var tallesid2_txt;
+	var cantidadMedidas = 0;
 	var cantidadmodal_txt;
 	var nombre_modulo;
 	var moduloElegido_id;
@@ -44,6 +49,10 @@
 	var medidasfactura_txt=[]; 
 	var preciosfactura_txt=[]; 
 	var tallesidfactura_txt=[];
+	var tallesfactura2_txt=[];
+	var medidasfactura2_txt=[]; 
+	var preciosfactura2_txt=[]; 
+	var tallesidfactura2_txt=[];
 	var titulofactura_txt=[];
 	var offFactura;
 	var modalActivo;
@@ -52,7 +61,7 @@
 	function completarCliente_Entrega(cliente_id){
         var loc_id;
 		var lugarentrega = $("#lugarentrega").val();
-        $.get(carpetaBase+'/ventas/leercliente_entrega/'+cliente_id, function(data){
+        $.get(''+carpetaBase+'/ventas/leercliente_entrega/'+cliente_id, function(data){
             var entr = $.map(data, function(value, index){
                 return [value];
             });
@@ -93,9 +102,9 @@
 
 		// Si marca boton de todas las combinaciones trae sin filtrar las activas o esta leyendo todos los articulos sin filtrar
 		if (fl_todas_las_combinaciones == 'on' || fl_todos_los_articulos == 'on' || flsinfiltro)
-			var url_comb = carpetaBase+'/stock/leercombinaciones/';
+			var url_comb = ''+carpetaBase+'/stock/leercombinaciones/';
 		else
-			var url_comb = carpetaBase+'/stock/leercombinacionesactivas/';
+			var url_comb = ''+carpetaBase+'/stock/leercombinacionesactivas/';
 
         $.get(url_comb+articulo_id, function(data){
             var comb = $.map(data, function(value, index){
@@ -123,7 +132,7 @@
 		var eligioModulo = false;
 		var articulo_id = $(articulo).val();
 		var flTieneModuloAbierto = false;
-        $.get(carpetaBase+'/stock/leermodulos/'+articulo_id+'/'+modulo_id, function(data){
+        $.get(''+carpetaBase+'/stock/leermodulos/'+articulo_id+'/'+modulo_id, function(data){
             var mod = $.map(data, function(value, index){
                 return [value];
             });
@@ -155,10 +164,14 @@
 		medidas_txt = "";
 		precios_txt = "";
 		tallesid_txt = "";
+		talles2_txt = "";
+		medidas2_txt = "";
+		precios2_txt = "";
+		tallesid2_txt = "";
 		nombre_modulo = "";
 
 		// Lee talles del modulo
-        $.get(carpetaBase+'/stock/leertalles/'+modulo_id, function(data){
+        $.get(''+carpetaBase+'/stock/leertalles/'+modulo_id, function(data){
 			var flEncontro, flHayMedidas;
 
            	var tall = $.map(data, function(value, index){
@@ -168,9 +181,14 @@
 			medidas_txt = "<tr>";
 			precios_txt = "<tr>";
 			tallesid_txt = "<tr>";
+			talles2_txt = "<table class='table-bordered table-striped'><tr>";
+			medidas2_txt = "<tr>";
+			precios2_txt = "<tr>";
+			tallesid2_txt = "<tr>";
 
 			// Arma variables modal
 			cantidadmodal_txt = " autofocus ";
+			cantidadMedidas = 0;
            	$.each(tall, function(index,value){
 				nombre_modulo = value.nombre;
 				for (var t in value.talles) {
@@ -193,7 +211,6 @@
 							
 								modulo_actual = cant / value.talles[t].pivot.cantidad;
 							}
-
 							agregaMedida(value.talles[t].nombre, cant, prec, value.talles[t].id);
 							flEncontro = true;
 							break;
@@ -213,12 +230,21 @@
 			precios_txt = precios_txt + "</tr>";
 			tallesid_txt = tallesid_txt + "</tr>";
 
+			talles2_txt = talles2_txt + "</tr>";
+			medidas2_txt = medidas2_txt + "</tr>";
+			precios2_txt = precios2_txt + "</tr>";
+			tallesid2_txt = tallesid2_txt + "</tr>";
+
 			if (flFactura)
 			{
 				tallesfactura_txt[offFactura] = talles_txt;
 				medidasfactura_txt[offFactura] = medidas_txt;
 				preciosfactura_txt[offFactura] = precios_txt;
 				tallesidfactura_txt[offFactura] = tallesid_txt;
+				tallesfactura2_txt[offFactura] = talles2_txt;
+				medidasfactura2_txt[offFactura] = medidas2_txt;
+				preciosfactura2_txt[offFactura] = precios2_txt;
+				tallesidfactura2_txt[offFactura] = tallesid2_txt;
 
 				let descripcion_art = $(ptrcheck).parents("tr").find(".articulo option:selected").text();
 				let nombre_comb = $(ptrcheck).parents("tr").find(".desc_combinacion").val();
@@ -232,25 +258,45 @@
 	function agregaMedida(Ptalle, Pcant, Pprec, Ptalle_id)
 	{
 		let nombre = "";
-
-    	talles_txt = talles_txt + "<th><input name='medidasportalles[]' class='medidasportalles' style='width:30px; text-align:center; background-color   : #D2D8DC;' type='text' readonly value='"+Ptalle+"'></input></th>";
-
-		if (!flAnulacionItem)
-			nombre = "cantidadesportalles";
-		else
-			nombre = "cantidadesportallesa";
 		
-		medidas_txt = medidas_txt + "<th><input name='"+nombre+"[]' "+cantidadmodal_txt+" class='"+nombre+"' style='width:30px;' type='text' value='"+Pcant+"'></input></th>";
+		cantidadMedidas++;
 
-    	precios_txt = precios_txt + "<th><input name='preciosportalles[]' class='preciosportalles' type='hidden' value='"+Pprec+"'></input></th>";
-    	tallesid_txt = tallesid_txt + "<th><input name='tallesid[]' class='tallesid' type='hidden' value='"+Ptalle_id+"'></input></th>";
-		cantidadmodal_txt = "";
+		if (cantidadMedidas > 20)
+		{
+			talles2_txt = talles2_txt + "<th><input name='medidasportalles[]' class='medidasportalles' style='width:30px; text-align:center; background-color   : #D2D8DC;' type='text' readonly value='"+Ptalle+"'></input></th>";
+
+			if (!flAnulacionItem)
+				nombre = "cantidadesportalles";
+			else
+				nombre = "cantidadesportallesa";
+			
+			medidas2_txt = medidas2_txt + "<th><input name='"+nombre+"[]' "+cantidadmodal_txt+" class='"+nombre+"' style='width:30px;' type='text' value='"+Pcant+"'></input></th>";
+
+			precios2_txt = precios2_txt + "<th><input name='preciosportalles[]' class='preciosportalles' style='width:50px;' value='"+Pprec+"'></input></th>";
+			tallesid2_txt = tallesid2_txt + "<th><input name='tallesid[]' class='tallesid' type='hidden' value='"+Ptalle_id+"'></input></th>";
+			cantidadmodal_txt = "";		
+		}
+		else
+		{
+			talles_txt = talles_txt + "<th><input name='medidasportalles[]' class='medidasportalles' style='width:30px; text-align:center; background-color   : #D2D8DC;' type='text' readonly value='"+Ptalle+"'></input></th>";
+
+			if (!flAnulacionItem)
+				nombre = "cantidadesportalles";
+			else
+				nombre = "cantidadesportallesa";
+			
+			medidas_txt = medidas_txt + "<th><input name='"+nombre+"[]' "+cantidadmodal_txt+" class='"+nombre+"' style='width:30px;' type='text' value='"+Pcant+"'></input></th>";
+
+			precios_txt = precios_txt + "<th><input name='preciosportalles[]' class='preciosportalles' style='width:50px;' value='"+Pprec+"'></input></th>";
+			tallesid_txt = tallesid_txt + "<th><input name='tallesid[]' class='tallesid' type='hidden' value='"+Ptalle_id+"'></input></th>";
+			cantidadmodal_txt = "";
+		}
 	}
 
 	function asignaPrecio(Particulo_id, Ptalle_id)
 	{
 		// Lee talles del modulo
-        $.get(carpetaBase+'/stock/asignaprecio/'+Particulo_id+'/'+Ptalle_id, function(data){
+        $.get(''+carpetaBase+'/stock/asignaprecio/'+Particulo_id+'/'+Ptalle_id, function(data){
            	var prec = $.map(data, function(value, index){
                	return [value];
            	});
@@ -315,8 +361,7 @@
 			}
 			
 			// Busca si tiene factura asociada
-			var listarUri = carpetaBase+"/ventas/estadoot/"+ordentrabajo+"/"+pedido_combinacion_id;
-		
+			var listarUri = carpetaBase+'/ventas/estadoot/'+ordentrabajo+'/'+pedido_combinacion_id;
 			$.get(listarUri, function(data){
 				
 				if (data.numerofactura != -1 && data.numerofactura != -2 && data.numerofactura != -3)
@@ -377,17 +422,23 @@
 
 		$('.checkImpresion').on('change', function (event) {
 			event.preventDefault();
-			
 			if (flFactura && $(this).prop("checked"))
 			{
 				let ordentrabajo = $(this).parents("tr").find(".otcodigo").val();
 				let tilde = this;
 				let cliente_id = $("#cliente_id").val();
-				let estadocliente = $("#estadocliente").va/czl();
+				let estadocliente = $("#estadocliente").val();
 				let tiposuspensioncliente_id = $("#tiposuspensioncliente_id").val();
 				let nombretiposuspensioncliente = $("#nombretiposuspensioncliente").val();
 				let pedido_combinacion_id = $(this).parents("tr").find(".ids").val();
-			
+				let historiaanulacion = $(this).parents("tr").find(".historiaanulacion").val();
+
+				if (historiaanulacion)
+				{
+					alert("No puede facturar un item anulado");
+					$(tilde).prop("checked",false);
+					return;
+				}
 				// No deja factura cliente stock
 				if (cliente_id == CLIENTE_STOCK_ID)
 				{
@@ -395,9 +446,8 @@
 					$(tilde).prop("checked",false);
 					return;
 				}
-
 				// Debe chequear estado del cliente
-				if (!window.clienteEstaHabilitadoParaFacturacion(estadocliente) &&
+				if (estadocliente > '0' && 
 					(tiposuspensioncliente_id == PROFORMA ||
 					tiposuspensioncliente_id == MOROSO ||
 					tiposuspensioncliente_id == NO_FACTURAR
@@ -407,7 +457,6 @@
 					$(tilde).prop("checked",false);
 					return;
 				}
-			
 				// chequea si puede facturar
 				if (ordentrabajo <= 0)
 				{
@@ -415,13 +464,12 @@
 					$(tilde).prop("checked",false);
 					return;
 				}
-
+				
 				// Busca si tiene factura asociada
-				var listarUri = carpetaBase+"/ventas/estadoot/"+ordentrabajo+"/"+pedido_combinacion_id;
+				var listarUri = carpetaBase+'/ventas/estadoot/'+ordentrabajo+'/'+pedido_combinacion_id;
             
 				$.get(listarUri, function(data){
-					
-					if (data.numerofactura == -3)
+					if (data.terminada != 'si')
 					{
 						alert("OT no está terminada");
 
@@ -514,7 +562,11 @@
 
   			modal.find('.modal-title').text('Medidas item '+descripcion_articulo+' Combinacion '+nombre_combinacion+' Modulo '+nombre_modulo);
   			modal.find('#medidasModal').empty();
-  			modal.find('#medidasModal').append(talles_txt+medidas_txt+precios_txt+tallesid_txt);
+			if (cantidadMedidas > 20)
+  				modal.find('#medidasModal').append(talles_txt+medidas_txt+precios_txt+tallesid_txt+
+												talles2_txt+medidas2_txt+precios2_txt+tallesid2_txt);
+			else
+				modal.find('#medidasModal').append(talles_txt+medidas_txt+precios_txt+tallesid_txt);
 			sumaPares(modalActivo, 'cantidadesportalles');
 			muestraTotalPares();
 		});
@@ -551,7 +603,7 @@
 							var nueva_cantidad = cantidad_base * parseFloat(cantmodulo);
 						}
 						else	
-							var nueva_cantidad = arseFloat(cantidad)*parseFloat(cantmodulo);
+							var nueva_cantidad = parseFloat(cantidad)*parseFloat(cantmodulo);
 
 				  		$(this).val(nueva_cantidad);
 						sumaPares(modalActivo, 'cantidadesportalles');
@@ -655,6 +707,10 @@
 			medidas_txt = "";
 			precios_txt = "";
 			tallesid_txt = "";
+			talles2_txt = "";
+			medidas2_txt = "";
+			precios2_txt = "";
+			tallesid2_txt = "";
 		});
 
 		// Llena variable desc_combinacion
@@ -688,7 +744,7 @@
 
 			if (ordentrabajo_stock_codigo > 0)
 			{
-				var listarUri = carpetaBase+"/ventas/controlaordentrabajostock/"+ordentrabajo_stock_codigo+"/"+articulo_id+"/"+combinacion_id;
+				var listarUri = carpetaBase+'/ventas/controlaordentrabajostock/'+ordentrabajo_stock_codigo+'/'+articulo_id+'/'+combinacion_id;
 
 				$.get(listarUri, function(data){
 					if (data.estado != -1)
@@ -708,11 +764,11 @@
 						$('#crearOrdenTrabajoModal').modal('hide');
 
 						if (checkotstock == 'on')
-							var listarUri = carpetaBase+"/ventas/guardaordenestrabajo/pedido/"+
-											$(pedido_combinacion).val()+"/on/"+ordentrabajo_stock_codigo+'/'+data.deposito_id+'/'+leyenda;
+							var listarUri = carpetaBase+'/ventas/guardaordenestrabajo/pedido/'+
+											$(pedido_combinacion).val()+'/on/'+ordentrabajo_stock_codigo+'/'+data.deposito_id+'/'+leyenda;
 						else
-							var listarUri = carpetaBase+"/ventas/guardaordenestrabajo/pedido/"+
-											$(pedido_combinacion).val()+"/off/"+ordentrabajo_stock_codigo+'/'+data.deposito_id+'/'+leyenda;
+							var listarUri = carpetaBase+'/ventas/guardaordenestrabajo/pedido/'+
+											$(pedido_combinacion).val()+'/off/'+ordentrabajo_stock_codigo+'/'+data.deposito_id+'/'+leyenda;
 						$.get(listarUri, function(data){
 							// Asigna ot id y nro. de orden 
 							if (data.id > 0)
@@ -738,11 +794,11 @@
 				$('#crearOrdenTrabajoModal').modal('hide');
 
 				if (checkotstock == 'on')
-					var listarUri = carpetaBase+"/ventas/guardaordenestrabajo/pedido/"
-									+$(pedido_combinacion).val()+"/on/"+ordentrabajo_stock_codigo+'/1/'+leyenda;
+					var listarUri = carpetaBase+'/ventas/guardaordenestrabajo/pedido/'
+									+$(pedido_combinacion).val()+'/on/'+ordentrabajo_stock_codigo+'/1/'+leyenda;
 				else
-					var listarUri = carpetaBase+"/ventas/guardaordenestrabajo/pedido/"
-									+$(pedido_combinacion).val()+"/off/"+ordentrabajo_stock_codigo+'/1/'+leyenda;
+					var listarUri = carpetaBase+'/ventas/guardaordenestrabajo/pedido/'
+									+$(pedido_combinacion).val()+'/off/'+ordentrabajo_stock_codigo+'/1/'+leyenda;
 	
 				$.get(listarUri, function(data){
 					// Asigna ot id y nro. de orden 
@@ -935,7 +991,7 @@
 
     function imprimeOt() {
 		var ot = $(this).parents("tr").find(".ot").val();
-        var listarUri = carpetaBase+"/ventas/crearemisionot";
+        var listarUri = carpetaBase+'/ventas/crearemisionot';
 		
 		if (ot == 0 || ot == -1)
 			alert("No puede listar OT");
@@ -996,7 +1052,7 @@
 	  	flAnulacionItem = true;
 
 		// Busca si tiene factura asociada
-		var listarUri = carpetaBase+"/ventas/estadoot/"+codigoAnulacionOt+"/"+pedido_combinacion_id;
+		var listarUri = carpetaBase+'/ventas/estadoot/'+codigoAnulacionOt+'/'+pedido_combinacion_id;
 
 		$.get(listarUri, function(data){
 			
@@ -1042,7 +1098,11 @@
 		$("#ordentrabajoanulacion").val(codigoAnulacionOt);
   		modal.find('.modal-title').text(tituloModal+descripcion_articulo+' Combinacion '+nombre_combinacion+' Modulo '+nombre_modulo);
   		modal.find('#anulacionModal').empty();
-  		modal.find('#anulacionModal').append(talles_txt+medidas_txt+precios_txt+tallesid_txt);
+		if (cantidadMedidas > 20)
+			modal.find('#anulacionModal').append(talles_txt+medidas_txt+precios_txt+tallesid_txt+
+										  talles2_txt+medidas2_txt+precios2_txt+tallesid2_txt);
+	  	else
+			modal.find('#anulacionModal').append(talles_txt+medidas_txt+precios_txt+tallesid_txt);
 		sumaanulacionPares();
 		muestraanulacionTotalPares();
 	});
@@ -1066,7 +1126,7 @@
 		$('#anulacionModal').modal('hide');
 
 	  	// Anula el item 
-        $.get(carpetaBase+'/ventas/anularitempedido/'+itemAnulacionId+'/'+codigoAnulacionOt+'/'+motivoAnulacionId+'/'+nuevoClienteId, function(data){
+        $.get(''+carpetaBase+'/ventas/anularitempedido/'+itemAnulacionId+'/'+codigoAnulacionOt+'/'+motivoAnulacionId+'/'+nuevoClienteId, function(data){
             var ret = $.map(data, function(value, index){
                 return [value];
             });
@@ -1101,6 +1161,10 @@
 		medidas_txt = "";
 		precios_txt = "";
 		tallesid_txt = "";
+		talles2_txt = "";
+		medidas2_txt = "";
+		precios2_txt = "";
+		tallesid2_txt = "";
 	});
 
 	// Muestra historia del item
@@ -1124,7 +1188,13 @@
 		$("#ordentrabajohistoria").val(codigoAnulacionOt);
 		modal.find('.modal-title').text(tituloModal+descripcion_articulo+' Combinacion '+nombre_combinacion+' Modulo '+nombre_modulo);
 		modal.find('#historiaModal').empty();
-		modal.find('#historiaModal').append(talles_txt+medidas_txt+precios_txt+tallesid_txt);
+
+		if (cantidadMedidas > 20)
+			modal.find('#historiaModal').append(talles_txt+medidas_txt+precios_txt+tallesid_txt+
+										  talles2_txt+medidas2_txt+precios2_txt+tallesid2_txt);
+	  	else
+			modal.find('#historiaModal').append(talles_txt+medidas_txt+precios_txt+tallesid_txt);
+		
 		modal.find('#tbody-historia').empty();
 		
 		let historia = $(itemAnulacionOt).parents("tr").find('.historiaanulacion').val();
@@ -1167,6 +1237,10 @@
 		medidas_txt = "";
 		precios_txt = "";
 		tallesid_txt = "";
+		talles2_txt = "";
+		medidas2_txt = "";
+		precios2_txt = "";
+		tallesid2_txt = "";
 	});
 
     function borraRenglon() {
@@ -1175,7 +1249,7 @@
 		let pedido_combinacion_id = $(this).parents("tr").find(".ids").val();
 		
 		// Busca si tiene factura asociada
-		var listarUri = carpetaBase+"/ventas/estadoot/"+ordentrabajo+"/"+pedido_combinacion_id;
+		var listarUri = carpetaBase+'/ventas/estadoot/'+ordentrabajo+'/'+pedido_combinacion_id;
 		var flError = false;
 
 		$.get(listarUri, function(data){
@@ -1241,7 +1315,7 @@
 		});
 		descuentoLinea = prompt("Ingrese descuento de linea: ");
 
-		let listarUri = carpetaBase+"/ventas/listarprefactura"+"/"+pedidoId+'/'+checksId+"/"+descuentoLinea;
+		let listarUri = carpetaBase+'/ventas/listarprefactura/'+pedidoId+'/'+checksId+'/'+descuentoLinea;
 		document.location.href= listarUri;
 	}
 
@@ -1253,18 +1327,21 @@
 		medidasfactura_txt = [];
 		preciosfactura_txt = [];
 		tallesidfactura_txt = [];
+		tallesfactura2_txt = [];
+		medidasfactura2_txt = [];
+		preciosfactura2_txt = [];
+		tallesidfactura2_txt = [];
 		titulofactura_txt = [];
 		offFactura = 0;
+		cantItem = 0;
 		pedido_combinacion_ids = [];
 		ordentrabajo_ids = [];
 
 		cliente_id = $("#cliente_id").val();
-		
 		$("input[type=checkbox]:checked").each(function(){
 
 			ordentrabajo = $(this).parents('tr').find('.otcodigo').val();
 			itemId = $(this).parents('tr').find('.ids').val();
-			
 			if (!otFacturada(ordentrabajo, itemId))
 			{
 				pedido_combinacion_ids.push(itemId);
@@ -1285,7 +1362,7 @@
 				// Lee tabla de medidas
 				var val_medida = $(this).parents("tr").find(".medidas").val();
 				let check = this;
-			
+
 				medidas=[];
 				cantidades=[];
 				precios=[];
@@ -1300,8 +1377,9 @@
 						precios.push(value.precio);
 					});
 				}
-				
 				completarTalles(modulo_id, check, medidas, cantidades, precios);
+				cantItem = cantItem + 1;
+				alert('item ' + cantItem);
 			}
 		});
 		
@@ -1354,7 +1432,8 @@
 		
 		for (i = 0; i < offFactura; i++)
 		{
-			modal.find('#facturarMedidasModal').append(titulofactura_txt[i]+tallesfactura_txt[i]+medidasfactura_txt[i]+preciosfactura_txt[i]+tallesidfactura_txt[i]);
+				modal.find('#facturarMedidasModal').append(titulofactura_txt[i]+tallesfactura_txt[i]+medidasfactura_txt[i]+preciosfactura_txt[i]+tallesidfactura_txt[i]+
+					tallesfactura2_txt[i]+medidasfactura2_txt[i]+preciosfactura2_txt[i]+tallesidfactura2_txt[i]);
 		}
 
 		// Arma select de tipos de transacciones
@@ -1435,6 +1514,10 @@
 		medidasfactura_txt = [];
 		preciosfactura_txt = [];
 		tallesidfactura_txt = [];
+		tallesfactura2_txt = [];
+		medidasfactura2_txt = [];
+		preciosfactura2_txt = [];
+		tallesidfactura2_txt = [];
 		titulofactura_txt = [];
 		offFactura = 0;
 		$('#facturarOrdenTrabajoModal').modal('hide');
@@ -1458,19 +1541,15 @@
 		var mercaderia = $('#mercaderia').val();
 		var leyendaexportacion = $('#leyendaexportacion').val();
 
-		cantidadbulto = typeof normalizarCantidadBulto === 'function'
-			? normalizarCantidadBulto(cantidadbulto)
-			: (parseInt(cantidadbulto, 10) || 0);
-		$('#cantidadbulto').val(cantidadbulto === 0 ? '' : cantidadbulto);
-		if (cantidadbulto > 999999)
+		if (cantidadbulto < 1 || cantidadbulto > 999999)
 		{
-			alert("La cantidad de bultos no puede superar 999999");
+			alert("No permite facturar sin cargar bultos");
 			return false;
 		}
 		
 		$('#facturarOrdenTrabajoModal').modal('hide');
 
-		$.post(carpetaBase+"/ventas/facturarItemOt",
+		$.post(carpetaBase+'/ventas/facturarItemOt',
 				{
 					pedido_combinacion_id: pedido_combinacion_ids,
 					ordentrabajo_id: ordentrabajo_ids,
@@ -1511,6 +1590,10 @@
 		medidas_txt = "";
 		precios_txt = "";
 		tallesid_txt = "";
+		talles2_txt = "";
+		medidas2_txt = "";
+		precios2_txt = "";
+		tallesid2_txt = "";
 	});
 
 	$('#puntoventa_id').on('change', function () {
@@ -1522,7 +1605,7 @@
 
 	function leePuntoVenta(puntoventa_id)
 	{
-		var listarUri = carpetaBase+"/ventas/chequeapuntoventa/"+puntoventa_id;
+		var listarUri = carpetaBase+'/ventas/chequeapuntoventa/'+puntoventa_id;
 
 		$.get(listarUri, function(data){
 			
@@ -1544,30 +1627,19 @@
 	}
 
    	function asignaDatosCliente(cliente_id, flCambioCliente){
-		if (!cliente_id || !$.isNumeric(cliente_id) || parseInt(cliente_id, 10) <= 0) {
-			return;
-		}
-
-        $.get(carpetaBase+'/ventas/leercliente/'+cliente_id, function(data){
-            const transporte_id = data.transporte_id == null ? 0 : data.transporte_id;
-            const condicionventa_id = data.condicionventa_id;
-            const descuento = data.descuento;
-			const tiposuspension_id = data.tiposuspension_id;
+        $.get(''+carpetaBase+'/ventas/leercliente/'+cliente_id, function(data){
+            var datoscli = $.map(data, function(value, index){
+                return [value];
+            });
+            const vendedor_id = datoscli[1];
+            const transporte_id = datoscli[2];
+            const condicionventa_id = datoscli[3];
+            const descuento = datoscli[4];
+			const tiposuspension_id = datoscli[5];
 
 			if (flCambioCliente)
 			{
-				if (typeof window.aplicarVendedorPedidoDesdeCliente === 'function') {
-					window.aplicarVendedorPedidoDesdeCliente(data);
-				} else {
-					var vendedorId = data.vendedor_id;
-					if ((vendedorId == null || vendedorId === '') && data.vendedores && data.vendedores.id != null) {
-						vendedorId = data.vendedores.id;
-					}
-					if (vendedorId == null || vendedorId === '') {
-						vendedorId = 1;
-					}
-					$('#vendedor_id').val(String(vendedorId));
-				}
+				$('#vendedor_id').val(vendedor_id);
 				$('#transporte_id').val(transporte_id);
 				$('#condicionventa_id').val(condicionventa_id);
 				$('#descuento').val(descuento);
@@ -1606,7 +1678,7 @@
 	function otFacturada(ordentrabajo, pedido_combinacion_id)
 	{
 		// Busca si tiene factura asociada
-		var listarUri = carpetaBase+"/ventas/estadoot/"+ordentrabajo+"/"+pedido_combinacion_id;
+		var listarUri = carpetaBase+'/ventas/estadoot/'+ordentrabajo+'/'+pedido_combinacion_id;
             
 		$.get(listarUri, function(data){
 							

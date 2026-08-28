@@ -13,7 +13,7 @@ use Auth;
 
 class Precio extends Model
 {
-    protected $fillable = ['articulo_id', 'listaprecio_id', 'fechavigencia', 'moneda_id', 'precio', 'precioanterior', 'usuarioultcambio_id'];
+    protected $fillable = ['articulo_id', 'combinacion_id', 'listaprecio_id', 'fechavigencia', 'moneda_id', 'precio', 'precioanterior', 'usuarioultcambio_id'];
     protected $table = 'precio';
     protected $tableAnita = 'stkpre';
     protected $keyField = 'sku';
@@ -32,6 +32,11 @@ class Precio extends Model
     public function articulos()
     {
         return $this->belongsTo(Articulo::class, 'articulo_id');
+    }
+
+    public function combinaciones()
+    {
+        return $this->belongsTo(Combinacion::class, 'combinacion_id');
     }
 
     public function monedas()

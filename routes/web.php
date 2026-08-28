@@ -1325,8 +1325,8 @@ Route::get('stock/leercombinacionesactivas/{id}', 'Stock\CombinacionController@l
 Route::get('stock/leermodulos/{id}/{modulo?}', 'Stock\LineaController@leerModulos')->name('leer_modulos');
 Route::get('stock/leertalles/{id}', 'Stock\ModuloController@leerTalles')->name('leer_talles');
 
-Route::put('stock/product/contaduria/update/{id}', 'Stock\ArticuloController@updateContaduria')->name('product.contaduria.update');
-Route::put('stock/product/tecnica/update/{id}', 'Stock\ArticuloController@updateTecnica')->name('product.tecnica.update');
+Route::put('stock/product/contaduria/update/{id}', 'Stock\ArticuloFerliController@updateContaduria')->name('product.contaduria.update');
+Route::put('stock/product/tecnica/update/{id}', 'Stock\ArticuloFerliController@updateTecnica')->name('product.tecnica.update');
 
 Route::get('stock/combinacion/list', 'Stock\CombinacionController@list')->name('combinacion.list');
 Route::get('stock/combinacion/index/{id?}', 'Stock\CombinacionController@index')->name('combinacion.index');
@@ -1616,6 +1616,10 @@ Route::post('ventas/crearemisionot', 'Ventas\OrdentrabajoController@crearEmision
 // Clientes
 Route::get('ventas/repcliente', 'Ventas\ClienteController@indexReporteCliente')->name('rep_cliente');
 Route::post('ventas/crearrepcliente', 'Ventas\ClienteController@crearReporteCliente')->name('crear_repcliente');
+
+// Articulos vendidos (Ferli: combinaciones / importado vs nacional)
+Route::get('ventas/reparticulovendido', 'Ventas\RepArticuloVendidoController@index')->name('rep_articulovendido');
+Route::post('ventas/crearreparticulovendido', 'Ventas\RepArticuloVendidoController@crearReporteArticuloVendido')->name('crear_reparticulovendido');
 
 /*
  * Vendedores
@@ -2134,10 +2138,27 @@ Route::get('ventas/cliente/consultadeuda/{cliente_id}/{empresa_id}/{venta_id?}',
 Route::get('ventas/cliente/editacuentacorriente/{id}', 'Ventas\ClienteController@editarCuentaCorriente')->name('editar_cuentacorriente_cliente');
 Route::get('ventas/cliente/leercuentacorrienteaplicacion/{id}', 'Ventas\ClienteController@leerCuentaCorrienteAplicacion')->name('leer_cuentacorriente_aplicacion');
 /*
- * Pedidos — CRUD: INTERFORMING usa PedidoInterformingController (vistas pedido.interforming).
- * Bierzo/AGG mantienen PedidoController. Reportes kilos/OT siguen en PedidoController.
+ * Pedidos — CRUD:
+ * Calzados Ferli usa PedidoFerliController (combinaciones / módulos / talles).
+ * INTERFORMING usa PedidoInterformingController (vistas pedido.interforming).
+ * Bierzo/AGG mantienen PedidoController. Reportes kilos siguen en PedidoController.
  */
-if (strtoupper((string) config('app.empresa')) === 'INTERFORMING') {
+if ((string) config('app.empresa') === 'Calzados Ferli') {
+    Route::get('ventas/pedido', 'Ventas\PedidoFerliController@indexp')->name('pedido');
+    Route::get('ventas/pedido/crear', 'Ventas\PedidoFerliController@crear')->name('crear_pedido');
+    Route::post('ventas/pedido', 'Ventas\PedidoFerliController@guardar')->name('guardar_pedido');
+    Route::get('ventas/pedido/{id}/editar', 'Ventas\PedidoFerliController@editar')->name('editar_pedido')->middleware('modo.consulta');
+    Route::put('ventas/pedido/{id}', 'Ventas\PedidoFerliController@actualizar')->name('actualizar_pedido')->middleware('modo.consulta');
+    Route::delete('ventas/pedido/{id}', 'Ventas\PedidoFerliController@eliminar')->name('eliminar_pedido');
+    Route::post('ventas/pedido/limpiafiltro', 'Ventas\PedidoFerliController@limpiafiltro')->name('pedido.limpiafiltro');
+    Route::get('ventas/listarpedidopdf/{id}/{cliente_id?}', 'Ventas\PedidoFerliController@listarPedidoPdf')->name('listar_pedido_pdf');
+    Route::get('ventas/listapedido/{formato?}/{busqueda?}', 'Ventas\PedidoFerliController@listar')->name('lista_pedido');
+    Route::get('ventas/listarpedido/{id}/{cliente_id?}', 'Ventas\PedidoFerliController@listarPedido')->name('listar_pedido');
+    Route::get('ventas/listarprefactura/{id}/{itemid}/{descuentolinea?}', 'Ventas\PedidoFerliController@listarPreFactura')->name('listar_prefactura');
+    Route::get('ventas/anularitempedido/{id}/{codigoot}/{motivocierrepedido_id}/{cliente_id?}', 'Ventas\PedidoFerliController@anularItemPedido')->name('anular_item_pedido');
+    Route::get('ventas/pedido/cerrar', 'Ventas\PedidoFerliController@cerrarPedido')->name('cerrar_pedido');
+    Route::post('ventas/pedido/ejecutacierre', 'Ventas\PedidoFerliController@ejecutaCierre')->name('ejecuta_cierre_pedido');
+} elseif (strtoupper((string) config('app.empresa')) === 'INTERFORMING') {
     Route::get('ventas/pedido', 'Ventas\PedidoInterformingController@index')->name('pedido');
     Route::get('ventas/pedido/crear', 'Ventas\PedidoInterformingController@crear')->name('crear_pedido');
     Route::post('ventas/pedido', 'Ventas\PedidoInterformingController@guardar')->name('guardar_pedido');
@@ -2158,7 +2179,17 @@ if (strtoupper((string) config('app.empresa')) === 'INTERFORMING') {
     Route::post('ventas/pedido/limpiafiltro', 'Ventas\PedidoController@limpiafiltro')->name('pedido.limpiafiltro');
     Route::get('ventas/listarpedidopdf/{id}/{cliente_id?}', 'Ventas\PedidoController@listarPedidoPdf')->name('listar_pedido_pdf');
     Route::get('ventas/listapedido/{formato?}/{busqueda?}', 'Ventas\PedidoController@listar')->name('lista_pedido');
+}
 
+if ((string) config('app.empresa') !== 'Calzados Ferli') {
+    Route::get('ventas/listarpedido/{id}/{cliente_id?}', 'Ventas\PedidoController@listarPedido')->name('listar_pedido');
+    Route::get('ventas/listarprefactura/{id}/{itemid}/{descuentolinea?}', 'Ventas\PedidoController@listarPreFactura')->name('listar_prefactura');
+    Route::get('ventas/anularitempedido/{id}/{codigoot}/{motivocierrepedido_id}/{cliente_id?}', 'Ventas\PedidoController@anularItemPedido')->name('anular_item_pedido');
+    Route::get('ventas/pedido/cerrar', 'Ventas\PedidoController@cerrarPedido')->name('cerrar_pedido');
+    Route::post('ventas/pedido/ejecutacierre', 'Ventas\PedidoController@ejecutaCierre')->name('ejecuta_cierre_pedido');
+}
+
+if (strtoupper((string) config('app.empresa')) !== 'INTERFORMING') {
     Route::get('ventas/remito', 'Ventas\RemitoController@index')->name('remito');
     Route::get('ventas/remito/crear', 'Ventas\RemitoController@crear')->name('crear_remito');
     Route::post('ventas/remito', 'Ventas\RemitoController@guardar')->name('guardar_remito');
@@ -2169,12 +2200,6 @@ if (strtoupper((string) config('app.empresa')) === 'INTERFORMING') {
     Route::get('ventas/listarremitopdf/{id}', 'Ventas\RemitoController@listarRemitoPdf')->name('listar_remito_pdf');
     Route::get('ventas/listaremito/{formato?}/{busqueda?}', 'Ventas\RemitoController@listar')->name('lista_remito');
 }
-
-Route::get('ventas/listarpedido/{id}/{cliente_id?}', 'Ventas\PedidoController@listarPedido')->name('listar_pedido');
-Route::get('ventas/listarprefactura/{id}/{itemid}/{descuentolinea?}', 'Ventas\PedidoController@listarPreFactura')->name('listar_prefactura');
-Route::get('ventas/anularitempedido/{id}/{codigoot}/{motivocierrepedido_id}/{cliente_id?}', 'Ventas\PedidoController@anularItemPedido')->name('anular_item_pedido');
-Route::get('ventas/pedido/cerrar', 'Ventas\PedidoController@cerrarPedido')->name('cerrar_pedido');
-Route::post('ventas/pedido/ejecutacierre', 'Ventas\PedidoController@ejecutaCierre')->name('ejecuta_cierre_pedido');
 Route::get('ventas/estadoitempedido/{pedido_articulo_id?}', 'Ventas\PedidoController@estadoItemPedido')->name('estado_item_pedido');
 Route::post('ventas/calculafacturaporpedido', 'Ventas\FacturacionController@calculaFacturaPorPedido')->name('calcula_factura_por_pedido');
 Route::post('ventas/facturarporpedido', 'Ventas\FacturacionController@facturarPorPedido')->name('facturar_por_pedido');
@@ -2202,7 +2227,11 @@ Route::get('ventas/ordenestrabajo/crear', 'Ventas\OrdentrabajoController@crear')
 Route::get('ventas/ordenestrabajo/{id}/editar', 'Ventas\OrdentrabajoController@editar')->name('editar_ordentrabajo');
 Route::put('ventas/ordenestrabajo/{id}', 'Ventas\OrdentrabajoController@actualizar')->name('actualizar_ordentrabajo');
 Route::delete('ventas/ordenestrabajo/{id}', 'Ventas\OrdentrabajoController@eliminar')->name('eliminar_ordentrabajo');
-Route::post('ventas/pedido/consultapendientesot', 'Ventas\PedidoController@consultarPendienteOt')->name('consultar_pendiente_ot');
+if ((string) config('app.empresa') === 'Calzados Ferli') {
+    Route::post('ventas/pedido/consultapendientesot', 'Ventas\PedidoFerliController@consultarPendienteOT')->name('consultar_pendiente_ot');
+} else {
+    Route::post('ventas/pedido/consultapendientesot', 'Ventas\PedidoController@consultarPendienteOt')->name('consultar_pendiente_ot');
+}
 Route::post('ventas/ordenestrabajo/generar', 'Ventas\OrdentrabajoController@generar')->name('generar_ordentrabajo');
 Route::get('ventas/guardaordenestrabajo/{origen}/{ids}/{checkotstock}/{ordentrabajo_stock_codigo}/{deposito_id}/{leyenda?}',
     'Ventas\OrdentrabajoController@guardar')->name('guardar_ordentrabajo');
@@ -2288,7 +2317,11 @@ Route::get('produccion/ctrlsecuencia/{ots}/{operacion}/{tarea}/{pedido}', 'Produ
 
 // Llamadas desde consulta de OT
 Route::post('produccion/empacarTarea', 'Produccion\MovimientoOrdentrabajoController@empacarTarea')->name('empacar_tarea');
-Route::post('ventas/actualizarpedido', 'Ventas\PedidoController@actualizaItemPedido')->name('actualizar_pedido_desdeoc');
+if ((string) config('app.empresa') === 'Calzados Ferli') {
+    Route::post('ventas/actualizarpedido', 'Ventas\PedidoFerliController@actualizaItemPedido')->name('actualizar_pedido_desdeoc');
+} else {
+    Route::post('ventas/actualizarpedido', 'Ventas\PedidoController@actualizaItemPedido')->name('actualizar_pedido_desdeoc');
+}
 Route::get('produccion/leerTareas/{ot_id}', 'Produccion\MovimientoOrdentrabajoController@leerTareas')->name('leer_tareas');
 Route::post('ventas/facturarItemOt', 'Ventas\FacturacionController@facturarItemOt')->name('facturar_item_ot');
 

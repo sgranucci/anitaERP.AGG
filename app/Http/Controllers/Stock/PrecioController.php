@@ -8,6 +8,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionPrecio;
 use App\Http\Requests\ValidacionPrecioActualizacionCategoria;
 use App\Imports\Stock\PrecioImport;
+use App\Imports\Stock\PrecioImportFerli;
+use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Listaprecio;
@@ -147,6 +149,42 @@ class PrecioController extends Controller
             ->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))
             ->orderBy('codigo')
             ->get(['id', 'codigo', 'nombre']);
+    }
+
+    public function asignaPrecio($articulo_id, $talle_id)
+    {
+        if (MovimientoStockFerliSupport::esCalzadosFerli()) {
+            $fechaHoy = Carbon::now();
+            $talle_id = preg_replace('([^A-Za-z0-9,])', '', $talle_id);
+            $array_talle = explode(',', $talle_id);
+            $array_precio = [];
+            if ($talle_id) {
+                $talle = Talle::select('nombre', 'id')->whereIn('id', $array_talle)->get();
+                $precioServiceFerli = app(\App\Services\Stock\PrecioServiceFerli::class);
+                foreach ($talle as $value) {
+                    $precio = $precioServiceFerli->asignaPrecio($articulo_id, 0, $value->id, $fechaHoy);
+                    if (count($precio) > 0) {
+                        $array_precio[] = [
+                            'precio' => $precio[0]['precio'],
+                            'listaprecio_id' => $precio[0]['listaprecio_id'],
+                            'moneda_id' => $precio[0]['moneda_id'],
+                            'incluyeimpuesto' => $precio[0]['incluyeimpuesto'],
+                        ];
+                    } else {
+                        $array_precio[] = [
+                            'precio' => 0,
+                            'listaprecio_id' => 0,
+                            'moneda_id' => 1,
+                            'incluyeimpuesto' => 1,
+                        ];
+                    }
+                }
+            }
+
+            return $array_precio;
+        }
+
+        return $this->asignaPrecioPorTalle($articulo_id, $talle_id);
     }
 
     public function asignaPrecioPorTalle($articulo_id, $talle_id)
@@ -457,6 +495,10 @@ class PrecioController extends Controller
         $listaprecio_query = Listaprecio::all();
         $moneda_query = Moneda::all();
 
+        if (MovimientoStockFerliSupport::esCalzadosFerli()) {
+            return view('stock.precio.crearimportacion_ferli', compact('listaprecio_query', 'moneda_query'));
+        }
+
         return view('stock.precio.crearimportacion', compact('listaprecio_query', 'moneda_query'));
     }
 
@@ -493,6 +535,10 @@ class PrecioController extends Controller
 
     public function importar(Request $request)
     {
+        if (MovimientoStockFerliSupport::esCalzadosFerli()) {
+            return $this->importarFerli($request);
+        }
+
         $formato = (string) $request->input('formato', PrecioImportColumnasSupport::FORMATO_SIMPLE);
 
         $this->validate($request, [
@@ -585,6 +631,41 @@ class PrecioController extends Controller
             return back()
                 ->withInput()
                 ->with('mensaje-error', $exception->getMessage());
+        }
+    }
+
+    private function importarFerli(Request $request)
+    {
+        ini_set('memory_limit', '512M');
+        ini_set('max_execution_time', '0');
+
+        $this->validate($request, [
+            'file' => 'required|mimetypes:'.
+                'application/vnd.ms-office,'.
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,'.
+                'application/vnd.ms-excel',
+            'fechavigencia' => 'required|string',
+            'moneda_id' => 'required|integer|exists:moneda,id',
+        ]);
+
+        $headings = (new HeadingRowImport(1))->toArray($request->file('file'));
+
+        try {
+            set_time_limit(0);
+
+            DB::beginTransaction();
+            Excel::import(new PrecioImportFerli(
+                $request->input('fechavigencia'),
+                (int) $request->input('moneda_id'),
+                $headings
+            ), $request->file('file'));
+            DB::commit();
+
+            return back()->with('mensaje', 'Precios importados correctamente');
+        } catch (\Exception $exception) {
+            DB::rollBack();
+
+            return back()->with('mensaje', $exception->getMessage());
         }
     }
 
