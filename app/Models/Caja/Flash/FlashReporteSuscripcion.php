@@ -3,6 +3,7 @@
 namespace App\Models\Caja\Flash;
 
 use App\Models\Seguridad\Usuario;
+use App\Support\Caja\Flash\FlashReporteAggSmtpReintentoSupport;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -95,6 +96,17 @@ class FlashReporteSuscripcion extends Model
             6 => 'Sábado',
             7 => 'Domingo',
         ];
+    }
+
+    public function esperaReintentoSmtp(): bool
+    {
+        return $this->ultimo_estado === self::ESTADO_ERROR
+            && FlashReporteAggSmtpReintentoSupport::esErrorTransporte((string) $this->ultimo_mensaje);
+    }
+
+    public function minutosReintentoSmtp(): int
+    {
+        return FlashReporteAggSmtpReintentoSupport::esperaMinutos();
     }
 
     public function periodicidadTexto(): string

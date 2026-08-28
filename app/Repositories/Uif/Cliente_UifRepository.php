@@ -167,6 +167,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
     /**
      * Si fotodocumento está vacío o el archivo no está en disco, busca el DNI
      * en /scan (incl. Kandiko/rebisco) y lo referencia en BD.
+     * Si lo asociado es una DDJJ/NOSIS o un retrato de tesorería copiado, lo descarta.
      */
     private function relinkFotodocumentoDesdeDisco(Cliente_Uif $cliente_uif): void
     {
@@ -178,12 +179,23 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
         $resolvedPath = $storedBasename !== ''
             ? ClienteUifFotoDocumento::absolutePathForBasename($storedBasename)
             : null;
+        $descartoCopiaNoDni = false;
         if ($resolvedPath !== null && is_file($resolvedPath)) {
-            ClienteUifFotoDocumento::promoverADniMountCanonico($resolvedPath, $nroDocumento);
+            if (ClienteUifFotoDocumento::descartarCopiaCanonicoSiNoEsDni($cid, $resolvedPath, $nroDocumento)) {
+                $descartoCopiaNoDni = true;
+                $resolvedPath = null;
+            } else {
+                ClienteUifFotoDocumento::promoverADniMountCanonico($resolvedPath, $nroDocumento);
 
-            return;
+                return;
+            }
         }
         $path = ClienteUifFotoDocumento::findFirstMatchingPath($nroDocumento, $inroclienteidParaGuardar);
+        if ($path !== null && is_file($path)
+            && ClienteUifFotoDocumento::descartarCopiaCanonicoSiNoEsDni($cid, $path, $nroDocumento)) {
+            $descartoCopiaNoDni = true;
+            $path = null;
+        }
         $fotoBasename = null;
         if ($path !== null && is_file($path)) {
             $promoted = ClienteUifFotoDocumento::promoverADniMountCanonico($path, $nroDocumento);
@@ -195,6 +207,9 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
         if ($fotoBasename !== null && $fotoBasename !== $storedBasename) {
             $cliente_uif->update(['fotodocumento' => $fotoBasename]);
             $cliente_uif->fotodocumento = $fotoBasename;
+        } elseif ($descartoCopiaNoDni && $fotoBasename === null && $storedBasename !== '') {
+            $cliente_uif->update(['fotodocumento' => null]);
+            $cliente_uif->fotodocumento = null;
         }
     }
 

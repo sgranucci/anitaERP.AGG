@@ -127,6 +127,27 @@ class PerdidaPersonalController extends Controller
             ->with('mensaje', 'Pérdida de personal actualizada con éxito');
     }
 
+    public function imprimirPdf($id)
+    {
+        if (! can('listar-perdida-personal', false) && ! can('editar-perdida-personal', false)) {
+            return redirect()->route('inicio')->with('mensaje', 'No tiene permisos para imprimir la pérdida de personal.');
+        }
+
+        $data = $this->repository->findOrFail($id);
+        $this->assertAccesoRegistro($data);
+        $data->loadMissing(['empresa.localidad']);
+
+        $html = view('caja.perdida_personal.pdf', compact('data'))->render();
+
+        $pdf = \App::make('dompdf.wrapper');
+        $pdf->setPaper('a4', 'portrait');
+        $pdf->loadHTML($html);
+
+        $nombreArchivo = 'Perdida_personal_'.preg_replace('/[^\w\-]+/', '_', (string) $data->numero).'.pdf';
+
+        return $pdf->stream($nombreArchivo);
+    }
+
     public function eliminar(Request $request, $id)
     {
         can('borrar-perdida-personal');

@@ -22,9 +22,8 @@
                     <ul class="mb-0 pl-3">
                         <li><strong>Facturaci&oacute;n</strong> = &Sigma; cierres de turno + post-cierre Waitry (+ totem / agregados CAEA si hay).</li>
                         <li><strong>Flash</strong> = <code>flash_ayb</code> Informix (caja) de la misma fecha de jornada.
-                            Mientras Anita no discrimine vending (<code>flash_ayb</code> = AyB + vending), se resta el vending ERP
-                            antes de comparar; cuando el flash viva en ERP con vending separado, se desactiva
-                            <code>GASTRONOMIA_CONCILIACION_CONTROL_FLASH_AYB_INCLUYE_VENDING</code>.</li>
+                            Informix no discrimina vending (<code>flash_ayb</code> = AyB + vending); se resta el vending ERP
+                            antes de comparar con la facturaci&oacute;n gastronom&iacute;a.</li>
                         <li><strong>Asientos Waitry</strong> = snapshot del proceso de cierre (mismos componentes que la facturaci&oacute;n).</li>
                         <li><strong>Mayor Anita</strong> = neto haber (subdiario+ctamov) del d&iacute;a en las cuentas del control
                             (ventas / kiosco / tabaco / IVA d&eacute;bito y cr&eacute;dito fiscal), solo detalle gastronom&iacute;a;

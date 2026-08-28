@@ -2738,6 +2738,8 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::get('caja/perdida-personal/catalogos/resolver', 'Caja\PerdidaPersonalController@resolverCatalogo')
         ->name('resolver_catalogo_perdida_personal');
     Route::get('caja/perdida-personal/{id}/editar', 'Caja\PerdidaPersonalController@editar')->name('editar_perdida_personal');
+    Route::get('caja/perdida-personal/{id}/imprimir-pdf', 'Caja\PerdidaPersonalController@imprimirPdf')
+        ->name('imprimir_pdf_perdida_personal');
     Route::put('caja/perdida-personal/{id}', 'Caja\PerdidaPersonalController@actualizar')->name('actualizar_perdida_personal');
     Route::delete('caja/perdida-personal/{id}', 'Caja\PerdidaPersonalController@eliminar')->name('eliminar_perdida_personal');
 

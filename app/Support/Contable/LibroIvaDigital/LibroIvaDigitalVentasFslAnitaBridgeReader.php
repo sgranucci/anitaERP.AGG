@@ -15,6 +15,11 @@ use Illuminate\Support\Facades\Log;
  */
 final class LibroIvaDigitalVentasFslAnitaBridgeReader
 {
+    private const DIAS_POR_LOTE = 10;
+
+    /** @var array<string, list<array<string, mixed>>> */
+    private static array $cachePeriodo = [];
+
     /**
      * @return list<array<string, mixed>>
      */
@@ -24,17 +29,50 @@ final class LibroIvaDigitalVentasFslAnitaBridgeReader
         string $hastaYmd,
         bool $porFechaJornada = false,
     ): array {
+        $cacheKey = $empresaId.'|'.$desdeYmd.'|'.$hastaYmd.'|'.($porFechaJornada ? '1' : '0');
+        if (isset(self::$cachePeriodo[$cacheKey])) {
+            return self::$cachePeriodo[$cacheKey];
+        }
+
         $empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId);
         if ($empresaAnita <= 0) {
-            return [];
+            return self::$cachePeriodo[$cacheKey] = [];
         }
 
         $desde = (int) str_replace('-', '', $desdeYmd);
         $hasta = (int) str_replace('-', '', $hastaYmd);
         if ($desde <= 0 || $hasta <= 0 || $hasta < $desde) {
-            return [];
+            return self::$cachePeriodo[$cacheKey] = [];
         }
 
+        $filas = $this->listarVentaRango($empresaAnita, $desde, $hasta, $porFechaJornada);
+        if ($filas !== null) {
+            return self::$cachePeriodo[$cacheKey] = $filas;
+        }
+
+        $acumulado = [];
+        foreach (LibroIvaDigitalAnitaPeriodoSupport::partirRangoYmd($desde, $hasta, self::DIAS_POR_LOTE) as [$loteDesde, $loteHasta]) {
+            $lote = $this->listarVentaRango($empresaAnita, $loteDesde, $loteHasta, $porFechaJornada);
+            if ($lote === null) {
+                continue;
+            }
+            foreach ($lote as $fila) {
+                $acumulado[] = $fila;
+            }
+        }
+
+        return self::$cachePeriodo[$cacheKey] = $acumulado;
+    }
+
+    /**
+     * @return list<array<string, mixed>>|null
+     */
+    private function listarVentaRango(
+        int $empresaAnita,
+        int $desde,
+        int $hasta,
+        bool $porFechaJornada,
+    ): ?array {
         $campoFecha = $porFechaJornada ? 'ven_fecha_vto' : 'ven_fecha';
         // Descripción / textos al final: evita corrimiento por | en el bridge.
         $campos = implode(',', [
@@ -60,8 +98,7 @@ final class LibroIvaDigitalVentasFslAnitaBridgeReader
             .' AND '.$campoFecha.' <= '.$hasta;
 
         try {
-            $api = new ApiAnita();
-            $filas = ApiAnita::decodificarListaFilas($api->apiCall([
+            $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita())->apiCall([
                 'acc' => 'list',
                 'sistema' => 'ventas',
                 'tabla' => 'venta',
@@ -71,18 +108,28 @@ final class LibroIvaDigitalVentasFslAnitaBridgeReader
             ]));
         } catch (\Throwable $e) {
             Log::warning('libro_iva_digital.fsl_anita_bridge', [
-                'empresa_id' => $empresaId,
                 'empresa_anita' => $empresaAnita,
                 'desde' => $desde,
                 'hasta' => $hasta,
                 'error' => $e->getMessage(),
             ]);
 
-            return [];
+            return null;
+        }
+
+        if ($parsed['error_lectura'] !== null) {
+            Log::warning('libro_iva_digital.fsl_anita_bridge', [
+                'empresa_anita' => $empresaAnita,
+                'desde' => $desde,
+                'hasta' => $hasta,
+                'error' => $parsed['error_lectura'],
+            ]);
+
+            return null;
         }
 
         $resultado = [];
-        foreach ($filas as $fila) {
+        foreach ($parsed['filas'] as $fila) {
             $resultado[] = (array) $fila;
         }
 

@@ -12,6 +12,32 @@ use Carbon\Carbon;
  */
 final class FlashReporteAggMapeoSupport
 {
+    public const ETIQUETA_TOTAL_FINAL = 'Total final';
+
+    public const ETIQUETA_MTD_AVERAGE = 'MTD Average';
+
+    public const ETIQUETA_TOTAL_MES_ANT = 'Total final mes ant.  ';
+
+    public const ETIQUETA_MTD_MES_ANT = 'MTD average mes ant.  ';
+
+    public const ETIQUETA_TOTAL_ANIO_ANT = 'Total final anio ant. ';
+
+    public const ETIQUETA_MTD_ANIO_ANT = 'MTD average anio ant. ';
+
+    public const ETIQUETA_PROM_PCT_MES_ANT = 'Prom.diario mes ant.% ';
+
+    public const ETIQUETA_PROM_MONTO_MES_ANT = 'Prom.diario mes ant.$ ';
+
+    public const ETIQUETA_PROM_PCT_ANIO_ANT = 'Prom.diario anio ant.%';
+
+    public const ETIQUETA_PROM_MONTO_ANIO_ANT = 'Prom.diario anio ant.$';
+
+    /** @var list<string> */
+    private const COLS_PROM_DIARIO = [
+        'C', 'E', 'F', 'G', 'K', 'M', 'N', 'O', 'S', 'T', 'U',
+        'AD', 'AE', 'AG', 'AH', 'AI', 'AK', 'AL', 'AN', 'AU',
+    ];
+
     /**
      * @param  array<string, mixed>  $m  Métricas enriquecidas (FlashCajaLFlashCalculoSupport)
      * @return array<string, float|int|string>
@@ -114,7 +140,7 @@ final class FlashReporteAggMapeoSupport
         $es = self::normalizarDiaEs($fecha->copy()->locale('es')->isoFormat('ddd'));
         $en = ucfirst(mb_strtolower($fecha->copy()->locale('en')->isoFormat('ddd')));
 
-        return str_pad($es.'/'.$en, 12, ' ', STR_PAD_RIGHT);
+        return str_pad($es.'/'.$en, 11, ' ', STR_PAD_RIGHT);
     }
 
     public static function etiquetaFecha(Carbon $fecha): string
@@ -148,6 +174,89 @@ final class FlashReporteAggMapeoSupport
     public static function ratioDesdePct(float $pct): float
     {
         return round($pct / 100, 6);
+    }
+
+    /**
+     * Filas del bloque Total / MTD / comparativos, relativas al último día cargado.
+     * Agosto al 26 → última diaria 34; julio completo → 39.
+     *
+     * @return array<string, int>
+     */
+    public static function filasConsolidados(int $filaUltimoDia): array
+    {
+        return [
+            'total_final' => $filaUltimoDia + 1,
+            'mtd_average' => $filaUltimoDia + 3,
+            'titulo_mes_ant' => $filaUltimoDia + 8,
+            'total_mes_ant' => $filaUltimoDia + 9,
+            'mtd_mes_ant' => $filaUltimoDia + 11,
+            'prom_pct_mes_ant' => $filaUltimoDia + 14,
+            'prom_monto_mes_ant' => $filaUltimoDia + 15,
+            'titulo_anio_ant' => $filaUltimoDia + 18,
+            'total_anio_ant' => $filaUltimoDia + 19,
+            'mtd_anio_ant' => $filaUltimoDia + 21,
+            'prom_pct_anio_ant' => $filaUltimoDia + 24,
+            'prom_monto_anio_ant' => $filaUltimoDia + 25,
+        ];
+    }
+
+    public static function tituloComparativoMesAnt(Carbon $desde): string
+    {
+        return 'Comparativo mes anterior '.$desde->copy()->subMonthNoOverflow()->year;
+    }
+
+    public static function tituloComparativoAnioAnt(Carbon $desde): string
+    {
+        return 'Comparativo igual periodo '.($desde->year - 1);
+    }
+
+    /**
+     * @param  array<string, mixed>  $actual
+     * @param  array<string, mixed>  $base
+     * @return array<string, float>
+     */
+    public static function filaPromedioDiarioPct(array $actual, array $base): array
+    {
+        return self::variacionColumnas($actual, $base, true);
+    }
+
+    /**
+     * @param  array<string, mixed>  $actual
+     * @param  array<string, mixed>  $base
+     * @return array<string, float>
+     */
+    public static function filaPromedioDiarioMonto(array $actual, array $base): array
+    {
+        return self::variacionColumnas($actual, $base, false);
+    }
+
+    /**
+     * @param  array<string, mixed>  $actual
+     * @param  array<string, mixed>  $base
+     * @return array<string, float>
+     */
+    private static function variacionColumnas(array $actual, array $base, bool $porcentaje): array
+    {
+        $a = self::filaDatos($actual, Carbon::create(2000, 1, 1));
+        $b = self::filaDatos($base, Carbon::create(2000, 1, 1));
+        $out = [];
+        foreach (self::COLS_PROM_DIARIO as $col) {
+            if (! $porcentaje && $col === 'C') {
+                continue;
+            }
+            $av = (float) ($a[$col] ?? 0);
+            $bv = (float) ($b[$col] ?? 0);
+            if ($porcentaje) {
+                if (abs($bv) < 0.0000001) {
+                    continue;
+                }
+                $out[$col] = round(($av / $bv) - 1, 6);
+                continue;
+            }
+            $out[$col] = round($av - $bv, 2);
+        }
+
+        return $out;
     }
 
     private static function normalizarDiaEs(string $dia): string

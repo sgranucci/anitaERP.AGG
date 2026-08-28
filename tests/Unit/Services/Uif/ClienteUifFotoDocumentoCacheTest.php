@@ -72,6 +72,20 @@ final class ClienteUifFotoDocumentoCacheTest extends TestCase
         @unlink($path);
     }
 
+    public function test_encuentra_dni_en_subcarpeta_dni_viejos(): void
+    {
+        $mount = sys_get_temp_dir().DIRECTORY_SEPARATOR.'uif_dni_viejos_'.uniqid('', true);
+        $nested = $mount.DIRECTORY_SEPARATOR.'DNI VIEJOS';
+        self::assertTrue(mkdir($nested, 0777, true));
+        $pdf = $nested.DIRECTORY_SEPARATOR.'95275896.pdf';
+        file_put_contents($pdf, '%PDF-1.4');
+
+        $this->assertSame($pdf, ClienteUifFotoDocumento::findInDniMountTree($mount, '95275896'));
+        $this->assertSame($pdf, ClienteUifFotoDocumento::findBasenameInDniMountTree($mount, '95275896.pdf'));
+
+        $this->rmTree($mount);
+    }
+
     public function test_encuentra_dni_en_subcarpeta_kandiko_rebisco(): void
     {
         $mount = sys_get_temp_dir().DIRECTORY_SEPARATOR.'uif_dni_mount_'.uniqid('', true);
@@ -111,6 +125,41 @@ final class ClienteUifFotoDocumentoCacheTest extends TestCase
         $this->assertSame('scan-rebisco', file_get_contents((string) $otraVez));
 
         $this->rmTree($mount);
+    }
+
+    public function test_no_trata_retrato_de_tesoreria_como_dni(): void
+    {
+        $teso = sys_get_temp_dir().DIRECTORY_SEPARATOR.'uif_teso_'.uniqid('', true);
+        $mount = sys_get_temp_dir().DIRECTORY_SEPARATOR.'uif_dni_teso_'.uniqid('', true);
+        self::assertTrue(mkdir($teso, 0777, true));
+        self::assertTrue(mkdir($mount, 0777, true));
+        $retrato = $teso.DIRECTORY_SEPARATOR.'31503720.jpg';
+        file_put_contents($retrato, 'retrato-caja');
+        $copia = $mount.DIRECTORY_SEPARATOR.'31503720.jpg';
+        file_put_contents($copia, 'retrato-caja');
+
+        $this->assertTrue(ClienteUifFotoDocumento::esRutaFotoTesoreria($retrato, [$teso]));
+        $this->assertFalse(ClienteUifFotoDocumento::esRutaFotoTesoreria($copia, [$teso]));
+        $this->assertTrue(ClienteUifFotoDocumento::esCopiaDeFotoTesoreria($copia, '31503720', [$teso]));
+        $this->assertFalse(ClienteUifFotoDocumento::esCopiaDeFotoTesoreria($retrato, '31503720', [$teso]));
+
+        $this->rmTree($teso);
+        $this->rmTree($mount);
+    }
+
+    public function test_no_usa_declaracion_ni_nosis_como_foto_dni(): void
+    {
+        $this->assertTrue(ClienteUifFotoDocumento::esNombreAdjuntoNoDni('319-DDJJPEP_Maidanaj_260425.pdf'));
+        $this->assertTrue(ClienteUifFotoDocumento::esNombreAdjuntoNoDni('DDJJ_24000014_MAIDANA.pdf'));
+        $this->assertTrue(ClienteUifFotoDocumento::esNombreAdjuntoNoDni('319-MAIDANA_NOSIS_290425.pdf'));
+        $this->assertFalse(ClienteUifFotoDocumento::esNombreAdjuntoNoDni('24000014.pdf'));
+        $this->assertFalse(ClienteUifFotoDocumento::esNombreAdjuntoNoDni('dni_frente_24000014.jpg'));
+
+        $this->assertNull(ClienteUifFotoDocumento::puntajeCandidatoFotoDni('319-DDJJPEP_Maidanaj_260425.pdf', '24000014'));
+        $this->assertNull(ClienteUifFotoDocumento::puntajeCandidatoFotoDni('DDJJ_24000014_MAIDANA.pdf', '24000014'));
+        $this->assertSame(0, ClienteUifFotoDocumento::puntajeCandidatoFotoDni('319-MAIDANAJUSTAVOALBERTO_290425.pdf', '24000014'));
+        $this->assertSame(100, ClienteUifFotoDocumento::puntajeCandidatoFotoDni('24000014.pdf', '24000014'));
+        $this->assertGreaterThan(0, ClienteUifFotoDocumento::puntajeCandidatoFotoDni('dni_frente_maidana.jpg', '24000014'));
     }
 
     public function test_promueve_solo_archivos_nombrados_por_dni(): void

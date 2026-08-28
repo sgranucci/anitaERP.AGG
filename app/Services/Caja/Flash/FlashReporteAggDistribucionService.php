@@ -4,6 +4,7 @@ namespace App\Services\Caja\Flash;
 
 use App\Mail\Caja\Flash\FlashReporteAggDistribucion;
 use App\Models\Caja\Flash\FlashReporteSuscripcion;
+use App\Support\Caja\Flash\FlashReporteAggSmtpReintentoSupport;
 use App\Support\Caja\Flash\FlashReporteAggSuscripcionSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -76,23 +77,19 @@ class FlashReporteAggDistribucionService
             );
         }
 
-        try {
-            Mail::to($destinatarios)->send(new FlashReporteAggDistribucion(
-                $suscripcion,
-                $periodo['desde'],
-                $periodo['hasta'],
-                $archivo,
-            ));
-        } catch (\Throwable $e) {
-            Log::error('Flash Report AGG: falló el envío', [
-                'suscripcion_id' => $suscripcion->id,
-                'error' => $e->getMessage(),
-            ]);
+        $errorMail = $this->enviarMailConReintento(
+            $suscripcion,
+            $periodo['desde'],
+            $periodo['hasta'],
+            $archivo,
+            $destinatarios,
+        );
+        if ($errorMail !== null) {
             $this->limpiar($archivo);
 
             return $this->resultado(
                 FlashReporteSuscripcion::ESTADO_ERROR,
-                'No se pudo enviar el mail: '.$e->getMessage(),
+                FlashReporteAggSmtpReintentoSupport::mensajeConAvisoReintento($errorMail),
                 $destinatarios,
                 $dias
             );
@@ -112,6 +109,48 @@ class FlashReporteAggDistribucionService
             $dias,
             [$archivo['nombre']]
         );
+    }
+
+    /**
+     * @param  array{path: string, nombre: string, mime: string}  $archivo
+     * @param  list<string>  $destinatarios
+     */
+    private function enviarMailConReintento(
+        FlashReporteSuscripcion $suscripcion,
+        Carbon $desde,
+        Carbon $hasta,
+        array $archivo,
+        array $destinatarios,
+    ): ?string {
+        $intentos = FlashReporteAggSmtpReintentoSupport::intentosInmediatos();
+        $ultimoError = null;
+
+        for ($intento = 1; $intento <= $intentos; $intento++) {
+            try {
+                Mail::to($destinatarios)->send(new FlashReporteAggDistribucion(
+                    $suscripcion,
+                    $desde,
+                    $hasta,
+                    $archivo,
+                ));
+
+                return null;
+            } catch (\Throwable $e) {
+                $ultimoError = $e->getMessage();
+                $reintentable = FlashReporteAggSmtpReintentoSupport::esErrorTransporte($ultimoError);
+                Log::error('Flash Report AGG: falló el envío', [
+                    'suscripcion_id' => $suscripcion->id,
+                    'intento' => $intento,
+                    'reintentable' => $reintentable,
+                    'error' => $ultimoError,
+                ]);
+                if (! $reintentable || $intento >= $intentos) {
+                    return $ultimoError;
+                }
+            }
+        }
+
+        return $ultimoError;
     }
 
     /**

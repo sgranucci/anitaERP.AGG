@@ -58,4 +58,36 @@ class FlashReporteAggSuscripcionSupportTest extends TestCase
         $this->assertTrue($support->correspondeEnviar($s, Carbon::create(2026, 8, 19, 16, 5)));
         $this->assertFalse($support->correspondeEnviar($s, Carbon::create(2026, 8, 19, 15, 59)));
     }
+
+    public function test_reintenta_si_office365_fallo_hace_rato(): void
+    {
+        $support = new FlashReporteAggSuscripcionSupport;
+        $s = new FlashReporteSuscripcion([
+            'activo' => true,
+            'periodicidad' => FlashReporteSuscripcion::PERIODICIDAD_DIARIA,
+            'hora' => '16:00',
+            'ultimo_estado' => FlashReporteSuscripcion::ESTADO_ERROR,
+            'ultimo_mensaje' => 'No se pudo enviar el mail: Connection could not be established with host "smtp.office365.com:587" (Network is unreachable). Se reintentará automáticamente en unos minutos.',
+        ]);
+        $s->ultima_ejecucion = Carbon::create(2026, 8, 19, 16, 54, 0);
+
+        $this->assertFalse($support->correspondeEnviar($s, Carbon::create(2026, 8, 19, 17, 0)));
+        $this->assertTrue($support->correspondeEnviar($s, Carbon::create(2026, 8, 19, 17, 10)));
+        $this->assertFalse($support->correspondeEnviar($s, Carbon::create(2026, 8, 20, 10, 0)));
+    }
+
+    public function test_no_reintenta_error_que_no_es_smtp(): void
+    {
+        $support = new FlashReporteAggSuscripcionSupport;
+        $s = new FlashReporteSuscripcion([
+            'activo' => true,
+            'periodicidad' => FlashReporteSuscripcion::PERIODICIDAD_DIARIA,
+            'hora' => '16:00',
+            'ultimo_estado' => FlashReporteSuscripcion::ESTADO_ERROR,
+            'ultimo_mensaje' => 'Sin destinatarios válidos: revisá los mails del envío.',
+        ]);
+        $s->ultima_ejecucion = Carbon::create(2026, 8, 19, 16, 5, 0);
+
+        $this->assertFalse($support->correspondeEnviar($s, Carbon::create(2026, 8, 19, 17, 30)));
+    }
 }

@@ -201,6 +201,12 @@ return [
             env('FLASH_REPORTE_AGG_DISTRIBUCION', true),
             FILTER_VALIDATE_BOOLEAN
         ),
+        'reintento_smtp' => filter_var(
+            env('FLASH_REPORTE_AGG_REINTENTO_SMTP', true),
+            FILTER_VALIDATE_BOOLEAN
+        ),
+        'reintento_minutos' => (int) env('FLASH_REPORTE_AGG_REINTENTO_MINUTOS', 15),
+        'reintento_intentos' => (int) env('FLASH_REPORTE_AGG_REINTENTO_INTENTOS', 2),
         'plantilla' => env(
             'FLASH_REPORTE_AGG_PLANTILLA',
             resource_path('templates/caja/flash/plantilla-flash-agg.xlsx')

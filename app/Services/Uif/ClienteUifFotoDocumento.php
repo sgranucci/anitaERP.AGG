@@ -130,21 +130,50 @@ class ClienteUifFotoDocumento
     }
 
     /**
-     * Rutas donde buscar fotos ya existentes (montaje + fallback + legacy).
+     * Rutas de lectura de foto DNI. No incluye fotos_clientes* (retratos / pago_* de tesorería).
      *
      * @return array<int, string>
      */
     public static function storagePathsForRead(): array
     {
-        $paths = array_filter(array_merge(
-            ClienteUifArchivoStorage::dirsFotosPremioTodos(),
-            [
-                self::basePath(),
-                self::fallbackPath(),
-            ]
-        ));
+        $paths = array_filter([
+            self::anitaDniMount(),
+            self::fallbackPath(),
+        ]);
 
         return array_values(array_unique($paths));
+    }
+
+    /**
+     * Carpetas de retrato/pago de tesorería. No son DNI.
+     *
+     * @return array<int, string>
+     */
+    public static function directoriosFotoTesoreria(?array $override = null): array
+    {
+        if ($override !== null) {
+            return array_values(array_filter($override));
+        }
+        try {
+            return ClienteUifArchivoStorage::dirsFotosPremioTodos();
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    public static function esRutaFotoTesoreria(string $path, ?array $prizeDirs = null): bool
+    {
+        $real = realpath($path) ?: $path;
+        $real = rtrim(str_replace(['\\'], ['/'], $real), '/');
+        foreach (self::directoriosFotoTesoreria($prizeDirs) as $dir) {
+            $realDir = realpath($dir) ?: $dir;
+            $realDir = rtrim(str_replace(['\\'], ['/'], (string) $realDir), '/');
+            if ($realDir !== '' && ($real === $realDir || str_starts_with($real, $realDir.'/'))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**
@@ -164,7 +193,7 @@ class ClienteUifFotoDocumento
      */
     public static function dniMountExtraRelDirs(): array
     {
-        $defaults = ['Kandiko/rebisco', 'Kandiko/DNI'];
+        $defaults = ['Kandiko/rebisco', 'Kandiko/DNI', 'DNI VIEJOS'];
         try {
             $cfg = config('uif.anita_uif_archivos.dni_extra_dirs', $defaults);
         } catch (\Throwable $e) {
@@ -247,6 +276,9 @@ class ClienteUifFotoDocumento
         $dniMount = rtrim((string) ($dniMount ?? self::anitaDniMount()), DIRECTORY_SEPARATOR);
         $stem = self::sanitizeNumeroDocumento($numerodocumento);
         if ($dniMount === '' || $stem === '' || ! is_file($srcPath) || ! is_readable($srcPath)) {
+            return null;
+        }
+        if (self::esRutaFotoTesoreria($srcPath)) {
             return null;
         }
         $ext = strtolower((string) pathinfo($srcPath, PATHINFO_EXTENSION));
@@ -613,6 +645,167 @@ class ClienteUifFotoDocumento
     }
 
     /**
+     * DDJJ, NOSIS, PEP e informes no son foto de DNI aunque el número figure en el nombre.
+     */
+    public static function esNombreAdjuntoNoDni(string $basename): bool
+    {
+        $bn = strtolower(basename($basename));
+        if ($bn === '') {
+            return false;
+        }
+
+        foreach (['ddjj', 'declaracion', 'declaraci', 'nosis', 'djpep', 'informepep', 'informe_pep', 'informe-pep'] as $token) {
+            if (str_contains($bn, $token)) {
+                return true;
+            }
+        }
+
+        return (bool) preg_match('/(^|[-_ ])(cp|li|lt)[-_]/i', $bn);
+    }
+
+    /**
+     * Puntaje para elegir foto DNI. null = no usar (declaración / informe).
+     * Solo valores > 0 son candidatos (número de documento o pistas dni/frente/…).
+     */
+    public static function puntajeCandidatoFotoDni(string $basename, string $numerodocumento): ?int
+    {
+        if (self::esNombreAdjuntoNoDni($basename)) {
+            return null;
+        }
+        $bn = strtolower(basename($basename));
+        $stem = strtolower(self::sanitizeNumeroDocumento($numerodocumento));
+        $score = 0;
+        if ($stem !== '' && str_contains($bn, $stem)) {
+            $score += 100;
+        }
+        foreach (['dni', 'documento', 'frente', 'verso'] as $hint) {
+            if (str_contains($bn, $hint)) {
+                $score += 15;
+            }
+        }
+        foreach (['foto', 'scan', 'img'] as $hint) {
+            if (str_contains($bn, $hint)) {
+                $score += 5;
+            }
+        }
+
+        return $score;
+    }
+
+    /**
+     * True si $absolutePath es la misma bytes que un adjunto DDJJ/NOSIS del cliente.
+     */
+    public static function esCopiaDeAdjuntoNoDni(int $clienteUifId, string $absolutePath): bool
+    {
+        if ($clienteUifId <= 0 || $absolutePath === '' || ! is_file($absolutePath) || ! is_readable($absolutePath)) {
+            return false;
+        }
+        $fotoSize = filesize($absolutePath);
+        if ($fotoSize === false || $fotoSize <= 0) {
+            return false;
+        }
+        $fotoHash = md5_file($absolutePath);
+        if ($fotoHash === false) {
+            return false;
+        }
+
+        $rows = Cliente_Archivo_Uif::query()
+            ->where('cliente_uif_id', $clienteUifId)
+            ->orderBy('id')
+            ->get(['nombrearchivo']);
+
+        foreach ($rows as $row) {
+            $n = (string) $row->nombrearchivo;
+            if ($n === '' || ! self::esNombreAdjuntoNoDni($n)) {
+                continue;
+            }
+            $src = ClienteUifArchivoStorage::absoluteClienteAdjunto($clienteUifId, $n);
+            if ($src === null || ! is_file($src) || ! is_readable($src)) {
+                continue;
+            }
+            if (filesize($src) !== $fotoSize) {
+                continue;
+            }
+            if (md5_file($src) === $fotoHash) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * True si $absolutePath es la misma bytes que el retrato {dni}.* de tesorería.
+     */
+    public static function esCopiaDeFotoTesoreria(string $absolutePath, string $numerodocumento, ?array $prizeDirs = null): bool
+    {
+        if ($absolutePath === '' || ! is_file($absolutePath) || ! is_readable($absolutePath)) {
+            return false;
+        }
+        if (self::esRutaFotoTesoreria($absolutePath, $prizeDirs)) {
+            return false;
+        }
+        $stem = self::sanitizeNumeroDocumento($numerodocumento);
+        if ($stem === '') {
+            return false;
+        }
+        $fotoSize = filesize($absolutePath);
+        $fotoHash = md5_file($absolutePath);
+        if ($fotoSize === false || $fotoSize <= 0 || $fotoHash === false) {
+            return false;
+        }
+        foreach (self::directoriosFotoTesoreria($prizeDirs) as $dir) {
+            if ($dir === '' || ! is_dir($dir)) {
+                continue;
+            }
+            foreach (glob($dir.DIRECTORY_SEPARATOR.$stem.'.*') ?: [] as $src) {
+                if (! is_file($src) || ! is_readable($src)) {
+                    continue;
+                }
+                if (filesize($src) === $fotoSize && md5_file($src) === $fotoHash) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Si la foto canónica es DDJJ/NOSIS o un retrato de tesorería copiado a dni_uif, la borra.
+     */
+    public static function descartarCopiaCanonicoSiEsAdjuntoNoDni(int $clienteUifId, string $absolutePath): bool
+    {
+        return self::descartarCopiaCanonicoSiNoEsDni($clienteUifId, $absolutePath, '');
+    }
+
+    public static function descartarCopiaCanonicoSiNoEsDni(int $clienteUifId, string $absolutePath, string $numerodocumento): bool
+    {
+        $esAdjunto = $clienteUifId > 0 && self::esCopiaDeAdjuntoNoDni($clienteUifId, $absolutePath);
+        $esTesoreria = $numerodocumento !== '' && self::esCopiaDeFotoTesoreria($absolutePath, $numerodocumento);
+        if (! $esAdjunto && ! $esTesoreria) {
+            return false;
+        }
+        $mount = self::anitaDniMount();
+        if ($mount === '') {
+            return false;
+        }
+        $realFile = realpath($absolutePath);
+        $realMount = realpath($mount);
+        if ($realFile === false || $realMount === false) {
+            return false;
+        }
+        if (! str_starts_with($realFile, $realMount.DIRECTORY_SEPARATOR)) {
+            return false;
+        }
+        if (dirname($realFile) !== $realMount) {
+            return false;
+        }
+
+        return @unlink($realFile);
+    }
+
+    /**
      * Elige una imagen en el montaje UIF del cliente (puntuación por nombre de archivo).
      */
     public static function findBestImageInMountClienteDirs(?int $inroclienteid, string $numerodocumento): ?string
@@ -633,7 +826,6 @@ class ClienteUifFotoDocumento
             return null;
         }
 
-        $stem = strtolower(self::sanitizeNumeroDocumento($numerodocumento));
         $ranked = [];
 
         foreach (AnitaUifArchivosSync::directoriosCandidatosCliente($mount, $inroclienteid) as $dir) {
@@ -648,22 +840,11 @@ class ClienteUifFotoDocumento
                 if (! in_array($e, self::EXTENSIONES_PERMITIDAS, true)) {
                     continue;
                 }
-                $bn = strtolower(basename($path));
-                $score = 0;
-                if ($stem !== '' && str_contains($bn, $stem)) {
-                    $score += 100;
+                $score = self::puntajeCandidatoFotoDni(basename($path), $numerodocumento);
+                if ($score === null || $score <= 0) {
+                    continue;
                 }
-                foreach (['dni', 'documento', 'frente', 'verso'] as $hint) {
-                    if (str_contains($bn, $hint)) {
-                        $score += 15;
-                    }
-                }
-                foreach (['foto', 'scan', 'img', 'cli'] as $hint) {
-                    if (str_contains($bn, $hint)) {
-                        $score += 5;
-                    }
-                }
-                $ranked[] = ['path' => $path, 'score' => $score, 'bn' => $bn];
+                $ranked[] = ['path' => $path, 'score' => $score, 'bn' => strtolower(basename($path))];
             }
         }
 
@@ -684,11 +865,14 @@ class ClienteUifFotoDocumento
 
     /**
      * Tras {@see Cliente_Archivo_UifRepository::traerArchivosDeAnita}, copia la mejor imagen adjunta a la carpeta de foto DNI.
+     * No copia declaraciones juradas, NOSIS ni informes PEP.
      */
     public static function copyFirstClienteAdjuntoImageToFotodocumento(int $clienteUifId, string $numerodocumento): ?string
     {
         $stem = self::sanitizeNumeroDocumento($numerodocumento);
-        $stemLower = strtolower($stem);
+        if ($stem === '') {
+            return null;
+        }
         $rows = Cliente_Archivo_Uif::query()
             ->where('cliente_uif_id', $clienteUifId)
             ->orderBy('id')
@@ -700,21 +884,15 @@ class ClienteUifFotoDocumento
             if ($n === '' || ! preg_match('/\.(jpe?g|png|gif|webp|pdf)$/i', $n)) {
                 continue;
             }
+            $score = self::puntajeCandidatoFotoDni($n, $numerodocumento);
+            if ($score === null || $score <= 0) {
+                continue;
+            }
             $src = ClienteUifArchivoStorage::absoluteClienteAdjunto($clienteUifId, $n);
             if ($src === null || ! is_file($src)) {
                 continue;
             }
-            $bn = strtolower(basename($n));
-            $score = 0;
-            if ($stemLower !== '' && str_contains($bn, $stemLower)) {
-                $score += 100;
-            }
-            foreach (['dni', 'documento', 'frente', 'verso'] as $hint) {
-                if (str_contains($bn, $hint)) {
-                    $score += 15;
-                }
-            }
-            $ranked[] = ['nombre' => $n, 'src' => $src, 'score' => $score, 'bn' => $bn];
+            $ranked[] = ['nombre' => $n, 'src' => $src, 'score' => $score, 'bn' => strtolower(basename($n))];
         }
 
         if ($ranked === []) {
@@ -730,9 +908,6 @@ class ClienteUifFotoDocumento
         });
 
         $pick = $ranked[0];
-        if ($stem === '') {
-            return null;
-        }
         $ext = strtolower((string) pathinfo($pick['src'], PATHINFO_EXTENSION));
         if (! in_array($ext, self::EXTENSIONES_PERMITIDAS, true)) {
             return null;

@@ -28,6 +28,7 @@ class FlashCajaAnitaMapeoSupportTest extends TestCase
             'fecha' => '2026-08-15',
             'att' => 1200,
             'ayb' => 10.5,
+            'vending' => 20.25,
             'slot_d' => 1,
             'slot_r' => 2,
             'slot_coin_in' => 3,
@@ -57,6 +58,7 @@ class FlashCajaAnitaMapeoSupportTest extends TestCase
         $this->assertSame(1, $valores['flash_empresa']);
         $this->assertSame(21, $valores['flash_sala']);
         $this->assertSame(20260815, $valores['flash_fecha']);
+        $this->assertEquals(30.75, $valores['flash_ayb']);
         $this->assertEquals(80.25, $valores['flash_win_ol_slot']);
         $this->assertSame(0, $valores['flash_cant_poker']);
         $this->assertSame('cron diario', $valores['flash_comentario']);
@@ -77,5 +79,12 @@ class FlashCajaAnitaMapeoSupportTest extends TestCase
             ' WHERE flash_empresa = 1 AND flash_sala = 21 AND flash_fecha = 20260815',
             FlashCajaAnitaMapeoSupport::whereClave(1, 21, 20260815)
         );
+    }
+
+    public function test_flash_ayb_anita_suma_ayb_y_vending(): void
+    {
+        $flash = new FlashCaja(['ayb' => 843840.96, 'vending' => 647900.0]);
+
+        $this->assertEquals(1491740.96, FlashCajaAnitaMapeoSupport::flashAybParaAnita($flash));
     }
 }

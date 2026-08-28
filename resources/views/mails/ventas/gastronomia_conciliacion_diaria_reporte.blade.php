@@ -70,7 +70,7 @@
 @endif
 
 <p style="margin:16px 0 8px 0;">
-    Adjunto Excel (y CSV) por circuito: <strong>GASTRO</strong> (sal&oacute;n), <strong>ESTACIONAMIENTO</strong> (PV ERP vs rendgastro), <strong>VENDING</strong> (rendiciones ERP vs rendgastro), <strong>FLASH</strong> (caja Informix: flash_ayb incluye vending mientras Anita no lo discrimine; flash_estac vs rendgastro; jornada anterior a la auditada).
+    Adjunto Excel (y CSV) por circuito: <strong>GASTRO</strong> (sal&oacute;n), <strong>ESTACIONAMIENTO</strong> (PV ERP vs rendgastro), <strong>VENDING</strong> (rendiciones ERP vs rendgastro), <strong>FLASH</strong> (caja Informix: flash_ayb = AyB + vending; flash_estac vs rendgastro; jornada anterior a la auditada).
 </p>
 
 @foreach ($informe['empresas'] ?? [] as $empresa)

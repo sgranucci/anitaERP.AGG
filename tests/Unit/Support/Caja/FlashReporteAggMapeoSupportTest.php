@@ -11,7 +11,7 @@ class FlashReporteAggMapeoSupportTest extends TestCase
     public function test_etiqueta_dia_coincide_con_plantilla_julio(): void
     {
         $fecha = Carbon::create(2026, 7, 1);
-        $this->assertSame('Mie/Wed     ', FlashReporteAggMapeoSupport::etiquetaDia($fecha));
+        $this->assertSame('Mie/Wed    ', FlashReporteAggMapeoSupport::etiquetaDia($fecha));
         $this->assertSame(' 01/07/26 ', FlashReporteAggMapeoSupport::etiquetaFecha($fecha));
     }
 
@@ -74,7 +74,7 @@ class FlashReporteAggMapeoSupportTest extends TestCase
             ],
         ], $fecha);
 
-        $this->assertSame('Lun/Mon     ', $fila['A']);
+        $this->assertSame('Lun/Mon    ', $fila['A']);
         $this->assertSame(' 03/08/26 ', $fila['B']);
         $this->assertSame(2065, $fila['C']);
         $this->assertSame(717, $fila['D']);
@@ -98,5 +98,46 @@ class FlashReporteAggMapeoSupportTest extends TestCase
     {
         $this->assertSame('Reporte Flash Agosto 26', FlashReporteAggMapeoSupport::tituloMes(Carbon::create(2026, 8, 1)));
         $this->assertSame('Reporte Flash Julio 2026', FlashReporteAggMapeoSupport::tituloMesLargo(Carbon::create(2026, 7, 31)));
+    }
+
+    public function test_filas_consolidados_siguen_el_layout_oficial(): void
+    {
+        $agosto26 = FlashReporteAggMapeoSupport::filasConsolidados(34);
+        $this->assertSame(35, $agosto26['total_final']);
+        $this->assertSame(37, $agosto26['mtd_average']);
+        $this->assertSame(42, $agosto26['titulo_mes_ant']);
+        $this->assertSame(43, $agosto26['total_mes_ant']);
+        $this->assertSame(45, $agosto26['mtd_mes_ant']);
+        $this->assertSame(48, $agosto26['prom_pct_mes_ant']);
+        $this->assertSame(52, $agosto26['titulo_anio_ant']);
+        $this->assertSame(53, $agosto26['total_anio_ant']);
+        $this->assertSame(55, $agosto26['mtd_anio_ant']);
+
+        $julio31 = FlashReporteAggMapeoSupport::filasConsolidados(39);
+        $this->assertSame(40, $julio31['total_final']);
+        $this->assertSame(48, $julio31['total_mes_ant']);
+        $this->assertSame(58, $julio31['total_anio_ant']);
+    }
+
+    public function test_titulos_comparativos_y_promedio_diario(): void
+    {
+        $desde = Carbon::create(2026, 8, 1);
+        $this->assertSame('Comparativo mes anterior 2026', FlashReporteAggMapeoSupport::tituloComparativoMesAnt($desde));
+        $this->assertSame('Comparativo igual periodo 2025', FlashReporteAggMapeoSupport::tituloComparativoAnioAnt($desde));
+        $this->assertSame('Comparativo mes anterior 2025', FlashReporteAggMapeoSupport::tituloComparativoMesAnt(Carbon::create(2026, 1, 10)));
+
+        $pct = FlashReporteAggMapeoSupport::filaPromedioDiarioPct(
+            ['custom' => 2240, 'revenues' => 137522802],
+            ['custom' => 2146, 'revenues' => 143193336],
+        );
+        $this->assertEqualsWithDelta(0.0438, $pct['C'], 0.0001);
+        $this->assertEqualsWithDelta(-0.0396, $pct['AU'], 0.0001);
+
+        $monto = FlashReporteAggMapeoSupport::filaPromedioDiarioMonto(
+            ['custom' => 2240, 'revenues' => 137522802],
+            ['custom' => 2146, 'revenues' => 143193336],
+        );
+        $this->assertArrayNotHasKey('C', $monto);
+        $this->assertEqualsWithDelta(-5670534.0, $monto['AU'], 0.5);
     }
 }

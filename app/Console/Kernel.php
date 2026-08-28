@@ -405,11 +405,12 @@ class Kernel extends ConsoleKernel
                 ->when(fn () => (bool) config('solicitudpago.generar_cuotas.habilitado', false));
         }
 
-        // Flash Report AGG: cada suscripción define día y hora de envío.
+        // Flash Report AGG: cada suscripción define día y hora. Cada 15 min para
+        // reintentar si Office 365 no respondió en el turno programado.
         $schedule->command('flash:distribuir-reportes')
-            ->hourly()
+            ->everyFifteenMinutes()
             ->runInBackground()
-            ->withoutOverlapping(120)
+            ->withoutOverlapping(20)
             ->appendOutputTo(storage_path('logs/flash-reporte-agg-distribucion.log'))
             ->when(fn () => (bool) config('caja.flash_reporte_agg.distribucion_habilitada', true));
 

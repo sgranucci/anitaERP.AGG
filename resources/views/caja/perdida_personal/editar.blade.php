@@ -30,6 +30,14 @@
             <div class="card-header">
                 <h3 class="card-title">Editar p&eacute;rdida de personal</h3>
                 <div class="card-tools">
+                    @if (can('listar-perdida-personal', false) || can('editar-perdida-personal', false))
+                        <a href="{{ route('imprimir_pdf_perdida_personal', $data->id) }}"
+                           class="btn btn-primary btn-sm"
+                           title="Imprimir constancia PDF para firma del empleado"
+                           target="_blank" rel="noopener noreferrer">
+                            <i class="fa fa-print"></i> Imprimir PDF
+                        </a>
+                    @endif
                     <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>

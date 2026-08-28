@@ -238,6 +238,9 @@
                                         @if ($s->ultima_ejecucion)
                                             {{ $s->ultima_ejecucion->format('d/m/Y H:i') }}
                                             <br><small class="text-muted">{{ $s->ultimo_estado }} — {{ $s->ultimo_mensaje }}</small>
+                                            @if ($s->esperaReintentoSmtp())
+                                                <br><small class="text-warning">Si Office 365 no respondió, se reintenta solo a los {{ $s->minutosReintentoSmtp() }} min.</small>
+                                            @endif
                                         @else
                                             <span class="text-muted">Nunca</span>
                                         @endif

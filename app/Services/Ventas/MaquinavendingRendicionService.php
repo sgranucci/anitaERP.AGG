@@ -14,6 +14,7 @@ use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Ventas\MaquinavendingRendicionAnitaAdvertenciaSupport;
 use App\Support\Ventas\MaquinavendingRendicionPermiso;
+use App\Services\Caja\Flash\FlashCajaVendingRecalculoService;
 use App\Services\Stock\PrecioService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -29,6 +30,7 @@ class MaquinavendingRendicionService
         private MaquinavendingRendicionRepositoryInterface $repository,
         private EmpresaRepositoryInterface $empresaRepository,
         private MaquinavendingRendicionAnitaSyncService $anitaSyncService,
+        private FlashCajaVendingRecalculoService $flashVendingRecalculoService,
     ) {
     }
 
@@ -132,6 +134,7 @@ class MaquinavendingRendicionService
         });
 
         $rendicion = $this->repository->findOrFail($rendicionId);
+        $this->actualizarFlashVendingSiExiste($rendicion, 'rendicion_vending_alta');
         $advertenciasAnita = $this->sincronizarAnitaTrasGuardar($rendicion, 'al registrar la rendición');
 
         return [
@@ -196,6 +199,7 @@ class MaquinavendingRendicionService
         });
 
         $fresh = $this->repository->findOrFail($rendicionId);
+        $this->actualizarFlashVendingSiExiste($fresh, 'rendicion_vending_edicion');
         $advertenciasAnita = $this->sincronizarAnitaTrasGuardar($fresh, 'al actualizar la rendición');
 
         return [
@@ -230,6 +234,8 @@ class MaquinavendingRendicionService
 
             return $snapshot;
         });
+
+        $this->actualizarFlashVendingSiExiste($snapshot, 'rendicion_vending_baja');
 
         return $this->eliminarAnitaTrasBorrar($snapshot);
     }
@@ -364,6 +370,33 @@ class MaquinavendingRendicionService
                 'cuentacaja_id' => $medio['cuentacaja_id'],
                 'monto' => $medio['monto'],
                 'cotizacion' => $medio['cotizacion'],
+            ]);
+        }
+    }
+
+    private function actualizarFlashVendingSiExiste(MaquinavendingRendicion $rendicion, string $origen): void
+    {
+        $empresaId = (int) ($rendicion->empresa_id ?? 0);
+        $fecha = $rendicion->fecha_jornada?->format('Y-m-d') ?? '';
+        if ($empresaId <= 0 || $fecha === '') {
+            return;
+        }
+
+        try {
+            $this->flashVendingRecalculoService->recalcularVendingSiExiste(
+                $empresaId,
+                $fecha,
+                $origen,
+                false,
+                (int) (Auth::id() ?? 0) ?: null,
+            );
+        } catch (\Throwable $e) {
+            Log::warning('maquinavending_rendicion.flash_vending.fallo', [
+                'rendicion_id' => (int) ($rendicion->id ?? 0),
+                'empresa_id' => $empresaId,
+                'fecha_jornada' => $fecha,
+                'origen' => $origen,
+                'mensaje' => $e->getMessage(),
             ]);
         }
     }

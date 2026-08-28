@@ -9,6 +9,8 @@ use App\Models\Configuracion\Empresa;
 
 /**
  * Mapeo ERP ↔ Anita (tabla flash): sala 21/38/43 → empresas 1/2/3.
+ *
+ * Informix no tiene columna de vending: flash_ayb = AyB ERP + vending ERP.
  */
 final class FlashCajaAnitaMapeoSupport
 {
@@ -100,6 +102,14 @@ final class FlashCajaAnitaMapeoSupport
     }
 
     /**
+     * Anita no discrimina vending: un solo campo flash_ayb.
+     */
+    public static function flashAybParaAnita(FlashCaja $flash): float
+    {
+        return round((float) ($flash->ayb ?? 0) + (float) ($flash->vending ?? 0), 2);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public static function valoresDesdeFlash(FlashCaja $flash, int $sala, int $flashEmpresa): array
@@ -111,7 +121,7 @@ final class FlashCajaAnitaMapeoSupport
             'flash_sala' => $sala,
             'flash_fecha' => self::fechaEntera($flash->fecha?->format('Y-m-d') ?? ''),
             'flash_att' => (int) ($flash->att ?? 0),
-            'flash_ayb' => (float) ($flash->ayb ?? 0),
+            'flash_ayb' => self::flashAybParaAnita($flash),
             'flash_slot_d' => (float) ($flash->slot_d ?? 0),
             'flash_slot_r' => (float) ($flash->slot_r ?? 0),
             'flash_slot_coin_in' => (float) ($flash->slot_coin_in ?? 0),

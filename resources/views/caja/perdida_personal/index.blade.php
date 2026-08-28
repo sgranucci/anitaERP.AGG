@@ -88,6 +88,14 @@
                             <td class="text-right">{{ number_format((float) $data->importe, 2, ',', '.') }}</td>
                             <td>{{ $data->estado_label }}</td>
                             <td class="text-nowrap">
+                                @if (can('listar-perdida-personal', false) || can('editar-perdida-personal', false))
+                                    <a href="{{ route('imprimir_pdf_perdida_personal', $data->id) }}"
+                                       class="btn-accion-tabla tooltipsC"
+                                       title="Imprimir constancia PDF para firma del empleado"
+                                       target="_blank" rel="noopener noreferrer">
+                                        <i class="fas fa-file-pdf text-danger"></i>
+                                    </a>
+                                @endif
                                 @if (can('editar-perdida-personal', false))
                                     <a href="{{ route('editar_perdida_personal', ['id' => $data->id] + $retornoListadoQuery) }}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                         <i class="fa fa-edit"></i>

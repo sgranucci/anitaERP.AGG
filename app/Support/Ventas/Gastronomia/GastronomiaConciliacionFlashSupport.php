@@ -10,10 +10,8 @@ use Illuminate\Support\Facades\Log;
 /**
  * Control flash (caja Informix): flash_ayb / flash_estac vs rendgastro neto por unidad de negocio.
  *
- * Transición Anita → ERP: Informix no discrimina vending en el flash; flash_ayb = AyB + vending.
- * Mientras eso sea así, FLASH-GASTRO compara flash_ayb contra (gastro + vending) en ERP/Rendg.
- * Cuando el flash operativo viva en ERP con vending discriminado, desactivar
- * `control_flash_ayb_incluye_vending`.
+ * Informix no discrimina vending: flash_ayb = AyB + vending (el ERP los guarda separados
+ * y el export a Anita los suma). FLASH-GASTRO compara flash_ayb contra gastro+vending.
  */
 final class GastronomiaConciliacionFlashSupport
 {

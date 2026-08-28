@@ -64,7 +64,7 @@ return [
 		 */
 		'dni_extra_dirs' => array_values(array_filter(array_map(
 			'trim',
-			explode(',', (string) env('ANITA_UIF_DNI_EXTRA_DIRS', 'Kandiko/rebisco,Kandiko/DNI'))
+			explode(',', (string) env('ANITA_UIF_DNI_EXTRA_DIRS', 'Kandiko/rebisco,Kandiko/DNI,DNI VIEJOS'))
 		))),
 		'sistema' => env('ANITA_UIF_ARCHIVOS_SISTEMA', 'base_admin'),
 		'tabla_cliente' => env('ANITA_UIF_ARCHIVOS_TABLA_CLIENTE', ''),
@@ -85,6 +85,7 @@ return [
 			'archivos_clientes' => '/scan/uif/archivos/clientes',
 			'archivos_premios' => '/scan/uif/archivos/premios',
 			'fotos_premios' => '/scan/tesoreria/fotos_clientes',
+			'dni_http' => env('ANITA_UIF_DNI_HTTP_BIYEMAS', 'http://10.20.30.200:8080/dni_uif'),
 		],
 		'kandiko' => [
 			'servidor' => env('ANITA_IP_KANDIKO', '192.168.20.100:8080'),
@@ -93,6 +94,7 @@ return [
 			'archivos_clientes' => '/scan/uif/archivos/clientes_KSA',
 			'archivos_premios' => '/scan/uif/archivos/premios_KSA',
 			'fotos_premios' => '/scan/tesoreria/fotos_clientes_KSA',
+			'dni_http' => env('ANITA_UIF_DNI_HTTP_KANDIKO', 'http://192.168.20.100:8080/dni_uif'),
 		],
 		'rebisco' => [
 			'servidor' => env('ANITA_IP_REBISCO', '192.168.40.100:8080'),
@@ -101,6 +103,7 @@ return [
 			'archivos_clientes' => '/scan/uif/archivos/clientes_RSA',
 			'archivos_premios' => '/scan/uif/archivos/premios_RSA',
 			'fotos_premios' => '/scan/tesoreria/fotos_clientes_RSA',
+			'dni_http' => env('ANITA_UIF_DNI_HTTP_REBISCO', 'http://192.168.40.100:8080/dni_uif'),
 		],
 	],
 ];

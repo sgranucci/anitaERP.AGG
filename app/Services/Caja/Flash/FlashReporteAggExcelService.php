@@ -7,10 +7,8 @@ use App\Models\Configuracion\Empresa;
 use App\Support\Caja\Flash\FlashCajaLFlashCalculoSupport;
 use App\Support\Caja\Flash\FlashCajaReporteSupport;
 use App\Support\Caja\Flash\FlashReporteAggMapeoSupport;
+use App\Support\Caja\Flash\FlashReporteAggXlsxPatchSupport;
 use Carbon\Carbon;
-use PhpOffice\PhpSpreadsheet\IOFactory;
-use PhpOffice\PhpSpreadsheet\Spreadsheet;
-use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 use RuntimeException;
 
 /**
@@ -23,6 +21,17 @@ class FlashReporteAggExcelService
     public const FILA_PRESENTACION_INICIO = 7;
 
     public const DIAS_MAX = 31;
+
+    public const HOJA_PRESENTACION_MAESTRA = 'Biyemas S.A.';
+
+    /**
+     * BP de un día sin fila: no puede quedar vacío.
+     * En Marcela, A = SI(BP = Datos!A; …) y C/G = SI(BP = A; …).
+     * Vacío = vacío da verdadero y las filas 29–31 leen Total final / MTD;
+     * COUNT(C7:C37) pasa a 31, el INDEX de Recaudación toma el promedio
+     * y el SUM del mes se cae con #N/A.
+     */
+    public const MARCA_DIA_SIN_DATOS = '-';
 
     /**
      * @return array{path: string, nombre: string, mime: string, dias: int, empresas: list<string>}
@@ -39,9 +48,10 @@ class FlashReporteAggExcelService
             throw new RuntimeException('No hay empresas AGG (Biyemas / Kandiko / Rebisco) para armar el Flash Report.');
         }
 
-        $spreadsheet = IOFactory::load($plantilla);
+        $porHoja = [];
         $diasConDatos = 0;
         $nombres = [];
+        $filasRef = [];
 
         foreach ($mapa as $empresaId => $hojas) {
             $empresa = Empresa::query()->find($empresaId);
@@ -59,23 +69,16 @@ class FlashReporteAggExcelService
                 $filasDatos,
                 fn (array $f) => (int) ($f['C'] ?? 0) > 0 || (float) ($f['AU'] ?? 0) != 0.0
             )));
-
-            $this->escribirHojaDatos(
-                $spreadsheet,
-                (string) $hojas['datos'],
+            $porHoja[(string) $hojas['datos']] = $this->celdasHojaDatos(
                 $filasDatos,
                 $desde,
                 $hasta,
                 $empresa,
-            );
-            $this->escribirHojaPresentacion(
-                $spreadsheet,
-                (string) $hojas['hoja'],
-                $filasDatos,
                 $reporte,
-                $desde,
-                $hasta,
             );
+            if ($filasDatos !== []) {
+                $filasRef = $filasDatos;
+            }
             $nombres[] = (string) ($empresa->nombre ?? $hojas['hoja']);
         }
 
@@ -89,22 +92,17 @@ class FlashReporteAggExcelService
         );
         $porDiaConsol = $this->indexarPorDia($reporteConsol['filas_diarias'] ?? []);
         $filasConsol = $this->filasDatosDelMes($desde, $hasta, 0, $porDiaConsol, true);
-        $this->escribirHojaDatos(
-            $spreadsheet,
-            'Datos Consolidados',
+        $porHoja['Datos Consolidados'] = $this->celdasHojaDatos(
             $filasConsol,
             $desde,
             $hasta,
             null,
-        );
-        $this->escribirHojaPresentacion(
-            $spreadsheet,
-            'Resumen',
-            $filasConsol,
             $reporteConsol,
-            $desde,
-            $hasta,
         );
+        if ($filasRef === [] && $filasConsol !== []) {
+            $filasRef = $filasConsol;
+        }
+        $porHoja[self::HOJA_PRESENTACION_MAESTRA] = $this->celdasHojaPresentacionMaestra($filasRef, $desde);
 
         $nombre = sprintf(
             'Flash Report AGG al %s.xlsx',
@@ -116,13 +114,7 @@ class FlashReporteAggExcelService
         }
         $path = $dir.'/flash-reporte-agg-'.uniqid('', true).'.xlsx';
 
-        $writer = IOFactory::createWriter($spreadsheet, 'Xlsx');
-        // La plantilla oficial tiene fórmulas que PhpSpreadsheet no puede resolver
-        // (p. ej. Resumen!AZ26 → "internal error"). Excel las calcula al abrir.
-        $writer->setPreCalculateFormulas(false);
-        $writer->save($path);
-        $spreadsheet->disconnectWorksheets();
-        unset($spreadsheet);
+        (new FlashReporteAggXlsxPatchSupport)->rellenar($plantilla, $path, $porHoja);
 
         return [
             'path' => $path,
@@ -226,7 +218,47 @@ class FlashReporteAggExcelService
             $cursor->addDay();
         }
 
-        return $out;
+        return $this->quitarDiasVaciosAlFinal($out);
+    }
+
+    /**
+     * @param  list<array<string, float|int|string>>  $filas
+     * @return list<array<string, float|int|string>>
+     */
+    private function quitarDiasVaciosAlFinal(array $filas): array
+    {
+        while ($filas !== [] && $this->filaDatosSinMovimiento($filas[array_key_last($filas)])) {
+            array_pop($filas);
+        }
+
+        return array_values($filas);
+    }
+
+    /**
+     * @param  list<array<string, float|int|string>>  $filas
+     */
+    private function throughDay(array $filas, Carbon $hasta): string
+    {
+        if ($filas === []) {
+            return $hasta->format('j');
+        }
+
+        $ultima = $filas[array_key_last($filas)]['B'] ?? '';
+        if (is_string($ultima) && preg_match('/(\d{1,2})\//', $ultima, $m)) {
+            return (string) (int) $m[1];
+        }
+
+        return $hasta->format('j');
+    }
+
+    /**
+     * @param  array<string, float|int|string>  $fila
+     */
+    private function filaDatosSinMovimiento(array $fila): bool
+    {
+        return (int) ($fila['C'] ?? 0) === 0
+            && abs((float) ($fila['G'] ?? 0)) < 0.00001
+            && abs((float) ($fila['O'] ?? 0)) < 0.00001;
     }
 
     /**
@@ -256,138 +288,217 @@ class FlashReporteAggExcelService
 
     /**
      * @param  list<array<string, float|int|string>>  $filas
+     * @param  array<string, mixed>  $reporte
+     * @return array<string, float|int|string|null>
      */
-    private function escribirHojaDatos(
-        Spreadsheet $spreadsheet,
-        string $nombreHoja,
+    private function celdasHojaDatos(
         array $filas,
         Carbon $desde,
         Carbon $hasta,
         ?Empresa $empresa,
-    ): void {
-        $sheet = $this->hoja($spreadsheet, $nombreHoja);
-        if ($sheet === null) {
-            return;
-        }
-
-        $sheet->setCellValue('A1', now()->translatedFormat('D M j H:i:s T Y'));
-        $sheet->setCellValue('A2', 'Consolidated Income');
-        $sheet->setCellValue(
-            'A3',
-            'Desde '.$desde->format('d/m/y').' hasta '.$hasta->format('d/m/y').' '
-        );
-        $sheet->setCellValue(
-            'A4',
-            $empresa !== null
+        array $reporte,
+    ): array {
+        $celdas = [
+            'A1' => now()->translatedFormat('D M j H:i:s T Y'),
+            'A2' => 'Consolidated Income',
+            'A3' => 'Desde '.$desde->format('d/m/y').' hasta '.$hasta->format('d/m/y').' ',
+            'A4' => $empresa !== null
                 ? 'Empresas: '.(int) $empresa->id.' '.(string) $empresa->nombre
-                : 'Empresas: consolidado AGG'
-        );
-        $sheet->setCellValue('A5', 'Through day: '.$hasta->format('j'));
+                : 'Empresas: consolidado AGG',
+            'A5' => 'Through day: '.$this->throughDay($filas, $hasta),
+        ];
 
         for ($i = 0; $i < self::DIAS_MAX; $i++) {
             $excelRow = self::FILA_DATOS_INICIO + $i;
             if (! isset($filas[$i])) {
-                $this->limpiarRangoDatos($sheet, $excelRow);
                 continue;
             }
             foreach ($filas[$i] as $col => $valor) {
-                $sheet->setCellValue($col.$excelRow, $valor);
+                if ($valor === '' || $valor === null) {
+                    continue;
+                }
+                $celdas[$col.$excelRow] = $valor;
             }
         }
+
+        return array_merge($celdas, $this->celdasConsolidadosDatos($filas, $reporte, $desde));
     }
 
     /**
      * @param  list<array<string, float|int|string>>  $filas
-     * @param  array<string, mixed>  $reporte
+     * @return array<string, float|int|string|null>
      */
-    private function escribirHojaPresentacion(
-        Spreadsheet $spreadsheet,
-        string $nombreHoja,
-        array $filas,
-        array $reporte,
-        Carbon $desde,
-        Carbon $hasta,
-    ): void {
-        $sheet = $this->hoja($spreadsheet, $nombreHoja);
-        if ($sheet === null) {
-            return;
-        }
-
-        if ($nombreHoja !== 'Resumen') {
-            $sheet->setCellValue('A3', FlashReporteAggMapeoSupport::tituloMes($desde));
-        }
+    private function celdasHojaPresentacionMaestra(array $filas, Carbon $desde): array
+    {
+        $celdas = [
+            'A3' => FlashReporteAggMapeoSupport::tituloMes($desde),
+            'A44' => FlashReporteAggMapeoSupport::tituloMesLargo($desde->copy()->subMonthNoOverflow()),
+            'A53' => FlashReporteAggMapeoSupport::tituloMes($desde->copy()->subYear()),
+        ];
 
         for ($i = 0; $i < self::DIAS_MAX; $i++) {
             $excelRow = self::FILA_PRESENTACION_INICIO + $i;
             if (! isset($filas[$i])) {
-                $sheet->setCellValue('BP'.$excelRow, null);
+                $celdas['BP'.$excelRow] = self::MARCA_DIA_SIN_DATOS;
                 continue;
             }
-            $sheet->setCellValue('BP'.$excelRow, $filas[$i]['A']);
+            $celdas['BP'.$excelRow] = $filas[$i]['A'];
         }
 
+        return $celdas;
+    }
+
+    /**
+     * Bloque Total / MTD / comparativos de las hojas Datos (como el l-flash de Marcela).
+     * Las VLOOKUP de presentación buscan estas etiquetas en A9:BB145.
+     *
+     * @param  list<array<string, float|int|string>>  $filas
+     * @param  array<string, mixed>  $reporte
+     * @return array<string, float|int|string|null>
+     */
+    private function celdasConsolidadosDatos(array $filas, array $reporte, Carbon $desde): array
+    {
+        if ($filas === []) {
+            return [];
+        }
+
+        $filasBloque = FlashReporteAggMapeoSupport::filasConsolidados(
+            self::FILA_DATOS_INICIO + count($filas) - 1
+        );
+        $celdas = [];
+        $total = is_array($reporte['total_final'] ?? null) ? $reporte['total_final'] : [];
+        $mtd = is_array($reporte['mtd_average'] ?? null) ? $reporte['mtd_average'] : [];
         $mesAnt = is_array($reporte['comparativo_mes_ant'] ?? null) ? $reporte['comparativo_mes_ant'] : [];
         $anioAnt = is_array($reporte['comparativo_anio_ant'] ?? null) ? $reporte['comparativo_anio_ant'] : [];
+        $mesAntTotal = is_array($mesAnt['total_final'] ?? null) ? $mesAnt['total_final'] : [];
+        $mesAntMtd = is_array($mesAnt['mtd_average'] ?? null) ? $mesAnt['mtd_average'] : [];
+        $anioAntTotal = is_array($anioAnt['total_final'] ?? null) ? $anioAnt['total_final'] : [];
+        $anioAntMtd = is_array($anioAnt['mtd_average'] ?? null) ? $anioAnt['mtd_average'] : [];
 
-        $sheet->setCellValue('A44', FlashReporteAggMapeoSupport::tituloMesLargo($desde->copy()->subMonthNoOverflow()));
-        $this->escribirTotalesComparativo($sheet, 45, 46, $mesAnt);
+        $this->agregarFilaComparativo(
+            $celdas,
+            $filasBloque['total_final'],
+            $total,
+            FlashReporteAggMapeoSupport::ETIQUETA_TOTAL_FINAL,
+            $desde,
+        );
+        $this->agregarFilaComparativo(
+            $celdas,
+            $filasBloque['mtd_average'],
+            $mtd,
+            FlashReporteAggMapeoSupport::ETIQUETA_MTD_AVERAGE,
+            $desde,
+        );
 
-        $sheet->setCellValue('A53', FlashReporteAggMapeoSupport::tituloMes($desde->copy()->subYear()));
-        $this->escribirTotalesComparativo($sheet, 54, 55, $anioAnt);
+        $celdas['A'.$filasBloque['titulo_mes_ant']] = FlashReporteAggMapeoSupport::tituloComparativoMesAnt($desde);
+        $this->agregarFilaComparativo(
+            $celdas,
+            $filasBloque['total_mes_ant'],
+            $mesAntTotal,
+            FlashReporteAggMapeoSupport::ETIQUETA_TOTAL_MES_ANT,
+            $desde,
+        );
+        $this->agregarFilaComparativo(
+            $celdas,
+            $filasBloque['mtd_mes_ant'],
+            $mesAntMtd,
+            FlashReporteAggMapeoSupport::ETIQUETA_MTD_MES_ANT,
+            $desde,
+        );
+        $this->agregarFilaVariacion(
+            $celdas,
+            $filasBloque['prom_pct_mes_ant'],
+            $mtd,
+            $mesAntMtd,
+            FlashReporteAggMapeoSupport::ETIQUETA_PROM_PCT_MES_ANT,
+            true,
+        );
+        $this->agregarFilaVariacion(
+            $celdas,
+            $filasBloque['prom_monto_mes_ant'],
+            $mtd,
+            $mesAntMtd,
+            FlashReporteAggMapeoSupport::ETIQUETA_PROM_MONTO_MES_ANT,
+            false,
+        );
+
+        $celdas['A'.$filasBloque['titulo_anio_ant']] = FlashReporteAggMapeoSupport::tituloComparativoAnioAnt($desde);
+        $this->agregarFilaComparativo(
+            $celdas,
+            $filasBloque['total_anio_ant'],
+            $anioAntTotal,
+            FlashReporteAggMapeoSupport::ETIQUETA_TOTAL_ANIO_ANT,
+            $desde,
+        );
+        $this->agregarFilaComparativo(
+            $celdas,
+            $filasBloque['mtd_anio_ant'],
+            $anioAntMtd,
+            FlashReporteAggMapeoSupport::ETIQUETA_MTD_ANIO_ANT,
+            $desde,
+        );
+        $this->agregarFilaVariacion(
+            $celdas,
+            $filasBloque['prom_pct_anio_ant'],
+            $mtd,
+            $anioAntMtd,
+            FlashReporteAggMapeoSupport::ETIQUETA_PROM_PCT_ANIO_ANT,
+            true,
+        );
+        $this->agregarFilaVariacion(
+            $celdas,
+            $filasBloque['prom_monto_anio_ant'],
+            $mtd,
+            $anioAntMtd,
+            FlashReporteAggMapeoSupport::ETIQUETA_PROM_MONTO_ANIO_ANT,
+            false,
+        );
+
+        return $celdas;
     }
 
     /**
-     * @param  array<string, mixed>  $periodo
+     * @param  array<string, float|int|string|null>  $celdas
+     * @param  array<string, mixed>  $metricas
      */
-    private function escribirTotalesComparativo(Worksheet $sheet, int $filaTotal, int $filaMtd, array $periodo): void
-    {
-        $total = is_array($periodo['total_final'] ?? null) ? $periodo['total_final'] : [];
-        $mtd = is_array($periodo['mtd_average'] ?? null) ? $periodo['mtd_average'] : [];
-        if ($total === []) {
-            return;
-        }
-
-        $this->escribirResumenMetricas($sheet, $filaTotal, $total, 'Total final     ');
-        if ($mtd !== []) {
-            $this->escribirResumenMetricas($sheet, $filaMtd, $mtd, 'MTD Average');
+    private function agregarFilaComparativo(
+        array &$celdas,
+        int $fila,
+        array $metricas,
+        string $etiqueta,
+        Carbon $fecha,
+    ): void {
+        $valores = FlashReporteAggMapeoSupport::filaDatos($metricas, $fecha);
+        $valores['A'] = $etiqueta;
+        $valores['B'] = ' ';
+        foreach ($valores as $col => $valor) {
+            if ($valor === '' || $valor === null) {
+                continue;
+            }
+            $celdas[$col.$fila] = $valor;
         }
     }
 
     /**
-     * @param  array<string, mixed>  $m
+     * @param  array<string, float|int|string|null>  $celdas
+     * @param  array<string, mixed>  $actual
+     * @param  array<string, mixed>  $base
      */
-    private function escribirResumenMetricas(Worksheet $sheet, int $fila, array $m, string $etiqueta): void
-    {
-        $sheet->setCellValue('A'.$fila, $etiqueta);
-        $sheet->setCellValue('C'.$fila, (int) ($m['custom'] ?? 0));
-        $sheet->setCellValue('E'.$fila, (float) ($m['slot_coin_in'] ?? 0));
-        $sheet->setCellValue('F'.$fila, (float) ($m['slot_drop'] ?? 0));
-        $sheet->setCellValue('G'.$fila, (float) ($m['slot_ol_win'] ?? 0));
-        $sheet->setCellValue('M'.$fila, (float) ($m['rul_coin_in'] ?? 0));
-        $sheet->setCellValue('N'.$fila, (float) ($m['rul_drop'] ?? 0));
-        $sheet->setCellValue('O'.$fila, (float) ($m['rul_ol_win'] ?? 0));
-        $sheet->setCellValue('AE'.$fila, (float) ($m['win_financial'] ?? 0));
-        $sheet->setCellValue('AG'.$fila, (int) ($m['bingo_carton'] ?? 0));
-        $sheet->setCellValue('AH'.$fila, (float) ($m['bingo_venta'] ?? 0));
-        $sheet->setCellValue('AI'.$fila, (float) ($m['bingo_win'] ?? 0));
-        $sheet->setCellValue('AL'.$fila, (float) ($m['ayb'] ?? 0));
-        $sheet->setCellValue('AN'.$fila, (float) ($m['estac'] ?? 0));
-        $sheet->setCellValue('AU'.$fila, (float) ($m['revenues'] ?? 0));
-    }
-
-    private function limpiarRangoDatos(Worksheet $sheet, int $fila): void
-    {
-        foreach (['A', 'B', 'C', 'D', 'E', 'F', 'G', 'L', 'M', 'N', 'O', 'AD', 'AE', 'AG', 'AH', 'AI', 'AL', 'AN', 'AU'] as $col) {
-            $sheet->setCellValue($col.$fila, null);
-        }
-    }
-
-    private function hoja(Spreadsheet $spreadsheet, string $nombre): ?Worksheet
-    {
-        try {
-            return $spreadsheet->getSheetByName($nombre);
-        } catch (\Throwable $e) {
-            return null;
+    private function agregarFilaVariacion(
+        array &$celdas,
+        int $fila,
+        array $actual,
+        array $base,
+        string $etiqueta,
+        bool $porcentaje,
+    ): void {
+        $celdas['A'.$fila] = $etiqueta;
+        $celdas['B'.$fila] = ' ';
+        $valores = $porcentaje
+            ? FlashReporteAggMapeoSupport::filaPromedioDiarioPct($actual, $base)
+            : FlashReporteAggMapeoSupport::filaPromedioDiarioMonto($actual, $base);
+        foreach ($valores as $col => $valor) {
+            $celdas[$col.$fila] = $valor;
         }
     }
 }

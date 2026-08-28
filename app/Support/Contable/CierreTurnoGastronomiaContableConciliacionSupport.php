@@ -28,8 +28,7 @@ use Illuminate\Support\Collection;
  *
  * Transición Anita → ERP: Informix no discrimina vending en flash_ayb (= AyB + vending).
  * Mientras `control_flash_ayb_incluye_vending` esté activo, se resta el vending ERP del flash
- * antes de comparar con la facturación gastronomía. Cuando el flash viva en ERP con vending
- * separado, desactivar ese flag y deja de restarse.
+ * antes de comparar con la facturación gastronomía. El ERP exporta AyB+vending a flash_ayb.
  *
  * Los asientos Waitry se resuelven igual que en el proceso de cierre
  * ({@see GastronomiaConciliacionRendgAsientosDiaSupport::auditarAsientosFacturacionJornada}).

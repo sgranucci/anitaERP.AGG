@@ -72,8 +72,40 @@ class FlashReporteAggSuscripcionSupport
             return false;
         }
 
+        if ($this->debeReintentarTrasFalloSmtp($suscripcion, $ahora, $programada)) {
+            return true;
+        }
+
         return $suscripcion->ultima_ejecucion === null
             || $suscripcion->ultima_ejecucion->lt($programada);
+    }
+
+    private function debeReintentarTrasFalloSmtp(
+        FlashReporteSuscripcion $suscripcion,
+        Carbon $ahora,
+        Carbon $programada,
+    ): bool {
+        if (! FlashReporteAggSmtpReintentoSupport::habilitado()) {
+            return false;
+        }
+        if ($suscripcion->ultimo_estado !== FlashReporteSuscripcion::ESTADO_ERROR) {
+            return false;
+        }
+        if (! FlashReporteAggSmtpReintentoSupport::esErrorTransporte((string) $suscripcion->ultimo_mensaje)) {
+            return false;
+        }
+
+        $ultima = $suscripcion->ultima_ejecucion;
+        if ($ultima === null) {
+            return true;
+        }
+        if ($ultima->lt($programada)) {
+            return false;
+        }
+
+        return $ultima->lte(
+            $ahora->copy()->subMinutes(FlashReporteAggSmtpReintentoSupport::esperaMinutos())
+        );
     }
 
     /**
