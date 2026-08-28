@@ -35,7 +35,7 @@ use App\Models\Stock\Unidadmedida;
 use App\Models\Stock\Usoarticulo;
 use App\Repositories\Stock\Articulo_CajaRepositoryInterface;
 use App\Repositories\Stock\Articulo_CostoRepositoryInterface;
-use App\Services\Stock\PrecioService;
+use App\Services\Stock\PrecioServiceFerli;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -53,7 +53,7 @@ class ArticuloFerliController extends Controller
 
     public function __construct(Articulo_CajaRepositoryInterface $articulo_cajaRepository,
         Articulo_CostoRepositoryInterface $articulo_costoRepository,
-        PrecioService $precioservice)
+        PrecioServiceFerli $precioservice)
     {
         $this->articulo_cajaRepository = $articulo_cajaRepository;
         $this->articulo_costoRepository = $articulo_costoRepository;
@@ -223,6 +223,7 @@ class ArticuloFerliController extends Controller
 
         $combinacion = Combinacion::select(
             'combinacion.codigo as codigo',
+            'combinacion.id as idcombinacion',
             'combinacion.nombre as nombre',
             'articulo.id as articulo_id',
             'articulo.sku as sku',
@@ -281,7 +282,8 @@ class ArticuloFerliController extends Controller
                     $precios = $this->precioService->
                         asignaPrecioPorTipoNumeracion($item->articulo_id,
                             $tiponumeracion->tiponumeracion_id,
-                            $_fecha);
+                            $_fecha,
+                            $item->idcombinacion);
 
                     // Asigna precio por vigencia
                     $item->precio4 = 0;

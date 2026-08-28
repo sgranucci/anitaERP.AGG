@@ -8,6 +8,8 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionPrecio;
 use App\Http\Requests\ValidacionPrecioActualizacionCategoria;
 use App\Imports\Stock\PrecioImport;
+use App\Imports\Stock\PrecioImportFerli;
+use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Listaprecio;
@@ -457,6 +459,10 @@ class PrecioController extends Controller
         $listaprecio_query = Listaprecio::all();
         $moneda_query = Moneda::all();
 
+        if (MovimientoStockFerliSupport::esCalzadosFerli()) {
+            return view('stock.precio.crearimportacion_ferli', compact('listaprecio_query', 'moneda_query'));
+        }
+
         return view('stock.precio.crearimportacion', compact('listaprecio_query', 'moneda_query'));
     }
 
@@ -493,6 +499,10 @@ class PrecioController extends Controller
 
     public function importar(Request $request)
     {
+        if (MovimientoStockFerliSupport::esCalzadosFerli()) {
+            return $this->importarFerli($request);
+        }
+
         $formato = (string) $request->input('formato', PrecioImportColumnasSupport::FORMATO_SIMPLE);
 
         $this->validate($request, [
@@ -585,6 +595,41 @@ class PrecioController extends Controller
             return back()
                 ->withInput()
                 ->with('mensaje-error', $exception->getMessage());
+        }
+    }
+
+    private function importarFerli(Request $request)
+    {
+        ini_set('memory_limit', '512M');
+        ini_set('max_execution_time', '0');
+
+        $this->validate($request, [
+            'file' => 'required|mimetypes:'.
+                'application/vnd.ms-office,'.
+                'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,'.
+                'application/vnd.ms-excel',
+            'fechavigencia' => 'required|string',
+            'moneda_id' => 'required|integer|exists:moneda,id',
+        ]);
+
+        $headings = (new HeadingRowImport(1))->toArray($request->file('file'));
+
+        try {
+            set_time_limit(0);
+
+            DB::beginTransaction();
+            Excel::import(new PrecioImportFerli(
+                $request->input('fechavigencia'),
+                (int) $request->input('moneda_id'),
+                $headings
+            ), $request->file('file'));
+            DB::commit();
+
+            return back()->with('mensaje', 'Precios importados correctamente');
+        } catch (\Exception $exception) {
+            DB::rollBack();
+
+            return back()->with('mensaje', $exception->getMessage());
         }
     }
 
