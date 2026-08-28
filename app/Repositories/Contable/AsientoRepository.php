@@ -12,6 +12,7 @@ use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Contable\AsientoAlcanceCierreSupport;
+use App\Support\Ventas\PedidoFacturacionProfiler;
 use App\Support\Contable\AsientoAnitaNumeracionLock;
 use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Contable\AsientoCtamovRollbackSupport;
@@ -108,7 +109,9 @@ class AsientoRepository implements AsientoRepositoryInterface
 				(int) ($data['empresa_id'] ?? 0),
 				(string) ($data['numeroasiento'] ?? ''),
 			);
+			PedidoFacturacionProfiler::etapa('asiento_ctamov_anita_inicio');
 			self::guardarAnita($data);
+			PedidoFacturacionProfiler::etapa('asiento_ctamov_anita_fin');
 		}
 
 		return $asiento;

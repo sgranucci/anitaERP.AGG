@@ -54,6 +54,7 @@ final class ElBierzoFacturacionCaeaSaltoSupport
         $usaCaea = $forzarCaea || $idUso === (int) $ids['caea_id'];
 
         $data['puntoventa_id'] = $idUso;
+        PedidoFacturacionProfiler::etapa($usaCaea ? 'salto_emite_caea' : 'salto_emite_cae');
         $resultado = $emitir($data);
 
         $mensajeError = self::mensajeError($resultado);

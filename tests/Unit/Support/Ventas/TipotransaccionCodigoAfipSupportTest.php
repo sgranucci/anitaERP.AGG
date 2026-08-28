@@ -35,6 +35,26 @@ final class TipotransaccionCodigoAfipSupportTest extends TestCase
         );
     }
 
+    public function test_codigo_afip_fce_no_cambia_si_no_alcanza_el_minimo(): void
+    {
+        config(['facturacion.LIMITE_FCE' => 1000]);
+
+        $this->assertSame(
+            6,
+            TipotransaccionCodigoAfipSupport::codigoAfipParaEmision('001', 'B', 'C', 999),
+        );
+    }
+
+    public function test_codigo_afip_sin_modo_fce_no_suma_200(): void
+    {
+        config(['facturacion.LIMITE_FCE' => 1000]);
+
+        $this->assertSame(
+            1,
+            TipotransaccionCodigoAfipSupport::codigoAfipParaEmision('001', 'A', 'N', 5000),
+        );
+    }
+
     public function test_codigos_base_posibles_incluye_varios_tipotransaccion_mismo_codigo(): void
     {
         $bases = TipotransaccionCodigoAfipSupport::codigosBaseAlmacenadosPosibles(8, 'B');

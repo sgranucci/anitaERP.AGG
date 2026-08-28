@@ -354,6 +354,7 @@ class CotElectronicoService
     private function mapearResultadoFila(array $fila, CotRemitoEnvio $registro): array
     {
         return [
+            'id' => (int) $registro->id,
             'numero_remito' => (int) ($fila['numero_remito'] ?? 0),
             'cliente_nombre' => (string) ($fila['cliente_nombre'] ?? $registro->cliente_nombre ?? ''),
             'transporte_codigo' => (string) ($fila['transporte_codigo'] ?? ''),

@@ -133,7 +133,7 @@ Route::post('configuracion/uso-salida-impresora', 'Configuracion\UsoSalidaImpres
 Route::get('configuracion/uso-salida-impresora/{id}/editar', 'Configuracion\UsoSalidaImpresoraController@editar')->name('editar_uso_salida_impresora');
 Route::put('configuracion/uso-salida-impresora/{id}', 'Configuracion\UsoSalidaImpresoraController@actualizar')->name('actualizar_uso_salida_impresora');
 Route::delete('configuracion/uso-salida-impresora/{id}', 'Configuracion\UsoSalidaImpresoraController@eliminar')->name('eliminar_uso_salida_impresora');
-Route::get('configuracion/configurarsalida/{programa?}', 'Configuracion\SalidaController@configurarSalida')->name('configurar_salida');
+Route::get('configuracion/configurarsalida/{programa?}', 'Configuracion\SalidaController@configurarSalida')->name('configurar_salida')->middleware('modo.consulta');
 Route::get('configuracion/setearsalida/{programa}/{salida}', 'Configuracion\SalidaController@setearSalida')->name('setear_salida');
 Route::get('configuracion/buscarsalida/{programa?}', 'Configuracion\SalidaController@buscarSalida')->name('buscar_salida');
 
@@ -874,6 +874,9 @@ Route::post('configuracion/empresa', 'Configuracion\EmpresaController@guardar')-
 Route::get('configuracion/empresa/{id}/editar', 'Configuracion\EmpresaController@editar')->name('editar_empresa');
 Route::put('configuracion/empresa/{id}', 'Configuracion\EmpresaController@actualizar')->name('actualizar_empresa');
 Route::delete('configuracion/empresa/{id}', 'Configuracion\EmpresaController@eliminar')->name('eliminar_empresa');
+
+Route::get('configuracion/general', 'Configuracion\ConfiguracionGeneralController@index')->name('configuracion_general');
+Route::put('configuracion/general', 'Configuracion\ConfiguracionGeneralController@actualizar')->name('actualizar_configuracion_general');
 
 /*
  * Avisos configurables por módulo
@@ -2256,9 +2259,13 @@ Route::put('ventas/factura/{id}', 'Ventas\FacturacionController@actualizar')->na
 Route::delete('ventas/factura/{id}', 'Ventas\FacturacionController@eliminar')->name('eliminar_factura');
 Route::get('ventas/listafactura/{formato?}/{busqueda?}', 'Ventas\FacturacionController@listar')->name('listar_factura');
 Route::get('ventas/listaunafactura/{id}', 'Ventas\FacturacionController@listaUnaFactura')->name('lista_una_factura');
+Route::get('ventas/listaunafacturapdf/{id}', 'Ventas\FacturacionController@listaUnaFacturaPdf')->name('lista_una_factura_pdf');
+Route::get('ventas/listaunafacturacopias/{id}', 'Ventas\FacturacionController@listaUnaFacturaCopias')->name('lista_una_factura_copias');
 Route::get('ventas/impresion-sesion/factura/{id}', 'Ventas\ComprobanteImpresionSesionController@factura')->name('sesion_impresion_factura');
+Route::get('ventas/impresion-sesion/reparto/{transporteId}', 'Ventas\ComprobanteImpresionSesionController@reparto')->name('sesion_impresion_reparto');
 Route::get('ventas/impresion-sesion/pedido/{id}', 'Ventas\ComprobanteImpresionSesionController@pedido')->name('sesion_impresion_pedido');
 Route::get('ventas/impresion-sesion/remito/{id}', 'Ventas\ComprobanteImpresionSesionController@remito')->name('sesion_impresion_remito');
+Route::get('ventas/impresion-sesion/cot/{id}', 'Ventas\ComprobanteImpresionSesionController@cot')->name('sesion_impresion_cot')->where('id', '[0-9]+');
 Route::post('ventas/impresion-sesion/ejecutar', 'Ventas\ComprobanteImpresionSesionController@ejecutar')->name('ejecutar_impresion_sesion');
 Route::get('ventas/impresion-sesion/descargar', 'Ventas\ComprobanteImpresionSesionController@descargar')->name('descargar_impresion_sesion');
 Route::get('ventas/factura/generanotadecredito/{id}', 'Ventas\FacturacionController@generaNotaDeCredito')->name('generar_notadecredito');

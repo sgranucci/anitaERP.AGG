@@ -87,6 +87,12 @@ final class SqlDialectSupport
         return self::castEntero($columna, $connection).' ASC';
     }
 
+    /** Expresión ORDER BY por código numérico descendente. */
+    public static function ordenCodigoDesc(string $columna, ?string $connection = null): string
+    {
+        return self::castEntero($columna, $connection).' DESC';
+    }
+
     /**
      * Extracción de hora (0–23).
      * MySQL: HOUR(col) — PostgreSQL: EXTRACT(HOUR FROM col).

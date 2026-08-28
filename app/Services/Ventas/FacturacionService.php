@@ -65,6 +65,7 @@ use App\Support\Ventas\PedidoFacturaAnitaDeferSupport;
 use App\Support\Ventas\PedidoFacturacionExclusivaSupport;
 use App\Support\Ventas\PedidoItemCierreFaltaStockSupport;
 use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
+use App\Support\Ventas\TipoComprobantePreviewSupport;
 use App\Support\Ventas\VentaEmisionCajaPiezaSupport;
 use App\Support\Stock\UnidadesCajaPiezaSupport;
 use App\Support\Ventas\ArcaCaeaAnitaTipoAfipSupport;
@@ -114,6 +115,7 @@ use DB;
 use App\ApiAnita;
 use App\Support\Ventas\CaeaEmisionNumeracionSupport;
 use App\Support\Ventas\GastronomiaEmisionProfiler;
+use App\Support\Ventas\PedidoFacturacionProfiler;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
 use App\Support\Ventas\VentaNumeracionEmpresaSupport;
@@ -321,6 +323,20 @@ class FacturacionService
         return $this->ventaRepository->leeSinPaginar($busqueda);
     }
 
+	public function totalesIndexPorReparto($filtros)
+	{
+		return $this->ventaRepository->totalesIndexPorReparto($filtros);
+	}
+
+	/**
+	 * @param  array<string, mixed>|string|null  $filtros
+	 * @return list<int>
+	 */
+	public function idsIndexPorReparto($filtros, int $transporteId): array
+	{
+		return $this->ventaRepository->idsIndexPorReparto($filtros, $transporteId);
+	}
+
 	private function clienteTieneLugaresEntrega(int $clienteId): bool
 	{
 		return $this->cliente_entregaRepository->leeClienteEntrega($clienteId)->count() > 0;
@@ -383,7 +399,13 @@ class FacturacionService
 	public function calculaFacturaPorPedido(array $data)
 	{
 		// Recibe datos para facturar
-		$pedido_articulo_ids = $data['pedido_articulo_ids'];
+		$pedido_articulo_ids = $data['pedido_articulo_ids'] ?? [];
+		if (! is_array($pedido_articulo_ids)) {
+			$pedido_articulo_ids = [];
+		}
+		if ($pedido_articulo_ids === []) {
+			return ['error' => 'No se puede facturar: el pedido no tiene ítems pesados. Cargue la pesada de al menos un ítem.'];
+		}
 
 		$cliente_id = $data['cliente_id'];
 
@@ -616,62 +638,89 @@ class FacturacionService
 		$totalComprobante = $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Total', 'importe');
 
 		if ($dataFactura === []) {
-			return ['error' => 'No hay ítems para facturar: verifique que estén en estado pendiente y con pesada cargada.'];
+			return ['error' => 'No se puede facturar: el pedido no tiene ítems pesados. Cargue la pesada de al menos un ítem.'];
 		}
 
 		if ($totalComprobante == 0.) {
 			return ['error' => 'El total del comprobante es 0. Revise que los ítems del pedido tengan precio mayor a cero.'];
 		}
 
-		return ['datosfactura' => $dataFactura, 'datoscliente' => $datosCliente, 'totalcomprobante' => $totalComprobante,
-				'conceptostotales' => $conceptosTotales];
+		return $this->conSugerenciaTipoPreview(
+			['datosfactura' => $dataFactura, 'datoscliente' => $datosCliente, 'totalcomprobante' => $totalComprobante,
+				'conceptostotales' => $conceptosTotales],
+			$cliente,
+			(float) $totalComprobante,
+			$letra
+		);
 	}
 
 	public function generaFacturaPorPedido(array $data)
 	{
-		UsuarioPreferenciaFacturacionSupport::guardar($data);
+		$profiler = PedidoFacturacionProfiler::iniciarSiConfigurado([
+			'pedido_id' => (int) ($data['pedido_id'] ?? 0),
+			'puntoventa_id' => (int) ($data['puntoventa_id'] ?? 0),
+			'puntoventaremito_id' => (int) ($data['puntoventaremito_id'] ?? 0),
+			'tipotransaccion_id' => (int) ($data['tipotransaccion_id'] ?? 0),
+			'cliente_id' => (int) ($data['cliente_id'] ?? 0),
+		]);
 
-		$cliente_id = $data['cliente_id'];
-		$tipoTransaccion_id = $data['tipotransaccion_id'];
-		$puntoventa_id = $data['puntoventa_id'];
-		$this->coeficienteCliente = 0;
-		$this->coeficienteExtraCliente = 0;
-		$this->flCalculaDesdeGeneracionFactura = true;
+		try {
+			UsuarioPreferenciaFacturacionSupport::guardar($data);
+			PedidoFacturacionProfiler::etapa('preferencias_ok');
 
-		// Trae el cliente 
-		$cliente = $this->clienteQuery->traeClienteporId($cliente_id);
-		if (!$cliente)
-			return ['error' => 'Cliente inexistente'];
+			$cliente_id = $data['cliente_id'];
+			$tipoTransaccion_id = $data['tipotransaccion_id'];
+			$puntoventa_id = $data['puntoventa_id'];
+			$this->coeficienteCliente = 0;
+			$this->coeficienteExtraCliente = 0;
+			$this->flCalculaDesdeGeneracionFactura = true;
 
-		if ($errorDespacho = $this->errorClienteDespachoNoFacturable($data, $cliente_id)) {
-			return $errorDespacho;
+			// Trae el cliente
+			$cliente = $this->clienteQuery->traeClienteporId($cliente_id);
+			if (!$cliente)
+				return ['error' => 'Cliente inexistente'];
+
+			if ($errorDespacho = $this->errorClienteDespachoNoFacturable($data, $cliente_id)) {
+				return $errorDespacho;
+			}
+
+			// Lee el tipo de transaccion
+			$tipotransaccion = $this->tipotransaccionRepository->find($tipoTransaccion_id);
+			if ($errorNc = $this->errorNotaCreditoDesdePedidoORemito($tipotransaccion, 'pedido')) {
+				return $errorNc;
+			}
+
+			// Trae el pedido
+			$pedido_query = $this->pedidoQuery->leePedidoporId($data['pedido_id']);
+
+			if (!$pedido_query)
+				return ['error' => 'Pedido inexistente'];
+			else
+				$pedido = $pedido_query[0];
+
+			if (PedidoEstadoErpSupport::esTransferido($pedido->estado ?? null, $pedido->estadopedido ?? null)) {
+				return ['error' => 'El pedido ya fue transferido al despacho.'];
+			}
+
+			$errorEntrega = $this->resolverLugarEntregaPedido($cliente, $pedido, $data, true);
+			if ($errorEntrega) {
+				return $errorEntrega;
+			}
+
+			PedidoFacturacionProfiler::etapa('preflight_ok');
+
+			return PedidoFacturacionExclusivaSupport::ejecutar((int) $pedido->id, function () use ($data, $cliente, $pedido, $tipotransaccion) {
+				PedidoFacturacionProfiler::etapa('lock_ok');
+				$retorno = $this->emitirFacturasDePedido($data, $cliente, $pedido, $tipotransaccion);
+				PedidoFacturacionProfiler::etapa('emitir_fin');
+				$retorno = $this->anexarUrlImpresionSesion($retorno, $data);
+				PedidoFacturacionProfiler::etapa('impresion_url_ok');
+
+				return $retorno;
+			});
+		} finally {
+			PedidoFacturacionProfiler::finalizar($profiler);
 		}
-
-		// Lee el tipo de transaccion
-		$tipotransaccion = $this->tipotransaccionRepository->find($tipoTransaccion_id);
-
-		// Trae el pedido
-		$pedido_query = $this->pedidoQuery->leePedidoporId($data['pedido_id']);
-
-		if (!$pedido_query)
-			return ['error' => 'Pedido inexistente'];
-		else	
-			$pedido = $pedido_query[0];
-
-		if (PedidoEstadoErpSupport::esTransferido($pedido->estado ?? null, $pedido->estadopedido ?? null)) {
-			return ['error' => 'El pedido ya fue transferido al despacho.'];
-		}
-
-		$errorEntrega = $this->resolverLugarEntregaPedido($cliente, $pedido, $data, true);
-		if ($errorEntrega) {
-			return $errorEntrega;
-		}
-
-		return PedidoFacturacionExclusivaSupport::ejecutar((int) $pedido->id, function () use ($data, $cliente, $pedido, $tipotransaccion) {
-			return $this->anexarUrlImpresionSesion(
-				$this->emitirFacturasDePedido($data, $cliente, $pedido, $tipotransaccion)
-			);
-		});
 	}
 
 	/**
@@ -790,8 +839,13 @@ class FacturacionService
 		}
 		unset($data[ElBierzoFacturacionCaeaSaltoSupport::FLAG_INTERNO]);
 
+		PedidoFacturacionProfiler::etapa('emision_una_factura_inicio');
+
 		// Recibe datos para facturar
-		$pedido_articulo_ids = $data['pedido_articulo_ids'];
+		$pedido_articulo_ids = $data['pedido_articulo_ids'] ?? [];
+		if (! is_array($pedido_articulo_ids) || $pedido_articulo_ids === []) {
+			return ['error' => 'No se puede facturar: el pedido no tiene ítems pesados. Cargue la pesada de al menos un ítem.'];
+		}
 
 		$cliente_id = $data['cliente_id'];
 		$puntoventa_id = $data['puntoventa_id'];
@@ -828,13 +882,21 @@ class FacturacionService
 
 		// Lee el tipo de transaccion
 		$tipotransaccion = $this->tipotransaccionRepository->find($tipoTransaccion_id);
+		if ($errorNc = $this->errorNotaCreditoDesdePedidoORemito(
+			$tipotransaccion,
+			$this->facturandoDesdeRemitoId ? 'remito' : 'pedido'
+		)) {
+			return $errorNc;
+		}
 
 		// Recalcula la factura (pedido o remito Bierzo)
+		PedidoFacturacionProfiler::etapa('calcula_factura_inicio');
 		if ($this->facturandoDesdeRemitoId) {
 			$calculoFactura = Self::calculaFacturaPorRemito($data);
 		} else {
 			$calculoFactura = Self::calculaFacturaPorPedido($data);
 		}
+		PedidoFacturacionProfiler::etapa('calcula_factura_fin');
 
 		if (! is_array($calculoFactura) || isset($calculoFactura['error'])) {
 			return ['error' => $calculoFactura['error'] ?? 'No se pudo calcular la factura del pedido.'];
@@ -900,10 +962,7 @@ class FacturacionService
 			$this->nombreTipoTransaccion = $tipotransaccion->nombre;
 			$signo = $tipotransaccion->signo == 'S' ? 1. : -1.;
 
-			if ($codigoTipoTransaccion >= '200')
-				$tipoAnita = substr($tipotransaccion->abreviatura,0,1)+"CE";
-			else
-				$tipoAnita = $tipotransaccion->abreviatura;
+			$tipoAnita = $this->tipoAnitaSegunCodigoAfip($tipotransaccion, $codigoTipoTransaccion);
 
 			// Numera factura con web service si es factura electronica
 			$numeroReservadoVillafranca = false;
@@ -919,13 +978,14 @@ class FacturacionService
 				}
 				$numeroReservadoVillafranca = true;
 			} else {
+			PedidoFacturacionProfiler::etapa('numeracion_factura_inicio');
+			$modoClienteFce = $this->hidratarContextoFceCliente($data, $cliente, $totalComprobante);
+			$this->facturaelectronicaService->armaTipoTransaccion($letra, $modoClienteFce, $codigoTipoTransaccion,
+																	$puntoventa, $totalComprobante);
 			switch($puntoventa->modofacturacion)
 			{
 			case 'C':
 			case 'E':
-				$this->facturaelectronicaService->armaTipoTransaccion($letra, $cliente->modoFacturacion, $codigoTipoTransaccion,
-																		$puntoventa, $totalComprobante);
-
 				$numero = $this->facturaelectronicaService
 							->traeUltimoNumeroComprobante($empresa->nroinscripcion,
 															$codigoTipoTransaccion,
@@ -954,6 +1014,7 @@ class FacturacionService
 				break;
 			}
 			}
+			PedidoFacturacionProfiler::etapa('numeracion_factura_fin');
 
 			if ($numero != -1)
 			{
@@ -961,6 +1022,7 @@ class FacturacionService
 					$numero++;
 				}
 
+				PedidoFacturacionProfiler::etapa('numeracion_remito_anita_inicio');
 				// Pide numero de remito
 				if ($this->flDivide)
 				{
@@ -1009,6 +1071,8 @@ class FacturacionService
 				if ($this->flGrabaComprobanteDividido && (int) $this->numeroComprobanteDivision > 0) {
 					$numero = (int) $this->numeroComprobanteDivision;
 				}
+
+				PedidoFacturacionProfiler::etapa('numeracion_remito_anita_fin');
 
 				if ($numeroremito === 'error') {
 					return [
@@ -1075,7 +1139,9 @@ class FacturacionService
 							'items' => $dataFactura
 					];
 				}
+				PedidoFacturacionProfiler::etapa('arma_contabilidad_inicio');
 				$asientoContable = Self::armaContabilidad($dataFactura, $conceptosTotales, $empresa->id, $totalComprobante);
+				PedidoFacturacionProfiler::etapa('arma_contabilidad_fin');
 
 				// Detalle asiento (ERP + ctamov): "FAC 1296 MORA CARLOS ARIEL" — solo factura por pedido Bierzo.
 				// No tocar gastronomía/estacionamiento AGG (usan otros flujos / grabaFacturaERP).
@@ -1084,14 +1150,13 @@ class FacturacionService
 				$detalleContable = trim($tipoAnita.' '.$numero.' '.$nombreClienteAsiento);
 
 				// Graba la factura
+				PedidoFacturacionProfiler::etapa('tx_inicio');
 				DB::beginTransaction();
 				try 
 				{
+					$deferAnitaPedido = PedidoFacturaAnitaDeferSupport::debeDiferir();
 					$omitirAnitaAsiento = false;
-					if ($codigoTipoTransaccion >= '200')
-						$tipoAnita = substr($tipotransaccion->abreviatura,0,1)+"CE";
-					else
-						$tipoAnita = $tipotransaccion->abreviatura;
+					$tipoAnita = $this->tipoAnitaSegunCodigoAfip($tipotransaccion, $codigoTipoTransaccion);
 
 					$ventaPedidoId = $pedido_id ?: null;
 					$ventaRemitoId = $this->facturandoDesdeRemitoId ?: null;
@@ -1143,6 +1208,7 @@ class FacturacionService
 
 					// Graba venta
 					$vta = $this->ventaRepository->create($venta);
+					PedidoFacturacionProfiler::etapa('graba_venta_ok');
 
 					$referenciaFactura = $vta->codigo;
 
@@ -1201,6 +1267,7 @@ class FacturacionService
 					}
 
 					// Graba items
+					PedidoFacturacionProfiler::etapa('items_stock_inicio');
 					$dataArticuloMovimiento = [];
 					foreach ($dataFactura as $item)
 					{
@@ -1247,17 +1314,21 @@ class FacturacionService
 											$dataFirmado, null);
 						}
 					}
-					
-					// Graba contabilidad ERP. En PV electrónico (C/E) no escribe ctamov Anita
-					// hasta tener CAE: si ARCA rechaza, el rollback MySQL no limpia Informix.
-					$omitirAnitaAsiento = in_array((string) ($puntoventa->modofacturacion ?? ''), ['C', 'E'], true);
+					PedidoFacturacionProfiler::etapa('items_stock_fin');
+
+					// C/E: no ctamov hasta CAE. Diferido Bierzo: ctamov con venta/vencae post-respuesta.
+					$omitirAnitaAsiento = $deferAnitaPedido
+						|| in_array((string) ($puntoventa->modofacturacion ?? ''), ['C', 'E'], true);
+					PedidoFacturacionProfiler::etapa($omitirAnitaAsiento ? 'asiento_erp_sin_anita_inicio' : 'asiento_erp_anita_inicio');
 					Self::grabaAsientoContable($asientoContable, $empresa_id, $fechaFactura, $vta->id, $detalleContable, $centrocosto_id,
 											$moneda_id, $cotizacion, $signo, $cliente->cuentacontable_id,
 											substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante'],
 											$puntoventa->modofacturacion ?? null,
 											isset($venta['fechajornada']) ? (string) $venta['fechajornada'] : null,
 											$omitirAnitaAsiento);
+					PedidoFacturacionProfiler::etapa($omitirAnitaAsiento ? 'asiento_erp_sin_anita_fin' : 'asiento_erp_anita_fin');
 					
+					PedidoFacturacionProfiler::etapa('remito_erp_inicio');
 					// Remito ERP (solo facturación administrativa Bierzo; no gastronomía/estacionamiento)
 					if ($this->facturandoDesdeRemitoId) {
 						app(\App\Services\Ventas\RemitoService::class)->marcarFacturado(
@@ -1294,6 +1365,7 @@ class FacturacionService
 							}
 						}
 					}
+					PedidoFacturacionProfiler::etapa('remito_erp_fin');
 
 					// Marca Pedido como facturado (si aplica)
 					$pedidoIdMarcar = $ventaPedidoId ?: $pedido_id;
@@ -1307,7 +1379,7 @@ class FacturacionService
 
 					$anitaPendientePedido = null;
 					$vencaePendientePedido = null;
-					$deferAnitaPedido = PedidoFacturaAnitaDeferSupport::debeDiferir();
+					PedidoFacturacionProfiler::etapa($deferAnitaPedido ? 'anita_venta_diferida' : 'anita_venta_sincrona_inicio');
 
 					if ($puntoventa->modofacturacion != 'M' || $this->flGrabaComprobanteDividido)
 					{
@@ -1353,11 +1425,13 @@ class FacturacionService
 						}
 
 						// ARCA síncrono: numera y valida CAE. vencae a Anita se difiere con la venta.
+						PedidoFacturacionProfiler::etapa('arca_caea_inicio');
 						Self::solicitaComprobanteARCA($empresa, $codigoTipoTransaccion, substr($venta['codigo'], 0, 3),
 							$letra, $puntoventa, $venta['numerocomprobante'], $fechaFactura, $dataCAE, $vta->id,
 							$deferAnitaPedido);
+						PedidoFacturacionProfiler::etapa('arca_caea_fin');
 
-						if ($omitirAnitaAsiento) {
+						if ($omitirAnitaAsiento && ! $deferAnitaPedido) {
 							$this->sincronizarCtamovAnitaDeVenta(
 								(int) $vta->id,
 								substr((string) $venta['codigo'], 0, 3),
@@ -1377,6 +1451,7 @@ class FacturacionService
 							]);
 						}
 					}
+					PedidoFacturacionProfiler::etapa('tx_commit');
 					DB::commit();
 
 					$ok = $this->respuestaFacturaPedidoOk($venta['codigo'] ?? '');
@@ -1398,9 +1473,9 @@ class FacturacionService
 				} catch (\Throwable $e) {
 					DB::rollback();
 
-					// El asiento ERP puede haber escrito ctamov en Anita antes del CAE; el rollback
-					// MySQL no lo revierte. Limpiar siempre (también con Anita diferida).
-					if (($venta['codigo'] ?? '') !== '') {
+					// Con Anita diferida no se escribió Informix (salvo lectura del numerador remito).
+					// Sin diferir, el asiento pudo haber dejado ctamov huérfano.
+					if (! $deferAnitaPedido && ($venta['codigo'] ?? '') !== '') {
 						try {
 							self::borraAnita(
 								substr((string) $venta['codigo'], 0, 3),
@@ -1447,7 +1522,7 @@ class FacturacionService
 	 * @param  array<int|string, mixed>  $retorno
 	 * @return array<int|string, mixed>
 	 */
-	private function anexarUrlImpresionSesion($retorno)
+	private function anexarUrlImpresionSesion($retorno, ?array $dataOrigen = null)
 	{
 		if (! is_array($retorno) || $retorno === []) {
 			return $retorno;
@@ -1476,7 +1551,8 @@ class FacturacionService
 			}
 		}
 
-		$url = ComprobanteImpresionSesionUrlSupport::postFacturacion($ventaId, $remitoId, $pedidoId);
+		$retornoIndex = is_array($dataOrigen) ? (string) ($dataOrigen['retorno_index'] ?? '') : '';
+		$url = ComprobanteImpresionSesionUrlSupport::postFacturacion($ventaId, $remitoId, $pedidoId, $retornoIndex);
 		if ($url === null) {
 			return $retorno;
 		}
@@ -1772,18 +1848,17 @@ class FacturacionService
 			$this->nombreTipoTransaccion = $tipotransaccion->nombre;
 			$signo = $tipotransaccion->signo == 'S' ? 1. : -1.;
 
-			if ($codigoTipoTransaccion >= '200')
-				$tipoAnita = substr($tipotransaccion->abreviatura,0,1)+"CE";
-			else
-				$tipoAnita = $tipotransaccion->abreviatura;
+			$tipoAnita = $this->tipoAnitaSegunCodigoAfip($tipotransaccion, $codigoTipoTransaccion);
+
+			$modoClienteFce = $this->hidratarContextoFceCliente($data, $cliente, $totalComprobante);
+			$this->facturaelectronicaService->armaTipoTransaccion($letra, $modoClienteFce, $codigoTipoTransaccion,
+																	$puntoventa, $totalComprobante);
+			$tipoAnita = $this->tipoAnitaSegunCodigoAfip($tipotransaccion, $codigoTipoTransaccion);
 
 			switch($puntoventa->modofacturacion)
 			{
 				case 'C':
 				case 'E':
-					$this->facturaelectronicaService->armaTipoTransaccion($letra, $cliente->modoFacturacion, $codigoTipoTransaccion,
-																			$puntoventa, $totalComprobante);
-
 					$numero = $this->facturaelectronicaService
 								->traeUltimoNumeroComprobante($empresa->nroinscripcion,
 																$codigoTipoTransaccion,
@@ -1881,10 +1956,7 @@ class FacturacionService
 				DB::beginTransaction();
 				try 
 				{
-					if ($codigoTipoTransaccion >= '200')
-						$tipoAnita = substr($tipotransaccion->abreviatura,0,1)+"CE";
-					else
-						$tipoAnita = $tipotransaccion->abreviatura;
+					$tipoAnita = $this->tipoAnitaSegunCodigoAfip($tipotransaccion, $codigoTipoTransaccion);
 					$venta = ['fecha' => $fechaFactura,
 						'fechajornada' => $fechaFactura,
 						'empresa_id' => $puntoventa->empresa_id,
@@ -2146,8 +2218,13 @@ class FacturacionService
 		if ($condicioniva)
 			$letra = $condicioniva->letra;
 
+		// Letra B: no IIBB ni perc. IVA 3 % (RG 5329). La perc. RG 2126 de no categorizado sí va.
+		$omitirPercepcionesYaPedido = ! empty($data['omitir_percepciones']);
 		if (strtoupper((string) $letra) === 'B') {
 			$data['omitir_percepciones'] = true;
+			if (PercepcionNoCategorizadoSupport::aplicarAunqueSeOmitanOtras($omitirPercepcionesYaPedido, $condicioniva)) {
+				$data['aplicar_percepcion_no_categorizado'] = true;
+			}
 		}
 
 		// Lee punto de venta
@@ -2159,7 +2236,11 @@ class FacturacionService
 		$dataFactura = [];
 		$totCantidad = 0;
 
-		$articulos = $data['articulo_ids'];
+		$articulos = $data['articulo_ids'] ?? [];
+		if (! is_array($articulos)) {
+			$articulos = [$articulos];
+		}
+		$codigosArticulo = $data['codigoarticulos'] ?? [];
 		$descripciones = $data['descripcionarticulos'];
 		$cantidades = $data['cantidades'];
 		$precios = $data['precios'];
@@ -2182,10 +2263,19 @@ class FacturacionService
 
 		for ($offItem = 0; $offItem < count($cantidades); $offItem++)
 		{
+			$articuloIdLinea = (int) ($articulos[$offItem] ?? 0);
+			if ($articuloIdLinea <= 0) {
+				$skuLinea = trim((string) ($codigosArticulo[$offItem] ?? ''));
+				if ($skuLinea !== '') {
+					$articuloPorSku = $this->articuloQuery->traeArticuloPorSku($skuLinea);
+					$articuloIdLinea = (int) ($articuloPorSku->id ?? 0);
+				}
+			}
+
 			// Trae el articulo
-			if ($articulos[$offItem] > 0)
+			if ($articuloIdLinea > 0)
 			{
-				$articulo = $this->articuloQuery->traeArticuloPorId($articulos[$offItem]);
+				$articulo = $this->articuloQuery->traeArticuloPorId($articuloIdLinea);
 
 				if (!$articulo)
 					return ['error' => 'Artículo inexistente'];
@@ -2351,6 +2441,9 @@ class FacturacionService
 			if (! empty($data['venta_receptor']['numerodocumento'])) {
 				$datosCliente['numerodocumento'] = $data['venta_receptor']['numerodocumento'];
 			}
+			if (! empty($data['aplicar_percepcion_no_categorizado'])) {
+				$datosCliente['aplicar_percepcion_no_categorizado'] = true;
+			}
 		}
 		// Calcula impuestos
 		$conceptosTotales = $this->impuestoService->calculaImpuestoVenta($dataFactura, $datosCliente, $fechaFactura, 
@@ -2425,10 +2518,7 @@ class FacturacionService
 		$this->nombreTipoTransaccion = $tipotransaccion->nombre;
 		$signo = $tipotransaccion->signo == 'S' ? 1. : -1.;
 
-		if ($codigoTipoTransaccion >= '200')
-			$tipoAnita = substr($tipotransaccion->abreviatura,0,1)+"CE";
-		else
-			$tipoAnita = $tipotransaccion->abreviatura;
+		$tipoAnita = $this->tipoAnitaSegunCodigoAfip($tipotransaccion, $codigoTipoTransaccion);
 
 		// Verifica si es nota de credito o factura
 		$factura = null;
@@ -2530,10 +2620,12 @@ class FacturacionService
 			$this->nombreTipoTransaccion = $tipotransaccion->nombre;
 			$signo = $tipotransaccion->signo == 'S' ? 1. : -1.;
 
-			if ($codigoTipoTransaccion >= '200')
-				$tipoAnita = substr($tipotransaccion->abreviatura,0,1)+"CE";
-			else
-				$tipoAnita = $tipotransaccion->abreviatura;
+			$tipoAnita = $this->tipoAnitaSegunCodigoAfip($tipotransaccion, $codigoTipoTransaccion);
+
+			$modoClienteFce = $this->hidratarContextoFceCliente($data, $cliente, $totalComprobante);
+			$this->facturaelectronicaService->armaTipoTransaccion($letra, $modoClienteFce, $codigoTipoTransaccion,
+																	$puntoventa, $totalComprobante);
+			$tipoAnita = $this->tipoAnitaSegunCodigoAfip($tipotransaccion, $codigoTipoTransaccion);
 
 			$reservaCaeaErr = $this->aplicarReservaNumeracionCaeaEnData($data, $puntoventa, $tipotransaccion, $letra);
 			if ($reservaCaeaErr !== null) {
@@ -2547,13 +2639,10 @@ class FacturacionService
 			{
 				case 'C':
 				case 'E':
-					$this->facturaelectronicaService->armaTipoTransaccion($letra, $cliente->modoFacturacion, $codigoTipoTransaccion,
-																			$puntoventa, $totalComprobante);
-
 					if ($numeroForzado > 0) {
 						$numero = $numeroForzado - 1;
 					} else {
-						GastronomiaEmisionProfiler::activo()?->marcar('arca_ultimo_numero_inicio');
+						PedidoFacturacionProfiler::etapa('arca_ultimo_numero_inicio');
 						$numero = $this->facturaelectronicaService
 									->traeUltimoNumeroComprobante(
 										$empresa->nroinscripcion,
@@ -2561,7 +2650,7 @@ class FacturacionService
 										$puntoventa,
 										$opcionesEmisionNumeracion,
 									);
-						GastronomiaEmisionProfiler::activo()?->marcar('arca_ultimo_numero_fin');
+						PedidoFacturacionProfiler::etapa('arca_ultimo_numero_fin');
 					}
 					break;
 				case 'A':
@@ -3025,7 +3114,8 @@ class FacturacionService
 			// Numera factura con web service si es factura electronica
 			if ($puntoventa->modofacturacion != 'M')
 			{
-				$this->facturaelectronicaService->armaTipoTransaccion($letra, $cliente->modoFacturacion, $codigoTipoTransaccion,
+				$modoClienteFce = $this->hidratarContextoFceCliente($data, $cliente, $totalComprobante);
+				$this->facturaelectronicaService->armaTipoTransaccion($letra, $modoClienteFce, $codigoTipoTransaccion,
 																		$puntoventa, $totalComprobante);
 
 				$numero = $this->facturaelectronicaService
@@ -3122,10 +3212,7 @@ class FacturacionService
 				DB::beginTransaction();
 				try 
 				{
-					if ($codigoTipoTransaccion >= '200')
-						$tipoAnita = substr($tipotransaccion->abreviatura,0,1)+"CE";
-					else
-						$tipoAnita = $tipotransaccion->abreviatura;
+					$tipoAnita = $this->tipoAnitaSegunCodigoAfip($tipotransaccion, $codigoTipoTransaccion);
 
 					$venta = ['fecha' => $fechaFactura,
 						'fechajornada' => $fechaFactura,
@@ -3414,10 +3501,7 @@ class FacturacionService
 
 		try 
 		{
-			if ($codigoTipoTransaccion >= '200')
-				$tipoAnita = substr($tipotransaccion->abreviatura,0,1)+"CE";
-			else
-				$tipoAnita = $tipotransaccion->abreviatura;
+			$tipoAnita = $this->tipoAnitaSegunCodigoAfip($tipotransaccion, $codigoTipoTransaccion);
 
 			// Prioridad: opciones_emision (gastronomía/proceso cierre) → no pisar con fechafactura CAEA.
 			$fechaJornada = $fechaFactura;
@@ -3687,12 +3771,15 @@ class FacturacionService
 			}
 			// Graba contabilidad
 			if (! $omitirContabilidad) {
+			$omitirAnitaAsientoMostrador = ! $transaccionExterna
+				&& PedidoFacturaAnitaDeferSupport::debeDiferir();
 			Self::grabaAsientoContable($asientoContable, $puntoventa->empresa_id, $fechaFactura, $vta->id, 
 									$detalleContable, $centrocosto_id,
 									$moneda_id, $cotizacion, $signo, $cliente->cuentacontable_id,
 									substr($venta['codigo'],0,3), $letra, $puntoventa->codigo, $venta['numerocomprobante'],
 									$puntoventa->modofacturacion ?? null,
-									isset($venta['fechajornada']) ? (string) $venta['fechajornada'] : null);
+									isset($venta['fechajornada']) ? (string) $venta['fechajornada'] : null,
+									$omitirAnitaAsientoMostrador);
 			}
 
 			$ret = [
@@ -3744,7 +3831,7 @@ class FacturacionService
 						];
 					} else {
 						$replicacionAnitaIntentada = true;
-						GastronomiaEmisionProfiler::activo()?->marcar('anita_graba_inicio');
+						PedidoFacturacionProfiler::etapa('anita_graba_inicio');
 						// Graba anita
 						$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, 0, 0,
 									$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
@@ -3753,7 +3840,7 @@ class FacturacionService
 									$empresa->codigo, null, null, $modoMinimoAnita, $omitirCuentaCorriente,
 									$omitirStkmovAnita, $omitirNumeraAnitaFin, $puntoventa->modofacturacion ?? null);
 
-						GastronomiaEmisionProfiler::activo()?->marcar('anita_graba_fin');
+						PedidoFacturacionProfiler::etapa('anita_graba_fin');
 
 						if (isset($anita['error']))
 						{
@@ -3821,6 +3908,7 @@ class FacturacionService
 					(int) ($ret['venta_id'] ?? 0),
 					is_array($ret['anita_pendiente'] ?? null) ? $ret['anita_pendiente'] : null,
 					is_array($ret['vencae_pendiente'] ?? null) ? $ret['vencae_pendiente'] : null,
+					'mostrador',
 				);
 				unset($ret['anita_pendiente'], $ret['vencae_pendiente']);
 			}
@@ -5716,6 +5804,39 @@ class FacturacionService
 	 * @param  array<string, mixed>  $data
 	 * @return int|array{error:string}
 	 */
+	/**
+	 * @param  array<string, mixed>  $payload
+	 * @return array<string, mixed>
+	 */
+	private function conSugerenciaTipoPreview(array $payload, object $cliente, float $totalComprobante, string $letra): array
+	{
+		return array_merge(
+			$payload,
+			TipoComprobantePreviewSupport::desdeCliente($cliente, $totalComprobante, $letra)
+		);
+	}
+
+	/**
+	 * Deja en $data el modo FCE del cliente y el total, para numeración CAEA y ARCA.
+	 */
+	private function hidratarContextoFceCliente(array &$data, object $cliente, $totalComprobante): ?string
+	{
+		$modo = trim((string) ($cliente->modofacturacion ?? $cliente->modoFacturacion ?? ''));
+		$data['modofacturacion_cliente'] = $modo !== '' ? $modo : null;
+		$data['total_comprobante'] = (float) $totalComprobante;
+
+		return $data['modofacturacion_cliente'];
+	}
+
+	private function tipoAnitaSegunCodigoAfip(object $tipotransaccion, $codigoTipoTransaccion): string
+	{
+		$codigo = (int) preg_replace('/\D+/', '', (string) $codigoTipoTransaccion);
+
+		return $codigo >= 200
+			? substr((string) ($tipotransaccion->abreviatura ?? 'F'), 0, 1).'CE'
+			: (string) ($tipotransaccion->abreviatura ?? 'FAC');
+	}
+
 	private function ultimoNumeroBaseModoCaea(
 		array &$data,
 		object $puntoventa,
@@ -5974,7 +6095,7 @@ class FacturacionService
 			$anitaPendiente['data_cae'] = $dataCae;
 		}
 
-		GastronomiaEmisionProfiler::activo()?->marcar('anita_graba_inicio');
+		PedidoFacturacionProfiler::etapa('anita_graba_inicio');
 		$anita = $this->grabaAnitaConReintentoPorDuplicado(
 			$anitaPendiente['puntoventa_codigo'] ?? 0,
 			(string) ($anitaPendiente['letra'] ?? ''),
@@ -6001,7 +6122,7 @@ class FacturacionService
 			! empty($anitaPendiente['omitir_numera_anita_fin']),
 			$anitaPendiente['modo_facturacion_puntoventa'] ?? null,
 		);
-		GastronomiaEmisionProfiler::activo()?->marcar('anita_graba_fin');
+		PedidoFacturacionProfiler::etapa('anita_graba_fin');
 
 		if (is_array($anita) && isset($anita['error'])) {
 			if ($anita['error'] === 'Errvend') {
@@ -6540,6 +6661,26 @@ class FacturacionService
 	}
 
 	/**
+	 * Pedido y remito solo emiten factura (operación V). La NC se genera desde el comprobante de venta.
+	 *
+	 * @return array{error: string}|null
+	 */
+	private function errorNotaCreditoDesdePedidoORemito($tipotransaccion, string $origen): ?array
+	{
+		if (! $tipotransaccion) {
+			return ['error' => 'Tipo de transacción inexistente'];
+		}
+
+		if (! $tipotransaccion->esNotaCredito()) {
+			return null;
+		}
+
+		$desde = $origen === 'remito' ? 'un remito' : 'un pedido';
+
+		return ['error' => 'No se puede generar una nota de crédito desde '.$desde.'. Use un tipo de factura.'];
+	}
+
+	/**
 	 * POS gastronomía, estacionamiento o canje: no usa depósito ni transporte de reparto.
 	 *
 	 * @param  array<string, mixed>  $data
@@ -6787,6 +6928,38 @@ class FacturacionService
 	}
 
 	/**
+	 * Replica ctamov del asiento ERP (pedido / mostrador diferido).
+	 *
+	 * @param  array<string, mixed>  $anitaPendiente
+	 */
+	public function sincronizarCtamovAnitaPendientePedido(int $ventaId, array $anitaPendiente): void
+	{
+		$venta = is_array($anitaPendiente['venta'] ?? null) ? $anitaPendiente['venta'] : [];
+		$codigo = (string) ($venta['codigo'] ?? '');
+		$tipo = substr($codigo, 0, 3);
+		$letra = (string) ($anitaPendiente['letra'] ?? '');
+		$sucursal = (int) ($anitaPendiente['puntoventa_codigo'] ?? 0);
+		$nro = (int) ($venta['numerocomprobante'] ?? 0);
+		if ($tipo === '' || $nro <= 0) {
+			throw new Exception('ctamov diferido: faltan tipo o número de comprobante.');
+		}
+
+		$path = PedidoFacturaAnitaArchivosSupport::pathSistema($anitaPendiente);
+		$prevDivision = $this->flGrabaComprobanteDividido;
+		if ($path === PedidoFacturaAnitaArchivosSupport::PATH_VILLAFRANCA) {
+			$this->flGrabaComprobanteDividido = true;
+		}
+
+		try {
+			PedidoFacturacionProfiler::etapa('defer_ctamov_inicio');
+			$this->sincronizarCtamovAnitaDeVenta($ventaId, $tipo, $letra, $sucursal, $nro);
+			PedidoFacturacionProfiler::etapa('defer_ctamov_fin');
+		} finally {
+			$this->flGrabaComprobanteDividido = $prevDivision;
+		}
+	}
+
+	/**
 	 * Tras CAE OK: escribe ctamov en Anita para el asiento ERP de la venta
 	 * (creado con omitir_anita mientras ARCA no había autorizado).
 	 */
@@ -6935,10 +7108,20 @@ class FacturacionService
 			'codAut' => intval($venta->cae),
 		];
 		if (config('app.empresa') == 'EL BIERZO') {
-			unset($conceptosTotales[0]);
-			if ($flConDescuento) {
-				unset($conceptosTotales[1]);
-			}
+			$conceptosTotales = array_values(array_filter(
+				$conceptosTotales,
+				static function ($fila) {
+					$concepto = (string) ($fila['concepto'] ?? '');
+					if ($concepto === 'Subtotal' || $concepto === 'Total') {
+						return true;
+					}
+					if (str_starts_with($concepto, 'Descuento') && (float) ($fila['importe'] ?? 0) == 0.0) {
+						return false;
+					}
+
+					return true;
+				}
+			));
 		}
 
 		$qrPng = QrCode::encoding('UTF-8')->format('png')->size(500)->margin(10)->generate(
@@ -6988,6 +7171,34 @@ class FacturacionService
 		if ($trabajos === []) {
 			return [];
 		}
+
+		$grupos = [];
+		foreach ($trabajos as $idx => $t) {
+			$clave = ((int) ! empty($t['omitir_remito'])).'-'.((int) ! empty($t['solo_remito']));
+			$grupos[$clave][$idx] = $t;
+		}
+
+		$rutas = [];
+		foreach ($grupos as $grupo) {
+			foreach ($this->renderPdfFacturaLoteHomogeneo($ctx, $grupo) as $idx => $ruta) {
+				$rutas[$idx] = $ruta;
+			}
+		}
+
+		return $rutas;
+	}
+
+	/**
+	 * Un solo DomPDF para copias del mismo tipo (misma cantidad de páginas).
+	 *
+	 * @param  array<int, array{leyenda: string, omitir_remito: bool, solo_remito: bool}>  $trabajos
+	 * @return array<int, string>
+	 */
+	private function renderPdfFacturaLoteHomogeneo(array $ctx, array $trabajos): array
+	{
+		if ($trabajos === []) {
+			return [];
+		}
 		if (count($trabajos) === 1) {
 			$t = reset($trabajos);
 			$idx = key($trabajos);
@@ -6997,7 +7208,7 @@ class FacturacionService
 
 		$fragmentos = [];
 		$primero = true;
-		foreach ($trabajos as $idx => $t) {
+		foreach ($trabajos as $t) {
 			$fragmentos[] = $this->htmlFacturaDesdeContexto(
 				$ctx,
 				$t['leyenda'],
@@ -7248,7 +7459,7 @@ class FacturacionService
 	 */
 	public function ejecutarVencaePendienteGastronomia(array $vencaePendiente): void
 	{
-		GastronomiaEmisionProfiler::activo()?->marcar('anita_vencae_inicio');
+		PedidoFacturacionProfiler::etapa('anita_vencae_inicio');
 
 		$resultado = $this->grabaVenCae(
 			(string) ($vencaePendiente['tipo_anita'] ?? ''),
@@ -7259,7 +7470,7 @@ class FacturacionService
 			(string) ($vencaePendiente['fechavencimientocae'] ?? ''),
 		);
 
-		GastronomiaEmisionProfiler::activo()?->marcar('anita_vencae_fin');
+		PedidoFacturacionProfiler::etapa('anita_vencae_fin');
 
 		if ($resultado === 'Error') {
 			throw new \RuntimeException('No pudo grabar CAE en Anita (vencae).');
@@ -7324,7 +7535,7 @@ class FacturacionService
 			case 'C':
 			case 'E':
 				try {
-					GastronomiaEmisionProfiler::activo()?->marcar('arca_solicita_cae_inicio');
+					PedidoFacturacionProfiler::etapa('arca_solicita_cae_inicio');
 					$cae = $this->facturaelectronicaService->solicitaCAE(
 						$empresa->nroinscripcion,
 						$codigoTipoTransaccion,
@@ -7332,9 +7543,9 @@ class FacturacionService
 						$dataCAE,
 						$opcionesEmisionArca,
 					);
-					GastronomiaEmisionProfiler::activo()?->marcar('arca_solicita_cae_fin');
+					PedidoFacturacionProfiler::etapa('arca_solicita_cae_fin');
 				} catch (\Throwable $e) {
-					GastronomiaEmisionProfiler::activo()?->marcar('arca_solicita_cae_fin');
+					PedidoFacturacionProfiler::etapa('arca_solicita_cae_fin');
 					$cae = ['Error' => $e->getMessage()];
 				}
 				$flGrabaCae = true;
@@ -7373,7 +7584,9 @@ class FacturacionService
 				{
 					// PV CAEA: numeración local (Anita) al emitir; CAEA vigente en arca_caea.
 					// No se informa comprobante en ARCA en línea (informe quincenal aparte).
+					PedidoFacturacionProfiler::etapa('busca_caea_local_inicio');
 					$cae = $this->facturaelectronicaService->buscaCAEA($empresa->nroinscripcion, $fechaFactura);
+					PedidoFacturacionProfiler::etapa('busca_caea_local_fin');
 
 					if (isset($cae['Error'])) {
 						throw new Exception('No pudo asignar CAEA, no esta pedido para la quincena');
@@ -7393,7 +7606,7 @@ class FacturacionService
 
 		if ($puntoventa->modofacturacion != 'M' && ! $deferVencaeAnita && ! $omitirVencaeAnita)
 		{
-			GastronomiaEmisionProfiler::activo()?->marcar('anita_vencae_inicio');
+			PedidoFacturacionProfiler::etapa('anita_vencae_inicio');
 			// Graba cae en Anita
 			$vencae = Self::grabaVenCae($tipoAnita, $letra, $puntoventa->codigo,
 						$numeroComprobante, $cae['cae'],
@@ -7402,7 +7615,7 @@ class FacturacionService
 			if ($vencae === 'Error') {
 				throw new Exception('No pudo grabar CAE en Anita (vencae).');
 			}
-			GastronomiaEmisionProfiler::activo()?->marcar('anita_vencae_fin');
+			PedidoFacturacionProfiler::etapa('anita_vencae_fin');
 		}
 
 		return 'Success';
@@ -7444,7 +7657,7 @@ class FacturacionService
 		], $ventaId);
 
 		if ($puntoventa !== null && ($puntoventa->modofacturacion ?? '') !== 'M' && ! $deferVencaeAnita && ! $omitirVencaeAnita) {
-			GastronomiaEmisionProfiler::activo()?->marcar('anita_vencae_inicio');
+			PedidoFacturacionProfiler::etapa('anita_vencae_inicio');
 			$vencae = Self::grabaVenCae(
 				$tipoAnita,
 				$letra,
@@ -7453,7 +7666,7 @@ class FacturacionService
 				$cae,
 				date('Ymd', strtotime($fechaVto)),
 			);
-			GastronomiaEmisionProfiler::activo()?->marcar('anita_vencae_fin');
+			PedidoFacturacionProfiler::etapa('anita_vencae_fin');
 
 			if ($vencae === 'Error') {
 				throw new Exception('No pudo grabar CAE en Anita (vencae) en recuperación ARCA.');
@@ -7858,12 +8071,19 @@ class FacturacionService
 			return ['error' => 'El total del comprobante es 0. Revise precios del remito.'];
 		}
 
-		return [
-			'datosfactura' => $dataFactura,
-			'datoscliente' => $datosCliente,
-			'totalcomprobante' => $totalComprobante,
-			'conceptostotales' => $conceptosTotales,
-		];
+		$letraRemito = (string) (optional($cliente->condicionivas)->letra ?? 'A');
+
+		return $this->conSugerenciaTipoPreview(
+			[
+				'datosfactura' => $dataFactura,
+				'datoscliente' => $datosCliente,
+				'totalcomprobante' => $totalComprobante,
+				'conceptostotales' => $conceptosTotales,
+			],
+			$cliente,
+			(float) $totalComprobante,
+			$letraRemito
+		);
 	}
 
 	/**
@@ -7921,7 +8141,10 @@ class FacturacionService
 		$emitir = function () use ($data, $cliente, $remito) {
 			try {
 				// $remito actúa como cabecera (mismos campos que pedido: cond/vendedor/transporte/entrega)
-				$retorno = $this->generaUnaFacturaPorPedido($data, $cliente, $remito);
+				$retorno = PedidoFacturaAnitaDeferSupport::tomarYProgramar(
+					$this->generaUnaFacturaPorPedido($data, $cliente, $remito),
+					'remito',
+				);
 			} finally {
 				$this->facturandoDesdeRemitoId = null;
 				$this->numeroremitoFijoDesdeRemito = null;

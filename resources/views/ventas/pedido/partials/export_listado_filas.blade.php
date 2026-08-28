@@ -16,10 +16,10 @@
         @endif
     </td>
     <td>{{ $pedido['nombrecliente'] ?? $pedido->nombrecliente ?? '' }}</td>
-    <td>{{ $totales['caja'] }}</td>
-    <td>{{ $totales['pieza'] }}</td>
-    <td>{{ $totales['kilo'] }}</td>
-    <td>{{ $totales['pesada'] }}</td>
+    <td>{{ App\Support\Ventas\PedidoListadoSupport::formatearTotal($totales['caja']) }}</td>
+    <td>{{ App\Support\Ventas\PedidoListadoSupport::formatearTotal($totales['pieza']) }}</td>
+    <td>{{ App\Support\Ventas\PedidoListadoSupport::formatearTotal($totales['kilo']) }}</td>
+    <td>{{ App\Support\Ventas\PedidoListadoSupport::formatearTotal($totales['pesada']) }}</td>
     <td>{{ $pedido->nombretransporte ?? '' }}</td>
     <td>{{ $pedido['estado'] ?? $pedido->estado ?? '' }}</td>
 </tr>

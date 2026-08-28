@@ -17,6 +17,7 @@ use App\Support\Configuracion\ExclusionPercepcionIvaSupport;
 use App\Support\Configuracion\PercepcionIvaSujetoSupport;
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Ventas\ClienteExclusionPercepcionSupport;
+use App\Support\Ventas\LogisticaBierzoSupport;
 use App\Support\Ventas\VentaImporteDosDecimalesSupport;
 use App\Support\Stock\FormulaArticuloFactorCosto;
 use Illuminate\Support\Facades\Storage;
@@ -76,6 +77,8 @@ class ImpuestoService extends FacturacionService
 			$flGrabaComprobanteDividido = false;
 
 		$omitirPercepciones = ! empty($dataCliente['omitir_percepciones']);
+		$aplicarPercNoCategorizado = ! $omitirPercepciones
+			|| ! empty($dataCliente['aplicar_percepcion_no_categorizado']);
 
 		// Asigna datos cliente
 		$nroInscripcion = $dataCliente['numerodocumento'];
@@ -289,33 +292,22 @@ class ImpuestoService extends FacturacionService
 			}
 		}
 
-		// Logística El Bierzo (a-comprob): IVA con la alícuota del impuesto (21 %), no con el
-		// % de logística. El ítem MTXCA "Logistica" se agrega al armar el CAE (no acá: dataItem
+		// Logística El Bierzo (a-comprob.c calcula ~4220):
+		// tot_logistica = (tot_grav + _tot_grav_otasa) * clim_logistica / 100
+		// Base = gravado 21 % + 10,5 %. No el último renglón ni el exento.
+		// IVA con la alícuota del impuesto (21 %), no con el % de logística.
+		// El ítem MTXCA "Logistica" se agrega al armar el CAE (no acá: dataItem
 		// alimenta stock / venta_emision).
 		if (EntornoEmpresaSupport::esElBierzo() && $porcentajeLogistica && ! $flGrabaComprobanteDividido) {
-			$totalLogistica = round($totalNeto * $porcentajeLogistica / 100., 2);
+			$baseGravadoLogistica = LogisticaBierzoSupport::gravadoDesdeNetos($netos);
+			$totalLogistica = LogisticaBierzoSupport::importe(
+				$baseGravadoLogistica,
+				(float) $porcentajeLogistica,
+			);
 
 			$impuesto = Impuesto::findOrFail(config('facturacion.IMPUESTO_LOGISTICA_ID'));
 
-			if ($impuesto) {
-				$descuentoPieLinea = 0.0;
-				foreach ($dataItem as $lineaFactura) {
-					if ((float) ($lineaFactura['cantidad'] ?? 0) != 0.0) {
-						$descuentoPieLinea = (float) ($lineaFactura['descuentofinal'] ?? 0);
-						break;
-					}
-				}
-
-				if (($descuentoPieLinea + $porcentajeDescuentoImportePie) != 0.) {
-					$descuentoFinal += ($totalLogistica * ($descuentoPieLinea +
-										$porcentajeDescuentoImportePie) / 100.);
-
-					$totalLogistica *= (1. - (($descuentoPieLinea + $porcentajeDescuentoImportePie) / 100.));
-					$porcDescuento = ($descuentoPieLinea + $porcentajeDescuentoImportePie);
-				}
-
-				$totalLogistica = round($totalLogistica, 2);
-
+			if ($impuesto && $totalLogistica >= 0.01) {
 				self::agregaItemTotales(
 					'Total Logistica',
 					(float) $impuesto->valor,
@@ -456,15 +448,15 @@ class ImpuestoService extends FacturacionService
 			self::agregaItemTotales($detalle, 0, -$descuentoImportePie, 0, 0, 0, $conceptosTotales);
 		}
 
-		// RG 2126: sobre tot_fact (neto + IVA + otros, ya con descuento al pie).
-		if (! $omitirPercepciones && ! $flGrabaComprobanteDividido
+		// RG 2126 art. 5 / a-comprob.c: sobre tot_fact (neto + IVA + otros, ya con descuento).
+		if ($aplicarPercNoCategorizado && ! $flGrabaComprobanteDividido
 			&& PercepcionNoCategorizadoSupport::habilitada()
 			&& PercepcionNoCategorizadoSupport::corresponde($condicioniva)) {
 			$tasasIvaGravadas = [];
-			foreach ($conceptosTotales as $concepto) {
-				$nombre = (string) ($concepto['concepto'] ?? '');
-				if (str_starts_with($nombre, 'Iva ') || str_starts_with($nombre, 'Gravado al')) {
-					$tasasIvaGravadas[] = (float) ($concepto['tasa'] ?? 0);
+			foreach ($netos as $neto) {
+				$tasa = (float) ($neto['tasa'] ?? 0);
+				if ($tasa > 0.0001) {
+					$tasasIvaGravadas[] = $tasa;
 				}
 			}
 			$percNoCateg = PercepcionNoCategorizadoSupport::calcular($totalFinal, $tasasIvaGravadas);

@@ -9,6 +9,7 @@
         && filter_var(config('arca_wsapoc.habilitado', true), FILTER_VALIDATE_BOOLEAN);
 @endphp
 <script>window.VALIDACION_PADRON_POST_CARGA = true;</script>
+<script>window.pedidoRetornoIndexUrl = @json(route('pedido', $filtrosQuery ?? []));</script>
 <script>window.REQUIERE_VALIDACION_APOC_OPERACION = @json($requiereValidacionApocOperacion);</script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/padron-operacion.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/arca-apoc-validacion-async.js') }}" type="text/javascript"></script>
@@ -21,6 +22,7 @@
 @include('includes.ventas.preferencias_facturacion_scripts')
 @include('ventas.partials.aviso_deposito_facturacion')
 @include('includes.ventas.cliente_despacho_js')
+<script src="{{ asset('assets/pages/scripts/ventas/tipo_comprobante_preview.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/tipo_comprobante_preview.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/pedido/crear.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/crear.js')) ?: time() }}" type="text/javascript"></script>
 
 <script>
@@ -100,6 +102,7 @@
                 <h3 class="card-title">Editar Pedidos de clientes</h3>
 				&nbsp;- ID: {{ $pedido->id }} - Pedido: {{$pedido->codigo}}
                 <div class="card-tools">
+                    @include('includes.ventas.link_mi_impresora')
                     @if (empty($ocultarVolver))
                     <a href="{{ route('pedido', $filtrosQuery ?? []) }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado

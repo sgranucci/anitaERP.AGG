@@ -17,6 +17,7 @@ use App\Services\Arca\ArcaWsfeCaeaService;
 use App\Services\Arca\ArcaWsfeFacturaElectronicaService;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
+use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 
 class FacturaElectronicaService 
@@ -704,20 +705,20 @@ class FacturaElectronicaService
 
 	public function armaTipoTransaccion($letra, $modofacturacion, &$tipotransaccion, $puntoventa, $totalcomprobante)
 	{
-		// Arma el tipo de transaccion
-		if ($letra == 'B')
+		if ($letra == 'B') {
 			$tipotransaccion += 5;
-		elseif ($letra == 'E' || ($puntoventa->webservice == 'wsfex_v1'))
+		} elseif ($letra == 'E' || ($puntoventa->webservice ?? '') == 'wsfex_v1') {
 			$tipotransaccion += 18;
-		elseif ($letra == 'M')
+		} elseif ($letra == 'M') {
 			$tipotransaccion += 50;
+		}
 
-		// Si es FCE
-		if ($modofacturacion == 'C')
-		{
-			// Si supera limite asume factura electronica MyPiME
-			if ($totalComprobate >= config("facturacion.LIMITE_FCE"))
-				$tipotransaccion += 200;
+		if (
+			$modofacturacion == 'C'
+			&& (int) $tipotransaccion < 200
+			&& (float) $totalcomprobante >= ParametroSistemaSupport::limiteFce()
+		) {
+			$tipotransaccion += 200;
 		}
 	}
 

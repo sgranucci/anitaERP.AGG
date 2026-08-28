@@ -690,7 +690,7 @@ class PedidoFerliController extends Controller
 		$mventa_query = Mventa::all();
 		$lote_query = $this->loteRepository->all();
 		$puntoventa_query = $this->puntoventaRepository->all('A');
-		$tipotransaccion_query = $this->tipotransaccionRepository->all(['V','C'], ['A']);
+		$tipotransaccion_query = $this->tipotransaccionRepository->all(['V'], ['A']);
 		$formapago_query = $this->formapagoRepository->all();
 		$incoterm_query = $this->incotermRepository->all();
 		

@@ -59,6 +59,7 @@ class PedidoListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
     public function view(): View
     {
         $pedidos = $this->pedidoService->leePedidosIndex($this->filtros, false);
+        $totalesPorReparto = $this->pedidoService->totalesPedidosIndexPorReparto($this->filtros);
 
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($pedidos);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
@@ -80,6 +81,7 @@ class PedidoListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
 
         return view('exports.ventas.pedidoindex', [
             'pedidos' => $pedidos,
+            'totalesPorReparto' => $totalesPorReparto,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'subtituloFiltros' => $this->subtituloFiltros,
         ]);

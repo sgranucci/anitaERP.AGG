@@ -232,17 +232,19 @@ class IIBBService
 					}
 				}
 				// Verifica si tiene CM05 o no en la jurisdiccion
-				$provinciaCm05 = $cm05->where('provincia_id', $provincia->id); 
+				$provinciaCm05 = $cm05 instanceof \Illuminate\Support\Collection
+					? $cm05->firstWhere('provincia_id', $provincia->id)
+					: null;
 
 				// Si la provincia tiene CM05 usa los parametros cargados
 				if ($totalNeto >= $minimoNeto[$i])
 				{
 					$flPercibe = true;
 					$coeficienteCm05 = 1.;
-					if (count($provinciaCm05) > 0)
+					if ($provinciaCm05)
 					{
 						// Verifica exclusion
-						if ($provinciaCm05->certificadonoretencion == 'S')
+						if (($provinciaCm05->certificadonoretencion ?? '') == 'S')
 						{
 							if ($fechaFactura >= $provinciaCm05->desdefechanoretencion &&
 								$fechaFactura <= $provinciaCm05->hastafechanoretencion)
@@ -250,7 +252,7 @@ class IIBBService
 						}
 
 						// Verifica forma de calculo
-						if ($provinciaCm05->tipopercepcion == 'C') // Percibe por coeficiente
+						if (($provinciaCm05->tipopercepcion ?? '') == 'C') // Percibe por coeficiente
 							$coeficienteCm05 = $provinciaCm05->coeficiente;
 					}
 					if ($flPercibe)

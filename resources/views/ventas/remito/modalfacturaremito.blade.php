@@ -21,6 +21,9 @@
                             <label for="recipient-name" class="col-lg-4 col-form-label requerido">Tipo de transacci&oacute;n</label>
                             <select name="tipotransaccion_id" id="tipotransaccion_id" data-placeholder="Tipo de transacci&oacute;n" class="col-lg-6 form-control required" data-fouc>
                             </select>
+                            <div class="col-lg-8 offset-lg-4">
+                                <small id="aviso-tipo-fce" class="form-text text-info d-none"></small>
+                            </div>
                         </div>
                         <div class="form-group row" id="puntoventa">
                             <label for="recipient-name" class="col-lg-4 col-form-label requerido">Punto de venta</label>

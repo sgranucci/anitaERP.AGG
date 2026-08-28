@@ -3,16 +3,17 @@
 namespace App\Support\Contable\LibroIvaDigital;
 
 use App\Models\Ventas\Venta;
+use App\Support\Configuracion\ParametroSistemaSupport;
 
 /**
  * Identificación comprador Factura B (RG 1415 modificada por RG 5700/2025).
- * Umbral compartido con emisión WSFE ({@see config('arca_wsfe.receptor.consumidor_final_umbral_monto')}).
+ * Umbral compartido con emisión WSFE ({@see ParametroSistemaSupport::topeConsumidorFinal()}).
  */
 final class LibroIvaDigitalVentasConsumidorFinalSupport
 {
     public static function umbralIdentificacion(): float
     {
-        return (float) config('arca_wsfe.receptor.consumidor_final_umbral_monto', 10_000_000);
+        return ParametroSistemaSupport::topeConsumidorFinal();
     }
 
     public static function esConsumidorFinal(Venta $venta): bool

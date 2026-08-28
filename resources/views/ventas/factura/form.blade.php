@@ -142,7 +142,7 @@
 						value="{{ old('nombretransporte', $transporteFactura?->nombre ?? '') }}"
 						placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">
 				</div>
-				<div id="aviso-deposito-facturacion-factura" class="alert alert-info aviso-deposito-facturacion d-none mb-0 mt-2 py-2" role="status"></div>
+				<div id="aviso-deposito-facturacion-factura" class="aviso-deposito-facturacion small text-muted d-none mt-1 mb-0" role="status" style="font-size: 11px; line-height: 1.3;"></div>
 			</div>
 		</div>
 		<div class="form-group row" id="divlugar">

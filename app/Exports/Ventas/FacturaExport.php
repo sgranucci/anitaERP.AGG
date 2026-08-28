@@ -24,7 +24,7 @@ class FacturaExport implements FromView, WithColumnFormatting, WithColumnWidths,
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'E';
+    private const COL_ULTIMA = 'J';
 
     /** Congela también ID y Fecha (columnas A y B): el freeze arranca en C. */
     private const COL_FREEZE = 'C';
@@ -57,6 +57,7 @@ class FacturaExport implements FromView, WithColumnFormatting, WithColumnWidths,
     public function view(): View
     {
         $ventas = $this->facturacionService->leeSinPaginar($this->filtros);
+        $totalesPorReparto = $this->facturacionService->totalesIndexPorReparto($this->filtros);
 
         foreach ($ventas as $row) {
             $row->nombreempresa = $row->nombreempresa ?? ($row->puntoventas->empresas->nombre ?? '');
@@ -71,6 +72,7 @@ class FacturaExport implements FromView, WithColumnFormatting, WithColumnWidths,
 
         return view('exports.ventas.factura', [
             'ventas' => $ventas,
+            'totalesPorReparto' => $totalesPorReparto,
             'esExcel' => true,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'formatoNumero' => $this->formatoNumeroEfectivo(),
@@ -79,10 +81,14 @@ class FacturaExport implements FromView, WithColumnFormatting, WithColumnWidths,
 
     public function columnFormats(): array
     {
+        $num = ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2);
+
         return [
             'A' => NumberFormat::FORMAT_TEXT,
-            // E = Total: número real con máscara neutra (sumable/adaptable).
-            'E' => ExcelFormatoNumero::codigoColumna(ExcelFormatoNumero::preferenciaGlobal(), 2),
+            'F' => $num,
+            'G' => $num,
+            'H' => $num,
+            'J' => $num,
         ];
     }
 
@@ -95,10 +101,15 @@ class FacturaExport implements FromView, WithColumnFormatting, WithColumnWidths,
     {
         return [
             'A' => 10,
-            'B' => 14,
-            'C' => 32,
-            'D' => 32,
-            'E' => 16,
+            'B' => 12,
+            'C' => 28,
+            'D' => 28,
+            'E' => 18,
+            'F' => 12,
+            'G' => 12,
+            'H' => 12,
+            'I' => 18,
+            'J' => 14,
         ];
     }
 

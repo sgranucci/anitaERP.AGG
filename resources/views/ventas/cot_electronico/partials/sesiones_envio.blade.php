@@ -90,6 +90,12 @@
                                     class="btn btn-info btn-sm" title="Ver detalle">
                                     <i class="fa fa-eye"></i>
                                 </a>
+                                @if ($sesion->cantidad_ok > 0)
+                                    <a href="{{ route('sesion_impresion_cot', ['id' => $sesion->id, 'auto' => 1]) }}"
+                                        class="btn btn-outline-success btn-sm" title="Imprimir constancias COT">
+                                        <i class="fa fa-print"></i>
+                                    </a>
+                                @endif
                                 <a href="{{ route('listar_cot_electronico_sesion', ['formato' => 'PDF', 'id' => $sesion->id]) }}"
                                     class="btn btn-outline-secondary btn-sm" title="Exportar PDF" target="_blank" rel="noopener">
                                     <i class="fa fa-file-pdf"></i>

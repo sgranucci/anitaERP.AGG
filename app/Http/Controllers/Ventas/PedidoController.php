@@ -168,9 +168,11 @@ class PedidoController extends Controller
 		$filtros = PedidoListadoFiltros::resolverDesdeRequest($request);
 		$filtrosQuery = PedidoListadoFiltros::paraQueryString($filtros);
 		$pedidos = $this->pedidoService->leePedidosIndex($filtros, true);
+		$totalesPorReparto = $this->pedidoService->totalesPedidosIndexPorReparto($filtros);
 
 		return view('ventas.pedido.indexp', [
 			'pedidos' => $pedidos,
+			'totalesPorReparto' => $totalesPorReparto,
 			'filtros' => $filtros,
 			'filtrosQuery' => $filtrosQuery,
 			'camposFiltro' => PedidoListadoFiltros::CAMPOS,
@@ -1103,7 +1105,7 @@ class PedidoController extends Controller
 		$vendedor_query = Vendedor::orderBy('nombre','ASC')->get();
 		$lote_query = $this->loteRepository->all();
 		$puntoventa_query = $this->puntoventaRepository->all('A');
-		$tipotransaccion_query = $this->tipotransaccionRepository->all(['V','C'], ['A']);
+		$tipotransaccion_query = $this->tipotransaccionRepository->all(['V'], ['A']);
 		$formapago_query = $this->formapagoRepository->all();
 		$incoterm_query = $this->incotermRepository->all();
 		$unidadmedida_query = Unidadmedida::all()->toarray();

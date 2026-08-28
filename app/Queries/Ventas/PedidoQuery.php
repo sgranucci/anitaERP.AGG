@@ -44,10 +44,10 @@ class PedidoQuery implements PedidoQueryInterface
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        return $this->queryPedidoIndexListado($busqueda, $estado, $reparto, $fechaentrega)
-            ->with('pedido_articulos')
-            ->orderBy('pedido.id', 'desc')
-            ->paginate(10);
+        return $this->aplicarOrdenIndexPorReparto(
+            $this->queryPedidoIndexListado($busqueda, $estado, $reparto, $fechaentrega)
+                ->with('pedido_articulos')
+        )->paginate(10);
     }
 
     public function allPedidoIndexSinPaginar($busqueda, $estado = '', $reparto = '', $fechaentrega = '')
@@ -55,10 +55,10 @@ class PedidoQuery implements PedidoQueryInterface
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        return $this->queryPedidoIndexListado($busqueda, $estado, $reparto, $fechaentrega)
-            ->with('pedido_articulos')
-            ->orderBy('pedido.id', 'desc')
-            ->get();
+        return $this->aplicarOrdenIndexPorReparto(
+            $this->queryPedidoIndexListado($busqueda, $estado, $reparto, $fechaentrega)
+                ->with('pedido_articulos')
+        )->get();
     }
 
     public function allPedidoIndexListadoCursor($busqueda, $estado = '', $reparto = '', $fechaentrega = '')
@@ -66,9 +66,9 @@ class PedidoQuery implements PedidoQueryInterface
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        return $this->queryPedidoIndexListado($busqueda, $estado, $reparto, $fechaentrega)
-            ->orderBy('pedido.id', 'desc')
-            ->cursor();
+        return $this->aplicarOrdenIndexPorReparto(
+            $this->queryPedidoIndexListado($busqueda, $estado, $reparto, $fechaentrega)
+        )->cursor();
     }
 
     /**
@@ -81,9 +81,9 @@ class PedidoQuery implements PedidoQueryInterface
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $query = $this->queryPedidoIndexFiltros($filtros)
-            ->with('pedido_articulos')
-            ->orderBy('pedido.id', 'desc');
+        $query = $this->aplicarOrdenIndexPorReparto(
+            $this->queryPedidoIndexFiltros($filtros)->with('pedido_articulos')
+        );
 
         return $flPaginando ? $query->paginate(10) : $query->get();
     }
@@ -96,9 +96,39 @@ class PedidoQuery implements PedidoQueryInterface
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+        return $this->aplicarOrdenIndexPorReparto(
+            $this->queryPedidoIndexFiltros($filtros)
+        )->cursor();
+    }
+
+    /**
+     * Totales de kilos y cantidad por reparto (mismos filtros que el index).
+     * `ultimo_pedido_id` es el último del grupo en el orden del listado (código DESC, id DESC).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return Collection<string, object>
+     */
+    public function totalesPedidoIndexPorReparto(array $filtros): Collection
+    {
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
         return $this->queryPedidoIndexFiltros($filtros)
-            ->orderBy('pedido.id', 'desc')
-            ->cursor();
+            ->leftJoin('pedido_articulo', 'pedido_articulo.pedido_id', '=', 'pedido.id')
+            ->select(
+                'pedido.transporte_id',
+                'transporte.codigo as codigotransporte',
+                'transporte.nombre as nombretransporte',
+                DB::raw('COUNT(DISTINCT pedido.id) as cantidad_pedidos'),
+                DB::raw('COALESCE(SUM(pedido_articulo.caja), 0) as caja'),
+                DB::raw('COALESCE(SUM(pedido_articulo.pieza), 0) as pieza'),
+                DB::raw('COALESCE(SUM(pedido_articulo.kilo), 0) as kilo'),
+                DB::raw('COALESCE(SUM(pedido_articulo.pesada), 0) as pesada'),
+                DB::raw('MIN(pedido.id) as ultimo_pedido_id'),
+            )
+            ->groupBy('pedido.transporte_id', 'transporte.codigo', 'transporte.nombre')
+            ->get()
+            ->keyBy(static fn ($row) => (string) ((int) ($row->transporte_id ?? 0)));
     }
 
     /**
@@ -130,6 +160,19 @@ class PedidoQuery implements PedidoQueryInterface
         PedidoListadoFiltros::aplicar($pedidos, $filtros);
 
         return $pedidos;
+    }
+
+    /**
+     * El Bierzo procesa por reparto: código numérico de mayor a menor, sin reparto al final.
+     */
+    private function aplicarOrdenIndexPorReparto($query)
+    {
+        return $query
+            ->orderByRaw(SqlDialectSupport::coalesce(
+                SqlDialectSupport::castEntero('transporte.codigo'),
+                '0'
+            ).' DESC')
+            ->orderBy('pedido.id', 'desc');
     }
 
     /**

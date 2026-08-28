@@ -156,6 +156,30 @@
 .sesion-ruta-hoja.pendiente {
     border-left: 4px solid #f4d03f;
 }
+.sesion-ruta-hoja.es-nas {
+    background: #fef9e7;
+    border: 2px dashed #d4a017;
+    border-top: 2px dashed #d4a017;
+    box-shadow: none;
+}
+.sesion-ruta-hoja.es-nas.ok {
+    border-left: 4px dashed #27ae60;
+}
+.sesion-ruta-hoja.es-nas.error {
+    border-left: 4px dashed #c0392b;
+}
+.sesion-nas-badge {
+    display: inline-block;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: #7d6608;
+    background: #f9e79f;
+    border: 1px solid #d4a017;
+    border-radius: 3px;
+    padding: 1px 6px;
+}
 .sesion-ruta-hoja .btn-solo-copia {
     padding: 2px 8px;
     font-size: 11px;

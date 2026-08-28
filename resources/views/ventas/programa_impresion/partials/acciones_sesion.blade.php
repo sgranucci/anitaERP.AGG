@@ -1,6 +1,7 @@
 @php
-    $urlPdfSesion = ! empty($resultado['pdf_sesion'] ?? null)
-        ? route('descargar_impresion_sesion', ['t' => basename((string) $resultado['pdf_sesion'])])
+    $puedeDescargarPdf = ! empty($sesion['pack']);
+    $urlPdfSesion = $puedeDescargarPdf
+        ? route('descargar_impresion_sesion', ['t' => 'papel'])
         : null;
     $puedeEjecutar = ! empty($sesion['pack']);
     $idBotonEjecutar = ! empty($botonEjecutarId) ? $botonEjecutarId : null;
@@ -15,8 +16,9 @@
         <i class="fa fa-print"></i> Ejecutar sesión
     </button>
     @if ($urlPdfSesion)
-        <a href="{{ $urlPdfSesion }}" class="btn btn-outline-primary">
+        <a href="{{ $urlPdfSesion }}" class="btn btn-outline-primary link-descargar-pdf-sesion" title="Solo las copias de papel marcadas. El NAS no está en este archivo.">
             <i class="fa fa-file-pdf"></i> Descargar PDF
         </a>
+        <span class="small text-muted">Acrobat: solo papel, sin el duplicado NAS.</span>
     @endif
 </div>

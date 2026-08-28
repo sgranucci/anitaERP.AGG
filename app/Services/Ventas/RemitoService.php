@@ -29,6 +29,8 @@ use Auth;
 
 class RemitoService
 {
+    private const ERROR_SIN_PESADA = 'No se puede generar remito: el pedido no tiene ítems pesados. Cargue la pesada de al menos un ítem.';
+
     protected $remitoRepository;
 
     protected $remito_articuloRepository;
@@ -457,7 +459,7 @@ class RemitoService
     }
 
     /**
-     * Genera remito desde pedido Bierzo (sin pesada en remito: usa pesada/kilo del pedido).
+     * Genera remito desde pedido Bierzo. Requiere pesada en al menos un ítem (igual que facturar).
      * No afecta gastronomía/estacionamiento.
      */
     public function crearDesdePedido(array $data): array
@@ -490,7 +492,7 @@ class RemitoService
 
         $ids = $data['pedido_articulo_ids'] ?? [];
         if (! is_array($ids) || $ids === []) {
-            return ['error' => 'Sin ítems para remito'];
+            return ['error' => self::ERROR_SIN_PESADA];
         }
 
         $puntoventaId = (int) ($data['puntoventaremito_id'] ?? $data['puntoventa_id'] ?? 0);
@@ -531,12 +533,10 @@ class RemitoService
             if (! $pa || $pa->pedido_id != $pedido->id || ! PedidoEstadoErpSupport::esItemPendienteFacturable($pa->estado ?? null)) {
                 continue;
             }
-            $kilo = (float) $pa->pesada > 0 ? (float) $pa->pesada : (float) $pa->kilo;
-            if ($kilo == 0.0) {
-                $sku = $pa->articulos->sku ?? $pa->articulo_id;
-
-                return ['error' => 'Artículo '.$sku.' sin kilos para remito'];
+            if ((float) $pa->pesada <= 0) {
+                continue;
             }
+            $kilo = (float) $pa->pesada;
 
             $nItem++;
             $articulos_id[] = $pa->articulo_id;
@@ -574,7 +574,7 @@ class RemitoService
         }
 
         if ($lineasRemito === []) {
-            return ['error' => 'No hay ítems pendientes para remito'];
+            return ['error' => self::ERROR_SIN_PESADA];
         }
 
         DB::beginTransaction();

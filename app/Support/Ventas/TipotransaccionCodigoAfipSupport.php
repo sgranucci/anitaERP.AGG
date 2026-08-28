@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas;
 
+use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 
 /**
@@ -39,7 +40,7 @@ final class TipotransaccionCodigoAfipSupport
         if (
             ($modoFacturacionCliente ?? '') === 'C'
             && $codigo < 200
-            && ($totalComprobante ?? 0) >= (float) config('facturacion.LIMITE_FCE', 0)
+            && ($totalComprobante ?? 0) >= ParametroSistemaSupport::limiteFce()
         ) {
             $tipo += 200;
         }

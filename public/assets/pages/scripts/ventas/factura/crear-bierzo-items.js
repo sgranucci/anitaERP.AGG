@@ -102,6 +102,22 @@
 		return 2;
 	}
 
+	function marcarCambioCantidadFactura($el) {
+		$el.data('facturaCambioLock', Date.now());
+		setTimeout(function () {
+			$el.removeData('facturaCambioLock');
+		}, 400);
+	}
+
+	function esCambioCantidadFacturaDuplicado($el) {
+		var t = $el.data('facturaCambioLock');
+		return !!t && (Date.now() - t) < 400;
+	}
+
+	function dispararCambioCampoFactura(el) {
+		$(el).trigger('change');
+	}
+
 	function redondeaCajaFactura(ptr, opcion) {
 		var caja = $(ptr).parents('tr').find('.caja').val();
 		var pieza = $(ptr).parents('tr').find('.pieza').val();
@@ -163,16 +179,14 @@
 	}
 
 	window.activa_eventosFacturaBierzo = function (flInicio) {
-		if (!flInicio) {
-			$(document).off('change.ocPedidoCodigoLocal', '.codigoarticulolocal');
-			$('.unidadmedida_id').off('change');
-			$('.caja').off('change');
-			$('.pieza').off('change');
-			$('.kilo').off('change');
-			$('.descuentoventa_id').off('change');
-			$('.precio').off('change');
-			$('#puntoventa_id').off('change.facturaBierzo');
-		}
+		$(document).off('change.ocPedidoCodigoLocal', '.codigoarticulolocal');
+		$('.unidadmedida_id').off('change.facturaBierzo');
+		$('.caja').off('change.facturaBierzo');
+		$('.pieza').off('change.facturaBierzo');
+		$('.kilo').off('change.facturaBierzo');
+		$('.descuentoventa_id').off('change.facturaBierzo');
+		$('.precio').off('change.facturaBierzo');
+		$('#puntoventa_id').off('change.facturaBierzo');
 
 		activa_eventos_consultacliente();
 		activa_eventos_consultaarticulo();
@@ -194,7 +208,7 @@
 			}
 		});
 
-		$('.unidadmedida_id').on('change', function () {
+		$('.unidadmedida_id').on('change.facturaBierzo', function () {
 			$(this).parents('tr').find('.caja').val('');
 			$(this).parents('tr').find('.pieza').val('');
 			$(this).parents('tr').find('.kilo').val('');
@@ -216,19 +230,31 @@
 			}
 		});
 
-		$('.caja').on('change', function () {
+		$('.caja').on('change.facturaBierzo', function () {
+			if (esCambioCantidadFacturaDuplicado($(this))) {
+				return;
+			}
+			marcarCambioCantidadFactura($(this));
 			redondeaCajaFactura(this, 1);
 		});
 
-		$('.pieza').on('change', function () {
+		$('.pieza').on('change.facturaBierzo', function () {
+			if (esCambioCantidadFacturaDuplicado($(this))) {
+				return;
+			}
+			marcarCambioCantidadFactura($(this));
 			redondeaCajaFactura(this, 2);
 		});
 
-		$('.kilo').on('change', function () {
+		$('.kilo').on('change.facturaBierzo', function () {
+			if (esCambioCantidadFacturaDuplicado($(this))) {
+				return;
+			}
+			marcarCambioCantidadFactura($(this));
 			redondeaCajaFactura(this, 3);
 		});
 
-		$('.descuentoventa_id').on('change', function () {
+		$('.descuentoventa_id').on('change.facturaBierzo', function () {
 			var categoria_secos_id = $('#categoria_secos_id').val();
 			var subcategoria_maquina_id = $('#subcategoria_maquina_id').val();
 			var subcategoria_tira_id = $('#subcategoria_tira_id').val();
@@ -250,7 +276,7 @@
 			redondeaCajaFactura(this, opcionCantidadSegunUnidadFactura($(this).parents('tr').find('.unidadmedida').val()));
 		});
 
-		$('.precio').on('change', function () {
+		$('.precio').on('change.facturaBierzo', function () {
 			if (typeof calculaFactura === 'function') {
 				calculaFactura();
 			}
@@ -524,16 +550,18 @@
 		var accion = obtenerSiguienteCampoFactura(event.target);
 
 		if (accion === 'defer') {
-			$target.trigger('change');
+			event.target.blur();
 			return;
 		}
 
 		if (typeof accion === 'string' && accion.indexOf('redondea:') === 0) {
 			flSaltarFocusDescuentoFactura = accion === 'redondea:kilo';
-			$target.trigger('change');
 			if (accion === 'redondea:descuento' && !$tr.length) {
 				flSaltarFocusDescuentoFactura = false;
 			}
+			// Enter en kilos/caja no cambia el valor (lo llenó el redondeo): blur no dispara
+			// change y el foco se queda. trigger + lock evita el segundo change del blur.
+			dispararCambioCampoFactura(event.target);
 			return;
 		}
 

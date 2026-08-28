@@ -122,10 +122,39 @@
 		return null;
 	}
 
+	function pathRetornoIndexPedidos() {
+		var raw = window.pedidoRetornoIndexUrl;
+		if (!raw) {
+			return '';
+		}
+		try {
+			var parsed = new URL(raw, window.location.origin);
+			return parsed.pathname + parsed.search;
+		} catch (e) {
+			return String(raw).indexOf('/') === 0 ? String(raw) : '';
+		}
+	}
+
+	function urlConRetornoIndex(url) {
+		var path = pathRetornoIndexPedidos();
+		if (!path || !url) {
+			return url;
+		}
+		try {
+			var abs = new URL(url, window.location.origin);
+			if (!abs.searchParams.get('retorno')) {
+				abs.searchParams.set('retorno', path);
+			}
+			return abs.toString();
+		} catch (e) {
+			return url;
+		}
+	}
+
 	function irASesionImpresionORecargar(data) {
 		var url = extraerUrlImpresionSesion(data);
 		if (url) {
-			window.location = url;
+			window.location = urlConRetornoIndex(url);
 			return;
 		}
 		window.history.go(0);
@@ -1853,6 +1882,22 @@
 		return isNaN(n) ? 0 : n;
 	}
 
+	function mensajeEmisionPedidoSinItems() {
+		var esRemito = window.modoEmisionPedido === 'remito';
+		if (window._pedidoItemsSinPesadaExcluidos > 0) {
+			return esRemito
+				? 'No se puede generar remito: el pedido no tiene ítems pesados. Cargue la pesada de al menos un ítem.'
+				: 'No se puede facturar: el pedido no tiene ítems pesados. Cargue la pesada de al menos un ítem.';
+		}
+		return esRemito
+			? 'No hay ítems pendientes en el pedido para remitir.'
+			: 'No hay ítems pendientes en el pedido para facturar.';
+	}
+
+	function tituloEmisionPedido() {
+		return window.modoEmisionPedido === 'remito' ? 'Generar remito' : 'Facturar pedido';
+	}
+
 	function estadoItemPendienteFacturable($tr) {
 		var estadoItem = $tr.find('.estados').val();
 		return estadoItem == 'P' || estadoItem == '0';
@@ -1874,7 +1919,7 @@
 			var $tr = $(this).parents('tr');
 			itemId = $tr.find('.ids').val();
 
-			if (window.modoEmisionPedido === 'factura') {
+			if (window.modoEmisionPedido === 'factura' || window.modoEmisionPedido === 'remito') {
 				if (!estadoItemPendienteFacturable($tr)) {
 					return;
 				}
@@ -1900,6 +1945,17 @@
 		});
 		nombrecliente = $("#nombrecliente").val();
 		descuentoCliente = $('#descuento').val();
+
+		if ((window.modoEmisionPedido === 'factura' || window.modoEmisionPedido === 'remito')
+			&& pedido_articulo_ids.length === 0) {
+			var msgSinPesada = mensajeEmisionPedidoSinItems();
+			if (window.toastr) {
+				toastr.error(msgSinPesada, tituloEmisionPedido(), { timeOut: 9000, closeButton: true, progressBar: true });
+			} else {
+				alert(msgSinPesada);
+			}
+			return;
+		}
 
 		$("#facturarPedidoModal").modal('show');
 	}
@@ -2081,7 +2137,7 @@
 
 			if (estadoItem == 'P' || estadoItem == '0')
 			{
-				if (!esRemito && pesadaNumericaFilaPedido($tr) <= 0) {
+				if (pesadaNumericaFilaPedido($tr) <= 0) {
 					return;
 				}
 
@@ -2113,6 +2169,19 @@
 				$('#factura-pedido-table').find('tr').last().find('.precio_fac').val(precio);
 			}
 		});
+
+		if (esRemito) {
+			var excluidosRemito = window._pedidoItemsSinPesadaExcluidos || 0;
+			if (excluidosRemito > 0) {
+				var avisoRemito = excluidosRemito === 1
+					? '1 ítem sin pesar no se incluye en el remito.'
+					: excluidosRemito + ' ítems sin pesar no se incluyen en el remito.';
+				modal.find('#alert-preview-factura-pedido')
+					.removeClass('d-none alert-warning alert-success')
+					.addClass('alert alert-info')
+					.text(avisoRemito);
+			}
+		}
 
 		// Bonificaciones / preview de factura: solo al facturar (no al remitir)
 		if (!esRemito) {
@@ -2165,9 +2234,9 @@
 
 		$('#factura-pedido-table').find('tr').last().find('.descripcionarticulo_fac').val("Totales");
 		$('#factura-pedido-table').find('tr').last().find('.descripcionarticulo_fac').css('fontWeight', 'bold');
-		$('#factura-pedido-table').find('tr').last().find('.caja_fac').val(totalcajaspedido);
-		$('#factura-pedido-table').find('tr').last().find('.pieza_fac').val(totalpiezaspedido);
-		$('#factura-pedido-table').find('tr').last().find('.pesada_fac').val(totalkilospesados);
+		$('#factura-pedido-table').find('tr').last().find('.caja_fac').val((parseFloat(totalcajaspedido) || 0).toFixed(2));
+		$('#factura-pedido-table').find('tr').last().find('.pieza_fac').val((parseFloat(totalpiezaspedido) || 0).toFixed(2));
+		$('#factura-pedido-table').find('tr').last().find('.pesada_fac').val((parseFloat(totalkilospesados) || 0).toFixed(2));
 		$('#factura-pedido-table').find('tr').last().find('.caja_fac').css('fontWeight', 'bold');
 		$('#factura-pedido-table').find('tr').last().find('.pieza_fac').css('fontWeight', 'bold');
 		$('#factura-pedido-table').find('tr').last().find('.pesada_fac').css('fontWeight', 'bold');
@@ -2277,6 +2346,14 @@
 		if (window.modoEmisionPedido === 'remito') {
 			return;
 		}
+		if (!pedido_articulo_ids || pedido_articulo_ids.length === 0) {
+			var msgSinItems = mensajeEmisionPedidoSinItems();
+			modal.find('#alert-preview-factura-pedido')
+				.removeClass('d-none alert-info alert-success')
+				.addClass('alert alert-warning')
+				.text(msgSinItems);
+			return;
+		}
 		var silencioso = !!(opciones && opciones.silencioso);
 
 		var token = $('#csrf_token').val();
@@ -2343,9 +2420,7 @@
 				var lineasFactura = $('#tbody-tabla-factura tr').not('.renglon-total-item-factura').length;
 				var excluidosSinPesada = window._pedidoItemsSinPesadaExcluidos || 0;
 				if (lineasFactura === 0) {
-					var sinItems = excluidosSinPesada > 0
-						? 'No hay ítems pesados para facturar. Los ítems sin pesar se cierran con Falta Stock al emitir, pero hace falta al menos uno pesado.'
-						: 'No hay ítems pendientes en el pedido para mostrar en la factura.';
+					var sinItems = mensajeEmisionPedidoSinItems();
 					modal.find('#alert-preview-factura-pedido')
 						.removeClass('d-none alert-info alert-success')
 						.addClass('alert alert-warning')
@@ -2382,6 +2457,10 @@
 				});
 				$('.tasatotal').css('text-align', 'right');
 				$('.importetotal').css('text-align', 'right');
+
+				if (typeof window.aplicarTipoComprobanteSugerido === 'function') {
+					window.aplicarTipoComprobanteSugerido(data, modal);
+				}
 			},
 			error: function(xhr, status) {
 				if (status === 'abort' || seq !== previewFacturaPedidoSeq) {
@@ -2602,6 +2681,16 @@
 
 	function emitirRemitoPedidoDesdeModal()
 	{
+		if (!pedido_articulo_ids || pedido_articulo_ids.length === 0) {
+			var msgEmitirSinPesada = mensajeEmisionPedidoSinItems();
+			if (window.toastr) {
+				toastr.error(msgEmitirSinPesada, tituloEmisionPedido(), { timeOut: 9000, closeButton: true, progressBar: true });
+			} else {
+				alert(msgEmitirSinPesada);
+			}
+			return;
+		}
+
 		var token = $('#csrf_token').val();
 		var puntoventaremito_id = $('#puntoventaremito_id').val();
 		var fechafactura = $('#fechafactura').val();
@@ -2677,6 +2766,19 @@
 
 	function emitirFacturaPedidoDesdeModal()
 	{
+		if (!pedido_articulo_ids || pedido_articulo_ids.length === 0) {
+			var msgEmitirSinPesada = mensajeEmisionPedidoSinItems();
+			if (window.toastr) {
+				toastr.error(msgEmitirSinPesada, tituloEmisionPedido(), { timeOut: 9000, closeButton: true, progressBar: true });
+			} else {
+				alert(msgEmitirSinPesada);
+			}
+			if (typeof liberarEmisionComprobantePedido === 'function') {
+				liberarEmisionComprobantePedido();
+			}
+			return;
+		}
+
 		var token = $('#csrf_token').val();
 		var puntoventa_id = $('#puntoventa_id').val();
 		var tipotransaccion_id = $('#tipotransaccion_id').val();
@@ -2727,6 +2829,7 @@
 				actividad_arca_id: actividad_arca_id,
 				cliente_entrega_id: lugarEntregaFactura.cliente_entrega_id,
 				lugarentrega: lugarEntregaFactura.lugarentrega,
+				retorno_index: pathRetornoIndexPedidos(),
 				_token: token
 			},
 		})
@@ -2766,6 +2869,10 @@
 		medidas_txt = "";
 		precios_txt = "";
 		tallesid_txt = "";
+		if (typeof window.resetearTipoComprobanteSugerido === 'function') {
+			window.resetearTipoComprobanteSugerido();
+		}
+		$(this).find('#aviso-tipo-fce').addClass('d-none').text('');
 	});
 
 	$('#puntoventa_id').on('change', function () {

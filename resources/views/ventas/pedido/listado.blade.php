@@ -27,6 +27,12 @@
             word-wrap: break-word;
         }
         table.data tbody tr:nth-child(even) { background-color: #f5f5f5; }
+        table.data tbody tr.pedido-subtotal-reparto,
+        table.data tbody tr.pedido-subtotal-reparto td {
+            background-color: #F9E79F;
+            font-weight: bold;
+            color: #17202A;
+        }
         table.data thead tr { background-color: #85C1E9; }
         table.data th {
             font-size: 7px;
@@ -82,6 +88,11 @@
             @foreach ($pedidos as $pedido)
                 @php $totales = PedidoListadoSupport::totalesPedido($pedido); @endphp
                 @include('ventas.pedido.partials.export_listado_filas', compact('pedido', 'totales'))
+                @if (PedidoListadoSupport::esCierreReparto($pedido, $totalesPorReparto ?? []))
+                    @include('ventas.pedido.partials.fila_subtotal_reparto', [
+                        'metaReparto' => PedidoListadoSupport::metaReparto($pedido, $totalesPorReparto ?? []),
+                    ])
+                @endif
             @endforeach
         </tbody>
         @if ($mostrarTotalesGenerales && $totalFilas > 0)
@@ -100,10 +111,10 @@
             <tfoot>
                 <tr>
                     <td colspan="4">Totales</td>
-                    <td>{{ $totalesFinales['caja'] }}</td>
-                    <td>{{ $totalesFinales['pieza'] }}</td>
-                    <td>{{ $totalesFinales['kilo'] }}</td>
-                    <td>{{ $totalesFinales['pesada'] }}</td>
+                    <td>{{ PedidoListadoSupport::formatearTotal($totalesFinales['caja']) }}</td>
+                    <td>{{ PedidoListadoSupport::formatearTotal($totalesFinales['pieza']) }}</td>
+                    <td>{{ PedidoListadoSupport::formatearTotal($totalesFinales['kilo']) }}</td>
+                    <td>{{ PedidoListadoSupport::formatearTotal($totalesFinales['pesada']) }}</td>
                     <td colspan="2"></td>
                 </tr>
             </tfoot>

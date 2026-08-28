@@ -81,6 +81,15 @@ class RemitoListadoFiltros
             return self::filtrosVacios();
         }
 
+        $numeroRemito = trim((string) $request->input('numero_remito', ''));
+        if ($numeroRemito !== '') {
+            return array_merge(self::filtrosVacios(), [
+                'numero_remito' => $numeroRemito,
+                'solo_numero' => true,
+                'solo_huerfanos' => false,
+            ]);
+        }
+
         $valor = FiltrosListadoRequest::valorBusqueda($request, $busquedaRuta);
         $busquedaRapida = $request->boolean('filtro_busqueda_rapida');
 
@@ -112,11 +121,17 @@ class RemitoListadoFiltros
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
             'solo_huerfanos' => $request->boolean('solo_huerfanos'),
+            'numero_remito' => '',
+            'solo_numero' => false,
         ], ListadoRepartoFechaEntregaSupport::resolverDesdeRequest($request));
     }
 
     public static function tieneCriteriosAplicados(array $filtros): bool
     {
+        if (self::esBusquedaSoloNumero($filtros)) {
+            return true;
+        }
+
         if (! empty($filtros['solo_huerfanos'])) {
             return true;
         }
@@ -161,6 +176,8 @@ class RemitoListadoFiltros
             'valor_hasta' => '',
             'busqueda' => '',
             'solo_huerfanos' => false,
+            'numero_remito' => '',
+            'solo_numero' => false,
         ], ListadoRepartoFechaEntregaSupport::vaciosConHoy());
     }
 
@@ -169,6 +186,10 @@ class RemitoListadoFiltros
      */
     public static function paraQueryString(array $filtros): array
     {
+        if (self::esBusquedaSoloNumero($filtros)) {
+            return ['numero_remito' => trim((string) $filtros['numero_remito'])];
+        }
+
         $params = [];
         if (($filtros['modo'] ?? self::MODO_TODOS) !== self::MODO_TODOS) {
             $params['filtro_modo'] = $filtros['modo'];
@@ -197,6 +218,12 @@ class RemitoListadoFiltros
      */
     public static function aplicar(Builder $query, array $filtros): void
     {
+        if (self::esBusquedaSoloNumero($filtros)) {
+            self::aplicarSoloNumero($query, trim((string) $filtros['numero_remito']));
+
+            return;
+        }
+
         ListadoRepartoFechaEntregaSupport::aplicar($query, $filtros, 'remito.fechaentrega');
 
         if (! empty($filtros['solo_huerfanos'])) {
@@ -663,8 +690,58 @@ class RemitoListadoFiltros
         };
     }
 
+    public static function esBusquedaSoloNumero(array $filtros): bool
+    {
+        return ! empty($filtros['solo_numero']) && trim((string) ($filtros['numero_remito'] ?? '')) !== '';
+    }
+
+    /**
+     * Busca por número/código de remito sin fechas, repartos ni otros filtros.
+     * Acepta el código completo (REM R 1-12345) o solo el número (12345).
+     *
+     * @param  Builder<\App\Models\Ventas\Remito>  $query
+     */
+    public static function aplicarSoloNumero(Builder $query, string $numero): void
+    {
+        $numero = trim($numero);
+        if ($numero === '') {
+            $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        $query->where(function ($q) use ($numero) {
+            $q->where('remito.codigo', '=', $numero);
+
+            $normalizado = trim(preg_replace('/\s+/', ' ', $numero) ?? $numero);
+            if ($normalizado !== $numero) {
+                $q->orWhere('remito.codigo', '=', $normalizado);
+            }
+
+            if (preg_match('/(\d+)\s*$/', $numero, $m)) {
+                $conCeros = $m[1];
+                $sinCeros = ltrim($conCeros, '0');
+                $sinCeros = $sinCeros === '' ? '0' : $sinCeros;
+                $sufijos = array_unique([$conCeros, $sinCeros]);
+                foreach ($sufijos as $sufijo) {
+                    $q->orWhere('remito.codigo', 'like', '%-'.$sufijo)
+                        ->orWhere('remito.codigo', 'like', '% '.$sufijo);
+                }
+            }
+
+            $id = filter_var($numero, FILTER_VALIDATE_INT);
+            if ($id !== false && (int) $id > 0) {
+                $q->orWhere('remito.id', (int) $id);
+            }
+        });
+    }
+
     public static function subtituloFiltros(array $filtros): string
     {
+        if (self::esBusquedaSoloNumero($filtros)) {
+            return 'Número remito: '.$filtros['numero_remito'].' (sin fechas ni otros filtros)';
+        }
+
         $partes = [];
         $ext = ListadoRepartoFechaEntregaSupport::subtitulo($filtros);
         if ($ext !== '') {

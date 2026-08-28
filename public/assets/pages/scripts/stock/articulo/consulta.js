@@ -52,6 +52,31 @@ window.mensajeErrorListaprecioArticuloVentas = function (sku, numeroItem) {
     return 'El artículo ' + etiqueta + sufijo + ' no tiene lista de precios asignada.';
 };
 
+function esLineaFacturaMostrador($tr) {
+    return $tr && $tr.length && $tr.closest('#formgeneral[data-factura-proceso]').length > 0;
+}
+
+function avisarArticuloSkuNoEncontrado($tr, $skuInput, mensaje) {
+    $tr.find('.articulo_id').val('');
+    $tr.find('.descripcionarticulo').val('');
+    if (esLineaFacturaMostrador($tr)) {
+        $tr.find('.codigoarticulo, .codigoarticulolocal').val('');
+        $tr.find('.codigo_previo_articulo').val('');
+        actualizarLinkEditarArticulo($tr, '');
+    }
+    alert(mensaje);
+    if (esLineaFacturaMostrador($tr)) {
+        setTimeout(function () {
+            var $sku = $skuInput && $skuInput.length
+                ? $skuInput
+                : $tr.find('.codigoarticulo, .codigoarticulolocal').first();
+            if ($sku.length) {
+                $sku.focus();
+            }
+        }, 0);
+    }
+}
+
 window.limpiarLineaArticuloSinListaprecio = function ($tr, sku, numeroItem) {
     alert(window.mensajeErrorListaprecioArticuloVentas(sku, numeroItem));
     $tr.find('.articulo_id').val('');
@@ -719,9 +744,7 @@ function activa_eventos_consultaarticulo()
 
         $.get(url_res, function (data) {
             if (!data || !data.id) {
-                $tr.find('.articulo_id').val('');
-                $tr.find('.descripcionarticulo').val('');
-                alert(consultaArticuloRequiereSoloFacturable($tr)
+                avisarArticuloSkuNoEncontrado($tr, $(ptrrenglon), consultaArticuloRequiereSoloFacturable($tr)
                     ? 'No se encontró artículo facturable con ese SKU.'
                     : 'No se encontró artículo con ese SKU.');
                 return;
@@ -775,9 +798,7 @@ function activa_eventos_consultaarticulo()
 
             enfocarCantidadLineaArticulo($tr, unidadmedida);
         }).fail(function () {
-            $tr.find('.articulo_id').val('');
-            $tr.find('.descripcionarticulo').val('');
-            alert('No se encontró artículo con ese SKU.');
+            avisarArticuloSkuNoEncontrado($tr, $(ptrrenglon), 'No se encontró artículo con ese SKU.');
         });
 
         setTimeout(() => {

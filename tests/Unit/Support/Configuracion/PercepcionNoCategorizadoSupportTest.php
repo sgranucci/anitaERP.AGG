@@ -40,4 +40,32 @@ class PercepcionNoCategorizadoSupportTest extends TestCase
 
         self::assertSame(3783.07, $importe);
     }
+
+    public function test_corresponde_por_codigo_afip_7(): void
+    {
+        $noCateg = (object) ['id' => 6, 'codigoexterno' => '7', 'letra' => 'B'];
+        $monotributo = (object) ['id' => 4, 'codigoexterno' => '6', 'letra' => 'A'];
+        $cf = (object) ['id' => 3, 'codigoexterno' => '5', 'letra' => 'B'];
+
+        self::assertTrue(PercepcionNoCategorizadoSupport::corresponde($noCateg));
+        self::assertFalse(PercepcionNoCategorizadoSupport::corresponde($monotributo));
+        self::assertFalse(PercepcionNoCategorizadoSupport::corresponde($cf));
+    }
+
+    public function test_mostrador_letra_b_aplica_pnc_salvo_omitir_forzado(): void
+    {
+        $noCateg = (object) ['id' => 6, 'codigoexterno' => '7', 'letra' => 'B'];
+        $cf = (object) ['id' => 3, 'codigoexterno' => '5', 'letra' => 'B'];
+
+        self::assertTrue(PercepcionNoCategorizadoSupport::aplicarAunqueSeOmitanOtras(false, $noCateg));
+        self::assertFalse(PercepcionNoCategorizadoSupport::aplicarAunqueSeOmitanOtras(true, $noCateg));
+        self::assertFalse(PercepcionNoCategorizadoSupport::aplicarAunqueSeOmitanOtras(false, $cf));
+    }
+
+    public function test_la_base_legal_es_gravado_mas_iva(): void
+    {
+        $totFact = round(33287.89 + 6990.46, 2);
+        self::assertSame(40278.35, $totFact);
+        self::assertSame(4229.23, round($totFact * 10.5 / 100, 2));
+    }
 }

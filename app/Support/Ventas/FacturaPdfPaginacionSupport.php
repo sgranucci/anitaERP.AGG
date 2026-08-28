@@ -25,15 +25,15 @@ final class FacturaPdfPaginacionSupport
     public const ITEMS_ANTERIOR_REMITO_HORIZONTAL = 18;
 
     /**
-     * Parte los renglones para que el pie (totales + QR/CAE o CAI) quede en la última hoja
-     * junto con ítems. Si entran todos con el pie, una sola página.
+     * Parte renglones por capacidad de hoja “llena”. El pie puede bajar a la
+     * siguiente página si no entra; no se reserva una primera hoja casi vacía.
      *
      * @param  list<array<string, mixed>>  $items
      * @return list<list<array<string, mixed>>>
      */
     public static function paginas(array $items, string $tipo = 'admin'): array
     {
-        [$ultima, $anterior] = match ($tipo) {
+        [, $anterior] = match ($tipo) {
             'pos' => [self::ITEMS_ULTIMA_POS, self::ITEMS_ANTERIOR_POS],
             'remito' => [self::ITEMS_ULTIMA_REMITO, self::ITEMS_ANTERIOR_REMITO],
             'pedido' => [self::ITEMS_ULTIMA_PEDIDO, self::ITEMS_ANTERIOR_PEDIDO],
@@ -46,24 +46,19 @@ final class FacturaPdfPaginacionSupport
         if ($n === 0) {
             return [[]];
         }
-        if ($n <= $ultima) {
+        // Si entra en una hoja “llena” (sin reservar el pie), no partir: eso dejaba
+        // 1–4 renglones + “Continúa…” y el resto en la página siguiente.
+        if ($n <= $anterior) {
             return [$items];
         }
 
         $paginas = [];
         $offset = 0;
         $restan = $n;
-        while ($restan > $ultima) {
-            $take = min($anterior, $restan);
-            if ($restan - $take === 0 && $take > $ultima) {
-                $take = $restan - $ultima;
-            }
-            if ($take < 1) {
-                break;
-            }
-            $paginas[] = array_slice($items, $offset, $take);
-            $offset += $take;
-            $restan -= $take;
+        while ($restan > $anterior) {
+            $paginas[] = array_slice($items, $offset, $anterior);
+            $offset += $anterior;
+            $restan -= $anterior;
         }
         $paginas[] = array_slice($items, $offset);
 

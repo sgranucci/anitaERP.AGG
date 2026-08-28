@@ -9,8 +9,13 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Models\Ventas\Cliente_Cuentacorriente_Aplicacion;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Ventas\FacturaListadoFiltros;
+use App\Support\Ventas\PedidoFacturacionProfiler;
 use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
+use App\Support\Ventas\VentaEmisionCajaPiezaSupport;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Auth;
 use App\ApiAnita;
 use Illuminate\Support\Facades\Log;
@@ -50,6 +55,73 @@ class VentaRepository implements VentaRepositoryInterface
     }
 
     /**
+     * Totales de kilos/cajas/unidades y cantidad por reparto (mismos filtros que el index).
+     * `ultimo_venta_id` es el último del grupo en el orden del listado (código DESC, id DESC).
+     *
+     * @param  array<string, mixed>|string|null  $filtros
+     * @return Collection<string, object>
+     */
+    public function totalesIndexPorReparto($filtros): Collection
+    {
+        $filtros = $this->normalizarFiltrosListado($filtros);
+
+        $query = $this->queryListadoFiltrado($filtros)
+            ->leftJoin('transporte', 'transporte.id', '=', 'venta.transporte_id')
+            ->leftJoin('venta_emision', 'venta_emision.venta_id', '=', 'venta.id');
+
+        $select = [
+            'venta.transporte_id',
+            'transporte.codigo as codigotransporte',
+            'transporte.nombre as nombretransporte',
+            DB::raw('COUNT(DISTINCT venta.id) as cantidad_comprobantes'),
+            DB::raw('COALESCE(SUM(venta_emision.cantidad), 0) as kilo'),
+            DB::raw('MIN(venta.id) as ultimo_venta_id'),
+        ];
+
+        if (VentaEmisionCajaPiezaSupport::columnasDisponibles()) {
+            $select[] = DB::raw('COALESCE(SUM(venta_emision.caja), 0) as caja');
+            $select[] = DB::raw('COALESCE(SUM(venta_emision.pieza), 0) as pieza');
+        } else {
+            $select[] = DB::raw('0 as caja');
+            $select[] = DB::raw('0 as pieza');
+        }
+
+        return $query
+            ->select($select)
+            ->groupBy('venta.transporte_id', 'transporte.codigo', 'transporte.nombre')
+            ->get()
+            ->keyBy(static fn ($row) => (string) ((int) ($row->transporte_id ?? 0)));
+    }
+
+    /**
+     * IDs de comprobantes del listado para un reparto (mismos filtros que el index).
+     *
+     * @param  array<string, mixed>|string|null  $filtros
+     * @return list<int>
+     */
+    public function idsIndexPorReparto($filtros, int $transporteId): array
+    {
+        $filtros = $this->normalizarFiltrosListado($filtros);
+
+        $query = $this->queryListadoFiltrado($filtros)
+            ->select('venta.id')
+            ->leftJoin('transporte', 'transporte.id', '=', 'venta.transporte_id');
+
+        if ($transporteId > 0) {
+            $query->where('venta.transporte_id', $transporteId);
+        } else {
+            $query->where(function ($q): void {
+                $q->whereNull('venta.transporte_id')->orWhere('venta.transporte_id', 0);
+            });
+        }
+
+        return $this->aplicarOrdenIndexPorReparto($query)
+            ->pluck('venta.id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+    }
+
+    /**
      * Query base del listado de comprobantes de venta.
      *
      * Restringe siempre a las empresas asignadas al usuario (vía punto de venta)
@@ -60,21 +132,49 @@ class VentaRepository implements VentaRepositoryInterface
      */
     private function construyeQueryListado($filtros): Builder
     {
-        // Compatibilidad con llamadas legacy que pasaban una cadena de búsqueda.
-        if (! is_array($filtros)) {
-            $legacy = FacturaListadoFiltros::filtrosVacios();
-            $legacy['valor'] = trim((string) $filtros);
-            $legacy['busqueda'] = $legacy['valor'];
-            // Las exportaciones legacy no acotan por rango de fechas.
-            $legacy['fecha_desde'] = '';
-            $legacy['fecha_hasta'] = '';
-            $filtros = $legacy;
+        $filtros = $this->normalizarFiltrosListado($filtros);
+
+        $query = $this->queryListadoFiltrado($filtros)
+            ->select('venta.*')
+            ->leftJoin('transporte', 'transporte.id', '=', 'venta.transporte_id')
+            ->with([
+                'puntoventas.empresas',
+                'clientes.condicionivas',
+                'tipotransacciones',
+                'transportes',
+                'venta_emisiones',
+            ]);
+
+        return $this->aplicarOrdenIndexPorReparto($query);
+    }
+
+    /**
+     * @param  array<string, mixed>|string|null  $filtros
+     * @return array<string, mixed>
+     */
+    private function normalizarFiltrosListado($filtros): array
+    {
+        if (is_array($filtros)) {
+            return $filtros;
         }
 
-        $query = $this->model->newQuery()
-            ->with(['puntoventas.empresas', 'clientes.condicionivas', 'tipotransacciones']);
+        $legacy = FacturaListadoFiltros::filtrosVacios();
+        $legacy['valor'] = trim((string) $filtros);
+        $legacy['busqueda'] = $legacy['valor'];
+        $legacy['fecha_desde'] = '';
+        $legacy['fecha_hasta'] = '';
 
-        // Restricción por empresas asignadas al usuario (acceso a los comprobantes).
+        return $legacy;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return Builder<Venta>
+     */
+    private function queryListadoFiltrado(array $filtros): Builder
+    {
+        $query = $this->model->newQuery();
+
         $empresas = $this->empresaRepository->traeEmpresasAsignadas();
         if (count($empresas) >= 1) {
             $query->whereHas('puntoventas', static function ($q) use ($empresas): void {
@@ -84,7 +184,17 @@ class VentaRepository implements VentaRepositoryInterface
 
         FacturaListadoFiltros::aplicar($query, $filtros);
 
-        return $query->orderBy('venta.id', 'desc');
+        return $query;
+    }
+
+    private function aplicarOrdenIndexPorReparto(Builder $query): Builder
+    {
+        return $query
+            ->orderByRaw(SqlDialectSupport::coalesce(
+                SqlDialectSupport::castEntero('transporte.codigo'),
+                '0'
+            ).' DESC')
+            ->orderBy('venta.id', 'desc');
     }
 
     public function create(array $data)
@@ -199,11 +309,15 @@ class VentaRepository implements VentaRepositoryInterface
         // el remito puede originarse al facturar sin existir aun en pendmae.
         if (EntornoEmpresaSupport::esElBierzo()) {
             try {
-                return $this->leerUltimoNumeradorCompemisEstricto(
+                PedidoFacturacionProfiler::etapa('anita_compemis_numerador_inicio');
+                $ultimo = $this->leerUltimoNumeradorCompemisEstricto(
                     (string) $tipo,
                     (string) $letra,
                     (string) (int) $sucursal,
                 ) + 1;
+                PedidoFacturacionProfiler::etapa('anita_compemis_numerador_fin');
+
+                return $ultimo;
             } catch (\Throwable $e) {
                 Log::error('ventas.remito.numerador_anita_no_disponible', [
                     'tipo' => $tipo,

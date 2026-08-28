@@ -2,13 +2,16 @@
 
 namespace App\Support\Ventas;
 
-use App\Services\Ventas\PedidoFacturaAnitaDeferEjecucionService;
+use App\Jobs\Ventas\ReplicarAnitaPedidoJob;
 use App\Services\Ventas\PedidoFacturaAnitaRegrabacionService;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use Illuminate\Support\Facades\Log;
+use Throwable;
 
 /**
  * Diferimiento de Anita en factura de pedido, remito y mostrador (El Bierzo).
- * ARCA (número + CAE) sigue síncrono; Anita corre post-respuesta como gastronomía AGG.
+ * ARCA (número + CAE) y el numerador de remito siguen síncronos.
+ * Venta / vencae / ctamov van a cola Laravel (no Apache / terminating).
  */
 final class PedidoFacturaAnitaDeferSupport
 {
@@ -21,15 +24,32 @@ final class PedidoFacturaAnitaDeferSupport
         return filter_var(config('facturacion.ANITA_TRAS_RESPUESTA_PEDIDO', true), FILTER_VALIDATE_BOOLEAN);
     }
 
+    public static function enColaHabilitado(): bool
+    {
+        if (! self::debeDiferir()) {
+            return false;
+        }
+
+        if (! filter_var(config('facturacion.ANITA_PEDIDO_EN_COLA', true), FILTER_VALIDATE_BOOLEAN)) {
+            return false;
+        }
+
+        if (config('queue.default') === 'sync') {
+            return false;
+        }
+
+        return true;
+    }
+
     /**
      * Programa Anita/vencae y saca esos payloads de la respuesta al browser.
      *
      * @param  array<string, mixed>  $item
      * @return array<string, mixed>
      */
-    public static function tomarYProgramar(array $item): array
+    public static function tomarYProgramar(array $item, string $contexto = 'pedido'): array
     {
-        $lista = self::programarDesdeResultados([$item]);
+        $lista = self::programarDesdeResultados([$item], $contexto);
 
         return $lista[0];
     }
@@ -38,7 +58,7 @@ final class PedidoFacturaAnitaDeferSupport
      * @param  list<array<string, mixed>>  $resultados
      * @return list<array<string, mixed>>
      */
-    public static function programarDesdeResultados(array $resultados): array
+    public static function programarDesdeResultados(array $resultados, string $contexto = 'pedido'): array
     {
         if (! self::debeDiferir()) {
             return $resultados;
@@ -56,16 +76,21 @@ final class PedidoFacturaAnitaDeferSupport
                 continue;
             }
 
+            $contextoItem = $contexto;
+            if ($contextoItem === 'pedido' && (int) ($item['remito_id'] ?? 0) > 0 && (int) ($item['pedido_id'] ?? 0) <= 0) {
+                $contextoItem = 'remito';
+            }
+
             self::programar(
                 $ventaId,
                 is_array($anita) ? $anita : null,
                 is_array($vencae) ? $vencae : null,
+                $contextoItem,
             );
 
             unset(
                 $resultados[$i]['anita_pendiente'],
                 $resultados[$i]['vencae_pendiente'],
-                $resultados[$i]['venta_id'],
             );
         }
 
@@ -76,7 +101,7 @@ final class PedidoFacturaAnitaDeferSupport
      * @param  array<string, mixed>|null  $anitaPendiente
      * @param  array<string, mixed>|null  $vencaePendiente
      */
-    public static function programar(int $ventaId, ?array $anitaPendiente, ?array $vencaePendiente): void
+    public static function programar(int $ventaId, ?array $anitaPendiente, ?array $vencaePendiente, string $contexto = 'factura'): void
     {
         if ($ventaId <= 0 && $anitaPendiente === null && $vencaePendiente === null) {
             return;
@@ -88,15 +113,38 @@ final class PedidoFacturaAnitaDeferSupport
             $vencaePendiente,
         );
 
-        app()->terminating(function () use ($ventaId, $anitaPendiente, $vencaePendiente): void {
-            if (function_exists('fastcgi_finish_request')) {
-                @fastcgi_finish_request();
-            }
-            app(PedidoFacturaAnitaDeferEjecucionService::class)->ejecutar(
+        if (! self::enColaHabilitado()) {
+            Log::warning('pedido.anita.cola.no_disponible', [
+                'venta_id' => $ventaId,
+                'contexto' => $contexto,
+                'queue' => config('queue.default'),
+                'en_cola' => filter_var(config('facturacion.ANITA_PEDIDO_EN_COLA', true), FILTER_VALIDATE_BOOLEAN),
+            ]);
+
+            return;
+        }
+
+        try {
+            ReplicarAnitaPedidoJob::dispatch(
                 $ventaId,
                 $anitaPendiente,
                 $vencaePendiente,
-            );
-        });
+                $contexto,
+            )->afterCommit();
+        } catch (Throwable $e) {
+            Log::warning('pedido.anita.cola.despacho_fallo', [
+                'venta_id' => $ventaId,
+                'contexto' => $contexto,
+                'msg' => $e->getMessage(),
+            ]);
+
+            return;
+        }
+
+        Log::info('pedido.anita.cola.despachado', [
+            'venta_id' => $ventaId,
+            'contexto' => $contexto,
+            'cola' => config('facturacion.ANITA_PEDIDO_COLA', 'default'),
+        ]);
     }
 }

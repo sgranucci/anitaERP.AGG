@@ -22,6 +22,11 @@ interface PedidoQueryInterface
      * @param  array<string, mixed>  $filtros
      */
     public function allPedidoIndexFiltrosCursor(array $filtros);
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function totalesPedidoIndexPorReparto(array $filtros);
     public function allPendienteOt($articulo_id, $combinacion_id);
     public function leePedidoporCodigo($codigo);
     public function leePedidoporId($id);

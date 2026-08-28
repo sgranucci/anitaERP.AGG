@@ -211,6 +211,17 @@ class PedidoService
 		return $this->pedidoQuery->allPedidoIndexFiltros($filtros, $flPaginando);
 	}
 
+	/**
+	 * Totales por reparto del index (kilos, cantidad, último pedido del grupo).
+	 *
+	 * @param  array<string, mixed>  $filtros
+	 * @return \Illuminate\Support\Collection<string, object>
+	 */
+	public function totalesPedidosIndexPorReparto(array $filtros)
+	{
+		return $this->pedidoQuery->totalesPedidoIndexPorReparto($filtros);
+	}
+
 	public function listarPedido($id)
 	{
 		$resultado = $this->imprimirPedido((int) $id);
