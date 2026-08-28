@@ -13,6 +13,7 @@ use App\Models\Ventas\DescuentoGastronomia;
 use App\Models\Ventas\MesaGastronomia;
 use App\Models\Ventas\MozoGastronomia;
 use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
+use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Services\Ventas\Gastronomia\GastronomiaCobranzaService;
 use App\Services\Ventas\Gastronomia\GastronomiaCuentaService;
 use App\Services\Ventas\Gastronomia\GastronomiaFacturaEmisionService;
@@ -164,7 +165,7 @@ class GastronomiaProcesoFacturacionController extends Controller
             'salida_factura_id' => $cfg?->salida_factura_id,
             'identificador_pc_actual' => GastronomiaIdentificadorPc::resolver($request),
             'usocuentacaja_gastronomia_id' => $this->usoCuentacajaGastronomiaId(),
-            'wsfe_receptor_cf_umbral_monto' => (float) config('arca_wsfe.receptor.consumidor_final_umbral_monto', 0),
+            'wsfe_receptor_cf_umbral_monto' => ParametroSistemaSupport::topeConsumidorFinal(),
             'wsfe_forzar_modo_caea' => \App\Support\Ventas\ArcaWsfeEmisionResiliencia::forzarModoCaea(),
             'wsfe_failover_automatico' => \App\Support\Ventas\ArcaWsfeEmisionResiliencia::failoverAutomaticoActivo(),
             'modo_seleccion_preferido' => $this->leerPreferenciaModoSeleccion($cfg) ?? 'mesa',

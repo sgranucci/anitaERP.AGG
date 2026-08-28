@@ -55,14 +55,19 @@
                 $totalPesada += $totales['pesada'];
             @endphp
             @include('ventas.pedido.partials.export_listado_filas', compact('pedido', 'totales'))
+            @if (PedidoListadoSupport::esCierreReparto($pedido, $totalesPorReparto ?? []))
+                @include('ventas.pedido.partials.fila_subtotal_reparto', [
+                    'metaReparto' => PedidoListadoSupport::metaReparto($pedido, $totalesPorReparto ?? []),
+                ])
+            @endif
         @endforeach
         @if (count($pedidos) > 0)
             <tr>
                 <td colspan="4" style="font-weight: bold;">Totales</td>
-                <td style="font-weight: bold;">{{ $totalCaja }}</td>
-                <td style="font-weight: bold;">{{ $totalPieza }}</td>
-                <td style="font-weight: bold;">{{ $totalKilo }}</td>
-                <td style="font-weight: bold;">{{ $totalPesada }}</td>
+                <td style="font-weight: bold;">{{ PedidoListadoSupport::formatearTotal($totalCaja) }}</td>
+                <td style="font-weight: bold;">{{ PedidoListadoSupport::formatearTotal($totalPieza) }}</td>
+                <td style="font-weight: bold;">{{ PedidoListadoSupport::formatearTotal($totalKilo) }}</td>
+                <td style="font-weight: bold;">{{ PedidoListadoSupport::formatearTotal($totalPesada) }}</td>
                 <td colspan="2"></td>
             </tr>
         @endif

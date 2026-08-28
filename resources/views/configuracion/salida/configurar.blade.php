@@ -33,13 +33,31 @@
         }
 
         $.get(listarUri, function(){
-            if (urlRetorno) {
-                window.location.href = urlRetorno;
-                return;
-            }
-
-            window.history.back();
+            volverConfigurarSalida();
         });
+    }
+
+    function volverConfigurarSalida()
+    {
+        if (document.body.classList.contains('modo-consulta')) {
+            if (typeof window.cerrarSolapaConsulta === 'function') {
+                window.cerrarSolapaConsulta();
+            } else {
+                window.close();
+            }
+            return false;
+        }
+        var urlRetorno = ($('#urlretorno').val() || '').trim();
+        if (urlRetorno) {
+            window.location.href = urlRetorno;
+            return false;
+        }
+        if (window.history.length > 1) {
+            window.history.back();
+            return false;
+        }
+        window.close();
+        return false;
     }
 
 </script>
@@ -54,9 +72,15 @@
             <div class="card-header">
                 <h3 class="card-title">Configurar impresora — {{ $programaEtiqueta ?? $programa }}</h3>
                 <div class="card-tools">
-                    <a href="javascript:history.back()" class="btn btn-outline-info btn-sm">
-                        <i class="fa fa-fw fa-reply-all"></i> Volver atrás
-                    </a>
+                    @if (request()->input('vista') === 'consulta')
+                        <button type="button" class="btn btn-outline-info btn-sm" onclick="window.close()">
+                            <i class="fa fa-fw fa-times"></i> Cerrar solapa
+                        </button>
+                    @else
+                        <a href="{{ $urlRetorno ?: '#' }}" class="btn btn-outline-info btn-sm" onclick="return volverConfigurarSalida();">
+                            <i class="fa fa-fw fa-reply-all"></i> Volver atrás
+                        </a>
+                    @endif
                 </div>
             </div>
             <div class="card-body">

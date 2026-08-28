@@ -21,6 +21,9 @@
                             <label for="recipient-name" class="col-lg-4 col-form-label requerido">Tipo de transacci&oacute;n</label>
                             <select name="tipotransaccion_id" id="tipotransaccion_id" data-placeholder="Tipo de transacci&oacute;n" class="col-lg-6 form-control required" data-fouc>
                             </select>
+                            <div class="col-lg-8 offset-lg-4">
+                                <small id="aviso-tipo-fce" class="form-text text-info d-none"></small>
+                            </div>
                         </div>
                         <div class="form-group row" id="puntoventa">
                             <label for="recipient-name" class="col-lg-4 col-form-label requerido">Punto de venta</label>
@@ -85,7 +88,7 @@
                         </div>
                     </div>
                 </div>
-                <div id="aviso-deposito-facturacion-pedido" class="alert alert-info aviso-deposito-facturacion d-none mb-2" role="status"></div>
+                <div id="aviso-deposito-facturacion-pedido" class="aviso-deposito-facturacion small text-muted d-none mb-2" role="status" style="font-size: 11px; line-height: 1.3;"></div>
                 <div id="alert-preview-factura-pedido" class="alert alert-warning d-none mb-2" role="alert"></div>
                 <div class="form-group">
                     <label for="recipient-name" class="col-form-label">Items a Facturar</label>

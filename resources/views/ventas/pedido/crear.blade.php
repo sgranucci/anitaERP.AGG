@@ -5,6 +5,7 @@
 
 @section("scripts")
 <script>window.VALIDACION_PADRON_POST_CARGA = true;</script>
+<script>window.pedidoRetornoIndexUrl = @json(route('pedido', $filtrosQuery ?? []));</script>
 @php
     $requiereValidacionApocOperacion = filter_var(config('arca_wsapoc.validar_factura_cliente', true), FILTER_VALIDATE_BOOLEAN)
         && filter_var(config('arca_wsapoc.habilitado', true), FILTER_VALIDATE_BOOLEAN);
@@ -20,6 +21,7 @@
 @include('includes.ventas.preferencias_facturacion_scripts')
 @include('ventas.partials.aviso_deposito_facturacion')
 @include('includes.ventas.cliente_despacho_js')
+<script src="{{ asset('assets/pages/scripts/ventas/tipo_comprobante_preview.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/tipo_comprobante_preview.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/pedido/crear.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/crear.js')) ?: time() }}" type="text/javascript"></script>
 <script>
     var CLIENTE_STOCK_ID = "{{ config('cliente.CLIENTE_STOCK_ID') }}";
@@ -100,6 +102,7 @@
             <div class="card-header">
                 <h3 class="card-title">Crear Pedidos de clientes</h3>
                 <div class="card-tools">
+                    @include('includes.ventas.link_mi_impresora')
                     <a href="{{ route('pedido', $filtrosQuery ?? []) }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>

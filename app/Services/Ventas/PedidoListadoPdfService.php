@@ -40,6 +40,7 @@ class PedidoListadoPdfService
             'pesada' => 0.0,
         ];
 
+        $totalesPorReparto = $this->pedidoQuery->totalesPedidoIndexPorReparto($filtros);
         $cursor = $this->pedidoQuery->allPedidoIndexFiltrosCursor($filtros);
 
         foreach ($cursor as $fila) {
@@ -56,7 +57,8 @@ class PedidoListadoPdfService
                     $totalFilas,
                     $totalesGenerales,
                     true,
-                    $subtituloFiltros
+                    $subtituloFiltros,
+                    $totalesPorReparto
                 );
                 $lote = [];
             }
@@ -72,7 +74,8 @@ class PedidoListadoPdfService
                 $totalFilas,
                 $totalesGenerales,
                 true,
-                $subtituloFiltros
+                $subtituloFiltros,
+                $totalesPorReparto
             );
         } elseif ($ultimoLoteCompleto !== null) {
             @unlink($temporales[array_key_last($temporales)]);
@@ -86,12 +89,13 @@ class PedidoListadoPdfService
                 $totalFilas,
                 $totalesGenerales,
                 false,
-                $subtituloFiltros
+                $subtituloFiltros,
+                $totalesPorReparto
             );
         }
 
         if ($temporales === []) {
-            $temporales[] = $this->generarLotePdf([], $dir, 1, true, false, 0, $totalesGenerales, true, $subtituloFiltros);
+            $temporales[] = $this->generarLotePdf([], $dir, 1, true, false, 0, $totalesGenerales, true, $subtituloFiltros, $totalesPorReparto);
         }
 
         try {
@@ -118,6 +122,7 @@ class PedidoListadoPdfService
     /**
      * @param  list<object>  $filas
      * @param  array{caja: float, pieza: float, kilo: float, pesada: float}  $totalesGenerales
+     * @param  \Illuminate\Support\Collection<string, object>  $totalesPorReparto
      */
     private function generarLotePdf(
         array $filas,
@@ -128,7 +133,8 @@ class PedidoListadoPdfService
         int $totalFilas,
         array &$totalesGenerales,
         bool $acumularTotales = true,
-        string $subtituloFiltros = ''
+        string $subtituloFiltros = '',
+        $totalesPorReparto = null
     ): string {
         $pedidos = $this->enriquecerLote(collect($filas), $totalesGenerales, $acumularTotales);
         $html = view('ventas.pedido.listado', [
@@ -138,6 +144,7 @@ class PedidoListadoPdfService
             'totalesGenerales' => $totalesGenerales,
             'totalFilas' => $totalFilas,
             'subtituloFiltros' => $subtituloFiltros,
+            'totalesPorReparto' => $totalesPorReparto ?? collect(),
         ])->render();
         $ruta = $dir.'/listado_pedido_parte_'.$indice.'_'.uniqid('', true).'.pdf';
 

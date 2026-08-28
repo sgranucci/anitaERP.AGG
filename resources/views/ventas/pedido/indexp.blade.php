@@ -27,7 +27,10 @@ function eliminarPedido(event) {
 </script>
 @endsection
 
-<?php use App\Support\Ventas\PedidoListadoFiltros; ?>
+<?php
+use App\Support\Ventas\PedidoListadoFiltros;
+use App\Support\Ventas\PedidoListadoSupport;
+?>
 
 @section('contenido')
 @php
@@ -68,6 +71,7 @@ function eliminarPedido(event) {
                             <i class="fa fa-fw fa-times-circle"></i> Cierre de pedidos
                         </a>
                     @endif
+                    @include('includes.ventas.link_mi_impresora', ['claseBtnMiImpresora' => 'btn btn-outline-secondary btn-sm ml-1'])
                     <a href="#" onclick="return configurarSalida();" class="btn btn-outline-secondary btn-sm ml-1">
                         <i class="fa fa-fw fa-cog"></i> Configura salida
                     </a>
@@ -80,6 +84,14 @@ function eliminarPedido(event) {
                 ])
             </form>
             <div class="card-body table-responsive p-0">
+                <style>
+                    #tabla-paginada tr.pedido-subtotal-reparto,
+                    #tabla-paginada tr.pedido-subtotal-reparto td {
+                        background-color: #F9E79F !important;
+                        color: #17202A;
+                        font-weight: 700;
+                    }
+                </style>
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_pedido',
                     'queryparams' => $filtrosQuery ?? [],
@@ -102,39 +114,16 @@ function eliminarPedido(event) {
                     </thead>
                     <tbody>
                         @forelse($pedidos as $pedido)
+                            @php $totales = PedidoListadoSupport::totalesPedido($pedido); @endphp
                             <tr data-entry-id="{{ $pedido['id'] }}">
                                 <td>{{ $pedido['id'] ?? '' }}</td>
                                 <td>{{ date('d-m-Y', strtotime($pedido['fecha'] ?? '')) }}</td>
                                 <td>{{ date('d-m-Y', strtotime($pedido['fechaentrega'] ?? '')) }}</td>
                                 <td><b>{{ $pedido['nombrecliente'] ?? '' }}</b></td>
-                                <td>
-                                    @php $caja = 0; @endphp
-                                    @foreach ($pedido->pedido_articulos as $item)
-                                        @php $caja = $caja + $item->caja @endphp
-                                    @endforeach
-                                    {{ $caja }}
-                                </td>
-                                <td>
-                                    @php $pieza = 0; @endphp
-                                    @foreach ($pedido->pedido_articulos as $item)
-                                        @php $pieza = $pieza + $item->pieza @endphp
-                                    @endforeach
-                                    {{ $pieza }}
-                                </td>
-                                <td>
-                                    @php $kilo = 0; @endphp
-                                    @foreach ($pedido->pedido_articulos as $item)
-                                        @php $kilo = $kilo + $item->kilo @endphp
-                                    @endforeach
-                                    {{ $kilo }}
-                                </td>
-                                <td>
-                                    @php $pesada = 0; @endphp
-                                    @foreach ($pedido->pedido_articulos as $item)
-                                        @php $pesada = $pesada + $item->pesada @endphp
-                                    @endforeach
-                                    {{ $pesada }}
-                                </td>
+                                <td>{{ PedidoListadoSupport::formatearTotal($totales['caja']) }}</td>
+                                <td>{{ PedidoListadoSupport::formatearTotal($totales['pieza']) }}</td>
+                                <td>{{ PedidoListadoSupport::formatearTotal($totales['kilo']) }}</td>
+                                <td>{{ PedidoListadoSupport::formatearTotal($totales['pesada']) }}</td>
                                 <td>{{ $pedido->nombretransporte ?? '' }}</td>
                                 <td>{{ $pedido['estado'] }}</td>
                                 <td>
@@ -169,6 +158,12 @@ function eliminarPedido(event) {
                                     @endif
                                 </td>
                             </tr>
+                            @if (PedidoListadoSupport::esCierreReparto($pedido, $totalesPorReparto ?? []))
+                                @include('ventas.pedido.partials.fila_subtotal_reparto', [
+                                    'metaReparto' => PedidoListadoSupport::metaReparto($pedido, $totalesPorReparto ?? []),
+                                    'conAcciones' => true,
+                                ])
+                            @endif
                         @empty
                             <tr>
                                 <td colspan="11" class="text-center">Sin pedidos</td>

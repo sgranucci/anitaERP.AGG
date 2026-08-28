@@ -33,12 +33,10 @@
         var deposito = etiquetaDeposito(info);
         if (info.desde_reparto) {
             var reparto = ((info.transporte_codigo || '') + ' ' + (info.transporte_nombre || '')).trim();
-            return 'El stock se descontará del depósito del reparto'
-                + (reparto !== '' ? ' ' + reparto : '')
-                + ': ' + deposito + '.';
+            return 'Stock → ' + deposito + (reparto !== '' ? ' (reparto ' + reparto + ')' : '');
         }
 
-        return 'El stock se descontará del depósito default de ventas: ' + deposito + '.';
+        return 'Stock → ' + deposito;
     }
 
     function transporteIdActual() {
@@ -85,10 +83,10 @@
             $targets.each(function () {
                 var $el = $(this);
                 if (!texto) {
-                    $el.addClass('d-none').text('');
+                    $el.addClass('d-none').text('').removeAttr('title');
                     return;
                 }
-                $el.removeClass('d-none').text(texto);
+                $el.removeClass('d-none').text(texto).attr('title', texto);
             });
         }
         if (opciones.sincronizarCampo) {

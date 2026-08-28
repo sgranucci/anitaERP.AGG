@@ -136,6 +136,22 @@
 
         actualizarOperadores(true);
 
+        $('#form-traer-remito').on('submit', function (e) {
+            var $num = $('#numero_remito');
+            var valor = $.trim($num.val() || '');
+            $num.val(valor);
+            if (!valor) {
+                e.preventDefault();
+                $num.focus();
+                if (window.toastr) {
+                    toastr.warning('Ingrese el número o código del remito.', '', { timeOut: 5000, closeButton: true });
+                } else {
+                    alert('Ingrese el número o código del remito.');
+                }
+                return false;
+            }
+        });
+
         // Fecha entrega: al elegir "desde", si "hasta" está vacío → hoy
         $('#fecha_entrega_desde').on('change', function () {
             var $hasta = $('#fecha_entrega_hasta');

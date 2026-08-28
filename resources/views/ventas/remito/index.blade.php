@@ -6,7 +6,7 @@ Remitos de Clientes
 @section("scripts")
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/ventas/remito/filtro.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/remito/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/remito/filtro.js')) ?: time() }}" type="text/javascript"></script>
 @if (\App\Services\Ventas\RemitoImportarDesdeAnitaService::esElBierzo() && can('ejecutar-importar-remito-anita', false))
 <script src="{{ asset('assets/pages/scripts/ventas/remito/importar_anita_index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/remito/importar_anita_index.js')) ?: time() }}" type="text/javascript"></script>
 @endif
@@ -45,6 +45,23 @@ function eliminarRemito(event) {
                         'nuevoRegistroUrl' => route('crear_remito', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-remitos',
                     ])
+                    <form method="get" action="{{ route('remito') }}" id="form-traer-remito" class="d-inline-flex align-items-center ml-1 mb-0">
+                        <input type="text"
+                               name="numero_remito"
+                               id="numero_remito"
+                               class="form-control form-control-sm{{ RemitoListadoFiltros::esBusquedaSoloNumero($filtros ?? []) ? ' listado-filtros-input-activo' : '' }}"
+                               style="width: 130px;"
+                               value="{{ $filtros['numero_remito'] ?? '' }}"
+                               placeholder="N&ordm; remito"
+                               autocomplete="off"
+                               title="N&uacute;mero o c&oacute;digo del remito. No usa fechas, repartos ni otros filtros.">
+                        <button type="submit"
+                                class="btn btn-warning btn-sm ml-1 text-dark font-weight-bold"
+                                title="Trae un remito por n&uacute;mero, sin fechas ni otros filtros">
+                            <i class="fa fa-search"></i> Traer remito
+                        </button>
+                    </form>
+                    @include('includes.ventas.link_mi_impresora', ['claseBtnMiImpresora' => 'btn btn-outline-secondary btn-sm ml-1'])
                     @if (\App\Services\Ventas\RemitoImportarDesdeAnitaService::esElBierzo() && can('ejecutar-importar-remito-anita', false))
                         <button type="button"
                                 class="btn btn-outline-light btn-sm ml-1"
@@ -89,6 +106,18 @@ function eliminarRemito(event) {
                     'limpiarUrl' => route('remito'),
                 ])
             </form>
+            @if (RemitoListadoFiltros::esBusquedaSoloNumero($filtros ?? []))
+                <div class="alert alert-warning mb-0 rounded-0 border-left-0 border-right-0">
+                    <i class="fa fa-search"></i>
+                    Mostrando remito
+                    <strong>{{ $filtros['numero_remito'] }}</strong>
+                    sin fechas, repartos ni otros filtros.
+                    @if ($remitos->total() === 0)
+                        No se encontr&oacute; ning&uacute;n remito con ese n&uacute;mero.
+                    @endif
+                    <a href="{{ route('remito') }}" class="alert-link ml-1">Volver al listado de hoy</a>
+                </div>
+            @endif
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_remito',

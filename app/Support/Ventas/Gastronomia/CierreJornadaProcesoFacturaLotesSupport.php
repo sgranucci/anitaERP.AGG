@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas\Gastronomia;
 
+use App\Support\Configuracion\ParametroSistemaSupport;
 use InvalidArgumentException;
 
 /**
@@ -41,7 +42,7 @@ final class CierreJornadaProcesoFacturaLotesSupport
         $comandasFactura = $clasificacion['facturar'];
         $comandasAjuste = $clasificacion['ajuste'];
 
-        $topeCf = $topeCf ?? (float) config('arca_wsfe.receptor.consumidor_final_umbral_monto', 0);
+        $topeCf = $topeCf ?? ParametroSistemaSupport::topeConsumidorFinal();
         $pctLote = $pctLote ?? (float) config('gastronomia.cierre_jornada_cf_lote_porcentaje_tope', 20);
         $montoLote = $montoLote ?? (float) config('gastronomia.cierre_jornada_cf_lote_monto', 0);
         $objetivoLote = self::objetivoLote($topeCf, $pctLote, $montoLote);

@@ -50,6 +50,22 @@ trait ClienteTrait {
 		'C' => 'Factura de crédito FCE',
 		];
 
+	/**
+	 * Alias de la columna `modofacturacion`.
+	 * La facturación usaba `$cliente->modoFacturacion` (camelCase) y Eloquent devolvía null.
+	 */
+	public function getModoFacturacionAttribute(): ?string
+	{
+		$valor = $this->attributes['modofacturacion'] ?? null;
+
+		return $valor !== null && $valor !== '' ? (string) $valor : null;
+	}
+
+	public function esReceptorFacturaCreditoFce(): bool
+	{
+		return ($this->modofacturacion ?? '') === 'C';
+	}
+
 	public static $enumCajaEspecial = [
 		'N' => 'No lleva caja especial',
 		'S' => 'Lleva caja especial',

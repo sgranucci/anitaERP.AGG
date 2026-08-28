@@ -118,7 +118,7 @@ class SalidaController extends Controller
     {
         //can('configurar-salidas');
 
-        $urlRetorno = $request->query('retorno', $request->server('HTTP_REFERER'));
+        $urlRetorno = $request->input('vista') === 'consulta' ? '' : $this->urlRetornoLocal($request);
         $programa = $this->seteosalidaRepository->armaNombrePrograma($opcion);
         $programaEtiqueta = SeteoSalidaProgramaSupport::etiqueta($programa);
 
@@ -212,6 +212,26 @@ class SalidaController extends Controller
         } else {
             abort(404);
         }
+    }
+
+    private function urlRetornoLocal(Request $request): string
+    {
+        $candidata = (string) $request->query('retorno', $request->server('HTTP_REFERER', ''));
+        if ($candidata === '' || Str::startsWith(strtolower($candidata), ['javascript:', 'data:'])) {
+            return '';
+        }
+
+        if (Str::startsWith($candidata, '/') && ! Str::startsWith($candidata, '//')) {
+            return $candidata;
+        }
+
+        $hostApp = parse_url((string) config('app.url'), PHP_URL_HOST);
+        $hostRetorno = parse_url($candidata, PHP_URL_HOST);
+        if ($hostApp && $hostRetorno && strcasecmp((string) $hostApp, (string) $hostRetorno) === 0) {
+            return $candidata;
+        }
+
+        return '';
     }
 
 }

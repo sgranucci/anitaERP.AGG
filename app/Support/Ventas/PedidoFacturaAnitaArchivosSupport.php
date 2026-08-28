@@ -75,6 +75,8 @@ final class PedidoFacturaAnitaArchivosSupport
             $esperados[] = 'vencae';
         }
 
+        $esperados[] = 'ctamov';
+
         return array_values(array_unique($esperados));
     }
 
@@ -306,6 +308,10 @@ final class PedidoFacturaAnitaArchivosSupport
                 ." compa_nro_fact = '".addslashes($clave['numero'])."'",
             'stkmov' => self::whereTipoLetraSucursalNro('stkv', $clave),
             'vencae' => self::whereTipoLetraSucursalNro('venc', $clave),
+            'ctamov' => " WHERE ctav_tipo = '".addslashes($clave['tipo'])."' AND"
+                ." ctav_letra = '".addslashes($clave['letra'])."' AND"
+                .' ctav_sucursal = '.(int) $clave['sucursal']
+                .' AND ctav_nro = '.(int) $clave['numero'],
             default => null,
         };
 
@@ -322,6 +328,7 @@ final class PedidoFacturaAnitaArchivosSupport
             'compaux' => 'compa_nro_fact',
             'stkmov' => 'stkv_nro',
             'vencae' => 'venc_nro',
+            'ctamov' => 'ctav_nro',
             default => '*',
         };
 
@@ -331,6 +338,9 @@ final class PedidoFacturaAnitaArchivosSupport
             'campos' => $campo,
             'whereArmado' => $where,
         ];
+        if ($tabla === 'ctamov') {
+            $data['sistema'] = 'contab';
+        }
         if ($clave['path'] !== null) {
             $data['path_sistema'] = $clave['path'];
         }

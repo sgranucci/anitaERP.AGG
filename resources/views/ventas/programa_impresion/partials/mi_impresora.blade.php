@@ -36,6 +36,13 @@
             </div>
             <div class="form-group col-md-5 mb-2">
                 <div class="form-check mb-2">
+                    <input type="checkbox" id="sesion_enviar_impresora" class="form-check-input" value="1"
+                        {{ ! empty($enviarImpresora ?? true) ? 'checked' : '' }}>
+                    <label class="form-check-label small" for="sesion_enviar_impresora">
+                        Enviar a impresora
+                    </label>
+                </div>
+                <div class="form-check mb-2">
                     <input type="checkbox" id="sesion_disparar_al_grabar" class="form-check-input" value="1"
                         {{ ! empty($impresora['disparar_al_grabar']) ? 'checked' : '' }}>
                     <label class="form-check-label small" for="sesion_disparar_al_grabar">

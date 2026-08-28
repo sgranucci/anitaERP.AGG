@@ -6,6 +6,7 @@ use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
 use App\Repositories\Ventas\VentaRepositoryInterface;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
 use InvalidArgumentException;
 
 /**
@@ -16,10 +17,23 @@ use InvalidArgumentException;
  */
 final class CaeaEmisionNumeracionSupport
 {
-    public static function tipoAnitaDesdeTipotransaccion(Tipotransaccion $tipotransaccion): string
-    {
-        $codigo = (string) ($tipotransaccion->codigo ?? '');
+    public static function tipoAnitaDesdeTipotransaccion(
+        Tipotransaccion $tipotransaccion,
+        ?string $modoFacturacionCliente = null,
+        ?float $totalComprobante = null,
+        string $letra = 'A',
+    ): string {
+        $codigoAfip = TipotransaccionCodigoAfipSupport::codigoAfipParaEmision(
+            $tipotransaccion->codigo ?? 0,
+            $letra,
+            $modoFacturacionCliente,
+            $totalComprobante,
+        );
+        if ($codigoAfip >= 200) {
+            return substr((string) ($tipotransaccion->abreviatura ?? 'F'), 0, 1).'CE';
+        }
 
+        $codigo = (string) ($tipotransaccion->codigo ?? '');
         if ($codigo >= '200') {
             return substr((string) ($tipotransaccion->abreviatura ?? ''), 0, 1).'CE';
         }
@@ -51,7 +65,12 @@ final class CaeaEmisionNumeracionSupport
         if (EntornoEmpresaSupport::esElBierzo()) {
             $puntoventa = Puntoventa::query()->find($puntoventaId);
             $sucursal = trim((string) ($puntoventa->codigo ?? ''));
-            $tipoAnita = self::tipoAnitaDesdeTipotransaccion($tipotransaccion);
+            $tipoAnita = self::tipoAnitaDesdeTipotransaccion(
+                $tipotransaccion,
+                $modoFacturacionCliente,
+                $totalComprobante,
+                $letraComprobante,
+            );
             $path = PedidoFacturaAnitaArchivosSupport::esPuntoVentaDivision($puntoventaId)
                 ? PedidoFacturaAnitaArchivosSupport::PATH_VILLAFRANCA
                 : null;

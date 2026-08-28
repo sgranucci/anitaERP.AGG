@@ -34,6 +34,16 @@
             </div>
 
             <div class="mb-2">
+                @if ($sesionDetalle->cantidad_ok > 0)
+                    <a href="{{ route('sesion_impresion_cot', ['id' => $sesionDetalle->id, 'auto' => 1]) }}"
+                        class="btn btn-app bg-success" title="Enviar constancias COT a la impresora">
+                        <i class="fa fa-print"></i> Imprimir
+                    </a>
+                    <a href="{{ route('sesion_impresion_cot', ['id' => $sesionDetalle->id, 'pdf' => 1]) }}"
+                        class="btn btn-app bg-primary" title="Armar PDF de constancias sin enviar a impresora">
+                        <i class="fas fa-file-alt"></i> Constancia
+                    </a>
+                @endif
                 <a href="{{ route('listar_cot_electronico_sesion', ['id' => $sesionDetalle->id, 'formato' => 'PDF']) }}"
                     class="btn btn-app bg-danger" target="_blank" rel="noopener">
                     <i class="fas fa-file-pdf"></i> Pdf
@@ -63,6 +73,7 @@
                             <th>N&deg; &uacute;nico</th>
                             <th>Proc.</th>
                             <th>Observaci&oacute;n ARBA</th>
+                            <th></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -79,6 +90,14 @@
                                 <td class="small">{{ $remito->nro_unico ?: '—' }}</td>
                                 <td>{{ $remito->procesado ?: '—' }}</td>
                                 <td class="small text-danger">{{ $remito->error ?: '—' }}</td>
+                                <td class="text-nowrap">
+                                    @if ($remito->fueEmitido())
+                                        <a href="{{ route('sesion_impresion_cot', ['id' => $sesionDetalle->id, 'remito_envio_id' => $remito->id, 'auto' => 1]) }}"
+                                            class="btn btn-outline-success btn-sm" title="Imprimir esta constancia">
+                                            <i class="fa fa-print"></i>
+                                        </a>
+                                    @endif
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>

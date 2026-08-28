@@ -1,6 +1,8 @@
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
     use App\Support\Ventas\FacturaListadoFiltros;
+    use App\Support\Ventas\FacturaListadoSupport;
+    use App\Support\Ventas\PedidoListadoSupport;
 
     $ventas = $ventas ?? collect();
     foreach ($ventas as $c) {
@@ -24,6 +26,12 @@
         table.data { border-collapse: collapse; width: 100%; }
         table.data td, table.data th { border: 1px solid #cccccc; padding: 3px 5px; text-align: left; vertical-align: top; }
         table.data tbody tr:nth-child(even) { background-color: #f5f5f5; }
+        table.data tbody tr.factura-subtotal-reparto,
+        table.data tbody tr.factura-subtotal-reparto td {
+            background-color: #F9E79F;
+            font-weight: bold;
+            color: #17202A;
+        }
         table.data thead tr { background-color: #85C1E9; }
         table.data th { font-weight: bold; color: #17202A; }
         .num { text-align: right; }
@@ -61,11 +69,16 @@
                 <th>Comprobante</th>
                 <th>Cliente</th>
                 <th>Empresa</th>
+                <th class="num">Cajas</th>
+                <th class="num">Unidades</th>
+                <th class="num">Kilos</th>
+                <th>Reparto</th>
                 <th class="num">Total</th>
             </tr>
         </thead>
         <tbody>
             @forelse ($ventas as $comprobante)
+                @php $totales = FacturaListadoSupport::totalesFactura($comprobante); @endphp
                 <tr>
                     <td>{{ $comprobante->id ?? '' }}</td>
                     <td>{{ $comprobante->fecha ? date('d/m/Y', strtotime($comprobante->fecha)) : '' }}</td>
@@ -76,18 +89,27 @@
                     </td>
                     <td>{{ $comprobante->clientes->nombre ?? '' }}</td>
                     <td>{{ $comprobante->nombreempresa }}</td>
+                    <td class="num">{{ PedidoListadoSupport::formatearTotal($totales['caja']) }}</td>
+                    <td class="num">{{ PedidoListadoSupport::formatearTotal($totales['pieza']) }}</td>
+                    <td class="num">{{ PedidoListadoSupport::formatearTotal($totales['kilo']) }}</td>
+                    <td>{{ FacturaListadoSupport::etiquetaReparto($comprobante) }}</td>
                     <td class="num">{{ number_format((float) $comprobante->total, 2, ',', '.') }}</td>
                 </tr>
+                @if (FacturaListadoSupport::esCierreReparto($comprobante, $totalesPorReparto ?? []))
+                    @include('ventas.factura.partials.fila_subtotal_reparto', [
+                        'metaReparto' => FacturaListadoSupport::metaReparto($comprobante, $totalesPorReparto ?? []),
+                    ])
+                @endif
             @empty
                 <tr>
-                    <td colspan="6" style="text-align:center;">Sin registros</td>
+                    <td colspan="10" style="text-align:center;">Sin registros</td>
                 </tr>
             @endforelse
         </tbody>
         @if (is_countable($ventas) && count($ventas) > 0)
             <tfoot>
                 <tr>
-                    <th colspan="5" class="num">Total general</th>
+                    <th colspan="9" class="num">Total general</th>
                     <th class="num">{{ number_format($totalGeneral, 2, ',', '.') }}</th>
                 </tr>
             </tfoot>

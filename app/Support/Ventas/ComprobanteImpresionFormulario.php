@@ -12,6 +12,8 @@ final class ComprobanteImpresionFormulario
 
     public const ENVIO = 'ENVIO';
 
+    public const COT = 'COT';
+
     /** @return array<string, string> */
     public static function etiquetas(): array
     {
@@ -20,6 +22,7 @@ final class ComprobanteImpresionFormulario
             self::REMITO => 'Remito',
             self::PEDIDO => 'Pedido',
             self::ENVIO => 'Envío',
+            self::COT => 'COT ARBA',
         ];
     }
 

@@ -7,6 +7,7 @@ use App\Models\Caja\Estacionamiento\DescuentoEstacionamiento;
 use App\Models\Configuracion\Tipodocumento;
 use App\Models\Ventas\Cliente;
 use App\Support\Caja\Estacionamiento\EstacionamientoFacturaPayloadSupport;
+use App\Support\Configuracion\ParametroSistemaSupport;
 use InvalidArgumentException;
 
 /**
@@ -137,7 +138,7 @@ final class EstacionamientoReceptorFacturacionService
     {
         $cuenta->loadMissing(['cliente.tipodocumentos', 'lineas', 'descuentoEstacionamiento']);
         $total = $subtotal ?? $this->estimarSubtotalFactura($cuenta);
-        $tope = (float) config('arca_wsfe.receptor.consumidor_final_umbral_monto', 0);
+        $tope = ParametroSistemaSupport::topeConsumidorFinal();
 
         if ($this->clienteIdFacturacionExplicito($cuenta) === null) {
             return $this->resolverModoConsumidorFinal($total, $tope);

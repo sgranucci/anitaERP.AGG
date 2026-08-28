@@ -16,8 +16,8 @@
         @method('PUT')
         <div class="card-body">
             <p class="text-muted mb-3">
-                Se cobra sobre el total de la factura (neto + IVA + otros tributos) cuando el cliente es
-                Sujeto No Categorizado. No es la percepción IVA 3&nbsp;% a responsables inscriptos (RG 5329).
+                Se cobra sobre el total de la factura (neto + IVA + otros tributos ya sumados) cuando el cliente es
+                Sujeto No Categorizado (RG 2126 art. 5). No es la percepción IVA 3&nbsp;% a responsables inscriptos (RG 5329).
                 La cuenta del asiento se carga en el impuesto código <strong>PNC</strong>.
             </p>
             <div class="form-group row">

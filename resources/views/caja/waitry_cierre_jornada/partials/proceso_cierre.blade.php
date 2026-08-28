@@ -763,7 +763,7 @@
                     Facturas CF en lotes de alrededor de
                     ${{ number_format(
                         \App\Support\Ventas\Gastronomia\CierreJornadaProcesoFacturaLotesSupport::objetivoLote(
-                            (float) config('arca_wsfe.receptor.consumidor_final_umbral_monto', 0),
+                            \App\Support\Configuracion\ParametroSistemaSupport::topeConsumidorFinal(),
                             (float) config('gastronomia.cierre_jornada_cf_lote_porcentaje_tope', 20),
                             (float) config('gastronomia.cierre_jornada_cf_lote_monto', 0),
                         ),

@@ -1,10 +1,12 @@
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
+    use App\Support\Ventas\FacturaListadoSupport;
+    use App\Support\Ventas\PedidoListadoSupport;
 
     $esExcel = ! empty($esExcel);
     $reservarFilaLogoExcel = ! empty($reservarFilaLogoExcel);
     $ventas = $ventas ?? collect();
-    $colspan = 5;
+    $colspan = 10;
 
     foreach ($ventas as $c) {
         $c->nombreempresa = $c->nombreempresa ?? ($c->puntoventas->empresas->nombre ?? '');
@@ -86,11 +88,17 @@
             <th>Fecha</th>
             <th>Comprobante</th>
             <th>Cliente</th>
+            <th>Empresa</th>
+            <th class="num">Cajas</th>
+            <th class="num">Unidades</th>
+            <th class="num">Kilos</th>
+            <th>Reparto</th>
             <th class="num">Total</th>
         </tr>
     </thead>
     <tbody>
         @forelse ($ventas as $comprobante)
+            @php $totales = FacturaListadoSupport::totalesFactura($comprobante); @endphp
             <tr>
                 <td>{{ $comprobante->id ?? '' }}</td>
                 <td>{{ date('d/m/Y', strtotime($comprobante->fecha ?? '')) }}</td>
@@ -100,8 +108,18 @@
                     {{ $comprobante->puntoventas->codigo ?? '' }}-{{ $comprobante->numerocomprobante }}
                 </td>
                 <td>{{ $comprobante->clientes->nombre ?? '' }}</td>
+                <td>{{ $comprobante->nombreempresa }}</td>
+                <td class="num">{{ $fmtMonto($totales['caja']) }}</td>
+                <td class="num">{{ $fmtMonto($totales['pieza']) }}</td>
+                <td class="num">{{ $fmtMonto($totales['kilo']) }}</td>
+                <td>{{ FacturaListadoSupport::etiquetaReparto($comprobante) }}</td>
                 <td class="num">{{ $fmtMonto($comprobante->total) }}</td>
             </tr>
+            @if (FacturaListadoSupport::esCierreReparto($comprobante, $totalesPorReparto ?? []))
+                @include('ventas.factura.partials.fila_subtotal_reparto', [
+                    'metaReparto' => FacturaListadoSupport::metaReparto($comprobante, $totalesPorReparto ?? []),
+                ])
+            @endif
         @empty
             <tr>
                 <td colspan="{{ $colspan }}" style="text-align:center;">Sin registros</td>

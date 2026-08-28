@@ -12,7 +12,7 @@
         box-sizing: border-box;
     }
     .factura-pagina {
-        page-break-inside: avoid;
+        page-break-inside: auto;
     }
     .salto-pagina {
         page-break-before: always;
@@ -30,7 +30,8 @@
     .factura-bloque-cliente-admin p { margin: 2px 0 0 0; line-height: 1.2; }
     .factura-cliente-der { text-align: right; }
     .factura-continua { font-size: 11px; text-align: right; margin: 4px 0 0 0; }
-    .factura-pie-bloque { page-break-inside: avoid; page-break-before: avoid; }
+    .factura-pie-bloque { page-break-inside: auto; page-break-before: avoid; }
+    table.tabla-totales-importes { page-break-inside: avoid; page-break-before: avoid; }
     .factura-pie-cai, .factura-pie-cae { font-size: 13px; text-align: right; white-space: nowrap; }
     .factura-valor-asegurado {
         font-size: 13px;

@@ -91,9 +91,11 @@ class FacturacionController extends Controller
         $filtros = FacturaListadoFiltros::resolverDesdeRequest($request);
 
 		$ventas = $this->facturacionService->leePaginando($filtros);
+        $totalesPorReparto = $this->facturacionService->totalesIndexPorReparto($filtros);
 
         $datas = [
             'ventas' => $ventas,
+            'totalesPorReparto' => $totalesPorReparto,
             'busqueda' => $filtros['busqueda'],
             'filtros' => $filtros,
             'filtrosQuery' => FacturaListadoFiltros::paraQueryString($filtros),
@@ -114,6 +116,7 @@ class FacturacionController extends Controller
         $filtros = FacturaListadoFiltros::resolverDesdeRequest($request, $busqueda);
 
 		$ventas = $this->facturacionService->leeSinPaginar($filtros);
+        $totalesPorReparto = $this->facturacionService->totalesIndexPorReparto($filtros);
 
         switch($formato)
         {
@@ -121,6 +124,7 @@ class FacturacionController extends Controller
             $view =  \View::make('ventas.factura.listado', [
                         'ventas' => $ventas,
                         'filtros' => $filtros,
+                        'totalesPorReparto' => $totalesPorReparto,
                     ])->render();
             $path = storage_path('pdf/listados');
             $nombre_pdf = 'listado_factura';
@@ -364,15 +368,42 @@ class FacturacionController extends Controller
         return $this->facturacionService->generaFacturaPorRemito($request->all());
     }
 
-    // Lista una factura de ventas
+    // Lista una factura de ventas (sesión con envío a impresora)
     public function listaUnaFactura($id)
+    {
+        return $this->irASesionImpresionFactura($id, 'impresora');
+    }
+
+    public function listaUnaFacturaPdf($id)
+    {
+        return $this->irASesionImpresionFactura($id, 'pdf');
+    }
+
+    public function listaUnaFacturaCopias($id)
+    {
+        return $this->irASesionImpresionFactura($id, 'copias');
+    }
+
+    private function irASesionImpresionFactura($id, string $destino)
     {
         $venta = Venta::query()->with(['gastronomiaEmision', 'estacionamientoEmision'])->find($id);
         if ($venta && ($venta->gastronomiaEmision || $venta->estacionamientoEmision)) {
             return $this->facturacionService->listaUnaFactura($id);
         }
 
-        return redirect()->route('sesion_impresion_factura', ['id' => $id, 'auto' => 1]);
+        $params = ['id' => $id];
+        if ($destino === 'impresora') {
+            $params['auto'] = 1;
+            $params['enviar_impresora'] = 1;
+        } elseif ($destino === 'pdf') {
+            $params['pdf'] = 1;
+            $params['enviar_impresora'] = 0;
+        } else {
+            $params['elegir'] = 1;
+            $params['enviar_impresora'] = 1;
+        }
+
+        return redirect()->route('sesion_impresion_factura', $params);
     }
 
     public function generaNotaDeCredito($id)

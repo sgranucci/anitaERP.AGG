@@ -18,7 +18,8 @@ final class ComprobanteImpresionSalidaUsuarioSupport
     {
         return match ($formulario) {
             ComprobanteImpresionFormulario::PEDIDO => SeteoSalidaProgramaSupport::VENTAS_PEDIDO,
-            ComprobanteImpresionFormulario::REMITO => SeteoSalidaProgramaSupport::VENTAS_REMITO,
+            ComprobanteImpresionFormulario::REMITO,
+            ComprobanteImpresionFormulario::COT => SeteoSalidaProgramaSupport::VENTAS_REMITO,
             default => SeteoSalidaProgramaSupport::VENTAS_FACTURA,
         };
     }

@@ -94,8 +94,19 @@ switch(strtoupper(config('app.empresa')))
                 '00010' => (string) env('FACTURACION_SALTO_CAEA_PARA_00010', '00005'),
                 '00009' => (string) env('FACTURACION_SALTO_CAEA_PARA_00009', '00005'),
             ],
+            // Profiler paso a paso factura pedido (laravel.log: facturacion.pedido.paso / .profile).
+            "pedido_emision_profile" => filter_var(env('FACTURACION_PEDIDO_PROFILE', true), FILTER_VALIDATE_BOOLEAN),
+            "pedido_emision_profile_live" => filter_var(env('FACTURACION_PEDIDO_PROFILE_LIVE', true), FILTER_VALIDATE_BOOLEAN),
+            "pedido_emision_profile_en_respuesta" => filter_var(env('FACTURACION_PEDIDO_PROFILE_EN_RESPUESTA', false), FILTER_VALIDATE_BOOLEAN),
+            "pedido_emision_umbral_advertencia_ms" => max(0, (int) env('FACTURACION_PEDIDO_UMBRAL_ADVERTENCIA_MS', 5000)),
             // Anita de factura pedido / remito / mostrador: después de responder. ARCA (número + CAE) sigue síncrono.
             "ANITA_TRAS_RESPUESTA_PEDIDO" => filter_var(env('BIERZO_PEDIDO_ANITA_TRAS_RESPUESTA', true), FILTER_VALIDATE_BOOLEAN),
+            // Cola Laravel (no terminating/Apache). Requiere QUEUE_CONNECTION=database|redis y worker.
+            "ANITA_PEDIDO_EN_COLA" => filter_var(env('BIERZO_PEDIDO_ANITA_EN_COLA', true), FILTER_VALIDATE_BOOLEAN),
+            "ANITA_PEDIDO_COLA" => env('BIERZO_PEDIDO_ANITA_COLA', 'default'),
+            "ANITA_PEDIDO_JOB_TRIES" => max(1, (int) env('BIERZO_PEDIDO_ANITA_JOB_TRIES', 3)),
+            "ANITA_PEDIDO_JOB_BACKOFF_SEGUNDOS" => [60, 300, 900],
+            "ANITA_PEDIDO_JOB_TIMEOUT" => max(60, (int) env('BIERZO_PEDIDO_ANITA_JOB_TIMEOUT', 300)),
             "ANITA_PEDIDO_REGRABAR_HABILITADO" => filter_var(env('BIERZO_PEDIDO_ANITA_REGRABAR', true), FILTER_VALIDATE_BOOLEAN),
             "ANITA_PEDIDO_REGRABAR_MAX_INTENTOS" => max(1, (int) env('BIERZO_PEDIDO_ANITA_REGRABAR_MAX_INTENTOS', 20)),
             "ANITA_PEDIDO_REGRABAR_LIMITE" => max(1, (int) env('BIERZO_PEDIDO_ANITA_REGRABAR_LIMITE', 20)),

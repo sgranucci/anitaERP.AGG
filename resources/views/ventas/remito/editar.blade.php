@@ -19,6 +19,7 @@
 <script src="{{asset("assets/pages/scripts/ventas/zonavta/consulta.js")}}" type="text/javascript"></script>
 @include('includes.ventas.preferencias_facturacion_scripts')
 @include('includes.ventas.cliente_despacho_js')
+<script src="{{ asset('assets/pages/scripts/ventas/tipo_comprobante_preview.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/tipo_comprobante_preview.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/remito/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/remito/crear.js')) ?: time() }}" type="text/javascript"></script>
 
 <script>
@@ -89,6 +90,7 @@
                 <h3 class="card-title">Editar Remito</h3>
 				&nbsp;- ID: {{ $remito->id }} - Remito: {{ $remito->codigo }}
                 <div class="card-tools">
+                    @include('includes.ventas.link_mi_impresora')
                     @if (empty($ocultarVolver))
                     <a href="{{route('remito')}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado

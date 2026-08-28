@@ -4,16 +4,22 @@ namespace App\Services\Ventas;
 
 use App\Models\Configuracion\Salida;
 use App\Models\Ventas\ComprobanteImpresionLog;
+use App\Models\Ventas\CotSesionEnvio;
 use App\Models\Ventas\Pedido;
 use App\Models\Ventas\Remito;
 use App\Models\Ventas\Venta;
 use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
+use App\Services\Ventas\CotElectronico\CotConstanciaPdfService;
 use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Ventas\ComprobanteImpresionDespachoSupport;
 use App\Support\Ventas\ComprobanteImpresionFormulario;
 use App\Support\Ventas\ComprobanteImpresionNasPathSupport;
+use App\Support\Ventas\ComprobanteImpresionPackSupport;
 use App\Support\Ventas\ComprobanteImpresionResolverSupport;
 use App\Support\Ventas\ComprobanteImpresionSalidaUsuarioSupport;
+use App\Support\Ventas\CotConstanciaSupport;
+use App\Support\Ventas\FacturaListadoFiltros;
+use App\Support\Ventas\FacturaListadoSupport;
 use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
@@ -26,7 +32,86 @@ class ComprobanteImpresionSesionService
         private PedidoService $pedidoService,
         private RemitoService $remitoService,
         private SeteosalidaRepositoryInterface $seteosalidaRepository,
+        private CotConstanciaPdfService $cotConstanciaPdfService,
     ) {
+    }
+
+    /**
+     * Constancia COT de una sesión ARBA: una copia a la impresora del usuario.
+     *
+     * @return array<string, mixed>
+     */
+    public function armarDesdeCotSesion(int $sesionId, ?int $remitoEnvioId = null, string $modo = 'OPERATIVO'): array
+    {
+        $cotSesion = CotSesionEnvio::query()->find($sesionId);
+        if ($cotSesion === null) {
+            throw new \InvalidArgumentException('No se encontró la sesión de COT #'.$sesionId);
+        }
+
+        $remitos = CotConstanciaSupport::remitosImprimibles(
+            $cotSesion->remitos()->orderBy('numero_remito')->get(),
+            $remitoEnvioId
+        );
+        if ($remitos === []) {
+            throw new \InvalidArgumentException(
+                $remitoEnvioId
+                    ? 'Ese remito no tiene COT emitido para imprimir.'
+                    : 'La sesión #'.$sesionId.' no tiene COT emitidos para imprimir.'
+            );
+        }
+
+        $titulo = CotConstanciaSupport::tituloSesion($cotSesion, count($remitos));
+        $docs = [
+            ComprobanteImpresionFormulario::COT => [
+                'id' => (int) $cotSesion->id,
+                'codigo' => $titulo,
+                'nombre' => $cotSesion->etiquetaRepartos() !== ''
+                    ? $cotSesion->etiquetaRepartos()
+                    : (count($remitos).' remito(s)'),
+                'fecha' => $this->fechaYmd($cotSesion->fecha_envio ?? $cotSesion->fecha_facturas),
+            ],
+        ];
+        $pack = [[
+            'formulario' => ComprobanteImpresionFormulario::COT,
+            'formulario_etiqueta' => ComprobanteImpresionFormulario::etiquetas()[ComprobanteImpresionFormulario::COT],
+            'copia_id' => null,
+            'copia_codigo' => 'COT',
+            'leyenda' => 'CONSTANCIA',
+            'destinatario' => 'Chofer / ARBA',
+            'salida_id' => null,
+            'salida_nombre' => 'Heredar usuario',
+            'incluir_en_pdf_sesion' => true,
+            'medio' => 'IMPRESORA',
+            'destino_path' => null,
+            'documento_id' => (int) $cotSesion->id,
+            'documento_codigo' => $titulo,
+            'documento_fecha' => $this->fechaYmd($cotSesion->fecha_envio ?? $cotSesion->fecha_facturas),
+            'remito_envio_id' => $remitoEnvioId,
+        ]];
+
+        $payload = $this->payload(
+            [
+                'programa' => null,
+                'motivo' => 'Impresión directa de la constancia COT emitida ante ARBA',
+                'empresa_id' => null,
+                'transporte_id' => null,
+                'provincia_entrega_id' => null,
+            ],
+            $pack,
+            'COT',
+            (int) $cotSesion->id,
+            $modo,
+            ComprobanteImpresionFormulario::COT,
+            $docs
+        );
+        $payload['programa'] = [
+            'id' => 0,
+            'codigo' => 'COT',
+            'nombre' => 'Constancia COT electrónico',
+            'permite_disparo_al_grabar' => false,
+        ];
+
+        return $payload;
     }
 
     /**
@@ -71,43 +156,374 @@ class ComprobanteImpresionSesionService
     }
 
     /**
+     * Sesión cabecera: una línea por copia de papel para imprimir N facturas del reparto.
+     *
+     * @param  list<int>  $ventaIds
+     * @param  array<string, mixed>  $retorno
+     * @return array<string, mixed>
+     */
+    public function armarDesdeReparto(array $ventaIds, string $modo = 'OPERATIVO', string $etiqueta = '', array $retorno = []): array
+    {
+        $ventaIds = array_values(array_unique(array_filter(array_map('intval', $ventaIds))));
+        if ($ventaIds === []) {
+            throw new \InvalidArgumentException('No hay comprobantes en este reparto para el filtro actual.');
+        }
+
+        $ventas = Venta::query()
+            ->with(['puntoventas', 'pedidos', 'remitos', 'transportes', 'gastronomiaEmision', 'estacionamientoEmision'])
+            ->whereIn('id', $ventaIds)
+            ->get()
+            ->keyBy('id');
+
+        $idsOk = [];
+        $primera = null;
+        foreach ($ventaIds as $id) {
+            $venta = $ventas->get($id);
+            if (! $venta || $venta->gastronomiaEmision || $venta->estacionamientoEmision) {
+                continue;
+            }
+            $idsOk[] = $id;
+            $primera ??= $venta;
+        }
+        if ($primera === null || $idsOk === []) {
+            throw new \InvalidArgumentException('No hay comprobantes imprimibles en este reparto.');
+        }
+
+        $base = $this->armarDesdeVenta($primera, $modo, ComprobanteImpresionFormulario::FACTURA);
+        $packCabecera = [];
+        $vistos = [];
+        foreach ($base['pack'] as $linea) {
+            if (ComprobanteImpresionPackSupport::esNas($linea)) {
+                continue;
+            }
+            $clave = strtoupper((string) ($linea['copia_codigo'] ?? ''));
+            if ($clave === '' || isset($vistos[$clave])) {
+                continue;
+            }
+            $vistos[$clave] = true;
+            $packCabecera[] = $linea;
+        }
+
+        $transporteId = (int) ($primera->transporte_id ?? 0);
+        if ($etiqueta === '') {
+            $etiqueta = FacturaListadoSupport::etiquetaReparto($primera);
+            if ($etiqueta === '') {
+                $etiqueta = 'Sin reparto';
+            }
+        }
+
+        $base['origen_tipo'] = 'REPARTO';
+        $base['origen_id'] = $transporteId;
+        $base['lote_venta_ids'] = $idsOk;
+        $base['lote_etiqueta'] = $etiqueta;
+        $base['lote_cantidad'] = count($idsOk);
+        $base['lote_retorno'] = $retorno;
+        $base['solo_formulario'] = ComprobanteImpresionFormulario::FACTURA;
+        $base['pack'] = $this->aplicarImpresoraUsuarioAlPack($packCabecera);
+        $base['faltante_impresora_papel'] = $this->packFaltaImpresoraPapel($base['pack']);
+        $base['documentos'] = [
+            'REPARTO' => [
+                'id' => $transporteId,
+                'codigo' => 'Reparto '.$etiqueta,
+                'nombre' => count($idsOk).' comprobantes',
+                'fecha' => '',
+            ],
+        ];
+        $base['motivo'] = 'Impresión por reparto: elegí la copia y se envía a todas las facturas del filtro';
+        $base['tiene_venta'] = false;
+
+        return $base;
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public function armarDesdeRepartoPorFiltros(array $filtros, int $transporteId, string $modo = 'OPERATIVO'): array
+    {
+        $ids = $this->facturacionService->idsIndexPorReparto($filtros, $transporteId);
+
+        return $this->armarDesdeReparto(
+            $ids,
+            $modo,
+            '',
+            FacturaListadoFiltros::paraQueryString($filtros)
+        );
+    }
+
+    /**
      * @param  array<string, mixed>  $sesion
      * @return array<string, mixed>
      */
     /**
      * @param  list<int>|null  $soloPackIdxs
      */
-    public function ejecutar(array $sesion, ?array $soloPackIdxs = null): array
+    public function ejecutar(array $sesion, ?array $soloPackIdxs = null, bool $soloCopia = false): array
     {
+        if (! empty($sesion['lote_venta_ids'])) {
+            return $this->ejecutarLoteCabecera($sesion, $soloPackIdxs, $soloCopia);
+        }
+
         ini_set('memory_limit', '512M');
         $modo = (string) ($sesion['modo'] ?? 'OPERATIVO');
         $resultados = [];
-        $pdfsSesion = [];
-        $usuarioId = Auth::id();
+        $usuarioId = Auth::id() ? (int) Auth::id() : null;
         $pack = $sesion['pack'] ?? [];
         $soloPackIdxs = $this->normalizarPackIdxs($soloPackIdxs, $pack);
+        $partes = ComprobanteImpresionPackSupport::idxsPapelYNas($pack, $soloPackIdxs, $soloCopia);
 
-        $pdfsLote = $this->generarPdfsLoteFactura($sesion, $soloPackIdxs);
-        foreach ($pack as $idx => $linea) {
-            if ($soloPackIdxs !== null && ! in_array($idx, $soloPackIdxs, true)) {
-                continue;
+        $nasSync = $soloCopia && $partes['papel'] === [] && $partes['nas'] !== [];
+        if ($nasSync) {
+            foreach ($partes['nas'] as $idx) {
+                $resultados[$idx] = $this->ejecutarLinea($pack[$idx] ?? [], $modo, $usuarioId);
             }
-            $resultado = $this->ejecutarLinea($linea, $modo, $usuarioId, null, $pdfsLote[$idx] ?? null);
-            $resultados[$idx] = $resultado;
-            if (! empty($resultado['pdf_path']) && is_file($resultado['pdf_path'])) {
-                $pdfsSesion[] = $resultado['pdf_path'];
-            }
+
+            return $this->payloadEjecucion($sesion, $resultados, null);
         }
 
-        $pdfSesion = $this->fusionar($pdfsSesion, $sesion);
+        foreach ($partes['papel'] as $idx) {
+            $resultados[$idx] = $this->resultadoPendiente(
+                $pack[$idx] ?? [],
+                'Imprimiendo en segundo plano…',
+                ComprobanteImpresionLog::MEDIO_IMPRESORA
+            );
+        }
+        foreach ($partes['nas'] as $idx) {
+            $resultados[$idx] = $this->resultadoPendiente(
+                $pack[$idx] ?? [],
+                'Archivando en segundo plano (no va al PDF de Acrobat)',
+                ComprobanteImpresionLog::MEDIO_ARCHIVO
+            );
+        }
 
+        dispatch(function () use ($sesion, $partes, $modo, $usuarioId) {
+            app(self::class)->ejecutarPapelYNasDiferido($sesion, $partes, $modo, $usuarioId);
+        })->afterResponse();
+
+        return $this->payloadEjecucion($sesion, $resultados, $this->rutaPdfSesionEstable($sesion));
+    }
+
+    /**
+     * @param  list<int>|null  $soloPackIdxs
+     * @param  array<string, mixed>  $sesion
+     * @return array<string, mixed>
+     */
+    private function ejecutarLoteCabecera(array $sesion, ?array $soloPackIdxs, bool $soloCopia): array
+    {
+        $expandida = $this->expandirPackLote($sesion, $soloPackIdxs, $soloCopia);
+        $cantidad = count($expandida['pack'] ?? []);
+        unset($expandida['lote_venta_ids']);
+        $this->ejecutar($expandida, null, false);
+
+        $idxs = $this->normalizarPackIdxs($soloPackIdxs, $sesion['pack'] ?? []);
+        $resultados = [];
+        foreach ($sesion['pack'] ?? [] as $idx => $linea) {
+            if ($idxs !== null && ! in_array((int) $idx, $idxs, true)) {
+                continue;
+            }
+            $resultados[$idx] = $this->resultadoPendiente(
+                $linea,
+                $cantidad.' copias en segundo plano (todas las facturas del reparto)',
+                ComprobanteImpresionLog::MEDIO_IMPRESORA
+            );
+        }
+
+        return $this->payloadEjecucion($sesion, $resultados, $this->rutaPdfSesionEstable($sesion));
+    }
+
+    /**
+     * @param  list<int>|null  $soloPackIdxs
+     * @param  array<string, mixed>  $sesion
+     * @return array<string, mixed>
+     */
+    private function expandirPackLote(array $sesion, ?array $soloPackIdxs, bool $soloCopia = false): array
+    {
+        $ventaIds = array_values(array_filter(array_map('intval', $sesion['lote_venta_ids'] ?? [])));
+        $packCabecera = $sesion['pack'] ?? [];
+        $idxs = $this->normalizarPackIdxs($soloPackIdxs, $packCabecera);
+        $codigos = [];
+        foreach ($packCabecera as $idx => $linea) {
+            if ($idxs !== null && ! in_array((int) $idx, $idxs, true)) {
+                continue;
+            }
+            if ($soloCopia && $idxs !== null && ! in_array((int) $idx, $idxs, true)) {
+                continue;
+            }
+            $codigos[] = strtoupper((string) ($linea['copia_codigo'] ?? ''));
+        }
+        $codigos = array_values(array_unique(array_filter($codigos)));
+        $pack = [];
+        $modo = (string) ($sesion['modo'] ?? 'OPERATIVO');
+        if ($codigos !== []) {
+            foreach ($ventaIds as $ventaId) {
+                $venta = Venta::query()
+                    ->with(['puntoventas', 'pedidos', 'remitos', 'gastronomiaEmision', 'estacionamientoEmision'])
+                    ->find($ventaId);
+                if (! $venta || $venta->gastronomiaEmision || $venta->estacionamientoEmision) {
+                    continue;
+                }
+                $una = $this->armarDesdeVenta($venta, $modo, ComprobanteImpresionFormulario::FACTURA);
+                foreach ($una['pack'] as $linea) {
+                    if (ComprobanteImpresionPackSupport::esNas($linea)) {
+                        continue;
+                    }
+                    if (in_array(strtoupper((string) ($linea['copia_codigo'] ?? '')), $codigos, true)) {
+                        $pack[] = $linea;
+                    }
+                }
+            }
+        }
+        $sesion['pack'] = $this->aplicarImpresoraUsuarioAlPack($pack);
+
+        return $sesion;
+    }
+
+    /**
+     * @param  array{papel: list<int>, nas: list<int>}  $partes
+     */
+    public function ejecutarPapelYNasDiferido(array $sesion, array $partes, string $modo, ?int $usuarioId): void
+    {
+        ini_set('memory_limit', '512M');
+        $pack = $sesion['pack'] ?? [];
+        $resultados = [];
+        $pdfsSesion = [];
+        $idxsPapel = $partes['papel'] ?? [];
+        $idxsNas = $partes['nas'] ?? [];
+
+        try {
+            $pdfsLote = $this->generarPdfsLoteFactura($sesion, $idxsPapel === [] ? [] : $idxsPapel);
+            foreach ($idxsPapel as $idx) {
+                $resultado = $this->ejecutarLinea($pack[$idx] ?? [], $modo, $usuarioId, null, $pdfsLote[$idx] ?? null);
+                $resultados[$idx] = $resultado;
+                if (
+                    ! empty($resultado['pdf_path'])
+                    && is_file($resultado['pdf_path'])
+                    && ComprobanteImpresionPackSupport::vaAlPdfSesion($resultado)
+                ) {
+                    $pdfsSesion[] = $resultado['pdf_path'];
+                }
+            }
+            $this->fusionar($pdfsSesion, $sesion);
+            foreach ($idxsNas as $idx) {
+                $linea = $pack[$idx] ?? [];
+                $reuso = ComprobanteImpresionPackSupport::pdfReusoParaNas($linea, $resultados);
+                $this->ejecutarLinea($linea, $modo, $usuarioId, null, $reuso);
+            }
+        } catch (\Throwable $e) {
+            report($e);
+        }
+    }
+
+    /**
+     * @param  array<int, array<string, mixed>>  $resultados
+     * @return array<string, mixed>
+     */
+    private function payloadEjecucion(array $sesion, array $resultados, ?string $pdfSesion): array
+    {
         return [
             'origen_tipo' => $sesion['origen_tipo'] ?? null,
             'origen_id' => $sesion['origen_id'] ?? null,
             'resultados' => $resultados,
             'pdf_sesion' => $pdfSesion,
-            'ok' => collect($resultados)->contains(fn ($r) => ! empty($r['ok'])),
+            'ok' => collect($resultados)->contains(
+                fn ($r) => ! empty($r['ok']) || ($r['estado'] ?? '') === ComprobanteImpresionLog::ESTADO_PENDIENTE
+            ),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>  $linea
+     * @return array<string, mixed>
+     */
+    private function resultadoPendiente(array $linea, string $mensaje, string $medio): array
+    {
+        return array_merge($linea, [
+            'ok' => true,
+            'mensaje' => $mensaje,
+            'estado' => ComprobanteImpresionLog::ESTADO_PENDIENTE,
+            'pdf_path' => null,
+            'incluir_en_pdf_sesion' => $medio !== ComprobanteImpresionLog::MEDIO_ARCHIVO
+                && (bool) ($linea['incluir_en_pdf_sesion'] ?? false),
+            'es_nas' => $medio === ComprobanteImpresionLog::MEDIO_ARCHIVO,
+        ]);
+    }
+
+    /**
+     * PDF de papel para Acrobat: si no está, lo arma ahora (sin imprimir ni archivar NAS).
+     *
+     * @param  list<int>|null  $soloPackIdxs
+     */
+    public function asegurarPdfSesionPapel(array $sesion, ?array $soloPackIdxs = null): ?string
+    {
+        if (! empty($sesion['lote_venta_ids'])) {
+            $expandida = $this->expandirPackLote($sesion, $soloPackIdxs);
+            unset($expandida['lote_venta_ids']);
+
+            return $this->asegurarPdfSesionPapel($expandida, null);
+        }
+
+        $pack = $sesion['pack'] ?? [];
+        $partes = ComprobanteImpresionPackSupport::idxsPapelYNas($pack, $soloPackIdxs, false);
+        $idxsPapel = $partes['papel'];
+        if ($idxsPapel === []) {
+            return null;
+        }
+
+        $ruta = $this->rutaPdfSesionEstable($sesion, $idxsPapel);
+        if (is_file($ruta) && filesize($ruta) > 500) {
+            return $ruta;
+        }
+
+        $pdfsLote = $this->generarPdfsLoteFactura($sesion, $idxsPapel);
+        $rutas = [];
+        foreach ($idxsPapel as $idx) {
+            $linea = $pack[$idx] ?? [];
+            $path = $pdfsLote[$idx] ?? null;
+            if (! is_string($path) || ! is_file($path)) {
+                try {
+                    $path = $this->generarPdf(
+                        (string) ($linea['formulario'] ?? ''),
+                        (int) ($linea['documento_id'] ?? 0),
+                        (string) ($linea['leyenda'] ?? 'ORIGINAL'),
+                        $linea
+                    );
+                } catch (\Throwable $e) {
+                    report($e);
+                    continue;
+                }
+            }
+            if (is_string($path) && is_file($path) && ComprobanteImpresionPackSupport::vaAlPdfSesion($linea + ['incluir_en_pdf_sesion' => $linea['incluir_en_pdf_sesion'] ?? true])) {
+                $rutas[] = $path;
+            }
+        }
+
+        return $this->fusionar($rutas, $sesion, $idxsPapel);
+    }
+
+    /**
+     * @param  list<int>|null  $idxsPapel
+     */
+    public function rutaPdfSesionEstable(array $sesion, ?array $idxsPapel = null): string
+    {
+        $dir = storage_path('pdf/impresion_sesion');
+        if (! is_dir($dir)) {
+            mkdir($dir, 0775, true);
+        }
+
+        $marca = 'ultimo';
+        if ($idxsPapel !== null) {
+            $norm = array_values(array_unique(array_map('intval', $idxsPapel)));
+            sort($norm);
+            $marca = 'idx-'.implode('-', $norm);
+        }
+
+        return sprintf(
+            '%s/sesion-%s-%d-%s.pdf',
+            $dir,
+            strtolower((string) ($sesion['origen_tipo'] ?? 'doc')),
+            (int) ($sesion['origen_id'] ?? 0),
+            $marca
+        );
     }
 
     public function dispararAlGrabarVenta(int $ventaId): void
@@ -357,7 +773,7 @@ class ComprobanteImpresionSesionService
         try {
             $pdfPath = ($pdfPrevio && is_file($pdfPrevio))
                 ? $pdfPrevio
-                : $this->generarPdf($formulario, $documentoId, $leyenda);
+                : $this->generarPdf($formulario, $documentoId, $leyenda, $linea);
         } catch (\Throwable $e) {
             $errorPdf = $e->getMessage();
         }
@@ -454,6 +870,19 @@ class ComprobanteImpresionSesionService
             return [];
         }
 
+        $ventaIdsPack = [];
+        foreach ($sesion['pack'] ?? [] as $linea) {
+            if (($linea['formulario'] ?? '') === ComprobanteImpresionFormulario::FACTURA) {
+                $vid = (int) ($linea['documento_id'] ?? 0);
+                if ($vid > 0) {
+                    $ventaIdsPack[$vid] = true;
+                }
+            }
+        }
+        if (count($ventaIdsPack) > 1) {
+            return [];
+        }
+
         $ventaId = (int) (($sesion['documentos'][ComprobanteImpresionFormulario::FACTURA]['id'] ?? 0)
             ?: (($sesion['origen_tipo'] ?? '') === 'FACTURA' ? ($sesion['origen_id'] ?? 0) : 0));
         if ($ventaId <= 0) {
@@ -505,7 +934,10 @@ class ComprobanteImpresionSesionService
         return $ventaId;
     }
 
-    private function generarPdf(string $formulario, int $documentoId, string $leyenda): string
+    /**
+     * @param  array<string, mixed>  $linea
+     */
+    private function generarPdf(string $formulario, int $documentoId, string $leyenda, array $linea = []): string
     {
         return match ($formulario) {
             ComprobanteImpresionFormulario::FACTURA => $this->facturacionService->generarPdfFacturaArchivo(
@@ -522,6 +954,10 @@ class ComprobanteImpresionSesionService
                 }
             ),
             ComprobanteImpresionFormulario::REMITO => $this->generarPdfRemito($documentoId, $leyenda),
+            ComprobanteImpresionFormulario::COT => $this->cotConstanciaPdfService->generarPdf(
+                $documentoId,
+                isset($linea['remito_envio_id']) ? ((int) $linea['remito_envio_id'] ?: null) : null
+            ),
             default => throw new \RuntimeException('Formulario no implementado: '.$formulario),
         };
     }
@@ -546,6 +982,11 @@ class ComprobanteImpresionSesionService
     {
         $usuarioId = Auth::id() ? (int) Auth::id() : null;
         foreach ($pack as $i => $linea) {
+            $esNas = ComprobanteImpresionPackSupport::esNas($linea);
+            $pack[$i]['es_nas'] = $esNas;
+            if ($esNas) {
+                $pack[$i]['incluir_en_pdf_sesion'] = false;
+            }
             $hereda = ComprobanteImpresionSalidaUsuarioSupport::heredaImpresoraUsuario($linea);
             $pack[$i]['hereda_usuario'] = $hereda;
             if (! $hereda) {
@@ -663,25 +1104,20 @@ class ComprobanteImpresionSesionService
     /**
      * @param  list<string>  $rutas
      * @param  array<string, mixed>  $sesion
+     * @param  list<int>|null  $idxsPapel
      */
-    private function fusionar(array $rutas, array $sesion): ?string
+    private function fusionar(array $rutas, array $sesion, ?array $idxsPapel = null): ?string
     {
         $rutas = array_values(array_filter($rutas, fn ($r) => is_string($r) && is_file($r)));
         if ($rutas === []) {
             return null;
         }
 
-        $dir = storage_path('pdf/impresion_sesion');
+        $destino = $this->rutaPdfSesionEstable($sesion, $idxsPapel);
+        $dir = dirname($destino);
         if (! is_dir($dir) && ! mkdir($dir, 0775, true) && ! is_dir($dir)) {
             return $rutas[0];
         }
-        $nombre = sprintf(
-            'sesion-%s-%s-%s.pdf',
-            strtolower((string) ($sesion['origen_tipo'] ?? 'doc')),
-            (int) ($sesion['origen_id'] ?? 0),
-            date('YmdHis')
-        );
-        $destino = $dir.'/'.$nombre;
 
         $rutas = array_values(array_unique($rutas));
         if (count($rutas) === 1) {

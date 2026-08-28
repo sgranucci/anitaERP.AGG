@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Log;
 use Throwable;
 
 /**
- * Replica venta + vencae en Anita tras responder la factura (pedido / remito / mostrador, El Bierzo).
+ * Replica venta + vencae + ctamov en Anita en cola (pedido / remito / mostrador, El Bierzo).
  * Antes de grabar inspecciona archivos: si está completo no escribe; si falta alguno, solo esos.
  */
 final class PedidoFacturaAnitaDeferEjecucionService
@@ -54,7 +54,7 @@ final class PedidoFacturaAnitaDeferEjecucionService
         $this->facturacionService->prepararGrabacionPedidoAnitaDiferida($path, []);
 
         try {
-            $faltantesVenta = array_values(array_diff($faltantes, ['vencae']));
+            $faltantesVenta = array_values(array_diff($faltantes, ['vencae', 'ctamov']));
             if ($faltantesVenta !== [] && is_array($anitaPendiente)) {
                 try {
                     $this->facturacionService->ejecutarAnitaPendientePedidoBierzo(
@@ -82,6 +82,20 @@ final class PedidoFacturaAnitaDeferEjecucionService
                         'msg' => $e->getMessage(),
                     ]);
                     $this->regrabacion()->marcarError($ventaId, 'vencae: '.$e->getMessage());
+
+                    return;
+                }
+            }
+
+            if (in_array('ctamov', $faltantes, true) && $ventaId > 0 && is_array($anitaPendiente)) {
+                try {
+                    $this->facturacionService->sincronizarCtamovAnitaPendientePedido($ventaId, $anitaPendiente);
+                } catch (Throwable $e) {
+                    Log::error('pedido.anita.defer.ctamov_fallo', [
+                        'venta_id' => $ventaId,
+                        'msg' => $e->getMessage(),
+                    ]);
+                    $this->regrabacion()->marcarError($ventaId, 'ctamov: '.$e->getMessage());
 
                     return;
                 }

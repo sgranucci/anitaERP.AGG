@@ -9,8 +9,12 @@ Comprobantes de Venta
 <script src="{{asset("assets/pages/scripts/ventas/factura/filtro.js")}}" type="text/javascript"></script>
 @endsection
 
-<?php use App\Helpers\biblioteca;
-use App\Support\Ventas\FacturaListadoFiltros; ?>
+<?php
+use App\Helpers\biblioteca;
+use App\Support\Ventas\FacturaListadoFiltros;
+use App\Support\Ventas\FacturaListadoSupport;
+use App\Support\Ventas\PedidoListadoSupport;
+?>
 
 @section('contenido')
 @php
@@ -23,6 +27,7 @@ use App\Support\Ventas\FacturaListadoFiltros; ?>
             <div class="card-header">
                 <h3 class="card-title">Comprobantes de venta</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.ventas.link_mi_impresora', ['claseBtnMiImpresora' => 'btn btn-outline-secondary btn-sm mr-1'])
                     @if (can('listar-asignacion-remito-factura', false))
                         <a href="{{ route('asignacion_remito_factura') }}" class="btn btn-outline-secondary btn-sm mr-1" style="color:#fff;">
                             <i class="fa fa-link"></i> Asignar remitos
@@ -52,6 +57,14 @@ use App\Support\Ventas\FacturaListadoFiltros; ?>
                         <i class="fa fa-calendar-alt"></i> Per&iacute;odo: <strong>{{ $periodoTexto }}</strong>
                     </div>
                 @endif
+                <style>
+                    #tabla-paginada tr.factura-subtotal-reparto,
+                    #tabla-paginada tr.factura-subtotal-reparto td {
+                        background-color: #F9E79F !important;
+                        color: #17202A;
+                        font-weight: 700;
+                    }
+                </style>
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'listar_factura',
                     'queryparams' => $filtrosQuery ?? [],
@@ -64,12 +77,17 @@ use App\Support\Ventas\FacturaListadoFiltros; ?>
 							<th>Comprobante</th>
 							<th>Cliente</th>
 							<th>Empresa</th>
+                            <th class="text-right">Cajas</th>
+                            <th class="text-right">Unidades</th>
+                            <th class="text-right">Kilos</th>
+                            <th>Reparto</th>
 							<th class="text-right">Total</th>
                             <th data-orderable="false">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
 						@forelse($ventas as $comprobante)
+                            @php $totales = FacturaListadoSupport::totalesFactura($comprobante); @endphp
     						<tr data-entry-id="{{ $comprobante->id }}">
         						<td>{{ $comprobante->id ?? '' }}</td>
 								<td>{{ $comprobante->fecha ? date("d/m/Y", strtotime($comprobante->fecha)) : '' }}</td>
@@ -80,6 +98,10 @@ use App\Support\Ventas\FacturaListadoFiltros; ?>
         						</td>
         						<td>{{ $comprobante->clientes->nombre ?? '' }}</td>
 								<td>{{ $comprobante->puntoventas->empresas->nombre ?? '' }}</td>
+                                <td class="text-right">{{ PedidoListadoSupport::formatearTotal($totales['caja']) }}</td>
+                                <td class="text-right">{{ PedidoListadoSupport::formatearTotal($totales['pieza']) }}</td>
+                                <td class="text-right">{{ PedidoListadoSupport::formatearTotal($totales['kilo']) }}</td>
+                                <td>{{ FacturaListadoSupport::etiquetaReparto($comprobante) }}</td>
 								<td class="text-right">{{ number_format($comprobante->total, 2, ',', '.') }}</td>
         						<td>
                        			@if (can('editar-factura', false))
@@ -95,15 +117,28 @@ use App\Support\Ventas\FacturaListadoFiltros; ?>
 									@endif
 								@endif
                        			@if (can('listar-factura', false))
-                                	<a href="{{route('lista_una_factura', ['id' => $comprobante->id])}}" class="btn-accion-tabla tooltipsC" title="Listar el Comprobante de Venta">
+                                	<a href="{{route('lista_una_factura', ['id' => $comprobante->id])}}" class="btn-accion-tabla tooltipsC" title="Listar el comprobante por impresora">
                                    	<i class="fa fa-print"></i>
+                                	</a>
+                                	<a href="{{route('lista_una_factura_pdf', ['id' => $comprobante->id])}}" class="btn-accion-tabla tooltipsC" title="Listar el comprobante en PDF">
+                                   	<i class="fas fa-file-pdf text-danger"></i>
+                                	</a>
+                                	<a href="{{route('lista_una_factura_copias', ['id' => $comprobante->id])}}" class="btn-accion-tabla tooltipsC" title="Imprimir eligiendo copias">
+                                   	<i class="fa fa-copy"></i>
                                 	</a>
 								@endif
                             	</td>
                         	</tr>
+                            @if (FacturaListadoSupport::esCierreReparto($comprobante, $totalesPorReparto ?? []))
+                                @include('ventas.factura.partials.fila_subtotal_reparto', [
+                                    'metaReparto' => FacturaListadoSupport::metaReparto($comprobante, $totalesPorReparto ?? []),
+                                    'conAcciones' => true,
+                                    'filtrosQuery' => $filtrosQuery ?? [],
+                                ])
+                            @endif
                         @empty
                             <tr>
-                                <td colspan="7" class="text-center text-muted py-3">No se encontraron comprobantes con los filtros aplicados.</td>
+                                <td colspan="11" class="text-center text-muted py-3">No se encontraron comprobantes con los filtros aplicados.</td>
                             </tr>
                         @endforelse
                     </tbody>

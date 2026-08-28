@@ -27,7 +27,7 @@
 @if ($layoutItemsPedido)
 <script src="{{asset("assets/pages/scripts/ventas/factura/crear-bierzo-items.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/crear-bierzo-items.js')) ?: time() }}" type="text/javascript"></script>
 @endif
-<script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/depmae/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/asiento/asiento_externo.js")}}" type="text/javascript"></script>
@@ -107,9 +107,16 @@
                 @endif
                 <span class="ml-2">ID {{ $data->id }} — {{ $data->codigo }}</span>
                 <div class="card-tools">
+                    @include('includes.ventas.link_mi_impresora')
                     @if (can('listar-factura', false))
-                        <a href="{{route('lista_una_factura', ['id' => $data->id])}}" class="btn btn-outline-light btn-sm" title="Listar el comprobante">
-                            <i class="fa fa-print"></i> Listar comprobante
+                        <a href="{{route('lista_una_factura', ['id' => $data->id])}}" class="btn btn-outline-light btn-sm" title="Listar el comprobante por impresora">
+                            <i class="fa fa-print"></i> Impresora
+                        </a>
+                        <a href="{{route('lista_una_factura_pdf', ['id' => $data->id])}}" class="btn btn-outline-light btn-sm" title="Listar el comprobante en PDF">
+                            <i class="fas fa-file-pdf"></i> PDF
+                        </a>
+                        <a href="{{route('lista_una_factura_copias', ['id' => $data->id])}}" class="btn btn-outline-light btn-sm" title="Imprimir eligiendo copias">
+                            <i class="fa fa-copy"></i> Copias
                         </a>
                     @endif
                     <a href="{{ isset($urlOrigen) ? 'javascript:history.back()' : route('factura') }}" class="btn btn-outline-info btn-sm">

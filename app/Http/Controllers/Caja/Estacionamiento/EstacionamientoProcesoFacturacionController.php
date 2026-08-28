@@ -19,6 +19,7 @@ use App\Services\Caja\Estacionamiento\EstacionamientoPvService;
 use App\Services\Caja\Estacionamiento\EstacionamientoTurnoOperativoService;
 use App\Services\Caja\Estacionamiento\JornadaEstacionamientoService;
 use App\Support\Caja\CotizacionTesoreriaConsultaSupport;
+use App\Support\Configuracion\ParametroSistemaSupport;
 use App\Support\Caja\Estacionamiento\EstacionamientoCuentacajaEfectivo;
 use App\Support\Caja\Estacionamiento\EstacionamientoIdentificadorPc;
 use App\Support\Caja\Estacionamiento\EstacionamientoItemCatalogoSupport;
@@ -67,7 +68,7 @@ class EstacionamientoProcesoFacturacionController extends Controller
             'usocuentacaja_estacionamiento_id' => $this->usoCuentacajaEstacionamientoId(),
             'cliente_descuento_codigo' => $clienteDescuento['codigo'],
             'cliente_descuento' => $clienteDescuento['cliente'],
-            'wsfe_receptor_cf_umbral_monto' => (float) config('arca_wsfe.receptor.consumidor_final_umbral_monto', 0),
+            'wsfe_receptor_cf_umbral_monto' => ParametroSistemaSupport::topeConsumidorFinal(),
             'wsfe_forzar_modo_caea' => \App\Support\Ventas\ArcaWsfeEmisionResiliencia::forzarModoCaea(),
             'wsfe_failover_automatico' => \App\Support\Ventas\ArcaWsfeEmisionResiliencia::failoverAutomaticoActivo(),
             'jornada' => $empresaId > 0

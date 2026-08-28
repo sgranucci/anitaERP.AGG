@@ -209,7 +209,7 @@
                                         Facturas B CF an&oacute;nimas agrupadas por d&iacute;a, PV y tipo (desde/hasta).
                                         @if (($resultado['ventas']['resumen']['ventas_b_individuales'] ?? 0) > 0)
                                             {{ number_format($resultado['ventas']['resumen']['ventas_b_individuales'], 0, ',', '.') }} Facturas B informadas individualmente
-                                            (&ge; ${{ number_format(config('arca_wsfe.receptor.consumidor_final_umbral_monto', 10000000), 0, ',', '.') }} o comprador identificado).
+                                            (&ge; ${{ number_format(\App\Support\Configuracion\ParametroSistemaSupport::topeConsumidorFinal(), 0, ',', '.') }} o comprador identificado).
                                         @endif
                                     </td>
                                 </tr>

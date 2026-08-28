@@ -38,6 +38,10 @@ final class ComprobanteImpresionSalidaUsuarioSupportTest extends TestCase
             SeteoSalidaProgramaSupport::VENTAS_FACTURA,
             ComprobanteImpresionSalidaUsuarioSupport::programaPorFormulario(ComprobanteImpresionFormulario::FACTURA)
         );
+        $this->assertSame(
+            SeteoSalidaProgramaSupport::VENTAS_REMITO,
+            ComprobanteImpresionSalidaUsuarioSupport::programaPorFormulario(ComprobanteImpresionFormulario::COT)
+        );
     }
 
     public function test_busqueda_pone_unificado_antes_del_formulario(): void

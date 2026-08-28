@@ -6,6 +6,7 @@ use App\Models\Configuracion\Tipodocumento;
 use App\Models\Ventas\CuentaGastronomia;
 use App\Models\Ventas\DescuentoGastronomia;
 use App\Models\Ventas\Cliente;
+use App\Support\Configuracion\ParametroSistemaSupport;
 use InvalidArgumentException;
 
 /**
@@ -222,7 +223,7 @@ final class GastronomiaReceptorFacturacionService
     {
         $cuenta->loadMissing(['cliente.tipodocumentos', 'lineas', 'descuentoGastronomia']);
         $total = $subtotal ?? $this->estimarSubtotalFactura($cuenta);
-        $tope = (float) config('arca_wsfe.receptor.consumidor_final_umbral_monto', 0);
+        $tope = ParametroSistemaSupport::topeConsumidorFinal();
 
         if ($this->debeUsarReceptorConsumidorFinal($cuenta)) {
             return $this->resolverModoConsumidorFinal($total, $tope);

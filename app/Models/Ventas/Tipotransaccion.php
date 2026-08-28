@@ -47,5 +47,10 @@ class Tipotransaccion extends Model
     {
         return Arr::get(TipotransaccionTrait::$enumOperacionStock, $this->operacionstock);
     }
+
+    public function esNotaCredito(): bool
+    {
+        return ($this->operacion ?? '') === 'C';
+    }
 }
 

@@ -13,8 +13,9 @@ use Illuminate\Support\Facades\Schema;
  * Percepción IVA a sujetos no categorizados (RG 2126 / RG 5710).
  * Distinta de la percepción IVA a RI (RG 5329) de PercepcionIvaSujetoSupport.
  *
- * Replica a-comprob.c: base = total de la factura (neto + IVA + otros tributos
- * ya sumados); tasa llena o la mitad si toda la operatoria es IVA reducido.
+ * RG 2126 art. 5 / a-comprob.c: base = tot_fact (precio neto + IVA + otros
+ * tributos ya sumados, antes de esta percepción). Tasa llena o la mitad si
+ * toda la operatoria es IVA reducido.
  */
 final class PercepcionNoCategorizadoSupport
 {
@@ -57,6 +58,16 @@ final class PercepcionNoCategorizadoSupport
         }
 
         return (int) ($condicioniva->id ?? 0) === 6;
+    }
+
+    /**
+     * Mostrador pone omitir_percepciones en letra B para no aplicar IIBB ni perc. IVA 3 % (RG 5329).
+     * La RG 2126 sí corresponde a esa letra: no taparla, salvo que el caller ya haya pedido
+     * omitir todas (gastronomía / estacionamiento).
+     */
+    public static function aplicarAunqueSeOmitanOtras(bool $omitirPercepcionesYaPedido, ?object $condicioniva): bool
+    {
+        return ! $omitirPercepcionesYaPedido && self::corresponde($condicioniva);
     }
 
     public static function habilitada(): bool

@@ -24,6 +24,18 @@
                             Ver detalle de la sesi&oacute;n #{{ $resultadoProceso['sesion_id'] }}
                         </a>
                     </div>
+                    @if (($resultadoProceso['ok'] ?? false))
+                        <div class="mt-2">
+                            <a href="{{ route('sesion_impresion_cot', ['id' => $resultadoProceso['sesion_id'], 'auto' => 1]) }}"
+                                class="btn btn-success btn-sm">
+                                <i class="fa fa-print"></i> Imprimir COT
+                            </a>
+                            <a href="{{ route('sesion_impresion_cot', ['id' => $resultadoProceso['sesion_id'], 'pdf' => 1]) }}"
+                                class="btn btn-outline-danger btn-sm">
+                                <i class="fa fa-file-pdf"></i> PDF constancia
+                            </a>
+                        </div>
+                    @endif
                 @endif
             </div>
         @endif
@@ -309,6 +321,7 @@
                                             <th>N&deg; &uacute;nico</th>
                                             <th>COT</th>
                                             <th>Error</th>
+                                            <th></th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -321,6 +334,14 @@
                                                 <td>{{ $res['nro_unico'] ?? '' }}</td>
                                                 <td>{{ $res['cot'] ?? '' }}</td>
                                                 <td class="small text-danger">{{ $res['error'] ?? '' }}</td>
+                                                <td class="text-nowrap">
+                                                    @if (! empty($res['cot']) && ! empty($resultadoProceso['sesion_id']) && ! empty($res['id']))
+                                                        <a href="{{ route('sesion_impresion_cot', ['id' => $resultadoProceso['sesion_id'], 'remito_envio_id' => $res['id'], 'auto' => 1]) }}"
+                                                            class="btn btn-outline-success btn-sm" title="Imprimir esta constancia">
+                                                            <i class="fa fa-print"></i>
+                                                        </a>
+                                                    @endif
+                                                </td>
                                             </tr>
                                         @endforeach
                                     </tbody>
