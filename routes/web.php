@@ -1617,6 +1617,10 @@ Route::post('ventas/crearemisionot', 'Ventas\OrdentrabajoController@crearEmision
 Route::get('ventas/repcliente', 'Ventas\ClienteController@indexReporteCliente')->name('rep_cliente');
 Route::post('ventas/crearrepcliente', 'Ventas\ClienteController@crearReporteCliente')->name('crear_repcliente');
 
+// Articulos vendidos (Ferli: combinaciones / importado vs nacional)
+Route::get('ventas/reparticulovendido', 'Ventas\RepArticuloVendidoController@index')->name('rep_articulovendido');
+Route::post('ventas/crearreparticulovendido', 'Ventas\RepArticuloVendidoController@crearReporteArticuloVendido')->name('crear_reparticulovendido');
+
 /*
  * Vendedores
  */
