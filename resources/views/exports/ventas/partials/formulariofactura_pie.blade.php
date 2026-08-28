@@ -79,6 +79,9 @@
                     @if ($impuestoInterno > 0)
                         <br>&nbsp;&nbsp;&nbsp;Impuesto Interno {{ $venta->monedas->abreviatura ?? '' }} {{ number_format($impuestoInterno, 2) }}
                     @endif
+                    @if (\App\Support\Ventas\FacturaBLeyendaIsibCabaSupport::corresponde($venta, $letra))
+                        <br>{{ \App\Support\Ventas\FacturaBLeyendaIsibCabaSupport::TEXTO }}
+                    @endif
                 @endif
                 @if ($facturaPdfEsElBierzo)
                     @if ($letra == 'B')<br>@endif

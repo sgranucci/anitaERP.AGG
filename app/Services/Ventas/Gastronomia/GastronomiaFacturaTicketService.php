@@ -11,6 +11,7 @@ use App\Models\Ventas\Venta;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use App\Support\Ventas\ArcaFacturaQrSupport;
 use App\Support\Ventas\EscPosTicketWriter;
+use App\Support\Ventas\FacturaBLeyendaIsibCabaSupport;
 use App\Support\Ventas\GastronomiaVentaDisplaySupport;
 use App\Support\Ventas\NcjetdirectSalidaSupport;
 use Carbon\Carbon;
@@ -339,6 +340,9 @@ final class GastronomiaFacturaTicketService
             $w->linea('Otros Trib.Nac.Incid.Precio');
             if ($impuestoInterno > 0) {
                 $w->lineaConImporte('  Imp. Interno', number_format($impuestoInterno, 2, '.', ''));
+            }
+            if (FacturaBLeyendaIsibCabaSupport::corresponde($venta, $letra)) {
+                $w->linea(FacturaBLeyendaIsibCabaSupport::TEXTO);
             }
             $w->linea('LOS IMPUESTOS INFORMADOS SON SOLO');
             $w->linea('LOS QUE CORRESPONDEN A NIVEL NACIONAL');

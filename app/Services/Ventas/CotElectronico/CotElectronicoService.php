@@ -358,6 +358,8 @@ class CotElectronicoService
             'numero_remito' => (int) ($fila['numero_remito'] ?? 0),
             'cliente_nombre' => (string) ($fila['cliente_nombre'] ?? $registro->cliente_nombre ?? ''),
             'transporte_codigo' => (string) ($fila['transporte_codigo'] ?? ''),
+            'kilos' => round((float) ($fila['kilos'] ?? 0), 2),
+            'importe' => round((float) ($fila['importe'] ?? 0), 2),
             'procesado' => (string) ($registro->procesado ?? ''),
             'nro_unico' => (string) ($registro->nro_unico ?? ''),
             'cot' => (string) ($registro->cot ?? ''),

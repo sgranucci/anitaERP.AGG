@@ -256,13 +256,22 @@
                                     <tbody>
                                         @foreach ($remitos as $remito)
                                             @php $remitoImporteOk = ! empty($remito['importe_ok']); @endphp
-                                            <tr class="{{ !empty($remito['ya_enviado']) ? 'table-secondary' : (! $remitoImporteOk ? 'table-warning' : '') }}">
+                                            <tr class="fila-remito-cot {{ !empty($remito['ya_enviado']) ? 'table-secondary' : (! $remitoImporteOk ? 'table-warning' : '') }}"
+                                                data-kilos="{{ number_format((float) ($remito['kilos'] ?? 0), 2, '.', '') }}"
+                                                data-importe="{{ $remitoImporteOk ? number_format((float) ($remito['importe'] ?? 0), 2, '.', '') : '0.00' }}"
+                                                data-reparto-codigo="{{ $remito['transporte_codigo'] ?? '' }}"
+                                                data-reparto-nombre="{{ $remito['transporte_nombre'] ?? '' }}"
+                                                data-enviable="{{ empty($remito['ya_enviado']) && $remitoImporteOk ? '1' : '0' }}">
                                                 <td class="text-center">
                                                     @if (empty($remito['ya_enviado']) && $remitoImporteOk)
                                                         <input type="checkbox" name="remitos_seleccionados[]"
                                                             class="check-remito-cot-pendiente"
                                                             value="{{ $remito['clave'] }}"
                                                             data-importe-ok="1"
+                                                            data-kilos="{{ number_format((float) ($remito['kilos'] ?? 0), 2, '.', '') }}"
+                                                            data-importe="{{ number_format((float) ($remito['importe'] ?? 0), 2, '.', '') }}"
+                                                            data-reparto-codigo="{{ $remito['transporte_codigo'] ?? '' }}"
+                                                            data-reparto-nombre="{{ $remito['transporte_nombre'] ?? '' }}"
                                                             checked>
                                                     @elseif (empty($remito['ya_enviado']))
                                                         <input type="checkbox" name="remitos_seleccionados[]"
@@ -312,11 +321,34 @@
                                             </tr>
                                         @endforeach
                                     </tbody>
+                                    <tfoot>
+                                        <tr class="font-weight-bold" style="background:#eaf6fb;">
+                                            <td colspan="5" class="text-right">A enviar (seleccionados)</td>
+                                            <td class="text-right" id="tfoot-kilos-sel">{{ number_format((float) ($totalesCot['pendientes']['kilos'] ?? 0), 2, ',', '.') }}</td>
+                                            <td class="text-right" id="tfoot-importe-sel">{{ number_format((float) ($totalesCot['pendientes']['importe'] ?? 0), 2, ',', '.') }}</td>
+                                            <td colspan="2" id="tfoot-cant-sel">{{ (int) ($totalesCot['pendientes']['cantidad'] ?? 0) }} remito(s)</td>
+                                        </tr>
+                                        <tr>
+                                            <td colspan="5" class="text-right">Total consulta</td>
+                                            <td class="text-right" id="tfoot-kilos-consulta">{{ number_format((float) ($totalesCot['consulta']['kilos'] ?? 0), 2, ',', '.') }}</td>
+                                            <td class="text-right" id="tfoot-importe-consulta">{{ number_format((float) ($totalesCot['consulta']['importe'] ?? 0), 2, ',', '.') }}</td>
+                                            <td colspan="2" id="tfoot-cant-consulta">{{ (int) ($totalesCot['consulta']['cantidad'] ?? 0) }} remito(s)</td>
+                                        </tr>
+                                    </tfoot>
                                 </table>
                             </div>
+                            @include('ventas.cot_electronico.partials.control_totales')
                         @endif
 
                         @if (!empty($resultadoProceso['resultados']))
+                            @php
+                                $totResultadoKilos = 0.0;
+                                $totResultadoImporte = 0.0;
+                                foreach ($resultadoProceso['resultados'] as $resTot) {
+                                    $totResultadoKilos += (float) ($resTot['kilos'] ?? 0);
+                                    $totResultadoImporte += (float) ($resTot['importe'] ?? 0);
+                                }
+                            @endphp
                             <h5 class="mt-4">Resultado del env&iacute;o</h5>
                             <div class="table-responsive">
                                 <table class="table table-sm table-bordered">
@@ -325,6 +357,8 @@
                                             <th>Remito</th>
                                             <th>Cliente</th>
                                             <th>Reparto</th>
+                                            <th class="text-right">Kilos</th>
+                                            <th class="text-right">Importe</th>
                                             <th>Procesado</th>
                                             <th>N&deg; &uacute;nico</th>
                                             <th>COT</th>
@@ -338,6 +372,8 @@
                                                 <td>{{ $res['numero_remito'] ?? '' }}</td>
                                                 <td>{{ $res['cliente_nombre'] ?? '' }}</td>
                                                 <td>{{ $res['transporte_codigo'] ?? '' }}</td>
+                                                <td class="text-right">{{ number_format((float) ($res['kilos'] ?? 0), 2, ',', '.') }}</td>
+                                                <td class="text-right">{{ number_format((float) ($res['importe'] ?? 0), 2, ',', '.') }}</td>
                                                 <td>{{ $res['procesado'] ?? '' }}</td>
                                                 <td>{{ $res['nro_unico'] ?? '' }}</td>
                                                 <td>{{ $res['cot'] ?? '' }}</td>
@@ -353,6 +389,14 @@
                                             </tr>
                                         @endforeach
                                     </tbody>
+                                    <tfoot>
+                                        <tr class="font-weight-bold" style="background:#eaf6fb;">
+                                            <td colspan="3" class="text-right">Total enviado</td>
+                                            <td class="text-right">{{ number_format($totResultadoKilos, 2, ',', '.') }}</td>
+                                            <td class="text-right">{{ number_format($totResultadoImporte, 2, ',', '.') }}</td>
+                                            <td colspan="5">{{ count($resultadoProceso['resultados']) }} remito(s)</td>
+                                        </tr>
+                                    </tfoot>
                                 </table>
                             </div>
                         @endif
@@ -371,6 +415,15 @@
                         <button type="submit" class="btn btn-success" id="btn-procesar-cot">
                             <i class="fa fa-paper-plane"></i> Procesar env&iacute;o ARBA
                         </button>
+                        <span class="small ml-2 align-middle" id="cot-footer-resumen">
+                            A enviar:
+                            <strong id="cot-footer-cant">{{ (int) ($totalesCot['pendientes']['cantidad'] ?? 0) }}</strong>
+                            remitos ·
+                            <strong id="cot-footer-kilos">{{ number_format((float) ($totalesCot['pendientes']['kilos'] ?? 0), 2, ',', '.') }}</strong>
+                            kg ·
+                            $
+                            <strong id="cot-footer-importe">{{ number_format((float) ($totalesCot['pendientes']['importe'] ?? 0), 2, ',', '.') }}</strong>
+                        </span>
                     @endif
                     <input type="hidden" name="procesar" id="input-procesar" value="">
                     <div class="form-check form-check-inline mt-2 mt-md-0 ml-md-3 align-middle">

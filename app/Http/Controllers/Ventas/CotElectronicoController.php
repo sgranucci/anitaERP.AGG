@@ -10,6 +10,7 @@ use App\Services\Ventas\CotElectronico\CotElectronicoService;
 use App\Support\Ventas\ComprobanteImpresionFormulario;
 use App\Support\Ventas\ComprobanteImpresionSalidaUsuarioSupport;
 use App\Support\Ventas\CotElectronicoPreferenciasUsuario;
+use App\Support\Ventas\CotRemitoTotalesSupport;
 use App\Support\Ventas\CuitFormatoValidacionSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -122,6 +123,7 @@ class CotElectronicoController extends Controller
                 fn ($r) => empty($r['ya_enviado']) && empty($r['importe_ok'])
             )->count(),
             'cantidadRemitosEmitidos' => collect($remitos)->filter(fn ($r) => ! empty($r['ya_enviado']))->count(),
+            'totalesCot' => CotRemitoTotalesSupport::resumir($remitos),
             'consultado' => $consultado || $procesado,
             'resultadoProceso' => $resultadoProceso,
             'resultadoPruebaConexion' => session('resultadoPruebaConexion'),

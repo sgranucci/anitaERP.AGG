@@ -449,7 +449,8 @@ class ComprobanteImpresionSesionService
     }
 
     /**
-     * PDF de papel para Acrobat: si no está, lo arma ahora (sin imprimir ni archivar NAS).
+     * PDF de papel para Acrobat. Siempre se regenera: descripciones, leyendas
+     * y plantilla pueden haber cambiado sin tocar venta.updated_at.
      *
      * @param  list<int>|null  $soloPackIdxs
      */
@@ -467,11 +468,6 @@ class ComprobanteImpresionSesionService
         $idxsPapel = $partes['papel'];
         if ($idxsPapel === []) {
             return null;
-        }
-
-        $ruta = $this->rutaPdfSesionEstable($sesion, $idxsPapel);
-        if ($this->pdfSesionEstaVigente($sesion, $ruta)) {
-            return $ruta;
         }
 
         $pdfsLote = $this->generarPdfsLoteFactura($sesion, $idxsPapel);
@@ -524,47 +520,6 @@ class ComprobanteImpresionSesionService
             (int) ($sesion['origen_id'] ?? 0),
             $marca
         );
-    }
-
-    /**
-     * El PDF estable se reutiliza para Acrobat. Si la venta se corrigió (p. ej. FCE→FAC)
-     * hay que regenerar: si no, la reimpresión sigue mostrando el archivo viejo.
-     */
-    private function pdfSesionEstaVigente(array $sesion, string $ruta): bool
-    {
-        if (! is_file($ruta) || filesize($ruta) <= 500) {
-            return false;
-        }
-        $mtime = filemtime($ruta);
-        if ($mtime === false) {
-            return false;
-        }
-
-        $ids = [];
-        if (($sesion['origen_tipo'] ?? '') === 'FACTURA') {
-            $ids[] = (int) ($sesion['origen_id'] ?? 0);
-        }
-        $docFactura = $sesion['documentos'][ComprobanteImpresionFormulario::FACTURA]['id'] ?? 0;
-        $ids[] = (int) $docFactura;
-        foreach ($sesion['pack'] ?? [] as $linea) {
-            if (($linea['formulario'] ?? '') === ComprobanteImpresionFormulario::FACTURA) {
-                $ids[] = (int) ($linea['documento_id'] ?? 0);
-            }
-        }
-        foreach ($sesion['lote_venta_ids'] ?? [] as $id) {
-            $ids[] = (int) $id;
-        }
-        $ids = array_values(array_unique(array_filter($ids)));
-        if ($ids === []) {
-            return true;
-        }
-
-        $maxUpdated = Venta::query()->whereIn('id', $ids)->max('updated_at');
-        if ($maxUpdated === null) {
-            return true;
-        }
-
-        return Carbon::parse((string) $maxUpdated)->getTimestamp() <= $mtime;
     }
 
     public function dispararAlGrabarVenta(int $ventaId): void

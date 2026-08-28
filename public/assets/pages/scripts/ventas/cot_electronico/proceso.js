@@ -544,9 +544,133 @@
         $('#input-procesar').val('');
     });
 
+    function formatearNumeroCot(valor) {
+        var n = Number(valor);
+        if (!isFinite(n)) {
+            n = 0;
+        }
+
+        return n.toLocaleString('es-AR', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2,
+        });
+    }
+
+    function numeroDesdeAtributo(valor) {
+        var n = parseFloat(String(valor || '0').replace(',', '.'));
+        return isFinite(n) ? n : 0;
+    }
+
+    function etiquetaRepartoCot(codigo, nombre) {
+        var texto = (String(codigo || '') + ' ' + String(nombre || '')).trim();
+        return texto !== '' ? texto : '—';
+    }
+
+    function totalesSeleccionadosCot() {
+        var cantidad = 0;
+        var kilos = 0;
+        var importe = 0;
+        var porReparto = {};
+
+        $('#tabla-remitos-cot tbody .check-remito-cot-pendiente:checked').each(function () {
+            var $check = $(this);
+            var kilosFila = numeroDesdeAtributo($check.attr('data-kilos'));
+            var importeFila = numeroDesdeAtributo($check.attr('data-importe'));
+            var codigo = String($check.attr('data-reparto-codigo') || '');
+            var nombre = String($check.attr('data-reparto-nombre') || '');
+            var clave = codigo !== '' ? codigo : (nombre !== '' ? nombre : '—');
+
+            cantidad += 1;
+            kilos += kilosFila;
+            importe += importeFila;
+
+            if (!porReparto[clave]) {
+                porReparto[clave] = {
+                    etiqueta: etiquetaRepartoCot(codigo, nombre),
+                    cantidad: 0,
+                    kilos: 0,
+                    importe: 0,
+                };
+            }
+            porReparto[clave].cantidad += 1;
+            porReparto[clave].kilos += kilosFila;
+            porReparto[clave].importe += importeFila;
+        });
+
+        return {
+            cantidad: cantidad,
+            kilos: kilos,
+            importe: importe,
+            porReparto: porReparto,
+        };
+    }
+
+    function actualizarTotalesCot() {
+        if (!$('#tabla-remitos-cot').length) {
+            return;
+        }
+
+        var tot = totalesSeleccionadosCot();
+        var kilosTxt = formatearNumeroCot(tot.kilos);
+        var importeTxt = formatearNumeroCot(tot.importe);
+        var cantTxt = tot.cantidad + ' remito(s)';
+
+        $('#tfoot-kilos-sel').text(kilosTxt);
+        $('#tfoot-importe-sel').text(importeTxt);
+        $('#tfoot-cant-sel').text(cantTxt);
+
+        $('#cot-ctrl-sel-cant').text(tot.cantidad);
+        $('#cot-ctrl-sel-kilos').html(kilosTxt + ' <span class="small font-weight-normal">kg</span>');
+        $('#cot-ctrl-sel-importe').text('$ ' + importeTxt);
+
+        $('#cot-reparto-total-cant').text(tot.cantidad);
+        $('#cot-reparto-total-kilos').text(kilosTxt);
+        $('#cot-reparto-total-importe').text('$ ' + importeTxt);
+
+        $('#cot-footer-cant').text(tot.cantidad);
+        $('#cot-footer-kilos').text(kilosTxt);
+        $('#cot-footer-importe').text(importeTxt);
+
+        var $tbodyReparto = $('#tabla-cot-totales-reparto tbody');
+        if ($tbodyReparto.length) {
+            $tbodyReparto.empty();
+            var claves = Object.keys(tot.porReparto);
+            if (claves.length < 1) {
+                $tbodyReparto.append(
+                    '<tr><td colspan="4" class="text-muted">No hay remitos seleccionados para enviar.</td></tr>'
+                );
+            } else {
+                claves.sort().forEach(function (clave) {
+                    var fila = tot.porReparto[clave];
+                    $tbodyReparto.append(
+                        '<tr>'
+                        + '<td>' + $('<div>').text(fila.etiqueta).html() + '</td>'
+                        + '<td class="text-center">' + fila.cantidad + '</td>'
+                        + '<td class="text-right">' + formatearNumeroCot(fila.kilos) + '</td>'
+                        + '<td class="text-right">$ ' + formatearNumeroCot(fila.importe) + '</td>'
+                        + '</tr>'
+                    );
+                });
+            }
+        }
+    }
+
     $('#check-todos-remitos').on('change', function () {
         var marcado = $(this).is(':checked');
         $('#tabla-remitos-cot tbody .check-remito-cot-pendiente').prop('checked', marcado);
+        actualizarTotalesCot();
+    });
+
+    $(document).on('change', '#tabla-remitos-cot tbody .check-remito-cot-pendiente', function () {
+        var $pendientes = $('#tabla-remitos-cot tbody .check-remito-cot-pendiente');
+        var $marcados = $pendientes.filter(':checked');
+        var $checkTodos = $('#check-todos-remitos');
+        if ($pendientes.length && $marcados.length === $pendientes.length) {
+            $checkTodos.prop('checked', true);
+        } else {
+            $checkTodos.prop('checked', false);
+        }
+        actualizarTotalesCot();
     });
 
     $('#btn-procesar-cot').on('click', function (e) {
@@ -567,8 +691,8 @@
             return false;
         }
 
-        var seleccionados = $('#tabla-remitos-cot tbody .check-remito-cot-pendiente:checked').length;
-        if (seleccionados < 1) {
+        var totEnvio = totalesSeleccionadosCot();
+        if (totEnvio.cantidad < 1) {
             e.preventDefault();
             alert('Seleccione al menos un remito para procesar.');
             return false;
@@ -578,7 +702,10 @@
         var imprimirAlProcesar = $('#imprimir_al_procesar').is(':checked');
         var tieneImpresora = String($formCot.data('tiene-impresora') || '') === '1';
         var nombreImpresora = String($formCot.data('impresora-nombre') || '').trim();
-        var mensajeConfirm = '¿Confirma el envío de los remitos seleccionados a ARBA?';
+        var mensajeConfirm = '¿Confirma el envío de los remitos seleccionados a ARBA?'
+            + '\n\nRemitos: ' + totEnvio.cantidad
+            + '\nKilos: ' + formatearNumeroCot(totEnvio.kilos)
+            + '\nImporte (sin IVA): $ ' + formatearNumeroCot(totEnvio.importe);
         if (imprimirAlProcesar && tieneImpresora) {
             mensajeConfirm += nombreImpresora !== ''
                 ? '\n\nDespués se enviará la constancia COT a la impresora ' + nombreImpresora + '.'
@@ -595,6 +722,8 @@
         $('#input-consultar').val('1');
         $('#input-procesar').val('1');
     });
+
+    actualizarTotalesCot();
 
     $tablaRepartos.find('tr.fila-reparto').each(function () {
         inicializarCuitEnFila($(this));
