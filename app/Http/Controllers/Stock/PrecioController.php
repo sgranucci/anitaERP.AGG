@@ -151,6 +151,42 @@ class PrecioController extends Controller
             ->get(['id', 'codigo', 'nombre']);
     }
 
+    public function asignaPrecio($articulo_id, $talle_id)
+    {
+        if (MovimientoStockFerliSupport::esCalzadosFerli()) {
+            $fechaHoy = Carbon::now();
+            $talle_id = preg_replace('([^A-Za-z0-9,])', '', $talle_id);
+            $array_talle = explode(',', $talle_id);
+            $array_precio = [];
+            if ($talle_id) {
+                $talle = Talle::select('nombre', 'id')->whereIn('id', $array_talle)->get();
+                $precioServiceFerli = app(\App\Services\Stock\PrecioServiceFerli::class);
+                foreach ($talle as $value) {
+                    $precio = $precioServiceFerli->asignaPrecio($articulo_id, 0, $value->id, $fechaHoy);
+                    if (count($precio) > 0) {
+                        $array_precio[] = [
+                            'precio' => $precio[0]['precio'],
+                            'listaprecio_id' => $precio[0]['listaprecio_id'],
+                            'moneda_id' => $precio[0]['moneda_id'],
+                            'incluyeimpuesto' => $precio[0]['incluyeimpuesto'],
+                        ];
+                    } else {
+                        $array_precio[] = [
+                            'precio' => 0,
+                            'listaprecio_id' => 0,
+                            'moneda_id' => 1,
+                            'incluyeimpuesto' => 1,
+                        ];
+                    }
+                }
+            }
+
+            return $array_precio;
+        }
+
+        return $this->asignaPrecioPorTalle($articulo_id, $talle_id);
+    }
+
     public function asignaPrecioPorTalle($articulo_id, $talle_id)
     {
         $fechaHoy = Carbon::now();
