@@ -1325,8 +1325,8 @@ Route::get('stock/leercombinacionesactivas/{id}', 'Stock\CombinacionController@l
 Route::get('stock/leermodulos/{id}/{modulo?}', 'Stock\LineaController@leerModulos')->name('leer_modulos');
 Route::get('stock/leertalles/{id}', 'Stock\ModuloController@leerTalles')->name('leer_talles');
 
-Route::put('stock/product/contaduria/update/{id}', 'Stock\ArticuloController@updateContaduria')->name('product.contaduria.update');
-Route::put('stock/product/tecnica/update/{id}', 'Stock\ArticuloController@updateTecnica')->name('product.tecnica.update');
+Route::put('stock/product/contaduria/update/{id}', 'Stock\ArticuloFerliController@updateContaduria')->name('product.contaduria.update');
+Route::put('stock/product/tecnica/update/{id}', 'Stock\ArticuloFerliController@updateTecnica')->name('product.tecnica.update');
 
 Route::get('stock/combinacion/list', 'Stock\CombinacionController@list')->name('combinacion.list');
 Route::get('stock/combinacion/index/{id?}', 'Stock\CombinacionController@index')->name('combinacion.index');
