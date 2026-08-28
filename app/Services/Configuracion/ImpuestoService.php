@@ -17,6 +17,7 @@ use App\Support\Configuracion\ExclusionPercepcionIvaSupport;
 use App\Support\Configuracion\PercepcionIvaSujetoSupport;
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Ventas\ClienteExclusionPercepcionSupport;
+use App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport;
 use App\Support\Ventas\LogisticaBierzoSupport;
 use App\Support\Ventas\VentaImporteDosDecimalesSupport;
 use App\Support\Stock\FormulaArticuloFactorCosto;
@@ -168,11 +169,18 @@ class ImpuestoService extends FacturacionService
 			$tasaDetraccion += $tasaPercepcionIva;
 
 		// Agrega impuestos provinciales (también en tasa de detracción si aplica)
-		$percepcionesIIBB = [];
-		if (! $omitirPercepciones && ! $flGrabaComprobanteDividido) {
-			$percepcionesIIBB = $this->IIBBService->calculaPercepcionIIBB($totalBrutoAuxiliar, $nroInscripcion,
-				$condicioniibb_id, $provincia, $cm05, $fechaFactura, $cliente_id);
-		}
+		$percepcionesIIBB = $this->percepcionesIibbParaVenta(
+			$totalBrutoAuxiliar,
+			$dataCliente,
+			$nroInscripcion,
+			$condicioniibb_id,
+			$provincia,
+			$cm05,
+			$fechaFactura,
+			$cliente_id,
+			$omitirPercepciones,
+			$flGrabaComprobanteDividido
+		);
 
 		if (config('facturacion.USA_DETRACCION') == 'S' && ! $omitirPercepciones)
 		{
@@ -394,18 +402,24 @@ class ImpuestoService extends FacturacionService
 		}
 
 		// Agrega impuestos provinciales
-		$percepcionesIIBB = [];
-		if (! $omitirPercepciones && ! $flGrabaComprobanteDividido)
+		$importeNetoIibb = 0.;
+		for ($i = 0; $i < count($netos); $i++)
 		{
-			$importeNeto = 0.;
-			for ($i = 0; $i < count($netos); $i++)
-			{
-				if($netos[$i]['tasa'] != 0.) // Solo trae los importes gravados
-					$importeNeto += $netos[$i]['importe'];
-			}	
-			$percepcionesIIBB = $this->IIBBService->calculaPercepcionIIBB($importeNeto, $nroInscripcion, 
-																		$condicioniibb_id, $provincia, $cm05, $fechaFactura, $cliente_id);
+			if($netos[$i]['tasa'] != 0.) // Solo trae los importes gravados
+				$importeNetoIibb += $netos[$i]['importe'];
 		}
+		$percepcionesIIBB = $this->percepcionesIibbParaVenta(
+			$importeNetoIibb,
+			$dataCliente,
+			$nroInscripcion,
+			$condicioniibb_id,
+			$provincia,
+			$cm05,
+			$fechaFactura,
+			$cliente_id,
+			$omitirPercepciones,
+			$flGrabaComprobanteDividido
+		);
 
 		// Abasto El Bierzo (a-comprob: kilos × tasa; MTXCA tributo 99).
 		if (EntornoEmpresaSupport::esElBierzo() && ! $flGrabaComprobanteDividido && $tasaAbasto > 0) {
@@ -626,6 +640,44 @@ class ImpuestoService extends FacturacionService
 			'total' => round($totalFinal, 4),
 			'filas_iva' => $filasIva,
 		];
+	}
+
+	/**
+	 * IIBB de venta. Letra B omite percepciones salvo El Bierzo + CABA 901.
+	 *
+	 * @param  array<string, mixed>  $dataCliente
+	 */
+	private function percepcionesIibbParaVenta(
+		$baseNeto,
+		array $dataCliente,
+		$nroInscripcion,
+		$condicioniibb_id,
+		$provincia,
+		$cm05,
+		$fechaFactura,
+		$cliente_id,
+		bool $omitirPercepciones,
+		bool $flGrabaComprobanteDividido
+	): array {
+		if ($flGrabaComprobanteDividido) {
+			return [];
+		}
+
+		$forzarCaba = ElBierzoFacturaBPercepcionCabaSupport::debeForzarDesdeCliente($dataCliente);
+		if ($omitirPercepciones && ! $forzarCaba) {
+			return [];
+		}
+
+		return $this->IIBBService->calculaPercepcionIIBB(
+			$baseNeto,
+			$nroInscripcion,
+			$condicioniibb_id,
+			$provincia,
+			$cm05,
+			$fechaFactura,
+			$cliente_id,
+			$forzarCaba
+		);
 	}
 
 	// Busca un valor en array

@@ -50,4 +50,10 @@ final class CaeaEmisionNumeracionSupportTest extends TestCase
         $this->assertSame(99999, $payload['numerocomprobante_forzado']);
         $this->assertTrue($payload['_omitir_numera_anita_fin']);
     }
+
+    public function test_piso_caea_no_aplica_a_serie_fce(): void
+    {
+        $this->assertSame(0, CaeaEmisionNumeracionSupport::aplicarPisoCaea(3, 0, 201));
+        $this->assertSame(12, CaeaEmisionNumeracionSupport::aplicarPisoCaea(3, 12, 206));
+    }
 }

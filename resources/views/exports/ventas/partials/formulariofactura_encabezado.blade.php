@@ -29,10 +29,10 @@
         </td>
         <td class="factura-cabecera-letra">
             <div class="factura-letra-caja">{{ $esRemitoHoja ? 'R' : $letra }}</div>
-            <div class="factura-codigo-tipo">Código {{ $esRemitoHoja ? '091' : $codigoTipoTransaccion }}</div>
+            <div class="factura-codigo-tipo">Código {{ $esRemitoHoja ? '091' : ($codigoTipoTransaccionPad ?? $codigoTipoTransaccion) }}</div>
         </td>
         <td class="factura-cabecera-comprobante">
-            <strong>{{ $esRemitoHoja ? 'REMITO' : ($venta->tipotransacciones->nombre ?? '') }}</strong><br>
+            <strong>{{ $esRemitoHoja ? 'REMITO' : ($nombreTipoComprobanteImpresion ?? $venta->tipotransacciones->nombre ?? '') }}</strong><br>
             <strong>Nro. {{ $esRemitoHoja ? $nroRemitoFormateado : $venta->codigo }}</strong>
             <p>
                 Fecha emisi&oacute;n: {{ date('d/m/Y', strtotime($venta->fecha ?? '')) }}<br>

@@ -206,20 +206,20 @@ class CuentacajaController extends Controller
 
     public function consultaCuentaCaja(Request $request)
     {
-		$columns = ['cuentacaja.id', 'cuentacaja.codigo', 'cuentacaja.nombre', 'empresa.nombre', 'cuentacontable.codigo', 
-                    'cuentacontable.nombre', 'cuentacaja.moneda_id', 'moneda.nombre'];
+		$columns = ['cuentacaja.id', 'cuentacaja.codigo', 'cuentacaja.nombre', 'empresa.nombre', 'cuentacontable.codigo',
+                    'cuentacontable.nombre', 'cuentacaja.moneda_id', 'moneda.nombre', 'cuentacaja.cbu'];
 		$columnsOut = ['cuentacaja_id', 'codigo', 'nombre', 'nombreempresa', 'codigocuentacontable', 'nombrecuentacontable',
-                        'moneda_id', 'nombremoneda'];
+                        'moneda_id', 'nombremoneda', 'cbu'];
 
         $empresaId = $request->empresa_id;
         $consulta = $request->consulta;
         $usoCuentacajaId = (int) $request->get('usocuentacaja_id');
         $count = count($columns);
 
-        $query = CuentaCaja::select('cuentacaja.id as cuentacaja_id', 'cuentacaja.codigo', 
+        $query = CuentaCaja::select('cuentacaja.id as cuentacaja_id', 'cuentacaja.codigo',
                 'cuentacaja.nombre', 'cuentacaja.empresa_id as empresa_id', 'empresa.nombre as nombreempresa',
                 'cuentacaja.tipocuenta', 'cuentacontable.codigo as codigocuentacontable', 'cuentacontable.nombre as nombrecuentacontable',
-                'cuentacaja.moneda_id', 'moneda.nombre as nombremoneda')
+                'cuentacaja.moneda_id', 'moneda.nombre as nombremoneda', 'cuentacaja.cbu')
 				->leftJoin('empresa','cuentacaja.empresa_id','=','empresa.id')
                 ->leftJoin('cuentacontable','cuentacaja.cuentacontable_id','=','cuentacontable.id')
                 ->leftJoin('moneda','cuentacaja.moneda_id','=','moneda.id');
@@ -265,15 +265,21 @@ class CuentacajaController extends Controller
 		{
 			foreach ($query as $row)
 			{
-                if ($row['empresa_id'] == $empresaId || $row['empresa_id'] == null)
-                {
                     $flSinDatos = false;
                     $output['data'] .= '<tr>';
                     for ($i = 0; $i < $count; $i++)
                         $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row[$columnsOut[$i]] . '</td>';	
-                    $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultacuentacaja">Elegir</a></td>';
+                    $output['data'] .= '<td class="text-nowrap"><a class="btn btn-warning btn-sm eligeconsultacuentacaja">Elegir</a>';
+                    if (can('editar-cuentas-de-caja', false) || can('listar-cuentas-de-caja', false)) {
+                        $urlAbm = route('editar_cuentacaja', [
+                            'id' => (int) $row['cuentacaja_id'],
+                            'origen' => 'modal_consulta',
+                            'vista' => 'consulta',
+                        ]);
+                        $output['data'] .= ' <a class="btn btn-info btn-sm" href="'.e($urlAbm).'" target="_blank" rel="noopener">Consultar</a>';
+                    }
+                    $output['data'] .= '</td>';
                     $output['data'] .= '</tr>';
-                }
 			}
 		}
 

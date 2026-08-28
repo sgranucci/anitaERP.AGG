@@ -178,6 +178,8 @@ return [
         'informe_max_lotes_job' => (int) env('ARCA_CAEA_INFORME_MAX_LOTES_JOB', 50),
         /**
          * Datos adicionales FCE (MTXCA t=21 CBU emisor, t=27 opción transferencia).
+         * Anita (a-comprob.c): tesmae cuenta 00000032 → tesm_nro_cbu.
+         * Override: ARCA_FCE_CBU_EMPRESA_{id} / ARCA_FCE_CBU_EMISOR; si vacío, tesmae/cuentacaja.
          * cbu_por_empresa: JSON {"1":"0170..."} o ARCA_FCE_CBU_EMPRESA_{id}.
          */
         'fce' => [

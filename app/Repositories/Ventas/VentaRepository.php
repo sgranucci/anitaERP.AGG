@@ -56,7 +56,8 @@ class VentaRepository implements VentaRepositoryInterface
 
     /**
      * Totales de kilos/cajas/unidades y cantidad por reparto (mismos filtros que el index).
-     * `ultimo_venta_id` es el último del grupo en el orden del listado (código DESC, id DESC).
+     * `ultimo_venta_id` es el último del grupo en el orden por reparto (código DESC, id DESC).
+     * Los subtotales solo se muestran cuando el listado está en orden por reparto.
      *
      * @param  array<string, mixed>|string|null  $filtros
      * @return Collection<string, object>
@@ -136,7 +137,6 @@ class VentaRepository implements VentaRepositoryInterface
 
         $query = $this->queryListadoFiltrado($filtros)
             ->select('venta.*')
-            ->leftJoin('transporte', 'transporte.id', '=', 'venta.transporte_id')
             ->with([
                 'puntoventas.empresas',
                 'clientes.condicionivas',
@@ -145,7 +145,11 @@ class VentaRepository implements VentaRepositoryInterface
                 'venta_emisiones',
             ]);
 
-        return $this->aplicarOrdenIndexPorReparto($query);
+        if (FacturaListadoFiltros::esOrdenReparto($filtros)) {
+            $query->leftJoin('transporte', 'transporte.id', '=', 'venta.transporte_id');
+        }
+
+        return $this->aplicarOrdenIndex($query, $filtros);
     }
 
     /**
@@ -187,6 +191,9 @@ class VentaRepository implements VentaRepositoryInterface
         return $query;
     }
 
+    /**
+     * Impresión por reparto: siempre agrupa por código, independiente del toggle del index.
+     */
     private function aplicarOrdenIndexPorReparto(Builder $query): Builder
     {
         return $query
@@ -195,6 +202,18 @@ class VentaRepository implements VentaRepositoryInterface
                 '0'
             ).' DESC')
             ->orderBy('venta.id', 'desc');
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function aplicarOrdenIndex(Builder $query, array $filtros): Builder
+    {
+        if (FacturaListadoFiltros::esOrdenId($filtros)) {
+            return $query->orderBy('venta.id', 'desc');
+        }
+
+        return $this->aplicarOrdenIndexPorReparto($query);
     }
 
     public function create(array $data)

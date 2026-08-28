@@ -574,7 +574,20 @@
             return false;
         }
 
-        if (!confirm('¿Confirma el envío de los remitos seleccionados a ARBA?')) {
+        var $formCot = $('#form-cot-electronico');
+        var imprimirAlProcesar = $('#imprimir_al_procesar').is(':checked');
+        var tieneImpresora = String($formCot.data('tiene-impresora') || '') === '1';
+        var nombreImpresora = String($formCot.data('impresora-nombre') || '').trim();
+        var mensajeConfirm = '¿Confirma el envío de los remitos seleccionados a ARBA?';
+        if (imprimirAlProcesar && tieneImpresora) {
+            mensajeConfirm += nombreImpresora !== ''
+                ? '\n\nDespués se enviará la constancia COT a la impresora ' + nombreImpresora + '.'
+                : '\n\nDespués se enviará la constancia COT a su impresora.';
+        } else if (imprimirAlProcesar && !tieneImpresora) {
+            mensajeConfirm += '\n\nMarcó imprimir al procesar, pero no tiene impresora asignada. Configure Mi impresora o imprima después con el botón.';
+        }
+
+        if (!confirm(mensajeConfirm)) {
             e.preventDefault();
             return false;
         }

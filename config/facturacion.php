@@ -114,6 +114,8 @@ switch(strtoupper(config('app.empresa')))
             "CAEA_PISO_NUMERO_POR_CODIGO" => [
                 '00008' => (int) env('FACTURACION_CAEA_PISO_PV_00008', 43),
             ],
+            // Fase 1: motor listo. false = los facturadores no lo usan todavía.
+            "NUMERADOR_FISCAL_EN_USO" => filter_var(env('FACTURACION_NUMERADOR_FISCAL_EN_USO', false), FILTER_VALIDATE_BOOLEAN),
         ];
         break;
     case "AGG":

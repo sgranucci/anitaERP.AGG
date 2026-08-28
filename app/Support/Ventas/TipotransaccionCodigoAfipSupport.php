@@ -50,12 +50,92 @@ final class TipotransaccionCodigoAfipSupport
 
     /**
      * Tipo AFIP inferido de una venta ya grabada (sin umbral FCE por monto).
+     * El prefijo FCE/NCE/DCE del código manda: si no, FAC y FCE compartirían
+     * codigo_afip 1 y chocarían el unique (PV + tipo + número).
      */
     public static function codigoAfipDesdeVentaGrabada(int|string $codigoAlmacenado, string $codigoVenta): int
     {
         $letra = LibroIvaDigitalMapeosSupport::letraDesdeCodigoVenta((string) $codigoVenta);
+        $tipo = self::codigoAfipParaEmision($codigoAlmacenado, $letra);
+        if ($tipo > 0 && $tipo < 200 && self::codigoVentaEsFce($codigoVenta)) {
+            $tipo += 200;
+        }
 
-        return self::codigoAfipParaEmision($codigoAlmacenado, $letra);
+        return $tipo;
+    }
+
+    public static function codigoVentaEsFce(string $codigoVenta): bool
+    {
+        return (bool) preg_match('/^(FCE|NCE|DCE)\b/i', trim($codigoVenta));
+    }
+
+    /**
+     * Tipo ARCA desde cabecera Anita (ven_tipo + ven_letra).
+     * No usa la letra como clave: FAC A=001, FAC B=006, FCE A=201.
+     * ven_tipo_comp de El Bierzo suele ser solo 2 dígitos: no alcanza para FCE.
+     */
+    public static function codigoAfipDesdeAnitaTipoLetra(string $venTipo, string $venLetra): int
+    {
+        $tipo = strtoupper(trim($venTipo));
+        $letra = strtoupper(trim($venLetra));
+        if ($tipo === '' || $letra === '') {
+            return 0;
+        }
+
+        $base = match ($tipo) {
+            'FAC', 'FAK' => 1,
+            'ND' => 2,
+            'NC', 'NCD', 'NCK' => 3,
+            'REC' => 4,
+            'FCE' => 201,
+            'NDE' => 202,
+            'NCE' => 203,
+            'DCE' => 201,
+            default => 0,
+        };
+
+        if ($base <= 0) {
+            return 0;
+        }
+
+        return $base + self::offsetLetra($letra);
+    }
+
+    /**
+     * Etiqueta de serie: la letra ya está en el tipo ARCA (001 FAC A, 006 FAC B).
+     */
+    public static function etiqueta(int $codigoAfip): string
+    {
+        $nombres = [
+            1 => 'FAC A',
+            2 => 'ND A',
+            3 => 'NC A',
+            4 => 'REC A',
+            6 => 'FAC B',
+            7 => 'ND B',
+            8 => 'NC B',
+            11 => 'FAC C',
+            12 => 'ND C',
+            13 => 'NC C',
+            51 => 'FAC M',
+            52 => 'ND M',
+            53 => 'NC M',
+            201 => 'FCE A',
+            202 => 'NDE A',
+            203 => 'NCE A',
+            206 => 'FCE B',
+            207 => 'NDE B',
+            208 => 'NCE B',
+            211 => 'FCE C',
+        ];
+        $pad = str_pad((string) $codigoAfip, 3, '0', STR_PAD_LEFT);
+        if ($codigoAfip <= 0) {
+            return '';
+        }
+
+        return isset($nombres[$codigoAfip])
+            ? $nombres[$codigoAfip].' ('.$pad.')'
+            : 'AFIP '.$pad;
     }
 
     /**

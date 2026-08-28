@@ -22,8 +22,6 @@ final class UsuarioPreferenciaFacturacionSupport
     /** @var array<string, int|null> */
     private static array $idPorCodigoPv = [];
 
-    private static ?int $tipoFacturaId = null;
-
     /**
      * @return array{tipotransaccion_id: int|null, puntoventa_id: int|null, puntoventaremito_id: int|null}
      */
@@ -70,6 +68,17 @@ final class UsuarioPreferenciaFacturacionSupport
             self::guardar($faltantes, $usuarioId);
         }
 
+        $tipoGuardado = $resuelto['tipotransaccion_id'];
+        if ($tipoGuardado && TipoComprobantePreviewSupport::esTipoFceId($tipoGuardado)) {
+            $facId = TipoComprobantePreviewSupport::idTipoFactura();
+            if ($facId) {
+                $resuelto['tipotransaccion_id'] = $facId;
+                if ($usuarioId > 0) {
+                    self::guardar(['tipotransaccion_id' => $facId], $usuarioId);
+                }
+            }
+        }
+
         return $resuelto;
     }
 
@@ -95,6 +104,9 @@ final class UsuarioPreferenciaFacturacionSupport
         $pv = self::idPositivo($data['puntoventa_id'] ?? null);
         $pvRemito = self::idPositivo($data['puntoventaremito_id'] ?? null);
 
+        if ($tipo && TipoComprobantePreviewSupport::esTipoFceId($tipo)) {
+            $tipo = TipoComprobantePreviewSupport::idTipoFactura();
+        }
         if ($tipo && ! Tipotransaccion::query()->whereKey($tipo)->exists()) {
             $tipo = null;
         }
@@ -224,20 +236,7 @@ final class UsuarioPreferenciaFacturacionSupport
 
     private static function tipoFacturaId(): ?int
     {
-        if (self::$tipoFacturaId !== null) {
-            return self::$tipoFacturaId > 0 ? self::$tipoFacturaId : null;
-        }
-
-        $abrev = strtoupper(trim((string) config('facturacion.TIPO_FACTURA_ABREVIATURA', 'FAC')));
-        $id = (int) (Tipotransaccion::query()
-            ->where('abreviatura', $abrev)
-            ->where('operacion', 'V')
-            ->orderBy('id')
-            ->value('id') ?? 0);
-
-        self::$tipoFacturaId = $id;
-
-        return $id > 0 ? $id : null;
+        return TipoComprobantePreviewSupport::idTipoFactura();
     }
 
     private static function defaultPuntoventaFacturacion(): ?int

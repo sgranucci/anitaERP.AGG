@@ -28,6 +28,23 @@ class Vendedor extends Model
         return $this->hasMany(Vendedorasociado::class, 'vendedor_id')->with('vendedorasociados');
     }
 
+    /**
+     * Código que Anita espera en ven_vendedor / stkv_vendedor (vend_codigo), no el id ERP.
+     */
+    public static function codigoAnitaDesdeId(?int $vendedorId): int
+    {
+        if ($vendedorId === null || $vendedorId <= 0) {
+            return 0;
+        }
+
+        $codigo = trim((string) (self::query()->whereKey($vendedorId)->value('codigo') ?? ''));
+        if ($codigo === '' || ! ctype_digit($codigo)) {
+            return (int) $codigo ?: 0;
+        }
+
+        return (int) $codigo;
+    }
+
     public function sincronizarConAnita(){
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'list', 'campos' => $this->keyField, 

@@ -25,6 +25,12 @@
                         </a>
                     </div>
                     @if (($resultadoProceso['ok'] ?? false))
+                        @if (! empty($imprimirAlProcesar) && empty($tieneImpresoraAsignada))
+                            <div class="small mt-2">
+                                Marc&oacute; imprimir al procesar, pero no tiene impresora asignada.
+                                Configure <strong>Mi impresora</strong> o use el bot&oacute;n Imprimir COT.
+                            </div>
+                        @endif
                         <div class="mt-2">
                             <a href="{{ route('sesion_impresion_cot', ['id' => $resultadoProceso['sesion_id'], 'auto' => 1]) }}"
                                 class="btn btn-success btn-sm">
@@ -114,7 +120,9 @@
             </div>
 
             <form method="get" action="{{ route('cot_electronico') }}" id="form-cot-electronico" autocomplete="off"
-                data-arca-constancia-url="{{ route('arca_constancia_inscripcion') }}">
+                data-arca-constancia-url="{{ route('arca_constancia_inscripcion') }}"
+                data-impresora-nombre="{{ $impresoraUsuario['nombre'] ?? '' }}"
+                data-tiene-impresora="{{ ! empty($tieneImpresoraAsignada) ? '1' : '0' }}">
                 <input type="hidden" name="consultar" id="input-consultar" value="">
                 <div class="card-body">
                     <div class="form-group row">
@@ -365,6 +373,29 @@
                         </button>
                     @endif
                     <input type="hidden" name="procesar" id="input-procesar" value="">
+                    <div class="form-check form-check-inline mt-2 mt-md-0 ml-md-3 align-middle">
+                        <input type="hidden" name="imprimir_al_procesar" value="0">
+                        <input type="checkbox" name="imprimir_al_procesar" id="imprimir_al_procesar"
+                            class="form-check-input" value="1"
+                            {{ ! empty($imprimirAlProcesar) ? 'checked' : '' }}>
+                        <label class="form-check-label" for="imprimir_al_procesar">
+                            Imprimir COT al procesar
+                        </label>
+                    </div>
+                    <span class="small text-muted align-middle">
+                        @if (! empty($impresoraUsuario['nombre']))
+                            Impresora:
+                            <strong>{{ $impresoraUsuario['nombre'] }}</strong>
+                            @if (($impresoraUsuario['ubicacion'] ?? '') !== '')
+                                ({{ $impresoraUsuario['ubicacion'] }})
+                            @endif
+                        @else
+                            Sin impresora asignada
+                        @endif
+                    </span>
+                    @include('includes.ventas.link_mi_impresora', [
+                        'claseBtnMiImpresora' => 'btn btn-outline-secondary btn-sm ml-2',
+                    ])
                 </div>
             </form>
         </div>

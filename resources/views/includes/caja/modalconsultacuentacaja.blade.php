@@ -30,6 +30,7 @@
               <th>Nombre Cuenta Contable</th>
               <th>Cod.Mon.</th>
               <th>Nombre Moneda</th>
+              <th>CBU</th>
               <th>Opcion</th>
           </thead>
           <tbody id="datoscuentacaja"></tbody>

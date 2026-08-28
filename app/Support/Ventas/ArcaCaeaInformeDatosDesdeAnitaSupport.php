@@ -409,21 +409,7 @@ final class ArcaCaeaInformeDatosDesdeAnitaSupport
             return [];
         }
 
-        $cbu = trim((string) (
-            config("arca.caea.fce.cbu_por_empresa.{$empresaId}")
-            ?: config('arca.caea.fce.cbu_emisor', '')
-        ));
-        $opcion = trim((string) config('arca.caea.fce.opcion_transferencia', 'ADC'));
-        if ($cbu === '') {
-            throw new InvalidArgumentException(
-                'FCE requiere CBU emisor: configure ARCA_FCE_CBU_EMPRESA_'.$empresaId.' o ARCA_FCE_CBU_EMISOR en .env.'
-            );
-        }
-
-        return [
-            ['t' => 21, 'c1' => $cbu],
-            ['t' => 27, 'c1' => $opcion !== '' ? $opcion : 'ADC'],
-        ];
+        return ArcaFceDatosAdicionalesSupport::paraComprobante($cbteTipo, $empresaId);
     }
 
     private static function normalizarFechaYmd(string $fecha): string

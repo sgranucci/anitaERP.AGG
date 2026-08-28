@@ -9,6 +9,7 @@ use App\Models\Ventas\Puntoventa;
 use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Ventas\ArcaFceDatosAdicionalesSupport;
 use App\Support\Ventas\ArcaMtxcaComprobanteTotalesSupport;
 use App\Support\Ventas\CaeaQuincenaSupport;
 use Carbon\Carbon;
@@ -636,7 +637,13 @@ class ArcaMtxcaFacturaElectronicaService
             $req['arrayActividades'] = $actividades;
         }
 
-        $datosAdic = $this->buildDatosAdicionales($datos['datos_adicionales'] ?? $datos['opcionales'] ?? []);
+        $listaAdic = $datos['datos_adicionales'] ?? $datos['opcionales'] ?? [];
+        $listaAdic = ArcaFceDatosAdicionalesSupport::asegurar(
+            is_array($listaAdic) ? $listaAdic : [],
+            $cbteTipo,
+            $empresaId
+        );
+        $datosAdic = $this->buildDatosAdicionales($listaAdic);
         if ($datosAdic !== null) {
             $req['arrayDatosAdicionales'] = $datosAdic;
         }

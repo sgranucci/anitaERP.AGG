@@ -5,13 +5,15 @@ namespace App\Support\Ventas;
 use App\Support\Database\SqlDialectSupport;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Numeración de ventas acotada por empresa (PV comparte sucursal Anita entre empresas).
  *
- * La secuencia CAEA/fiscal es por tipo AFIP efectivo (tipotransaccion.codigo + letra + FCE),
- * no por tipotransaccion_id.
+ * La secuencia CAEA/fiscal es por venta.codigo_afip + PV (misma clave que el unique El Bierzo).
+ * 201 FCE A y 1 FAC A son series distintas; no se numera por tipotransaccion_id ni por letra.
  */
 final class VentaNumeracionEmpresaSupport
 {
@@ -37,6 +39,24 @@ final class VentaNumeracionEmpresaSupport
         );
     }
 
+    /**
+     * Serie fiscal El Bierzo: unique y max()+1 usan (codigo_afip, puntoventa_id).
+     * 201 ya es FCE A; 206 es FCE B. No filtrar por letra ni por tipotransaccion.codigo
+     * (una FCE por umbral MiPyME sigue siendo FAC/001 en el ABM).
+     *
+     * @param  Builder<\App\Models\Ventas\Venta>  $query
+     */
+    public static function aplicarFiltroSerieCodigoAfip(Builder $query, int $codigoAfipObjetivo): bool
+    {
+        if ($codigoAfipObjetivo <= 0 || ! Schema::hasColumn('venta', 'codigo_afip')) {
+            return false;
+        }
+
+        $query->where('venta.codigo_afip', $codigoAfipObjetivo);
+
+        return true;
+    }
+
     public static function maxNumerocomprobanteErpPorCodigoAfip(
         int $puntoventaId,
         int $codigoAfipObjetivo,
@@ -47,16 +67,20 @@ final class VentaNumeracionEmpresaSupport
             return 0;
         }
 
-        $query = Venta::query()
-            ->join('tipotransaccion as tt', 'tt.id', '=', 'venta.tipotransaccion_id')
-            ->where('venta.puntoventa_id', $puntoventaId)
-            ->whereNull('tt.deleted_at');
+        $query = Venta::query()->where('venta.puntoventa_id', $puntoventaId);
 
         if ($empresaId !== null && $empresaId > 0) {
             $query->whereHas('puntoventas', static function ($q) use ($empresaId): void {
                 $q->where('empresa_id', $empresaId);
             });
         }
+
+        if (self::aplicarFiltroSerieCodigoAfip($query, $codigoAfipObjetivo)) {
+            return (int) ($query->max('venta.numerocomprobante') ?? 0);
+        }
+
+        $query->join('tipotransaccion as tt', 'tt.id', '=', 'venta.tipotransaccion_id')
+            ->whereNull('tt.deleted_at');
 
         if ($letraEmision !== null && $letraEmision !== '') {
             $letra = strtoupper(trim($letraEmision));

@@ -19,6 +19,14 @@ use App\Support\Ventas\PedidoListadoSupport;
 @section('contenido')
 @php
     $periodoTexto = FacturaListadoFiltros::formatearPeriodoTexto($filtros ?? []);
+    $repartoTexto = FacturaListadoFiltros::formatearRepartoTexto($filtros ?? []);
+    $ordenActual = FacturaListadoFiltros::normalizarOrden($filtros['orden'] ?? null);
+    $qsOrdenReparto = FacturaListadoFiltros::paraQueryString(array_merge($filtros ?? [], [
+        'orden' => FacturaListadoFiltros::ORDEN_REPARTO,
+    ]));
+    $qsOrdenId = FacturaListadoFiltros::paraQueryString(array_merge($filtros ?? [], [
+        'orden' => FacturaListadoFiltros::ORDEN_ID,
+    ]));
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -27,6 +35,18 @@ use App\Support\Ventas\PedidoListadoSupport;
             <div class="card-header">
                 <h3 class="card-title">Comprobantes de venta</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    <div class="btn-group btn-group-sm mr-2 mb-1" role="group" aria-label="Orden del listado">
+                        <a href="{{ route('factura', $qsOrdenReparto) }}"
+                           class="btn {{ $ordenActual === FacturaListadoFiltros::ORDEN_REPARTO ? 'btn-warning' : 'btn-outline-light' }}"
+                           title="Agrupar por código de reparto (mayor a menor)">
+                            <i class="fa fa-truck"></i> Por reparto
+                        </a>
+                        <a href="{{ route('factura', $qsOrdenId) }}"
+                           class="btn {{ $ordenActual === FacturaListadoFiltros::ORDEN_ID ? 'btn-warning' : 'btn-outline-light' }}"
+                           title="Últimas facturas primero (ID mayor a menor)">
+                            <i class="fa fa-sort-numeric-down"></i> Por ID
+                        </a>
+                    </div>
                     @include('includes.ventas.link_mi_impresora', ['claseBtnMiImpresora' => 'btn btn-outline-secondary btn-sm mr-1'])
                     @if (can('listar-asignacion-remito-factura', false))
                         <a href="{{ route('asignacion_remito_factura') }}" class="btn btn-outline-secondary btn-sm mr-1" style="color:#fff;">
@@ -38,7 +58,7 @@ use App\Support\Ventas\PedidoListadoSupport;
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => FacturaListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
                         'limpiarUrl' => route('factura'),
-                        'placeholder' => 'Búsqueda rápida (cliente, comprobante, empresa)…',
+                        'placeholder' => 'Búsqueda rápida (cliente, comprobante, empresa, reparto)…',
                         'toggleTarget' => '#panel-filtros-factura',
                         'toggleId' => 'btn-toggle-filtros-factura',
                         'inputId' => 'filtro_valor',
@@ -55,6 +75,10 @@ use App\Support\Ventas\PedidoListadoSupport;
                 @if ($periodoTexto !== '')
                     <div class="px-3 py-2 text-muted small border-bottom">
                         <i class="fa fa-calendar-alt"></i> Per&iacute;odo: <strong>{{ $periodoTexto }}</strong>
+                        @if ($repartoTexto !== '')
+                            · <i class="fa fa-truck"></i> {{ $repartoTexto }}
+                        @endif
+                        · Orden: <strong>{{ FacturaListadoFiltros::formatearOrdenTexto($filtros ?? []) }}</strong>
                     </div>
                 @endif
                 <style>

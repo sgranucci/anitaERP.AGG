@@ -13,6 +13,23 @@ class Zonavta extends Model
     protected $table = 'zonavta';
     protected $keyField = 'zonv_codigo';
 
+    /**
+     * Código que Anita espera en ven_zonavta / stkv_zona_vta (zonv_codigo), no el id ERP.
+     */
+    public static function codigoAnitaDesdeId(?int $zonavtaId): int
+    {
+        if ($zonavtaId === null || $zonavtaId <= 0) {
+            return 0;
+        }
+
+        $codigo = trim((string) (self::query()->whereKey($zonavtaId)->value('codigo') ?? ''));
+        if ($codigo === '' || ! ctype_digit($codigo)) {
+            return (int) $codigo ?: 0;
+        }
+
+        return (int) $codigo;
+    }
+
     public function sincronizarConAnita(){
         $apiAnita = new ApiAnita();
         $data = array( 'acc' => 'list', 'campos' => $this->keyField, 

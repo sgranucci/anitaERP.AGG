@@ -1,0 +1,54 @@
+---
+description: El Bierzo — factura B cobra percepción IIBB CABA (jurisdicción 901) sí o sí
+globs: app/Services/Configuracion/IIBBService.php,app/Services/Configuracion/ImpuestoService.php,app/Services/Ventas/FacturacionService.php,app/Support/Ventas/ElBierzoFacturaBPercepcionCabaSupport.php
+alwaysApply: false
+---
+
+# El Bierzo: Factura B cobra percepción CABA 901
+
+En **El Bierzo**, todo comprobante **letra B** (FAC / ND / NC) **cobra percepción IIBB CABA, jurisdicción 901**. No omitirla porque la letra B apague el resto de percepciones.
+
+Punto único: `App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport`.
+
+## Qué manda
+
+| Caso | IIBB otras jur. | Perc. IVA 3 % | Perc. no categ. RG 2126 | **CABA 901** |
+|---|---|---|---|---|
+| Letra B en AGG / resto | No | No | Sí (si corresponde) | No |
+| Letra B en **El Bierzo** | No | No | Sí (si corresponde) | **Sí** |
+| Letra A (cualquier cliente) | Según padrón / agente | Según RI | No | Según padrón |
+
+## Cómo se calcula CABA en B (Bierzo)
+
+1. Flag `forzar_percepcion_iibb_caba` desde `FacturacionService` (letra B + `esElBierzo()`).
+2. `ImpuestoService` llama `IIBBService::calculaPercepcionIIBB(..., $forzarCaba = true)` aunque `omitir_percepciones` esté prendido.
+3. Solo jurisdicción **901**. Se trata al cliente como local a CABA.
+4. Alícuota: **padrón AGIP** si hay (incluye 0). Si no está, **tasa de descarte** de `provincia_tasaiibb` (hoy 6 %, mínimo neto 3000). Si la condición IIBB no tiene fila, la primera tasa CABA cargada.
+5. Siguen vigentes: CM05 certificado de no retención y exclusión de la solapa del cliente.
+
+## Correcto
+
+```php
+if (ElBierzoFacturaBPercepcionCabaSupport::correspondePorLetra($letra)) {
+    $data[ElBierzoFacturaBPercepcionCabaSupport::FLAG] = true;
+}
+```
+
+## Prohibido
+
+```php
+// ❌ Letra B + omitir_percepciones sin exceptuar CABA en El Bierzo
+if ($letra === 'B') {
+    $data['omitir_percepciones'] = true;
+}
+
+// ❌ Recalcular IIBB B en otro lado (gastronomía, preview) sin el Support
+```
+
+## Comprobación rápida
+
+```bash
+rg "forzar_percepcion_iibb_caba|ElBierzoFacturaBPercepcionCabaSupport" app --glob '*.php'
+rg "omitir_percepciones" app/Services/Ventas/FacturacionService.php app/Services/Configuracion/ImpuestoService.php
+php -l app/Support/Ventas/ElBierzoFacturaBPercepcionCabaSupport.php
+```

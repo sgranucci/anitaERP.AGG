@@ -91,7 +91,9 @@ class FacturacionController extends Controller
         $filtros = FacturaListadoFiltros::resolverDesdeRequest($request);
 
 		$ventas = $this->facturacionService->leePaginando($filtros);
-        $totalesPorReparto = $this->facturacionService->totalesIndexPorReparto($filtros);
+        $totalesPorReparto = FacturaListadoFiltros::esOrdenReparto($filtros)
+            ? $this->facturacionService->totalesIndexPorReparto($filtros)
+            : collect();
 
         $datas = [
             'ventas' => $ventas,
@@ -116,7 +118,9 @@ class FacturacionController extends Controller
         $filtros = FacturaListadoFiltros::resolverDesdeRequest($request, $busqueda);
 
 		$ventas = $this->facturacionService->leeSinPaginar($filtros);
-        $totalesPorReparto = $this->facturacionService->totalesIndexPorReparto($filtros);
+        $totalesPorReparto = FacturaListadoFiltros::esOrdenReparto($filtros)
+            ? $this->facturacionService->totalesIndexPorReparto($filtros)
+            : collect();
 
         switch($formato)
         {

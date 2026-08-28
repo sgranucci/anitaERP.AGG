@@ -299,10 +299,7 @@ final class CaeaEmisionFechaCorrelatividadSupport
             return null;
         }
 
-        $query = Venta::query()
-            ->join('tipotransaccion as tt', 'tt.id', '=', 'venta.tipotransaccion_id')
-            ->where('venta.puntoventa_id', $puntoventaId)
-            ->whereNull('tt.deleted_at');
+        $query = Venta::query()->where('venta.puntoventa_id', $puntoventaId);
 
         if ($empresaId !== null && $empresaId > 0) {
             $query->whereHas('puntoventas', static function ($q) use ($empresaId): void {
@@ -310,16 +307,21 @@ final class CaeaEmisionFechaCorrelatividadSupport
             });
         }
 
-        $letraNorm = strtoupper(trim($letra));
-        $bases = TipotransaccionCodigoAfipSupport::codigosBaseAlmacenadosPosibles($codigoAfip, $letraNorm);
-        if ($bases !== []) {
-            $query->whereIn(DB::raw(SqlDialectSupport::castEntero('tt.codigo')), $bases);
-        }
-        if ($letraNorm !== '') {
-            $query->where(static function ($q) use ($letraNorm): void {
-                $q->where('venta.codigo', 'like', '% '.$letraNorm.'-%')
-                    ->orWhere('venta.codigo', 'like', '% '.$letraNorm.' %');
-            });
+        if (! VentaNumeracionEmpresaSupport::aplicarFiltroSerieCodigoAfip($query, $codigoAfip)) {
+            $query->join('tipotransaccion as tt', 'tt.id', '=', 'venta.tipotransaccion_id')
+                ->whereNull('tt.deleted_at');
+
+            $letraNorm = strtoupper(trim($letra));
+            $bases = TipotransaccionCodigoAfipSupport::codigosBaseAlmacenadosPosibles($codigoAfip, $letraNorm);
+            if ($bases !== []) {
+                $query->whereIn(DB::raw(SqlDialectSupport::castEntero('tt.codigo')), $bases);
+            }
+            if ($letraNorm !== '') {
+                $query->where(static function ($q) use ($letraNorm): void {
+                    $q->where('venta.codigo', 'like', '% '.$letraNorm.'-%')
+                        ->orWhere('venta.codigo', 'like', '% '.$letraNorm.' %');
+                });
+            }
         }
 
         $row = $query

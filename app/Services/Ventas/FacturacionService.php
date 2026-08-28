@@ -69,6 +69,10 @@ use App\Support\Ventas\TipoComprobantePreviewSupport;
 use App\Support\Ventas\VentaEmisionCajaPiezaSupport;
 use App\Support\Stock\UnidadesCajaPiezaSupport;
 use App\Support\Ventas\ArcaCaeaAnitaTipoAfipSupport;
+use App\Support\Ventas\ClienteAnitaZonamultSupport;
+use App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport;
+use App\Support\Ventas\FacturaBTotalesImpresionSupport;
+use App\Support\Ventas\FacturaPdfIdentificacionSupport;
 use App\Support\Ventas\ElBierzoFacturacionCaeaSaltoSupport;
 use App\Models\Stock\Talle;
 use App\Models\Stock\Material;
@@ -90,7 +94,9 @@ use App\Models\Stock\Articulo_Caja;
 use App\Models\Stock\Caja;
 use App\Models\Ventas\Ordentrabajo;
 use App\Models\Ventas\Copiaot;
+use App\Models\Ventas\Cobrador;
 use App\Models\Ventas\Vendedor;
+use App\Models\Ventas\Zonavta;
 use App\Models\Ventas\Condicionventa;
 use App\Models\Ventas\Condicionventacuota;
 use App\Models\Configuracion\Empresa;
@@ -114,6 +120,7 @@ use Auth;
 use DB;
 use App\ApiAnita;
 use App\Support\Ventas\CaeaEmisionNumeracionSupport;
+use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
 use App\Support\Ventas\GastronomiaEmisionProfiler;
 use App\Support\Ventas\PedidoFacturacionProfiler;
 use App\Support\Contable\PeriodoContableCierreSupport;
@@ -360,6 +367,10 @@ class FacturacionService
 		}
 	}
 
+	/**
+	 * Provincia de entrega para IIBB (salvo CABA/BA, que van por padrón).
+	 * Lugar de entrega del documento; si no hay, domicilio del CRUD de cliente.
+	 */
 	private function provinciaPercepcionDesdePedido($cliente, $pedido): ?int
 	{
 		if ($pedido && (int) ($pedido->cliente_entrega_id ?? 0) > 0) {
@@ -841,9 +852,10 @@ class FacturacionService
 
 		PedidoFacturacionProfiler::etapa('emision_una_factura_inicio');
 
-		// Recibe datos para facturar
+		// Pedido: exige ítems pesados. Remito (Anita / por lo real): manda remito_articulo.kilo.
 		$pedido_articulo_ids = $data['pedido_articulo_ids'] ?? [];
-		if (! is_array($pedido_articulo_ids) || $pedido_articulo_ids === []) {
+		if (! $this->facturandoDesdeRemitoId
+			&& (! is_array($pedido_articulo_ids) || $pedido_articulo_ids === [])) {
 			return ['error' => 'No se puede facturar: el pedido no tiene ítems pesados. Cargue la pesada de al menos un ítem.'];
 		}
 
@@ -926,6 +938,14 @@ class FacturacionService
 		$letra = 'Z';
 		if ($condicioniva)
 			$letra = $condicioniva->letra;
+
+		$this->aplicarTipotransaccionSegunClienteMonto(
+			$data,
+			$cliente,
+			(float) $totalComprobante,
+			(string) $letra,
+			$tipoTransaccion_id
+		);
 
 		// Calcula vencimientos
 		$cuentaCorriente = $this->calculaCondicionVenta($fechaFactura, 
@@ -1189,6 +1209,7 @@ class FacturacionService
 						'codigo' => $tipoAnita.' '.$letra.'-'.
 										str_pad($puntoventa->codigo, config('facturacion.DIGITOS_SUCURSAL'), "0", STR_PAD_LEFT).'-'.
 										str_pad($numero, config('facturacion.DIGITOS_COMPROBANTE'), "0", STR_PAD_LEFT),
+						'codigo_afip' => (int) preg_replace('/\D+/', '', (string) $codigoTipoTransaccion) ?: null,
 						'nombre' => $cliente->nombre,
 						'domicilio' => $cliente->domicilio,
 						'localidad_id' => $cliente->localidad_id,
@@ -1197,7 +1218,7 @@ class FacturacionService
 						'codigopostal' => $cliente->codigopostal,
 						'email' => $cliente->email,
 						'telefono' => $cliente->telefono,
-						'numerodocumento' => $cliente->numerodocumento,
+						'nroinscripcion' => $cliente->numerodocumento ?? $cliente->nroinscripcion ?? null,
 						'condicioniva_id' => $cliente->condicioniva_id,
 						'puntoventaremito_id' => $this->puntoventaremito_id,
             			'numeroremito' => $numeroremito,
@@ -1473,6 +1494,15 @@ class FacturacionService
 				} catch (\Throwable $e) {
 					DB::rollback();
 
+					Log::error('facturacion.pedido.emision_rollback', [
+						'error' => $e->getMessage(),
+						'remito_id' => $this->facturandoDesdeRemitoId,
+						'pedido_id' => $pedido_id ?? null,
+						'puntoventa_id' => $puntoventa->id ?? null,
+						'codigo' => $venta['codigo'] ?? null,
+						'numero' => $venta['numerocomprobante'] ?? null,
+					]);
+
 					// Con Anita diferida no se escribió Informix (salvo lectura del numerador remito).
 					// Sin diferir, el asiento pudo haber dejado ctamov huérfano.
 					if (! $deferAnitaPedido && ($venta['codigo'] ?? '') !== '') {
@@ -1495,7 +1525,13 @@ class FacturacionService
 						}
 					}
 
-					return ['error' => $e->getMessage()];
+					$msg = $e->getMessage();
+					if ($e instanceof QueryException
+						&& str_contains($msg, 'venta_codigo_afip_puntoventa_numerocomprobante_unique')) {
+						$msg = 'Ya existe un comprobante con ese punto de venta, tipo AFIP y número. Reintente.';
+					}
+
+					return ['error' => $msg];
 				}
 			}
 
@@ -2219,11 +2255,15 @@ class FacturacionService
 			$letra = $condicioniva->letra;
 
 		// Letra B: no IIBB ni perc. IVA 3 % (RG 5329). La perc. RG 2126 de no categorizado sí va.
+		// El Bierzo: CABA 901 se cobra igual en letra B (padrón o tasa de descarte).
 		$omitirPercepcionesYaPedido = ! empty($data['omitir_percepciones']);
 		if (strtoupper((string) $letra) === 'B') {
 			$data['omitir_percepciones'] = true;
 			if (PercepcionNoCategorizadoSupport::aplicarAunqueSeOmitanOtras($omitirPercepcionesYaPedido, $condicioniva)) {
 				$data['aplicar_percepcion_no_categorizado'] = true;
+			}
+			if (ElBierzoFacturaBPercepcionCabaSupport::correspondePorLetra($letra)) {
+				$data[ElBierzoFacturaBPercepcionCabaSupport::FLAG] = true;
 			}
 		}
 
@@ -2445,6 +2485,12 @@ class FacturacionService
 				$datosCliente['aplicar_percepcion_no_categorizado'] = true;
 			}
 		}
+		if (! empty($data[ElBierzoFacturaBPercepcionCabaSupport::FLAG])) {
+			$datosCliente[ElBierzoFacturaBPercepcionCabaSupport::FLAG] = true;
+			// Restaura IIBB real: el overwrite a "No Retiene" dejaría CABA sin tasa.
+			$datosCliente['condicioniibb_id'] = $cliente->condicioniibb_id;
+			$datosCliente['provincia'] = $cliente->provincia_id;
+		}
 		// Calcula impuestos
 		$conceptosTotales = $this->impuestoService->calculaImpuestoVenta($dataFactura, $datosCliente, $fechaFactura, 
 																			$this->flGrabaComprobanteDividido);
@@ -2452,8 +2498,13 @@ class FacturacionService
 		// Arma total de comprobante
 		$totalComprobante = $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Total', 'importe');
 
-		return ['datosfactura' => $dataFactura, 'datoscliente' => $datosCliente, 'totalcomprobante' => $totalComprobante,
-				'conceptostotales' => $conceptosTotales];
+		return $this->conSugerenciaTipoPreview(
+			['datosfactura' => $dataFactura, 'datoscliente' => $datosCliente, 'totalcomprobante' => $totalComprobante,
+				'conceptostotales' => $conceptosTotales],
+			$cliente,
+			(float) $totalComprobante,
+			$letra
+		);
 	}
 
 	// Genera factura general
@@ -2597,6 +2648,14 @@ class FacturacionService
 		$letra = 'Z';
 		if ($condicioniva)
 			$letra = $condicioniva->letra;
+
+		$this->aplicarTipotransaccionSegunClienteMonto(
+			$data,
+			$cliente,
+			(float) $totalComprobante,
+			(string) $letra,
+			$tipoTransaccion_id
+		);
 
 		// Calcula vencimientos
 		$cuentacorriente = $this->calculaCondicionVenta($fechaFactura, 
@@ -4163,7 +4222,13 @@ class FacturacionService
 			}
 		}
 
-		$vendedor = 1;
+		$vendedor = $this->codigoVendedorAnitaParaGraba($venta, $cliente);
+		$cobrador = $this->codigoCobradorAnitaParaGraba($cliente);
+		$codigoZonavta = Zonavta::codigoAnitaDesdeId($zonavta_id ? (int) $zonavta_id : null);
+		$codigoSubzona = (int) ($subzonavta_id ?: 0);
+		$codigoZonamult = ClienteAnitaZonamultSupport::codigoDesdeProvinciaId(
+			$provincia_id ? (int) $provincia_id : null
+		);
 		$empresa = $dataCAE['codigoempresa'];
 		$tipoErpVenta = substr((string) ($venta['codigo'] ?? ''), 0, 3);
 		$tipoVentaAnita = KandikoAnitaVentaTipoSupport::tipoVentaAnitaBridge(
@@ -4216,11 +4281,11 @@ class FacturacionService
 			0,
 			0,
 			0,
-			$zonavta_id == null ? 0 : $cliente->zonavta_id,
-			$provincia_id == null ? 0 : $cliente->provincia_id,
-			$subzonavta_id == null ? 0 : $cliente->subzonavta_id,
+			$codigoZonavta,
+			$codigoSubzona,
+			$codigoZonamult,
 			$vendedor,
-			0,
+			$cobrador,
 			$condicionventa,
 			0,
 			$nombre,
@@ -4436,7 +4501,13 @@ class FacturacionService
 				$totalImpuestoInterno += $concepto['importe'];
 		}
 		// Lee comisiones
-		$vendedor = 1;
+		$vendedor = $this->codigoVendedorAnitaParaGraba($venta, $cliente);
+		$cobrador = $this->codigoCobradorAnitaParaGraba($cliente);
+		$codigoZonavta = Zonavta::codigoAnitaDesdeId($zonavta_id ? (int) $zonavta_id : null);
+		$codigoSubzona = (int) ($subzonavta_id ?: 0);
+		$codigoZonamult = ClienteAnitaZonamultSupport::codigoDesdeProvinciaId(
+			$provincia_id ? (int) $provincia_id : null
+		);
 		if (config('app.empresa') == 'Calzados Ferli')
 		{
 			if ($codigoCliente != '')
@@ -4541,11 +4612,11 @@ class FacturacionService
 							'".'0'."',
 							'".'0'."',
 							'".'0'."',
-							'".($zonavta_id == null ? '0' : $cliente->zonavta_id)."',
-							'".($provincia_id == null ? '0' : $cliente->provincia_id)."',
-							'".($subzonavta_id == null ? '0' : $cliente->subzonavta_id)."',
+							'".$codigoZonavta."',
+							'".$codigoSubzona."',
+							'".$codigoZonamult."',
 							'".$vendedor."',
-							'".'0'."',
+							'".$cobrador."',
 							'".$condicionventa."',
 							'".'0'."',
 							'".$nombre."',
@@ -4618,11 +4689,11 @@ class FacturacionService
 							'".'0'."',
 							'".'0'."',
 							'".'0'."',
-							'".($zonavta_id == null ? '0' : $cliente->zonavta_id)."',
-							'".($provincia_id == null ? '0' : $cliente->provincia_id)."',
-							'".($subzonavta_id == null ? '0' : $cliente->subzonavta_id)."',
+							'".$codigoZonavta."',
+							'".$codigoSubzona."',
+							'".$codigoZonamult."',
 							'".$vendedor."',
-							'".'0'."',
+							'".$cobrador."',
 							'".$condicionventa."',
 							'".'0'."',
 							'".$nombre."',
@@ -5168,9 +5239,9 @@ class FacturacionService
 								'".$orden."',
 								'".str_pad($codigoCliente, 6, "0", STR_PAD_LEFT)."', 
 								'".$vendedor."',
-								'".($zonavta_id == null ? '0' : $zonavta_id)."',
-								'".($provincia_id == null ? '0' : $provincia_id)."',
-								'".($subzonavta_id == null ? '0' : $subzonavta_id)."',
+								'".$codigoZonavta."',
+								'".$codigoZonamult."',
+								'".$codigoSubzona."',
 								'".'0'."',
 								'".($ifx_server == 'IFX_SERVER_LOCAL' ? $medida['medida'] : $medida['partida'])."',
 								'".substr((string) ($medida['pedido'] ?? '0'),-8)."',
@@ -5239,9 +5310,9 @@ class FacturacionService
 									'".$deposito."',
 									'".str_pad($codigoCliente, 6, "0", STR_PAD_LEFT)."',
 									'".$vendedor."',
-									'".($zonavta_id == null ? '0' : $zonavta_id)."',
-									'".($provincia_id == null ? '0' : $provincia_id)."',
-									'".($subzonavta_id == null ? '0' : $subzonavta_id)."',
+									'".$codigoZonavta."',
+									'".$codigoZonamult."',
+									'".$codigoSubzona."',
 									'".'0'."',
 									'".($ifx_server == 'IFX_SERVER_LOCAL' ? $medida['medida'] : $medida['partida'])."',
 									'".$medida['medida']."',
@@ -5535,6 +5606,34 @@ class FacturacionService
 		return $cuotas;
 	}
 
+	/**
+	 * ven_vendedor / stkv_vendedor: código Anita del vendedor de la factura (o del cliente).
+	 * No usar el id ERP ni el default 1 (Casa) cuando hay vendedor asignado.
+	 */
+	private function codigoVendedorAnitaParaGraba(array $venta, $cliente): int
+	{
+		$vendedorId = (int) ($venta['vendedor_id'] ?? 0);
+		if ($vendedorId <= 0 && $cliente) {
+			$vendedorId = (int) ($cliente->vendedor_id ?? 0);
+		}
+
+		$codigo = Vendedor::codigoAnitaDesdeId($vendedorId);
+
+		return $codigo > 0 ? $codigo : 1;
+	}
+
+	/**
+	 * ven_cobrador: código Anita del cobrador del cliente. 0 si no tiene (no inventar Casa).
+	 */
+	private function codigoCobradorAnitaParaGraba($cliente): int
+	{
+		if (! $cliente) {
+			return 0;
+		}
+
+		return Cobrador::codigoAnitaDesdeId((int) ($cliente->cobrador_id ?? 0));
+	}
+
 	private function leeVendedor($cliente, $marca)
 	{
 		$apiAnita = new ApiAnita();
@@ -5817,6 +5916,33 @@ class FacturacionService
 	}
 
 	/**
+	 * Rearma FAC/FCE según cliente receptor MiPyME y monto. No toca NC/ND.
+	 *
+	 * @param  array<string, mixed>  $data
+	 */
+	private function aplicarTipotransaccionSegunClienteMonto(
+		array &$data,
+		object $cliente,
+		float $totalComprobante,
+		string $letra,
+		int|string|null &$tipoTransaccionId
+	): void {
+		$actual = (int) ($tipoTransaccionId ?: ($data['tipotransaccion_id'] ?? 0));
+		$resuelto = TipoComprobantePreviewSupport::resolverTipotransaccionId(
+			$actual,
+			$cliente,
+			$totalComprobante,
+			$letra
+		);
+		if ($resuelto <= 0) {
+			return;
+		}
+
+		$data['tipotransaccion_id'] = $resuelto;
+		$tipoTransaccionId = $resuelto;
+	}
+
+	/**
 	 * Deja en $data el modo FCE del cliente y el total, para numeración CAEA y ARCA.
 	 */
 	private function hidratarContextoFceCliente(array &$data, object $cliente, $totalComprobante): ?string
@@ -5863,7 +5989,18 @@ class FacturacionService
 			isset($data['total_comprobante']) ? (float) $data['total_comprobante'] : null,
 		);
 
-		return CaeaEmisionNumeracionSupport::aplicarPisoCaea((int) ($puntoventa->id ?? 0), $ultimoErp);
+		$codigoAfip = TipotransaccionCodigoAfipSupport::codigoAfipParaEmision(
+			$tipotransaccion->codigo ?? 0,
+			$letra,
+			$data['modofacturacion_cliente'] ?? null,
+			isset($data['total_comprobante']) ? (float) $data['total_comprobante'] : null,
+		);
+
+		return CaeaEmisionNumeracionSupport::aplicarPisoCaea(
+			(int) ($puntoventa->id ?? 0),
+			$ultimoErp,
+			$codigoAfip,
+		);
 	}
 
 	/**
@@ -7034,12 +7171,11 @@ class FacturacionService
 			'puntoventaremito',
 		]);
 
-		$codigoTipoTransaccion = intval($venta->tipotransacciones->codigo);
-		$codigoComprobante = explode(' ', (string) $venta->codigo);
-		$letra = substr($codigoComprobante[1] ?? '', 0, 1);
-		if ($letra == 'B') {
-			$codigoTipoTransaccion += 5;
-		}
+		$identificacionPdf = FacturaPdfIdentificacionSupport::desdeVenta($venta);
+		$letra = $identificacionPdf['letra'];
+		$codigoTipoTransaccion = $identificacionPdf['codigo_afip'];
+		$nombreTipoComprobanteImpresion = $identificacionPdf['nombre'];
+		$codigoTipoTransaccionPad = $identificacionPdf['codigo_afip_pad'];
 
 		$cliente = $this->clienteQuery->traeClienteporId($venta->cliente_id);
 		$tblItem = [];
@@ -7097,7 +7233,7 @@ class FacturacionService
 			'fecha' => $venta->fecha,
 			'cuit' => intval(str_replace('-', '', $venta->puntoventas->empresas->nroinscripcion)),
 			'ptoVta' => intval($venta->puntoventas->codigo),
-			'tipoCmp' => intval($venta->tipotransacciones->codigo),
+			'tipoCmp' => $codigoTipoTransaccion,
 			'nroCmp' => $venta->numerocomprobante,
 			'importe' => floatval(number_format($venta->total, 2, '.', '')),
 			'moneda' => $venta->monedas->abreviatura,
@@ -7134,13 +7270,20 @@ class FacturacionService
 			mkdir($pathDir, 0775, true);
 		}
 
+		$lineasTotalesLetraB = $letra === 'B'
+			? FacturaBTotalesImpresionSupport::lineas($conceptosTotales)
+			: [];
+
 		return [
 			'venta' => $venta,
 			'conceptosTotales' => $conceptosTotales,
+			'lineasTotalesLetraB' => $lineasTotalesLetraB,
 			'tblItem' => $tblItem,
 			'caiRemito' => CaiRemitoVigenteSupport::paraVenta($venta),
 			'letra' => $letra,
 			'codigoTipoTransaccion' => $codigoTipoTransaccion,
+			'codigoTipoTransaccionPad' => $codigoTipoTransaccionPad,
+			'nombreTipoComprobanteImpresion' => $nombreTipoComprobanteImpresion,
 			'qrDataUri' => 'data:image/png;base64,'.base64_encode((string) $qrPng),
 			'logoEmpresaDataUri' => $logo['uri'] ?? null,
 			'pathDir' => $pathDir,
@@ -7263,6 +7406,7 @@ class FacturacionService
 		return view('exports.ventas.formulariofactura', [
 			'venta' => $ctx['venta'],
 			'conceptosTotales' => $ctx['conceptosTotales'],
+			'lineasTotalesLetraB' => $ctx['lineasTotalesLetraB'] ?? [],
 			'tblItem' => $ctx['tblItem'],
 			'caiRemito' => $ctx['caiRemito'] ?? null,
 			'output_file' => '',
@@ -7270,6 +7414,8 @@ class FacturacionService
 			'logoEmpresaDataUri' => $ctx['logoEmpresaDataUri'],
 			'letra' => $ctx['letra'],
 			'codigoTipoTransaccion' => $ctx['codigoTipoTransaccion'],
+			'codigoTipoTransaccionPad' => $ctx['codigoTipoTransaccionPad'] ?? str_pad((string) $ctx['codigoTipoTransaccion'], 3, '0', STR_PAD_LEFT),
+			'nombreTipoComprobanteImpresion' => $ctx['nombreTipoComprobanteImpresion'] ?? null,
 			'copiaLeyenda' => $copiaLeyenda,
 			'facturaPdfOmitirHojaRemito' => $omitirRemito,
 			'facturaPdfSoloHojaRemito' => $soloRemito,
@@ -8093,6 +8239,28 @@ class FacturacionService
 	 */
 	public function generaFacturaPorRemito(array $data)
 	{
+		$profiler = PedidoFacturacionProfiler::iniciarSiConfigurado([
+			'remito_id' => (int) ($data['remito_id'] ?? 0),
+			'pedido_id' => (int) ($data['pedido_id'] ?? 0),
+			'puntoventa_id' => (int) ($data['puntoventa_id'] ?? 0),
+			'puntoventaremito_id' => (int) ($data['puntoventaremito_id'] ?? 0),
+			'tipotransaccion_id' => (int) ($data['tipotransaccion_id'] ?? 0),
+			'cliente_id' => (int) ($data['cliente_id'] ?? 0),
+		]);
+
+		try {
+			return $this->generaFacturaPorRemitoInterno($data);
+		} finally {
+			PedidoFacturacionProfiler::finalizar($profiler);
+		}
+	}
+
+	/**
+	 * @param  array<string, mixed>  $data
+	 * @return array<int|string, mixed>
+	 */
+	private function generaFacturaPorRemitoInterno(array $data)
+	{
 		UsuarioPreferenciaFacturacionSupport::guardar($data);
 
 		$remito = app(\App\Services\Ventas\RemitoService::class)->leeRemito($data['remito_id'] ?? 0);
@@ -8132,7 +8300,10 @@ class FacturacionService
 		$data['cliente_id'] = $cliente_id;
 		$data['remito_id'] = $remito->id;
 		$data['pedido_id'] = $remito->pedido_id ?: 0;
-		$data['pedido_articulo_ids'] = $data['pedido_articulo_ids'] ?? [];
+		// Remito por lo real / importado de Anita: no hay pesada de pedido.
+		$data['pedido_articulo_ids'] = is_array($data['pedido_articulo_ids'] ?? null)
+			? $data['pedido_articulo_ids']
+			: [];
 		if (empty($data['puntoventaremito_id']) && $remito->puntoventa_id) {
 			$data['puntoventaremito_id'] = $remito->puntoventa_id;
 		}

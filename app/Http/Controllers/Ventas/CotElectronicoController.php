@@ -7,6 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Repositories\Ventas\CotSesionEnvioRepository;
 use App\Services\Ventas\CotElectronico\ArbaCotPresentacionService;
 use App\Services\Ventas\CotElectronico\CotElectronicoService;
+use App\Support\Ventas\ComprobanteImpresionFormulario;
+use App\Support\Ventas\ComprobanteImpresionSalidaUsuarioSupport;
+use App\Support\Ventas\CotElectronicoPreferenciasUsuario;
 use App\Support\Ventas\CuitFormatoValidacionSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -33,6 +36,22 @@ class CotElectronicoController extends Controller
         $errorCuit = null;
 
         if ($consultado || $procesado) {
+            CotElectronicoPreferenciasUsuario::persistirImprimirAlProcesar(
+                $request->boolean('imprimir_al_procesar')
+            );
+        }
+
+        $imprimirAlProcesar = CotElectronicoPreferenciasUsuario::resolverImprimirAlProcesar();
+        $impresoraUsuario = ComprobanteImpresionSalidaUsuarioSupport::resumenImpresora(
+            null,
+            ComprobanteImpresionFormulario::COT
+        );
+        $tieneImpresoraAsignada = ComprobanteImpresionSalidaUsuarioSupport::tieneImpresoraAsignada(
+            null,
+            ComprobanteImpresionFormulario::COT
+        );
+
+        if ($consultado || $procesado) {
             $errorCuit = CuitFormatoValidacionSupport::primerErrorEnRepartos($repartos);
 
             if ($errorCuit === null) {
@@ -49,6 +68,20 @@ class CotElectronicoController extends Controller
             if ($resultadoProceso['ok'] ?? false) {
                 $preview = $this->service->preview(Carbon::parse($fecha), $repartos);
                 $remitos = $preview['remitos'];
+
+                $redirigirImpresion = $this->debeRedirigirImpresionAutomatica(
+                    $resultadoProceso,
+                    $imprimirAlProcesar,
+                    $tieneImpresoraAsignada
+                );
+                if ($redirigirImpresion) {
+                    return redirect()
+                        ->route('sesion_impresion_cot', [
+                            'id' => (int) $resultadoProceso['sesion_id'],
+                            'auto' => 1,
+                        ])
+                        ->with('mensaje', $resultadoProceso['mensaje'] ?? 'Envío procesado.');
+                }
             }
         }
 
@@ -100,7 +133,34 @@ class CotElectronicoController extends Controller
             'sesionDetalle' => $sesionDetalle,
             'remitosSesion' => $remitosSesion,
             'sesionId' => $sesionId,
+            'imprimirAlProcesar' => $imprimirAlProcesar,
+            'impresoraUsuario' => $impresoraUsuario,
+            'tieneImpresoraAsignada' => $tieneImpresoraAsignada,
         ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultadoProceso
+     */
+    private function debeRedirigirImpresionAutomatica(
+        array $resultadoProceso,
+        bool $imprimirAlProcesar,
+        bool $tieneImpresoraAsignada
+    ): bool {
+        if (! $imprimirAlProcesar || ! $tieneImpresoraAsignada) {
+            return false;
+        }
+        if ((int) ($resultadoProceso['sesion_id'] ?? 0) < 1) {
+            return false;
+        }
+
+        foreach ((array) ($resultadoProceso['resultados'] ?? []) as $resultado) {
+            if (! empty($resultado['cot'])) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function probarConexion()

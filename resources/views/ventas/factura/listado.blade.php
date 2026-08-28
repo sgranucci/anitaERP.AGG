@@ -10,6 +10,7 @@
     }
     $logosCabecera = EmpresaLogoArchivo::logosCabeceraDesdeColeccion($ventas);
     $periodoTexto = FacturaListadoFiltros::formatearPeriodoTexto($filtros ?? []);
+    $repartoTexto = FacturaListadoFiltros::formatearRepartoTexto($filtros ?? []);
     $totalGeneral = 0;
     foreach ($ventas as $c) {
         $totalGeneral += (float) ($c->total ?? 0);
@@ -54,6 +55,10 @@
                 @if ($periodoTexto !== '')
                     <div class="meta">Per&iacute;odo: {{ $periodoTexto }}</div>
                 @endif
+                @if ($repartoTexto !== '')
+                    <div class="meta">{{ $repartoTexto }}</div>
+                @endif
+                <div class="meta">Orden: {{ FacturaListadoFiltros::formatearOrdenTexto($filtros ?? []) }}</div>
             </td>
             <td style="width: 25%; text-align: right; font-size: 8px;">
                 Registros: {{ is_countable($ventas) ? count($ventas) : 0 }}

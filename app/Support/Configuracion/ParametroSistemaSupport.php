@@ -2,7 +2,9 @@
 
 namespace App\Support\Configuracion;
 
+use App\Models\Caja\Cuentacaja;
 use App\Models\Configuracion\Parametro_Sistema;
+use App\Support\Ventas\ArcaFceDatosAdicionalesSupport;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 use Throwable;
@@ -16,6 +18,8 @@ final class ParametroSistemaSupport
     public const CLAVE_LIMITE_FCE = 'limite_fce';
 
     public const CLAVE_TOPE_CONSUMIDOR_FINAL = 'tope_consumidor_final';
+
+    public const CLAVE_FCE_CUENTACAJA_ID = 'fce_cuentacaja_id';
 
     private const CACHE_KEY = 'parametro_sistema.mapa';
 
@@ -39,6 +43,13 @@ final class ParametroSistemaSupport
                 'tipo' => 'decimal',
                 'orden' => 20,
             ],
+            self::CLAVE_FCE_CUENTACAJA_ID => [
+                'grupo' => 'Facturación ARCA',
+                'etiqueta' => 'Cuenta de caja FCE (CBU emisor)',
+                'ayuda' => 'Cuenta cuyo CBU se envía a ARCA en FCE (dato adicional 21). En Anita era tesmae 00000032. F1 o lupa abren la consulta.',
+                'tipo' => 'cuentacaja',
+                'orden' => 30,
+            ],
         ];
     }
 
@@ -53,6 +64,27 @@ final class ParametroSistemaSupport
             self::CLAVE_TOPE_CONSUMIDOR_FINAL,
             (float) config('arca_wsfe.receptor.consumidor_final_umbral_monto', 10_000_000)
         );
+    }
+
+    public static function fceCuentacajaId(): int
+    {
+        $valor = self::mapa()[self::CLAVE_FCE_CUENTACAJA_ID] ?? '';
+        $id = (int) $valor;
+        if ($id > 0) {
+            return $id;
+        }
+
+        return (int) self::fallbackValor(self::CLAVE_FCE_CUENTACAJA_ID);
+    }
+
+    public static function fceCuentacaja(): ?Cuentacaja
+    {
+        $id = self::fceCuentacajaId();
+        if ($id <= 0) {
+            return null;
+        }
+
+        return Cuentacaja::query()->find($id);
     }
 
     public static function decimal(string $clave, float $fallback): float
@@ -75,7 +107,7 @@ final class ParametroSistemaSupport
 
         foreach (self::definiciones() as $clave => $def) {
             $valor = $mapa[$clave] ?? self::fallbackValor($clave);
-            $grupos[$def['grupo']][] = [
+            $item = [
                 'clave' => $clave,
                 'grupo' => $def['grupo'],
                 'etiqueta' => $def['etiqueta'],
@@ -83,6 +115,10 @@ final class ParametroSistemaSupport
                 'tipo' => $def['tipo'],
                 'valor' => (string) $valor,
             ];
+            if ($def['tipo'] === 'cuentacaja') {
+                $item['cuenta'] = self::cuentaParaFormulario((int) $valor);
+            }
+            $grupos[$def['grupo']][] = $item;
         }
 
         return $grupos;
@@ -97,9 +133,14 @@ final class ParametroSistemaSupport
             if (! array_key_exists($clave, $valores)) {
                 continue;
             }
-            $valor = is_numeric($valores[$clave])
-                ? (string) $valores[$clave]
-                : trim((string) $valores[$clave]);
+            $valor = $def['tipo'] === 'cuentacaja'
+                ? (string) max(0, (int) $valores[$clave])
+                : (is_numeric($valores[$clave])
+                    ? (string) $valores[$clave]
+                    : trim((string) $valores[$clave]));
+            if ($def['tipo'] === 'cuentacaja' && $valor === '0') {
+                $valor = '';
+            }
 
             Parametro_Sistema::query()->updateOrCreate(
                 ['clave' => $clave],
@@ -153,7 +194,42 @@ final class ParametroSistemaSupport
                 'arca_wsfe.receptor.consumidor_final_umbral_monto',
                 10_000_000
             ),
+            self::CLAVE_FCE_CUENTACAJA_ID => (string) self::cuentacajaIdFallbackAnita(),
             default => '0',
         };
+    }
+
+    /**
+     * @return array{id:int, codigo:string, nombre:string, cbu:string}
+     */
+    public static function cuentaParaFormulario(int $id): array
+    {
+        $cta = $id > 0 ? Cuentacaja::query()->find($id) : null;
+
+        return [
+            'id' => (int) ($cta->id ?? 0),
+            'codigo' => (string) ($cta->codigo ?? ''),
+            'nombre' => (string) ($cta->nombre ?? ''),
+            'cbu' => (string) ($cta->cbu ?? ''),
+        ];
+    }
+
+    private static function cuentacajaIdFallbackAnita(): int
+    {
+        $codigos = [
+            ArcaFceDatosAdicionalesSupport::CUENTA_TESORERIA_ANITA,
+            ltrim(ArcaFceDatosAdicionalesSupport::CUENTA_TESORERIA_ANITA, '0') ?: '0',
+        ];
+        $id = (int) (Cuentacaja::query()->whereIn('codigo', $codigos)->value('id') ?? 0);
+        if ($id > 0) {
+            return $id;
+        }
+
+        $cbu = preg_replace('/\D+/', '', (string) config('arca.caea.fce.cbu_emisor', '')) ?? '';
+        if (strlen($cbu) === 22) {
+            return (int) (Cuentacaja::query()->where('cbu', $cbu)->value('id') ?? 0);
+        }
+
+        return 0;
     }
 }

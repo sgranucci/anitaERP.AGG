@@ -9,7 +9,9 @@ use App\Repositories\Configuracion\Padron_Iibb_CabaRepositoryInterface;
 use App\Repositories\Configuracion\Padron_Coeficiente_TucumanRepositoryInterface;
 use App\Repositories\Configuracion\CondicionIIBBRepositoryInterface;
 use App\Repositories\Configuracion\ProvinciaRepositoryInterface;
+use App\Support\Configuracion\PercepcionIibbJurisdiccionEntregaSupport;
 use App\Support\Ventas\ClienteExclusionPercepcionSupport;
+use App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport;
 
 class IIBBService 
 {
@@ -177,22 +179,33 @@ class IIBBService
 
 	// Calcula percepciones de ingresos brutos para ventas
 
-	public function calculaPercepcionIIBB($totalNeto, $numeroDocumento, $condicioniibb_id, $provincia_id, $cm05, $fechaFactura, $cliente_id = null)
+	public function calculaPercepcionIIBB($totalNeto, $numeroDocumento, $condicioniibb_id, $provincia_id, $cm05, $fechaFactura, $cliente_id = null, bool $forzarCaba = false)
 	{
 		$percepcionesIIBB = [];
 
-		$condicioniibb = $this->condicion_iibbRepository->find($condicioniibb_id);
+		$condicioniibb = $condicioniibb_id
+			? $this->condicion_iibbRepository->find($condicioniibb_id)
+			: null;
 
-		if ($condicioniibb->formacalculo != 'N' && $condicioniibb->estado == 'A')
+		$forzarCaba = $forzarCaba && ElBierzoFacturaBPercepcionCabaSupport::aplicaEnEntorno();
+		$puedeCalcular = $forzarCaba
+			|| ($condicioniibb && $condicioniibb->formacalculo != 'N' && $condicioniibb->estado == 'A');
+
+		if ($puedeCalcular)
 		{
 			$jurisdiccionesPercepcion = array_values(array_filter(array_map('trim', explode(',', (string) config('anita.agente_percepcion_iibb', '')))));
+			if ($forzarCaba) {
+				$jurisdiccionesPercepcion = [(string) ElBierzoFacturaBPercepcionCabaSupport::JURISDICCION];
+			}
 			$tasasDescarte = array_map('trim', explode(',', (string) config('anita.tasas_descarte_iibb', '0,0')));
 			$minimoNeto = array_map('trim', explode(',', (string) config('anita.minimo_neto_iibb', '0,0')));
 			$minimaPercepcion = array_map('trim', explode(',', (string) config('anita.minima_percepcion_iibb', '0,0')));
 
 			// Lee provincia en donde es local el cliente
 			$jurisdiccionCliente = null;
-			if ($provincia_id != null)
+			if ($forzarCaba) {
+				$jurisdiccionCliente = ElBierzoFacturaBPercepcionCabaSupport::JURISDICCION;
+			} elseif ($provincia_id != null)
 			{
 				$provinciaLocal = $this->provinciaRepository->find($provincia_id);
 
@@ -200,12 +213,17 @@ class IIBBService
 					$jurisdiccionCliente = $provinciaLocal->jurisdiccion;
 			}
 			else
-				$jurisdiccionCliente = $jurisdiccionesPercepcion[0];
+				$jurisdiccionCliente = $jurisdiccionesPercepcion[0] ?? null;
 
 			$percepcionesIIBB = [];
 			// Calcula IIBB por cada jurisdiccion que la empresa percibe
 			for ($i = 0; $i < count($jurisdiccionesPercepcion); $i++)
 			{
+				$jurisdiccionActual = (int) $jurisdiccionesPercepcion[$i];
+				if (! PercepcionIibbJurisdiccionEntregaSupport::corresponde($jurisdiccionActual, $jurisdiccionCliente)) {
+					continue;
+				}
+
 				$provincia = $this->provinciaRepository->findPorJurisdiccion($jurisdiccionesPercepcion[$i]);
 
 				if (! $provincia) {
@@ -229,6 +247,19 @@ class IIBBService
 						$minimoNeto[$i] = $tasa->minimoneto;
 						$minimaPercepcion[$i] = $tasa->minimopercepcion;
 						$tasasDescarte[$i] = $tasa->tasa;
+					}
+				}
+				// Letra B El Bierzo: si la condición no tiene fila (p. ej. "No Retiene"),
+				// usa la primera alícuota CABA cargada. Sin eso la perc. queda en 0.
+				if ($forzarCaba && ElBierzoFacturaBPercepcionCabaSupport::esJurisdiccionCaba($jurisdiccionesPercepcion[$i])
+					&& (float) $tasasDescarte[$i] <= 0.00001) {
+					foreach ($provincia->provincia_tasaiibbs as $tasaFila) {
+						if ((float) $tasaFila->tasa > 0.00001) {
+							$minimoNeto[$i] = $tasaFila->minimoneto;
+							$minimaPercepcion[$i] = $tasaFila->minimopercepcion;
+							$tasasDescarte[$i] = $tasaFila->tasa;
+							break;
+						}
 					}
 				}
 				// Verifica si tiene CM05 o no en la jurisdiccion

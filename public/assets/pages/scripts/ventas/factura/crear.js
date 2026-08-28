@@ -2264,6 +2264,10 @@
 				});
 				$('.tasatotal').css('text-align', 'right');
 				$('.importetotal').css('text-align', 'right');
+
+				if (typeof window.aplicarTipoComprobanteSugerido === 'function') {
+					window.aplicarTipoComprobanteSugerido(data);
+				}
 			},
 			error :function( data ) {
 				if (seq !== calculaFacturaSeq) {

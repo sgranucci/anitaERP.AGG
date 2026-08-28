@@ -7,7 +7,10 @@ use App\Models\Configuracion\Condicioniva;
 use App\Models\Stock\Articulo_Movimiento;
 use App\Models\Stock\Depmae;
 use App\Models\Ventas\ConfiguracionPuntoventaGastronomia;
+use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Venta;
+use App\Models\Ventas\Zonavta;
+use App\Support\Ventas\ClienteAnitaZonamultSupport;
 use App\Support\Ventas\AnitaStkmovPayloadSupport;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
 use App\Support\Ventas\GastronomiaVentaDetalleSupport;
@@ -185,10 +188,14 @@ final class GastronomiaInsumoStkmovAnitaService
             'fecha' => (string) $venta->fecha,
             'moneda_id' => (int) ($venta->moneda_id ?? 1),
             'codigo_cliente' => $codigoCliente,
-            'vendedor' => (int) ($cliente?->vendedor_id ?? 1),
-            'zonavta_id' => $cliente?->zonavta_id ?? 0,
-            'provincia_id' => $cliente?->provincia_id ?? 0,
-            'subzonavta_id' => $cliente?->subzonavta_id ?? 0,
+            'vendedor' => Vendedor::codigoAnitaDesdeId(
+                (int) ($venta->vendedor_id ?? ($cliente?->vendedor_id ?? 0))
+            ) ?: 1,
+            'zonavta_id' => Zonavta::codigoAnitaDesdeId((int) ($cliente?->zonavta_id ?? 0)),
+            'provincia_id' => ClienteAnitaZonamultSupport::codigoDesdeProvinciaId(
+                (int) ($cliente?->provincia_id ?? 0)
+            ),
+            'subzonavta_id' => (int) ($cliente?->subzonavta_id ?? 0),
             'empresa_codigo' => (string) ($pv->empresas->codigo ?? ''),
         ];
     }

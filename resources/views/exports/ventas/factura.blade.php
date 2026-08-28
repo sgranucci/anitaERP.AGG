@@ -1,5 +1,6 @@
 @php
     use App\Support\Configuracion\EmpresaLogoArchivo;
+    use App\Support\Ventas\FacturaListadoFiltros;
     use App\Support\Ventas\FacturaListadoSupport;
     use App\Support\Ventas\PedidoListadoSupport;
 
@@ -12,7 +13,10 @@
         $c->nombreempresa = $c->nombreempresa ?? ($c->puntoventas->empresas->nombre ?? '');
     }
     $logosCabecera = $esExcel ? [] : EmpresaLogoArchivo::logosCabeceraDesdeColeccion($ventas);
-    $subtitulo = 'Generado '.date('d/m/Y H:i').' — '.(is_countable($ventas) ? count($ventas) : 0).' registro(s)';
+    $repartoTexto = FacturaListadoFiltros::formatearRepartoTexto($filtros ?? []);
+    $subtitulo = 'Generado '.date('d/m/Y H:i').' — '.(is_countable($ventas) ? count($ventas) : 0).' registro(s)'
+        .($repartoTexto !== '' ? ' — '.$repartoTexto : '')
+        .' — Orden: '.FacturaListadoFiltros::formatearOrdenTexto($filtros ?? []);
 
     $formatoNumero = $formatoNumero ?? \App\Support\Export\ExcelFormatoNumero::preferenciaGlobal();
     $autoExcelNum = \App\Support\Export\ExcelFormatoNumero::esAuto($formatoNumero);

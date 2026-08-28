@@ -11,6 +11,7 @@
 @endphp
 <div class="collapse border-bottom" id="panel-filtros-factura" data-listado-filtros-panel>
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
+    <input type="hidden" name="filtro_orden" id="filtro_orden" value="{{ FacturaListadoFiltros::normalizarOrden($f['orden'] ?? null) }}">
     <div class="card-body bg-light py-2 text-body">
         <div class="form-row align-items-end">
             @include('includes.listado.filtro_empresa_asignada', [
@@ -27,6 +28,17 @@
                 <label class="small mb-1" for="fecha_hasta">Fecha hasta</label>
                 <input type="date" name="fecha_hasta" id="fecha_hasta" class="form-control form-control-sm"
                        value="{{ $f['fecha_hasta'] ?? '' }}">
+            </div>
+            <div class="form-group col-md-2 col-sm-6 mb-2">
+                <label class="small mb-1" for="filtro_reparto">N&ordm; reparto</label>
+                <input type="text"
+                       name="filtro_reparto"
+                       id="filtro_reparto"
+                       class="form-control form-control-sm"
+                       value="{{ $f['filtro_reparto'] ?? '' }}"
+                       placeholder="Ej: 101 &oacute; 10/20"
+                       autocomplete="off"
+                       title="N&uacute;mero de reparto. Coma = lista (1,3,5); barra / = rango (10/20). Vac&iacute;o = todos.">
             </div>
             <div class="form-group col-md-auto mb-2">
                 <div class="custom-control custom-checkbox mt-4">

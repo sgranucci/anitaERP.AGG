@@ -5,6 +5,7 @@ namespace App\Exports\Ventas;
 use App\Services\Ventas\FacturacionService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Export\ExcelFormatoNumero;
+use App\Support\Ventas\FacturaListadoFiltros;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -56,8 +57,11 @@ class FacturaExport implements FromView, WithColumnFormatting, WithColumnWidths,
 
     public function view(): View
     {
+        $filtros = is_array($this->filtros) ? $this->filtros : [];
         $ventas = $this->facturacionService->leeSinPaginar($this->filtros);
-        $totalesPorReparto = $this->facturacionService->totalesIndexPorReparto($this->filtros);
+        $totalesPorReparto = FacturaListadoFiltros::esOrdenReparto($filtros)
+            ? $this->facturacionService->totalesIndexPorReparto($this->filtros)
+            : collect();
 
         foreach ($ventas as $row) {
             $row->nombreempresa = $row->nombreempresa ?? ($row->puntoventas->empresas->nombre ?? '');
@@ -73,6 +77,7 @@ class FacturaExport implements FromView, WithColumnFormatting, WithColumnWidths,
         return view('exports.ventas.factura', [
             'ventas' => $ventas,
             'totalesPorReparto' => $totalesPorReparto,
+            'filtros' => $filtros,
             'esExcel' => true,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'formatoNumero' => $this->formatoNumeroEfectivo(),

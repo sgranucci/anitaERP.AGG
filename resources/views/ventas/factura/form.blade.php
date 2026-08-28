@@ -40,17 +40,20 @@
 				@php $flPrimero = true; @endphp
 				@foreach($tipotransaccion_query as $key => $value)
 					@if (isset($flGeneraNotaDeCredito) && $flPrimero)
-						<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>
+						<option value="{{ $value->id }}" data-abreviatura="{{ $value->abreviatura }}" selected="select">{{ $value->nombre }}</option>
 						@php $flPrimero = false; @endphp
 					@else
 						@if( (int) $value->id == (int) $tipotransaccionSeleccionada)
-							<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
+							<option value="{{ $value->id }}" data-abreviatura="{{ $value->abreviatura }}" selected="select">{{ $value->nombre }}</option>    
 						@else
-							<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
+							<option value="{{ $value->id }}" data-abreviatura="{{ $value->abreviatura }}">{{ $value->nombre }}</option>    
 						@endif
 					@endif
 				@endforeach	
 			</select>
+			<div class="col-lg-8 offset-lg-3">
+				<small id="aviso-tipo-fce" class="form-text text-info d-none"></small>
+			</div>
 		</div>
 		<div class="form-group row" id="puntoventa">
 			<label for="puntoventa_id" class="col-lg-3 control-label text-right pr-2 requerido">Punto de venta</label>

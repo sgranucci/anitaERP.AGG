@@ -53,6 +53,13 @@ final class CaeaEmisionNumeracionSupport
             return 0;
         }
 
+        $codigoAfip = TipotransaccionCodigoAfipSupport::codigoAfipParaEmision(
+            (int) ($tipotransaccion->codigo ?? 0),
+            $letraComprobante,
+            $modoFacturacionCliente,
+            $totalComprobante,
+        );
+
         $ultimoErp = VentaNumeracionEmpresaSupport::maxNumerocomprobanteErpDesdeTipotransaccion(
             $puntoventaId,
             (int) ($tipotransaccion->codigo ?? 0),
@@ -83,15 +90,19 @@ final class CaeaEmisionNumeracionSupport
             $ultimoErp = max($ultimoErp, $ultimoAnita);
         }
 
-        return self::aplicarPisoCaea($puntoventaId, $ultimoErp) + 1;
+        return self::aplicarPisoCaea($puntoventaId, $ultimoErp, $codigoAfip) + 1;
     }
 
     /**
-     * Piso operativo (último número): el próximo CAEA es max(ERP, piso)+1.
-     * El PV 8 de El Bierzo no tiene compemis Anita; el hueco se fuerza por config.
+     * Piso operativo FAC/CAEA del PV (hueco Anita): el próximo es max(ERP, piso)+1.
+     * FCE/NCE/DCE (codigo_afip >= 200) no usan ese piso: solo la última de su serie.
      */
-    public static function aplicarPisoCaea(int $puntoventaId, int $ultimoErp): int
+    public static function aplicarPisoCaea(int $puntoventaId, int $ultimoErp, ?int $codigoAfip = null): int
     {
+        if ($codigoAfip !== null && $codigoAfip >= 200) {
+            return $ultimoErp;
+        }
+
         return max($ultimoErp, self::pisoCaeaPorPuntoventaId($puntoventaId));
     }
 

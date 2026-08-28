@@ -13,6 +13,7 @@ use App\Support\Ventas\ArcaCaeaAnitaIvaVentasSupport;
 use App\Support\Ventas\ArcaCaeaAnitaTipoAfipSupport;
 use App\Support\Ventas\ArcaCaeaAnitaVencaeConsultaSupport;
 use App\Support\Ventas\ArcaCaeaInformeDatosDesdeAnitaSupport;
+use App\Support\Ventas\ArcaFceDatosAdicionalesSupport;
 use App\Support\Ventas\ArcaCaeaInformeDatosDesdeVentaSupport;
 use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
 use App\Support\Ventas\TipotransaccionCodigoAfipSupport;
@@ -381,9 +382,10 @@ class ArcaCaeaPresentacionManualService
         if ($venta !== null) {
             try {
                 $datos = ArcaCaeaInformeDatosDesdeVentaSupport::construir($venta);
-                if (ArcaCaeaAnitaTipoAfipSupport::esFce((int) ($datos['cbte_tipo'] ?? $tipoAfip))) {
-                    $datos['datos_adicionales'] = $this->datosAdicionalesFce($empresaId);
-                }
+                $datos['datos_adicionales'] = ArcaFceDatosAdicionalesSupport::paraComprobante(
+                    (int) ($datos['cbte_tipo'] ?? $tipoAfip),
+                    $empresaId
+                );
             } catch (Throwable $e) {
                 return ['encontrado' => false, 'mensaje' => 'ERP: '.$e->getMessage()];
             }
@@ -655,26 +657,6 @@ class ArcaCaeaPresentacionManualService
         }
 
         return (int) $this->wsfe->feCompUltimoAutorizado($empresaId, $pto, $tipoAfip);
-    }
-
-    /**
-     * @return list<array{t:int, c1:string}>
-     */
-    private function datosAdicionalesFce(int $empresaId): array
-    {
-        $cbu = trim((string) (
-            config("arca.caea.fce.cbu_por_empresa.{$empresaId}")
-            ?: config('arca.caea.fce.cbu_emisor', '')
-        ));
-        $opcion = trim((string) config('arca.caea.fce.opcion_transferencia', 'ADC'));
-        if ($cbu === '') {
-            return [];
-        }
-
-        return [
-            ['t' => 21, 'c1' => $cbu],
-            ['t' => 27, 'c1' => $opcion !== '' ? $opcion : 'ADC'],
-        ];
     }
 
     private function marcarVenta(Venta $venta, string $estado, string $mensaje): void

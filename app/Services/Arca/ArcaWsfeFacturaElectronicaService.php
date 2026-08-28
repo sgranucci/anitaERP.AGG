@@ -5,6 +5,7 @@ namespace App\Services\Arca;
 use App\Models\Ventas\Puntoventa;
 use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
+use App\Support\Ventas\ArcaFceDatosAdicionalesSupport;
 use Exception;
 use Illuminate\Support\Facades\Log;
 use SoapClient;
@@ -238,7 +239,7 @@ class ArcaWsfeFacturaElectronicaService
         $client = $this->soapClient($soapTimeoutSeconds);
 
         $ptoVta = (int) $puntoventa->codigo;
-        $det = $this->buildFecaDetRequest($cbteTipo, $ptoVta, $datos);
+        $det = $this->buildFecaDetRequest($cbteTipo, $ptoVta, $datos, $empresaId);
 
         $feReq = [
             'FeCabReq' => [
@@ -437,7 +438,7 @@ class ArcaWsfeFacturaElectronicaService
         $client = $this->soapClient();
 
         $ptoVta = (int) $puntoventa->codigo;
-        $det = $this->buildFeCaeaDetRequest($cbteTipo, $ptoVta, $datos, $caeaNum);
+        $det = $this->buildFeCaeaDetRequest($cbteTipo, $ptoVta, $datos, $caeaNum, $empresaId);
 
         $feReq = [
             'FeCabReq' => [
@@ -793,7 +794,7 @@ class ArcaWsfeFacturaElectronicaService
         return (int) $d;
     }
 
-    private function buildFecaDetRequest(int $cbteTipo, int $ptoVta, array $datos): array
+    private function buildFecaDetRequest(int $cbteTipo, int $ptoVta, array $datos, int $empresaId = 0): array
     {
         $condIvaRec = null;
         if ((int) $datos['fechacomprobante'] >= 20250406) {
@@ -850,6 +851,28 @@ class ArcaWsfeFacturaElectronicaService
             $det['Iva'] = $iva;
         }
 
+        $listaAdic = $datos['datos_adicionales'] ?? $datos['opcionales'] ?? [];
+        $listaAdic = ArcaFceDatosAdicionalesSupport::asegurar(
+            is_array($listaAdic) ? $listaAdic : [],
+            $cbteTipo,
+            $empresaId
+        );
+        $opcionales = [];
+        foreach ($listaAdic as $row) {
+            if (! is_array($row)) {
+                continue;
+            }
+            $id = (int) ($row['t'] ?? $row['codigo'] ?? $row['Id'] ?? 0);
+            $valor = trim((string) ($row['c1'] ?? $row['valor'] ?? $row['Valor'] ?? ''));
+            if ($id <= 0 || $valor === '') {
+                continue;
+            }
+            $opcionales[] = ['Id' => $id, 'Valor' => $valor];
+        }
+        if ($opcionales !== []) {
+            $det['Opcionales'] = ['Opcional' => $opcionales];
+        }
+
         return $det;
     }
 
@@ -857,9 +880,9 @@ class ArcaWsfeFacturaElectronicaService
      * @param  array<string, mixed>  $datos
      * @return array<string, mixed>
      */
-    private function buildFeCaeaDetRequest(int $cbteTipo, int $ptoVta, array $datos, string $caeaNum): array
+    private function buildFeCaeaDetRequest(int $cbteTipo, int $ptoVta, array $datos, string $caeaNum, int $empresaId = 0): array
     {
-        $det = $this->buildFecaDetRequest($cbteTipo, $ptoVta, $datos);
+        $det = $this->buildFecaDetRequest($cbteTipo, $ptoVta, $datos, $empresaId);
         $det['CAEA'] = $caeaNum;
 
         $cbteFchHsGen = trim((string) ($datos['cbte_fch_hs_gen'] ?? ''));

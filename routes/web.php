@@ -2088,6 +2088,10 @@ Route::post('ventas/arca-caea/{id}/informar', 'Ventas\ArcaCaeaController@informa
 Route::post('ventas/arca-caea/{id}/actualizar-resumen', 'Ventas\ArcaCaeaController@actualizarResumen')->name('arca_caea_actualizar_resumen');
 Route::post('ventas/arca-caea/{id}/grabar-anita', 'Ventas\ArcaCaeaController@grabarAnita')->name('arca_caea_grabar_anita');
 
+Route::get('ventas/numerador-fiscal', 'Ventas\VentaSerieNumeradorController@index')->name('venta_serie_numerador');
+Route::get('ventas/lista-numerador-fiscal/{formato?}/{busqueda?}', 'Ventas\VentaSerieNumeradorController@listar')->name('lista_venta_serie_numerador');
+Route::post('ventas/numerador-fiscal/sembrar', 'Ventas\VentaSerieNumeradorController@sembrar')->name('sembrar_venta_serie_numerador');
+
 Route::get('ventas/puntoventa', 'Ventas\PuntoventaController@index')->name('puntoventa');
 Route::get('ventas/puntoventa/arca-puntos-venta', 'Ventas\PuntoventaController@puntosVentaArca')->name('puntoventa_arca_puntos_venta');
 Route::post('ventas/puntoventa/sincronizar-anita', 'Ventas\PuntoventaController@sincronizarDesdeAnita')->name('sincronizar_puntoventa_anita');

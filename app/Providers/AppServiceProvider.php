@@ -218,6 +218,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Ventas\VentaSerieNumeradorRepositoryInterface',
+            'App\Repositories\Ventas\VentaSerieNumeradorRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Ventas\Venta_EmisionRepositoryInterface',
             'App\Repositories\Ventas\Venta_EmisionRepository',
         );

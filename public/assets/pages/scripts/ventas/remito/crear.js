@@ -1998,13 +1998,13 @@
 
 		let totalcajasremito = $("#totalcajasremito").val();
 		let totalpiezasremito = $("#totalpiezasremito").val();
-		let totalkilospesados = $("#totalkilospesados").val();
+		let totalkilosremito = $("#totalkilosremito").val();
 
 		$('#factura-remito-table').find('tr').last().find('.descripcionarticulo_fac').val("Totales");
 		$('#factura-remito-table').find('tr').last().find('.descripcionarticulo_fac').css('fontWeight', 'bold');
 		$('#factura-remito-table').find('tr').last().find('.caja_fac').val(totalcajasremito);
 		$('#factura-remito-table').find('tr').last().find('.pieza_fac').val(totalpiezasremito);
-		$('#factura-remito-table').find('tr').last().find('.pesada_fac').val(totalkilospesados);
+		$('#factura-remito-table').find('tr').last().find('.pesada_fac').val(totalkilosremito);
 		$('#factura-remito-table').find('tr').last().find('.caja_fac').css('fontWeight', 'bold');
 		$('#factura-remito-table').find('tr').last().find('.pieza_fac').css('fontWeight', 'bold');
 		$('#factura-remito-table').find('tr').last().find('.pesada_fac').css('fontWeight', 'bold');
@@ -2022,7 +2022,7 @@
 			op = (window.PreferenciasFacturacionUsuario
 				? window.PreferenciasFacturacionUsuario.opcionSelected(tipoTransaccionDefault, item.id)
 				: (tipoTransaccionDefault == item.id ? ' selected="selected"' : ''));
-			selectTipoTransaccion.append('<option value="' + item.id + '"'+op+'>' + item.abreviatura + '-' + item.nombre + '</option>');
+			selectTipoTransaccion.append('<option value="' + item.id + '" data-abreviatura="' + (item.abreviatura || '') + '"'+op+'>' + item.abreviatura + '-' + item.nombre + '</option>');
 		});
 
 		// Arma select de puntos de venta

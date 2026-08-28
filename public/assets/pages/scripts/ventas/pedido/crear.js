@@ -2269,7 +2269,7 @@
 			op = (window.PreferenciasFacturacionUsuario
 				? window.PreferenciasFacturacionUsuario.opcionSelected(tipoTransaccionDefault, item.id)
 				: (tipoTransaccionDefault == item.id ? ' selected="selected"' : ''));
-			selectTipoTransaccion.append('<option value="' + item.id + '"'+op+'>' + item.abreviatura + '-' + item.nombre + '</option>');
+			selectTipoTransaccion.append('<option value="' + item.id + '" data-abreviatura="' + (item.abreviatura || '') + '"'+op+'>' + item.abreviatura + '-' + item.nombre + '</option>');
 		});
 
 		selectPuntoVenta.empty();

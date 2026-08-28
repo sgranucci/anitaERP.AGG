@@ -14,7 +14,8 @@ use Throwable;
  *
  * AGG / CAEA gastro: unique (puntoventa_id, numerocomprobante) — no se toca.
  * El Bierzo: unique (codigo_afip, puntoventa_id, numerocomprobante).
- * codigo_afip es el tipo ARCA efectivo (001+letra, 002 ND, 003 NC, 201 FCE, 202 NDE, 203 NCE):
+ * La numeración max()+1 usa la misma clave (VentaNumeracionEmpresaSupport).
+ * codigo_afip es el tipo ARCA efectivo (001+letra, 002 ND, 003 NC, 201 FCE A, 206 FCE B):
  * FAC A y FAG A (ambas 001) no pueden repetir sucursal+número; FAC A 10-1 y FAC B 10-1 sí (001 vs 006).
  */
 final class VentaNumerocomprobanteUnicidadSupport

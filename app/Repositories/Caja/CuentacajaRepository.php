@@ -369,9 +369,11 @@ class CuentacajaRepository implements CuentacajaRepositoryInterface
                     tesm_cta_contable,
                     tesm_cod_mon,
                     tesm_cta_destino,
-                    tesm_fl_boleta_cl,
+                    tesm_fl_boleta_cl';
+        if (self::usaTablaTesmcbu()) {
+            $camposTesmae .= ',
                     tesm_empresa';
-        if (! self::usaTablaTesmcbu()) {
+        } else {
             $camposTesmae .= ',
                     tesm_nro_cbu';
         }

@@ -6,10 +6,12 @@ use App\Models\Ventas\Tipotransaccion;
 use App\Support\Configuracion\ParametroSistemaSupport;
 
 /**
- * Tipo de comprobante a preseleccionar en el preview de factura (pedido / remito).
+ * Tipo de comprobante FAC/FCE según cliente receptor MiPyME y monto.
  */
 final class TipoComprobantePreviewSupport
 {
+    private static ?int $tipoFacturaId = null;
+
     /**
      * @return array{
      *     tipotransaccion_sugerido_id: int|null,
@@ -31,7 +33,9 @@ final class TipoComprobantePreviewSupport
         );
         $esFce = $modo === 'C' && $tope > 0 && $totalComprobante >= $tope && $codigoAfip >= 200;
 
-        $tipoId = $esFce ? self::idTipotransaccionPorCodigoAfip($codigoAfip) : null;
+        $tipoId = $esFce
+            ? self::idTipotransaccionPorCodigoAfip($codigoAfip)
+            : self::idTipoFactura();
 
         $aviso = null;
         if ($esFce) {
@@ -48,6 +52,102 @@ final class TipoComprobantePreviewSupport
             'es_fce' => $esFce,
             'aviso_fce' => $aviso,
         ];
+    }
+
+    /**
+     * FAC/FCE según cliente y monto. NC/ND y otros tipos se dejan como están.
+     */
+    public static function resolverTipotransaccionId(
+        int $tipoIdPedido,
+        object $cliente,
+        float $totalComprobante,
+        string $letra,
+        ?object $tipoPedido = null
+    ): int {
+        $preview = self::desdeCliente($cliente, $totalComprobante, $letra);
+        $tipoPedido ??= $tipoIdPedido > 0
+            ? Tipotransaccion::query()->find($tipoIdPedido)
+            : null;
+
+        return self::elegirId($tipoIdPedido, $preview, $tipoPedido);
+    }
+
+    /**
+     * @param  array{tipotransaccion_sugerido_id?: int|null, es_fce?: bool}  $preview
+     */
+    public static function elegirId(int $tipoIdPedido, array $preview, ?object $tipoPedido): int
+    {
+        if ($tipoPedido && ! self::esFacturaVentaFacOFce($tipoPedido)) {
+            return $tipoIdPedido;
+        }
+
+        $sugerido = (int) ($preview['tipotransaccion_sugerido_id'] ?? 0);
+        if ($sugerido > 0) {
+            return $sugerido;
+        }
+
+        return $tipoIdPedido > 0 ? $tipoIdPedido : 0;
+    }
+
+    public static function idTipoFactura(): ?int
+    {
+        if (self::$tipoFacturaId !== null) {
+            return self::$tipoFacturaId > 0 ? self::$tipoFacturaId : null;
+        }
+
+        $abrev = strtoupper(trim((string) config('facturacion.TIPO_FACTURA_ABREVIATURA', 'FAC')));
+        $id = (int) (Tipotransaccion::query()
+            ->where('abreviatura', $abrev)
+            ->where('operacion', 'V')
+            ->orderBy('id')
+            ->value('id') ?? 0);
+
+        self::$tipoFacturaId = $id;
+
+        return $id > 0 ? $id : null;
+    }
+
+    public static function esTipoFceId(?int $tipoId): bool
+    {
+        if (! $tipoId || $tipoId <= 0) {
+            return false;
+        }
+
+        $tipo = Tipotransaccion::query()->find($tipoId, ['id', 'codigo', 'abreviatura']);
+
+        return self::esTipoFce($tipo);
+    }
+
+    public static function esTipoFce(?object $tipo): bool
+    {
+        if (! $tipo) {
+            return false;
+        }
+
+        $abrev = strtoupper(trim((string) ($tipo->abreviatura ?? '')));
+        if (in_array($abrev, ['FCE', 'NCE', 'DCE'], true)) {
+            return true;
+        }
+
+        $codigo = (int) preg_replace('/\D+/', '', (string) ($tipo->codigo ?? ''));
+
+        return $codigo >= 200 && $codigo < 300;
+    }
+
+    public static function esFacturaVentaFacOFce(?object $tipo): bool
+    {
+        if (! $tipo) {
+            return true;
+        }
+
+        $abrev = strtoupper(trim((string) ($tipo->abreviatura ?? '')));
+        if (in_array($abrev, ['FAC', 'FCE'], true)) {
+            return true;
+        }
+
+        $codigo = (int) preg_replace('/\D+/', '', (string) ($tipo->codigo ?? ''));
+
+        return in_array($codigo, [1, 201, 206], true);
     }
 
     private static function idTipotransaccionPorCodigoAfip(int $codigoAfip): ?int

@@ -12,7 +12,7 @@ use Illuminate\Http\Request;
  *
  * Combina:
  *  - Búsqueda inteligente de texto (modo todos / campo determinado, operadores, coincidencia flexible).
- *  - Filtros básicos: empresa (vía punto de venta) y rango de fechas.
+ *  - Filtros básicos: empresa (vía punto de venta), rango de fechas y número de reparto.
  *
  * Regla del rango de fechas:
  *  - Por defecto se presenta el mes actual: desde el día 1 del mes hasta hoy.
@@ -25,6 +25,12 @@ class FacturaListadoFiltros
 
     public const MODO_CAMPO = 'campo';
 
+    /** Orden operativo: agrupa por código de reparto (mayor a menor) y luego ID. */
+    public const ORDEN_REPARTO = 'reparto';
+
+    /** Orden por ID de venta de mayor a menor (últimas facturas primero). */
+    public const ORDEN_ID = 'id';
+
     /** @var array<string, array{type: string, label: string}> */
     public const CAMPOS = [
         'id' => ['type' => 'entero', 'label' => 'ID'],
@@ -33,6 +39,7 @@ class FacturaListadoFiltros
         'tipotransaccion' => ['type' => 'texto', 'label' => 'Comprobante (tipo)'],
         'puntoventa' => ['type' => 'texto', 'label' => 'Punto de venta (código)'],
         'empresa' => ['type' => 'texto', 'label' => 'Empresa'],
+        'reparto' => ['type' => 'texto', 'label' => 'Reparto (n&uacute;mero)'],
     ];
 
     /** @var array<string, string> */
@@ -92,6 +99,8 @@ class FacturaListadoFiltros
             'fecha_desde' => $fechaDesde,
             'fecha_hasta' => $fechaHasta,
             'solo_sin_remito' => $request->boolean('solo_sin_remito'),
+            'filtro_reparto' => trim((string) $request->input('filtro_reparto', '')),
+            'orden' => self::normalizarOrden($request->input('filtro_orden')),
         ];
     }
 
@@ -153,6 +162,10 @@ class FacturaListadoFiltros
             return true;
         }
 
+        if (trim((string) ($filtros['filtro_reparto'] ?? '')) !== '') {
+            return true;
+        }
+
         // Rango de fechas distinto del mes actual por defecto.
         $default = self::rangoFechasPorDefecto();
         if (($filtros['fecha_desde'] ?? '') !== $default['fecha_desde']
@@ -189,6 +202,8 @@ class FacturaListadoFiltros
             'fecha_desde' => $rango['fecha_desde'],
             'fecha_hasta' => $rango['fecha_hasta'],
             'solo_sin_remito' => false,
+            'filtro_reparto' => '',
+            'orden' => self::ORDEN_REPARTO,
         ];
     }
 
@@ -223,6 +238,13 @@ class FacturaListadoFiltros
         if (! empty($filtros['solo_sin_remito'])) {
             $params['solo_sin_remito'] = 1;
         }
+        $filtroReparto = trim((string) ($filtros['filtro_reparto'] ?? ''));
+        if ($filtroReparto !== '') {
+            $params['filtro_reparto'] = $filtroReparto;
+        }
+        if (self::esOrdenId($filtros)) {
+            $params['filtro_orden'] = self::ORDEN_ID;
+        }
 
         return $params;
     }
@@ -238,6 +260,45 @@ class FacturaListadoFiltros
         return date('d/m/Y', strtotime($desde)).' — '.date('d/m/Y', strtotime($hasta));
     }
 
+    public static function formatearRepartoTexto(array $filtros): string
+    {
+        $reparto = trim((string) ($filtros['filtro_reparto'] ?? ''));
+        if ($reparto === '') {
+            return '';
+        }
+
+        [$desde, $hasta] = KiloPedidoListadoFiltros::normalizarRangoRepartos($reparto, '');
+
+        return KiloPedidoListadoFiltros::formatearRepartoTexto([
+            'reparto_desde' => $desde,
+            'reparto_hasta' => $hasta,
+        ]);
+    }
+
+    public static function normalizarOrden(mixed $orden): string
+    {
+        return trim((string) $orden) === self::ORDEN_ID
+            ? self::ORDEN_ID
+            : self::ORDEN_REPARTO;
+    }
+
+    public static function esOrdenId(array $filtros): bool
+    {
+        return self::normalizarOrden($filtros['orden'] ?? null) === self::ORDEN_ID;
+    }
+
+    public static function esOrdenReparto(array $filtros): bool
+    {
+        return ! self::esOrdenId($filtros);
+    }
+
+    public static function formatearOrdenTexto(array $filtros): string
+    {
+        return self::esOrdenId($filtros)
+            ? 'ID (mayor a menor)'
+            : 'Reparto (código mayor a menor)';
+    }
+
     /**
      * Aplica todos los filtros a un query de comprobantes de venta.
      *
@@ -251,6 +312,8 @@ class FacturaListadoFiltros
         if (! empty($filtros['solo_sin_remito'])) {
             $query->whereNull('venta.remito_id');
         }
+
+        self::aplicarFiltroReparto($query, (string) ($filtros['filtro_reparto'] ?? ''));
 
         $valor = trim((string) ($filtros['valor'] ?? ''));
         if ($valor === '') {
@@ -331,6 +394,11 @@ class FacturaListadoFiltros
                         }
                     });
             });
+
+            $q->orWhereHas('transportes', function ($t) use ($like) {
+                $t->where('codigo', 'like', $like)
+                    ->orWhere('nombre', 'like', $like);
+            });
         });
     }
 
@@ -373,7 +441,28 @@ class FacturaListadoFiltros
                     });
                 });
                 break;
+            case 'reparto':
+                $query->whereHas('transportes', function ($t) use ($operador, $valor) {
+                    self::aplicarTexto($t, 'codigo', $operador, $valor);
+                });
+                break;
         }
+    }
+
+    /**
+     * @param  Builder<\App\Models\Ventas\Venta>  $query
+     */
+    private static function aplicarFiltroReparto(Builder $query, string $filtroReparto): void
+    {
+        $filtroReparto = trim($filtroReparto);
+        if ($filtroReparto === '') {
+            return;
+        }
+
+        [$desde, $hasta] = KiloPedidoListadoFiltros::normalizarRangoRepartos($filtroReparto, '');
+        $query->whereHas('transportes', static function ($q) use ($desde, $hasta): void {
+            KiloPedidoListadoFiltros::aplicarFiltroRepartoEnQuery($q, $desde, $hasta);
+        });
     }
 
     /**
