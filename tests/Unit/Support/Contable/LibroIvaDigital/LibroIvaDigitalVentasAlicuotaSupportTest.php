@@ -425,6 +425,8 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         $this->assertTrue(LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoAbreviatura('NCD'));
         $this->assertTrue(LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoAbreviatura('CRE'));
         $this->assertFalse(LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoAbreviatura('FAC'));
+        $this->assertSame(1.0, LibroIvaDigitalComprasAnitaArmadoSupport::coeficienteMoneda('PES', 1482));
+        $this->assertSame(1450.0, LibroIvaDigitalComprasAnitaArmadoSupport::coeficienteMoneda('DOL', 1450));
     }
 
     /**

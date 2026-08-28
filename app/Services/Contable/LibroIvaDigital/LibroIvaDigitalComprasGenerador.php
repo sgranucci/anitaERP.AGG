@@ -299,7 +299,15 @@ class LibroIvaDigitalComprasGenerador
      */
     private function adjuntarConceptoIvaSimple(array &$registro, array $conceptos, string $letra): void
     {
-        $alicuotas = LibroIvaDigitalComprasAnitaArmadoSupport::alicuotasIvaSimple($conceptos, $letra);
+        $codigoMoneda = LibroIvaDigitalMapeosSupport::codigoMonedaAfip(
+            (string) ($registro['cabecera']['codigo_moneda'] ?? 'PES'),
+            null,
+        );
+        $coeficiente = LibroIvaDigitalComprasAnitaArmadoSupport::coeficienteMoneda(
+            $codigoMoneda,
+            (float) ($registro['cabecera']['tipo_cambio'] ?? 1),
+        );
+        $alicuotas = LibroIvaDigitalComprasAnitaArmadoSupport::alicuotasIvaSimple($conceptos, $letra, $coeficiente);
         $porLid = [];
         foreach ($alicuotas as $row) {
             $codigo = LibroIvaDigitalMapeosSupport::codigoAlicuotaLid((float) ($row['tasa'] ?? 0));

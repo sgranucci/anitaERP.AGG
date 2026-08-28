@@ -80,16 +80,17 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             return null;
         }
 
-        $totales = self::desglosarConcmov($conceptos, $letra);
-        $cuit = preg_replace('/\D+/', '', (string) ($compra['com_cuit_prov'] ?? '')) ?? '';
         $codigoMoneda = self::codigoMonedaAnita((string) ($compra['com_cod_mon'] ?? '1'));
         $cotizacion = (float) ($compra['com_cotizacion'] ?? 1);
+        $coeficiente = self::coeficienteMoneda($codigoMoneda, $cotizacion);
+        $totales = self::desglosarConcmov($conceptos, $letra, $coeficiente);
+        $cuit = preg_replace('/\D+/', '', (string) ($compra['com_cuit_prov'] ?? '')) ?? '';
         $fechaIva = self::fechaYmdAnita((string) ($compra['com_fecha_iva'] ?? $compra['com_fecha'] ?? ''));
         if ($fechaIva === null) {
             return null;
         }
 
-        $importeTotal = abs((float) ($compra['com_monto'] ?? 0));
+        $importeTotal = abs((float) ($compra['com_monto'] ?? 0)) * $coeficiente;
         $credito = $prorrateoGlobal ? 0.0 : (float) $totales['credito_computable'];
 
         $cabecera = [
@@ -155,7 +156,10 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
      *     alicuotas: list<array{neto: float, iva: float, tasa: float, codigo_lid: string, concepto_iva_simple: int}>
      * }
      */
-    private static function desglosarConcmov(array $conceptos, string $letra): array
+    /**
+     * @param  list<array{concepto: int, importe: float}>  $conceptos
+     */
+    private static function desglosarConcmov(array $conceptos, string $letra, float $coeficiente = 1.0): array
     {
         $noIntegra = 0.0;
         $exento = 0.0;
@@ -164,12 +168,13 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         $percIibb = 0.0;
         $percMun = 0.0;
         $impInterno = 0.0;
+        $coef = $coeficiente > 0.000001 ? $coeficiente : 1.0;
         /** @var array<string, array{neto: float, iva: float, tasa: float}> $alicuotas */
         $alicuotas = [];
 
         foreach ($conceptos as $linea) {
             $codigo = (int) ($linea['concepto'] ?? 0);
-            $importe = abs((float) ($linea['importe'] ?? 0));
+            $importe = abs((float) ($linea['importe'] ?? 0)) * $coef;
             if ($codigo <= 0 || $importe < 0.0001) {
                 continue;
             }
@@ -303,6 +308,15 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         return null;
     }
 
+    public static function coeficienteMoneda(string $codigoMoneda, float $cotizacion): float
+    {
+        if (strtoupper(trim($codigoMoneda)) === 'PES') {
+            return 1.0;
+        }
+
+        return $cotizacion > 0.000001 ? $cotizacion : 1.0;
+    }
+
     public static function esNotaCreditoAbreviatura(string $abrev): bool
     {
         $norm = self::normalizarAbreviaturaTipo($abrev);
@@ -338,9 +352,9 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
      * @param  list<array{concepto: int, importe: float}>  $conceptos
      * @return list<array{neto: float, iva: float, tasa: float, concepto_iva_simple: int}>
      */
-    public static function alicuotasIvaSimple(array $conceptos, string $letra): array
+    public static function alicuotasIvaSimple(array $conceptos, string $letra, float $coeficiente = 1.0): array
     {
-        $totales = self::desglosarConcmov($conceptos, $letra);
+        $totales = self::desglosarConcmov($conceptos, $letra, $coeficiente);
         $filas = [];
         foreach ($totales['alicuotas'] as $row) {
             $filas[] = [

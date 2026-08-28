@@ -462,9 +462,18 @@ class LibroIvaDigitalIvaSimpleGenerador
                 $esNc = LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoTipo($tipo)
                     || LibroIvaDigitalComprasAnitaArmadoSupport::esNotaCreditoAbreviatura($tipoAbrev)
                     || LibroIvaDigitalMapeosSupport::esTipoNotaCredito($tipoCbte);
+                $codigoMoneda = LibroIvaDigitalMapeosSupport::codigoMonedaAfip(
+                    (string) ($compra['com_cod_mon'] ?? '1'),
+                    null,
+                );
+                $coeficiente = LibroIvaDigitalComprasAnitaArmadoSupport::coeficienteMoneda(
+                    $codigoMoneda,
+                    (float) ($compra['com_cotizacion'] ?? 1),
+                );
                 $alicuotas = LibroIvaDigitalComprasAnitaArmadoSupport::alicuotasIvaSimple(
                     $fila['conceptos'],
                     $letra,
+                    $coeficiente,
                 );
                 foreach ($alicuotas as $row) {
                     $this->acumularFilaCredito($acumCredito, $acumRestitucion, $row, $prorrateoGlobal, $esNc);
