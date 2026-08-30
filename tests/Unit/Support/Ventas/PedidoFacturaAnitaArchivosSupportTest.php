@@ -11,9 +11,11 @@ class PedidoFacturaAnitaArchivosSupportTest extends TestCase
     {
         config()->set('facturacion.PUNTOVENTA_DIVISION_ID', 5);
         config()->set('facturacion.PUNTOVENTA_DIVISION_LOCAL_ID', 6);
+        config()->set('facturacion.PUNTOVENTA_DIVISION_REPARTO_101_ID', 9);
 
         $this->assertTrue(PedidoFacturaAnitaArchivosSupport::esPuntoVentaDivision(5));
         $this->assertTrue(PedidoFacturaAnitaArchivosSupport::esPuntoVentaDivision(6));
+        $this->assertTrue(PedidoFacturaAnitaArchivosSupport::esPuntoVentaDivision(9));
         $this->assertFalse(PedidoFacturaAnitaArchivosSupport::esPuntoVentaDivision(8));
         $this->assertFalse(PedidoFacturaAnitaArchivosSupport::esPuntoVentaDivision(0));
     }

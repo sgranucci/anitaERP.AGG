@@ -16,8 +16,10 @@ use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\ExclusionPercepcionIvaSupport;
 use App\Support\Configuracion\PercepcionIvaSujetoSupport;
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
+use App\Support\Configuracion\RegimenPercepcionSupport;
 use App\Support\Ventas\ClienteExclusionPercepcionSupport;
 use App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport;
+use App\Support\Ventas\AbastoBierzoSupport;
 use App\Support\Ventas\LogisticaBierzoSupport;
 use App\Support\Ventas\VentaImporteDosDecimalesSupport;
 use App\Support\Stock\FormulaArticuloFactorCosto;
@@ -142,9 +144,21 @@ class ImpuestoService extends FacturacionService
 		foreach($dataItem as $item)
 			$totalBrutoAuxiliar += ($item['cantidad'] * $item['precio']);
 
-		$tasaPercepcionIva = (float) config('anita.tasa_percepcion_iva', 0);
+		// Perc. IVA RI (PIVA): solo administración. Gastro / estacionamiento / POS mandan omitir_percepciones.
+		$fechaPiva = null;
+		if (! empty($fechaFactura)) {
+			try {
+				$fechaPiva = Carbon::parse($fechaFactura)->toDateString();
+			} catch (\Throwable $e) {
+				$fechaPiva = is_string($fechaFactura) ? $fechaFactura : null;
+			}
+		}
+		$paramPiva = RegimenPercepcionSupport::parametrosPiva($fechaPiva);
+		$tasaPercepcionIva = (float) $paramPiva['tasa'];
+		$minimoBasePiva = (float) $paramPiva['minimo_base'];
+		$minimoImportePiva = (float) $paramPiva['minimo_importe'];
 		$aplicaPercepcionIva = ! $omitirPercepciones
-			&& config('anita.agente_percepcion_iva') == 'si'
+			&& $paramPiva['habilitado']
 			&& $retieneIva != 'S'
 			&& PercepcionIvaSujetoSupport::correspondePercepcionIva($condicioniva);
 
@@ -378,27 +392,25 @@ class ImpuestoService extends FacturacionService
 			}
 		}
 
-		// Percepción IVA: agente + comprador RI + no "No percibir" + no excluido en padrón/cliente
+		// Percepción IVA RG 5329: 3 % gravado 21 %; 1,5 % gravado 10,5 %.
         if ($aplicaPercepcionIva && !$flGrabaComprobanteDividido)
 		{
-			$importeNeto = $importePercepcion = 0.;
-			for ($i = 0; $i < count($netos); $i++)
-			{
-				if($tasaPercepcionIva != 0.)
-				{
-					if($netos[$i]['tasa'] != 0.) // Solo trae los importes gravados
-					{
-						$importeNeto += $netos[$i]['importe'];
-						$importePercepcion += round($netos[$i]['importe'] * $tasaPercepcionIva / 100., 2);
+			$liqPiva = RegimenPercepcionSupport::liquidarPivaSobreNetos($netos, (float) $tasaPercepcionIva);
+			if (RegimenPercepcionSupport::superaMinimoBase((float) $liqPiva['base'], $minimoBasePiva)
+				&& RegimenPercepcionSupport::superaMinimoImporte((float) $liqPiva['importe'], $minimoImportePiva)) {
+				foreach ($liqPiva['por_tasa'] as $renglonPiva) {
+					if (abs((float) $renglonPiva['importe']) < 0.00001) {
+						continue;
 					}
+					$impuestos[] = [
+						'concepto' => 'Percepcion IVA '.$renglonPiva['tasa'].'%',
+						'baseimponible' => $renglonPiva['base'],
+						'tasa' => $renglonPiva['tasa'],
+						'importe' => $renglonPiva['importe'],
+						'impuesto_id' => $paramPiva['impuesto_id'],
+					];
 				}
-			}			
-			$detalle = "Percepcion IVA ".$tasaPercepcionIva."%";
-			$impuestos[] = ["concepto"=>$detalle,
-						"baseimponible" => $importeNeto,
-						"tasa"=>$tasaPercepcionIva,
-						"importe"=>$importePercepcion
-					];			
+			}
 		}
 
 		// Agrega impuestos provinciales
@@ -421,16 +433,18 @@ class ImpuestoService extends FacturacionService
 			$flGrabaComprobanteDividido
 		);
 
-		// Abasto El Bierzo (a-comprob: kilos × tasa; MTXCA tributo 99).
+		// Abasto El Bierzo (a-comprob: tot_kilo × tasa, incluye bonificados; no CAJ ni SKU 903).
 		if (EntornoEmpresaSupport::esElBierzo() && ! $flGrabaComprobanteDividido && $tasaAbasto > 0) {
-			$totalAbasto = $totalCantidad * $tasaAbasto;
-
-			$impuestos[] = [
-				'concepto' => 'Total Abasto',
-				'baseimponible' => 0,
-				'tasa' => $tasaAbasto,
-				'importe' => $totalAbasto,
-			];
+			$kilosAbasto = AbastoBierzoSupport::kilosDesdeItems($dataItem);
+			$totalAbasto = AbastoBierzoSupport::importe($kilosAbasto, (float) $tasaAbasto);
+			if ($totalAbasto >= 0.01) {
+				$impuestos[] = [
+					'concepto' => 'Total Abasto',
+					'baseimponible' => $kilosAbasto,
+					'tasa' => $tasaAbasto,
+					'importe' => $totalAbasto,
+				];
+			}
 		}
 		// Agrega impuesto interno como concepto del comprobante (sumatoria por renglón).
 		$conceptosImpuestoInterno = [];
@@ -668,6 +682,8 @@ class ImpuestoService extends FacturacionService
 			return [];
 		}
 
+		$empresaId = (int) ($dataCliente['empresa_id'] ?? 0);
+
 		return $this->IIBBService->calculaPercepcionIIBB(
 			$baseNeto,
 			$nroInscripcion,
@@ -676,7 +692,8 @@ class ImpuestoService extends FacturacionService
 			$cm05,
 			$fechaFactura,
 			$cliente_id,
-			$forzarCaba
+			$forzarCaba,
+			$empresaId > 0 ? $empresaId : null
 		);
 	}
 

@@ -239,6 +239,30 @@
 					</select>
 				</div>
 			</div>
+			@php
+				$provIibb = $data->provinciasIibb ?? null;
+				if (! $provIibb) {
+					$provIibbIdLookup = (int) old('provincia_iibb_id', $data->provincia_iibb_id ?? 0);
+					if ($provIibbIdLookup > 0) {
+						$provIibb = collect($provincia_query ?? [])->firstWhere('id', $provIibbIdLookup);
+					}
+				}
+			@endphp
+			@include('configuracion.partials.campo_consulta_provincia', [
+				'inputName' => 'provincia_iibb_id',
+				'inputId' => 'provincia_iibb_id',
+				'codigoName' => 'provincia_iibb_codigo',
+				'codigoId' => 'codigo_provincia_iibb',
+				'nombreName' => 'provincia_iibb_nombre',
+				'nombreId' => 'nombre_provincia_iibb',
+				'provinciaId' => $data->provincia_iibb_id ?? '',
+				'codigo' => optional($provIibb)->codigo ?? '',
+				'nombre' => optional($provIibb)->nombre ?? '',
+				'jurisdiccion' => optional($provIibb)->jurisdiccion ?? '',
+				'label' => 'Jurisdicción IIBB',
+				'extra_class' => 'tm-provincia-iibb-campo',
+				'help' => 'Sede de Ingresos Brutos (zona multilateral Anita). Distinta del domicilio si el cliente es Convenio Multilateral.',
+			])
 			<div class="form-group row">
 				<label for="tipoempresa_cliente_id" class="col-lg-4 control-label text-right pr-2">Tipo de empresa</label>
 				<div class="col-lg-8">

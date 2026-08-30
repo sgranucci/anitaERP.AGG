@@ -91,11 +91,6 @@
 				&nbsp;- ID: {{ $remito->id }} - Remito: {{ $remito->codigo }}
                 <div class="card-tools">
                     @include('includes.ventas.link_mi_impresora')
-                    @if (empty($ocultarVolver))
-                    <a href="{{route('remito')}}" class="btn btn-outline-info btn-sm">
-                        <i class="fa fa-fw fa-reply-all"></i> Volver al listado
-                    </a>
-                    @endif
                     @if (!empty($mostrarFacturarRemito))
                         <button type="button" onclick="generaFactura()" class="btn btn-primary" data-padron-accion-factura="1">
                             <i class="fa fa-fw fa-print"></i>
@@ -119,6 +114,11 @@
                         <a href="{{route('listar_cuentacorriente_cliente', ['id' => $remito->cliente_id])}}" target="_blank" class="btn btn-primary" title="Cuenta Corriente">
                         <i class="fa fa-folder-open"> Listar Cuenta Corriente</i>
                         </a>
+                    @endif
+                    @if (empty($ocultarVolver))
+                    <a href="{{route('remito')}}" class="btn btn-outline-info btn-sm">
+                        <i class="fa fa-fw fa-reply-all"></i> Volver al listado
+                    </a>
                     @endif
                 </div>
             </div>

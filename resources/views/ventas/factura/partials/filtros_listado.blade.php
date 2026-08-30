@@ -8,27 +8,38 @@
     foreach (FacturaListadoFiltros::CAMPOS as $key => $meta) {
         $operadoresJson[$key] = FacturaListadoFiltros::operadoresParaCampo($key);
     }
+    $fScope = $f['empresa_scope'] ?? 'una';
+    $fEmp = (int) ($f['empresa_id'] ?? 0);
 @endphp
-<div class="collapse border-bottom" id="panel-filtros-factura" data-listado-filtros-panel>
+<div class="px-3 py-2 border-bottom bg-light text-body">
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
     <input type="hidden" name="filtro_orden" id="filtro_orden" value="{{ FacturaListadoFiltros::normalizarOrden($f['orden'] ?? null) }}">
+    @if ($fScope === 'todas')
+        <input type="hidden" name="empresa_todas" value="1">
+    @elseif ($fEmp > 0)
+        <input type="hidden" name="empresa_id" value="{{ $fEmp }}">
+    @endif
+    <div class="form-row align-items-end">
+        <div class="form-group col-auto mb-0 mr-2">
+            <label class="small mb-1" for="fecha_desde">Fecha desde</label>
+            <input type="date" name="fecha_desde" id="fecha_desde" class="form-control form-control-sm"
+                   value="{{ $f['fecha_desde'] ?? date('Y-m-d') }}">
+        </div>
+        <div class="form-group col-auto mb-0 mr-2">
+            <label class="small mb-1" for="fecha_hasta">Fecha hasta</label>
+            <input type="date" name="fecha_hasta" id="fecha_hasta" class="form-control form-control-sm"
+                   value="{{ $f['fecha_hasta'] ?? date('Y-m-d') }}">
+        </div>
+        <div class="form-group col-auto mb-0">
+            <button type="submit" class="btn btn-primary btn-sm" data-aplicar-filtros-panel="1" title="Aplicar el rango de fechas">
+                <i class="fa fa-calendar-check"></i> Aplicar fechas
+            </button>
+        </div>
+    </div>
+</div>
+<div class="collapse border-bottom" id="panel-filtros-factura" data-listado-filtros-panel>
     <div class="card-body bg-light py-2 text-body">
         <div class="form-row align-items-end">
-            @include('includes.listado.filtro_empresa_asignada', [
-                'empresa_query' => $empresa_query ?? collect(),
-                'empresa_id' => $f['empresa_id'] ?? 0,
-                'col_class' => 'col-md-3 col-sm-6 mb-2',
-            ])
-            <div class="form-group col-md-2 col-sm-6 mb-2">
-                <label class="small mb-1" for="fecha_desde">Fecha desde</label>
-                <input type="date" name="fecha_desde" id="fecha_desde" class="form-control form-control-sm"
-                       value="{{ $f['fecha_desde'] ?? '' }}">
-            </div>
-            <div class="form-group col-md-2 col-sm-6 mb-2">
-                <label class="small mb-1" for="fecha_hasta">Fecha hasta</label>
-                <input type="date" name="fecha_hasta" id="fecha_hasta" class="form-control form-control-sm"
-                       value="{{ $f['fecha_hasta'] ?? '' }}">
-            </div>
             <div class="form-group col-md-2 col-sm-6 mb-2">
                 <label class="small mb-1" for="filtro_reparto">N&ordm; reparto</label>
                 <input type="text"

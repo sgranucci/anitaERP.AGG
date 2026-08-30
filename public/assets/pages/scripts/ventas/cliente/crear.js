@@ -247,14 +247,9 @@
 
             if (target === '#tab-lugares-entrega') {
                 activaEventoEntrega();
-
-                $("#tbody-tabla .localidades").each(function() {
-                    var $tr = $(this).closest("tr");
-                    completarLocalidadesEntrega(
-                        $tr.find(".provincias"),
-                        $tr.find(".localidad_id_previas").val()
-                    );
-                });
+                if (typeof actualizaRenglones === 'function') {
+                    actualizaRenglones();
+                }
             }
 
             if (target === '#tab-leyendas' || target === '#tab-seguimiento') {
@@ -350,8 +345,19 @@
         // Muestra tipo de suspension
         muestraTipoSuspension();
         
-        $('#agrega_renglon').on('click', agregaRenglon);
-        $(document).on('click', '.eliminar', borraRenglon);
+        $('#agrega_renglon').on('click', function (event) {
+            event.preventDefault();
+            if (typeof agregaRenglonEntrega === 'function') {
+                agregaRenglonEntrega();
+            }
+        });
+        $(document).on('click', '#tab-lugares-entrega .eliminar', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (typeof borraRenglonEntrega === 'function') {
+                borraRenglonEntrega($(this));
+            }
+        });
         $('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
         $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
         $(document).on('click', '.eliminar-archivo-cliente', borraTarjetaArchivoCliente);
@@ -450,28 +456,16 @@
 
     function agregaRenglon(){
     	event.preventDefault();
-    	var renglon = $('#template-renglon').html();
-
-    	$("#tbody-tabla").append(renglon);
-    	actualizaRenglones();
-		activaEventoEntrega();
-
-        activa_eventos(false);
+        if (typeof agregaRenglonEntrega === 'function') {
+            agregaRenglonEntrega();
+        }
     }
 
     function borraRenglon() {
     	event.preventDefault();
-    	$(this).parents('tr').remove();
-    	actualizaRenglones();
-		activaEventoEntrega();
-    }
-
-    function actualizaRenglones() {
-    	var item = 1;
-
-    	$("#tbody-tabla .iicuota").each(function() {
-    		$(this).val(item++);
-    	});
+        if (typeof borraRenglonEntrega === 'function') {
+            borraRenglonEntrega($(this));
+        }
     }
 
     function agregaRenglonArchivo(event){

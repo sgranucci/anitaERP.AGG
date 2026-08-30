@@ -88,7 +88,7 @@ class FacturacionController extends Controller
     {
         can('listar-factura');
 
-        $filtros = FacturaListadoFiltros::resolverDesdeRequest($request);
+        $filtros = $this->filtrosListado($request);
 
 		$ventas = $this->facturacionService->leePaginando($filtros);
         $totalesPorReparto = FacturaListadoFiltros::esOrdenReparto($filtros)
@@ -115,7 +115,7 @@ class FacturacionController extends Controller
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
-        $filtros = FacturaListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $filtros = $this->filtrosListado($request, $busqueda);
 
 		$ventas = $this->facturacionService->leeSinPaginar($filtros);
         $totalesPorReparto = FacturaListadoFiltros::esOrdenReparto($filtros)
@@ -406,6 +406,10 @@ class FacturacionController extends Controller
             $params['elegir'] = 1;
             $params['enviar_impresora'] = 1;
         }
+        $retorno = (string) request()->query('retorno', '');
+        if ($retorno !== '') {
+            $params['retorno'] = $retorno;
+        }
 
         return redirect()->route('sesion_impresion_factura', $params);
     }
@@ -567,6 +571,33 @@ class FacturacionController extends Controller
         return back()->withInput()->with('errores', [
             $error !== null && $error !== '' ? $error : 'No se pudo generar el comprobante.',
         ]);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function filtrosListado(Request $request, ?string $busquedaRuta = null): array
+    {
+        return FacturaListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busquedaRuta,
+            $this->empresaDefaultListado()
+        );
+    }
+
+    /**
+     * Empresa 1 si el usuario la tiene asignada; si no, la primera asignada.
+     */
+    private function empresaDefaultListado(): ?int
+    {
+        $empresas = $this->empresaRepository->allFiltrado();
+        $preferida = FacturaListadoFiltros::EMPRESA_ID_DEFAULT;
+        if ($empresas->contains(static fn ($emp) => (int) $emp->id === $preferida)) {
+            return $preferida;
+        }
+        $primera = $empresas->first();
+
+        return $primera ? (int) $primera->id : null;
     }
 
 }

@@ -16,8 +16,8 @@ use App\Models\Configuracion\Pais;
 class Cliente_Entrega extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
-    protected $fillable = ['cliente_id', 'nombre', 'codigo', 'domicilio', 'localidad_id', 'provincia_id', 
-		'pais_id', 'codigopostal', 'zonavta_id', 'subzonavta_id', 'vendedor_id', 'transporte_id'];
+    protected $fillable = ['cliente_id', 'nombre', 'codigo', 'domicilio', 'localidad_id', 'provincia_id',
+		'provincia_iibb_id', 'pais_id', 'codigopostal', 'zonavta_id', 'subzonavta_id', 'vendedor_id', 'transporte_id'];
     protected $table = 'cliente_entrega';
 
 	public function clientes()
@@ -28,6 +28,11 @@ class Cliente_Entrega extends Model implements Auditable
     public function provincias()
     {
         return $this->belongsTo(Provincia::class, 'provincia_id');
+    }
+
+    public function provinciasIibb()
+    {
+        return $this->belongsTo(Provincia::class, 'provincia_iibb_id');
     }
 
     public function localidades()

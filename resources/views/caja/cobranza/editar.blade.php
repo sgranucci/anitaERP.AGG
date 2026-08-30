@@ -19,7 +19,8 @@
 @endif
 <script src="{{asset("assets/pages/scripts/contable/cuentacontable/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/caja/cuentacaja/consulta.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/contable/asiento/asiento_externo.js")}}" type="text/javascript"></script>
+@include('includes.contable.asiento_montos_formato_js')
+<script src="{{asset("assets/pages/scripts/contable/asiento/asiento_externo.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/contable/asiento/asiento_externo.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/caja/banco/consulta.js")}}" type="text/javascript"></script>
 @endsection

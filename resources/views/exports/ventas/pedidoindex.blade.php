@@ -32,7 +32,7 @@
     </tbody>
     <thead>
     <tr>
-        <th>ID</th>
+        <th>Nº pedido</th>
         <th>Fecha</th>
         <th>Fecha entrega</th>
         <th>Cliente</th>

@@ -61,7 +61,10 @@ return [
     'minima_percepcion_iibb' => env('ANITA_MINIMA_PERCEPCION_IIBB', '0,0'),
     'agente_percepcion_iva' => env('ANITA_AGENTE_PERCEPCION_IVA', 'no'),
     'tasa_percepcion_iva' => env('ANITA_TASA_PERCEPCION_IVA', 0),
-    // RG 2126: percepción a sujeto no categorizado (a-comprob.c). Fallback si no hay fila en ABM Impuestos.
+    // Fallback si no hay fila en Configuración → Regímenes de percepción (PIVA / PNC).
+    'minimo_base_percepcion_iva' => env('ANITA_MINIMO_BASE_PERCEPCION_IVA', 0),
+    'minimo_importe_percepcion_iva' => env('ANITA_MINIMO_IMPORTE_PERCEPCION_IVA', 0),
+    // RG 2126: percepción a sujeto no categorizado (a-comprob.c). Fallback si no hay fila PNC.
     'agente_percepcion_no_categorizado' => env('ANITA_AGENTE_PERCEPCION_NO_CATEGORIZADO', 'no'),
     'tasa_percepcion_no_categorizado' => env('ANITA_TASA_PERCEPCION_NO_CATEGORIZADO', 10.5),
     'minimo_percepcion_no_categorizado' => env('ANITA_MINIMO_PERCEPCION_NO_CATEGORIZADO', 0),

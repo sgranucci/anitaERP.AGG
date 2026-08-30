@@ -12,7 +12,7 @@ final class FacturaPdfPaginacionSupport
 
     public const ITEMS_ANTERIOR_POS = 22;
 
-    public const ITEMS_ULTIMA_REMITO = 20;
+    public const ITEMS_ULTIMA_REMITO = 16;
 
     public const ITEMS_ANTERIOR_REMITO = 26;
 

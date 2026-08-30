@@ -23,7 +23,7 @@ class Cliente_EntregaQuery implements Cliente_EntregaQueryInterface
     {
         return $this->model
             ->with(['transportes:id,codigo,nombre'])
-            ->select('id', 'nombre', 'domicilio', 'localidad_id', 'provincia_id', 'codigopostal', 'transporte_id')
+            ->select('id', 'nombre', 'domicilio', 'localidad_id', 'provincia_id', 'provincia_iibb_id', 'codigopostal', 'transporte_id')
             ->where('cliente_id', $cliente_id)
             ->orderBy('nombre')
             ->get()
@@ -42,6 +42,7 @@ class Cliente_EntregaQuery implements Cliente_EntregaQueryInterface
                     'domicilio' => $entrega->domicilio,
                     'localidad_id' => $entrega->localidad_id,
                     'provincia_id' => $entrega->provincia_id,
+                    'provincia_iibb_id' => $entrega->provincia_iibb_id,
                     'codigopostal' => $entrega->codigopostal,
                     'localidad' => $entrega->desc_localidades,
                     'provincia' => $entrega->desc_provincias,

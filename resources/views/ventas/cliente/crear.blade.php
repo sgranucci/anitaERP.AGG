@@ -14,8 +14,7 @@ input:invalid {
 @section("scripts")
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/admin/localidad-cascada.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/admin/localidad-cascada.js')) ?: time() }}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/admin/domicilio.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/admin/domicilio.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/cliente/domicilio.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/domicilio.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/domicilioentrega.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/domicilioentrega.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/localidad/consulta.js")}}" type="text/javascript"></script>
@@ -57,14 +56,14 @@ $( "#botonform0" ).click(function() {
         @include('ventas.cliente.partials.arca_impuestos_alerta')
         @include('ventas.cliente.partials.cuit_duplicado_alerta')
         <div class="card card-primary">
-            <div class="card-header d-flex flex-wrap align-items-center">
-                <h3 class="card-title mb-0">
+            <div class="card-header">
+                <h3 class="card-title mb-0 d-inline-flex align-items-center flex-wrap">
                     Crear Cliente
                     @if ($tipoalta == 'P')
                         Provisorio
                     @endif
+                    @include('ventas.cliente.partials.codigo_barra')
                 </h3>
-                @include('ventas.cliente.partials.codigo_barra')
                 <div class="card-tools">
                     @if (isset($urlOrigen))
                         <a href="javascript:history.back()" class="btn btn-outline-info btn-sm">

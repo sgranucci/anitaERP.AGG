@@ -46,19 +46,32 @@ $(document).on('keyup', '#consultaprovincia', function () {
 });
 
 /**
- * Contenedor del campo: fila de grilla o bloque del formulario.
+ * Contenedor del campo: bloque .tm-provincia-campo (varios por fila) o tr de grilla.
  */
 function contenedorCampoProvincia(origen) {
     var $origen = $(origen);
     if (!$origen.length) {
         return $();
     }
+    var $campo = $origen.closest('.tm-provincia-campo');
+    if ($campo.length) {
+        return $campo;
+    }
     var $tr = $origen.closest('tr');
     if ($tr.length) {
         return $tr;
     }
 
-    return $origen.closest('.tm-provincia-campo');
+    return $();
+}
+
+function abrirModalConsultaProvincia($origen) {
+    var $contenedor = contenedorCampoProvincia($origen);
+    ptrprovincia_id = $contenedor.length ? $contenedor.find('.provincia_id') : $('#provincia_id');
+    $('#consultaprovinciaModal').modal('show');
+    if (typeof buscar_datos_provincia === 'function') {
+        buscar_datos_provincia('');
+    }
 }
 
 /**
@@ -75,6 +88,7 @@ function aplicarProvinciaEnCampo($contenedor, datos) {
         $contenedor.find('.codigoprovincia').val(codigo);
         $contenedor.find('.nombreprovincia').val(nombre);
         $contenedor.find('.jurisdiccionprovincia').val(jurisdiccion);
+        $contenedor.find('.desc_provincia').val(nombre);
     }
 
     // Compatibilidad con pantallas que usan los ids globales.
@@ -83,6 +97,7 @@ function aplicarProvinciaEnCampo($contenedor, datos) {
         $('#codigoprovincia').val(codigo);
         $('#nombreprovincia').val(nombre);
         $('#jurisdiccionprovincia').val(jurisdiccion);
+        $('#desc_provincia').val(nombre);
         $('#provincia').val(nombre);
     }
 }
@@ -117,9 +132,13 @@ function avanzarDesdeCampoProvincia(origen) {
 function leerProvinciaPorCodigo(codigo, origen, avisar) {
     var $contenedor = contenedorCampoProvincia(origen);
     var valor = $.trim(codigo || '');
+    var idAnterior = $contenedor.length ? String($contenedor.find('.provincia_id').val() || '') : '';
 
     if (valor === '') {
         aplicarProvinciaEnCampo($contenedor, null);
+        if ($contenedor.length && !$contenedor.hasClass('tm-provincia-iibb-campo') && idAnterior !== '') {
+            $contenedor.find('.provincia_id').trigger('change');
+        }
         return;
     }
 
@@ -128,6 +147,10 @@ function leerProvinciaPorCodigo(codigo, origen, avisar) {
             if (data && data.id) {
                 aplicarProvinciaEnCampo($contenedor, data);
                 $(origen).removeAttr('data-provincia-invalida');
+                if ($contenedor.length && !$contenedor.hasClass('tm-provincia-iibb-campo')
+                    && idAnterior !== String(data.id)) {
+                    $contenedor.find('.provincia_id').trigger('change');
+                }
                 if (avisar) {
                     avanzarDesdeCampoProvincia(origen);
                 }
@@ -165,12 +188,6 @@ function activa_eventos_consultaprovincia()
 
     function esCampoCodigoProvincia($target) {
         return $target.hasClass('codigoprovincia') || $target.is('#codigoprovincia');
-    }
-
-    function abrirModalConsultaProvincia($origen) {
-        var $tr = $origen && $origen.length ? $origen.closest('tr') : $();
-        ptrprovincia_id = $tr.length ? $tr.find('.provincia_id') : $('#provincia_id');
-        $('#consultaprovinciaModal').modal('show');
     }
 
     // Consulta de provincias
@@ -268,6 +285,10 @@ function activa_eventos_consultaprovincia()
 
         if (ptrprovincia_id && ptrprovincia_id.length) {
             ptrprovincia_id.val(datos.id);
+        }
+
+        if ($contenedor.length && !$contenedor.hasClass('tm-provincia-iibb-campo')) {
+            $contenedor.find('.provincia_id').trigger('change');
         }
 
         $('#consultaprovinciaModal').modal('hide');

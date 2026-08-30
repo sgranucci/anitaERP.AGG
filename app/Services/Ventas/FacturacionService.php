@@ -43,6 +43,8 @@ use App\Repositories\Stock\LoteRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
+use App\Models\Ventas\Tipotransaccion;
+use App\Models\Ventas\Venta;
 use App\Models\Configuracion\Impuesto;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
@@ -51,8 +53,10 @@ use App\Models\Stock\Linea;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
+use App\Support\Configuracion\RegimenPercepcionSupport;
 use setasign\Fpdi\Fpdi;
 use App\Support\Ventas\CaiRemitoVigenteSupport;
+use App\Support\Ventas\RemitoFormularioLeyendaSupport;
 use App\Support\Ventas\RemitoValorAseguradoSupport;
 use App\Support\Ventas\ClienteDespachoSupport;
 use App\Support\Ventas\ClienteEntregaPedidoSupport;
@@ -70,7 +74,9 @@ use App\Support\Ventas\VentaEmisionCajaPiezaSupport;
 use App\Support\Stock\UnidadesCajaPiezaSupport;
 use App\Support\Ventas\ArcaCaeaAnitaTipoAfipSupport;
 use App\Support\Ventas\ClienteAnitaZonamultSupport;
+use App\Support\Ventas\ClienteProvinciaIibbSupport;
 use App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport;
+use App\Support\Ventas\FacturaAsientoDescuentoPieSupport;
 use App\Support\Ventas\FacturaBTotalesImpresionSupport;
 use App\Support\Ventas\FacturaPdfIdentificacionSupport;
 use App\Support\Ventas\ElBierzoFacturacionCaeaSaltoSupport;
@@ -197,7 +203,7 @@ class FacturacionService
 	protected $tasaImpuesto;
 	protected $puntoVentaDivision_id;
 	protected $numeroComprobanteDivision;
-	/** Reparto 101: reserva FAC A sucursal 1 en Anita Villafranca y emite en PV 15. */
+	/** Reparto 101: reserva FAC A sucursal 1 en Anita Villafranca y emite en PV 00001. */
 	protected $usaNumeradorVillafrancaPropio;
 	/** @var int Número FAC Villafranca ya reservado (reparto 101) para no volver a numerar. */
 	protected $numeroReservadoVillafrancaReparto101;
@@ -208,6 +214,8 @@ class FacturacionService
 	protected $facturandoDesdeRemitoId;
 	/** @var int|null Numeración remito ya emitida (no pedir MAX+1). */
 	protected $numeroremitoFijoDesdeRemito;
+	/** @var int FAC de Bierzo recién emitida; la VF de la división la apunta. */
+	protected $ventaOrigenIdDivision;
 
     public function __construct(
 								OrdentrabajoQueryInterface $ordentrabajoquery,
@@ -318,6 +326,7 @@ class FacturacionService
 		$this->flCalculaDesdeGeneracionFactura = false;
 		$this->facturandoDesdeRemitoId = null;
 		$this->numeroremitoFijoDesdeRemito = null;
+		$this->ventaOrigenIdDivision = 0;
     }
 
 	public function leePaginando($busqueda)
@@ -373,15 +382,12 @@ class FacturacionService
 	 */
 	private function provinciaPercepcionDesdePedido($cliente, $pedido): ?int
 	{
+		$entrega = null;
 		if ($pedido && (int) ($pedido->cliente_entrega_id ?? 0) > 0) {
-			$clienteEntrega = $this->cliente_entregaRepository->find($pedido->cliente_entrega_id);
-
-			if ($clienteEntrega && $clienteEntrega->provincia_id) {
-				return (int) $clienteEntrega->provincia_id;
-			}
+			$entrega = $this->cliente_entregaRepository->find($pedido->cliente_entrega_id);
 		}
 
-		return $cliente->provincia_id;
+		return ClienteProvinciaIibbSupport::idParaPercepcionAdmin($cliente, $entrega);
 	}
 
 	private function resolverLugarEntregaPedido($cliente, $documento, array $data, bool $persistir): ?array
@@ -630,7 +636,8 @@ class FacturacionService
 							"descuentoimportepie" => $this->descuentoImportePie,
 							"id" => $cliente->id,
 							"abasto_id" => $cliente->abasto_id,
-							"porcentajelogistica" => $cliente->porcentajelogistica
+							"porcentajelogistica" => $cliente->porcentajelogistica,
+							"empresa_id" => $data['empresa_id'] ?? null,
 							];
 		else
 			$datosCliente = [ "condicioniva_id" => $cliente->condicioniva_id,
@@ -639,7 +646,8 @@ class FacturacionService
 							"condicioniibb_id" => $cliente->condicioniibb_id,
 							"provincia" => $provinciaPercepcion,
 							"descuentoimportepie" => $this->descuentoImportePie,
-							"id" => $cliente->id
+							"id" => $cliente->id,
+							"empresa_id" => $data['empresa_id'] ?? null,
 							];
 		// Calcula impuestos
 		$conceptosTotales = $this->impuestoService->calculaImpuestoVenta($dataFactura, $datosCliente, $fechaFactura, 
@@ -776,6 +784,8 @@ class FacturacionService
 						return [$retorno1];
 					}
 
+					$this->ventaOrigenIdDivision = (int) ($retorno1['venta_id'] ?? 0);
+
 					// Cambia punto de venta de Villa
 					$this->puntoVentaDivision_id = config('facturacion.PUNTOVENTA_DIVISION_ID');
 					$data['puntoventa_id'] = $this->puntoVentaDivision_id;
@@ -807,8 +817,19 @@ class FacturacionService
 						return [$retorno1];
 					}
 
-					// Cambia punto de venta de Villa
-					$this->puntoVentaDivision_id = config('facturacion.PUNTOVENTA_DIVISION_ID');
+					// 101 (huérfana): PV 00001 + numerador sucursal 1. Resto 100%: PV 15.
+					if (VillafrancaFacturacionSupport::esReparto101($pedido)) {
+						$pv101 = VillafrancaFacturacionSupport::idPuntoVentaReparto101();
+						if ($pv101 <= 0) {
+							return [[
+								'error' => 'Error punto de venta Villafranca',
+								'mensaje' => 'No está configurado el punto de venta Villafranca sucursal 1 para el reparto 101.',
+							]];
+						}
+						$this->puntoVentaDivision_id = $pv101;
+					} else {
+						$this->puntoVentaDivision_id = config('facturacion.PUNTOVENTA_DIVISION_ID');
+					}
 					$data['puntoventa_id'] = $this->puntoVentaDivision_id;						
 				}
 
@@ -829,6 +850,7 @@ class FacturacionService
 			$this->flDivide = false;
 			$this->usaNumeradorVillafrancaPropio = false;
 			$this->numeroReservadoVillafrancaReparto101 = 0;
+			$this->ventaOrigenIdDivision = 0;
 
 			$retorno = [PedidoFacturaAnitaDeferSupport::tomarYProgramar(
 				Self::generaUnaFacturaPorPedido($data, $cliente, $pedido)
@@ -983,6 +1005,7 @@ class FacturacionService
 			$signo = $tipotransaccion->signo == 'S' ? 1. : -1.;
 
 			$tipoAnita = $this->tipoAnitaSegunCodigoAfip($tipotransaccion, $codigoTipoTransaccion);
+			$emiteRemito = $this->tipoEmiteRemito($tipotransaccion);
 
 			// Numera factura con web service si es factura electronica
 			$numeroReservadoVillafranca = false;
@@ -1043,7 +1066,10 @@ class FacturacionService
 				}
 
 				PedidoFacturacionProfiler::etapa('numeracion_remito_anita_inicio');
-				// Pide numero de remito
+				// Remito solo con FAC/FCE. NC/ND no numeran ni persisten remito.
+				$numeroremito = 0;
+				if ($emiteRemito)
+				{
 				if ($this->flDivide)
 				{
 					if (!$this->flGrabaComprobanteDividido)
@@ -1085,6 +1111,7 @@ class FacturacionService
 						$numeroremito = $this->ventaRepository->traeUltimoNumeroRemito('REM','R',$puntoventaremito->codigo);
 					else	
 						$numeroremito = 0;
+				}
 				}
 
 				// Villafranca (comprobante dividido) usa el mismo número que la FAC de Bierzo.
@@ -1220,11 +1247,15 @@ class FacturacionService
 						'telefono' => $cliente->telefono,
 						'nroinscripcion' => $cliente->numerodocumento ?? $cliente->nroinscripcion ?? null,
 						'condicioniva_id' => $cliente->condicioniva_id,
-						'puntoventaremito_id' => $this->puntoventaremito_id,
-            			'numeroremito' => $numeroremito,
+						'puntoventaremito_id' => $emiteRemito ? $this->puntoventaremito_id : null,
+            			'numeroremito' => $emiteRemito ? $numeroremito : 0,
 						'cantidadbulto' => $this->cantidadBulto,
 						'pedido_id' => $ventaPedidoId,
-						'remito_id' => $ventaRemitoId,
+						'remito_id' => $emiteRemito ? $ventaRemitoId : null,
+						'venta_origen_id' => VillafrancaFacturacionSupport::ventaOrigenIdParaGrabar(
+							(int) $puntoventa->id,
+							(int) $this->ventaOrigenIdDivision
+						),
 					];	
 
 					// Graba venta
@@ -1350,13 +1381,13 @@ class FacturacionService
 					PedidoFacturacionProfiler::etapa($omitirAnitaAsiento ? 'asiento_erp_sin_anita_fin' : 'asiento_erp_anita_fin');
 					
 					PedidoFacturacionProfiler::etapa('remito_erp_inicio');
-					// Remito ERP (solo facturación administrativa Bierzo; no gastronomía/estacionamiento)
-					if ($this->facturandoDesdeRemitoId) {
+					// Remito ERP solo FAC/FCE (administración Bierzo; no gastronomía/estacionamiento/NC)
+					if ($emiteRemito && $this->facturandoDesdeRemitoId) {
 						app(\App\Services\Ventas\RemitoService::class)->marcarFacturado(
 							(int) $this->facturandoDesdeRemitoId,
 							(int) $vta->id
 						);
-					} elseif ((int) $numeroremito > 0 && $puntoventaremito) {
+					} elseif ($emiteRemito && (int) $numeroremito > 0 && $puntoventaremito) {
 						$remitoService = app(\App\Services\Ventas\RemitoService::class);
 						$remitoPendiente = \App\Models\Ventas\Remito::query()
 							->where('pedido_id', $pedido_id)
@@ -1405,7 +1436,8 @@ class FacturacionService
 					if ($puntoventa->modofacturacion != 'M' || $this->flGrabaComprobanteDividido)
 					{
 						$anitaPedidoId = (int) ($pedidoIdMarcar ?: 0);
-						$codigoPuntoventaRemito = $puntoventaremito->codigo ?? 0;
+						$codigoPuntoventaRemito = $emiteRemito ? ($puntoventaremito->codigo ?? 0) : 0;
+						$numeroremito = $emiteRemito ? $numeroremito : 0;
 
 						if ($deferAnitaPedido) {
 							$anitaPendientePedido = [
@@ -1777,9 +1809,10 @@ class FacturacionService
 						  "numerodocumento" => $cliente->numerodocumento,
 						  "retieneiva" => $cliente->retieneiva,
 						  "condicioniibb_id" => $cliente->condicioniibb_id,
-						  "provincia" => $cliente->provincia_id,
+						  "provincia" => ClienteProvinciaIibbSupport::idParaPercepcionAdmin($cliente),
 						  "descuentoimportepie" => $this->descuentoImportePie,
-						  "id" => $cliente->id
+						  "id" => $cliente->id,
+						  "empresa_id" => $empresa_id,
 						];
 
 		// Calcula impuestos
@@ -2453,25 +2486,31 @@ class FacturacionService
 			$totCantidad += $cantidad;
 		}
 		// Arma datos del cliente
+		$provinciaDatosCliente = $this->esEmisionPos($data)
+			? ($cliente->provincia_id ? (int) $cliente->provincia_id : null)
+			: ClienteProvinciaIibbSupport::idParaPercepcionAdmin($cliente);
+
 		if (strtoupper(config('app.empresa') == "EL BIERZO"))
 			$datosCliente = [ "condicioniva_id" => $cliente->condicioniva_id,
 							"numerodocumento" => $cliente->numerodocumento,
 							"retieneiva" => $cliente->retieneiva,
 							"condicioniibb_id" => $cliente->condicioniibb_id,
-							"provincia" => $cliente->provincia_id,
+							"provincia" => $provinciaDatosCliente,
 							"descuentoimportepie" => $this->descuentoImportePie,
 							"id" => $cliente->id,
 							"abasto_id" => $cliente->abasto_id,
-							"porcentajelogistica" => $cliente->porcentajelogistica
+							"porcentajelogistica" => $cliente->porcentajelogistica,
+							"empresa_id" => $data['empresa_id'] ?? null,
 							];
 		else
 			$datosCliente = [ "condicioniva_id" => $cliente->condicioniva_id,
 							"numerodocumento" => $cliente->numerodocumento,
 							"retieneiva" => $cliente->retieneiva,
 							"condicioniibb_id" => $cliente->condicioniibb_id,
-							"provincia" => $cliente->provincia_id,
+							"provincia" => $provinciaDatosCliente,
 							"descuentoimportepie" => $this->descuentoImportePie,
-							"id" => $cliente->id
+							"id" => $cliente->id,
+							"empresa_id" => $data['empresa_id'] ?? null,
 							];
 		if (! empty($data['omitir_percepciones'])) {
 			$datosCliente['omitir_percepciones'] = true;
@@ -2489,7 +2528,9 @@ class FacturacionService
 			$datosCliente[ElBierzoFacturaBPercepcionCabaSupport::FLAG] = true;
 			// Restaura IIBB real: el overwrite a "No Retiene" dejaría CABA sin tasa.
 			$datosCliente['condicioniibb_id'] = $cliente->condicioniibb_id;
-			$datosCliente['provincia'] = $cliente->provincia_id;
+			$datosCliente['provincia'] = $this->esEmisionPos($data)
+				? ($cliente->provincia_id ? (int) $cliente->provincia_id : null)
+				: ClienteProvinciaIibbSupport::idParaPercepcionAdmin($cliente);
 		}
 		// Calcula impuestos
 		$conceptosTotales = $this->impuestoService->calculaImpuestoVenta($dataFactura, $datosCliente, $fechaFactura, 
@@ -3130,14 +3171,18 @@ class FacturacionService
 		$this->sincronizarLugarEntregaPedido($pedido);
 		$provinciaPercepcion = $this->provinciaPercepcionDesdePedido($cliente, $pedido);
 
+		// Lee punto de venta (empresa jurídica = sucursal elegida)
+		$puntoventa = $this->puntoventaRepository->find($puntoventa_id);
+
 		// Arma datos del cliente
 		$datosCliente = [ "condicioniva_id" => $cliente->condicioniva_id,
 						  "numerodocumento" => $cliente->numerodocumento,
 						  "retieneiva" => $cliente->retieneiva,
-						  "condicioniibb" => $cliente->condicioniibb,
+						  "condicioniibb_id" => $cliente->condicioniibb_id,
 						  "provincia" => $provinciaPercepcion,
 						  "descuentoimportepie" => $this->descuentoImportePie,
-						  "id" => $cliente->id
+						  "id" => $cliente->id,
+						  "empresa_id" => $puntoventa->empresa_id ?? null,
 						];
 
 		// Calcula impuestos
@@ -3150,9 +3195,6 @@ class FacturacionService
 		$cuentacorriente = $this->calculaCondicionVenta($fechaFactura, 
 														$totalComprobante, 
 														$pedido->condicionventa_id);
-
-		// Lee punto de venta
-		$puntoventa = $this->puntoventaRepository->find($puntoventa_id);
 		$cuentacorriente = $this->aplicarVencimientoVillafrancaSiCorresponde($cuentacorriente, $fechaFactura, $puntoventa);
 		// Lee punto de venta del remito
 		$puntoventaremito = null;
@@ -3170,6 +3212,7 @@ class FacturacionService
 			$codigoTipoTransaccion = $tipotransaccion->codigo;
 			$this->nombreTipoTransaccion = $tipotransaccion->nombre;
 			$signo = $tipotransaccion->signo == 'S' ? 1. : -1.;
+			$emiteRemito = $this->tipoEmiteRemito($tipotransaccion);
 			// Numera factura con web service si es factura electronica
 			if ($puntoventa->modofacturacion != 'M')
 			{
@@ -3199,8 +3242,8 @@ class FacturacionService
 			{
 				$numero++;
 
-				// Pide numero de remito
-				if ($puntoventaremito && $puntoventa->modofacturacion != 'M')
+				// Remito solo con FAC/FCE
+				if ($emiteRemito && $puntoventaremito && $puntoventa->modofacturacion != 'M')
 					$numeroremito = $this->ventaRepository->traeUltimoNumeroRemito('REM','R',$puntoventaremito->codigo);
 				else	
 					$numeroremito = 0;
@@ -3307,8 +3350,8 @@ class FacturacionService
 						'telefono' => $cliente->telefono,
 						'numerodocumento' => $cliente->numerodocumento,
 						'condicioniva_id' => $cliente->condicioniva_id,
-						'puntoventaremito_id' => $this->puntoventaremito_id,
-            			'numeroremito' => $numeroremito,
+						'puntoventaremito_id' => $emiteRemito ? $this->puntoventaremito_id : null,
+            			'numeroremito' => $emiteRemito ? $numeroremito : 0,
 						'cantidadbulto' => $this->cantidadBulto
 					];	
 
@@ -3471,7 +3514,7 @@ class FacturacionService
 					if ($puntoventa->modofacturacion != 'M')
 					{
 						// Graba anita
-						$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, $puntoventaremito->codigo, $numeroremito,
+						$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, $emiteRemito ? $puntoventaremito->codigo : 0, $emiteRemito ? $numeroremito : 0,
 									$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
 									$codigoTipoTransaccion, null,
 									true, 0, 0, '', $empresa->codigo,
@@ -3605,7 +3648,8 @@ class FacturacionService
 				'puntoventaremito_id' => null,
 				'numeroremito' => 0,
 				'cantidadbulto' => 1,
-				'ordenventa_id' => $ordenventa_id
+				'ordenventa_id' => $ordenventa_id,
+				'venta_origen_id' => $this->ventaOrigenIdParaNcDividida($puntoventa, (int) $venta_id),
 			];	
 
 			// Graba venta
@@ -4226,6 +4270,7 @@ class FacturacionService
 		$cobrador = $this->codigoCobradorAnitaParaGraba($cliente);
 		$codigoZonavta = Zonavta::codigoAnitaDesdeId($zonavta_id ? (int) $zonavta_id : null);
 		$codigoSubzona = (int) ($subzonavta_id ?: 0);
+		// POS gastronomía: domicilio. Este método es solo modo mínimo gastro.
 		$codigoZonamult = ClienteAnitaZonamultSupport::codigoDesdeProvinciaId(
 			$provincia_id ? (int) $provincia_id : null
 		);
@@ -4505,8 +4550,14 @@ class FacturacionService
 		$cobrador = $this->codigoCobradorAnitaParaGraba($cliente);
 		$codigoZonavta = Zonavta::codigoAnitaDesdeId($zonavta_id ? (int) $zonavta_id : null);
 		$codigoSubzona = (int) ($subzonavta_id ?: 0);
-		$codigoZonamult = ClienteAnitaZonamultSupport::codigoDesdeProvinciaId(
-			$provincia_id ? (int) $provincia_id : null
+		$entregaAnita = null;
+		if (! $modoMinimoAnita && (int) ($venta['cliente_entrega_id'] ?? 0) > 0) {
+			$entregaAnita = $this->cliente_entregaRepository->find($venta['cliente_entrega_id']);
+		}
+		$codigoZonamult = ClienteProvinciaIibbSupport::codigoZonamultParaAnita(
+			$cliente,
+			$modoMinimoAnita,
+			$entregaAnita
 		);
 		if (config('app.empresa') == 'Calzados Ferli')
 		{
@@ -4887,7 +4938,11 @@ class FacturacionService
 			}
 		}
 	
-		$leyenda = '';
+		$leyenda = str_replace(
+			["'", '\\'],
+			[' ', ''],
+			RemitoFormularioLeyendaSupport::paraCompLeyenda((string) ($venta['leyenda'] ?? ''))
+		);
 
 		// Filtra lugar de entrega
 		$lugarEntrega = preg_replace('([^A-Za-z0-9])', '', $venta['lugarentrega']);
@@ -5488,9 +5543,28 @@ class FacturacionService
 		return (bool) $this->usaNumeradorVillafrancaPropio && (bool) $this->flGrabaComprobanteDividido;
 	}
 
+	private function ventaOrigenIdParaNcDividida($puntoventa, int $ventaAplicadaId): ?int
+	{
+		$puntoventaId = (int) ($puntoventa->id ?? 0);
+		$desdeDivision = VillafrancaFacturacionSupport::ventaOrigenIdParaGrabar(
+			$puntoventaId,
+			(int) $this->ventaOrigenIdDivision
+		);
+		if ($desdeDivision) {
+			return $desdeDivision;
+		}
+		if ($ventaAplicadaId <= 0 || ! PedidoFacturaAnitaArchivosSupport::esPuntoVentaDivision($puntoventaId)) {
+			return null;
+		}
+
+		return VillafrancaFacturacionSupport::heredarOrigenIdDesdeVenta(
+			Venta::query()->find($ventaAplicadaId)
+		);
+	}
+
 	/**
 	 * Reserva FAC Villafranca (reparto 101) y arma penm_ref_* del remito en pendmae.
-	 * Sucursal de referencia = PV de emisión (15), no la del numerador (1).
+	 * Sucursal de referencia = PV de emisión (00001), igual al numerador Anita.
 	 *
 	 * @return array{tipo: string, letra: string, sucursal: int, nro: int}|array{error: string, mensaje?: string}
 	 */
@@ -5510,7 +5584,7 @@ class FacturacionService
 		$this->numeroReservadoVillafrancaReparto101 = (int) $numero;
 
 		$puntoventaEmision = $this->puntoventaRepository->find(
-			(int) config('facturacion.PUNTOVENTA_DIVISION_ID')
+			VillafrancaFacturacionSupport::idPuntoVentaReparto101()
 		);
 		$sucursalEmision = (int) ($puntoventaEmision->codigo ?? 0);
 		if ($sucursalEmision <= 0) {
@@ -6692,6 +6766,13 @@ class FacturacionService
 				}
 			}
 		}
+
+		// Pie: IVA/perc. ya van sobre gravado neto. Ventas venía en subtotal (renglón).
+		$asientoContable = FacturaAsientoDescuentoPieSupport::netearLineasVenta(
+			$asientoContable,
+			$conceptostotales
+		);
+
 		// Barre por cada concepto para grabar asiento contable
 		foreach ($conceptostotales as $conc)
 		{
@@ -6713,39 +6794,38 @@ class FacturacionService
 				
 				// RG 2126: no usar el bloque IVA (el concepto no dice "IVA").
 				if (PercepcionNoCategorizadoSupport::esConcepto((string) $conc['concepto'])) {
-					$cuenta = 0;
-					$impuestoId = (int) ($conc['impuesto_id'] ?? 0);
-					if ($impuestoId <= 0) {
-						$impuestoId = (int) (PercepcionNoCategorizadoSupport::impuestoId() ?? 0);
-					}
-					if ($impuestoId > 0) {
-						$cuentacontable = $this->impuesto_cuentacontableRepository->leePorImpuesto($impuestoId, $empresa_id);
-						if (isset($cuentacontable[0])) {
-							$cuenta = $cuentacontable[0]->cuentacontable_id;
-						}
-					}
+					$cuenta = (int) (RegimenPercepcionSupport::cuentaContableId(
+						RegimenPercepcionSupport::CODIGO_PNC,
+						(int) $empresa_id
+					) ?? 0);
 					if (! $cuenta) {
-						$codigoCuenta = PercepcionNoCategorizadoSupport::codigoCuentaContable();
+						$codigoCuenta = RegimenPercepcionSupport::codigoCuentaFallback(RegimenPercepcionSupport::CODIGO_PNC);
 						if ($codigoCuenta !== '') {
 							$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, $codigoCuenta);
 							$cuenta = $cuentacontable ? $cuentacontable->id : 0;
 						}
 					}
 					if (! $cuenta) {
-						throw new Exception('Falta la cuenta contable del impuesto PNC (percepción no categorizado) para esta empresa.');
+						throw new Exception('Falta la cuenta contable del régimen PNC (percepción no categorizado) para esta empresa.');
 					}
 				}
 
-				// Percepcion iva
-				if (strpos($conc['concepto'], 'IVA') !== false)
-				{
-					$cuenta = config('facturacion.CUENTACONTABLE_PERCEPCION_IVA');
-
-					$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, $cuenta);
-
-					$cuenta = 0;
-					if ($cuentacontable)
-						$cuenta = $cuentacontable->id;
+				// Perc. IVA RI (PIVA / RG 5329): grilla del régimen, config como fallback.
+				if (RegimenPercepcionSupport::esConceptoPiva((string) $conc['concepto'])) {
+					$cuenta = (int) (RegimenPercepcionSupport::cuentaContableId(
+						RegimenPercepcionSupport::CODIGO_PIVA,
+						(int) $empresa_id
+					) ?? 0);
+					if (! $cuenta) {
+						$codigoCuenta = RegimenPercepcionSupport::codigoCuentaFallback(RegimenPercepcionSupport::CODIGO_PIVA);
+						if ($codigoCuenta !== '') {
+							$cuentacontable = $this->cuentacontableRepository->findPorCodigo($empresa_id, $codigoCuenta);
+							$cuenta = $cuentacontable ? $cuentacontable->id : 0;
+						}
+					}
+					if (! $cuenta) {
+						throw new Exception('Falta la cuenta contable del régimen PIVA (percepción IVA RG 5329) para esta empresa.');
+					}
 				}
 				
 				// Iva
@@ -6795,6 +6875,12 @@ class FacturacionService
 		}
 
 		return ClienteDespachoSupport::errorNoFacturable((int) $clienteId);
+	}
+
+	private function tipoEmiteRemito($tipotransaccion): bool
+	{
+		return $tipotransaccion instanceof Tipotransaccion
+			&& $tipotransaccion->correspondeRemito();
 	}
 
 	/**
@@ -8109,6 +8195,13 @@ class FacturacionService
 			return ['error' => $motivo];
 		}
 
+		if (VillafrancaFacturacionSupport::esReparto101($remito)) {
+			$this->flGrabaComprobanteDividido = true;
+			if ((float) $this->coeficienteExtraCliente <= 0) {
+				$this->coeficienteExtraCliente = VillafrancaFacturacionSupport::coeficienteReparto101();
+			}
+		}
+
 		$remitoArticuloRepo = app(\App\Repositories\Ventas\Remito_ArticuloRepositoryInterface::class);
 		$remito_articulo_ids = $data['remito_articulo_ids'] ?? [];
 		if ($remito_articulo_ids === []) {
@@ -8144,6 +8237,10 @@ class FacturacionService
 			}
 
 			$precioUnitario = $linea->precio;
+			if (VillafrancaFacturacionSupport::esReparto101($remito)
+				&& (float) $this->coeficienteExtraCliente > 0) {
+				$precioUnitario = $linea->precio * $this->coeficienteExtraCliente;
+			}
 			$kilo = (float) $linea->kilo;
 			$pieza = (float) $linea->pieza;
 			$caja = (float) $linea->caja;
@@ -8205,9 +8302,15 @@ class FacturacionService
 			'id' => $cliente->id,
 			'abasto_id' => $cliente->abasto_id,
 			'porcentajelogistica' => $cliente->porcentajelogistica,
+			'empresa_id' => $data['empresa_id'] ?? $remito->empresa_id ?? null,
 		];
 
-		$conceptosTotales = $this->impuestoService->calculaImpuestoVenta($dataFactura, $datosCliente, $fechaFactura, false);
+		$conceptosTotales = $this->impuestoService->calculaImpuestoVenta(
+			$dataFactura,
+			$datosCliente,
+			$fechaFactura,
+			(bool) $this->flGrabaComprobanteDividido
+		);
 		$totalComprobante = $this->impuestoService->buscaValor($conceptosTotales, 'concepto', 'Total', 'importe');
 
 		if ($dataFactura === []) {
@@ -8296,6 +8399,23 @@ class FacturacionService
 		$this->numeroReservadoVillafrancaReparto101 = 0;
 		$this->facturandoDesdeRemitoId = (int) $remito->id;
 		$this->numeroremitoFijoDesdeRemito = (int) $remito->numero;
+
+		if (VillafrancaFacturacionSupport::esReparto101($remito)) {
+			$pv101 = VillafrancaFacturacionSupport::idPuntoVentaReparto101();
+			if ($pv101 <= 0) {
+				return [
+					'error' => 'Error punto de venta Villafranca',
+					'mensaje' => 'No está configurado el punto de venta Villafranca sucursal 1 para el reparto 101.',
+				];
+			}
+			$this->usaNumeradorVillafrancaPropio = true;
+			$this->flGrabaComprobanteDividido = true;
+			$this->flDivide = true;
+			$this->coeficienteCliente = 100.;
+			$this->coeficienteExtraCliente = VillafrancaFacturacionSupport::coeficienteReparto101();
+			$this->puntoVentaDivision_id = $pv101;
+			$data['puntoventa_id'] = $pv101;
+		}
 
 		$data['cliente_id'] = $cliente_id;
 		$data['remito_id'] = $remito->id;

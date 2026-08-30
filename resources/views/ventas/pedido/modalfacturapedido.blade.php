@@ -74,11 +74,11 @@
                         </div>
                         <div class="form-group row" id="actividad_arca">
                             <label for="recipient-name" class="col-lg-4 col-form-label requerido">Actividad</label>
-                            <input type="hidden" id="actividad_arcadefault_id" class="form-control" value="{{old('actividad_arcadefault_id', $data->puntoventas->actividad_arca_id ?? '')}}" />
+                            <input type="hidden" id="actividad_arcadefault_id" class="form-control" value="{{old('actividad_arcadefault_id', optional(optional($data ?? null)->puntoventas)->actividad_arca_id ?? '')}}" />
                             <select name="actividad_arca_id" id="actividad_arca_id" data-placeholder="Actividad ARCA" class="col-lg-6 form-control required" data-fouc>
                                 <option value="">-- Seleccionar Actividad ARCA --</option>
                                 @foreach($actividad_arca_query as $key => $value)
-                                    @if( (int) $value->id == (int) old('actividad_arca_id', $data->actividad_arca_id ?? ''))
+                                    @if( (int) $value->id == (int) old('actividad_arca_id', optional($data ?? null)->actividad_arca_id ?? ''))
                                         <option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
                                     @else
                                         <option value="{{ $value->id }}">{{ $value->nombre }}</option>    

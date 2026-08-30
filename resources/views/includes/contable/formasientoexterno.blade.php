@@ -182,7 +182,4 @@
     </div>
 </div>
 <input type="hidden" id="csrf_token" class="form-control" value="{{csrf_token()}}" />
-@once
-<script src="{{ asset('assets/pages/scripts/contable/asiento/montos_formato.js') }}" type="text/javascript"></script>
-@endonce
 

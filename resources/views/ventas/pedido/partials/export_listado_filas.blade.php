@@ -4,7 +4,7 @@
     $fechaEntrega = $pedido['fechaentrega'] ?? $pedido->fechaentrega ?? null;
 @endphp
 <tr>
-    <td>{{ $pedido['id'] ?? $pedido->id ?? '' }}</td>
+    <td>{{ App\Support\Ventas\PedidoListadoSupport::codigoParaListado($pedido) }}</td>
     <td>
         @if ($fecha)
             {{ date('d/m/Y', strtotime((string) $fecha)) }}

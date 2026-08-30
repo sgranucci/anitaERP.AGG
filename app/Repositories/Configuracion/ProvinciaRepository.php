@@ -3,6 +3,7 @@
 namespace App\Repositories\Configuracion;
 
 use App\Models\Configuracion\Provincia;
+use App\Support\Configuracion\ProvinciaListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use Auth;
@@ -33,6 +34,52 @@ class ProvinciaRepository implements ProvinciaRepositoryInterface
 
         return $this->model->with('paises:id,nombre')->with('provincia_tasaiibbs')
                     ->with('provincia_cuentacontableiibbs')->orderBy('nombre','ASC')->get();
+    }
+
+    /**
+     * @param  array<string, mixed>|string|null  $filtros
+     * @return \Illuminate\Contracts\Pagination\LengthAwarePaginator|\Illuminate\Support\Collection<int, Provincia>
+     */
+    public function leeProvincia($filtros, bool $paginar = false)
+    {
+        $hay_provincia = Provincia::first();
+        if (! $hay_provincia) {
+            self::sincronizarConAnita();
+        }
+
+        if (is_string($filtros)) {
+            $texto = trim($filtros);
+            $filtros = [
+                'modo' => ProvinciaListadoFiltros::MODO_TODOS,
+                'campo' => 'nombre',
+                'operador' => 'contiene',
+                'valor' => $texto,
+                'valor_hasta' => '',
+                'busqueda' => $texto,
+            ];
+        } elseif (! is_array($filtros)) {
+            $filtros = ProvinciaListadoFiltros::filtrosVacios();
+        }
+
+        $query = $this->model->newQuery()
+            ->select('provincia.*')
+            ->leftJoin('pais', 'pais.id', '=', 'provincia.pais_id')
+            ->with([
+                'paises:id,nombre',
+                'provincia_tasaiibbs',
+                'provincia_cuentacontableiibbs.empresas:id,nombre',
+                'provincia_cuentacontableiibbs.cuentacontables:id,codigo,nombre',
+            ]);
+
+        if (ProvinciaListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            ProvinciaListadoFiltros::aplicar($query, $filtros);
+        }
+
+        $query->orderBy('provincia.nombre', 'ASC');
+
+        return $paginar
+            ? $query->paginate(10)->appends(ProvinciaListadoFiltros::paraQueryString($filtros))
+            : $query->get();
     }
 
     public function create(array $data)

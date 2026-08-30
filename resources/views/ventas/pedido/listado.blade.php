@@ -72,7 +72,7 @@
     <table class="data">
         <thead>
             <tr>
-                <th style="width: 5%;">ID</th>
+                <th style="width: 8%;">Nº pedido</th>
                 <th style="width: 8%;">Fecha</th>
                 <th style="width: 9%;">Fecha entrega</th>
                 <th style="width: 28%;">Cliente</th>

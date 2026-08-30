@@ -27,6 +27,10 @@ function aplicarTransporteEnContexto($ctx, data) {
         $ctx.find('.transporte_id').first().val(data.id);
         $ctx.find('.codigotransporte').first().val(data.codigo);
         $ctx.find('.nombretransporte').first().val(data.nombre);
+        if ($ctx.find('#transporte_id').length && typeof window.actualizarAvisoDepositoFacturacion === 'function') {
+            window.actualizarAvisoDepositoFacturacion(data.id, { sincronizarCampo: true });
+        }
+        return;
     }
 
     $('#transporte_id').val(data.id);
@@ -42,6 +46,10 @@ function limpiarTransporteEnContexto($ctx) {
         $ctx.find('.transporte_id').first().val('');
         $ctx.find('.codigotransporte').first().val('');
         $ctx.find('.nombretransporte').first().val('');
+        if ($ctx.find('#transporte_id').length && typeof window.actualizarAvisoDepositoFacturacion === 'function') {
+            window.actualizarAvisoDepositoFacturacion(0, { sincronizarCampo: true });
+        }
+        return;
     }
 
     $('#transporte_id').val('');
@@ -52,8 +60,11 @@ function limpiarTransporteEnContexto($ctx) {
     }
 }
 
-function opcionesFocusTrasEnterTransporte() {
+function opcionesFocusTrasEnterTransporte($ctx) {
     var opts = {};
+    if ($ctx && $ctx.length && $ctx.closest('#tab-lugares-entrega, #cuotas-table').length) {
+        return opts;
+    }
     if ($('#codigozonavta').length) {
         opts.focusSiguiente = '#codigozonavta';
     } else if (window.FL_FACTURA_LAYOUT_PEDIDO) {
@@ -214,7 +225,7 @@ function manejarEnterCodigoTransporteCapture(e) {
     e.stopImmediatePropagation();
     var $input = $(target);
     var $ctx = $input.closest('.tm-transporte-campo');
-    resolverPorCodigoTransporte($input.val(), $ctx.length ? $ctx : null, opcionesFocusTrasEnterTransporte());
+    resolverPorCodigoTransporte($input.val(), $ctx.length ? $ctx : null, opcionesFocusTrasEnterTransporte($ctx));
 }
 
 if (!window.__transporteF1CaptureActivo) {
@@ -246,8 +257,8 @@ $(document).on('keyup', '#consultatransporte', function () {
 
 function activa_eventos_consultatransporte()
 {
-    // Consulta de transportes
-    $('.consultatransporte').off('click.transporte').on('click.transporte', function (event) {
+    $(document).off('click.transporte', '.consultatransporte').on('click.transporte', '.consultatransporte', function (event) {
+        event.preventDefault();
         ptrTransporteContext = $(this).closest('.tm-transporte-campo');
         if (!ptrTransporteContext.length) {
             ptrTransporteContext = null;
@@ -310,18 +321,19 @@ function activa_eventos_consultatransporte()
         e.preventDefault();
         e.stopPropagation();
         var $ctx = $(this).closest('.tm-transporte-campo');
-        resolverPorCodigoTransporte($(this).val(), $ctx.length ? $ctx : null, opcionesFocusTrasEnterTransporte());
+        resolverPorCodigoTransporte($(this).val(), $ctx.length ? $ctx : null, opcionesFocusTrasEnterTransporte($ctx));
     });
 
-    $('.codigotransporte').off('change.transporte blur.transporte').on('change.transporte blur.transporte', function (event) {
-        if (event.type === 'blur' && !$(this).closest('.tm-transporte-campo').length && this.id !== 'codigotransporte') {
-            return;
-        }
+    $(document).off('change.transporte blur.transporte', '.codigotransporte')
+        .on('change.transporte blur.transporte', '.codigotransporte', function (event) {
+            if (event.type === 'blur' && !$(this).closest('.tm-transporte-campo').length && this.id !== 'codigotransporte') {
+                return;
+            }
 
-        event.preventDefault();
-        var $ctx = $(this).closest('.tm-transporte-campo');
-        resolverPorCodigoTransporte($(this).val(), $ctx.length ? $ctx : null);
-    });
+            event.preventDefault();
+            var $ctx = $(this).closest('.tm-transporte-campo');
+            resolverPorCodigoTransporte($(this).val(), $ctx.length ? $ctx : null);
+        });
 
     // Consulta de transportes
     $('.consultadesdetransporte').off('click.transporteDesde').on('click.transporteDesde', function (event) {

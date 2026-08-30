@@ -63,11 +63,22 @@ window.impresionSesionFaltaImpresora = @json(! empty($sesion['faltante_impresora
                 </p>
                 <p class="text-muted small mb-3">{{ $sesion['motivo'] ?? '' }} — modo {{ $sesion['modo'] ?? 'OPERATIVO' }}</p>
                 @if (! empty($sesion['lote_venta_ids']))
+                    @php
+                        $loteSoloCopias = ! empty($sesion['solo_copias']);
+                        $lotePackCompleto = ! empty($sesion['lote_pack_completo']);
+                        $loteEjemploCopia = $loteSoloCopias
+                            ? 'Duplicado o Triplicado'
+                            : 'Triplicado';
+                    @endphp
                     <div class="alert alert-info py-2 mb-3">
                         Se van a usar
                         <strong>{{ (int) ($sesion['lote_cantidad'] ?? count($sesion['lote_venta_ids'])) }}</strong>
-                        comprobantes del filtro actual.
-                        Marcá la copia (por ejemplo Triplicado) y ejecutá: sale esa copia en todas las facturas del reparto.
+                        comprobantes del filtro actual{{ $loteSoloCopias ? ' (solo copias, sin original)' : '' }}.
+                        @if ($lotePackCompleto)
+                            Se imprimen todas las copias del programa (como al facturar pedido por pedido).
+                        @else
+                            Marcá la copia (por ejemplo {{ $loteEjemploCopia }}) y ejecutá: sale esa copia en todas las facturas del reparto.
+                        @endif
                     </div>
                 @endif
 

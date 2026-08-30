@@ -506,7 +506,7 @@ class ArticuloFerliController extends Controller
         } elseif ($type == 'contaduria') {
 
             $ctamae = Cuentacontable::orderBy('codigo')->get();
-            $codimp = Impuesto::all();
+            $codimp = Impuesto::soloNacionales()->orderBy('nombre')->get();
             $tarea_query = Tarea::all();
 
             $nofactura_enum = [

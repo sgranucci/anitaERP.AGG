@@ -43,8 +43,15 @@
         el.value = n === 0 && String(el.value).trim() === '' ? '' : String(n);
     }
 
+    function jqueryDisponible() {
+        return typeof window.jQuery !== 'undefined';
+    }
+
     function normalizarAntesDeEnviar(root) {
-        var scope = root ? $(root) : $(document);
+        if (!jqueryDisponible()) {
+            return;
+        }
+        var scope = root ? window.jQuery(root) : window.jQuery(document);
         scope.find(SELECTORES_MONTO).each(function () {
             if (this.value === '' || this.value == null) {
                 this.value = '';
@@ -55,7 +62,10 @@
     }
 
     function initEnContenedor(root) {
-        var scope = root ? $(root) : $(document);
+        if (!jqueryDisponible()) {
+            return;
+        }
+        var scope = root ? window.jQuery(root) : window.jQuery(document);
         scope.find(SELECTORES_MONTO).each(function () {
             formatearInput(this);
         });
@@ -63,8 +73,12 @@
 
     function bindEventos() {
         if (bindEventos._listo) {
-            return;
+            return true;
         }
+        if (!jqueryDisponible()) {
+            return false;
+        }
+        var $ = window.jQuery;
         bindEventos._listo = true;
 
         $(document).on('focus', SELECTORES_MONTO, function () {
@@ -81,9 +95,9 @@
                 normalizarAntesDeEnviar(this);
             }
         });
-    }
 
-    bindEventos();
+        return true;
+    }
 
     window.AsientoMontosFormato = {
         parseDecimal: parseDecimal,
@@ -92,6 +106,12 @@
         desformatearInput: desformatearInput,
         normalizarAntesDeEnviar: normalizarAntesDeEnviar,
         initEnContenedor: initEnContenedor,
+        bindEventos: bindEventos,
         selectoresMonto: SELECTORES_MONTO
     };
+
+    if (!bindEventos()) {
+        document.addEventListener('DOMContentLoaded', bindEventos);
+        window.addEventListener('load', bindEventos);
+    }
 })();

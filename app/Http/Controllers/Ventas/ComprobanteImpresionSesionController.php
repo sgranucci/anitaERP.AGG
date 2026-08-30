@@ -12,6 +12,9 @@ use App\Support\Ventas\ComprobanteImpresionFormulario;
 use App\Support\Ventas\ComprobanteImpresionSalidaUsuarioSupport;
 use App\Support\Ventas\ComprobanteImpresionSesionUrlSupport;
 use App\Support\Ventas\FacturaListadoFiltros;
+use App\Support\Ventas\PedidoListadoFiltros;
+use App\Support\Ventas\PedidoListadoSupport;
+use App\Queries\Ventas\PedidoQueryInterface;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
@@ -20,6 +23,7 @@ class ComprobanteImpresionSesionController extends Controller
     public function __construct(
         private ComprobanteImpresionSesionService $sesionService,
         private SalidaRepositoryInterface $salidaRepository,
+        private PedidoQueryInterface $pedidoQuery,
     ) {
         $this->middleware('auth');
     }
@@ -61,13 +65,52 @@ class ComprobanteImpresionSesionController extends Controller
             $sesion = $this->sesionService->armarDesdeRepartoPorFiltros(
                 $filtros,
                 $transporteId,
-                $this->modo($request)
+                $this->modo($request),
+                $request->boolean('solo_copias')
             );
         } catch (\InvalidArgumentException $e) {
             return redirect()
                 ->route('factura', FacturaListadoFiltros::paraQueryString($filtros))
                 ->with('errores', [$e->getMessage()]);
         }
+
+        return $this->mostrar($request, $sesion);
+    }
+
+    public function repartoPedidos(Request $request, int $transporteId)
+    {
+        can('listar-factura');
+
+        $filtros = PedidoListadoFiltros::resolverDesdeRequest($request);
+        $soloCopias = $request->boolean('solo_copias');
+        $packCompleto = $request->boolean('pack_completo');
+        $idsQuery = trim((string) $request->query('venta_ids', ''));
+        $ids = $idsQuery !== ''
+            ? array_values(array_filter(array_map('intval', explode(',', $idsQuery))))
+            : $this->pedidoQuery->ventaIdsIndexPorReparto($filtros, $transporteId);
+
+        $retornoQs = PedidoListadoFiltros::paraQueryString($filtros);
+        $retornoPath = (string) $request->query('retorno', PedidoListadoSupport::pathRetornoIndex($retornoQs));
+
+        try {
+            $sesion = $this->sesionService->armarDesdeReparto(
+                $ids,
+                $this->modo($request),
+                '',
+                $retornoQs,
+                $soloCopias,
+                $packCompleto
+            );
+        } catch (\InvalidArgumentException $e) {
+            return redirect()
+                ->to($retornoPath !== '' ? $retornoPath : route('pedido', $retornoQs))
+                ->with('errores', [$e->getMessage()]);
+        }
+
+        if ($retornoPath !== '') {
+            $sesion['retorno'] = $retornoPath;
+        }
+        $sesion['lote_origen'] = 'pedidos';
 
         return $this->mostrar($request, $sesion);
     }
@@ -197,6 +240,7 @@ class ComprobanteImpresionSesionController extends Controller
         $request->session()->put('comprobante_impresion_sesion', $sesion);
         $autoPdf = $request->boolean('pdf');
         $esLote = ($sesion['origen_tipo'] ?? '') === 'REPARTO';
+        $lotePackCompleto = ! empty($sesion['lote_pack_completo']);
         $enviarImpresora = $esLote ? true : $this->enviarImpresoraDesdeRequest($request);
         $forzarRegen = $request->boolean('auto')
             || $autoPdf
@@ -215,7 +259,7 @@ class ComprobanteImpresionSesionController extends Controller
             $request->session()->forget('comprobante_impresion_sesion_resultado');
         }
         $faltanteImpresora = ! empty($sesion['faltante_impresora_papel']);
-        $autoEjecutar = ! $esLote
+        $autoEjecutar = (! $esLote || $lotePackCompleto)
             && $request->boolean('auto')
             && $enviarImpresora
             && ! empty($sesion['pack'])
@@ -290,11 +334,25 @@ class ComprobanteImpresionSesionController extends Controller
 
         if (($sesion['origen_tipo'] ?? '') === 'REPARTO') {
             $retorno = is_array($sesion['lote_retorno'] ?? null) ? $sesion['lote_retorno'] : [];
+            $params = ['transporteId' => (int) ($sesion['origen_id'] ?? 0)] + $retorno;
+            if (! empty($sesion['retorno'])) {
+                $params['retorno'] = $sesion['retorno'];
+            }
+            if (! empty($sesion['solo_copias'])) {
+                $params['solo_copias'] = 1;
+            }
+            if (($sesion['lote_origen'] ?? '') === 'pedidos') {
+                if (! empty($sesion['lote_venta_ids']) && is_array($sesion['lote_venta_ids'])) {
+                    $params['venta_ids'] = implode(',', $sesion['lote_venta_ids']);
+                }
+                if (! empty($sesion['lote_pack_completo'])) {
+                    $params['pack_completo'] = 1;
+                }
 
-            return redirect()->route(
-                'sesion_impresion_reparto',
-                ['transporteId' => (int) ($sesion['origen_id'] ?? 0)] + $retorno
-            );
+                return redirect()->route('sesion_impresion_reparto_pedidos', $params);
+            }
+
+            return redirect()->route('sesion_impresion_reparto', $params);
         }
 
         if (($sesion['origen_tipo'] ?? '') === 'COT') {
@@ -408,7 +466,8 @@ class ComprobanteImpresionSesionController extends Controller
                 $ids,
                 $modo,
                 (string) ($sesionSesion['lote_etiqueta'] ?? ''),
-                is_array($sesionSesion['lote_retorno'] ?? null) ? $sesionSesion['lote_retorno'] : []
+                is_array($sesionSesion['lote_retorno'] ?? null) ? $sesionSesion['lote_retorno'] : [],
+                ! empty($sesionSesion['solo_copias']) || $request->boolean('solo_copias')
             );
             $request->session()->put('comprobante_impresion_sesion', $sesion);
 

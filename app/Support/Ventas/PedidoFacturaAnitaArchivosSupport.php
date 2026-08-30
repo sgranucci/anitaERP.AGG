@@ -156,6 +156,7 @@ final class PedidoFacturaAnitaArchivosSupport
         return array_values(array_filter([
             (int) config('facturacion.PUNTOVENTA_DIVISION_ID', 0),
             (int) config('facturacion.PUNTOVENTA_DIVISION_LOCAL_ID', 0),
+            VillafrancaFacturacionSupport::idPuntoVentaReparto101(),
         ]));
     }
 

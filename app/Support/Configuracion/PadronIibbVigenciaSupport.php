@@ -40,17 +40,20 @@ final class PadronIibbVigenciaSupport
     {
         $juris = [];
 
-        foreach (['agente_percepcion_iibb', 'agente_retencion_iibb'] as $clave) {
-            foreach (explode(',', (string) config('anita.' . $clave, '')) as $valor) {
-                $valor = trim($valor);
-                if ($valor !== '' && ctype_digit($valor)) {
-                    $juris[] = (int) $valor;
+        $juris = EmpresaJurisdiccionIibbSupport::jurisdiccionesAgente();
+
+        if ($juris === []) {
+            foreach (['agente_percepcion_iibb', 'agente_retencion_iibb'] as $clave) {
+                foreach (explode(',', (string) config('anita.' . $clave, '')) as $valor) {
+                    $valor = trim($valor);
+                    if ($valor !== '' && ctype_digit($valor)) {
+                        $juris[] = (int) $valor;
+                    }
                 }
             }
+            $juris = array_values(array_unique($juris));
+            sort($juris);
         }
-
-        $juris = array_values(array_unique($juris));
-        sort($juris);
 
         return $juris;
     }

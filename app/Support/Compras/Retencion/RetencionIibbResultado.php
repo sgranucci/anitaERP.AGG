@@ -9,6 +9,8 @@ final class RetencionIibbResultado
 {
     public const MOTIVO_NO_RETIENE = 'no_retiene';
 
+    public const MOTIVO_NO_AGENTE = 'no_agente';
+
     public const MOTIVO_SIN_TASA = 'sin_tasa';
 
     public const MOTIVO_BAJO_MINIMO_IMPONIBLE = 'bajo_minimo_imponible';

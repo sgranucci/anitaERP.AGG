@@ -4,6 +4,7 @@ namespace App\Services\Ventas;
 
 use App\Models\Stock\Articulo;
 use App\Models\Ventas\Cliente;
+use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Transporte;
 use App\Queries\Ventas\ClienteQueryInterface;
 use App\Queries\Ventas\PedidoQueryInterface;
@@ -362,6 +363,14 @@ class RemitoService
             $puntoventa = $this->puntoventaRepository->find($puntoventaId);
             if (! $puntoventa) {
                 return ['error' => 'Punto de venta de remito inexistente'];
+            }
+
+            $origen = (string) ($ctx['origen'] ?? 'factura');
+            if ($origen !== 'pedido') {
+                $errorTipo = $this->errorSiVentaNoAdmiteRemito($venta, (int) ($ctx['venta_id'] ?? 0));
+                if ($errorTipo !== null) {
+                    return $errorTipo;
+                }
             }
 
             $pedido = $ctx['pedido'] ?? null;
@@ -804,8 +813,38 @@ class RemitoService
         return $porSku;
     }
 
+    /**
+     * @return array{error: string}|null
+     */
+    private function errorSiVentaNoAdmiteRemito(mixed $venta, int $ventaIdFallback = 0): ?array
+    {
+        $tipoId = 0;
+        if (is_object($venta)) {
+            $tipoId = (int) ($venta->tipotransaccion_id ?? 0);
+        }
+        if ($tipoId <= 0 && $ventaIdFallback > 0) {
+            $ventaErp = $this->ventaRepository->find($ventaIdFallback);
+            $tipoId = (int) ($ventaErp?->tipotransaccion_id ?? 0);
+        }
+        if ($tipoId <= 0) {
+            return null;
+        }
+
+        $tipo = Tipotransaccion::query()->find($tipoId);
+        if ($tipo && ! $tipo->correspondeRemito()) {
+            return ['error' => 'El remito solo se genera con factura (FAC / FCE).'];
+        }
+
+        return null;
+    }
+
     public function marcarFacturado(int $remitoId, int $ventaId): void
     {
+        $errorTipo = $this->errorSiVentaNoAdmiteRemito(null, $ventaId);
+        if ($errorTipo !== null) {
+            throw new \RuntimeException($errorTipo['error']);
+        }
+
         $this->remitoRepository->update([
             'estadoremito' => \App\Support\Ventas\RemitoEstadosSupport::ESTADOREMITO_FACTURADO,
             'estado' => 'F',

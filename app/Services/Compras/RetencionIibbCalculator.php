@@ -11,12 +11,14 @@ use App\Services\Configuracion\IIBBService;
 use App\Support\Compras\Retencion\RetencionIibbCalculoSupport;
 use App\Support\Compras\Retencion\RetencionIibbInput;
 use App\Support\Compras\Retencion\RetencionIibbResultado;
+use App\Support\Configuracion\EmpresaJurisdiccionIibbSupport;
 
 /**
  * Fachada de retención IIBB.
  *
+ * Quién retiene: matriz empresa × jurisdicción (es_agente_retencion).
+ * Catálogo de alícuotas/mínimos: retencionIIBB (legado Anita).
  * Tasa: override del pago → padrón (tasaretencion) → fallback retencionIIBB_condicion.
- * Mínimos desde retencionIIBB_condicion (provincia × condición del proveedor).
  */
 class RetencionIibbCalculator
 {
@@ -33,6 +35,7 @@ class RetencionIibbCalculator
      * @param  float|null  $tasaOverride  Alícuota forzada en el pago
      * @param  int|null  $provinciaIdOverride  Provincia agente / del pago
      * @param  int|null  $condicionIibbIdOverride  Condición IIBB del pago/comprobante
+     * @param  int|null  $empresaId  Empresa del pago (sucursal / jurídica)
      */
     public function calcularParaProveedor(
         Proveedor $proveedor,
@@ -42,6 +45,7 @@ class RetencionIibbCalculator
         ?int $provinciaIdOverride = null,
         ?int $condicionIibbIdOverride = null,
         ?bool $retieneOverride = null,
+        ?int $empresaId = null,
     ): RetencionIibbResultado {
         $condicionId = $condicionIibbIdOverride ?? ($proveedor->condicionIIBB_id
             ? (int) $proveedor->condicionIIBB_id
@@ -67,16 +71,23 @@ class RetencionIibbCalculator
         $parametrica = null;
 
         if ($provinciaId === null) {
-            $parametrica = RetencionIIBB::query()
-                ->with(['retencionIIBB_condiciones', 'provincias'])
-                ->orderBy('id')
-                ->first();
-            $provinciaId = $parametrica?->provincia_id ? (int) $parametrica->provincia_id : null;
+            $parametrica = $this->resolverCatalogoAgente($empresaId);
+            $provinciaId = $parametrica?->provincia_id
+                ? (int) $parametrica->provincia_id
+                : (EmpresaJurisdiccionIibbSupport::provinciaIdsRetencion($empresaId)[0] ?? null);
         } else {
             $parametrica = RetencionIIBB::query()
                 ->with(['retencionIIBB_condiciones', 'provincias'])
                 ->where('provincia_id', $provinciaId)
                 ->first();
+        }
+
+        if (! EmpresaJurisdiccionIibbSupport::esAgenteRetencion($empresaId, $provinciaId)) {
+            return RetencionIibbResultado::noAplica(RetencionIibbResultado::MOTIVO_NO_AGENTE, [
+                'empresa_id' => $empresaId,
+                'provincia_id' => $provinciaId,
+                'condicion_iibb_id' => $condicionId,
+            ]);
         }
 
         $provincia = $provinciaId
@@ -129,6 +140,24 @@ class RetencionIibbCalculator
     public function calcular(RetencionIibbInput $input): RetencionIibbResultado
     {
         return $this->calculoSupport->calcular($input);
+    }
+
+    /**
+     * Catálogo Anita de la primera provincia donde la empresa es agente.
+     * Sin matriz (tabla vacía) → primera fila del catálogo, como antes.
+     */
+    private function resolverCatalogoAgente(?int $empresaId): ?RetencionIIBB
+    {
+        $query = RetencionIIBB::query()
+            ->with(['retencionIIBB_condiciones', 'provincias'])
+            ->orderBy('id');
+
+        $agenteIds = EmpresaJurisdiccionIibbSupport::provinciaIdsRetencion($empresaId);
+        if ($agenteIds !== []) {
+            $query->whereIn('provincia_id', $agenteIds);
+        }
+
+        return $query->first();
     }
 
     private function resolverFilaCondicion(?RetencionIIBB $parametrica, ?int $condicionId): ?RetencionIIBB_Condicion

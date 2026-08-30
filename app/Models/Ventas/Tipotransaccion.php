@@ -52,5 +52,20 @@ class Tipotransaccion extends Model
     {
         return ($this->operacion ?? '') === 'C';
     }
+
+    /**
+     * Remito ERP / Anita solo con factura de mercadería (FAC / FCE).
+     * NC y ND no generan ni heredan remito.
+     */
+    public function correspondeRemito(): bool
+    {
+        if ($this->esNotaCredito()) {
+            return false;
+        }
+
+        $abrev = strtoupper(trim((string) ($this->abreviatura ?? '')));
+
+        return in_array($abrev, ['FAC', 'FCE'], true);
+    }
 }
 

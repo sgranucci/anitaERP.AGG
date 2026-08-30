@@ -134,7 +134,7 @@ class PedidoListadoExport implements FromView, ShouldAutoSize, WithColumnFormatt
         }
 
         return [
-            'A' => 8,
+            'A' => 14,
             'B' => 12,
             'C' => 14,
             'D' => 35,

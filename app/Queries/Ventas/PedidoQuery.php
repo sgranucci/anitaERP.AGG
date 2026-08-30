@@ -9,6 +9,9 @@ use App\Models\Stock\Avioart;
 use Illuminate\Support\Collection;
 use App\Repositories\Ventas\VendedorRepositoryInterface;
 use App\Support\Ventas\PedidoListadoFiltros;
+use App\Support\Ventas\PedidoEstadoErpSupport;
+use App\Support\Ventas\PedidoFacturaAnitaArchivosSupport;
+use App\Support\Ventas\ClienteDespachoSupport;
 use DB;
 
 class PedidoQuery implements PedidoQueryInterface
@@ -82,7 +85,11 @@ class PedidoQuery implements PedidoQueryInterface
         ini_set('max_execution_time', '0');
 
         $query = $this->aplicarOrdenIndexPorReparto(
-            $this->queryPedidoIndexFiltros($filtros)->with('pedido_articulos')
+            $this->queryPedidoIndexFiltros($filtros)
+                ->with('pedido_articulos')
+                ->with(['ventas' => static function ($ventas): void {
+                    $ventas->select('id', 'pedido_id', 'codigo', 'puntoventa_id');
+                }])
         );
 
         return $flPaginando ? $query->paginate(10) : $query->get();
@@ -132,6 +139,123 @@ class PedidoQuery implements PedidoQueryInterface
     }
 
     /**
+     * Conteos de facturas visibles y pedidos facturables por reparto (mismos filtros del index).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return Collection<string, object>
+     */
+    public function accionesPedidoIndexPorReparto(array $filtros): Collection
+    {
+        $base = $this->queryPedidoIndexFiltros($filtros);
+        $idsDivision = PedidoFacturaAnitaArchivosSupport::idsPuntoVentaDivision();
+        $clienteDespachoId = ClienteDespachoSupport::circuitoHabilitado()
+            ? ClienteDespachoSupport::id()
+            : 0;
+
+        $ventas = (clone $base)
+            ->join('venta', 'venta.pedido_id', '=', 'pedido.id')
+            ->where('venta.codigo', 'like', 'FAC%')
+            ->when($idsDivision !== [], static function ($q) use ($idsDivision): void {
+                $q->whereNotIn('venta.puntoventa_id', $idsDivision);
+            })
+            ->select(
+                'pedido.transporte_id',
+                DB::raw('COUNT(DISTINCT venta.id) as cantidad_ventas')
+            )
+            ->groupBy('pedido.transporte_id')
+            ->get()
+            ->keyBy(static fn ($row) => (string) ((int) ($row->transporte_id ?? 0)));
+
+        $facturables = (clone $base)
+            ->join('pedido_articulo', 'pedido_articulo.pedido_id', '=', 'pedido.id')
+            ->where('pedido.estadopedido', 'Pendiente')
+            ->where('pedido.estado', '!=', PedidoEstadoErpSupport::TRANSFERIDO)
+            ->when($clienteDespachoId > 0, static function ($q) use ($clienteDespachoId): void {
+                $q->where('pedido.cliente_id', '!=', $clienteDespachoId);
+            })
+            ->where(function ($q): void {
+                $q->where('pedido_articulo.estado', PedidoEstadoErpSupport::PENDIENTE)
+                    ->orWhere('pedido_articulo.estado', '0');
+            })
+            ->where('pedido_articulo.pesada', '>', 0)
+            ->select(
+                'pedido.transporte_id',
+                DB::raw('COUNT(DISTINCT pedido.id) as cantidad_facturables'),
+                DB::raw('MIN(pedido.id) as pedido_id_desde'),
+                DB::raw('MAX(pedido.id) as pedido_id_hasta'),
+                DB::raw('MIN(pedido.codigo) as codigo_desde'),
+                DB::raw('MAX(pedido.codigo) as codigo_hasta')
+            )
+            ->groupBy('pedido.transporte_id')
+            ->get()
+            ->keyBy(static fn ($row) => (string) ((int) ($row->transporte_id ?? 0)));
+
+        $claves = $ventas->keys()->merge($facturables->keys())->unique();
+
+        return $claves->mapWithKeys(function ($clave) use ($ventas, $facturables) {
+            $v = $ventas->get($clave);
+            $f = $facturables->get($clave);
+
+            return [
+                (string) $clave => (object) [
+                    'transporte_id' => (int) $clave,
+                    'cantidad_ventas' => (int) ($v->cantidad_ventas ?? 0),
+                    'cantidad_facturables' => (int) ($f->cantidad_facturables ?? 0),
+                    'pedido_id_desde' => (int) ($f->pedido_id_desde ?? 0),
+                    'pedido_id_hasta' => (int) ($f->pedido_id_hasta ?? 0),
+                    'codigo_desde' => (string) ($f->codigo_desde ?? ''),
+                    'codigo_hasta' => (string) ($f->codigo_hasta ?? ''),
+                ],
+            ];
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<int>
+     */
+    public function ventaIdsIndexPorReparto(array $filtros, int $transporteId): array
+    {
+        $idsDivision = PedidoFacturaAnitaArchivosSupport::idsPuntoVentaDivision();
+
+        return $this->queryPedidoIndexFiltros($filtros)
+            ->join('venta', 'venta.pedido_id', '=', 'pedido.id')
+            ->where('pedido.transporte_id', $transporteId)
+            ->where('venta.codigo', 'like', 'FAC%')
+            ->when($idsDivision !== [], static function ($q) use ($idsDivision): void {
+                $q->whereNotIn('venta.puntoventa_id', $idsDivision);
+            })
+            ->orderBy('venta.id')
+            ->pluck('venta.id')
+            ->map(static fn ($id) => (int) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public function pedidosIndexPorReparto(array $filtros, int $transporteId)
+    {
+        $ids = $this->queryPedidoIndexFiltros($filtros)
+            ->where('pedido.transporte_id', $transporteId)
+            ->pluck('pedido.id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+
+        if ($ids === []) {
+            return $this->model->newQuery()->whereRaw('1 = 0')->get();
+        }
+
+        return $this->model->newQuery()
+            ->with(['pedido_articulos', 'clientes', 'transportes'])
+            ->whereIn('id', $ids)
+            ->orderBy('id')
+            ->get();
+    }
+
+    /**
      * @param  array<string, mixed>  $filtros
      */
     private function queryPedidoIndexFiltros(array $filtros)
@@ -145,6 +269,8 @@ class PedidoQuery implements PedidoQueryInterface
             'cliente.nombre as nombrecliente',
             'pedido.codigo as codigo',
             'pedido.estadopedido as estado',
+            'pedido.estado as estado_erp',
+            'pedido.cliente_id as cliente_id',
             'pedido.transporte_id as transporte_id',
             'transporte.nombre as nombretransporte',
             'transporte.codigo as codigotransporte',

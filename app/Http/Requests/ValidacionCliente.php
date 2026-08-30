@@ -38,6 +38,7 @@ class ValidacionCliente extends FormRequest
                 'descuento' => 'numeric|nullable|max:100',
                 'localidad_id' => ['integer', 'nullable'],
                 'provincia_id' => 'required',
+                'provincia_iibb_id' => ['nullable', 'integer', 'exists:provincia,id'],
                 'pais_id' => 'required',
                 'zonavta_id' => ['integer', 'nullable'],
                 'subzonavta_id' => ['integer', 'nullable'],
@@ -59,6 +60,7 @@ class ValidacionCliente extends FormRequest
                 'descuento' => 'numeric|nullable|max:100',
                 'localidad_id' => ['integer', 'nullable'],
                 'provincia_id' => 'required',
+                'provincia_iibb_id' => ['nullable', 'integer', 'exists:provincia,id'],
                 'pais_id' => 'required',
                 'zonavta_id' => ['integer', 'nullable'],
                 'subzonavta_id' => ['integer', 'nullable'],
@@ -89,6 +91,11 @@ class ValidacionCliente extends FormRequest
         );
         if ($localidadId !== null) {
             $this->merge(['localidad_id' => $localidadId]);
+        }
+
+        $provinciaIibb = $this->input('provincia_iibb_id');
+        if ($provinciaIibb === '' || $provinciaIibb === null || (int) $provinciaIibb <= 0) {
+            $this->merge(['provincia_iibb_id' => null]);
         }
     }
 }

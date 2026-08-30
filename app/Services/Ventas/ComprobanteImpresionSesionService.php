@@ -157,12 +157,13 @@ class ComprobanteImpresionSesionService
 
     /**
      * Sesión cabecera: una línea por copia de papel para imprimir N facturas del reparto.
+     * Con `$packCompleto` incluye NAS y dispara el pack entero (post facturación lote).
      *
      * @param  list<int>  $ventaIds
      * @param  array<string, mixed>  $retorno
      * @return array<string, mixed>
      */
-    public function armarDesdeReparto(array $ventaIds, string $modo = 'OPERATIVO', string $etiqueta = '', array $retorno = []): array
+    public function armarDesdeReparto(array $ventaIds, string $modo = 'OPERATIVO', string $etiqueta = '', array $retorno = [], bool $soloCopias = false, bool $packCompleto = false): array
     {
         $ventaIds = array_values(array_unique(array_filter(array_map('intval', $ventaIds))));
         if ($ventaIds === []) {
@@ -193,7 +194,7 @@ class ComprobanteImpresionSesionService
         $packCabecera = [];
         $vistos = [];
         foreach ($base['pack'] as $linea) {
-            if (ComprobanteImpresionPackSupport::esNas($linea)) {
+            if (! $packCompleto && ComprobanteImpresionPackSupport::esNas($linea)) {
                 continue;
             }
             $clave = strtoupper((string) ($linea['copia_codigo'] ?? ''));
@@ -202,6 +203,16 @@ class ComprobanteImpresionSesionService
             }
             $vistos[$clave] = true;
             $packCabecera[] = $linea;
+        }
+
+        if ($soloCopias) {
+            $packCabecera = array_values(array_filter(
+                $packCabecera,
+                static fn (array $linea): bool => ! ComprobanteImpresionPackSupport::esOriginal($linea)
+            ));
+            if ($packCabecera === []) {
+                throw new \InvalidArgumentException('No hay copias (sin original) configuradas para imprimir este reparto.');
+            }
         }
 
         $transporteId = (int) ($primera->transporte_id ?? 0);
@@ -218,6 +229,8 @@ class ComprobanteImpresionSesionService
         $base['lote_etiqueta'] = $etiqueta;
         $base['lote_cantidad'] = count($idsOk);
         $base['lote_retorno'] = $retorno;
+        $base['solo_copias'] = $soloCopias;
+        $base['lote_pack_completo'] = $packCompleto;
         $base['solo_formulario'] = ComprobanteImpresionFormulario::FACTURA;
         $base['pack'] = $this->aplicarImpresoraUsuarioAlPack($packCabecera);
         $base['faltante_impresora_papel'] = $this->packFaltaImpresoraPapel($base['pack']);
@@ -229,7 +242,11 @@ class ComprobanteImpresionSesionService
                 'fecha' => '',
             ],
         ];
-        $base['motivo'] = 'Impresión por reparto: elegí la copia y se envía a todas las facturas del filtro';
+        $base['motivo'] = $packCompleto
+            ? 'Impresión de todas las copias de las facturas emitidas del reparto (igual que al facturar pedido por pedido)'
+            : ($soloCopias
+                ? 'Impresión de copias del reparto (sin original): elegí la copia y se envía a todas las facturas del filtro'
+                : 'Impresión por reparto: elegí la copia y se envía a todas las facturas del filtro');
         $base['tiene_venta'] = false;
 
         return $base;
@@ -239,15 +256,20 @@ class ComprobanteImpresionSesionService
      * @param  array<string, mixed>  $filtros
      * @return array<string, mixed>
      */
-    public function armarDesdeRepartoPorFiltros(array $filtros, int $transporteId, string $modo = 'OPERATIVO'): array
+    public function armarDesdeRepartoPorFiltros(array $filtros, int $transporteId, string $modo = 'OPERATIVO', bool $soloCopias = false): array
     {
         $ids = $this->facturacionService->idsIndexPorReparto($filtros, $transporteId);
+        $retorno = FacturaListadoFiltros::paraQueryString($filtros);
+        if ($soloCopias) {
+            $retorno['solo_copias'] = 1;
+        }
 
         return $this->armarDesdeReparto(
             $ids,
             $modo,
             '',
-            FacturaListadoFiltros::paraQueryString($filtros)
+            $retorno,
+            $soloCopias
         );
     }
 
@@ -341,12 +363,12 @@ class ComprobanteImpresionSesionService
         $ventaIds = array_values(array_filter(array_map('intval', $sesion['lote_venta_ids'] ?? [])));
         $packCabecera = $sesion['pack'] ?? [];
         $idxs = $this->normalizarPackIdxs($soloPackIdxs, $packCabecera);
+        $packCompleto = ! empty($sesion['lote_pack_completo']);
         $codigos = [];
         foreach ($packCabecera as $idx => $linea) {
-            if ($idxs !== null && ! in_array((int) $idx, $idxs, true)) {
-                continue;
-            }
-            if ($soloCopia && $idxs !== null && ! in_array((int) $idx, $idxs, true)) {
+            $usarPorSeleccion = $idxs === null || in_array((int) $idx, $idxs, true);
+            $usarNasCompleto = $packCompleto && ComprobanteImpresionPackSupport::esNas($linea);
+            if (! $usarPorSeleccion && ! $usarNasCompleto) {
                 continue;
             }
             $codigos[] = strtoupper((string) ($linea['copia_codigo'] ?? ''));
@@ -364,7 +386,7 @@ class ComprobanteImpresionSesionService
                 }
                 $una = $this->armarDesdeVenta($venta, $modo, ComprobanteImpresionFormulario::FACTURA);
                 foreach ($una['pack'] as $linea) {
-                    if (ComprobanteImpresionPackSupport::esNas($linea)) {
+                    if (! $packCompleto && ComprobanteImpresionPackSupport::esNas($linea)) {
                         continue;
                     }
                     if (in_array(strtoupper((string) ($linea['copia_codigo'] ?? '')), $codigos, true)) {

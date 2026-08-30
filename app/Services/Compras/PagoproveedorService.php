@@ -282,6 +282,7 @@ class PagoproveedorService
             calcularIva: ! isset($data['calcular_iva']) || (bool) $data['calcular_iva'],
             calcularSuss: ! isset($data['calcular_suss']) || (bool) $data['calcular_suss'],
             calcularIibb: ! isset($data['calcular_iibb']) || (bool) $data['calcular_iibb'],
+            empresaId: (int) $pago->empresa_id ?: null,
         ));
 
         PagoproveedorRetencionPersistenciaSupport::reemplazarDesdeResultado(

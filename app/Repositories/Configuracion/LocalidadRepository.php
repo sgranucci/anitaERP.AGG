@@ -82,7 +82,7 @@ class LocalidadRepository implements LocalidadRepositoryInterface
 
     public function findPorCodigo($codigo)
     {
-        $localidad = $this->model->with('provincias:id,nombre')->where('codigo', $codigo)->first();
+        $localidad = $this->model->with('provincias:id,nombre,codigo,jurisdiccion')->where('codigo', $codigo)->first();
 
         return $localidad;
     }
@@ -167,16 +167,20 @@ class LocalidadRepository implements LocalidadRepositoryInterface
 		$count = count($columns);
         if (config('app.empresa') == "EL BIERZO")
         {
-		    $data = $this->model->select('localidad.id as id',
+		    $query = $this->model->select('localidad.id as id',
 									'localidad.nombre as nombre',
 									'localidad.codigopostal as codigopostal',
 									'localidad.codigo as codigo',
 									'localidad.provincia_id as provincia_id',
-                                    'provincia.nombre as nombreprovincia', 
+                                    'provincia.nombre as nombreprovincia',
+                                    'provincia.codigo as codigo_provincia',
+                                    'provincia.jurisdiccion as jurisdiccion_provincia',
                                     'localidad.codigosenasa as codigosenasa')
-                            ->leftjoin('provincia', 'provincia.id', 'localidad.provincia_id')
-                            ->where('localidad.provincia_id', $provincia_id)
-							->where(function ($query) use ($count, $consulta, $columns) {
+                            ->leftjoin('provincia', 'provincia.id', 'localidad.provincia_id');
+            if ($provincia_id) {
+                $query->where('localidad.provincia_id', $provincia_id);
+            }
+            $data = $query->where(function ($query) use ($count, $consulta, $columns) {
                         			for ($i = 0; $i < $count; $i++)
                                     {
                                         if ($columns[$i] != 'provincia.nombre')
@@ -187,15 +191,19 @@ class LocalidadRepository implements LocalidadRepositoryInterface
         }
         else
         {
-		    $data = $this->model->select('localidad.id as id',
+		    $query = $this->model->select('localidad.id as id',
 									'localidad.nombre as nombre',
 									'localidad.codigopostal as codigopostal',
 									'localidad.codigo as codigo',
 									'localidad.provincia_id as provincia_id',
-                                    'provincia.nombre as nombreprovincia')
-                            ->leftjoin('provincia', 'provincia.id', 'localidad.provincia_id')
-                            ->where('localidad.provincia_id', $provincia_id)
-							->where(function ($query) use ($count, $consulta, $columns) {
+                                    'provincia.nombre as nombreprovincia',
+                                    'provincia.codigo as codigo_provincia',
+                                    'provincia.jurisdiccion as jurisdiccion_provincia')
+                            ->leftjoin('provincia', 'provincia.id', 'localidad.provincia_id');
+            if ($provincia_id) {
+                $query->where('localidad.provincia_id', $provincia_id);
+            }
+            $data = $query->where(function ($query) use ($count, $consulta, $columns) {
                         			for ($i = 0; $i < $count; $i++)
                                     {
                                         if ($columns[$i] != 'provincia.nombre')
@@ -216,6 +224,8 @@ class LocalidadRepository implements LocalidadRepositoryInterface
                 $output['data'] .= '<tr>';
                 for ($i = 0; $i < $count; $i++)
                     $output['data'] .= '<td class="'.$columnsOut[$i].'">' . $row->{$columnsOut[$i]} . '</td>';	
+                $output['data'] .= '<td class="codigo_provincia d-none">' . ($row->codigo_provincia ?? '') . '</td>';
+                $output['data'] .= '<td class="jurisdiccion_provincia d-none">' . ($row->jurisdiccion_provincia ?? '') . '</td>';
                 $output['data'] .= '<td><a class="btn btn-warning btn-sm eligeconsultalocalidad">Elegir</a></td>';
                 $output['data'] .= '<td><a class="btn btn-warning btn-sm consultaunalocalidad">Consultar</a></td>';
                 $output['data'] .= '</tr>';

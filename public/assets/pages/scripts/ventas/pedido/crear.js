@@ -1078,6 +1078,10 @@
 	}
 
     $(function () {
+		if (window.pedidoModoIndexFacturacion) {
+			return;
+		}
+
 		initPedidoEnterNavigation();
 
 		var articulo_id;
@@ -1106,6 +1110,10 @@
 		var clienteIdInicial = $('#cliente_id').val();
 		if (clienteIdInicial && $.isNumeric(clienteIdInicial) && parseInt(clienteIdInicial, 10) > 0) {
 			completarCliente_Entrega(clienteIdInicial);
+		}
+
+		if (window.abrirFacturaPedidoAlCargar && typeof generaFactura === 'function') {
+			setTimeout(generaFactura, 500);
 		}
 	});
 
@@ -1503,6 +1511,10 @@
 	// Manejo de grilla 
 
     $(function () {
+		if (window.pedidoModoIndexFacturacion) {
+			return;
+		}
+
         $('#agrega_renglon').on('click', agregaRenglon);
         $(document).on('click', '.eliminar', borraRenglon);
         $(document).on('click', '.anulaitem', anulaItem);

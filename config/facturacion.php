@@ -66,7 +66,10 @@ switch(strtoupper(config('app.empresa')))
             "USA_DETRACCION" => 'N',
             "PUNTOVENTA_DIVISION_ID" => 5,
             "PUNTOVENTA_DIVISION_LOCAL_ID" => 6,
-            // Reparto 101: correlativo Anita Villafranca FAC A sucursal 1; se emite en PV 15.
+            // Reparto 101 (huérfana: remito Bierzo, sin FAC hermana): emite en PV 00001
+            // con el numerador Anita Villafranca FAC A sucursal 1.
+            "PUNTOVENTA_DIVISION_REPARTO_101_ID" => 9,
+            "PUNTOVENTA_DIVISION_REPARTO_101_CODIGO" => "00001",
             "VILLAFRANCA_NUMERADOR_SUCURSAL" => "1",
             "COEFICIENTE_EXTRA_REPARTO_101" => 1.10,
             "DECIMAL_KILO" => 2,

@@ -24,7 +24,8 @@
                 <div class="modal-body">
                     <p class="text-muted small mb-3">
                         Trae pedidos de Anita (<code>pendmae</code>/<code>pendmov</code>) a anitaERP
-                        por fecha de entrega y repartos. Crea los faltantes y actualiza los existentes.
+                        por fecha de entrega y repartos. Crea los faltantes y actualiza los existentes
+                        que aún no estén facturados.
                     </p>
                     <div class="form-group">
                         <label for="import_anita_fecha_entrega" class="requerido">Fecha de entrega</label>

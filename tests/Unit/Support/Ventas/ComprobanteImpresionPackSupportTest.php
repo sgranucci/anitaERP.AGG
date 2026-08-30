@@ -10,6 +10,30 @@ use PHPUnit\Framework\TestCase;
 
 final class ComprobanteImpresionPackSupportTest extends TestCase
 {
+    public function test_es_original_por_codigo_y_leyenda(): void
+    {
+        $this->assertTrue(ComprobanteImpresionPackSupport::esOriginal([
+            'copia_codigo' => 'ORI',
+            'leyenda' => 'ORIGINAL',
+        ]));
+        $this->assertTrue(ComprobanteImpresionPackSupport::esOriginal([
+            'copia_codigo' => 'original',
+            'leyenda' => '',
+        ]));
+        $this->assertTrue(ComprobanteImpresionPackSupport::esOriginal([
+            'copia_codigo' => 'X',
+            'leyenda' => 'Original',
+        ]));
+        $this->assertFalse(ComprobanteImpresionPackSupport::esOriginal([
+            'copia_codigo' => 'DUP',
+            'leyenda' => 'DUPLICADO',
+        ]));
+        $this->assertFalse(ComprobanteImpresionPackSupport::esOriginal([
+            'copia_codigo' => 'TRI',
+            'leyenda' => 'TRIPLICADO',
+        ]));
+    }
+
     public function test_nas_no_va_al_pdf_de_sesion(): void
     {
         $this->assertTrue(ComprobanteImpresionPackSupport::esNas([

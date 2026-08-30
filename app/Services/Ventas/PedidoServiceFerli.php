@@ -9,6 +9,9 @@ use App\Repositories\Ventas\Ordentrabajo_Combinacion_TalleRepositoryInterface;
 use App\Repositories\Ventas\Ordentrabajo_TareaRepositoryInterface;
 use App\Repositories\Ventas\OrdentrabajoRepositoryInterface;
 use App\Services\Configuracion\ImpuestoService;
+use App\Support\Ventas\PuntoventaEmpresaSupport;
+use App\Support\Ventas\ClienteProvinciaIibbSupport;
+use App\Models\Ventas\Cliente_Entrega;
 use App\Services\Stock\Articulo_MovimientoService;
 use App\Services\Stock\PrecioServiceFerli;
 use App\Queries\Ventas\PedidoQueryFerli;
@@ -692,12 +695,18 @@ class PedidoServiceFerli
 				}
 			}
 		}
-		// Arma datos del cliente
+		// Arma datos del cliente (empresa = sucursal de facturación del usuario)
+		$entregaPrefactura = null;
+		if ((int) ($pedido->cliente_entrega_id ?? 0) > 0) {
+			$entregaPrefactura = Cliente_Entrega::query()->find((int) $pedido->cliente_entrega_id);
+		}
 		$datosCliente = [ "condicioniva_id" => $cliente->condicioniva_id,
-						  "nroinscripcion" => $cliente->nroinscripcion,
+						  "numerodocumento" => $cliente->numerodocumento,
 						  "retieneiva" => $cliente->retieneiva,
-						  "condicioniibb" => $cliente->condicioniibb,
-						  "provincia" => $cliente->provincia_id,
+						  "condicioniibb_id" => $cliente->condicioniibb_id,
+						  "provincia" => ClienteProvinciaIibbSupport::idParaPercepcionAdmin($cliente, $entregaPrefactura),
+						  "id" => $cliente->id,
+						  "empresa_id" => PuntoventaEmpresaSupport::empresaIdDesdePreferenciaFacturacion(),
 						];
 		// Calcula impuestos
 		$conceptosTotales = $this->impuestoService->calculaImpuestoVenta($tblImpuesto, $datosCliente);

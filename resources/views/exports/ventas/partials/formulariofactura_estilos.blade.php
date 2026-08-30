@@ -25,6 +25,7 @@
     .factura-cabecera-comprobante { text-align: right; font-size: 16px; }
     .factura-cabecera-comprobante p { margin: 2px 0 0 0; font-size: 12px; }
     .factura-cabecera-letra { text-align: center; width: 80px; }
+    .factura-cabecera-letra-remito { width: 170px; }
     .factura-codigo-tipo { font-size: 11px; font-weight: bold; }
     .factura-bloque-cliente-admin td { font-size: 13px; padding: 2px 4px; }
     .factura-bloque-cliente-admin p { margin: 2px 0 0 0; line-height: 1.2; }
@@ -162,4 +163,24 @@
     table.factura-cabecera-admin thead th {
         border: none !important;
     }
+    .factura-remito-no-valido {
+        font-size: 13px;
+        font-weight: bold;
+        color: #1a1a1a;
+        margin: 8px 0 0 0;
+        line-height: 1.25;
+        text-align: center;
+    }
+    table.factura-remito-pie-grid {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 4px;
+    }
+    table.factura-remito-pie-grid > tbody > tr > td {
+        vertical-align: top;
+        padding: 0;
+        border: none;
+    }
+    .factura-remito-pie-izq { width: 52%; padding-right: 10px !important; }
+    .factura-remito-pie-der { width: 48%; }
 </style>

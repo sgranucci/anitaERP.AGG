@@ -549,10 +549,13 @@
 	}
 
 	function formateaMontoTotal(n) {
-		if (window.AsientoMontosFormato) {
+		if (window.AsientoMontosFormato && window.AsientoMontosFormato.fmt) {
 			return AsientoMontosFormato.fmt(n);
 		}
-		return Number(n || 0).toFixed(2);
+		return Number(n || 0).toLocaleString('es-AR', {
+			minimumFractionDigits: 2,
+			maximumFractionDigits: 2
+		});
 	}
 
 	function sumaMonto()

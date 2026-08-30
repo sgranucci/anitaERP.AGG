@@ -795,7 +795,7 @@ class ArticuloController extends Controller
         $referer = request()->headers->get('referer');
         $tipoimputacion_enum = Articulo_Cuentacontable::$enumTipoImputacion;
         $nofactura_enum = Articulo_Estado::$enumNoFactura;
-        $codimp = Impuesto::all();
+        $codimp = Impuesto::soloNacionales()->orderBy('nombre')->get();
         $estado_enum = Articulo_Estado::$enumEstado;
         $tipoproducto_query = Tipoproducto::orderBy('nombre')->get();
         $capacidad_query = (config('app.empresa') === 'FRASLE')
@@ -931,7 +931,7 @@ class ArticuloController extends Controller
         $linea = Linea::orderBy('nombre')->get();
         $usosArticulos = Usoarticulo::all();
         $tiposArticulos = Tipoarticulo::all();
-        $codimp = Impuesto::all();
+        $codimp = Impuesto::soloNacionales()->orderBy('nombre')->get();
         $deposito_query = Depmae::query()->paraUsuarioAutorizado()->orderByRaw(SqlDialectSupport::ordenCodigoAsc('codigo'))->get();
         $oficinacompra_query = $this->oficinacompraRepository->all();
         $periodicidadcompra_query = $this->periodicidadcompraRepository->all();

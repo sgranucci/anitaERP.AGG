@@ -110,6 +110,7 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
 			);
 
 			$provincias_id = $data['provincias_id'];
+			$provincias_iibb_id = $data['provincias_iibb_id'] ?? [];
 			$codigospostales = $data['codigospostales'];
 			$transportes_id = $data['transportes_id'];
 			$zonavtas_id = $data['zonavtas_id'] ?? [];
@@ -153,6 +154,10 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
 									'domicilio' => $domicilios[$i],
 									'localidad_id' => $localidades_id[$i],
 									'provincia_id' => $provincias_id[$i],
+									'provincia_iibb_id' => $this->provinciaIibbIdDesdeFormulario(
+										$provincias_iibb_id[$i] ?? null,
+										$cliente
+									),
 									'pais_id' => $pais_id,
 									'codigopostal' => $codigospostales[$i],
 									'zonavta_id' => ! empty($zonavtas_id[$i]) ? $zonavtas_id[$i] : null,
@@ -189,6 +194,10 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
 									'domicilio' => $domicilios[$i_entrega],
 									'localidad_id' => $localidades_id[$i_entrega],
 									'provincia_id' => $provincias_id[$i_entrega],
+									'provincia_iibb_id' => $this->provinciaIibbIdDesdeFormulario(
+										$provincias_iibb_id[$i_entrega] ?? null,
+										$cliente
+									),
 									'pais_id' => $pais_id,
 									'codigopostal' => $codigospostales[$i_entrega],
 									'zonavta_id' => ! empty($zonavtas_id[$i_entrega]) ? $zonavtas_id[$i_entrega] : null,
@@ -293,6 +302,7 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
             'domicilio' => $data->entc_direccion,
             'localidad_id' => $localidad_id,
             'provincia_id' => $provincia_id,
+            'provincia_iibb_id' => $Cliente->provincia_iibb_id ?: null,
             'pais_id' => $pais_id,
             'codigopostal' => $data->entc_cod_postal,
             'zonavta_id' => $Cliente->zonavta_id,
@@ -307,8 +317,28 @@ class Cliente_EntregaRepository implements Cliente_EntregaRepositoryInterface
         if ($fl_crea_registro && ! $existe) {
             $this->model->create($arr_campos);
         } elseif ($existe) {
-            $this->model->where('cliente_id', $Cliente->id)->where('codigo', $codigoLinea)->update($arr_campos);
+            $update = $arr_campos;
+            unset($update['provincia_iibb_id']);
+            $this->model->where('cliente_id', $Cliente->id)->where('codigo', $codigoLinea)->update($update);
+            $this->model->where('cliente_id', $Cliente->id)
+                ->where('codigo', $codigoLinea)
+                ->where(function ($q) {
+                    $q->whereNull('provincia_iibb_id')->orWhere('provincia_iibb_id', 0);
+                })
+                ->update(['provincia_iibb_id' => $Cliente->provincia_iibb_id ?: null]);
         }
+    }
+
+    private function provinciaIibbIdDesdeFormulario(mixed $enviado, ?Cliente $cliente): ?int
+    {
+        $id = (int) ($enviado ?? 0);
+        if ($id > 0) {
+            return $id;
+        }
+
+        $sedeCliente = (int) ($cliente->provincia_iibb_id ?? 0);
+
+        return $sedeCliente > 0 ? $sedeCliente : null;
     }
 
     /**

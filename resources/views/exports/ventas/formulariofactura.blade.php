@@ -68,6 +68,16 @@
         $venta->remitos?->remito_articulos,
         $itemsFactura
     );
+    $leyendasRemito = \App\Support\Ventas\RemitoFormularioLeyendaSupport::desdeVenta($venta);
+    $totalKilosRemito = (float) ($totalesDocumento['cantidad'] ?? 0);
+    $totalBultosRemito = (float) ($venta->cantidadbulto ?? 0);
+    $totalPiezasRemito = 0.0;
+    foreach ($itemsFactura as $itRemitoTot) {
+        $totalPiezasRemito += (float) ($itRemitoTot['pieza'] ?? 0);
+        if ((float) ($venta->cantidadbulto ?? 0) <= 0.00001) {
+            $totalBultosRemito += (float) ($itRemitoTot['caja'] ?? 0);
+        }
+    }
 @endphp
 <div id="area-pdf">
     @if ($mostrarHojaFactura)
@@ -109,6 +119,8 @@
                     'mostrarBonificacion' => false,
                     'mostrarTotalesFila' => $esUltima,
                     'totalesDocumento' => $totalesDocumento,
+                    'esRemitoHoja' => true,
+                    'totalPiezasRemito' => $totalPiezasRemito,
                 ])
                 @if ($esUltima)
                     @include('exports.ventas.partials.formulariofactura_pie_remito')

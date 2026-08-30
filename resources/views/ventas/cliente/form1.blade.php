@@ -91,39 +91,22 @@
 					</select>
 				</div>
 			</div>
-			<div class="form-group row" id="prov">
-				<label for="provincia_id" class="col-lg-4 control-label text-right pr-2 requerido">Provincia</label>
-				<div class="col-lg-8">
-					<select name="provincia_id" id="provincia_id" data-placeholder="Provincia" class="form-control" required data-fouc>
-						<option value="">-- Seleccionar --</option>
-						@foreach($provincia_query as $key => $value)
-							<option value="{{ $value->id }}" {{ (int) $value->id === (int) old('provincia_id', $data->provincia_id ?? '') ? 'selected' : '' }}>{{ $value->nombre }}</option>
-						@endforeach
-					</select>
-					<input type="hidden" id="desc_provincia" name="desc_provincia" value="{{old('desc_provincia', $data->desc_provincia ?? '')}}" >
-				</div>
-			</div>
+			@include('configuracion.partials.campo_consulta_provincia', [
+				'provinciaId' => optional($data ?? null)->provincia_id ?? '',
+				'codigo' => optional(optional($data ?? null)->provincias)->codigo ?? '',
+				'nombre' => optional(optional($data ?? null)->provincias)->nombre ?? (optional($data ?? null)->desc_provincia ?? ''),
+				'jurisdiccion' => optional(optional($data ?? null)->provincias)->jurisdiccion ?? '',
+				'requerido' => true,
+				'descName' => 'desc_provincia',
+			])
 		</div>
 		<div class="col-lg-6">
-			<div class="form-group row" id="loc">
-				<label for="codigolocalidad" class="col-lg-4 control-label text-right pr-2">Localidad</label>
-				<div class="col-lg-8">
-					<input type="hidden" id="localidad_id_previa" name="localidad_id_previa" value="{{old('localidad_id', $data->localidad_id ?? '')}}" >
-					<input type="hidden" id="desc_localidad" name="desc_localidad" value="{{old('desc_localidad', $data->desc_localidad ?? '')}}" >
-					<input type="hidden" class="localidad_id" id="localidad_id" name="localidad_id" value="{{ old('localidad_id', $data->localidad_id ?? '') }}" >
-					<div class="d-flex flex-nowrap align-items-center w-100" style="gap: 4px;">
-						<button type="button" title="Consulta localidades (F1)" class="btn-accion-tabla consultalocalidad tooltipsC flex-shrink-0">
-							<i class="fa fa-search text-primary"></i>
-						</button>
-						<input type="text" class="form-control codigolocalidad flex-shrink-0" id="codigolocalidad" name="codigolocalidad"
-							value="{{ old('codigolocalidad', $data->localidades->codigo ?? '') }}"
-							placeholder="C&oacute;d." autocomplete="off" style="width: 5.5rem;">
-						<input type="text" class="form-control nombrelocalidad" id="nombrelocalidad" name="nombrelocalidad"
-							value="{{ old('nombrelocalidad', $data->localidades->nombre ?? '') }}"
-							placeholder="Descripci&oacute;n" readonly style="min-width: 0; flex: 1 1 auto;">
-					</div>
-				</div>
-			</div>
+			@include('configuracion.partials.campo_consulta_localidad', [
+				'localidadId' => optional($data ?? null)->localidad_id ?? '',
+				'codigo' => optional(optional($data ?? null)->localidades)->codigo ?? '',
+				'nombre' => optional(optional($data ?? null)->localidades)->nombre ?? (optional($data ?? null)->desc_localidad ?? ''),
+				'provinciaSource' => '#provincia_id',
+			])
 			<div class="form-group row">
 				<label for="codigopostal" class="col-lg-4 control-label text-right pr-2">C&oacute;digo postal</label>
 				<div class="col-lg-8">
@@ -159,4 +142,5 @@
 	<input type="hidden" name="idRemoto" value="{{$idRemoto ?? ''}}" >
 	<input type="hidden" id="cliente_id" value="{{$data->id ?? ''}}" >
 </div>
+@include('includes.configuracion.modalconsultaprovincia')
 @include('includes.configuracion.modalconsultalocalidad')

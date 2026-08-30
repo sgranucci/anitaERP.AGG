@@ -11,10 +11,12 @@ use App\Models\Ventas\Pedido_Articulo_Caja;
 use App\Models\Ventas\Transporte;
 use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Zonavta;
+use App\Models\Ventas\Venta;
 use App\Support\Ventas\ClienteDespachoSupport;
 use App\Support\Ventas\KiloPedidoListadoFiltros;
 use App\Support\Ventas\PedidoDespachoAnitaCierreSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
+use App\Support\Ventas\PedidoFacturacionExclusivaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
@@ -62,8 +64,12 @@ class PedidoImportarDesdeAnitaService
 
         $existentes = Pedido::query()
             ->whereIn('codigo', $codigos)
-            ->pluck('id', 'codigo')
-            ->all();
+            ->get(['id', 'codigo', 'estado', 'estadopedido'])
+            ->keyBy('codigo');
+
+        $idsConFactura = $this->idsConFacturaEmitida(
+            $existentes->pluck('id')->map(static fn ($id) => (int) $id)->all()
+        );
 
         $clientesCache = [];
         $out = [];
@@ -72,8 +78,17 @@ class PedidoImportarDesdeAnitaService
             $codigo = $this->codigoErpDesdeCabecera($cab);
             $codigoCliente = ltrim(trim((string) ($cab->penm_cliente ?? '')), '0');
             $nombreCliente = $this->nombreCliente($codigoCliente, $clientesCache);
-            $existe = array_key_exists($codigo, $existentes);
+            $existente = $existentes->get($codigo);
+            $existe = $existente !== null;
             $esDespacho = ClienteDespachoSupport::esCodigoAnita($codigoCliente);
+            $estadoErp = 'nuevo';
+            if ($esDespacho) {
+                $estadoErp = 'omitido_despacho';
+            } elseif ($existe && $this->motivoOmitirReimport($existente, $idsConFactura) !== null) {
+                $estadoErp = 'omitido_facturado';
+            } elseif ($existe) {
+                $estadoErp = 'existe';
+            }
 
             $out[] = [
                 'codigo' => $codigo,
@@ -87,8 +102,8 @@ class PedidoImportarDesdeAnitaService
                 'reparto' => (string) (int) ($cab->penm_expreso ?? 0),
                 'estado_anita' => trim((string) ($cab->penm_estado ?? '')),
                 'leyenda' => trim((string) ($cab->penm_leyenda ?? '')),
-                'estado_erp' => $esDespacho ? 'omitido_despacho' : ($existe ? 'existe' : 'nuevo'),
-                'pedido_id' => $existe ? (int) $existentes[$codigo] : null,
+                'estado_erp' => $estadoErp,
+                'pedido_id' => $existe ? (int) $existente->id : null,
             ];
         }
 
@@ -100,6 +115,7 @@ class PedidoImportarDesdeAnitaService
      * @return array{
      *   creados: int,
      *   actualizados: int,
+     *   omitidos: int,
      *   cerrados: int,
      *   errores: int,
      *   total: int,
@@ -119,6 +135,7 @@ class PedidoImportarDesdeAnitaService
         $resumen = [
             'creados' => 0,
             'actualizados' => 0,
+            'omitidos' => 0,
             'cerrados' => 0,
             'errores' => 0,
             'total' => count($cabeceras),
@@ -133,6 +150,8 @@ class PedidoImportarDesdeAnitaService
                     $resumen['creados']++;
                 } elseif ($resultado['estado'] === 'actualizado') {
                     $resumen['actualizados']++;
+                } elseif ($resultado['estado'] === 'omitido') {
+                    $resumen['omitidos']++;
                 } elseif ($resultado['estado'] === 'cerrado') {
                     $resumen['cerrados']++;
                 } else {
@@ -202,6 +221,18 @@ class PedidoImportarDesdeAnitaService
             ];
         }
 
+        $pedidoExistente = Pedido::query()->where('codigo', $codigo)->first();
+        if ($pedidoExistente) {
+            $motivo = $this->motivoOmitirReimport($pedidoExistente);
+            if ($motivo !== null) {
+                return [
+                    'estado' => 'omitido',
+                    'mensaje' => $motivo,
+                    'pedido_id' => (int) $pedidoExistente->id,
+                ];
+            }
+        }
+
         $condicionventaId = (int) ($cab->penm_cond_vta ?? 0);
         if ($condicionventaId === 0) {
             $condicionventaId = 1;
@@ -225,8 +256,8 @@ class PedidoImportarDesdeAnitaService
 
         $zonavtaId = $this->resolverZonavtaId($cab->penm_zonavta ?? null);
 
-        // Anita ya tiene muchos PED facturados (penm_estado=3/'F'). En pruebas ERP
-        // se importan siempre como pendientes para poder pesada/facturar acá.
+        // Pedidos nuevos (o pendientes sin factura) entran como pendientes para pesada/facturar en ERP.
+        // Los que ya tienen FAC / Facturado / Transferido / Anulado no llegan acá.
         $mapeoEstado = PedidoEstadoErpSupport::cabeceraPendiente();
 
         $campos = [
@@ -463,6 +494,59 @@ class PedidoImportarDesdeAnitaService
         });
 
         return $rows;
+    }
+
+    /**
+     * No reescribir un pedido que el ERP ya procesó (factura, transferido o anulado).
+     *
+     * @param  array<int, true>|null  $idsConFactura  mapa pedido_id => true; null consulta la venta
+     */
+    private function motivoOmitirReimport(Pedido $pedido, ?array $idsConFactura = null): ?string
+    {
+        $estado = PedidoEstadoErpSupport::normalizarEstadoCabecera(
+            $pedido->estado ?? null,
+            $pedido->estadopedido ?? null
+        );
+        if ($estado === PedidoEstadoErpSupport::FACTURADO) {
+            return 'Ya está facturado en ERP; no se pisa.';
+        }
+        if ($estado === PedidoEstadoErpSupport::TRANSFERIDO) {
+            return 'Ya fue transferido al despacho; no se pisa.';
+        }
+        if ($estado === PedidoEstadoErpSupport::ANULADO) {
+            return 'Está anulado en ERP; no se pisa.';
+        }
+
+        $pedidoId = (int) $pedido->id;
+        $tieneFactura = $idsConFactura === null
+            ? PedidoFacturacionExclusivaSupport::tieneFacturaEmitida($pedidoId)
+            : isset($idsConFactura[$pedidoId]);
+        if ($tieneFactura) {
+            return 'Ya tiene factura en ERP; no se pisa.';
+        }
+
+        return null;
+    }
+
+    /**
+     * @param  list<int>  $pedidoIds
+     * @return array<int, true>
+     */
+    private function idsConFacturaEmitida(array $pedidoIds): array
+    {
+        if ($pedidoIds === []) {
+            return [];
+        }
+
+        $ids = Venta::query()
+            ->whereIn('pedido_id', $pedidoIds)
+            ->where('codigo', 'like', 'FAC%')
+            ->distinct()
+            ->pluck('pedido_id')
+            ->map(static fn ($id) => (int) $id)
+            ->all();
+
+        return array_fill_keys($ids, true);
     }
 
     private function codigoErpDesdeCabecera(object $cab): string

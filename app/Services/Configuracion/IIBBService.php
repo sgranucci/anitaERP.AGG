@@ -9,6 +9,8 @@ use App\Repositories\Configuracion\Padron_Iibb_CabaRepositoryInterface;
 use App\Repositories\Configuracion\Padron_Coeficiente_TucumanRepositoryInterface;
 use App\Repositories\Configuracion\CondicionIIBBRepositoryInterface;
 use App\Repositories\Configuracion\ProvinciaRepositoryInterface;
+use App\Support\Configuracion\EmpresaJurisdiccionIibbSupport;
+use App\Support\Configuracion\PercepcionIibbAlicuotaSupport;
 use App\Support\Configuracion\PercepcionIibbJurisdiccionEntregaSupport;
 use App\Support\Ventas\ClienteExclusionPercepcionSupport;
 use App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport;
@@ -179,7 +181,7 @@ class IIBBService
 
 	// Calcula percepciones de ingresos brutos para ventas
 
-	public function calculaPercepcionIIBB($totalNeto, $numeroDocumento, $condicioniibb_id, $provincia_id, $cm05, $fechaFactura, $cliente_id = null, bool $forzarCaba = false)
+	public function calculaPercepcionIIBB($totalNeto, $numeroDocumento, $condicioniibb_id, $provincia_id, $cm05, $fechaFactura, $cliente_id = null, bool $forzarCaba = false, ?int $empresaId = null)
 	{
 		$percepcionesIIBB = [];
 
@@ -188,12 +190,20 @@ class IIBBService
 			: null;
 
 		$forzarCaba = $forzarCaba && ElBierzoFacturaBPercepcionCabaSupport::aplicaEnEntorno();
+		$esNoRetiene = $condicioniibb
+			&& $condicioniibb->formacalculo === 'N'
+			&& $condicioniibb->estado === 'A';
+		// Anita: PERC_NO_RETIENE + padrón CABA → PERC_CAPITAL. Lo mismo en BA si hay ARBA.
 		$puedeCalcular = $forzarCaba
-			|| ($condicioniibb && $condicioniibb->formacalculo != 'N' && $condicioniibb->estado == 'A');
+			|| ($condicioniibb && $condicioniibb->formacalculo != 'N' && $condicioniibb->estado == 'A')
+			|| $esNoRetiene;
 
 		if ($puedeCalcular)
 		{
-			$jurisdiccionesPercepcion = array_values(array_filter(array_map('trim', explode(',', (string) config('anita.agente_percepcion_iibb', '')))));
+			$jurisdiccionesPercepcion = array_map(
+				'strval',
+				EmpresaJurisdiccionIibbSupport::jurisdiccionesPercepcion($empresaId)
+			);
 			if ($forzarCaba) {
 				$jurisdiccionesPercepcion = [(string) ElBierzoFacturaBPercepcionCabaSupport::JURISDICCION];
 			}
@@ -221,6 +231,9 @@ class IIBBService
 			{
 				$jurisdiccionActual = (int) $jurisdiccionesPercepcion[$i];
 				if (! PercepcionIibbJurisdiccionEntregaSupport::corresponde($jurisdiccionActual, $jurisdiccionCliente)) {
+					continue;
+				}
+				if ($esNoRetiene && ! PercepcionIibbJurisdiccionEntregaSupport::esCabaOBuenosAires($jurisdiccionActual)) {
 					continue;
 				}
 
@@ -295,6 +308,8 @@ class IIBBService
 						$tasa = 0.;
 						if ($tasaPadron !== null)
 							$tasa = $tasaPadron;
+						elseif ($esNoRetiene)
+							continue;
 						else
 						{
 							// Si el cliente esta en la jurisdiccion y no leyo padron asume tasa de descarte
@@ -310,6 +325,13 @@ class IIBBService
 						);
 						if ($tasaExclusion !== null)
 							$tasa = $tasaExclusion;
+
+						$tasa = PercepcionIibbAlicuotaSupport::aplicarPoliticaTucumanAnita(
+							(int) $jurisdiccionesPercepcion[$i],
+							$registroPadron,
+							(float) $tasa
+						);
+						$tasa = PercepcionIibbAlicuotaSupport::aplicarTope((float) $tasa, $provincia);
 
 						if ($tasa <= 0.00001)
 							continue;

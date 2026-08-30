@@ -1,57 +1,77 @@
-<div class="card form2" style="display: none">
-    <div class="card-body">
-    	<table class="table" id="tasaiibb-table">
-    		<thead>
-    			<tr>
-					<th>Condición IIBB</th=>
-    				<th>Tasa</th=>
-                    <th>Mínimo Neto</th=>
-                    <th>Mínimo Percepción</th>
-    			</tr>
-    		</thead>
-    		<tbody id="tbody-tasaiibb-table">
-		 		@if ($data->provincia_tasaiibbs ?? '') 
-				@if (count($data->provincia_tasaiibbs) > 0)
-					@foreach (old('tasa', $data->provincia_tasaiibbs->count() ? $data->provincia_tasaiibbs : ['']) as $tasa)
-            			<tr class="item-tasaiibb">
-							<td>
-								<select name="condicioniibb_ids[]" data-placeholder="Condicion IIBB" class="condicioniibb_id form-control" data-fouc>
-									<option value="">-- Seleccionar --</option>
-									@foreach($condicioniibb_query as $value)
-										@if( (int) $value->id == (int) old('condicioniibb_ids[]', $tasa->condicioniibb_id ?? ''))
-											<option value="{{ $value->id }}" selected="select">{{ $value->nombre }}</option>    
-										@else
-											<option value="{{ $value->id }}">{{ $value->nombre }}</option>    
-										@endif
-									@endforeach
-								</select>
-							</td>
+@php
+    $tasasForm = [];
+    $oldCondiciones = old('condicioniibb_ids');
+    if (is_array($oldCondiciones)) {
+        $n = count($oldCondiciones);
+        for ($i = 0; $i < $n; $i++) {
+            $tasasForm[] = (object) [
+                'condicioniibb_id' => old('condicioniibb_ids.'.$i),
+                'tasa' => old('tasas.'.$i),
+                'minimoneto' => old('minimonetos.'.$i),
+                'minimopercepcion' => old('minimopercepciones.'.$i),
+                'creousuario_id' => old('creousuario_tasa_ids.'.$i),
+            ];
+        }
+    } else {
+        $tasasForm = ($data->provincia_tasaiibbs ?? collect())->all();
+    }
+@endphp
+<div class="card card-outline card-info mb-0">
+    <div class="card-header py-2">
+        <strong>Tasas por condición IIBB</strong>
+    </div>
+    <div class="card-body p-2">
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-2" id="tasaiibb-table">
+                <thead style="background:#85C1E9;color:#17202A;">
+                    <tr>
+                        <th>Condición IIBB</th>
+                        <th>Tasa</th>
+                        <th>Mínimo Neto</th>
+                        <th>Mínimo Percepción</th>
+                        <th class="text-center" style="width: 3rem;"></th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-tasaiibb-table">
+                    @foreach ($tasasForm as $tasa)
+                        <tr class="item-tasaiibb">
                             <td>
-                                <input type="number" name="tasas[]" min="0" max="100" value="{{old('tasas.' . $loop->index, $tasa->tasa ?? '')}}" class="form-control tasa" placeholder="Tasa de percepción por defecto">
+                                <select name="condicioniibb_ids[]" data-placeholder="Condición IIBB" class="condicioniibb_id form-control" data-fouc>
+                                    <option value="">-- Seleccionar --</option>
+                                    @foreach($condicioniibb_query as $value)
+                                        <option value="{{ $value->id }}"
+                                            @if ((int) $value->id === (int) ($tasa->condicioniibb_id ?? 0))
+                                                selected
+                                            @endif
+                                        >{{ $value->nombre }}</option>
+                                    @endforeach
+                                </select>
                             </td>
                             <td>
-                                <input type="number" name="minimonetos[]" value="{{old('minimonetos.' . $loop->index, $tasa->minimoneto ?? '')}}" class="form-control minimoneto" placeholder="Mínimo Neto sujeto a Percepión">
-                            </td>   
+                                <input type="number" name="tasas[]" min="0" max="100" step="0.01" value="{{ $tasa->tasa ?? '' }}" class="form-control tasa" placeholder="Tasa de percepción por defecto">
+                            </td>
                             <td>
-                                <input type="number" name="minimopercepciones[]" value="{{old('minimopercepciones.' . $loop->index, $tasa->minimopercepcion ?? '')}}" class="form-control minimopercepcion" placeholder="Monto Mínimo de Percepión">
-                            </td>                                                        
-                			<td>
-								<button type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_tasaiibb tooltipsC">
-                            		<i class="fa fa-times-circle text-danger"></i>
-								</button>
-								<input type="hidden" name="creousuario_tasa_ids[]" class="form-control creousuario_tasa_id" value="{{ $tasa->creousuario_id ?? ''}}"/>
-                			</td>
-                		</tr>
-           			@endforeach
-				@endif
-				@endif
-       		</tbody>
-       	</table>
-		@include('configuracion.provincia.template2')
-        <div class="row">
-        	<div class="col-md-12">
-        		<button id="agrega_renglon_tasaiibb" class="pull-right btn btn-danger">+ Agrega rengl&oacute;n</button>
-        	</div>
+                                <input type="number" name="minimonetos[]" step="0.01" value="{{ $tasa->minimoneto ?? '' }}" class="form-control minimoneto" placeholder="Mínimo neto sujeto a percepción">
+                            </td>
+                            <td>
+                                <input type="number" name="minimopercepciones[]" step="0.01" value="{{ $tasa->minimopercepcion ?? '' }}" class="form-control minimopercepcion" placeholder="Monto mínimo de percepción">
+                            </td>
+                            <td class="text-center">
+                                <button type="button" title="Elimina esta línea" class="btn-accion-tabla eliminar_tasaiibb tooltipsC">
+                                    <i class="fa fa-times-circle text-danger"></i>
+                                </button>
+                                <input type="hidden" name="creousuario_tasa_ids[]" class="form-control creousuario_tasa_id" value="{{ $tasa->creousuario_id ?? '' }}"/>
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+        @include('configuracion.provincia.template2')
+        <div class="d-flex justify-content-end">
+            <button type="button" id="agrega_renglon_tasaiibb" class="btn btn-sm btn-outline-primary">
+                <i class="fa fa-plus"></i> Agrega renglón
+            </button>
         </div>
     </div>
 </div>

@@ -5,6 +5,11 @@ $base = [
     'imprimir_timeout_segundos' => (int) env('PEDIDO_IMPRIMIR_TIMEOUT_SEGUNDOS', 60),
     'imprimir_esperar_job_segundos' => (int) env('PEDIDO_IMPRIMIR_ESPERAR_JOB_SEGUNDOS', 60),
     'imprimir_fallback_habilitado' => filter_var(env('PEDIDO_IMPRIMIR_FALLBACK', true), FILTER_VALIDATE_BOOLEAN),
+    // Cron El Bierzo: ventas:importar-pedido-anita --ejecutar (fecha entrega del día, todos los repartos)
+    'importar_anita_diaria' => [
+        'habilitado' => filter_var(env('PEDIDO_IMPORTAR_ANITA_DIARIA_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('PEDIDO_IMPORTAR_ANITA_DIARIA_HORA', '01:00'),
+    ],
 ];
 
 if (config('app.empresa') == 'EL BIERZO') {

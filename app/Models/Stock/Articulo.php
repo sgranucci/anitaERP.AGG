@@ -4,6 +4,7 @@ namespace App\Models\Stock;
 
 use App\ApiAnita;
 use App\Models\Configuracion\Empresa;
+use App\Support\Stock\ArticuloImpuestoAnitaSupport;
 use App\Support\Stock\ArticuloStkmaeAnitaBridgeSupport;
 use App\Support\Stock\StockAnitaBridgeSupport;
 use App\Support\Stock\InterformingArticuloAnitaMapperSupport;
@@ -555,11 +556,9 @@ class Articulo extends Model implements Auditable
                 $linea_id = null;
             }
 
-            $impuesto_id = ($data->stkm_cod_impuesto == '0' ? 1 : $data->stkm_cod_impuesto);
-
-            if ($impuesto_id > 4) {
-                $impuesto_id = 1;
-            }
+            $impuesto_id = ArticuloImpuestoAnitaSupport::impuestoIdDesdeCodigoAnita(
+                (string) ($data->stkm_cod_impuesto ?? '')
+            );
 
             $cuenta = Cuentacontable::select('id', 'codigo')->where('codigo', $data->stkm_cta_contable)->first();
             if ($cuenta) {

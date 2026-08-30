@@ -1367,6 +1367,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Configuracion\RegimenPercepcionRepositoryInterface',
+            'App\Repositories\Configuracion\RegimenPercepcionRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Configuracion\Padron_MipymeRepositoryInterface',
             'App\Repositories\Configuracion\Padron_MipymeRepository',
         );

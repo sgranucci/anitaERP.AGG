@@ -33,7 +33,7 @@ class Cliente extends Model implements Auditable
 	use ClienteTrait;
 
     protected $fillable = ['nombre','codigo','contacto','fantasia','email','telefono','urlweb','domicilio','localidad_id',
-							'provincia_id','pais_id','zonavta_id','subzonavta_id','vendedor_id','cobrador_id','numerodocumento','condicioniva_id',
+							'provincia_id','provincia_iibb_id','pais_id','zonavta_id','subzonavta_id','vendedor_id','cobrador_id','numerodocumento','condicioniva_id',
 							'retieneiva','nroiibb','condicioniibb_id','tipoempresa_cliente_id','condicionventa_id','listaprecio_id','cuentacontable_id','vaweb',
 							'estado','usuario_id','codigopostal','transporte_id','descuento','leyenda','tiposuspension_id',
                             'facturas_apocrifas','facturas_apocrifas_consulta_at','facturas_apocrifas_detalle',
@@ -54,7 +54,7 @@ class Cliente extends Model implements Auditable
 
 	public function cliente_entregas()
 	{
-    	return $this->hasMany(Cliente_Entrega::class, 'cliente_id')->with('localidades')->with('provincias')->with('transportes');
+    	return $this->hasMany(Cliente_Entrega::class, 'cliente_id')->with('localidades')->with('provincias')->with('provinciasIibb')->with('transportes');
 	}
 
 	public function cliente_seguimientos()
@@ -95,6 +95,11 @@ class Cliente extends Model implements Auditable
     public function provincias()
     {
         return $this->belongsTo(Provincia::class, 'provincia_id');
+    }
+
+    public function provinciasIibb()
+    {
+        return $this->belongsTo(Provincia::class, 'provincia_iibb_id');
     }
 
     public function paises()

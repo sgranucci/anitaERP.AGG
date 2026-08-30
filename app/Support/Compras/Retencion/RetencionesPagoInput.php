@@ -52,6 +52,7 @@ final class RetencionesPagoInput
         public readonly bool $calcularIva = true,
         public readonly bool $calcularSuss = true,
         public readonly bool $calcularIibb = true,
+        public readonly ?int $empresaId = null,
     ) {
     }
 }

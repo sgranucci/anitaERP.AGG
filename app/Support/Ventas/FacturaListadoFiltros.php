@@ -15,7 +15,7 @@ use Illuminate\Http\Request;
  *  - Filtros básicos: empresa (vía punto de venta), rango de fechas y número de reparto.
  *
  * Regla del rango de fechas:
- *  - Por defecto se presenta el mes actual: desde el día 1 del mes hasta hoy.
+ *  - Por defecto siempre el día de hoy (desde = hasta = hoy), en cualquier orden.
  *  - Si el usuario carga "desde" y deja "hasta" vacío, "hasta" toma el día de hoy.
  *  - Si carga solo "hasta", "desde" toma el día 1 del mes de esa fecha.
  */
@@ -30,6 +30,9 @@ class FacturaListadoFiltros
 
     /** Orden por ID de venta de mayor a menor (últimas facturas primero). */
     public const ORDEN_ID = 'id';
+
+    /** Empresa por defecto del filtro externo del index. */
+    public const EMPRESA_ID_DEFAULT = 1;
 
     /** @var array<string, array{type: string, label: string}> */
     public const CAMPOS = [
@@ -58,10 +61,15 @@ class FacturaListadoFiltros
         'menor' => 'Menor que',
     ];
 
-    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
+    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null, ?int $empresaDefault = null): array
     {
+        [$empresaId, $empresaScope] = self::resolverEmpresaExterna($request, $empresaDefault);
+
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return self::filtrosVacios();
+            return array_merge(self::filtrosVacios(), [
+                'empresa_id' => $empresaId ?? 0,
+                'empresa_scope' => $empresaScope,
+            ]);
         }
 
         $valor = FiltrosListadoRequest::valorBusqueda($request, $busquedaRuta);
@@ -86,6 +94,7 @@ class FacturaListadoFiltros
 
         $operador = self::normalizarOperador($operador, $modo === self::MODO_CAMPO ? $campo : 'cliente');
 
+        $orden = self::normalizarOrden($request->input('filtro_orden'));
         [$fechaDesde, $fechaHasta] = self::resolverRangoFechas($request);
 
         return [
@@ -95,13 +104,35 @@ class FacturaListadoFiltros
             'valor' => $valor,
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
-            'empresa_id' => (int) $request->input('empresa_id', 0),
+            'empresa_id' => $empresaId ?? 0,
+            'empresa_scope' => $empresaScope,
             'fecha_desde' => $fechaDesde,
             'fecha_hasta' => $fechaHasta,
             'solo_sin_remito' => $request->boolean('solo_sin_remito'),
             'filtro_reparto' => trim((string) $request->input('filtro_reparto', '')),
-            'orden' => self::normalizarOrden($request->input('filtro_orden')),
+            'orden' => $orden,
         ];
+    }
+
+    /**
+     * Filtro externo del index: empresa 1 por defecto, o todas (`empresa_todas=1`).
+     *
+     * @return array{0:?int,1:string} [empresa_id, empresa_scope]
+     */
+    private static function resolverEmpresaExterna(Request $request, ?int $empresaDefault): array
+    {
+        if ($request->boolean('empresa_todas') || $request->input('empresa_scope') === 'todas') {
+            return [null, 'todas'];
+        }
+        if ($request->filled('empresa_id')) {
+            return [(int) $request->input('empresa_id'), 'una'];
+        }
+        $default = $empresaDefault ?? self::EMPRESA_ID_DEFAULT;
+        if ($default > 0) {
+            return [$default, 'una'];
+        }
+
+        return [null, 'todas'];
     }
 
     /**
@@ -111,18 +142,19 @@ class FacturaListadoFiltros
      */
     private static function resolverRangoFechas(Request $request): array
     {
+        $default = self::rangoFechasPorDefecto();
         $tieneParametros = $request->has('fecha_desde') || $request->has('fecha_hasta');
 
         $desde = trim((string) $request->input('fecha_desde', ''));
         $hasta = trim((string) $request->input('fecha_hasta', ''));
 
-        // Primera carga (sin parámetros de fecha en la request): mes actual.
+        // Primera carga (sin parámetros de fecha): default según el orden.
         if (! $tieneParametros) {
-            return [date('Y-m-01'), date('Y-m-d')];
+            return [$default['fecha_desde'], $default['fecha_hasta']];
         }
 
         if ($desde === '' && $hasta === '') {
-            return [date('Y-m-01'), date('Y-m-d')];
+            return [$default['fecha_desde'], $default['fecha_hasta']];
         }
 
         if ($desde !== '' && $hasta === '') {
@@ -154,10 +186,6 @@ class FacturaListadoFiltros
             return true;
         }
 
-        if ((int) ($filtros['empresa_id'] ?? 0) > 0) {
-            return true;
-        }
-
         if (! empty($filtros['solo_sin_remito'])) {
             return true;
         }
@@ -166,10 +194,7 @@ class FacturaListadoFiltros
             return true;
         }
 
-        // Rango de fechas distinto del mes actual por defecto.
-        $default = self::rangoFechasPorDefecto();
-        if (($filtros['fecha_desde'] ?? '') !== $default['fecha_desde']
-            || ($filtros['fecha_hasta'] ?? '') !== $default['fecha_hasta']) {
+        if (! self::esRangoFechasPorDefecto($filtros)) {
             return true;
         }
 
@@ -179,12 +204,52 @@ class FacturaListadoFiltros
     /**
      * @return array{fecha_desde: string, fecha_hasta: string}
      */
-    public static function rangoFechasPorDefecto(): array
+    public static function rangoFechasPorDefecto(?string $orden = null): array
     {
+        $hoy = date('Y-m-d');
+
         return [
-            'fecha_desde' => date('Y-m-01'),
-            'fecha_hasta' => date('Y-m-d'),
+            'fecha_desde' => $hoy,
+            'fecha_hasta' => $hoy,
         ];
+    }
+
+    public static function esRangoFechasPorDefecto(array $filtros): bool
+    {
+        $default = self::rangoFechasPorDefecto();
+
+        return ($filtros['fecha_desde'] ?? '') === $default['fecha_desde']
+            && ($filtros['fecha_hasta'] ?? '') === $default['fecha_hasta'];
+    }
+
+    /**
+     * Cambia el orden conservando el rango de fechas (custom o default de hoy).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public static function conOrden(array $filtros, string $orden): array
+    {
+        $siguiente = $filtros;
+        $siguiente['orden'] = self::normalizarOrden($orden);
+
+        return $siguiente;
+    }
+
+    /**
+     * Query del enlace de impresión por reparto (mismos filtros del index).
+     *
+     * @param  array<string, mixed>  $filtros
+     * @return array<string, mixed>
+     */
+    public static function paraImpresionReparto(array $filtros, int $transporteId, bool $soloCopias = false): array
+    {
+        $params = ['transporteId' => $transporteId] + self::paraQueryString($filtros);
+        if ($soloCopias) {
+            $params['solo_copias'] = 1;
+        }
+
+        return $params;
     }
 
     public static function filtrosVacios(): array
@@ -198,7 +263,8 @@ class FacturaListadoFiltros
             'valor' => '',
             'busqueda' => '',
             'busqueda_rapida' => false,
-            'empresa_id' => 0,
+            'empresa_id' => self::EMPRESA_ID_DEFAULT,
+            'empresa_scope' => 'una',
             'fecha_desde' => $rango['fecha_desde'],
             'fecha_hasta' => $rango['fecha_hasta'],
             'solo_sin_remito' => false,
@@ -226,9 +292,7 @@ class FacturaListadoFiltros
         if (! empty($filtros['valor'])) {
             $params['filtro_valor'] = $filtros['valor'];
         }
-        if ((int) ($filtros['empresa_id'] ?? 0) > 0) {
-            $params['empresa_id'] = (int) $filtros['empresa_id'];
-        }
+        $params = array_merge($params, self::paraQueryStringEmpresa($filtros));
         if (! empty($filtros['fecha_desde'])) {
             $params['fecha_desde'] = $filtros['fecha_desde'];
         }
@@ -249,6 +313,23 @@ class FacturaListadoFiltros
         return $params;
     }
 
+    /**
+     * Solo el filtro externo de empresa (para Limpiar texto sin perder empresa).
+     *
+     * @return array<string, int>
+     */
+    public static function paraQueryStringEmpresa(array $filtros): array
+    {
+        if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
+            return ['empresa_todas' => 1];
+        }
+        if (! empty($filtros['empresa_id'])) {
+            return ['empresa_id' => (int) $filtros['empresa_id']];
+        }
+
+        return [];
+    }
+
     public static function formatearPeriodoTexto(array $filtros): string
     {
         $desde = $filtros['fecha_desde'] ?? '';
@@ -257,7 +338,13 @@ class FacturaListadoFiltros
             return '';
         }
 
-        return date('d/m/Y', strtotime($desde)).' — '.date('d/m/Y', strtotime($hasta));
+        $desdeTxt = date('d/m/Y', strtotime($desde));
+        $hastaTxt = date('d/m/Y', strtotime($hasta));
+        if ($desde === $hasta) {
+            return $desdeTxt;
+        }
+
+        return $desdeTxt.' — '.$hastaTxt;
     }
 
     public static function formatearRepartoTexto(array $filtros): string

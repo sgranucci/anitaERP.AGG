@@ -21,6 +21,66 @@ final class ClienteAnitaZonamultSupport
     }
 
     /**
+     * ERP → Anita: provincia_iibb_id (sede) → clim_zonamult / ven_zonamult.
+     * Si no hay sede, el caller puede caer al domicilio.
+     */
+    public static function codigoDesdeProvinciaIibbId(?int $provinciaIibbId): int
+    {
+        return self::codigoDesdeProvinciaId($provinciaIibbId);
+    }
+
+    /**
+     * Anita veni_provincia / clim_zonamult → jurisdicción AFIP (901, 902, 915…).
+     * Acepta ya un código 900+ (histórico). 0 si no hay mapa.
+     */
+    public static function jurisdiccionDesdeCodigoZonamult(?int $codigoZonamult): int
+    {
+        if ($codigoZonamult === null || $codigoZonamult <= 0) {
+            return 0;
+        }
+        if ($codigoZonamult >= 900) {
+            return $codigoZonamult;
+        }
+        foreach (self::mapaPorJurisdiccion() as $jur => $codigo) {
+            if ((int) $codigo === $codigoZonamult) {
+                return (int) $jur;
+            }
+        }
+        foreach (self::mapaFallbackConfig() as $jur => $codigo) {
+            if ((int) $codigo === $codigoZonamult) {
+                return (int) $jur;
+            }
+        }
+
+        return 0;
+    }
+
+    /**
+     * Anita → ERP: clim_zonamult → provincia.id de esa jurisdicción (901, 902, …).
+     * No usa el domicilio. Null si la zona es 0 o no hay match.
+     */
+    public static function provinciaIdDesdeCodigoZonamult(?int $codigoZonamult): ?int
+    {
+        $jurisdiccion = self::jurisdiccionDesdeCodigoZonamult($codigoZonamult);
+        if ($jurisdiccion < 900) {
+            return null;
+        }
+
+        $porJurisdiccion = Provincia::query()
+            ->where('jurisdiccion', $jurisdiccion)
+            ->value('id');
+        if ($porJurisdiccion) {
+            return (int) $porJurisdiccion;
+        }
+
+        $porCodigo = Provincia::query()
+            ->where('codigo', $jurisdiccion)
+            ->value('id');
+
+        return $porCodigo ? (int) $porCodigo : null;
+    }
+
+    /**
      * Código Anita para clim_zonamult.
      * 1) Busca zonamult por jurisdicción de la provincia.
      * 2) Si no hay match, usa provincia.codigo (comportamiento legacy).

@@ -72,6 +72,12 @@ return [
             'accion' => 'Descarga o abre el PDF en pantalla.',
             'permiso' => 'listar-pedidos',
         ],
+        [
+            'herramienta' => 'Facturar reparto',
+            'ubicacion' => 'Corte amarillo de reparto',
+            'accion' => 'Factura todos los pedidos pesados del reparto e imprime el lote.',
+            'permiso' => 'facturar-reparto-pedidos',
+        ],
     ],
     'edicion_pedido' => [
         [

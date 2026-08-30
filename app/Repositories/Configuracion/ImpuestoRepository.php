@@ -3,6 +3,7 @@
 namespace App\Repositories\Configuracion;
 
 use App\Models\Configuracion\Impuesto;
+use App\Support\Configuracion\RegimenPercepcionSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\ApiAnita;
 use Auth;
@@ -31,40 +32,48 @@ class ImpuestoRepository implements ImpuestoRepositoryInterface
         if (!$hay_impuesto)
 			self::sincronizarConAnita();
 
-        return $this->model->orderBy('nombre','ASC')->get();
+        return $this->model->soloNacionales()->orderBy('nombre', 'ASC')->get();
+    }
+
+    public function allPercepcion()
+    {
+        return $this->model->soloPercepcion()->orderBy('codigo')->get();
     }
 
     public function create(array $data)
     {
         $impuesto = $this->model->create($data);
-		//
-		// Graba anita
-		self::guardarAnita($data);
+        if (! RegimenPercepcionSupport::esCodigoSistema((string) ($data['codigo'] ?? ''))) {
+            self::guardarAnita($data);
+        }
 
         return $impuesto;
     }
 
     public function update(array $data, $id)
     {
-        $impuesto = $this->model->findOrFail($id)
-            ->update($data);
+        $impuesto = $this->model->findOrFail($id);
+        $impuesto->update($data);
 
-        // Actualiza anita
-		self::actualizarAnita($data, $data['codigo']);
+        if (! $impuesto->esPercepcion() && ! RegimenPercepcionSupport::esCodigoSistema((string) ($data['codigo'] ?? ''))) {
+            self::actualizarAnita($data, $data['codigo']);
+        }
 
-		return $impuesto;
+        return $impuesto;
     }
 
     public function delete($id)
     {
-    	$impuesto = $this->model->find($id);
-		//
-		// Elimina anita
-		self::eliminarAnita($impuesto->codigo);
+        $impuesto = $this->model->find($id);
+        if ($impuesto && $impuesto->esPercepcion()) {
+            throw new \RuntimeException('Los códigos PIVA / PNC no son impuestos nacionales: se configuran en Regímenes de percepción.');
+        }
+        if ($impuesto) {
+            self::eliminarAnita($impuesto->codigo);
+            $impuesto->delete();
+        }
 
-        $impuesto = $this->model->destroy($id);
-
-		return $impuesto;
+        return $impuesto;
     }
 
     public function find($id)

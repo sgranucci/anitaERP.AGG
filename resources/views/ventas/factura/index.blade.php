@@ -21,12 +21,12 @@ use App\Support\Ventas\PedidoListadoSupport;
     $periodoTexto = FacturaListadoFiltros::formatearPeriodoTexto($filtros ?? []);
     $repartoTexto = FacturaListadoFiltros::formatearRepartoTexto($filtros ?? []);
     $ordenActual = FacturaListadoFiltros::normalizarOrden($filtros['orden'] ?? null);
-    $qsOrdenReparto = FacturaListadoFiltros::paraQueryString(array_merge($filtros ?? [], [
-        'orden' => FacturaListadoFiltros::ORDEN_REPARTO,
-    ]));
-    $qsOrdenId = FacturaListadoFiltros::paraQueryString(array_merge($filtros ?? [], [
-        'orden' => FacturaListadoFiltros::ORDEN_ID,
-    ]));
+    $qsOrdenReparto = FacturaListadoFiltros::paraQueryString(
+        FacturaListadoFiltros::conOrden($filtros ?? [], FacturaListadoFiltros::ORDEN_REPARTO)
+    );
+    $qsOrdenId = FacturaListadoFiltros::paraQueryString(
+        FacturaListadoFiltros::conOrden($filtros ?? [], FacturaListadoFiltros::ORDEN_ID)
+    );
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -57,7 +57,7 @@ use App\Support\Ventas\PedidoListadoSupport;
                         'formId' => 'form-filtros-factura',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => FacturaListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
-                        'limpiarUrl' => route('factura'),
+                        'limpiarUrl' => route('factura', FacturaListadoFiltros::paraQueryStringEmpresa($filtros ?? [])),
                         'placeholder' => 'Búsqueda rápida (cliente, comprobante, empresa, reparto)…',
                         'toggleTarget' => '#panel-filtros-factura',
                         'toggleId' => 'btn-toggle-filtros-factura',
@@ -71,10 +71,13 @@ use App\Support\Ventas\PedidoListadoSupport;
             <form method="get" action="{{ route('factura') }}" id="form-filtros-factura" class="mb-0">
                 @include('ventas.factura.partials.filtros_listado')
             </form>
+            @include('ventas.factura.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
-                @if ($periodoTexto !== '')
+                @if ($repartoTexto !== '' || $periodoTexto !== '')
                     <div class="px-3 py-2 text-muted small border-bottom">
-                        <i class="fa fa-calendar-alt"></i> Per&iacute;odo: <strong>{{ $periodoTexto }}</strong>
+                        @if ($periodoTexto !== '')
+                            <i class="fa fa-calendar-alt"></i> Per&iacute;odo: <strong>{{ $periodoTexto }}</strong>
+                        @endif
                         @if ($repartoTexto !== '')
                             · <i class="fa fa-truck"></i> {{ $repartoTexto }}
                         @endif
@@ -157,7 +160,7 @@ use App\Support\Ventas\PedidoListadoSupport;
                                 @include('ventas.factura.partials.fila_subtotal_reparto', [
                                     'metaReparto' => FacturaListadoSupport::metaReparto($comprobante, $totalesPorReparto ?? []),
                                     'conAcciones' => true,
-                                    'filtrosQuery' => $filtrosQuery ?? [],
+                                    'filtros' => $filtros ?? [],
                                 ])
                             @endif
                         @empty

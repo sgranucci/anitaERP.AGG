@@ -21,6 +21,14 @@ class ValidacionProvincia extends FormRequest
      *
      * @return array
      */
+    protected function prepareForValidation(): void
+    {
+        $tope = $this->input('tope_alicuota_percepcion');
+        if ($tope === '' || $tope === null) {
+            $this->merge(['tope_alicuota_percepcion' => null]);
+        }
+    }
+
     public function rules()
     {
         return [
@@ -28,7 +36,8 @@ class ValidacionProvincia extends FormRequest
             'abreviatura' => 'sometimes|max:10' ,
             'jurisdiccion' => 'sometimes|max:50' ,
             'codigo' => 'sometimes|max:50' ,
-            'pais_id' => 'required|integer' 
+            'pais_id' => 'required|integer',
+            'tope_alicuota_percepcion' => 'nullable|numeric|min:0|max:100',
         ];
     }
 }

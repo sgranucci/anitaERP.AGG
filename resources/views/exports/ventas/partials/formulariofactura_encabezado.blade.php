@@ -27,9 +27,12 @@
                 </p>
             </div>
         </td>
-        <td class="factura-cabecera-letra">
+        <td class="factura-cabecera-letra {{ $esRemitoHoja ? 'factura-cabecera-letra-remito' : '' }}">
             <div class="factura-letra-caja">{{ $esRemitoHoja ? 'R' : $letra }}</div>
             <div class="factura-codigo-tipo">Código {{ $esRemitoHoja ? '091' : ($codigoTipoTransaccionPad ?? $codigoTipoTransaccion) }}</div>
+            @if ($esRemitoHoja)
+                <div class="factura-remito-no-valido">DOCUMENTO NO VALIDO<br>COMO FACTURA</div>
+            @endif
         </td>
         <td class="factura-cabecera-comprobante">
             <strong>{{ $esRemitoHoja ? 'REMITO' : ($nombreTipoComprobanteImpresion ?? $venta->tipotransacciones->nombre ?? '') }}</strong><br>
@@ -43,22 +46,14 @@
             <p>{{ $copiaLeyenda ?? 'ORIGINAL' }}</p>
         </td>
     </tr>
-    @if ($esRemitoHoja)
+    @if (! $esRemitoHoja && ! $facturaPdfRemitoDebajoCliente)
     <tr>
-        <td>Factura: {{ $venta->codigo }}</td>
+        <td>Remito: {{ $nroRemitoFormateado }}</td>
         <td>
             @if (isset($venta->transportes->codigo))
                 Reparto: {{ $venta->transportes->codigo }}
             @endif
         </td>
-        <td class="text-right">
-            <strong>Valor asegurado: {{ number_format($valorAsegurado ?? 0, 2) }}</strong>
-        </td>
-    </tr>
-    @elseif (! $facturaPdfRemitoDebajoCliente)
-    <tr>
-        <td>Remito: {{ $nroRemitoFormateado }}</td>
-        <td>@if (isset($venta->transportes->codigo)) Reparto: {{ $venta->transportes->codigo }} @endif</td>
         <td class="text-right">Condicion de Venta: {{ $venta->condicionventas->nombre ?? $venta->clientes->condicionventas->nombre ?? 'CONTADO' }}</td>
     </tr>
     @endif
@@ -90,7 +85,7 @@
         <td class="factura-cliente-der">
             <p>
                 @php $codCli = \App\Support\Ventas\GastronomiaVentaDisplaySupport::codigoClienteMaestro($venta); @endphp
-                @if ($facturaEsGastronomia && $codCli !== '')
+                @if ($codCli !== '' && ($esRemitoHoja || $facturaEsGastronomia))
                     Código: {{ $codCli }}<br>
                 @endif
                 @if (! \App\Support\Ventas\GastronomiaVentaDisplaySupport::usaSnapshotReceptorEnVenta($venta))
@@ -111,11 +106,27 @@
         </td>
     </tr>
 </table>
-@if ($facturaPdfRemitoDebajoCliente && ! $esRemitoHoja)
+@if ($esRemitoHoja)
+<table class="table borderless factura-remito-caja-admin">
+    <tr>
+        <td>Condición de venta: {{ $venta->condicionventas->nombre ?? $venta->clientes->condicionventas->nombre ?? 'CONTADO' }}</td>
+        <td class="text-center">
+            @if (isset($venta->transportes->codigo))
+                Reparto: {{ $venta->transportes->codigo }}
+            @endif
+        </td>
+        <td class="text-right">Factura: {{ $venta->codigo }}</td>
+    </tr>
+</table>
+@elseif ($facturaPdfRemitoDebajoCliente)
 <table class="table borderless factura-remito-caja-admin">
     <tr>
         <td>Remito: {{ $nroRemitoFormateado }}</td>
-        <td class="text-center">@if (isset($venta->transportes->codigo)) Reparto: {{ $venta->transportes->codigo }} @endif</td>
+        <td class="text-center">
+            @if (isset($venta->transportes->codigo))
+                Reparto: {{ $venta->transportes->codigo }}
+            @endif
+        </td>
         <td class="text-right">Condicion de Venta: {{ $venta->condicionventas->nombre ?? $venta->clientes->condicionventas->nombre ?? 'CONTADO' }}</td>
     </tr>
 </table>

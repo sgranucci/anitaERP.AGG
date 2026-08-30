@@ -29,10 +29,12 @@
 		}
 		.pedido-cliente { margin-top: 8px; font-size: 13px; line-height: 1.35; }
 		.pedido-totales-division {
-			font-size: 12px;
+			font-size: 10px;
+			color: #555;
 			text-align: right;
 			line-height: 1.4;
-			margin-top: 4px;
+			margin-top: 8px;
+			font-variant-numeric: tabular-nums;
 		}
 		table.pedido-items {
 			border-collapse: collapse;
@@ -87,11 +89,7 @@
 @php
 	use App\Support\Ventas\FacturaPdfPaginacionSupport;
 
-	$mostrarTotalesDivision = config('app.empresa') === 'EL BIERZO'
-		&& optional($pedido->transportes)->tipoexpreso === '4';
-	$totalNetoDivision = 0.;
-	$ajusteDivision = 0.;
-	$totalDivision = 0.;
+	$montosReparto101 = \App\Support\Ventas\VillafrancaFacturacionSupport::montosPedidoDesdeFactura($pedido);
 	$codigoClientePedido = trim((string) ($pedido->clientes->codigo ?? ''));
 	$nombreClientePedido = trim((string) ($pedido->clientes->nombre ?? ''));
 	$clientePedidoDisplay = $codigoClientePedido !== '' && $nombreClientePedido !== ''
@@ -107,15 +105,6 @@
 	$filas = $lineasPdf['filas'];
 	$totales = $lineasPdf['totales'];
 	$totalKilosPesadaBonificacion = (float) ($totales['pesada'] ?? 0) + (float) ($totales['bonificacion'] ?? 0);
-	if ($mostrarTotalesDivision) {
-		$coeficienteDivision = (float) config('facturacion.COEFICIENTE_EXTRA_REPARTO_101', 1.10);
-		foreach ($filas as $filaDiv) {
-			$totalNetoDivision += (float) $filaDiv['precio'] * (float) $filaDiv['pesada'];
-		}
-		$totalNetoDivision = round($totalNetoDivision, 2);
-		$ajusteDivision = round($totalNetoDivision * ($coeficienteDivision - 1), 2);
-		$totalDivision = round($totalNetoDivision + $ajusteDivision, 2);
-	}
 	$paginasPedido = FacturaPdfPaginacionSupport::paginas($filas, 'pedido');
 @endphp
 @foreach ($paginasPedido as $pagIdx => $itemsPagina)
@@ -138,11 +127,11 @@
 					<strong>Fecha de Entrega: {{ date('d/m/Y', strtotime($pedido->fechaentrega ?? '')) }}</strong><br>
 					<strong>Reparto: {{ $repartoNombre }}</strong><br>
 					<strong>Lugar de entrega: {{ $pedido->lugarentrega ?? '' }}</strong>
-					@if ($mostrarTotalesDivision)
+					@if ($montosReparto101)
 						<div class="pedido-totales-division">
-							{{ number_format($totalNetoDivision, 2) }}<br>
-							{{ number_format($ajusteDivision, 2) }}<br>
-							{{ number_format($totalDivision, 2) }}
+							{{ number_format($montosReparto101['neto'], 2, ',', '.') }}<br>
+							{{ number_format($montosReparto101['recargo'], 2, ',', '.') }}<br>
+							{{ number_format($montosReparto101['total'], 2, ',', '.') }}
 						</div>
 					@endif
 				</td>

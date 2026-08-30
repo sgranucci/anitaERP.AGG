@@ -2,7 +2,7 @@
     $codigoCliente = old('codigo', $data->codigo ?? '');
     $codigoEditable = config('app.empresa') === 'INTERFORMING';
 @endphp
-<div class="d-flex align-items-center ml-2 mr-2">
+<div class="d-inline-flex align-items-center ml-2 mr-2">
     <label for="codigo" class="mb-0 mr-2 small font-weight-bold text-white">C&oacute;digo</label>
     <input type="text"
            name="codigo"

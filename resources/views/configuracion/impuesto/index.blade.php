@@ -78,7 +78,17 @@ Impuestos
             </div>
         </div>
 
-        @include('configuracion.impuesto.partials.percepcion_no_categorizado')
+        <div class="card card-outline card-info mt-3">
+            <div class="card-body py-3">
+                Percepción IVA (RG 5329) y no categorizado (RG 2126):
+                @if (can('listar-regimen-percepcion', false))
+                    <a href="{{ route('regimen_percepcion') }}" class="text-primary">Regímenes de percepción</a>.
+                @else
+                    menú Configuración → Regímenes de percepción.
+                @endif
+                Alícuota, mínimos y cuentas del asiento viven ahí, no en este ABM.
+            </div>
+        </div>
     </div>
 </div>
 @endsection

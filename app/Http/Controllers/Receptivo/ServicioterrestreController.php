@@ -41,7 +41,7 @@ class ServicioterrestreController extends Controller
         $prepago_enum = Servicioterrestre::$enumPrepago;
         $tiposervicioterrestre_query = $this->tiposervicioterrestreRepository->all();
         $moneda_query = Moneda::get();
-        $impuesto_query = Impuesto::all();
+        $impuesto_query = Impuesto::soloNacionales()->orderBy('nombre')->get();
 
         return view('receptivo.servicioterrestre.index', compact('serviciosterrestres', 'ubicacion_enum', 
                                                                 'modoexento_enum', 'prepago_enum',
@@ -63,7 +63,7 @@ class ServicioterrestreController extends Controller
         $prepago_enum = Servicioterrestre::$enumPrepago;
         $tiposervicioterrestre_query = $this->tiposervicioterrestreRepository->all();
         $moneda_query = Moneda::get();
-        $impuesto_query = Impuesto::all();
+        $impuesto_query = Impuesto::soloNacionales()->orderBy('nombre')->get();
 
         return view('receptivo.servicioterrestre.crear', compact('ubicacion_enum', 
                                                                 'modoexento_enum', 'prepago_enum',
@@ -100,7 +100,7 @@ class ServicioterrestreController extends Controller
         $prepago_enum = Servicioterrestre::$enumPrepago;
         $tiposervicioterrestre_query = $this->tiposervicioterrestreRepository->all();
         $moneda_query = Moneda::get();
-        $impuesto_query = Impuesto::all();
+        $impuesto_query = Impuesto::soloNacionales()->orderBy('nombre')->get();
         
         return view('receptivo.servicioterrestre.editar', compact('servicioterrestre', 'ubicacion_enum', 
                                                                 'modoexento_enum', 'prepago_enum', 'moneda_query',

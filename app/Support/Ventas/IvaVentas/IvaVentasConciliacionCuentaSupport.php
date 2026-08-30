@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Ventas\IvaVentas;
 
 use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
+use App\Support\Configuracion\RegimenPercepcionSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoConfigSupport;
 use Illuminate\Support\Facades\DB;
 
@@ -56,7 +57,9 @@ final class IvaVentasConciliacionCuentaSupport
 
         self::agregarCuentaPorCodigoConfig($ventasGravadas, $detalle, 'ventas_gravadas', self::FUENTE_FACTURACION, $empresaId, trim((string) config('facturacion.CUENTACONTABLE_VENTA', '')), 'Ventas (facturación)');
         self::agregarCuentaPorCodigoConfig($ivaDebito, $detalle, 'iva_debito', self::FUENTE_FACTURACION, $empresaId, trim((string) config('facturacion.CUENTACONTABLE_IVA', '')), 'IVA débito (facturación)');
-        self::agregarCuentaPorCodigoConfig($percepcionIva, $detalle, 'percepcion_iva', self::FUENTE_FACTURACION, $empresaId, trim((string) config('facturacion.CUENTACONTABLE_PERCEPCION_IVA', '')), 'Percepción IVA (facturación)');
+        foreach (RegimenPercepcionSupport::codigosCuentaContableEmpresaPiva($empresaId) as $codigoPiva) {
+            self::agregarCuentaPorCodigoConfig($percepcionIva, $detalle, 'percepcion_iva', self::FUENTE_FACTURACION, $empresaId, $codigoPiva, 'Percepción IVA RG 5329 (facturación)');
+        }
         foreach (PercepcionNoCategorizadoSupport::codigosCuentaContableEmpresa($empresaId) as $codigoPnc) {
             self::agregarCuentaPorCodigoConfig($percepcionNoCateg, $detalle, 'percepcion_no_categorizado', self::FUENTE_FACTURACION, $empresaId, $codigoPnc, 'Percepción no categorizado (RG 2126)');
         }

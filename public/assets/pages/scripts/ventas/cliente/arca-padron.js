@@ -386,42 +386,39 @@
 
 		if (df.provincia_id) {
 			setVal('provincia_id', df.provincia_id);
-			triggerChange('provincia_id');
-			const provSel = byId('provincia_id');
-			const provText = provSel && provSel.selectedOptions && provSel.selectedOptions[0] ? provSel.selectedOptions[0].text : '';
-			setVal('desc_provincia', df.provincia || provText);
+			setVal('desc_provincia', df.provincia || '');
+			setVal('nombreprovincia', df.provincia || '');
+			if (df.provincia_codigo) {
+				setVal('codigoprovincia', df.provincia_codigo);
+			}
+			if (df.provincia_jurisdiccion) {
+				const jur = byId('jurisdiccionprovincia') || document.querySelector('#tab-datos-principales .jurisdiccionprovincia');
+				if (jur && 'value' in jur) {
+					jur.value = df.provincia_jurisdiccion;
+				}
+			}
 		} else if (df.provincia) {
 			setVal('desc_provincia', df.provincia);
+			setVal('nombreprovincia', df.provincia);
 		}
 
 		if (df.localidad_id) {
-			setVal('localidad_id_previa', df.localidad_id);
-			const inicio = Date.now();
-			while (Date.now() - inicio < 7000) {
-				const loc = byId('localidad_id');
-				if (loc && loc.querySelector('option[value="' + String(df.localidad_id) + '"]')) {
-					break;
-				}
-				await new Promise(function (resolve) { setTimeout(resolve, 100); });
-			}
-			const loc = byId('localidad_id');
-			if (loc && !loc.querySelector('option[value="' + String(df.localidad_id) + '"]')) {
-				const opt = document.createElement('option');
-				opt.value = String(df.localidad_id);
-				opt.textContent = df.localidad || String(df.localidad_id);
-				loc.appendChild(opt);
-			}
 			setVal('localidad_id', df.localidad_id);
-			triggerChange('localidad_id');
-		}
-		if (df.localidad) {
-			setVal('desc_localidad', df.localidad);
-			const nodes = document.querySelectorAll('#nombrelocalidad');
-			if (nodes && nodes.length) {
-				nodes.forEach(function (n) {
-					if (n && 'value' in n) n.value = df.localidad;
-				});
+			setVal('localidad_id_previa', df.localidad_id);
+			setVal('nombrelocalidad', df.localidad || '');
+			setVal('desc_localidad', df.localidad || '');
+			if (df.localidad_codigo) {
+				setVal('codigolocalidad', df.localidad_codigo);
 			}
+		} else if (df.localidad) {
+			setVal('desc_localidad', df.localidad);
+			setVal('nombrelocalidad', df.localidad);
+		} else if (df.provincia_id) {
+			setVal('localidad_id', '');
+			setVal('localidad_id_previa', '');
+			setVal('codigolocalidad', '');
+			setVal('nombrelocalidad', '');
+			setVal('desc_localidad', '');
 		}
 	}
 

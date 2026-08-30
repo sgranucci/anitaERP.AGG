@@ -414,6 +414,15 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/flash-reporte-agg-distribucion.log'))
             ->when(fn () => (bool) config('caja.flash_reporte_agg.distribucion_habilitada', true));
 
+        // El Bierzo: Anita → ERP pedidos del día (todos los repartos).
+        $schedule->command('ventas:importar-pedido-anita --ejecutar')
+            ->dailyAt((string) config('pedido.importar_anita_diaria.hora', '01:00'))
+            ->runInBackground()
+            ->withoutOverlapping(30)
+            ->appendOutputTo(storage_path('logs/pedido-importar-anita-diaria.log'))
+            ->when(fn () => EntornoEmpresaSupport::esElBierzo()
+                && (bool) config('pedido.importar_anita_diaria.habilitado', true));
+
         $limiteRegrabarAnitaPedido = max(1, (int) config('facturacion.ANITA_PEDIDO_REGRABAR_LIMITE', 20));
         $schedule->command('ventas:regrabar-anita-pedido --ejecutar --limite='.$limiteRegrabarAnitaPedido)
             ->everyTenMinutes()

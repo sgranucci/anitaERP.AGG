@@ -27,6 +27,24 @@ interface PedidoQueryInterface
      * @param  array<string, mixed>  $filtros
      */
     public function totalesPedidoIndexPorReparto(array $filtros);
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return \Illuminate\Support\Collection<string, object>
+     */
+    public function accionesPedidoIndexPorReparto(array $filtros);
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<int>
+     */
+    public function ventaIdsIndexPorReparto(array $filtros, int $transporteId): array;
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return \Illuminate\Support\Collection<int, \App\Models\Ventas\Pedido>
+     */
+    public function pedidosIndexPorReparto(array $filtros, int $transporteId);
     public function allPendienteOt($articulo_id, $combinacion_id);
     public function leePedidoporCodigo($codigo);
     public function leePedidoporId($id);

@@ -83,6 +83,7 @@ class RetencionesPagoCalculator
                 $input->iibbProvinciaId,
                 $input->iibbCondicionId,
                 $input->retieneIibb,
+                $input->empresaId,
             )
             : RetencionIibbResultado::noAplica(RetencionIibbResultado::MOTIVO_NO_RETIENE, [
                 'omitido' => true,

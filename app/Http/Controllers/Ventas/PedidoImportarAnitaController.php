@@ -53,9 +53,10 @@ class PedidoImportarAnitaController extends Controller
         $resumen = $this->service->importar($filtros);
 
         $mensaje = sprintf(
-            'Importación finalizada: %d creados, %d actualizados, %d DESPACHO cerrados en Anita (sin importar), %d con error (total %d).',
+            'Importación finalizada: %d creados, %d actualizados, %d omitidos (ya facturados/procesados), %d DESPACHO cerrados en Anita (sin importar), %d con error (total %d).',
             $resumen['creados'],
             $resumen['actualizados'],
+            $resumen['omitidos'] ?? 0,
             $resumen['cerrados'] ?? 0,
             $resumen['errores'],
             $resumen['total']
@@ -109,9 +110,10 @@ class PedidoImportarAnitaController extends Controller
         $resumen = $this->service->importar($filtros, (int) (auth()->id() ?: 0));
 
         $mensaje = sprintf(
-            'Importación Anita: %d creados, %d actualizados, %d DESPACHO cerrados en Anita (sin importar), %d con error (total %d).',
+            'Importación Anita: %d creados, %d actualizados, %d omitidos (ya facturados/procesados), %d DESPACHO cerrados en Anita (sin importar), %d con error (total %d).',
             $resumen['creados'],
             $resumen['actualizados'],
+            $resumen['omitidos'] ?? 0,
             $resumen['cerrados'] ?? 0,
             $resumen['errores'],
             $resumen['total']

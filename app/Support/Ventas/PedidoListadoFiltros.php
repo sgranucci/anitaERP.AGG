@@ -20,7 +20,7 @@ class PedidoListadoFiltros
     /** @var array<string, array{column: string, type: string, label: string}> */
     public const CAMPOS = [
         'id' => ['column' => 'pedido.id', 'type' => 'entero', 'label' => 'ID'],
-        'codigo' => ['column' => 'pedido.codigo', 'type' => 'texto', 'label' => 'Código'],
+        'codigo' => ['column' => 'pedido.codigo', 'type' => 'texto', 'label' => 'Número de pedido'],
         'cliente' => ['column' => 'cliente.nombre', 'type' => 'texto', 'label' => 'Cliente'],
         'cliente_codigo' => ['column' => 'cliente.codigo', 'type' => 'texto', 'label' => 'Cód. cliente'],
         'vendedor' => ['column' => 'vendedor.nombre', 'type' => 'texto', 'label' => 'Vendedor'],

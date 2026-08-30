@@ -105,7 +105,15 @@ final class ComprobanteImpresionPackSupport
         return $mismoLeyenda ?? $original ?? $cualquiera;
     }
 
-    private static function esLeyendaOriginal(string $leyenda): bool
+    public static function esOriginal(array $linea): bool
+    {
+        $codigo = strtoupper(trim((string) ($linea['copia_codigo'] ?? '')));
+        $leyenda = strtoupper(trim((string) ($linea['leyenda'] ?? '')));
+
+        return $codigo === 'ORI' || $codigo === 'ORIGINAL' || self::esLeyendaOriginal($leyenda);
+    }
+
+    public static function esLeyendaOriginal(string $leyenda): bool
     {
         $texto = strtoupper(trim($leyenda));
 

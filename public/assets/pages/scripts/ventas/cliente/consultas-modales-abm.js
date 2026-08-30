@@ -22,7 +22,7 @@
         return !!(m && m.classList.contains('show'));
     }
 
-    function sincronizarProvinciaDesdeLocalidad(data) {
+    function sincronizarProvinciaDesdeLocalidad(data, $localidadCampo) {
         if (!data) {
             return;
         }
@@ -33,6 +33,23 @@
         var provNombre = (data.provincias && data.provincias.nombre)
             || data.nombreprovincia
             || '';
+        var $ambito = $localidadCampo && $localidadCampo.length
+            ? $localidadCampo.closest('tr')
+            : $();
+        var $campoProv = $ambito.length
+            ? $ambito.find('.tm-provincia-campo').not('.tm-provincia-iibb-campo').first()
+            : $('#provincia_id').closest('.tm-provincia-campo');
+
+        if (typeof aplicarProvinciaEnCampo === 'function' && $campoProv.length) {
+            aplicarProvinciaEnCampo($campoProv, {
+                id: provId,
+                codigo: (data.provincias && data.provincias.codigo) || data.codigo_provincia || '',
+                nombre: provNombre,
+                jurisdiccion: (data.provincias && data.provincias.jurisdiccion) || data.jurisdiccion_provincia || '',
+            });
+            return;
+        }
+
         var $prov = $('#provincia_id');
         if (!$prov.length) {
             return;
@@ -40,15 +57,17 @@
         if (String($prov.val()) !== String(provId)) {
             $prov.val(String(provId));
         }
-        if (!provNombre) {
-            provNombre = $.trim($prov.find('option:selected').text());
-        }
         if (provNombre) {
             $('#desc_provincia').val(provNombre);
+            $('#nombreprovincia').val(provNombre);
         }
     }
 
-    function resolverLocalidadDesdeCodigo(codigo) {
+    function resolverLocalidadDesdeCodigo(codigo, $input) {
+        if (typeof leerLocalidadPorCodigo === 'function') {
+            leerLocalidadPorCodigo(codigo, ($input && $input[0]) || $('#codigolocalidad')[0], true);
+            return;
+        }
         var cod = $.trim(codigo);
         if (cod === '') {
             $('#localidad_id').val('');
@@ -73,6 +92,10 @@
     window.sincronizarProvinciaDesdeLocalidad = sincronizarProvinciaDesdeLocalidad;
 
     function resolverProvinciaDesdeInput($input) {
+        if (typeof leerProvinciaPorCodigo === 'function') {
+            leerProvinciaPorCodigo($input.val(), $input[0], true);
+            return;
+        }
         var cod = $.trim($input.val());
         var $tr = $input.closest('tr');
 
@@ -107,7 +130,11 @@
         });
     }
 
-    function abrirModalLocalidad() {
+    function abrirModalLocalidad($input) {
+        if (typeof abrirModalConsultaLocalidad === 'function') {
+            abrirModalConsultaLocalidad($input);
+            return;
+        }
         $('#consultalocalidadModal').modal('show');
     }
 
@@ -204,6 +231,10 @@
     }
 
     function abrirModalProvincia($input) {
+        if (typeof abrirModalConsultaProvincia === 'function') {
+            abrirModalConsultaProvincia($input);
+            return;
+        }
         var $tr = $input.closest('tr');
         window.ptrprovincia_id = $tr.length ? $tr.find('.provincia_id') : null;
         $('#consultaprovinciaModal').modal('show');
@@ -224,7 +255,7 @@
             match: function (t) { return t.classList.contains('codigolocalidad') || t.id === 'codigolocalidad'; },
             modal: '#consultalocalidadModal',
             abrir: abrirModalLocalidad,
-            validar: function ($t) { resolverLocalidadDesdeCodigo($t.val()); },
+            validar: function ($t) { resolverLocalidadDesdeCodigo($t.val(), $t); },
         },
         {
             match: function (t) { return t.classList.contains('codigozonavta') || t.id === 'codigozonavta'; },

@@ -1,92 +1,66 @@
-    $(function () {
+$(function () {
+    $('#agrega_renglon_tasaiibb').on('click', agregaRenglonTasaiibb);
+    $(document).on('click', '.eliminar_tasaiibb', borraRenglonTasaiibb);
+    $('#agrega_renglon_cuentacontableiibb').on('click', agregaRenglonCuentacontableiibb);
+    $(document).on('click', '.eliminar_cuentacontableiibb', borraRenglonCuentacontableiibb);
 
-        $('#agrega_renglon_tasaiibb').on('click', agregaRenglonTasaiibb);
-        $(document).on('click', '.eliminar_tasaiibb', borraRenglonTasaiibb);
-        $('#agrega_renglon_cuentacontableiibb').on('click', agregaRenglonCuentacontableiibb);
-        $(document).on('click', '.eliminar_cuentacontableiibb', borraRenglonCuentacontableiibb);
-
-        $( ".botonsubmit" ).click(function() {
-            $( "#form-general" ).submit();
-        });
-
-        $("#botonform1").click(function(){
-            $(".form1").show();
-            $(".form2").hide();
-            $(".form3").hide();
-        });
-
-        $("#botonform2").click(function(){
-            $(".form1").hide();
-            $(".form2").show();
-            $(".form3").hide();
-        });
-
-        $("#botonform3").click(function(){
-            $(".form1").hide();
-            $(".form2").hide();
-            $(".form3").show();
-        });		
-
-		activa_eventos(true);
+    $('.botonsubmit').click(function () {
+        $('#form-general').submit();
     });
 
-	function activa_eventos(flInicio)
-	{
-		// Si esta agregando items desactiva los eventos
-		if (!flInicio)
-		{
-			$('.consultacuentacontable').off('click');
-			$('.codigocuentacontable').off('change');
-		}
-		activa_eventos_consulta_cuentacontable();
-	}
+    activa_eventos(true);
+});
 
-    function agregaRenglonTasaiibb(event){
-    	event.preventDefault();
-    	let renglon = $('#template-renglon-tasaiibb').html();
-
-		$("#tbody-tasaiibb-table").append(renglon);
-    	actualizaRenglonesTasaiibb();
+function activa_eventos(flInicio) {
+    if (!flInicio) {
+        $('.consultacuentacontable').off('click');
+        $('.codigocuentacontable').off('change');
     }
+    activa_eventos_consulta_cuentacontable();
+}
 
-    function borraRenglonTasaiibb(event) {
-    	event.preventDefault();
-    	$(this).parents('tr').remove();
-    	actualizaRenglonesTasaiibb();
-    }
+function agregaRenglonTasaiibb(event) {
+    event.preventDefault();
+    var renglon = $('#template-renglon-tasaiibb').html();
 
-    function actualizaRenglonesTasaiibb() {
-    	var item = 1;
+    $('#tbody-tasaiibb-table').append(renglon);
+    actualizaRenglonesTasaiibb();
+}
 
-    	$("#tbody-tasaiibb-table .iitasaiibb").each(function() {
-    		$(this).val(item++);
-    	});
-    }
+function borraRenglonTasaiibb(event) {
+    event.preventDefault();
+    $(this).parents('tr').remove();
+    actualizaRenglonesTasaiibb();
+}
 
-    function agregaRenglonCuentacontableiibb(event){
-    	event.preventDefault();
-    	let renglon = $('#template-renglon-cuentacontableiibb').html();
+function actualizaRenglonesTasaiibb() {
+    var item = 1;
 
-		$("#tbody-cuentacontableiibb-table").append(renglon);
-    	actualizaRenglonesCuentacontableiibb();
+    $('#tbody-tasaiibb-table .iitasaiibb').each(function () {
+        $(this).val(item++);
+    });
+}
 
-        activa_eventos(false);
-    }
+function agregaRenglonCuentacontableiibb(event) {
+    event.preventDefault();
+    var renglon = $('#template-renglon-cuentacontableiibb').html();
 
-    function borraRenglonCuentacontableiibb(event) {
-    	event.preventDefault();
-    	$(this).parents('tr').remove();
-    	actualizaRenglonesCuentacontableiibb();
-    }
+    $('#tbody-cuentacontableiibb-table').append(renglon);
+    actualizaRenglonesCuentacontableiibb();
 
-    function actualizaRenglonesCuentacontableiibb() {
-    	var item = 1;
+    activa_eventos(false);
+}
 
-    	$("#tbody-cuentacontableiibb-table .iicuenta").each(function() {
-    		$(this).val(item++);
-    	});
-    }
-		
-    
+function borraRenglonCuentacontableiibb(event) {
+    event.preventDefault();
+    $(this).parents('tr').remove();
+    actualizaRenglonesCuentacontableiibb();
+}
 
+function actualizaRenglonesCuentacontableiibb() {
+    var item = 1;
 
+    $('#tbody-cuentacontableiibb-table .iicuenta').each(function () {
+        $(this).val(item++);
+    });
+}

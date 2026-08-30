@@ -331,6 +331,9 @@ class PagoproveedorController extends Controller
             retencionsussIdPago: $request->filled('retencionsuss_id') ? (int) $request->input('retencionsuss_id') : null,
             iibbProvinciaId: $request->filled('iibb_provincia_id') ? (int) $request->input('iibb_provincia_id') : null,
             iibbTasaOverride: $request->filled('iibb_tasa') ? (float) $request->input('iibb_tasa') : null,
+            empresaId: $request->filled('empresa_id')
+                ? (int) $request->input('empresa_id')
+                : ((int) session('empresa_id') ?: null),
         ));
 
         return response()->json([

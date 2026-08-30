@@ -258,7 +258,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 											->with("cliente_cm05s.provincias")
 										->with("cliente_exclusion_percepcions.provincias")
 											->with("cliente_articulo_suspendidos")->with("cliente_archivos")
-											->with("provincias")->with("localidades")->with("paises")
+											->with("provincias")->with("provinciasIibb")->with("localidades")->with("paises")
 											->with("tipossuspensioncliente")->with('zonavtas')
 											->with("abastos")->with("coeficientes")
 										->with("vendedores")->with("cobradores")->with("distribuidores")->with("listaprecios")->with("cuentascontables")
@@ -748,6 +748,10 @@ class ClienteRepository implements ClienteRepositoryInterface
 			else
 				$provincia_id = NULL;
 
+			$provincia_iibb_id = ClienteAnitaZonamultSupport::provinciaIdDesdeCodigoZonamult(
+				(int) ($data->clim_zonamult ?? 0)
+			);
+
         	$pais = Pais::select('id', 'nombre')->where('codigo' , $data->clim_pais)->first();
 			if ($pais)
 				$pais_id = $pais->id;
@@ -842,7 +846,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 			$condicioniibb_id = 1;
 			switch($data->clim_perc_ing_br)
 			{
-			case '1':
+			case '1': // Anita PERC_EXENTO → ibrxp_porc_exento (No inscripto)
 				$condicioniibb_id = 3;
 				break;
 			case '2':
@@ -933,6 +937,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 					"domicilio" => $data->clim_direccion,
 					"localidad_id" => $localidad_id,
 					"provincia_id" => $provincia_id,
+					"provincia_iibb_id" => $provincia_iibb_id,
 					"pais_id" => $pais_id,
 					"codigopostal" => $data->clim_cod_postal,
 					"zonavta_id" => $zonavta_id,
@@ -984,6 +989,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 					"domicilio" => $data->clim_direccion,
 					"localidad_id" => $localidad_id,
 					"provincia_id" => $provincia_id,
+					"provincia_iibb_id" => $provincia_iibb_id,
 					"pais_id" => $pais_id,
 					"codigopostal" => $data->clim_cod_postal,
 					"zonavta_id" => $zonavta_id,
@@ -1318,7 +1324,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 	{
 		$floats = ['descuento', 'porcentajelogistica', 'coeficienteextra'];
 		$enteros = [
-			'localidad_id', 'provincia_id', 'pais_id', 'zonavta_id', 'subzonavta_id',
+			'localidad_id', 'provincia_id', 'provincia_iibb_id', 'pais_id', 'zonavta_id', 'subzonavta_id',
 			'vendedor_id', 'cobrador_id', 'transporte_id', 'condicioniva_id', 'condicioniibb_id',
 			'tipoempresa_cliente_id', 'condicionventa_id', 'listaprecio_id', 'cuentacontable_id',
 			'abasto_id', 'coeficiente_id', 'distribuidor_id', 'descuentoventa_id', 'tipodocumento_id',
@@ -1772,8 +1778,10 @@ class ClienteRepository implements ClienteRepositoryInterface
 			$codigolistaprecio, $codigoabasto, $codigocoeficiente, $codigodistribuidor,
 			$emitecertificado, $emitenotadecredito, $agregabonificacion, $regimen, $codigotipoempresa);
 
-		$codigozonamult = ClienteAnitaZonamultSupport::codigoDesdeProvinciaId(
-			isset($request['provincia_id']) ? (int) $request['provincia_id'] : null
+		$codigozonamult = ClienteAnitaZonamultSupport::codigoDesdeProvinciaIibbId(
+			isset($request['provincia_iibb_id']) && (int) $request['provincia_iibb_id'] > 0
+				? (int) $request['provincia_iibb_id']
+				: (isset($request['provincia_id']) ? (int) $request['provincia_id'] : null)
 		);
 
 		$fecha = Carbon::now()->format('Ymd');
@@ -1966,6 +1974,7 @@ class ClienteRepository implements ClienteRepositoryInterface
 			'transporte_id' => $cliente->transporte_id ?? 0,
 			'localidad_id' => $cliente->localidad_id ?? 0,
 			'provincia_id' => $cliente->provincia_id ?? 0,
+			'provincia_iibb_id' => $cliente->provincia_iibb_id ?? 0,
 			'pais_id' => $cliente->pais_id ?? 1,
 			'zonavta_id' => $cliente->zonavta_id ?? 0,
 			'listaprecio_id' => $cliente->listaprecio_id ?? 0,
@@ -2119,8 +2128,10 @@ class ClienteRepository implements ClienteRepositoryInterface
 			$codigolistaprecio, $codigoabasto, $codigocoeficiente, $codigodistribuidor,
 			$emitecertificado, $emitenotadecredito, $agregabonificacion, $regimen, $codigotipoempresa);
 
-		$codigozonamult = ClienteAnitaZonamultSupport::codigoDesdeProvinciaId(
-			isset($request['provincia_id']) ? (int) $request['provincia_id'] : null
+		$codigozonamult = ClienteAnitaZonamultSupport::codigoDesdeProvinciaIibbId(
+			isset($request['provincia_iibb_id']) && (int) $request['provincia_iibb_id'] > 0
+				? (int) $request['provincia_iibb_id']
+				: (isset($request['provincia_id']) ? (int) $request['provincia_id'] : null)
 		);
 
 		$nombre = preg_replace('([^A-Za-z0-9 ])', '', $request['nombre']);

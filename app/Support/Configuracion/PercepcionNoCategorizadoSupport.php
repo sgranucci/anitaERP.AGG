@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace App\Support\Configuracion;
 
 use App\Models\Configuracion\ConfiguracionPercepcionNoCategorizado;
-use App\Models\Configuracion\Impuesto;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -22,7 +20,7 @@ final class PercepcionNoCategorizadoSupport
     /** Código AFIP CondicionIVAReceptor: Sujeto No Categorizado. */
     public const CODIGO_AFIP = 7;
 
-    /** Código del impuesto maestro donde se cargan las cuentas (ABM Impuestos). */
+    /** Código del régimen de percepción (catálogo, no impuesto nacional). */
     public const IMPUESTO_CODIGO = 'PNC';
 
     /** Tributo ARCA / FACEL (otros tributos). */
@@ -34,16 +32,11 @@ final class PercepcionNoCategorizadoSupport
 
     private static bool $filaLeida = false;
 
-    private static ?int $impuestoId = null;
-
-    private static bool $impuestoIdLeido = false;
-
     public static function olvidarCache(): void
     {
         self::$fila = null;
         self::$filaLeida = false;
-        self::$impuestoId = null;
-        self::$impuestoIdLeido = false;
+        RegimenPercepcionSupport::olvidarCache();
     }
 
     public static function corresponde(?object $condicioniva): bool
@@ -147,7 +140,7 @@ final class PercepcionNoCategorizadoSupport
             'base' => $base,
             'tasa' => $tasa,
             'importe' => $importe,
-            'impuesto_id' => self::impuestoId(),
+            'impuesto_id' => null,
         ];
     }
 
@@ -184,49 +177,25 @@ final class PercepcionNoCategorizadoSupport
 
     public static function impuestoId(): ?int
     {
-        if (self::$impuestoIdLeido) {
-            return self::$impuestoId;
-        }
-        self::$impuestoIdLeido = true;
-        $id = Impuesto::query()->where('codigo', self::IMPUESTO_CODIGO)->value('id');
-        self::$impuestoId = $id !== null ? (int) $id : null;
-
-        return self::$impuestoId;
+        return null;
     }
 
     public static function codigoCuentaContable(): string
     {
-        return trim((string) config('facturacion.CUENTACONTABLE_PERCEPCION_NO_CATEGORIZADO', ''));
+        return RegimenPercepcionSupport::codigoCuentaFallback(RegimenPercepcionSupport::CODIGO_PNC);
     }
 
     /**
-     * Códigos de cuenta del asiento: ABM impuesto PNC por empresa y fallback de config.
+     * Códigos de cuenta del asiento: grilla del régimen PNC y fallback de config.
      *
      * @return list<string>
      */
     public static function codigosCuentaContableEmpresa(int $empresaId): array
     {
-        $codigos = [];
-        $cfg = self::codigoCuentaContable();
-        if ($cfg !== '') {
-            $codigos[] = $cfg;
-        }
-        $impuestoId = self::impuestoId();
-        if ($impuestoId && $empresaId > 0 && Schema::hasTable('impuesto_cuentacontable')) {
-            $filas = DB::table('impuesto_cuentacontable as ic')
-                ->join('cuentacontable as c', 'c.id', '=', 'ic.cuentacontable_id')
-                ->where('ic.impuesto_id', $impuestoId)
-                ->where('ic.empresa_id', $empresaId)
-                ->pluck('c.codigo');
-            foreach ($filas as $codigo) {
-                $codigo = trim((string) $codigo);
-                if ($codigo !== '') {
-                    $codigos[] = $codigo;
-                }
-            }
-        }
-
-        return array_values(array_unique($codigos));
+        return RegimenPercepcionSupport::codigosCuentaContableEmpresa(
+            RegimenPercepcionSupport::CODIGO_PNC,
+            $empresaId
+        );
     }
 
     private static function fila(): ?object
@@ -235,6 +204,18 @@ final class PercepcionNoCategorizadoSupport
             return self::$fila;
         }
         self::$filaLeida = true;
+
+        $catalogo = RegimenPercepcionSupport::porCodigo(RegimenPercepcionSupport::CODIGO_PNC);
+        if ($catalogo !== null) {
+            self::$fila = (object) [
+                'habilitado' => (bool) $catalogo->habilitado,
+                'tasa' => (float) $catalogo->tasa,
+                'minimo' => (float) $catalogo->minimo_importe,
+            ];
+
+            return self::$fila;
+        }
+
         if (! Schema::hasTable('configuracion_percepcion_no_categorizado')) {
             return null;
         }

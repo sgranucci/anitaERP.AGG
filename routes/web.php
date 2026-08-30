@@ -178,12 +178,14 @@ Route::delete('configuracion/pais/{id}', 'Configuracion\PaisController@eliminar'
 
 Route::get('configuracion/provincia', 'Configuracion\ProvinciaController@index')->name('provincia');
 Route::get('configuracion/provincia/crear', 'Configuracion\ProvinciaController@crear')->name('crear_provincia');
+Route::get('configuracion/provincia/preview-tasas-iibb', 'Configuracion\ProvinciaController@previewTasasIibb')->name('preview_provincia_tasas_iibb');
 Route::post('configuracion/provincia', 'Configuracion\ProvinciaController@guardar')->name('guardar_provincia');
 Route::get('configuracion/provincia/{id}/editar', 'Configuracion\ProvinciaController@editar')->name('editar_provincia');
 Route::put('configuracion/provincia/{id}', 'Configuracion\ProvinciaController@actualizar')->name('actualizar_provincia');
 Route::delete('configuracion/provincia/{id}', 'Configuracion\ProvinciaController@eliminar')->name('eliminar_provincia');
 
 Route::get('configuracion/listaprovincia/{formato?}/{busqueda?}', 'Configuracion\ProvinciaController@listar')->name('lista_provincia');
+Route::get('configuracion/lista-provincias/{formato?}/{busqueda?}', 'Configuracion\ProvinciaController@listarIndex')->name('lista_provincias');
 Route::post('configuracion/provincia/consultaprovincia', 'Configuracion\ProvinciaController@consultaProvincia')->name('consulta_provincia');
 Route::get('configuracion/leerunaprovincia/{provincia_id}', 'Configuracion\ProvinciaController@leeUnaProvincia')->name('leer_una_provincia');
 
@@ -852,10 +854,17 @@ Route::post('stock/crearreplistaprecio', 'Stock\RepListaPrecioController@crearRe
  * Impuestos
  */
 
+Route::get('configuracion/regimen-percepcion', 'Configuracion\RegimenPercepcionController@index')->name('regimen_percepcion');
+Route::get('configuracion/lista-regimen-percepcion/{formato?}/{busqueda?}', 'Configuracion\RegimenPercepcionController@listar')->name('lista_regimen_percepcion');
+Route::get('configuracion/regimen-percepcion/crear', 'Configuracion\RegimenPercepcionController@crear')->name('crear_regimen_percepcion');
+Route::post('configuracion/regimen-percepcion', 'Configuracion\RegimenPercepcionController@guardar')->name('guardar_regimen_percepcion');
+Route::get('configuracion/regimen-percepcion/{id}/editar', 'Configuracion\RegimenPercepcionController@editar')->name('editar_regimen_percepcion');
+Route::put('configuracion/regimen-percepcion/{id}', 'Configuracion\RegimenPercepcionController@actualizar')->name('actualizar_regimen_percepcion');
+Route::delete('configuracion/regimen-percepcion/{id}', 'Configuracion\RegimenPercepcionController@eliminar')->name('eliminar_regimen_percepcion');
+
 Route::get('configuracion/impuesto', 'Configuracion\ImpuestoController@index')->name('impuesto');
 Route::get('configuracion/impuesto/crear', 'Configuracion\ImpuestoController@crear')->name('crear_impuesto');
 Route::post('configuracion/impuesto', 'Configuracion\ImpuestoController@guardar')->name('guardar_impuesto');
-Route::put('configuracion/impuesto/percepcion-no-categorizado', 'Configuracion\ImpuestoController@actualizarPercepcionNoCategorizado')->name('actualizar_percepcion_no_categorizado');
 Route::get('configuracion/impuesto/{id}/editar', 'Configuracion\ImpuestoController@editar')->name('editar_impuesto');
 Route::put('configuracion/impuesto/{id}', 'Configuracion\ImpuestoController@actualizar')->name('actualizar_impuesto');
 Route::delete('configuracion/impuesto/{id}', 'Configuracion\ImpuestoController@eliminar')->name('eliminar_impuesto');
@@ -877,6 +886,7 @@ Route::delete('configuracion/empresa/{id}', 'Configuracion\EmpresaController@eli
 
 Route::get('configuracion/general', 'Configuracion\ConfiguracionGeneralController@index')->name('configuracion_general');
 Route::put('configuracion/general', 'Configuracion\ConfiguracionGeneralController@actualizar')->name('actualizar_configuracion_general');
+Route::put('configuracion/general/agentes-iibb', 'Configuracion\ConfiguracionGeneralController@actualizarAgentesIibb')->name('actualizar_agentes_iibb');
 
 /*
  * Avisos configurables por módulo
@@ -2179,6 +2189,9 @@ if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::get('ventas/pedido', 'Ventas\PedidoController@indexp')->name('pedido');
     Route::get('ventas/pedido/crear', 'Ventas\PedidoController@crear')->name('crear_pedido');
     Route::post('ventas/pedido', 'Ventas\PedidoController@guardar')->name('guardar_pedido');
+    Route::get('ventas/pedido/{id}/contexto-facturacion', 'Ventas\PedidoController@contextoFacturacion')->name('contexto_facturacion_pedido');
+    Route::get('ventas/pedido/reparto/{transporteId}/contexto-facturacion', 'Ventas\PedidoController@contextoFacturacionReparto')->name('contexto_facturacion_reparto_pedido');
+    Route::post('ventas/pedido/reparto/{transporteId}/facturar', 'Ventas\PedidoController@facturarReparto')->name('facturar_reparto_pedido');
     Route::get('ventas/pedido/{id}/editar', 'Ventas\PedidoController@editar')->name('editar_pedido')->middleware('modo.consulta');
     Route::post('ventas/pedido/{id}/transferir-despacho', 'Ventas\PedidoController@transferirAlDespacho')->name('transferir_pedido_despacho');
     Route::put('ventas/pedido/{id}', 'Ventas\PedidoController@actualizar')->name('actualizar_pedido')->middleware('modo.consulta');
@@ -2267,6 +2280,7 @@ Route::get('ventas/listaunafacturapdf/{id}', 'Ventas\FacturacionController@lista
 Route::get('ventas/listaunafacturacopias/{id}', 'Ventas\FacturacionController@listaUnaFacturaCopias')->name('lista_una_factura_copias');
 Route::get('ventas/impresion-sesion/factura/{id}', 'Ventas\ComprobanteImpresionSesionController@factura')->name('sesion_impresion_factura');
 Route::get('ventas/impresion-sesion/reparto/{transporteId}', 'Ventas\ComprobanteImpresionSesionController@reparto')->name('sesion_impresion_reparto');
+Route::get('ventas/impresion-sesion/reparto-pedidos/{transporteId}', 'Ventas\ComprobanteImpresionSesionController@repartoPedidos')->name('sesion_impresion_reparto_pedidos');
 Route::get('ventas/impresion-sesion/pedido/{id}', 'Ventas\ComprobanteImpresionSesionController@pedido')->name('sesion_impresion_pedido');
 Route::get('ventas/impresion-sesion/remito/{id}', 'Ventas\ComprobanteImpresionSesionController@remito')->name('sesion_impresion_remito');
 Route::get('ventas/impresion-sesion/cot/{id}', 'Ventas\ComprobanteImpresionSesionController@cot')->name('sesion_impresion_cot')->where('id', '[0-9]+');

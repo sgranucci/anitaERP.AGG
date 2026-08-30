@@ -6,6 +6,7 @@ interface ImpuestoRepositoryInterface extends RepositoryInterface
 {
 
     public function all();
+    public function allPercepcion();
     public function sincronizarConAnita();
     public function traerRegistroDeAnita($key);
 	public function guardarAnita($request);

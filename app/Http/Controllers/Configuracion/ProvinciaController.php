@@ -2,19 +2,24 @@
 
 namespace App\Http\Controllers\Configuracion;
 
-use Illuminate\Http\Request;
+use App\Exports\Configuracion\ProvinciaListadoExport;
+use App\Exports\Configuracion\ProvinciaTasaiibbListadoExport;
 use App\Http\Controllers\Controller;
-use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionProvincia;
-use App\Repositories\Configuracion\EmpresaRepositoryInterface;
-use App\Repositories\Configuracion\ProvinciaRepositoryInterface;
-use App\Repositories\Configuracion\Provincia_TasaiibbRepositoryInterface;
-use App\Repositories\Configuracion\Provincia_CuentacontableiibbRepositoryInterface;
-use App\Repositories\Configuracion\CondicionIIBBRepositoryInterface;
-use App\Repositories\Contable\CuentacontableRepositoryInterface;
-use Illuminate\Support\Facades\Auth;
 use App\Models\Configuracion\Pais;
+use App\Models\Configuracion\Provincia;
+use App\Repositories\Configuracion\CondicionIIBBRepositoryInterface;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Repositories\Configuracion\Provincia_CuentacontableiibbRepositoryInterface;
+use App\Repositories\Configuracion\Provincia_TasaiibbRepositoryInterface;
+use App\Repositories\Configuracion\ProvinciaRepositoryInterface;
+use App\Repositories\Contable\CuentacontableRepositoryInterface;
+use App\Support\Configuracion\ProvinciaListadoFiltros;
+use App\Support\Configuracion\ProvinciaTasaiibbListadoSupport;
+use App\Support\Listado\QueryRetornoListado;
 use DB;
+use Illuminate\Http\Request;
+use Maatwebsite\Excel\Excel;
 
 class ProvinciaController extends Controller
 {
@@ -45,13 +50,19 @@ class ProvinciaController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function index()
+    public function index(Request $request)
     {
         can('listar-provincias');
 
-        $datas = $this->provinciaRepository->all();
+        $filtros = ProvinciaListadoFiltros::resolverDesdeRequest($request);
+        $datas = $this->provinciaRepository->leeProvincia($filtros, true);
 
-        return view('configuracion.provincia.index', compact('datas'));
+        return view('configuracion.provincia.index', [
+            'datas' => $datas,
+            'filtros' => $filtros,
+            'filtrosQuery' => ProvinciaListadoFiltros::paraQueryString($filtros),
+            'camposFiltro' => ProvinciaListadoFiltros::CAMPOS,
+        ]);
     }
 
     /**
@@ -59,15 +70,23 @@ class ProvinciaController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-provincias');
 
+        $data = new Provincia();
 		$pais_query = Pais::all();
         $condicioniibb_query = $this->condicioniibbRepository->all();
         $empresa_query = $this->empresaRepository->allFiltrado();
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ProvinciaListadoFiltros::class);
 
-        return view('configuracion.provincia.crear', compact('pais_query', 'condicioniibb_query', 'empresa_query'));
+        return view('configuracion.provincia.crear', compact(
+            'data',
+            'pais_query',
+            'condicioniibb_query',
+            'empresa_query',
+            'filtrosQuery'
+        ));
     }
 
     /**
@@ -118,7 +137,8 @@ class ProvinciaController extends Controller
 
             DB::commit();
         
-            return redirect('configuracion/provincia')->with('mensaje', 'Provincia creada con éxito');
+            return redirect()->route('provincia', QueryRetornoListado::desdeRequest($request, ProvinciaListadoFiltros::class))
+                ->with('mensaje', 'Provincia creada con éxito');
 
         } catch (\Exception $exception) {
             DB::rollBack();
@@ -135,7 +155,7 @@ class ProvinciaController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
         can('editar-provincias');
 		$pais_query = Pais::all();
@@ -143,8 +163,15 @@ class ProvinciaController extends Controller
         $empresa_query = $this->empresaRepository->allFiltrado();
 
         $data = $this->provinciaRepository->findOrFail($id);
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ProvinciaListadoFiltros::class);
 
-        return view('configuracion.provincia.editar', compact('data', 'pais_query', 'condicioniibb_query', 'empresa_query'));
+        return view('configuracion.provincia.editar', compact(
+            'data',
+            'pais_query',
+            'condicioniibb_query',
+            'empresa_query',
+            'filtrosQuery'
+        ));
     }
 
     /**
@@ -205,7 +232,8 @@ class ProvinciaController extends Controller
 
             DB::commit();
         
-            return redirect('configuracion/provincia')->with('mensaje', 'Provincia actualizada con exito');
+            return redirect()->route('provincia', QueryRetornoListado::desdeRequest($request, ProvinciaListadoFiltros::class))
+                ->with('mensaje', 'Provincia actualizada con éxito');
 
         } catch (\Exception $exception) {
             DB::rollBack();
@@ -234,7 +262,50 @@ class ProvinciaController extends Controller
         } else {
             abort(404);
         }
-        return redirect('configuracion/provincia')->with('mensaje', 'Provincia eliminada con exito');
+        return redirect()->route('provincia')->with('mensaje', 'Provincia eliminada con éxito');
+    }
+
+    /**
+     * Exportación del index de provincias (no confundir con lista_provincia = tasas IIBB).
+     */
+    public function listarIndex(Request $request, $formato = null, $busqueda = null)
+    {
+        can('listar-provincias');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $filtros = ProvinciaListadoFiltros::resolverDesdeRequest($request, $busqueda);
+
+        switch ($formato) {
+            case 'PDF':
+                $datas = $this->provinciaRepository->leeProvincia($filtros, false);
+                $view = \View::make('configuracion.provincia.listado_index', compact('datas'))->render();
+                $path = storage_path('pdf/listados');
+                $nombrePdf = 'listado_provincia';
+
+                if (! is_dir($path)) {
+                    @mkdir($path, 0775, true);
+                }
+
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombrePdf.'.pdf');
+
+                return response()->download($path.'/'.$nombrePdf.'.pdf');
+
+            case 'EXCEL':
+                return (new ProvinciaListadoExport($this->provinciaRepository))
+                    ->parametros($filtros)
+                    ->download('provincias.xlsx');
+
+            case 'CSV':
+                return (new ProvinciaListadoExport($this->provinciaRepository))
+                    ->parametros($filtros)
+                    ->download('provincias.csv', Excel::CSV);
+        }
+
+        return redirect()->route('provincia', ProvinciaListadoFiltros::paraQueryString($filtros));
     }
     
     public function consultaProvincia(Request $request)
@@ -245,5 +316,56 @@ class ProvinciaController extends Controller
     public function leeUnaProvincia($codigoProvincia)
     {
         return ($this->provinciaRepository->findPorCodigo($codigoProvincia));
-	}    
+	}
+
+    public function listar(Request $request, $formato = null, $busqueda = null)
+    {
+        can('listar-provincias');
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $filas = ProvinciaTasaiibbListadoSupport::filas();
+        $resumen = ProvinciaTasaiibbListadoSupport::resumen($filas);
+        $titulo = ProvinciaTasaiibbListadoSupport::titulo();
+        $subtitulo = ProvinciaTasaiibbListadoSupport::subtitulo();
+
+        switch ($formato) {
+            case 'PDF':
+                $view = \View::make('configuracion.provincia.listado', compact('filas', 'resumen', 'titulo', 'subtitulo'))
+                    ->render();
+                $path = storage_path('pdf/listados');
+                $nombrePdf = 'listado_provincia_tasas_iibb';
+
+                if (! is_dir($path)) {
+                    @mkdir($path, 0775, true);
+                }
+
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'landscape');
+                $pdf->loadHTML($view)->save($path.'/'.$nombrePdf.'.pdf');
+
+                return response()->download($path.'/'.$nombrePdf.'.pdf');
+
+            case 'EXCEL':
+                return (new ProvinciaTasaiibbListadoExport($filas, $resumen, $titulo, $subtitulo))
+                    ->download('tasas_iibb_provincias.xlsx');
+
+            case 'CSV':
+                return (new ProvinciaTasaiibbListadoExport($filas, $resumen, $titulo, $subtitulo))
+                    ->download('tasas_iibb_provincias.csv', Excel::CSV);
+        }
+
+        return redirect()->route('provincia');
+    }
+
+    public function previewTasasIibb()
+    {
+        can('listar-provincias');
+
+        $filas = ProvinciaTasaiibbListadoSupport::filas();
+        $resumen = ProvinciaTasaiibbListadoSupport::resumen($filas);
+
+        return view('configuracion.provincia.partials.preview_tasas', compact('filas', 'resumen'));
+    }
 }

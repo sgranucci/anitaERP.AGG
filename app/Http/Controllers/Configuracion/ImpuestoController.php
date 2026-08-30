@@ -4,18 +4,13 @@ namespace App\Http\Controllers\Configuracion;
 
 use Illuminate\Http\Request;
 use App\Http\Controllers\Controller;
-use App\Models\Configuracion\ConfiguracionPercepcionNoCategorizado;
-use App\Models\Configuracion\Impuesto;
 use Illuminate\Support\Facades\Storage;
 use App\Http\Requests\ValidacionImpuesto;
-use App\Http\Requests\ValidacionPercepcionNoCategorizado;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\ImpuestoRepositoryInterface;
 use App\Repositories\Configuracion\Impuesto_CuentacontableRepositoryInterface;
-use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use Carbon\Carbon;
 use DB;
-use Illuminate\Support\Facades\Schema;
 
 class ImpuestoController extends Controller
 {
@@ -42,50 +37,8 @@ class ImpuestoController extends Controller
         can('listar-impuestos');
 
         $datas = $this->impuestoRepository->all();
-        $percepcionNoCateg = $this->percepcionNoCategParaVista();
 
-        return view('configuracion.impuesto.index', compact('datas', 'percepcionNoCateg'));
-    }
-
-    public function actualizarPercepcionNoCategorizado(ValidacionPercepcionNoCategorizado $request)
-    {
-        can('actualizar-impuestos');
-
-        if (! Schema::hasTable('configuracion_percepcion_no_categorizado')) {
-            return back()->with('mensaje', 'Falta aplicar la migración de percepción no categorizado.');
-        }
-
-        $datos = $request->validated();
-        $fila = ConfiguracionPercepcionNoCategorizado::query()->first();
-        if ($fila) {
-            $fila->update($datos);
-        } else {
-            ConfiguracionPercepcionNoCategorizado::query()->create($datos);
-        }
-
-        $impuesto = Impuesto::query()->where('codigo', PercepcionNoCategorizadoSupport::IMPUESTO_CODIGO)->first();
-        if ($impuesto) {
-            $impuesto->update([
-                'valor' => (float) $datos['tasa'],
-            ]);
-        }
-
-        PercepcionNoCategorizadoSupport::olvidarCache();
-
-        return redirect()->route('impuesto')->with('mensaje', 'Percepción a no categorizados actualizada con éxito');
-    }
-
-    /**
-     * @return array{habilitado: bool, tasa: float, minimo: float, impuesto_id: int|null}
-     */
-    private function percepcionNoCategParaVista(): array
-    {
-        return [
-            'habilitado' => PercepcionNoCategorizadoSupport::habilitada(),
-            'tasa' => PercepcionNoCategorizadoSupport::tasaBase(),
-            'minimo' => PercepcionNoCategorizadoSupport::minimo(),
-            'impuesto_id' => PercepcionNoCategorizadoSupport::impuestoId(),
-        ];
+        return view('configuracion.impuesto.index', compact('datas'));
     }
 
     /**
@@ -215,10 +168,14 @@ class ImpuestoController extends Controller
         can('borrar-impuestos');
 
         if ($request->ajax()) {
-            if ($this->impuestoRepository->delete($id)) {
-                return response()->json(['mensaje' => 'ok']);
-            } else {
+            try {
+                if ($this->impuestoRepository->delete($id)) {
+                    return response()->json(['mensaje' => 'ok']);
+                }
+
                 return response()->json(['mensaje' => 'ng']);
+            } catch (\RuntimeException $e) {
+                return response()->json(['mensaje' => 'ng', 'error' => $e->getMessage()], 422);
             }
         } else {
             abort(404);

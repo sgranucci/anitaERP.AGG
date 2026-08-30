@@ -16,8 +16,11 @@ use App\Models\Configuracion\Salida;
 use App\Support\Configuracion\SalidaImpresionFallbackSupport;
 use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Support\Ventas\ClienteEntregaPedidoSupport;
+use App\Support\Ventas\ClienteProvinciaIibbSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
+use App\Support\Ventas\VillafrancaFacturacionSupport;
 use App\Support\Ventas\PedidoItemCierreFaltaStockSupport;
+use App\Support\Ventas\PuntoventaEmpresaSupport;
 use App\Services\Configuracion\ImpuestoService;
 use App\Services\Stock\Articulo_MovimientoService;
 use App\Services\Stock\PrecioService;
@@ -222,6 +225,24 @@ class PedidoService
 		return $this->pedidoQuery->totalesPedidoIndexPorReparto($filtros);
 	}
 
+	/**
+	 * @param  array<string, mixed>  $filtros
+	 * @return \Illuminate\Support\Collection<string, object>
+	 */
+	public function accionesPedidoIndexPorReparto(array $filtros)
+	{
+		return $this->pedidoQuery->accionesPedidoIndexPorReparto($filtros);
+	}
+
+	/**
+	 * @param  array<string, mixed>  $filtros
+	 * @return list<int>
+	 */
+	public function ventaIdsIndexPorReparto(array $filtros, int $transporteId): array
+	{
+		return $this->pedidoQuery->ventaIdsIndexPorReparto($filtros, $transporteId);
+	}
+
 	public function listarPedido($id)
 	{
 		$resultado = $this->imprimirPedido((int) $id);
@@ -262,8 +283,13 @@ class PedidoService
 		$nombreReporte = null;
 
 		try {
-			$data = $this->pedidoQuery->leePedidoporId($id);
-			$pedido = $data[0];
+			$pedido = $this->pedidoParaPdf($id);
+			if (! $pedido) {
+				return [
+					'ok' => false,
+					'mensaje' => 'Pedido no encontrado',
+				];
+			}
 			$nombre_pdf = 'pedido-'.$id.'-'.$pedido->clientes->nombre;
 
 			$view = View::make('exports.ventas.pedido', compact('pedido'))->render();
@@ -367,8 +393,7 @@ class PedidoService
 	{
 	  	ini_set('memory_limit', '512M');
 
-		$data = $this->pedidoQuery->leePedidoporId($id);
-		$pedido = $data[0] ?? null;
+		$pedido = $this->pedidoParaPdf($id);
 		if (! $pedido) {
 			return '';
 		}
@@ -388,6 +413,20 @@ class PedidoService
         $pdf->loadHTML($view)->save($path.'/'.$nombre_pdf.'.pdf');
 
 		return $path.'/'.$nombre_pdf.'.pdf';
+	}
+
+	private function pedidoParaPdf($id)
+	{
+		$data = $this->pedidoQuery->leePedidoporId($id);
+		$pedido = $data[0] ?? null;
+		if (! $pedido) {
+			return null;
+		}
+		if (VillafrancaFacturacionSupport::esReparto101($pedido)) {
+			$pedido->load('ventas');
+		}
+
+		return $pedido;
 	}
 
 	public function listarPreFactura($id, $items_id, $descuentoLinea = null)
@@ -461,13 +500,18 @@ class PedidoService
 				}
 			}
 		}
-		// Arma datos del cliente
+		// Arma datos del cliente (empresa = sucursal de facturación del usuario)
+		$entregaPrefactura = null;
+		if ((int) ($pedido->cliente_entrega_id ?? 0) > 0) {
+			$entregaPrefactura = $this->cliente_entregaRepository->find($pedido->cliente_entrega_id);
+		}
 		$datosCliente = [ "condicioniva_id" => $cliente->condicioniva_id,
-						  "nroinscripcion" => $cliente->nroinscripcion,
+						  "numerodocumento" => $cliente->numerodocumento,
 						  "retieneiva" => $cliente->retieneiva,
-						  "condicioniibb" => $cliente->condicioniibb,
-						  "provincia" => $cliente->provincia_id,
+						  "condicioniibb_id" => $cliente->condicioniibb_id,
+						  "provincia" => ClienteProvinciaIibbSupport::idParaPercepcionAdmin($cliente, $entregaPrefactura),
 						  "id" => $cliente->id,
+						  "empresa_id" => PuntoventaEmpresaSupport::empresaIdDesdePreferenciaFacturacion(),
 						];
 
 		// Calcula impuestos

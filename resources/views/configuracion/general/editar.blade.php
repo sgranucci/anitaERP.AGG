@@ -86,6 +86,70 @@ Configuración general del sistema
                 </div>
             </form>
         </div>
+
+        <div class="card card-outline card-info mt-3">
+            <div class="card-header">
+                <h3 class="card-title"><i class="fa fa-balance-scale"></i> Agentes IIBB por empresa</h3>
+            </div>
+            <form action="{{ route('actualizar_agentes_iibb') }}" id="form-agentes-iibb" class="form-horizontal" method="POST" autocomplete="off">
+                @csrf
+                @method('put')
+                <div class="card-body">
+                    <p class="text-muted mb-3">
+                        Tilde en qu&eacute; jurisdicciones cada empresa jur&iacute;dica percibe (ventas) o retiene (compras).
+                        Las al&iacute;cuotas y m&iacute;nimos se cargan en el ABM de provincia: son del fisco, no de la empresa.
+                    </p>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered" id="tabla-agentes-iibb">
+                            <thead style="background:#85C1E9;color:#17202A;">
+                                <tr>
+                                    <th rowspan="2" class="align-middle">Jur.</th>
+                                    <th rowspan="2" class="align-middle">Provincia</th>
+                                    @foreach ($empresasIibb as $empresa)
+                                        <th colspan="2" class="text-center">{{ $empresa->nombre }}</th>
+                                    @endforeach
+                                </tr>
+                                <tr>
+                                    @foreach ($empresasIibb as $empresa)
+                                        <th class="text-center">Percibe</th>
+                                        <th class="text-center">Retiene</th>
+                                    @endforeach
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach ($matrizIibb as $fila)
+                                    <tr>
+                                        <td>{{ $fila['jurisdiccion'] }}</td>
+                                        <td>{{ $fila['nombre'] }}</td>
+                                        @foreach ($empresasIibb as $empresa)
+                                            @php
+                                                $celda = $fila['empresas'][(int) $empresa->id] ?? ['percepcion' => false, 'retencion' => false];
+                                                $base = 'agentes['.$empresa->id.']['.$fila['provincia_id'].']';
+                                            @endphp
+                                            <td class="text-center">
+                                                <input type="hidden" name="{{ $base }}[percepcion]" value="0">
+                                                <input type="checkbox" name="{{ $base }}[percepcion]" value="1"
+                                                    {{ ! empty($celda['percepcion']) ? 'checked' : '' }}>
+                                            </td>
+                                            <td class="text-center">
+                                                <input type="hidden" name="{{ $base }}[retencion]" value="0">
+                                                <input type="checkbox" name="{{ $base }}[retencion]" value="1"
+                                                    {{ ! empty($celda['retencion']) ? 'checked' : '' }}>
+                                            </td>
+                                        @endforeach
+                                    </tr>
+                                @endforeach
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+                <div class="card-footer">
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fa fa-save"></i> Guardar agentes IIBB
+                    </button>
+                </div>
+            </form>
+        </div>
     </div>
 </div>
 @include('includes.caja.modalconsultacuentacaja')

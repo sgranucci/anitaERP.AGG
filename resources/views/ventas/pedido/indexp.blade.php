@@ -1,4 +1,10 @@
 @extends("theme.$theme.layout")
+<?php
+use App\Support\Ventas\PedidoListadoFiltros;
+use App\Support\Ventas\PedidoListadoSupport;
+$retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+$retornoImpresionPath = $retornoIndexPath ?? '';
+?>
 @section('titulo')
 Pedidos de Clientes
 @endsection
@@ -11,6 +17,28 @@ Pedidos de Clientes
 <script src="{{ asset('assets/pages/scripts/configuracion/configurar_salida.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/proceso-overlay.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/imprimir.js') }}" type="text/javascript"></script>
+<script>window.pedidoRetornoIndexUrl = @json(route('pedido', $retornoListadoQuery));</script>
+<script>window.pedidoRetornoIndexPath = @json($retornoImpresionPath);</script>
+@if (!empty($puedeFacturarIndex))
+<script>window.pedidoModoIndexFacturacion = true;</script>
+<script>window.VALIDACION_PADRON_POST_CARGA = true;</script>
+@php
+    $requiereValidacionApocOperacionIndex = filter_var(config('arca_wsapoc.validar_factura_cliente', true), FILTER_VALIDATE_BOOLEAN)
+        && filter_var(config('arca_wsapoc.habilitado', true), FILTER_VALIDATE_BOOLEAN);
+@endphp
+<script>window.REQUIERE_VALIDACION_APOC_OPERACION = @json($requiereValidacionApocOperacionIndex);</script>
+<script src="{{ asset('assets/pages/scripts/ventas/cliente/padron-operacion.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/arca-apoc-validacion-async.js') }}" type="text/javascript"></script>
+@include('includes.ventas.preferencias_facturacion_scripts')
+@include('ventas.partials.aviso_deposito_facturacion')
+@include('includes.ventas.cliente_despacho_js')
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/crear.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/facturar_index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/facturar_index.js')) ?: time() }}" type="text/javascript"></script>
+@endif
+@if (!empty($puedeFacturarReparto))
+<script>window.pedidoActividadesArca = @json(collect($actividad_arca_query ?? [])->pluck('nombre', 'id'));</script>
+<script src="{{ asset('assets/pages/scripts/ventas/pedido/facturar_reparto.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/facturar_reparto.js')) ?: time() }}" type="text/javascript"></script>
+@endif
 @if (\App\Services\Ventas\PedidoImportarDesdeAnitaService::esElBierzo() && can('ejecutar-importar-pedido-anita', false))
 <script src="{{ asset('assets/pages/scripts/ventas/pedido/importar_anita_index.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/pedido/importar_anita_index.js')) ?: time() }}" type="text/javascript"></script>
 @endif
@@ -27,15 +55,7 @@ function eliminarPedido(event) {
 </script>
 @endsection
 
-<?php
-use App\Support\Ventas\PedidoListadoFiltros;
-use App\Support\Ventas\PedidoListadoSupport;
-?>
-
 @section('contenido')
-@php
-    $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
-@endphp
 <meta name="csrf-token" content="{{ csrf_token() }}" />
 <div class="row">
     <div class="col-lg-12">
@@ -99,7 +119,7 @@ use App\Support\Ventas\PedidoListadoSupport;
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead>
                         <tr>
-                            <th class="width20">ID</th>
+                            <th class="text-nowrap">Nº pedido</th>
                             <th>Fecha</th>
                             <th>Fecha entrega</th>
                             <th class="width50">Cliente</th>
@@ -116,7 +136,7 @@ use App\Support\Ventas\PedidoListadoSupport;
                         @forelse($pedidos as $pedido)
                             @php $totales = PedidoListadoSupport::totalesPedido($pedido); @endphp
                             <tr data-entry-id="{{ $pedido['id'] }}">
-                                <td>{{ $pedido['id'] ?? '' }}</td>
+                                <td class="text-nowrap">{{ PedidoListadoSupport::codigoParaListado($pedido) }}</td>
                                 <td>{{ date('d-m-Y', strtotime($pedido['fecha'] ?? '')) }}</td>
                                 <td>{{ date('d-m-Y', strtotime($pedido['fechaentrega'] ?? '')) }}</td>
                                 <td><b>{{ $pedido['nombrecliente'] ?? '' }}</b></td>
@@ -151,17 +171,38 @@ use App\Support\Ventas\PedidoListadoSupport;
                                            data-pedido-id="{{ $pedido['id'] }}">
                                             <i class="fa fa-print"></i>
                                         </a>
-                                        <a href="{{ route('listar_pedido_pdf', ['id' => $pedido['id']]) }}"
+                                        <a href="{{ route('listar_pedido_pdf', array_filter(['id' => $pedido['id'], 'retorno' => $retornoImpresionPath])) }}"
                                            class="btn-accion-tabla tooltipsC" title="Listar el pedido en PDF">
                                             <i class="fas fa-file-pdf text-danger"></i>
                                         </a>
                                     @endif
+                                    @if (PedidoListadoSupport::puedeFacturarDesdeIndex($pedido))
+                                        <a href="{{ route('editar_pedido', ['id' => $pedido['id'], 'facturar' => 1] + $retornoListadoQuery) }}"
+                                           class="btn-accion-tabla tooltipsC btn-facturar-pedido-index"
+                                           title="Facturar pedido"
+                                           data-pedido-id="{{ $pedido['id'] }}">
+                                            <i class="fas fa-file-invoice text-success"></i>
+                                        </a>
+                                    @endif
+                                    @foreach (PedidoListadoSupport::ventasVisiblesParaIndex($pedido) as $ventaPedido)
+                                        <a href="{{ route('lista_una_factura', array_filter(['id' => $ventaPedido->id, 'retorno' => $retornoImpresionPath])) }}"
+                                           class="btn-accion-tabla tooltipsC"
+                                           title="Imprimir factura {{ $ventaPedido->codigo }}"
+                                           target="_blank"
+                                           rel="noopener">
+                                            <i class="fas fa-file-invoice text-primary"></i>
+                                        </a>
+                                    @endforeach
                                 </td>
                             </tr>
                             @if (PedidoListadoSupport::esCierreReparto($pedido, $totalesPorReparto ?? []))
                                 @include('ventas.pedido.partials.fila_subtotal_reparto', [
                                     'metaReparto' => PedidoListadoSupport::metaReparto($pedido, $totalesPorReparto ?? []),
+                                    'accionesReparto' => PedidoListadoSupport::accionesReparto($pedido, $accionesPorReparto ?? []),
                                     'conAcciones' => true,
+                                    'retornoIndexPath' => $retornoImpresionPath,
+                                    'filtrosQuery' => $filtrosQuery ?? [],
+                                    'puedeFacturarReparto' => $puedeFacturarReparto ?? false,
                                 ])
                             @endif
                         @empty
@@ -178,6 +219,13 @@ use App\Support\Ventas\PedidoListadoSupport;
 {{ $pedidos->appends($filtrosQuery ?? [])->links() }}
 
 @include('includes.proceso-overlay-pedido')
+@if (!empty($puedeFacturarIndex))
+    @include('ventas.pedido.partials.facturar_desde_index')
+@endif
+@if (!empty($puedeFacturarReparto))
+    @include('ventas.pedido.partials.modal_facturar_reparto')
+    @include('ventas.pedido.partials.modal_resultado_facturar_reparto')
+@endif
 @if (\App\Services\Ventas\PedidoImportarDesdeAnitaService::esElBierzo() && can('ejecutar-importar-pedido-anita', false))
     @include('ventas.pedido.partials.modal_importar_anita')
 @endif

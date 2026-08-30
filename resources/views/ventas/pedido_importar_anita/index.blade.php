@@ -29,8 +29,13 @@
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
                         Consulta pedidos de Anita (<code>pendmae</code>) por fecha de entrega y reparto (transporte <code>penm_expreso</code>).
-                        Luego puede importarlos al ERP: crea los faltantes y actualiza cabecera y líneas de los existentes.
+                        Luego puede importarlos al ERP: crea los faltantes y actualiza cabecera y líneas de los existentes
+                        que aún no estén facturados, transferidos o anulados.
                         El cliente interno DESPACHO no se importa: el circuito vive solo en ERP y el pedido Anita se cierra.
+                        @if (config('pedido.importar_anita_diaria.habilitado', true))
+                            Cada día a las {{ config('pedido.importar_anita_diaria.hora', '01:00') }}
+                            se importan solos los pedidos con fecha de entrega de ese día y todos los repartos.
+                        @endif
                     </p>
 
                     <div class="form-group row">
@@ -146,6 +151,8 @@
                                                 <span class="badge badge-warning">Existe (actualizar)</span>
                                             @elseif (($fila['estado_erp'] ?? '') === 'omitido_despacho')
                                                 <span class="badge badge-info">DESPACHO: cierra Anita, no importa</span>
+                                            @elseif (($fila['estado_erp'] ?? '') === 'omitido_facturado')
+                                                <span class="badge badge-secondary">Facturado / procesado: no se pisa</span>
                                             @else
                                                 <span class="badge badge-success">Nuevo</span>
                                             @endif

@@ -244,9 +244,8 @@ class AsignacionRemitoFacturaService
         if (Schema::hasTable('venta_estacionamiento_emision') && $venta->estacionamientoEmision()->exists()) {
             throw new RuntimeException('No se asignan remitos a facturas de estacionamiento');
         }
-        $operacion = (string) ($venta->tipotransacciones->operacion ?? '');
-        if ($operacion === 'C') {
-            throw new RuntimeException('No se asignan remitos a notas de crédito / devoluciones');
+        if (! ($venta->tipotransacciones?->correspondeRemito() ?? false)) {
+            throw new RuntimeException('Solo se asignan remitos a facturas (FAC / FCE)');
         }
     }
 
@@ -360,9 +359,7 @@ class AsignacionRemitoFacturaService
         }
 
         $query->whereHas('tipotransacciones', static function ($q) {
-                $q->where(function ($w) {
-                    $w->whereNull('operacion')->orWhere('operacion', '!=', 'C');
-                });
+                $q->whereIn('abreviatura', ['FAC', 'FCE']);
             });
 
         if (trim((string) ($filtros['fecha_hasta'] ?? '')) !== '') {

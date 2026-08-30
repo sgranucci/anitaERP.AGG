@@ -26,10 +26,12 @@ use App\Support\Ventas\KiloPedidoListadoFiltros;
 use App\Support\Ventas\KiloCategoriaListadoFiltros;
 use App\Support\Ventas\ListadoRepartoFechaEntregaSupport;
 use App\Support\Ventas\PedidoListadoFiltros;
+use App\Support\Ventas\PedidoListadoSupport;
 use App\Support\Ventas\ClienteDespachoSupport;
 use App\Support\Ventas\PedidoEstadoErpSupport;
 use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use App\Services\Ventas\PedidoTransferenciaDespachoService;
+use App\Services\Ventas\PedidoFacturacionLoteService;
 use Illuminate\Http\RedirectResponse;
 use App\Models\Configuracion\Moneda;
 use App\Models\Ventas\Cliente;
@@ -76,12 +78,14 @@ class PedidoController extends Controller
 	private $formpagoRepository;
 	private $actividad_arcaRepository;
 	private PedidoTransferenciaDespachoService $pedidoTransferenciaDespachoService;
+	private PedidoFacturacionLoteService $pedidoFacturacionLoteService;
 
     public function __construct(PedidoService $pedidoservice,
     							PedidoListadoPdfService $pedidoListadoPdfService,
     							KiloPedidoReporteService $kiloPedidoReporteService,
     							KiloCategoriaReporteService $kiloCategoriaReporteService,
     							PedidoTransferenciaDespachoService $pedidoTransferenciaDespachoService,
+    							PedidoFacturacionLoteService $pedidoFacturacionLoteService,
     							TransporteRepositoryInterface $transporterepository,
 								TiposuspensionclienteRepositoryInterface $tiposuspensionclienteRepository,
 								MotivocierrepedidoRepositoryInterface $motivocierrepedidoRepository,
@@ -110,6 +114,7 @@ class PedidoController extends Controller
 		$this->formapagoRepository = $formpagorepository;
         $this->actividad_arcaRepository = $actividad_arcarepository;
         $this->pedidoTransferenciaDespachoService = $pedidoTransferenciaDespachoService;
+        $this->pedidoFacturacionLoteService = $pedidoFacturacionLoteService;
     }
 
     /**
@@ -169,15 +174,130 @@ class PedidoController extends Controller
 		$filtrosQuery = PedidoListadoFiltros::paraQueryString($filtros);
 		$pedidos = $this->pedidoService->leePedidosIndex($filtros, true);
 		$totalesPorReparto = $this->pedidoService->totalesPedidosIndexPorReparto($filtros);
+		$accionesPorReparto = $this->pedidoService->accionesPedidoIndexPorReparto($filtros);
+		$puedeFacturarIndex = PedidoListadoSupport::usuarioPuedeFacturarPedido();
+		$puedeFacturarReparto = PedidoListadoSupport::usuarioPuedeFacturarReparto();
+		$retornoIndexPath = PedidoListadoSupport::pathRetornoIndex(
+			QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery)
+		);
 
-		return view('ventas.pedido.indexp', [
+		$vista = [
 			'pedidos' => $pedidos,
 			'totalesPorReparto' => $totalesPorReparto,
+			'accionesPorReparto' => $accionesPorReparto,
 			'filtros' => $filtros,
 			'filtrosQuery' => $filtrosQuery,
 			'camposFiltro' => PedidoListadoFiltros::CAMPOS,
-		]);
+			'puedeFacturarIndex' => $puedeFacturarIndex,
+			'puedeFacturarReparto' => $puedeFacturarReparto,
+			'retornoIndexPath' => $retornoIndexPath,
+		];
+
+		if ($puedeFacturarIndex || $puedeFacturarReparto) {
+			$vista = array_merge($vista, $this->datosVistaFacturacionIndex());
+		}
+
+		return view('ventas.pedido.indexp', $vista);
     }
+
+	public function contextoFacturacion(int $id)
+	{
+		if (! PedidoListadoSupport::usuarioPuedeFacturarPedido()) {
+			can('editar-pedidos');
+		}
+
+		$pedido = $this->pedidoService->leePedido($id);
+
+		if (! PedidoListadoSupport::puedeFacturarDesdeIndex($pedido)) {
+			return response()->json([
+				'error' => 'El pedido no está pesado o no se puede facturar.',
+			], 422);
+		}
+
+		return response()->json(PedidoListadoSupport::contextoFacturacion($pedido));
+	}
+
+	public function contextoFacturacionReparto(Request $request, int $transporteId)
+	{
+		can('facturar-reparto-pedidos');
+
+		$filtros = PedidoListadoFiltros::resolverDesdeRequest($request);
+		$contexto = $this->pedidoFacturacionLoteService->contexto($filtros, $transporteId);
+		if ($contexto['pedidos'] === []) {
+			return response()->json([
+				'error' => 'No hay pedidos pesados para facturar en este reparto.',
+			], 422);
+		}
+
+		return response()->json($contexto);
+	}
+
+	public function facturarReparto(Request $request, int $transporteId)
+	{
+		can('facturar-reparto-pedidos');
+
+		$tipotransaccionId = (int) $request->input('tipotransaccion_id', 0);
+		$puntoventaId = (int) $request->input('puntoventa_id', 0);
+		$puntoventaremitoId = (int) $request->input('puntoventaremito_id', 0);
+		$actividadArcaId = (int) $request->input('actividad_arca_id', 0);
+		if ($tipotransaccionId <= 0 || $puntoventaId <= 0 || $puntoventaremitoId <= 0) {
+			return response()->json([
+				'error' => 'Debe indicar tipo de transacción, punto de venta de factura y punto de venta del remito.',
+			], 422);
+		}
+		if ($actividadArcaId <= 0) {
+			return response()->json([
+				'error' => 'Debe asignar actividad ARCA.',
+			], 422);
+		}
+
+		$filtros = PedidoListadoFiltros::resolverDesdeRequest($request);
+		$filtrosQuery = PedidoListadoFiltros::paraQueryString($filtros);
+		$retornoPath = (string) $request->input('retorno_index', PedidoListadoSupport::pathRetornoIndex($filtrosQuery));
+
+		ini_set('memory_limit', '512M');
+		ini_set('max_execution_time', '0');
+
+		$resultado = $this->pedidoFacturacionLoteService->facturar($filtros, $transporteId, [
+			'tipotransaccion_id' => $tipotransaccionId,
+			'puntoventa_id' => $puntoventaId,
+			'puntoventaremito_id' => $puntoventaremitoId,
+			'actividad_arca_id' => $actividadArcaId,
+			'fechafactura' => (string) $request->input('fechafactura', date('Y-m-d')),
+			'retorno_index' => $retornoPath,
+		]);
+
+		if ($resultado['ok'] === [] && $resultado['venta_ids'] === []) {
+			return response()->json([
+				'error' => $resultado['errores'][0] ?? 'No se pudo facturar ningún pedido del reparto.',
+				'errores' => $resultado['errores'],
+			], 422);
+		}
+
+		$impresionUrlCompleta = null;
+		$impresionUrlElegir = null;
+		if ($resultado['venta_ids'] !== [] && can('listar-factura', false)) {
+			$baseImpresion = [
+				'transporteId' => $transporteId,
+				'venta_ids' => implode(',', $resultado['venta_ids']),
+				'retorno' => $retornoPath,
+			];
+			$impresionUrlCompleta = route('sesion_impresion_reparto_pedidos', $baseImpresion + [
+				'pack_completo' => 1,
+				'auto' => 1,
+			]);
+			$impresionUrlElegir = route('sesion_impresion_reparto_pedidos', $baseImpresion);
+		}
+
+		return response()->json([
+			'ok' => $resultado['ok'],
+			'errores' => $resultado['errores'],
+			'venta_ids' => $resultado['venta_ids'],
+			'facturas' => $resultado['facturas'],
+			'impresion_url_completa' => $impresionUrlCompleta,
+			'impresion_url_elegir' => $impresionUrlElegir,
+		]);
+	}
 
     public function listar(Request $request, $formato = null, $busqueda = null)
     {
@@ -786,13 +906,19 @@ class PedidoController extends Controller
 	}
 
 	/* Lista el pedido en PDF */
-	public function listarPedidoPdf($id, $cliente_id = null)
+	public function listarPedidoPdf(Request $request, $id, $cliente_id = null)
 	{
-		return redirect()->route('sesion_impresion_pedido', [
+		$params = [
 			'id' => $id,
 			'auto' => 1,
 			'solo_formulario' => 'PEDIDO',
-		]);
+		];
+		$retorno = (string) $request->query('retorno', '');
+		if ($retorno !== '') {
+			$params['retorno'] = $retorno;
+		}
+
+		return redirect()->route('sesion_impresion_pedido', $params);
 	}
 
 	/* Lista el prefactura */
@@ -944,6 +1070,9 @@ class PedidoController extends Controller
 			&& can('transferir-pedido-despacho', false)
 			&& empty($soloConsulta);
 
+		$abrirFacturaPedidoAlCargar = request()->boolean('facturar') && $mostrarFacturarPedido
+			&& $pedido->estadopedido != 'Facturado' && $pedido->estadopedido != 'Suspendido';
+
 		return view('ventas.pedido.editar', compact('pedido', 'cliente_query', 'condicionventa_query', 
 			'vendedor_query', 
 			'listaprecio_query', 'moneda_query', 
@@ -951,7 +1080,8 @@ class PedidoController extends Controller
 			'puntoventa_query', 'puntoventadefault_id', 'tipotransaccion_query', 'descuentoventa_query',
 			'tipotransacciondefault_id', 'puntoventaremitodefault_id', 'formapago_query', 'incoterm_query',
 			'unidadmedida_query', 'actividad_arca_query', 'soloConsulta', 'ocultarVolver', 'puedeActualizarPedido',
-			'filtrosQuery', 'esPedidoDespacho', 'pedidoTransferido', 'mostrarFacturarPedido', 'mostrarTransferirDespacho'));
+			'filtrosQuery', 'esPedidoDespacho', 'pedidoTransferido', 'mostrarFacturarPedido', 'mostrarTransferirDespacho',
+			'abrirFacturaPedidoAlCargar'));
     }
 
     public function transferirAlDespacho(int $id)
@@ -1086,6 +1216,26 @@ class PedidoController extends Controller
 		$this->pedidoService->cierrePedido($request->all());
 
         return redirect('ventas/pedido')->with('mensaje', 'Pedidos actualizados con exito');
+	}
+
+	/**
+	 * @return array<string, mixed>
+	 */
+	private function datosVistaFacturacionIndex(): array
+	{
+		$prefsFacturacion = UsuarioPreferenciaFacturacionSupport::leer();
+
+		return [
+			'puntoventa_query' => $this->puntoventaRepository->all('A'),
+			'tipotransaccion_query' => $this->tipotransaccionRepository->all(['V'], ['A']),
+			'formapago_query' => $this->formapagoRepository->all(),
+			'incoterm_query' => $this->incotermRepository->all(),
+			'actividad_arca_query' => $this->actividad_arcaRepository->all(),
+			'puntoventadefault_id' => $prefsFacturacion['puntoventa_id'],
+			'puntoventaremitodefault_id' => $prefsFacturacion['puntoventaremito_id'],
+			'tipotransacciondefault_id' => $prefsFacturacion['tipotransaccion_id'],
+			'data' => null,
+		];
 	}
 
 	/*
