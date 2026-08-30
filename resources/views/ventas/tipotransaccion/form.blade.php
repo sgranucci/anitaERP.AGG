@@ -143,3 +143,14 @@
         @endforeach
     </select>
 </div>
+@include('ventas.partials.campo_consulta_concepto_venta', [
+    'conceptoId' => old('concepto_venta_id', $data?->concepto_venta_id ?? ''),
+    'codigo' => old('concepto_venta_codigo', $data?->conceptoVenta?->codigo ?? ''),
+    'descripcion' => old('concepto_venta_nombre', $data?->conceptoVenta?->nombre ?? ''),
+    'required' => false,
+    'label' => 'Concepto de venta',
+    'ayuda_tooltip' => 'Si está cargado, el facturador lo muestra en la cabecera (NC/ND o FAC). Vacío: no aparece el campo global.',
+])
+<small class="form-text text-muted col-lg-8 offset-lg-3 mb-2">
+    Con concepto asignado, el facturador lo muestra al elegir este tipo. Sin asignar, en FAC se elige en el renglón (ícono de documento) y se completa el detalle.
+</small>

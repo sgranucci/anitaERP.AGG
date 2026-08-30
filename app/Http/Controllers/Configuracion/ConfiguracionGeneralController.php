@@ -23,8 +23,16 @@ class ConfiguracionGeneralController extends Controller
         $grupos = ParametroSistemaSupport::listarParaFormulario();
         $empresasIibb = $this->empresaRepository->all();
         $matrizIibb = EmpresaJurisdiccionIibbSupport::matrizParaFormulario($empresasIibb);
+        $matrizIibbUsaEnv = EmpresaJurisdiccionIibbSupport::matrizUsaFallbackEnv();
+        $matrizIibbJursEnv = EmpresaJurisdiccionIibbSupport::desdeEnv('agente_percepcion_iibb');
 
-        return view('configuracion.general.editar', compact('grupos', 'empresasIibb', 'matrizIibb'));
+        return view('configuracion.general.editar', compact(
+            'grupos',
+            'empresasIibb',
+            'matrizIibb',
+            'matrizIibbUsaEnv',
+            'matrizIibbJursEnv',
+        ));
     }
 
     public function actualizar(ValidacionConfiguracionGeneral $request)
@@ -42,7 +50,13 @@ class ConfiguracionGeneralController extends Controller
     {
         can('actualizar-configuracion-general');
 
-        EmpresaJurisdiccionIibbSupport::guardarMatriz($request->input('agentes', []));
+        try {
+            EmpresaJurisdiccionIibbSupport::guardarMatriz($request->input('agentes', []));
+        } catch (\RuntimeException $e) {
+            return redirect()
+                ->route('configuracion_general')
+                ->withErrors(['agentes' => $e->getMessage()]);
+        }
 
         return redirect()
             ->route('configuracion_general')

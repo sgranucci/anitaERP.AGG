@@ -11,6 +11,7 @@ use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Ventas\ArcaFceDatosAdicionalesSupport;
 use App\Support\Ventas\ArcaMtxcaComprobanteTotalesSupport;
+use App\Support\Ventas\ConceptoVentaMostradorSupport;
 use App\Support\Ventas\CaeaQuincenaSupport;
 use Carbon\Carbon;
 use Exception;
@@ -755,7 +756,7 @@ class ArcaMtxcaFacturaElectronicaService
             'alicuota' => $alicuota,
             'neto' => $logistica,
             'iva' => round($logistica * $alicuota / 100, 2),
-            'codigo_mtx' => '7790000000000',
+            'codigo_mtx' => ConceptoVentaMostradorSupport::codigoMtxLogistica(),
             'unidades_mtx' => 1,
         ];
 

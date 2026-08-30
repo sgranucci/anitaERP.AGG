@@ -156,7 +156,20 @@ final class EmpresaJurisdiccionIibbSupport
     }
 
     /**
+     * Sin filas en la tabla (instalación nueva / AGG) la nominación sigue el .env.
+     */
+    public static function matrizUsaFallbackEnv(): bool
+    {
+        if (! Schema::hasTable('empresa_jurisdiccion_iibb')) {
+            return true;
+        }
+
+        return ! Empresa_Jurisdiccion_Iibb::query()->exists();
+    }
+
+    /**
      * Matriz para la pantalla: 24 provincias × empresas.
+     * Tabla vacía: tilda lo de ANITA_AGENTE_PERCEPCION_IIBB / RETENCION (mismo .env para todas).
      *
      * @param  iterable<int, object>  $empresas
      * @return list<array<string, mixed>>
@@ -169,7 +182,8 @@ final class EmpresaJurisdiccionIibbSupport
         }
 
         $filas = [];
-        if (Schema::hasTable('empresa_jurisdiccion_iibb') && $empresaIds !== []) {
+        $usaEnv = self::matrizUsaFallbackEnv();
+        if (! $usaEnv && $empresaIds !== []) {
             foreach (Empresa_Jurisdiccion_Iibb::query()
                 ->whereIn('empresa_id', $empresaIds)
                 ->get() as $fila) {
@@ -177,25 +191,30 @@ final class EmpresaJurisdiccionIibbSupport
             }
         }
 
-        $provincias = Provincia::query()
-            ->where('jurisdiccion', '>=', 900)
-            ->orderBy('jurisdiccion')
-            ->get(['id', 'nombre', 'jurisdiccion']);
+        $jursPercibeEnv = $usaEnv ? self::desdeEnv('agente_percepcion_iibb') : [];
+        $jursRetieneEnv = $usaEnv ? self::desdeEnv('agente_retencion_iibb') : [];
+
+        $provincias = self::provinciasParaMatriz();
 
         $out = [];
         foreach ($provincias as $provincia) {
+            $jur = (int) $provincia->jurisdiccion;
             $celdas = [];
             foreach ($empresas as $empresa) {
                 $fila = $filas[(int) $empresa->id][(int) $provincia->id] ?? null;
                 $celdas[(int) $empresa->id] = [
-                    'percepcion' => (bool) ($fila->es_agente_percepcion ?? false),
-                    'retencion' => (bool) ($fila->es_agente_retencion ?? false),
+                    'percepcion' => $fila !== null
+                        ? (bool) $fila->es_agente_percepcion
+                        : in_array($jur, $jursPercibeEnv, true),
+                    'retencion' => $fila !== null
+                        ? (bool) $fila->es_agente_retencion
+                        : in_array($jur, $jursRetieneEnv, true),
                 ];
             }
             $out[] = [
                 'provincia_id' => (int) $provincia->id,
                 'nombre' => (string) $provincia->nombre,
-                'jurisdiccion' => (int) $provincia->jurisdiccion,
+                'jurisdiccion' => $jur,
                 'empresas' => $celdas,
             ];
         }
@@ -204,11 +223,36 @@ final class EmpresaJurisdiccionIibbSupport
     }
 
     /**
+     * @return \Illuminate\Support\Collection<int, Provincia>
+     */
+    public static function provinciasParaMatriz()
+    {
+        $provincias = Provincia::query()
+            ->whereNotNull('jurisdiccion')
+            ->where('jurisdiccion', '!=', '')
+            ->orderBy('jurisdiccion')
+            ->orderBy('nombre')
+            ->get(['id', 'nombre', 'jurisdiccion']);
+
+        $conAfip = $provincias->filter(
+            static fn (Provincia $p) => (int) $p->jurisdiccion >= 900
+        )->values();
+
+        return $conAfip->isNotEmpty() ? $conAfip : $provincias;
+    }
+
+    /**
      * @param  array<int|string, array<int|string, array<string, mixed>>>  $payload
      *        [empresa_id][provincia_id][percepcion|retencion]
      */
     public static function guardarMatriz(array $payload): void
     {
+        if (! Schema::hasTable('empresa_jurisdiccion_iibb')) {
+            throw new \RuntimeException(
+                'Falta la tabla empresa_jurisdiccion_iibb. Correr las migraciones del 29/08/2026.'
+            );
+        }
+
         foreach ($payload as $empresaId => $provincias) {
             $empresaId = (int) $empresaId;
             if ($empresaId <= 0 || ! is_array($provincias)) {

@@ -51,6 +51,9 @@
                 <p class="px-3 pt-2 text-muted small mb-0">
                     Parámetros de percepción IVA nacional (RG 5329 y RG 2126) para facturación de administración
                     (mostrador, pedido, remito). Gastronomía, estacionamiento y POS no usan este catálogo.
+                    Ingresos brutos no se cargan acá:
+                    <a href="{{ route('configuracion_general') }}">Configuración general → Agentes IIBB por empresa</a>
+                    (Buenos Aires = jurisdicción 902). Las alícuotas, en el ABM de provincia.
                 </p>
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
                     <thead style="background:#85C1E9;color:#17202A;">

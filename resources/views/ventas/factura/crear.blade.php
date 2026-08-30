@@ -20,6 +20,7 @@
 @endphp
 <script>
     window.FL_FACTURA_LAYOUT_PEDIDO = @json($layoutItemsPedido);
+    window.FACTURA_CONCEPTO_OBLIGATORIO_SIN_ARTICULO = @json((bool) config('facturacion.CONCEPTO_OBLIGATORIO_SIN_ARTICULO', false));
     window.FACTURA_URLS = {
         preferencias: @json(route('factura_preferencias'))
     };
@@ -31,6 +32,7 @@
 <script src="{{asset("assets/pages/scripts/ventas/factura/crear-bierzo-items.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/factura/crear-bierzo-items.js')) ?: time() }}" type="text/javascript"></script>
 @endif
 <script src="{{asset("assets/pages/scripts/stock/articulo/consulta.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/consulta.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{asset("assets/pages/scripts/ventas/concepto_venta/consulta.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/concepto_venta/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/stock/depmae/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/cliente/consulta.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/cliente/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/ventas/vendedor/consulta.js")}}" type="text/javascript"></script>

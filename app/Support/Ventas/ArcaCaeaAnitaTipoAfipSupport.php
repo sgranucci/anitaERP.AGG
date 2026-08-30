@@ -90,8 +90,8 @@ final class ArcaCaeaAnitaTipoAfipSupport
 
         $candidatos = [
             'FAC', 'FAU', 'FCE',
-            'NDR', 'NDE', 'NDB', 'NDT', 'NDP',
-            'NCD', 'NCG', 'NCP', 'NCE', 'NCL', 'NCR',
+            'NDR', 'NDE', 'NDB', 'NDT', 'NDP', 'NDA', 'NDJ', 'NDI',
+            'NCD', 'NCG', 'NCP', 'NCE', 'NCL', 'NCR', 'NCA', 'NCJ', 'NCI',
         ];
         $out = [];
         foreach ($candidatos as $tipoAnita) {
@@ -136,13 +136,13 @@ final class ArcaCaeaAnitaTipoAfipSupport
                 'M' => 51,
                 default => 0,
             },
-            'NDE', 'ND', 'NDR', 'NDB', 'NDT', 'NDP' => match ($letra) {
+            'NDE', 'ND', 'NDR', 'NDB', 'NDT', 'NDP', 'NDA', 'NDJ', 'NDI' => match ($letra) {
                 'A' => 2,
                 'B' => 7,
                 'C' => 12,
                 default => 0,
             },
-            'NCE', 'NC', 'NCD', 'NCG', 'NCP', 'NCL', 'NCR' => match ($letra) {
+            'NCE', 'NC', 'NCD', 'NCG', 'NCP', 'NCL', 'NCR', 'NCA', 'NCJ', 'NCI' => match ($letra) {
                 'A' => 3,
                 'B' => 8,
                 'C' => 13,

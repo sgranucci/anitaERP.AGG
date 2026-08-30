@@ -8,6 +8,7 @@ use Illuminate\Support\Str;
 use OwenIt\Auditing\Contracts\Auditable;
 use App\Models\Configuracion\Impuesto;
 use App\Models\Configuracion\Moneda;
+use App\Models\Ordenventa\Concepto_Ordenventa;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Combinacion;
 use App\Models\Stock\Modulo;
@@ -18,7 +19,7 @@ class Venta_Emision extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
 
     protected $fillable = ['venta_id','numeroitem', 'pedido_combinacion_id', 'ordentrabajo_id', 'lotestock',
-                        'articulo_id', 'combinacion_id', 'detalle', 'comentario_cocina', 'modulo_id', 'talle_id', 
+                        'articulo_id', 'concepto_venta_id', 'concepto_ordenventa_id', 'combinacion_id', 'detalle', 'comentario_cocina', 'modulo_id', 'talle_id', 
                         'cantidad', 'pieza', 'caja',
                         'precio', 
                         'impuesto_id', 'incluyeimpuesto', 
@@ -52,6 +53,16 @@ class Venta_Emision extends Model implements Auditable
     public function articulos()
     {
         return $this->belongsTo(Articulo::class, 'articulo_id');
+    }
+
+    public function conceptoVenta()
+    {
+        return $this->belongsTo(Concepto_Venta::class, 'concepto_venta_id');
+    }
+
+    public function conceptoOrdenventa()
+    {
+        return $this->belongsTo(Concepto_Ordenventa::class, 'concepto_ordenventa_id');
     }
 
     public function combinaciones()

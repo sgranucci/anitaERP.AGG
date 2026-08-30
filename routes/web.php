@@ -1598,6 +1598,8 @@ Route::get('ventas/repkilocategoria', 'Ventas\PedidoController@indexReporteKiloC
 Route::get('ventas/listar-repkilocategoria/{formato}', 'Ventas\PedidoController@listarReporteKiloCategoria')->name('listar_rep_kilocategoria');
 Route::get('ventas/iva-ventas', 'Ventas\IvaVentasReporteController@index')->name('iva_ventas');
 Route::get('ventas/listar-iva-ventas/{formato}', 'Ventas\IvaVentasReporteController@exportar')->name('listar_iva_ventas');
+Route::get('ventas/ventas-por-concepto', 'Ventas\VentasPorConceptoReporteController@index')->name('ventas_por_concepto');
+Route::get('ventas/listar-ventas-por-concepto/{formato}', 'Ventas\VentasPorConceptoReporteController@exportar')->name('listar_ventas_por_concepto');
 Route::get('ventas/cot-electronico', 'Ventas\CotElectronicoController@index')->name('cot_electronico');
 Route::post('ventas/cot-electronico/probar-conexion', 'Ventas\CotElectronicoController@probarConexion')->name('cot_electronico_probar_conexion');
 Route::get('ventas/listar-cot-electronico/{formato?}', 'Ventas\CotElectronicoController@exportar')->name('listar_cot_electronico');
@@ -1768,6 +1770,19 @@ Route::post('ventas/tipotransaccion', 'Ventas\TipotransaccionController@guardar'
 Route::get('ventas/tipotransaccion/{id}/editar', 'Ventas\TipotransaccionController@editar')->name('editar_tipotransaccion')->middleware('modo.consulta');
 Route::put('ventas/tipotransaccion/{id}', 'Ventas\TipotransaccionController@actualizar')->name('actualizar_tipotransaccion');
 Route::delete('ventas/tipotransaccion/{id}', 'Ventas\TipotransaccionController@eliminar')->name('eliminar_tipotransaccion');
+
+/*
+ * Conceptos de venta (mostrador, ítems sin artículo)
+ */
+Route::get('ventas/concepto-venta', 'Ventas\ConceptoVentaController@index')->name('concepto_venta');
+Route::get('ventas/lista-concepto-venta/{formato?}/{busqueda?}', 'Ventas\ConceptoVentaController@listar')->name('lista_concepto_venta');
+Route::get('ventas/concepto-venta/crear', 'Ventas\ConceptoVentaController@crear')->name('crear_concepto_venta');
+Route::post('ventas/concepto-venta', 'Ventas\ConceptoVentaController@guardar')->name('guardar_concepto_venta');
+Route::get('ventas/concepto-venta/{id}/editar', 'Ventas\ConceptoVentaController@editar')->name('editar_concepto_venta')->middleware('modo.consulta');
+Route::put('ventas/concepto-venta/{id}', 'Ventas\ConceptoVentaController@actualizar')->name('actualizar_concepto_venta');
+Route::delete('ventas/concepto-venta/{id}', 'Ventas\ConceptoVentaController@eliminar')->name('eliminar_concepto_venta');
+Route::post('ventas/concepto-venta/consulta', 'Ventas\ConceptoVentaController@consultaConceptoVenta')->name('consulta_concepto_venta');
+Route::get('ventas/concepto-venta/por-codigo/{codigo}', 'Ventas\ConceptoVentaController@leeUnConceptoPorCodigo')->name('leer_concepto_venta_codigo');
 
 /*
  * Puntos de venta

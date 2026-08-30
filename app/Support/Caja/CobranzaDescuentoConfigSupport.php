@@ -14,6 +14,14 @@ final class CobranzaDescuentoConfigSupport
         return (bool) config('cobranza.descuento_nc_habilitado', true);
     }
 
+    /**
+     * ¿La NCP de cobranza lleva percepción IIBB? El Bierzo: no (descuento financiero).
+     */
+    public static function ncPercibeIibb(): bool
+    {
+        return (bool) config('cobranza.nc_percepcion_iibb', true);
+    }
+
     public static function puntoventaIdParaEmpresa(int $empresaId): int
     {
         $map = config('cobranza.nc_puntoventa_por_empresa', []);

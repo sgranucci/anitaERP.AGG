@@ -194,6 +194,10 @@ class TipotransaccionController extends Controller
             }
         }
 
+        if ($data && $data->concepto_venta_id) {
+            $data->loadMissing('conceptoVenta');
+        }
+
         return compact(
             'operacionEnum',
             'operacionStockEnum',

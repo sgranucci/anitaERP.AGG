@@ -28,7 +28,12 @@
         @foreach ($itemsPagina as $item)
             <tr>
                 <td>{{ $item['sku'] ?? '' }}</td>
-                <td>{{ $item['detalle'] ?? '' }}</td>
+                <td>
+                    {{ $item['detalle'] ?? '' }}
+                    @if (! empty($item['leyenda']))
+                        <br><small>{{ $item['leyenda'] }}</small>
+                    @endif
+                </td>
                 @if ($esRemitoHojaItems)
                     <td class="text-center">{{ number_format((float) ($item['pieza'] ?? 0), $decCant) }}</td>
                 @endif

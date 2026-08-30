@@ -119,6 +119,12 @@ switch(strtoupper(config('app.empresa')))
             ],
             // Fase 1: motor listo. false = los facturadores no lo usan todavía.
             "NUMERADOR_FISCAL_EN_USO" => filter_var(env('FACTURACION_NUMERADOR_FISCAL_EN_USO', false), FILTER_VALIDATE_BOOLEAN),
+            // WSMTXCA: ítem sin artículo necesita concepto (GTIN + cuenta). Pregunta para activar.
+            "CONCEPTO_OBLIGATORIO_SIN_ARTICULO" => filter_var(env('FACTURACION_CONCEPTO_OBLIGATORIO_SIN_ARTICULO', true), FILTER_VALIDATE_BOOLEAN),
+            // a-comprob.c FACEL: logística = concepto Anita 5 (concod → art_cbarra).
+            "CONCEPTO_ANITA_LOGISTICA" => (int) env('FACTURACION_CONCEPTO_ANITA_LOGISTICA', 5),
+            "CONCEPTO_ANITA_BONIFICACION" => (int) env('FACTURACION_CONCEPTO_ANITA_BONIFICACION', 1),
+            "CONCEPTO_ANITA_AJUSTE" => (int) env('FACTURACION_CONCEPTO_ANITA_AJUSTE', 2),
         ];
         break;
     case "AGG":
@@ -141,6 +147,10 @@ switch(strtoupper(config('app.empresa')))
                 ? $impuestoInternoListasPorEmpresa
                 : [1 => '162', 2 => '262', 3 => '362'],
             "IMPUESTO_INTERNO_TIPOARTICULO_NOMBRE" => $impuestoInternoTipoArticulo,
+            "CONCEPTO_OBLIGATORIO_SIN_ARTICULO" => filter_var(env('FACTURACION_CONCEPTO_OBLIGATORIO_SIN_ARTICULO', false), FILTER_VALIDATE_BOOLEAN),
+            "CONCEPTO_ANITA_LOGISTICA" => (int) env('FACTURACION_CONCEPTO_ANITA_LOGISTICA', 5),
+            "CONCEPTO_ANITA_BONIFICACION" => (int) env('FACTURACION_CONCEPTO_ANITA_BONIFICACION', 1),
+            "CONCEPTO_ANITA_AJUSTE" => (int) env('FACTURACION_CONCEPTO_ANITA_AJUSTE', 2),
         ];
         break;
 }

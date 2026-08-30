@@ -84,12 +84,12 @@ final class TipotransaccionCodigoAfipSupport
 
         $base = match ($tipo) {
             'FAC', 'FAK' => 1,
-            'ND' => 2,
-            'NC', 'NCD', 'NCK' => 3,
+            'ND', 'NDB', 'NDR', 'NDT', 'NDP', 'NDA', 'NDJ', 'NDI' => 2,
+            'NC', 'NCD', 'NCK', 'NCA', 'NCG', 'NCP', 'NCR', 'NCJ', 'NCI' => 3,
             'REC' => 4,
             'FCE' => 201,
             'NDE' => 202,
-            'NCE' => 203,
+            'NCE', 'NCL' => 203,
             'DCE' => 201,
             default => 0,
         };

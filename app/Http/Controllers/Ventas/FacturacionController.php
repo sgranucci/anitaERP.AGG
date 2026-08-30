@@ -23,6 +23,7 @@ use App\Repositories\Configuracion\Actividad_ArcaRepositoryInterface;
 use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
 use App\Models\Stock\Mventa;
 use App\Models\Stock\Unidadmedida;
+use App\Models\Configuracion\Impuesto;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Modulo;
 use App\Models\Stock\Listaprecio;
@@ -182,6 +183,7 @@ class FacturacionController extends Controller
         $layoutItemsPedido = facturaUsaLayoutItemsPedido();
         $descuentoventa_query = collect();
         $unidadmedida_query = [];
+        $impuesto_query = Impuesto::soloNacionales()->orderBy('valor')->orderBy('nombre')->get();
 
         if ($layoutItemsPedido) {
             $descuentoventa_query = $this->descuentoventaRepository->all();
@@ -196,7 +198,7 @@ class FacturacionController extends Controller
             'puntoventaremitodefault_id',
             'deposito_query', 'lote_query', 'cliente_query', 'vendedor_query', 'condicionventa_query',
             'transporte_query', 'formapago_query', 'incoterm_query', 'moneda_query', 'actividad_arca_query',
-            'layoutItemsPedido', 'descuentoventa_query', 'unidadmedida_query'));
+            'layoutItemsPedido', 'descuentoventa_query', 'unidadmedida_query', 'impuesto_query'));
     }
 
     public function preferencias(Request $request): JsonResponse
@@ -323,6 +325,13 @@ class FacturacionController extends Controller
     {
         $mventa_query = Mventa::all();
         $tipotransaccion_query = $this->tipotransaccionRepository->all(['V', 'C'], ['A']);
+        if (method_exists($tipotransaccion_query, 'load')) {
+            try {
+                $tipotransaccion_query->load('conceptoVenta:id,codigo,nombre,descripcion,impuesto_id');
+            } catch (\Throwable $e) {
+                // Columna/tabla concepto_venta aún no migrada.
+            }
+        }
         $puntoventa_query = $this->puntoventaRepository->all();
         $deposito_query = Depmae::query()->paraUsuarioAutorizado()->orderBy('nombre')->get();
         $cliente_query = $this->clienteQuery->allQueryCargaPedido(['id','nombre','codigo']);

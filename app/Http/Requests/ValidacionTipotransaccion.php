@@ -30,6 +30,15 @@ class ValidacionTipotransaccion extends FormRequest
             'codigo' => 'required|string|max:50',
             'operacion' => ['required', Rule::in(array_keys(\App\Traits\Ventas\TipotransaccionTrait::$enumOperacion))],
             'operacionstock' => ['required', Rule::in(array_keys(\App\Traits\Ventas\TipotransaccionTrait::$enumOperacionStock))],
+            'concepto_venta_id' => ['nullable', 'integer', 'exists:concepto_venta,id'],
         ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $conceptoId = $this->input('concepto_venta_id');
+        if ($conceptoId === '' || $conceptoId === '0' || $conceptoId === 0) {
+            $this->merge(['concepto_venta_id' => null]);
+        }
     }
 }

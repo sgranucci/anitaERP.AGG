@@ -283,7 +283,8 @@ class VentaRepository implements VentaRepositoryInterface
     {
         if (null == $venta = $this->model
                                 ->with('venta_impuestos')
-                                ->with('venta_emisiones')
+                                ->with('venta_emisiones.articulos')
+                                ->with('venta_emisiones.conceptoVenta')
                                 ->with('venta_exportaciones')
                                 ->with('cliente_cuentacorrientes')
                                 ->with('clientes')        
@@ -304,7 +305,8 @@ class VentaRepository implements VentaRepositoryInterface
     {
         if (null == $venta = $this->model
                                 ->with('venta_impuestos')
-                                ->with('venta_emisiones')
+                                ->with('venta_emisiones.articulos')
+                                ->with('venta_emisiones.conceptoVenta')
                                 ->with('venta_exportaciones')
                                 ->with('cliente_cuentacorrientes')
                                 ->with('clientes')    

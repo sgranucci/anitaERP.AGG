@@ -139,6 +139,14 @@
 			descuentoventa_id = 0;
 		}
 
+		if (typeof window.filaEsConceptoVenta === 'function' && window.filaEsConceptoVenta($(ptr).closest('tr'))) {
+			sincronizarCantidadRenglon($(ptr).closest('tr'));
+			if (typeof calculaFactura === 'function') {
+				calculaFactura();
+			}
+			return;
+		}
+
 		if (opcion > 0 && articulo_id > 0) {
 			var url = carpetaBase + '/stock/redondeacaja/' + articulo_id + '/' + encodeURIComponent(unidadmedida || 'KG') + '/' + caja + '/' + pieza + '/' + kilo + '/' + descuentoventa_id + '/' + opcion + '?sin_redondeo_caja=1';
 
@@ -185,7 +193,7 @@
 		$('.pieza').off('change.facturaBierzo');
 		$('.kilo').off('change.facturaBierzo');
 		$('.descuentoventa_id').off('change.facturaBierzo');
-		$('.precio').off('change.facturaBierzo');
+		$(document).off('change.facturaBierzo', '#itemspedido-table .precio');
 		$('#puntoventa_id').off('change.facturaBierzo');
 
 		activa_eventos_consultacliente();
@@ -276,7 +284,7 @@
 			redondeaCajaFactura(this, opcionCantidadSegunUnidadFactura($(this).parents('tr').find('.unidadmedida').val()));
 		});
 
-		$('.precio').on('change.facturaBierzo', function () {
+		$(document).on('change.facturaBierzo', '#itemspedido-table .precio', function () {
 			if (typeof calculaFactura === 'function') {
 				calculaFactura();
 			}
@@ -501,6 +509,9 @@
 		if (typeof calculaFactura === 'function') {
 			calculaFactura();
 		}
+		if (typeof window.facturaActualizarColumnasGrilla === 'function') {
+			window.facturaActualizarColumnasGrilla();
+		}
 
 		if ($siguiente.length) {
 			var codigoSig = $siguiente.find('.codigoarticulo')[0];
@@ -563,6 +574,10 @@
 			// change y el foco se queda. trigger + lock evita el segundo change del blur.
 			dispararCambioCampoFactura(event.target);
 			return;
+		}
+
+		if ($tr.length && event.target.classList.contains('precio')) {
+			dispararCambioCampoFactura(event.target);
 		}
 
 		if (accion) {

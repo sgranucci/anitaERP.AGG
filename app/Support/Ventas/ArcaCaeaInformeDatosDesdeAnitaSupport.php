@@ -302,7 +302,7 @@ final class ArcaCaeaInformeDatosDesdeAnitaSupport
                 'cantidad' => 1,
                 'precio' => $gravado,
                 'codigounidadmedida' => 1,
-                'codigo_mtx' => '7790000000000',
+                'codigo_mtx' => ConceptoVentaMostradorSupport::codigoMtxSintetico('ajuste'),
                 'unidades_mtx' => 1,
                 'impuesto_id' => 0,
                 'importe_iva' => $iva,
@@ -357,7 +357,7 @@ final class ArcaCaeaInformeDatosDesdeAnitaSupport
                 'cantidad' => 1,
                 'precio' => $gravado,
                 'codigounidadmedida' => 1,
-                'codigo_mtx' => '7790000000000',
+                'codigo_mtx' => ConceptoVentaMostradorSupport::codigoMtxSintetico('ajuste'),
                 'unidades_mtx' => 1,
                 'importe_iva' => $iva,
             ]];
@@ -391,7 +391,7 @@ final class ArcaCaeaInformeDatosDesdeAnitaSupport
                 $ivaAsignado += $it['importe_iva'];
             }
             if (trim((string) ($it['codigo_mtx'] ?? '')) === '') {
-                $it['codigo_mtx'] = '7790000000000';
+                $it['codigo_mtx'] = ConceptoVentaMostradorSupport::codigoMtxSintetico('ajuste');
                 $it['unidades_mtx'] = 1;
             }
         }

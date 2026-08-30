@@ -19,6 +19,7 @@ use App\Support\Configuracion\PercepcionNoCategorizadoSupport;
 use App\Support\Configuracion\RegimenPercepcionSupport;
 use App\Support\Ventas\ClienteExclusionPercepcionSupport;
 use App\Support\Ventas\ElBierzoFacturaBPercepcionCabaSupport;
+use App\Support\Ventas\NotaCreditoPercepcionIibbSupport;
 use App\Support\Ventas\AbastoBierzoSupport;
 use App\Support\Ventas\LogisticaBierzoSupport;
 use App\Support\Ventas\VentaImporteDosDecimalesSupport;
@@ -675,6 +676,11 @@ class ImpuestoService extends FacturacionService
 	): array {
 		if ($flGrabaComprobanteDividido) {
 			return [];
+		}
+
+		$desdeNc = NotaCreditoPercepcionIibbSupport::paraNotaCredito($dataCliente, (float) $baseNeto);
+		if ($desdeNc !== null) {
+			return $desdeNc;
 		}
 
 		$forzarCaba = ElBierzoFacturaBPercepcionCabaSupport::debeForzarDesdeCliente($dataCliente);

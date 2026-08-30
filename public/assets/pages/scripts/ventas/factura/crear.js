@@ -520,8 +520,19 @@
 			var $tr = $(this);
 			var articulo_id = $tr.find('.articulo_id').val();
 			var codigo = $tr.find('.codigoarticulo').val();
+			var conceptoVentaId = $tr.find('.concepto_venta_id').val();
+			var conceptoCabecera = $('#concepto_venta_comprobante_id').val();
+			var exigeConcepto = typeof window.facturaConceptoObligatorioSinArticulo === 'function'
+				&& window.facturaConceptoObligatorioSinArticulo();
 
-			if (!articulo_id && !codigo)
+			if (!articulo_id && exigeConcepto && !conceptoVentaId && !conceptoCabecera)
+			{
+				alert('El concepto es obligatorio en el ítem ' + item + ' porque no tiene artículo (WSMTXCA).');
+				flError = true;
+				return false;
+			}
+
+			if (!articulo_id && !codigo && !conceptoVentaId && !conceptoCabecera)
 			{
 				alert('Código de artículo nulo en ítem ' + item);
 				flError = true;
@@ -1008,7 +1019,23 @@
 			guardarPreferenciasFactura();
 		});
 
-		$('#tipotransaccion_id').on('change', guardarPreferenciasFactura);
+		$('#tipotransaccion_id').on('change', function () {
+			guardarPreferenciasFactura();
+			if (typeof window.sincronizarConceptoVentaDesdeTipo === 'function') {
+				window.sincronizarConceptoVentaDesdeTipo();
+			}
+		});
+		$('#puntoventa_id').on('change.conceptoVentaMtxca', function () {
+			if (typeof window.actualizarAvisoConceptoVentaFactura === 'function') {
+				window.actualizarAvisoConceptoVentaFactura();
+			}
+		});
+		var esAltaFactura = !$.trim($('#codigofactura').val() || '');
+		if (esAltaFactura && typeof window.sincronizarConceptoVentaDesdeTipo === 'function') {
+			window.sincronizarConceptoVentaDesdeTipo();
+		} else if (typeof window.actualizarAvisoConceptoVentaFactura === 'function') {
+			window.actualizarAvisoConceptoVentaFactura();
+		}
 
 		$("#botonform1").click(function(e){
 			if (e && typeof e.preventDefault === 'function') {
@@ -1729,6 +1756,12 @@
         actualizaRenglones();
 
 		activa_eventos(false);
+		if (typeof window.aplicarConceptoVentaCabeceraALineasVacias === 'function') {
+			window.aplicarConceptoVentaCabeceraALineasVacias();
+		}
+		if (typeof window.facturaActualizarColumnasGrilla === 'function') {
+			window.facturaActualizarColumnasGrilla();
+		}
 
 		opciones = opciones || {};
 		if (window.FL_FACTURA_LAYOUT_PEDIDO && opciones.enfocarArticulo !== false) {
@@ -1950,6 +1983,9 @@
 				{
 					$(this).parents('tr').remove();
 					actualizaRenglones();
+					if (typeof window.facturaActualizarColumnasGrilla === 'function') {
+						window.facturaActualizarColumnasGrilla();
+					}
 				}
 				TotalCantidadFactura();
 				calculaFactura();
@@ -2184,6 +2220,11 @@
 
 	function calculaFactura()
 	{
+		var clienteId = parseInt($('#cliente_id').val() || '0', 10);
+		if (!(clienteId > 0)) {
+			return;
+		}
+
 		if (window.FL_FACTURA_LAYOUT_PEDIDO && typeof sincronizarCantidadesItemsFactura === 'function') {
 			sincronizarCantidadesItemsFactura();
 		}

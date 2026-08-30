@@ -96,9 +96,30 @@ Configuración general del sistema
                 @method('put')
                 <div class="card-body">
                     <p class="text-muted mb-3">
-                        Tilde en qu&eacute; jurisdicciones cada empresa jur&iacute;dica percibe (ventas) o retiene (compras).
-                        Las al&iacute;cuotas y m&iacute;nimos se cargan en el ABM de provincia: son del fisco, no de la empresa.
+                        Tilde en qué jurisdicciones cada empresa jurídica percibe (ventas) o retiene (compras).
+                        Las alícuotas y mínimos se cargan en el ABM de provincia: son del fisco, no de la empresa.
+                        No es el catálogo PIVA/PNC (percepción IVA nacional).
                     </p>
+                    @if (! empty($matrizIibbUsaEnv))
+                        <div class="alert alert-warning py-2">
+                            Todavía no hay nominación guardada por empresa. Se muestran los tildes del
+                            <code>.env</code>
+                            @if (! empty($matrizIibbJursEnv))
+                                ({{ implode(', ', $matrizIibbJursEnv) }})
+                            @else
+                                (vacío: no hay <code>ANITA_AGENTE_PERCEPCION_IIBB</code>)
+                            @endif.
+                            Buenos Aires es jurisdicción <strong>902</strong>. Al guardar, deja de usarse el
+                            <code>.env</code> y manda esta grilla.
+                        </div>
+                    @endif
+                    @if (count($matrizIibb) === 0)
+                        <div class="alert alert-danger py-2">
+                            No hay provincias con código de jurisdicción AFIP (901–924).
+                            Editá <strong>Buenos Aires</strong> en el ABM de provincia y cargá jurisdicción
+                            <strong>902</strong>. Sin ese código la grilla no puede armarse y el motor no percibe.
+                        </div>
+                    @endif
                     <div class="table-responsive">
                         <table class="table table-sm table-bordered" id="tabla-agentes-iibb">
                             <thead style="background:#85C1E9;color:#17202A;">

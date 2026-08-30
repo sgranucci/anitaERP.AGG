@@ -69,6 +69,8 @@ use App\Support\Ventas\PedidoFacturaAnitaDeferSupport;
 use App\Support\Ventas\PedidoFacturacionExclusivaSupport;
 use App\Support\Ventas\PedidoItemCierreFaltaStockSupport;
 use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
+use App\Support\Ventas\ConceptoVentaMostradorSupport;
+use App\Support\Ventas\GtinEan13Support;
 use App\Support\Ventas\TipoComprobantePreviewSupport;
 use App\Support\Ventas\VentaEmisionCajaPiezaSupport;
 use App\Support\Stock\UnidadesCajaPiezaSupport;
@@ -132,6 +134,7 @@ use App\Support\Ventas\PedidoFacturacionProfiler;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Ventas\KandikoAnitaVentaTipoSupport;
 use App\Support\Ventas\VentaNumeracionEmpresaSupport;
+use App\Support\Ventas\NotaCreditoPercepcionIibbSupport;
 use App\Support\Ventas\VentaNotaCreditoPrecioLiteralSupport;
 use App\Support\Ventas\VentaImporteDosDecimalesSupport;
 use App\Support\Ventas\VentaNumerocomprobanteUnicidadSupport;
@@ -2127,11 +2130,15 @@ class FacturacionService
 					$numeroItem = 0;
 					foreach($dataFactura as $itemEmision)
 					{
+						$detalleEmision = trim((string) ($itemEmision['detalle'] ?? ''));
+						if ($detalleEmision === '') {
+							$detalleEmision = trim((string) ($itemEmision['detalleconcepto'] ?? ''));
+						}
 						$dataEmision = [
 							'venta_id' => $vta->id,
 							'numeroitem' => ++$numeroItem, 
 							'lotestock' => 0,
-							'detalle' => $itemEmision['detalle'],
+							'detalle' => $detalleEmision,
 							'cantidad' => abs($itemEmision['cantidad']), 
 							'precio' => $itemEmision['precio'], 
 							'impuesto_id' => $itemEmision['impuesto_id'],
@@ -2140,6 +2147,7 @@ class FacturacionService
 							'descuento' => $itemEmision['descuento'], 
 							'descuentointegrado' => $itemEmision['descuentointegrado']
 						];
+						$dataEmision = $this->anexarConceptoEnEmision($dataEmision, $itemEmision);
 						$venta_emision = $this->venta_emisionRepository->create($dataEmision);
 					}
 					// Agrega referencia a la OV
@@ -2305,6 +2313,22 @@ class FacturacionService
 
 		$empresa_id = $puntoventa->empresa_id;
 
+		$tipotransaccionCalculo = null;
+		$tipoTransaccionCalculoId = (int) ($data['tipotransaccion_id'] ?? 0);
+		if ($tipoTransaccionCalculoId > 0) {
+			try {
+				$tipotransaccionCalculo = $this->tipotransaccionRepository->find($tipoTransaccionCalculoId);
+			} catch (\Throwable $e) {
+				$tipotransaccionCalculo = null;
+			}
+		}
+		$conceptoVentaIdsInput = $data['concepto_venta_ids'] ?? [];
+		if (! is_array($conceptoVentaIdsInput)) {
+			$conceptoVentaIdsInput = [];
+		}
+		$conceptoVentaCabeceraId = (int) ($data['concepto_venta_id'] ?? 0);
+		$esPosMostrador = $this->esEmisionPos($data);
+
 		// Lee los items a facturar
 		$dataFactura = [];
 		$totCantidad = 0;
@@ -2323,6 +2347,10 @@ class FacturacionService
 		$listaspreciosIds = $data['listasprecios_id'] ?? null;
 		$incluyeimpuestosInput = $data['incluyeimpuestos'] ?? null;
 		$impuestosIdsInput = $data['impuesto_ids'] ?? null;
+		$leyendasLineaInput = $data['leyendas_linea'] ?? [];
+		if (! is_array($leyendasLineaInput)) {
+			$leyendasLineaInput = [];
+		}
 		$incluyePorLista = [];
 
 		// Selección de opcionales por índice de item (orden_opcional => articulo_id).
@@ -2337,7 +2365,8 @@ class FacturacionService
 		for ($offItem = 0; $offItem < count($cantidades); $offItem++)
 		{
 			$articuloIdLinea = (int) ($articulos[$offItem] ?? 0);
-			if ($articuloIdLinea <= 0) {
+			$conceptoIdInputLinea = (int) ($conceptoVentaIdsInput[$offItem] ?? 0);
+			if ($articuloIdLinea <= 0 && $conceptoIdInputLinea <= 0) {
 				$skuLinea = trim((string) ($codigosArticulo[$offItem] ?? ''));
 				if ($skuLinea !== '') {
 					$articuloPorSku = $this->articuloQuery->traeArticuloPorSku($skuLinea);
@@ -2365,6 +2394,11 @@ class FacturacionService
 				$codigoUnidadMedida = $articulo->unidadesdemedidas?->codigo ?? 1;
 				$impuesto_id = $articulo->impuesto_id;
 				$cuentaContable_id = $articulo->cuentacontableventa_id;
+				$conceptoVentaIdLinea = null;
+				$codigoMtxLinea = '';
+				$unidadesMtxLinea = 1;
+				$centrocostoConceptoId = null;
+				$precioCatalogo = 0.0;
 			}
 			else
 			{
@@ -2382,6 +2416,64 @@ class FacturacionService
 				$cuentaContable_id = null;
 				if ($cuentacontable)
 					$cuentaContable_id = $cuentacontable->id;
+
+				$conceptoVentaIdLinea = null;
+				$codigoMtxLinea = '';
+				$unidadesMtxLinea = 1;
+				$centrocostoConceptoId = null;
+				$precioCatalogo = 0.0;
+
+				if (! $esPosMostrador) {
+					$conceptoIdLinea = (int) ($conceptoVentaIdsInput[$offItem] ?? 0);
+					if ($conceptoIdLinea <= 0) {
+						$conceptoIdLinea = $conceptoVentaCabeceraId;
+					}
+					if ($conceptoIdLinea <= 0
+						&& $tipotransaccionCalculo
+						&& $tipotransaccionCalculo->usaConceptoVentaEnFacturador()) {
+						$conceptoIdLinea = (int) ($tipotransaccionCalculo->concepto_venta_id ?? 0);
+					}
+					$resueltoConcepto = ConceptoVentaMostradorSupport::resolverLinea(
+						$conceptoIdLinea,
+						(int) $empresa_id,
+						(int) ($tipotransaccionCalculo->id ?? 0) ?: null,
+						is_string($fechaFactura) ? substr($fechaFactura, 0, 10) : null,
+					);
+					if ($resueltoConcepto === null
+						&& ConceptoVentaMostradorSupport::obligatorioSinArticulo($puntoventa->webservice ?? null)) {
+						return ['error' => ConceptoVentaMostradorSupport::mensajeObligatorioSinArticulo()];
+					}
+					if ($resueltoConcepto !== null) {
+						$conceptoVentaIdLinea = $resueltoConcepto['concepto_venta_id'];
+						if (trim((string) $descripcion) === '' && $resueltoConcepto['descripcion'] !== '') {
+							$descripcion = $resueltoConcepto['descripcion'];
+						}
+						$codigoUnidadMedida = $resueltoConcepto['unidadmedida_codigo'];
+						$impuestoFormLinea = 0;
+						if (is_array($impuestosIdsInput) && isset($impuestosIdsInput[$offItem]) && (string) $impuestosIdsInput[$offItem] !== '') {
+							$impuestoFormLinea = (int) $impuestosIdsInput[$offItem];
+						}
+						if ($impuestoFormLinea > 0) {
+							$impuesto_id = $impuestoFormLinea;
+						} elseif ($resueltoConcepto['impuesto_id']) {
+							$impuesto_id = $resueltoConcepto['impuesto_id'];
+						} else {
+							return ['error' => 'Indicá la alícuota de IVA del renglón (Exento, 10,5% o 21%).'];
+						}
+						if ($resueltoConcepto['cuentacontable_id']) {
+							$cuentaContable_id = $resueltoConcepto['cuentacontable_id'];
+						}
+						$codigoMtxLinea = $resueltoConcepto['codigo_gtin'];
+						$unidadesMtxLinea = $resueltoConcepto['unidades_mtx'];
+						$sku = $resueltoConcepto['codigo'];
+						$centrocostoConceptoId = $resueltoConcepto['centrocosto_id'] ?? null;
+						$precioCatalogo = (float) ($resueltoConcepto['precio'] ?? 0);
+						if (ConceptoVentaMostradorSupport::obligatorioSinArticulo($puntoventa->webservice ?? null)
+							&& ! GtinEan13Support::esAceptable($codigoMtxLinea)) {
+							return ['error' => ConceptoVentaMostradorSupport::mensajeGtinInvalido($resueltoConcepto)];
+						}
+					}
+				}
 			}
 
 			$listaprecio_id = 1;
@@ -2423,6 +2515,9 @@ class FacturacionService
 
 			$precioUnitario = $precios[$offItem];
 			$cantidad = $cantidades[$offItem];
+			if ((float) str_replace(',', '', (string) $precioUnitario) == 0.0 && $precioCatalogo > 0) {
+				$precioUnitario = $precioCatalogo;
+			}
 
 			if ($this->descuentoLinea != 0)
 				$precioConDescuento = $precioUnitario * (1. - ($this->descuentoLinea / 100.));
@@ -2461,6 +2556,14 @@ class FacturacionService
 				}
 			}
 
+			$leyendaLinea = $articulo_id
+				? trim((string) ($leyendasLineaInput[$offItem] ?? ''))
+				: '';
+			$detalleLinea = $descripcion;
+			if ($leyendaLinea !== '') {
+				$detalleLinea = $leyendaLinea;
+			}
+
 			$dataFactura[] = ["cantidad" => $cantidadLinea,
 				"pieza" => $piezaLinea,
 				"caja" => $cajaLinea,
@@ -2475,6 +2578,8 @@ class FacturacionService
 				"articulo_id" => $articulo_id,
 				"sku" => $sku,
 				"descripcion" => $descripcion,
+				"detalle" => $detalleLinea,
+				"leyenda_linea" => $leyendaLinea,
 				"codigounidadmedida" => $codigoUnidadMedida,
 				'categoria' => $codigoCategoria,
 				'moneda_id' => $moneda_id,
@@ -2482,6 +2587,10 @@ class FacturacionService
 				'cuentacontable_id' => $cuentaContable_id,
 				'impuesto_interno_coeficiente' => $impuestoInternoCoeficiente,
 				'omitir_stkmov_anita' => $omitirStkmovAnita,
+				'concepto_venta_id' => $conceptoVentaIdLinea,
+				'codigo_mtx' => $codigoMtxLinea,
+				'unidades_mtx' => $unidadesMtxLinea,
+				'centrocosto_id' => $centrocostoConceptoId,
 			];
 			$totCantidad += $cantidad;
 		}
@@ -2532,6 +2641,11 @@ class FacturacionService
 				? ($cliente->provincia_id ? (int) $cliente->provincia_id : null)
 				: ClienteProvinciaIibbSupport::idParaPercepcionAdmin($cliente);
 		}
+		NotaCreditoPercepcionIibbSupport::anexarOrigenSiCorresponde(
+			$datosCliente,
+			$data,
+			! $this->esEmisionPos($data)
+		);
 		// Calcula impuestos
 		$conceptosTotales = $this->impuestoService->calculaImpuestoVenta($dataFactura, $datosCliente, $fechaFactura, 
 																			$this->flGrabaComprobanteDividido);
@@ -3858,6 +3972,7 @@ class FacturacionService
 				if (! empty($itemEmision['articulo_id'])) {
 					$dataEmision['articulo_id'] = $itemEmision['articulo_id'];
 				}
+				$dataEmision = $this->anexarConceptoEnEmision($dataEmision, $itemEmision);
 				$venta_emision = $this->venta_emisionRepository->create($dataEmision);
 
 				if (! $omitirMovimientoStock && isset($itemEmision['articulo_id']) && $dataArticuloMovimiento !== [])
@@ -5092,7 +5207,7 @@ class FacturacionService
 							// Sin pedido (gastronomía u otros flujos sin OV): se manda 0 para que stkv_pedido no quede null.
 							'pedido' => $pedido_id ?? 0,
 							'sku' => $item['sku'],
-							'descripcion' => $item['descripcion'],
+							'descripcion' => trim($item['descripcion'].(! empty($item['leyenda_linea']) ? ' '.$item['leyenda_linea'] : '')),
 							'categoria' => $item['categoria'],
 							'medida' => '',
 							// Banderín para omitir stkmov en Anita (p. ej. opcionales gastronomía $0:
@@ -6720,9 +6835,12 @@ class FacturacionService
 				{
 					if ($item['cuentacontable_id'] > 0)
 					{
+						$ccItem = (int) ($item['centrocosto_id'] ?? 0);
 						for ($i = 0, $flEncontro = false; $i < count($asientoContable); $i++)
 						{
-							if ($asientoContable[$i]['cuentacontable_id'] == $item['cuentacontable_id'])
+							$ccAsiento = (int) ($asientoContable[$i]['centrocosto_id'] ?? 0);
+							if ($asientoContable[$i]['cuentacontable_id'] == $item['cuentacontable_id']
+								&& $ccAsiento === $ccItem)
 							{
 								$flEncontro = true;
 								break;
@@ -6732,6 +6850,7 @@ class FacturacionService
 							$asientoContable[] = [	
 												'empresa_id' => $empresa_id,
 												'cuentacontable_id' => $item['cuentacontable_id'],
+												'centrocosto_id' => $ccItem > 0 ? $ccItem : null,
 												'monto' => $monto
 											];			
 						else
@@ -6904,6 +7023,25 @@ class FacturacionService
 	}
 
 	/**
+	 * Persiste el concepto en la línea de venta_emision (mismo patrón que ordenventa_concepto).
+	 *
+	 * @param  array<string, mixed>  $dataEmision
+	 * @param  array<string, mixed>  $itemEmision
+	 * @return array<string, mixed>
+	 */
+	private function anexarConceptoEnEmision(array $dataEmision, array $itemEmision): array
+	{
+		if (! empty($itemEmision['concepto_venta_id'])) {
+			$dataEmision['concepto_venta_id'] = (int) $itemEmision['concepto_venta_id'];
+		}
+		if (! empty($itemEmision['concepto_ordenventa_id'])) {
+			$dataEmision['concepto_ordenventa_id'] = (int) $itemEmision['concepto_ordenventa_id'];
+		}
+
+		return $dataEmision;
+	}
+
+	/**
 	 * POS gastronomía, estacionamiento o canje: no usa depósito ni transporte de reparto.
 	 *
 	 * @param  array<string, mixed>  $data
@@ -7056,7 +7194,8 @@ class FacturacionService
 				$totalMonto -= $monto;
 			}
 			
-			$centrocosto_ids[] = $centrocosto_id;
+			$ccImputacion = (int) ($imputacion['centrocosto_id'] ?? 0);
+			$centrocosto_ids[] = $ccImputacion > 0 ? $ccImputacion : $centrocosto_id;
 			$observaciones[] = $observacion;
 			$moneda_ids[] = $moneda_id;
 			$cotizaciones[] = $cotizacion;
@@ -7244,6 +7383,8 @@ class FacturacionService
 		$venta = $this->ventaRepository->find($id);
 		$venta->loadMissing([
 			'gastronomiaEmision',
+			'venta_emisiones.articulos',
+			'venta_emisiones.conceptoVenta',
 			'clientes.tipodocumentos',
 			'clientes.condicioniibbs',
 			'condicionventas',
@@ -7276,12 +7417,22 @@ class FacturacionService
 				}
 			}
 			$precioArticulo = $descuentoLinea > 0 ? $precio * (1 - ($descuentoLinea / 100)) : $precio;
-			if (isset($ventaItem->articulos)) {
-				$sku = $ventaItem->articulos->sku;
-				$detalle = $ventaItem->articulos->descripcion;
+			$articuloItem = $ventaItem->articulos;
+			$conceptoItem = $ventaItem->conceptoVenta;
+			$leyendaItem = '';
+			if ($articuloItem) {
+				$sku = $articuloItem->sku;
+				$detalle = $articuloItem->descripcion;
+				$detalleEmision = trim((string) ($ventaItem->detalle ?? ''));
+				if ($detalleEmision !== '' && $detalleEmision !== trim((string) $detalle)) {
+					$leyendaItem = $detalleEmision;
+				}
 			} else {
-				$sku = '';
-				$detalle = $ventaItem->detalle;
+				$sku = $conceptoItem->codigo ?? '';
+				$detalle = trim((string) ($ventaItem->detalle ?? ''));
+				if ($detalle === '' && $conceptoItem) {
+					$detalle = trim((string) ($conceptoItem->descripcion ?: $conceptoItem->nombre));
+				}
 			}
 			$kiloDescuento = 0;
 			$cantidad = $ventaItem->cantidad;
@@ -7293,6 +7444,7 @@ class FacturacionService
 			$tblItem[] = [
 				'sku' => $sku,
 				'detalle' => $detalle,
+				'leyenda' => $leyendaItem,
 				'cantidad' => $cantidad,
 				'kilodescuento' => $kiloDescuento,
 				'caja' => $ventaItem->caja,
@@ -7587,6 +7739,7 @@ class FacturacionService
 		$layoutItemsPedido = facturaUsaLayoutItemsPedido();
 		$descuentoventa_query = collect();
 		$unidadmedida_query = [];
+		$impuesto_query = Impuesto::soloNacionales()->orderBy('valor')->orderBy('nombre')->get();
 		if ($layoutItemsPedido) {
 			$descuentoventa_query = $this->descuentoventaRepository->all();
 			$unidadmedida_query = Unidadmedida::all()->toArray();
@@ -7601,7 +7754,7 @@ class FacturacionService
             'deposito_query', 'lote_query', 'cliente_query','vendedor_query', 'condicionventa_query',
             'transporte_query', 'formapago_query', 'incoterm_query', 'flGeneraNotaDeCredito', 'moneda_query',
 			'actividad_arca_query', 'urlOrigen', 'consultaFacturasDia',
-			'layoutItemsPedido', 'descuentoventa_query', 'unidadmedida_query')); 
+			'layoutItemsPedido', 'descuentoventa_query', 'unidadmedida_query', 'impuesto_query')); 
 	}
 
 	/*
@@ -7621,6 +7774,13 @@ class FacturacionService
         	$tipotransaccion_query = $this->tipotransaccionRepository->all(['C'], ['A']);
 		else
 			$tipotransaccion_query = $this->tipotransaccionRepository->all(['V', 'C'], ['A']);
+
+        if (method_exists($tipotransaccion_query, 'load')) {
+            try {
+                $tipotransaccion_query->load('conceptoVenta:id,codigo,nombre,descripcion,impuesto_id');
+            } catch (\Throwable $e) {
+            }
+        }
 
         $puntoventa_query = $this->puntoventaRepository->all();
         $deposito_query = Depmae::query()->paraUsuarioAutorizado()->orderBy('nombre')->get();

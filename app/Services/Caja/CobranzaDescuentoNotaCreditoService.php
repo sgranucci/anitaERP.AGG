@@ -7,6 +7,7 @@ use App\Models\Ventas\Venta;
 use App\Repositories\Ventas\Cliente_CuentacorrienteRepositoryInterface;
 use App\Services\Ventas\FacturacionService;
 use App\Support\Caja\CobranzaDescuentoConfigSupport;
+use App\Support\Ventas\NotaCreditoPercepcionIibbSupport;
 use Exception;
 use InvalidArgumentException;
 
@@ -128,6 +129,7 @@ final class CobranzaDescuentoNotaCreditoService
             'descripcionarticulos' => ['Descuento por cobranza — '.$referenciaCompro],
             'impuesto_ids' => [$impuestoId],
             'incluyeimpuestos' => [$incluyeImpuesto],
+            NotaCreditoPercepcionIibbSupport::FLAG_NCP => true,
         ];
 
         if (trim((string) ($ventaOrigen->nombre ?? '')) !== '' || trim((string) ($ventaOrigen->numerodocumento ?? '')) !== '') {

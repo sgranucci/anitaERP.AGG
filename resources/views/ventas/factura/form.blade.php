@@ -2,6 +2,7 @@
 	$layoutItemsPedido = $layoutItemsPedido ?? facturaUsaLayoutItemsPedido();
 	$tipotransaccionSeleccionada = old('tipotransaccion_id', $data->tipotransaccion_id ?? ($tipotransacciondefault_id ?? ''));
 	$unidadmedida_query = $unidadmedida_query ?? [];
+	$impuesto_query = $impuesto_query ?? collect();
 	$descuentoventa_query = $descuentoventa_query ?? collect();
 	$clienteIdFactura = old('cliente_id', $data->cliente_id ?? '');
 	$clienteCodigoFactura = old('codigocliente', isset($data->clientes) ? ($data->clientes->codigo ?? '') : '');
@@ -12,6 +13,12 @@
 	$transporteFactura = collect($transporte_query ?? [])->firstWhere('id', (int) $transporteIdFactura);
 	$puedeAbrirAbmCliente = can('editar-clientes', false) || can('listar-clientes', false);
 	$puedeAbrirAbmVendedor = can('editar-vendedores', false) || can('listar-vendedores', false);
+	$tipotransaccionSel = collect($tipotransaccion_query ?? [])->firstWhere('id', (int) $tipotransaccionSeleccionada);
+	$conceptoAsignadoTipo = (int) ($tipotransaccionSel->concepto_venta_id ?? 0);
+	$mostrarConceptoCabecera = $conceptoAsignadoTipo > 0;
+	$conceptoCabeceraId = old('concepto_venta_id', $mostrarConceptoCabecera ? $conceptoAsignadoTipo : '');
+	$conceptoCabeceraCodigo = old('concepto_venta_codigo', $mostrarConceptoCabecera ? ($tipotransaccionSel->conceptoVenta->codigo ?? '') : '');
+	$conceptoCabeceraNombre = old('concepto_venta_nombre', $mostrarConceptoCabecera ? ($tipotransaccionSel->conceptoVenta->nombre ?? '') : '');
 @endphp
 <style>
 	#itemspedido-table thead th,
@@ -22,6 +29,84 @@
 	#itemspedido-table td,
 	#total-factura-table td {
 		vertical-align: middle;
+	}
+	#itemspedido-table.factura-grilla-concepto tr td {
+		vertical-align: top;
+	}
+	#itemspedido-table .descripcionarticulo.factura-detalle-concepto {
+		width: 100%;
+		min-width: 360px;
+		min-height: 110px;
+		height: auto;
+		resize: vertical;
+	}
+	#itemspedido-table.factura-grilla-concepto th.factura-col-detalle,
+	#itemspedido-table.factura-grilla-concepto td.factura-col-detalle {
+		width: 52%;
+	}
+	#itemspedido-table.factura-grilla-concepto th.factura-col-descuento,
+	#itemspedido-table.factura-grilla-concepto td.factura-col-descuento {
+		width: 4.5%;
+		max-width: 4.2rem;
+	}
+	#itemspedido-table.factura-grilla-concepto td.factura-col-descuento .descuentoventa_id {
+		max-width: 4.2rem;
+		padding-left: 2px;
+		padding-right: 2px;
+	}
+	#itemspedido-table tr.item-concepto-venta .factura-abrir-leyenda-linea,
+	#itemspedido-table tr.item-concepto-venta .factura-leyenda-badge {
+		display: none;
+	}
+	#itemspedido-table .factura-leyenda-badge {
+		font-size: 0.75rem;
+		color: #495057;
+		line-height: 1.25;
+		margin-top: 4px;
+		white-space: pre-wrap;
+		overflow: hidden;
+		max-width: 100%;
+		max-height: 2.6em;
+	}
+	#itemspedido-table .factura-abrir-leyenda-linea.tiene-leyenda {
+		color: #007bff;
+	}
+	#itemspedido-table .factura-leyenda-badge:empty {
+		display: none;
+	}
+	#itemspedido-table.factura-grilla-concepto th.factura-col-caja,
+	#itemspedido-table.factura-grilla-concepto td.factura-col-caja,
+	#itemspedido-table.factura-grilla-concepto th.factura-col-pieza,
+	#itemspedido-table.factura-grilla-concepto td.factura-col-pieza,
+	#itemspedido-table.factura-grilla-concepto th.factura-col-umd,
+	#itemspedido-table.factura-grilla-concepto td.factura-col-umd,
+	#itemspedido-table.factura-grilla-concepto .caja,
+	#itemspedido-table.factura-grilla-concepto .pieza {
+		display: none;
+	}
+	#itemspedido-table:not(.factura-grilla-con-iva) th.factura-col-iva,
+	#itemspedido-table:not(.factura-grilla-con-iva) td.factura-col-iva {
+		display: none;
+	}
+	#itemspedido-table tr:not(.item-concepto-venta) td.factura-col-iva .factura-iva-linea {
+		visibility: hidden;
+	}
+	#itemspedido-table .factura-sku-campo {
+		display: flex;
+		flex-wrap: nowrap;
+		align-items: center;
+		gap: 4px;
+		margin: 0;
+	}
+	#itemspedido-table .factura-sku-campo .btn-accion-tabla {
+		flex-shrink: 0;
+		line-height: 1;
+	}
+	#itemspedido-table .factura-sku-campo .codigoarticulo {
+		width: 7.5rem;
+		min-width: 0;
+		flex: 1 1 auto;
+		height: calc(2.25rem + 2px);
 	}
 </style>
 <div class="form1">
@@ -39,20 +124,48 @@
 				<option value="">-- Seleccionar transacción  --</option>
 				@php $flPrimero = true; @endphp
 				@foreach($tipotransaccion_query as $key => $value)
+					@php
+						$conceptoTipo = $value->conceptoVenta ?? null;
+						$attrsConcepto = 'data-abreviatura="'.e((string) ($value->abreviatura ?? '')).'"'
+							.' data-operacion="'.e((string) ($value->operacion ?? '')).'"'
+							.' data-usa-concepto="'.(($value->usaConceptoVentaEnFacturador() ?? false) ? '1' : '0').'"'
+							.' data-concepto-venta-id="'.e((string) ($value->concepto_venta_id ?? '')).'"'
+							.' data-concepto-codigo="'.e((string) ($conceptoTipo->codigo ?? '')).'"'
+							.' data-concepto-nombre="'.e((string) ($conceptoTipo->nombre ?? '')).'"'
+							.' data-concepto-descripcion="'.e((string) ($conceptoTipo->descripcion ?? '')).'"'
+							.' data-concepto-impuesto-id="'.e((string) ($conceptoTipo->impuesto_id ?? '')).'"';
+					@endphp
 					@if (isset($flGeneraNotaDeCredito) && $flPrimero)
-						<option value="{{ $value->id }}" data-abreviatura="{{ $value->abreviatura }}" selected="select">{{ $value->nombre }}</option>
+						<option value="{{ $value->id }}" {!! $attrsConcepto !!} selected="select">{{ $value->nombre }}</option>
 						@php $flPrimero = false; @endphp
 					@else
 						@if( (int) $value->id == (int) $tipotransaccionSeleccionada)
-							<option value="{{ $value->id }}" data-abreviatura="{{ $value->abreviatura }}" selected="select">{{ $value->nombre }}</option>    
+							<option value="{{ $value->id }}" {!! $attrsConcepto !!} selected="select">{{ $value->nombre }}</option>
 						@else
-							<option value="{{ $value->id }}" data-abreviatura="{{ $value->abreviatura }}">{{ $value->nombre }}</option>    
+							<option value="{{ $value->id }}" {!! $attrsConcepto !!}>{{ $value->nombre }}</option>
 						@endif
 					@endif
 				@endforeach	
 			</select>
 			<div class="col-lg-8 offset-lg-3">
 				<small id="aviso-tipo-fce" class="form-text text-info d-none"></small>
+			</div>
+		</div>
+		<div id="concepto-venta-comprobante-wrap" class="{{ $mostrarConceptoCabecera ? '' : 'd-none' }}">
+			@include('ventas.partials.campo_consulta_concepto_venta', [
+				'conceptoId' => $conceptoCabeceraId,
+				'codigo' => $conceptoCabeceraCodigo,
+				'descripcion' => $conceptoCabeceraNombre,
+				'required' => false,
+				'label' => 'Concepto',
+				'inputId' => 'concepto_venta_comprobante_id',
+				'inputName' => 'concepto_venta_id',
+				'ayuda_tooltip' => 'Default del tipo si tiene concepto asignado. En FAC se puede cambiar o elegir otro en el renglón.',
+			])
+			<div class="col-lg-8 offset-lg-3 mb-2">
+				<small id="aviso-concepto-venta-tipo" class="form-text text-muted">
+					Default del comprobante. En el renglón se puede cambiar y completar el detalle.
+				</small>
 			</div>
 		</div>
 		<div class="form-group row" id="puntoventa">
@@ -264,20 +377,42 @@
         <h3 class="card-title mb-0">&Iacute;tems</h3>
     </div>
     <div class="card-body">
-    	<table class="table table-sm table-bordered table-hover" id="itemspedido-table">
+		@php
+			$emisionesFactura = $data->venta_emisiones ?? [];
+			$grillaSoloConcepto = false;
+			$grillaConIva = false;
+			if (($emisionesFactura[0] ?? '')) {
+				$grillaSoloConcepto = (bool) $layoutItemsPedido;
+				foreach ($emisionesFactura as $emCheck) {
+					$esConceptoCheck = empty($emCheck->articulo_id) && ! empty($emCheck->concepto_venta_id);
+					if ($esConceptoCheck) {
+						$grillaConIva = true;
+					}
+					if ($layoutItemsPedido && (! empty($emCheck->articulo_id) || empty($emCheck->concepto_venta_id))) {
+						$grillaSoloConcepto = false;
+					}
+				}
+				if (! $layoutItemsPedido) {
+					$grillaSoloConcepto = false;
+				}
+			}
+		@endphp
+    	<table class="table table-sm table-bordered table-hover{{ $grillaSoloConcepto ? ' factura-grilla-concepto' : '' }}{{ $grillaConIva ? ' factura-grilla-con-iva' : '' }}" id="itemspedido-table">
     		<thead style="background:#85C1E9;color:#17202A;">
     			<tr>
     				<th style="width: 5%;">Item</th>
-    				<th style="width: 12%;">Art&iacute;culo</th>
+    				<th style="width: 12%;">Art&iacute;culo / concepto</th>
 					@if ($layoutItemsPedido)
-					<th style="width: 16%;">Descripci&oacute;n Art&iacute;culo</th>
-					<th>UMD</th>
-    				<th style="width: 9%;">Cajas</th>
-    				<th style="width: 9%;">Piezas</th>
-    				<th style="width: 9%;">Kilos</th>
-					<th>Descuento</th>
+					<th class="factura-col-detalle">Detalle</th>
+					<th class="factura-col-iva" style="width: 9%;">IVA</th>
+					<th class="factura-col-umd">UMD</th>
+    				<th class="factura-col-caja" style="width: 9%;">Cajas</th>
+    				<th class="factura-col-pieza" style="width: 9%;">Piezas</th>
+    				<th class="factura-col-kilo" style="width: 9%;">{{ $grillaSoloConcepto ? 'Cantidad' : 'Kilos' }}</th>
+					<th class="factura-col-descuento">Dto.</th>
 					@else
 					<th style="width: 50%;">Detalle</th>
+					<th class="factura-col-iva" style="width: 9%;">IVA</th>
     				<th style="width: 10%;">Cantidad</th>
 					<th style="width: 10%;">Descuento</th>
 					@endif
@@ -332,14 +467,27 @@
 								return (float) $valor;
 							};
 							$idxItem = (int) $loop->index;
+							$conceptoItem = $item->conceptoVenta;
+							$esLineaConcepto = empty($item->articulo_id) && ! empty($item->concepto_venta_id);
+							$codigoItemMostrar = $item->articulos->sku
+								?? ($conceptoItem->codigo ?? '');
+							$descArticuloMostrar = trim((string) ($articuloItem->descripcion ?? ''));
+							$detalleEmision = trim((string) ($item->detalle ?? ''));
+							$leyendaLineaItem = '';
+							if (! $esLineaConcepto && $detalleEmision !== '' && $detalleEmision !== $descArticuloMostrar) {
+								$leyendaLineaItem = $detalleEmision;
+							}
+							$leyendaLineaItem = trim((string) $valorOldIndice('leyendas_linea', $idxItem, $leyendaLineaItem));
+							$textoDetalleMostrar = $esLineaConcepto
+								? $detalleEmision
+								: ($descArticuloMostrar !== '' ? $descArticuloMostrar : $detalleEmision);
 						@endphp
-            			<tr class="{{ $layoutItemsPedido ? 'item-pedido' : 'item-factura' }}">
+            			<tr class="{{ $layoutItemsPedido ? 'item-pedido' : 'item-factura' }}{{ $esLineaConcepto ? ' item-concepto-venta' : '' }}">
                				<td>
                					<input type="text" name="items[]" class="form-control item" value="{{ $loop->index+1 }}" readonly>
                 				<input type="hidden" name="listasprecios_id[]" class="form-control listaprecio_id" readonly value="{{ $valorOldIndice('listasprecios_id', $idxItem, $item->listaprecio_id ?? '') }}" />
                 				<input type="hidden" name="monedas_id[]" class="form-control moneda_id" readonly value="{{ $valorOldIndice('monedas_id', $idxItem, $item->moneda_id ?? '') }}" />
                 				<input type="hidden" name="incluyeimpuestos[]" class="form-control incluyeimpuesto" readonly value="{{ $valorOldIndice('incluyeimpuestos', $idxItem, $item->incluyeimpuesto ?? '') }}" />
-                				<input type="hidden" name="impuesto_ids[]" class="form-control impuesto_id" readonly value="{{ $valorOldIndice('impuesto_ids', $idxItem, $item->impuesto_id ?? '') }}" />
                 				<input type="hidden" name="ids[]" class="form-control ids" value="{{$item->id??''}}" />
 								<input type="hidden" name="loteids[]" class="form-control loteids" value="{{ $item->lotes?->id ?? '' }}" />
 								@if ($layoutItemsPedido)
@@ -348,25 +496,40 @@
 								@endif
                 			</td>
                             <td>
-                                <div class="form-group row" id="articulo">
+                                <div class="factura-sku-campo" id="articulo">
                                     <input type="hidden" name="articulo[]" class="form-control iiarticulo" readonly value="{{ $loop->index+1 }}" />
                                     <input type="hidden" class="articulo_id" name="articulo_ids[]" value="{{$item->articulo_id ?? ''}}" >
+                                    <input type="hidden" class="concepto_venta_id" name="concepto_venta_ids[]" value="{{ $valorOldIndice('concepto_venta_ids', $idxItem, $item->concepto_venta_id ?? '') }}" >
                                     <input type="hidden" class="articulo_id_previa" name="articulo_id_previa[]" value="{{$item->articulo_id ?? ''}}" >
                                     <input type="hidden" class="articulo_id_previo" name="articulo_id_previo[]" value="{{$item->articulo_id ?? ''}}" >
 									<input type="hidden" class="categoria_id" name="categoria_ids[]" value="{{$item->articulos->categoria_id ?? ''}}" >
 									<input type="hidden" class="subcategoria_id" name="subcategoria_ids[]" value="{{$item->articulos->subcategoria_id ?? ''}}" >
-                                    <button type="button" title="Consulta articulos" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC" data-solo-facturable="1">
+                                    <button type="button" title="Consulta articulos" class="btn-accion-tabla consultaarticulo tooltipsC" data-solo-facturable="1">
                                             <i class="fa fa-search text-primary"></i>
                                     </button>
-                                    <input type="text" style="WIDTH: 120px;HEIGHT: 38px" class="codigoarticulo codigoarticulolocal form-control" name="codigoarticulos[]" value="{{$item->articulos->sku ?? ''}}" >
-                                    <input type="hidden" class="codigo_previo_articulo" name="codigo_previo_articulos[]" value="{{$item->articulos->sku ?? ''}}" >
+                                    <button type="button" title="Concepto sin artículo (F1). Después complete el detalle y el precio." class="btn-accion-tabla consultaconceptoventa tooltipsC">
+                                            <i class="fa fa-file-text-o text-info"></i>
+                                    </button>
+                                    <input type="text" class="codigoarticulo codigoarticulolocal form-control" name="codigoarticulos[]" value="{{ $codigoItemMostrar }}" >
+                                    <input type="hidden" class="codigo_previo_articulo" name="codigo_previo_articulos[]" value="{{ $codigoItemMostrar }}" >
                                 </div>
                             </td>		
-                            <td>
-                                <input type="text" style="WIDTH: {{ $layoutItemsPedido ? '220' : '700' }}px; HEIGHT: 38px" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="{{$item->detalle ?? ''}}" @if($layoutItemsPedido) readonly @endif>
+                            <td class="factura-col-detalle">
+								@if ($esLineaConcepto && $grillaSoloConcepto)
+                                <textarea class="descripcionarticulo form-control factura-detalle-concepto" name="descripcionarticulos[]" rows="3" placeholder="Detalle (ej. AUTO FIAT UNO dominio XXX)">{{ $textoDetalleMostrar }}</textarea>
+								@else
+                                <input type="text" style="WIDTH: {{ $layoutItemsPedido ? '220' : '700' }}px; HEIGHT: 38px" class="descripcionarticulo form-control" name="descripcionarticulos[]" value="{{ $textoDetalleMostrar }}" @if($layoutItemsPedido && ! $esLineaConcepto) readonly @endif>
+								@endif
+								<textarea name="leyendas_linea[]" class="d-none factura-ta-leyenda-linea" aria-hidden="true">{{ $leyendaLineaItem }}</textarea>
+								<div class="factura-leyenda-badge" title="{{ $leyendaLineaItem }}">{{ $leyendaLineaItem !== '' ? $leyendaLineaItem : '' }}</div>
                             </td>
+							<td class="factura-col-iva">
+								@include('ventas.factura.partials.select_iva_linea', [
+									'impuestoIdSeleccionado' => $valorOldIndice('impuesto_ids', $idxItem, $item->impuesto_id ?? optional($conceptoItem)->impuesto_id ?? 0),
+								])
+							</td>
 							@if ($layoutItemsPedido)
-							<td>
+							<td class="factura-col-umd">
 								<select name="unidadmedida_ids[]" data-placeholder="Unidad de Medida" class="unidadmedida_id form-control" data-fouc>
 									@foreach($unidadmedida_query as $key => $value)
 										@if ((int) $value['id'] == (int) $unidadMedidaIdItem)
@@ -378,16 +541,16 @@
 								</select>
 								<input type="hidden" name="unidadmedidas[]" class="form-control unidadmedida" value="{{ $unidadMedidaAbrevItem }}" />
 							</td>
-							<td>
-								<input type="text" name="cajas[]" class="form-control caja" value="{{ number_format((float) $cajaItem, 2, '.', '') }}" />
+							<td class="factura-col-caja">
+								<input type="text" name="cajas[]" class="form-control caja" value="{{ number_format((float) $cajaItem, 2, '.', '') }}" @if($esLineaConcepto) readonly @endif />
 							</td>
-							<td>
-								<input type="text" name="piezas[]" class="form-control pieza" value="{{ number_format((float) $piezaItem, 2, '.', '') }}" />
+							<td class="factura-col-pieza">
+								<input type="text" name="piezas[]" class="form-control pieza" value="{{ number_format((float) $piezaItem, 2, '.', '') }}" @if($esLineaConcepto) readonly @endif />
 							</td>
-							<td>
-								<input type="text" name="kilos[]" class="form-control kilo" value="{{ number_format((float) $kiloItem, 2, '.', '') }}" />
+							<td class="factura-col-kilo">
+								<input type="text" name="kilos[]" class="form-control kilo" value="{{ number_format((float) $kiloItem, 2, '.', '') }}" @if($esLineaConcepto) title="Cantidad" placeholder="Cant." @endif />
 							</td>
-							<td>
+							<td class="factura-col-descuento">
 								<select name="descuentoventa_ids[]" data-placeholder="Descuento" class="descuentoventa_id form-control" data-fouc>
 									<option value="">-Descuento-</option>
 									@foreach($descuentoventa_query as $key => $value)
@@ -409,9 +572,12 @@
                 			</td>
 							@endif								
                 			<td>
-                				<input type="text" style="text-align: right;" name="precios[]" class="form-control precio" readonly value="{{ \App\Support\Ventas\VentaNotaCreditoPrecioLiteralSupport::formatLiteral($valorOldIndice('precios', $idxItem, optional($item)->precio ?? 0)) }}" />
+                				<input type="text" style="text-align: right;" name="precios[]" class="form-control precio" @if(! $esLineaConcepto) readonly @endif value="{{ \App\Support\Ventas\VentaNotaCreditoPrecioLiteralSupport::formatLiteral($valorOldIndice('precios', $idxItem, optional($item)->precio ?? 0)) }}" />
                 			</td>							
-                			<td>
+                			<td class="text-nowrap">
+								<button type="button" title="Leyenda / comentario de la l&iacute;nea" class="btn-accion-tabla factura-abrir-leyenda-linea tooltipsC{{ $leyendaLineaItem !== '' ? ' tiene-leyenda' : '' }}">
+									<i class="fa fa-align-left"></i>
+								</button>
 								<button type="button" title="Elimina esta l&iacute;nea" class="btn-accion-tabla eliminar tooltipsC">
                             		<i class="fa fa-times-circle text-danger"></i>
 								</button>
@@ -434,6 +600,9 @@
         	<button type="button" id="agrega_renglon" class="btn btn-outline-primary btn-sm factura-carga-bloqueable">
 				<i class="fa fa-plus"></i> Agregar rengl&oacute;n
 			</button>
+			<small class="form-text text-muted d-inline-block ml-2">
+				Mercadería: lupa o código. Comentario de la l&iacute;nea: &iacute;cono de p&aacute;rrafo (como en OC). Sin art&iacute;culo: &iacute;cono de documento o F1 (concepto, IVA, detalle y precio).
+			</small>
 		</div>
 		<div class="row">
 			<div class="col-sm-6">
@@ -517,6 +686,24 @@
 <input type="hidden" id="ordenventa_id" name="ordenventa_id" class="form-control" value="{{$data->ordenventa_id ?? ''}}" />
 <input type="hidden" id="estadocliente" value="{{ $data->clientes->estado ?? '' }}">
 
+<div class="modal fade" id="modalFacturaLeyendaLinea" tabindex="-1" role="dialog" aria-labelledby="modalFacturaLeyendaLineaLabel" aria-hidden="true">
+	<div class="modal-dialog modal-lg" role="document">
+		<div class="modal-content">
+			<div class="modal-header py-2">
+				<h5 class="modal-title" id="modalFacturaLeyendaLineaLabel">Leyenda de la l&iacute;nea</h5>
+				<button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+			</div>
+			<div class="modal-body">
+				<p class="small text-muted mb-2">Texto adicional de esta l&iacute;nea de art&iacute;culo (aparece debajo en el comprobante).</p>
+				<textarea id="factura_leyenda_linea_editor" class="form-control" rows="6" placeholder="Comentario o leyenda de esta l&iacute;nea…"></textarea>
+			</div>
+			<div class="modal-footer py-2">
+				<button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
+				<button type="button" class="btn btn-primary btn-sm" id="factura_leyenda_linea_guardar">Guardar</button>
+			</div>
+		</div>
+	</div>
+</div>
 @include('ventas.factura.modal')
 @include('ventas.factura.templatetotalfactura')
 @include('includes.stock.modalconsultaarticulo')
@@ -524,3 +711,4 @@
 @include('includes.ventas.modalconsultacliente')
 @include('includes.ventas.modalconsultavendedor')
 @include('includes.ventas.modalconsultatransporte')
+@include('includes.ventas.modalconsultaconceptoventa')

@@ -207,6 +207,10 @@ class CentrocostoController extends Controller
             'editar-perdida-personal',
             'actualizar-perdida-personal',
             'listar-perdida-personal',
+            'crear-conceptos-venta',
+            'editar-conceptos-venta',
+            'actualizar-conceptos-venta',
+            'listar-conceptos-venta',
         ] as $permiso) {
             if (can($permiso, false)) {
                 return true;

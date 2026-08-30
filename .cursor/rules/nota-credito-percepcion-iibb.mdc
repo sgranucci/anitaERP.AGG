@@ -1,0 +1,55 @@
+---
+description: NC mostrador admin — percepciones IIBB se prorratean desde la factura origen
+globs: app/Services/Configuracion/ImpuestoService.php,app/Services/Configuracion/IIBBService.php,app/Services/Ventas/FacturacionService.php,app/Support/Ventas/NotaCreditoPercepcionIibbSupport.php,app/Services/Caja/CobranzaDescuentoNotaCreditoService.php,app/Support/Caja/CobranzaDescuentoConfigSupport.php,config/cobranza.php
+alwaysApply: false
+---
+
+# NC mostrador: percepción IIBB de la factura origen
+
+En **facturación mostrador de administración** (AGG y resto), la nota de crédito **no recalcula** percepciones IIBB. Hereda las de la factura origen y las prorratea por neto gravado.
+
+Punto único: `App\Support\Ventas\NotaCreditoPercepcionIibbSupport`.
+
+## Dónde corre
+
+| Canal | ¿Prorratea? |
+|---|---|
+| Mostrador admin (`ventas/factura`) | **Sí** (AGG incluido) |
+| NCP cobranza (`COBRANZA_NC_PERCEPCION_IIBB`) | Configurable. **El Bierzo = false** (sin IIBB) |
+| POS gastronomía / estacionamiento / canje | **No** (`esEmisionPos`) |
+| Factura / ND | **No** |
+
+## Qué manda
+
+| NC | Percepción |
+|---|---|
+| Total | 100 % de lo percibido en la factura (mismas jur. y alícuotas) |
+| Parcial | `perc_FAC × (neto_NC / neto_FAC)` — sin volver a aplicar el mínimo |
+| Factura sin perc. | La NC no inventa percepción |
+
+## Correcto
+
+```php
+NotaCreditoPercepcionIibbSupport::anexarOrigenSiCorresponde(
+    $datosCliente,
+    $data,
+    ! $this->esEmisionPos($data)
+);
+// ImpuestoService: si paraNotaCredito() !== null, usar eso; no calculaPercepcionIIBB
+```
+
+## Prohibido
+
+```php
+// ❌ Recalcular IIBB de la NC como venta nueva (padrón/mínimo del día)
+$this->IIBBService->calculaPercepcionIIBB($netoNc, ...);
+
+// ❌ Enganchar el prorrateo en gastronomía / estacionamiento
+```
+
+## Comprobación rápida
+
+```bash
+rg "NotaCreditoPercepcionIibbSupport" app --glob '*.php'
+php -l app/Support/Ventas/NotaCreditoPercepcionIibbSupport.php
+```

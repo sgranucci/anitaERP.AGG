@@ -60,6 +60,17 @@ return [
     'nc_tipotransaccion_por_letra' => $ncTipotransaccionPorLetra,
     'nc_articulo_id' => (int) env('COBRANZA_NC_ARTICULO_ID', 0),
     'nc_articulo_sku' => (string) env('COBRANZA_NC_ARTICULO_SKU', ''),
+    /**
+     * NCP (NC de descuento en cobranza): si false, no lleva percepción IIBB
+     * (ni prorrateo ni recálculo). El Bierzo = false; AGG y resto = true.
+     */
+    'nc_percepcion_iibb' => filter_var(
+        env(
+            'COBRANZA_NC_PERCEPCION_IIBB',
+            strtoupper(trim((string) env('EMPRESA', ''))) === 'EL BIERZO' ? 'false' : 'true'
+        ),
+        FILTER_VALIDATE_BOOLEAN
+    ),
 
     /**
      * Lock de numeración tesorería (cobranza + caja_movimiento sin cobranza_id).

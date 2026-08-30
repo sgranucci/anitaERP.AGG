@@ -325,7 +325,9 @@ final class ArcaMtxcaComprobanteTotalesSupport
             'alicuota' => $alicuota,
             'neto' => $neto,
             'iva' => round($neto * $alicuota / 100, 2),
-            'codigo_mtx' => '7790000000000',
+            'codigo_mtx' => ConceptoVentaMostradorSupport::codigoMtxSintetico(
+                $esDescuento ? 'bonificacion' : 'ajuste'
+            ),
             'unidades_mtx' => 1,
         ];
     }

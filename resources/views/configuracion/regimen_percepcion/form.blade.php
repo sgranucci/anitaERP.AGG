@@ -7,6 +7,8 @@
     Gastronomía, estacionamiento y POS omiten estas percepciones.
     <strong>PIVA</strong>: percepción IVA 3&nbsp;% a RI (RG 5329), mínimo sobre gravado.
     <strong>PNC</strong>: percepción a no categorizado (RG 2126), mínimo sobre el importe calculado.
+    IIBB (Buenos Aires 902 y resto) no es un régimen de esta lista:
+    <a href="{{ route('configuracion_general') }}">Agentes IIBB por empresa</a>.
 </div>
 <div class="form-group row">
     <label for="codigo" class="col-lg-3 control-label text-right pr-2 requerido">Código</label>
