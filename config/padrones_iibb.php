@@ -66,7 +66,7 @@ return [
         'sync_habilitado' => filter_var(env('PADRON_IIBB_ARBA_SYNC_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
         // siguiente = próximo mes (último día del mes); actual = mes en curso
         'sync_periodo' => env('PADRON_IIBB_ARBA_SYNC_PERIODO', 'siguiente'),
-        'sync_hora' => env('PADRON_IIBB_ARBA_SYNC_HORA', '22:00'),
+        'sync_hora' => env('PADRON_IIBB_ARBA_SYNC_HORA', '19:00'),
     ],
 
 ];
