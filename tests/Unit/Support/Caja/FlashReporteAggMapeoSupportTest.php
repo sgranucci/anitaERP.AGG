@@ -109,6 +109,34 @@ class FlashReporteAggMapeoSupportTest extends TestCase
         $this->assertArrayNotHasKey('AY8', $h);
     }
 
+    public function test_denominadores_budget_fila8_como_marcela(): void
+    {
+        $celdas = FlashReporteAggMapeoSupport::celdasDenominadoresBudgetFila8([
+            'budget_pos' => 2794,
+            'budget_total' => 203999582,
+            'budget_electronic' => 203999582,
+            'budget_bingo' => 4302863,
+            'budget_ayb' => 6069507,
+            'budget_estac' => 461785,
+        ]);
+
+        $this->assertSame(2794.0, $celdas['AY8']);
+        $this->assertSame(203999582.0, $celdas['BH8']);
+        $this->assertSame(4302863.0, $celdas['BI8']);
+        $this->assertSame(6069507.0, $celdas['BJ8']);
+        $this->assertSame(461785.0, $celdas['BK8']);
+
+        $sinEstac = FlashReporteAggMapeoSupport::celdasDenominadoresBudgetFila8([
+            'budget_pos' => 1135,
+            'budget_electronic' => 39531489,
+            'budget_bingo' => 975577,
+            'budget_ayb' => 1495372,
+            'budget_estac' => 0,
+        ]);
+        $this->assertArrayNotHasKey('BK8', $sinEstac);
+        $this->assertSame(39531489.0, $sinEstac['BH8']);
+    }
+
     public function test_titulos_de_mes(): void
     {
         $this->assertSame('Reporte Flash Agosto 26', FlashReporteAggMapeoSupport::tituloMes(Carbon::create(2026, 8, 1)));

@@ -334,6 +334,14 @@ class FlashReporteAggExcelService
         // Filas 6–8: títulos oficiales (HLOOKUP Electronic / máscara Tabla).
         $celdas = array_merge($celdas, FlashReporteAggMapeoSupport::encabezadosHojaDatos());
 
+        $budgetMes = is_array($reporte['budget_mes'] ?? null)
+            ? $reporte['budget_mes']
+            : FlashCajaLFlashCalculoSupport::budgetDesdeParametro(null);
+        $celdas = array_merge(
+            $celdas,
+            FlashReporteAggMapeoSupport::celdasDenominadoresBudgetFila8($budgetMes)
+        );
+
         for ($i = 0; $i < self::DIAS_MAX; $i++) {
             $excelRow = self::FILA_DATOS_INICIO + $i;
             if (! isset($filas[$i])) {

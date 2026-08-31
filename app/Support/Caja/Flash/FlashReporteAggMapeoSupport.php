@@ -240,6 +240,41 @@ final class FlashReporteAggMapeoSupport
     }
 
     /**
+     * Denominadores de budget diario en fila 8 (como l-flash / Marcela).
+     * La presentación usa Datos!BH8; sin estos valores el % de cumplimiento queda en 0.
+     *
+     * @param  array<string, float|int>  $budget  Salida de FlashCajaLFlashCalculoSupport::budgetDesdeParametro
+     * @return array<string, float|int>
+     */
+    public static function celdasDenominadoresBudgetFila8(array $budget): array
+    {
+        $celdas = [];
+        $pos = (float) ($budget['budget_pos'] ?? 0);
+        if (abs($pos) > 0.00001) {
+            $celdas['AY8'] = $pos;
+        }
+        // BH = electronic (= total en AGG cuando poker=0); BI/BJ/BK = bingo / F&B / parking.
+        $electronic = (float) ($budget['budget_electronic'] ?? 0);
+        if (abs($electronic) < 0.00001) {
+            $electronic = (float) ($budget['budget_total'] ?? 0);
+        }
+        if (abs($electronic) > 0.00001) {
+            $celdas['BH8'] = $electronic;
+        }
+        foreach ([
+            'BI8' => (float) ($budget['budget_bingo'] ?? 0),
+            'BJ8' => (float) ($budget['budget_ayb'] ?? 0),
+            'BK8' => (float) ($budget['budget_estac'] ?? 0),
+        ] as $celda => $valor) {
+            if (abs($valor) > 0.00001) {
+                $celdas[$celda] = $valor;
+            }
+        }
+
+        return $celdas;
+    }
+
+    /**
      * @param  array<string, mixed>  $m  Métricas enriquecidas (FlashCajaLFlashCalculoSupport)
      * @return array<string, float|int|string>
      */
