@@ -280,6 +280,7 @@ class CertificadoSanitarioService
                 'sku' => (string) $sku,
                 'cantidad' => (float) $items->sum('kilos'),
                 'cajas' => (float) $items->sum('cajas'),
+                'piezas' => (float) $items->sum('piezas'),
                 'cert_tercero' => $certTercero ?: null,
                 'partida' => null,
             ]);
@@ -361,7 +362,8 @@ class CertificadoSanitarioService
         $xmlFalta = ! $this->xmlLegible($cert->xml_frio) && ! $this->xmlLegible($cert->xml_sin_frio);
         $xmlSinTagOrigen = $this->xmlTerceroSinTagOrigen($cert, $lineas);
         $xmlMaestroViejo = $this->xmlDesactualizadoRespectoMaestro($cert, $lineas);
-        if (! $necesitaAmparo && ! $xmlFalta && ! $xmlSinTagOrigen && ! $xmlMaestroViejo) {
+        $xmlCantidadCajas = $this->xmlCantidadNoEsPiezas($cert, $lineas);
+        if (! $necesitaAmparo && ! $xmlFalta && ! $xmlSinTagOrigen && ! $xmlMaestroViejo && ! $xmlCantidadCajas) {
             return $cert;
         }
 
@@ -472,6 +474,57 @@ class CertificadoSanitarioService
     }
 
     /**
+     * XML viejo: se:cantidad era cajas; ahora son piezas (unidades).
+     *
+     * @param  Collection<int, PedidoCertificadoLinea>  $lineas
+     */
+    private function xmlCantidadNoEsPiezas(CertificadoSanitario $cert, Collection $lineas): bool
+    {
+        foreach (['S', 'N'] as $frio) {
+            $nuevo = $this->xmlBuilder->build($cert, $lineas, $frio, $cert->camion);
+            $path = $frio === 'S' ? $cert->xml_frio : $cert->xml_sin_frio;
+            if ($nuevo === '') {
+                continue;
+            }
+            if (! $this->xmlLegible($path)) {
+                return true;
+            }
+            $viejo = (string) Storage::disk('local')->get($path);
+            if ($this->cantidadesDelXml($nuevo) !== $this->cantidadesDelXml($viejo)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * @return list<float>
+     */
+    private function cantidadesDelXml(string $xml): array
+    {
+        preg_match_all('/<se:cantidad>([^<]+)<\/se:cantidad>/', $xml, $m);
+
+        return array_map(static fn ($v) => (float) $v, $m[1] ?? []);
+    }
+
+    private function piezasDesdeArticuloGuardado(CertificadoSanitarioArticulo $item): float
+    {
+        $guardadas = (float) ($item->piezas ?? 0);
+        if ($guardadas > 0) {
+            return $guardadas;
+        }
+
+        $ux = (float) ($item->articulo?->unidadesxenvase ?? 0);
+        $cajas = (float) ($item->cajas ?? 0);
+        if ($ux > 0 && $cajas > 0) {
+            return $cajas * $ux;
+        }
+
+        return $cajas;
+    }
+
+    /**
      * @return Collection<int, PedidoCertificadoLinea>
      */
     private function lineasDesdeCertificado(CertificadoSanitario $cert): Collection
@@ -505,7 +558,7 @@ class CertificadoSanitarioService
                 articuloId: $item->articulo_id ? (int) $item->articulo_id : null,
                 kilos: (float) $item->cantidad,
                 cajas: (float) $item->cajas,
-                piezas: (float) $item->cajas,
+                piezas: $this->piezasDesdeArticuloGuardado($item),
                 codigosenasaId: (int) $cods->id,
                 llevafrio: Codigosenasa::codigoFrio($cods->llevafrio ?? 'N'),
                 registroSenasa: trim((string) ($cods->registro ?? '')),

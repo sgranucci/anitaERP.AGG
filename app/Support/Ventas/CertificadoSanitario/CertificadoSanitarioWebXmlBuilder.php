@@ -10,6 +10,7 @@ use Illuminate\Support\Collection;
 
 /**
  * Genera XML solicitudCertCarnicos (port de CERTS_genera_certificado_web en certsan.fc).
+ * se:cantidad = unidades (piezas). Cajas solo entran en tara (peso bruto) y observaciones.
  */
 final class CertificadoSanitarioWebXmlBuilder
 {
@@ -61,13 +62,13 @@ final class CertificadoSanitarioWebXmlBuilder
             $base = $grupo['linea'];
             $neto = (float) $grupo['kilos'];
             $cajas = (float) $grupo['cajas'];
-            // Anita certsan.fc: cantidad = Round(cajas); si Round==0 → 1
-            if (round($cajas, 0) == 0.0) {
-                $cajas = 1.0;
+            $cajasTara = $cajas;
+            if (round($cajasTara, 0) == 0.0) {
+                $cajasTara = 1.0;
             }
-            $cantidad = round($cajas, 0);
-            $totalCajas += $cajas;
-            $bruto = $neto + $cajas;
+            $cantidad = self::cantidadXmlDesdePiezas((float) $grupo['piezas']);
+            $totalCajas += $cajasTara;
+            $bruto = $neto + $cajasTara;
 
             $codigoProducto = self::codigoProducto($base);
             $fechaElab = $fecha->copy()->subDays(2);
@@ -201,6 +202,18 @@ final class CertificadoSanitarioWebXmlBuilder
         }
 
         return trim($primera->localidadNombre.'-'.$primera->provinciaNombre, '-');
+    }
+
+    /**
+     * Unidades (piezas) para se:cantidad.
+     * p-certsan.c las acumula en double (pueden ser 8.50);
+     * certsan.fc las escribe %.0lf / Round(..., 0). Si Round==0 → 1.
+     */
+    public static function cantidadXmlDesdePiezas(float $piezas): float
+    {
+        $cantidad = round($piezas, 0);
+
+        return $cantidad == 0.0 ? 1.0 : $cantidad;
     }
 
     public static function codigoProducto(PedidoCertificadoLinea $l): string

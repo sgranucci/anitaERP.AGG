@@ -16,7 +16,7 @@ class ImportarPedidoAnitaCommand extends Command
                             {--dry-run : Solo lista qué se importaría, sin grabar}
                             {--ejecutar : Persiste altas y actualizaciones}';
 
-    protected $description = 'Importa pedidos Anita (pendmae/pendmov) al ERP por fecha de entrega y reparto. El cron diario usa hoy y todos los repartos.';
+    protected $description = 'Importa pedidos Anita (pendmae/pendmov) al ERP por fecha de entrega y reparto, incluida la pesada (penv_kilos_reales). El cron diario usa hoy y todos los repartos; el refresco diurno actualiza pesadas.';
 
     public function handle(PedidoImportarDesdeAnitaService $service): int
     {

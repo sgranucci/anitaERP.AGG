@@ -100,7 +100,7 @@ class CertificadoSanitarioController extends Controller
 
         $preview = null;
         $previewFilas = collect();
-        $previewTotales = ['kilos' => 0.0, 'cajas' => 0.0, 'lineas' => 0, 'pedidos' => 0];
+        $previewTotales = ['kilos' => 0.0, 'cajas' => 0.0, 'piezas' => 0.0, 'lineas' => 0, 'pedidos' => 0];
         $omitidosSinSenasa = collect();
         $filtros = [
             'fecha' => $request->get('fecha', now()->toDateString()),

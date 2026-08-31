@@ -22,10 +22,12 @@ final class CertificadoSanitarioPreviewAplanado
 
         $totalKilos = 0.0;
         $totalCajas = 0.0;
+        $totalPiezas = 0.0;
 
         foreach ($lineas->groupBy(fn (PedidoCertificadoLinea $l) => $l->origen.'|'.$l->codigoPedido) as $grupo) {
             $kilos = 0.0;
             $cajas = 0.0;
+            $piezas = 0.0;
             /** @var PedidoCertificadoLinea $primera */
             $primera = $grupo->first();
             foreach ($grupo as $linea) {
@@ -35,6 +37,7 @@ final class CertificadoSanitarioPreviewAplanado
                 ]);
                 $kilos += $linea->kilos;
                 $cajas += $linea->cajas;
+                $piezas += $linea->piezas;
             }
             $out->push([
                 'tipo_fila' => 'subtotal_pedido',
@@ -42,15 +45,18 @@ final class CertificadoSanitarioPreviewAplanado
                 'origen' => $primera->origen,
                 'kilos' => $kilos,
                 'cajas' => $cajas,
+                'piezas' => $piezas,
             ]);
             $totalKilos += $kilos;
             $totalCajas += $cajas;
+            $totalPiezas += $piezas;
         }
 
         $out->push([
             'tipo_fila' => 'total_final',
             'kilos' => $totalKilos,
             'cajas' => $totalCajas,
+            'piezas' => $totalPiezas,
         ]);
 
         return $out;
@@ -58,7 +64,7 @@ final class CertificadoSanitarioPreviewAplanado
 
     /**
      * @param  Collection<int, PedidoCertificadoLinea>  $lineas
-     * @return array{kilos: float, cajas: float, lineas: int, pedidos: int}
+     * @return array{kilos: float, cajas: float, piezas: float, lineas: int, pedidos: int}
      */
     public static function totales(Collection $lineas): array
     {
@@ -70,6 +76,7 @@ final class CertificadoSanitarioPreviewAplanado
         return [
             'kilos' => (float) $lineas->sum('kilos'),
             'cajas' => (float) $lineas->sum('cajas'),
+            'piezas' => (float) $lineas->sum('piezas'),
             'lineas' => $lineas->count(),
             'pedidos' => $pedidos,
         ];

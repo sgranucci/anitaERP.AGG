@@ -32,9 +32,16 @@
                         Luego puede importarlos al ERP: crea los faltantes y actualiza cabecera y líneas de los existentes
                         que aún no estén facturados, transferidos o anulados.
                         El cliente interno DESPACHO no se importa: el circuito vive solo en ERP y el pedido Anita se cierra.
+                        Trae la pesada de Anita (<code>penv_kilos_reales</code> / <code>penm_kg_reales</code>);
+                        si Anita aún no pesó, no pisa una pesada ya cargada en el ERP.
                         @if (config('pedido.importar_anita_diaria.habilitado', true))
                             Cada día a las {{ config('pedido.importar_anita_diaria.hora', '01:00') }}
                             se importan solos los pedidos con fecha de entrega de ese día y todos los repartos.
+                        @endif
+                        @if (config('pedido.importar_anita_diaria.refresco_habilitado', true))
+                            Entre las {{ config('pedido.importar_anita_diaria.refresco_desde', '05:00') }}
+                            y las {{ config('pedido.importar_anita_diaria.refresco_hasta', '18:00') }}
+                            se refresca cada 30 minutos para traer las pesadas que se cargaron después.
                         @endif
                     </p>
 
@@ -126,6 +133,8 @@
                                     <th>Fecha</th>
                                     <th>Entrega</th>
                                     <th>Reparto</th>
+                                    <th class="text-right">Kg reales</th>
+                                    <th class="text-right">Cajas reales</th>
                                     <th>Estado Anita</th>
                                     <th>ERP</th>
                                 </tr>
@@ -145,6 +154,16 @@
                                         <td>{{ $fila['fecha'] }}</td>
                                         <td>{{ $fila['fecha_entrega'] }}</td>
                                         <td>{{ $fila['reparto'] }}</td>
+                                        <td class="text-right">
+                                            @if ((float) ($fila['kg_reales'] ?? 0) > 0)
+                                                {{ number_format((float) $fila['kg_reales'], 2, ',', '.') }}
+                                            @endif
+                                        </td>
+                                        <td class="text-right">
+                                            @if ((int) ($fila['caja_reales'] ?? 0) > 0)
+                                                {{ (int) $fila['caja_reales'] }}
+                                            @endif
+                                        </td>
                                         <td>{{ $fila['estado_anita'] }}</td>
                                         <td>
                                             @if (($fila['estado_erp'] ?? '') === 'existe')
@@ -160,7 +179,7 @@
                                     </tr>
                                 @empty
                                     <tr>
-                                        <td colspan="9" class="text-center text-muted py-4">
+                                        <td colspan="11" class="text-center text-muted py-4">
                                             No hay pedidos Anita para el filtro indicado.
                                         </td>
                                     </tr>

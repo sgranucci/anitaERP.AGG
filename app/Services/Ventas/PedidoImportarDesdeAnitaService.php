@@ -8,10 +8,12 @@ use App\Models\Ventas\Cliente;
 use App\Models\Ventas\Pedido;
 use App\Models\Ventas\Pedido_Articulo;
 use App\Models\Ventas\Pedido_Articulo_Caja;
+use App\Models\Ventas\Pedido_Articulo_Estado;
 use App\Models\Ventas\Transporte;
 use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Zonavta;
 use App\Models\Ventas\Venta;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Ventas\ClienteDespachoSupport;
 use App\Support\Ventas\KiloPedidoListadoFiltros;
 use App\Support\Ventas\PedidoDespachoAnitaCierreSupport;
@@ -20,6 +22,7 @@ use App\Support\Ventas\PedidoFacturacionExclusivaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 /**
@@ -102,6 +105,8 @@ class PedidoImportarDesdeAnitaService
                 'reparto' => (string) (int) ($cab->penm_expreso ?? 0),
                 'estado_anita' => trim((string) ($cab->penm_estado ?? '')),
                 'leyenda' => trim((string) ($cab->penm_leyenda ?? '')),
+                'kg_reales' => self::floatDesdeAnita($cab->penm_kg_reales ?? null),
+                'caja_reales' => self::enteroDesdeAnita($cab->penm_caja_reales ?? null),
                 'estado_erp' => $estadoErp,
                 'pedido_id' => $existe ? (int) $existente->id : null,
             ];
@@ -277,8 +282,12 @@ class PedidoImportarDesdeAnitaService
             'lugarentrega' => trim((string) ($cab->penm_entrega ?? '')),
             'codigo' => $codigo,
             'zonavta_id' => $zonavtaId,
-            'caja_reales' => self::enteroDesdeAnita($cab->penm_caja_reales ?? null),
         ];
+
+        $cajaRealesAnita = self::enteroDesdeAnita($cab->penm_caja_reales ?? null);
+        if ($cajaRealesAnita > 0 || $pedidoExistente === null) {
+            $campos['caja_reales'] = $cajaRealesAnita;
+        }
 
         $lineasAnita = $this->leerPendmov(
             (string) ($cab->penm_tipo ?? 'PED'),
@@ -297,15 +306,20 @@ class PedidoImportarDesdeAnitaService
                 unset($campos['codigo']);
                 $pedido->fill($campos);
                 $pedido->save();
-                Pedido_Articulo_Caja::query()->where('pedido_id', $pedido->id)->delete();
-                Pedido_Articulo::query()->where('pedido_id', $pedido->id)->delete();
             }
 
-            $this->grabarLineas((int) $pedido->id, $lineasAnita);
+            $pesada = $this->grabarLineas((int) $pedido->id, $lineasAnita, ! $esNuevo);
+
+            Log::info('pedido.importar_anita.pedido', [
+                'codigo' => $codigo,
+                'estado' => $esNuevo ? 'creado' : 'actualizado',
+                'lineas_anita' => count($lineasAnita),
+                'pesada' => $pesada,
+            ]);
 
             return [
                 'estado' => $esNuevo ? 'creado' : 'actualizado',
-                'mensaje' => null,
+                'mensaje' => $pesada > 0 ? ('Pesada Anita '.number_format($pesada, 2, ',', '.').' kg') : null,
                 'pedido_id' => (int) $pedido->id,
             ];
         });
@@ -314,12 +328,18 @@ class PedidoImportarDesdeAnitaService
     /**
      * @param  list<object>  $lineasAnita
      */
-    private function grabarLineas(int $pedidoId, array $lineasAnita): void
+    private function grabarLineas(int $pedidoId, array $lineasAnita, bool $conservarPesadaErp): float
     {
-        if ($lineasAnita === []) {
-            return;
+        $existentes = Pedido_Articulo::query()
+            ->where('pedido_id', $pedidoId)
+            ->get();
+        $porClave = [];
+        foreach ($existentes as $existente) {
+            $porClave[$this->claveLinea((int) $existente->numeroitem, (int) $existente->articulo_id)] = $existente;
         }
 
+        $idsConservar = [];
+        $pesadaTotal = 0.0;
         $i = 0;
         $n = count($lineasAnita);
         while ($i < $n) {
@@ -337,8 +357,8 @@ class PedidoImportarDesdeAnitaService
             }
 
             $numeroitem = (int) ($row->penv_orden ?? ($i + 1));
-            $precio = (float) ($row->penv_precio ?? 0);
-            $descuento = (float) ($row->penv_dto_art ?? 0);
+            $precio = self::floatDesdeAnita($row->penv_precio ?? 0);
+            $descuento = self::floatDesdeAnita($row->penv_dto_art ?? 0);
             $incluyeimpuesto = trim((string) ($row->penv_incl_impuesto ?? 'N')) ?: 'N';
             $monedaId = (int) ($row->penv_cod_mon ?? 0);
             if ($monedaId <= 0) {
@@ -348,21 +368,28 @@ class PedidoImportarDesdeAnitaService
 
             $pieza = 0.0;
             $kilo = 0.0;
-            $pesada = 0.0;
+            $pesadaAnita = 0.0;
             $ordenActual = $numeroitem;
 
             while ($i < $n && (int) ($lineasAnita[$i]->penv_orden ?? $ordenActual) === $ordenActual) {
                 $r = $lineasAnita[$i];
-                $pieza += (float) ($r->penv_pieza ?? 0);
-                $kilo += (float) ($r->penv_cantidad ?? 0);
-                $pesada += (float) ($r->penv_kilos_reales ?? 0);
+                $pieza += self::floatDesdeAnita($r->penv_pieza ?? 0);
+                $kilo += self::floatDesdeAnita($r->penv_cantidad ?? 0);
+                $pesadaAnita += self::floatDesdeAnita($r->penv_kilos_reales ?? 0);
                 $i++;
             }
 
             $uxenv = (float) ($articulo->unidadesxenvase ?? 0);
             $caja = ($uxenv > 0 && $pieza > 0) ? round($pieza / $uxenv, 6) : 0.0;
+            $clave = $this->claveLinea($numeroitem, (int) $articulo->id);
+            $existente = $porClave[$clave] ?? null;
+            $pesada = $pesadaAnita;
+            if ($pesada <= 0 && $conservarPesadaErp && $existente && (float) $existente->pesada > 0) {
+                $pesada = (float) $existente->pesada;
+            }
+            $pesadaTotal += $pesada;
 
-            Pedido_Articulo::query()->create([
+            $campos = [
                 'pedido_id' => $pedidoId,
                 'articulo_id' => (int) $articulo->id,
                 'numeroitem' => $numeroitem,
@@ -377,9 +404,41 @@ class PedidoImportarDesdeAnitaService
                 'descuento' => $descuento,
                 'observacion' => $observacion !== '' ? $observacion : null,
                 'unidadmedida_id' => $articulo->unidadmedida_id ?? null,
-                'estado' => 'P',
-            ]);
+                'estado' => $existente !== null ? (string) ($existente->estado ?? 'P') : 'P',
+            ];
+
+            if ($existente) {
+                $existente->fill($campos);
+                $existente->save();
+                $idsConservar[] = (int) $existente->id;
+            } else {
+                $nuevo = Pedido_Articulo::query()->create($campos);
+                $idsConservar[] = (int) $nuevo->id;
+            }
         }
+
+        $aBorrar = $existentes->filter(
+            static fn (Pedido_Articulo $item): bool => ! in_array((int) $item->id, $idsConservar, true)
+        );
+        if ($aBorrar->isNotEmpty()) {
+            $idsBorrar = $aBorrar->pluck('id')->map(static fn ($id) => (int) $id)->all();
+            EloquentAuditDeleteSupport::each(
+                Pedido_Articulo_Caja::query()->whereIn('pedido_articulo_id', $idsBorrar)
+            );
+            EloquentAuditDeleteSupport::each(
+                Pedido_Articulo_Estado::query()->whereIn('pedido_articulo_id', $idsBorrar)
+            );
+            EloquentAuditDeleteSupport::each(
+                Pedido_Articulo::query()->whereIn('id', $idsBorrar)
+            );
+        }
+
+        return $pesadaTotal;
+    }
+
+    private function claveLinea(int $numeroitem, int $articuloId): string
+    {
+        return $numeroitem.':'.$articuloId;
     }
 
     /**
@@ -411,14 +470,17 @@ class PedidoImportarDesdeAnitaService
                 penm_cliente, penm_tipo, penm_letra, penm_sucursal, penm_nro,
                 penm_fecha, penm_fecha_ent, penm_cond_vta, penm_vendedor, penm_zonavta,
                 penm_entrega, penm_dto, penm_expreso, penm_estado, penm_leyenda,
-                penm_dto_integrado, penm_caja_reales
+                penm_dto_integrado, penm_caja_reales, penm_kg_reales
             ',
             'whereArmado' => $where,
         ];
 
-        $rows = json_decode($api->apiCall($data));
+        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall($data));
+        if (($parsed['error_lectura'] ?? null) !== null) {
+            throw new RuntimeException('No se pudieron leer cabeceras Anita: '.$parsed['error_lectura']);
+        }
 
-        return is_array($rows) ? $rows : [];
+        return $parsed['filas'];
     }
 
     private function whereRepartoAnita(string $filtroReparto): string
@@ -484,10 +546,11 @@ class PedidoImportarDesdeAnitaService
             'whereArmado' => " WHERE penv_tipo='".$this->esc($tipo)."' AND penv_letra='".$this->esc($letra)
                 ."' AND penv_sucursal=".$sucursal.' AND penv_nro='.$nro.' ',
         ];
-        $rows = json_decode($api->apiCall($data));
-        if (! is_array($rows)) {
-            return [];
+        $parsed = ApiAnita::parsearRespuestaLista($api->apiCall($data));
+        if (($parsed['error_lectura'] ?? null) !== null) {
+            throw new RuntimeException('No se pudieron leer líneas Anita: '.$parsed['error_lectura']);
         }
+        $rows = $parsed['filas'];
 
         usort($rows, static function ($a, $b) {
             return ((int) ($a->penv_orden ?? 0)) <=> ((int) ($b->penv_orden ?? 0));
@@ -722,10 +785,18 @@ class PedidoImportarDesdeAnitaService
      */
     private static function enteroDesdeAnita(mixed $valor): int
     {
+        return max(0, (int) round(self::floatDesdeAnita($valor)));
+    }
+
+    /**
+     * Kilos reales / cantidades Anita (Informix a veces manda 0 como 0.000e+00).
+     */
+    private static function floatDesdeAnita(mixed $valor): float
+    {
         if ($valor === null || $valor === '') {
-            return 0;
+            return 0.0;
         }
 
-        return max(0, (int) round((float) $valor));
+        return (float) $valor;
     }
 }

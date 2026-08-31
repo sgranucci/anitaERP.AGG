@@ -9,6 +9,10 @@ $base = [
     'importar_anita_diaria' => [
         'habilitado' => filter_var(env('PEDIDO_IMPORTAR_ANITA_DIARIA_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
         'hora' => env('PEDIDO_IMPORTAR_ANITA_DIARIA_HORA', '01:00'),
+        // Tras el alta de la 01:00: refresca pesada (penv_kilos_reales) durante el día.
+        'refresco_habilitado' => filter_var(env('PEDIDO_IMPORTAR_ANITA_REFRESCO_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'refresco_desde' => env('PEDIDO_IMPORTAR_ANITA_REFRESCO_DESDE', '05:00'),
+        'refresco_hasta' => env('PEDIDO_IMPORTAR_ANITA_REFRESCO_HASTA', '18:00'),
     ],
 ];
 

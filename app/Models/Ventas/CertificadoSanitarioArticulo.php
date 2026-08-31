@@ -17,6 +17,7 @@ class CertificadoSanitarioArticulo extends Model
         'sku',
         'cantidad',
         'cajas',
+        'piezas',
         'cert_tercero',
         'partida',
     ];
@@ -24,6 +25,7 @@ class CertificadoSanitarioArticulo extends Model
     protected $casts = [
         'cantidad' => 'float',
         'cajas' => 'float',
+        'piezas' => 'float',
     ];
 
     public function certificado(): BelongsTo

@@ -423,6 +423,20 @@ class Kernel extends ConsoleKernel
             ->when(fn () => EntornoEmpresaSupport::esElBierzo()
                 && (bool) config('pedido.importar_anita_diaria.habilitado', true));
 
+        // El Bierzo: refresco diurno para traer pesada/cajas reales cargadas en Anita después del alta.
+        $schedule->command('ventas:importar-pedido-anita --ejecutar')
+            ->everyThirtyMinutes()
+            ->between(
+                (string) config('pedido.importar_anita_diaria.refresco_desde', '05:00'),
+                (string) config('pedido.importar_anita_diaria.refresco_hasta', '18:00')
+            )
+            ->runInBackground()
+            ->withoutOverlapping(30)
+            ->appendOutputTo(storage_path('logs/pedido-importar-anita-diaria.log'))
+            ->when(fn () => EntornoEmpresaSupport::esElBierzo()
+                && (bool) config('pedido.importar_anita_diaria.habilitado', true)
+                && (bool) config('pedido.importar_anita_diaria.refresco_habilitado', true));
+
         $limiteRegrabarAnitaPedido = max(1, (int) config('facturacion.ANITA_PEDIDO_REGRABAR_LIMITE', 20));
         $schedule->command('ventas:regrabar-anita-pedido --ejecutar --limite='.$limiteRegrabarAnitaPedido)
             ->everyTenMinutes()

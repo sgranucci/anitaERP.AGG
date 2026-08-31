@@ -140,7 +140,7 @@ $(function () {
         @if (!is_null($preview))
         @php
             $fmtN = static fn (float $n, int $dec = 2): string => number_format($n, $dec, ',', '.');
-            $previewTotales = $previewTotales ?? ['kilos' => 0.0, 'cajas' => 0.0, 'lineas' => 0, 'pedidos' => 0];
+            $previewTotales = $previewTotales ?? ['kilos' => 0.0, 'cajas' => 0.0, 'piezas' => 0.0, 'lineas' => 0, 'pedidos' => 0];
             $previewFilas = $previewFilas ?? collect();
             $omitidosSinSenasa = $omitidosSinSenasa ?? collect();
             $bloquearGeneracion = $omitidosSinSenasa->isNotEmpty();
@@ -161,6 +161,7 @@ $(function () {
                     <span class="badge badge-info">
                         {{ $fmtN((float) $previewTotales['kilos']) }} kg
                         · {{ $fmtN((float) $previewTotales['cajas']) }} cajas
+                        · {{ $fmtN((float) ($previewTotales['piezas'] ?? 0)) }} piezas
                     </span>
                 </div>
             </div>
@@ -176,6 +177,7 @@ $(function () {
                             <th>Art&iacute;culo</th>
                             <th class="text-right">Kilos</th>
                             <th class="text-right">Cajas</th>
+                            <th class="text-right">Piezas</th>
                             <th>Frio</th>
                             <th>Registro SENASA</th>
                             <th>Amparo origen</th>
@@ -189,6 +191,7 @@ $(function () {
                                     <td colspan="6">Subtotal pedido {{ $fila['codigoPedido'] }}</td>
                                     <td class="text-right">{{ $fmtN((float) $fila['kilos']) }}</td>
                                     <td class="text-right">{{ $fmtN((float) $fila['cajas']) }}</td>
+                                    <td class="text-right">{{ $fmtN((float) ($fila['piezas'] ?? 0)) }}</td>
                                     <td colspan="3"></td>
                                 </tr>
                             @elseif ($tipo === 'total_final')
@@ -196,6 +199,7 @@ $(function () {
                                     <td colspan="6">TOTAL FINAL</td>
                                     <td class="text-right">{{ $fmtN((float) $fila['kilos']) }}</td>
                                     <td class="text-right">{{ $fmtN((float) $fila['cajas']) }}</td>
+                                    <td class="text-right">{{ $fmtN((float) ($fila['piezas'] ?? 0)) }}</td>
                                     <td colspan="3"></td>
                                 </tr>
                             @else
@@ -209,13 +213,14 @@ $(function () {
                                     <td>{{ $l->articuloNombre }}</td>
                                     <td class="text-right text-nowrap">{{ $fmtN((float) $l->kilos) }}</td>
                                     <td class="text-right text-nowrap">{{ $fmtN((float) $l->cajas) }}</td>
+                                    <td class="text-right text-nowrap">{{ $fmtN((float) $l->piezas) }}</td>
                                     <td class="text-nowrap">{{ $l->llevafrio }}</td>
                                     <td class="text-nowrap">{{ $l->prefijoSenasa !== '' ? $l->prefijoSenasa.'-' : '' }}{{ $l->registroSenasa }}</td>
                                     <td class="text-nowrap">{{ $l->certificadoOrigen !== '' ? $l->certificadoOrigen : '—' }}</td>
                                 </tr>
                             @endif
                         @empty
-                        <tr><td colspan="11" class="text-center text-muted py-3">Sin l&iacute;neas SENASA para los filtros.</td></tr>
+                        <tr><td colspan="12" class="text-center text-muted py-3">Sin l&iacute;neas SENASA para los filtros.</td></tr>
                         @endforelse
                     </tbody>
                 </table>
@@ -238,6 +243,7 @@ $(function () {
                     <span class="badge badge-light">
                         {{ number_format((float) ($previewTotales['kilos'] ?? 0), 2, ',', '.') }} kg
                         · {{ number_format((float) ($previewTotales['cajas'] ?? 0), 2, ',', '.') }} cajas
+                        · {{ number_format((float) ($previewTotales['piezas'] ?? 0), 2, ',', '.') }} piezas
                     </span>
                 </div>
             </div>

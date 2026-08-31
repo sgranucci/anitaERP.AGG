@@ -44,6 +44,7 @@
                 @php
                     $kilosTotal = (float) $data->articulos->sum('cantidad');
                     $cajasTotal = (float) $data->articulos->sum('cajas');
+                    $piezasTotal = (float) $data->articulos->sum('piezas');
                 @endphp
                 <div class="row mb-3">
                     <div class="col-md-4"><strong>Fecha:</strong> {{ optional($data->fecha)->format('d/m/Y') }}</div>
@@ -65,6 +66,7 @@
                         <strong>Totales:</strong>
                         {{ number_format($kilosTotal, 2, ',', '.') }} kg
                         · {{ number_format($cajasTotal, 2, ',', '.') }} cajas
+                        · {{ number_format($piezasTotal, 2, ',', '.') }} piezas
                     </div>
                 </div>
 
@@ -79,6 +81,7 @@
                                     <th>Art&iacute;culo</th>
                                     <th class="text-right">Kilos</th>
                                     <th class="text-right">Cajas</th>
+                                    <th class="text-right">Piezas</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -89,9 +92,10 @@
                                     <td>{{ optional($a->articulo)->descripcion ?? optional($a->articulo)->nombre }}</td>
                                     <td class="text-right text-nowrap">{{ number_format($a->cantidad, 2, ',', '.') }}</td>
                                     <td class="text-right text-nowrap">{{ number_format($a->cajas, 2, ',', '.') }}</td>
+                                    <td class="text-right text-nowrap">{{ number_format((float) ($a->piezas ?? 0), 2, ',', '.') }}</td>
                                 </tr>
                                 @empty
-                                <tr><td colspan="5" class="text-center text-muted">Sin art&iacute;culos.</td></tr>
+                                <tr><td colspan="6" class="text-center text-muted">Sin art&iacute;culos.</td></tr>
                                 @endforelse
                             </tbody>
                             @if ($data->articulos->isNotEmpty())
@@ -100,6 +104,7 @@
                                     <td colspan="3">TOTAL</td>
                                     <td class="text-right">{{ number_format($kilosTotal, 2, ',', '.') }}</td>
                                     <td class="text-right">{{ number_format($cajasTotal, 2, ',', '.') }}</td>
+                                    <td class="text-right">{{ number_format($piezasTotal, 2, ',', '.') }}</td>
                                 </tr>
                             </tfoot>
                             @endif
