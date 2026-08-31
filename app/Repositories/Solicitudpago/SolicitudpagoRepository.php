@@ -272,6 +272,7 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
             'sector_solicitudpago_id' => $this->nullableInt($data['sector_solicitudpago_id'] ?? null),
             'detalle' => $this->recortar(trim((string) ($data['detalle'] ?? '')), 180) ?: null,
             'solicitudpago_madre_id' => $this->nullableInt($data['solicitudpago_madre_id'] ?? null),
+            'liquidacion_sueldos_id' => $this->nullableInt($data['liquidacion_sueldos_id'] ?? null),
             'usuario_umod_id' => Auth::id(),
             // CC de cabecera: en update se conserva. En alta: payload interno (ej. cuota) o CC del usuario en sesión.
             // No tomar del request del CRUD (ValidacionSolicitudpago no lo incluye).

@@ -17,7 +17,7 @@ class FlashReporteAggExcelServiceTest extends TestCase
         $this->assertGreaterThan(100000, filesize($ruta));
     }
 
-    public function test_la_plantilla_respeta_columnas_ocultas_del_formato_oficial(): void
+    public function test_la_plantilla_deja_tabla_en_a_g_con_electronic(): void
     {
         $service = new FlashReporteAggExcelService;
         $spreadsheet = IOFactory::load($service->rutaPlantilla());
@@ -25,12 +25,17 @@ class FlashReporteAggExcelServiceTest extends TestCase
         try {
             $tabla = $spreadsheet->getSheetByName('Tabla');
             $this->assertNotNull($tabla);
-            foreach (['B', 'C', 'D', 'E', 'F', 'G'] as $col) {
+            foreach (['A', 'B', 'C', 'D', 'E', 'F', 'G'] as $col) {
                 $this->assertTrue($tabla->getColumnDimension($col)->getVisible(), "Tabla {$col} debe verse (Slots/Ruletas/Total EP/Electronic/vs mes ant/vs año ant)");
+                $this->assertEqualsWithDelta(
+                    (float) \App\Support\Caja\Flash\FlashReporteAggXlsxPatchSupport::TABLA_ANCHO_COL_EXCEL,
+                    (float) $tabla->getColumnDimension($col)->getWidth(),
+                    0.2,
+                    "Tabla {$col} debe medir 120 px"
+                );
             }
-            foreach (['I', 'J', 'K', 'L'] as $col) {
-                $this->assertFalse($tabla->getColumnDimension($col)->getVisible(), "Tabla {$col} debe permanecer oculta");
-            }
+            $this->assertSame('', trim((string) $tabla->getCell('J3')->getValue()));
+            $this->assertSame('', trim((string) $tabla->getCell('I3')->getValue()));
             $this->assertSame('Slots', (string) $tabla->getCell('B2')->getValue());
             $this->assertSame('Ruletas', (string) $tabla->getCell('C2')->getValue());
             $this->assertSame('Total EP', (string) $tabla->getCell('D2')->getValue());
@@ -49,7 +54,10 @@ class FlashReporteAggExcelServiceTest extends TestCase
             );
             $this->assertSame('=+\'Biyemas S.A.\'!G39', (string) $tabla->getCell('B10')->getValue());
             $this->assertSame('=+\'Biyemas S.A.\'!O39', (string) $tabla->getCell('C10')->getValue());
-            $this->assertStringContainsString('HLOOKUP(J3,', (string) $tabla->getCell('E3')->getValue());
+            $this->assertStringContainsString('HLOOKUP("Electronic",', (string) $tabla->getCell('E3')->getValue());
+            $this->assertStringContainsString('HLOOKUP("Electronic",', (string) $tabla->getCell('E4')->getValue());
+            $this->assertStringContainsString('HLOOKUP("Electronic",', (string) $tabla->getCell('E5')->getValue());
+            $this->assertStringContainsString('HLOOKUP("Electronic",', (string) $tabla->getCell('E6')->getValue());
 
             $resumen = $spreadsheet->getSheetByName('Resumen');
             $this->assertNotNull($resumen);
@@ -109,6 +117,15 @@ class FlashReporteAggExcelServiceTest extends TestCase
             $workbook = $zip->getFromName('xl/workbook.xml');
             $this->assertNotFalse($workbook);
             $this->assertStringContainsString('fullCalcOnLoad="1"', $workbook);
+
+            $tablaXml = $zip->getFromName('xl/worksheets/sheet5.xml');
+            $this->assertNotFalse($tablaXml);
+            $this->assertStringContainsString('HLOOKUP("Electronic",', $tablaXml);
+            $this->assertStringNotContainsString('HLOOKUP(J3,', $tablaXml);
+            $this->assertStringNotContainsString('r="J3"', $tablaXml);
+            $this->assertStringNotContainsString('r="I3"', $tablaXml);
+            $this->assertStringContainsString('width="17.138671875"', $tablaXml);
+            $this->assertStringContainsString('ref="A1:G13"', $tablaXml);
 
             $zip->close();
         } finally {

@@ -16,7 +16,7 @@
     <aside class="mc-sidebar">
         <div class="mc-sidebar-brand">
             <h1>Anita ERP</h1>
-            <p>Manual de usuario · Pedidos y Facturación</p>
+            <p>Manual de usuario · Pedidos, Facturación y Abonos</p>
         </div>
         <nav class="mc-nav">
             @foreach ($meta['secciones'] as $i => $sec)

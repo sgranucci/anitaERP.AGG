@@ -121,6 +121,22 @@ final class CuentaAutomaticaClaves
      */
     public const PAGO_ANTICIPO_PROVEEDOR = 'pago.anticipo_proveedor';
 
+    /** Pasivo laboral: haber del asiento de devengamiento; debe del asiento de pago. */
+    public const SUELDOS_A_PAGAR = 'sueldos.a_pagar';
+
+    public const SUELDOS_GASTO_REMUNERATIVO = 'sueldos.gasto_remunerativo';
+
+    public const SUELDOS_GASTO_NO_REMUNERATIVO = 'sueldos.gasto_no_remunerativo';
+
+    public const SUELDOS_GASTO_CONTRIBUCION = 'sueldos.gasto_contribucion';
+
+    public const SUELDOS_PASIVO_RETENCION = 'sueldos.pasivo_retencion';
+
+    public const SUELDOS_PASIVO_CONTRIBUCION = 'sueldos.pasivo_contribucion';
+
+    /** Haber del asiento de pago de haberes (fase 3). */
+    public const SUELDOS_BANCO_PAGO = 'sueldos.banco_pago';
+
     /**
      * @return array<string, array{
      *   grupo: string,
@@ -311,7 +327,7 @@ final class CuentaAutomaticaClaves
             ],
             self::CIERRE_MAQUINA_DOLARES => [
                 'grupo' => 'Cierre rendiciones máquinas',
-                'descripcion' => 'Dólares en pesos (impcont 475)',
+                'descripcion' => 'Dólares en pesos (impcont 475 → 111010002 Caja dólar)',
                 'modulo_tabla' => null,
                 'modulo_columna' => null,
                 'env_config' => null,
@@ -374,14 +390,14 @@ final class CuentaAutomaticaClaves
             ],
             self::CIERRE_MAQUINA_TICKET_PROM_DEBE => [
                 'grupo' => 'Cierre rendiciones máquinas',
-                'descripcion' => 'Tickets promocionales debe (impcont 484)',
+                'descripcion' => 'Tickets promocionales debe (impcont 484 → 521040005 Obsequios; CC 96)',
                 'modulo_tabla' => null,
                 'modulo_columna' => null,
                 'env_config' => null,
             ],
             self::CIERRE_MAQUINA_TICKET_PROM_HABER => [
                 'grupo' => 'Cierre rendiciones máquinas',
-                'descripcion' => 'Tickets promocionales haber (impcont 485)',
+                'descripcion' => 'Tickets promocionales haber (impcont 485 → 211010009 Moneda poder público)',
                 'modulo_tabla' => null,
                 'modulo_columna' => null,
                 'env_config' => null,
@@ -503,6 +519,55 @@ final class CuentaAutomaticaClaves
             self::PAGO_ANTICIPO_PROVEEDOR => [
                 'grupo' => 'Pagos a proveedores',
                 'descripcion' => 'Anticipos a proveedores (OP adelantada). Vacía = el anticipo queda en la cuenta de proveedores',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::SUELDOS_A_PAGAR => [
+                'grupo' => 'Sueldos',
+                'descripcion' => 'Sueldos a pagar (haber devengamiento; debe del pago de haberes)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::SUELDOS_GASTO_REMUNERATIVO => [
+                'grupo' => 'Sueldos',
+                'descripcion' => 'Gasto sueldos remunerativos (fallback tipo remunerativo / asignación)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::SUELDOS_GASTO_NO_REMUNERATIVO => [
+                'grupo' => 'Sueldos',
+                'descripcion' => 'Gasto beneficios no remunerativos (fallback tipo no remunerativo)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::SUELDOS_GASTO_CONTRIBUCION => [
+                'grupo' => 'Sueldos',
+                'descripcion' => 'Gasto cargas sociales empleador (fallback contribuciones sin rubro)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::SUELDOS_PASIVO_RETENCION => [
+                'grupo' => 'Sueldos',
+                'descripcion' => 'Retenciones / aportes del trabajador a depositar (fallback descuentos)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::SUELDOS_PASIVO_CONTRIBUCION => [
+                'grupo' => 'Sueldos',
+                'descripcion' => 'Contribuciones patronales a pagar (fallback haber contribuciones)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+            ],
+            self::SUELDOS_BANCO_PAGO => [
+                'grupo' => 'Sueldos',
+                'descripcion' => 'Banco / caja del pago de haberes (asiento 2; se usa en fase 3)',
                 'modulo_tabla' => null,
                 'modulo_columna' => null,
                 'env_config' => null,

@@ -55,6 +55,10 @@ class AsientoAlcanceCierreSupport
             return PeriodoContableCierreSupport::ALCANCE_CUENTAS_PAGAR;
         }
 
+        if (! empty($data['liquidacion_sueldos_id'])) {
+            return PeriodoContableCierreSupport::ALCANCE_CONTABLE;
+        }
+
         return PeriodoContableCierreSupport::ALCANCE_CONTABLE;
     }
 }

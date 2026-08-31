@@ -23,5 +23,17 @@ final class VentaNumeracionEmpresaSupportTest extends TestCase
     {
         $codigo = VentaNumeracionEmpresaSupport::formatearCodigoVenta('FAC', 'B', '00031', 14048);
         $this->assertSame('FAC B-00031-00014048', $codigo);
+        $this->assertSame(
+            'FSL B-00039-00007231',
+            VentaNumeracionEmpresaSupport::formatearCodigoVenta('FSL', 'B', '39', 7231),
+        );
+    }
+
+    public function test_siguiente_numero_salta_colision_sin_puntoventa(): void
+    {
+        $this->assertSame(
+            9,
+            VentaNumeracionEmpresaSupport::siguienteNumerocomprobanteParaUnique(0, 6, 'B', null, 8),
+        );
     }
 }

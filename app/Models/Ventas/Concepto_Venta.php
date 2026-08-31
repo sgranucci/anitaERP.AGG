@@ -45,6 +45,13 @@ class Concepto_Venta extends Model implements Auditable
         return $this->hasMany(Concepto_Venta_Precio::class, 'concepto_venta_id');
     }
 
+    public function tags(): HasMany
+    {
+        return $this->hasMany(Concepto_Venta_Tag::class, 'concepto_venta_id')
+            ->orderBy('orden')
+            ->orderBy('id');
+    }
+
     public function impuesto(): BelongsTo
     {
         return $this->belongsTo(Impuesto::class, 'impuesto_id');

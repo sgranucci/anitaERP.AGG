@@ -52,6 +52,35 @@ final class WaitryInformeZVentaRealSupportTest extends TestCase
         $this->assertSame('revisar_venta', $r['decision']);
     }
 
+    public function test_regenera_si_recomputo_coincide_con_mp_contabilizado_aunque_waitry_este_viejo(): void
+    {
+        $r = WaitryInformeZVentaRealSupport::decidirRegeneracion(
+            2665500.0,
+            2660100.0,
+            7065605.4,
+            2660100.0,
+            0.02,
+            2665500.0,
+        );
+
+        $this->assertSame('regenerar', $r['decision']);
+        $this->assertSame(2665500.0, $r['mp_contabilizado']);
+    }
+
+    public function test_ok_si_recomputo_ya_igual_a_z_y_asientos(): void
+    {
+        $r = WaitryInformeZVentaRealSupport::decidirRegeneracion(
+            482700.0,
+            479000.0,
+            2599520.94,
+            482700.0,
+            0.02,
+            482700.0,
+        );
+
+        $this->assertSame('ok', $r['decision']);
+    }
+
     public function test_ok_si_todo_es_cero(): void
     {
         $r = WaitryInformeZVentaRealSupport::decidirRegeneracion(0.0, 0.0, 0.0, 0.0);

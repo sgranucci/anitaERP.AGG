@@ -15,6 +15,7 @@ use App\Models\Caja\Cobranza;
 use App\Models\Caja\Remesa;
 use App\Models\Seguridad\Usuario;
 use App\Models\Solicitudpago\Solicitudpago;
+use App\Models\Sueldos\Liquidacion_Sueldos;
 use Auth;
 
 class Asiento extends Model implements Auditable
@@ -33,7 +34,7 @@ class Asiento extends Model implements Auditable
                             'compra_id', 'caja_movimiento_id', 'solicitudpago_id', 'remesa_id',
                             'jornada_gastronomia_id', 'rendicion_estacionamiento_caja_id', 'transferencia_mercaderia_id',
                             'ordencompra_id', 'recepcionproveedor_id',
-                            'comprobante_proveedor_id', 'observacion',
+                            'comprobante_proveedor_id', 'liquidacion_sueldos_id', 'observacion',
                             'anita_origen', 'anita_nro_asiento',
                             'anita_sistema', 'anita_tipo', 'anita_letra',
                             'anita_sucursal', 'anita_nro', 'anita_emisor',
@@ -132,5 +133,10 @@ class Asiento extends Model implements Auditable
     public function solicitudpagos()
     {
         return $this->belongsTo(Solicitudpago::class, 'solicitudpago_id');
+    }
+
+    public function liquidacion_sueldos()
+    {
+        return $this->belongsTo(Liquidacion_Sueldos::class, 'liquidacion_sueldos_id');
     }
 }

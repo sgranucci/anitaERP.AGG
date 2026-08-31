@@ -77,6 +77,17 @@ class ValidacionEmpleado_Sueldos extends FormRequest
             'marca_reduccion_sijp' => 'nullable|string|max:1',
             'tipo_empresa_sijp' => 'nullable|string|max:1',
             'regimen_sijp' => 'nullable|string|max:1',
+            'actividad_sijp' => 'nullable|string|max:3',
+            'localidad_afip' => 'nullable|string|max:2',
+            'cuit_agencia_eventual' => 'nullable|string|max:13',
+            'lsd_legajo_principal' => 'nullable|boolean',
+            'lsd_cct' => 'nullable|boolean',
+            'lsd_scvo' => 'nullable|boolean',
+            'lsd_revista' => 'nullable|array|max:3',
+            'lsd_revista.*.id' => 'nullable|integer',
+            'lsd_revista.*.periodo' => 'nullable|integer|min:200001|max:209912',
+            'lsd_revista.*.situacion' => 'nullable|string|max:2',
+            'lsd_revista.*.dia_inicio' => 'nullable|integer|min:1|max:31',
             'a_cargo_de' => 'nullable|string|max:80',
             'puesto_jefe' => 'nullable|string|max:80',
             'clave_alta_temprana' => 'nullable|string|max:40',
@@ -106,6 +117,9 @@ class ValidacionEmpleado_Sueldos extends FormRequest
     {
         $this->merge([
             'confidencial' => $this->boolean('confidencial'),
+            'lsd_legajo_principal' => $this->boolean('lsd_legajo_principal'),
+            'lsd_cct' => $this->boolean('lsd_cct'),
+            'lsd_scvo' => $this->boolean('lsd_scvo'),
             'cuil' => preg_replace('/\D+/', '', (string) $this->input('cuil', '')) ?: null,
         ]);
     }

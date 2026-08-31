@@ -321,6 +321,7 @@ class ImpuestoService extends FacturacionService
 		// IVA con la alícuota del impuesto (21 %), no con el % de logística.
 		// El ítem MTXCA "Logistica" se agrega al armar el CAE (no acá: dataItem
 		// alimenta stock / venta_emision).
+		// AGG y resto: no entra (porcentajelogistica queda 0 fuera de El Bierzo).
 		if (EntornoEmpresaSupport::esElBierzo() && $porcentajeLogistica && ! $flGrabaComprobanteDividido) {
 			$baseGravadoLogistica = LogisticaBierzoSupport::gravadoDesdeNetos($netos);
 			$totalLogistica = LogisticaBierzoSupport::importe(
@@ -332,7 +333,7 @@ class ImpuestoService extends FacturacionService
 
 			if ($impuesto && $totalLogistica >= 0.01) {
 				self::agregaItemTotales(
-					'Total Logistica',
+					LogisticaBierzoSupport::CONCEPTO,
 					(float) $impuesto->valor,
 					$totalLogistica,
 					$impuesto->id,
@@ -355,21 +356,22 @@ class ImpuestoService extends FacturacionService
 			self::agregaItemTotales($detalle, $porcDescuento, -$descuentoFinal, 0, 0, 0, $subtotales);
 		}
 
-		// Agrega impuestos nacionales
+		// Agrega impuestos nacionales (IVA consolidado por alícuota: logística + gravado juntos).
 		$impuestos = [];
 		if ($flConIva)
 		{
+			$ivaPorTasa = [];
 			for ($i = 0; $i < count($netos); $i++)
 			{
 				if($netos[$i]['tasa'] != 0.)
 				{
-					$detalle = "Iva ".$netos[$i]['tasa']."%";
 					$tasaKey = (string) $netos[$i]['tasa'];
+					$esLogistica = LogisticaBierzoSupport::esConceptoLogistica($netos[$i]['concepto'] ?? '');
 
-					// Si todos los items de esta tasa traían el IVA dentro del precio (incluyeimpuesto
-					// distinto de 'N' y '2'), cerramos el IVA desde el bruto acumulado para que
-					// neto + IVA = bruto exacto (sin el centavo arrastrado por el round del neto).
-					if (isset($brutosIncluyenIvaPorTasa[$tasaKey]) && empty($tasasMixtas[$tasaKey]))
+					// Cierre por bruto solo en renglones de mercadería, no en logística.
+					if (! $esLogistica
+						&& isset($brutosIncluyenIvaPorTasa[$tasaKey])
+						&& empty($tasasMixtas[$tasaKey]))
 					{
 						$brutoTasa = round((float) $brutosIncluyenIvaPorTasa[$tasaKey], 2);
 						$importe = round($brutoTasa - $brutoTasa / (1. + $netos[$i]['tasa'] / 100.), 2);
@@ -381,15 +383,31 @@ class ImpuestoService extends FacturacionService
 						$importe = round($netos[$i]['importe'] * $netos[$i]['tasa'] / 100., 2);
 					}
 
-					$impuestos[] = ["concepto"=>$detalle,
-								"baseimponible" => $netos[$i]['importe'],
-								"tasa"=>$netos[$i]['tasa'],
-								"importe"=>$importe,
-								"impuesto_id"=>$netos[$i]['impuesto_id'],
-								"codigo"=>$netos[$i]['codigo'],
-								"codigoarca"=>$netos[$i]['codigoarca']
-							];
+					if (! isset($ivaPorTasa[$tasaKey])) {
+						$ivaPorTasa[$tasaKey] = [
+							'concepto' => 'Iva '.$netos[$i]['tasa'].'%',
+							'baseimponible' => 0.,
+							'tasa' => $netos[$i]['tasa'],
+							'importe' => 0.,
+							'impuesto_id' => $netos[$i]['impuesto_id'],
+							'codigo' => $netos[$i]['codigo'],
+							'codigoarca' => $netos[$i]['codigoarca'],
+						];
+					}
+
+					$ivaPorTasa[$tasaKey]['baseimponible'] += (float) $netos[$i]['importe'];
+					$ivaPorTasa[$tasaKey]['importe'] += $importe;
+					if (! $esLogistica) {
+						$ivaPorTasa[$tasaKey]['impuesto_id'] = $netos[$i]['impuesto_id'];
+						$ivaPorTasa[$tasaKey]['codigo'] = $netos[$i]['codigo'];
+						$ivaPorTasa[$tasaKey]['codigoarca'] = $netos[$i]['codigoarca'];
+					}
 				}
+			}
+			foreach ($ivaPorTasa as $filaIva) {
+				$filaIva['baseimponible'] = round((float) $filaIva['baseimponible'], 2);
+				$filaIva['importe'] = round((float) $filaIva['importe'], 2);
+				$impuestos[] = $filaIva;
 			}
 		}
 
@@ -447,6 +465,12 @@ class ImpuestoService extends FacturacionService
 				];
 			}
 		}
+
+		// El Bierzo: logística antes del gravado y sin tasa en pie (IVA ya consolidado; IIBB ya usó la tasa).
+		if (EntornoEmpresaSupport::esElBierzo()) {
+			$netos = LogisticaBierzoSupport::prepararNetosParaImpresion($netos);
+		}
+
 		// Agrega impuesto interno como concepto del comprobante (sumatoria por renglón).
 		$conceptosImpuestoInterno = [];
 		if ($totalImpuestoInterno != 0.) {

@@ -1039,6 +1039,18 @@ Route::get('contable/suss-config/{id}/editar', 'Contable\SussConfigController@ed
 Route::put('contable/suss-config/{id}', 'Contable\SussConfigController@actualizar')->name('actualizar_suss_config');
 Route::delete('contable/suss-config/{id}', 'Contable\SussConfigController@eliminar')->name('eliminar_suss_config');
 
+Route::get('contable/canon-municipal', 'Contable\CanonMunicipalReporteController@index')->name('canon_municipal');
+Route::get('contable/canon-municipal/liquidaciones', 'Contable\CanonMunicipalReporteController@liquidaciones')->name('canon_municipal_liquidaciones');
+Route::get('contable/exportar-canon-municipal-nota', 'Contable\CanonMunicipalReporteController@exportarNota')->name('exportar_canon_municipal_nota');
+Route::get('contable/listar-canon-municipal/{formato?}', 'Contable\CanonMunicipalReporteController@listar')->name('listar_canon_municipal');
+
+Route::get('contable/canon-municipal-config', 'Contable\CanonMunicipalConfigController@index')->name('canon_municipal_config');
+Route::get('contable/canon-municipal-config/crear', 'Contable\CanonMunicipalConfigController@crear')->name('crear_canon_municipal_config');
+Route::post('contable/canon-municipal-config', 'Contable\CanonMunicipalConfigController@guardar')->name('guardar_canon_municipal_config');
+Route::get('contable/canon-municipal-config/{id}/editar', 'Contable\CanonMunicipalConfigController@editar')->name('editar_canon_municipal_config');
+Route::put('contable/canon-municipal-config/{id}', 'Contable\CanonMunicipalConfigController@actualizar')->name('actualizar_canon_municipal_config');
+Route::delete('contable/canon-municipal-config/{id}', 'Contable\CanonMunicipalConfigController@eliminar')->name('eliminar_canon_municipal_config');
+
 Route::get('contable/efe-mensual', 'Contable\EfeMensualController@index')->name('efe_mensual');
 Route::get('contable/listar-efe-mensual/{formato}', 'Contable\EfeMensualController@exportar')->name('listar_efe_mensual');
 
@@ -1185,7 +1197,9 @@ Route::post('contable/cierre-rendiciones-bingo/api/anular-cierre-rango', 'Contab
 
 Route::get('contable/cierre-rendiciones-maquina', 'Contable\CierreRendicionMaquinaController@index')->name('cierre_rendicion_maquina_contable');
 Route::get('contable/cierre-rendiciones-maquina/conciliacion-flash', 'Contable\CierreRendicionMaquinaController@conciliacionFlash')->name('cierre_rendicion_maquina_conciliacion_flash');
+Route::get('contable/cierre-rendiciones-maquina/venta-listado', 'Contable\CierreRendicionMaquinaController@ventaListado')->name('cierre_rendicion_maquina_venta_listado');
 Route::get('contable/listar-cierre-rendiciones-maquina-conciliacion-flash/{formato?}', 'Contable\CierreRendicionMaquinaController@listarConciliacionFlash')->name('listar_cierre_rendicion_maquina_conciliacion_flash');
+Route::get('contable/listar-cierre-rendiciones-maquina-venta-listado/{formato?}', 'Contable\CierreRendicionMaquinaController@listarVentaListado')->name('listar_cierre_rendicion_maquina_venta_listado');
 Route::get('contable/listar-cierre-rendiciones-maquina/{formato?}/{busqueda?}', 'Contable\CierreRendicionMaquinaController@listar')->name('listar_cierre_rendicion_maquina_contable');
 Route::get('contable/cierre-rendiciones-maquina/api/pendientes-cierre', 'Contable\CierreRendicionMaquinaController@apiPendientesCierre')->name('api_cierre_rendicion_maquina_pendientes');
 Route::post('contable/cierre-rendiciones-maquina/api/preview-asiento', 'Contable\CierreRendicionMaquinaController@apiPreviewAsiento')->name('api_cierre_rendicion_maquina_preview');
@@ -1783,6 +1797,20 @@ Route::put('ventas/concepto-venta/{id}', 'Ventas\ConceptoVentaController@actuali
 Route::delete('ventas/concepto-venta/{id}', 'Ventas\ConceptoVentaController@eliminar')->name('eliminar_concepto_venta');
 Route::post('ventas/concepto-venta/consulta', 'Ventas\ConceptoVentaController@consultaConceptoVenta')->name('consulta_concepto_venta');
 Route::get('ventas/concepto-venta/por-codigo/{codigo}', 'Ventas\ConceptoVentaController@leeUnConceptoPorCodigo')->name('leer_concepto_venta_codigo');
+
+Route::get('ventas/contrato-venta', 'Ventas\ContratoVentaController@index')->name('contrato_venta');
+Route::get('ventas/lista-contrato-venta/{formato?}/{busqueda?}', 'Ventas\ContratoVentaController@listar')->name('lista_contrato_venta');
+Route::get('ventas/contrato-venta/crear', 'Ventas\ContratoVentaController@crear')->name('crear_contrato_venta');
+Route::post('ventas/contrato-venta', 'Ventas\ContratoVentaController@guardar')->name('guardar_contrato_venta');
+Route::get('ventas/contrato-venta/prefill', 'Ventas\ContratoVentaController@prefillFactura')->name('prefill_contrato_venta');
+Route::post('ventas/contrato-venta/consulta', 'Ventas\ContratoVentaController@consultaContratoVenta')->name('consulta_contrato_venta');
+Route::get('ventas/contrato-venta/por-codigo/{codigo}', 'Ventas\ContratoVentaController@leeUnContratoPorCodigo')->name('leer_contrato_venta_codigo');
+Route::get('ventas/contrato-venta/{id}/editar', 'Ventas\ContratoVentaController@editar')->name('editar_contrato_venta')->middleware('modo.consulta');
+Route::put('ventas/contrato-venta/{id}', 'Ventas\ContratoVentaController@actualizar')->name('actualizar_contrato_venta');
+Route::delete('ventas/contrato-venta/{id}', 'Ventas\ContratoVentaController@eliminar')->name('eliminar_contrato_venta');
+
+Route::get('ventas/contrato-venta-cola', 'Ventas\ContratoVentaColaController@index')->name('contrato_venta_cola');
+Route::post('ventas/contrato-venta-cola/prefill-batch', 'Ventas\ContratoVentaColaController@prefillBatch')->name('prefill_batch_contrato_venta_cola');
 
 /*
  * Puntos de venta
@@ -2788,19 +2816,6 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::match(['get', 'post'], 'caja/rendicion-maquina/api/ajustes', 'Caja\RendicionMaquinaController@apiAjustes')->name('rendicion_maquina_api_ajustes');
     Route::delete('caja/rendicion-maquina/{id}', 'Caja\RendicionMaquinaController@eliminar')->name('eliminar_rendicion_maquina');
 
-    Route::get('caja/remesa', 'Caja\RemesaController@index')->name('remesa');
-    Route::get('caja/lista-remesa/{formato?}/{busqueda?}', 'Caja\RemesaController@listar')->name('lista_remesa');
-    Route::get('caja/remesa/crear', 'Caja\RemesaController@crear')->name('crear_remesa');
-    Route::post('caja/remesa', 'Caja\RemesaController@guardar')->name('guardar_remesa');
-    Route::get('caja/remesa/configurar', 'Caja\RemesaController@configurar')->name('configurar_remesa');
-    Route::post('caja/remesa/configurar/agregar', 'Caja\RemesaController@configurarAgregar')->name('configurar_remesa_agregar');
-    Route::post('caja/remesa/configurar/quitar', 'Caja\RemesaController@configurarQuitar')->name('configurar_remesa_quitar');
-    Route::get('caja/remesa/{id}/editar', 'Caja\RemesaController@editar')->name('editar_remesa');
-    Route::put('caja/remesa/{id}', 'Caja\RemesaController@actualizar')->name('actualizar_remesa');
-    Route::post('caja/remesa/{id}/revertir', 'Caja\RemesaController@revertir')->name('revertir_remesa');
-    Route::delete('caja/remesa/{id}', 'Caja\RemesaController@anular')->name('anular_remesa');
-    Route::post('caja/remesa/api/lineas-empresa', 'Caja\RemesaController@apiLineasEmpresa')->name('remesa_api_lineas_empresa');
-
     Route::get('caja/posicion-financiera', 'Caja\PosicionFinancieraController@index')->name('posicion_financiera');
     Route::get('caja/listar-posicion-financiera/{formato}', 'Caja\PosicionFinancieraController@exportar')->name('listar_posicion_financiera');
     Route::get('caja/posicion-financiera/auditoria', 'Caja\PosicionFinancieraController@auditoria')->name('posicion_financiera_auditoria');
@@ -2864,6 +2879,25 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::get('caja/bingo/cierres-turno/cierre/{id}/comprobante', 'Caja\Bingo\CierreTurnoBingoController@comprobanteCierre')->name('bingo_cierre_turno_comprobante_cierre');
     Route::get('caja/bingo/cierres-turno/parcial/{id}/comprobante', 'Caja\Bingo\CierreTurnoBingoController@comprobanteParcial')->name('bingo_cierre_turno_comprobante_parcial');
 });
+
+/*
+ * Remesas (tesorería — no dependen del módulo Bingo)
+ */
+Route::get('caja/remesa', 'Caja\RemesaController@index')->name('remesa');
+Route::get('caja/lista-remesa/{formato?}/{busqueda?}', 'Caja\RemesaController@listar')->name('lista_remesa');
+Route::get('caja/remesa/crear', 'Caja\RemesaController@crear')->name('crear_remesa');
+Route::post('caja/remesa', 'Caja\RemesaController@guardar')->name('guardar_remesa');
+Route::get('caja/remesa/configurar', 'Caja\RemesaController@configurar')->name('configurar_remesa');
+Route::post('caja/remesa/configurar/agregar', 'Caja\RemesaController@configurarAgregar')->name('configurar_remesa_agregar');
+Route::post('caja/remesa/configurar/quitar', 'Caja\RemesaController@configurarQuitar')->name('configurar_remesa_quitar');
+Route::get('caja/remesa/{id}/editar', 'Caja\RemesaController@editar')->name('editar_remesa');
+Route::put('caja/remesa/{id}', 'Caja\RemesaController@actualizar')->name('actualizar_remesa');
+Route::post('caja/remesa/{id}/revertir', 'Caja\RemesaController@revertir')->name('revertir_remesa');
+Route::delete('caja/remesa/{id}', 'Caja\RemesaController@anular')->name('anular_remesa');
+Route::post('caja/remesa/api/lineas-empresa', 'Caja\RemesaController@apiLineasEmpresa')->name('remesa_api_lineas_empresa');
+
+Route::get('caja/remesa-reporte', 'Caja\RemesaReporteController@index')->name('remesa_reporte');
+Route::get('caja/listar-remesa-reporte/{formato}', 'Caja\RemesaReporteController@exportar')->name('listar_remesa_reporte');
 
 /*
  * Voucher
@@ -3055,6 +3089,8 @@ Route::get('caja/interbanking/movimientos-persistidos/{formato}', 'Caja\Interban
 Route::get('caja/interbanking/movimientos-persistidos', 'Caja\InterbankingMovimientoHistoricoController@index')->name('interbanking_movimientos_persistidos');
 Route::get('caja/interbanking/saldos-historicos/{formato}', 'Caja\InterbankingSaldoHistoricoController@exportar')->name('lista_interbanking_saldos_historicos');
 Route::get('caja/interbanking/saldos-historicos', 'Caja\InterbankingSaldoHistoricoController@index')->name('interbanking_saldos_historicos');
+Route::get('caja/interbanking/archivo-pago', 'Caja\InterbankingArchivoPagoController@index')->name('interbanking_archivo_pago');
+Route::get('caja/interbanking/archivo-pago/descargar', 'Caja\InterbankingArchivoPagoController@descargar')->name('descargar_interbanking_archivo_pago');
 
 // Modulo de compras
 
@@ -3235,6 +3271,7 @@ Route::put('compras/proveedor/{id}', 'Compras\ProveedorController@actualizar')->
 Route::delete('compras/proveedor/{id}', 'Compras\ProveedorController@eliminar')->name('eliminar_proveedor');
 
 Route::post('compras/proveedor/consultaproveedor', 'Compras\ProveedorController@consultaProveedor')->name('consulta_proveedor');
+Route::get('compras/proveedor/{id}/cbus-pago', 'Compras\ProveedorController@cbusPago')->name('cbus_pago_proveedor');
 Route::get('compras/leerproveedor/{proveedor_id}', 'Compras\ProveedorController@leeProveedor')->name('leer_proveedor');
 Route::get('compras/leerproveedorporcodigo/{codigo}', 'Compras\ProveedorController@leeProveedorPorCodigo')->name('leer_proveedor_por_codigo');
 Route::get('compras/listaproveedor/{formato?}/{busqueda?}', 'Compras\ProveedorController@listar')->name('lista_proveedor');
@@ -3592,6 +3629,9 @@ Route::get('caja/manual/descargar-word', 'Caja\ManualCajaController@descargarWor
 Route::get('sueldos/manual', 'Sueldos\ManualSueldosController@index')->name('manual_sueldos');
 Route::get('sueldos/manual/descargar-pdf', 'Sueldos\ManualSueldosController@descargarPdf')->name('manual_sueldos_pdf');
 Route::get('sueldos/manual/descargar-word', 'Sueldos\ManualSueldosController@descargarWord')->name('manual_sueldos_word');
+Route::get('sueldos/manual-lsd', 'Sueldos\ManualLsdSueldosController@index')->name('manual_lsd_sueldos');
+Route::get('sueldos/manual-lsd/descargar-pdf', 'Sueldos\ManualLsdSueldosController@descargarPdf')->name('manual_lsd_sueldos_pdf');
+Route::get('sueldos/manual-lsd/descargar-word', 'Sueldos\ManualLsdSueldosController@descargarWord')->name('manual_lsd_sueldos_word');
 
 /*
  * Manual de usuario — Solicitudes de pago
@@ -4105,6 +4145,13 @@ Route::middleware('uif.pc_configurada')->group(function () {
     Route::get('uif/listar-conciliacion-wigos/{formato}', 'Uif\UifConciliacionWigosController@exportar')->name('listar_conciliacion_wigos_uif');
 
     /*
+     * Unificar clientes UIF (supervisor)
+     */
+    Route::get('uif/unificar-clientes', 'Uif\ClienteUifUnificarController@index')->name('unificar_clientes_uif');
+    Route::post('uif/unificar-clientes/preview', 'Uif\ClienteUifUnificarController@preview')->name('preview_unificar_clientes_uif');
+    Route::post('uif/unificar-clientes', 'Uif\ClienteUifUnificarController@unificar')->name('ejecutar_unificar_clientes_uif');
+
+    /*
      * Premios UIF
      */
 
@@ -4390,6 +4437,10 @@ Route::put('sueldos/liquidacion/{id}', 'Sueldos\Liquidacion_SueldosController@ac
 Route::post('sueldos/liquidacion/{id}/estado', 'Sueldos\Liquidacion_SueldosController@estado')->name('estado_liquidacion_sueldos');
 Route::post('sueldos/liquidacion/{id}/calcular', 'Sueldos\Liquidacion_SueldosController@calcular')->name('calcular_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/{id}/resultado', 'Sueldos\Liquidacion_SueldosController@resultado')->name('resultado_liquidacion_sueldos');
+Route::get('sueldos/liquidacion/{id}/asiento', 'Sueldos\Liquidacion_SueldosController@previewAsiento')->name('preview_asiento_liquidacion_sueldos');
+Route::post('sueldos/liquidacion/{id}/contabilizar', 'Sueldos\Liquidacion_SueldosController@contabilizar')->name('contabilizar_liquidacion_sueldos');
+Route::post('sueldos/liquidacion/{id}/descontabilizar', 'Sueldos\Liquidacion_SueldosController@descontabilizar')->name('descontabilizar_liquidacion_sueldos');
+Route::post('sueldos/liquidacion/{id}/solicitudpago', 'Sueldos\Liquidacion_SueldosController@generarSolicitudpago')->name('solicitudpago_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/{id}/recibo/{reciboId}', 'Sueldos\Liquidacion_SueldosController@reciboPreview')->name('preview_recibo_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/{id}/recibo/{reciboId}/pdf', 'Sueldos\Liquidacion_SueldosController@reciboPdf')->name('pdf_recibo_liquidacion_sueldos');
 Route::get('sueldos/liquidacion/{id}/recibos/pdf', 'Sueldos\Liquidacion_SueldosController@recibosPdf')->name('pdf_recibos_liquidacion_sueldos');
@@ -4444,6 +4495,15 @@ Route::post('sueldos/grupo-concepto', 'Sueldos\Grupo_Concepto_SueldosController@
 Route::get('sueldos/grupo-concepto/{id}/editar', 'Sueldos\Grupo_Concepto_SueldosController@editar')->name('editar_grupo_concepto_sueldos');
 Route::put('sueldos/grupo-concepto/{id}', 'Sueldos\Grupo_Concepto_SueldosController@actualizar')->name('actualizar_grupo_concepto_sueldos');
 Route::delete('sueldos/grupo-concepto/{id}', 'Sueldos\Grupo_Concepto_SueldosController@eliminar')->name('eliminar_grupo_concepto_sueldos');
+
+Route::get('sueldos/imputacion-concepto', 'Sueldos\Concepto_Imputacion_SueldosController@index')->name('consultar_imputacion_concepto_sueldos');
+Route::post('sueldos/imputacion-concepto/modo-asiento', 'Sueldos\Concepto_Imputacion_SueldosController@guardarModoAsiento')->name('guardar_modo_asiento_sueldos');
+Route::get('sueldos/listaimputacion-concepto/{formato?}/{busqueda?}', 'Sueldos\Concepto_Imputacion_SueldosController@listar')->name('lista_imputacion_concepto_sueldos');
+Route::get('sueldos/imputacion-concepto/crear', 'Sueldos\Concepto_Imputacion_SueldosController@crear')->name('crear_imputacion_concepto_sueldos');
+Route::post('sueldos/imputacion-concepto', 'Sueldos\Concepto_Imputacion_SueldosController@guardar')->name('guardar_imputacion_concepto_sueldos');
+Route::get('sueldos/imputacion-concepto/{id}/editar', 'Sueldos\Concepto_Imputacion_SueldosController@editar')->name('editar_imputacion_concepto_sueldos')->middleware('modo.consulta');
+Route::put('sueldos/imputacion-concepto/{id}', 'Sueldos\Concepto_Imputacion_SueldosController@actualizar')->name('actualizar_imputacion_concepto_sueldos')->middleware('modo.consulta');
+Route::delete('sueldos/imputacion-concepto/{id}', 'Sueldos\Concepto_Imputacion_SueldosController@eliminar')->name('eliminar_imputacion_concepto_sueldos');
 
 Route::get('sueldos/concepto', 'Sueldos\Concepto_SueldosController@index')->name('consultar_concepto_sueldos');
 Route::get('sueldos/listaconcepto/{formato?}/{busqueda?}', 'Sueldos\Concepto_SueldosController@listar')->name('lista_concepto_sueldos');
@@ -4738,6 +4798,25 @@ Route::post('sueldos/siradig/importar', 'Sueldos\SiradigController@importar')->n
 Route::get('sueldos/empleado/{empleado}/siradig', 'Sueldos\SiradigController@panelEmpleado')->name('siradig_empleado_sueldos');
 Route::get('sueldos/siradig/{id}', 'Sueldos\SiradigController@ver')->name('ver_siradig_sueldos')->whereNumber('id');
 Route::delete('sueldos/siradig/{id}', 'Sueldos\SiradigController@eliminar')->name('eliminar_siradig_sueldos')->whereNumber('id');
+
+/*
+ * Libro de Sueldos Digital (ARCA): parametrización de conceptos + TXT liquidaciones 01–06.
+ * El PDF del libro y el F.931 los emite el organismo; el ERP genera la interfaz.
+ */
+Route::get('sueldos/libro-sueldos-digital', 'Sueldos\Lsd_SueldosController@index')->name('consultar_lsd_sueldos');
+Route::get('sueldos/lista-libro-sueldos-digital/{formato?}/{busqueda?}', 'Sueldos\Lsd_SueldosController@listar')->name('lista_lsd_sueldos');
+Route::get('sueldos/libro-sueldos-digital/cobertura', 'Sueldos\Lsd_SueldosController@cobertura')->name('cobertura_lsd_sueldos');
+Route::get('sueldos/libro-sueldos-digital/exportar-conceptos', 'Sueldos\Lsd_SueldosController@exportarConceptos')->name('exportar_conceptos_lsd_sueldos');
+Route::get('sueldos/libro-sueldos-digital/catalogo', 'Sueldos\Lsd_SueldosController@catalogoJson')->name('catalogo_lsd_sueldos');
+Route::get('sueldos/libro-sueldos-digital/liquidaciones', 'Sueldos\Lsd_SueldosController@liquidacionesPeriodo')->name('liquidaciones_periodo_lsd_sueldos');
+Route::post('sueldos/libro-sueldos-digital/generar', 'Sueldos\Lsd_SueldosController@generar')->name('generar_lsd_sueldos');
+Route::get('sueldos/libro-sueldos-digital/{id}', 'Sueldos\Lsd_SueldosController@ver')->name('ver_lsd_sueldos')->whereNumber('id');
+Route::get('sueldos/libro-sueldos-digital/{id}/txt', 'Sueldos\Lsd_SueldosController@descargar')->name('descargar_lsd_sueldos')->whereNumber('id');
+Route::post('sueldos/libro-sueldos-digital/{id}/presentar', 'Sueldos\Lsd_SueldosController@marcarPresentada')->name('presentar_lsd_sueldos')->whereNumber('id');
+Route::post('sueldos/libro-sueldos-digital/{id}/rechazar', 'Sueldos\Lsd_SueldosController@marcarRechazada')->name('rechazar_lsd_sueldos')->whereNumber('id');
+Route::post('sueldos/libro-sueldos-digital/{id}/rectificar', 'Sueldos\Lsd_SueldosController@rectificar')->name('rectificar_lsd_sueldos')->whereNumber('id');
+Route::post('sueldos/libro-sueldos-digital/{id}/registro/{registroId}', 'Sueldos\Lsd_SueldosController@guardarOverride')->name('override_lsd_sueldos')->whereNumber('id')->whereNumber('registroId');
+Route::delete('sueldos/libro-sueldos-digital/{id}', 'Sueldos\Lsd_SueldosController@eliminar')->name('eliminar_lsd_sueldos')->whereNumber('id');
 
 /*
  * Motivos de egreso de sueldos (Anita sueldos / motivoegr). CRUD liviano (DataTables).

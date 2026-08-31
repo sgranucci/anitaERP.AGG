@@ -7,9 +7,11 @@ namespace App\Repositories\Ventas;
 use App\Models\Ventas\Concepto_Venta;
 use App\Models\Ventas\Concepto_Venta_Cuentacontable;
 use App\Models\Ventas\Concepto_Venta_Precio;
+use App\Models\Ventas\Concepto_Venta_Tag;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Ventas\ConceptoVentaListadoFiltros;
+use App\Support\Ventas\ConceptoVentaTagSupport;
 use App\Support\Ventas\ConceptoVentaUsoSupport;
 use App\Support\Ventas\GtinEan13Support;
 use RuntimeException;
@@ -56,6 +58,7 @@ class Concepto_VentaRepository implements Concepto_VentaRepositoryInterface
                 'cuentas.tipotransaccion:id,abreviatura,nombre',
                 'cuentas.centrocosto:id,codigo,nombre',
                 'precios',
+                'tags',
             ]);
 
         if (ConceptoVentaListadoFiltros::tieneCriteriosAplicados($filtros)) {
@@ -130,6 +133,9 @@ class Concepto_VentaRepository implements Concepto_VentaRepositoryInterface
         }
 
         EloquentAuditDeleteSupport::each(
+            Concepto_Venta_Tag::query()->where('concepto_venta_id', (int) $id)
+        );
+        EloquentAuditDeleteSupport::each(
             Concepto_Venta_Precio::query()->where('concepto_venta_id', (int) $id)
         );
         EloquentAuditDeleteSupport::each(
@@ -151,6 +157,7 @@ class Concepto_VentaRepository implements Concepto_VentaRepositoryInterface
             'cuentas.tipotransaccion',
             'cuentas.centrocosto',
             'precios',
+            'tags',
             'impuesto',
             'unidadmedida',
         ])->find($id);
@@ -174,7 +181,7 @@ class Concepto_VentaRepository implements Concepto_VentaRepositoryInterface
         }
 
         return $this->model->newQuery()
-            ->with(['cuentas', 'precios', 'impuesto', 'unidadmedida'])
+            ->with(['cuentas', 'precios', 'tags', 'impuesto', 'unidadmedida'])
             ->where('codigo', $codigo)
             ->first();
     }
@@ -190,7 +197,10 @@ class Concepto_VentaRepository implements Concepto_VentaRepositoryInterface
 
     public function listadoActivosParaConsulta(string $texto)
     {
-        $query = $this->model->newQuery()->activos()->orderBy('codigo');
+        $query = $this->model->newQuery()
+            ->activos()
+            ->with(['tags' => fn ($q) => $q->orderBy('orden')->orderBy('id')])
+            ->orderBy('codigo');
         $texto = trim($texto);
         if ($texto !== '') {
             $like = '%'.addcslashes($texto, '%_\\').'%';
@@ -290,6 +300,31 @@ class Concepto_VentaRepository implements Concepto_VentaRepositoryInterface
     }
 
     /**
+     * @param  list<array<string, mixed>>  $filas
+     */
+    public function sincronizarTags(int $conceptoId, array $filas): void
+    {
+        EloquentAuditDeleteSupport::each(
+            Concepto_Venta_Tag::query()->where('concepto_venta_id', $conceptoId)
+        );
+
+        $normalizadas = ConceptoVentaTagSupport::normalizarFilasFormulario($filas);
+        foreach ($normalizadas as $fila) {
+            Concepto_Venta_Tag::query()->create([
+                'concepto_venta_id' => $conceptoId,
+                'clave' => $fila['clave'],
+                'etiqueta' => $fila['etiqueta'],
+                'tipo' => $fila['tipo'],
+                'origen' => $fila['origen'] ?? 'pedible',
+                'obligatorio' => $fila['obligatorio'],
+                'orden' => $fila['orden'],
+                'largo_max' => $fila['largo_max'],
+                'opciones' => $fila['opciones'] ?? null,
+            ]);
+        }
+    }
+
+    /**
      * Sin empresas asignadas (acceso total) no filtra.
      *
      * @param  Builder<\App\Models\Ventas\Concepto_Venta_Cuentacontable>|Relation  $query
@@ -328,6 +363,14 @@ class Concepto_VentaRepository implements Concepto_VentaRepositoryInterface
             $data['precio_vigencia_desde'],
             $data['precio_vigencia_hasta'],
             $data['creousuario_precio_ids'],
+            $data['tag_claves'],
+            $data['tag_etiquetas'],
+            $data['tag_tipos'],
+            $data['tag_origenes'],
+            $data['tag_obligatorios'],
+            $data['tag_ordenes'],
+            $data['tag_largo_max'],
+            $data['tag_opciones'],
         );
     }
 

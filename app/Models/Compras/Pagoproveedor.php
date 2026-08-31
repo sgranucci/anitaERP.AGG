@@ -28,6 +28,8 @@ class Pagoproveedor extends Model
         'interbanking_transferencia_id',
         'interbanking_movimiento_id',
         'bloqueado_banco',
+        'proveedor_formapago_id',
+        'cbu_pago',
     ];
 
     protected $casts = [

@@ -10,10 +10,12 @@ use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Support\Contable\CierreRendicionMaquinaAsientoSupport;
+use App\Support\Contable\CierreRendicionMaquinaCierreLock;
 use App\Support\Contable\CierreRendicionMaquinaConciliacionFlashSupport;
 use App\Support\Contable\CierreRendicionMaquinaConfigSupport;
 use App\Support\Contable\CierreRendicionMaquinaGrupoSupport;
 use App\Support\Contable\CierreRendicionMaquinaListadoFiltros;
+use App\Support\Contable\CierreRendicionMaquinaVentaListadoSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Ventas\MaquinaFslTipoSupport;
 use App\Services\Ventas\CierreSalaExentaEmisionService;
@@ -95,7 +97,6 @@ class CierreRendicionMaquinaService
         $this->assertCorrelatividadCierre($empresaId, $fechaDia);
 
         $config = CierreRendicionMaquinaConfigSupport::paraEmpresa($empresaId);
-        CierreRendicionMaquinaConfigSupport::exigirCompleta($config, $empresaId);
 
         $preview = CierreRendicionMaquinaAsientoSupport::generarPreviewGrupo(
             $rendiciones,
@@ -116,11 +117,31 @@ class CierreRendicionMaquinaService
      *   asiento_id: int,
      *   asiento_ids: list<int>,
      *   numeroasiento: string,
+     *   numeros_asiento: list<string>,
      *   rendicion_ids: list<int>,
      *   fsl: array{tipo: string, letra: string, sucursal: int, nro: int, monto: float}
      * }
      */
     public function ejecutarCierreGrupo(int $empresaId, string $fechaDia): array
+    {
+        return CierreRendicionMaquinaCierreLock::conExclusividadEmpresa(
+            $empresaId,
+            fn () => $this->ejecutarCierreGrupoExclusivo($empresaId, $fechaDia),
+            true,
+        );
+    }
+
+    /**
+     * @return array{
+     *   asiento_id: int,
+     *   asiento_ids: list<int>,
+     *   numeroasiento: string,
+     *   numeros_asiento: list<string>,
+     *   rendicion_ids: list<int>,
+     *   fsl: array{tipo: string, letra: string, sucursal: int, nro: int, monto: float}
+     * }
+     */
+    private function ejecutarCierreGrupoExclusivo(int $empresaId, string $fechaDia): array
     {
         $rendiciones = $this->findRendicionesPendientesGrupo($empresaId, $fechaDia);
         if ($rendiciones->isEmpty()) {
@@ -130,7 +151,6 @@ class CierreRendicionMaquinaService
         $this->assertCorrelatividadCierre($empresaId, $fechaDia);
 
         $config = CierreRendicionMaquinaConfigSupport::paraEmpresa($empresaId);
-        CierreRendicionMaquinaConfigSupport::exigirCompleta($config, $empresaId);
 
         $fecha = CierreRendicionMaquinaGrupoSupport::fechaAsientoDesdeGrupo($fechaDia);
 
@@ -205,6 +225,7 @@ class CierreRendicionMaquinaService
             );
 
             $asientoIds = [];
+            $numerosAsiento = [];
             $numeroPrincipal = '';
 
             foreach ($preview['asientos'] ?? [] as $bloque) {
@@ -227,8 +248,12 @@ class CierreRendicionMaquinaService
 
                 $this->asientoMovimientoRepository->create($payload, $asiento->id);
                 $asientoIds[] = (int) $asiento->id;
+                $nro = (string) ($asiento->numeroasiento ?? '');
+                if ($nro !== '') {
+                    $numerosAsiento[] = $nro;
+                }
                 if ($numeroPrincipal === '') {
-                    $numeroPrincipal = (string) ($asiento->numeroasiento ?? '');
+                    $numeroPrincipal = $nro;
                 }
             }
 
@@ -264,6 +289,7 @@ class CierreRendicionMaquinaService
                 'asiento_id' => $asientoIds[0],
                 'asiento_ids' => $asientoIds,
                 'numeroasiento' => $numeroPrincipal,
+                'numeros_asiento' => $numerosAsiento,
                 'rendicion_ids' => $ids,
                 'fsl' => $fsl,
             ];
@@ -271,6 +297,17 @@ class CierreRendicionMaquinaService
     }
 
     public function anularCierreGrupo(int $empresaId, string $fechaDia): void
+    {
+        CierreRendicionMaquinaCierreLock::conExclusividadEmpresa(
+            $empresaId,
+            function () use ($empresaId, $fechaDia): void {
+                $this->anularCierreGrupoExclusivo($empresaId, $fechaDia);
+            },
+            true,
+        );
+    }
+
+    private function anularCierreGrupoExclusivo(int $empresaId, string $fechaDia): void
     {
         $rendiciones = $this->findRendicionesGrupo($empresaId, $fechaDia);
         if ($rendiciones->isEmpty()) {
@@ -476,11 +513,6 @@ class CierreRendicionMaquinaService
             [$desde, $hasta] = [$hasta, $desde];
         }
 
-        CierreRendicionMaquinaConfigSupport::exigirCompleta(
-            CierreRendicionMaquinaConfigSupport::paraEmpresa($empresaId),
-            $empresaId,
-        );
-
         $this->assertCorrelatividadCierre($empresaId, $desde);
 
         $rendiciones = $this->listarPendientesEnRango($empresaId, $desde, $hasta);
@@ -571,6 +603,21 @@ class CierreRendicionMaquinaService
             [$desde, $hasta] = [$hasta, $desde];
         }
 
+        return CierreRendicionMaquinaCierreLock::conExclusividadEmpresa(
+            $empresaId,
+            fn () => $this->ejecutarCierreRangoExclusivo($empresaId, $desde, $hasta),
+            false,
+        );
+    }
+
+    /**
+     * @return array{
+     *   ok: list<array{grupo_clave: string, asiento_id: int, numeroasiento: string, rendicion_ids: list<int>}>,
+     *   errores: list<array{grupo_clave: string, mensaje: string}>
+     * }
+     */
+    private function ejecutarCierreRangoExclusivo(int $empresaId, string $desde, string $hasta): array
+    {
         $this->assertCorrelatividadCierre($empresaId, $desde);
 
         $rendiciones = $this->listarPendientesEnRango($empresaId, $desde, $hasta);
@@ -591,7 +638,7 @@ class CierreRendicionMaquinaService
         foreach ($grupos as $grupo) {
             $clave = (string) ($grupo['clave'] ?? '');
             try {
-                $resultado = $this->ejecutarCierreGrupo(
+                $resultado = $this->ejecutarCierreGrupoExclusivo(
                     (int) ($grupo['empresa_id'] ?? 0),
                     (string) ($grupo['fecha_dia'] ?? ''),
                 );
@@ -623,6 +670,17 @@ class CierreRendicionMaquinaService
     {
         return app(CierreRendicionMaquinaConciliacionFlashSupport::class)
             ->conciliar($empresaId, $fechaDesde, $fechaHasta, $tolerancia);
+    }
+
+    /**
+     * Listado «Venta de máquinas» (p-vtamaquina.c).
+     *
+     * @return array<string, mixed>
+     */
+    public function reporteVentaListado(int $empresaId, string $fechaDesde, string $fechaHasta): array
+    {
+        return app(CierreRendicionMaquinaVentaListadoSupport::class)
+            ->generar($empresaId, $fechaDesde, $fechaHasta);
     }
 
     /**

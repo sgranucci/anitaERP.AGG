@@ -27,6 +27,17 @@ class ConceptoTipo
         'informativo',
     ];
 
+    /** Tipos que pueden imputar en el asiento de devengamiento (no neto ni informativo). */
+    public const TIPOS_IMPUTABLES = [
+        'remunerativo',
+        'no_remunerativo',
+        'descuento',
+        'aporte',
+        'contribucion',
+        'retencion',
+        'asignacion',
+    ];
+
     /** @var array<string, string> Momento de liquidacion (Anita hab_momento) */
     public const MOMENTOS = [
         'mensual' => 'Siempre / mensual',

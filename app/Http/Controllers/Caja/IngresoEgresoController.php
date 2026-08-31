@@ -355,31 +355,16 @@ class IngresoEgresoController extends Controller
      */
     public function eliminar(Request $request, $id, $origen = null)
     {
-        can('borrar-ingresos-egresos-caja');
-        IngresoEgresoVisibilidadSupport::abortSiNoAccesible((int) $id);
+        // El borrado crudo no reabre SP ni desmarca facturas CC; usar Revertir o Anular físico.
+        $mensaje = 'No se permite eliminar el movimiento. Use Revertir (compensatorio) o Anular físico (solo administrador).';
 
-        if ($request->ajax()) 
-		{
-			$fl_borro = false;
-			if ($this->caja_movimientoRepository->delete($id))
-				$fl_borro = true;
-
-            if ($fl_borro) {
-                return response()->json(['mensaje' => 'ok']);
-            } else {
-                return response()->json(['mensaje' => 'ng']);
-            }
-        } else {
-            if ($this->caja_movimientoRepository->delete($id))
-                $mensaje = 'Ingreso Egreso borrado con éxito';
-            else 	
-                $mensaje = 'error';
-
-            if ($origen == 'movimientocaja')
-                return redirect('caja/movimientocaja')->with('mensaje', $mensaje);
-
-            return redirect('caja/ingresoegreso')->with('mensaje', $mensaje);
+        if ($request->ajax()) {
+            return response()->json(['mensaje' => $mensaje], 403);
         }
+
+        return redirect()
+            ->back()
+            ->with('mensaje', $mensaje);
     }
 
     public function anularFisicamente(Request $request, int $id)

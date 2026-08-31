@@ -89,6 +89,9 @@ return [
         'conciliacion_flash_tolerancia' => (float) env('RENDICION_MAQUINA_CIERRE_FLASH_TOLERANCIA', 0.02),
         'canon_loteria_porcentaje' => (float) env('RENDICION_MAQUINA_CIERRE_CANON_LOTERIA_PCT', 34),
         'canon_hospital_porcentaje' => (float) env('RENDICION_MAQUINA_CIERRE_CANON_HOSPITAL_PCT', 1),
+        // p-vtamaquina.c: dft_ccosto / 89L vales; 96L ticket prom debe.
+        'centrocosto_default' => env('RENDICION_MAQUINA_CIERRE_CENTROCOSTO_DEFAULT', '89'),
+        'centrocosto_ticket_prom' => env('RENDICION_MAQUINA_CIERRE_CENTROCOSTO_TICKET_PROM', '96'),
     ],
 
 ];

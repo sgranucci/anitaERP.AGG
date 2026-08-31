@@ -5,8 +5,8 @@
  */
 return [
     'titulo' => 'Manual de Usuario',
-    'subtitulo' => 'Anita ERP — Pedidos y Facturación',
-    'version' => '1.0',
+    'subtitulo' => 'Anita ERP — Pedidos, Facturación y Abonos',
+    'version' => '1.2',
     'fecha' => null,
     'empresa' => null,
     'url_base' => null,
@@ -14,14 +14,17 @@ return [
         [
             'titulo' => '1. Introducción y roles',
             'parrafos' => [
-                'Este manual describe el proceso de pedidos de venta y su facturación en Anita ERP, adaptado a la operatoria de EL BIERZO, donde la mercadería se comercializa en cajas, piezas y kilos, y el importe facturado se basa en la pesada real registrada en planta.',
-                'El circuito involucra dos perfiles principales:',
+                'Este manual describe dos circuitos de Ventas en Anita ERP: (A) pedidos de mercadería con pesada y facturación en planta, y (B) abonos / contratos de servicio con conceptos, tags y cola de facturación periódica.',
+                'El circuito de pedidos (EL BIERZO) comercializa en cajas, piezas y kilos; el importe facturado se basa en la pesada real registrada en planta.',
+                'El circuito de abonos (menú Ventas → Abonos) gestiona servicios recurrentes: conceptos con plantillas de texto fiscal, contratos por cliente, períodos a facturar y avisos de vencimiento. No forma parte de «Tablas de ventas»: es un módulo operativo.',
+                'Perfiles del circuito de pedidos:',
             ],
             'items' => [
                 'Vendedor remoto (desde cualquier punto del país con acceso web): carga el pedido con cliente, reparto, artículos y cantidades pedidas. No pesa ni factura.',
                 'Personal de planta / administración (en la empresa): ve el listado de pedidos, los imprime para preparación y despacho, registra la pesada escaneando códigos QR de las cajas, y emite remito y factura.',
+                'Administración / facturación (abonos): da de alta conceptos y abonos, completa tags al emitir, y factura períodos desde la cola.',
             ],
-            'nota' => 'Los pedidos cargados por vendedores remotos quedan registrados en el sistema y se listan físicamente en la empresa (impresión en papel o PDF) para que depósito y logística preparen la mercadería. La facturación se realiza en planta, una vez pesada la mercadería.',
+            'nota' => 'Los pedidos cargados por vendedores remotos quedan registrados en el sistema y se listan físicamente en la empresa (impresión en papel o PDF) para que depósito y logística preparen la mercadería. La facturación se realiza en planta, una vez pesada la mercadería. Los abonos se facturan desde el facturador o desde la cola de abonos, con descripción ya resuelta (sin tags pendientes).',
             'tabla' => [
                 'caption' => 'Rutas principales',
                 'headers' => ['Pantalla', 'Ruta', 'Quién la usa'],
@@ -32,6 +35,10 @@ return [
                     ['Listado físico (impresora)', 'ventas/listarpedido/{id}', 'Planta'],
                     ['Listado PDF', 'ventas/listarpedidopdf/{id}', 'Planta / vendedor'],
                     ['Cierre masivo de pedidos', 'ventas/pedido/cerrar', 'Administración'],
+                    ['Conceptos de venta', 'ventas/concepto-venta', 'Administración / facturación'],
+                    ['Abonos / contratos', 'ventas/contrato-venta', 'Administración / facturación'],
+                    ['Cola facturación abonos', 'ventas/contrato-venta-cola', 'Administración / facturación'],
+                    ['Manual en línea', 'ventas/manual', 'Todos con acceso a Ventas'],
                 ],
             ],
         ],
@@ -244,7 +251,7 @@ return [
         [
             'titulo' => '12. Permisos principales',
             'tabla' => [
-                'caption' => 'Permisos frecuentes',
+                'caption' => 'Permisos — pedidos y facturación',
                 'headers' => ['Permiso', 'Uso'],
                 'rows' => [
                     ['listar-pedidos', 'Ver listado e imprimir pedidos'],
@@ -257,11 +264,23 @@ return [
                     ['entregar-articulo-sin-cargo-pedido-venta', 'Ítems bonificados sin cargo'],
                 ],
             ],
+            'tabla2' => [
+                'caption' => 'Permisos — módulo Abonos',
+                'headers' => ['Permiso', 'Uso'],
+                'rows' => [
+                    ['listar-conceptos-venta', 'Ver y consultar conceptos de venta'],
+                    ['crear-conceptos-venta / editar-conceptos-venta / actualizar-conceptos-venta / borrar-conceptos-venta', 'ABM de conceptos y tags'],
+                    ['listar-contratos-venta', 'Ver abonos / contratos'],
+                    ['crear-contratos-venta / editar-contratos-venta / actualizar-contratos-venta / borrar-contratos-venta', 'ABM de abonos'],
+                    ['listar-contrato-venta-cola', 'Ver cola de períodos a facturar'],
+                    ['facturar-contrato-venta-cola', 'Enviar abonos de la cola al facturador'],
+                ],
+            ],
         ],
         [
             'titulo' => '13. Errores frecuentes y buenas prácticas',
             'tabla' => [
-                'caption' => 'Problema → solución',
+                'caption' => 'Pedidos — problema → solución',
                 'headers' => ['Situación', 'Qué hacer'],
                 'rows' => [
                     ['No puede generar pedidos con más de 42 ítems', 'Dividir en dos pedidos o consolidar líneas.'],
@@ -274,9 +293,175 @@ return [
                     ['Impresión física no sale', 'Configure salida en el listado (impresora/comando del usuario).'],
                 ],
             ],
+            'tabla2' => [
+                'caption' => 'Abonos — problema → solución',
+                'headers' => ['Situación', 'Qué hacer'],
+                'rows' => [
+                    ['El sistema rechaza tags sin resolver (@clave@)', 'Complete el modal de tags o cargue datos fijos en el abono; no deje placeholders en la descripción final.'],
+                    ['No aparece el abono en la cola', 'Verifique estado Activo, vigencia, periodicidad y que el período aún no esté marcado como facturado.'],
+                    ['El período se factura dos veces', 'La cola solo muestra períodos pendientes; si ya facturó fuera de la cola, marque el período o revise el historial del abono.'],
+                    ['Condicional no se ve en la factura', 'Revise la clave y el valor: {{#si dominio}}…{{/si}} o {{#si dominio=AB123CD}}…{{/si}}.'],
+                    ['Descripción truncada en ARCA', 'El detalle fiscal tiene límite de caracteres; acorte la plantilla o los valores de tags.'],
+                    ['No ve el menú Abonos', 'Pida a un administrador el menú Ventas → Abonos y los permisos de conceptos/contratos/cola.'],
+                ],
+            ],
             'items' => [
                 'Buenas prácticas — vendedor remoto: cargar reparto y lugar de entrega correctos; usar UMD coherente; dejar pesada en cero; usar leyendas para observaciones; confirmar que el pedido aparece Pendiente tras guardar.',
                 'Buenas prácticas — planta: imprimir listado al recibir pedidos del día; pesar todas las cajas antes de facturar; verificar Total pesados; facturar el mismo día del despacho cuando sea posible.',
+                'Buenas prácticas — abonos: definir tags en el concepto antes de alta masiva de contratos; guardar datos fijos (dominio, patente) en el abono; facturar períodos desde la cola; revisar avisos de vencimiento.',
+            ],
+        ],
+        [
+            'titulo' => '14. Módulo Abonos — visión general',
+            'parrafos' => [
+                'El módulo Abonos vive bajo Ventas (no bajo Tablas de ventas). Une tres pantallas: Conceptos de venta (qué se factura y cómo se describe), Abonos / contratos (a quién y con qué datos fijos) y Cola de facturación (qué períodos faltan emitir).',
+                'Flujo recomendado: 1) crear o ajustar el concepto con plantilla y tags; 2) dar de alta el abono del cliente; 3) facturar el período desde la cola o el facturador; 4) el sistema deja histórico del período y guarda los valores de tags usados en la emisión.',
+            ],
+            'flujo' => "1. CONCEPTO DE VENTA ──► Plantilla + tags + condicionales + precio / IVA / cuenta\n         │\n         ▼\n2. ABONO / CONTRATO ──► Cliente + concepto + vigencia + periodicidad + datos fijos\n         │\n         ▼\n3. COLA / FACTURADOR ──► Completa tags pedibles (si faltan) → emite ARCA\n         │\n         ▼\n4. HISTÓRICO ──► Período marcado facturado + valores de tags en la emisión\n         │\n         ▼\n5. AVISOS ──► Cron diario de vencimiento (emails configurados)",
+            'tabla' => [
+                'caption' => 'Menú Ventas → Abonos',
+                'headers' => ['Opción', 'Ruta', 'Para qué'],
+                'rows' => [
+                    ['Abonos / contratos', 'ventas/contrato-venta', 'Alta y mantenimiento de contratos de servicio'],
+                    ['Cola facturación abonos', 'ventas/contrato-venta-cola', 'Listar períodos pendientes y mandarlos a facturar'],
+                    ['Conceptos de venta', 'ventas/concepto-venta', 'Catálogo de ítems de mostrador / abono con plantillas'],
+                ],
+            ],
+            'nota' => 'La facturación fiscal sigue siendo el mismo circuito de Ventas (punto de venta, ARCA, PDF). El módulo Abonos prepara el renglón (cliente, concepto, descripción y período) para no reescribir a mano cada mes.',
+        ],
+        [
+            'titulo' => '15. Conceptos de venta y plantillas',
+            'herramientas_clave' => 'conceptos_venta',
+            'parrafos' => [
+                'Un concepto de venta es el ítem que se elige en facturación mostrador o en un abono: código, nombre, precio, alícuota, cuenta contable y descripción fiscal (texto que ve ARCA / PDF).',
+                'La descripción puede ser fija o una plantilla con tags @clave@ y bloques condicionales. Al facturar, el sistema reemplaza los tags por valores (modal, datos del abono o tags de sistema) y deja el texto final sin placeholders.',
+                'Acceso: Ventas → Abonos → Conceptos de venta (ventas/concepto-venta). En la solapa de tags del concepto se definen clave, etiqueta, tipo, origen y opciones (si es lista).',
+            ],
+            'tabla' => [
+                'caption' => 'Tipos de tag',
+                'headers' => ['Tipo', 'Ejemplo de uso', 'Cómo se completa'],
+                'rows' => [
+                    ['texto', 'dominio, patente, referencia', 'Input libre (con largo máximo si se definió)'],
+                    ['fecha', 'vencimiento de servicio', 'Selector de fecha → se formatea dd/mm/aaaa'],
+                    ['periodo', 'mes a facturar', 'Desde–hasta o mes/año → texto «dd/mm/aaaa al dd/mm/aaaa»'],
+                    ['lista', 'tipo de abono', 'Select con opciones cargadas en el tag'],
+                ],
+            ],
+            'items' => [
+                'Origen pedible: el operador completa el valor en el modal al facturar (o ya viene del abono).',
+                'Origen sistema: no se pide; se completa solo (cliente, CUIT, fecha de factura, empresa, código/nombre del concepto).',
+                'Detectar tags: si escribió @periodo@ en la plantilla, use la acción de detectar para generar filas de tags faltantes.',
+                'Condicionales: incluya texto solo si hay valor ({{#si dominio}}Dominio @dominio@{{/si}}) o si coincide ({{#si dominio=AB123CD}}…{{/si}}).',
+                'Tras guardar, pruebe el concepto en el facturador o desde un abono de prueba antes de usarlo en producción.',
+            ],
+            'nota' => 'Si al emitir queda un @clave@ sin resolver, el sistema rechaza la factura. Complete todos los tags pedibles o quite el tag de la plantilla.',
+        ],
+        [
+            'titulo' => '16. Tags de sistema y condicionales',
+            'parrafos' => [
+                'Los tags de sistema se rellenan automáticamente al emitir. No hace falta cargarlos en el abono ni en el modal.',
+            ],
+            'tabla' => [
+                'caption' => 'Tags de sistema',
+                'headers' => ['Tag en plantilla', 'Valor'],
+                'rows' => [
+                    ['@cliente@', 'Nombre del cliente de la factura'],
+                    ['@cuit@', 'CUIT/CUIL/DNI del cliente'],
+                    ['@fecha_factura@', 'Fecha del comprobante'],
+                    ['@empresa@', 'Empresa del comprobante'],
+                    ['@codigo_concepto@', 'Código del concepto elegido'],
+                    ['@nombre_concepto@', 'Nombre del concepto'],
+                ],
+            ],
+            'parrafos2' => [
+                'Condicionales (sintaxis literal en la plantilla del concepto):',
+            ],
+            'items' => [
+                '{{#si clave}}texto si la clave tiene valor{{/si}} — muestra el bloque solo si el tag tiene contenido.',
+                '{{#si clave=valor}}texto si coincide{{/si}} — muestra el bloque solo si el valor del tag es exactamente «valor».',
+                'Dentro del bloque puede usar otros tags (@clave@). Tras resolver condicionales y tags, el texto final no debe contener @…@ ni {{#si…}}.',
+            ],
+        ],
+        [
+            'titulo' => '17. Abonos / contratos de cliente',
+            'herramientas_clave' => 'contratos_venta',
+            'parrafos' => [
+                'El abono (contrato de venta) vincula un cliente con un concepto, con vigencia, periodicidad, precio opcional y datos fijos (los mismos tags del concepto).',
+                'Acceso: Ventas → Abonos → Abonos / contratos (ventas/contrato-venta). Alta con Nuevo registro; edición desde el listado.',
+            ],
+            'tabla' => [
+                'caption' => 'Campos principales del abono',
+                'headers' => ['Campo', 'Descripción'],
+                'rows' => [
+                    ['Cliente', 'Cliente al que se factura el servicio (consulta por código / lupa).'],
+                    ['Concepto de venta', 'Ítem / plantilla que se usará en cada emisión.'],
+                    ['Vigencia desde / hasta', 'Rango en el que el abono puede generar períodos.'],
+                    ['Periodicidad', 'Mensual u otra frecuencia definida en el ABM (define la cola).'],
+                    ['Estado', 'Activo / suspendido / vencido según operatoria.'],
+                    ['Precio', 'Opcional; si no se informa, suele usarse el precio vigente del concepto.'],
+                    ['Datos fijos (tags)', 'Valores que no cambian cada mes (dominio, patente, etc.).'],
+                ],
+            ],
+            'items' => [
+                'Al elegir el concepto, la grilla de datos muestra los tags pedibles de esa plantilla.',
+                'Complete los datos fijos una sola vez; al facturar solo pedirá lo que falte (típicamente el período).',
+                'Use el prefill / facturar desde el abono o desde la cola para no rearmar el renglón a mano.',
+                'El historial de períodos facturados queda asociado al abono (auditoría de qué mes se emitió).',
+            ],
+            'nota' => 'Suspenda el abono si el cliente deja de usar el servicio; así deja de aparecer en la cola sin borrar el histórico.',
+        ],
+        [
+            'titulo' => '18. Cola de facturación de abonos',
+            'herramientas_clave' => 'cola_contratos_venta',
+            'parrafos' => [
+                'La cola lista períodos pendientes de abonos activos según vigencia y periodicidad.',
+                'Acceso: Ventas → Abonos → Cola facturación abonos (ventas/contrato-venta-cola).',
+                'Seleccione uno o varios períodos y use la acción de facturar: el sistema abre (o prepara) el facturador con cliente, concepto, tags y período precargados.',
+            ],
+            'items' => [
+                'Filtre por empresa, cliente o rango de fechas si el volumen es alto.',
+                'Revise la descripción preview antes de confirmar la emisión ARCA.',
+                'Tras emitir correctamente, el período queda marcado como facturado y sale de la cola.',
+                'Si cancela a mitad de camino, el período sigue pendiente (no se marca facturado).',
+            ],
+            'nota' => 'Permisos: listar-contrato-venta-cola para ver la cola; facturar-contrato-venta-cola para enviar a facturar.',
+        ],
+        [
+            'titulo' => '19. Facturar un abono (paso a paso)',
+            'parrafos' => [
+                'Puede facturar desde la cola (recomendado) o eligiendo el concepto/abono en el facturador de Ventas.',
+            ],
+            'items' => [
+                'Abra la cola o el abono y dispare Facturar / Prefill.',
+                'Verifique cliente, PV, tipo de comprobante y actividad ARCA como en cualquier factura.',
+                'Si aparecen tags pedibles sin valor, complete el modal (por ejemplo período del mes).',
+                'Confirme que la descripción del renglón ya no muestra @clave@.',
+                'Genere la factura. Conserve el PDF / número ARCA.',
+                'Controle en el abono que el período figure como facturado.',
+            ],
+            'parrafos2' => [
+                'También puede facturar un concepto suelto (sin abono): elija el concepto en el facturador; si tiene tags pedibles, el modal pide los valores y arma la descripción. Los tags de sistema se completan solos.',
+            ],
+        ],
+        [
+            'titulo' => '20. Avisos de vencimiento de abonos',
+            'parrafos' => [
+                'El sistema puede avisar por correo los abonos próximos a vencer o ya vencidos. El aviso no factura: solo alerta a administración para renovar, suspender o facturar el último período.',
+            ],
+            'tabla' => [
+                'caption' => 'Configuración (.env / facturación)',
+                'headers' => ['Variable', 'Significado'],
+                'rows' => [
+                    ['FACTURACION_CONTRATO_VENTA_AVISO_HABILITADO', 'true/false — activa el aviso diario'],
+                    ['FACTURACION_CONTRATO_VENTA_AVISO_DIAS', 'Días de anticipación (ej. 15)'],
+                    ['FACTURACION_CONTRATO_VENTA_AVISO_HORA', 'Hora del cron (ej. 09:20)'],
+                    ['FACTURACION_CONTRATO_VENTA_AVISO_EMAILS', 'Destinatarios separados por coma'],
+                ],
+            ],
+            'items' => [
+                'Comando: php artisan ventas:avisar-contratos-venta-vencimiento (opción --dry-run para listar sin enviar).',
+                'El cron del servidor debe estar activo para que el schedule de Laravel ejecute el aviso a la hora configurada.',
+                'Si no hay emails configurados, el comando no tiene a quién notificar: complete FACTURACION_CONTRATO_VENTA_AVISO_EMAILS.',
             ],
         ],
     ],

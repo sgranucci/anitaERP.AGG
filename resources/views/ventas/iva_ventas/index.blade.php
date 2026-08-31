@@ -341,15 +341,25 @@
             });
         }
 
-        // Exportaciones (PDF / Excel / CSV) tambien navegan: mostrar el aviso.
+        // Exportaciones (PDF / Excel / CSV) no recargan la página: Esc/focus cierran el aviso.
         document.querySelectorAll('a[href*="listar-iva-ventas"]').forEach(function (a) {
             a.addEventListener('click', function () {
-                mostrarProcesoOverlay('Generando exportaci\u00f3n…');
+                mostrarProcesoOverlay('Generando exportaci\u00f3n\u2026');
+                var sub = document.getElementById('iva-ventas-procesando-subtitulo');
+                if (sub) {
+                    sub.textContent = 'El archivo se descarga al terminar. Pulse Esc para cerrar este aviso.';
+                }
+                window.addEventListener('focus', ocultarProcesoOverlay, { once: true });
             });
         });
 
-        // Si el usuario vuelve con el boton atras (bfcache), ocultar el aviso.
         window.addEventListener('pageshow', ocultarProcesoOverlay);
+        window.addEventListener('pagehide', ocultarProcesoOverlay);
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' || event.keyCode === 27) {
+                ocultarProcesoOverlay();
+            }
+        });
     })();
 </script>
 @endsection

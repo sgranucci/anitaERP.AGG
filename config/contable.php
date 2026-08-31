@@ -67,6 +67,8 @@ return [
     'cierre_estacionamiento_lock_espera_segundos' => (int) env('CIERRE_ESTACIONAMIENTO_LOCK_ESPERA_SEGUNDOS', 30),
     'cierre_bingo_lock_segundos' => (int) env('CIERRE_BINGO_LOCK_SEGUNDOS', 600),
     'cierre_bingo_lock_espera_segundos' => (int) env('CIERRE_BINGO_LOCK_ESPERA_SEGUNDOS', 30),
+    'cierre_maquina_lock_segundos' => (int) env('CIERRE_MAQUINA_LOCK_SEGUNDOS', 600),
+    'cierre_maquina_lock_espera_segundos' => (int) env('CIERRE_MAQUINA_LOCK_ESPERA_SEGUNDOS', 30),
     'asiento_numeracion_lock_segundos' => (int) env('ASIENTO_NUMERACION_LOCK_SEGUNDOS', 60),
     'asiento_numeracion_lock_espera_segundos' => (int) env('ASIENTO_NUMERACION_LOCK_ESPERA_SEGUNDOS', 30),
 

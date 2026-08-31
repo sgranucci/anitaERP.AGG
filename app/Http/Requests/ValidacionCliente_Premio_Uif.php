@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Uif\Cliente_Premio_Uif;
 use App\Support\Uif\ClienteUifArchivoStorage;
 use App\Support\Uif\ClienteUifOrigenPcSupport;
 use Illuminate\Foundation\Http\FormRequest;
@@ -15,21 +16,17 @@ class ValidacionCliente_Premio_Uif extends FormRequest
 
     public function rules()
     {
+        $salasUif = $this->salaIdsUifPermitidas();
+
         return [
             'cliente_uif_id' => 'required|integer|exists:cliente_uif,id',
             'sala_id' => [
                 'required',
                 'integer',
                 'exists:sala,id',
-                function (string $attribute, mixed $value, \Closure $fail) {
-                    $esperada = $this->salaEsperadaDesdeCliente();
-                    if ($esperada === null) {
-                        $fail('No se pudo determinar la sala del cliente UIF.');
-
-                        return;
-                    }
-                    if ((int) $value !== $esperada) {
-                        $fail('La sala del premio debe coincidir con el origen del cliente (sala_id '.$esperada.').');
+                function (string $attribute, mixed $value, \Closure $fail) use ($salasUif) {
+                    if ($salasUif !== [] && ! in_array((int) $value, $salasUif, true)) {
+                        $fail('La sala del premio debe ser una sala UIF (BSA/KSA/RSA).');
                     }
                 },
             ],
@@ -64,27 +61,57 @@ class ValidacionCliente_Premio_Uif extends FormRequest
             $this->merge(['fechatito' => null]);
         }
 
-        $sala = $this->salaEsperadaDesdeCliente();
+        // Edición: conservar la sala ya grabada (cliente multi-sala).
+        $premioId = (int) $this->route('id', 0);
+        if ($premioId > 0) {
+            $salaExistente = (int) (Cliente_Premio_Uif::query()->whereKey($premioId)->value('sala_id') ?? 0);
+            if ($salaExistente > 0) {
+                $this->merge(['sala_id' => $salaExistente]);
+
+                return;
+            }
+        }
+
+        // Alta: sala del contexto de escritura (PC / empresa), no forzar origen de la ficha.
+        $sala = $this->salaDesdeContextoEscritura();
         if ($sala !== null) {
             $this->merge(['sala_id' => $sala]);
         }
     }
 
-    private function salaEsperadaDesdeCliente(): ?int
+    private function salaDesdeContextoEscritura(): ?int
     {
-        $clienteId = (int) $this->input('cliente_uif_id', 0);
-        $origen = ClienteUifOrigenPcSupport::origenDeClienteId($clienteId);
-        if ($origen !== null) {
-            return ClienteUifArchivoStorage::salaId($origen);
-        }
-
         try {
             return ClienteUifOrigenPcSupport::resolverParaEscritura(
                 $this,
                 (int) $this->input('empresa_id', 0) ?: null
             )['sala_id'];
         } catch (\Throwable) {
-            return null;
+            // fallback: origen de carga del cliente
         }
+
+        $clienteId = (int) $this->input('cliente_uif_id', 0);
+        $origen = ClienteUifOrigenPcSupport::origenDeClienteId($clienteId);
+        if ($origen !== null) {
+            return ClienteUifArchivoStorage::salaId($origen);
+        }
+
+        return null;
+    }
+
+    /**
+     * @return list<int>
+     */
+    private function salaIdsUifPermitidas(): array
+    {
+        $ids = [];
+        foreach (config('uif.anita_origenes', []) as $cfg) {
+            $sid = (int) ($cfg['sala_id'] ?? 0);
+            if ($sid > 0) {
+                $ids[] = $sid;
+            }
+        }
+
+        return array_values(array_unique($ids));
     }
 }

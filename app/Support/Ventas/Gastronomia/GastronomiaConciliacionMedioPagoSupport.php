@@ -14,7 +14,9 @@ use Illuminate\Support\Facades\DB;
  *    (prefijos 111/112/113) en los asientos del cierre.
  *  - Esperado / «Z» por medio (híbrido, comparable 1:1 con contabilizado):
  *      · Informe Z (tótem/GMEP) → Mercado Pago / QR kiosco
- *      · Cobranzas ERP del asiento 2 (excl. TOTEM) → efectivo, tarjeta, etc.
+ *      · Cobranzas ERP del asiento 2 (excl. TOTEM y excl. factura proceso) → efectivo,
+ *        tarjeta y MP de salón. Si la cuenta ya tiene Informe Z (p.ej. GMEP), se SUMA
+ *        el cobro de mostrador: no está en el Z físico (órdenes ya cobradas en Anita).
  *      · Compensación proceso → fondo fijo máquinas
  *
  * El cruce es por CÓDIGO de cuenta contable (hay códigos duplicados con distinto id, p.ej. 113010001).
@@ -123,8 +125,13 @@ final class GastronomiaConciliacionMedioPagoSupport
         }
 
         foreach ($this->esperadoSalonDesdeCobranzasErp($empresaId, $fechaJornada) as $cod => $item) {
-            // Si el Informe Z ya cubre la cuenta (p.ej. MP), prevalece el Z físico.
-            if (isset($out[$cod]) && abs((float) $out[$cod]['total']) > 0.005) {
+            $salon = round((float) ($item['total'] ?? 0), 2);
+            if (isset($out[$cod])) {
+                // Complementarios: Z tótem + GMEP/tarjeta/efectivo de salón (no pisar el Z).
+                if (abs($salon) > 0.005) {
+                    $out[$cod]['total'] = round((float) $out[$cod]['total'] + $salon, 2);
+                    $out[$cod]['fuente'] = $this->combinarFuente((string) ($out[$cod]['fuente'] ?? ''), 'cobranza_erp');
+                }
                 continue;
             }
             $out[$cod] = $item + ['fuente' => 'cobranza_erp'];
@@ -297,6 +304,22 @@ final class GastronomiaConciliacionMedioPagoSupport
     }
 
     /**
+     * MP/QR tótem contabilizado (cuentas que el Informe Z compara: 11105* / GMEP).
+     */
+    public function contabilizadoMercadoPago(int $empresaId, string $fechaJornada): float
+    {
+        $suma = 0.0;
+        foreach ($this->contabilizadoPorMedio($empresaId, $fechaJornada) as $codigo => $item) {
+            if (! str_starts_with((string) $codigo, '11105')) {
+                continue;
+            }
+            $suma = round($suma + (float) ($item['total'] ?? 0), 2);
+        }
+
+        return $suma;
+    }
+
+    /**
      * Contabilizado por medio: DEBE − HABER de las cuentas de cobro (111/112/113) en los asientos del cierre.
      *
      * @return array<string, array{cuenta_codigo:string,cuenta_nombre:string,medio_clave:string,total:float}>
@@ -404,5 +427,15 @@ final class GastronomiaConciliacionMedioPagoSupport
         }
 
         return false;
+    }
+
+    private function combinarFuente(string $actual, string $agregada): string
+    {
+        $partes = array_values(array_filter(array_unique(array_merge(
+            $actual === '' ? [] : explode('+', $actual),
+            [$agregada],
+        )), static fn (string $p): bool => $p !== ''));
+
+        return implode('+', $partes);
     }
 }

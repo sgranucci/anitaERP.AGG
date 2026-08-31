@@ -23,7 +23,15 @@
             }
         });
     }
-    window.addEventListener('pageshow', function () {
+    function mostrarOverlayCcVsMayor() {
+        var overlay = document.getElementById('cc-vs-mayor-overlay');
+        if (overlay) {
+            overlay.classList.remove('d-none');
+            overlay.style.display = 'flex';
+            overlay.setAttribute('aria-hidden', 'false');
+        }
+    }
+    function ocultarOverlayCcVsMayor() {
         var overlay = document.getElementById('cc-vs-mayor-overlay');
         if (overlay) {
             overlay.classList.add('d-none');
@@ -35,14 +43,22 @@
             btn.disabled = false;
             btn.innerHTML = '<i class="fa fa-search"></i> Consultar';
         }
+    }
+    window.addEventListener('pageshow', ocultarOverlayCcVsMayor);
+    window.addEventListener('pagehide', ocultarOverlayCcVsMayor);
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' || event.keyCode === 27) {
+            ocultarOverlayCcVsMayor();
+        }
     });
     document.querySelectorAll('a[href*="listar-cc-vs-mayor-anita"]').forEach(function (a) {
         a.addEventListener('click', function () {
-            var overlay = document.getElementById('cc-vs-mayor-overlay');
-            if (overlay) {
-                overlay.classList.remove('d-none');
-                overlay.style.display = 'flex';
+            var sub = document.getElementById('cc-vs-mayor-subtitulo');
+            if (sub) {
+                sub.textContent = 'El archivo se descarga al terminar. Pulse Esc para cerrar este aviso.';
             }
+            mostrarOverlayCcVsMayor();
+            window.addEventListener('focus', ocultarOverlayCcVsMayor, { once: true });
         });
     });
 })();

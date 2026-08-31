@@ -180,16 +180,11 @@ class CierreRendicionBingoService
         $ids = $rendiciones->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
         $tipoAsientoId = $this->resolverTipoAsientoId();
         $pvFbi = CierreRendicionBingoConfigSupport::puntoventaFbi($empresaId);
-        $obsBase = CierreRendicionBingoAsientoSupport::DESCRIPCION_ASIENTO
-            .' — '.Carbon::parse($fechaDia)->format('d/m/Y')
-            .' — PV FBI '.$pvFbi
-            .' — rend. '.implode(', ', $ids);
 
         return DB::transaction(function () use (
             $rendiciones,
             $preview,
             $tipoAsientoId,
-            $obsBase,
             $fecha,
             $empresaId,
             $fechaDia,
@@ -231,12 +226,15 @@ class CierreRendicionBingoService
             $numeroPrincipal = '';
 
             foreach ($preview['asientos'] ?? [] as $bloque) {
+                // Paridad p-vtabingo.c arma_asiento: ctav_desc_mov = leyenda corta
+                // ("Pago de premios", "Dev. pozo acum.", "Canon …"). No anteponer fecha:
+                // ctav_desc_mov tiene 30 chars y truncaba a "Cierre rendicin bingo DDMMYYYY".
                 $leyenda = (string) ($bloque['leyenda'] ?? CierreRendicionBingoAsientoSupport::DESCRIPCION_ASIENTO);
                 $payload = CierreRendicionBingoAsientoSupport::armarPayloadAsiento(
                     $bloque['lineas'] ?? [],
                     $empresaId,
                     $fecha,
-                    $obsBase.' — '.$leyenda,
+                    $leyenda,
                 );
                 if (($payload['cuentacontable_ids'] ?? []) === []) {
                     continue;

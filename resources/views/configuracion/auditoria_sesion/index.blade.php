@@ -169,7 +169,7 @@
                             <div class="kpi-label">Tabla bitácora (navegación)</div>
                             <div class="kpi-value">{{ $tabla['total_humano'] ?? '0 B' }}</div>
                             <div class="kpi-hint">
-                                {{ number_format((int) ($tabla['filas'] ?? 0), 0, ',', '.') }} filas
+                                ~{{ number_format((int) ($tabla['filas'] ?? 0), 0, ',', '.') }} filas
                                 · datos {{ $tabla['data_humano'] ?? '0 B' }}
                                 · índices {{ $tabla['index_humano'] ?? '0 B' }}
                             </div>
@@ -223,15 +223,21 @@
                     </div>
                 </div>
                 <p class="text-muted small mb-0 mt-1">
-                    La memoria pico es la del proceso PHP al atender cada request (no el disco). Global histórico:
-                    {{ number_format((int) ($procGlobal['total'] ?? 0), 0, ',', '.') }} eventos ·
-                    avg
-                    @if (($procGlobal['duracion_promedio_ms'] ?? null) !== null)
-                        {{ number_format($procGlobal['duracion_promedio_ms'], 0, ',', '.') }} ms
+                    @if ($pestana === 'navegacion')
+                        La memoria pico es la del proceso PHP al atender cada request (no el disco). Global histórico
+                        (aprox. o cache):
+                        {{ number_format((int) ($procGlobal['total'] ?? 0), 0, ',', '.') }} eventos ·
+                        avg
+                        @if (($procGlobal['duracion_promedio_ms'] ?? null) !== null)
+                            {{ number_format($procGlobal['duracion_promedio_ms'], 0, ',', '.') }} ms
+                        @else
+                            —
+                        @endif
+                        · tabla acumulada {{ $tabla['total_humano'] ?? '0 B' }}.
                     @else
-                        —
+                        Las métricas de proceso de navegación se calculan solo en la pestaña Navegación
+                        (evitan escanear millones de filas al abrir logs o cambios de datos).
                     @endif
-                    · tabla acumulada {{ $tabla['total_humano'] ?? '0 B' }}.
                 </p>
             </div>
         </div>

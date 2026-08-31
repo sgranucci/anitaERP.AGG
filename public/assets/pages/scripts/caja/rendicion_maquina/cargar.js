@@ -331,15 +331,79 @@
             if (monedaId > 1) {
                 title += ' — moneda extranjera × cotización ' + cot;
             }
+            var ayudaDolar = '';
+            if (monedaId === 2 || monedaId === 4) {
+                var montoNum = parseFloat(String(linea.monto || 0).toString().replace(',', '.')) || 0;
+                if (!isFinite(montoNum)) {
+                    montoNum = 0;
+                }
+                var equiv = (montoNum * cot);
+                ayudaDolar = '<div class="text-muted small font-weight-normal mt-0 js-valor-ayuda-dolar" style="line-height:1.25;">'
+                    + 'Cargar el monto en dólares (USD), no en pesos.'
+                    + '<span class="d-block">Cotiz. día: <strong class="js-valor-cotizacion">'
+                    + escapeHtml(fmtCotizacion(cot))
+                    + '</strong> · Equiv. pesos: <strong class="js-valor-equiv-pesos">'
+                    + escapeHtml(fmtMoney(equiv))
+                    + '</strong></span></div>';
+            }
             return '<tr data-cuentacaja-id="' + id + '" data-cotizacion="' + cot + '" data-moneda-id="' + monedaId + '">'
                 + '<td class="text-muted col-codigo">' + codigo + '</td>'
-                + '<td class="col-desc" title="' + escapeHtml(title) + '">' + nombre + '</td>'
+                + '<td class="col-desc" title="' + escapeHtml(title) + '">' + nombre + ayudaDolar + '</td>'
                 + '<td class="col-monto"><input type="text" inputmode="decimal" class="form-control form-control-sm text-right js-valor-monto js-monto-ar" autocomplete="off" value="' + monto + '"'
                 + (monedaId > 1 ? ' title="' + escapeHtml(title) + '"' : '')
                 + '></td>'
                 + '</tr>';
         }).join('');
         initFormatoMontos(tbody);
+        actualizarEquivPesosValores(tbody);
+    }
+
+    function fmtCotizacion(n) {
+        var x = parseFloat(n);
+        if (!isFinite(x)) {
+            return '0,0000';
+        }
+        return x.toLocaleString('es-AR', { minimumFractionDigits: 4, maximumFractionDigits: 4 });
+    }
+
+    function parseMontoInput(el) {
+        if (!el) {
+            return 0;
+        }
+        var raw = String(el.value || '').trim();
+        if (raw === '') {
+            return 0;
+        }
+        // formato AR: 1.234,56 → 1234.56
+        if (raw.indexOf(',') >= 0) {
+            raw = raw.replace(/\./g, '').replace(',', '.');
+        }
+        var n = parseFloat(raw);
+        return isFinite(n) ? n : 0;
+    }
+
+    function actualizarEquivPesosValores(root) {
+        var scope = root || app;
+        scope.querySelectorAll('#tabla-valores-rendicion tbody tr[data-moneda-id]').forEach(function (tr) {
+            var monedaId = parseInt(tr.dataset.monedaId, 10) || 1;
+            if (monedaId !== 2 && monedaId !== 4) {
+                return;
+            }
+            var cot = parseFloat(tr.dataset.cotizacion || '0');
+            if (!isFinite(cot) || cot <= 0) {
+                cot = 1;
+            }
+            var inp = tr.querySelector('.js-valor-monto');
+            var monto = parseMontoInput(inp);
+            var equivEl = tr.querySelector('.js-valor-equiv-pesos');
+            var cotEl = tr.querySelector('.js-valor-cotizacion');
+            if (cotEl) {
+                cotEl.textContent = fmtCotizacion(cot);
+            }
+            if (equivEl) {
+                equivEl.textContent = fmtMoney(monto * cot);
+            }
+        });
     }
 
     /**
@@ -1101,7 +1165,21 @@
     }
 
     initFormatoMontos(app);
+    actualizarEquivPesosValores(app);
     actualizarAvisoWigos();
+
+    app.addEventListener('input', function (ev) {
+        var el = ev.target;
+        if (el && el.classList && el.classList.contains('js-valor-monto')) {
+            actualizarEquivPesosValores(el.closest('tr') || app);
+        }
+    });
+    app.addEventListener('blur', function (ev) {
+        var el = ev.target;
+        if (el && el.classList && el.classList.contains('js-valor-monto')) {
+            actualizarEquivPesosValores(el.closest('tr') || app);
+        }
+    }, true);
 
     // Alta: pie en cero hasta Traer WIGOS / editar montos (Ctrl+R no debe dejar totales viejos).
     // Edición: recalcular con lo grabado.

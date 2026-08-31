@@ -81,6 +81,13 @@
                 'requerido' => false,
                 'estilo_contenedor' => 'display: none',
             ])
+            <div id="div-cbu-pago-ie" style="display: none">
+                @include('compras.partials.campo_cbu_pago', [
+                    'col_label' => 'col-lg-3 control-label text-right pr-2',
+                    'col_input' => 'col-lg-7',
+                    'data' => $data ?? null,
+                ])
+            </div>
         </div>
         <div class="col-sm-6">
             <div class="form-group row">
@@ -230,6 +237,7 @@
 @include('includes.contable.modalconsultacuentacontable')
 @include('includes.caja.modalconsultacuentacaja')
 @include('includes.compras.modalconsultaproveedor')
+@include('includes.compras.modalconsultacbupago')
 @include('caja.ingresoegreso.copiaringresoegresomodal')
 @include('caja.ingresoegreso.revertiringresoegresomodal')
 @include('includes.caja.modalconsultagasto')

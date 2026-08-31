@@ -102,12 +102,16 @@
                     @endforeach
                 </select>
             </div>
-            <div class="form-group col-md-1 col-sm-4 mb-2">
-                <div class="custom-control custom-checkbox mt-4">
-                    <input type="checkbox" class="custom-control-input" name="filtro_con_premios" id="filtro_con_premios" value="1"
-                           {{ !empty($f['con_premios']) ? 'checked' : '' }}>
-                    <label class="custom-control-label small" for="filtro_con_premios">Con premio</label>
-                </div>
+            <div class="form-group col-md-2 col-sm-6 mb-2">
+                <label class="small mb-1" for="filtro_premios">Premios</label>
+                @php
+                    $premiosFiltro = ! empty($f['sin_premios']) ? 'sin' : (! empty($f['con_premios']) ? 'con' : '');
+                @endphp
+                <select name="filtro_premios" id="filtro_premios" class="form-control form-control-sm">
+                    <option value="" {{ $premiosFiltro === '' ? 'selected' : '' }}>Todos</option>
+                    <option value="con" {{ $premiosFiltro === 'con' ? 'selected' : '' }}>Con premio</option>
+                    <option value="sin" {{ $premiosFiltro === 'sin' ? 'selected' : '' }}>Sin premio</option>
+                </select>
             </div>
             <div class="form-group col-md-auto mb-2">
                 <button type="submit" class="btn btn-primary btn-sm" data-aplicar-filtros-panel="1">

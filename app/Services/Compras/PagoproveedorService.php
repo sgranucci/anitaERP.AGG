@@ -21,6 +21,7 @@ use App\Repositories\Contable\TipoasientoRepositoryInterface;
 use App\Support\Compras\AnitaSync\Pagoproveedor\PagoproveedorAnitaNumeracionSupport;
 use App\Support\Compras\PagoproveedorAplicacionCuentacorrienteSupport;
 use App\Support\Compras\PagoproveedorAsientoArmadoSupport;
+use App\Support\Compras\ProveedorCbuPagoSupport;
 use App\Support\Compras\Retencion\PagoproveedorRetencionPersistenciaSupport;
 use App\Support\Compras\Retencion\RetencionesPagoInput;
 use App\Support\Contable\PeriodoContableCierreSupport;
@@ -106,6 +107,12 @@ class PagoproveedorService
                     $estado = 'CONFIRMADA';
                 }
 
+                $cbuElegido = ProveedorCbuPagoSupport::resolverDesdeRequest(
+                    (int) $data['proveedor_id'],
+                    $data['proveedor_formapago_id'] ?? null,
+                    $data['cbu_pago'] ?? null
+                );
+
                 $pago = $this->pagoproveedorRepository->create([
                     'empresa_id' => $empresaId,
                     'tipotransaccion_caja_id' => ($data['tipotransaccion_caja_id'] ?? null) ?: null,
@@ -116,6 +123,8 @@ class PagoproveedorService
                     'fecha' => $data['fecha'],
                     'caja_id' => ($data['caja_id'] ?? null) ?: null,
                     'proveedor_id' => (int) $data['proveedor_id'],
+                    'proveedor_formapago_id' => $cbuElegido['proveedor_formapago_id'] ?? null,
+                    'cbu_pago' => $cbuElegido['cbu_pago'] ?? null,
                     'detalle' => (string) ($data['detalle'] ?? ('Orden de pago Nro. '.$numero)),
                     'estado' => $estado,
                     'monto' => (float) ($data['monto'] ?? $data['totalfinalpago'] ?? 0),
@@ -161,10 +170,18 @@ class PagoproveedorService
                     throw new Exception('No se puede modificar una OP en estado '.$pago->estado.'.');
                 }
 
+                $cbuElegido = ProveedorCbuPagoSupport::resolverDesdeRequest(
+                    (int) $data['proveedor_id'],
+                    $data['proveedor_formapago_id'] ?? null,
+                    $data['cbu_pago'] ?? null
+                );
+
                 $this->pagoproveedorRepository->update([
                     'fecha' => $data['fecha'],
                     'caja_id' => ($data['caja_id'] ?? null) ?: null,
                     'proveedor_id' => (int) $data['proveedor_id'],
+                    'proveedor_formapago_id' => $cbuElegido['proveedor_formapago_id'] ?? null,
+                    'cbu_pago' => $cbuElegido['cbu_pago'] ?? null,
                     'detalle' => (string) ($data['detalle'] ?? $pago->detalle),
                     'estado' => (string) ($data['estado'] ?? $pago->estado),
                     'monto' => (float) ($data['monto'] ?? $data['totalfinalpago'] ?? $pago->monto),

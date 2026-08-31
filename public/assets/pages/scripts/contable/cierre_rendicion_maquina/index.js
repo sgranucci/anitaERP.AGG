@@ -3,6 +3,41 @@
 
     var cfg = window.CIERRE_REND_MAQUINA || {};
     var grupoActual = null;
+    var cierreGrupoEjecutando = false;
+    var anularGrupoEjecutando = false;
+    var rangoEjecutando = false;
+
+    function overlayCierre() {
+        return document.getElementById('cierre-rend-maquina-overlay');
+    }
+
+    function mostrarOverlayCierre(titulo, subtitulo) {
+        var overlay = overlayCierre();
+        if (!overlay) {
+            return;
+        }
+        var tituloEl = document.getElementById('cierre-rend-maquina-overlay-titulo');
+        var subEl = document.getElementById('cierre-rend-maquina-overlay-subtitulo');
+        if (titulo && tituloEl) {
+            tituloEl.textContent = titulo;
+        }
+        if (subtitulo && subEl) {
+            subEl.textContent = subtitulo;
+        }
+        overlay.classList.remove('d-none');
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+    }
+
+    function ocultarOverlayCierre() {
+        var overlay = overlayCierre();
+        if (!overlay) {
+            return;
+        }
+        overlay.classList.add('d-none');
+        overlay.style.display = '';
+        overlay.setAttribute('aria-hidden', 'true');
+    }
 
     function tokenCsrf() {
         var meta = document.querySelector('meta[name="csrf-token"]');
@@ -112,9 +147,19 @@
     }
 
     function ejecutarCierre() {
-        if (!grupoActual) {
+        if (!grupoActual || cierreGrupoEjecutando || anularGrupoEjecutando || rangoEjecutando) {
             return;
         }
+        cierreGrupoEjecutando = true;
+        var btn = document.getElementById('btn-confirmar-cierre-rend-maquina');
+        if (btn) {
+            btn.disabled = true;
+        }
+        setBotonesAnularGrupo(true);
+        mostrarOverlayCierre(
+            'Cerrando máquinas…',
+            'Escribe FSL y asientos (venta + canon). No cierre la página ni vuelva a confirmar.'
+        );
         fetch(cfg.urlEjecutar, {
             method: 'POST',
             headers: {
@@ -127,6 +172,12 @@
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (!data.ok) {
+                    cierreGrupoEjecutando = false;
+                    if (btn) {
+                        btn.disabled = false;
+                    }
+                    setBotonesAnularGrupo(false);
+                    ocultarOverlayCierre();
                     alert(data.mensaje || 'No se pudo ejecutar el cierre.');
                     return;
                 }
@@ -134,14 +185,38 @@
                 window.location.reload();
             })
             .catch(function () {
-                alert('Error de comunicación al ejecutar el cierre.');
+                cierreGrupoEjecutando = false;
+                if (btn) {
+                    btn.disabled = false;
+                }
+                setBotonesAnularGrupo(false);
+                ocultarOverlayCierre();
+                alert('Error de comunicación al ejecutar el cierre. Recargue la pantalla antes de reintentar: el asiento puede haberse grabado.');
             });
     }
 
+    function setBotonesAnularGrupo(procesando) {
+        document.querySelectorAll('.js-anular-grupo').forEach(function (btn) {
+            btn.disabled = !!procesando;
+        });
+        document.querySelectorAll('.js-cerrar-grupo').forEach(function (btn) {
+            btn.disabled = !!procesando;
+        });
+    }
+
     function anularCierreGrupo(grupo) {
+        if (anularGrupoEjecutando || cierreGrupoEjecutando || rangoEjecutando) {
+            return;
+        }
         if (!confirm('¿Anular el cierre contable del día? Se eliminarán los asientos en ERP y ctamov.')) {
             return;
         }
+        anularGrupoEjecutando = true;
+        setBotonesAnularGrupo(true);
+        mostrarOverlayCierre(
+            'Anulando cierre de máquinas…',
+            'Elimina asientos en ERP y ctamov. No cierre la página ni vuelva a anular.'
+        );
         fetch(cfg.urlAnular, {
             method: 'POST',
             headers: {
@@ -154,13 +229,19 @@
             .then(function (r) { return r.json(); })
             .then(function (data) {
                 if (!data.ok) {
+                    anularGrupoEjecutando = false;
+                    setBotonesAnularGrupo(false);
+                    ocultarOverlayCierre();
                     alert(data.mensaje || 'No se pudo anular el cierre.');
                     return;
                 }
                 window.location.reload();
             })
             .catch(function () {
-                alert('Error de comunicación al anular el cierre.');
+                anularGrupoEjecutando = false;
+                setBotonesAnularGrupo(false);
+                ocultarOverlayCierre();
+                alert('Error de comunicación al anular el cierre. Recargue y verifique si el cierre quedó anulado.');
             });
     }
 
@@ -373,8 +454,6 @@
             });
     }
 
-    var rangoEjecutando = false;
-
     function setBotonEjecutarRango(procesando) {
         var btn = document.getElementById('btn-rango-ejecutar');
         if (!btn) {
@@ -392,7 +471,7 @@
     }
 
     function ejecutarCierreRango() {
-        if (rangoEjecutando) {
+        if (rangoEjecutando || cierreGrupoEjecutando || anularGrupoEjecutando) {
             return;
         }
         var empresaId = parseInt((document.getElementById('rango-empresa-id') || {}).value || '0', 10);
@@ -406,6 +485,11 @@
         }
         rangoEjecutando = true;
         setBotonEjecutarRango(true);
+        setBotonesAnularGrupo(true);
+        mostrarOverlayCierre(
+            'Cerrando rango de máquinas…',
+            'Puede demorar varios minutos (FSL + asientos por día). No cierre la página ni vuelva a confirmar.'
+        );
         fetch(cfg.urlEjecutarRango, {
             method: 'POST',
             headers: {
@@ -425,6 +509,8 @@
                 if (!data.ok) {
                     rangoEjecutando = false;
                     setBotonEjecutarRango(false);
+                    setBotonesAnularGrupo(false);
+                    ocultarOverlayCierre();
                     alert(data.mensaje || 'No se pudo ejecutar el cierre del rango.');
                     return;
                 }
@@ -442,6 +528,8 @@
             .catch(function () {
                 rangoEjecutando = false;
                 setBotonEjecutarRango(false);
+                setBotonesAnularGrupo(false);
+                ocultarOverlayCierre();
                 alert('Error de comunicación al ejecutar el cierre del rango.');
             });
     }
@@ -485,6 +573,9 @@
 
         document.querySelectorAll('.js-anular-grupo').forEach(function (btn) {
             btn.addEventListener('click', function () {
+                if (anularGrupoEjecutando || cierreGrupoEjecutando || rangoEjecutando) {
+                    return;
+                }
                 var tr = btn.closest('tr.grupo-resumen');
                 var grupo = leerGrupoDesdeFila(tr);
                 if (grupo && grupo.empresa_id > 0 && grupo.fecha_dia) {
@@ -527,5 +618,18 @@
                 el.addEventListener('change', limpiarPreviewRango);
             }
         });
+    });
+
+    window.addEventListener('pageshow', function () {
+        cierreGrupoEjecutando = false;
+        anularGrupoEjecutando = false;
+        rangoEjecutando = false;
+        ocultarOverlayCierre();
+        var btn = document.getElementById('btn-confirmar-cierre-rend-maquina');
+        if (btn) {
+            btn.disabled = false;
+        }
+        setBotonesAnularGrupo(false);
+        setBotonEjecutarRango(false);
     });
 })();

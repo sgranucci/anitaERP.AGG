@@ -58,4 +58,22 @@ final class LogisticaBierzoSupportTest extends TestCase
         $this->assertSame(0.0, LogisticaBierzoSupport::importe(1000.0, 0));
         $this->assertSame(0.0, LogisticaBierzoSupport::importe(0, 1.5));
     }
+
+    public function test_preparar_netos_pone_logistica_antes_del_gravado_sin_tasa(): void
+    {
+        $netos = [
+            ['concepto' => 'Exento', 'tasa' => 0, 'importe' => 10.0],
+            ['concepto' => 'Gravado al 21%', 'tasa' => 21, 'importe' => 1000.0],
+            ['concepto' => 'Total Logistica', 'tasa' => 21, 'importe' => 15.0],
+        ];
+
+        $ordenado = LogisticaBierzoSupport::prepararNetosParaImpresion($netos);
+
+        $this->assertSame('Exento', $ordenado[0]['concepto']);
+        $this->assertSame('Total Logistica', $ordenado[1]['concepto']);
+        $this->assertSame(0, $ordenado[1]['tasa']);
+        $this->assertSame(15.0, $ordenado[1]['importe']);
+        $this->assertSame('Gravado al 21%', $ordenado[2]['concepto']);
+        $this->assertSame(21, $ordenado[2]['tasa']);
+    }
 }

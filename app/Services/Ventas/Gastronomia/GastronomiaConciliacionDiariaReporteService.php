@@ -309,8 +309,11 @@ final class GastronomiaConciliacionDiariaReporteService
                             $contabPorMedio[$cod] = ['cuenta_codigo' => $cod, 'cuenta_nombre' => $nombre, 'total' => 0.0];
                         }
                         $zPorMedio[$cod]['total'] = round($zPorMedio[$cod]['total'] + $zMonto, 2);
-                        if ($fuente !== '' && ($zPorMedio[$cod]['fuente'] ?? '') === '') {
-                            $zPorMedio[$cod]['fuente'] = $fuente;
+                        if ($fuente !== '') {
+                            $prevFuente = (string) ($zPorMedio[$cod]['fuente'] ?? '');
+                            if ($prevFuente === '' || (str_contains($fuente, '+') && ! str_contains($prevFuente, '+'))) {
+                                $zPorMedio[$cod]['fuente'] = $fuente;
+                            }
                         }
                         $contabPorMedio[$cod]['total'] = round($contabPorMedio[$cod]['total'] + $cMonto, 2);
 

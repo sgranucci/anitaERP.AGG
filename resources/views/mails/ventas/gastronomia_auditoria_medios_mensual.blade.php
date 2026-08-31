@@ -17,6 +17,7 @@
         return match ((string) $f) {
             'informe_z' => 'Informe Z',
             'cobranza_erp' => 'Cobranza ERP',
+            'informe_z+cobranza_erp' => 'Informe Z + cobranza ERP',
             'fondo_fijo' => 'Fondo fijo',
             default => $f !== '' ? $f : '—',
         };
@@ -30,7 +31,7 @@
     · Tolerancia $ {{ $fmt($tolerancia) }}
 </p>
 <p style="margin:0 0 12px 0; color:#555; font-size:13px;">
-    Columna Z (esperado): <strong>Informe Z</strong> (tótem/MP) + <strong>cobranzas ERP</strong> (efectivo/tarjeta) + <strong>fondo fijo</strong> (compensación proceso).
+    Columna Z (esperado): <strong>Informe Z</strong> (tótem/MP) + <strong>cobranzas ERP</strong> (efectivo/tarjeta y MP de salón, sumado al Z si es la misma cuenta) + <strong>fondo fijo</strong> (compensación proceso).
     Adjunto CSV: totales del mes (<code>tipo=mes</code>) y detalle día × medio (<code>tipo=dia</code>).
 </p>
 

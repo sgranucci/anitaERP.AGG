@@ -68,7 +68,7 @@ use App\Support\Uif\ClienteUifListadoFiltros; ?>
                     <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th class="width10">ID</th>
-                            <th>Origen</th>
+                            <th style="width:3.5rem;">Origen</th>
                             <th>Nombre</th>
                             <th>Tipo</th>
                             <th>Número de doc.</th>
@@ -84,13 +84,25 @@ use App\Support\Uif\ClienteUifListadoFiltros; ?>
                     </thead>
                     <tbody>
                         @foreach ($cliente_uifs as $data)
+							@php
+								$origenCodigo = \App\Support\Uif\ClienteUifOrigenPcSupport::codigoOrigen((string) ($data->anita_origen ?? ''));
+								$origenLabel = \App\Support\Uif\ClienteUifOrigenPcSupport::labelOrigen((string) ($data->anita_origen ?? ''));
+								$sinPremios = (int) ($data->premios_count ?? 0) === 0;
+							@endphp
 							@if ($data->estado == '1')
                         		<tr class="table-danger">
 							@else
                         		<tr>
 							@endif
-                            <td>{{$data->id}}</td>
-                            <td><small>{{ \App\Support\Uif\ClienteUifOrigenPcSupport::labelOrigen((string) ($data->anita_origen ?? '')) }}</small></td>
+                            <td>
+								{{ $data->id }}
+								@if ($sinPremios)
+									<span class="badge badge-light border text-muted ml-1" title="Sin premios" style="font-size:0.65rem;font-weight:600;padding:0.1rem 0.3rem;vertical-align:middle;">∅</span>
+								@endif
+							</td>
+                            <td>
+								<span class="badge badge-info" title="{{ $origenLabel }}" style="font-size:0.7rem;font-weight:600;padding:0.15rem 0.35rem;">{{ $origenCodigo }}</span>
+							</td>
                             <td>{{$data->nombre}}</td>
                             <td>{{$data->abreviaturatipodocumento}}</td>
                             <td><small>{{$data->numerodocumento}}</small></td>
@@ -101,12 +113,14 @@ use App\Support\Uif\ClienteUifListadoFiltros; ?>
                             <td><small>{{$data->telefono}}</small></td>
                             <td><small>{{$data->email}}</small></td>
                             <td>
-                                @if (!empty($data->ultimo_premio_fecha))
+                                @if (! $sinPremios && !empty($data->ultimo_premio_fecha))
                                     <small>
                                         {{\Carbon\Carbon::parse($data->ultimo_premio_fecha)->format('d/m/Y H:i')}}<br>
                                         {{ number_format((float) ($data->ultimo_premio_monto ?? 0), 2, ',', '.') }}<br>
                                         {{ $data->ultimo_premio_juego ?? '' }}
                                     </small>
+								@elseif ($sinPremios)
+									<small class="text-muted">Sin premios</small>
                                 @endif
                             </td>
                             <td>

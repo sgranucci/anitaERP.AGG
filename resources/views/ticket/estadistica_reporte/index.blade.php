@@ -28,9 +28,22 @@
             });
         }
         document.querySelectorAll('a[href*="listar-informe-estadistico-ticket"]').forEach(function (a) {
-            a.addEventListener('click', function () { mostrar(); });
+            a.addEventListener('click', function () {
+                var sub = document.getElementById('ticket-estadistica-subtitulo');
+                if (sub) {
+                    sub.textContent = 'El archivo se descarga al terminar. Pulse Esc para cerrar este aviso.';
+                }
+                mostrar();
+                window.addEventListener('focus', ocultar, { once: true });
+            });
         });
         window.addEventListener('pageshow', ocultar);
+        window.addEventListener('pagehide', ocultar);
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' || event.keyCode === 27) {
+                ocultar();
+            }
+        });
     })();
 </script>
 @endsection

@@ -176,9 +176,7 @@ class OrdencompraReporteExport implements FromView, ShouldAutoSize, WithColumnFo
                 }
 
                 $filaFinMeta = $this->filaInicioMeta + $this->filasMetaEncabezado - 1;
-                for ($fila = $this->filaInicioMeta; $fila <= $filaFinMeta; $fila++) {
-                    $sheet->mergeCells('A'.$fila.':'.$colUltima.$fila);
-                }
+                // El HTML ya trae colspan=37 (A:AK) en meta: no re-mergear (pisa merges y Excel marca corrupto).
 
                 $filaTit = $this->filaInicioMeta;
                 $sheet->getRowDimension($filaTit)->setRowHeight(28);

@@ -7,7 +7,7 @@
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <script src="{{asset('assets/pages/scripts/compras/proveedor/consulta.js')}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/reportes/empresas_checkboxes.js') }}"></script>
-<script src="{{ asset('assets/pages/scripts/compras/ordencompra_reporte/filtro.js') }}"></script>
+<script src="{{ asset('assets/pages/scripts/compras/ordencompra_reporte/filtro.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra_reporte/filtro.js')) ?: time() }}"></script>
 @endsection
 
 @section('contenido')

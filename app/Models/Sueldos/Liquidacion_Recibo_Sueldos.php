@@ -96,4 +96,9 @@ class Liquidacion_Recibo_Sueldos extends Model implements Auditable
         return $this->hasMany(Liquidacion_Detalle_Sueldos::class, 'recibo_id')
             ->orderBy('nro_linea');
     }
+
+    public function lsdBase()
+    {
+        return $this->hasOne(Lsd_Recibo_Base_Sueldos::class, 'recibo_id');
+    }
 }

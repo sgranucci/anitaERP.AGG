@@ -72,12 +72,24 @@ Recuento {{ $recuento->codigo }}
                         <div class="col-lg-3"></div>
                         <div class="col-lg-6">
                             @include('includes.boton-form-editar')
+                            <p class="small text-muted mb-0 mt-2">
+                                <i class="fa fa-info-circle"></i>
+                                «Actualizar» solo guarda los datos. Para ajustar stock use el panel
+                                <strong>Cierre de inventario</strong> debajo (o la pantalla Ver).
+                            </p>
                         </div>
                     </div>
                 </div>
                 @endif
             </form>
         </div>
+
+        {{-- Fuera del form de guardar: no anidar forms (ver blade-formularios-no-anidados). --}}
+        @if (! $soloLectura && $recuento->esEditable())
+            <div class="mt-3">
+                @include('stock.recuento.partials.opciones_cierre', ['recuento' => $recuento])
+            </div>
+        @endif
     </div>
 </div>
 @include('includes.stock.modalconsultaarticulo')

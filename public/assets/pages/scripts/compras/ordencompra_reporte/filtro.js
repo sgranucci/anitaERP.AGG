@@ -15,7 +15,7 @@ function ocReporteEsPantallaActiva() {
     return $('#form-ordencompra-reporte').length > 0;
 }
 
-function ocReporteMostrarOverlay(titulo) {
+function ocReporteMostrarOverlay(titulo, subtitulo) {
     var overlay = document.getElementById('oc-reporte-overlay');
     if (!overlay) {
         return;
@@ -24,6 +24,12 @@ function ocReporteMostrarOverlay(titulo) {
         var t = document.getElementById('oc-reporte-overlay-titulo');
         if (t) {
             t.textContent = titulo;
+        }
+    }
+    if (subtitulo) {
+        var s = document.getElementById('oc-reporte-overlay-subtitulo');
+        if (s) {
+            s.textContent = subtitulo;
         }
     }
     overlay.classList.remove('d-none');
@@ -36,9 +42,126 @@ function ocReporteOcultarOverlay() {
     if (!overlay) {
         return;
     }
+    if (window.__ocReporteExportSafetyTimer) {
+        clearTimeout(window.__ocReporteExportSafetyTimer);
+        window.__ocReporteExportSafetyTimer = null;
+    }
     overlay.classList.add('d-none');
     overlay.style.display = '';
     overlay.setAttribute('aria-hidden', 'true');
+}
+
+function ocReporteNombreArchivoDesdeDisposition(disposition, fallback) {
+    if (!disposition) {
+        return fallback;
+    }
+    var match = /filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;]+)/i.exec(disposition);
+    if (!match) {
+        return fallback;
+    }
+    var raw = (match[1] || match[2] || match[3] || '').trim();
+    try {
+        return decodeURIComponent(raw.replace(/['"]/g, ''));
+    } catch (e) {
+        return raw.replace(/['"]/g, '') || fallback;
+    }
+}
+
+function ocReporteDispararDescargaBlob(blob, filename) {
+    var url = window.URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'ordenes_compra';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.setTimeout(function () {
+        window.URL.revokeObjectURL(url);
+    }, 1500);
+}
+
+function ocReporteDescargarExportacion(href) {
+    var lower = String(href).toLowerCase();
+    var formato = 'archivo';
+    var fallback = 'ordenes_compra';
+    if (lower.indexOf('/excel') !== -1) {
+        formato = 'Excel';
+        fallback += '.xlsx';
+    } else if (lower.indexOf('/pdf') !== -1) {
+        formato = 'PDF';
+        fallback += '.pdf';
+    } else if (lower.indexOf('/csv') !== -1) {
+        formato = 'CSV';
+        fallback += '.csv';
+    }
+
+    ocReporteMostrarOverlay(
+        'Exportando…',
+        'Generando ' + formato + '… Puede demorar según el volumen. Pulse Esc para cerrar este aviso.'
+    );
+
+    if (window.__ocReporteExportAbort) {
+        try {
+            window.__ocReporteExportAbort.abort();
+        } catch (e) {}
+    }
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    window.__ocReporteExportAbort = controller;
+
+    if (window.__ocReporteExportSafetyTimer) {
+        clearTimeout(window.__ocReporteExportSafetyTimer);
+    }
+    window.__ocReporteExportSafetyTimer = setTimeout(ocReporteOcultarOverlay, 600000);
+
+    fetch(href, {
+        method: 'GET',
+        credentials: 'same-origin',
+        signal: controller ? controller.signal : undefined,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'Accept': '*/*',
+        },
+    }).then(function (res) {
+        if (res.status === 419) {
+            throw new Error('Sesión expirada. Recargue la página (F5) e intente de nuevo.');
+        }
+        if (res.redirected && res.url && res.url.indexOf('listar-ordencompra-reporte') === -1) {
+            throw new Error('No se pudo generar la exportación. Verifique los filtros y vuelva a consultar.');
+        }
+        if (!res.ok) {
+            throw new Error('Error HTTP ' + res.status + ' al exportar.');
+        }
+        var filename = ocReporteNombreArchivoDesdeDisposition(
+            res.headers.get('Content-Disposition'),
+            fallback
+        );
+        return res.blob().then(function (blob) {
+            return { blob: blob, filename: filename };
+        });
+    }).then(function (pack) {
+        if (!pack || !pack.blob || pack.blob.size === 0) {
+            throw new Error('La exportación vino vacía. Reintente.');
+        }
+        if (pack.blob.type && pack.blob.type.indexOf('text/html') !== -1) {
+            throw new Error('La sesión o el permiso fallaron al exportar. Recargue e intente de nuevo.');
+        }
+        ocReporteDispararDescargaBlob(pack.blob, pack.filename);
+        ocReporteOcultarOverlay();
+    }).catch(function (err) {
+        if (err && err.name === 'AbortError') {
+            ocReporteOcultarOverlay();
+            return;
+        }
+        ocReporteOcultarOverlay();
+        window.alert(err && err.message ? err.message : 'No se pudo descargar la exportación.');
+    }).finally(function () {
+        if (window.__ocReporteExportSafetyTimer) {
+            clearTimeout(window.__ocReporteExportSafetyTimer);
+            window.__ocReporteExportSafetyTimer = null;
+        }
+        window.__ocReporteExportAbort = null;
+    });
 }
 
 function ocReporteAbrirModalUsuario() {
@@ -330,16 +453,38 @@ function activaEventosOrdencompraReporteFiltro() {
         if (!this.checkValidity()) {
             return;
         }
-        ocReporteMostrarOverlay('Consultando pedidos…');
+        ocReporteMostrarOverlay(
+            'Consultando pedidos…',
+            'Puede demorar según el período y el volumen. No cierre la página.'
+        );
     });
 
+    // Descarga sin navegación: fetch+blob y ocultar el aviso al terminar.
     $(document)
         .off('click.ocreporte', 'a[href*="listar-ordencompra-reporte"]')
-        .on('click.ocreporte', 'a[href*="listar-ordencompra-reporte"]', function () {
-            ocReporteMostrarOverlay('Exportando…');
+        .on('click.ocreporte', 'a[href*="listar-ordencompra-reporte"]', function (e) {
+            var href = $(this).attr('href') || '';
+            if (!href || href === '#') {
+                return;
+            }
+            e.preventDefault();
+            ocReporteDescargarExportacion(href);
         });
 
     window.addEventListener('pageshow', ocReporteOcultarOverlay);
+    window.addEventListener('pagehide', ocReporteOcultarOverlay);
+    $(document)
+        .off('keydown.ocreporte-overlay')
+        .on('keydown.ocreporte-overlay', function (e) {
+            if (e.key === 'Escape' || e.keyCode === 27) {
+                if (window.__ocReporteExportAbort) {
+                    try {
+                        window.__ocReporteExportAbort.abort();
+                    } catch (err) {}
+                }
+                ocReporteOcultarOverlay();
+            }
+        });
 
     $form.on('keydown', 'input:not([type="submit"])', function (e) {
         if (e.which === 13) {

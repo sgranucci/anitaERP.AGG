@@ -17,12 +17,6 @@
         }
     });
 
-    function eliminarIngresoEgreso(event) {
-        var opcion = confirm("Desea eliminar la transacción de caja?");
-        if(!opcion) {
-            event.preventDefault();
-        }
-    }
 </script>
 
 @endsection
@@ -136,16 +130,6 @@
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif
-                                @if (\Carbon\Carbon::now()->format('Y-m-d') == date("Y-m-d", strtotime($data->fecha ?? '')) || can('supervisor-movimiento-caja', false))
-                                    @if (can('borrar-ingresos-egresos-caja', false))
-                                    <form action="{{route('eliminar_ingresoegreso', ['id' => $data->caja_movimiento_id, 'origen' => 'movimientocaja'])}}" class="d-inline form-eliminar" method="POST">
-                                        @csrf @method("delete")
-                                        <button type="submit" onclick="eliminarIngresoEgreso(event)" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
-                                            <i class="fa fa-times-circle text-danger"></i>
-                                        </button>
-                                    </form>
-                                    @endif
-                                @endif
                             </td>
                         </tr>
                         @endforeach

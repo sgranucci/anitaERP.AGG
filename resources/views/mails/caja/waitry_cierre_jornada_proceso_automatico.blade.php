@@ -69,6 +69,24 @@
             </p>
         @endif
 
+        @php
+            $topeMail = is_array($empresa['tope_recodificacion'] ?? null)
+                ? $empresa['tope_recodificacion']
+                : ($pasos['recalcular']['tope_recodificacion'] ?? []);
+        @endphp
+        @if (! empty($topeMail['tope_bajado']))
+            <p style="margin:8px 0; padding:8px 10px; background:#fff3cd; border:1px solid #ffc107; color:#7a5b00;">
+                <strong>Tope del % bajado solo para esta jornada.</strong>
+                Objetivo empresa {{ $topeMail['porcentaje_objetivo_empresa'] ?? '—' }}%
+                → aplicado {{ $topeMail['porcentaje'] ?? ($empresa['porcentaje'] ?? '—') }}%
+                (Waitry recodificable $ {{ $fmt($topeMail['total_recodificable'] ?? 0) }}).
+                El día siguiente vuelve el objetivo original; no se modifica la config de la empresa.
+                @if (! empty($topeMail['motivo']))
+                    <br>{{ $topeMail['motivo'] }}
+                @endif
+            </p>
+        @endif
+
         @if (! empty($pasos['emitir_factura']))
             @php $ef = $pasos['emitir_factura']; @endphp
             <p style="margin:4px 0;">

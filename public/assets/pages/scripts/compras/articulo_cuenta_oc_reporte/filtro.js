@@ -16,7 +16,7 @@
         return $('#form-articulo-cuenta-oc').length > 0;
     }
 
-    function acoMostrarOverlay(titulo) {
+    function acoMostrarOverlay(titulo, subtitulo) {
         var overlay = document.getElementById('aco-reporte-overlay');
         if (!overlay) {
             return;
@@ -25,6 +25,12 @@
             var t = document.getElementById('aco-reporte-overlay-titulo');
             if (t) {
                 t.textContent = titulo;
+            }
+        }
+        if (subtitulo) {
+            var s = document.getElementById('aco-reporte-overlay-subtitulo');
+            if (s) {
+                s.textContent = subtitulo;
             }
         }
         overlay.classList.remove('d-none');
@@ -134,13 +140,21 @@
             if (typeof this.checkValidity === 'function' && !this.checkValidity()) {
                 return;
             }
-            acoMostrarOverlay('Consultando OC en Anita…');
+            acoMostrarOverlay(
+                'Consultando OC en Anita…',
+                'Puede demorar según el período. No cierre la página.'
+            );
         });
 
+        // Descarga sin navegación: sin Esc/focus el aviso queda pegado.
         $(document)
             .off('click.acoreporte', 'a[href*="listar-articulo-cuenta-oc-reporte"]')
             .on('click.acoreporte', 'a[href*="listar-articulo-cuenta-oc-reporte"]', function () {
-                acoMostrarOverlay('Exportando…');
+                acoMostrarOverlay(
+                    'Exportando…',
+                    'El archivo se descarga al terminar. Pulse Esc para cerrar este aviso.'
+                );
+                window.addEventListener('focus', acoOcultarOverlay, { once: true });
             });
 
         $(document)
@@ -202,4 +216,10 @@
 
     $(document).ready(activaEventosArticuloCuentaOcFiltro);
     window.addEventListener('pageshow', acoOcultarOverlay);
+    window.addEventListener('pagehide', acoOcultarOverlay);
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' || event.keyCode === 27) {
+            acoOcultarOverlay();
+        }
+    });
 })(jQuery);

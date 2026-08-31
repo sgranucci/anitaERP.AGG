@@ -125,6 +125,17 @@
                                         <button type="submit" class="btn-accion-tabla tooltipsC" title="Reabrir corrida"><i class="fa fa-unlock text-warning"></i></button>
                                     </form>
                                 @endif
+                                @if (empty($data->simulacion) && in_array((string) $data->estado, ['calculada', 'revisada', 'cerrada', 'contabilizada'], true) && (int) $data->cantidad_recibos > 0)
+                                    <a href="{{ route('resultado_liquidacion_sueldos', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Calidad / asiento de devengamiento">
+                                        <i class="fa fa-balance-scale text-primary"></i>
+                                    </a>
+                                @endif
+                                @if (can('editar-asiento', false) && (int) ($data->asiento_id ?? 0) > 0)
+                                    <a href="{{ route('editar_asiento', ['id' => $data->asiento_id, 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                                       class="btn-accion-tabla tooltipsC" title="Ver asiento" target="_blank" rel="noopener">
+                                        <i class="fa fa-book text-info"></i>
+                                    </a>
+                                @endif
                                 @if (can('borrar-liquidacion-sueldos', false) && $data->esEditable())
                                     <form action="{{route('eliminar_liquidacion_sueldos', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
                                         @csrf @method("delete")

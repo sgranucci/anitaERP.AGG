@@ -367,6 +367,13 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
 
+		$empresaId = (int) $empresaId;
+		if ($empresaId <= 0) {
+			throw new \InvalidArgumentException(
+				'La exportación UIF requiere empresa/sala. No se pueden mezclar premios de distintas salas.'
+			);
+		}
+
 		$fecha = conviertePeriodoEnRangoFecha($periodo, true);
 		$desdeFecha = $fecha['desdefecha'];
 		$hastaFecha = $fecha['hastafecha'];
@@ -425,13 +432,12 @@ class Cliente_Premio_UifRepository implements Cliente_Premio_UifRepositoryInterf
                                 ->leftJoin('moneda', 'moneda.id', '=', 'cliente_premio_uif.moneda_id')
                                 ->leftJoin('juego_uif', 'juego_uif.id', '=', 'cliente_premio_uif.juego_uif_id')
                                 ->leftJoin('usuario as usuario_alta', 'usuario_alta.id', '=', 'cliente_premio_uif.creousuario_id')
-                                ->leftJoin('sala', 'sala.id', '=', 'cliente_premio_uif.sala_id')
-                                ->leftJoin('empresa', 'empresa.id', '=', 'sala.empresa_id')
+                                ->join('sala', 'sala.id', '=', 'cliente_premio_uif.sala_id')
+                                ->join('empresa', 'empresa.id', '=', 'sala.empresa_id')
 								->whereNull('cliente_uif.deleted_at')
 								->where('cliente_premio_uif.monto', '>=', $limite)
-								->when($empresaId, function ($query, $empresaId) {
-                                    $query->where('empresa.id', (int) $empresaId);
-                                })
+								// Informe por sala del premio (cliente multi-sala OK).
+								->where('empresa.id', $empresaId)
 								->whereBetween('cliente_premio_uif.fechaentrega', [$desdeFecha, $hastaFecha])
                                 ->orderBy('cliente_premio_uif.fechaentrega', 'ASC')
                                 ->orderBy('cliente_premio_uif.id', 'ASC')

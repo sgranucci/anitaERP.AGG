@@ -119,7 +119,11 @@ class ArchivoLogSupport
         ];
     }
 
-    /** @return list<string> */
+    /**
+     * Lee la cola del archivo por chunks (no carácter a carácter).
+     *
+     * @return list<string>
+     */
     private static function tailArchivo(string $path, int $lineas): array
     {
         $fp = fopen($path, 'rb');
@@ -127,10 +131,6 @@ class ArchivoLogSupport
             return [];
         }
 
-        $buffer = '';
-        $chunk = 4096;
-        $pos = -1;
-        $lineCount = 0;
         $stat = fstat($fp);
         $size = (int) ($stat['size'] ?? 0);
         if ($size === 0) {
@@ -139,17 +139,23 @@ class ArchivoLogSupport
             return [];
         }
 
-        while ($lineCount <= $lineas && -$pos < $size) {
-            $pos -= ($buffer === '' ? min($chunk, $size) : 1);
-            fseek($fp, $pos, SEEK_END);
-            $char = fgetc($fp);
-            if ($char === "\n") {
-                $lineCount++;
-            }
-            $buffer = $char.$buffer;
-            if (-$pos >= $size) {
+        $chunkSize = 8192;
+        $buffer = '';
+        $pos = $size;
+        $nuevasLineas = 0;
+
+        while ($pos > 0 && $nuevasLineas <= $lineas) {
+            $leer = min($chunkSize, $pos);
+            $pos -= $leer;
+            if (fseek($fp, $pos) !== 0) {
                 break;
             }
+            $chunk = fread($fp, $leer);
+            if ($chunk === false || $chunk === '') {
+                break;
+            }
+            $buffer = $chunk.$buffer;
+            $nuevasLineas = substr_count($buffer, "\n");
         }
         fclose($fp);
 

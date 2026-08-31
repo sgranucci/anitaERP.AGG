@@ -76,6 +76,7 @@ class AnitaFuncionMapa
         'MT' => ['erp' => 'meses_trabajados', 'exacto' => false, 'nota' => 'meses trabajados'],
         'TE' => ['erp' => 'tabla_empleado', 'exacto' => false, 'nota' => 'valor de tabla del empleado'],
         'DTBR' => ['erp' => 'descuento_bruto', 'exacto' => true, 'nota' => 'factor del concepto si no liquidado en el período'],
+        'DETRAC' => ['erp' => 'detraccion', 'exacto' => true, 'nota' => 'Ley 27.430; reemplaza la fórmula Anita del 1002'],
         'BCAT' => ['erp' => 'base_categoria', 'exacto' => false, 'nota' => 'base de la categoría'],
         'EMPMAD' => ['erp' => 'es_empresa_madre', 'exacto' => false, 'nota' => 'flag empresa madre'],
         'EASOC' => ['erp' => 'es_asociacion', 'exacto' => false, 'nota' => 'flag asociación'],
@@ -171,7 +172,7 @@ class AnitaFuncionMapa
         'aguinaldo', 'cantidad_vacaciones', 'dias_vacaciones', 'total_vacaciones',
         'cantidad_asignacion', 'importe_asignacion', 'tabla_empleado', 'descuento_bruto',
         'base_categoria', 'es_empresa_madre', 'es_asociacion', 'im_concepto_rem', 'val',
-        'antiguedad_tabla',
+        'antiguedad_tabla', 'detraccion', 'detraccion_lsd',
     ];
 
     public static function funcion(string $nombreAnita): ?array

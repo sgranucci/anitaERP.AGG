@@ -78,7 +78,7 @@
 			@foreach ($cliente_uifs as $data)
 				<tr>
 					<td>{{ $data->id }}</td>
-					<td>{{ \App\Support\Uif\ClienteUifOrigenPcSupport::labelOrigen((string) ($data->anita_origen ?? '')) }}</td>
+					<td>{{ \App\Support\Uif\ClienteUifOrigenPcSupport::codigoOrigen((string) ($data->anita_origen ?? '')) }}</td>
 					<td>{{ $data->nombre }}</td>
 					<td>{{ $data->abreviaturatipodocumento }}</td>
 					<td>{{ $data->numerodocumento }}</td>

@@ -8,6 +8,7 @@
 <script src="{{ asset('assets/pages/scripts/sueldos/formula_debugger.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/formula_debugger.js')) ?: time() }}"></script>
 <script src="{{asset("assets/pages/scripts/sueldos/concepto/elegibilidad.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/sueldos/concepto/formula_debugger.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/concepto/formula_debugger.js')) ?: time() }}"></script>
+<script src="{{asset('assets/pages/scripts/sueldos/concepto/lsd.js')}}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/concepto/lsd.js')) ?: time() }}"></script>
 @endsection
 
 @section('contenido')

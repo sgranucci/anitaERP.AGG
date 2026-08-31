@@ -28,6 +28,30 @@
     </p>
 @endif
 
+@if (!empty($archivo['imagen_path']) && is_file($archivo['imagen_path']))
+    <p style="margin:0 0 8px 0; color:#555;">Resumen solapa Tabla (A1:G13)</p>
+    <p style="margin:0 0 16px 0;">
+        <img src="{{ $message->embed($archivo['imagen_path']) }}" alt="Tabla Flash A1:G13" style="max-width:100%;border:1px solid #cccccc;">
+    </p>
+@elseif (!empty($archivo['tabla_resumen']))
+    <p style="margin:0 0 8px 0; color:#555;">Resumen solapa Tabla (A1:G13)</p>
+    <table cellpadding="6" cellspacing="0" style="border-collapse:collapse;margin:0 0 16px 0;font-size:12px;">
+        @foreach ($archivo['tabla_resumen'] as $fila)
+            <tr>
+                @foreach ($fila as $celda)
+                    @php
+                        $encabezado = !empty($celda['encabezado']);
+                        $rojo = !empty($celda['rojo']);
+                    @endphp
+                    <td style="border:1px solid #cccccc;min-width:90px;{{ $encabezado ? 'background:#85C1E9;color:#17202A;font-weight:bold;' : '' }}{{ $rojo ? 'color:#C0392B;' : '' }}">
+                        {{ $celda['texto'] ?? '' }}
+                    </td>
+                @endforeach
+            </tr>
+        @endforeach
+    </table>
+@endif
+
 <p style="margin:0 0 12px 0;">
     Adjunto: <strong>{{ $archivo['nombre'] ?? 'Flash Report AGG.xlsx' }}</strong>
 </p>

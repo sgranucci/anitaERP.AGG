@@ -146,21 +146,54 @@
     }
 
     var form = document.getElementById('form-reporte-definible-ejecutar');
-    if (form) {
-        form.addEventListener('submit', function () {
-            if (!form.checkValidity()) return;
-            var overlay = document.getElementById('rd-exec-overlay');
-            if (overlay) {
-                overlay.classList.remove('d-none');
-                overlay.style.display = 'flex';
-            }
-        });
-    }
-    window.addEventListener('pageshow', function () {
+    function ocultarRdOverlay() {
         var overlay = document.getElementById('rd-exec-overlay');
         if (overlay) {
             overlay.classList.add('d-none');
             overlay.style.display = '';
+            overlay.setAttribute('aria-hidden', 'true');
+        }
+    }
+    function mostrarRdOverlay(titulo, subtitulo) {
+        var overlay = document.getElementById('rd-exec-overlay');
+        if (!overlay) {
+            return;
+        }
+        var t = document.getElementById('rd-exec-titulo');
+        var s = document.getElementById('rd-exec-subtitulo');
+        if (titulo && t) {
+            t.textContent = titulo;
+        }
+        if (subtitulo && s) {
+            s.textContent = subtitulo;
+        }
+        overlay.classList.remove('d-none');
+        overlay.style.display = 'flex';
+        overlay.setAttribute('aria-hidden', 'false');
+    }
+    if (form) {
+        form.addEventListener('submit', function () {
+            if (!form.checkValidity()) return;
+            mostrarRdOverlay(
+                'Calculando informe…',
+                'Puede demorar según el período y la cantidad de cuentas. No cierre la página.'
+            );
+        });
+    }
+    document.querySelectorAll('a[href*="listar-reporte-definible"]').forEach(function (a) {
+        a.addEventListener('click', function () {
+            mostrarRdOverlay(
+                'Exportando…',
+                'El archivo se descarga al terminar. Pulse Esc para cerrar este aviso.'
+            );
+            window.addEventListener('focus', ocultarRdOverlay, { once: true });
+        });
+    });
+    window.addEventListener('pageshow', ocultarRdOverlay);
+    window.addEventListener('pagehide', ocultarRdOverlay);
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' || event.keyCode === 27) {
+            ocultarRdOverlay();
         }
     });
 })();

@@ -14,6 +14,7 @@ use App\Support\Ventas\Waitry\WaitryCierreJornadaVentanaSupport;
 use App\Support\Ventas\Waitry\WaitryDisplayIdSupport;
 use App\Support\Ventas\Waitry\WaitryFacturacionDuplicadosSupport;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
+use App\Support\Ventas\Waitry\WaitryTotemImporteFacturaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
@@ -936,6 +937,8 @@ final class WaitryOrdenesExternasService
         );
         $cuenta->waitry_display_id = $displayId !== '' ? $displayId : null;
         $cuenta->waitry_cobro_totem = $cobroTotem;
+        $montoCobroWaitry = WaitryTotemImporteFacturaSupport::montoCobradoEnOrden($orden);
+        $cuenta->waitry_monto_cobro = $montoCobroWaitry > 0.0001 ? $montoCobroWaitry : null;
         $waitryTipoPago = $cobroTotem
             ? WaitryMedioPagoCuentacajaSupport::extraerTipoPagoOrden($orden)
             : null;
@@ -965,11 +968,17 @@ final class WaitryOrdenesExternasService
                     'errores' => $errores,
                 ]);
 
+                $montoWaitry = round((float) ($cuenta->waitry_monto_cobro ?? 0), 2);
+
                 return [
                     'ok' => true,
                     'cuenta' => $cuenta,
                     'errores' => $errores,
                     'requiere_carga_opcionales_en_pos' => true,
+                    'waitry_monto_cobro' => $montoWaitry,
+                    'total_cuenta' => 0.,
+                    'desfasaje_totem' => (bool) $cuenta->waitry_cobro_totem
+                        && WaitryTotemImporteFacturaSupport::hayDesfasaje(0., $montoWaitry),
                 ];
             }
 
@@ -992,10 +1001,18 @@ final class WaitryOrdenesExternasService
 
         $this->invalidarCacheOrdenesPosEmpresa($empresaId);
 
+        $totalCuenta = WaitryTotemImporteFacturaSupport::totalLineasCuenta($cuenta);
+        $montoWaitry = round((float) ($cuenta->waitry_monto_cobro ?? 0), 2);
+        $desfasajeTotem = (bool) $cuenta->waitry_cobro_totem
+            && WaitryTotemImporteFacturaSupport::hayDesfasaje($totalCuenta, $montoWaitry);
+
         return [
             'ok' => true,
             'cuenta' => $cuenta,
             'errores' => $errores,
+            'waitry_monto_cobro' => $montoWaitry,
+            'total_cuenta' => $totalCuenta,
+            'desfasaje_totem' => $desfasajeTotem,
         ];
     }
 

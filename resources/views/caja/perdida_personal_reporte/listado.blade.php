@@ -21,8 +21,8 @@
 		<tr>
 			<td style="width:20%;">
 				@foreach ($logos as $logo)
-					@if (!empty($logo))
-						<img src="{{ $logo }}" style="max-height:40px;">
+					@if (!empty($logo['uri']))
+						<img src="{{ $logo['uri'] }}" style="max-height:40px;">
 					@endif
 				@endforeach
 			</td>

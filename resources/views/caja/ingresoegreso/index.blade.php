@@ -8,13 +8,6 @@
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/filtro.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/anular_revertir.js') }}" type="text/javascript"></script>
-<script>
-    function eliminarIngresoEgreso(event) {
-        if (!confirm('¿Desea eliminar la transacción de caja?')) {
-            event.preventDefault();
-        }
-    }
-</script>
 @endsection
 
 @php
@@ -64,8 +57,15 @@
             @if (! empty($alcance_centro_costo))
                 <div class="px-3 py-2 border-bottom bg-white text-muted small">
                     <i class="fa fa-filter"></i>
-                    Listado limitado (ingresos/egresos de usuarios de su centro de costo):
+                    Alcance del listado:
                     <strong>{{ $alcance_centro_costo }}</strong>
+                    <span class="text-muted">· Sin cobranzas POS (módulo Cobranza)</span>
+                </div>
+            @else
+                <div class="px-3 py-2 border-bottom bg-white text-muted small">
+                    <i class="fa fa-info-circle"></i>
+                    Listado de ingresos/egresos de caja (OPP, remesas, transferencias, etc.).
+                    Las cobranzas POS (gastronomía, estacionamiento) se consultan en el módulo Cobranza.
                 </div>
             @endif
             <div class="card-body table-responsive p-0">
@@ -170,14 +170,6 @@
                                         <input type="hidden" name="id" value="{{ $data->id }}">
                                         <button type="submit" class="btn-accion-tabla tooltipsC" title="Revertir (compensatorio + asiento + Anita)">
                                             <i class="fa fa-undo text-warning"></i>
-                                        </button>
-                                    </form>
-                                @endif
-                                @if (can('borrar-ingresos-egresos-caja', false))
-                                    <form action="{{ route('eliminar_ingresoegreso', ['id' => $data->id]) }}" class="d-inline form-eliminar" method="POST">
-                                        @csrf @method('delete')
-                                        <button type="submit" onclick="eliminarIngresoEgreso(event)" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
-                                            <i class="fa fa-times-circle text-danger"></i>
                                         </button>
                                     </form>
                                 @endif

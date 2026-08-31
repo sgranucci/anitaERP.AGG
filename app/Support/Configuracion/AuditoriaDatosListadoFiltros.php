@@ -138,22 +138,7 @@ class AuditoriaDatosListadoFiltros
 
     public static function tipoPermitido(string $type): bool
     {
-        if ($type === '' || ! str_starts_with($type, 'App\\Models\\')) {
-            return false;
-        }
-        if (isset(config('auditoria_datos.favoritos')[$type])) {
-            return true;
-        }
-        if (! Schema::hasTable('audits')) {
-            return false;
-        }
-        foreach (AuditoriaDatosCatalogoSupport::catalogo() as $item) {
-            if ($item['type'] === $type) {
-                return true;
-            }
-        }
-
-        return false;
+        return AuditoriaDatosCatalogoSupport::tipoConocido($type);
     }
 
     /**

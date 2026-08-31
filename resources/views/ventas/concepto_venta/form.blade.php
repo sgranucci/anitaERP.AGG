@@ -22,7 +22,23 @@
     <div class="col-lg-6">
         <input type="text" name="descripcion" id="descripcion" class="form-control" maxlength="255"
             value="{{ old('descripcion', $data->descripcion ?? '') }}" required>
-        <small class="form-text text-muted">Texto del ítem que se informa a ARCA.</small>
+        <small class="form-text text-muted">
+            Texto del ítem que se informa a ARCA. Puede usar tags
+            <code>@clave@</code> (ej. <code>Abono período @periodo@</code>)
+            y condicionales
+            <code>&#123;&#123;#si dominio&#125;&#125;…&#123;&#123;/si&#125;&#125;</code>
+            o
+            <code>&#123;&#123;#si dominio=AB123CD&#125;&#125;…&#123;&#123;/si&#125;&#125;</code>.
+            Al facturar se completan por modal, abono o tags de sistema.
+        </small>
+        <div class="mt-1">
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="cv-insertar-tag-descripcion" title="Inserta @clave@ en la descripción">
+                Insertar tag
+            </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" id="cv-detectar-tags-plantilla" title="Agrega a la grilla los @tags@ de la descripción">
+                Detectar tags de la plantilla
+            </button>
+        </div>
     </div>
 </div>
 <div class="form-group row">
@@ -88,3 +104,4 @@
     </div>
 </div>
 @include('ventas.concepto_venta.form2')
+@include('ventas.concepto_venta.form4')

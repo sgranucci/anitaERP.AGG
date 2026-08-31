@@ -124,8 +124,6 @@
 					<strong>Fecha de Entrega: {{ date('d/m/Y', strtotime($remito->fechaentrega ?? '')) }}</strong><br>
 					<strong>Reparto: {{ $repartoNombre }}</strong><br>
 					<strong>Lugar de entrega: {{ $remito->lugarentrega ?? '' }}</strong>
-					<br>
-					<strong>Valor asegurado: {{ number_format($valorAsegurado, 2) }}</strong>
 					@if ($mostrarTotalesDivision)
 						<div class="remito-totales-division">
 							{{ number_format($totalNetoDivision, 2) }}<br>

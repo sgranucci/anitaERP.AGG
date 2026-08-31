@@ -10,11 +10,14 @@ use App\Models\Ventas\Puntoventa;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Impuesto;
-use App\Repositories\Ventas\VentaRepositoryInterface;
 use App\Support\Database\EloquentAuditDeleteSupport;
+use App\Support\Ventas\CierreSalaExentaNumeracionSupport;
+use App\Support\Ventas\VentaNumeracionEmpresaSupport;
+use App\Support\Ventas\VentaNumerocomprobanteUnicidadSupport;
 use Illuminate\Support\Facades\Auth;
 use InvalidArgumentException;
 use RuntimeException;
+use Throwable;
 
 /**
  * Emite FBI/FSL internos 100% exentos en ventas ERP (sin bridge Anita venta).
@@ -22,10 +25,7 @@ use RuntimeException;
  */
 class CierreSalaExentaEmisionService
 {
-    public function __construct(
-        private readonly VentaRepositoryInterface $ventaRepository,
-    ) {
-    }
+    private const INTENTOS_NUMERO = 8;
 
     /**
      * @return array{
@@ -57,6 +57,11 @@ class CierreSalaExentaEmisionService
         }
 
         $puntoventa = $this->resolverPuntoventa($empresaId, $codigoSucursal);
+        $puntoventa = Puntoventa::query()
+            ->whereKey((int) $puntoventa->id)
+            ->lockForUpdate()
+            ->firstOrFail();
+
         $modo = strtoupper(trim((string) ($puntoventa->modofacturacion ?? '')));
         if ($modo !== 'M') {
             throw new InvalidArgumentException(
@@ -70,48 +75,75 @@ class CierreSalaExentaEmisionService
             throw new RuntimeException('Cliente consumidor final (000000) no encontrado.');
         }
 
-        $ultimo = $this->ventaRepository->traeUltimoComprobanteVenta(
-            (int) $tipo->id,
-            (int) $puntoventa->id,
-            $empresaId,
-        );
-        $numero = (int) ($ultimo->numerocomprobante ?? 0) + 1;
-
-        $digitosSuc = (int) config('facturacion.DIGITOS_SUCURSAL', 5);
-        $digitosComp = (int) config('facturacion.DIGITOS_COMPROBANTE', 8);
         $codigoPv = (int) ltrim((string) $puntoventa->codigo, '0');
         if ($codigoPv <= 0) {
             $codigoPv = (int) $puntoventa->codigo;
         }
-        $codigo = $tipo->abreviatura.' '.$letra.'-'
-            .str_pad((string) $codigoPv, $digitosSuc, '0', STR_PAD_LEFT).'-'
-            .str_pad((string) $numero, $digitosComp, '0', STR_PAD_LEFT);
 
-        $venta = Venta::query()->create([
-            'fecha' => $fechaDia,
-            'fechajornada' => $fechaDia,
-            'tipotransaccion_id' => (int) $tipo->id,
-            'puntoventa_id' => (int) $puntoventa->id,
-            'numerocomprobante' => $numero,
-            'actividad_arca_id' => $this->resolverActividadArcaId($puntoventa),
-            'cliente_id' => (int) $cliente->id,
-            'condicionventa_id' => $cliente->condicionventa_id,
-            'total' => $monto,
-            'moneda_id' => 1,
-            'cotizacion' => 1,
-            'estado' => ' ',
-            'usuario_id' => (int) (Auth::id() ?: 1),
-            'leyenda' => $leyenda,
-            'descuento' => 0,
-            'descuentointegrado' => ' ',
-            'codigo' => $codigo,
-            'nombre' => $nombreCliente,
-            'domicilio' => (string) ($cliente->domicilio ?? ''),
-            'localidad_id' => $cliente->localidad_id,
-            'provincia_id' => $cliente->provincia_id,
-            'pais_id' => $cliente->pais_id,
-            'condicioniva_id' => (int) ($cliente->condicioniva_id ?? 3),
-        ]);
+        $sucursalCodigo = (string) $codigoPv;
+        $numero = 0;
+        $codigo = '';
+        $venta = null;
+        $ultimoIntento = 0;
+
+        for ($intento = 1; $intento <= self::INTENTOS_NUMERO; $intento++) {
+            $numero = CierreSalaExentaNumeracionSupport::siguienteNumero(
+                (string) $tipo->abreviatura,
+                $letra,
+                $codigoPv,
+                $empresaId,
+                $fechaDia,
+                (int) $puntoventa->id,
+                $ultimoIntento,
+            );
+            $codigo = VentaNumeracionEmpresaSupport::formatearCodigoVenta(
+                (string) $tipo->abreviatura,
+                $letra,
+                $sucursalCodigo,
+                $numero,
+            );
+
+            try {
+                $venta = Venta::query()->create([
+                    'fecha' => $fechaDia,
+                    'fechajornada' => $fechaDia,
+                    'tipotransaccion_id' => (int) $tipo->id,
+                    'puntoventa_id' => (int) $puntoventa->id,
+                    'numerocomprobante' => $numero,
+                    'actividad_arca_id' => $this->resolverActividadArcaId($puntoventa),
+                    'cliente_id' => (int) $cliente->id,
+                    'condicionventa_id' => $cliente->condicionventa_id,
+                    'total' => $monto,
+                    'moneda_id' => 1,
+                    'cotizacion' => 1,
+                    'estado' => ' ',
+                    'usuario_id' => (int) (Auth::id() ?: 1),
+                    'leyenda' => $leyenda,
+                    'descuento' => 0,
+                    'descuentointegrado' => ' ',
+                    'codigo' => $codigo,
+                    'nombre' => $nombreCliente,
+                    'domicilio' => (string) ($cliente->domicilio ?? ''),
+                    'localidad_id' => $cliente->localidad_id,
+                    'provincia_id' => $cliente->provincia_id,
+                    'pais_id' => $cliente->pais_id,
+                    'condicioniva_id' => (int) ($cliente->condicioniva_id ?? 3),
+                ]);
+                break;
+            } catch (Throwable $e) {
+                if (
+                    ! VentaNumerocomprobanteUnicidadSupport::esViolacionNumerocomprobante($e)
+                    || $intento === self::INTENTOS_NUMERO
+                ) {
+                    throw $e;
+                }
+                $ultimoIntento = $numero;
+            }
+        }
+
+        if ($venta === null) {
+            throw new RuntimeException('No se pudo emitir '.$tipo->abreviatura.' (numeración).');
+        }
 
         Venta_Impuesto::query()->create([
             'venta_id' => (int) $venta->id,

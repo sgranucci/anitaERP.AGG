@@ -2,6 +2,8 @@
 
 namespace App\Support\Contable;
 
+use App\Support\Numerico\NumeroDecimalLocalSupport;
+
 /**
  * Validación Debe = Haber para asientos antes de grabar ERP / Anita ctamov.
  *
@@ -202,27 +204,6 @@ final class AsientoBalanceSupport
 
     public static function parseMonto(mixed $valor): float
     {
-        if ($valor === null || $valor === '') {
-            return 0.0;
-        }
-
-        if (is_int($valor) || is_float($valor)) {
-            return (float) $valor;
-        }
-
-        $texto = trim((string) $valor);
-        if ($texto === '') {
-            return 0.0;
-        }
-
-        // Formato AR: 1.234.567,89 o plano 1234.56 / 1234,56
-        if (str_contains($texto, ',') && str_contains($texto, '.')) {
-            $texto = str_replace('.', '', $texto);
-            $texto = str_replace(',', '.', $texto);
-        } elseif (str_contains($texto, ',')) {
-            $texto = str_replace(',', '.', $texto);
-        }
-
-        return is_numeric($texto) ? (float) $texto : 0.0;
+        return NumeroDecimalLocalSupport::aFloat($valor, 0.0);
     }
 }

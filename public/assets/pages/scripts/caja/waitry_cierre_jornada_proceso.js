@@ -1254,6 +1254,7 @@
         jornadaProceso: null,
         lastCuadroData: null,
         previewLotesEmision: null,
+        emisionFacturaEnCurso: false,
     };
 
     function porcentajeProcesoActual() {
@@ -2001,6 +2002,10 @@
     }
 
     function confirmarEmitirFacturaProceso() {
+        if (procesoEstado.emisionFacturaEnCurso) {
+            alert('Ya hay una emisión de facturas del proceso en curso. Espere a que termine.');
+            return;
+        }
         var jp = procesoEstado.jornadaProceso;
         if (jp && jp.factura_proceso_emitida) {
             alert('La factura del proceso ya fue emitida para esta jornada.');
@@ -2035,6 +2040,7 @@
         if (!window.confirm(msgConfirm)) {
             return;
         }
+        procesoEstado.emisionFacturaEnCurso = true;
         var btnConfirmar = el('btn-confirmar-emitir-factura-proceso');
         var btnEmitir = el('btn-proceso-emitir-factura');
         if (btnConfirmar) {
@@ -2090,6 +2096,7 @@
                 });
             }
         }).catch(function (e) {
+            procesoEstado.emisionFacturaEnCurso = false;
             alert(e.message);
             // La factura puede haber quedado grabada aunque la API respondió error
             // (p. ej. fallo de rendgastro o corte de red). Refrescar estado.
@@ -2101,7 +2108,7 @@
             });
         }).finally(function () {
             mostrarOverlayEmitiendoFacturas(false);
-            if (btnConfirmar) {
+            if (!procesoEstado.emisionFacturaEnCurso && btnConfirmar) {
                 btnConfirmar.disabled = false;
             }
             actualizarBotonEmitirFactura(procesoEstado.jornadaProceso);
@@ -2974,6 +2981,7 @@
         }).catch(function (e) {
             setError(e.message);
         }).finally(function () {
+            procesoEstado.emisionFacturaEnCurso = false;
             setProcesoLoading(false);
         });
     }

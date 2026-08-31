@@ -319,6 +319,7 @@ final class AiManualRagSupport
             'manual-propuesta-pago' => 'manual_propuesta_pago',
             'manual-uif' => 'manual_uif',
             'manual-sueldos' => 'manual_sueldos',
+            'manual-lsd-sueldos' => 'manual_lsd_sueldos',
             'manual-ia' => 'manual_ia',
         ];
         $name = $map[$manualDir] ?? null;

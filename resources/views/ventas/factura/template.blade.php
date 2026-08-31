@@ -14,6 +14,10 @@
 				<input type="hidden" name="articulo[]" class="form-control iiarticulo" readonly value="" />
 				<input type="hidden" class="articulo_id" name="articulo_ids[]" value="" >
 				<input type="hidden" class="concepto_venta_id" name="concepto_venta_ids[]" value="" >
+				<input type="hidden" class="contrato_venta_id" name="contrato_venta_ids[]" value="" >
+				<input type="hidden" class="concepto_tag_json" name="concepto_tag_json[]" value="" >
+				<input type="hidden" class="concepto_periodo_desde" name="concepto_periodo_desde[]" value="" >
+				<input type="hidden" class="concepto_periodo_hasta" name="concepto_periodo_hasta[]" value="" >
 				<input type="hidden" class="articulo_id_previo" name="articulo_id_previo[]" value="" >
 				<input type="hidden" class="categoria_id" name="categoria_ids[]" value="" >
 				<input type="hidden" class="subcategoria_id" name="subcategoria_ids[]" value="" >

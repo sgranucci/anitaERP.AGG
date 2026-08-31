@@ -59,8 +59,7 @@ final class GastronomiaInformeGerenteQuery
             ->join('tipotransaccion as tt', 'tt.id', '=', 'v.tipotransaccion_id')
             ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
             ->where('pv.empresa_id', $empresaId)
-            ->whereDate('v.fechajornada', '>=', $fechaDesde)
-            ->whereDate('v.fechajornada', '<=', $fechaHasta)
+            ->whereBetween('v.fechajornada', [$fechaDesde, $fechaHasta])
             ->select([
                 'v.id as venta_id',
                 'v.created_at',
@@ -88,7 +87,7 @@ final class GastronomiaInformeGerenteQuery
             if (! isset($porTurno[$turnoId])) {
                 $porTurno[$turnoId] = [
                     'turno_id' => $turnoId,
-                    'etiqueta' => $this->etiquetaTurno($turnoId),
+                    'etiqueta' => 'Turno #'.$turnoId,
                     'total' => 0.0,
                     'cantidad' => 0,
                 ];
@@ -103,6 +102,22 @@ final class GastronomiaInformeGerenteQuery
         }
 
         usort($filas, fn ($a, $b) => ($b['total'] <=> $a['total']));
+
+        $turnoIds = [];
+        foreach ($filas as $fila) {
+            $tid = (int) ($fila['turno_id'] ?? 0);
+            if ($tid > 0) {
+                $turnoIds[] = $tid;
+            }
+        }
+        $etiquetas = $this->etiquetasTurnos($turnoIds);
+        foreach ($filas as &$fila) {
+            $tid = (int) ($fila['turno_id'] ?? 0);
+            if ($tid > 0) {
+                $fila['etiqueta'] = $etiquetas[$tid] ?? ('Turno #'.$tid);
+            }
+        }
+        unset($fila);
 
         return $filas;
     }
@@ -142,8 +157,7 @@ final class GastronomiaInformeGerenteQuery
                 ->join('venta as v', 'v.id', '=', 'vge.venta_id')
                 ->join('tipotransaccion as tt', 'tt.id', '=', 'v.tipotransaccion_id')
                 ->whereIn('v.puntoventa_id', $pvIds->all())
-                ->whereDate('v.fechajornada', '>=', $fechaDesde)
-                ->whereDate('v.fechajornada', '<=', $fechaHasta)
+                ->whereBetween('v.fechajornada', [$fechaDesde, $fechaHasta])
                 ->groupBy('v.puntoventa_id')
                 ->select([
                     'v.puntoventa_id',
@@ -192,8 +206,7 @@ final class GastronomiaInformeGerenteQuery
             ->leftJoin('descuento_gastronomia as dg', 'dg.id', '=', 'cg.descuento_gastronomia_id')
             ->whereNull('vge.venta_factura_origen_id')
             ->where('pv.empresa_id', $empresaId)
-            ->whereDate('v.fechajornada', '>=', $fechaDesde)
-            ->whereDate('v.fechajornada', '<=', $fechaHasta)
+            ->whereBetween('v.fechajornada', [$fechaDesde, $fechaHasta])
             ->select([
                 'dg.id as descuento_id',
                 'dg.codigo as descuento_codigo',
@@ -241,8 +254,7 @@ final class GastronomiaInformeGerenteQuery
             ->join('tipotransaccion as tt', 'tt.id', '=', 'v.tipotransaccion_id')
             ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
             ->where('pv.empresa_id', $empresaId)
-            ->whereDate('v.fechajornada', '>=', $fechaDesde)
-            ->whereDate('v.fechajornada', '<=', $fechaHasta)
+            ->whereBetween('v.fechajornada', [$fechaDesde, $fechaHasta])
             ->selectRaw('COALESCE(SUM('.GastronomiaVentaComprobanteSignoSupport::sqlTotalComprobante().'), 0) as total')
             ->first();
 
@@ -344,8 +356,7 @@ final class GastronomiaInformeGerenteQuery
             ->join('venta as v', 'v.id', '=', 'vge.venta_id')
             ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
             ->where('pv.empresa_id', $empresaId)
-            ->whereDate('v.fechajornada', '>=', $fechaDesde)
-            ->whereDate('v.fechajornada', '<=', $fechaHasta);
+            ->whereBetween('v.fechajornada', [$fechaDesde, $fechaHasta]);
     }
 
     /**
@@ -417,20 +428,24 @@ final class GastronomiaInformeGerenteQuery
         return (int) ($elegido->turno_gastronomia_id ?? 0);
     }
 
-    private function etiquetaTurno(int $turnoId): string
+    /**
+     * @param  list<int>  $turnoIds
+     * @return array<int, string>
+     */
+    private function etiquetasTurnos(array $turnoIds): array
     {
-        if ($turnoId <= 0) {
-            return 'Sin turno';
+        $turnoIds = array_values(array_unique(array_filter($turnoIds, static fn (int $id) => $id > 0)));
+        if ($turnoIds === []) {
+            return [];
         }
 
-        $turno = TurnoGastronomia::query()->find($turnoId);
-        if ($turno === null) {
-            return 'Turno #'.$turnoId;
+        $out = [];
+        foreach (TurnoGastronomia::query()->whereIn('id', $turnoIds)->get() as $turno) {
+            $nombre = trim((string) $turno->nombre);
+            $horario = $turno->etiquetaHorario();
+            $out[(int) $turno->id] = $nombre !== '' ? $nombre.' ('.$horario.')' : 'Turno #'.$turno->id;
         }
 
-        $nombre = trim((string) $turno->nombre);
-        $horario = $turno->etiquetaHorario();
-
-        return $nombre !== '' ? $nombre.' ('.$horario.')' : 'Turno #'.$turnoId;
+        return $out;
     }
 }

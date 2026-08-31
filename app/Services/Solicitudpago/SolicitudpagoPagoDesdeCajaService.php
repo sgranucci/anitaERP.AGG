@@ -4,6 +4,7 @@ namespace App\Services\Solicitudpago;
 
 use App\Models\Caja\Caja_Movimiento;
 use App\Repositories\Solicitudpago\SolicitudpagoRepositoryInterface;
+use App\Services\Sueldos\LiquidacionSolicitudpagoService;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use Illuminate\Support\Facades\Log;
 
@@ -43,6 +44,8 @@ class SolicitudpagoPagoDesdeCajaService
                 SolicitudpagoEstados::PAGADA,
                 self::leyendaPagadaDesdeMovimiento($movimiento)
             );
+            $sp = $this->repository->findOrFail($spId);
+            app(LiquidacionSolicitudpagoService::class)->marcarPagada($sp);
         } catch (\Throwable $e) {
             Log::error('solicitudpago.pago_caja', [
                 'solicitudpago_id' => $spId,
@@ -78,6 +81,8 @@ class SolicitudpagoPagoDesdeCajaService
             SolicitudpagoEstados::AUTORIZADA,
             $leyenda !== '' ? $leyenda : 'Reabre pago (IE '.$movimiento->id.')'
         );
+        $sp = $this->repository->findOrFail($spId);
+        app(LiquidacionSolicitudpagoService::class)->revertirPago($sp);
     }
 
     private static function leyendaPagadaDesdeMovimiento(Caja_Movimiento $movimiento): string

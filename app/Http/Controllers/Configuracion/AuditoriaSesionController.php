@@ -28,15 +28,20 @@ class AuditoriaSesionController extends Controller
 
         $filtros = BitacoraAccesoListadoFiltros::resolverDesdeRequest($request);
         $filtrosQuery = BitacoraAccesoListadoFiltros::paraQueryString($filtros);
-        $disco = BitacoraAccesoDiscoSupport::resumenCompleto($filtros);
 
         $coleccion = null;
         $coleccionDatos = null;
         $contenidoLog = null;
         $avisoDatos = null;
         $catalogoDatos = [];
+        $archivosLog = [];
 
         $pestana = (string) ($filtros['pestana'] ?? 'navegacion');
+
+        // AVG/COUNT sobre bitácora (~millones) solo en pestaña Navegación (y cacheados).
+        $disco = BitacoraAccesoDiscoSupport::resumenCompleto($filtros, [
+            'incluir_proceso' => $pestana === 'navegacion',
+        ]);
 
         if ($pestana === 'navegacion' && Schema::hasTable('bitacora_acceso')) {
             $coleccion = BitacoraAccesoListadoFiltros::queryBase($filtros)->paginate(25);
@@ -44,13 +49,9 @@ class AuditoriaSesionController extends Controller
         }
 
         if ($pestana === 'archivos') {
+            $archivosLog = ArchivoLogSupport::listar();
             $archivo = (string) ($filtros['archivo_log'] ?? '');
-            if ($archivo === '') {
-                $lista = ArchivoLogSupport::listar();
-                $archivo = $lista[0]['nombre'] ?? '';
-                $filtros['archivo_log'] = $archivo;
-                $filtrosQuery = BitacoraAccesoListadoFiltros::paraQueryString($filtros);
-            }
+            // Solo leer contenido cuando el usuario eligió un archivo (no al abrir la tabla).
             if ($archivo !== '') {
                 $contenidoLog = ArchivoLogSupport::leerCola($archivo, (int) $filtros['lineas_log']);
             }
@@ -117,9 +118,32 @@ class AuditoriaSesionController extends Controller
                     $perPage = 25;
                     $base = AuditoriaDatosListadoFiltros::queryBase($filtros)
                         ->leftJoin('usuario', 'usuario.id', '=', 'audits.user_id')
-                        ->select('audits.*', 'usuario.nombre as usuario_nombre', 'usuario.usuario as usuario_login');
-                    $total = (clone $base)->count('audits.id');
-                    $rows = (clone $base)->forPage($page, $perPage)->get();
+                        ->select(
+                            'audits.id',
+                            'audits.user_id',
+                            'audits.event',
+                            'audits.auditable_type',
+                            'audits.auditable_id',
+                            'audits.old_values',
+                            'audits.new_values',
+                            'audits.created_at',
+                            'usuario.nombre as usuario_nombre',
+                            'usuario.usuario as usuario_login'
+                        );
+
+                    $tieneTipo = ($filtros['auditable_type'] ?? '') !== '';
+                    // Con modelo: COUNT es barato vía índice. Solo usuario: evitar COUNT (scan).
+                    if ($tieneTipo) {
+                        $total = (clone $base)->count('audits.id');
+                        $rows = (clone $base)->forPage($page, $perPage)->get();
+                    } else {
+                        $rows = (clone $base)->forPage($page, $perPage + 1)->get();
+                        $tieneMas = $rows->count() > $perPage;
+                        $rows = $rows->take($perPage)->values();
+                        // total sintético para LengthAware (links prev/next sin COUNT real).
+                        $total = (($page - 1) * $perPage) + $rows->count() + ($tieneMas ? 1 : 0);
+                    }
+
                     $items = $rows->map(static function ($row) {
                         $row->diff = AuditoriaDatosListadoFiltros::diffValores(
                             $row->old_values ?? null,
@@ -161,7 +185,7 @@ class AuditoriaSesionController extends Controller
             'coleccionDatos' => $coleccionDatos,
             'contenidoLog' => $contenidoLog,
             'usuarioFiltro' => $usuarioFiltro,
-            'archivosLog' => ArchivoLogSupport::listar(),
+            'archivosLog' => $archivosLog,
             'catalogoDatos' => $catalogoDatos,
             'favoritosAnclados' => $favoritosAnclados,
             'avisoDatos' => $avisoDatos,

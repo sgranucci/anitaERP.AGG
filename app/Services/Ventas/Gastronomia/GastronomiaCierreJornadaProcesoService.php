@@ -7,6 +7,7 @@ use App\Models\Ventas\JornadaGastronomia;
 use App\Models\Ventas\VentaGastronomiaEmision;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use App\Support\Ventas\Gastronomia\CierreJornadaAnitaCompensacionOverlaySupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaCuadroDetalleSupport;
@@ -535,20 +536,23 @@ final class GastronomiaCierreJornadaProcesoService
         }
 
         $contextoPct = $this->contextoRecodificacionPorcentaje($jornada);
-        CierreJornadaProcesoRedistribucionSupport::validarPorcentajeNoExcedeRecodificable(
+        $ajuste = CierreJornadaProcesoRedistribucionSupport::resolverPorcentajeQueEntra(
             (float) $contextoPct['total_facturacion_anita'],
-            $porcentaje,
             (float) $contextoPct['total_sin_facturar_recodificable'],
+            $porcentaje,
+            (float) ($contextoPct['porcentaje_objetivo'] ?? $porcentaje),
         );
+        $porcentaje = (float) $ajuste['porcentaje'];
 
         $clasificacion = $this->clasificacionConRedistribucion($jornada, $porcentaje);
-        $this->persistirPorcentajeEnSnapshot($jornadaId, $porcentaje, $clasificacion);
+        $this->persistirPorcentajeEnSnapshot($jornadaId, $porcentaje, $clasificacion, $ajuste);
         $this->sincronizarMetadatosEmisionSnapshot($jornada, $clasificacion, $porcentaje);
 
         return [
             'ok' => true,
             'porcentaje' => $clasificacion['porcentaje'],
             'objetivo_importe' => $clasificacion['objetivo_importe'],
+            'tope_recodificacion' => $ajuste,
             'redistribucion' => $clasificacion['redistribucion'],
             'grilla' => $clasificacion['grilla'],
             'cuadro_filas' => $clasificacion['cuadro_filas'],
@@ -750,11 +754,13 @@ final class GastronomiaCierreJornadaProcesoService
 
         if ($pct > 0.0001) {
             $contextoPct = $this->contextoRecodificacionPorcentaje($jornada);
-            CierreJornadaProcesoRedistribucionSupport::validarPorcentajeNoExcedeRecodificable(
+            $ajuste = CierreJornadaProcesoRedistribucionSupport::resolverPorcentajeQueEntra(
                 (float) $contextoPct['total_facturacion_anita'],
-                $pct,
                 (float) $contextoPct['total_sin_facturar_recodificable'],
+                $pct,
+                (float) ($contextoPct['porcentaje_objetivo'] ?? $pct),
             );
+            $pct = (float) $ajuste['porcentaje'];
 
             $clasificacionBase = CierreJornadaProcesoClasificacionSupport::clasificar($lineas, $empresaId, $totalesAnita);
             $facturasAnitaEfectivo = CierreJornadaFacturadoAnitaSupport::movimientosEfectivoParaCompensacion(
@@ -820,7 +826,10 @@ final class GastronomiaCierreJornadaProcesoService
      */
     private function obtenerCargadoParaProceso(JornadaGastronomia $jornada, bool $refrescarWaitry): array
     {
+        $payloadPersistente = [];
         if ($refrescarWaitry) {
+            $prev = $this->snapshotDeJornada((int) $jornada->id);
+            $payloadPersistente = CierreJornadaProcesoJornadaSupport::payloadProcesoPersistente($prev);
             GastronomiaCierreJornadaProcesoSnapshot::query()
                 ->where('jornada_gastronomia_id', $jornada->id)
                 ->delete();
@@ -828,6 +837,7 @@ final class GastronomiaCierreJornadaProcesoService
             $snapshot = $this->snapshotDeJornada((int) $jornada->id);
             if ($snapshot !== null) {
                 if (CierreJornadaProcesoJornadaSupport::debeInvalidarSnapshot($jornada, $snapshot)) {
+                    $payloadPersistente = CierreJornadaProcesoJornadaSupport::payloadProcesoPersistente($snapshot);
                     $snapshot->delete();
                 } else {
                     $meta = $snapshot->meta();
@@ -850,7 +860,7 @@ final class GastronomiaCierreJornadaProcesoService
         $cargado = $this->cierreTotemJornadaService->movimientosParaProcesoCaja($jornada);
         $empresaId = (int) $jornada->empresa_id;
         $cargado['lineas'] = $this->enriquecerLineasConCobranzaAnita($cargado['lineas'], $empresaId);
-        $this->guardarSnapshotCongelado($jornada, $cargado);
+        $this->guardarSnapshotCongelado($jornada, $cargado, $payloadPersistente);
         $cargado['meta']['congelado'] = true;
         $cargado['meta']['congelado_en'] = now()->toIso8601String();
 
@@ -877,7 +887,9 @@ final class GastronomiaCierreJornadaProcesoService
      *   total_pendiente_qr_mp: float,
      *   porcentaje_maximo_recodificacion: float,
      *   porcentaje_objetivo: float,
-     *   porcentaje_aplicar: float
+     *   porcentaje_aplicar: float,
+     *   tope_bajado: bool,
+     *   tope_recodificacion: array<string, mixed>
      * }
      */
     private function contextoRecodificacionPorcentaje(JornadaGastronomia $jornada): array
@@ -892,22 +904,23 @@ final class GastronomiaCierreJornadaProcesoService
             $clasificacion['movimientos'],
         );
         $totalFacturacion = round((float) ($clasificacion['total_facturacion'] ?? 0), 2);
-        $maximo = CierreJornadaProcesoRedistribucionSupport::porcentajeMaximoSobreFacturacion(
+        $objetivo = CierreJornadaProcesoConfigSupport::resolverPorcentajeParaEmpresa($empresaId);
+        $ajuste = CierreJornadaProcesoRedistribucionSupport::resolverPorcentajeQueEntra(
             $totalFacturacion,
             $recodificable,
+            $objetivo,
+            $objetivo,
         );
-        $objetivo = CierreJornadaProcesoConfigSupport::resolverPorcentajeParaEmpresa($empresaId);
 
         return [
             'total_facturacion_anita' => $totalFacturacion,
             'total_sin_facturar_recodificable' => $recodificable,
             'total_pendiente_qr_mp' => self::totalPendienteQrMpDesdeGrilla($clasificacion['grilla'] ?? []),
-            'porcentaje_maximo_recodificacion' => $maximo,
+            'porcentaje_maximo_recodificacion' => (float) $ajuste['porcentaje_maximo_teorico'],
             'porcentaje_objetivo' => $objetivo,
-            'porcentaje_aplicar' => CierreJornadaProcesoConfigSupport::resolverPorcentajeParaJornada(
-                $empresaId,
-                $maximo,
-            ),
+            'porcentaje_aplicar' => (float) $ajuste['porcentaje'],
+            'tope_bajado' => (bool) $ajuste['tope_bajado'],
+            'tope_recodificacion' => $ajuste,
         ];
     }
 
@@ -923,9 +936,13 @@ final class GastronomiaCierreJornadaProcesoService
 
     /**
      * @param  array{lineas: list<array<string, mixed>>, meta: array<string, mixed>}  $cargado
+     * @param  array<string, mixed>  $payloadPersistente
      */
-    private function guardarSnapshotCongelado(JornadaGastronomia $jornada, array $cargado): void
-    {
+    private function guardarSnapshotCongelado(
+        JornadaGastronomia $jornada,
+        array $cargado,
+        array $payloadPersistente = [],
+    ): void {
         $fecha = $jornada->fecha_jornada?->format('Y-m-d') ?? Carbon::today()->format('Y-m-d');
         $usuarioId = Auth::id();
         $ctx = CierreJornadaProcesoJornadaSupport::contexto($jornada);
@@ -936,7 +953,7 @@ final class GastronomiaCierreJornadaProcesoService
             [
                 'empresa_id' => (int) $jornada->empresa_id,
                 'fecha_jornada' => $fecha,
-                'payload' => [
+                'payload' => array_merge($payloadPersistente, [
                     'lineas' => $cargado['lineas'],
                     'meta' => $cargado['meta'],
                     'snapshot_provisional' => $provisional,
@@ -945,7 +962,7 @@ final class GastronomiaCierreJornadaProcesoService
                     'waitry_order_id_hasta' => $cargado['meta']['waitry_order_id_hasta'] ?? null,
                     'tramo_ultimo_ticket_origen' => $cargado['meta']['tramo_ultimo_ticket_origen'] ?? null,
                     'lineas_schema_version' => CierreJornadaProcesoJornadaSupport::LINEAS_SCHEMA_VERSION,
-                ],
+                ]),
                 'porcentaje' => null,
                 'usuario_id' => $usuarioId ? (int) $usuarioId : null,
                 'congelado_en' => now(),
@@ -963,9 +980,14 @@ final class GastronomiaCierreJornadaProcesoService
 
     /**
      * @param  array<string, mixed>  $clasificacion
+     * @param  array<string, mixed>|null  $ajusteTope
      */
-    private function persistirPorcentajeEnSnapshot(int $jornadaId, float $porcentaje, array $clasificacion): void
-    {
+    private function persistirPorcentajeEnSnapshot(
+        int $jornadaId,
+        float $porcentaje,
+        array $clasificacion,
+        ?array $ajusteTope = null,
+    ): void {
         $snapshot = $this->snapshotDeJornada($jornadaId);
         if ($snapshot === null) {
             return;
@@ -978,6 +1000,9 @@ final class GastronomiaCierreJornadaProcesoService
         $payload['porcentaje'] = round($porcentaje, 4);
         $payload['redistribucion'] = $clasificacion['redistribucion'] ?? null;
         $payload['recalculo_aplicado_en'] = now()->toIso8601String();
+        if ($ajusteTope !== null) {
+            $payload['tope_recodificacion'] = $ajusteTope;
+        }
 
         $snapshot->porcentaje = round($porcentaje, 4);
         $snapshot->payload = $payload;
@@ -991,10 +1016,7 @@ final class GastronomiaCierreJornadaProcesoService
     {
         $ctx = $this->contextoRecodificacionPorcentaje($jornada);
 
-        return CierreJornadaProcesoConfigSupport::resolverPorcentajeParaJornada(
-            (int) $jornada->empresa_id,
-            (float) ($ctx['porcentaje_maximo_recodificacion'] ?? 0),
-        );
+        return (float) ($ctx['porcentaje_aplicar'] ?? 0);
     }
 
     /**
@@ -1144,17 +1166,20 @@ final class GastronomiaCierreJornadaProcesoService
         foreach ($lineas as $ln) {
             $wid = (int) ($ln['waitry_order_id'] ?? 0);
             if ($wid > 0 && ! empty($ln['facturada_erp'])) {
-                $waitryIds[] = $wid;
+                $waitryIds[$wid] = true;
             }
         }
         if ($waitryIds === []) {
             return $lineas;
         }
 
+        $waitryIds = array_keys($waitryIds);
         $totemId = (int) (GastronomiaCuentacajaTotem::cuentaParaEmpresa($empresaId)['id'] ?? 0);
 
+        // Solo las emisiones de estos order_id (antes se cargaban TODAS las de la empresa).
         $emisiones = VentaGastronomiaEmision::query()
             ->with(['venta.cobranzasDirectas', 'venta.caja_movimientos.cobranzas', 'cuenta', 'waitryComandaEnvio'])
+            ->whereIn('waitry_order_id', $waitryIds)
             ->whereHas('venta', fn ($q) => $q->whereHas('puntoventas', fn ($pv) => $pv->where('empresa_id', $empresaId)))
             ->orderByDesc('venta_id')
             ->get();
@@ -1162,7 +1187,7 @@ final class GastronomiaCierreJornadaProcesoService
         $mapEmisiones = [];
         foreach ($emisiones as $emision) {
             $wid = VentaGastronomiaEmisionWaitrySupport::resolverOrderId($emision);
-            if ($wid > 0 && in_array($wid, $waitryIds, true) && ! isset($mapEmisiones[$wid])) {
+            if ($wid > 0 && ! isset($mapEmisiones[$wid])) {
                 $mapEmisiones[$wid] = $emision;
             }
         }
@@ -1493,7 +1518,7 @@ final class GastronomiaCierreJornadaProcesoService
             'El efectivo registrado en Waitry (cash) no se facturará; queda en fila aparte.',
             'Las facturas cobradas con TOTEM en Anita generan asiento puente (Debe medio real / Haber TOTEM); el QR de esas facturas entra en el cupo de redistribución a efectivo.',
             'El porcentaje objetivo (default 25% sobre facturado Anita) mueve QR/Totalcoin/MP→efectivo en Waitry sin facturar (orden waitry_order_id) y arma el 3er asiento (fondo fijo). Si el disponible recodificable es menor, se aplica ese tope (p. ej. Kandiko 18,46% el 19/08). Compensa el mismo importe en facturas Anita cobradas en efectivo→mismo medio (memoria).',
-            'El % no puede implicar recodificar más de lo cobrado Waitry sin facturar en QR/Totalcoin + MP; si excede, el pendiente QR/MP a facturar quedaría negativo.',
+            'El % no puede implicar recodificar más de lo cobrado Waitry sin facturar en QR/Totalcoin + MP. Si el tope no entra por redondeo, el sistema baja el % de esa jornada (sin pisar el objetivo de la empresa) y lo informa en el correo.',
             'Haga clic en un importe del cuadro para ver comandas con fecha/hora y conciliar contra Waitry.',
             'Consola: php artisan gastronomia:diagnostico-cuadro-cierre {empresa} {fecha} {fila} {medio} [--csv=ruta]',
             'El preview de asientos y comandas puede usarse con jornada abierta; «Emitir factura del proceso» exige jornada cerrada y snapshot definitivo.',
@@ -1661,6 +1686,7 @@ final class GastronomiaCierreJornadaProcesoService
     /**
      * Waitry pagado sin facturar en Anita para informe gerente (solo jornada abierta).
      * Consulta Waitry en vivo; no persiste snapshot.
+     * Cache corta: evita reconsultar Waitry + clasificar en cada refresh del panel.
      *
      * @return array{
      *   empresa_id:int,
@@ -1678,6 +1704,38 @@ final class GastronomiaCierreJornadaProcesoService
         }
 
         $fecha = $this->normalizarFecha($fechaJornada);
+        $cacheKey = 'gastronomia_informe_gerente_waitry_v1_'.$empresaId.'_'.$fecha;
+        if (Cache::has($cacheKey)) {
+            $cached = Cache::get($cacheKey);
+            if ($cached === '__null__') {
+                return null;
+            }
+
+            return is_array($cached) ? $cached : null;
+        }
+
+        $resultado = $this->calcularWaitryPagadoSinFacturarParaInformeGerente($empresaId, $fecha);
+        Cache::put(
+            $cacheKey,
+            $resultado === null ? '__null__' : $resultado,
+            now()->addMinutes(3),
+        );
+
+        return $resultado;
+    }
+
+    /**
+     * @return array{
+     *   empresa_id:int,
+     *   total:float,
+     *   cantidad_ordenes:int,
+     *   puntoventa_id:int,
+     *   codigo:string,
+     *   nombre:string
+     * }|null
+     */
+    private function calcularWaitryPagadoSinFacturarParaInformeGerente(int $empresaId, string $fecha): ?array
+    {
         $jornada = JornadaGastronomia::query()
             ->where('empresa_id', $empresaId)
             ->whereDate('fecha_jornada', $fecha)
@@ -1690,10 +1748,15 @@ final class GastronomiaCierreJornadaProcesoService
 
         $cargado = $this->cierreTotemJornadaService->movimientosParaProcesoCaja($jornada);
         $lineas = $this->filtrarLineasOperativasWaitry($cargado['lineas']);
-        $lineas = $this->enriquecerLineasConCobranzaAnita($lineas, $empresaId);
 
-        $totalesAnita = CierreJornadaFacturadoAnitaSupport::totalesJornadaEmpresa($empresaId, $fecha);
-        $clasificacion = CierreJornadaProcesoClasificacionSupport::clasificar($lineas, $empresaId, $totalesAnita);
+        // Solo hace falta el pendiente a facturar: no enriquecer cobranzas Anita ni totales
+        // del cuadro (ahorra ~20–25 s cargando emisiones de toda la empresa).
+        foreach ($lineas as &$ln) {
+            $ln['anita_es_totem'] = (bool) ($ln['waitry_cobro_totem'] ?? false);
+        }
+        unset($ln);
+
+        $clasificacion = CierreJornadaProcesoClasificacionSupport::clasificar($lineas, $empresaId, null);
         $total = round((float) ($clasificacion['total_pendiente_facturar'] ?? 0), 2);
         if ($total <= 0.0001) {
             return null;

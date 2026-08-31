@@ -19,7 +19,7 @@ class Venta_Emision extends Model implements Auditable
     use \OwenIt\Auditing\Auditable;
 
     protected $fillable = ['venta_id','numeroitem', 'pedido_combinacion_id', 'ordentrabajo_id', 'lotestock',
-                        'articulo_id', 'concepto_venta_id', 'concepto_ordenventa_id', 'combinacion_id', 'detalle', 'comentario_cocina', 'modulo_id', 'talle_id', 
+                        'articulo_id', 'concepto_venta_id', 'contrato_venta_id', 'concepto_ordenventa_id', 'combinacion_id', 'detalle', 'comentario_cocina', 'modulo_id', 'talle_id', 
                         'cantidad', 'pieza', 'caja',
                         'precio', 
                         'impuesto_id', 'incluyeimpuesto', 
@@ -58,6 +58,16 @@ class Venta_Emision extends Model implements Auditable
     public function conceptoVenta()
     {
         return $this->belongsTo(Concepto_Venta::class, 'concepto_venta_id');
+    }
+
+    public function contratoVenta()
+    {
+        return $this->belongsTo(Contrato_Venta::class, 'contrato_venta_id');
+    }
+
+    public function tagValores()
+    {
+        return $this->hasMany(Venta_Emision_Tag_Valor::class, 'venta_emision_id');
     }
 
     public function conceptoOrdenventa()

@@ -29,7 +29,9 @@ class Caja_Movimiento extends Model implements Auditable
                             'detalle',
                             'usuario_id',
                             'ordenservicio_id',
-                            'rendicionreceptivo_id'];
+                            'rendicionreceptivo_id',
+                            'proveedor_formapago_id',
+                            'cbu_pago'];
 
     protected $table = 'caja_movimiento';
 

@@ -34,8 +34,12 @@
 @if (($archivosLog ?? []) === [])
     <div class="alert alert-warning mb-0">No se encontraron archivos <code>.log</code> en storage/logs.</div>
 @else
+    <p class="text-muted small mb-2">
+        Elegí un archivo en el listado o en el selector y pulsá <strong>Ver log</strong> para leer la cola.
+        Abrir la tabla no carga el contenido (los logs diarios pueden pesar varios MB).
+    </p>
     <div class="table-responsive mb-3">
-        <table class="table table-sm table-bordered auditoria-tabla mb-0">
+        <table class="table table-sm table-bordered auditoria-tabla mb-0" id="tabla-paginada">
             <thead>
                 <tr>
                     <th>Archivo</th>
@@ -58,6 +62,12 @@
                 @endforeach
             </tbody>
         </table>
+    </div>
+@endif
+
+@if (! $contenidoLog && ($archivosLog ?? []) !== [])
+    <div class="alert alert-light border mb-0">
+        Seleccioná un archivo para ver las últimas líneas.
     </div>
 @endif
 

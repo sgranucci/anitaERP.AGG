@@ -77,6 +77,12 @@ class Empleado_Sueldos extends Model implements Auditable
         'marca_reduccion_sijp',
         'tipo_empresa_sijp',
         'regimen_sijp',
+        'actividad_sijp',
+        'localidad_afip',
+        'cuit_agencia_eventual',
+        'lsd_legajo_principal',
+        'lsd_cct',
+        'lsd_scvo',
         'a_cargo_de',
         'puesto_jefe',
         'clave_alta_temprana',
@@ -93,6 +99,9 @@ class Empleado_Sueldos extends Model implements Auditable
         'centrocosto_id' => 'integer',
         'estado_civil' => 'integer',
         'confidencial' => 'boolean',
+        'lsd_legajo_principal' => 'boolean',
+        'lsd_cct' => 'boolean',
+        'lsd_scvo' => 'boolean',
         'sueldo_basico' => 'decimal:4',
         'jornal_dia' => 'decimal:4',
         'jornal_hora' => 'decimal:4',
@@ -242,6 +251,12 @@ class Empleado_Sueldos extends Model implements Auditable
     {
         return $this->hasMany(Empleado_Familiar_Sueldos::class, 'empleado_id')
             ->orderBy('tipo')->orderBy('apellido');
+    }
+
+    public function revistasLsd()
+    {
+        return $this->hasMany(Lsd_Empleado_Revista_Sueldos::class, 'empleado_id')
+            ->orderBy('nro');
     }
 
     public function cuotaMovimientos()

@@ -112,6 +112,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
             'pais_uif.nombre as nombrepais',
             'cliente_uif.telefono as telefono',
             'cliente_uif.email as email')
+            ->selectRaw('(SELECT COUNT(*) FROM cliente_premio_uif cp WHERE cp.cliente_uif_id = cliente_uif.id) as premios_count')
             ->selectRaw('(SELECT cp.fechaentrega FROM cliente_premio_uif cp WHERE cp.cliente_uif_id = cliente_uif.id ORDER BY cp.fechaentrega DESC, cp.id DESC LIMIT 1) as ultimo_premio_fecha')
             ->selectRaw('(SELECT cp.monto FROM cliente_premio_uif cp WHERE cp.cliente_uif_id = cliente_uif.id ORDER BY cp.fechaentrega DESC, cp.id DESC LIMIT 1) as ultimo_premio_monto')
             ->selectRaw('(SELECT j.nombre FROM cliente_premio_uif cp INNER JOIN juego_uif j ON j.id = cp.juego_uif_id WHERE cp.cliente_uif_id = cliente_uif.id ORDER BY cp.fechaentrega DESC, cp.id DESC LIMIT 1) as ultimo_premio_juego')
@@ -1503,5 +1504,131 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
         }
 
         return $profesion_id;
+    }
+
+    /**
+     * HTML de filas para el modal de consulta de clientes UIF.
+     *
+     * @param  string|null  $consulta
+     * @param  string|null  $anitaOrigen  Filtrar por origen (biyemas|kandiko|rebisco)
+     */
+    public function consultaCliente_UifHtml($consulta = null, $anitaOrigen = null): string
+    {
+        $consulta = trim((string) ($consulta ?? ''));
+        $anitaOrigen = strtolower(trim((string) ($anitaOrigen ?? '')));
+
+        $query = $this->model->newQuery()
+            ->with(['tipodocumentos:id,nombre'])
+            ->withCount(['cliente_premios_uif', 'cliente_archivos_uif'])
+            ->orderByDesc('id')
+            ->limit(80);
+
+        if ($anitaOrigen !== '' && array_key_exists($anitaOrigen, config('uif.anita_origenes', []))) {
+            $query->where('anita_origen', $anitaOrigen);
+        } else {
+            $permitidos = ClienteUifOrigenPcSupport::contexto()['origenes_permitidos'] ?? [];
+            if (is_array($permitidos) && $permitidos !== []) {
+                $query->whereIn('anita_origen', $permitidos);
+            }
+        }
+
+        if ($consulta !== '') {
+            $like = '%'.$consulta.'%';
+            $query->where(function ($q) use ($consulta, $like) {
+                if (ctype_digit($consulta)) {
+                    $q->orWhere('id', (int) $consulta)
+                        ->orWhere('numerodocumento', 'like', $like)
+                        ->orWhere('inroclienteid', (int) $consulta);
+                } else {
+                    $q->orWhere('numerodocumento', 'like', $like)
+                        ->orWhere('nombre', 'like', $like)
+                        ->orWhere('cuit', 'like', $like);
+                }
+            });
+        }
+
+        $rows = $query->get();
+        $puedeAbrirAbm = function_exists('can') && (
+            can('editar-cliente-uif', false) || can('listar-cliente-uif', false)
+        );
+
+        $html = '';
+        if ($rows->isEmpty()) {
+            return '<tr><td colspan="7" class="text-center text-muted">Sin resultados</td></tr>';
+        }
+
+        foreach ($rows as $row) {
+            $origenLabel = ClienteUifOrigenPcSupport::labelOrigen((string) ($row->anita_origen ?? ''));
+            $html .= '<tr>';
+            $html .= '<td class="id">'.(int) $row->id.'</td>';
+            $html .= '<td class="origen">'.e($origenLabel).'</td>';
+            $html .= '<td class="nombre">'.e((string) $row->nombre).'</td>';
+            $html .= '<td class="tipodoc">'.e((string) ($row->tipodocumentos->nombre ?? '')).'</td>';
+            $html .= '<td class="numerodocumento">'.e((string) $row->numerodocumento).'</td>';
+            $html .= '<td class="premios">'.(int) ($row->cliente_premios_uif_count ?? 0).'</td>';
+            $html .= '<td class="text-nowrap">';
+            $html .= '<a class="btn btn-warning btn-sm eligeconsultacliente_uif" href="javascript:void(0)">Elegir</a>';
+            if ($puedeAbrirAbm) {
+                $url = route('edita_cliente_uif', [
+                    'id' => (int) $row->id,
+                    'origen' => 'modal_consulta',
+                    'vista' => 'consulta',
+                ]);
+                $html .= ' <a class="btn btn-info btn-sm" href="'.e($url).'" target="_blank" rel="noopener">Consultar</a>';
+            }
+            $html .= '</td></tr>';
+        }
+
+        return $html;
+    }
+
+    /**
+     * Resumen JSON para resolver cliente por ID (blur/Enter del campo consulta).
+     *
+     * @return array<string, mixed>|null
+     */
+    public function findResumenParaConsulta(int $id): ?array
+    {
+        $cliente = $this->model->newQuery()
+            ->with(['tipodocumentos:id,nombre'])
+            ->withCount(['cliente_premios_uif', 'cliente_archivos_uif', 'cliente_riesgos_uif'])
+            ->with(['cliente_premios_uif' => fn ($q) => $q
+                ->with('juegos_uif:id,nombre')
+                ->orderByDesc('fechaentrega')
+                ->orderByDesc('id')
+                ->limit(1)])
+            ->find($id);
+
+        if ($cliente === null) {
+            return null;
+        }
+
+        $ultimo = $cliente->cliente_premios_uif->first();
+        $fechaUltimo = $ultimo && $ultimo->fechaentrega
+            ? $ultimo->fechaentrega->format('d/m/Y H:i')
+            : null;
+
+        return [
+            'id' => (int) $cliente->id,
+            'nombre' => (string) ($cliente->nombre ?? ''),
+            'numerodocumento' => (string) ($cliente->numerodocumento ?? ''),
+            'tipodocumento' => (string) ($cliente->tipodocumentos->nombre ?? 'DNI'),
+            'anita_origen' => (string) ($cliente->anita_origen ?? ''),
+            'origen_label' => ClienteUifOrigenPcSupport::labelOrigen((string) ($cliente->anita_origen ?? '')),
+            'domicilio' => (string) ($cliente->domicilio ?? ''),
+            'telefono' => (string) ($cliente->telefono ?? ''),
+            'email' => (string) ($cliente->email ?? ''),
+            'estado' => (string) ($cliente->estado ?? ''),
+            'inroclienteid' => $cliente->inroclienteid !== null ? (int) $cliente->inroclienteid : null,
+            'premios_count' => (int) ($cliente->cliente_premios_uif_count ?? 0),
+            'archivos_count' => (int) ($cliente->cliente_archivos_uif_count ?? 0),
+            'riesgos_count' => (int) ($cliente->cliente_riesgos_uif_count ?? 0),
+            'ultimo_premio' => $ultimo ? [
+                'fechaentrega' => $fechaUltimo,
+                'monto' => (float) ($ultimo->monto ?? 0),
+                'monto_fmt' => number_format((float) ($ultimo->monto ?? 0), 2, ',', '.'),
+                'juego' => (string) (optional($ultimo->juegos_uif)->nombre ?? ''),
+            ] : null,
+        ];
     }
 }

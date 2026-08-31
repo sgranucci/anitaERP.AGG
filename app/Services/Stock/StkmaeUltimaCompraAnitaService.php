@@ -4,6 +4,8 @@ namespace App\Services\Stock;
 
 use App\ApiAnita;
 use App\Support\Stock\ArticuloPrecioUltimaCompraSupport;
+use App\Support\Stock\StockAnitaBridgeSupport;
+use App\Support\Stock\StkmaePrecioCompraAnitaBridgeSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -95,7 +97,103 @@ class StkmaeUltimaCompraAnitaService
     }
 
     /**
+     * Última compra del SKU unificando Anita de todas las empresas (AGG multi-bridge).
+     * Elige stkm_pre_compra3 de la fila con stkm_fe_ult_compra más reciente y precio &gt; 0.
+     *
+     * @param  list<string>  $skus
+     * @return array<string, array{
+     *     precio: float|null,
+     *     moneda_id: int|null,
+     *     compra1: float|null,
+     *     compra2: float|null,
+     *     compra3: float|null,
+     *     fecha_ymd: string|null,
+     *     empresa_id: int|null
+     * }>
+     */
+    public function obtenerDatosUltimaCompraUnificadaPorSkus(array $skus): array
+    {
+        $skus = array_values(array_unique(array_filter(array_map(
+            static fn ($s) => trim((string) $s),
+            $skus
+        ), static fn ($s) => $s !== '')));
+
+        if ($skus === []) {
+            return [];
+        }
+
+        $codigoPorSku = [];
+        foreach ($skus as $sku) {
+            $codigoPorSku[$sku] = $this->codigoAnitaDesdeSku($sku);
+        }
+        $codigos = array_values(array_unique($codigoPorSku));
+
+        /** @var array<string, array{precio: float, moneda_id: int|null, compra1: float|null, compra2: float|null, compra3: float|null, fecha_ymd: string, empresa_id: int, fe_int: int}> $mejorPorCodigo */
+        $mejorPorCodigo = [];
+
+        foreach (StockAnitaBridgeSupport::empresaIdsLecturaStkmae() as $empresaId) {
+            foreach (array_chunk($codigos, self::CHUNK_SIZE) as $chunk) {
+                $filas = StkmaePrecioCompraAnitaBridgeSupport::leerStkmaePorCodigos($chunk, $empresaId);
+                foreach ($filas as $codigo => $row) {
+                    $compra3 = self::floatONull($row['stkm_pre_compra3'] ?? null);
+                    if ($compra3 === null || $compra3 <= 0) {
+                        continue;
+                    }
+                    $feRaw = trim((string) ($row['stkm_fe_ult_compra'] ?? ''));
+                    $feInt = ctype_digit($feRaw) && strlen($feRaw) === 8 ? (int) $feRaw : 0;
+                    $prev = $mejorPorCodigo[$codigo] ?? null;
+                    if ($prev !== null && $prev['fe_int'] > $feInt) {
+                        continue;
+                    }
+                    if ($prev !== null && $prev['fe_int'] === $feInt && $prev['empresa_id'] <= $empresaId) {
+                        continue;
+                    }
+
+                    $monedaRaw = $row['stkm_cod_mon_co3'] ?? null;
+                    $mejorPorCodigo[$codigo] = [
+                        'precio' => $compra3,
+                        'moneda_id' => $monedaRaw !== null && $monedaRaw !== ''
+                            ? (int) $monedaRaw
+                            : 1,
+                        'compra1' => self::floatONull($row['stkm_pre_compra1'] ?? null),
+                        'compra2' => self::floatONull($row['stkm_pre_compra2'] ?? null),
+                        'compra3' => $compra3,
+                        'fecha_ymd' => $feInt > 0
+                            ? sprintf('%04d-%02d-%02d', intdiv($feInt, 10000), intdiv($feInt % 10000, 100), $feInt % 100)
+                            : null,
+                        'empresa_id' => $empresaId,
+                        'fe_int' => $feInt,
+                    ];
+                }
+            }
+        }
+
+        $out = [];
+        foreach ($codigoPorSku as $sku => $codigo) {
+            if (! isset($mejorPorCodigo[$codigo])) {
+                $out[$sku] = [
+                    'precio' => null,
+                    'moneda_id' => null,
+                    'compra1' => null,
+                    'compra2' => null,
+                    'compra3' => null,
+                    'fecha_ymd' => null,
+                    'empresa_id' => null,
+                ];
+
+                continue;
+            }
+            $m = $mejorPorCodigo[$codigo];
+            unset($m['fe_int']);
+            $out[$sku] = $m;
+        }
+
+        return $out;
+    }
+
+    /**
      * Promedio (compra1 + compra2 + compra3) / 3. Null si el resultado es ≤ 0.
+     * Usa bridge Biyemas (una sola Anita); no unifica multiempresa.
      *
      * @param  list<string>  $skus
      * @return array<string, float|null>

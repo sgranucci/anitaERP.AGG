@@ -64,7 +64,8 @@ final class CierreJornadaProcesoJornadaSupport
             : [];
         $requiereEmisionProceso = (bool) ($payloadSnap['requiere_emision_proceso'] ?? true);
         $facturaOmitida = self::emisionProcesoOmitida($emisionSnap);
-        $facturaEmitida = self::facturaProcesoConsideradaEmitida($emisionSnap);
+        $facturaEmitida = self::facturaProcesoConsideradaEmitida($emisionSnap)
+            || CierreJornadaProcesoEmisionExistenteSupport::existeParaJornada($jornada);
         $asientosGrabados = ! empty($payloadSnap['asientos_proceso_grabacion']['asientos']);
         $rendicionAnitaGrabada = ! empty($payloadSnap['rendicion_proceso_anita']['nro_oper']);
         // Rendgastro cuelga de las ventas emitidas (no de asientos).
@@ -482,5 +483,32 @@ final class CierreJornadaProcesoJornadaSupport
         }
 
         return null;
+    }
+
+    /**
+     * Bloques del snapshot que no deben perderse al reanalizar / recrear el tramo.
+     *
+     * @return array<string, mixed>
+     */
+    public static function payloadProcesoPersistente(?GastronomiaCierreJornadaProcesoSnapshot $snapshot): array
+    {
+        if ($snapshot === null) {
+            return [];
+        }
+
+        $payload = is_array($snapshot->payload) ? $snapshot->payload : [];
+        $out = [];
+        foreach ([
+            'factura_proceso_emision',
+            'factura_proceso_emision_recuperacion',
+            'asientos_proceso_grabacion',
+            'rendicion_proceso_anita',
+        ] as $clave) {
+            if (isset($payload[$clave]) && is_array($payload[$clave])) {
+                $out[$clave] = $payload[$clave];
+            }
+        }
+
+        return $out;
     }
 }

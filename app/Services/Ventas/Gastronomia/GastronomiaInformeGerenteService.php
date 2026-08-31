@@ -31,7 +31,6 @@ final class GastronomiaInformeGerenteService
             [$desde, $hasta] = [$hasta, $desde];
         }
 
-        $topCantidad = $this->query->top10PorCantidad($empresaId, $desde, $hasta);
         $topValor = $this->query->top10PorValor($empresaId, $desde, $hasta);
         $topMesCantidad = $this->query->top10MesPorCantidad($empresaId, $hasta);
         $porTurno = $this->query->ventasPorTurno($empresaId, $desde, $hasta);
@@ -52,8 +51,21 @@ final class GastronomiaInformeGerenteService
         $hastaCarbon = Carbon::parse($hasta);
         $mesDesde = $hastaCarbon->copy()->startOfMonth()->format('Y-m-d');
         $mesHasta = $hastaCarbon->copy()->endOfMonth()->format('Y-m-d');
-        $porMedioPagoMes = $this->query->ventasPorMedioPago($empresaId, $mesDesde, $mesHasta);
+        $porMedioPagoMes = ($desde === $mesDesde && $hasta === $mesHasta)
+            ? $porMedioPago
+            : $this->query->ventasPorMedioPago($empresaId, $mesDesde, $mesHasta);
         $top20ArticulosCosto = $this->topArticulosService->top20DelPeriodoConCostos($empresaId, $desde, $hasta);
+        // Top10 por cantidad = primeras 10 del top20 (misma métrica; evita otra agregación).
+        $topCantidad = [];
+        foreach (array_slice($top20ArticulosCosto['filas'] ?? [], 0, 10) as $fila) {
+            $topCantidad[] = [
+                'articulo_id' => (int) ($fila['articulo_id'] ?? 0),
+                'sku' => (string) ($fila['sku'] ?? ''),
+                'descripcion' => (string) ($fila['descripcion'] ?? ''),
+                'cantidad' => (float) ($fila['cantidad'] ?? 0),
+                'importe' => (float) ($fila['importe'] ?? 0),
+            ];
+        }
         $recepciones = $this->recepcionesAnita->resumen($empresaId, $desde, $hasta);
 
         $totalPeriodo = $this->query->totalVentasPeriodo($empresaId, $desde, $hasta);

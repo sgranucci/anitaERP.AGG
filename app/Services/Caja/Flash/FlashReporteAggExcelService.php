@@ -34,7 +34,7 @@ class FlashReporteAggExcelService
     public const MARCA_DIA_SIN_DATOS = '-';
 
     /**
-     * @return array{path: string, nombre: string, mime: string, dias: int, empresas: list<string>}
+     * @return array{path: string, nombre: string, mime: string, dias: int, empresas: list<string>, imagen_path?: string, tabla_resumen?: list<list<array{texto: string, negrita: bool, rojo: bool, encabezado: bool}>>}
      */
     public function generar(Carbon $desde, Carbon $hasta): array
     {
@@ -108,21 +108,44 @@ class FlashReporteAggExcelService
             'Flash Report AGG al %s.xlsx',
             $hasta->format('d.m.Y')
         );
-        $dir = storage_path('app/tmp');
-        if (! is_dir($dir)) {
-            mkdir($dir, 0775, true);
-        }
+        $dir = $this->directorioTemporal();
         $path = $dir.'/flash-reporte-agg-'.uniqid('', true).'.xlsx';
+        $imagenPath = $dir.'/flash-reporte-agg-tabla-'.uniqid('', true).'.png';
 
-        (new FlashReporteAggXlsxPatchSupport)->rellenar($plantilla, $path, $porHoja);
+        $extra = (new FlashReporteAggXlsxPatchSupport)->rellenar($plantilla, $path, $porHoja, $imagenPath);
 
-        return [
+        $out = [
             'path' => $path,
             'nombre' => $nombre,
             'mime' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
             'dias' => $diasConDatos,
             'empresas' => $nombres,
+            'tabla_resumen' => $extra['tabla_resumen'] ?? [],
         ];
+        if (is_file($imagenPath)) {
+            $out['imagen_path'] = $imagenPath;
+        }
+
+        return $out;
+    }
+
+    private function directorioTemporal(): string
+    {
+        $candidatos = [
+            storage_path('app/tmp'),
+            storage_path('app'),
+            sys_get_temp_dir(),
+        ];
+        foreach ($candidatos as $dir) {
+            if (! is_dir($dir)) {
+                @mkdir($dir, 0775, true);
+            }
+            if (is_dir($dir) && is_writable($dir)) {
+                return $dir;
+            }
+        }
+
+        throw new RuntimeException('No hay directorio temporal escribible para armar el Flash Report AGG.');
     }
 
     /**
@@ -307,6 +330,9 @@ class FlashReporteAggExcelService
                 : 'Empresas: consolidado AGG',
             'A5' => 'Through day: '.$this->throughDay($filas, $hasta),
         ];
+
+        // Filas 6–8: títulos oficiales (HLOOKUP Electronic / máscara Tabla).
+        $celdas = array_merge($celdas, FlashReporteAggMapeoSupport::encabezadosHojaDatos());
 
         for ($i = 0; $i < self::DIAS_MAX; $i++) {
             $excelRow = self::FILA_DATOS_INICIO + $i;

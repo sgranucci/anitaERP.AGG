@@ -18,6 +18,7 @@ use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Contable\AsientoCtamovRollbackSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaEmisorSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
+use App\Support\Numerico\NumeroDecimalLocalSupport;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\Log;
@@ -635,12 +636,12 @@ class AsientoRepository implements AsientoRepositoryInterface
 
 		$centrocostos = $request['centrocosto_ids'] ?? [];
 		$centrocostosPrev = $request['centrocosto_id_previo'] ?? [];
-		$debes = $request['debes'] ?? [];
-		$haberes = $request['haberes'] ?? [];
+		$debes = NumeroDecimalLocalSupport::listaAFloat($request['debes'] ?? []);
+		$haberes = NumeroDecimalLocalSupport::listaAFloat($request['haberes'] ?? []);
 		$cuentacontables = $request['cuentacontable_ids'] ?? [];
 		$observaciones = $request['observaciones'] ?? [];
 		$moneda_ids = $request['moneda_ids'] ?? [];
-		$cotizaciones = $request['cotizaciones'] ?? [];
+		$cotizaciones = NumeroDecimalLocalSupport::listaAFloat($request['cotizaciones'] ?? []);
 
 		$fecha = Carbon::createFromFormat( 'Y-m-d', $request['fecha'])->format('Ymd');
 
@@ -718,20 +719,20 @@ class AsientoRepository implements AsientoRepositoryInterface
 				);
 
 				$d_h = null;
-				$monto = 0;
-				$debeLin = $debes[$i_movimiento] ?? '';
-				$haberLin = $haberes[$i_movimiento] ?? '';
+				$monto = 0.0;
+				$debeLin = $debes[$i_movimiento] ?? 0.0;
+				$haberLin = $haberes[$i_movimiento] ?? 0.0;
 
-				if ($debeLin > 0 && $debeLin != '')
+				if ($debeLin > 0)
 				{
 					$d_h = 'D';
 					$monto = $debeLin;
 				}
 
-				if (($haberLin != 0 || $debeLin < 0) && $haberLin != '')
+				if (($haberLin != 0 || $debeLin < 0) && $haberLin != 0)
 				{
 					$d_h = 'H';
-					$monto = abs(floatval($haberLin)+floatval($debeLin));
+					$monto = abs($haberLin + $debeLin);
 				}
 
 				// Línea sin importe: no grabar ctamov (evita ctav_d_h indefinido; no altera líneas con debe/haber válidos).
@@ -909,17 +910,34 @@ class AsientoRepository implements AsientoRepositoryInterface
 	/**
 	 * ctav_desc_mov tiene 30 caracteres y no hay campo emisor en ctamov.
 	 * El código del proveedor va primero para que el mayor (Anita y ERP) lo vea.
+	 *
+	 * Solo A-Z, 0-9 y espacio: evita que comillas, pipes u otros caracteres
+	 * rompan el VALUES del bridge y disparen "1213 Character to numeric conversion".
 	 */
 	private function descripcionCtamovConEmisor(string $observacion, mixed $emisor): string
 	{
-		$texto = preg_replace('([^A-Za-z0-9 ])', '', $observacion) ?? '';
-		$texto = trim((string) preg_replace('/\s+/', ' ', $texto));
+		$texto = $this->sanitizarDescripcionCtamov($observacion);
 		$codigo = MayorPlanoCuentaEmisorSupport::normalizarCodigo((string) $emisor);
+		$codigo = $this->sanitizarDescripcionCtamov($codigo);
 		if ($codigo !== '' && ! preg_match('/^'.preg_quote($codigo, '/').'\b/', $texto)) {
 			$texto = trim($codigo.' '.$texto);
 		}
 
 		return mb_substr($texto, 0, 30);
+	}
+
+	/**
+	 * Texto seguro para ctav_desc_mov en INSERT Informix vía bridge (valores entre comillas).
+	 * Permite . % - (paridad p-vtabingo: «Dev. pozo acum.», «Canon … 4%»).
+	 */
+	private function sanitizarDescripcionCtamov(string $texto): string
+	{
+		// Quitar comillas, pipes, acentos y saltos; conservar letra/dígito/espacio/.%- .
+		$limpio = preg_replace('/[^A-Za-z0-9 .%\\-]+/u', '', $texto) ?? '';
+		$limpio = trim((string) preg_replace('/\s+/u', ' ', $limpio));
+
+		// Por si quedó alguna comilla: duplicar estilo SQL (Informix).
+		return str_replace("'", "''", $limpio);
 	}
 
 	private function assertPayloadCtamovGrabable(array $request): void
@@ -948,7 +966,8 @@ class AsientoRepository implements AsientoRepositoryInterface
 				);
 			}
 
-			if ((float) ($debes[$i] ?? 0) > 0 || (float) ($haberes[$i] ?? 0) > 0) {
+			if (NumeroDecimalLocalSupport::aFloat($debes[$i] ?? 0) > 0
+				|| NumeroDecimalLocalSupport::aFloat($haberes[$i] ?? 0) > 0) {
 				$lineasConImporte++;
 			}
 		}

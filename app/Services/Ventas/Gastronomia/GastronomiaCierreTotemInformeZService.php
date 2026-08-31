@@ -32,10 +32,11 @@ final class GastronomiaCierreTotemInformeZService
      *  - `ok`: recomputo = venta Waitry del cierre y el Z ya coincide.
      *  - `regenerar`: recomputo = venta Waitry (MP/QR) y el Z persistido no; se alinea el Z.
      *  - `omitido_recomputo_cero`: el proceso dio $0 pero Waitry/ERP tienen venta → no se toca el Z.
-     *  - `revisar_venta`: recomputo ≠ venta Waitry del cierre → no se toca el Z.
+     *  - `revisar_venta`: recomputo ≠ venta Waitry del cierre ni MP contabilizado → no se toca el Z.
      *  - `snapshot_invalido` / `snapshot_provisional`: el snapshot no es el tramo definitivo.
      *
-     * No se usa el asiento del proceso como confirmación: a las 07:45 todavía no está grabado.
+     * A las 07:45 el asiento todavía no está. Después de grabarlo, si el recomputo = MP
+     * contabilizado se alinea el Z (comandas tardías o factura ERP ≠ cobro Waitry).
      *
      * @return array<string, mixed>
      */
@@ -80,6 +81,8 @@ final class GastronomiaCierreTotemInformeZService
         }
         unset($ln);
 
+        $lineas = WaitryInformeZVentaRealSupport::aplicarImporteErpALineasInformeZ($lineas);
+
         $totems = TotemWaitryGastronomia::query()->where('empresa_id', $empresaId)->with('ubicacion')->get();
         $resumen = WaitryTotemJornadaResumenSupport::armarParaInformeZ($totems, $lineas, $empresaId);
         $recomputado = round((float) ($resumen['total_general']['total_ingreso'] ?? 0), 2);
@@ -90,6 +93,9 @@ final class GastronomiaCierreTotemInformeZService
         $zMpActual = $this->totalMontosInformeZEnJson(
             is_array($cierre->informe_z_json) ? $cierre->informe_z_json : [],
         );
+        $mpContabilizado = $fechaJornada !== ''
+            ? $this->medioPagoSupport->contabilizadoMercadoPago($empresaId, $fechaJornada)
+            : 0.0;
 
         $eval = WaitryInformeZVentaRealSupport::decidirRegeneracion(
             $recomputado,
@@ -97,6 +103,7 @@ final class GastronomiaCierreTotemInformeZService
             $ventaErp,
             $zMpActual,
             $tolerancia,
+            $mpContabilizado > 0.02 ? $mpContabilizado : null,
         );
         $decision = (string) ($eval['decision'] ?? 'revisar_venta');
 
@@ -107,6 +114,7 @@ final class GastronomiaCierreTotemInformeZService
             'venta_waitry' => $ventaWaitry,
             'venta_erp' => $ventaErp,
             'venta_real' => (float) ($eval['venta_real'] ?? $ventaWaitry),
+            'mp_contabilizado' => $mpContabilizado,
             'diff_recomputado_waitry' => round($recomputado - $ventaWaitry, 2),
         ];
 
@@ -123,9 +131,10 @@ final class GastronomiaCierreTotemInformeZService
         $aud = is_array($detalle['auditoria'] ?? null) ? $detalle['auditoria'] : [];
         $aud['resumen_informe_z_recomputado_proceso_en'] = now()->format('Y-m-d H:i:s');
         $aud['resumen_informe_z_sistema_anterior'] = round($sistemaAnterior, 2);
-        $aud['resumen_informe_z_motivo'] = 'Regeneración desde líneas del proceso (recomputo = venta Waitry del cierre; no se usa el asiento).';
+        $aud['resumen_informe_z_motivo'] = 'Regeneración desde líneas del proceso (recomputo alineado a factura ERP y, si hay asientos, a MP contabilizado).';
         $detalle['auditoria'] = $aud;
         $cierre->detalle_json = $detalle;
+        $this->persistirWatermarkHastaDesdeLineas($cierre, $lineas);
         $cierre->save();
 
         $out = $this->igualarInformeZConSistemaEnCierre($jornadaId, true);
@@ -133,7 +142,7 @@ final class GastronomiaCierreTotemInformeZService
         $cierre->refresh();
         $iz = is_array($cierre->informe_z_json) ? $cierre->informe_z_json : [];
         $iz['correccion_masiva'] = [
-            'motivo' => 'Alinear Z con la venta Waitry del cierre recomputada desde el proceso.',
+            'motivo' => 'Alinear Z con el proceso (factura ERP / MP contabilizado).',
             'aplicada_en' => now()->format('Y-m-d H:i:s'),
             'z_anterior' => round((float) ($out['z_anterior'] ?? $zMpActual), 2),
             'z_nuevo' => round((float) ($out['z_nuevo'] ?? $recomputado), 2),
@@ -856,6 +865,31 @@ final class GastronomiaCierreTotemInformeZService
         }
 
         return false;
+    }
+
+    /**
+     * El proceso puede haber incluido comandas posteriores al watermark congelado al cerrar.
+     * Extiende waitry_order_id_hasta para que la jornada siguiente no las vuelva a tomar.
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     */
+    private function persistirWatermarkHastaDesdeLineas(CierreTotemJornadaGastronomia $cierre, array $lineas): void
+    {
+        $hasta = 0;
+        foreach ($lineas as $ln) {
+            if (! WaitryMedioPagoCuentacajaSupport::lineaEntraInformeZSistema($ln)) {
+                continue;
+            }
+            $id = (int) ($ln['waitry_order_id'] ?? $ln['order_id'] ?? 0);
+            if ($id > $hasta) {
+                $hasta = $id;
+            }
+        }
+        if ($hasta <= (int) ($cierre->waitry_order_id_hasta ?? 0)) {
+            return;
+        }
+
+        $cierre->waitry_order_id_hasta = $hasta;
     }
 
     private function cierrePorJornada(int $jornadaId): CierreTotemJornadaGastronomia

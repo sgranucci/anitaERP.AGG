@@ -8,7 +8,6 @@ use App\Models\Stock\Listaprecio;
 use App\Models\Stock\Precio;
 use App\Services\Stock\FormulaArticuloCostoTotalService;
 use App\Services\Stock\FormulaArticuloService;
-use App\Support\Stock\PrecioSoloFacturableSupport;
 use App\Support\Ventas\GastronomiaSkuCatalogoSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaInformeGerenteCostoListaSupport;
 use App\Support\Ventas\Gastronomia\GastronomiaStkpreEscrituraSupport;
@@ -18,6 +17,7 @@ use Illuminate\Support\Facades\Log;
 /**
  * Calcula el costo mensual de artículos de catálogo (SKU V…) según fórmula + última compra Anita
  * y lo graba en la lista de precios 5000 + mes (ej. junio → 5006) en ERP y Anita (stkpre).
+ * Incluye no facturables (nofactura=1): invitaciones / cortesía también necesitan costo en reportes.
  */
 class GastronomiaCostoMensualCatalogoService
 {
@@ -126,13 +126,15 @@ class GastronomiaCostoMensualCatalogoService
     }
 
     /**
+     * Catálogo V… con o sin facturación (invitaciones suelen ir nofactura=1).
+     * El costo de fórmula debe grabarse igual para valuación de reportes.
+     *
      * @return list<array{id: int, sku: string}>
      */
     private function articulosCatalogo(?string $skuFiltro): array
     {
         $query = Articulo::query()
-            ->select(['id', 'sku'])
-            ->where('nofactura', PrecioSoloFacturableSupport::NOFACTURA_FACTURABLE);
+            ->select(['id', 'sku']);
 
         GastronomiaSkuCatalogoSupport::aplicarScopeFormatoCatalogo($query);
 

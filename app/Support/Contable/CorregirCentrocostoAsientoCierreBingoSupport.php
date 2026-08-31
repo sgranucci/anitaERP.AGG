@@ -94,8 +94,14 @@ final class CorregirCentrocostoAsientoCierreBingoSupport
         }
 
         $obsQuery = Asiento::query()
-            ->where('observacion', 'like', CierreRendicionBingoAsientoSupport::DESCRIPCION_ASIENTO.' — %')
-            ->whereDate('fecha', '>=', $desde);
+            ->whereDate('fecha', '>=', $desde)
+            ->where(function ($q) {
+                $q->where('observacion', 'like', CierreRendicionBingoAsientoSupport::DESCRIPCION_ASIENTO.' — %')
+                    ->orWhere('observacion', CierreRendicionBingoAsientoSupport::LEYENDA_PAGO_PREMIOS)
+                    ->orWhere('observacion', CierreRendicionBingoAsientoSupport::LEYENDA_DEV_POZO)
+                    ->orWhere('observacion', CierreRendicionBingoAsientoSupport::LEYENDA_CANON_HOSPITAL)
+                    ->orWhere('observacion', 'like', 'Canon %');
+            });
 
         if ($empresaId !== null && $empresaId > 0) {
             $obsQuery->where('empresa_id', $empresaId);

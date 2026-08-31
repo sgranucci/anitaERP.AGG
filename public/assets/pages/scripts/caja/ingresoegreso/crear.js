@@ -301,23 +301,45 @@ var montoPendienteSp = 0;
 		function continuarGrabacionIngresoEgreso(totalDebe, totalHaber, totalDebeAsiento)
 		{
 			var flError = false;
-			totalDebeAsiento = parseTotalAsientoCampo(totalDebeAsiento);
 
-			// Controla total de la operacion contra el total del asiento
-			if (totalDebe != 0 || totalHaber != 0)
-			{
-				let totalOperacion;
+			// Una sola cuenta de caja en 0 + asiento con importe → copiar total asiento al monto
+			copiarTotalAsientoAUnicaCuentaCajaSiCorresponde();
+			sumaMonto();
+			totalDebe = parseTotalAsientoCampo($("#totaldebe").val());
+			totalHaber = parseTotalAsientoCampo($("#totalhaber").val());
+			sumaMontoAsiento();
+			totalDebeAsiento = parseTotalAsientoCampo($("#totaldebeasiento").val());
+			var totalHaberAsientoCmp = parseTotalAsientoCampo($("#totalhaberasiento").val());
+			var totalAsientoCmp = totalDebeAsiento >= totalHaberAsientoCmp ? totalDebeAsiento : totalHaberAsientoCmp;
+			var totalOperacionCmp = (totalDebe >= totalHaber) ? totalDebe : totalHaber;
 
-				if (totalDebe > totalHaber)
-					totalOperacion = totalDebe;
-				else
-					totalOperacion = totalHaber;
+			if (totalAsientoCmp > 0.02 && totalOperacionCmp <= 0.02) {
+				alert('Debe cargar el monto en las cuentas de caja. El asiento tiene importe pero las cuentas de caja quedaron en cero.');
+				flError = true;
+				muestraVentanaAsiento();
+			} else if (totalOperacionCmp > 0.02 && totalAsientoCmp <= 0.02) {
+				alert('Debe generar el asiento contable. Las cuentas de caja tienen importe pero el asiento quedó en cero.');
+				flError = true;
+				muestraVentanaAsiento();
+			} else if (totalOperacionCmp > 0.02 && Math.abs(totalOperacionCmp - totalAsientoCmp) > 0.02) {
+				// Solo discrepancia si la caja ya tenía (o quedó con) monto ≠ 0
+				alert('Problemas en el asiento, no coincide el monto total de la operación con el asiento contable');
+				flError = true;
+				muestraVentanaAsiento();
+			}
 
-				if (Math.abs(totalOperacion - totalDebeAsiento) > 0.02)
-				{
-					alert('Problemas en el asiento, no coincide el monto total de la operación con el asiento contable');
+			if (!flError) {
+				var hayCuentaSinMonto = false;
+				$("#tbody-cuenta-table .item-cuenta").each(function () {
+					var cta = parseInt($(this).find('.cuentacaja_id').val() || '0', 10) || 0;
+					var monto = parseTotalAsientoCampo($(this).find('.monto').val());
+					if (cta > 0 && Math.abs(monto) < 0.000001) {
+						hayCuentaSinMonto = true;
+					}
+				});
+				if (hayCuentaSinMonto) {
+					alert('Ingrese un monto en todas las cuentas de caja seleccionadas.');
 					flError = true;
-					muestraVentanaAsiento();						
 				}
 			}
 
@@ -647,6 +669,9 @@ var montoPendienteSp = 0;
 		// Activa eventos de consulta
 		activa_eventos_consultaproveedor();
 		activa_eventos_consultaconceptogasto();
+		if (typeof activa_eventos_consulta_cbu_pago === 'function') {
+			activa_eventos_consulta_cbu_pago();
+		}
 		activarTecladoGrillaCuentaIe();
 
 		$('#tipotransaccion_caja_id').on('change', function (event) {
@@ -867,9 +892,9 @@ var montoPendienteSp = 0;
 		});
 
 		$("#tbody-cuenta-table .monto").each(function() {
-            let valor = parseFloat($(this).val());
+            let valor = parseTotalAsientoCampo($(this).val());
 			let moneda = $(this).parents("tr").find('.moneda').val();
-			let cotizacion = $(this).parents("tr").find('.cotizacion').val();
+			let cotizacion = parseTotalAsientoCampo($(this).parents("tr").find('.cotizacion').val());
 			let coef = calculaCoeficienteMoneda(monedaDefault, moneda, cotizacion);
 
             if (valor >= 0)
@@ -923,6 +948,38 @@ var montoPendienteSp = 0;
 		actualizarAvisoMontoSpIe();
 	}
 
+	/**
+	 * Si hay exactamente 1 cuenta de caja con monto 0 y el asiento tiene total,
+	 * copia ese total al monto de la cuenta (1er pantalla).
+	 */
+	function copiarTotalAsientoAUnicaCuentaCajaSiCorresponde()
+	{
+		var $filas = [];
+		$("#tbody-cuenta-table .item-cuenta").each(function () {
+			var cta = parseInt($(this).find('.cuentacaja_id').val() || '0', 10) || 0;
+			if (cta > 0) {
+				$filas.push($(this));
+			}
+		});
+		if ($filas.length !== 1) {
+			return false;
+		}
+		var $tr = $filas[0];
+		var montoActual = parseTotalAsientoCampo($tr.find('.monto').val());
+		if (Math.abs(montoActual) > 0.000001) {
+			return false;
+		}
+		sumaMontoAsiento();
+		var debe = parseTotalAsientoCampo($("#totaldebeasiento").val());
+		var haber = parseTotalAsientoCampo($("#totalhaberasiento").val());
+		var totalAsiento = debe >= haber ? debe : haber;
+		if (!(totalAsiento > 0.02)) {
+			return false;
+		}
+		$tr.find('.monto').val(totalAsiento.toFixed(2));
+		return true;
+	}
+
 	function generaAsientoContable(onDone)
 	{
 		let token = $("meta[name='csrf-token']").attr("content");
@@ -957,16 +1014,16 @@ var montoPendienteSp = 0;
 			cuentacaja_ids = $(this).find(".cuentacaja_id").val();
 			moneda_ids = $(this).find(".moneda").val();
 
-			montos = $(this).find(".monto").val();
+			montos = parseTotalAsientoCampo($(this).find(".monto").val());
 
 			debes = haberes = ' ';
-			if ($(this).find(".monto").val() > 0)
-				debes = $(this).find(".monto").val();
+			if (montos > 0)
+				debes = montos;
 
-			if ($(this).find(".monto").val() < 0)
-				haberes = Math.abs($(this).find(".monto").val());
+			if (montos < 0)
+				haberes = Math.abs(montos);
 
-			cotizaciones = $(this).find(".cotizacion").val();
+			cotizaciones = parseTotalAsientoCampo($(this).find(".cotizacion").val());
 			observaciones = $(this).find(".observacion").val();
 
 			datosCuentasCaja.push({
@@ -1202,6 +1259,9 @@ var montoPendienteSp = 0;
 
 	$("#form-general").submit(function (e) {
 		e.preventDefault();
+		if (window.AsientoMontosFormato && typeof AsientoMontosFormato.normalizarAntesDeEnviar === 'function') {
+			AsientoMontosFormato.normalizarAntesDeEnviar(this);
+		}
 		let token = $("meta[name='csrf-token']").attr("content");
 		let id = $("#id").val();
 		var url;
@@ -1309,12 +1369,14 @@ var montoPendienteSp = 0;
 					$("#div-ordenservicio").show();
 					$("#div-conceptogasto").show();
 					$("#div-proveedor").show();
+					$("#div-cbu-pago-ie").show();
 				}
 				else
 				{
 					$("#div-ordenservicio").hide();
 					$("#div-conceptogasto").hide();
 					$("#div-proveedor").hide();
+					$("#div-cbu-pago-ie").hide();
 					if (esTransferenciaIngresoEgreso()) {
 						$('#ordenservicio_id').val('');
 						$('#conceptogasto_id').val('');
@@ -1324,6 +1386,9 @@ var montoPendienteSp = 0;
 							$('#proveedor_id').val('');
 							$('#codigoproveedor').val('');
 							$('#nombreproveedor').val('');
+						}
+						if (typeof window.ProveedorCbuPago !== 'undefined' && window.ProveedorCbuPago.limpiar) {
+							window.ProveedorCbuPago.limpiar();
 						}
 					}
 				}

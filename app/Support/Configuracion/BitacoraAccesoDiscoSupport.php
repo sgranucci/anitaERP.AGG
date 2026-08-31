@@ -3,6 +3,7 @@
 namespace App\Support\Configuracion;
 
 use App\Support\Database\SqlDialectSupport;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -11,12 +12,21 @@ use Illuminate\Support\Facades\Schema;
  */
 class BitacoraAccesoDiscoSupport
 {
+    /** Cache de AVG/MAX globales sobre bitácora (tabla grande). */
+    private const TTL_STATS_GLOBAL_SEG = 600;
+
+    /** Cache de stats del filtro de fechas (mismo rango no se recalcula). */
+    private const TTL_STATS_FILTRO_SEG = 120;
+
     /**
      * @param  array<string, mixed>  $filtros
+     * @param  array{incluir_proceso?: bool}  $opciones
      * @return array<string, mixed>
      */
-    public static function resumenCompleto(array $filtros = []): array
+    public static function resumenCompleto(array $filtros = [], array $opciones = []): array
     {
+        $incluirProceso = (bool) ($opciones['incluir_proceso'] ?? true);
+
         return [
             'bitacora_habilitada' => (bool) config('bitacora_acceso.habilitado', false),
             'auditing_habilitado' => (bool) config('audit.enabled', true),
@@ -24,8 +34,12 @@ class BitacoraAccesoDiscoSupport
             'retencion_meses' => (int) config('bitacora_acceso.retencion_meses', 12),
             'tabla' => self::tamanoTablaBitacora(),
             'tabla_audits' => self::tamanoTabla('audits'),
-            'proceso_filtro' => self::statsProcesoFiltro($filtros),
-            'proceso_global' => self::statsProcesoGlobal(),
+            'proceso_filtro' => $incluirProceso
+                ? self::statsProcesoFiltro($filtros)
+                : self::statsVacias(),
+            'proceso_global' => $incluirProceso
+                ? self::statsProcesoGlobal()
+                : self::statsVacias(),
             'archivos_log' => ArchivoLogSupport::resumenDisco(),
             'generado_en' => now()->format('d/m/Y H:i:s'),
         ];
@@ -67,7 +81,11 @@ class BitacoraAccesoDiscoSupport
         ];
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * Tamaño de bitácora: filas aproximadas del motor (sin COUNT(*) sobre millones de filas).
+     *
+     * @return array<string, mixed>
+     */
     public static function tamanoTablaBitacora(): array
     {
         if (! Schema::hasTable('bitacora_acceso')) {
@@ -82,21 +100,7 @@ class BitacoraAccesoDiscoSupport
             ];
         }
 
-        $base = self::tamanoTabla('bitacora_acceso');
-        $filasReales = (int) DB::table('bitacora_acceso')->count();
-
-        return [
-            'existe' => true,
-            'filas' => $filasReales,
-            'filas_aprox_motor' => (int) ($base['filas'] ?? 0),
-            'data_bytes' => (int) ($base['data_bytes'] ?? 0),
-            'index_bytes' => (int) ($base['index_bytes'] ?? 0),
-            'total_bytes' => (int) ($base['total_bytes'] ?? 0),
-            'total_humano' => (string) ($base['total_humano'] ?? '0 B'),
-            'data_humano' => (string) ($base['data_humano'] ?? '0 B'),
-            'index_humano' => (string) ($base['index_humano'] ?? '0 B'),
-            'promedio_fila_bytes' => (int) ($base['promedio_fila_bytes'] ?? 0),
-        ];
+        return self::tamanoTabla('bitacora_acceso');
     }
 
     /**
@@ -153,22 +157,69 @@ class BitacoraAccesoDiscoSupport
             return self::statsVacias();
         }
 
-        $q = BitacoraAccesoListadoFiltros::aplicar(DB::table('bitacora_acceso'), $filtros);
+        $clave = 'auditoria.bitacora.stats_filtro.'.md5(json_encode([
+            $filtros['fecha_desde'] ?? '',
+            $filtros['fecha_hasta'] ?? '',
+            $filtros['usuario_id'] ?? null,
+            $filtros['tipo'] ?? '',
+            $filtros['ruta'] ?? '',
+            $filtros['metodo'] ?? '',
+        ]));
 
-        $row = (clone $q)->selectRaw(
-            'COUNT(*) AS total,
-             AVG(duracion_ms) AS duracion_promedio_ms,
-             MAX(duracion_ms) AS duracion_max_ms,
-             AVG(memoria_pico_kb) AS memoria_promedio_kb,
-             MAX(memoria_pico_kb) AS memoria_max_kb,
-             SUM(memoria_pico_kb) AS memoria_suma_kb'
-        )->first();
+        return Cache::remember($clave, self::TTL_STATS_FILTRO_SEG, static function () use ($filtros) {
+            $q = BitacoraAccesoListadoFiltros::aplicar(DB::table('bitacora_acceso'), $filtros);
 
-        return self::mapStats($row);
+            $row = (clone $q)->selectRaw(
+                'COUNT(*) AS total,
+                 AVG(duracion_ms) AS duracion_promedio_ms,
+                 MAX(duracion_ms) AS duracion_max_ms,
+                 AVG(memoria_pico_kb) AS memoria_promedio_kb,
+                 MAX(memoria_pico_kb) AS memoria_max_kb,
+                 SUM(memoria_pico_kb) AS memoria_suma_kb'
+            )->first();
+
+            return self::mapStats($row);
+        });
     }
 
-    /** @return array<string, mixed> */
+    /**
+     * Stats globales: solo desde cache (TTL). No hace COUNT/AVG sobre toda la tabla
+     * en el request web (puede tardar varios segundos con millones de filas).
+     *
+     * @return array<string, mixed>
+     */
     public static function statsProcesoGlobal(): array
+    {
+        if (! Schema::hasTable('bitacora_acceso')) {
+            return self::statsVacias();
+        }
+
+        $cached = Cache::get('auditoria.bitacora.stats_global');
+        if (is_array($cached)) {
+            return $cached;
+        }
+
+        // Fallback liviano: total aproximado del motor, sin AVG.
+        $tam = self::tamanoTablaBitacora();
+
+        return [
+            'total' => (int) ($tam['filas'] ?? 0),
+            'duracion_promedio_ms' => null,
+            'duracion_max_ms' => null,
+            'memoria_promedio_kb' => null,
+            'memoria_max_kb' => null,
+            'memoria_suma_kb' => null,
+            'memoria_suma_humano' => '0 B',
+            'aproximado' => true,
+        ];
+    }
+
+    /**
+     * Calcula y cachea stats globales (para comando/schedule o uso explícito).
+     *
+     * @return array<string, mixed>
+     */
+    public static function recalcularStatsProcesoGlobal(): array
     {
         if (! Schema::hasTable('bitacora_acceso')) {
             return self::statsVacias();
@@ -183,7 +234,10 @@ class BitacoraAccesoDiscoSupport
              SUM(memoria_pico_kb) AS memoria_suma_kb'
         )->first();
 
-        return self::mapStats($row);
+        $stats = self::mapStats($row);
+        Cache::put('auditoria.bitacora.stats_global', $stats, self::TTL_STATS_GLOBAL_SEG);
+
+        return $stats;
     }
 
     /** @return array<string, mixed> */

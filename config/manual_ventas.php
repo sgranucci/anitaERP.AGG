@@ -1,9 +1,9 @@
 <?php
 
 return [
-    'version' => '1.1',
+    'version' => '1.2',
     'titulo' => 'Manual de Usuario',
-    'subtitulo' => 'Anita ERP — Pedidos y Facturación',
+    'subtitulo' => 'Anita ERP — Pedidos, Facturación y Abonos',
 
     /**
      * Capturas en public/docs/manual-ventas/img/

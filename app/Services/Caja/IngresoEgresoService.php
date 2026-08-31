@@ -28,6 +28,9 @@ use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Caja\IngresoEgresoChequeAsientoSupport;
 use App\Support\Caja\IngresoEgresoComprobanteIvaAsientoSupport;
 use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
+use App\Support\Caja\IngresoEgresoCuadreCajaAsientoSupport;
+use App\Support\Numerico\NumeroDecimalLocalSupport;
+use App\Support\Compras\ProveedorCbuPagoSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport;
 use App\Support\Caja\IngresoEgresoTransferenciaSupport;
@@ -104,7 +107,13 @@ class IngresoEgresoService
 
 		try {
 			$data = $this->aplicarPagoSolicitudEnRequest($request);
+			$this->normalizarImportesEnDataYRequest($request, $data);
+			$this->aplicarCbuPagoEnRequest($request, $data);
 			IngresoEgresoTransferenciaSupport::assertBalanceado($data);
+			IngresoEgresoCuadreCajaAsientoSupport::prepararYAssertCuadre($data);
+			if (array_key_exists('montos', $data)) {
+				$request->merge(['montos' => $data['montos']]);
+			}
 			IngresoEgresoSolicitudpagoSupport::assertMontoCoincideConSolicitud($data);
 		} catch (InvalidArgumentException $e) {
 			return ['errores' => $e->getMessage()];
@@ -218,16 +227,22 @@ class IngresoEgresoService
 
 		try {
 			$data = $this->aplicarPagoSolicitudEnRequest($request);
+			$this->normalizarImportesEnDataYRequest($request, $data);
+			$this->aplicarCbuPagoEnRequest($request, $data);
 			IngresoEgresoTransferenciaSupport::assertBalanceado($data);
+			IngresoEgresoCuadreCajaAsientoSupport::prepararYAssertCuadre($data);
+			if (array_key_exists('montos', $data)) {
+				$request->merge(['montos' => $data['montos']]);
+			}
 			IngresoEgresoSolicitudpagoSupport::assertMontoCoincideConSolicitud($data);
 		} catch (InvalidArgumentException $e) {
 			return ['errores' => $e->getMessage()];
 		}
 
-		// Crea estado
-		$data['fechas'][] = Carbon::now();
-		$data['estados'][] = Caja_Movimiento_Estado::$enumEstado[0]['valor'];
-		$data['observacionestados'][] = "Alta de Movimiento de Caja";
+   		// Crea estado
+	   	$data['fechas'][] = Carbon::now();
+	   	$data['estados'][] = Caja_Movimiento_Estado::$enumEstado[0]['valor'];
+	   	$data['observacionestados'][] = "Alta de Movimiento de Caja";
 
 		if ($origen)
 			Self::actualiza($data, $id, $request);
@@ -858,10 +873,10 @@ class IngresoEgresoService
 
 		$monto = 0.0;
 		foreach ((array) ($data['montos'] ?? []) as $m) {
-			$monto += abs((float) $m);
+			$monto += abs(NumeroDecimalLocalSupport::aFloat($m));
 		}
 		if ($monto <= 0) {
-			$monto = abs((float) ($data['monto'] ?? 0));
+			$monto = abs(NumeroDecimalLocalSupport::aFloat($data['monto'] ?? 0));
 		}
 		if ($monto < $umbral) {
 			return;
@@ -872,6 +887,34 @@ class IngresoEgresoService
 			'monto' => $monto,
 			'empresa_id' => $data['empresa_id'] ?? null,
 		]);
+	}
+
+	/**
+	 * Formato AR del formulario (1.234.567,89) → float antes de validar/grabar ERP y Anita.
+	 *
+	 * @param  \Illuminate\Http\Request  $request
+	 * @param  array<string, mixed>  $data
+	 */
+	private function normalizarImportesEnDataYRequest($request, array &$data): void
+	{
+		$merge = [];
+		foreach (['montos', 'debeasientos', 'haberasientos', 'debes', 'haberes'] as $campo) {
+			if (! isset($data[$campo]) || ! is_array($data[$campo])) {
+				continue;
+			}
+			$data[$campo] = NumeroDecimalLocalSupport::listaAFloat($data[$campo]);
+			$merge[$campo] = $data[$campo];
+		}
+		foreach (['cotizaciones', 'cotizacionasientos'] as $campo) {
+			if (! isset($data[$campo]) || ! is_array($data[$campo])) {
+				continue;
+			}
+			$data[$campo] = NumeroDecimalLocalSupport::listaAFloat($data[$campo], 1.0);
+			$merge[$campo] = $data[$campo];
+		}
+		if ($merge !== []) {
+			$request->merge($merge);
+		}
 	}
 
 	/**
@@ -896,6 +939,43 @@ class IngresoEgresoService
 		}
 
 		return $data;
+	}
+
+
+	/**
+	 * Normaliza CBU elegido (proveedor_formapago) en el request/data del IE.
+	 *
+	 * @param  \Illuminate\Http\Request  $request
+	 * @param  array<string, mixed>  $data
+	 */
+	private function aplicarCbuPagoEnRequest($request, array &$data): void
+	{
+		$proveedorId = (int) ($data['proveedor_id'] ?? $request->input('proveedor_id') ?? 0);
+		if ($proveedorId <= 0) {
+			$data['proveedor_formapago_id'] = null;
+			$data['cbu_pago'] = null;
+			$request->merge([
+				'proveedor_formapago_id' => null,
+				'cbu_pago' => null,
+			]);
+
+			return;
+		}
+
+		$elegido = ProveedorCbuPagoSupport::resolverDesdeRequest(
+			$proveedorId,
+			$data['proveedor_formapago_id'] ?? $request->input('proveedor_formapago_id'),
+			$data['cbu_pago'] ?? $request->input('cbu_pago')
+		);
+
+		$fpId = $elegido['proveedor_formapago_id'] ?? null;
+		$cbu = $elegido['cbu_pago'] ?? null;
+		$data['proveedor_formapago_id'] = $fpId;
+		$data['cbu_pago'] = $cbu;
+		$request->merge([
+			'proveedor_formapago_id' => $fpId,
+			'cbu_pago' => $cbu,
+		]);
 	}
 
 }

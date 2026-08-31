@@ -1,7 +1,7 @@
 (function () {
     'use strict';
 
-    var SELECTORES_MONTO = '.debe, .haber, .cotizacion, .debeasiento, .haberasiento, .cotizacionasiento, .js-monto-ar';
+    var SELECTORES_MONTO = '.debe, .haber, .cotizacion, .debeasiento, .haberasiento, .cotizacionasiento, .monto, .js-monto-ar';
 
     function parseDecimal(str) {
         if (str == null || str === '') {

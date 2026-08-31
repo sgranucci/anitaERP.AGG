@@ -4,6 +4,7 @@ namespace App\Repositories\Caja;
 
 use App\Models\Caja\Caja_Movimiento_Cuentacaja;
 use App\Repositories\Caja\Tipotransaccion_CajaRepositoryInterface;
+use App\Support\Numerico\NumeroDecimalLocalSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Carbon\Carbon;
 use Auth;
@@ -87,8 +88,8 @@ class Caja_Movimiento_CuentacajaRepository implements Caja_Movimiento_Cuentacaja
 			}
 			$cuentacaja_ids = $data['cuentacaja_ids'];
 			$moneda_ids = $data['moneda_ids'];
-			$montos = $data['montos'];
-			$cotizaciones = $data['cotizaciones'];
+			$montos = NumeroDecimalLocalSupport::listaAFloat($data['montos'] ?? []);
+			$cotizaciones = NumeroDecimalLocalSupport::listaAFloat($data['cotizaciones'] ?? [], 1.0);
 			$observaciones = $data['observaciones'];
 			$fecha = $data['fecha'];
 			
@@ -109,7 +110,7 @@ class Caja_Movimiento_CuentacajaRepository implements Caja_Movimiento_Cuentacaja
 					if ($i < count($cuentacaja_ids))
 					{
 						$monto = 0;
-						if ($montos[$i] != null && $montos[$i] != 0)
+						if (($montos[$i] ?? 0) != 0)
 							$monto = $montos[$i] * $signo;
 
 						$caja_movimiento_cuentacaja = $this->model->findOrFail($_id[$i])->update([
@@ -118,7 +119,7 @@ class Caja_Movimiento_CuentacajaRepository implements Caja_Movimiento_Cuentacaja
 									"cuentacaja_id" => $cuentacaja_ids[$i],
 									"moneda_id" => $moneda_ids[$i],
 									"monto" => $monto,
-									"cotizacion" => $cotizaciones[$i],
+									"cotizacion" => $cotizaciones[$i] ?? 1.0,
 									"observacion" => $observaciones[$i]
 									]);
 					}
@@ -135,7 +136,7 @@ class Caja_Movimiento_CuentacajaRepository implements Caja_Movimiento_Cuentacaja
 					if (!isset($observaciones[$i_movimiento]))
 						$observaciones[$i_movimiento] = ' ';
 					$monto = 0;
-					if ($montos[$i_movimiento] != null && $montos[$i_movimiento] != 0)
+					if (($montos[$i_movimiento] ?? 0) != 0)
 						$monto = $montos[$i_movimiento] * $signo;
 					$caja_movimiento_cuentacaja = $this->model->create([
 						"caja_movimiento_id" => $id,
@@ -143,7 +144,7 @@ class Caja_Movimiento_CuentacajaRepository implements Caja_Movimiento_Cuentacaja
 						"cuentacaja_id" => $cuentacaja_ids[$i_movimiento],
 						"moneda_id" => $moneda_ids[$i_movimiento],
 						"monto" => $monto,
-						"cotizacion" => $cotizaciones[$i_movimiento],
+						"cotizacion" => $cotizaciones[$i_movimiento] ?? 1.0,
 						"observacion" => $observaciones[$i_movimiento]
 						]);
 				}

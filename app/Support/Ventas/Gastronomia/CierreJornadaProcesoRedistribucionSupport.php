@@ -295,6 +295,7 @@ final class CierreJornadaProcesoRedistribucionSupport
 
     /**
      * Porcentaje máximo sobre facturado Anita sin exceder lo recodificable en Waitry sin facturar.
+     * Baja de a 0,0001 si el redondeo a pesos del objetivo quedaría 1 $ por encima del tope.
      */
     public static function porcentajeMaximoSobreFacturacion(float $totalFacturacion, float $totalRecodificable): float
     {
@@ -302,7 +303,81 @@ final class CierreJornadaProcesoRedistribucionSupport
             return 0.0;
         }
 
-        return round(min(100.0, $totalRecodificable / max(0., $totalFacturacion) * 100.), 4);
+        $pct = round(min(100.0, $totalRecodificable / max(0., $totalFacturacion) * 100.), 4);
+
+        return self::bajarPorcentajeHastaQueEntre($totalFacturacion, $totalRecodificable, $pct);
+    }
+
+    /**
+     * % a usar en la jornada: min(solicitado, tope) bajando solo hasta que el objetivo en pesos entre.
+     * No pisa el % de la empresa: el día siguiente vuelve a resolver desde config.
+     *
+     * @return array{
+     *   porcentaje: float,
+     *   porcentaje_solicitado: float,
+     *   porcentaje_objetivo_empresa: float,
+     *   porcentaje_maximo_teorico: float,
+     *   objetivo_importe: float,
+     *   total_recodificable: float,
+     *   tope_bajado: bool,
+     *   motivo: string
+     * }
+     */
+    public static function resolverPorcentajeQueEntra(
+        float $totalFacturacion,
+        float $totalRecodificable,
+        float $porcentajeSolicitado,
+        ?float $porcentajeObjetivoEmpresa = null,
+    ): array {
+        $objetivoEmpresa = round(max(0., min(100., $porcentajeObjetivoEmpresa ?? $porcentajeSolicitado)), 4);
+        $solicitado = round(max(0., min(100., $porcentajeSolicitado)), 4);
+        $maximo = self::porcentajeMaximoSobreFacturacion($totalFacturacion, $totalRecodificable);
+        $aplicado = self::bajarPorcentajeHastaQueEntre(
+            $totalFacturacion,
+            $totalRecodificable,
+            self::porcentajeAplicar($solicitado, $maximo),
+        );
+        $objetivoImporte = self::objetivoDesdePorcentaje($totalFacturacion, $aplicado);
+        $tope = self::pesos($totalRecodificable);
+        $topeBajado = $objetivoEmpresa > 0.0001 && ($aplicado + 0.0001) < $objetivoEmpresa;
+
+        $motivo = '';
+        if ($topeBajado) {
+            $motivo = sprintf(
+                'Tope del %% bajado de %s%% (objetivo empresa) a %s%% en esta jornada para no exceder Waitry sin facturar recodificable ($ %s). El día siguiente vuelve el objetivo original.',
+                number_format($objetivoEmpresa, 4, ',', '.'),
+                number_format($aplicado, 4, ',', '.'),
+                number_format($tope, 0, ',', '.'),
+            );
+        }
+
+        return [
+            'porcentaje' => $aplicado,
+            'porcentaje_solicitado' => $solicitado,
+            'porcentaje_objetivo_empresa' => $objetivoEmpresa,
+            'porcentaje_maximo_teorico' => $maximo,
+            'objetivo_importe' => $objetivoImporte,
+            'total_recodificable' => $tope,
+            'tope_bajado' => $topeBajado,
+            'motivo' => $motivo,
+        ];
+    }
+
+    /**
+     * Baja el % de a 0,0001 hasta que objetivoDesdePorcentaje (pesos) no exceda el recodificable.
+     */
+    public static function bajarPorcentajeHastaQueEntre(
+        float $totalFacturacion,
+        float $totalRecodificable,
+        float $porcentaje,
+    ): float {
+        $pct = round(max(0., min(100., $porcentaje)), 4);
+        $tope = self::pesos($totalRecodificable);
+        while ($pct > 0 && self::objetivoDesdePorcentaje($totalFacturacion, $pct) > $tope + 0.0001) {
+            $pct = round($pct - 0.0001, 4);
+        }
+
+        return $pct;
     }
 
     /**

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Caja;
 
 use App\Models\Caja\Tipotransaccion_Caja;
+use App\Support\Numerico\NumeroDecimalLocalSupport;
 use InvalidArgumentException;
 
 /**
@@ -167,26 +168,6 @@ final class IngresoEgresoTransferenciaSupport
 
     private static function parseMonto(mixed $valor): float
     {
-        if ($valor === null || $valor === '') {
-            return 0.0;
-        }
-        if (is_numeric($valor)) {
-            return (float) $valor;
-        }
-
-        $s = trim((string) $valor);
-        if ($s === '') {
-            return 0.0;
-        }
-
-        // Formato AR: 1.234,56
-        if (preg_match('/^\s*-?\d{1,3}(\.\d{3})*(,\d+)?\s*$/', $s)) {
-            $s = str_replace('.', '', $s);
-            $s = str_replace(',', '.', $s);
-        } else {
-            $s = str_replace(',', '.', $s);
-        }
-
-        return (float) $s;
+        return NumeroDecimalLocalSupport::aFloat($valor, 0.0);
     }
 }

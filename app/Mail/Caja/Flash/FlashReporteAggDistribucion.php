@@ -13,7 +13,7 @@ class FlashReporteAggDistribucion extends Mailable
     use Queueable, SerializesModels;
 
     /**
-     * @param  array{path: string, nombre: string, mime: string, dias?: int, empresas?: list<string>}  $archivo
+     * @param  array{path: string, nombre: string, mime: string, dias?: int, empresas?: list<string>, imagen_path?: string, tabla_resumen?: list<list<array{texto: string, negrita: bool, rojo: bool, encabezado: bool}>>}  $archivo
      */
     public function __construct(
         public FlashReporteSuscripcion $suscripcion,

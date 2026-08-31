@@ -9,17 +9,32 @@ use Tests\TestCase;
 
 class FlashReporteAggSuscripcionSupportTest extends TestCase
 {
-    public function test_periodo_mes_actual_corta_hoy(): void
+    public function test_periodo_mes_actual_corta_fecha_produccion(): void
     {
         $support = new FlashReporteAggSuscripcionSupport;
         $s = new FlashReporteSuscripcion([
             'periodo_relativo' => FlashReporteSuscripcion::PERIODO_MES_ACTUAL,
         ]);
-        $ahora = Carbon::create(2026, 8, 19, 16, 0, 0);
+        // Envío del 31/08 → reporte al 30/08 (fecha de producción).
+        $ahora = Carbon::create(2026, 8, 31, 16, 0, 0);
         $periodo = $support->periodoEfectivo($s, $ahora);
 
         $this->assertSame('2026-08-01', $periodo['desde']->toDateString());
-        $this->assertSame('2026-08-19', $periodo['hasta']->toDateString());
+        $this->assertSame('2026-08-30', $periodo['hasta']->toDateString());
+    }
+
+    public function test_periodo_mes_actual_el_1_usa_mes_de_produccion(): void
+    {
+        $support = new FlashReporteAggSuscripcionSupport;
+        $s = new FlashReporteSuscripcion([
+            'periodo_relativo' => FlashReporteSuscripcion::PERIODO_MES_ACTUAL,
+        ]);
+        // 1/09 temprano: producción = 31/08 → mes agosto completo.
+        $ahora = Carbon::create(2026, 9, 1, 10, 0, 0);
+        $periodo = $support->periodoEfectivo($s, $ahora);
+
+        $this->assertSame('2026-08-01', $periodo['desde']->toDateString());
+        $this->assertSame('2026-08-31', $periodo['hasta']->toDateString());
     }
 
     public function test_periodo_mes_anterior_cierra_el_mes(): void

@@ -13,7 +13,10 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Sueldos\Liquidacion_SueldosRepositoryInterface;
 use App\Services\Sueldos\AnitaLiquidacionNovedadSyncService;
 use App\Services\Sueldos\ImportarAuxconfLiquidacionService;
+use App\Services\Sueldos\LiquidacionAsientoService;
+use App\Services\Sueldos\LiquidacionSolicitudpagoService;
 use App\Services\Sueldos\LiquidacionCalculadorService;
+use App\Services\Sueldos\LsdGeneradorPresentacionService;
 use App\Services\Sueldos\PlanCuotaLiquidacionService;
 use App\Services\Sueldos\ReciboAnexoIIIArmadorService;
 use App\Services\Sueldos\ReciboLotePdfService;
@@ -21,7 +24,10 @@ use App\Services\Sueldos\ReciboMultiempresaService;
 use App\Support\Sueldos\Formula\FormulaException;
 use App\Support\Sueldos\LiquidacionConfidencialSeguridadSupport;
 use App\Support\Sueldos\LiquidacionSueldosListadoFiltros;
+use App\Support\Sueldos\SueldosAsientoCalidadCierreSupport;
+use App\Support\Sueldos\SueldosAsientoSupport;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Session;
 
 class Liquidacion_SueldosController extends Controller
@@ -224,8 +230,10 @@ class Liquidacion_SueldosController extends Controller
         ];
 
         if ($destino === 'reabrir') {
-            if (! in_array($liq->estado, $permitidas['reabrir'], true) || $liq->contabilizado) {
-                return back()->with('error', 'La corrida no puede reabrirse.');
+            if (! in_array($liq->estado, $permitidas['reabrir'], true)
+                || $liq->contabilizado
+                || $liq->estado === 'contabilizada') {
+                return back()->with('error', 'La corrida no puede reabrirse (está contabilizada).');
             }
             $this->repository->cambiarEstado((int) $id, 'calculada');
             // Retrocede el contador de cuotas confirmadas al cerrar.
@@ -238,12 +246,24 @@ class Liquidacion_SueldosController extends Controller
             return back()->with('error', 'Transición de estado no permitida.');
         }
 
+        if ($destino === 'cerrada' && empty($liq->simulacion)) {
+            try {
+                SueldosAsientoCalidadCierreSupport::assertPuedeCerrar($liq);
+            } catch (\Throwable $e) {
+                return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
+                    ->with('error', $e->getMessage());
+            }
+        }
+
         $this->repository->cambiarEstado((int) $id, $destino);
 
         // Planes de cuotas: al cerrar avanza el contador (y finaliza al llegar a N);
         // al anular retrocede lo confirmado y limpia los movimientos de la corrida.
         if ($destino === 'cerrada') {
             $planCuotas->confirmar($liq);
+            if (Schema::hasTable('lsd_recibo_base_sueldos')) {
+                app(LsdGeneradorPresentacionService::class)->persistirBasesCierre($liq->fresh());
+            }
         } elseif ($destino === 'anulada') {
             $planCuotas->revertir($liq);
         }
@@ -303,6 +323,11 @@ class Liquidacion_SueldosController extends Controller
 
         $liq = $this->repository->findOrFail($id);
         LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($liq);
+        $liq->loadMissing([
+            'asiento:id,numeroasiento,fecha',
+            'asientosSueldos.asiento:id,numeroasiento,fecha',
+            'solicitudpago:id,codigo,estado,monto',
+        ]);
 
         $query = $liq->recibos()
             ->with(['detalles', 'empleado:id,confidencial,nombre']);
@@ -312,6 +337,18 @@ class Liquidacion_SueldosController extends Controller
         $hermanosPorRecibo = $multi->hermanosPorRecibos($recibos->getCollection());
         $totalesVisibles = LiquidacionConfidencialSeguridadSupport::totalesVisiblesCorrida($liq);
 
+        $previewAsiento = null;
+        $errorAsiento = null;
+        if (empty($liq->simulacion)
+            && in_array((string) $liq->estado, ['calculada', 'revisada', 'cerrada', 'contabilizada', 'pagada'], true)
+            && (int) ($liq->cantidad_recibos ?? 0) > 0) {
+            try {
+                $previewAsiento = app(LiquidacionAsientoService::class)->preview($liq);
+            } catch (\Throwable $e) {
+                $errorAsiento = $e->getMessage();
+            }
+        }
+
         return view('sueldos.liquidacion.resultado', [
             'liq' => $liq,
             'recibos' => $recibos,
@@ -319,7 +356,83 @@ class Liquidacion_SueldosController extends Controller
             'totalesVisibles' => $totalesVisibles,
             'puedeImportarConfidencial' => LiquidacionConfidencialSeguridadSupport::puedeImportarConfidencial()
                 && $liq->esEditable(),
+            'previewAsiento' => $previewAsiento,
+            'errorAsiento' => $errorAsiento,
         ]);
+    }
+
+    public function previewAsiento($id)
+    {
+        can(SueldosAsientoSupport::PERMISO_CONTABILIZAR);
+
+        $liq = $this->repository->findOrFail($id);
+        LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($liq);
+
+        try {
+            $preview = app(LiquidacionAsientoService::class)->preview($liq);
+        } catch (\Throwable $e) {
+            return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
+                ->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
+            ->with('previewAsiento', $preview);
+    }
+
+    public function contabilizar($id)
+    {
+        can(SueldosAsientoSupport::PERMISO_CONTABILIZAR);
+
+        $liq = $this->repository->findOrFail($id);
+        LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($liq);
+
+        try {
+            $asientoId = app(LiquidacionAsientoService::class)->generar($liq);
+        } catch (\Throwable $e) {
+            return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
+                ->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
+            ->with('mensaje', 'Corrida contabilizada. Asiento #'.$asientoId.'.');
+    }
+
+    public function descontabilizar($id)
+    {
+        can(SueldosAsientoSupport::PERMISO_CONTABILIZAR);
+
+        $liq = $this->repository->findOrFail($id);
+        LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($liq);
+
+        try {
+            $reversoId = app(LiquidacionAsientoService::class)->revertir($liq);
+        } catch (\Throwable $e) {
+            return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
+                ->with('error', $e->getMessage());
+        }
+
+        return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
+            ->with('mensaje', 'Corrida descontabilizada. Contra-asiento #'.$reversoId.'.');
+    }
+
+    public function generarSolicitudpago($id)
+    {
+        can(SueldosAsientoSupport::PERMISO_GENERAR_SP);
+
+        $liq = $this->repository->findOrFail($id);
+        LiquidacionConfidencialSeguridadSupport::assertLiquidacionVisible($liq);
+
+        try {
+            $spId = app(LiquidacionSolicitudpagoService::class)->generar($liq);
+        } catch (\Throwable $e) {
+            return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
+                ->with('error', $e->getMessage());
+        }
+
+        $sp = $liq->fresh()->solicitudpago;
+
+        return redirect()->route('resultado_liquidacion_sueldos', ['id' => $id])
+            ->with('mensaje', 'Solicitud de pago '.($sp->codigo ?? $spId).' generada (autorizada). Pagala desde Caja.');
     }
 
     /**

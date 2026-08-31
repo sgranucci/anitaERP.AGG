@@ -704,6 +704,30 @@
 		</div>
 	</div>
 </div>
+
+<div class="modal fade" id="modalFacturaConceptoTags" tabindex="-1" role="dialog" aria-labelledby="modalFacturaConceptoTagsLabel" aria-hidden="true" data-backdrop="static">
+	<div class="modal-dialog" role="document">
+		<div class="modal-content">
+			<div class="modal-header py-2">
+				<h5 class="modal-title" id="modalFacturaConceptoTagsLabel">Completar detalle del concepto</h5>
+				<button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+			</div>
+			<div class="modal-body">
+				<p class="small text-muted mb-2">Complete los datos para armar el texto ARCA de la l&iacute;nea.</p>
+				<div id="factura_concepto_tags_campos"></div>
+				<div class="form-group mb-0 mt-3">
+					<label class="small font-weight-bold">Vista previa</label>
+					<textarea id="factura_concepto_tags_preview" class="form-control" rows="3" readonly></textarea>
+					<small class="text-muted" id="factura_concepto_tags_aviso_largo"></small>
+				</div>
+			</div>
+			<div class="modal-footer py-2">
+				<button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cancelar</button>
+				<button type="button" class="btn btn-primary btn-sm" id="factura_concepto_tags_aplicar">Aplicar al detalle</button>
+			</div>
+		</div>
+	</div>
+</div>
 @include('ventas.factura.modal')
 @include('ventas.factura.templatetotalfactura')
 @include('includes.stock.modalconsultaarticulo')
@@ -712,3 +736,5 @@
 @include('includes.ventas.modalconsultavendedor')
 @include('includes.ventas.modalconsultatransporte')
 @include('includes.ventas.modalconsultaconceptoventa')
+@include('includes.ventas.modalconsultacontratoventa')
+<script src="{{ asset('assets/pages/scripts/ventas/contrato_venta/consulta.js') }}" type="text/javascript"></script>

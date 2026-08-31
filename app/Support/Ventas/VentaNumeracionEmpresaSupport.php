@@ -2,6 +2,7 @@
 
 namespace App\Support\Ventas;
 
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Database\SqlDialectSupport;
 use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
@@ -95,6 +96,64 @@ final class VentaNumeracionEmpresaSupport
         }
 
         return (int) ($query->max('venta.numerocomprobante') ?? 0);
+    }
+
+    /**
+     * AGG unique (puntoventa_id, numerocomprobante): todos los tipos del PV.
+     * FBI y FSL (y cualquier otro) comparten la misma sucursal y no pueden repetir número.
+     */
+    public static function maxNumerocomprobanteErpPorPuntoventa(
+        int $puntoventaId,
+        ?int $empresaId = null,
+    ): int {
+        if ($puntoventaId <= 0) {
+            return 0;
+        }
+
+        $query = Venta::query()->where('venta.puntoventa_id', $puntoventaId);
+
+        if ($empresaId !== null && $empresaId > 0) {
+            $query->whereHas('puntoventas', static function ($q) use ($empresaId): void {
+                $q->where('empresa_id', $empresaId);
+            });
+        }
+
+        return (int) ($query->max('venta.numerocomprobante') ?? 0);
+    }
+
+    /**
+     * Próximo número que respeta el unique vigente.
+     * AGG: max del PV (todos los tipos) + 1.
+     * El Bierzo: max de la serie codigo_afip + PV + 1.
+     *
+     * $mayorQue fuerza a saltar un número que acabó de chocar (INSERT fallido no actualiza el max).
+     */
+    public static function siguienteNumerocomprobanteParaUnique(
+        int $puntoventaId,
+        int $tipotransaccionId,
+        string $letra = 'B',
+        ?int $empresaId = null,
+        int $mayorQue = 0,
+    ): int {
+        if ($puntoventaId <= 0) {
+            return max(1, $mayorQue + 1);
+        }
+
+        if (EntornoEmpresaSupport::esElBierzo()) {
+            $codigoAlmacenado = (int) (Tipotransaccion::query()
+                ->whereKey($tipotransaccionId)
+                ->value('codigo') ?? 0);
+            $ultimo = self::maxNumerocomprobanteErpDesdeTipotransaccion(
+                $puntoventaId,
+                $codigoAlmacenado,
+                $letra,
+                $empresaId,
+            );
+        } else {
+            $ultimo = self::maxNumerocomprobanteErpPorPuntoventa($puntoventaId, $empresaId);
+        }
+
+        return max($ultimo, $mayorQue) + 1;
     }
 
     public static function maxNumerocomprobanteErpDesdeTipotransaccion(

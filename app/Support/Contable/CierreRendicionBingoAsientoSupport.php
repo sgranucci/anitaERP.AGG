@@ -9,10 +9,20 @@ use InvalidArgumentException;
 
 /**
  * Armado de asientos BIN del cierre bingo (réplica genera_asiento en p-vtabingo.c).
+ *
+ * Leyendas de cabecera/línea (= ctav_desc_mov Anita, máx. 30): mismas cadenas que
+ * arma_asiento() en p-vtabingo.c — no incluir fecha ni PV (no entran en 30 chars).
  */
 final class CierreRendicionBingoAsientoSupport
 {
+    /** Fallback / rótulo de proceso (no es leyenda de ctamov). */
     public const DESCRIPCION_ASIENTO = 'Cierre rendición bingo';
+
+    public const LEYENDA_PAGO_PREMIOS = 'Pago de premios';
+
+    public const LEYENDA_DEV_POZO = 'Dev. pozo acum.';
+
+    public const LEYENDA_CANON_HOSPITAL = 'Canon ent. de bien publico';
 
     private const TOLERANCIA_CUADRE = 0.02;
 
@@ -154,7 +164,7 @@ final class CierreRendicionBingoAsientoSupport
         }
 
         if ($lineas1 !== []) {
-            $asientos[] = ['leyenda' => 'Pago de premios', 'lineas' => $lineas1];
+            $asientos[] = ['leyenda' => self::LEYENDA_PAGO_PREMIOS, 'lineas' => $lineas1];
         }
 
         $lineas2 = [];
@@ -174,7 +184,7 @@ final class CierreRendicionBingoAsientoSupport
         }
 
         if ($lineas2 !== []) {
-            $asientos[] = ['leyenda' => 'Dev. pozo acum.', 'lineas' => $lineas2];
+            $asientos[] = ['leyenda' => self::LEYENDA_DEV_POZO, 'lineas' => $lineas2];
         }
 
         foreach ($tot['canones'] ?? [] as $canon) {
@@ -197,10 +207,10 @@ final class CierreRendicionBingoAsientoSupport
         $hospital = round((float) ($tot['tot_pago_hospital'] ?? 0), 2);
         if (abs($hospital) > 0.0001) {
             $asientos[] = [
-                'leyenda' => 'Canon ent. de bien publico',
+                'leyenda' => self::LEYENDA_CANON_HOSPITAL,
                 'lineas' => [
-                    self::linea($hospital > 0 ? 'D' : 'H', 'Canon ent. de bien publico', $cHospital, abs($hospital)),
-                    self::linea($hospital > 0 ? 'H' : 'D', 'Canon ent. de bien publico — contrapartida', $cContHospital, abs($hospital)),
+                    self::linea($hospital > 0 ? 'D' : 'H', self::LEYENDA_CANON_HOSPITAL, $cHospital, abs($hospital)),
+                    self::linea($hospital > 0 ? 'H' : 'D', self::LEYENDA_CANON_HOSPITAL.' — contrapartida', $cContHospital, abs($hospital)),
                 ],
             ];
         }

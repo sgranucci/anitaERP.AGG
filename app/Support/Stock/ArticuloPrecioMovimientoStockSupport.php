@@ -168,8 +168,9 @@ final class ArticuloPrecioMovimientoStockSupport
     public static function etiquetaOrigenUltimaCompra(?string $origen): string
     {
         return match ($origen) {
-            ArticuloPrecioUltimaCompraSupport::ORIGEN_ANITA => 'Anita (stkmae)',
+            ArticuloPrecioUltimaCompraSupport::ORIGEN_ANITA => 'Anita (stkmae unificado)',
             ArticuloPrecioUltimaCompraSupport::ORIGEN_ERP_COM => 'ERP (última COM)',
+            ArticuloPrecioUltimaCompraSupport::ORIGEN_ERP_ENTRADA => 'ERP (TRA / entrada stock)',
             ArticuloPrecioUltimaCompraSupport::ORIGEN_ARTICULO => 'Artículo (costo/PPP)',
             default => '—',
         };

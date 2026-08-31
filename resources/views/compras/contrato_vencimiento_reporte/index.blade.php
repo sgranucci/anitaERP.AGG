@@ -205,11 +205,25 @@
         }
     });
 
+    // Descarga sin navegación: sin Esc/focus el aviso queda pegado.
     document.querySelectorAll('a[href*="listar-contrato-vencimiento-reporte"]').forEach(function (link) {
-        link.addEventListener('click', mostrar);
+        link.addEventListener('click', function () {
+            var sub = document.getElementById('contrato-venc-overlay-subtitulo');
+            if (sub) {
+                sub.textContent = 'El archivo se descarga al terminar. Pulse Esc para cerrar este aviso.';
+            }
+            mostrar();
+            window.addEventListener('focus', ocultar, { once: true });
+        });
     });
 
     window.addEventListener('pageshow', ocultar);
+    window.addEventListener('pagehide', ocultar);
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' || event.keyCode === 27) {
+            ocultar();
+        }
+    });
 })();
 </script>
 @endsection

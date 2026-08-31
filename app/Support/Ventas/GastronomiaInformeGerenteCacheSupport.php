@@ -27,7 +27,7 @@ final class GastronomiaInformeGerenteCacheSupport
     {
         $userId = (int) (auth()->id() ?? 0);
 
-        return 'gastronomia_informe_gerente_v3_'.$userId.'_'.self::firma($filtros);
+        return 'gastronomia_informe_gerente_v4_'.$userId.'_'.self::firma($filtros);
     }
 
     /**

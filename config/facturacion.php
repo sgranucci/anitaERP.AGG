@@ -125,6 +125,12 @@ switch(strtoupper(config('app.empresa')))
             "CONCEPTO_ANITA_LOGISTICA" => (int) env('FACTURACION_CONCEPTO_ANITA_LOGISTICA', 5),
             "CONCEPTO_ANITA_BONIFICACION" => (int) env('FACTURACION_CONCEPTO_ANITA_BONIFICACION', 1),
             "CONCEPTO_ANITA_AJUSTE" => (int) env('FACTURACION_CONCEPTO_ANITA_AJUSTE', 2),
+            'contrato_venta_aviso' => [
+                'habilitado' => filter_var(env('FACTURACION_CONTRATO_VENTA_AVISO_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+                'dias_antes' => max(1, (int) env('FACTURACION_CONTRATO_VENTA_AVISO_DIAS', 15)),
+                'hora' => env('FACTURACION_CONTRATO_VENTA_AVISO_HORA', '09:20'),
+                'emails' => env('FACTURACION_CONTRATO_VENTA_AVISO_EMAILS', ''),
+            ],
         ];
         break;
     case "AGG":
@@ -151,6 +157,12 @@ switch(strtoupper(config('app.empresa')))
             "CONCEPTO_ANITA_LOGISTICA" => (int) env('FACTURACION_CONCEPTO_ANITA_LOGISTICA', 5),
             "CONCEPTO_ANITA_BONIFICACION" => (int) env('FACTURACION_CONCEPTO_ANITA_BONIFICACION', 1),
             "CONCEPTO_ANITA_AJUSTE" => (int) env('FACTURACION_CONCEPTO_ANITA_AJUSTE', 2),
+            'contrato_venta_aviso' => [
+                'habilitado' => filter_var(env('FACTURACION_CONTRATO_VENTA_AVISO_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+                'dias_antes' => max(1, (int) env('FACTURACION_CONTRATO_VENTA_AVISO_DIAS', 15)),
+                'hora' => env('FACTURACION_CONTRATO_VENTA_AVISO_HORA', '09:20'),
+                'emails' => env('FACTURACION_CONTRATO_VENTA_AVISO_EMAILS', ''),
+            ],
         ];
         break;
 }

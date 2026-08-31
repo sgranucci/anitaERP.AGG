@@ -6,6 +6,7 @@ use App\Models\Sueldos\Empleado_Sueldos;
 use App\Models\Sueldos\Liquidacion_Sueldos;
 use App\Support\Sueldos\AntiguedadTablaResolver;
 use App\Support\Sueldos\CategoriaOrigenBases;
+use App\Support\Sueldos\Lsd\LsdDetraccionSupport;
 use App\Support\Sueldos\NovedadSueldosVigencia;
 use App\Support\Sueldos\VacacionEscalaAntiguedad;
 use Carbon\Carbon;
@@ -151,8 +152,9 @@ class ContextoLiquidacion implements EntornoFormula
             'empleado.agrupamiento_var2' => $vag[2],
             'empleado.agrupamiento_var3' => $vag[3],
             'empleado.agrupamiento_var4' => $vag[4],
-            // Anita emp_modalidad (SIJP); DTBR/1002 y fórmulas de base no imponible.
+            // Anita emp_modalidad (SIJP). La detracción Ley 27.430 usa detraccion(), no el 1002.
             'empleado.modalidad_sijp' => (int) ($emp->modalidad_sijp ?? 0),
+            'empleado.condicion_sijp' => (string) ($emp->condicion_sijp ?? '01'),
             'empleado.mano_obra' => is_numeric($emp->mano_obra ?? null) ? (int) $emp->mano_obra : 0,
             // Anita GRRE/GRDE / emp_grp*: espejo de los primeros 3 del pivot N (o códigos sync)
             'empleado.grupo_remuneracion' => (int) ($emp->grupo_concepto_1_codigo ?? 0),
@@ -657,7 +659,7 @@ class ContextoLiquidacion implements EntornoFormula
             'aguinaldo', 'cantidad_vacaciones', 'dias_vacaciones', 'total_vacaciones',
             'cantidad_asignacion', 'importe_asignacion', 'tabla_empleado', 'descuento_bruto',
             'base_categoria', 'es_empresa_madre', 'es_asociacion', 'im_concepto_rem', 'val',
-            'antiguedad_tabla',
+            'antiguedad_tabla', 'detraccion', 'detraccion_lsd',
         ], true);
     }
 
@@ -774,6 +776,16 @@ class ContextoLiquidacion implements EntornoFormula
             case 'descuento_bruto':
                 // Anita DTBR(concepto): factor del haber si no se liquidó ya en el período.
                 return $this->descuentoBruto((int) ($args[0] ?? 0));
+            case 'detraccion':
+            case 'detraccion_lsd':
+                // Ley 27.430 art. 4. Reemplaza la fórmula Anita del 1002.
+                return LsdDetraccionSupport::importeParaFormula(
+                    $this->parametros,
+                    (int) round((float) ($this->vars['periodo.dias_trabajados'] ?? $this->vars['periodo.dias'] ?? 30)),
+                    (int) ($this->vars['empleado.modalidad_sijp'] ?? 0),
+                    (string) ($this->vars['empleado.condicion_sijp'] ?? '01'),
+                    (float) ($this->acum['REM'] ?? 0),
+                );
             case 'base_categoria':
             case 'im_concepto_rem':
                 return 0.0;

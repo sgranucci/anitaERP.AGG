@@ -627,6 +627,22 @@ class ProveedorController extends Controller
 	}
 
     /**
+     * CBU de pago del proveedor (para modal de elección en OP / IE).
+     */
+    public function cbusPago(Request $request, int $id)
+    {
+        $cbus = \App\Support\Compras\ProveedorCbuPagoSupport::listarCbusValidos($id);
+
+        return response()->json([
+            'ok' => true,
+            'proveedor_id' => $id,
+            'cantidad' => count($cbus),
+            'requiere_eleccion' => count($cbus) > 1,
+            'cbus' => $cbus,
+        ], 200, [], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    /**
      * Consulta ARCA en background desde el ABM; suspende el proveedor si los impuestos no son válidos (RI / Monotributo).
      */
     public function validarArcaPadron(Request $request, int $id): JsonResponse

@@ -548,8 +548,9 @@
             btnZip.addEventListener('click', function () {
                 mostrarProcesoOverlay(
                     'Generando ZIP de Libro IVA Digital e IVA Simple…',
-                    'Preparando los archivos ASCII/CSV. Puede demorar. No cierre la página.'
+                    'El archivo se descarga al terminar. Pulse Esc para cerrar este aviso.'
                 );
+                window.addEventListener('focus', ocultarProcesoOverlay, { once: true });
             });
         }
 
@@ -558,12 +559,19 @@
             btnIvaSimple.addEventListener('click', function () {
                 mostrarProcesoOverlay(
                     'Generando IVA Simple…',
-                    'Armando débito (ventas) y crédito fiscal (compras). Puede demorar. No cierre la página.'
+                    'El archivo se descarga al terminar. Pulse Esc para cerrar este aviso.'
                 );
+                window.addEventListener('focus', ocultarProcesoOverlay, { once: true });
             });
         }
 
         window.addEventListener('pageshow', ocultarProcesoOverlay);
+        window.addEventListener('pagehide', ocultarProcesoOverlay);
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' || event.keyCode === 27) {
+                ocultarProcesoOverlay();
+            }
+        });
     })();
 </script>
 @endsection

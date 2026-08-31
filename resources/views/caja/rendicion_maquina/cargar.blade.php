@@ -553,7 +553,20 @@
                                                 data-cotizacion="{{ number_format($cotLinea, 6, '.', '') }}"
                                                 data-moneda-id="{{ $monedaIdLinea }}">
                                                 <td class="text-muted col-codigo">{{ $linea['codigo'] ?? '' }}</td>
-                                                <td class="col-desc" title="{{ $titleCuenta }}">{{ $linea['nombre'] ?? '' }}</td>
+                                                <td class="col-desc" title="{{ $titleCuenta }}">
+                                                    {{ $linea['nombre'] ?? '' }}
+                                                    @if (in_array($monedaIdLinea, [2, 4], true))
+                                                        <div class="text-muted small font-weight-normal mt-0 js-valor-ayuda-dolar" style="line-height:1.25;">
+                                                            Cargar el monto en d&oacute;lares (USD), no en pesos.
+                                                            <span class="d-block">
+                                                                Cotiz. d&iacute;a:
+                                                                <strong class="js-valor-cotizacion">{{ number_format($cotLinea, 4, ',', '.') }}</strong>
+                                                                &nbsp;·&nbsp;Equiv. pesos:
+                                                                <strong class="js-valor-equiv-pesos">{{ number_format((float) ($linea['monto'] ?? 0) * $cotLinea, 2, ',', '.') }}</strong>
+                                                            </span>
+                                                        </div>
+                                                    @endif
+                                                </td>
                                                 <td class="col-monto">
                                                     <input type="text" inputmode="decimal"
                                                            class="form-control form-control-sm text-right js-valor-monto js-monto-ar"

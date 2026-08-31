@@ -8,6 +8,7 @@ use App\Models\Configuracion\Moneda;
 use App\Models\Contable\Centrocosto;
 use App\Models\Caja\Caja_Movimiento;
 use App\Models\Seguridad\Usuario;
+use App\Models\Sueldos\Liquidacion_Sueldos;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use OwenIt\Auditing\Contracts\Auditable;
@@ -38,6 +39,7 @@ class Solicitudpago extends Model implements Auditable
         'centrocosto_id',
         'detalle',
         'solicitudpago_madre_id',
+        'liquidacion_sueldos_id',
         'usuario_umod_id',
     ];
 
@@ -55,6 +57,7 @@ class Solicitudpago extends Model implements Auditable
         'sector_solicitudpago_id' => 'integer',
         'centrocosto_id' => 'integer',
         'solicitudpago_madre_id' => 'integer',
+        'liquidacion_sueldos_id' => 'integer',
         'usuario_umod_id' => 'integer',
     ];
 
@@ -136,5 +139,10 @@ class Solicitudpago extends Model implements Auditable
         return $this->hasMany(Caja_Movimiento::class, 'solicitudpago_id')
             ->whereNull('caja_movimiento_origen_id')
             ->orderByDesc('id');
+    }
+
+    public function liquidacionSueldos()
+    {
+        return $this->belongsTo(Liquidacion_Sueldos::class, 'liquidacion_sueldos_id');
     }
 }

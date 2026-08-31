@@ -16,12 +16,15 @@ class FlashReporteAggXlsxPatchSupportTest extends TestCase
 
         try {
             (new FlashReporteAggXlsxPatchSupport)->rellenar($plantilla, $path, [
-                'Datos Biyemas' => [
-                    'A9' => 'Sab/Sat    ',
-                    'B9' => ' 01/08/26 ',
-                    'C9' => 3482,
-                    'AU9' => 194838676.5,
-                ],
+                'Datos Biyemas' => array_merge(
+                    \App\Support\Caja\Flash\FlashReporteAggMapeoSupport::encabezadosHojaDatos(),
+                    [
+                        'A9' => 'Sab/Sat    ',
+                        'B9' => ' 01/08/26 ',
+                        'C9' => 3482,
+                        'AU9' => 194838676.5,
+                    ]
+                ),
             ]);
 
             $zip = new ZipArchive;
@@ -40,10 +43,19 @@ class FlashReporteAggXlsxPatchSupportTest extends TestCase
             $this->assertStringContainsString('<c r="C9"', $datos);
             $this->assertStringContainsString('<v>3482</v>', $datos);
             $this->assertStringContainsString('<v>194838676.5</v>', $datos);
+            $this->assertStringContainsString('<c r="BC7"', $datos);
+            $this->assertStringContainsString('<c r="A8"', $datos);
 
             $shared = $zip->getFromName('xl/sharedStrings.xml');
             $this->assertNotFalse($shared);
             $this->assertStringContainsString('xml:space="preserve"', $shared);
+            $this->assertStringContainsString('>Electronic</t>', $shared);
+            $this->assertStringContainsString('> Day       </t>', $shared);
+
+            $tablaXml = $zip->getFromName('xl/worksheets/sheet5.xml');
+            $this->assertNotFalse($tablaXml);
+            $this->assertStringContainsString('HLOOKUP("Electronic",', $tablaXml);
+            $this->assertStringNotContainsString('r="J3"', $tablaXml);
 
             $zip->close();
         } finally {
@@ -51,5 +63,24 @@ class FlashReporteAggXlsxPatchSupportTest extends TestCase
                 unlink($path);
             }
         }
+    }
+
+    public function test_sanea_hoja_tabla_a_solo_a_g(): void
+    {
+        $patcher = new FlashReporteAggXlsxPatchSupport;
+        $xml = '<worksheet><dimension ref="A2:O23"/><cols><col min="9" max="12" hidden="1"/></cols>'
+            .'<sheetData><row r="3"><c r="E3"><f>HLOOKUP(J3,Resumen!BE5:BH39,1,0)</f></c>'
+            .'<c r="J3" t="s"><v>42</v></c></row><row r="14"><c r="L14"/></row></sheetData>'
+            .'<mergeCells count="1"><mergeCell ref="J3:J4"/></mergeCells></worksheet>';
+
+        $saneado = $patcher->sanearXmlHojaTabla($xml);
+
+        $this->assertStringContainsString('HLOOKUP("Electronic",', $saneado);
+        $this->assertStringNotContainsString('HLOOKUP(J3,', $saneado);
+        $this->assertStringNotContainsString('r="J3"', $saneado);
+        $this->assertStringNotContainsString('mergeCells', $saneado);
+        $this->assertStringContainsString('ref="A1:G13"', $saneado);
+        $this->assertStringContainsString('width="17.138671875"', $saneado);
+        $this->assertStringNotContainsString('<row r="14"', $saneado);
     }
 }

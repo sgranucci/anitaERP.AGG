@@ -12,7 +12,8 @@ return new class extends Migration
     private const CODIGO_SUGERIDO = [
         CuentaAutomaticaClaves::CIERRE_MAQUINA_CAJA_PESOS => '111010001',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_TARJETAS => '113010001',
-        CuentaAutomaticaClaves::CIERRE_MAQUINA_DOLARES => '111020001',
+        // Códigos Anita (impcont 475/484/485). Migración 2026_08_31_093500 corrige installs ya seedados.
+        CuentaAutomaticaClaves::CIERRE_MAQUINA_DOLARES => '111010002',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_EUROS => '111020002',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_CAJA_TRANSITORIA => '111010010',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_DIFERENCIA_CAJA => '521280004',
@@ -21,8 +22,8 @@ return new class extends Migration
         CuentaAutomaticaClaves::CIERRE_MAQUINA_CONT_CANON_LOTERIA => '215010001',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_CANON_HOSPITAL => '521020002',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_CONT_CANON_HOSPITAL => '215010003',
-        CuentaAutomaticaClaves::CIERRE_MAQUINA_TICKET_PROM_DEBE => '521040010',
-        CuentaAutomaticaClaves::CIERRE_MAQUINA_TICKET_PROM_HABER => '411010010',
+        CuentaAutomaticaClaves::CIERRE_MAQUINA_TICKET_PROM_DEBE => '521040005',
+        CuentaAutomaticaClaves::CIERRE_MAQUINA_TICKET_PROM_HABER => '211010009',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_GASTOS => '521280001',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_VENTAS => '411010001',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_TICKET_GASTRO => '211010020',

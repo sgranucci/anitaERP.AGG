@@ -143,14 +143,15 @@ return [
 
     /*
     | Precio unitario de última compra (costo) para recuentos, transferencias y mov. stock.
-    | Resolución en ArticuloPrecioUltimaCompraSupport:
-    |   1) ERP: última recepción COM confirmada (historia OC o línea recepción)
-    |   2) Anita stkmae.stkm_pre_compra3
-    |   3) articulo.costo / articulo.ppp
+    | Resolución en ArticuloPrecioUltimaCompraSupport (gana la fuente con fecha más reciente):
+    |   1) ERP COM: historia OC / recepción confirmada
+    |   2) ERP entrada: TRA confirmada (precio destino) o movimiento cantidad &gt; 0
+    |   3) Anita stkmae.stkm_pre_compra3 unificado entre empresas (fecha máx.)
+    |   4) articulo.costo / articulo.ppp
     | TITO (promedio TRCONT): ArticuloPrecioPromedioCompraSupport
     |   1) exactamente 3 recepciones COM ERP → promedio en pesos usando
     |      moneda/cotización de Anita recepmov (recv_cod_mon / recv_cotizacion)
-    |   2) Anita stkm_pre_compra1/2/3 → promedio
+    |   2) Anita stkm_pre_compra1/2/3 → promedio (bridge Biyemas; no unifica multiempresa)
     */
     'precio_ultima_compra' => [
         'fuente_primaria' => 'erp_com',

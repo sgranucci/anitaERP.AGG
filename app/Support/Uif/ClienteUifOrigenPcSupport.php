@@ -286,6 +286,20 @@ final class ClienteUifOrigenPcSupport
         };
     }
 
+    /** Abreviatura corta para grillas (BSA / KSA / RSA). */
+    public static function codigoOrigen(string $origen): string
+    {
+        $origen = strtolower(trim($origen));
+
+        return match ($origen) {
+            'biyemas' => 'BSA',
+            'kandiko' => 'KSA',
+            'rebisco' => 'RSA',
+            '' => '—',
+            default => strtoupper(substr($origen, 0, 3)),
+        };
+    }
+
     /** @return array<string, string> */
     public static function opcionesOrigen(?array $soloOrigenes = null): array
     {

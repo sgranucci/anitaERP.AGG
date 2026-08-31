@@ -45,6 +45,7 @@ final class CierreJornadaProcesoAsientosPreviewSupport
 
         $asientos = [];
         $n = 0;
+        $totalesVentaPorId = self::totalesVentaErpPorId($movimientos);
 
         foreach ($movimientos as $mov) {
             $grupo = (string) ($mov['grupo'] ?? '');
@@ -55,7 +56,8 @@ final class CierreJornadaProcesoAsientosPreviewSupport
                 continue;
             }
 
-            $total = round((float) ($mov['total'] ?? 0), 2);
+            $totalWaitry = round((float) ($mov['total'] ?? 0), 2);
+            $total = self::importeContableMovimiento($mov, $totalesVentaPorId);
             if ($total <= 0.0001) {
                 continue;
             }
@@ -63,6 +65,13 @@ final class CierreJornadaProcesoAsientosPreviewSupport
             $impuestoInterno = round((float) ($mov['impuesto_interno'] ?? 0), 2);
             $importeCigarrillos = self::importeCigarrillosDesdeMov($mov, $empresaId);
             $exento = self::exentoDesdeMov($mov, $empresaId);
+            [$impuestoInterno, $importeCigarrillos, $exento] = self::escalarBasesAlImporteContable(
+                $totalWaitry,
+                $total,
+                $impuestoInterno,
+                $importeCigarrillos,
+                $exento,
+            );
 
             if ($grupo === CierreJornadaProcesoClasificacionSupport::GRUPO_FACTURADO_MEDIO_REAL) {
                 $medios = self::mediosPlanificadosFacturado($mov, $empresaId);
@@ -804,12 +813,17 @@ final class CierreJornadaProcesoAsientosPreviewSupport
      */
     private static function sumaTotalesGrupo(array $movimientos, string $grupo): float
     {
+        $totalesVenta = $grupo === CierreJornadaProcesoClasificacionSupport::GRUPO_FACTURADO_TOTEM
+            ? self::totalesVentaErpPorId($movimientos)
+            : [];
         $sum = 0.;
         foreach ($movimientos as $mov) {
             if (($mov['grupo'] ?? '') !== $grupo) {
                 continue;
             }
-            $total = round((float) ($mov['total'] ?? 0), 2);
+            $total = $totalesVenta !== []
+                ? self::importeContableMovimiento($mov, $totalesVenta)
+                : round((float) ($mov['total'] ?? 0), 2);
             if ($total <= 0.0001) {
                 continue;
             }
@@ -817,6 +831,84 @@ final class CierreJornadaProcesoAsientosPreviewSupport
         }
 
         return round($sum, 2);
+    }
+
+    /**
+     * TOTEM ya facturado: el asiento y los medios siguen el total de la venta ERP, no el cobro Waitry.
+     *
+     * @param  array<string, mixed>  $mov
+     * @param  array<int, float>  $totalesVentaPorId
+     */
+    public static function importeContableMovimiento(array $mov, array $totalesVentaPorId = []): float
+    {
+        $waitry = round((float) ($mov['total'] ?? 0), 2);
+        if ((string) ($mov['grupo'] ?? '') !== CierreJornadaProcesoClasificacionSupport::GRUPO_FACTURADO_TOTEM) {
+            return $waitry;
+        }
+
+        $ventaId = (int) ($mov['venta_id'] ?? 0);
+        if ($ventaId > 0) {
+            if (isset($totalesVentaPorId[$ventaId])) {
+                $erp = round((float) $totalesVentaPorId[$ventaId], 2);
+                if ($erp > 0.0001) {
+                    return $erp;
+                }
+            } elseif ($totalesVentaPorId === []) {
+                $erp = round((float) Venta::query()->whereKey($ventaId)->value('total'), 2);
+                if ($erp > 0.0001) {
+                    return $erp;
+                }
+            }
+        }
+
+        return $waitry;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $movimientos
+     * @return array<int, float>
+     */
+    private static function totalesVentaErpPorId(array $movimientos): array
+    {
+        $ids = [];
+        foreach ($movimientos as $mov) {
+            $id = (int) ($mov['venta_id'] ?? 0);
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+        if ($ids === []) {
+            return [];
+        }
+
+        return Venta::query()
+            ->whereIn('id', array_values($ids))
+            ->pluck('total', 'id')
+            ->map(static fn ($t) => round((float) $t, 2))
+            ->all();
+    }
+
+    /**
+     * @return array{0:float,1:float,2:float}
+     */
+    private static function escalarBasesAlImporteContable(
+        float $totalOrigen,
+        float $totalContable,
+        float $impuestoInterno,
+        float $importeCigarrillos,
+        float $exento,
+    ): array {
+        if ($totalOrigen <= 0.0001 || abs($totalContable - $totalOrigen) <= 0.0001) {
+            return [$impuestoInterno, $importeCigarrillos, $exento];
+        }
+
+        $factor = $totalContable / $totalOrigen;
+
+        return [
+            round($impuestoInterno * $factor, 2),
+            round($importeCigarrillos * $factor, 2),
+            round($exento * $factor, 2),
+        ];
     }
 
     /**
@@ -937,7 +1029,11 @@ final class CierreJornadaProcesoAsientosPreviewSupport
             }
             $medios = match ($grupo) {
                 CierreJornadaProcesoClasificacionSupport::GRUPO_SIN_FACTURAR_QR => self::mediosPlanificadosSinFacturar($mov, $empresaId),
-                CierreJornadaProcesoClasificacionSupport::GRUPO_FACTURADO_TOTEM => self::mediosPuenteTotem($mov, round((float) ($mov['total'] ?? 0), 2), $empresaId),
+                CierreJornadaProcesoClasificacionSupport::GRUPO_FACTURADO_TOTEM => self::mediosPuenteTotem(
+                    $mov,
+                    self::importeContableMovimiento($mov),
+                    $empresaId,
+                ),
                 default => self::mediosPlanificadosFacturado($mov, $empresaId),
             };
             foreach ($medios as $m) {
@@ -1408,10 +1504,16 @@ final class CierreJornadaProcesoAsientosPreviewSupport
         int $empresaId,
         array $configContable,
     ): array {
+        $totalesVentaPorId = self::totalesVentaErpPorId($movimientos);
         $movs = array_values(array_filter(
             $movimientos,
-            fn (array $m) => ($m['grupo'] ?? '') === CierreJornadaProcesoClasificacionSupport::GRUPO_FACTURADO_TOTEM
-                && round((float) ($m['total'] ?? 0), 2) > 0.0001,
+            function (array $m) use ($totalesVentaPorId) {
+                if (($m['grupo'] ?? '') !== CierreJornadaProcesoClasificacionSupport::GRUPO_FACTURADO_TOTEM) {
+                    return false;
+                }
+
+                return self::importeContableMovimiento($m, $totalesVentaPorId) > 0.0001;
+            },
         ));
         if ($movs === []) {
             return [];
@@ -1434,10 +1536,18 @@ final class CierreJornadaProcesoAsientosPreviewSupport
         $debePuentePorCuenta = [];
 
         foreach ($movs as $mov) {
-            $total = round((float) ($mov['total'] ?? 0), 2);
+            $totalWaitry = round((float) ($mov['total'] ?? 0), 2);
+            $total = self::importeContableMovimiento($mov, $totalesVentaPorId);
             $importeCigarrillos = self::importeCigarrillosDesdeMov($mov, $empresaId);
             $impuestoInterno = self::impuestoInternoDesdeMov($mov, $empresaId, $importeCigarrillos);
             $exento = self::exentoDesdeMov($mov, $empresaId);
+            [$impuestoInterno, $importeCigarrillos, $exento] = self::escalarBasesAlImporteContable(
+                $totalWaitry,
+                $total,
+                $impuestoInterno,
+                $importeCigarrillos,
+                $exento,
+            );
             $desglose = CierreJornadaVentasCigarrillosSupport::desglosarImportesContables(
                 $total,
                 $impuestoInterno,

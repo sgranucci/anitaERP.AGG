@@ -76,7 +76,7 @@ class FlashReporteSuscripcion extends Model
     public static function periodosRelativos(): array
     {
         return [
-            self::PERIODO_MES_ACTUAL => 'Mes en curso (hasta el último día con flash)',
+            self::PERIODO_MES_ACTUAL => 'Mes en curso (hasta fecha de producción = ayer)',
             self::PERIODO_MES_ANTERIOR => 'Mes anterior completo',
             self::PERIODO_FIJO => 'El mes fijo cargado en el envío',
         ];

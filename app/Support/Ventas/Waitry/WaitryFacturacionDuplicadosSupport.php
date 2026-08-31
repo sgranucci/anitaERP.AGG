@@ -20,6 +20,14 @@ final class WaitryFacturacionDuplicadosSupport
             return true;
         }
 
+        // Factura CF del proceso: waitry_order_id queda null; los IDs viven en waitry_comandas_json.
+        if (VentaGastronomiaEmision::query()
+            ->whereNotNull('waitry_comandas_json')
+            ->whereJsonContains('waitry_comandas_json', ['waitry_order_id' => $waitryOrderId])
+            ->exists()) {
+            return true;
+        }
+
         $q = CuentaGastronomia::query()
             ->where('waitry_order_id', $waitryOrderId)
             ->where('estado', CuentaGastronomia::ESTADO_FACTURADA)

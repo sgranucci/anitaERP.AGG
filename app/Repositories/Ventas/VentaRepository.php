@@ -485,6 +485,52 @@ class VentaRepository implements VentaRepositoryInterface
         return max($maxVenta, $maxNumerador);
     }
 
+    /**
+     * Número Anita ya emitido ese día (tipo + letra + sucursal). 0 si no hay.
+     * FSL/FBI: p-vtamaquina / p-vtabingo graban uno por jornada.
+     */
+    public function numeroComprobanteAnitaDelDia(
+        string $tipo,
+        string $letra,
+        string $sucursal,
+        string $fechaYmd,
+        ?int $empresaAnita = null,
+        $path_sistema = null,
+    ): int {
+        $tipo = strtoupper(trim($tipo));
+        $letra = strtoupper(trim($letra));
+        $sucursal = trim($sucursal);
+        $fecha = (int) str_replace('-', '', $fechaYmd);
+        if ($tipo === '' || $letra === '' || $sucursal === '' || $fecha <= 0) {
+            return 0;
+        }
+
+        $where = " WHERE ven_tipo = '".$tipo."' AND ven_letra = '".$letra."' AND "
+            .$this->sqlSucursalAnita('ven_sucursal', $sucursal)
+            .' AND ven_fecha = '.$fecha;
+        if ($empresaAnita !== null && $empresaAnita > 0) {
+            $where .= ' AND ven_empresa = '.(int) $empresaAnita;
+        }
+
+        $apiAnita = new ApiAnita();
+        $data = [
+            'acc' => 'list',
+            'tabla' => 'venta',
+            'campos' => 'max(ven_nro) as ultimonumero',
+            'whereArmado' => $where,
+        ];
+        if ($path_sistema !== null && $path_sistema !== '') {
+            $data['path_sistema'] = $path_sistema;
+        }
+
+        $fila = ApiAnita::primeraFilaLista($apiAnita->apiCall($data));
+        if ($fila === null || ! isset($fila->ultimonumero)) {
+            return 0;
+        }
+
+        return (int) $fila->ultimonumero;
+    }
+
     public function traeUltimoComprobanteVenta($tipotransaccion_id, $puntoventa_id, ?int $empresa_id = null)
     {
         $query = $this->model->select('venta.numerocomprobante')

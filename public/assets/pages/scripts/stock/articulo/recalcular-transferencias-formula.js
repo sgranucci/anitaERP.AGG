@@ -189,7 +189,7 @@
         actualizarBotonAplicar();
     }
 
-    function cargarPreview() {
+    function cargarPreview(seleccionarCambios) {
         var id = articuloId();
         if (id <= 0) {
             setEstado({ loading: false, error: 'Artículo inválido.', puedeAplicar: false });
@@ -232,6 +232,13 @@
         })
             .done(function (data) {
                 renderPreview(data);
+                if (seleccionarCambios) {
+                    $('#rtf-tbody .rtf-check-linea').each(function () {
+                        var $tr = $(this).closest('tr');
+                        $(this).prop('checked', $tr.hasClass('table-warning'));
+                    });
+                    actualizarBotonAplicar();
+                }
             })
             .fail(function (xhr) {
                 var msg = (xhr.responseJSON && xhr.responseJSON.error)
@@ -252,7 +259,9 @@
         if (previewTimer) {
             clearTimeout(previewTimer);
         }
-        previewTimer = setTimeout(cargarPreview, 350);
+        previewTimer = setTimeout(function () {
+            cargarPreview(false);
+        }, 350);
     }
 
     function aplicar() {
@@ -321,20 +330,45 @@
             });
     }
 
-    function abrirModal() {
+    function abrirModal(opciones) {
         var id = articuloId();
         if (id <= 0) {
             return;
         }
 
+        opciones = opciones || {};
+
         var sku = ($('#sku').val() || '').toString();
         var desc = ($('#descripcion').val() || $('.descripcion').val() || '').toString();
         $('#rtf-articulo-info').text((sku ? sku + ' — ' : '') + desc);
 
-        var coefForm = $('#coeficienteconversion').val();
+        var coefForm = opciones.coeficiente != null && String(opciones.coeficiente) !== ''
+            ? String(opciones.coeficiente)
+            : ($('#coeficienteconversion').val() || '');
         $('#rtf-coeficiente').val(coefForm || '');
 
-        $('#rtf-modo-ultima').prop('checked', true);
+        var modo = opciones.modo === 'rango' ? 'rango' : 'ultima';
+        if (modo === 'rango') {
+            $('#rtf-modo-rango').prop('checked', true);
+            if (opciones.fecha_desde) {
+                $('#rtf-fecha-desde').val(opciones.fecha_desde);
+            }
+            if (opciones.fecha_hasta) {
+                $('#rtf-fecha-hasta').val(opciones.fecha_hasta);
+            }
+            if (!$('#rtf-fecha-desde').val() || !$('#rtf-fecha-hasta').val()) {
+                var hasta = new Date();
+                var desde = new Date(hasta.getFullYear(), hasta.getMonth() - 3, 1);
+                if (!$('#rtf-fecha-desde').val()) {
+                    $('#rtf-fecha-desde').val(formatoYmd(desde));
+                }
+                if (!$('#rtf-fecha-hasta').val()) {
+                    $('#rtf-fecha-hasta').val(formatoYmd(hasta));
+                }
+            }
+        } else {
+            $('#rtf-modo-ultima').prop('checked', true);
+        }
         toggleRango();
         previewData = null;
         $('#rtf-tbody').empty();
@@ -349,8 +383,18 @@
             puedeAplicar: false,
         });
 
+        if (opciones.aviso) {
+            $('#rtf-resumen').text(opciones.aviso);
+        }
+
         $('#modalRecalcularTransferenciasFormula').modal('show');
-        cargarPreview();
+        cargarPreview(opciones.seleccionarCambios !== false && modo === 'rango');
+    }
+
+    function formatoYmd(d) {
+        var m = (d.getMonth() + 1).toString().padStart(2, '0');
+        var day = d.getDate().toString().padStart(2, '0');
+        return d.getFullYear() + '-' + m + '-' + day;
     }
 
     $(document).on('click', '#btn-recalcular-transferencias-formula', function (e) {
@@ -384,5 +428,28 @@
             $(this).prop('checked', $tr.hasClass('table-warning'));
         });
         actualizarBotonAplicar();
+    });
+
+    $(function () {
+        var cfg = window.abrirRecalcularTraFormula;
+        if (!cfg || typeof cfg !== 'object') {
+            return;
+        }
+        var coef = cfg.coeficiente;
+        var coefAnt = cfg.coeficiente_anterior;
+        var aviso = 'Se cambió el coeficiente'
+            + (coefAnt != null ? ' de ' + fmtNum(coefAnt) : '')
+            + (coef != null ? ' a ' + fmtNum(coef) : '')
+            + '. Revisá las TRA del rango (todas las empresas) y aplicá si corresponde.';
+        setTimeout(function () {
+            abrirModal({
+                modo: cfg.modo === 'ultima' ? 'ultima' : 'rango',
+                coeficiente: coef,
+                fecha_desde: cfg.fecha_desde || '',
+                fecha_hasta: cfg.fecha_hasta || '',
+                aviso: aviso,
+                seleccionarCambios: true,
+            });
+        }, 400);
     });
 })(jQuery);

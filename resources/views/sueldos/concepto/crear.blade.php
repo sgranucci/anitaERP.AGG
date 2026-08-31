@@ -5,6 +5,7 @@
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/crear.js")}}" type="text/javascript"></script>
+<script src="{{asset('assets/pages/scripts/sueldos/concepto/lsd.js')}}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/concepto/lsd.js')) ?: time() }}"></script>
 @endsection
 
 @section('contenido')

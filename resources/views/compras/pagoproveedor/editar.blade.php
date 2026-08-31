@@ -10,10 +10,18 @@
 @include('includes.contable.asiento_montos_formato_js')
 <script src="{{ asset('assets/pages/scripts/contable/asiento/asiento_externo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/asiento/asiento_externo.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/proveedor/cbu_pago.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/banco/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/cheques.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/form.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/crear.js') }}" type="text/javascript"></script>
+<script>
+    $(function () {
+        if (typeof activa_eventos_consulta_cbu_pago === 'function') {
+            activa_eventos_consulta_cbu_pago();
+        }
+    });
+</script>
 @endsection
 
 @section('contenido')
@@ -109,6 +117,7 @@
     </div>
 </div>
 @include('includes.compras.modalconsultaproveedor')
+@include('includes.compras.modalconsultacbupago')
 @include('includes.caja.modalconsultacuentacaja')
 @include('includes.contable.modalconsultacuentacontable')
 @endsection

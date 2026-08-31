@@ -3,7 +3,9 @@
 namespace App\Models\Sueldos;
 
 use App\Models\Configuracion\Empresa;
+use App\Models\Contable\Asiento;
 use App\Models\Seguridad\Usuario;
+use App\Models\Solicitudpago\Solicitudpago;
 use App\Support\Sueldos\LiquidacionAlcanceRecibo;
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
@@ -47,6 +49,7 @@ class Liquidacion_Sueldos extends Model implements Auditable
         'total_neto',
         'contabilizado',
         'asiento_id',
+        'solicitudpago_id',
         'fecha_contabilizacion',
         'fecha_calculo',
         'fecha_cierre',
@@ -76,6 +79,7 @@ class Liquidacion_Sueldos extends Model implements Auditable
         'total_neto' => 'decimal:2',
         'contabilizado' => 'boolean',
         'asiento_id' => 'integer',
+        'solicitudpago_id' => 'integer',
         'fecha_contabilizacion' => 'datetime',
         'fecha_calculo' => 'datetime',
         'fecha_cierre' => 'datetime',
@@ -141,6 +145,21 @@ class Liquidacion_Sueldos extends Model implements Auditable
     public function detalles()
     {
         return $this->hasMany(Liquidacion_Detalle_Sueldos::class, 'liquidacion_id');
+    }
+
+    public function asiento()
+    {
+        return $this->belongsTo(Asiento::class, 'asiento_id');
+    }
+
+    public function asientosSueldos()
+    {
+        return $this->hasMany(Liquidacion_Asiento_Sueldos::class, 'liquidacion_id');
+    }
+
+    public function solicitudpago()
+    {
+        return $this->belongsTo(Solicitudpago::class, 'solicitudpago_id');
     }
 
     public function estadoLabel(): string

@@ -240,14 +240,141 @@
                                value="{{ old('condicion_sijp', $data->condicion_sijp ?? '') }}">
                     </div>
                 </div>
-                <div class="form-group row mb-0">
-                    <label for="modalidad_sijp" class="col-lg-4 control-label">Modalidad SIJP</label>
+                <div class="form-group row">
+                    <label for="modalidad_sijp" class="col-lg-4 control-label text-right pr-2">Modalidad SIJP</label>
                     <div class="col-lg-3">
                         <input type="text" name="modalidad_sijp" id="modalidad_sijp" class="form-control" maxlength="6"
                                value="{{ old('modalidad_sijp', $data->modalidad_sijp ?? '') }}">
                     </div>
                 </div>
+                <div class="form-group row">
+                    <label for="actividad_sijp" class="col-lg-4 control-label text-right pr-2">Actividad AFIP</label>
+                    <div class="col-lg-3">
+                        <input type="text" name="actividad_sijp" id="actividad_sijp" class="form-control" maxlength="3"
+                               value="{{ old('actividad_sijp', $data->actividad_sijp ?? '') }}">
+                    </div>
+                    <label for="localidad_afip" class="col-lg-2 control-label text-right pr-2">Loc.</label>
+                    <div class="col-lg-3">
+                        <input type="text" name="localidad_afip" id="localidad_afip" class="form-control" maxlength="2"
+                               value="{{ old('localidad_afip', $data->localidad_afip ?? '') }}">
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label for="siniestrado_sijp" class="col-lg-4 control-label text-right pr-2">Siniestrado</label>
+                    <div class="col-lg-2">
+                        <input type="text" name="siniestrado_sijp" id="siniestrado_sijp" class="form-control" maxlength="4"
+                               value="{{ old('siniestrado_sijp', $data->siniestrado_sijp ?? '') }}">
+                    </div>
+                    <label for="marca_reduccion_sijp" class="col-lg-3 control-label text-right pr-2">Reducción</label>
+                    <div class="col-lg-3">
+                        <input type="text" name="marca_reduccion_sijp" id="marca_reduccion_sijp" class="form-control" maxlength="1"
+                               value="{{ old('marca_reduccion_sijp', $data->marca_reduccion_sijp ?? '') }}">
+                    </div>
+                </div>
+                <div class="form-group row">
+                    <label for="tipo_empresa_sijp" class="col-lg-4 control-label text-right pr-2">Tipo empresa SIJP</label>
+                    <div class="col-lg-2">
+                        <input type="text" name="tipo_empresa_sijp" id="tipo_empresa_sijp" class="form-control" maxlength="1"
+                               value="{{ old('tipo_empresa_sijp', $data->tipo_empresa_sijp ?? '') }}">
+                    </div>
+                    <label for="cuit_agencia_eventual" class="col-lg-3 control-label text-right pr-2">CUIT agencia</label>
+                    <div class="col-lg-3">
+                        <input type="text" name="cuit_agencia_eventual" id="cuit_agencia_eventual" class="form-control" maxlength="13"
+                               value="{{ old('cuit_agencia_eventual', $data->cuit_agencia_eventual ?? '') }}"
+                               placeholder="Si modalidad 102">
+                    </div>
+                </div>
+                <div class="form-group row mb-0">
+                    <div class="col-lg-4"></div>
+                    <div class="col-lg-8">
+                        <div class="custom-control custom-checkbox">
+                            <input type="hidden" name="lsd_legajo_principal" value="0">
+                            <input type="checkbox" class="custom-control-input" name="lsd_legajo_principal" id="lsd_legajo_principal" value="1"
+                                   {{ old('lsd_legajo_principal', $data->lsd_legajo_principal ?? true) ? 'checked' : '' }}>
+                            <label class="custom-control-label" for="lsd_legajo_principal">Legajo principal LSD (un 04 por CUIL)</label>
+                        </div>
+                        <div class="custom-control custom-checkbox">
+                            <input type="hidden" name="lsd_cct" value="0">
+                            <input type="checkbox" class="custom-control-input" name="lsd_cct" id="lsd_cct" value="1"
+                                   {{ old('lsd_cct', $data->lsd_cct ?? false) ? 'checked' : '' }}>
+                            <label class="custom-control-label" for="lsd_cct">Convenio colectivo (CCT)</label>
+                        </div>
+                        <div class="custom-control custom-checkbox">
+                            <input type="hidden" name="lsd_scvo" value="0">
+                            <input type="checkbox" class="custom-control-input" name="lsd_scvo" id="lsd_scvo" value="1"
+                                   {{ old('lsd_scvo', $data->lsd_scvo ?? true) ? 'checked' : '' }}>
+                            <label class="custom-control-label" for="lsd_scvo">SCVO (seguro colectivo de vida)</label>
+                        </div>
+                    </div>
+                </div>
             </div>
+        </div>
+    </div>
+</div>
+
+@php
+    $revistasForm = old('lsd_revista');
+    if (! is_array($revistasForm)) {
+        $revistasForm = [];
+        foreach ((isset($data) ? $data->revistasLsd : collect()) as $rev) {
+            $revistasForm[] = [
+                'id' => $rev->id,
+                'periodo' => $rev->periodo,
+                'situacion' => $rev->situacion,
+                'dia_inicio' => $rev->dia_inicio,
+            ];
+        }
+    }
+    while (count($revistasForm) < 3) {
+        $revistasForm[] = ['id' => '', 'periodo' => '', 'situacion' => '', 'dia_inicio' => ''];
+    }
+    $revistasForm = array_slice($revistasForm, 0, 3);
+@endphp
+<div class="card card-outline card-info mt-3 mb-0">
+    <div class="card-header py-2">
+        <h3 class="card-title mb-0"><i class="fa fa-exchange-alt"></i> Situación de revista intramés (LSD, hasta 3)</h3>
+    </div>
+    <div class="card-body pb-2">
+        <p class="text-muted small mb-2">
+            Si el trabajador cambia de situación en el mes (egreso, licencia, reingreso), cargue código AFIP y día de inicio.
+            Período AAAAMM vacío = aplica a todos los períodos. Sin filas se usa la situación SIJP del legajo desde el día 1.
+        </p>
+        <div class="table-responsive">
+            <table class="table table-sm table-bordered mb-0">
+                <thead style="background:#85C1E9;color:#17202A;">
+                    <tr>
+                        <th style="width:70px;">Nro</th>
+                        <th style="width:140px;">Período AAAAMM</th>
+                        <th>Situación AFIP</th>
+                        <th style="width:120px;">Día inicio</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach ($revistasForm as $i => $rev)
+                        <tr>
+                            <td class="text-center align-middle">
+                                {{ $i + 1 }}
+                                <input type="hidden" name="lsd_revista[{{ $i }}][id]" value="{{ $rev['id'] ?? '' }}">
+                            </td>
+                            <td>
+                                <input type="number" name="lsd_revista[{{ $i }}][periodo]" class="form-control form-control-sm"
+                                       min="200001" max="209912" placeholder="Todos"
+                                       value="{{ $rev['periodo'] ?? '' }}">
+                            </td>
+                            <td>
+                                <input type="text" name="lsd_revista[{{ $i }}][situacion]" class="form-control form-control-sm"
+                                       maxlength="2" placeholder="01"
+                                       value="{{ $rev['situacion'] ?? '' }}">
+                            </td>
+                            <td>
+                                <input type="number" name="lsd_revista[{{ $i }}][dia_inicio]" class="form-control form-control-sm"
+                                       min="1" max="31" placeholder="1"
+                                       value="{{ $rev['dia_inicio'] ?? '' }}">
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
         </div>
     </div>
 </div>

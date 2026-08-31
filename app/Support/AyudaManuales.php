@@ -69,8 +69,8 @@ class AyudaManuales
                 'disponible' => true,
             ],
             [
-                'modulo' => 'Ventas — Pedidos y facturación',
-                'bajada' => 'Carga de pedidos, pesada con QR, facturación con remito, cierres y reportes de ventas.',
+                'modulo' => 'Ventas — Pedidos, facturación y abonos',
+                'bajada' => 'Pedidos con pesada QR, facturación con remito, conceptos con tags, abonos/contratos, cola de períodos y avisos de vencimiento.',
                 'url' => route('manual_ventas'),
                 'icono' => 'fa-file-invoice',
                 'disponible' => true,
@@ -115,6 +115,13 @@ class AyudaManuales
                 'bajada' => 'Tipos y motivos, carga en el empleado, importe no cobrado, novedad de liquidación y reporte.',
                 'url' => route('manual_sueldos'),
                 'icono' => 'fa-gavel',
+                'disponible' => true,
+            ],
+            [
+                'modulo' => 'Sueldos — Libro de Sueldos Digital (ARCA)',
+                'bajada' => 'Conceptos AFIP, detracción Ley 27.430, tope SIPA, generación del TXT e importación en ARCA.',
+                'url' => route('manual_lsd_sueldos'),
+                'icono' => 'fa-book',
                 'disponible' => true,
             ],
             [

@@ -13,9 +13,11 @@ use Illuminate\Support\Facades\Schema;
  * Precio unitario de última compra para valorización de stock.
  *
  * Orden de resolución (ver también config/stock.php → precio_ultima_compra):
- * 1. ERP: última COM confirmada (historia de precio OC o línea de recepción)
- * 2. Anita: stkmae.stkm_pre_compra3 (StkmaeUltimaCompraAnitaService)
- * 3. Fallback: articulo.costo / articulo.ppp / articulo.precio
+ * Entre candidatos con precio &gt; 0 gana la fecha más reciente; empate → COM &gt; entrada ERP &gt; Anita.
+ * 1. ERP COM: historia OC / recepción confirmada
+ * 2. ERP entrada: TRA confirmada (precio destino) o movimiento con cantidad &gt; 0
+ * 3. Anita: stkmae.stkm_pre_compra3 unificado entre empresas (fecha máx.)
+ * 4. Fallback: articulo.costo / articulo.ppp / articulo.precio
  */
 final class ArticuloPrecioUltimaCompraSupport
 {
@@ -23,7 +25,17 @@ final class ArticuloPrecioUltimaCompraSupport
 
     public const ORIGEN_ERP_COM = 'erp_com';
 
+    public const ORIGEN_ERP_ENTRADA = 'erp_entrada';
+
     public const ORIGEN_ARTICULO = 'articulo';
+
+    /** Prioridad en empate de fecha (mayor gana). */
+    private const PRIORIDAD_ORIGEN = [
+        self::ORIGEN_ERP_COM => 30,
+        self::ORIGEN_ERP_ENTRADA => 20,
+        self::ORIGEN_ANITA => 10,
+        self::ORIGEN_ARTICULO => 0,
+    ];
 
     /**
      * @return array{precio: float|null, moneda_id: int|null, origen: string|null}
@@ -79,10 +91,41 @@ final class ArticuloPrecioUltimaCompraSupport
             }
         }
 
-        $erpPorId = self::preciosErpPorArticuloIds($articuloIds);
-        $out = [];
-        $articuloIdsSinErp = [];
+        /** @var array<int, array{precio: float, moneda_id: int|null, origen: string, ref_ts: int}> $candidatos */
+        $candidatos = [];
 
+        foreach (self::preciosErpComConFecha($articuloIds) as $id => $dato) {
+            self::considerarCandidato($candidatos, $id, $dato);
+        }
+        foreach (self::preciosErpEntradaConFecha($articuloIds) as $id => $dato) {
+            self::considerarCandidato($candidatos, $id, $dato);
+        }
+
+        $skusAnita = array_values(array_unique(array_filter($skuPorArticuloId)));
+        $anitaService ??= app(StkmaeUltimaCompraAnitaService::class);
+        $datosAnita = $skusAnita !== []
+            ? $anitaService->obtenerDatosUltimaCompraUnificadaPorSkus($skusAnita)
+            : [];
+
+        foreach ($skuPorArticuloId as $id => $sku) {
+            $datoAnita = $datosAnita[$sku] ?? null;
+            $precioAnita = $datoAnita['precio'] ?? null;
+            if ($precioAnita === null || (float) $precioAnita <= 0) {
+                continue;
+            }
+            $fechaYmd = $datoAnita['fecha_ymd'] ?? null;
+            $refTs = is_string($fechaYmd) && $fechaYmd !== ''
+                ? (int) strtotime($fechaYmd)
+                : 0;
+            self::considerarCandidato($candidatos, $id, [
+                'precio' => round((float) $precioAnita, 6),
+                'moneda_id' => isset($datoAnita['moneda_id']) ? (int) $datoAnita['moneda_id'] : null,
+                'origen' => self::ORIGEN_ANITA,
+                'ref_ts' => $refTs,
+            ]);
+        }
+
+        $out = [];
         foreach ($articulos as $id => $articulo) {
             $id = (int) $id;
             if (! $articulo instanceof Articulo) {
@@ -91,43 +134,15 @@ final class ArticuloPrecioUltimaCompraSupport
                 continue;
             }
 
-            if (isset($erpPorId[$id])) {
-                $out[$id] = $erpPorId[$id];
+            if (isset($candidatos[$id])) {
+                $c = $candidatos[$id];
+                $out[$id] = [
+                    'precio' => $c['precio'],
+                    'moneda_id' => $c['moneda_id'],
+                    'origen' => $c['origen'],
+                ];
 
                 continue;
-            }
-
-            $articuloIdsSinErp[] = $id;
-        }
-
-        $skusAnita = [];
-        foreach ($articuloIdsSinErp as $id) {
-            $sku = $skuPorArticuloId[$id] ?? '';
-            if ($sku !== '') {
-                $skusAnita[] = $sku;
-            }
-        }
-
-        $anitaService ??= app(StkmaeUltimaCompraAnitaService::class);
-        $datosAnita = $skusAnita !== []
-            ? $anitaService->obtenerDatosUltimaCompraPorSkus(array_values(array_unique($skusAnita)))
-            : [];
-
-        foreach ($articuloIdsSinErp as $id) {
-            $articulo = $articulos[$id];
-            $sku = $skuPorArticuloId[$id] ?? '';
-            if ($sku !== '') {
-                $datoAnita = $datosAnita[$sku] ?? null;
-                $precioAnita = $datoAnita['precio'] ?? null;
-                if ($precioAnita !== null && (float) $precioAnita > 0) {
-                    $out[$id] = [
-                        'precio' => round((float) $precioAnita, 6),
-                        'moneda_id' => isset($datoAnita['moneda_id']) ? (int) $datoAnita['moneda_id'] : null,
-                        'origen' => self::ORIGEN_ANITA,
-                    ];
-
-                    continue;
-                }
             }
 
             $fallback = self::fallbackDesdeArticulo($articulo);
@@ -433,6 +448,64 @@ final class ArticuloPrecioUltimaCompraSupport
      */
     private static function preciosErpPorArticuloIds(array $articuloIds): array
     {
+        $candidatos = [];
+        foreach (self::preciosErpComConFecha($articuloIds) as $id => $dato) {
+            self::considerarCandidato($candidatos, $id, $dato);
+        }
+        foreach (self::preciosErpEntradaConFecha($articuloIds) as $id => $dato) {
+            self::considerarCandidato($candidatos, $id, $dato);
+        }
+
+        $out = [];
+        foreach ($candidatos as $articuloId => $dato) {
+            unset($dato['ref_ts']);
+            $out[$articuloId] = $dato;
+        }
+
+        return $out;
+    }
+
+    /**
+     * @param  array<int, array{precio: float, moneda_id: int|null, origen: string, ref_ts: int}>  $candidatos
+     * @param  array{precio: float, moneda_id: int|null, origen: string, ref_ts: int}  $nuevo
+     */
+    private static function considerarCandidato(array &$candidatos, int $articuloId, array $nuevo): void
+    {
+        if ($articuloId <= 0 || (float) $nuevo['precio'] <= 0) {
+            return;
+        }
+
+        $prev = $candidatos[$articuloId] ?? null;
+        if ($prev === null) {
+            $candidatos[$articuloId] = $nuevo;
+
+            return;
+        }
+
+        $tsNuevo = (int) ($nuevo['ref_ts'] ?? 0);
+        $tsPrev = (int) ($prev['ref_ts'] ?? 0);
+        if ($tsNuevo > $tsPrev) {
+            $candidatos[$articuloId] = $nuevo;
+
+            return;
+        }
+        if ($tsNuevo < $tsPrev) {
+            return;
+        }
+
+        $prioNuevo = self::PRIORIDAD_ORIGEN[$nuevo['origen']] ?? 0;
+        $prioPrev = self::PRIORIDAD_ORIGEN[$prev['origen']] ?? 0;
+        if ($prioNuevo > $prioPrev) {
+            $candidatos[$articuloId] = $nuevo;
+        }
+    }
+
+    /**
+     * @param  list<int>  $articuloIds
+     * @return array<int, array{precio: float, moneda_id: int|null, origen: string, ref_ts: int}>
+     */
+    private static function preciosErpComConFecha(array $articuloIds): array
+    {
         $articuloIds = array_values(array_unique(array_filter(array_map('intval', $articuloIds), static fn ($id) => $id > 0)));
         if ($articuloIds === []) {
             return [];
@@ -503,7 +576,7 @@ final class ArticuloPrecioUltimaCompraSupport
                 continue;
             }
 
-            $refTs = $fila->fecha ? strtotime((string) $fila->fecha) : 0;
+            $refTs = $fila->fecha ? (int) strtotime((string) $fila->fecha) : 0;
             if (isset($candidatos[$articuloId]) && ($candidatos[$articuloId]['ref_ts'] ?? 0) >= $refTs) {
                 continue;
             }
@@ -516,13 +589,88 @@ final class ArticuloPrecioUltimaCompraSupport
             ];
         }
 
-        $out = [];
-        foreach ($candidatos as $articuloId => $dato) {
-            unset($dato['ref_ts']);
-            $out[$articuloId] = $dato;
+        return $candidatos;
+    }
+
+    /**
+     * TRA confirmada (precio destino) y última entrada de stock (cantidad &gt; 0).
+     *
+     * @param  list<int>  $articuloIds
+     * @return array<int, array{precio: float, moneda_id: int|null, origen: string, ref_ts: int}>
+     */
+    private static function preciosErpEntradaConFecha(array $articuloIds): array
+    {
+        $articuloIds = array_values(array_unique(array_filter(array_map('intval', $articuloIds), static fn ($id) => $id > 0)));
+        if ($articuloIds === []) {
+            return [];
         }
 
-        return $out;
+        $candidatos = [];
+
+        $tras = DB::table('transferencia_mercaderia_articulo as tma')
+            ->join('transferencia_mercaderia as tm', 'tm.id', '=', 'tma.transferencia_mercaderia_id')
+            ->whereIn('tma.articulo_destino_id', $articuloIds)
+            ->where('tm.estado', TransferenciaMercaderiaEstados::CONFIRMADA)
+            ->where('tma.precio_costo_destino', '>', 0)
+            ->orderByDesc('tm.fecha')
+            ->orderByDesc('tm.id')
+            ->orderByDesc('tma.id')
+            ->get([
+                'tma.articulo_destino_id',
+                'tma.precio_costo_destino',
+                'tm.fecha',
+            ]);
+
+        foreach ($tras as $fila) {
+            $articuloId = (int) $fila->articulo_destino_id;
+            if ($articuloId <= 0 || isset($candidatos[$articuloId])) {
+                continue;
+            }
+            $precio = round((float) $fila->precio_costo_destino, 6);
+            if ($precio <= 0) {
+                continue;
+            }
+            $fecha = (string) ($fila->fecha ?? '');
+            $refTs = $fecha !== '' ? (int) strtotime(substr($fecha, 0, 10)) : 0;
+            $candidatos[$articuloId] = [
+                'precio' => $precio,
+                'moneda_id' => (int) config('cotizacion.ID_MONEDA_DEFAULT', 1),
+                'origen' => self::ORIGEN_ERP_ENTRADA,
+                'ref_ts' => $refTs,
+            ];
+        }
+
+        $movs = DB::table('articulo_movimiento')
+            ->whereIn('articulo_id', $articuloIds)
+            ->where('cantidad', '>', 0)
+            ->where('precio', '>', 0)
+            ->orderByDesc('fecha')
+            ->orderByDesc('id')
+            ->get(['articulo_id', 'precio', 'fecha']);
+
+        foreach ($movs as $fila) {
+            $articuloId = (int) $fila->articulo_id;
+            if ($articuloId <= 0) {
+                continue;
+            }
+            $precio = round((float) $fila->precio, 6);
+            if ($precio <= 0) {
+                continue;
+            }
+            $fecha = (string) ($fila->fecha ?? '');
+            $refTs = $fecha !== '' ? (int) strtotime(substr($fecha, 0, 10)) : 0;
+            if (isset($candidatos[$articuloId]) && ($candidatos[$articuloId]['ref_ts'] ?? 0) >= $refTs) {
+                continue;
+            }
+            $candidatos[$articuloId] = [
+                'precio' => $precio,
+                'moneda_id' => (int) config('cotizacion.ID_MONEDA_DEFAULT', 1),
+                'origen' => self::ORIGEN_ERP_ENTRADA,
+                'ref_ts' => $refTs,
+            ];
+        }
+
+        return $candidatos;
     }
 
     public static function fallbackPrecioDesdeArticulo(Articulo $articulo): ?float

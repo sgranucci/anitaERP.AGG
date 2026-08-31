@@ -9,6 +9,41 @@ namespace App\Support\Stock;
 final class StockAnitaBridgeSupport
 {
     /**
+     * Empresas ERP a consultar para lectura unificada de stkmae (última compra del SKU).
+     * Siempre incluye 1 (Biyemas / bridge global) + overrides de anita_por_empresa.
+     *
+     * @return list<int>
+     */
+    public static function empresaIdsLecturaStkmae(): array
+    {
+        $ids = [1];
+        foreach (array_keys(self::mapaAnitaPorEmpresa()) as $empresaId) {
+            $id = (int) $empresaId;
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    /**
+     * @return array<int|string, array<string, mixed>>
+     */
+    public static function mapaAnitaPorEmpresa(): array
+    {
+        $map = (array) config('stock.anita_por_empresa', []);
+        if ($map === []) {
+            $map = (array) config('stock.anita_stkmov.anita_por_empresa', []);
+        }
+        if ($map === []) {
+            $map = (array) config('gastronomia.ticket_tarjeta_anita_por_empresa', []);
+        }
+
+        return $map;
+    }
+
+    /**
      * @return array{servidor?: string, path_sistema?: string, sistema: string, ifx_server?: string}
      */
     public static function parametrosBridge(int $empresaId): array
@@ -80,14 +115,7 @@ final class StockAnitaBridgeSupport
             return [];
         }
 
-        // Preferir override stock (top-level o anita_stkmov); si vacío, gastronomía AGG.
-        $map = (array) config('stock.anita_por_empresa', []);
-        if ($map === []) {
-            $map = (array) config('stock.anita_stkmov.anita_por_empresa', []);
-        }
-        if ($map === []) {
-            $map = (array) config('gastronomia.ticket_tarjeta_anita_por_empresa', []);
-        }
+        $map = self::mapaAnitaPorEmpresa();
 
         return (array) ($map[$empresaId] ?? $map[(string) $empresaId] ?? []);
     }

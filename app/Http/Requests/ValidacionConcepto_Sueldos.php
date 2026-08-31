@@ -37,6 +37,13 @@ class ValidacionConcepto_Sueldos extends FormRequest
             'mes_retroactivo' => 'nullable|integer|min:-99|max:12',
             'leyenda_recibo' => 'nullable|string|max:2000',
             'concepto_afip' => 'nullable|string|max:6',
+            'concepto_afip_libre' => 'nullable|string|max:6',
+            'codigo_lsd_empleador' => 'nullable|string|max:10',
+            'lsd_repetible' => 'nullable|boolean',
+            'lsd_subsistemas' => 'nullable|array',
+            'lsd_subsistemas.*' => 'nullable',
+            'lsd_bases' => 'nullable|array',
+            'lsd_bases.*' => 'nullable|integer|in:-1,0,1',
             'rubro_costo_laboral' => ['nullable', 'string', Rule::in(RubroCostoLaboral::todos())],
             'unidad_medida' => 'nullable|string|max:4',
             'activo' => 'nullable|boolean',
@@ -58,14 +65,21 @@ class ValidacionConcepto_Sueldos extends FormRequest
             'factor' => 'factor',
             'mes_retroactivo' => 'mes retroactivo',
             'concepto_afip' => 'concepto AFIP',
+            'codigo_lsd_empleador' => 'código empleador LSD',
         ];
     }
 
     protected function prepareForValidation(): void
     {
-        $this->merge([
+        $libre = preg_replace('/\D+/', '', (string) $this->input('concepto_afip_libre', '')) ?? '';
+        $merge = [
             'va_recibo' => $this->boolean('va_recibo'),
+            'lsd_repetible' => $this->boolean('lsd_repetible'),
             'activo' => $this->has('activo') ? $this->boolean('activo') : true,
-        ]);
+        ];
+        if ($libre !== '') {
+            $merge['concepto_afip'] = str_pad(substr($libre, -6), 6, '0', STR_PAD_LEFT);
+        }
+        $this->merge($merge);
     }
 }

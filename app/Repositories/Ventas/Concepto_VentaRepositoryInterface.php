@@ -25,6 +25,11 @@ interface Concepto_VentaRepositoryInterface extends RepositoryInterface
      */
     public function sincronizarPrecios(int $conceptoId, array $filas): void;
 
+    /**
+     * @param  list<array<string, mixed>>  $filas
+     */
+    public function sincronizarTags(int $conceptoId, array $filas): void;
+
     public function findPorCodigo(string $codigo): ?\App\Models\Ventas\Concepto_Venta;
 
     public function findPorCodigoAnita(int $codigoAnita): ?\App\Models\Ventas\Concepto_Venta;

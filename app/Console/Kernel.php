@@ -170,6 +170,13 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/compras-factura-borrador-aviso-schedule.log'))
             ->when(fn () => (bool) config('compras.factura_borrador_aviso.habilitado', true));
 
+        $schedule->command('ventas:avisar-contratos-venta-vencimiento')
+            ->dailyAt((string) config('facturacion.contrato_venta_aviso.hora', '09:20'))
+            ->runInBackground()
+            ->withoutOverlapping(30)
+            ->appendOutputTo(storage_path('logs/ventas-contrato-venta-aviso-schedule.log'))
+            ->when(fn () => (bool) config('facturacion.contrato_venta_aviso.habilitado', true));
+
         $schedule->command('seguridad:recordatorio-tickets-ingreso')
             ->dailyAt((string) config('ingreso_proveedor.recordatorio_hora', '08:45'))
             ->runInBackground()

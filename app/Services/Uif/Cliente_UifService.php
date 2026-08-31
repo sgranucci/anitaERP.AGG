@@ -232,16 +232,22 @@ class Cliente_UifService
 		}
 	}
 
-	public function guardaCliente_Premio_Uif($request)
+    public function guardaCliente_Premio_Uif($request)
 	{
 		DB::beginTransaction();
 		try
 		{
 			$cliente = $this->cliente_uifRepository->find((int) $request->input('cliente_uif_id'));
 			ClienteUifOrigenPcSupport::assertClienteOperable($cliente, $request);
-			$origen = ClienteUifOrigenPcSupport::origenDeCliente($cliente)
-				?? ClienteUifOrigenPcSupport::resolverParaEscritura($request)['origen'];
-			$salaId = ClienteUifArchivoStorage::salaId($origen);
+			$ctx = ClienteUifOrigenPcSupport::resolverParaEscritura(
+				$request,
+				(int) $request->input('empresa_id', 0) ?: null
+			);
+			$origen = $ctx['origen'];
+			$salaId = (int) ($ctx['sala_id'] ?? 0);
+			if ($salaId <= 0) {
+				$salaId = ClienteUifArchivoStorage::salaId($origen);
+			}
 			$request->merge(['sala_id' => $salaId]);
 
 			$cliente_premio_uif = ClienteUifArchivoStorage::withOrigen($origen, function () use ($request) {
@@ -282,7 +288,11 @@ class Cliente_UifService
 			ClienteUifOrigenPcSupport::assertClienteOperable($cliente, $request);
 			$origen = ClienteUifOrigenPcSupport::origenDeCliente($cliente)
 				?? ClienteUifOrigenPcSupport::resolverParaEscritura($request)['origen'];
-			$request->merge(['sala_id' => ClienteUifArchivoStorage::salaId($origen)]);
+			// Multi-sala: no pisar sala_id del premio (puede ser de otra sala que la ficha).
+			$salaPremio = (int) ($premioExistente->sala_id ?? 0);
+			if ($salaPremio > 0) {
+				$request->merge(['sala_id' => $salaPremio]);
+			}
 
 			ClienteUifArchivoStorage::withOrigen($origen, function () use ($request, $id, $premioExistente) {
 				if ($foto = Cliente_Premio_Uif::setFoto($request->foto_up, $premioExistente->foto ?? false)) {

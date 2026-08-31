@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\Caja\IngresoEgresoCuadreCajaAsientoSupport;
 use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Caja\IngresoEgresoTransferenciaSupport;
 use Illuminate\Foundation\Http\FormRequest;
@@ -67,6 +68,16 @@ class ValidacionIngresoEgreso extends FormRequest
                 IngresoEgresoTransferenciaSupport::assertBalanceado($this->all());
             } catch (InvalidArgumentException $e) {
                 $validator->errors()->add('tipotransaccion_caja_id', $e->getMessage());
+            }
+
+            try {
+                $dataCuadre = $this->all();
+                IngresoEgresoCuadreCajaAsientoSupport::prepararYAssertCuadre($dataCuadre);
+                if (array_key_exists('montos', $dataCuadre)) {
+                    $this->merge(['montos' => $dataCuadre['montos']]);
+                }
+            } catch (InvalidArgumentException $e) {
+                $validator->errors()->add('montos', $e->getMessage());
             }
 
             try {

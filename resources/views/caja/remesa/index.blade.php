@@ -43,6 +43,13 @@
                         'nuevoRegistroUrl' => route('crear_remesa', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-remesa',
                     ])
+                    @if (can('listar-remesa-reporte', false))
+                        <a href="{{ route('remesa_reporte') }}"
+                           class="btn btn-outline-secondary btn-sm ml-1"
+                           title="Reporte por cuenta de caja">
+                            <i class="fa fa-file-alt"></i> Reporte
+                        </a>
+                    @endif
                     @if (can('configurar-remesa', false))
                         <a href="{{ route('configurar_remesa', $retornoListadoQuery) }}"
                            class="btn btn-outline-secondary btn-sm ml-1"

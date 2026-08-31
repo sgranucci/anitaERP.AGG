@@ -23,7 +23,7 @@ class GastronomiaRegenerarZDesdeProceso extends Command
                             {--tolerancia= : Tolerancia en pesos (default: config)}
                             {--aplicar : Persistir cambios (por defecto es dry-run)}';
 
-    protected $description = 'Regenera Informe Z si el recomputo = venta Waitry del cierre; no pisa a $0 si hay venta Waitry/ERP';
+    protected $description = 'Regenera Informe Z si el recomputo = Waitry del cierre o MP contabilizado; no pisa a $0 si hay venta';
 
     public function handle(GastronomiaCierreTotemInformeZService $service): int
     {

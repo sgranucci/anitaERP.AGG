@@ -119,6 +119,20 @@ class ClienteUifListadoFiltros
 
         $conPremios = $request->boolean('filtro_con_premios')
             || self::esBusquedaSoloConPremios($valor);
+        $sinPremios = $request->boolean('filtro_sin_premios');
+        // Select unificado (prioridad sobre checkboxes legacy).
+        $filtroPremios = strtolower(trim((string) $request->input('filtro_premios', '')));
+        if ($filtroPremios === 'con') {
+            $conPremios = true;
+            $sinPremios = false;
+        } elseif ($filtroPremios === 'sin') {
+            $sinPremios = true;
+            $conPremios = false;
+        }
+        if ($conPremios && $sinPremios) {
+            // Mutuamente excluyentes: gana "sin premios".
+            $conPremios = false;
+        }
 
         $origenDesdeEmpresa = null;
         if ($empresaScope === 'una' && $empresaId > 0) {
@@ -185,6 +199,7 @@ class ClienteUifListadoFiltros
             'valor' => $valor,
             'valor_hasta' => trim((string) $request->input('filtro_valor_hasta', '')),
             'con_premios' => $conPremios,
+            'sin_premios' => $sinPremios,
             'anita_origen' => $anitaOrigen,
             'anita_origen_explicito' => $anitaOrigenExplicito,
             'anita_origen_todos' => ($empresaScope === 'todas' && ! $anitaOrigenExplicito)
@@ -255,6 +270,10 @@ class ClienteUifListadoFiltros
             return true;
         }
 
+        if (! empty($filtros['sin_premios'])) {
+            return true;
+        }
+
         if (! empty($filtros['anita_origen_explicito'])) {
             return true;
         }
@@ -312,6 +331,7 @@ class ClienteUifListadoFiltros
             'valor' => '',
             'valor_hasta' => '',
             'con_premios' => false,
+            'sin_premios' => false,
             'anita_origen' => '',
             'anita_origen_explicito' => false,
             'anita_origen_todos' => true,
@@ -349,6 +369,11 @@ class ClienteUifListadoFiltros
         }
         if (! empty($filtros['con_premios'])) {
             $params['filtro_con_premios'] = '1';
+            $params['filtro_premios'] = 'con';
+        }
+        if (! empty($filtros['sin_premios'])) {
+            $params['filtro_sin_premios'] = '1';
+            $params['filtro_premios'] = 'sin';
         }
         // Con empresa externa activa el origen ya queda implícito.
         if (($filtros['empresa_scope'] ?? 'todas') === 'todas'
@@ -411,6 +436,9 @@ class ClienteUifListadoFiltros
         if (! empty($filtros['con_premios'])) {
             $partes[] = 'Solo con premio';
         }
+        if (! empty($filtros['sin_premios'])) {
+            $partes[] = 'Solo sin premio';
+        }
 
         if (self::tieneCriteriosTexto($filtros) && (
             trim((string) ($filtros['valor'] ?? '')) !== ''
@@ -444,15 +472,8 @@ class ClienteUifListadoFiltros
      */
     public static function aplicar(Builder $query, array $filtros): void
     {
-        if (($filtros['anita_origen'] ?? '') !== '') {
-            $query->where('cliente_uif.anita_origen', $filtros['anita_origen']);
-        } elseif (! empty($filtros['origenes_permitidos']) && is_array($filtros['origenes_permitidos'])) {
-            $todosOrigenes = array_map('strval', array_keys(config('uif.anita_origenes', [])));
-            $permitidos = array_values(array_intersect($filtros['origenes_permitidos'], $todosOrigenes));
-            if ($permitidos !== [] && count($permitidos) < count($todosOrigenes)) {
-                $query->whereIn('cliente_uif.anita_origen', $permitidos);
-            }
-        }
+        // Multi-sala: premios en la sala filtrada; sin premios → origen de carga.
+        ClienteUifSalaFiltroSupport::aplicarEnClientes($query, $filtros);
 
         if (($filtros['estado'] ?? '') !== '') {
             $query->where('cliente_uif.estado', $filtros['estado']);
@@ -460,6 +481,8 @@ class ClienteUifListadoFiltros
 
         if (! empty($filtros['con_premios'])) {
             $query->whereRaw('(SELECT COUNT(*) FROM cliente_premio_uif WHERE cliente_premio_uif.cliente_uif_id = cliente_uif.id) > 0');
+        } elseif (! empty($filtros['sin_premios'])) {
+            $query->whereRaw('(SELECT COUNT(*) FROM cliente_premio_uif WHERE cliente_premio_uif.cliente_uif_id = cliente_uif.id) = 0');
         }
 
         $valor = trim((string) ($filtros['valor'] ?? ''));

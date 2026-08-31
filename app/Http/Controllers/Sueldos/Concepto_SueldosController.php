@@ -14,6 +14,7 @@ use App\Services\Sueldos\ConceptoPapoReclasificarService;
 use App\Services\Sueldos\LiquidacionCalculadorService;
 use App\Support\Sueldos\ConceptoSueldosListadoFiltros;
 use App\Support\Sueldos\ConceptoTipo;
+use App\Support\Sueldos\Lsd\LsdConceptoAfipCatalogo;
 use App\Support\Sueldos\Formula\FormulaException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
@@ -48,7 +49,11 @@ class Concepto_SueldosController extends Controller
             || can('editar-reporte-sueldos-definible', false)
             || can('actualizar-reporte-sueldos-definible', false)
             || can('crear-reporte-sueldos-definible', false)
-            || can('ejecutar-reporte-sueldos-definible', false);
+            || can('ejecutar-reporte-sueldos-definible', false)
+            || can('listar-imputacion-concepto-sueldos', false)
+            || can('crear-imputacion-concepto-sueldos', false)
+            || can('editar-imputacion-concepto-sueldos', false)
+            || can('actualizar-imputacion-concepto-sueldos', false);
     }
 
     public function index(Request $request)
@@ -113,6 +118,7 @@ class Concepto_SueldosController extends Controller
         return view('sueldos.concepto.crear', [
             'acumuladores' => $this->acumuladores(),
             'overridesMap' => [],
+            'catalogoLsd' => LsdConceptoAfipCatalogo::paraSelector(),
         ]);
     }
 
@@ -154,6 +160,7 @@ class Concepto_SueldosController extends Controller
             'data' => $data,
             'acumuladores' => $this->acumuladores(),
             'overridesMap' => $overridesMap,
+            'catalogoLsd' => LsdConceptoAfipCatalogo::paraSelector(),
             'modoConsulta' => $modoConsulta,
             'soloConsulta' => $modoConsulta && ! $puedeActualizar,
             'empresas' => $this->empresaRepository->allFiltrado(),

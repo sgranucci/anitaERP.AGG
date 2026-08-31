@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Requests;
 
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Support\Ventas\ConceptoVentaTagSupport;
 use App\Support\Ventas\GtinEan13Support;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -58,6 +59,22 @@ class ValidacionConcepto_Venta extends FormRequest
             'precio_vigencia_hasta.*' => ['nullable', 'date'],
             'creousuario_precio_ids' => ['nullable', 'array'],
             'creousuario_precio_ids.*' => ['nullable', 'integer'],
+            'tag_claves' => ['nullable', 'array'],
+            'tag_claves.*' => ['nullable', 'string', 'max:40'],
+            'tag_etiquetas' => ['nullable', 'array'],
+            'tag_etiquetas.*' => ['nullable', 'string', 'max:80'],
+            'tag_tipos' => ['nullable', 'array'],
+            'tag_tipos.*' => ['nullable', 'string', 'max:20'],
+            'tag_origenes' => ['nullable', 'array'],
+            'tag_origenes.*' => ['nullable', 'string', 'max:20'],
+            'tag_obligatorios' => ['nullable', 'array'],
+            'tag_obligatorios.*' => ['nullable'],
+            'tag_ordenes' => ['nullable', 'array'],
+            'tag_ordenes.*' => ['nullable', 'integer', 'min:1', 'max:999'],
+            'tag_largo_max' => ['nullable', 'array'],
+            'tag_largo_max.*' => ['nullable', 'integer', 'min:1', 'max:255'],
+            'tag_opciones' => ['nullable', 'array'],
+            'tag_opciones.*' => ['nullable', 'string', 'max:255'],
         ];
     }
 
@@ -117,6 +134,38 @@ class ValidacionConcepto_Venta extends FormRequest
                 if ($desde && $hasta && (string) $hasta < (string) $desde) {
                     $validator->errors()->add('precio_vigencia_hasta.'.$i, 'La vigencia hasta no puede ser anterior al desde.');
                 }
+            }
+
+            $clavesForm = [];
+            foreach ((array) $this->input('tag_claves', []) as $i => $claveRaw) {
+                $clave = ConceptoVentaTagSupport::normalizarClave((string) $claveRaw);
+                if ($clave === '') {
+                    continue;
+                }
+                if (! ConceptoVentaTagSupport::esClaveValida($clave)) {
+                    $validator->errors()->add(
+                        'tag_claves.'.$i,
+                        'La clave del tag debe empezar con letra y solo usar a-z, 0-9 y _ (máx. 40).'
+                    );
+                    continue;
+                }
+                if (isset($clavesForm[$clave])) {
+                    $validator->errors()->add('tag_claves.'.$i, 'La clave @'.$clave.'@ está duplicada.');
+                    continue;
+                }
+                $clavesForm[$clave] = true;
+                $tipo = ConceptoVentaTagSupport::normalizarTipo((string) ($this->input('tag_tipos.'.$i) ?? ''));
+                if (! in_array($tipo, ConceptoVentaTagSupport::TIPOS, true)) {
+                    $validator->errors()->add('tag_tipos.'.$i, 'Tipo de tag no soportado.');
+                }
+            }
+
+            $msgPlantilla = ConceptoVentaTagSupport::mensajePlantillaSinDefinicion(
+                (string) $this->input('descripcion', ''),
+                array_keys($clavesForm)
+            );
+            if ($msgPlantilla !== null) {
+                $validator->errors()->add('descripcion', $msgPlantilla);
             }
         });
     }

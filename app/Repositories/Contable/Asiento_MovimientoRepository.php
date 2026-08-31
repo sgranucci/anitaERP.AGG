@@ -3,6 +3,7 @@
 namespace App\Repositories\Contable;
 
 use App\Models\Contable\Asiento_Movimiento;
+use App\Support\Numerico\NumeroDecimalLocalSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Carbon\Carbon;
 use Auth;
@@ -123,12 +124,12 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 					if ($i < count($cuentacontable_ids))
 					{
 						$monto = 0;
-						$debeLin = $debes[$i] ?? null;
-						$haberLin = $haberes[$i] ?? null;
-						if ($debeLin != null && $debeLin != 0)
+						$debeLin = NumeroDecimalLocalSupport::aFloat($debes[$i] ?? null);
+						$haberLin = NumeroDecimalLocalSupport::aFloat($haberes[$i] ?? null);
+						if ($debeLin != 0)
 							$monto = $debeLin;
 
-						if ($haberLin != null && $haberLin != 0)
+						if ($haberLin != 0)
 							$monto = -$haberLin;
 
 						$ccId = $centrocosto_ids[$i] ?? $centrocosto_ids_previo[$i] ?? 0;
@@ -139,7 +140,7 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 									"centrocosto_id" => $this->normalizarCentrocostoId($ccId),
 									"moneda_id" => $moneda_ids[$i] ?? null,
 									"monto" => $monto,
-									"cotizacion" => $cotizaciones[$i] ?? 0,
+									"cotizacion" => NumeroDecimalLocalSupport::aFloat($cotizaciones[$i] ?? 0),
 									"observacion" => $observaciones[$i] ?? ''
 									]);
 					}
@@ -156,12 +157,12 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 				if ($cuentacontable_ids[$i_movimiento] != '') 
 				{
 					$monto = 0;
-					$debeLin = $debes[$i_movimiento] ?? null;
-					$haberLin = $haberes[$i_movimiento] ?? null;
-					if ($debeLin != null && $debeLin != 0)
+					$debeLin = NumeroDecimalLocalSupport::aFloat($debes[$i_movimiento] ?? null);
+					$haberLin = NumeroDecimalLocalSupport::aFloat($haberes[$i_movimiento] ?? null);
+					if ($debeLin != 0)
 						$monto = $debeLin;
 
-					if ($haberLin != null && $haberLin != 0)
+					if ($haberLin != 0)
 						$monto = -$haberLin;
 
 					if (abs($monto) <= 0.0001) {
@@ -176,7 +177,7 @@ class Asiento_MovimientoRepository implements Asiento_MovimientoRepositoryInterf
 									"centrocosto_id" => $this->normalizarCentrocostoId($ccId),
 									"moneda_id" => $moneda_ids[$i_movimiento] ?? null,
 									"monto" => $monto,
-									"cotizacion" => $cotizaciones[$i_movimiento] ?? 0,
+									"cotizacion" => NumeroDecimalLocalSupport::aFloat($cotizaciones[$i_movimiento] ?? 0),
 									"observacion" => $observaciones[$i_movimiento] ?? ''
 									]);
 				}

@@ -456,9 +456,28 @@ class Cliente_UifController extends Controller
         }
     }
 
-    public function leeCliente_Uif(Request $request)
+    public function consultaCliente_Uif(Request $request)
     {
-        return $this->cliente_uifService->leeCliente();
+        can('listar-cliente-uif');
+
+        $html = $this->cliente_uifRepository->consultaCliente_UifHtml(
+            $request->input('consulta'),
+            $request->input('anita_origen')
+        );
+
+        return response($html, 200)->header('Content-Type', 'text/html; charset=UTF-8');
+    }
+
+    public function leeCliente_Uif($cliente_uif_id)
+    {
+        can('listar-cliente-uif');
+
+        $resumen = $this->cliente_uifRepository->findResumenParaConsulta((int) $cliente_uif_id);
+        if ($resumen === null) {
+            return response()->json(null, 404);
+        }
+
+        return response()->json($resumen);
     }
 
     // Calcula riesgo del cliente UIF

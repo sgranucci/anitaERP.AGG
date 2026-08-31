@@ -68,7 +68,10 @@
                                     <input type="date" name="fecha_hasta" class="form-control" required value="{{ $fecha_hasta }}">
                                 </div>
                             </div>
-                            <small class="form-text text-muted">Arranca el día 1 del mes y corta en «hasta» (through day).</small>
+                            <small class="form-text text-muted">
+                                Arranca el día 1 del mes y corta en «hasta» (through day).
+                                Por defecto usa la <strong>fecha de producción</strong> (ayer): el envío del 31/08 es al 30/08.
+                            </small>
                         </div>
                     </div>
                     <div class="form-group row mb-0 mt-3">

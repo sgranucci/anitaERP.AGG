@@ -74,6 +74,8 @@
                     @endif
                 </div>
 
+                @include('sueldos.liquidacion.partials.asiento')
+
                 <div class="table-responsive p-0">
                     <table class="table table-sm table-bordered table-hover">
                         <thead>

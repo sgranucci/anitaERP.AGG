@@ -70,6 +70,11 @@ use App\Support\Ventas\PedidoFacturacionExclusivaSupport;
 use App\Support\Ventas\PedidoItemCierreFaltaStockSupport;
 use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use App\Support\Ventas\ConceptoVentaMostradorSupport;
+use App\Support\Ventas\ConceptoVentaPlantillaMotor;
+use App\Support\Ventas\ConceptoVentaTagSupport;
+use App\Support\Ventas\ContratoVentaEmisionSupport;
+use App\Support\Ventas\ContratoVentaSupport;
+use App\Models\Ventas\Contrato_Venta;
 use App\Support\Ventas\GtinEan13Support;
 use App\Support\Ventas\TipoComprobantePreviewSupport;
 use App\Support\Ventas\VentaEmisionCajaPiezaSupport;
@@ -2149,6 +2154,7 @@ class FacturacionService
 						];
 						$dataEmision = $this->anexarConceptoEnEmision($dataEmision, $itemEmision);
 						$venta_emision = $this->venta_emisionRepository->create($dataEmision);
+						ContratoVentaEmisionSupport::persistirTrasCrearEmision($venta_emision, $itemEmision, (int) $vta->id);
 					}
 					// Agrega referencia a la OV
 					$dataEmision = [
@@ -2326,6 +2332,22 @@ class FacturacionService
 		if (! is_array($conceptoVentaIdsInput)) {
 			$conceptoVentaIdsInput = [];
 		}
+		$contratoVentaIdsInput = $data['contrato_venta_ids'] ?? [];
+		if (! is_array($contratoVentaIdsInput)) {
+			$contratoVentaIdsInput = [];
+		}
+		$conceptoTagJsonInput = $data['concepto_tag_json'] ?? [];
+		if (! is_array($conceptoTagJsonInput)) {
+			$conceptoTagJsonInput = [];
+		}
+		$conceptoPeriodoDesdeInput = $data['concepto_periodo_desde'] ?? [];
+		if (! is_array($conceptoPeriodoDesdeInput)) {
+			$conceptoPeriodoDesdeInput = [];
+		}
+		$conceptoPeriodoHastaInput = $data['concepto_periodo_hasta'] ?? [];
+		if (! is_array($conceptoPeriodoHastaInput)) {
+			$conceptoPeriodoHastaInput = [];
+		}
 		$conceptoVentaCabeceraId = (int) ($data['concepto_venta_id'] ?? 0);
 		$esPosMostrador = $this->esEmisionPos($data);
 
@@ -2399,6 +2421,10 @@ class FacturacionService
 				$unidadesMtxLinea = 1;
 				$centrocostoConceptoId = null;
 				$precioCatalogo = 0.0;
+				$contratoVentaIdLinea = null;
+				$tagValoresLinea = [];
+				$periodoDesdeLinea = '';
+				$periodoHastaLinea = '';
 			}
 			else
 			{
@@ -2422,6 +2448,10 @@ class FacturacionService
 				$unidadesMtxLinea = 1;
 				$centrocostoConceptoId = null;
 				$precioCatalogo = 0.0;
+				$contratoVentaIdLinea = null;
+				$tagValoresLinea = [];
+				$periodoDesdeLinea = '';
+				$periodoHastaLinea = '';
 
 				if (! $esPosMostrador) {
 					$conceptoIdLinea = (int) ($conceptoVentaIdsInput[$offItem] ?? 0);
@@ -2471,6 +2501,86 @@ class FacturacionService
 						if (ConceptoVentaMostradorSupport::obligatorioSinArticulo($puntoventa->webservice ?? null)
 							&& ! GtinEan13Support::esAceptable($codigoMtxLinea)) {
 							return ['error' => ConceptoVentaMostradorSupport::mensajeGtinInvalido($resueltoConcepto)];
+						}
+
+						$contratoVentaIdLinea = (int) ($contratoVentaIdsInput[$offItem] ?? 0);
+						$tagValoresLinea = [];
+						$rawTagJson = $conceptoTagJsonInput[$offItem] ?? '';
+						if (is_string($rawTagJson) && $rawTagJson !== '') {
+							$decodedTags = json_decode($rawTagJson, true);
+							if (is_array($decodedTags)) {
+								foreach ($decodedTags as $tk => $tv) {
+									$tagValoresLinea[ConceptoVentaPlantillaMotor::normalizarClave((string) $tk)] = trim((string) $tv);
+								}
+							}
+						}
+						$periodoDesdeLinea = substr(trim((string) ($conceptoPeriodoDesdeInput[$offItem] ?? '')), 0, 10);
+						$periodoHastaLinea = substr(trim((string) ($conceptoPeriodoHastaInput[$offItem] ?? '')), 0, 10);
+
+						$contratoModel = null;
+						if ($contratoVentaIdLinea > 0) {
+							$contratoModel = Contrato_Venta::query()
+								->with(['datos', 'cliente', 'empresa', 'conceptoVenta.tags'])
+								->find($contratoVentaIdLinea);
+							if ($contratoModel) {
+								foreach (ContratoVentaSupport::datosFijosComoValores($contratoModel) as $ck => $cv) {
+									if (! isset($tagValoresLinea[$ck]) || $tagValoresLinea[$ck] === '') {
+										$tagValoresLinea[$ck] = $cv;
+									}
+								}
+								if ($periodoDesdeLinea === '' || $periodoHastaLinea === '') {
+									$per = ContratoVentaSupport::periodoParaFecha(
+										is_string($fechaFactura) ? substr($fechaFactura, 0, 10) : date('Y-m-d'),
+										(string) $contratoModel->periodicidad
+									);
+									$periodoDesdeLinea = $per['desde'];
+									$periodoHastaLinea = $per['hasta'];
+									if (! isset($tagValoresLinea['periodo']) || $tagValoresLinea['periodo'] === '') {
+										$tagValoresLinea['periodo'] = ContratoVentaSupport::valorPeriodoTag($per);
+									}
+								}
+								if ($contratoModel->precio !== null && (float) $contratoModel->precio > 0) {
+									$precioCatalogo = (float) $contratoModel->precio;
+								}
+							}
+						}
+
+						$sistemaVals = ConceptoVentaPlantillaMotor::valoresSistema([
+							'cliente_nombre' => $cliente->nombre ?? '',
+							'cliente_documento' => $cliente->numerodocumento ?? '',
+							'fecha_factura' => is_string($fechaFactura) ? substr($fechaFactura, 0, 10) : date('Y-m-d'),
+							'empresa_nombre' => (string) ($puntoventa->empresas->nombre
+								?? \App\Models\Configuracion\Empresa::query()->whereKey($empresa_id)->value('nombre')
+								?? ''),
+							'codigo_concepto' => $resueltoConcepto['codigo'] ?? '',
+							'nombre_concepto' => $resueltoConcepto['descripcion'] ?? '',
+						]);
+						foreach ($sistemaVals as $sk => $sv) {
+							if ($sv !== '' && (! isset($tagValoresLinea[$sk]) || $tagValoresLinea[$sk] === '')) {
+								$tagValoresLinea[$sk] = $sv;
+							}
+						}
+
+						$conceptoFull = \App\Models\Ventas\Concepto_Venta::query()
+							->with(['tags'])
+							->find($conceptoVentaIdLinea);
+						$plantillaConcepto = trim((string) ($conceptoFull->descripcion ?? $resueltoConcepto['descripcion'] ?? ''));
+						$metasTags = ConceptoVentaTagSupport::metasDesdeTagsApi(
+							ConceptoVentaTagSupport::tagsDesdeConcepto($conceptoFull)
+						);
+						// Si el detalle aún tiene tags/condicionales, renderizar con valores.
+						if (ConceptoVentaPlantillaMotor::tieneTagsSinResolver((string) $descripcion)
+							|| ConceptoVentaPlantillaMotor::extraerClaves($plantillaConcepto) !== []) {
+							$basePlantilla = ConceptoVentaPlantillaMotor::tieneTagsSinResolver((string) $descripcion)
+								? (string) $descripcion
+								: $plantillaConcepto;
+							$resueltoTxt = ConceptoVentaPlantillaMotor::resolver($basePlantilla, $tagValoresLinea, $metasTags);
+							$descripcion = $resueltoTxt['texto'];
+							$tagValoresLinea = $resueltoTxt['valores'];
+						}
+
+						if (ConceptoVentaTagSupport::tieneTagsSinResolver((string) $descripcion)) {
+							return ['error' => ConceptoVentaTagSupport::mensajeTagsPendientes((string) $descripcion)];
 						}
 					}
 				}
@@ -2588,6 +2698,10 @@ class FacturacionService
 				'impuesto_interno_coeficiente' => $impuestoInternoCoeficiente,
 				'omitir_stkmov_anita' => $omitirStkmovAnita,
 				'concepto_venta_id' => $conceptoVentaIdLinea,
+				'contrato_venta_id' => $contratoVentaIdLinea,
+				'tag_valores' => $tagValoresLinea,
+				'periodo_desde' => $periodoDesdeLinea,
+				'periodo_hasta' => $periodoHastaLinea,
 				'codigo_mtx' => $codigoMtxLinea,
 				'unidades_mtx' => $unidadesMtxLinea,
 				'centrocosto_id' => $centrocostoConceptoId,
@@ -3974,6 +4088,7 @@ class FacturacionService
 				}
 				$dataEmision = $this->anexarConceptoEnEmision($dataEmision, $itemEmision);
 				$venta_emision = $this->venta_emisionRepository->create($dataEmision);
+				ContratoVentaEmisionSupport::persistirTrasCrearEmision($venta_emision, $itemEmision, (int) $vta->id);
 
 				if (! $omitirMovimientoStock && isset($itemEmision['articulo_id']) && $dataArticuloMovimiento !== [])
 				{
@@ -7033,6 +7148,9 @@ class FacturacionService
 	{
 		if (! empty($itemEmision['concepto_venta_id'])) {
 			$dataEmision['concepto_venta_id'] = (int) $itemEmision['concepto_venta_id'];
+		}
+		if (! empty($itemEmision['contrato_venta_id'])) {
+			$dataEmision['contrato_venta_id'] = (int) $itemEmision['contrato_venta_id'];
 		}
 		if (! empty($itemEmision['concepto_ordenventa_id'])) {
 			$dataEmision['concepto_ordenventa_id'] = (int) $itemEmision['concepto_ordenventa_id'];

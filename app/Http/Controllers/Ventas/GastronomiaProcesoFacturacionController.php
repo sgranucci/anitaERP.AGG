@@ -36,6 +36,7 @@ use App\Support\Ventas\GastronomiaCuentacajaIconoSupport;
 use App\Support\Ventas\GastronomiaCuentacajaSoloAutomaticaSupport;
 use App\Support\Ventas\GastronomiaCuentacajaTotem;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
+use App\Support\Ventas\Waitry\WaitryTotemImporteFacturaSupport;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\Gastronomia\GastronomiaAnularCuentaPendienteClaveSupport;
 use App\Support\Ventas\GastronomiaTurnoOperativoTotalesSupport;
@@ -344,6 +345,23 @@ class GastronomiaProcesoFacturacionController extends Controller
         $erroresImport = $resultado['errores'] ?? [];
         $skusOpcionalesPendientes = $this->extraerSkusOpcionalesPendientesDesdeErroresWaitry($erroresImport);
         $soloOpcionalesEnPos = (bool) ($resultado['requiere_carga_opcionales_en_pos'] ?? false);
+        $desfasajeTotem = (bool) ($resultado['desfasaje_totem'] ?? false);
+        $montoWaitry = round((float) ($resultado['waitry_monto_cobro'] ?? 0), 2);
+        $totalCuenta = round((float) ($resultado['total_cuenta'] ?? 0), 2);
+
+        $warn = null;
+        if ($desfasajeTotem) {
+            $warn = WaitryTotemImporteFacturaSupport::mensajeDesfasaje(
+                $totalCuenta,
+                $montoWaitry,
+                $identificadorPapelito,
+            );
+        } elseif ($erroresImport !== []) {
+            $warn = $skusOpcionalesPendientes !== []
+                ? 'Faltan en la cuenta (opcionales): '.implode(', ', $skusOpcionalesPendientes)
+                    .'. Se abrirá el asistente para cargarlos.'
+                : 'Importación parcial: algunos ítems no se cargaron (ver detalle).';
+        }
 
         return response()->json([
             'ok' => true,
@@ -352,15 +370,13 @@ class GastronomiaProcesoFacturacionController extends Controller
             'errores' => $erroresImport,
             'skus_opcionales_pendientes' => $skusOpcionalesPendientes,
             'requiere_carga_opcionales_en_pos' => $soloOpcionalesEnPos,
+            'waitry_monto_cobro' => $montoWaitry,
+            'total_cuenta' => $totalCuenta,
+            'desfasaje_totem' => $desfasajeTotem,
             'mensaje' => $soloOpcionalesEnPos
                 ? 'Cuenta Waitry «'.$identificadorPapelito.'» abierta. Complete los consumos con opcionales en el POS.'
                 : 'Cuenta Waitry «'.$identificadorPapelito.'» importada correctamente.',
-            'warn' => $erroresImport !== []
-                ? ($skusOpcionalesPendientes !== []
-                    ? 'Faltan en la cuenta (opcionales): '.implode(', ', $skusOpcionalesPendientes)
-                        .'. Se abrirá el asistente para cargarlos.'
-                    : 'Importación parcial: algunos ítems no se cargaron (ver detalle).')
-                : null,
+            'warn' => $warn,
         ]);
     }
 

@@ -284,15 +284,8 @@ class ClientePremioUifListadoFiltros
      */
     public static function aplicar(Builder $query, array $filtros): void
     {
-        if (($filtros['anita_origen'] ?? '') !== '') {
-            $query->where('cliente_uif.anita_origen', $filtros['anita_origen']);
-        } elseif (! empty($filtros['origenes_permitidos']) && is_array($filtros['origenes_permitidos'])) {
-            $todosOrigenes = array_map('strval', array_keys(config('uif.anita_origenes', [])));
-            $permitidos = array_values(array_intersect($filtros['origenes_permitidos'], $todosOrigenes));
-            if ($permitidos !== [] && count($permitidos) < count($todosOrigenes)) {
-                $query->whereIn('cliente_uif.anita_origen', $permitidos);
-            }
-        }
+        // Multi-sala: el filtro externo de empresa mira la sala del premio.
+        ClienteUifSalaFiltroSupport::aplicarEnPremios($query, $filtros);
 
         $valor = trim((string) ($filtros['valor'] ?? ''));
         if ($valor === '' && ($filtros['operador'] ?? '') !== 'vacio') {

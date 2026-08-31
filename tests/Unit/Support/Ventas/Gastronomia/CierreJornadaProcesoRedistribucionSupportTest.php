@@ -231,4 +231,40 @@ class CierreJornadaProcesoRedistribucionSupportTest extends TestCase
         $this->assertSame(0.0, CierreJornadaProcesoRedistribucionSupport::porcentajeAplicar(25.0, 0.0));
         $this->assertSame(0.0, CierreJornadaProcesoRedistribucionSupport::porcentajeAplicar(0.0, 18.459));
     }
+
+    public function test_tope_baja_cuando_el_redondeo_a_pesos_excede_un_peso(): void
+    {
+        $totalFacturacion = 2595166.67;
+        $recodificable = 482700.0;
+        $maximoCrudo = round($recodificable / $totalFacturacion * 100, 4);
+        $objetivoCrudo = CierreJornadaProcesoRedistribucionSupport::objetivoDesdePorcentaje(
+            $totalFacturacion,
+            $maximoCrudo,
+        );
+        $this->assertGreaterThan($recodificable, $objetivoCrudo);
+
+        $maximo = CierreJornadaProcesoRedistribucionSupport::porcentajeMaximoSobreFacturacion(
+            $totalFacturacion,
+            $recodificable,
+        );
+        $objetivo = CierreJornadaProcesoRedistribucionSupport::objetivoDesdePorcentaje($totalFacturacion, $maximo);
+        $this->assertLessThanOrEqual($recodificable, $objetivo);
+        $this->assertLessThan($maximoCrudo, $maximo);
+    }
+
+    public function test_resolver_porcentaje_que_entra_baja_el_objetivo_empresa_sin_pisarlo(): void
+    {
+        $ajuste = CierreJornadaProcesoRedistribucionSupport::resolverPorcentajeQueEntra(
+            2595166.67,
+            482700.0,
+            25.0,
+            25.0,
+        );
+
+        $this->assertTrue($ajuste['tope_bajado']);
+        $this->assertSame(25.0, $ajuste['porcentaje_objetivo_empresa']);
+        $this->assertLessThan(25.0, $ajuste['porcentaje']);
+        $this->assertLessThanOrEqual(482700.0, $ajuste['objetivo_importe']);
+        $this->assertStringContainsString('día siguiente', $ajuste['motivo']);
+    }
 }

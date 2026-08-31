@@ -28,6 +28,8 @@ use App\Support\Ventas\Gastronomia\CierreJornadaProcesoJornadaSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoPuntoventaSupport;
 use App\Support\Ventas\CaeaEmisionFechaCorrelatividadSupport;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoFacturaFechajornadaSupport;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoEmisionExistenteSupport;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoEmisionLock;
 use App\Support\Ventas\CaeaEmisionNumeracionSupport;
 use App\Support\Ventas\GastronomiaDepositoConfigSupport;
 use App\Support\Ventas\GastronomiaMovimientoStockSupport;
@@ -191,9 +193,16 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
         $fechaFacturaPedida = $fechaFactura;
         $correlatividad = null;
 
+        $lockJornada = null;
         $lockPv = null;
         try {
+            $lockJornada = CierreJornadaProcesoEmisionLock::adquirir((int) $jornada->id);
             $lockPv = GastronomiaPuntoventaEmisionLock::adquirir($puntoventaEmisionId);
+
+            $snapshot = GastronomiaCierreJornadaProcesoSnapshot::query()
+                ->where('jornada_gastronomia_id', (int) $jornada->id)
+                ->first();
+            $this->asegurarEmisionProcesoNoDuplicada($jornada, $snapshot, $movimientos);
 
             // Dentro del lock: re-evaluar correlatividad (POS pudo emitir entre preview y acá).
             $correlatividad = $this->resolverFechaFacturaCaeaCorrelatividad(
@@ -495,6 +504,7 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
             );
         } finally {
             GastronomiaPuntoventaEmisionLock::liberar($lockPv);
+            CierreJornadaProcesoEmisionLock::liberar($lockJornada);
         }
     }
 
@@ -568,9 +578,16 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
         $ajusteMovId = (int) ($ajustePrevio['movimientostock_id'] ?? 0);
         $conservarAjuste = $ajusteMovId > 0 && MovimientoStock::query()->whereKey($ajusteMovId)->exists();
 
+        $lockJornada = null;
         $lockPv = null;
         try {
+            $lockJornada = CierreJornadaProcesoEmisionLock::adquirir((int) $jornada->id);
             $lockPv = GastronomiaPuntoventaEmisionLock::adquirir($puntoventaEmisionId);
+
+            $snapshot = GastronomiaCierreJornadaProcesoSnapshot::query()
+                ->where('jornada_gastronomia_id', (int) $jornada->id)
+                ->first();
+            $this->asegurarEmisionProcesoNoDuplicada($jornada, $snapshot, []);
 
             $correlatividad = $this->resolverFechaFacturaCaeaCorrelatividad(
                 $puntoventaModel,
@@ -815,6 +832,7 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
             );
         } finally {
             GastronomiaPuntoventaEmisionLock::liberar($lockPv);
+            CierreJornadaProcesoEmisionLock::liberar($lockJornada);
         }
     }
 
@@ -877,6 +895,39 @@ final class GastronomiaCierreJornadaFacturaProcesoEmisionService
             ])
             ->values()
             ->all();
+    }
+
+    /**
+     * Dentro del lock de jornada: snapshot fresco + ventas ya grabadas + órdenes Waitry.
+     *
+     * @param  list<array<string, mixed>>  $movimientos
+     */
+    private function asegurarEmisionProcesoNoDuplicada(
+        JornadaGastronomia $jornada,
+        ?GastronomiaCierreJornadaProcesoSnapshot $snapshot,
+        array $movimientos,
+    ): void {
+        $payloadSnap = is_array($snapshot?->payload) ? $snapshot->payload : [];
+        if (self::emisionYaRegistrada($payloadSnap['factura_proceso_emision'] ?? null)) {
+            $prev = $payloadSnap['factura_proceso_emision'];
+            $cant = is_array($prev) ? count($prev['facturas'] ?? []) : 0;
+            $ref = $cant > 0
+                ? $cant.' factura(s) del proceso'
+                : ('venta #'.($prev['venta_id'] ?? ''));
+
+            throw new InvalidArgumentException(
+                'Ya se emitió la facturación del proceso para esta jornada ('.$ref.').'
+            );
+        }
+
+        CierreJornadaProcesoEmisionExistenteSupport::assertNoVentaProcesoParaJornada($jornada);
+
+        foreach (CierreJornadaProcesoFacturaComandasSupport::movimientosFacturacion($movimientos) as $mov) {
+            $wid = (int) ($mov['waitry_order_id'] ?? 0);
+            if ($wid > 0 && WaitryFacturacionDuplicadosSupport::waitryOrderIdYaFacturado($wid)) {
+                throw new InvalidArgumentException(WaitryFacturacionDuplicadosSupport::mensajeOrdenYaFacturada($wid));
+            }
+        }
     }
 
     /**

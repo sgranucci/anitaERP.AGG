@@ -168,6 +168,7 @@ final class GastronomiaCierreJornadaProcesoAutomaticoService
 
             if (CierreJornadaProcesoAutomaticoSupport::necesitaRecalcular($snapshot, $porcentaje, $facturaEmitida)) {
                 $pasos['recalcular'] = $this->procesoService->recalcularPorEmpresaYFecha($empresaId, $fechaJornada, $porcentaje);
+                $porcentaje = (float) ($pasos['recalcular']['porcentaje'] ?? $porcentaje);
             }
 
             $snapshot = $this->snapshotDeJornada((int) $jornada->id);
@@ -217,6 +218,10 @@ final class GastronomiaCierreJornadaProcesoAutomaticoService
                 'fecha_jornada' => $fechaJornada,
                 'estado' => 'error',
                 'porcentaje' => $porcentaje,
+                'tope_recodificacion' => $this->topeRecodificacionDesdePasosOSnapshot(
+                    $pasos,
+                    $this->snapshotDeJornada((int) $jornada->id),
+                ),
                 'puntoventa' => $pv,
                 'pasos' => $this->resumirPasos($pasos),
                 'error' => $e->getMessage(),
@@ -226,12 +231,14 @@ final class GastronomiaCierreJornadaProcesoAutomaticoService
         $snapshot = $this->snapshotDeJornada((int) $jornada->id);
         $ctxFinal = CierreJornadaProcesoJornadaSupport::contexto($jornada, $snapshot);
         $completado = (bool) ($ctxFinal['proceso_cierre_completado'] ?? false);
+        $tope = $this->topeRecodificacionDesdePasosOSnapshot($pasos, $snapshot);
 
         Log::info('gastronomia.cierre_jornada_automatico.ok', [
             'empresa_id' => $empresaId,
             'jornada_id' => $jornada->id,
             'fecha_jornada' => $fechaJornada,
             'porcentaje' => $porcentaje,
+            'tope_bajado' => (bool) ($tope['tope_bajado'] ?? false),
             'completado' => $completado,
             'pasos' => array_keys($pasos),
         ]);
@@ -244,6 +251,7 @@ final class GastronomiaCierreJornadaProcesoAutomaticoService
             'fecha_jornada' => $fechaJornada,
             'estado' => $completado ? 'completado' : 'parcial',
             'porcentaje' => $porcentaje,
+            'tope_recodificacion' => $tope,
             'puntoventa' => $pv,
             'pasos' => $this->resumirPasos($pasos),
             'resultado' => $ctxFinal['resultado_grabado'] ?? [],
@@ -346,6 +354,9 @@ final class GastronomiaCierreJornadaProcesoAutomaticoService
                 'ok' => (bool) ($pasos['recalcular']['ok'] ?? false),
                 'porcentaje' => (float) ($pasos['recalcular']['porcentaje'] ?? 0),
                 'objetivo_importe' => (float) ($pasos['recalcular']['objetivo_importe'] ?? 0),
+                'tope_recodificacion' => is_array($pasos['recalcular']['tope_recodificacion'] ?? null)
+                    ? $pasos['recalcular']['tope_recodificacion']
+                    : null,
             ];
         }
 
@@ -394,5 +405,24 @@ final class GastronomiaCierreJornadaProcesoAutomaticoService
         }
 
         return $resumen;
+    }
+
+    /**
+     * @param  array<string, mixed>  $pasos
+     * @return array<string, mixed>
+     */
+    private function topeRecodificacionDesdePasosOSnapshot(
+        array $pasos,
+        ?GastronomiaCierreJornadaProcesoSnapshot $snapshot,
+    ): array {
+        $desdePaso = $pasos['recalcular']['tope_recodificacion'] ?? null;
+        if (is_array($desdePaso) && $desdePaso !== []) {
+            return $desdePaso;
+        }
+
+        $payload = is_array($snapshot?->payload) ? $snapshot->payload : [];
+        $desdeSnap = $payload['tope_recodificacion'] ?? null;
+
+        return is_array($desdeSnap) ? $desdeSnap : [];
     }
 }

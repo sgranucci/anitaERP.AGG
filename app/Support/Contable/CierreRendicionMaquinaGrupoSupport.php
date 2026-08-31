@@ -3,6 +3,7 @@
 namespace App\Support\Contable;
 
 use App\Models\Caja\RendicionMaquina;
+use App\Models\Contable\Asiento;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -161,9 +162,8 @@ final class CierreRendicionMaquinaGrupoSupport
 
             if (self::tieneCierreContable($row)) {
                 $cerradas++;
-                $asientoId = (int) ($row->asiento_id ?? 0);
-                if ($asientoId > 0) {
-                    $asientoIds[] = $asientoId;
+                foreach (self::asientoIdsDeRendicion($row) as $asientoIdFila) {
+                    $asientoIds[] = $asientoIdFila;
                 }
             } else {
                 $pendientes++;
@@ -172,14 +172,10 @@ final class CierreRendicionMaquinaGrupoSupport
 
         $asientoIds = array_values(array_unique($asientoIds));
         $estado = self::resolverEstadoGrupo($pendientes, $cerradas, count($items));
-        $asientoId = count($asientoIds) === 1 ? $asientoIds[0] : null;
-        $asientoNumero = null;
-        $asientoFecha = null;
-        if ($asientoId !== null) {
-            $conAsiento = $items->first(fn (RendicionMaquina $r) => (int) ($r->asiento_id ?? 0) === $asientoId);
-            $asientoNumero = $conAsiento?->asiento?->numeroasiento;
-            $asientoFecha = $conAsiento?->asiento?->fecha;
-        }
+        $asientosVista = self::asientosParaVista($asientoIds);
+        $asientoId = $asientoIds[0] ?? null;
+        $asientoNumero = $asientosVista[0]['numero'] ?? null;
+        $asientoFecha = $asientosVista[0]['fecha'] ?? null;
 
         $fechaDia = self::fechaDiaDesdeRendicion($primera);
         $facturaLabel = null;
@@ -215,10 +211,11 @@ final class CierreRendicionMaquinaGrupoSupport
             'asiento_id' => $asientoId,
             'asiento_numero' => $asientoNumero,
             'asiento_fecha' => $asientoFecha,
+            'asientos' => $asientosVista,
             'asiento_ids_distintos' => count($asientoIds),
             'factura_label' => $facturaLabel,
             'puede_cerrar' => $pendientes > 0,
-            'puede_anular' => $asientoId !== null && $pendientes === 0,
+            'puede_anular' => $asientoIds !== [] && $pendientes === 0,
             'fecha_asiento' => self::fechaAsientoDesdeGrupo($fechaDia),
             'rendiciones' => $items,
             'rendicion_ids_pendientes' => $items
@@ -228,6 +225,57 @@ final class CierreRendicionMaquinaGrupoSupport
                 ->values()
                 ->all(),
         ];
+    }
+
+    /**
+     * @return list<int>
+     */
+    private static function asientoIdsDeRendicion(RendicionMaquina $row): array
+    {
+        $ids = [];
+        $json = $row->asientos_cierre_ids_json;
+        if (is_array($json)) {
+            foreach ($json as $id) {
+                $id = (int) $id;
+                if ($id > 0) {
+                    $ids[] = $id;
+                }
+            }
+        }
+        $principal = (int) ($row->asiento_id ?? 0);
+        if ($principal > 0) {
+            $ids[] = $principal;
+        }
+
+        return $ids;
+    }
+
+    /**
+     * @param  list<int>  $asientoIds
+     * @return list<array{id: int, numero: string, fecha: mixed}>
+     */
+    private static function asientosParaVista(array $asientoIds): array
+    {
+        if ($asientoIds === []) {
+            return [];
+        }
+
+        $porId = Asiento::query()
+            ->whereIn('id', $asientoIds)
+            ->get(['id', 'numeroasiento', 'fecha'])
+            ->keyBy('id');
+
+        $vista = [];
+        foreach ($asientoIds as $id) {
+            $asiento = $porId->get($id);
+            $vista[] = [
+                'id' => $id,
+                'numero' => (string) ($asiento?->numeroasiento ?? ('#'.$id)),
+                'fecha' => $asiento?->fecha,
+            ];
+        }
+
+        return $vista;
     }
 
     private static function resolverEstadoGrupo(int $pendientes, int $cerradas, int $total): string

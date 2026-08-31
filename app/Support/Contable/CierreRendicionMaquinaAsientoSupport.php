@@ -81,6 +81,27 @@ final class CierreRendicionMaquinaAsientoSupport
         $ids = $rendiciones->pluck('id')->map(fn ($id) => (int) $id)->values()->all();
         $titulo = 'Cierre máquinas — '.$fechaFmt.' — PV FSL '.$pv.' — '.$rendiciones->count().' rendición(es)';
 
+        $lineasSinCuenta = [];
+        foreach ($asientos as $asiento) {
+            foreach ($asiento['lineas'] as $ln) {
+                $debeLn = (float) ($ln['debe'] ?? 0);
+                $haberLn = (float) ($ln['haber'] ?? 0);
+                if (abs($debeLn) <= 0.0001 && abs($haberLn) <= 0.0001) {
+                    continue;
+                }
+                if ((int) ($ln['cuenta_id'] ?? 0) <= 0) {
+                    $lineasSinCuenta[] = trim((string) ($ln['concepto'] ?? 'sin concepto'));
+                }
+            }
+        }
+        if ($lineasSinCuenta !== []) {
+            throw new InvalidArgumentException(
+                'Faltan cuentas automáticas de cierre máquinas para empresa #'.$empresaId.': '
+                .implode('; ', array_values(array_unique($lineasSinCuenta)))
+                .'. Cargue Contable → Cuentas automáticas (grupo Cierre rendiciones máquinas).',
+            );
+        }
+
         if (abs($debe - $haber) > self::TOLERANCIA_CUADRE) {
             $advertencias[] = 'Los asientos no cuadran en conjunto: debe '
                 .number_format($debe, 2, ',', '.').' vs haber '.number_format($haber, 2, ',', '.').'.';
@@ -110,12 +131,10 @@ final class CierreRendicionMaquinaAsientoSupport
         $asientos = [];
 
         $cCajaPesos = (int) ($config['cuenta_caja_pesos_id'] ?? 0);
-        $cTarjetas = (int) ($config['cuenta_tarjetas_id'] ?? 0);
-        $cMep = (int) ($config['cuenta_mep_id'] ?? 0);
-        $cDolares = (int) ($config['cuenta_dolares_id'] ?? 0);
-        $cEuros = (int) ($config['cuenta_euros_id'] ?? 0);
-        $cCripto = (int) ($config['cuenta_cripto_id'] ?? 0);
-        $cTotalcoin = (int) ($config['cuenta_totalcoin_id'] ?? 0);
+        $cTotalcoin = (int) ($tot['totalcoin_cuenta_id'] ?? 0);
+        if ($cTotalcoin <= 0) {
+            $cTotalcoin = (int) ($config['cuenta_totalcoin_id'] ?? 0);
+        }
         $cImpuestoEsp = (int) ($config['cuenta_impuesto_esp_id'] ?? 0);
         $cGastos = (int) ($config['cuenta_gastos_id'] ?? 0);
         $cTicketGastro = (int) ($config['cuenta_ticket_gastro_id'] ?? 0);
@@ -136,10 +155,8 @@ final class CierreRendicionMaquinaAsientoSupport
 
         $lineas1 = [];
 
-        self::agregarLineaSigned($lineas1, (float) ($tot['efectivo'] ?? 0), 'Venta maquinas — Caja pesos', $cCajaPesos);
-        self::agregarLineaSigned($lineas1, (float) ($tot['tarjetas'] ?? 0), 'Venta maquinas — Tarjetas', $cTarjetas);
-        self::agregarLineaSigned($lineas1, (float) ($tot['mep'] ?? 0), 'Venta maquinas — MEP', $cMep);
-
+        // Valores de arqueo: cuentacontable de cada cuentacaja (no slots fijos pesos/ME/MEP/tarjetas).
+        // Excepción: códigos 25/76/100 siguen en tot[totalcoin] → slot fijo abajo.
         foreach ($tot['valores_cuenta'] ?? [] as $valorCuenta) {
             $monto = round((float) ($valorCuenta['monto'] ?? 0), 2);
             $cuentaId = (int) ($valorCuenta['cuentacontable_id'] ?? 0);
@@ -149,10 +166,6 @@ final class CierreRendicionMaquinaAsientoSupport
             }
             self::agregarLineaSigned($lineas1, $monto, 'Venta maquinas — '.$concepto, $cuentaId);
         }
-
-        self::agregarLineaSigned($lineas1, (float) ($tot['dolares_en_pesos'] ?? 0), 'Venta maquinas — Dólares', $cDolares);
-        self::agregarLineaSigned($lineas1, (float) ($tot['euros_en_pesos'] ?? 0), 'Venta maquinas — Euros', $cEuros);
-        self::agregarLineaSigned($lineas1, (float) ($tot['cripto_en_pesos'] ?? 0), 'Venta maquinas — Cripto', $cCripto);
 
         $totalcoin = round((float) ($tot['totalcoin'] ?? 0), 2);
         if (abs($totalcoin) > 0.0001) {
@@ -166,7 +179,16 @@ final class CierreRendicionMaquinaAsientoSupport
 
         $gastosVales = round((float) ($tot['vales'] ?? 0) + (float) ($tot['reintegros'] ?? 0), 2);
         if (abs($gastosVales) > 0.0001) {
-            $lineas1[] = self::linea($gastosVales > 0 ? 'D' : 'H', 'Venta maquinas — Vales y reintegros', $cGastos, abs($gastosVales));
+            $ccVales = CierreRendicionMaquinaCentrocostoSupport::idPorCodigo(
+                CierreRendicionMaquinaCentrocostoSupport::CODIGO_VALES
+            );
+            $lineas1[] = self::linea(
+                $gastosVales > 0 ? 'D' : 'H',
+                'Venta maquinas — Vales y reintegros',
+                $cGastos,
+                abs($gastosVales),
+                $ccVales
+            );
         }
 
         foreach ($tot['gastos_apertura'] ?? [] as $gasto) {
@@ -177,9 +199,10 @@ final class CierreRendicionMaquinaAsientoSupport
             if (abs($monto) <= 0.0001 || $cuentaId <= 0) {
                 continue;
             }
-            $lineas1[] = self::linea($monto > 0 ? 'D' : 'H', 'Venta maquinas — '.$desc, $cuentaId, abs($monto));
+            $ccGasto = (int) ($gasto['centrocosto_id'] ?? 0);
+            $lineas1[] = self::linea($monto > 0 ? 'D' : 'H', 'Venta maquinas — '.$desc, $cuentaId, abs($monto), $ccGasto);
             if ($contrapartidaId > 0) {
-                $lineas1[] = self::linea($monto > 0 ? 'H' : 'D', 'Venta maquinas — '.$desc.' (contrapartida)', $contrapartidaId, abs($monto));
+                $lineas1[] = self::linea($monto > 0 ? 'H' : 'D', 'Venta maquinas — '.$desc.' (contrapartida)', $contrapartidaId, abs($monto), $ccGasto);
             }
         }
 
@@ -195,7 +218,8 @@ final class CierreRendicionMaquinaAsientoSupport
 
         $ticketProm = round((float) ($tot['ticket_prom'] ?? 0), 2);
         if ($ticketProm > 0.0001) {
-            $lineas1[] = self::linea('D', 'Venta maquinas — Ticket promocional', $cTicketPromDebe, $ticketProm);
+            $ccTicketProm = CierreRendicionMaquinaCentrocostoSupport::idTicketProm();
+            $lineas1[] = self::linea('D', 'Venta maquinas — Ticket promocional', $cTicketPromDebe, $ticketProm, $ccTicketProm);
             $lineas1[] = self::linea('H', 'Venta maquinas — Ticket promocional (contrapartida)', $cTicketPromHaber, $ticketProm);
         }
 
@@ -228,13 +252,13 @@ final class CierreRendicionMaquinaAsientoSupport
             $lineas1[] = self::linea($pagoDiferido > 0 ? 'H' : 'D', 'Venta maquinas — Pago diferido', $cPoderPublico, abs($pagoDiferido));
         }
 
-        $neto = self::sumDebeMenosHaber($lineas1);
+        // p-vtamaquina.c: quita online del saldo y pone venta real (con signo), + totalcoin.
         $neto = round(
-            $neto
-            + self::contribucionAjusteOnlineReal($maqOnline)
-            + self::contribucionAjusteOnlineReal($rulOnline)
-            - self::contribucionAjusteOnlineReal((float) ($tot['maquinas_real'] ?? 0))
-            - self::contribucionAjusteOnlineReal((float) ($tot['ruletas_real'] ?? 0))
+            self::sumDebeMenosHaber($lineas1)
+            + $maqOnline
+            + $rulOnline
+            - (float) ($tot['maquinas_real'] ?? 0)
+            - (float) ($tot['ruletas_real'] ?? 0)
             + $totalcoin,
             2,
         );
@@ -337,7 +361,8 @@ final class CierreRendicionMaquinaAsientoSupport
             $debes[] = $debe > 0.0001 ? $debe : '';
             $haberes[] = $haber > 0.0001 ? $haber : '';
             $monedaIds[] = 1;
-            $centrocostoIds[] = null;
+            $cc = (int) ($ln['centrocosto_id'] ?? 0);
+            $centrocostoIds[] = $cc > 0 ? $cc : null;
             $cotizaciones[] = 1.;
             $observaciones[] = $leyenda;
         }
@@ -379,31 +404,24 @@ final class CierreRendicionMaquinaAsientoSupport
      */
     private static function agregarLineaSigned(array &$lineas, float $monto, string $concepto, int $cuentaId): void
     {
-        if (abs($monto) <= 0.0001 || $cuentaId <= 0) {
+        if (abs($monto) <= 0.0001) {
             return;
         }
         $lineas[] = self::linea($monto > 0 ? 'D' : 'H', $concepto, $cuentaId, abs($monto));
     }
 
-    private static function contribucionAjusteOnlineReal(float $monto): float
-    {
-        if (abs($monto) <= 0.0001) {
-            return 0.0;
-        }
-
-        return round(abs($monto), 2);
-    }
-
     /**
      * @return array<string, mixed>
      */
-    private static function linea(string $dh, string $concepto, int $cuentaId, float $monto): array
+    private static function linea(string $dh, string $concepto, int $cuentaId, float $monto, int $centrocostoId = 0): array
     {
         $monto = round($monto, 2);
+        $cc = CierreRendicionMaquinaCentrocostoSupport::resolverParaCuenta($cuentaId, $centrocostoId);
 
         return [
             'concepto' => $concepto,
             'cuenta_id' => $cuentaId,
+            'centrocosto_id' => $cc,
             'debe' => $dh === 'D' ? $monto : 0.0,
             'haber' => $dh === 'H' ? $monto : 0.0,
         ];

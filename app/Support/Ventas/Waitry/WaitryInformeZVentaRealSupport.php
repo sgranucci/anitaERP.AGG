@@ -7,7 +7,10 @@ use Illuminate\Support\Facades\DB;
 /**
  * Contrasta el recomputo del proceso contra venta real (Waitry del cierre + facturas ERP).
  *
- * El asiento del proceso se graba ~09:00: no sirve como confirmación a las 07:45.
+ * A las 07:45 el asiento todavía no está: no se usa como confirmación.
+ * Después de grabar asientos, {@see $mpContabilizado} (MP/QR tótem) sí confirma:
+ * si el recomputo = lo contabilizado, se alinea el Z aunque el Waitry persistido
+ * se haya congelado antes de la última comanda de la jornada.
  */
 final class WaitryInformeZVentaRealSupport
 {
@@ -18,7 +21,8 @@ final class WaitryInformeZVentaRealSupport
      *   venta_erp: float,
      *   venta_real: float,
      *   z_mp_actual: float,
-     *   recomputado: float
+     *   recomputado: float,
+     *   mp_contabilizado: float|null
      * }
      */
     public static function decidirRegeneracion(
@@ -27,12 +31,14 @@ final class WaitryInformeZVentaRealSupport
         float $ventaErp,
         float $zMpActual,
         float $tolerancia = 0.02,
+        ?float $mpContabilizado = null,
     ): array {
         $tol = max(0.0, $tolerancia);
         $recomputado = round($recomputado, 2);
         $ventaWaitry = round($ventaWaitry, 2);
         $ventaErp = round($ventaErp, 2);
         $zMpActual = round($zMpActual, 2);
+        $mpContab = $mpContabilizado !== null ? round($mpContabilizado, 2) : null;
         $ventaReal = round(max($ventaWaitry, $zMpActual), 2);
 
         $base = [
@@ -41,12 +47,21 @@ final class WaitryInformeZVentaRealSupport
             'venta_real' => $ventaReal,
             'z_mp_actual' => $zMpActual,
             'recomputado' => $recomputado,
+            'mp_contabilizado' => $mpContab,
         ];
 
         $hayVentaReal = $ventaWaitry > $tol || $ventaErp > $tol || $zMpActual > $tol;
 
         if ($recomputado <= $tol && $hayVentaReal) {
             return $base + ['decision' => 'omitido_recomputo_cero'];
+        }
+
+        if ($mpContab !== null && $mpContab > $tol && abs($recomputado - $mpContab) <= $tol) {
+            if (abs($recomputado - $zMpActual) <= $tol) {
+                return $base + ['decision' => 'ok'];
+            }
+
+            return $base + ['decision' => 'regenerar'];
         }
 
         if (abs($recomputado - $ventaWaitry) <= $tol && $recomputado > $tol) {
@@ -62,6 +77,48 @@ final class WaitryInformeZVentaRealSupport
         }
 
         return $base + ['decision' => 'revisar_venta'];
+    }
+
+    /**
+     * El asiento TOTEM usa el total de la factura ERP, no el cobro Waitry.
+     * El Informe Z, al regenerarse desde el proceso, tiene que usar el mismo importe
+     * para no desalinearse de ventas / asientos / medios.
+     *
+     * @param  list<array<string, mixed>>  $lineas
+     * @return list<array<string, mixed>>
+     */
+    public static function aplicarImporteErpALineasInformeZ(array $lineas): array
+    {
+        $ids = [];
+        foreach ($lineas as $ln) {
+            $id = (int) ($ln['venta_id'] ?? 0);
+            if ($id > 0) {
+                $ids[$id] = $id;
+            }
+        }
+        if ($ids === []) {
+            return $lineas;
+        }
+
+        $totales = DB::table('venta')
+            ->whereIn('id', array_values($ids))
+            ->pluck('total', 'id')
+            ->all();
+
+        foreach ($lineas as $i => $ln) {
+            $ventaId = (int) ($ln['venta_id'] ?? 0);
+            if ($ventaId <= 0 || ! isset($totales[$ventaId])) {
+                continue;
+            }
+            $erp = round((float) $totales[$ventaId], 2);
+            if ($erp <= 0.0001) {
+                continue;
+            }
+            $lineas[$i]['total'] = $erp;
+            $lineas[$i]['monto_cobro_waitry'] = $erp;
+        }
+
+        return $lineas;
     }
 
     /**

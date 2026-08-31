@@ -982,6 +982,7 @@
                                 <strong>Cobranza</strong>
                                 <span class="text-muted" style="font-size:11px;">Se graba al facturar · total en $ · <kbd>Enter</kbd> en código y monto</span>
                             </div>
+                            <p id="aviso-totem-desfasaje" class="alert alert-danger py-2 px-2 small mb-1 d-none" role="alert"></p>
                             <p id="gastro-waitry-totem-aviso" class="alert alert-info py-1 px-2 small mb-1 d-none" role="status">
                                 Cuenta Waitry cobrada en el tótem: cobranza fija con medio
                                 <strong id="gastro-waitry-medio-label">TOTEM</strong> (no editable).

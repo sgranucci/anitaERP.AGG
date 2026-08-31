@@ -63,6 +63,11 @@ switch (strtoupper(config('app.empresa'))) {
             'client_secret' => ['IKIybgzcoOIteljkZJBvl9YER2ihPBeq06ms', 'Rf13czG6uDolPtN60dSZHZUldaPk7MGICL36', 'QCOOkdzAzwUgLB1esv5XmDCrlG7DSrjJVoMF'],
             'customer_id' => ['X36888A', 'X36688A', 'C25656A'],
             'movimientos_sync_dias_ventana' => (int) env('INTERBANKING_MOVIMIENTOS_SYNC_DIAS', 14),
+            // CBU cuenta origen default (Anita p-pagoxbanco / Biyemas)
+            'archivo_pago_cbu_origen' => (string) env(
+                'INTERBANKING_ARCHIVO_PAGO_CBU_ORIGEN',
+                '2850651330094012507151'
+            ),
         ];
         break;
 }

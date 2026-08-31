@@ -994,6 +994,18 @@ class ArticuloController extends Controller
         $data = ArticuloListadoFiltros::normalizarEmpresaIdEnData($request->all());
         $data['fl_precio_promedio_transferencia'] = $request->boolean('fl_precio_promedio_transferencia');
 
+        $articuloPrevio = Articulo::query()
+            ->whereKey((int) ($data['articulo_id'] ?? $id))
+            ->first(['id', 'coeficienteconversion']);
+        $coefAnterior = $articuloPrevio !== null
+            ? (float) ($articuloPrevio->coeficienteconversion ?? 0)
+            : null;
+        $coefNuevo = array_key_exists('coeficienteconversion', $data)
+            ? (float) ($data['coeficienteconversion'] ?? 0)
+            : $coefAnterior;
+        $coeficienteCambio = $coefAnterior !== null
+            && abs($coefAnterior - (float) $coefNuevo) > 0.000001;
+
         DB::beginTransaction();
         try {
             $data['foto'] = ($nombre_foto != null ? $nombre_foto.'.jpg' : null);
@@ -1035,6 +1047,29 @@ class ArticuloController extends Controller
                 ->back()
                 ->withInput()
                 ->with('errores', [$e->getMessage()]);
+        }
+
+        $redirigirRecalcularTra = $coeficienteCambio
+            && TransferenciaMercaderiaRepararCostosSupport::puedeRecalcularDesdeArticulo()
+            && (float) $coefNuevo > 0;
+
+        if ($redirigirRecalcularTra) {
+            $paramsEditar = ['id' => $id];
+            if ($request->input('origen') === 'modal_consulta') {
+                $paramsEditar['origen'] = 'modal_consulta';
+                $paramsEditar['vista'] = 'consulta';
+            }
+
+            return redirect()
+                ->route('editar_articulo', $paramsEditar)
+                ->with('status', 'Artículo actualizado con éxito. Revisá si hay que recalcular TRA a fórmulas.')
+                ->with('abrir_recalcular_tra_formula', [
+                    'coeficiente' => (float) $coefNuevo,
+                    'coeficiente_anterior' => (float) $coefAnterior,
+                    'modo' => 'rango',
+                    'fecha_desde' => now()->subMonths(3)->startOfMonth()->toDateString(),
+                    'fecha_hasta' => now()->toDateString(),
+                ]);
         }
 
         if ($request->input('origen') === 'modal_consulta') {

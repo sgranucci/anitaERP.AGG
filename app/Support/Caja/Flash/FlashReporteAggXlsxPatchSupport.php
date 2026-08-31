@@ -6,6 +6,7 @@ use DOMDocument;
 use DOMElement;
 use DOMXPath;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use PhpOffice\PhpSpreadsheet\RichText\RichText;
 use RuntimeException;
 use Throwable;
 use ZipArchive;
@@ -22,10 +23,14 @@ final class FlashReporteAggXlsxPatchSupport
 
     private const RELS_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 
+    /** Ancho Excel de 120 px (Calibri 11). */
+    public const TABLA_ANCHO_COL_EXCEL = '17.138671875';
+
     /**
      * @param  array<string, array<string, float|int|string|null>>  $porHoja
+     * @return array{tabla_resumen: list<list<array{texto: string, negrita: bool, rojo: bool, encabezado: bool}>>}
      */
-    public function rellenar(string $plantilla, string $destino, array $porHoja): void
+    public function rellenar(string $plantilla, string $destino, array $porHoja, ?string $imagenDestino = null): array
     {
         if (! is_file($plantilla)) {
             throw new RuntimeException('No está la plantilla Flash Report AGG: '.$plantilla);
@@ -39,9 +44,11 @@ final class FlashReporteAggXlsxPatchSupport
             throw new RuntimeException('No se pudo abrir el Excel generado: '.$destino);
         }
 
+        $rutaTabla = 'xl/worksheets/sheet5.xml';
         try {
             $shared = $this->cargarSharedStrings($zip);
             $hojas = $this->mapaHojas($zip);
+            $rutaTabla = $hojas['Tabla'] ?? $rutaTabla;
             $reemplazos = [];
 
             foreach ($porHoja as $nombreHoja => $celdas) {
@@ -57,6 +64,11 @@ final class FlashReporteAggXlsxPatchSupport
                     continue;
                 }
                 $reemplazos[$ruta] = $this->aplicarCeldas($xml, $celdas, $shared);
+            }
+
+            $xmlTabla = $reemplazos[$rutaTabla] ?? $zip->getFromName($rutaTabla);
+            if (is_string($xmlTabla)) {
+                $reemplazos[$rutaTabla] = $this->sanearXmlHojaTabla($xmlTabla);
             }
 
             $reemplazos['xl/sharedStrings.xml'] = $this->serializarSharedStrings($shared);
@@ -75,64 +87,201 @@ final class FlashReporteAggXlsxPatchSupport
             $zip->close();
         }
 
+        $tablaResumen = [];
         try {
-            $this->estamparValoresCalculadosTabla($destino);
+            $tablaResumen = $this->estamparValoresCalculadosTabla($destino, $rutaTabla, $imagenDestino);
         } catch (Throwable) {
             // Si el motor no puede calcular, Excel recalcula al abrir (fullCalcOnLoad).
         }
+
+        return ['tabla_resumen' => $tablaResumen];
+    }
+
+    /**
+     * Deja Tabla en A:G (120 px), HLOOKUP("Electronic") y sin columnas viejas.
+     */
+    public function sanearHojaTablaEnArchivo(string $xlsx): void
+    {
+        $zip = new ZipArchive;
+        if ($zip->open($xlsx) !== true) {
+            throw new RuntimeException('No se pudo abrir el Excel: '.$xlsx);
+        }
+        try {
+            $hojas = $this->mapaHojas($zip);
+            $ruta = $hojas['Tabla'] ?? null;
+            if ($ruta === null) {
+                return;
+            }
+            $xml = $zip->getFromName($ruta);
+            if ($xml === false) {
+                return;
+            }
+            $zip->deleteName($ruta);
+            $zip->addFromString($ruta, $this->sanearXmlHojaTabla($xml));
+        } finally {
+            $zip->close();
+        }
+    }
+
+    public function sanearXmlHojaTabla(string $xml): string
+    {
+        $xml = str_replace('HLOOKUP(J3,', 'HLOOKUP("Electronic",', $xml);
+        $xml = preg_replace('/<mergeCells\b[^>]*>.*?<\/mergeCells>/s', '', $xml) ?? $xml;
+        $xml = preg_replace('/<c r="(?:[H-Z]|[A-Z]{2,})\d+"[^>]*\/>/', '', $xml) ?? $xml;
+        $xml = preg_replace('/<c r="(?:[H-Z]|[A-Z]{2,})\d+"[^>]*>.*?<\/c>/s', '', $xml) ?? $xml;
+        $xml = preg_replace('/<row r="(?:1[4-9]|[2-9]\d)"[^>]*>.*?<\/row>/s', '', $xml) ?? $xml;
+        $cols = '<cols><col min="1" max="7" width="'.self::TABLA_ANCHO_COL_EXCEL.'" style="145" customWidth="1"/></cols>';
+        $xml = preg_replace('/<cols>.*?<\/cols>/s', $cols, $xml) ?? $xml;
+        $xml = preg_replace('/<dimension ref="[^"]*"/', '<dimension ref="A1:G13"', $xml) ?? $xml;
+        $xml = preg_replace('/spans="[^"]*"/', 'spans="1:7"', $xml) ?? $xml;
+        $xml = preg_replace(
+            '/<selection\b[^>]*\/>/',
+            '<selection activeCell="A2" sqref="A2"/>',
+            $xml
+        ) ?? $xml;
+
+        return $xml;
     }
 
     /**
      * La plantilla deja &lt;v&gt;0&lt;/v&gt; en Tabla. Excel muestra ese caché
      * hasta recalcular. Escribimos el resultado de las fórmulas oficiales
-     * (INDEX / G39) sin regrabar el xlsx con PhpSpreadsheet.
+     * (INDEX / G39 / Electronic) sin regrabar el xlsx con PhpSpreadsheet.
+     *
+     * @return list<list<array{texto: string, negrita: bool, rojo: bool, encabezado: bool}>>
      */
-    private function estamparValoresCalculadosTabla(string $destino): void
+    private function estamparValoresCalculadosTabla(string $destino, string $rutaTabla, ?string $imagenDestino): array
     {
         $ss = IOFactory::load($destino);
+        $valores = [];
+        $resumen = [];
         try {
             $tabla = $ss->getSheetByName('Tabla');
             if ($tabla === null) {
-                return;
+                return [];
             }
-            $valores = [];
-            foreach (['B3', 'C3', 'D3', 'B4', 'C4', 'D4', 'B5', 'C5', 'D5', 'B6', 'C6', 'D6', 'B9', 'C9', 'D9', 'B10', 'C10', 'D10', 'B11', 'C11', 'D11', 'B12', 'C12', 'D12'] as $ref) {
-                $calc = $tabla->getCell($ref)->getCalculatedValue();
-                if (! is_numeric($calc)) {
-                    continue;
+            for ($fila = 1; $fila <= 13; $fila++) {
+                $linea = [];
+                foreach (['A', 'B', 'C', 'D', 'E', 'F', 'G'] as $col) {
+                    $ref = $col.$fila;
+                    $cell = $tabla->getCell($ref);
+                    $raw = $cell->getValue();
+                    $calc = $raw;
+                    if (is_string($raw) && str_starts_with($raw, '=')) {
+                        try {
+                            $calc = $cell->getCalculatedValue();
+                        } catch (Throwable) {
+                            $calc = null;
+                        }
+                    }
+                    if (is_numeric($calc) && is_string($raw) && str_starts_with($raw, '=')) {
+                        $valores[$ref] = (float) $calc;
+                    }
+                    $formato = (string) $tabla->getStyle($ref)->getNumberFormat()->getFormatCode();
+                    $linea[] = $this->celdaResumenTabla($calc, $formato, $fila, $col);
                 }
-                $valores[$ref] = (float) $calc;
+                $resumen[] = $linea;
             }
         } finally {
             $ss->disconnectWorksheets();
         }
 
-        if ($valores === []) {
-            return;
+        if ($valores !== []) {
+            $this->escribirValoresEstampados($destino, $rutaTabla, $valores);
         }
 
+        if ($imagenDestino !== null && $imagenDestino !== '') {
+            try {
+                (new FlashReporteAggTablaImagenSupport)->generar($resumen, $imagenDestino);
+            } catch (Throwable) {
+                // El mail sigue con el Excel; la imagen es un extra.
+            }
+        }
+
+        return $resumen;
+    }
+
+    /**
+     * @param  array<string, float>  $valores
+     */
+    private function escribirValoresEstampados(string $destino, string $rutaTabla, array $valores): void
+    {
         $zip = new ZipArchive;
         if ($zip->open($destino) !== true) {
             return;
         }
         try {
-            $xml = $zip->getFromName('xl/worksheets/sheet5.xml');
+            $xml = $zip->getFromName($rutaTabla);
             if ($xml === false) {
                 return;
             }
             foreach ($valores as $ref => $numero) {
-                $xml = preg_replace(
-                    '/(<c r="'.preg_quote($ref, '/').'"[^>]*>)(<f[^>]*>.*?<\/f>)(?:<v>.*?<\/v>)?/',
-                    '$1$2<v>'.$this->numeroXml($numero).'</v>',
+                $xml = preg_replace_callback(
+                    '/<c r="'.preg_quote($ref, '/').'"([^>]*)>(<f[^>]*>.*?<\/f>)(?:<v>.*?<\/v>)?/',
+                    function (array $m) use ($ref, $numero): string {
+                        $attrs = preg_replace('/\s+t="[^"]*"/', '', $m[1]) ?? $m[1];
+
+                        return '<c r="'.$ref.'"'.$attrs.'>'.$m[2].'<v>'.$this->numeroXml($numero).'</v>';
+                    },
                     $xml,
                     1
                 ) ?? $xml;
             }
-            $zip->deleteName('xl/worksheets/sheet5.xml');
-            $zip->addFromString('xl/worksheets/sheet5.xml', $xml);
+            $zip->deleteName($rutaTabla);
+            $zip->addFromString($rutaTabla, $xml);
         } finally {
             $zip->close();
         }
+    }
+
+    /**
+     * @return array{texto: string, negrita: bool, rojo: bool, encabezado: bool}
+     */
+    private function celdaResumenTabla(mixed $valor, string $formato, int $fila, string $col): array
+    {
+        $encabezado = in_array($fila, [2, 8], true);
+        $negrita = $encabezado || $col === 'A';
+        if ($valor instanceof RichText) {
+            $valor = $valor->getPlainText();
+        }
+        if (is_string($valor)) {
+            $texto = trim($valor);
+            if (str_starts_with($texto, '=')) {
+                $texto = '';
+            }
+
+            return [
+                'texto' => $texto,
+                'negrita' => $negrita,
+                'rojo' => false,
+                'encabezado' => $encabezado,
+            ];
+        }
+        if (! is_numeric($valor)) {
+            return [
+                'texto' => '',
+                'negrita' => $negrita,
+                'rojo' => false,
+                'encabezado' => $encabezado,
+            ];
+        }
+
+        $n = (float) $valor;
+        $esPct = str_contains($formato, '%');
+        if ($esPct) {
+            $texto = number_format($n * 100, 1, ',', '.').'%';
+        } elseif (str_contains($formato, '$') || str_contains($formato, '#')) {
+            $texto = '$ '.number_format($n, 0, ',', '.');
+        } else {
+            $texto = number_format($n, 0, ',', '.');
+        }
+
+        return [
+            'texto' => $texto,
+            'negrita' => $negrita,
+            'rojo' => $esPct && $n < 0,
+            'encabezado' => $encabezado,
+        ];
     }
 
     /**

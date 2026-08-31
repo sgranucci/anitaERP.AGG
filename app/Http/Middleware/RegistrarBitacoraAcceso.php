@@ -21,27 +21,51 @@ class RegistrarBitacoraAcceso
 
     public function handle(Request $request, Closure $next): Response
     {
-        if (! BitacoraAccesoWriter::habilitado() || BitacoraAccesoWriter::debeExcluir($request)) {
-            return $next($request);
-        }
+        try {
+            if (! BitacoraAccesoWriter::habilitado() || BitacoraAccesoWriter::debeExcluir($request)) {
+                return $next($request);
+            }
 
-        $user = Auth::user();
-        $empresas = Session::get('usuario_empresas');
-        $empresaId = Session::get('empresa_id');
-        if ($empresaId === null && is_array($empresas) && isset($empresas[0]['id'])) {
-            $empresaId = $empresas[0]['id'];
-        }
+            $user = Auth::user();
+            $empresas = Session::get('usuario_empresas');
+            $empresaId = Session::get('empresa_id');
+            if ($empresaId === null) {
+                $empresaId = $this->resolverEmpresaIdDesdeSession($empresas);
+            }
 
-        $request->attributes->set(self::ATTR_CONTEXTO, [
-            'started' => defined('LARAVEL_START') ? (float) LARAVEL_START : microtime(true),
-            'usuario_id' => $user?->id ?? Session::get('usuario_id'),
-            'usuario_nombre' => $user?->nombre ?? Session::get('nombre_usuario') ?? Session::get('usuario'),
-            'empresa_id' => $empresaId !== null ? (int) $empresaId : null,
-            'rol_id' => Session::get('rol_id') !== null ? (int) Session::get('rol_id') : null,
-            'session_id' => Session::getId() ?: null,
-        ]);
+            $request->attributes->set(self::ATTR_CONTEXTO, [
+                'started' => defined('LARAVEL_START') ? (float) LARAVEL_START : microtime(true),
+                'usuario_id' => $user?->id ?? Session::get('usuario_id'),
+                'usuario_nombre' => $user?->nombre ?? Session::get('nombre_usuario') ?? Session::get('usuario'),
+                'empresa_id' => $empresaId !== null ? (int) $empresaId : null,
+                'rol_id' => Session::get('rol_id') !== null ? (int) Session::get('rol_id') : null,
+                'session_id' => Session::getId() ?: null,
+            ]);
+        } catch (\Throwable) {
+            // La bitácora no debe tumbar la navegación.
+        }
 
         return $next($request);
+    }
+
+    /**
+     * @param  mixed  $empresas
+     */
+    private function resolverEmpresaIdDesdeSession($empresas): mixed
+    {
+        if (! is_array($empresas) || $empresas === []) {
+            return null;
+        }
+
+        $primera = $empresas[array_key_first($empresas)];
+        if (is_array($primera)) {
+            return $primera['id'] ?? null;
+        }
+        if (is_object($primera)) {
+            return $primera->id ?? null;
+        }
+
+        return null;
     }
 
     public function terminate(Request $request, Response $response): void

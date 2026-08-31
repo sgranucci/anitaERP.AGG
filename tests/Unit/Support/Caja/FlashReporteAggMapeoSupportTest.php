@@ -94,6 +94,21 @@ class FlashReporteAggMapeoSupportTest extends TestCase
         $this->assertSame(12, $fila['BL']);
     }
 
+    public function test_encabezados_hoja_datos_tienen_electronic_para_hlookup(): void
+    {
+        $h = FlashReporteAggMapeoSupport::encabezadosHojaDatos();
+
+        $this->assertSame('Electronic', $h['BC7']);
+        $this->assertSame('Electronic', $h['BH7']);
+        $this->assertSame(' Electronic ', $h['AD7']);
+        $this->assertSame(' Day       ', $h['A8']);
+        $this->assertSame(' Fecha    ', $h['B8']);
+        $this->assertSame(' Custom.', $h['C8']);
+        $this->assertSame('          SL', $h['G6']);
+        $this->assertSame(' OTS     ', $h['H6']);
+        $this->assertArrayNotHasKey('AY8', $h);
+    }
+
     public function test_titulos_de_mes(): void
     {
         $this->assertSame('Reporte Flash Agosto 26', FlashReporteAggMapeoSupport::tituloMes(Carbon::create(2026, 8, 1)));

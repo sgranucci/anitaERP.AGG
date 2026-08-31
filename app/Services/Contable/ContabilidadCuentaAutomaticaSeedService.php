@@ -33,7 +33,8 @@ class ContabilidadCuentaAutomaticaSeedService
         CuentaAutomaticaClaves::CIERRE_BINGO_CONT_HOSPITAL => '215010003',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_CAJA_PESOS => '111010001',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_TARJETAS => '113010001',
-        CuentaAutomaticaClaves::CIERRE_MAQUINA_DOLARES => '111020001',
+        // p-vtamaquina.c lee_impcont(475/484/485) — no inventar; ctamov Biyemas.
+        CuentaAutomaticaClaves::CIERRE_MAQUINA_DOLARES => '111010002',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_EUROS => '111020002',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_CAJA_TRANSITORIA => '111010010',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_DIFERENCIA_CAJA => '521280004',
@@ -42,8 +43,8 @@ class ContabilidadCuentaAutomaticaSeedService
         CuentaAutomaticaClaves::CIERRE_MAQUINA_CONT_CANON_LOTERIA => '215010001',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_CANON_HOSPITAL => '521020002',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_CONT_CANON_HOSPITAL => '215010003',
-        CuentaAutomaticaClaves::CIERRE_MAQUINA_TICKET_PROM_DEBE => '521040010',
-        CuentaAutomaticaClaves::CIERRE_MAQUINA_TICKET_PROM_HABER => '411010010',
+        CuentaAutomaticaClaves::CIERRE_MAQUINA_TICKET_PROM_DEBE => '521040005',
+        CuentaAutomaticaClaves::CIERRE_MAQUINA_TICKET_PROM_HABER => '211010009',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_GASTOS => '521280001',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_VENTAS => '411010001',
         CuentaAutomaticaClaves::CIERRE_MAQUINA_TICKET_GASTRO => '211010020',
@@ -57,6 +58,12 @@ class ContabilidadCuentaAutomaticaSeedService
         CuentaAutomaticaClaves::CIERRE_MAQUINA_PAGO24 => '113010020',
         CuentaAutomaticaClaves::VENTAS_IVA_DEBITO_FISCAL => '214010009',
         CuentaAutomaticaClaves::VENTAS_IVA_CREDITO_FISCAL => '114010011',
+        CuentaAutomaticaClaves::SUELDOS_A_PAGAR => '213010001',
+        CuentaAutomaticaClaves::SUELDOS_GASTO_REMUNERATIVO => '521060001',
+        CuentaAutomaticaClaves::SUELDOS_GASTO_NO_REMUNERATIVO => '521070006',
+        CuentaAutomaticaClaves::SUELDOS_GASTO_CONTRIBUCION => '521060006',
+        CuentaAutomaticaClaves::SUELDOS_PASIVO_RETENCION => '213010002',
+        CuentaAutomaticaClaves::SUELDOS_PASIVO_CONTRIBUCION => '213010002',
     ];
 
     /**

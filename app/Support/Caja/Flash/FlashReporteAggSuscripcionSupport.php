@@ -134,16 +134,8 @@ class FlashReporteAggSuscripcionSupport
             return ['desde' => $desde, 'hasta' => $hasta];
         }
 
-        $desde = $ahora->copy()->startOfMonth();
-        $hasta = $ahora->copy()->startOfDay();
-        if ($hasta->lt($desde)) {
-            $hasta = $desde->copy();
-        }
-        if ($hasta->gt($ahora->copy()->endOfMonth()->startOfDay())) {
-            $hasta = $ahora->copy()->endOfMonth()->startOfDay();
-        }
-
-        return ['desde' => $desde, 'hasta' => $hasta];
+        // Mes en curso: hasta = fecha de producción (ayer), mes anclado a esa fecha.
+        return FlashReporteAggFechaProduccionSupport::periodoMesEnCurso($ahora);
     }
 
     /**

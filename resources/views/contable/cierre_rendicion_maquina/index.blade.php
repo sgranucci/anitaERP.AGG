@@ -34,6 +34,13 @@
 @endphp
 
 @section('contenido')
+@include('includes.proceso_overlay_aviso', [
+    'overlayId' => 'cierre-rend-maquina-overlay',
+    'tituloId' => 'cierre-rend-maquina-overlay-titulo',
+    'subtituloId' => 'cierre-rend-maquina-overlay-subtitulo',
+    'titulo' => 'Cerrando máquinas…',
+    'subtitulo' => 'Escribe FSL y asientos (venta + canon). No cierre la página ni vuelva a confirmar.',
+])
 @php
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $limpiarUrl = route(
@@ -58,6 +65,10 @@
                         <a href="{{ route('cierre_rendicion_maquina_conciliacion_flash', $retornoListadoQuery) }}"
                            class="btn btn-sm btn-outline-info mr-2 mb-1" title="Conciliar rendiciones vs flash">
                             <i class="fa fa-balance-scale"></i> Conciliaci&oacute;n flash
+                        </a>
+                        <a href="{{ route('cierre_rendicion_maquina_venta_listado', $retornoListadoQuery) }}"
+                           class="btn btn-sm btn-outline-primary mr-2 mb-1" title="Listado Venta de máquinas (Anita)">
+                            <i class="fa fa-table"></i> Venta de m&aacute;quinas
                         </a>
                         @if (can('editar-cuentas-automaticas-contables', false))
                             <a href="{{ route('cuentas_automaticas_contables') }}"
@@ -155,13 +166,18 @@
                                 @endif
                             </td>
                             <td>
-                                @if (! empty($grupo['asiento_id']) && can('listar-asiento', false))
+                                @if (! empty($grupo['asientos']) && can('listar-asiento', false))
+                                    @foreach ($grupo['asientos'] as $asientoVista)
+                                        <a href="{{ route('editar_asiento', ['id' => $asientoVista['id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
+                                           class="text-primary d-block" target="_blank" rel="noopener">
+                                            {{ $asientoVista['numero'] }}
+                                        </a>
+                                    @endforeach
+                                @elseif (! empty($grupo['asiento_id']) && can('listar-asiento', false))
                                     <a href="{{ route('editar_asiento', ['id' => $grupo['asiento_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']) }}"
                                        class="text-primary" target="_blank" rel="noopener">
                                         {{ $grupo['asiento_numero'] ?? ('#'.$grupo['asiento_id']) }}
                                     </a>
-                                @elseif (($grupo['asiento_ids_distintos'] ?? 0) > 1)
-                                    <span class="text-muted small">Varios asientos</span>
                                 @else
                                     —
                                 @endif

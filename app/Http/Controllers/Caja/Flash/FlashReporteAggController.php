@@ -7,6 +7,7 @@ use App\Models\Caja\Flash\FlashCaja;
 use App\Models\Caja\Flash\FlashReporteSuscripcion;
 use App\Services\Caja\Flash\FlashReporteAggDistribucionService;
 use App\Services\Caja\Flash\FlashReporteAggExcelService;
+use App\Support\Caja\Flash\FlashReporteAggFechaProduccionSupport;
 use App\Support\Caja\Flash\FlashReporteAggSuscripcionSupport;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -155,16 +156,19 @@ class FlashReporteAggController extends Controller
      */
     private function resolverPeriodo(Request $request): array
     {
+        $produccion = FlashReporteAggFechaProduccionSupport::fecha();
+
         $mes = trim((string) $request->input('mes', ''));
         if (! preg_match('/^\d{4}-\d{2}$/', $mes)) {
-            $mes = Carbon::now()->format('Y-m');
+            // Sin mes en el request: mes de la fecha de producción (no el calendario de hoy).
+            $mes = $produccion->format('Y-m');
         }
-        $desde = Carbon::createFromFormat('Y-m-d', $mes.'-01')?->startOfMonth() ?? Carbon::now()->startOfMonth();
+        $desde = Carbon::createFromFormat('Y-m-d', $mes.'-01')?->startOfMonth() ?? $produccion->copy()->startOfMonth();
 
         $hastaRaw = trim((string) $request->input('fecha_hasta', ''));
         $hasta = $hastaRaw !== ''
             ? Carbon::parse($hastaRaw)->startOfDay()
-            : Carbon::now()->startOfDay();
+            : $produccion->copy();
 
         if ($hasta->lt($desde)) {
             $hasta = $desde->copy();

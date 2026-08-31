@@ -22,9 +22,22 @@
             });
         }
         document.querySelectorAll('a[href*="listar-reporte-sueldos-definible"]').forEach(function (a) {
-            a.addEventListener('click', mostrarOverlay);
+            a.addEventListener('click', function () {
+                var sub = document.getElementById('rsd-overlay-subtitulo');
+                if (sub) {
+                    sub.textContent = 'El archivo se descarga al terminar. Pulse Esc para cerrar este aviso.';
+                }
+                mostrarOverlay();
+                window.addEventListener('focus', ocultarOverlay, { once: true });
+            });
         });
         window.addEventListener('pageshow', ocultarOverlay);
+        window.addEventListener('pagehide', ocultarOverlay);
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape' || event.keyCode === 27) {
+                ocultarOverlay();
+            }
+        });
 
         document.querySelectorAll('.rsd-drill').forEach(function (a) {
             a.addEventListener('click', function (e) {

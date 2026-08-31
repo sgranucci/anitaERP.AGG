@@ -16,6 +16,8 @@ use App\Repositories\Ventas\TipotransaccionRepositoryInterface;
 use App\Support\Ventas\ConceptoVentaMostradorSupport;
 use App\Support\Listado\QueryRetornoListado;
 use App\Support\Ventas\ConceptoVentaListadoFiltros;
+use App\Support\Ventas\ConceptoVentaPlantillaMotor;
+use App\Support\Ventas\ConceptoVentaTagSupport;
 use App\Support\Ventas\ConceptoVentaUsoSupport;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -173,7 +175,14 @@ class ConceptoVentaController extends Controller
             $output['data'] = '<tr><td colspan="6">Sin resultados</td></tr>';
         } else {
             foreach ($data as $row) {
-                $output['data'] .= '<tr data-impuesto-id="'.e((string) ($row->impuesto_id ?? '')).'">';
+                $tagsJson = e(json_encode(
+                    ConceptoVentaTagSupport::tagsDesdeConcepto($row),
+                    JSON_UNESCAPED_UNICODE
+                ) ?: '[]');
+                $plantilla = e((string) $row->descripcion);
+                $output['data'] .= '<tr data-impuesto-id="'.e((string) ($row->impuesto_id ?? '')).'"'
+                    .' data-concepto-tags="'.$tagsJson.'"'
+                    .' data-concepto-plantilla="'.$plantilla.'">';
                 $output['data'] .= '<td class="concepto_venta_id">'.e((string) $row->id).'</td>';
                 $output['data'] .= '<td class="codigoconceptoventa">'.e((string) $row->codigo).'</td>';
                 $output['data'] .= '<td class="nombreconceptoventa">'.e((string) $row->nombre).'</td>';
@@ -223,10 +232,12 @@ class ConceptoVentaController extends Controller
             'codigo' => $concepto->codigo,
             'nombre' => $concepto->nombre,
             'descripcion' => $concepto->descripcion,
+            'plantilla' => $concepto->descripcion,
             'codigo_gtin' => $concepto->codigo_gtin,
             'impuesto_id' => $concepto->impuesto_id,
             'unidadmedida_id' => $concepto->unidadmedida_id,
             'precio' => $linea['precio'],
+            'tags' => ConceptoVentaTagSupport::tagsDesdeConcepto($concepto),
         ]);
     }
 
@@ -296,5 +307,29 @@ class ConceptoVentaController extends Controller
             ];
         }
         $this->repository->sincronizarPrecios($conceptoId, $filasPrecio);
+
+        $claves = (array) $request->input('tag_claves', []);
+        $etiquetas = (array) $request->input('tag_etiquetas', []);
+        $tipos = (array) $request->input('tag_tipos', []);
+        $origenes = (array) $request->input('tag_origenes', []);
+        $obligatorios = (array) $request->input('tag_obligatorios', []);
+        $ordenes = (array) $request->input('tag_ordenes', []);
+        $largos = (array) $request->input('tag_largo_max', []);
+        $opciones = (array) $request->input('tag_opciones', []);
+        $filasTag = [];
+        foreach ($claves as $i => $clave) {
+            $obRaw = $obligatorios[$i] ?? '1';
+            $filasTag[] = [
+                'clave' => $clave,
+                'etiqueta' => $etiquetas[$i] ?? '',
+                'tipo' => $tipos[$i] ?? ConceptoVentaTagSupport::TIPO_TEXTO,
+                'origen' => $origenes[$i] ?? ConceptoVentaPlantillaMotor::ORIGEN_PEDIBLE,
+                'obligatorio' => $obRaw === true || $obRaw === 1 || $obRaw === '1',
+                'orden' => $ordenes[$i] ?? ($i + 1),
+                'largo_max' => $largos[$i] ?? null,
+                'opciones' => $opciones[$i] ?? null,
+            ];
+        }
+        $this->repository->sincronizarTags($conceptoId, $filasTag);
     }
 }

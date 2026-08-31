@@ -364,6 +364,28 @@ class EfeAnitaBridgeReader
     }
 
     /**
+     * Remesas Anita para el reporte por cuenta de caja.
+     * remem_estado al final: si el CSV de Informix trae '|', no corre los campos contables.
+     *
+     * @return list<object>
+     */
+    public function listarRememaeDetalle(int $empresaId, int $fechaDesde, int $fechaHasta): array
+    {
+        $errores = [];
+
+        return $this->listar(
+            'caja',
+            'rememae',
+            'remem_nro_remesa,remem_destino,remem_empresa,remem_fecha,remem_importe,remem_cod_mon,remem_cotizacion,remem_tipo_remesa,remem_cuenta,remem_estado',
+            ' WHERE remem_empresa='.$empresaId
+            .' AND remem_fecha>='.$fechaDesde
+            .' AND remem_fecha<='.$fechaHasta,
+            $errores,
+            'rememae-reporte',
+        );
+    }
+
+    /**
      * @return list<object>
      */
     private function listar(

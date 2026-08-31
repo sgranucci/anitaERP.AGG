@@ -27,6 +27,7 @@ Cuentas automáticas del sistema
                         si existe override de m&oacute;dulo, el proceso usa esa cuenta (no la de este cat&aacute;logo).
                         Solo se listan empresas activas (asignadas a al menos un usuario).
                         El concepto <strong>Stock — transferencias</strong> admite varias cuentas de compra para TRCONT.
+                        El grupo <strong>Sueldos</strong> son las patas fijas del asiento de liquidaci&oacute;n (devengamiento y, m&aacute;s adelante, pago). El mapeo por concepto/rubro/tipo vive en Sueldos → Imputaci&oacute;n contable de conceptos.
                     </p>
                     @include('includes.form-empresa-asignada', [
                         'empresa_query' => $empresa_query,

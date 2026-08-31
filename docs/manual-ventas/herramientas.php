@@ -123,4 +123,70 @@ return [
             'permiso' => 'editar-pedidos',
         ],
     ],
+    'conceptos_venta' => [
+        [
+            'herramienta' => 'Nuevo concepto',
+            'ubicacion' => 'Toolbar del listado',
+            'accion' => 'Alta de concepto con precio, IVA, cuenta y plantilla.',
+            'permiso' => 'crear-conceptos-venta',
+        ],
+        [
+            'herramienta' => 'Solapa Tags',
+            'ubicacion' => 'Formulario del concepto',
+            'accion' => 'Define claves @tag@, tipo, origen y opciones de lista.',
+            'permiso' => 'editar-conceptos-venta',
+        ],
+        [
+            'herramienta' => 'Detectar tags',
+            'ubicacion' => 'Solapa Tags',
+            'accion' => 'Genera filas a partir de @clave@ encontrados en la plantilla.',
+            'permiso' => 'editar-conceptos-venta',
+        ],
+        [
+            'herramienta' => 'Exportar listado',
+            'ubicacion' => 'Sobre la grilla',
+            'accion' => 'PDF / Excel / CSV de conceptos filtrados.',
+            'permiso' => 'listar-conceptos-venta',
+        ],
+    ],
+    'contratos_venta' => [
+        [
+            'herramienta' => 'Nuevo abono',
+            'ubicacion' => 'Toolbar del listado',
+            'accion' => 'Alta de contrato cliente + concepto + vigencia.',
+            'permiso' => 'crear-contratos-venta',
+        ],
+        [
+            'herramienta' => 'Datos fijos (tags)',
+            'ubicacion' => 'Formulario del abono',
+            'accion' => 'Completa valores que no cambian cada período (dominio, patente…).',
+            'permiso' => 'editar-contratos-venta',
+        ],
+        [
+            'herramienta' => 'Prefill / Facturar',
+            'ubicacion' => 'Acciones del abono',
+            'accion' => 'Prepara el facturador con cliente, concepto y tags.',
+            'permiso' => 'editar-contratos-venta',
+        ],
+        [
+            'herramienta' => 'Histórico de períodos',
+            'ubicacion' => 'Detalle del abono',
+            'accion' => 'Consulta qué períodos ya fueron facturados.',
+            'permiso' => 'listar-contratos-venta',
+        ],
+    ],
+    'cola_contratos_venta' => [
+        [
+            'herramienta' => 'Consultar cola',
+            'ubicacion' => 'Filtros de la pantalla',
+            'accion' => 'Lista períodos pendientes según vigencia y periodicidad.',
+            'permiso' => 'listar-contrato-venta-cola',
+        ],
+        [
+            'herramienta' => 'Facturar selección',
+            'ubicacion' => 'Toolbar / acciones',
+            'accion' => 'Envía abonos seleccionados al facturador con prefill.',
+            'permiso' => 'facturar-contrato-venta-cola',
+        ],
+    ],
 ];

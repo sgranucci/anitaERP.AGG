@@ -246,13 +246,17 @@
 
 @if ($coleccionDatos === null && empty($registroCandidatos) && ! $avisoDatos)
     <div class="alert alert-light border mb-0">Completá los filtros y consultá.</div>
-@elseif ($coleccionDatos !== null && $coleccionDatos->total() === 0)
+@elseif ($coleccionDatos !== null && $coleccionDatos->isEmpty())
     <div class="alert alert-light border mb-0">No hay cambios con esos criterios.</div>
 @elseif ($coleccionDatos !== null)
     <div class="d-flex justify-content-between align-items-center mb-2">
         <span class="text-muted small">
             Mostrando {{ $coleccionDatos->firstItem() }}–{{ $coleccionDatos->lastItem() }}
-            de {{ number_format($coleccionDatos->total(), 0, ',', '.') }} cambios
+            @if (($filtros['auditable_type'] ?? '') !== '')
+                de {{ number_format($coleccionDatos->total(), 0, ',', '.') }} cambios
+            @else
+                (sin total exacto: filtrá por modelo para el conteo completo)
+            @endif
         </span>
     </div>
     <div class="table-responsive">

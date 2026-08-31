@@ -371,7 +371,20 @@ final class IngresoEgresoAnitaTesmovSupport
             'cotizacion' => $cotizacion > 0 ? $cotizacion : 1.0,
             'spCodigo' => $spCodigo,
             'usuario' => $usuario,
+            'cbuPago' => self::cbuPagoDesdeMovimiento($movimiento),
         ];
+    }
+
+    private static function cbuPagoDesdeMovimiento(Caja_Movimiento $movimiento): string
+    {
+        $cbu = \App\Support\Compras\ProveedorCbuPagoSupport::cbuDesdeDocumento(
+            (int) ($movimiento->proveedor_formapago_id ?? 0) ?: null,
+            (string) ($movimiento->cbu_pago ?? ''),
+            (int) ($movimiento->proveedor_id ?? 0),
+            (string) ($movimiento->detalle ?? '')
+        );
+
+        return $cbu;
     }
 
     /** @param  array<string, mixed>  $ctx */
@@ -585,10 +598,20 @@ final class IngresoEgresoAnitaTesmovSupport
                 '0',
                 '".$ctx['empresa']."',
                 '0',
-                ' '",
+                '".self::esc(self::cbuAnita22((string) ($ctx['cbuPago'] ?? '')))."'",
         ], 'caja IE auxpag '.$tipoAp);
 
         self::assertOk($raw, 'auxpag '.$tipoAp, (int) $ctx['nro']);
+    }
+
+    private static function cbuAnita22(string $cbu): string
+    {
+        $n = preg_replace('/\D+/', '', $cbu) ?? '';
+        if (strlen($n) !== 22) {
+            return ' ';
+        }
+
+        return $n;
     }
 
     /** @param  array<string, mixed>  $ctx */

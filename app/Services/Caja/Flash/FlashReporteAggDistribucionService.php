@@ -158,9 +158,11 @@ class FlashReporteAggDistribucionService
      */
     private function limpiar(array $archivo): void
     {
-        $path = (string) ($archivo['path'] ?? '');
-        if ($path !== '' && is_file($path)) {
-            @unlink($path);
+        foreach (['path', 'imagen_path'] as $clave) {
+            $path = (string) ($archivo[$clave] ?? '');
+            if ($path !== '' && is_file($path)) {
+                @unlink($path);
+            }
         }
     }
 

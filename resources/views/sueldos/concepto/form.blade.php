@@ -72,12 +72,104 @@ use App\Support\Sueldos\RubroCostoLaboral;
                 <small class="form-text text-muted">0 = no es; -99 = variable.</small>
             </div>
         </div>
+        @php
+            $catalogoLsd = $catalogoLsd ?? [];
+            $afipSel = old('concepto_afip', $data->concepto_afip ?? '');
+            $flagsLsd = old('lsd_subsistemas', $data->lsd_subsistemas ?? []);
+        @endphp
         <div class="form-group row">
-            <label for="concepto_afip" class="col-lg-4 col-form-label">Concepto AFIP</label>
+            <label for="concepto_afip" class="col-lg-4 col-form-label text-right pr-2">Concepto AFIP (LSD)</label>
+            <div class="col-lg-8">
+                <select name="concepto_afip" id="concepto_afip" class="form-control">
+                    <option value="">— Sin mapeo LSD —</option>
+                    @foreach ($catalogoLsd as $cat)
+                        <option value="{{ $cat['codigo'] }}" data-tipo="{{ $cat['tipo'] }}"
+                            {{ (string) $afipSel === (string) $cat['codigo'] ? 'selected' : '' }}>
+                            {{ $cat['codigo'] }} — {{ $cat['descripcion'] }}
+                        </option>
+                    @endforeach
+                    @if ($afipSel !== '' && ! collect($catalogoLsd)->pluck('codigo')->contains($afipSel))
+                        <option value="{{ $afipSel }}" selected>{{ $afipSel }} (rango libre / no catalogado)</option>
+                    @endif
+                </select>
+                <small class="form-text text-muted">Catálogo oficial ARCA. Rangos libres (111000+, 121000+, etc.): escriba el código de 6 dígitos abajo.</small>
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="concepto_afip_libre" class="col-lg-4 col-form-label text-right pr-2">Código AFIP libre</label>
             <div class="col-lg-4">
-                <input type="text" name="concepto_afip" id="concepto_afip" class="form-control" maxlength="6"
-                       value="{{ old('concepto_afip', $data->concepto_afip ?? '') }}"/>
-                <small class="form-text text-muted">Mapeo Libro de Sueldos Digital (opcional, etapa LSD).</small>
+                <input type="text" name="concepto_afip_libre" id="concepto_afip_libre" class="form-control" maxlength="6"
+                       value="{{ old('concepto_afip_libre', '') }}" placeholder="Ej. 111001">
+            </div>
+        </div>
+        <div class="form-group row">
+            <label for="codigo_lsd_empleador" class="col-lg-4 col-form-label text-right pr-2">Cód. empleador LSD</label>
+            <div class="col-lg-4">
+                <input type="text" name="codigo_lsd_empleador" id="codigo_lsd_empleador" class="form-control" maxlength="10"
+                       value="{{ old('codigo_lsd_empleador', $data->codigo_lsd_empleador ?? '') }}"
+                       placeholder="Automático (código interno a 10)"/>
+            </div>
+        </div>
+        <div class="form-group row">
+            <div class="col-lg-4 col-form-label text-right pr-2">LSD</div>
+            <div class="col-lg-8">
+                <div class="custom-control custom-checkbox">
+                    <input type="hidden" name="lsd_repetible" value="0">
+                    <input type="checkbox" class="custom-control-input" name="lsd_repetible" id="lsd_repetible" value="1"
+                           {{ old('lsd_repetible', $data->lsd_repetible ?? true) ? 'checked' : '' }}>
+                    <label class="custom-control-label" for="lsd_repetible">Repetible en la misma liquidación</label>
+                </div>
+            </div>
+        </div>
+        @php
+            $flagsEdit = \App\Support\Sueldos\Lsd\LsdSubsistemaSupport::flagsEditables();
+        @endphp
+        <div class="form-group row">
+            <label class="col-lg-4 col-form-label text-right pr-2">Subsistemas LSD</label>
+            <div class="col-lg-8">
+                <div class="row">
+                    @foreach ($flagsEdit as $fl)
+                        <div class="col-md-6">
+                            <div class="custom-control custom-checkbox">
+                                <input type="hidden" name="lsd_subsistemas[{{ $fl['clave'] }}]" value="0">
+                                <input type="checkbox" class="custom-control-input" data-lsd-flag="1"
+                                       name="lsd_subsistemas[{{ $fl['clave'] }}]" id="lsd_flag_{{ $fl['clave'] }}" value="1"
+                                       {{ ! empty($flagsLsd[$fl['clave']]) ? 'checked' : '' }}>
+                                <label class="custom-control-label" for="lsd_flag_{{ $fl['clave'] }}">{{ $fl['etiqueta'] }}</label>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+                <small class="form-text text-muted">Remunerativo: todos en 1. Descuento: todos en 0. Se precargan al elegir el código AFIP.</small>
+            </div>
+        </div>
+        @php
+            $basesLsd = old('lsd_bases', $data->lsd_bases ?? []);
+            $etiquetasBases = \App\Support\Sueldos\Lsd\LsdBases04Support::ETIQUETAS;
+        @endphp
+        <div class="form-group row">
+            <label class="col-lg-4 col-form-label text-right pr-2">Bases registro 04</label>
+            <div class="col-lg-8">
+                <div class="row">
+                    @foreach ($etiquetasBases as $clave => $eti)
+                        <div class="col-md-6 mb-1">
+                            <div class="form-row align-items-center">
+                                <label class="col-7 col-form-label col-form-label-sm pr-1 mb-0" for="lsd_base_{{ $clave }}">{{ $eti }}</label>
+                                <div class="col-5">
+                                    <select name="lsd_bases[{{ $clave }}]" id="lsd_base_{{ $clave }}" class="form-control form-control-sm">
+                                        <option value="0">—</option>
+                                        <option value="1" {{ (int) ($basesLsd[$clave] ?? 0) === 1 ? 'selected' : '' }}>+1</option>
+                                        <option value="-1" {{ (int) ($basesLsd[$clave] ?? 0) === -1 ? 'selected' : '' }}>−1</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    @endforeach
+                </div>
+                <small class="form-text text-muted">
+                    Suma importe (o cantidad en días/horas/adherentes) en esa columna del F.931.
+                    Informativos Anita (1000, 3630, 1002, etc.) se mapean acá y no van al TXT de conceptos.
+                </small>
             </div>
         </div>
         <div class="form-group row">

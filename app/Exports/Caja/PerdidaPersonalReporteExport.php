@@ -4,6 +4,7 @@ namespace App\Exports\Caja;
 
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use Illuminate\Contracts\View\View;
+use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\WithColumnFormatting;
 use Maatwebsite\Excel\Concerns\WithColumnWidths;
@@ -15,6 +16,8 @@ use PhpOffice\PhpSpreadsheet\Style\NumberFormat;
 
 class PerdidaPersonalReporteExport implements FromView, WithColumnFormatting, WithColumnWidths, WithEvents
 {
+    use Exportable;
+
     /** @param list<array<string, mixed>> $filas */
     public function __construct(
         private readonly array $filas,

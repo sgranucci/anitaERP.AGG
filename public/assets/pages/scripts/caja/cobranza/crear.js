@@ -1355,6 +1355,9 @@ var saldoFinalCobranza = 0;
 
 	$("#form-general").submit(function (e) {
 		e.preventDefault();
+		if (window.AsientoMontosFormato && typeof AsientoMontosFormato.normalizarAntesDeEnviar === 'function') {
+			AsientoMontosFormato.normalizarAntesDeEnviar(this);
+		}
 		let token = $("meta[name='csrf-token']").attr("content");
 		let id = $("#id").val();
 		var url;

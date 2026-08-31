@@ -62,6 +62,11 @@
                 </select>
             </div>
         </div>
+        @include('compras.partials.campo_cbu_pago', [
+            'col_label' => 'col-lg-2 col-form-label text-right',
+            'col_input' => 'col-lg-6',
+            'data' => $data ?? null,
+        ])
         <div class="form-group row">
             <label class="col-lg-2 col-form-label text-right">Detalle</label>
             <div class="col-lg-8">

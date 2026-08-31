@@ -107,10 +107,8 @@ final class CierreRendicionMaquinaConfigSupport
     public static function faltantes(array $cfg): array
     {
         $labels = [
+            // Caja pesos: aún usada en contrapartida del slot Totalcoin (25/76/100) y fallback pago diferido.
             'cuenta_caja_pesos_id' => 'Caja pesos',
-            'cuenta_tarjetas_id' => 'Tarjetas',
-            'cuenta_dolares_id' => 'Dólares',
-            'cuenta_euros_id' => 'Euros',
             'cuenta_caja_transitoria_id' => 'Caja transitoria',
             'cuenta_diferencia_caja_id' => 'Diferencia de caja',
             'cuenta_ventas_ruleta_id' => 'Ventas ruleta',
@@ -127,9 +125,8 @@ final class CierreRendicionMaquinaConfigSupport
             'cuenta_impuesto_esp_id' => 'Impuesto especial',
             'cuenta_ff_maquina_id' => 'Fondo fijo máquinas',
             'cuenta_partida_pendiente_id' => 'Partida pendiente',
-            'cuenta_cripto_id' => 'Cripto',
+            // Slot QR Totalcoin (códigos 25/76/100); el resto de valores va por cuentacaja.
             'cuenta_totalcoin_id' => 'Totalcoin',
-            'cuenta_mep_id' => 'MEP',
             'cuenta_pago24_id' => 'Pago 24',
         ];
 

@@ -16,7 +16,7 @@
         return $('#form-imputacion-ap').length > 0;
     }
 
-    function iapMostrarOverlay(titulo) {
+    function iapMostrarOverlay(titulo, subtitulo) {
         var overlay = document.getElementById('iap-reporte-overlay');
         if (!overlay) {
             return;
@@ -25,6 +25,12 @@
             var t = document.getElementById('iap-reporte-overlay-titulo');
             if (t) {
                 t.textContent = titulo;
+            }
+        }
+        if (subtitulo) {
+            var s = document.getElementById('iap-reporte-overlay-subtitulo');
+            if (s) {
+                s.textContent = subtitulo;
             }
         }
         overlay.classList.remove('d-none');
@@ -134,13 +140,21 @@
             if (typeof this.checkValidity === 'function' && !this.checkValidity()) {
                 return;
             }
-            iapMostrarOverlay('Comparando comprobantes contra el asiento…');
+            iapMostrarOverlay(
+                'Comparando comprobantes contra el asiento…',
+                'Puede demorar según el período. No cierre la página.'
+            );
         });
 
+        // Descarga sin navegación: sin Esc/focus el aviso queda pegado.
         $(document)
             .off('click.iapreporte', 'a[href*="listar-comprobante-proveedor-imputacion-ap"]')
             .on('click.iapreporte', 'a[href*="listar-comprobante-proveedor-imputacion-ap"]', function () {
-                iapMostrarOverlay('Exportando…');
+                iapMostrarOverlay(
+                    'Exportando…',
+                    'El archivo se descarga al terminar. Pulse Esc para cerrar este aviso.'
+                );
+                window.addEventListener('focus', iapOcultarOverlay, { once: true });
             });
 
         $(document)
@@ -202,4 +216,10 @@
 
     $(document).ready(activaEventosImputacionApFiltro);
     window.addEventListener('pageshow', iapOcultarOverlay);
+    window.addEventListener('pagehide', iapOcultarOverlay);
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' || event.keyCode === 27) {
+            iapOcultarOverlay();
+        }
+    });
 })(jQuery);

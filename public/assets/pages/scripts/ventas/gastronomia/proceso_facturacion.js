@@ -723,6 +723,11 @@
             (id ? 'Cuenta Waitry #' + id + ' importada correctamente.' : 'Cuenta Waitry importada correctamente.');
         const warn = data && String(data.warn || '').trim();
         const opcionalesPendientes = tieneOpcionalesPendientesWaitry(data);
+        if (data && data.desfasaje_totem && warn) {
+            alert(warn);
+            toast(warn, 'error', { soloToast: true, timeOut: 15000, extendedTimeOut: 8000, closeButton: true, progressBar: true });
+            return;
+        }
         if (warn && !opcionalesPendientes) {
             const soloToast = esAvisoInformativoOpcionalesWaitry(warn);
             toast(warn, 'warning', soloToast ? { soloToast: true } : undefined);
@@ -1929,6 +1934,75 @@
 
     function cuentaEsWaitryCobroTotem(cuenta) {
         return !!(cuenta && cuenta.waitry_cobro_totem && cuenta.waitry_order_id);
+    }
+
+    function montoCobroTotemWaitry(cuenta) {
+        const c = cuenta || cuentaActivaConLineas;
+        if (!c) {
+            return 0;
+        }
+        const n = parseFloat(c.waitry_monto_cobro);
+        return !Number.isNaN(n) && n > 0 ? Math.round(n * 100) / 100 : 0;
+    }
+
+    function mensajeBloqueoTotemDesfasado(cuenta, totalFacturar) {
+        const c = cuenta || cuentaActivaConLineas;
+        if (!cuentaEsWaitryCobroTotem(c)) {
+            return null;
+        }
+        const cobro = montoCobroTotemWaitry(c);
+        const total = Number(totalFacturar);
+        const totalOk = !Number.isNaN(total) ? Math.round(total * 100) / 100 : 0;
+        const papelito = c.waitry_display_id ? ' (' + c.waitry_display_id + ')' : '';
+        if (cobro <= 0) {
+            return (
+                'Esta comanda' +
+                papelito +
+                ' figura cobrada en el tótem Waitry pero no se pudo verificar el importe. ' +
+                'No se puede facturar hasta confirmar el cobro del tótem.'
+            );
+        }
+        if (Math.abs(totalOk - cobro) > 0.02) {
+            return (
+                'Esta comanda ya se cobró en el tótem Waitry' +
+                papelito +
+                ' por $ ' +
+                cobro.toFixed(2) +
+                '. La cuenta a facturar suma $ ' +
+                totalOk.toFixed(2) +
+                '. Complete o corrija los ítems (y precios) hasta que coincidan. No se puede facturar un importe distinto.'
+            );
+        }
+        return null;
+    }
+
+    function aplicarBloqueoFacturaTotemEnPantalla(cuenta) {
+        const c = cuenta || cuentaActivaConLineas;
+        const btn = document.getElementById('tool-facturar');
+        const aviso = document.getElementById('aviso-totem-desfasaje');
+        const total = totalFacturarDesdeCuenta(c) || leerTotalAFacturarArs() || 0;
+        const msg = mensajeBloqueoTotemDesfasado(c, total);
+        if (aviso) {
+            if (msg) {
+                aviso.textContent = msg;
+                aviso.classList.remove('d-none');
+            } else {
+                aviso.textContent = '';
+                aviso.classList.add('d-none');
+            }
+        }
+        if (btn && !btn.dataset.loadingLock) {
+            if (msg) {
+                btn.disabled = true;
+                btn.title = msg;
+                btn.setAttribute('data-bloqueo-totem', '1');
+            } else if (btn.getAttribute('data-bloqueo-totem') === '1') {
+                btn.disabled = false;
+                btn.title = '';
+                btn.removeAttribute('data-bloqueo-totem');
+            }
+        }
+        return msg;
     }
 
     function cuentaWaitryImpaga(cuenta) {
@@ -5493,6 +5567,7 @@
             if (fd) fd.value = c.factura_receptor_documento || '';
             if (fdom) fdom.value = c.factura_receptor_domicilio || '';
             pintarLineas(c);
+            aplicarBloqueoFacturaTotemEnPantalla(c);
             limpiarFormularioArticuloLinea();
             cargarMesas();
             cargarCuentasActivas();
@@ -5551,6 +5626,7 @@
 
     function pintarLineas(cuenta) {
         cuentaActivaConLineas = cuenta;
+        aplicarBloqueoFacturaTotemEnPantalla(cuenta);
         if (cuenta && cuenta.descuento_gastronomia) {
             lastDescuentoGastronomiaMeta = {
                 tipovalor: cuenta.descuento_gastronomia.tipovalor,
@@ -6626,6 +6702,18 @@
             cuenta = cuentaActivaConLineas || cuenta;
             setFacturacionLoading(true, 'Validando cuenta y cobranza…');
             let montoArs = totalFacturarDesdeCuenta(cuenta) || leerTotalAFacturarArs();
+            const errTotem = mensajeBloqueoTotemDesfasado(cuenta, montoArs);
+            if (errTotem) {
+                aplicarBloqueoFacturaTotemEnPantalla(cuenta);
+                alert(errTotem);
+                return toast(errTotem, 'error', {
+                    soloToast: true,
+                    timeOut: 15000,
+                    extendedTimeOut: 8000,
+                    closeButton: true,
+                    progressBar: true,
+                });
+            }
             let esCortesia = esFacturaCortesia(montoArs, cuenta);
             setTotalFacturadoArs(montoArs > 0 ? montoArs : esCortesia ? IMPORTE_MINIMO_FACTURA : 0);
 
@@ -7144,6 +7232,11 @@
             });
         }
         document.getElementById('tool-facturar').addEventListener('click', () => {
+            const errTotem = aplicarBloqueoFacturaTotemEnPantalla(cuentaActivaConLineas);
+            if (errTotem) {
+                alert(errTotem);
+                return;
+            }
             void emitirFactura();
         });
         document.addEventListener(

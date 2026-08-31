@@ -14,6 +14,8 @@ use App\Support\Ventas\GastronomiaCuentacajaTotem;
 use App\Support\Ventas\Waitry\WaitryMedioPagoCuentacajaSupport;
 use App\Support\Ventas\GastronomiaIdentificadorPc;
 use App\Support\Ventas\Waitry\WaitryFacturacionDuplicadosSupport;
+use App\Support\Ventas\Waitry\WaitryTotemImporteFacturaSupport;
+use App\Services\Ventas\Gastronomia\Waitry\WaitryOrdenesExternasService;
 use InvalidArgumentException;
 
 /**
@@ -27,6 +29,7 @@ final class GastronomiaPreflightEmisionService
         private readonly GastronomiaJornadaService $jornadaService,
         private readonly GastronomiaTurnoOperativoService $turnoOperativoService,
         private readonly GastronomiaFormulaOpcionalesService $opcionalesService,
+        private readonly WaitryOrdenesExternasService $waitryOrdenesExternasService,
     ) {
     }
 
@@ -151,6 +154,15 @@ final class GastronomiaPreflightEmisionService
         );
         if (! empty($preview['error'])) {
             $errores[] = (string) $preview['error'];
+        }
+
+        $this->asegurarMontoCobroTotemEnCuenta($cuenta);
+        $errorTotem = WaitryTotemImporteFacturaSupport::errorSiDesfasado(
+            $cuenta,
+            (float) ($preview['total'] ?? 0),
+        );
+        if ($errorTotem !== null) {
+            $errores[] = $errorTotem;
         }
 
         $sinCobranza = ! empty($preview['sin_cobranza']);
@@ -449,5 +461,34 @@ final class GastronomiaPreflightEmisionService
             'El punto de venta '.$tipo.' configurado (id '.$configId.') no existe o fue eliminado'.$modo
             .'. Actualícelo en Ventas → Configuración punto de venta gastronomía.',
         ];
+    }
+
+    private function asegurarMontoCobroTotemEnCuenta(CuentaGastronomia $cuenta): void
+    {
+        if (! $cuenta->waitry_cobro_totem) {
+            return;
+        }
+        if (round((float) ($cuenta->waitry_monto_cobro ?? 0), 2) > 0.0001) {
+            return;
+        }
+
+        $waitryOrderId = (int) ($cuenta->waitry_order_id ?? 0);
+        $empresaId = (int) $cuenta->empresa_id;
+        if ($waitryOrderId <= 0 || $empresaId <= 0) {
+            return;
+        }
+
+        $orden = $this->waitryOrdenesExternasService->obtenerOrdenPorIdConciliacion($empresaId, $waitryOrderId);
+        if (! is_array($orden)) {
+            return;
+        }
+
+        $monto = WaitryTotemImporteFacturaSupport::montoCobradoEnOrden($orden);
+        if ($monto <= 0.0001) {
+            return;
+        }
+
+        $cuenta->waitry_monto_cobro = $monto;
+        $cuenta->save();
     }
 }

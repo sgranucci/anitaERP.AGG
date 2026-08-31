@@ -16,7 +16,7 @@
         return $('#form-historial-precios-articulo').length > 0;
     }
 
-    function hpaMostrarOverlay(titulo) {
+    function hpaMostrarOverlay(titulo, subtitulo) {
         var overlay = document.getElementById('hpa-reporte-overlay');
         if (!overlay) {
             return;
@@ -25,6 +25,12 @@
             var t = document.getElementById('hpa-reporte-overlay-titulo');
             if (t) {
                 t.textContent = titulo;
+            }
+        }
+        if (subtitulo) {
+            var s = document.getElementById('hpa-reporte-overlay-subtitulo');
+            if (s) {
+                s.textContent = subtitulo;
             }
         }
         overlay.classList.remove('d-none');
@@ -134,13 +140,21 @@
             if (typeof this.checkValidity === 'function' && !this.checkValidity()) {
                 return;
             }
-            hpaMostrarOverlay('Consultando historial de precios…');
+            hpaMostrarOverlay(
+                'Consultando historial de precios…',
+                'Puede demorar según el período. No cierre la página.'
+            );
         });
 
+        // Descarga sin navegación: sin Esc/focus el aviso queda pegado.
         $(document)
             .off('click.hpareporte', 'a[href*="listar-historial-precios-articulo"]')
             .on('click.hpareporte', 'a[href*="listar-historial-precios-articulo"]', function () {
-                hpaMostrarOverlay('Exportando…');
+                hpaMostrarOverlay(
+                    'Exportando…',
+                    'El archivo se descarga al terminar. Pulse Esc para cerrar este aviso.'
+                );
+                window.addEventListener('focus', hpaOcultarOverlay, { once: true });
             });
 
         $(document)
@@ -202,4 +216,10 @@
 
     $(document).ready(activaEventosHistorialPreciosFiltro);
     window.addEventListener('pageshow', hpaOcultarOverlay);
+    window.addEventListener('pagehide', hpaOcultarOverlay);
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' || event.keyCode === 27) {
+            hpaOcultarOverlay();
+        }
+    });
 })(jQuery);

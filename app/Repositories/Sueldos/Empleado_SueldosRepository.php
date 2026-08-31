@@ -8,8 +8,10 @@ use App\Models\Sueldos\Empleado_Base_Sueldos;
 use App\Models\Sueldos\Empleado_Ingreso_Sueldos;
 use App\Models\Sueldos\Empleado_Leyenda_Sueldos;
 use App\Models\Sueldos\Empleado_Sueldos;
+use App\Models\Sueldos\Lsd_Empleado_Revista_Sueldos;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Sueldos\EmpleadoDomicilioVinculador;
+use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Sueldos\EmpleadoEstados;
 use App\Support\Sueldos\EmpleadoSueldosListadoFiltros;
 use App\Support\Sueldos\VacacionFechaAnita;
@@ -45,7 +47,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             ->with([
                 'empresa', 'categoria', 'agrupamiento', 'lugartrabajo', 'centrocosto',
                 'obrasocial', 'sindicato', 'vacacion', 'art', 'motivoegreso',
-                'leyendas', 'ingresos.motivoegreso', 'archivos', 'paisNacimiento',
+                'leyendas', 'ingresos.motivoegreso', 'archivos', 'paisNacimiento', 'revistasLsd',
             ])
             ->findOrFail($id);
 
@@ -193,6 +195,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
 
             $emp = $this->model->create($this->soloFillable($data));
             $this->sincronizarLeyendas((int) $emp->id, $leyendas);
+            $this->sincronizarRevistasLsd((int) $emp->id, $data['lsd_revista'] ?? []);
 
             if (! empty($data['fecha_ingreso'])) {
                 Empleado_Ingreso_Sueldos::create([
@@ -226,6 +229,7 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
             $data = $this->mapearDomicilioDescripcion($data);
             $emp->update($this->soloFillable($data));
             $this->sincronizarLeyendas((int) $emp->id, $leyendas);
+            $this->sincronizarRevistasLsd((int) $emp->id, $data['lsd_revista'] ?? []);
 
             if (is_array($conservar)) {
                 $this->sincronizarArchivosConservados($emp, $conservar);
@@ -267,6 +271,52 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                 'leyenda' => mb_substr($texto, 0, 80),
             ]);
         }
+    }
+
+    /** @param  list<array<string, mixed>>  $filas */
+    private function sincronizarRevistasLsd(int $empleadoId, $filas): void
+    {
+        if (! is_array($filas)) {
+            $filas = [];
+        }
+        $idsConservar = [];
+        $nro = 1;
+        foreach ($filas as $fila) {
+            if ($nro > 3) {
+                break;
+            }
+            $sit = preg_replace('/\D+/', '', (string) ($fila['situacion'] ?? '')) ?? '';
+            if ($sit === '') {
+                continue;
+            }
+            $periodo = (int) ($fila['periodo'] ?? 0);
+            $payload = [
+                'empleado_id' => $empleadoId,
+                'periodo' => $periodo >= 200001 ? $periodo : null,
+                'nro' => $nro++,
+                'situacion' => str_pad(substr($sit, -2), 2, '0', STR_PAD_LEFT),
+                'dia_inicio' => max(1, min(31, (int) ($fila['dia_inicio'] ?? 1))),
+            ];
+            $id = (int) ($fila['id'] ?? 0);
+            if ($id > 0) {
+                $ex = Lsd_Empleado_Revista_Sueldos::query()
+                    ->where('empleado_id', $empleadoId)
+                    ->where('id', $id)
+                    ->first();
+                if ($ex) {
+                    $ex->update($payload);
+                    $idsConservar[] = (int) $ex->id;
+
+                    continue;
+                }
+            }
+            $idsConservar[] = (int) Lsd_Empleado_Revista_Sueldos::create($payload)->id;
+        }
+        $borrar = Lsd_Empleado_Revista_Sueldos::query()->where('empleado_id', $empleadoId);
+        if ($idsConservar !== []) {
+            $borrar->whereNotIn('id', $idsConservar);
+        }
+        EloquentAuditDeleteSupport::each($borrar);
     }
 
     /** @return list<string> */
@@ -466,7 +516,8 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
         .'emp_telefono, emp_contratado, emp_mo_dir_ind, emp_cod_postal, emp_codigo_afjp, emp_codigo_art, '
         .'emp_situacion, emp_condicion, emp_modalidad, emp_provincia, emp_siniestrado, emp_marca_red, '
         .'emp_tipo_empresa, emp_regimen, emp_lugartrabajo, emp_cbu, emp_motivoegr, emp_entre_calles, '
-        .'emp_cod_banco, emp_pais_nac, emp_grp1, emp_grp2, emp_grp3';
+        .'emp_cod_banco, emp_pais_nac, emp_grp1, emp_grp2, emp_grp3,'
+        .'emp_actividad, emp_zonageo';
 
     /**
      * Llenado inicial desde Anita (sueldos.empleado + emping + empley).
@@ -651,6 +702,8 @@ class Empleado_SueldosRepository implements Empleado_SueldosRepositoryInterface
                 'marca_reduccion_sijp' => $this->char1($f->emp_marca_red ?? null),
                 'tipo_empresa_sijp' => $this->char1($f->emp_tipo_empresa ?? null),
                 'regimen_sijp' => $this->char1($f->emp_regimen ?? null),
+                'actividad_sijp' => str_pad((string) max(0, (int) ($f->emp_actividad ?? 0)), 3, '0', STR_PAD_LEFT),
+                'localidad_afip' => str_pad((string) max(0, min(99, (int) ($f->emp_zonageo ?? 0))), 2, '0', STR_PAD_LEFT),
                 'created_at' => $now,
                 'updated_at' => $now,
             ];

@@ -18,10 +18,24 @@ interface Cliente_UifRepositoryInterface extends RepositoryInterface
     public function hayRegistrosClienteUifLocales(): bool;
 
     /**
-     * Registra en BD los adjuntos del cliente que ya están en el montaje Anita (NOSIS, DDJJ, etc.).
+     * Registra en BD los adjuntos del cliente que ya estan en el montaje Anita (NOSIS, DDJJ, etc.).
      * No copia archivos si el storage esta en modo solo-referencia.
      */
     public function sincronizarArchivosAnitaSiCorresponde(Cliente_Uif $cliente): void;
 
-}
+    /**
+     * HTML de filas para el modal de consulta de clientes UIF.
+     *
+     * @param  string|null  $consulta
+     * @param  string|null  $anitaOrigen
+     */
+    public function consultaCliente_UifHtml($consulta = null, $anitaOrigen = null): string;
 
+    /**
+     * Resumen JSON para resolver cliente por ID.
+     *
+     * @return array<string, mixed>|null
+     */
+    public function findResumenParaConsulta(int $id): ?array;
+
+}

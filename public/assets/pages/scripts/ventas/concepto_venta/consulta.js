@@ -63,13 +63,24 @@ function actualizarLinkEditarConceptoVenta($ctx, conceptoId) {
 }
 
 function dataConceptoDesdeFila($row) {
+    var tags = [];
+    try {
+        tags = JSON.parse($row.attr('data-concepto-tags') || '[]') || [];
+    } catch (e) {
+        tags = [];
+    }
+    if (!Array.isArray(tags)) {
+        tags = [];
+    }
     return {
         id: $.trim($row.find('.concepto_venta_id').text()),
         codigo: $.trim($row.find('.codigoconceptoventa').text()),
         nombre: $.trim($row.find('.nombreconceptoventa').text()),
         descripcion: $.trim($row.find('.descripcionconceptoventa').text()),
+        plantilla: $.trim($row.attr('data-concepto-plantilla') || $row.find('.descripcionconceptoventa').text()),
         codigo_gtin: $.trim($row.find('.gtinconceptoventa').text()),
-        impuesto_id: $.trim($row.attr('data-impuesto-id') || '')
+        impuesto_id: $.trim($row.attr('data-impuesto-id') || ''),
+        tags: tags
     };
 }
 
@@ -330,10 +341,17 @@ function facturaLineaModoConcepto($tr, esConcepto, opciones) {
                 placeholder: 'Detalle (ej. AUTO FIAT UNO dominio XXX)'
             });
             $ta.val(valor);
-            $actual.replaceWith($ta);
+            var $wrapDesc = $('<div class="d-flex align-items-start factura-concepto-detalle-wrap"></div>');
+            $wrapDesc.append($ta);
+            var $btnTags = $('<button type="button" class="btn btn-outline-secondary btn-sm ml-1 factura-abrir-tags-concepto d-none" title="Completar tags del concepto"><i class="fa fa-tags"></i></button>');
+            $wrapDesc.append($btnTags);
+            $actual.replaceWith($wrapDesc);
         } else {
             $actual.addClass('factura-detalle-concepto').prop('readonly', false)
                 .attr('placeholder', 'Detalle (ej. AUTO FIAT UNO dominio XXX)');
+            if (!$tr.find('.factura-abrir-tags-concepto').length) {
+                $actual.after('<button type="button" class="btn btn-outline-secondary btn-sm ml-1 factura-abrir-tags-concepto d-none" title="Completar tags del concepto"><i class="fa fa-tags"></i></button>');
+            }
         }
         return;
     }
@@ -341,7 +359,14 @@ function facturaLineaModoConcepto($tr, esConcepto, opciones) {
     $tr.removeClass('item-concepto-venta item-concepto-comentario item-concepto-completo');
     $tr.find('.caja, .pieza').prop('readonly', false);
     $tr.find('.kilo').removeAttr('title').attr('placeholder', '');
-    if ($actual.is('textarea')) {
+    $tr.find('.factura-abrir-tags-concepto').remove();
+    var $wrap = $tr.find('.factura-concepto-detalle-wrap');
+    if ($wrap.length) {
+        $actual = $wrap.find('.descripcionarticulo').first();
+        valor = $actual.val() || '';
+        name = $actual.attr('name') || name;
+    }
+    if ($actual.is('textarea') || $wrap.length) {
         var $inp = $('<input type="text">');
         $inp.addClass('descripcionarticulo form-control');
         $inp.attr('name', name);
@@ -351,7 +376,11 @@ function facturaLineaModoConcepto($tr, esConcepto, opciones) {
             $inp.css({ width: '700px', height: '38px' });
         }
         $inp.val(valor);
-        $actual.replaceWith($inp);
+        if ($wrap.length) {
+            $wrap.replaceWith($inp);
+        } else {
+            $actual.replaceWith($inp);
+        }
         return;
     }
     $actual.removeClass('factura-detalle-concepto')
@@ -394,8 +423,16 @@ function aplicarConceptoVentaEnFilaFactura($tr, data) {
     $tr.find('.codigo_previo_articulo').val(data.codigo);
     facturaLineaModoConcepto($tr, true);
     facturaActualizarColumnasGrilla();
-    var texto = data.descripcion || data.nombre || '';
-    $tr.find('.descripcionarticulo').val(texto).prop('readonly', false);
+    var plantilla = data.plantilla || data.descripcion || data.nombre || '';
+    var tags = Array.isArray(data.tags) ? data.tags : [];
+    guardarMetaTagsConceptoEnFila($tr, plantilla, tags);
+    if (!data.contrato_venta_id) {
+        $tr.find('.contrato_venta_id').val('');
+        $tr.find('.concepto_tag_json').val('');
+        $tr.find('.concepto_periodo_desde').val('');
+        $tr.find('.concepto_periodo_hasta').val('');
+    }
+    $tr.find('.descripcionarticulo').val(plantilla).prop('readonly', false);
     if (data.impuesto_id) {
         $tr.find('.impuesto_id, .factura-iva-linea').val(data.impuesto_id);
     }
@@ -416,23 +453,292 @@ function aplicarConceptoVentaEnFilaFactura($tr, data) {
     }
     $tr.find('.precio').prop('readonly', false);
     aplicarPrecioConceptoSiVacio($tr, data.precio);
-    if ((!data.precio || parseFloat(data.precio) <= 0) && data.codigo) {
+    if (tags.length && (!data.precio || parseFloat(data.precio) <= 0) && data.codigo) {
         completarPrecioConceptoDesdeServidor($tr, data.codigo);
     }
     if (typeof calculaFactura === 'function') {
         calculaFactura();
     }
     setTimeout(function () {
-        var $desc = $tr.find('.descripcionarticulo');
+        if (tags.length) {
+            abrirModalTagsConceptoFactura($tr, plantilla, tags);
+            return;
+        }
+        if (data.codigo && data._skipTagFetch !== true) {
+            var qs = [];
+            var fecha = fechaFacturaParaConceptoVenta();
+            var tipo = tipotransaccionIdParaConceptoVenta();
+            if (fecha) {
+                qs.push('fecha=' + encodeURIComponent(fecha));
+            }
+            if (tipo > 0) {
+                qs.push('tipotransaccion_id=' + tipo);
+            }
+            $.get(carpetaBase + '/ventas/concepto-venta/por-codigo/' + encodeURIComponent(data.codigo) + (qs.length ? '?' + qs.join('&') : ''), function (resp) {
+                if (resp && resp.ok) {
+                    aplicarPrecioConceptoSiVacio($tr, resp.precio);
+                    if (resp.tags && resp.tags.length) {
+                        var plantillaSrv = resp.plantilla || resp.descripcion || plantilla;
+                        guardarMetaTagsConceptoEnFila($tr, plantillaSrv, resp.tags);
+                        if (!$.trim($tr.find('.descripcionarticulo').val() || '') || $tr.find('.descripcionarticulo').val() === plantilla) {
+                            $tr.find('.descripcionarticulo').val(plantillaSrv);
+                        }
+                        abrirModalTagsConceptoFactura($tr, plantillaSrv, resp.tags);
+                        if (typeof calculaFactura === 'function') {
+                            calculaFactura();
+                        }
+                        return;
+                    }
+                    if (typeof calculaFactura === 'function') {
+                        calculaFactura();
+                    }
+                }
+                enfocarTrasConceptoSinTags($tr);
+            }).fail(function () {
+                enfocarTrasConceptoSinTags($tr);
+            });
+            return;
+        }
+        if ((!data.precio || parseFloat(data.precio) <= 0) && data.codigo) {
+            completarPrecioConceptoDesdeServidor($tr, data.codigo);
+        }
+        enfocarTrasConceptoSinTags($tr);
+    }, 0);
+}
+
+function enfocarTrasConceptoSinTags($tr) {
+    var $desc = $tr.find('.descripcionarticulo');
+    var $iva = $tr.find('.factura-iva-linea');
+    $desc.attr('placeholder', 'Detalle (ej. AUTO FIAT UNO dominio XXX)');
+    if ($iva.length && !$.trim($iva.val() || '')) {
+        $iva.trigger('focus');
+        return;
+    }
+    $desc.trigger('focus').trigger('select');
+}
+
+function guardarMetaTagsConceptoEnFila($tr, plantilla, tags) {
+    if (!$tr || !$tr.length) {
+        return;
+    }
+    $tr.attr('data-concepto-plantilla', plantilla || '');
+    try {
+        $tr.attr('data-concepto-tags', JSON.stringify(tags || []));
+    } catch (e) {
+        $tr.attr('data-concepto-tags', '[]');
+    }
+    var $btn = $tr.find('.factura-abrir-tags-concepto');
+    if ($btn.length) {
+        $btn.toggleClass('d-none', !(tags && tags.length));
+    }
+}
+
+function sustituirTagsConceptoPlantilla(plantilla, valores) {
+    return String(plantilla || '').replace(/@([a-z][a-z0-9_]{0,39})@/g, function (match, clave) {
+        if (Object.prototype.hasOwnProperty.call(valores, clave)) {
+            return String(valores[clave] == null ? '' : valores[clave]).trim();
+        }
+        return match;
+    });
+}
+
+var ptrFacturaConceptoTagsFila = $();
+
+function abrirModalTagsConceptoFactura($tr, plantilla, tags, valoresPrefill) {
+    if (!$tr || !$tr.length || !tags || !tags.length) {
+        return;
+    }
+    valoresPrefill = valoresPrefill || {};
+    var $consulta = $('#consultaconceptoventaModal');
+    if ($consulta.length && ($consulta.hasClass('show') || abriendoModalConceptoVenta)) {
+        $consulta.one('hidden.bs.modal', function () {
+            setTimeout(function () {
+                abrirModalTagsConceptoFactura($tr, plantilla, tags, valoresPrefill);
+            }, 0);
+        });
+        $consulta.modal('hide');
+        return;
+    }
+    if (typeof window.liberarPantallaModalesBloqueados === 'function') {
+        window.liberarPantallaModalesBloqueados();
+    }
+    ptrFacturaConceptoTagsFila = $tr;
+    plantilla = plantilla || $tr.attr('data-concepto-plantilla') || $tr.find('.descripcionarticulo').val() || '';
+    var $wrap = $('#factura_concepto_tags_campos');
+    $wrap.empty();
+    tags.forEach(function (tag, idx) {
+        var clave = String(tag.clave || '');
+        var etiqueta = String(tag.etiqueta || clave);
+        var max = tag.largo_max ? parseInt(tag.largo_max, 10) : 0;
+        var req = tag.obligatorio !== false;
+        var tipo = String(tag.tipo || 'texto');
+        var id = 'factura_concepto_tag_' + clave + '_' + idx;
+        var $grp = $('<div class="form-group"></div>');
+        var $lbl = $('<label></label>').attr('for', id).addClass(req ? 'requerido' : '');
+        $lbl.text(etiqueta + ' (@' + clave + '@)');
+        var prefill = (valoresPrefill && valoresPrefill[clave] != null) ? String(valoresPrefill[clave]) : '';
+        var $inp;
+        if (tipo === 'fecha') {
+            $inp = $('<input type="date" class="form-control factura-concepto-tag-input">');
+            if (/^\d{4}-\d{2}-\d{2}/.test(prefill)) {
+                prefill = prefill.substring(0, 10);
+            } else if (/^\d{2}\/\d{2}\/\d{4}$/.test(prefill)) {
+                var p = prefill.split('/');
+                prefill = p[2] + '-' + p[1] + '-' + p[0];
+            }
+        } else if (tipo === 'periodo') {
+            $inp = $('<input type="text" class="form-control factura-concepto-tag-input">')
+                .attr('placeholder', 'AAAA-MM o AAAA-MM-DD|AAAA-MM-DD');
+        } else if (tipo === 'lista') {
+            $inp = $('<select class="form-control factura-concepto-tag-input"></select>');
+            $inp.append($('<option value=""></option>').text('-- Seleccionar --'));
+            String(tag.opciones || '').split('|').forEach(function (opt) {
+                opt = $.trim(opt);
+                if (opt) {
+                    $inp.append($('<option></option>').val(opt).text(opt));
+                }
+            });
+        } else {
+            $inp = $('<input type="text" class="form-control factura-concepto-tag-input">');
+        }
+        $inp.attr({
+            id: id,
+            'data-clave': clave,
+            'data-tipo': tipo,
+            'data-obligatorio': req ? '1' : '0',
+            maxlength: max > 0 ? max : 255
+        });
+        if (prefill) {
+            $inp.val(prefill);
+        }
+        $grp.append($lbl).append($inp);
+        $wrap.append($grp);
+    });
+    $('#factura_concepto_tags_preview').val(plantilla);
+    $('#factura_concepto_tags_aviso_largo').text('');
+    $('#modalFacturaConceptoTags').data('plantilla', plantilla);
+    $('#modalFacturaConceptoTags').data('metas', tags);
+    $('#modalFacturaConceptoTags').modal('show');
+}
+
+function valoresModalTagsConceptoFactura() {
+    var valores = {};
+    $('#factura_concepto_tags_campos .factura-concepto-tag-input').each(function () {
+        var clave = $(this).attr('data-clave');
+        var tipo = $(this).attr('data-tipo') || 'texto';
+        if (!clave) {
+            return;
+        }
+        var val = $.trim($(this).val() || '');
+        if (tipo === 'periodo' && val && val.indexOf('|') === -1 && /^\d{4}-\d{2}$/.test(val)) {
+            // deja que el backend formatee AAAA-MM
+        }
+        valores[clave] = val;
+    });
+    return valores;
+}
+
+function actualizarPreviewTagsConceptoFactura() {
+    var plantilla = $('#modalFacturaConceptoTags').data('plantilla') || '';
+    var texto = sustituirTagsConceptoPlantilla(plantilla, valoresModalTagsConceptoFactura());
+    $('#factura_concepto_tags_preview').val(texto);
+    var $aviso = $('#factura_concepto_tags_aviso_largo');
+    if (texto.length > 250) {
+        $aviso.text('Atención: el texto supera 250 caracteres (límite ARCA MTXCA). Acórtelo antes de aplicar.')
+            .addClass('text-danger');
+    } else {
+        $aviso.text(texto.length + ' / 250 caracteres').removeClass('text-danger');
+    }
+}
+
+function aplicarModalTagsConceptoFactura() {
+    var $tr = ptrFacturaConceptoTagsFila;
+    if (!$tr || !$tr.length) {
+        return;
+    }
+    var faltan = [];
+    $('#factura_concepto_tags_campos .factura-concepto-tag-input').each(function () {
+        if ($(this).attr('data-obligatorio') === '1' && !$.trim($(this).val() || '')) {
+            faltan.push($(this).closest('.form-group').find('label').text() || $(this).attr('data-clave'));
+        }
+    });
+    if (faltan.length) {
+        alert('Complete los campos obligatorios:\n- ' + faltan.join('\n- '));
+        return;
+    }
+    var plantilla = $('#modalFacturaConceptoTags').data('plantilla') || '';
+    var texto = sustituirTagsConceptoPlantilla(plantilla, valoresModalTagsConceptoFactura());
+    if (/@[a-z][a-z0-9_]{0,39}@/.test(texto)) {
+        alert('Quedan tags sin completar en el detalle.');
+        return;
+    }
+    if (texto.length > 250) {
+        if (!confirm('El detalle supera 250 caracteres (ARCA). ¿Aplicarlo igual?')) {
+            return;
+        }
+    }
+    var valores = valoresModalTagsConceptoFactura();
+    $tr.find('.descripcionarticulo').val(texto);
+    try {
+        $tr.find('.concepto_tag_json').val(JSON.stringify(valores));
+    } catch (e) {
+        $tr.find('.concepto_tag_json').val('');
+    }
+    if (valores.periodo && String(valores.periodo).indexOf('|') !== -1) {
+        var partes = String(valores.periodo).split('|');
+        $tr.find('.concepto_periodo_desde').val($.trim(partes[0] || ''));
+        $tr.find('.concepto_periodo_hasta').val($.trim(partes[1] || ''));
+    }
+    $('#modalFacturaConceptoTags').modal('hide');
+    setTimeout(function () {
         var $iva = $tr.find('.factura-iva-linea');
-        $desc.attr('placeholder', 'Detalle (ej. AUTO FIAT UNO dominio XXX)');
         if ($iva.length && !$.trim($iva.val() || '')) {
             $iva.trigger('focus');
             return;
         }
-        $desc.trigger('focus').trigger('select');
+        $tr.find('.precio').trigger('focus');
     }, 0);
 }
+
+function aplicarContratoVentaPrefillEnFila($tr, prefill) {
+    if (!$tr || !$tr.length || !prefill) {
+        return;
+    }
+    var data = {
+        id: prefill.concepto_venta_id,
+        codigo: prefill.codigo,
+        descripcion: prefill.texto_preview || prefill.plantilla || prefill.descripcion,
+        plantilla: prefill.plantilla || prefill.descripcion,
+        tags: prefill.tags || [],
+        precio: prefill.precio,
+        impuesto_id: prefill.impuesto_id,
+        _skipTagFetch: true
+    };
+    aplicarConceptoVentaEnFilaFactura($tr, data);
+    $tr.find('.contrato_venta_id').val(prefill.contrato_venta_id || '');
+    $tr.find('.concepto_periodo_desde').val(prefill.periodo_desde || '');
+    $tr.find('.concepto_periodo_hasta').val(prefill.periodo_hasta || '');
+    try {
+        $tr.find('.concepto_tag_json').val(JSON.stringify(prefill.valores || {}));
+    } catch (e) {
+        $tr.find('.concepto_tag_json').val('');
+    }
+    if (prefill.texto_preview) {
+        $tr.find('.descripcionarticulo').val(prefill.texto_preview);
+    }
+    var tagsPendientes = (prefill.tags || []).filter(function (t) {
+        var v = (prefill.valores || {})[t.clave];
+        return t.obligatorio !== false && (!v || String(v).trim() === '');
+    });
+    if (tagsPendientes.length) {
+        setTimeout(function () {
+            abrirModalTagsConceptoFactura($tr, prefill.plantilla || '', prefill.tags, prefill.valores || {});
+        }, 50);
+    }
+}
+
+window.aplicarContratoVentaPrefillEnFila = aplicarContratoVentaPrefillEnFila;
+window.abrirModalTagsConceptoFactura = abrirModalTagsConceptoFactura;
 
 function fechaFacturaParaConceptoVenta() {
     return $.trim($('#fechafactura').val() || '') || '';
@@ -665,6 +971,40 @@ function activa_eventos_consultaconceptoventa() {
         $('#modalFacturaLeyendaLinea').modal('hide');
     });
 
+    $(document).off('input.facturaConceptoTags').on('input.facturaConceptoTags', '#factura_concepto_tags_campos .factura-concepto-tag-input', actualizarPreviewTagsConceptoFactura);
+    $(document).off('click.facturaConceptoTagsAplicar').on('click.facturaConceptoTagsAplicar', '#factura_concepto_tags_aplicar', aplicarModalTagsConceptoFactura);
+    $('#modalFacturaConceptoTags').off('shown.bs.modal').on('shown.bs.modal', function () {
+        actualizarPreviewTagsConceptoFactura();
+        $(this).find('.factura-concepto-tag-input').first().trigger('focus');
+    });
+    $(document).off('click.facturaAbrirTagsConcepto').on('click.facturaAbrirTagsConcepto', '.factura-abrir-tags-concepto', function () {
+        var $tr = $(this).closest('tr');
+        var plantilla = $tr.attr('data-concepto-plantilla') || '';
+        var tags = [];
+        try {
+            tags = JSON.parse($tr.attr('data-concepto-tags') || '[]') || [];
+        } catch (e) {
+            tags = [];
+        }
+        if (!tags.length && $tr.find('.codigoarticulo').val()) {
+            aplicarConceptoVentaEnFilaFactura($tr, {
+                id: $tr.find('.concepto_venta_id').val(),
+                codigo: $tr.find('.codigoarticulo').val(),
+                descripcion: plantilla || $tr.find('.descripcionarticulo').val(),
+                plantilla: plantilla || $tr.find('.descripcionarticulo').val(),
+                tags: [],
+                precio: $tr.find('.precio').val(),
+                impuesto_id: $tr.find('.factura-iva-linea').val()
+            });
+            return;
+        }
+        if (!tags.length) {
+            alert('Este concepto no tiene tags configurados.');
+            return;
+        }
+        abrirModalTagsConceptoFactura($tr, plantilla || $tr.find('.descripcionarticulo').val() || '', tags);
+    });
+
     $(document).off('blur.codigoarticuloconcepto').on('blur.codigoarticuloconcepto', '.item-factura .codigoarticulo, .item-pedido .codigoarticulo', function () {
         var $tr = $(this).closest('tr');
         var codigo = $.trim($(this).val());
@@ -696,4 +1036,26 @@ $(function () {
         facturaRefreshLeyendaBadge($(this));
     });
     facturaActualizarColumnasGrilla();
+
+    try {
+        var rawBatch = sessionStorage.getItem('anita_contrato_venta_prefill_batch');
+        if (rawBatch && $('#tbody-tabla').length) {
+            sessionStorage.removeItem('anita_contrato_venta_prefill_batch');
+            var batch = JSON.parse(rawBatch);
+            var lineas = (batch && batch.lineas) || (batch && batch.prefills) || [];
+            if (!Array.isArray(lineas) && batch && batch.linea) {
+                lineas = [batch.linea];
+            }
+            lineas.forEach(function (prefill, idx) {
+                var $tr = $('#tbody-tabla tr.item-factura, #tbody-tabla tr.item-pedido').eq(idx);
+                if (!$tr.length && typeof window.agrega_renglon === 'function') {
+                    window.agrega_renglon();
+                    $tr = $('#tbody-tabla tr.item-factura, #tbody-tabla tr.item-pedido').last();
+                }
+                if ($tr.length && typeof window.aplicarContratoVentaPrefillEnFila === 'function') {
+                    window.aplicarContratoVentaPrefillEnFila($tr, prefill);
+                }
+            });
+        }
+    } catch (e) {}
 });

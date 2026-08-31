@@ -233,6 +233,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Ventas\Contrato_VentaRepositoryInterface',
+            'App\Repositories\Ventas\Contrato_VentaRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Ventas\Venta_ImpuestoRepositoryInterface',
             'App\Repositories\Ventas\Venta_ImpuestoRepository',
         );
@@ -1122,6 +1127,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Contable\Canon_Municipal_ConfigRepositoryInterface',
+            'App\Repositories\Contable\Canon_Municipal_ConfigRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Contable\Suss_Presentacion_Config_CuentaRepositoryInterface',
             'App\Repositories\Contable\Suss_Presentacion_Config_CuentaRepository',
         );
@@ -1974,6 +1984,11 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(
             'App\Repositories\Sueldos\Grupo_Concepto_SueldosRepositoryInterface',
             'App\Repositories\Sueldos\Grupo_Concepto_SueldosRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Sueldos\Concepto_Imputacion_SueldosRepositoryInterface',
+            'App\Repositories\Sueldos\Concepto_Imputacion_SueldosRepository',
         );
 
         $this->app->bind(

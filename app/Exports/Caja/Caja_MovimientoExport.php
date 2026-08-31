@@ -22,6 +22,8 @@ use PhpOffice\PhpSpreadsheet\Worksheet\Worksheet;
 
 class Caja_MovimientoExport implements FromView, WithColumnFormatting, WithColumnWidths, WithEvents, WithStyles, WithTitle
 {
+    use Exportable;
+
     /** Congela también ID y Empresa (columnas A y B): el freeze arranca en C. */
     private const COL_FREEZE = 'C';
 

@@ -277,6 +277,8 @@ final class GastronomiaCierreTotemJornadaService
             }
         }
 
+        $this->persistirWatermarkSiJornadaCerrada($cierre, $hasta);
+
         $lineas = array_values(array_filter(
             $cargado['lineas'],
             function (array $l) use ($hasta, $instanteTope) {
@@ -1090,6 +1092,34 @@ final class GastronomiaCierreTotemJornadaService
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    /**
+     * Si la jornada ya cerró y el self-heal extendió el tope, persistir el watermark.
+     * Así el Informe Z y la jornada siguiente usan el mismo último ticket.
+     */
+    private function persistirWatermarkSiJornadaCerrada(CierreTotemJornadaGastronomia $cierre, int $hasta): void
+    {
+        $persistido = (int) ($cierre->waitry_order_id_hasta ?? 0);
+        if ($hasta <= $persistido) {
+            return;
+        }
+
+        $cierre->loadMissing('jornada');
+        if ((string) ($cierre->jornada?->estado ?? '') !== JornadaGastronomia::ESTADO_CERRADA) {
+            return;
+        }
+
+        $cierre->waitry_order_id_hasta = $hasta;
+        $cierre->save();
+
+        Log::info('gastronomia.cierre_totem.watermark_extendido_post_cierre', [
+            'cierre_totem_id' => (int) $cierre->id,
+            'jornada_id' => (int) $cierre->jornada_gastronomia_id,
+            'empresa_id' => (int) $cierre->empresa_id,
+            'hasta_anterior' => $persistido,
+            'hasta_nuevo' => $hasta,
+        ]);
     }
 
     private function origenTopeWaitryOrderIdHasta(JornadaGastronomia $jornada): string

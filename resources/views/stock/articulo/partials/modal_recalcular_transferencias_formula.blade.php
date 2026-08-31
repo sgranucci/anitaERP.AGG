@@ -45,7 +45,8 @@
                 <p class="small text-muted mb-2">
                     Conserva el costo de origen de cada TRA y recalcula cantidad/costo del insumo destino
                     (<code>destino = origen / coef</code>, <code>cant destino = cant origen &times; coef</code>).
-                    No actualiza Anita stkmae.
+                    Al aplicar, actualiza movimientos de stock vinculados y Anita <code>stkmae</code> (precio compra3) por empresa de la TRA.
+                    Por defecto el alcance es la &uacute;ltima TRA; us&aacute; <strong>Rango de fechas</strong> para Biyemas/Kandiko/Rebisco en el per&iacute;odo.
                 </p>
                 <div id="rtf-loading" class="small text-muted d-none">
                     <i class="fa fa-spinner fa-spin"></i> Consultando…

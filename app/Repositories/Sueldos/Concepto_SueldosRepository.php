@@ -11,6 +11,9 @@ use App\Support\Sueldos\ReciboBaseCalculoSupport;
 use App\Support\Sueldos\RubroCostoLaboral;
 use App\Support\Sueldos\ConceptoSueldosListadoFiltros;
 use App\Support\Sueldos\ConceptoTipo;
+use App\Support\Sueldos\Lsd\LsdBases04Support;
+use App\Support\Sueldos\Lsd\LsdConceptoAfipCatalogo;
+use App\Support\Sueldos\Lsd\LsdSubsistemaSupport;
 use App\Support\Sueldos\Formula\Anita\AnitaFormulaTraductor;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
@@ -556,11 +559,29 @@ class Concepto_SueldosRepository implements Concepto_SueldosRepositoryInterface
             'mes_retroactivo' => (int) ($data['mes_retroactivo'] ?? 0),
             'leyenda_recibo' => $this->nullSiVacio($data['leyenda_recibo'] ?? null),
             'concepto_afip' => $this->nullSiVacio($data['concepto_afip'] ?? null),
+            'codigo_lsd_empleador' => $this->nullSiVacio($data['codigo_lsd_empleador'] ?? null),
+            'lsd_repetible' => (bool) ($data['lsd_repetible'] ?? true),
+            'lsd_subsistemas' => $this->normalizarFlagsLsd($data['lsd_subsistemas'] ?? null, $data['concepto_afip'] ?? null),
+            'lsd_bases' => LsdBases04Support::normalizar($data['lsd_bases'] ?? null) ?: null,
             'rubro_costo_laboral' => $this->nullSiVacio($data['rubro_costo_laboral'] ?? null),
             'unidad_medida' => $this->nullSiVacio($data['unidad_medida'] ?? null),
             'activo' => (bool) ($data['activo'] ?? true),
             'orden' => (int) ($data['orden'] ?? 0),
         ];
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $flags
+     * @return array<string, int>|null
+     */
+    private function normalizarFlagsLsd($flags, $conceptoAfip): ?array
+    {
+        $tipo = LsdConceptoAfipCatalogo::tipoDesdeCodigo($conceptoAfip);
+        if ($tipo === null) {
+            return is_array($flags) ? LsdSubsistemaSupport::normalizar($flags, 'remunerativo') : null;
+        }
+
+        return LsdSubsistemaSupport::normalizar(is_array($flags) ? $flags : null, $tipo);
     }
 
     private function nullSiVacio($valor): ?string

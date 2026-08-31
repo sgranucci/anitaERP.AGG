@@ -159,8 +159,7 @@ class GastronomiaArticulosVendidosQuery
             ->join('tipotransaccion as tt', 'tt.id', '=', 'v.tipotransaccion_id')
             ->join('puntoventa as pv', 'pv.id', '=', 'v.puntoventa_id')
             ->where('pv.empresa_id', $empresaId)
-            ->whereDate('v.fechajornada', '>=', $fechaDesde)
-            ->whereDate('v.fechajornada', '<=', $fechaHasta);
+            ->whereBetween('v.fechajornada', [$fechaDesde, $fechaHasta]);
 
         $this->aplicarExclusionInsumos($rows);
 
