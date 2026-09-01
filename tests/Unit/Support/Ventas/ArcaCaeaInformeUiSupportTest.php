@@ -20,9 +20,9 @@ final class ArcaCaeaInformeUiSupportTest extends TestCase
         ]));
     }
 
-    public function test_no_puede_presentar_si_arca_ya_consulto_y_no_hay_informable(): void
+    public function test_puede_presentar_con_pendientes_aunque_no_haya_informable_ahora(): void
     {
-        self::assertFalse(ArcaCaeaInformeUiSupport::puedePresentarAhora([
+        self::assertTrue(ArcaCaeaInformeUiSupport::puedePresentarAhora([
             'total' => 55,
             'pendientes' => 55,
             'errores' => 0,

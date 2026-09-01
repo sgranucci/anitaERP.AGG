@@ -115,6 +115,46 @@ class ComprobanteImpresionSesionService
     }
 
     /**
+     * Manda la constancia a la impresora del usuario. No abre la sesión de comprobantes.
+     *
+     * @return array{ok: bool, mensaje: string, impresora: ?string}
+     */
+    public function imprimirCotDirecto(int $sesionId, ?int $remitoEnvioId = null): array
+    {
+        $sesion = $this->armarDesdeCotSesion($sesionId, $remitoEnvioId, 'OPERATIVO');
+        if (! empty($sesion['faltante_impresora_papel'])) {
+            throw new \InvalidArgumentException(
+                'No hay impresora asignada para el COT. Configure Mi impresora.'
+            );
+        }
+
+        $impresoraId = (int) ($sesion['impresora_usuario']['salida_id'] ?? 0);
+        if ($impresoraId > 0) {
+            foreach ($sesion['pack'] as $i => $linea) {
+                if (ComprobanteImpresionSalidaUsuarioSupport::heredaImpresoraUsuario($linea)) {
+                    $sesion['pack'][$i]['salida_id'] = $impresoraId;
+                }
+            }
+        }
+
+        $this->ejecutar($sesion);
+        $nombre = trim((string) ($sesion['impresora_usuario']['nombre'] ?? ''));
+
+        return [
+            'ok' => true,
+            'mensaje' => $nombre !== ''
+                ? 'Constancia COT enviada a '.$nombre.'.'
+                : 'Constancia COT enviada a la impresora.',
+            'impresora' => $nombre !== '' ? $nombre : null,
+        ];
+    }
+
+    public function generarPdfCot(int $sesionId, ?int $remitoEnvioId = null): string
+    {
+        return $this->cotConstanciaPdfService->generarPdf($sesionId, $remitoEnvioId);
+    }
+
+    /**
      * @return array<string, mixed>
      */
     public function armarDesdeVenta(Venta $venta, string $modo = 'OPERATIVO', ?string $soloFormulario = null): array

@@ -230,6 +230,13 @@
             try {
                 local = !!sessionStorage.getItem('arca-caea-activo-' + id);
             } catch (e) {}
+            // El server manda: no dejar el avión apagado por un flag viejo de sessionStorage.
+            if (!btnPareceActivo(id) && local) {
+                try {
+                    sessionStorage.removeItem('arca-caea-activo-' + id);
+                } catch (e) {}
+                local = false;
+            }
             if (local || btnPareceActivo(id)) {
                 hayActivo = true;
                 if (local) {

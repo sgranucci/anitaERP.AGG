@@ -69,7 +69,7 @@ class IIBBService
 
 		// Solo se considera leído el padrón si trajo una alícuota. Las jurisdicciones
 		// que resuelven por array devuelven estructura incluso cuando el CUIT no está.
-		$this->flLeyoPadron = $this->tasaPercepcionDesdePadron($tasa_iibb) !== null;
+		$this->flLeyoPadron = $this->tasaPercepcionDesdePadron($tasa_iibb, $jurisdiccion) !== null;
 
 		return $tasa_iibb;
 	}
@@ -105,12 +105,13 @@ class IIBBService
 	 * Alícuota de percepción del padrón, normalizada.
 	 *
 	 * ARBA y CABA devuelven un modelo con "tasapercepcion"; las demás jurisdicciones
-	 * devuelven un array con la alícuota en "tasa".
+	 * devuelven un array con la alícuota en "tasa". Tucumán (924) guarda la
+	 * alícuota en "coeficiente" porque el archivo de tasas no trae tasapercepcion.
 	 *
 	 * @param  mixed  $registroPadron
 	 * @return float|null null cuando el CUIT no está en el padrón vigente
 	 */
-	public function tasaPercepcionDesdePadron($registroPadron): ?float
+	public function tasaPercepcionDesdePadron($registroPadron, $jurisdiccion = null): ?float
 	{
 		if (! $registroPadron) {
 			return null;
@@ -122,7 +123,14 @@ class IIBBService
 			$tasa = $registroPadron->tasapercepcion ?? $registroPadron->tasa ?? null;
 		}
 
-		return ($tasa !== null && $tasa !== '') ? (float) $tasa : null;
+		if ($tasa !== null && $tasa !== '') {
+			return (float) $tasa;
+		}
+
+		return PercepcionIibbAlicuotaSupport::alicuotaDesdeCoeficienteTucuman(
+			(int) $jurisdiccion,
+			$registroPadron
+		);
 	}
 
 	/**
@@ -302,7 +310,7 @@ class IIBBService
 					if ($flPercibe)
 					{
 						$registroPadron = $this->leeTasaPercepcion($numeroDocumento, $jurisdiccionesPercepcion[$i], $fechaFactura);
-						$tasaPadron = $this->tasaPercepcionDesdePadron($registroPadron);
+						$tasaPadron = $this->tasaPercepcionDesdePadron($registroPadron, $jurisdiccionesPercepcion[$i]);
 
 						// La alicuota del padron manda, incluso cuando es 0.
 						$tasa = 0.;

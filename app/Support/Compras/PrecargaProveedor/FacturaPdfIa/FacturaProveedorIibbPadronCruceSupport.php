@@ -126,20 +126,18 @@ final class FacturaProveedorIibbPadronCruceSupport
             return null;
         }
 
-        if (is_array($reg)) {
-            $tasa = $reg['tasapercepcion'] ?? $reg['tasa'] ?? null;
-
-            return $tasa === null || $tasa === '' ? null : [
-                'tasa' => (float) $tasa,
-                'tipocontribuyente' => $reg['tipocontribuyente'] ?? null,
-            ];
+        $tasa = $this->iibbService->tasaPercepcionDesdePadron($reg, $jurisdiccion);
+        if ($tasa === null) {
+            return null;
         }
 
-        $tasa = $reg->tasapercepcion ?? null;
+        $tipo = is_array($reg)
+            ? ($reg['tipocontribuyente'] ?? null)
+            : ($reg->tipocontribuyente ?? null);
 
-        return $tasa === null || $tasa === '' ? null : [
-            'tasa' => (float) $tasa,
-            'tipocontribuyente' => $reg->tipocontribuyente ?? null,
+        return [
+            'tasa' => $tasa,
+            'tipocontribuyente' => $tipo,
         ];
     }
 

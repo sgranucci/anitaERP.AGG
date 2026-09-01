@@ -32,8 +32,8 @@
                             </div>
                         @endif
                         <div class="mt-2">
-                            <a href="{{ route('sesion_impresion_cot', ['id' => $resultadoProceso['sesion_id'], 'auto' => 1]) }}"
-                                class="btn btn-success btn-sm">
+                            <a href="{{ route('sesion_impresion_cot', ['id' => $resultadoProceso['sesion_id']]) }}"
+                                class="btn btn-success btn-sm" title="Enviar constancias a la impresora configurada">
                                 <i class="fa fa-print"></i> Imprimir COT
                             </a>
                             <a href="{{ route('sesion_impresion_cot', ['id' => $resultadoProceso['sesion_id'], 'pdf' => 1]) }}"
@@ -380,8 +380,8 @@
                                                 <td class="small text-danger">{{ $res['error'] ?? '' }}</td>
                                                 <td class="text-nowrap">
                                                     @if (! empty($res['cot']) && ! empty($resultadoProceso['sesion_id']) && ! empty($res['id']))
-                                                        <a href="{{ route('sesion_impresion_cot', ['id' => $resultadoProceso['sesion_id'], 'remito_envio_id' => $res['id'], 'auto' => 1]) }}"
-                                                            class="btn btn-outline-success btn-sm" title="Imprimir esta constancia">
+                                                        <a href="{{ route('sesion_impresion_cot', ['id' => $resultadoProceso['sesion_id'], 'remito_envio_id' => $res['id']]) }}"
+                                                            class="btn btn-outline-success btn-sm" title="Enviar esta constancia a la impresora">
                                                             <i class="fa fa-print"></i>
                                                         </a>
                                                     @endif

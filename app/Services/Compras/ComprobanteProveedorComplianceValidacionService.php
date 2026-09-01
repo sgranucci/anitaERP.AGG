@@ -360,7 +360,7 @@ class ComprobanteProveedorComplianceValidacionService
             }
 
             $padron = $this->iibbService->leeTasaPercepcion($cuitEmpresa, $jurisdiccion, $fecha ?: null);
-            $tasaPadron = $this->iibbService->tasaPercepcionDesdePadron($padron);
+            $tasaPadron = $this->iibbService->tasaPercepcionDesdePadron($padron, $jurisdiccion);
 
             if ($tasaPadron === null) {
                 if (ComprobanteProveedorIibbPadronFechaSupport::omitirPorFacturaAnterior(
@@ -406,7 +406,7 @@ class ComprobanteProveedorComplianceValidacionService
     {
         foreach ([902, 901, 921, 904, 908, 914, 924] as $jur) {
             $padron = $this->iibbService->leeTasaPercepcion($cuit, $jur, $fecha ?: null);
-            $tasa = $this->iibbService->tasaPercepcionDesdePadron($padron);
+            $tasa = $this->iibbService->tasaPercepcionDesdePadron($padron, $jur);
             if ($tasa === null) {
                 continue;
             }

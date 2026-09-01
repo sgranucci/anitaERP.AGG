@@ -146,7 +146,7 @@
                                         ? 'Presentación en segundo plano; no se puede encolar otra hasta que termine'
                                         : ($puedePresentar
                                             ? 'Encolar presentación CAEA (segundo plano + mail)'
-                                            : 'Sin comprobantes informables ahora en esta quincena');
+                                            : 'Sin comprobantes pendientes de informar en esta quincena');
                                 @endphp
                                 <tr>
                                     <td>{{ $r->empresa->nombre ?? '—' }}</td>

@@ -91,8 +91,8 @@
                                     <i class="fa fa-eye"></i>
                                 </a>
                                 @if ($sesion->cantidad_ok > 0)
-                                    <a href="{{ route('sesion_impresion_cot', ['id' => $sesion->id, 'auto' => 1]) }}"
-                                        class="btn btn-outline-success btn-sm" title="Imprimir constancias COT">
+                                    <a href="{{ route('sesion_impresion_cot', ['id' => $sesion->id]) }}"
+                                        class="btn btn-outline-success btn-sm" title="Enviar constancias COT a la impresora">
                                         <i class="fa fa-print"></i>
                                     </a>
                                 @endif

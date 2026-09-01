@@ -35,12 +35,12 @@
 
             <div class="mb-2">
                 @if ($sesionDetalle->cantidad_ok > 0)
-                    <a href="{{ route('sesion_impresion_cot', ['id' => $sesionDetalle->id, 'auto' => 1]) }}"
+                    <a href="{{ route('sesion_impresion_cot', ['id' => $sesionDetalle->id]) }}"
                         class="btn btn-app bg-success" title="Enviar constancias COT a la impresora">
                         <i class="fa fa-print"></i> Imprimir
                     </a>
                     <a href="{{ route('sesion_impresion_cot', ['id' => $sesionDetalle->id, 'pdf' => 1]) }}"
-                        class="btn btn-app bg-primary" title="Armar PDF de constancias sin enviar a impresora">
+                        class="btn btn-app bg-primary" title="Descargar PDF de constancias sin enviar a impresora">
                         <i class="fas fa-file-alt"></i> Constancia
                     </a>
                 @endif
@@ -92,8 +92,8 @@
                                 <td class="small text-danger">{{ $remito->error ?: '—' }}</td>
                                 <td class="text-nowrap">
                                     @if ($remito->fueEmitido())
-                                        <a href="{{ route('sesion_impresion_cot', ['id' => $sesionDetalle->id, 'remito_envio_id' => $remito->id, 'auto' => 1]) }}"
-                                            class="btn btn-outline-success btn-sm" title="Imprimir esta constancia">
+                                        <a href="{{ route('sesion_impresion_cot', ['id' => $sesionDetalle->id, 'remito_envio_id' => $remito->id]) }}"
+                                            class="btn btn-outline-success btn-sm" title="Enviar esta constancia a la impresora">
                                             <i class="fa fa-print"></i>
                                         </a>
                                     @endif

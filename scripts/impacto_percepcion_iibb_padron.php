@@ -76,7 +76,7 @@ foreach ($jurisdicciones as $jurisdiccion) {
         $descarte = (float) ($descartePorCondicion[$cliente->condicioniibb_id] ?? 0);
 
         $registro = $iibb->leeTasaPercepcion($cliente->numerodocumento, $jurisdiccion, $fecha);
-        $tasaPadron = $iibb->tasaPercepcionDesdePadron($registro);
+        $tasaPadron = $iibb->tasaPercepcionDesdePadron($registro, $jurisdiccion);
 
         if ($tasaPadron === null) {
             $sinPadron++;

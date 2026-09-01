@@ -133,20 +133,37 @@ class ComprobanteImpresionSesionController extends Controller
         can('procesar-cot-electronico');
 
         $remitoEnvioId = $request->integer('remito_envio_id') ?: null;
+        $retorno = $this->urlRetornoCot($id);
 
-        try {
-            $sesion = $this->sesionService->armarDesdeCotSesion(
-                $id,
-                $remitoEnvioId,
-                $this->modo($request)
-            );
-        } catch (\InvalidArgumentException $e) {
-            return redirect()
-                ->route('cot_electronico', array_filter(['sesion_id' => $id]))
-                ->with('errores', [$e->getMessage()]);
+        if ($request->boolean('pdf')) {
+            try {
+                $ruta = $this->sesionService->generarPdfCot($id, $remitoEnvioId);
+            } catch (\InvalidArgumentException|\RuntimeException $e) {
+                return redirect()->to($retorno)->with('errores', [$e->getMessage()]);
+            }
+
+            return response()->download($ruta, basename($ruta), [
+                'Cache-Control' => 'no-store, no-cache, must-revalidate, max-age=0',
+                'Pragma' => 'no-cache',
+            ]);
         }
 
-        return $this->mostrar($request, $sesion);
+        try {
+            $resultado = $this->sesionService->imprimirCotDirecto($id, $remitoEnvioId);
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->to($retorno)->with('errores', [$e->getMessage()]);
+        } catch (\Throwable $e) {
+            Log::error('ventas.impresion_cot', [
+                'sesion_id' => $id,
+                'remito_envio_id' => $remitoEnvioId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return redirect()->to($retorno)
+                ->with('errores', ['No se pudo imprimir el COT: '.$e->getMessage()]);
+        }
+
+        return redirect()->to($retorno)->with('mensaje', $resultado['mensaje']);
     }
 
     public function ejecutar(Request $request)
@@ -356,16 +373,7 @@ class ComprobanteImpresionSesionController extends Controller
         }
 
         if (($sesion['origen_tipo'] ?? '') === 'COT') {
-            $paramsCot = ['id' => (int) ($sesion['origen_id'] ?? 0)];
-            if (! empty($sesion['retorno'])) {
-                $paramsCot['retorno'] = $sesion['retorno'];
-            }
-            $remitoEnvioId = (int) (($sesion['pack'][0]['remito_envio_id'] ?? 0));
-            if ($remitoEnvioId > 0) {
-                $paramsCot['remito_envio_id'] = $remitoEnvioId;
-            }
-
-            return redirect()->route('sesion_impresion_cot', $paramsCot);
+            return redirect()->to($this->urlRetornoCot((int) ($sesion['origen_id'] ?? 0)));
         }
 
         return match ($sesion['origen_tipo'] ?? '') {
@@ -544,5 +552,12 @@ class ComprobanteImpresionSesionController extends Controller
         }
 
         return '';
+    }
+
+    private function urlRetornoCot(int $sesionId): string
+    {
+        $params = array_filter(['sesion_id' => $sesionId > 0 ? $sesionId : null]);
+
+        return route('cot_electronico', $params).($sesionId > 0 ? '#sesion-detalle' : '');
     }
 }

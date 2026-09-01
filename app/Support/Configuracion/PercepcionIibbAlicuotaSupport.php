@@ -7,8 +7,9 @@ use App\Models\Configuracion\Provincia;
 /**
  * Ajustes de alícuota IIBB después de padrón/descarte.
  *
- * Córdoba (Anita): tope configurable en provincia.tope_alicuota_percepcion.
- * Tucumán (Anita calc_ing_bruto): si excluido=E, tasa × coeficiente (0 si no hay coef).
+ * Córdoba: tope configurable en provincia.tope_alicuota_percepcion.
+ * Tucumán: el archivo de tasas no trae tasapercepcion; la alícuota está en
+ * coeficiente. Si excluido=E, tasa × coeficiente (0 si no hay coef).
  */
 final class PercepcionIibbAlicuotaSupport
 {
@@ -34,6 +35,23 @@ final class PercepcionIibbAlicuotaSupport
     }
 
     /**
+     * Alícuota del padrón de Tucumán cuando tasapercepcion viene vacío.
+     * El valor vive en coeficiente (1.5, 2.5, 3.5, 5…).
+     *
+     * @param  array<string, mixed>|object|null  $registroPadron
+     */
+    public static function alicuotaDesdeCoeficienteTucuman(int $jurisdiccion, $registroPadron): ?float
+    {
+        if ($jurisdiccion !== self::JURISDICCION_TUCUMAN || $registroPadron === null) {
+            return null;
+        }
+
+        $coef = self::coeficientePadron($registroPadron);
+
+        return $coef;
+    }
+
+    /**
      * @param  array<string, mixed>|object|null  $registroPadron
      */
     public static function aplicarPoliticaTucumanAnita(int $jurisdiccion, $registroPadron, float $tasa): float
@@ -42,18 +60,38 @@ final class PercepcionIibbAlicuotaSupport
             return $tasa;
         }
 
-        $excluido = strtoupper(trim((string) (is_array($registroPadron)
-            ? ($registroPadron['excluido'] ?? '')
-            : ($registroPadron->excluido ?? ''))));
+        $excluido = strtoupper(trim((string) self::campoPadron($registroPadron, 'excluido', '')));
         if ($excluido !== self::EXCLUIDO_TUCUMAN) {
             return $tasa;
         }
 
-        $coefRaw = is_array($registroPadron)
-            ? ($registroPadron['coeficiente'] ?? null)
-            : ($registroPadron->coeficiente ?? null);
-        $coef = ($coefRaw === null || $coefRaw === '') ? 0.0 : (float) $coefRaw;
+        $coef = self::coeficientePadron($registroPadron);
 
-        return $tasa * $coef;
+        return $tasa * ($coef ?? 0.0);
+    }
+
+    /**
+     * @param  array<string, mixed>|object  $registroPadron
+     */
+    private static function coeficientePadron($registroPadron): ?float
+    {
+        $coefRaw = self::campoPadron($registroPadron, 'coeficiente', null);
+        if ($coefRaw === null || $coefRaw === '') {
+            return null;
+        }
+
+        return (float) $coefRaw;
+    }
+
+    /**
+     * @param  array<string, mixed>|object  $registro
+     */
+    private static function campoPadron($registro, string $clave, mixed $default): mixed
+    {
+        if (is_array($registro)) {
+            return $registro[$clave] ?? $default;
+        }
+
+        return $registro->{$clave} ?? $default;
     }
 }

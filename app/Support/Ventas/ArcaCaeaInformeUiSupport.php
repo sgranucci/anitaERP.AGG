@@ -34,33 +34,14 @@ final class ArcaCaeaInformeUiSupport
     }
 
     /**
-     * El botón presentar solo debe estar activo si hay al menos un comprobante informable ahora
-     * (número = último ARCA + 1 para su PV/tipo).
+     * El avión se habilita si hay pendientes o errores de ESTA quincena.
+     * El job consulta ARCA al arrancar; no exigir informables_ahora (sin SOAP da 0).
      *
      * @param  array<string, mixed>|null  $resumen
      */
     public static function puedePresentarAhora(?array $resumen): bool
     {
-        if ($resumen === null || $resumen === []) {
-            return false;
-        }
-
-        if (! self::tienePendienteInforme($resumen)) {
-            return false;
-        }
-
-        if (! array_key_exists('informables_ahora', $resumen)) {
-            return true;
-        }
-
-        if ((int) ($resumen['informables_ahora'] ?? 0) > 0) {
-            return true;
-        }
-
-        // Sin último ARCA consultado el job lo pide al arrancar (Anita + ERP).
-        $ultimos = $resumen['ultimos_arca'] ?? [];
-
-        return ! is_array($ultimos) || $ultimos === [];
+        return self::tienePendienteInforme($resumen);
     }
 
     /**

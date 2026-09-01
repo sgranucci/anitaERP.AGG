@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Ventas;
 use App\Exports\Ventas\CotSesionEnvioExport;
 use App\Http\Controllers\Controller;
 use App\Repositories\Ventas\CotSesionEnvioRepository;
+use App\Services\Ventas\ComprobanteImpresionSesionService;
 use App\Services\Ventas\CotElectronico\ArbaCotPresentacionService;
 use App\Services\Ventas\CotElectronico\CotElectronicoService;
 use App\Support\Ventas\ComprobanteImpresionFormulario;
@@ -14,6 +15,7 @@ use App\Support\Ventas\CotRemitoTotalesSupport;
 use App\Support\Ventas\CuitFormatoValidacionSupport;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class CotElectronicoController extends Controller
 {
@@ -21,6 +23,7 @@ class CotElectronicoController extends Controller
         private CotElectronicoService $service,
         private ArbaCotPresentacionService $presentacionService,
         private CotSesionEnvioRepository $sesionRepository,
+        private ComprobanteImpresionSesionService $impresionSesionService,
     ) {}
 
     public function index(Request $request)
@@ -70,18 +73,12 @@ class CotElectronicoController extends Controller
                 $preview = $this->service->preview(Carbon::parse($fecha), $repartos);
                 $remitos = $preview['remitos'];
 
-                $redirigirImpresion = $this->debeRedirigirImpresionAutomatica(
+                if ($this->debeImprimirAutomaticamente(
                     $resultadoProceso,
                     $imprimirAlProcesar,
                     $tieneImpresoraAsignada
-                );
-                if ($redirigirImpresion) {
-                    return redirect()
-                        ->route('sesion_impresion_cot', [
-                            'id' => (int) $resultadoProceso['sesion_id'],
-                            'auto' => 1,
-                        ])
-                        ->with('mensaje', $resultadoProceso['mensaje'] ?? 'Envío procesado.');
+                )) {
+                    $this->imprimirCotTrasProcesar((int) $resultadoProceso['sesion_id']);
                 }
             }
         }
@@ -144,7 +141,7 @@ class CotElectronicoController extends Controller
     /**
      * @param  array<string, mixed>  $resultadoProceso
      */
-    private function debeRedirigirImpresionAutomatica(
+    private function debeImprimirAutomaticamente(
         array $resultadoProceso,
         bool $imprimirAlProcesar,
         bool $tieneImpresoraAsignada
@@ -163,6 +160,24 @@ class CotElectronicoController extends Controller
         }
 
         return false;
+    }
+
+    private function imprimirCotTrasProcesar(int $sesionId): void
+    {
+        try {
+            $resultado = $this->impresionSesionService->imprimirCotDirecto($sesionId);
+            session()->flash('mensaje', $resultado['mensaje']);
+        } catch (\InvalidArgumentException $e) {
+            session()->flash('errores', [$e->getMessage()]);
+        } catch (\Throwable $e) {
+            Log::error('ventas.cot_electronico.impresion', [
+                'sesion_id' => $sesionId,
+                'error' => $e->getMessage(),
+            ]);
+            session()->flash('errores', [
+                'El envío se procesó, pero no se pudo imprimir el COT: '.$e->getMessage(),
+            ]);
+        }
     }
 
     public function probarConexion()

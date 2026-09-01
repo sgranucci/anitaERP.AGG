@@ -325,7 +325,7 @@ final class ComprobanteProveedorConceptosIibbPadronCotejoSupport
 
         $registro = $this->iibbService->leeTasaPercepcion($cuit, $jurisdiccion, $fecha ?: null);
 
-        return $tasas[$jurisdiccion] = $this->iibbService->tasaPercepcionDesdePadron($registro);
+        return $tasas[$jurisdiccion] = $this->iibbService->tasaPercepcionDesdePadron($registro, $jurisdiccion);
     }
 
     /**
