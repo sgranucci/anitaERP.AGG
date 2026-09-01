@@ -178,7 +178,7 @@
                                             Solo movimientos en moneda origen
                                         </label>
                                     </div>
-                                    <div class="form-check">
+                                    <div class="form-check mb-2">
                                         <input type="hidden" name="incluye_subdiario" value="0">
                                         <input class="form-check-input" type="checkbox" name="incluye_subdiario" id="incluye_subdiario" value="1"
                                             @checked($filtros['incluye_subdiario'] ?? true)>
@@ -186,8 +186,16 @@
                                             Incluir movimientos de subdiario
                                         </label>
                                     </div>
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" name="solo_movimientos_ventas" id="solo_movimientos_ventas" value="1"
+                                            @checked(! empty($filtros['solo_movimientos_ventas']))>
+                                        <label class="form-check-label" for="solo_movimientos_ventas">
+                                            Solo movimientos de ventas (totales)
+                                        </label>
+                                    </div>
                                     <small class="text-muted d-block mt-2">
                                         El subdiario completa las imputaciones que no existen en ctamov.
+                                        El tilde de ventas filtra sistema V (subdiario/subhist/ctamov) y asientos de facturas de venta del ERP; muestra solo totales por cuenta, sin saldo inicial.
                                     </small>
                                 </div>
                             </div>
@@ -271,11 +279,15 @@
                         <p class="mb-0 small text-muted">
                             {{ $inclusion_asientos_texto }}
                             · {{ $centrocostos_texto }}
+                            @if (($origen_movimientos_texto ?? '') !== '')
+                                · {{ $origen_movimientos_texto }}
+                            @endif
                             · {{ $tot['stats']['ctamov_filas'] ?? 0 }} ctamov
                             · {{ $tot['stats']['subdiario_filas'] ?? 0 }} subdiario
                         </p>
                     </div>
 
+                    @if (empty($solo_totales_ventas))
                     <form method="get" action="{{ route('mayor_plano_cuenta') }}" class="px-3 py-2 border-bottom bg-light">
                         @foreach ($filtrosQuery ?? [] as $key => $val)
                             @if (is_array($val))
@@ -303,6 +315,7 @@
                             </div>
                         </div>
                     </form>
+                    @endif
 
                     <div class="d-flex flex-wrap align-items-center justify-content-between px-3 py-2 border-bottom bg-light">
                         <div class="mb-1 mb-md-0">
@@ -338,8 +351,10 @@
                         'resumen' => $resumen ?? [],
                         'resumen_cc' => $resumen_cc ?? [],
                         'puede_ver_cuenta' => $puede_ver_cuenta ?? false,
+                        'expandido' => ! empty($solo_totales_ventas),
                     ])
 
+                    @if (empty($solo_totales_ventas))
                     <div class="px-3 pt-2 pb-1">
                         <h6 class="mb-0 font-weight-bold">Detalle de movimientos</h6>
                         <small class="text-muted">Listado paginado por cuenta contable</small>
@@ -387,6 +402,7 @@
                             </span>
                             {{ $filas->appends($filtrosQuery ?? [])->links() }}
                         </div>
+                    @endif
                     @endif
                 </div>
             @endif

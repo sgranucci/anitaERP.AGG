@@ -39,6 +39,7 @@ final class MayorPlanoCuentaErpAsientoReader
         int $cuentaHasta = 0,
         array $cuentas = [],
         bool $cargarMetadatosComprobante = true,
+        bool $soloMovimientosVentas = false,
     ): array {
         $t0 = microtime(true);
         $errores = [];
@@ -97,6 +98,10 @@ final class MayorPlanoCuentaErpAsientoReader
                 ->where('a.observacion', 'not like', '%'.AnitaAsientoImportService::TAG_SUBDIARIO.'%')
                 ->where('a.observacion', 'not like', '%[subhist]%')
                 ->where('a.observacion', 'not like', '%[subdiario]%');
+        }
+
+        if ($soloMovimientosVentas) {
+            MayorPlanoCuentaVentasFiltroSupport::aplicarFiltroErpQuery($query, $columnasAnita);
         }
 
         $linea = 0;
@@ -188,6 +193,7 @@ final class MayorPlanoCuentaErpAsientoReader
                 $cuentaHasta,
                 $cuentas,
                 $errores,
+                $soloMovimientosVentas,
             );
             foreach ($ctamov as $fila) {
                 if (empty($fila->erp_origen_subdiario)) {
@@ -317,6 +323,7 @@ final class MayorPlanoCuentaErpAsientoReader
         int $cuentaHasta,
         array $cuentas,
         array &$errores,
+        bool $soloMovimientosVentas = false,
     ): array {
         $empresaIds = array_values(array_unique(array_filter(array_map('intval', $empresaIds), fn (int $id) => $id > 0)));
         if ($empresaIds === []) {
@@ -325,6 +332,9 @@ final class MayorPlanoCuentaErpAsientoReader
 
         $where = ' WHERE subh_empresa IN ('.implode(',', $empresaIds).')'
             .' AND subh_fecha BETWEEN '.$fechaDesde.' AND '.$fechaHasta;
+        if ($soloMovimientosVentas) {
+            $where .= MayorPlanoCuentaVentasFiltroSupport::condicionSqlSistema('subh_sistema');
+        }
         $filtroCuenta = $this->condicionCuentasSubhist($cuentaDesde, $cuentaHasta, $cuentas);
         if ($filtroCuenta !== '') {
             $where .= ' AND ('.$filtroCuenta.')';

@@ -33,6 +33,20 @@ final class ArcaCaeaInformeUiSupportTest extends TestCase
         ]));
     }
 
+    public function test_leyenda_pide_avion_si_hay_pendientes_sin_consulta_arca(): void
+    {
+        $leyenda = ArcaCaeaInformeUiSupport::leyendaFaltante([
+            'total' => 55,
+            'pendientes' => 55,
+            'errores' => 0,
+            'informables_ahora' => 0,
+            'ultimos_arca' => [],
+        ]);
+
+        self::assertStringContainsString('sin consulta a ARCA', $leyenda);
+        self::assertStringContainsString('avión azul', $leyenda);
+    }
+
     public function test_puede_presentar_si_hay_informable_ahora(): void
     {
         self::assertTrue(ArcaCaeaInformeUiSupport::puedePresentarAhora([

@@ -11,7 +11,7 @@
         @json(url('ventas/arca-caea/__ID__/estado-informe'))
     );
 </script>
-<script src="{{ asset('assets/pages/scripts/ventas/arca_caea/informe.js') }}?v=20260901b"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/arca_caea/informe.js') }}?v=20260901c"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/arca_caea/manual.js') }}?v=20260811a"></script>
 @endsection
 
@@ -35,6 +35,7 @@
                     @else
                         Incluye también los comprobantes CAEA que viven en Anita (bridge) y no están en el ERP.
                     @endif
+                    El avión azul <strong>no arranca solo</strong>: hay que hacer click (y confirmar) para encolar.
                     Solo está activo cuando falta informar comprobantes de la quincena y no hay otro proceso de esa quincena en cola.
                     Mientras corre, el avión se deshabilita y verás <i class="fa fa-spinner fa-spin text-warning"></i>.
                     Al terminar el proceso recibirás un mail con el resultado.

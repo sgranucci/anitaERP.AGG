@@ -58,6 +58,7 @@ class MayorPlanoCuentaReporteService
             array_values(array_filter(array_map('intval', $filtros['cuentas'] ?? []), fn (int $c) => $c > 0)),
             $centrocostoFiltro,
             (bool) ($filtros['agrupar_por_cc'] ?? false),
+            (bool) ($filtros['solo_movimientos_ventas'] ?? false),
         ];
 
         if ($consolidar || count($empresaIds) <= 1) {
@@ -258,6 +259,7 @@ class MayorPlanoCuentaReporteService
             ];
 
             $gruposCc = $seccion['grupos_cc'] ?? [];
+            $soloTotalesVentas = ! empty($filtros['solo_movimientos_ventas']);
             if ($gruposCc !== []) {
                 foreach ($gruposCc as $grupoCc) {
                     $filas[] = [
@@ -269,7 +271,9 @@ class MayorPlanoCuentaReporteService
                         'centrocosto_nombre' => $grupoCc['centrocosto_nombre'] ?? '',
                         'nombreempresa' => $nombreEmpresa,
                     ];
-                    if ((float) ($grupoCc['saldo_inicial'] ?? 0) !== 0.0 || ($grupoCc['cantidad_lineas'] ?? 0) === 0) {
+                    if (! $soloTotalesVentas
+                        && ((float) ($grupoCc['saldo_inicial'] ?? 0) !== 0.0 || ($grupoCc['cantidad_lineas'] ?? 0) === 0)
+                    ) {
                         $filas[] = [
                             'tipo_fila' => 'saldo_inicial',
                             'cuenta' => $cuenta,
@@ -281,8 +285,10 @@ class MayorPlanoCuentaReporteService
                             'nombreempresa' => $nombreEmpresa,
                         ];
                     }
-                    foreach ($grupoCc['lineas'] ?? [] as $ln) {
-                        $filas[] = $ln;
+                    if (! $soloTotalesVentas) {
+                        foreach ($grupoCc['lineas'] ?? [] as $ln) {
+                            $filas[] = $ln;
+                        }
                     }
                     if (($grupoCc['total_debe'] ?? 0) > 0 || ($grupoCc['total_haber'] ?? 0) > 0) {
                         $filas[] = [
@@ -296,7 +302,9 @@ class MayorPlanoCuentaReporteService
                         ];
                     }
                 }
-            } elseif ((float) ($seccion['saldo_inicial'] ?? 0) !== 0.0 || ($seccion['cantidad_lineas'] ?? 0) === 0) {
+            } elseif (! $soloTotalesVentas
+                && ((float) ($seccion['saldo_inicial'] ?? 0) !== 0.0 || ($seccion['cantidad_lineas'] ?? 0) === 0)
+            ) {
                 $filas[] = [
                     'tipo_fila' => 'saldo_inicial',
                     'cuenta' => $cuenta,
@@ -307,13 +315,14 @@ class MayorPlanoCuentaReporteService
                 ];
             }
 
-            if ($gruposCc === []) {
+            if ($gruposCc === [] && ! $soloTotalesVentas) {
                 foreach ($seccion['lineas'] ?? [] as $ln) {
                     $filas[] = $ln;
                 }
             }
 
-            if ($conTotales && (($seccion['total_debe'] ?? 0) > 0 || ($seccion['total_haber'] ?? 0) > 0)) {
+            $incluirTotalCuenta = $conTotales || $soloTotalesVentas;
+            if ($incluirTotalCuenta && (($seccion['total_debe'] ?? 0) > 0 || ($seccion['total_haber'] ?? 0) > 0)) {
                 $filas[] = [
                     'tipo_fila' => 'total_cuenta',
                     'cuenta' => $cuenta,
@@ -462,6 +471,23 @@ class MayorPlanoCuentaReporteService
         $texto = $filtro->metaTexto();
 
         return ! empty($filtros['agrupar_por_cc']) ? $texto.' · agrupado por CC' : $texto;
+    }
+
+    /** @param array<string, mixed> $filtros */
+    public function formatearOrigenMovimientosTexto(array $filtros): string
+    {
+        $partes = [];
+        if (! empty($filtros['solo_movimientos_ventas'])) {
+            $partes[] = 'Solo movimientos de ventas (totales)';
+        }
+        if (! empty($filtros['solo_moneda_origen'])) {
+            $partes[] = 'Solo moneda origen';
+        }
+        if (($filtros['incluye_subdiario'] ?? true) === false) {
+            $partes[] = 'Sin subdiario';
+        }
+
+        return implode(' · ', $partes);
     }
 
     /**

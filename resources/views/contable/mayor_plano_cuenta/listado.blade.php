@@ -60,6 +60,30 @@
         </tr>
     </table>
 
+    @if (! empty($filtros['solo_movimientos_ventas']) && ! empty($resumen))
+        <table class="data">
+            <thead>
+                <tr>
+                    <th>Cuenta</th>
+                    <th>Nombre</th>
+                    <th class="text-right">Debe</th>
+                    <th class="text-right">Haber</th>
+                    <th class="text-right">Líneas</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach ($resumen as $row)
+                    <tr>
+                        <td>{{ $row['cuenta_codigo'] ?? '' }}</td>
+                        <td>{{ $row['cuenta_nombre'] ?? '' }}</td>
+                        <td class="text-right">{{ number_format((float) ($row['total_debe'] ?? 0), 2, ',', '.') }}</td>
+                        <td class="text-right">{{ number_format((float) ($row['total_haber'] ?? 0), 2, ',', '.') }}</td>
+                        <td class="text-right">{{ (int) ($row['cantidad_lineas'] ?? 0) }}</td>
+                    </tr>
+                @endforeach
+            </tbody>
+        </table>
+    @else
     <table class="data">
         @include('contable.mayor_plano_cuenta.partials.tabla_datos', [
             'filas' => $filas,
@@ -69,6 +93,7 @@
             'multiempresa' => $multiempresa,
         ])
     </table>
+    @endif
 
     @if (! empty($tot))
         <p class="meta" style="margin-top: 8px;">

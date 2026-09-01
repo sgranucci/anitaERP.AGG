@@ -191,40 +191,53 @@
         HTMLFormElement.prototype.submit.call(form);
     }
 
+    function encolarPresentacion(form) {
+        if (!form || form.getAttribute('data-confirmado') === '1') {
+            return false;
+        }
+        var confirmMsg = form.getAttribute('data-confirm-msg');
+        if (confirmMsg && !window.confirm(confirmMsg)) {
+            return false;
+        }
+        form.setAttribute('data-confirmado', '1');
+        var id = idDesdeAction(form.getAttribute('action'));
+        var titulo = form.getAttribute('data-overlay-titulo') || 'Presentando comprobantes CAEA…';
+        var subtitulo = form.getAttribute('data-overlay-subtitulo') || '';
+        mostrarOverlay(titulo, subtitulo);
+        enviarFormularioNativo(form);
+        if (id > 0) {
+            marcarActivoLocal(id);
+        }
+        return true;
+    }
+
+    document.addEventListener('click', function (ev) {
+        var btn = ev.target && ev.target.closest ? ev.target.closest('.js-arca-caea-informar-btn') : null;
+        if (!btn || btn.disabled) {
+            return;
+        }
+        var form = btn.closest('form');
+        if (!form || !form.classList.contains('js-arca-caea-informar-form')) {
+            return;
+        }
+        ev.preventDefault();
+        ev.stopPropagation();
+        encolarPresentacion(form);
+    }, true);
+
     document.addEventListener('submit', function (ev) {
         var form = ev.target;
         if (!form || !form.classList || !form.classList.contains('js-arca-caea-informar-form')) {
             return;
         }
-        var confirmado = form.getAttribute('data-confirmado') === '1';
-        if (!confirmado && form.querySelector('button[type="submit"]:disabled')) {
-            ev.preventDefault();
+        if (form.getAttribute('data-confirmado') === '1') {
             return;
         }
-        var confirmMsg = form.getAttribute('data-confirm-msg');
-        if (confirmMsg && !confirmado) {
-            ev.preventDefault();
-            if (!window.confirm(confirmMsg)) {
-                return;
-            }
-            form.setAttribute('data-confirmado', '1');
-            var idConfirm = idDesdeAction(form.getAttribute('action'));
-            var tituloC = form.getAttribute('data-overlay-titulo') || 'Presentando comprobantes CAEA…';
-            var subtituloC = form.getAttribute('data-overlay-subtitulo') || '';
-            mostrarOverlay(tituloC, subtituloC);
-            if (idConfirm > 0) {
-                marcarActivoLocal(idConfirm);
-            }
-            enviarFormularioNativo(form);
+        ev.preventDefault();
+        if (form.querySelector('button[type="submit"]:disabled')) {
             return;
         }
-        var id = idDesdeAction(form.getAttribute('action'));
-        if (id > 0) {
-            marcarActivoLocal(id);
-        }
-        var titulo = form.getAttribute('data-overlay-titulo') || 'Presentando comprobantes CAEA…';
-        var subtitulo = form.getAttribute('data-overlay-subtitulo') || '';
-        mostrarOverlay(titulo, subtitulo);
+        encolarPresentacion(form);
     }, true);
 
     document.addEventListener('DOMContentLoaded', function () {

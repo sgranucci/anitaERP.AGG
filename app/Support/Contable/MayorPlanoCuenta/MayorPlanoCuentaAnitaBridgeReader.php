@@ -138,6 +138,7 @@ class MayorPlanoCuentaAnitaBridgeReader
         int $cuentaDesde = 0,
         int $cuentaHasta = 0,
         array $cuentas = [],
+        bool $soloMovimientosVentas = false,
     ): array {
         $t0 = microtime(true);
         $errores = [];
@@ -151,6 +152,10 @@ class MayorPlanoCuentaAnitaBridgeReader
         $filtroSubdiario = $condCuentaSubd !== ''
             ? ' AND ('.$condCuentaSubd.' OR '.$condContraSubd.')'
             : '';
+        if ($soloMovimientosVentas) {
+            $filtroCtamov .= MayorPlanoCuentaVentasFiltroSupport::condicionSqlSistema('ctav_sistema');
+            $filtroSubdiario .= MayorPlanoCuentaVentasFiltroSupport::condicionSqlSistema('subd_sistema');
+        }
 
         foreach ($empresaIds as $empresaId) {
             $empresaId = (int) $empresaId;

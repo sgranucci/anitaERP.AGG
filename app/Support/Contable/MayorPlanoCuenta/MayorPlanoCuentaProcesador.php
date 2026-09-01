@@ -21,6 +21,8 @@ class MayorPlanoCuentaProcesador
     /** @var array<string, string> */
     private array $nombresCentrocosto = [];
 
+    private bool $soloMovimientosVentas = false;
+
     public function __construct(
         private readonly MayorPlanoCuentaAnitaBridgeReader $reader = new MayorPlanoCuentaAnitaBridgeReader(),
         private readonly MayorPlanoCuentaErpAsientoReader $erpReader = new MayorPlanoCuentaErpAsientoReader(),
@@ -46,7 +48,9 @@ class MayorPlanoCuentaProcesador
         array $cuentas = [],
         ?MayorPlanoCuentaCentrocostoFiltroSupport $centrocostoFiltro = null,
         bool $agruparPorCc = false,
+        bool $soloMovimientosVentas = false,
     ): array {
+        $this->soloMovimientosVentas = $soloMovimientosVentas;
         $empresaIds = array_values(array_filter(array_map('intval', $empresaIds), fn (int $id) => $id > 0));
         if ($empresaIds === []) {
             return $this->resultadoVacio();
@@ -79,23 +83,38 @@ class MayorPlanoCuentaProcesador
             $diagSaldo['origen'] = 'erp_ejercicio';
         }
 
-        $planSaldo = $this->planSaldoInicialDesdeSaldosMes(
-            $empresaIds,
-            $fechaDesde,
-            $fechaSaldoDesde,
-            $cutoffErp,
-            $cuentaDesde,
-            $cuentaHasta,
-            $cuentas,
-            $monedaReporteId,
-            $soloMonedaOrigen,
-            $incluyeSubdiario,
-            $modoInclusionAsientos,
-            $centrocostoFiltro->tieneFiltro() || $agruparPorCc,
-        );
-        $saldosInicialesPorCuenta = $planSaldo['por_codigo'];
-        $omitirCargaSaldoErpCompleto = (bool) ($planSaldo['usar_saldos_mes'] ?? false);
-        $fechaSaldoMovimientosDesde = (int) ($planSaldo['fecha_saldo_movimientos_desde'] ?? $fechaSaldoDesde);
+        if ($this->soloMovimientosVentas) {
+            // El saldo de la cuenta mezcla todos los orígenes; en modo ventas no aplica.
+            $planSaldo = [
+                'usar_saldos_mes' => false,
+                'por_codigo' => [],
+                'fuente' => 'omitido_solo_ventas',
+                'movimientos_restados' => 0,
+                'fecha_saldo_movimientos_desde' => $fechaDesde,
+                'advertencias' => [],
+            ];
+            $saldosInicialesPorCuenta = [];
+            $omitirCargaSaldoErpCompleto = true;
+            $fechaSaldoMovimientosDesde = $fechaDesde;
+        } else {
+            $planSaldo = $this->planSaldoInicialDesdeSaldosMes(
+                $empresaIds,
+                $fechaDesde,
+                $fechaSaldoDesde,
+                $cutoffErp,
+                $cuentaDesde,
+                $cuentaHasta,
+                $cuentas,
+                $monedaReporteId,
+                $soloMonedaOrigen,
+                $incluyeSubdiario,
+                $modoInclusionAsientos,
+                $centrocostoFiltro->tieneFiltro() || $agruparPorCc,
+            );
+            $saldosInicialesPorCuenta = $planSaldo['por_codigo'];
+            $omitirCargaSaldoErpCompleto = (bool) ($planSaldo['usar_saldos_mes'] ?? false);
+            $fechaSaldoMovimientosDesde = (int) ($planSaldo['fecha_saldo_movimientos_desde'] ?? $fechaSaldoDesde);
+        }
 
         $datos = $this->cargarPeriodoHibrido(
             $empresaIds,
@@ -106,7 +125,8 @@ class MayorPlanoCuentaProcesador
             $cuentaDesde,
             $cuentaHasta,
             $cuentas,
-            $omitirCargaSaldoErpCompleto && $fechaSaldoMovimientosDesde <= 0,
+            $this->soloMovimientosVentas
+                || ($omitirCargaSaldoErpCompleto && $fechaSaldoMovimientosDesde <= 0),
         );
 
         $erroresBridge = $datos['errores'] ?? [];
@@ -231,6 +251,7 @@ class MayorPlanoCuentaProcesador
                 'moneda_id' => $monedaReporteId,
                 'solo_moneda_origen' => $soloMonedaOrigen,
                 'incluye_subdiario' => $incluyeSubdiario,
+                'solo_movimientos_ventas' => $this->soloMovimientosVentas,
                 'modo_inclusion_asientos' => $modoInclusionAsientos,
                 'centrocostos_codigo' => $centrocostoFiltro->codigos(),
                 'centrocostos_meta' => $centrocostoFiltro->metaTexto(),
@@ -298,6 +319,7 @@ class MayorPlanoCuentaProcesador
                 $cuentaDesde,
                 $cuentaHasta,
                 $cuentas,
+                $this->soloMovimientosVentas,
             );
 
             $anita['ctamov'] = MayorPlanoCuentaAnitaErpMetadatosSupport::adjuntarEmisorDesdeAsientoErp(
@@ -340,6 +362,7 @@ class MayorPlanoCuentaProcesador
                     $cuentaHasta,
                     $cuentas,
                     false,
+                    $this->soloMovimientosVentas,
                 );
                 $ctamov = array_merge($ctamov, $erp['ctamov'] ?? []);
                 $errores = array_merge($errores, $erp['errores'] ?? []);
@@ -363,6 +386,8 @@ class MayorPlanoCuentaProcesador
                 $cuentaDesde,
                 $cuentaHasta,
                 $cuentas,
+                true,
+                $this->soloMovimientosVentas,
             );
             $ctamov = array_merge($ctamov, $erp['ctamov'] ?? []);
             $errores = array_merge($errores, $erp['errores'] ?? []);
@@ -389,6 +414,7 @@ class MayorPlanoCuentaProcesador
                 $cuentaDesde,
                 $cuentaHasta,
                 $cuentas,
+                $this->soloMovimientosVentas,
             );
             $ctamov = array_merge($ctamov, $anita['ctamov'] ?? []);
             $subdiario = array_merge($subdiario, $anita['subdiario'] ?? []);
@@ -670,6 +696,10 @@ class MayorPlanoCuentaProcesador
             return false;
         }
 
+        if ($this->soloMovimientosVentas && ! MayorPlanoCuentaVentasFiltroSupport::esMovimientoVentas($mov)) {
+            return false;
+        }
+
         return MayorPlanoCuentaSupport::movimientoVisibleMoneda(
             (string) ($mov['cod_mon'] ?? '1'),
             (float) ($mov['cotizacion'] ?? 0),
@@ -862,6 +892,7 @@ class MayorPlanoCuentaProcesador
 
         return [
             'origen' => 'subdiario',
+            'sistema' => strtoupper(trim((string) ($lineaRef->subd_sistema ?? ''))),
             'empresa_id' => (int) ($lineaRef->subd_empresa ?? 0),
             'cuenta' => (int) $grupo['cuenta'],
             'centrocosto_codigo' => (string) ($grupo['centrocosto_codigo'] ?? ''),
@@ -924,6 +955,7 @@ class MayorPlanoCuentaProcesador
 
         return [
             'origen' => 'ctamov',
+            'sistema' => strtoupper(trim((string) ($linea->ctav_sistema ?? ''))),
             'empresa_id' => (int) ($linea->ctav_empresa ?? 0),
             'cuenta' => $cuenta,
             'centrocosto_codigo' => $this->normalizarCodigoCentrocosto($linea->ctav_ccosto ?? null),

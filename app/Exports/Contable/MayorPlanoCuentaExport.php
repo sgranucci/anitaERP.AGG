@@ -94,12 +94,14 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
         $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($filas);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
 
-        $subtitulo = trim(
-            $this->reporteService->formatearEmpresasTexto($this->filtros)
-            .' · '.$this->reporteService->formatearPeriodoTexto($this->filtros)
-            .' · '.$this->reporteService->formatearInclusionAsientosTexto($this->filtros)
-            .' · '.$this->reporteService->formatearCentrocostosTexto($this->filtros)
-        );
+        $subtituloPartes = [
+            $this->reporteService->formatearEmpresasTexto($this->filtros),
+            $this->reporteService->formatearPeriodoTexto($this->filtros),
+            $this->reporteService->formatearInclusionAsientosTexto($this->filtros),
+            $this->reporteService->formatearCentrocostosTexto($this->filtros),
+            $this->reporteService->formatearOrigenMovimientosTexto($this->filtros),
+        ];
+        $subtitulo = trim(implode(' · ', array_filter($subtituloPartes, fn ($p) => trim((string) $p) !== '')));
 
         $this->calcularFilasEncabezado($subtitulo, $totales);
 

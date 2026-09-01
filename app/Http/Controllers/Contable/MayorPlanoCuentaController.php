@@ -76,7 +76,10 @@ class MayorPlanoCuentaController extends Controller
             $resumenCc = $this->reporteService->resumenPorCentrocosto($resultado);
             $erroresBridge = $resultado['errores_bridge'] ?? [];
             $perPage = max(10, min(200, (int) $request->input('per_page', 50)));
-            $filasAplanadas = $this->reporteService->aplanarFilas($resultado, $filtros, false);
+            $soloTotalesVentas = ! empty($filtros['solo_movimientos_ventas']);
+            $filasAplanadas = $soloTotalesVentas
+                ? []
+                : $this->reporteService->aplanarFilas($resultado, $filtros, false);
             $filas = $this->reporteService->paginarFilas($filasAplanadas, $perPage);
         }
 
@@ -115,6 +118,8 @@ class MayorPlanoCuentaController extends Controller
             'empresas_texto' => $this->reporteService->formatearEmpresasTexto($filtros),
             'inclusion_asientos_texto' => $this->reporteService->formatearInclusionAsientosTexto($filtros),
             'centrocostos_texto' => $this->reporteService->formatearCentrocostosTexto($filtros),
+            'origen_movimientos_texto' => $this->reporteService->formatearOrigenMovimientosTexto($filtros),
+            'solo_totales_ventas' => ! empty($filtros['solo_movimientos_ventas']),
             'mes_actual' => (int) date('n'),
             'anio_actual' => (int) date('Y'),
             'puede_ver_asiento' => can('listar-asiento', false) || can('editar-asiento', false),
@@ -343,8 +348,9 @@ class MayorPlanoCuentaController extends Controller
         $partes[] = $this->reporteService->formatearInclusionAsientosTexto($filtros);
         $partes[] = $this->reporteService->formatearCentrocostosTexto($filtros);
 
-        if (! empty($filtros['solo_moneda_origen'])) {
-            $partes[] = 'Solo moneda origen';
+        $origen = $this->reporteService->formatearOrigenMovimientosTexto($filtros);
+        if ($origen !== '') {
+            $partes[] = $origen;
         }
 
         return implode(' · ', $partes);

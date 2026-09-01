@@ -63,6 +63,7 @@ class MayorPlanoCuentaListadoFiltros
             'fecha_hasta' => trim((string) $request->input('fecha_hasta', '')),
             'solo_moneda_origen' => $request->boolean('solo_moneda_origen'),
             'incluye_subdiario' => $request->boolean('incluye_subdiario', true),
+            'solo_movimientos_ventas' => $request->boolean('solo_movimientos_ventas'),
             'modo_inclusion_asientos' => $modoAsientos,
             'cuenta_desde' => $cuentaDesde,
             'cuenta_hasta' => $cuentaHasta,
@@ -219,6 +220,10 @@ class MayorPlanoCuentaListadoFiltros
 
         if (($filtros['incluye_subdiario'] ?? true) === false) {
             $out['incluye_subdiario'] = 0;
+        }
+
+        if (! empty($filtros['solo_movimientos_ventas'])) {
+            $out['solo_movimientos_ventas'] = 1;
         }
 
         if ((int) ($filtros['cuenta_desde'] ?? 0) > 0) {

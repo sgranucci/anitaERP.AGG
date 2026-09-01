@@ -710,10 +710,60 @@ class ArcaCaeaPresentacionService
             ];
         }
 
+        $erroresConsulta = is_array($sync['errores_consulta'] ?? null) ? $sync['errores_consulta'] : [];
+        if ($ultimosMemoria === [] && $erroresConsulta !== []) {
+            $resumen = $this->actualizarResumenPeriodo($registro, $usuarioId, false, $sync);
+            $msgs = [];
+            foreach ($erroresConsulta as $err) {
+                $m = trim((string) (is_array($err) ? ($err['mensaje'] ?? '') : ''));
+                if ($m !== '' && ! in_array($m, $msgs, true)) {
+                    $msgs[] = $m;
+                }
+            }
+
+            return [
+                'ok' => false,
+                'mensaje' => 'No se pudo consultar el último autorizado en ARCA; no se informa a ciegas. '
+                    .($msgs !== [] ? implode(' | ', $msgs) : 'Sin detalle de error.'),
+                'resumen' => $resumen,
+                'detalle' => [
+                    'informados' => 0,
+                    'errores_lote' => 1,
+                    'omitidos_ya_en_arca' => (int) ($sync['marcados'] ?? 0),
+                    'sincronizados_arca' => (int) ($sync['marcados'] ?? 0),
+                    'ultimos_arca' => $sync['ultimos_arca'] ?? [],
+                    'errores_consulta_arca' => $erroresConsulta,
+                    'pendientes_restantes' => (int) ($resumen['pendientes'] ?? 0),
+                    'errores_total' => (int) ($resumen['errores'] ?? 0),
+                ],
+            ];
+        }
+
         $lote = $this->armarLoteInforme($registro, $soloErrores, $ultimosMemoria, $limite);
 
         if ($lote === []) {
             $resumen = $this->actualizarResumenPeriodo($registro, $usuarioId, false, $sync);
+            $pendientes = (int) ($resumen['pendientes'] ?? 0);
+            $erroresResumen = (int) ($resumen['errores'] ?? 0);
+            if ($pendientes > 0 || $erroresResumen > 0) {
+                return [
+                    'ok' => false,
+                    'mensaje' => 'Hay '.$pendientes.' comprobante(s) pendiente(s) pero no se armó lote. '
+                        .'Sin último autorizado de ARCA el proceso arrancaría en #1 y no encuentra la factura. '
+                        .'Usá la calculadora o reintentá el avión; si persiste, revisá MTXCA / sucursal 5.',
+                    'resumen' => $resumen,
+                    'detalle' => [
+                        'informados' => 0,
+                        'errores_lote' => 1,
+                        'omitidos_ya_en_arca' => (int) ($sync['marcados'] ?? 0),
+                        'sincronizados_arca' => (int) ($sync['marcados'] ?? 0),
+                        'ultimos_arca' => $sync['ultimos_arca'] ?? [],
+                        'errores_consulta_arca' => $erroresConsulta,
+                        'pendientes_restantes' => $pendientes,
+                        'errores_total' => $erroresResumen,
+                    ],
+                ];
+            }
 
             return [
                 'ok' => true,

@@ -75,9 +75,14 @@ final class ArcaCaeaInformeUiSupport
         $ok = (int) ($resumen['informados_ok'] ?? 0);
         $obs = (int) ($resumen['informados_obs'] ?? 0);
         $informados = $ok + $obs;
+        $ultimos = $resumen['ultimos_arca'] ?? [];
 
         if ($pendientes === 0 && $errores === 0) {
             return sprintf('Informado: %d comprobante(s)', $informados);
+        }
+
+        if (($pendientes > 0 || $errores > 0) && (! is_array($ultimos) || $ultimos === [])) {
+            return $pendientes.' en Anita/ERP sin consulta a ARCA: el avión azul consulta el último autorizado e informa (no arranca solo)';
         }
 
         $faltantes = self::textoFaltantesEstaQuincena($resumen);
