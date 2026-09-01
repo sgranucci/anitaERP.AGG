@@ -33,6 +33,8 @@ class RecepcionProveedorReporteService
      */
     public function generar(array $filtros): array
     {
+        DB::connection()->disableQueryLog();
+
         $lineasErp = $this->consultarLineas($filtros);
         $anita = $this->consultarAnitaSiCorresponde($filtros, $lineasErp);
         $lineas = $this->fusionarLineas($lineasErp, $anita['filas'], $filtros);
@@ -309,7 +311,12 @@ class RecepcionProveedorReporteService
         $this->aplicarFiltros($query, $filtros);
         $this->aplicarOrden($query, $filtros);
 
-        return $query->get()->map(fn ($row) => $this->mapearLinea($row))->values();
+        $filas = [];
+        foreach ($query->toBase()->cursor() as $row) {
+            $filas[] = $this->mapearLinea($row);
+        }
+
+        return collect($filas);
     }
 
     /**

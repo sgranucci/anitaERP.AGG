@@ -393,6 +393,9 @@
                             el total cierre; el tipo 011-016 las identifica. En este resumen
                             quedan en <strong>Monotributo</strong> para cruzar con el Libro IVA
                             Compras de Anita (Portal suele sumarlas en «No gravado + exento»).
+                            El descuento exento (p. ej. Edesur) netea y conserva el signo.
+                            Las retenciones SIRTAC de liquidaciones FISE / medio de cobro
+                            van a Otros tributos, no a esta columna.
                         </p>
                         <div class="table-responsive mb-3">
                             <table class="table table-bordered table-sm" id="tabla-iva-simple-concepto">

@@ -104,12 +104,66 @@ final class LibroIvaDigitalComprasImportesSupport
             return $registro;
         }
 
-        $registro['cabecera']['no_integra_neto'] = round(
-            (float) ($registro['cabecera']['no_integra_neto'] ?? 0) + $residual,
+        $campo = self::campoAjusteCabecera($registro);
+        $registro['cabecera'][$campo] = round(
+            (float) ($registro['cabecera'][$campo] ?? 0) + $residual,
             2,
         );
 
         return $registro;
+    }
+
+    /**
+     * Tipo C: el ajuste va a no gravado (el tipo identifica monotributo).
+     * Resto: Otros tributos, para no inflar «Exento / no grav.» del cruce con Anita.
+     */
+    public static function campoAjusteCabecera(array $registro): string
+    {
+        $tipo = str_pad((string) ($registro['cabecera']['tipo_comprobante'] ?? ''), 3, '0', STR_PAD_LEFT);
+        if (in_array($tipo, LibroIvaDigitalVentasAlicuotaSupport::TIPOS_SIN_ALICUOTA, true)) {
+            return 'no_integra_neto';
+        }
+
+        return 'otros_tributos';
+    }
+
+    /**
+     * SIRTAC de liquidaciones «medio de cobro» / FISE: no es no gravado.
+     * Anita lo deja fuera de NO GRAVADO+EX; en el TXT va a Otros tributos.
+     */
+    public static function esRetencionMedioCobro(int $codigo, string $nombreConcepto, string $nombreVendedor): bool
+    {
+        $esSirtac = $codigo === 611 || str_contains(strtoupper($nombreConcepto), 'SIRTAC');
+        if (! $esSirtac) {
+            return false;
+        }
+        $v = strtoupper($nombreVendedor);
+
+        return str_contains($v, 'FISE') || str_contains($v, 'MEDIO DE COBRO');
+    }
+
+    public static function destinoRubroLid(
+        int $codigo,
+        string $nombreConcepto,
+        string $tipo,
+        string $nombreVendedor = '',
+    ): string {
+        if (self::esRetencionMedioCobro($codigo, $nombreConcepto, $nombreVendedor)) {
+            return 'otros';
+        }
+
+        return match (strtoupper(trim($tipo))) {
+            'N' => 'no_integra',
+            'G' => 'gravado',
+            'I' => 'iva',
+            'E' => 'exento',
+            'P' => 'perc_iva',
+            'B', 'S' => 'perc_iibb',
+            'M' => 'perc_municipal',
+            'V', 'A' => 'perc_nacional',
+            'T' => 'imp_interno',
+            default => '',
+        };
     }
 
     /**
@@ -216,8 +270,9 @@ final class LibroIvaDigitalComprasImportesSupport
         }
 
         if (abs($ajusteNeto) > 0.001) {
-            $registro['cabecera']['no_integra_neto'] = round(
-                (float) ($registro['cabecera']['no_integra_neto'] ?? 0) + $ajusteNeto,
+            $campo = self::campoAjusteCabecera($registro);
+            $registro['cabecera'][$campo] = round(
+                (float) ($registro['cabecera'][$campo] ?? 0) + $ajusteNeto,
                 2,
             );
         }

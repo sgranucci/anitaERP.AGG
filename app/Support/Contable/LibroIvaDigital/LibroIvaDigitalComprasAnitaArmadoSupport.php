@@ -83,7 +83,12 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         $codigoMoneda = self::codigoMonedaAnita((string) ($compra['com_cod_mon'] ?? '1'));
         $cotizacion = (float) ($compra['com_cotizacion'] ?? 1);
         $coeficiente = self::coeficienteMoneda($codigoMoneda, $cotizacion);
-        $totales = self::desglosarConcmov($conceptos, $letra, $coeficiente);
+        $totales = self::desglosarConcmov(
+            $conceptos,
+            $letra,
+            $coeficiente,
+            trim((string) ($compra['com_nombre_prov'] ?? '')),
+        );
         $cuit = preg_replace('/\D+/', '', (string) ($compra['com_cuit_prov'] ?? '')) ?? '';
         $fechaIva = self::fechaYmdAnita((string) ($compra['com_fecha_iva'] ?? $compra['com_fecha'] ?? ''));
         if ($fechaIva === null) {
@@ -115,7 +120,7 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             'cantidad_alicuotas' => $totales['cantidad_alicuotas'],
             'codigo_operacion' => ' ',
             'credito_fiscal_computable' => $credito,
-            'otros_tributos' => 0,
+            'otros_tributos' => $totales['otros'] ?? 0,
             'cuit_emisor_corredor' => '0',
             'denominacion_emisor_corredor' => '',
             'iva_comision' => 0,
@@ -152,6 +157,7 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
      *     perc_iibb: float,
      *     perc_municipal: float,
      *     imp_interno: float,
+     *     otros: float,
      *     cantidad_alicuotas: int,
      *     credito_computable: float,
      *     alicuotas: list<array{neto: float, iva: float, tasa: float, codigo_lid: string, concepto_iva_simple: int}>
@@ -160,8 +166,12 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
     /**
      * @param  list<array{concepto: int, importe: float}>  $conceptos
      */
-    private static function desglosarConcmov(array $conceptos, string $letra, float $coeficiente = 1.0): array
-    {
+    private static function desglosarConcmov(
+        array $conceptos,
+        string $letra,
+        float $coeficiente = 1.0,
+        string $nombreVendedor = '',
+    ): array {
         $noIntegra = 0.0;
         $exento = 0.0;
         $percIva = 0.0;
@@ -169,6 +179,7 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         $percIibb = 0.0;
         $percMun = 0.0;
         $impInterno = 0.0;
+        $otros = 0.0;
         $coef = $coeficiente > 0.000001 ? $coeficiente : 1.0;
         /** @var array<string, array{neto: float, iva: float, tasa: float}> $alicuotas */
         $alicuotas = [];
@@ -188,21 +199,26 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             $tipo = strtoupper(trim((string) ($concepto->tipoconcepto ?? '')));
             $tasa = (float) ($concepto->impuestos?->valor ?? 0);
             $key = (string) round($tasa, 3);
-            $conceptoIvaSimple = LibroIvaDigitalConceptoIvacompraSupport::conceptoIvaSimpleDesdeNombre(
-                (string) ($concepto->nombre ?? ''),
+            $nombreConcepto = (string) ($concepto->nombre ?? '');
+            $conceptoIvaSimple = LibroIvaDigitalConceptoIvacompraSupport::conceptoIvaSimpleDesdeNombre($nombreConcepto);
+            $destino = LibroIvaDigitalComprasImportesSupport::destinoRubroLid(
+                $codigo,
+                $nombreConcepto,
+                $tipo,
+                $nombreVendedor,
             );
 
-            switch ($tipo) {
-                case 'N':
+            switch ($destino) {
+                case 'no_integra':
                     $noIntegra += $importe;
                     break;
-                case 'G':
+                case 'gravado':
                     $alicuotas[$key]['neto'] = ($alicuotas[$key]['neto'] ?? 0) + $importe;
                     $alicuotas[$key]['tasa'] = $tasa;
                     $alicuotas[$key]['iva'] = $alicuotas[$key]['iva'] ?? 0;
                     $alicuotas[$key]['concepto_iva_simple'] = $conceptoIvaSimple;
                     break;
-                case 'I':
+                case 'iva':
                     $alicuotas[$key]['iva'] = ($alicuotas[$key]['iva'] ?? 0) + $importe;
                     $alicuotas[$key]['tasa'] = $tasa;
                     $alicuotas[$key]['neto'] = $alicuotas[$key]['neto'] ?? 0;
@@ -210,23 +226,26 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
                         $alicuotas[$key]['concepto_iva_simple'] = $conceptoIvaSimple;
                     }
                     break;
-                case 'E':
+                case 'exento':
                     $exento += $importe;
                     break;
-                case 'P':
+                case 'perc_iva':
                     $percIva += $importe;
                     break;
-                case 'B':
-                case 'S':
+                case 'perc_iibb':
                     $percIibb += $importe;
                     break;
-                case 'M':
-                case 'V':
-                case 'A':
+                case 'perc_municipal':
+                    $percMun += $importe;
+                    break;
+                case 'perc_nacional':
                     $percNac += $importe;
                     break;
-                case 'T':
+                case 'imp_interno':
                     $impInterno += $importe;
+                    break;
+                case 'otros':
+                    $otros += $importe;
                     break;
             }
         }
@@ -272,6 +291,7 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
             'perc_iibb' => LibroIvaDigitalComprasImportesSupport::absolutoInformable($percIibb),
             'perc_municipal' => LibroIvaDigitalComprasImportesSupport::absolutoInformable($percMun),
             'imp_interno' => LibroIvaDigitalComprasImportesSupport::absolutoInformable($impInterno),
+            'otros' => $esC ? 0.0 : LibroIvaDigitalComprasImportesSupport::importeNeteado($otros),
             'cantidad_alicuotas' => $cantidad,
             'credito_computable' => $cantidad > 0 ? $credito : 0.0,
             'alicuotas' => $cantidad > 0 ? $filas : [],

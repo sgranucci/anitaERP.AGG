@@ -3,6 +3,7 @@
 namespace App\Support\Stock;
 
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Log;
 
 /**
  * Snapshot del informe de recepción de proveedores (file cache, no sesión).
@@ -13,12 +14,20 @@ final class RecepcionProveedorReporteCacheSupport
 
     private const TTL_HORAS = 2;
 
+    /** Snapshot en file cache: un año (~34k líneas) entra; más que esto no vale el pico de serialize. */
+    public const MAX_FILAS = 50000;
+
     /**
      * @param  array<string, mixed>  $filtros
      */
     public static function firma(array $filtros): string
     {
         return RecepcionProveedorReporteFiltros::firma($filtros);
+    }
+
+    public static function cabeEnCache(int $cantidadFilas): bool
+    {
+        return $cantidadFilas <= self::MAX_FILAS;
     }
 
     /**
@@ -45,12 +54,22 @@ final class RecepcionProveedorReporteCacheSupport
             $resultado['filas'] = [];
         }
 
-        Cache::store('file')->put(self::cacheKey($filtros), [
-            'firma' => $firma,
-            'resultado' => $resultado,
-        ], now()->addHours(self::TTL_HORAS));
+        if (! self::cabeEnCache(count($resultado['filas']))) {
+            return;
+        }
 
-        session()->put(self::SESSION_FIRMA_KEY, $firma);
+        try {
+            Cache::store('file')->put(self::cacheKey($filtros), [
+                'firma' => $firma,
+                'resultado' => $resultado,
+            ], now()->addHours(self::TTL_HORAS));
+            session()->put(self::SESSION_FIRMA_KEY, $firma);
+        } catch (\Throwable $e) {
+            Log::warning('RecepcionProveedorReporteCache: no se pudo guardar', [
+                'filas' => count($resultado['filas']),
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

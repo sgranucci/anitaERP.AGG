@@ -260,7 +260,7 @@ class LibroIvaDigitalComprasGenerador
             'cantidad_alicuotas' => $totales['cantidad_alicuotas'],
             'codigo_operacion' => ' ',
             'credito_fiscal_computable' => $credito,
-            'otros_tributos' => 0,
+            'otros_tributos' => $totales['otros'] ?? 0,
             'cuit_emisor_corredor' => '0',
             'denominacion_emisor_corredor' => '',
             'iva_comision' => 0,

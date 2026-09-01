@@ -35,6 +35,7 @@ final class LibroIvaDigitalConceptoIvacompraSupport
             'perc_municipal' => 0.0,
             'perc_nacional' => 0.0,
             'imp_interno' => 0.0,
+            'otros' => 0.0,
             'alicuotas' => [],
         ];
 
@@ -69,6 +70,7 @@ final class LibroIvaDigitalConceptoIvacompraSupport
         $resultado['perc_municipal'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['perc_municipal']);
         $resultado['perc_nacional'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['perc_nacional']);
         $resultado['imp_interno'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['imp_interno']);
+        $resultado['otros'] = LibroIvaDigitalComprasImportesSupport::importeNeteado((float) ($resultado['otros'] ?? 0));
 
         $esC = strtoupper($letra) === 'C';
         $cantidad = $esC ? 0 : count($filasAlicuota);

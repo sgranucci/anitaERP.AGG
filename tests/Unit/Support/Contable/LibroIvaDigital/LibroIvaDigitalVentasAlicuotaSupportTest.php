@@ -559,6 +559,32 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         );
     }
 
+    public function test_sirtac_de_medio_de_cobro_va_a_otros_tributos(): void
+    {
+        $this->assertTrue(
+            LibroIvaDigitalComprasImportesSupport::esRetencionMedioCobro(
+                611,
+                'RETENCIONES SIRTAC',
+                'MEDIO DE COBRO FISE 15101/0',
+            ),
+        );
+        $this->assertFalse(
+            LibroIvaDigitalComprasImportesSupport::esRetencionMedioCobro(
+                611,
+                'RETENCIONES SIRTAC',
+                'BANCO MACRO NUEVAS',
+            ),
+        );
+        $this->assertSame(
+            'otros',
+            LibroIvaDigitalComprasImportesSupport::destinoRubroLid(611, 'RETENCIONES SIRTAC', 'N', 'MEDIO DE COBRO FISE'),
+        );
+        $this->assertSame(
+            'no_integra',
+            LibroIvaDigitalComprasImportesSupport::destinoRubroLid(611, 'RETENCIONES SIRTAC', 'N', 'BANCO MACRO'),
+        );
+    }
+
     public function test_redondeo_dolar_por_cotizacion_ajusta_neto_y_cierra_21(): void
     {
         $neto = round(48.27 * 1495, 2);
@@ -599,7 +625,7 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         ]);
 
         $this->assertEqualsWithDelta(100.0, $registro['alicuotas'][0]['neto_gravado'], 0.001);
-        $this->assertEqualsWithDelta(0.05, $registro['cabecera']['no_integra_neto'], 0.001);
+        $this->assertEqualsWithDelta(0.05, $registro['cabecera']['otros_tributos'], 0.001);
         $this->assertEqualsWithDelta(
             0.0,
             LibroIvaDigitalComprasImportesSupport::residualCabecera($registro['cabecera'], $registro['alicuotas']),

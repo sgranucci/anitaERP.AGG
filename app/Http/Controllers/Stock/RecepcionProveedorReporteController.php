@@ -18,6 +18,9 @@ class RecepcionProveedorReporteController extends Controller
 
     private const PER_PAGE = 25;
 
+    /** DomPDF no bancá un año de líneas; Excel/CSV sí. */
+    private const MAX_FILAS_PDF = 2500;
+
     public function __construct(
         private RecepcionProveedorReporteService $service,
         private EmpresaRepositoryInterface $empresaRepository,
@@ -40,7 +43,7 @@ class RecepcionProveedorReporteController extends Controller
         $filas = null;
 
         if ($consultado) {
-            ini_set('memory_limit', '512M');
+            ini_set('memory_limit', '-1');
             ini_set('max_execution_time', '300');
 
             ReportePreferenciasUsuario::persistir(self::PREFERENCIAS_CLAVE, [
@@ -122,6 +125,18 @@ class RecepcionProveedorReporteController extends Controller
 
         switch (strtoupper((string) $formato)) {
             case 'PDF':
+                $cantidadFilas = $filas instanceof \Illuminate\Support\Collection
+                    ? $filas->count()
+                    : (is_countable($filas) ? count($filas) : 0);
+                if ($cantidadFilas > self::MAX_FILAS_PDF) {
+                    return redirect()
+                        ->route('reporte_recepcion_proveedor', RecepcionProveedorReporteFiltros::paraQueryString($filtros))
+                        ->with(
+                            'mensaje-aviso',
+                            'El PDF no admite '.$cantidadFilas.' filas (máximo '.self::MAX_FILAS_PDF
+                            .'). Bajá el año en Excel o CSV.'
+                        );
+                }
                 $view = \View::make('stock.recepcion_proveedor_reporte.listado', [
                     'filas' => $filas,
                     'totales' => $totales,
@@ -192,7 +207,7 @@ class RecepcionProveedorReporteController extends Controller
         $resultado = $this->service->generar($filtros);
         RecepcionProveedorReporteCacheSupport::guardar($filtros, $resultado);
 
-        return RecepcionProveedorReporteCacheSupport::recuperar($filtros) ?? $resultado;
+        return $resultado;
     }
 
     /**

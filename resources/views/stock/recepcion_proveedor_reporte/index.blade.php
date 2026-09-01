@@ -42,6 +42,7 @@
                         Movimientos de mercader&iacute;a recibida de proveedores (COM), con cruce contra OC, requisici&oacute;n,
                         factura ERP y diferencias de cantidad/precio.
                         El per&iacute;odo por defecto es de 90 d&iacute;as.
+                        Un a&ntilde;o completo (p. ej. 2025) puede tardar alrededor de un minuto; bajalo en Excel o CSV, no en PDF.
                         Incluye qui&eacute;n pidi&oacute; y qui&eacute;n aprob&oacute; la requisici&oacute;n de la OC.
                         Las fechas anteriores al primer COM del ERP se leen de Anita en una sola consulta (sin importar).
                         Las filas en amarillo tienen diferencias; en celeste, precio pendiente de aprobaci&oacute;n.
