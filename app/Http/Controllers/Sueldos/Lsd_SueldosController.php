@@ -147,7 +147,11 @@ class Lsd_SueldosController extends Controller
     {
         can('generar-lsd-sueldos');
         $empresaId = (int) $request->input('empresa_id');
-        $periodo = (int) $request->input('periodo');
+        $periodo = LsdTipoLiquidacionSupport::parsePeriodo(
+            $request->input('periodo'),
+            $request->input('periodo_mes_num'),
+            $request->input('periodo_anio')
+        );
         if ($empresaId <= 0 || $periodo < 200001) {
             return response()->json([]);
         }

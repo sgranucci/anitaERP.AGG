@@ -1,6 +1,6 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-    LSD {{ $p->periodo }} / {{ $p->nro_liquidacion_afip }}
+    LSD {{ $p->periodoLabel() }} / {{ $p->nro_liquidacion_afip }}
 @endsection
 
 @section('contenido')
@@ -16,7 +16,7 @@
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">
-                    Presentación LSD {{ $p->periodo }} · nro. AFIP {{ $p->nro_liquidacion_afip }}
+                    Presentación LSD {{ $p->periodoLabel() }} · nro. AFIP {{ $p->nro_liquidacion_afip }}
                     ({{ $p->identificacion }})
                 </h3>
                 <div class="card-tools">

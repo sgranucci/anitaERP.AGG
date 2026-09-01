@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Contable;
 
+use App\Exports\Contable\MayorPlanoCuentaExcelPlanoExport;
 use App\Exports\Contable\MayorPlanoCuentaExport;
 use App\Exports\Contable\MayorPlanoCuentaMultiExport;
 use App\Http\Controllers\Controller;
@@ -160,13 +161,21 @@ class MayorPlanoCuentaController extends Controller
 
         // Reutilizar resultado de pantalla (evita regenerar Anita al exportar).
         $resultado = $this->obtenerResultado($filtros);
+        $formatoNorm = strtoupper($formato);
+
+        if ($formatoNorm === 'EXCEL_PLANO') {
+            return (new MayorPlanoCuentaExcelPlanoExport($this->reporteService))
+                ->parametros($filtros, $resultado)
+                ->download($this->armarNombreArchivoExport($filtros, 'xlsx', 'mayor_plano_anita'));
+        }
+
         $filas = $this->reporteService->aplanarFilas($resultado, $filtros, true);
         $resumen = $this->reporteService->resumenPorCuenta($resultado);
         $totales = $this->armarTotalesDesdeResultado($resultado);
         $titulo = 'Mayor analítico por cuenta contable';
         $subtitulo = $this->armarSubtituloExport($filtros);
 
-        switch (strtoupper($formato)) {
+        switch ($formatoNorm) {
             case 'PDF':
                 if (count($filtros['empresa_ids'] ?? []) > 1 && empty($filtros['consolidar_empresas'])) {
                     return $this->descargarPdfPorEmpresa($filtros, $resultado);
@@ -615,7 +624,7 @@ class MayorPlanoCuentaController extends Controller
      *
      * @param  array<string, mixed>  $filtros
      */
-    private function armarNombreArchivoExport(array $filtros, string $extension): string
+    private function armarNombreArchivoExport(array $filtros, string $extension, string $prefijo = 'mayor_analitico_cuenta'): string
     {
         $periodo = '';
         if (($filtros['modo_periodo'] ?? 'mes') === 'mes') {
@@ -644,7 +653,7 @@ class MayorPlanoCuentaController extends Controller
         }
 
         $partes = array_filter([
-            'mayor_analitico_cuenta',
+            $prefijo !== '' ? $prefijo : 'mayor_analitico_cuenta',
             $periodo,
             $empPart,
             date('His'),

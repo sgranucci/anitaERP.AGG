@@ -10,13 +10,22 @@
 <script src="{{asset("assets/pages/scripts/sueldos/lsd/form.js")}}?v={{ @filemtime(public_path('assets/pages/scripts/sueldos/lsd/form.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
-<?php use App\Support\Sueldos\LsdPresentacionListadoFiltros; ?>
+<?php
+    use App\Support\Sueldos\Lsd\LsdTipoLiquidacionSupport;
+    use App\Support\Sueldos\LsdPresentacionListadoFiltros;
+?>
 
 @section('contenido')
 @php
     $unaEmpresa = ($empresa_query ?? collect())->count() === 1;
     $empresaSel = $filtros['empresa_id'] ?? optional(($empresa_query ?? collect())->first())->id;
-    $periodoDefault = $filtros['periodo'] ?? (int) date('Ym');
+    $periodoDefault = LsdTipoLiquidacionSupport::parsePeriodo($filtros['periodo'] ?? null) ?: (int) date('Ym');
+    $periodoMes = $periodoDefault % 100;
+    $periodoAnio = intdiv($periodoDefault, 100);
+    $periodoLabel = LsdTipoLiquidacionSupport::labelPeriodo($periodoDefault);
+    $mesesPeriodo = LsdTipoLiquidacionSupport::mesesNombres();
+    $anioMinPeriodo = 2000;
+    $anioMaxPeriodo = (int) date('Y') + 1;
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -87,7 +96,7 @@
                     <li>Importar cada TXT en ARCA y marcar presentada. No se regenera una presentada (usar RE).</li>
                 </ol>
                 @if (($wizard['liquidaciones'] ?? []) !== [])
-                    <p class="small text-muted mb-1">Cerradas del período {{ $periodoDefault }} (orden ARCA):</p>
+                    <p class="small text-muted mb-1">Cerradas del período {{ $periodoLabel }} (orden ARCA):</p>
                     <ul class="small mb-0">
                         @foreach ($wizard['liquidaciones'] as $wl)
                             <li>
@@ -129,12 +138,30 @@
                                 </select>
                             @endif
                         </div>
-                        <div class="form-group col-md-2">
-                            <label class="small mb-1" for="periodo_generar">Período AAAAMM</label>
-                            <input type="number" id="periodo_generar" class="form-control form-control-sm" min="200001" max="209912"
-                                   value="{{ $periodoDefault }}" required>
+                        <div class="form-group col-md-3">
+                            <label class="small mb-1" for="periodo_mes_num">Período</label>
+                            <div class="form-row">
+                                <div class="col-7">
+                                    <select id="periodo_mes_num" class="form-control form-control-sm" required
+                                            title="Mes del período" aria-label="Mes del período">
+                                        @foreach ($mesesPeriodo as $num => $nombre)
+                                            <option value="{{ $num }}" @selected($periodoMes === $num)>
+                                                {{ sprintf('%02d', $num) }} — {{ $nombre }}
+                                            </option>
+                                        @endforeach
+                                    </select>
+                                </div>
+                                <div class="col-5">
+                                    <select id="periodo_anio" class="form-control form-control-sm" required
+                                            title="Año del período" aria-label="Año del período">
+                                        @for ($y = $anioMaxPeriodo; $y >= $anioMinPeriodo; $y--)
+                                            <option value="{{ $y }}" @selected($periodoAnio === $y)>{{ $y }}</option>
+                                        @endfor
+                                    </select>
+                                </div>
+                            </div>
                         </div>
-                        <div class="form-group col-md-4">
+                        <div class="form-group col-md-3">
                             <label class="small mb-1" for="liquidacion_id">Liquidación cerrada</label>
                             <select name="liquidacion_id" id="liquidacion_id" class="form-control form-control-sm" required>
                                 <option value="">Seleccione período…</option>
@@ -225,7 +252,9 @@
                                 <select name="filtro_periodo" id="filtro_periodo" class="form-control form-control-sm">
                                     <option value="">Todos</option>
                                     @foreach ($periodos as $per)
-                                        <option value="{{ $per }}" {{ (int) ($filtros['periodo'] ?? 0) === (int) $per ? 'selected' : '' }}>{{ $per }}</option>
+                                        <option value="{{ $per }}" {{ (int) ($filtros['periodo'] ?? 0) === (int) $per ? 'selected' : '' }}>
+                                            {{ LsdTipoLiquidacionSupport::labelPeriodo($per) }}
+                                        </option>
                                     @endforeach
                                 </select>
                             </div>
@@ -267,7 +296,7 @@
                         <tbody>
                             @forelse ($datas as $p)
                                 <tr>
-                                    <td>{{ $p->periodo }}</td>
+                                    <td>{{ $p->periodoLabel() }}</td>
                                     <td>{{ $p->nro_liquidacion_afip }}</td>
                                     <td>{{ $p->identificacion }}</td>
                                     <td>

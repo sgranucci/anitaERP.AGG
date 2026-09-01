@@ -337,14 +337,14 @@
     <div class="card-body pb-2">
         <p class="text-muted small mb-2">
             Si el trabajador cambia de situación en el mes (egreso, licencia, reingreso), cargue código AFIP y día de inicio.
-            Período AAAAMM vacío = aplica a todos los períodos. Sin filas se usa la situación SIJP del legajo desde el día 1.
+            Período vacío = aplica a todos los períodos. Sin filas se usa la situación SIJP del legajo desde el día 1.
         </p>
         <div class="table-responsive">
             <table class="table table-sm table-bordered mb-0">
                 <thead style="background:#85C1E9;color:#17202A;">
                     <tr>
                         <th style="width:70px;">Nro</th>
-                        <th style="width:140px;">Período AAAAMM</th>
+                        <th style="width:180px;">Período</th>
                         <th>Situación AFIP</th>
                         <th style="width:120px;">Día inicio</th>
                     </tr>
@@ -357,9 +357,18 @@
                                 <input type="hidden" name="lsd_revista[{{ $i }}][id]" value="{{ $rev['id'] ?? '' }}">
                             </td>
                             <td>
-                                <input type="number" name="lsd_revista[{{ $i }}][periodo]" class="form-control form-control-sm"
-                                       min="200001" max="209912" placeholder="Todos"
-                                       value="{{ $rev['periodo'] ?? '' }}">
+                                @php
+                                    $revPer = (int) ($rev['periodo'] ?? 0);
+                                    $revPeriodoMes = $revPer >= 200001
+                                        ? sprintf('%04d-%02d', intdiv($revPer, 100), $revPer % 100)
+                                        : (string) ($rev['periodo'] ?? '');
+                                    if ($revPeriodoMes !== '' && ! preg_match('/^\d{4}-\d{2}$/', $revPeriodoMes)) {
+                                        $revPeriodoMes = '';
+                                    }
+                                @endphp
+                                <input type="month" name="lsd_revista[{{ $i }}][periodo]" class="form-control form-control-sm"
+                                       min="2000-01" max="2099-12" title="Vacío = todos los períodos"
+                                       value="{{ $revPeriodoMes }}">
                             </td>
                             <td>
                                 <input type="text" name="lsd_revista[{{ $i }}][situacion]" class="form-control form-control-sm"

@@ -16,34 +16,6 @@
     });
     togglePeriodo();
 
-    var form = document.getElementById('form-mayor-plano-cuenta');
-    var overlay = document.getElementById('mayor-plano-cuenta-overlay');
-    function ocultarOverlay() {
-        if (!overlay) {
-            return;
-        }
-        overlay.classList.add('d-none');
-        overlay.style.display = '';
-        overlay.setAttribute('aria-hidden', 'true');
-    }
-    if (form) {
-        form.addEventListener('submit', function () {
-            if (!form.checkValidity()) {
-                return;
-            }
-            var btn = document.getElementById('btn-consultar');
-            if (btn) {
-                btn.disabled = true;
-                btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Procesando…';
-            }
-            if (overlay) {
-                overlay.classList.remove('d-none');
-                overlay.style.display = 'flex';
-                overlay.setAttribute('aria-hidden', 'false');
-            }
-        });
-    }
-    window.addEventListener('pageshow', ocultarOverlay);
 })();
 </script>
 <meta name="csrf-token" content="{{ csrf_token() }}">
@@ -85,6 +57,7 @@
 
                     <p class="text-muted small mb-2">
                         Defina el período y combine cuentas puntuales o por rango. Los centros de costo pueden filtrar el mayor sin cambiar su clasificación.
+                        El <strong>Excel plano</strong> (formato Anita) sale después de consultar: una fila por movimiento, por cuenta o por centro de costo. La columna de OC resume qué se compró (ítems; IA si está habilitada). Las facturas van en una sola celda; no se lista la COM.
                     </p>
 
                     @include('includes.reportes.asignacion_empresas_checkboxes', [
@@ -288,7 +261,7 @@
                     </div>
 
                     @if (empty($solo_totales_ventas))
-                    <form method="get" action="{{ route('mayor_plano_cuenta') }}" class="px-3 py-2 border-bottom bg-light">
+                    <form method="get" action="{{ route('mayor_plano_cuenta') }}" id="form-mayor-plano-cuenta-filtro" class="px-3 py-2 border-bottom bg-light">
                         @foreach ($filtrosQuery ?? [] as $key => $val)
                             @if (is_array($val))
                                 @foreach ($val as $v)
@@ -318,11 +291,19 @@
                     @endif
 
                     <div class="d-flex flex-wrap align-items-center justify-content-between px-3 py-2 border-bottom bg-light">
-                        <div class="mb-1 mb-md-0">
+                        <div class="mb-1 mb-md-0" id="mayor-plano-cuenta-exportar">
                             @include('includes.exportar-tabla-queryparams', [
                                 'ruta' => 'listar_mayor_plano_cuenta',
                                 'queryparams' => $filtrosQuery ?? [],
                             ])
+                            @php
+                                $paramsPlano = array_filter($filtrosQuery ?? [], fn ($v) => $v !== null && $v !== '');
+                                $suffixPlano = count($paramsPlano) ? '?'.http_build_query($paramsPlano) : '';
+                            @endphp
+                            <a href="{{ route('listar_mayor_plano_cuenta', ['formato' => 'EXCEL_PLANO']).$suffixPlano }}"
+                                class="btn btn-app bg-info" title="Una fila por movimiento, con observación de OC y facturas (formato Anita)">
+                                <i class="fas fa-file-excel"></i> Excel plano
+                            </a>
                         </div>
                         <div class="small mb-1 mb-md-0 text-md-right">
                             <span class="text-muted">Totales filtro:</span>

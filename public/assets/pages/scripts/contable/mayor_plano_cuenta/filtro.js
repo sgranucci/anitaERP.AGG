@@ -717,4 +717,226 @@ $(function () {
         }
     });
     mayorPlanoActualizarExcelSolapasSeparadas();
+    mayorPlanoActivarOverlayProceso();
 });
+
+var MAYOR_PLANO_OVERLAY_ID = 'mayor-plano-cuenta-overlay';
+var MAYOR_PLANO_TITULO_ID = 'mayor-plano-cuenta-overlay-titulo';
+var MAYOR_PLANO_SUBTITULO_ID = 'mayor-plano-cuenta-overlay-subtitulo';
+
+function mayorPlanoMostrarOverlay(titulo, subtitulo) {
+    var overlay = document.getElementById(MAYOR_PLANO_OVERLAY_ID);
+    if (!overlay) {
+        return;
+    }
+    var tituloEl = document.getElementById(MAYOR_PLANO_TITULO_ID);
+    var subtituloEl = document.getElementById(MAYOR_PLANO_SUBTITULO_ID);
+    if (tituloEl && titulo) {
+        tituloEl.textContent = titulo;
+    }
+    if (subtituloEl && subtitulo) {
+        subtituloEl.textContent = subtitulo;
+    }
+    overlay.classList.remove('d-none');
+    overlay.style.display = 'flex';
+    overlay.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+    window.__mayorPlanoOverlayShownAt = Date.now();
+}
+
+function mayorPlanoOcultarOverlay() {
+    var overlay = document.getElementById(MAYOR_PLANO_OVERLAY_ID);
+    if (!overlay) {
+        return;
+    }
+    if (window.__mayorPlanoExportSafetyTimer) {
+        clearTimeout(window.__mayorPlanoExportSafetyTimer);
+        window.__mayorPlanoExportSafetyTimer = null;
+    }
+    overlay.classList.add('d-none');
+    overlay.style.display = '';
+    overlay.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+}
+
+function mayorPlanoEsUrlExportacion(href) {
+    if (!href || href === '#' || String(href).indexOf('javascript:') === 0) {
+        return false;
+    }
+    try {
+        return new URL(href, window.location.origin).pathname.toLowerCase().indexOf('listar-mayor-plano-cuenta') !== -1;
+    } catch (e) {
+        return String(href).toLowerCase().indexOf('listar-mayor-plano-cuenta') !== -1;
+    }
+}
+
+function mayorPlanoFormatoExportacion(href) {
+    var lower = String(href).toLowerCase();
+    if (lower.indexOf('/excel_plano') !== -1) {
+        return 'Excel plano';
+    }
+    if (lower.indexOf('/excel') !== -1) {
+        return 'Excel';
+    }
+    if (lower.indexOf('/pdf') !== -1) {
+        return 'PDF';
+    }
+    if (lower.indexOf('/csv') !== -1) {
+        return 'CSV';
+    }
+
+    return 'archivo';
+}
+
+function mayorPlanoNombreArchivoDisposition(disposition, fallback) {
+    if (!disposition) {
+        return fallback;
+    }
+    var match = /filename\*=UTF-8''([^;]+)|filename="([^"]+)"|filename=([^;]+)/i.exec(disposition);
+    if (!match) {
+        return fallback;
+    }
+    var raw = (match[1] || match[2] || match[3] || '').trim();
+    try {
+        return decodeURIComponent(raw.replace(/['"]/g, ''));
+    } catch (e) {
+        return raw.replace(/['"]/g, '') || fallback;
+    }
+}
+
+function mayorPlanoDispararDescargaBlob(blob, filename) {
+    var url = window.URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename || 'mayor';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.setTimeout(function () {
+        window.URL.revokeObjectURL(url);
+    }, 1500);
+}
+
+function mayorPlanoDescargarExportacion(href) {
+    var formato = mayorPlanoFormatoExportacion(href);
+    var subtitulo = formato === 'Excel plano'
+        ? 'Armando Excel plano con el mayor ya consultado. Pulse Esc para cerrar este aviso.'
+        : 'Generando ' + formato + '… Puede demorar según el período. Pulse Esc para cerrar este aviso.';
+
+    mayorPlanoMostrarOverlay('Exportando el mayor…', subtitulo);
+
+    if (window.__mayorPlanoExportAbort) {
+        try {
+            window.__mayorPlanoExportAbort.abort();
+        } catch (e) {}
+    }
+    var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+    window.__mayorPlanoExportAbort = controller;
+
+    if (window.__mayorPlanoExportSafetyTimer) {
+        clearTimeout(window.__mayorPlanoExportSafetyTimer);
+    }
+    window.__mayorPlanoExportSafetyTimer = setTimeout(mayorPlanoOcultarOverlay, 600000);
+
+    fetch(href, {
+        method: 'GET',
+        credentials: 'same-origin',
+        signal: controller ? controller.signal : undefined,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            Accept: '*/*',
+        },
+    }).then(function (res) {
+        if (res.status === 419) {
+            throw new Error('Sesión expirada. Recargue la página (F5) e intente de nuevo.');
+        }
+        if (res.redirected && res.url && res.url.toLowerCase().indexOf('listar-mayor-plano-cuenta') === -1) {
+            throw new Error('No se pudo generar la exportación. Verifique los filtros y vuelva a consultar.');
+        }
+        if (!res.ok) {
+            throw new Error('Error HTTP ' + res.status + ' al exportar.');
+        }
+        var fallback = 'mayor_plano';
+        if (formato === 'Excel' || formato === 'Excel plano') {
+            fallback += '.xlsx';
+        } else if (formato === 'PDF') {
+            fallback += '.pdf';
+        } else if (formato === 'CSV') {
+            fallback += '.csv';
+        }
+        var filename = mayorPlanoNombreArchivoDisposition(res.headers.get('Content-Disposition'), fallback);
+
+        return res.blob().then(function (blob) {
+            return { blob: blob, filename: filename };
+        });
+    }).then(function (pack) {
+        if (!pack || !pack.blob || pack.blob.size === 0) {
+            throw new Error('La exportación vino vacía. Reintente.');
+        }
+        if (pack.blob.type && pack.blob.type.indexOf('text/html') !== -1) {
+            throw new Error('La sesión o el permiso fallaron al exportar. Recargue e intente de nuevo.');
+        }
+        mayorPlanoDispararDescargaBlob(pack.blob, pack.filename);
+        mayorPlanoOcultarOverlay();
+    }).catch(function (err) {
+        mayorPlanoOcultarOverlay();
+        if (err && err.name === 'AbortError') {
+            return;
+        }
+        window.alert(err && err.message ? err.message : 'No se pudo descargar la exportación.');
+    }).finally(function () {
+        if (window.__mayorPlanoExportSafetyTimer) {
+            clearTimeout(window.__mayorPlanoExportSafetyTimer);
+            window.__mayorPlanoExportSafetyTimer = null;
+        }
+        window.__mayorPlanoExportAbort = null;
+    });
+}
+
+function mayorPlanoActivarOverlayProceso() {
+    ['form-mayor-plano-cuenta', 'form-mayor-plano-cuenta-filtro'].forEach(function (id) {
+        var form = document.getElementById(id);
+        if (!form) {
+            return;
+        }
+        form.addEventListener('submit', function () {
+            if (!form.checkValidity()) {
+                return;
+            }
+            if (id === 'form-mayor-plano-cuenta') {
+                var btn = document.getElementById('btn-consultar');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.innerHTML = '<i class="fa fa-spinner fa-spin"></i> Procesando…';
+                }
+            }
+            mayorPlanoMostrarOverlay(
+                'Calculando el mayor…',
+                'Puede demorar según el período y las empresas. No cierre la página.'
+            );
+        });
+    });
+
+    document.addEventListener('click', function (event) {
+        var enlace = event.target && event.target.closest ? event.target.closest('a[href]') : null;
+        if (!enlace || enlace.target === '_blank') {
+            return;
+        }
+        var href = enlace.getAttribute('href') || enlace.href || '';
+        if (!mayorPlanoEsUrlExportacion(href)) {
+            return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        mayorPlanoDescargarExportacion(href);
+    }, true);
+
+    window.addEventListener('pageshow', mayorPlanoOcultarOverlay);
+    window.addEventListener('pagehide', mayorPlanoOcultarOverlay);
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+            mayorPlanoOcultarOverlay();
+        }
+    });
+}

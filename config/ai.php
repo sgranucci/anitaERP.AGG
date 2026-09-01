@@ -142,6 +142,16 @@ return [
             'auto_aplicar_score' => (float) env('AI_SKILL_SUGERIR_PEDIDO_CONSUMO_SECTOR_AUTO_SCORE', 0),
             'driver' => null,
         ],
+
+        // Excel plano del mayor: frase de qué se compró a partir de ítems de la OC
+        'resumir_compra_ordencompra' => [
+            'habilitada' => filter_var(env('AI_SKILL_RESUMIR_COMPRA_ORDENCOMPRA', true), FILTER_VALIDATE_BOOLEAN),
+            'permiso' => 'listar-mayor-plano-cuenta',
+            'auto_aplicar_score' => 0,
+            'driver' => null,
+            'timeout' => (int) env('AI_SKILL_RESUMIR_COMPRA_ORDENCOMPRA_TIMEOUT', 40),
+            'lote' => (int) env('AI_SKILL_RESUMIR_COMPRA_ORDENCOMPRA_LOTE', 12),
+        ],
     ],
 
     /*

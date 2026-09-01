@@ -69,22 +69,39 @@
     }
 
     var empresa = document.getElementById('empresa_id');
-    var periodo = document.getElementById('periodo_generar');
+    var periodoMes = document.getElementById('periodo_mes_num');
+    var periodoAnio = document.getElementById('periodo_anio');
     var selectLiq = document.getElementById('liquidacion_id');
     var fechaPago = document.getElementById('fecha_pago');
+
+    function periodoYyyymm() {
+        var mes = periodoMes ? String(periodoMes.value || '') : '';
+        var anio = periodoAnio ? String(periodoAnio.value || '') : '';
+        if (!/^\d{4}$/.test(anio) || !/^\d{1,2}$/.test(mes)) {
+            return '';
+        }
+        var m = parseInt(mes, 10);
+        if (m < 1 || m > 12) {
+            return '';
+        }
+        return anio + (m < 10 ? '0' : '') + String(m);
+    }
 
     function cargarLiquidaciones() {
         if (!selectLiq || !window.lsdLiquidacionesUrl) {
             return;
         }
         var empId = empresa ? empresa.value : '';
-        var per = periodo ? periodo.value : '';
+        var per = periodoYyyymm();
         selectLiq.innerHTML = '<option value="">Cargando…</option>';
         if (!empId || !per) {
             selectLiq.innerHTML = '<option value="">Seleccione período…</option>';
             return;
         }
-        var url = window.lsdLiquidacionesUrl + '?empresa_id=' + encodeURIComponent(empId) + '&periodo=' + encodeURIComponent(per);
+        var url = window.lsdLiquidacionesUrl + '?empresa_id=' + encodeURIComponent(empId)
+            + '&periodo=' + encodeURIComponent(per)
+            + '&periodo_mes_num=' + encodeURIComponent(periodoMes ? periodoMes.value : '')
+            + '&periodo_anio=' + encodeURIComponent(periodoAnio ? periodoAnio.value : '');
         fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } })
             .then(function (r) { return r.json(); })
             .then(function (filas) {
@@ -124,9 +141,11 @@
     if (empresa) {
         empresa.addEventListener('change', cargarLiquidaciones);
     }
-    if (periodo) {
-        periodo.addEventListener('change', cargarLiquidaciones);
-        periodo.addEventListener('blur', cargarLiquidaciones);
+    if (periodoMes) {
+        periodoMes.addEventListener('change', cargarLiquidaciones);
+    }
+    if (periodoAnio) {
+        periodoAnio.addEventListener('change', cargarLiquidaciones);
     }
     cargarLiquidaciones();
 })();

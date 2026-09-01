@@ -154,7 +154,7 @@ return [
                 ['titulo' => 'Detalle de la presentación', 'clave' => 'lsd_ver'],
             ],
             'parrafos' => [
-                'En Generar liquidación elija empresa, período AAAAMM (ejemplo 202607) y la liquidación cerrada. El nro. AFIP lo sugiere el sistema (el siguiente libre de esa empresa y período); puede cambiarlo si ARCA ya usó ese número. Fecha de pago y rúbrica son las que pide el organismo. El tilde Incluir licencias sin recibo agrega empleados de licencia que no tienen recibo en esa liquidación (solo registro 04).',
+                'En Generar liquidación elija empresa, mes y año del período (ejemplo julio 2026) y la liquidación cerrada. El nro. AFIP lo sugiere el sistema (el siguiente libre de esa empresa y período); puede cambiarlo si ARCA ya usó ese número. Fecha de pago y rúbrica son las que pide el organismo. El tilde Incluir licencias sin recibo agrega empleados de licencia que no tienen recibo en esa liquidación (solo registro 04).',
                 'Al generar, el sistema arma los registros 01 (cabecera), 02 (trabajador), 03 (conceptos del recibo), 04 (bases F.931), 05 y 06 si correspondan. Después puede previsualizar, bajar el TXT e importarlo en ARCA. El PDF del libro y el F.931 los emite el organismo, no el ERP.',
             ],
             'tabla' => [
@@ -181,7 +181,7 @@ return [
                 'caption' => 'Caso A — Liquidación final de julio (tipo E)',
                 'headers' => ['Dato', 'Valor', 'Qué tiene que pasar'],
                 'rows' => [
-                    ['Liquidación', 'Nº 4 · LIQ.FINAL 07-26 · empresa Biyemas', 'Cerrada. Aparece en el combo al elegir período 202607.'],
+                    ['Liquidación', 'Nº 4 · LIQ.FINAL 07-26 · empresa Biyemas', 'Cerrada. Aparece en el combo al elegir julio 2026.'],
                     ['Tipo ARCA', 'E (especial)', 'Hay que generarla antes que la mensual de julio.'],
                     ['Trabajadores', '11 recibos', 'El 04 tiene 11 líneas.'],
                     ['Días', '31 (el motor usa 30)', 'Detracción llena: $ 7.003,68 a cada uno.'],
@@ -215,7 +215,7 @@ return [
                 'caption' => 'Síntoma y qué mirar',
                 'headers' => ['Qué se ve', 'Causa habitual', 'Qué hacer'],
                 'rows' => [
-                    ['No aparece la liquidación en el combo', 'Sigue abierta, o la empresa / período no coinciden.', 'Cerrar la liquidación. Período AAAAMM = año y mes de la liq.'],
+                    ['No aparece la liquidación en el combo', 'Sigue abierta, o la empresa / período no coinciden.', 'Cerrar la liquidación. El período es el mes y año de la liq.'],
                     ['Bloquea la mensual', 'Hay una E del mismo período con recibos y sin TXT.', 'Generar primero esa E, o verificar que no tenga recibos.'],
                     ['ARCA no reconoce un concepto', 'Falta el TXT de conceptos o el código AFIP.', 'Ver cobertura → editar el concepto → reexportar conceptos.'],
                     ['CUIT / CUIL inválido', 'Empresa sin nro. de inscripción, o CUIL del empleado incompleto.', 'Ficha empresa y ficha empleado. 11 dígitos.'],

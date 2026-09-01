@@ -4,6 +4,7 @@ namespace App\Models\Sueldos;
 
 use App\Models\Configuracion\Empresa;
 use App\Models\Seguridad\Usuario;
+use App\Support\Sueldos\Lsd\LsdTipoLiquidacionSupport;
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -92,6 +93,11 @@ class Lsd_Presentacion_Sueldos extends Model implements Auditable
     public function estadoLabel(): string
     {
         return self::ESTADOS[$this->estado] ?? (string) $this->estado;
+    }
+
+    public function periodoLabel(): string
+    {
+        return LsdTipoLiquidacionSupport::labelPeriodo($this->periodo);
     }
 
     public function getNombreempresaAttribute(): string

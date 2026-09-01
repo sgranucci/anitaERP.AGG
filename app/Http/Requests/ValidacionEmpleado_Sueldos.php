@@ -115,12 +115,24 @@ class ValidacionEmpleado_Sueldos extends FormRequest
 
     protected function prepareForValidation(): void
     {
+        $revistas = $this->input('lsd_revista', []);
+        if (is_array($revistas)) {
+            foreach ($revistas as $i => $fila) {
+                if (! is_array($fila)) {
+                    continue;
+                }
+                $raw = preg_replace('/\D+/', '', (string) ($fila['periodo'] ?? '')) ?? '';
+                $revistas[$i]['periodo'] = strlen($raw) === 6 ? (int) $raw : null;
+            }
+        }
+
         $this->merge([
             'confidencial' => $this->boolean('confidencial'),
             'lsd_legajo_principal' => $this->boolean('lsd_legajo_principal'),
             'lsd_cct' => $this->boolean('lsd_cct'),
             'lsd_scvo' => $this->boolean('lsd_scvo'),
             'cuil' => preg_replace('/\D+/', '', (string) $this->input('cuil', '')) ?: null,
+            'lsd_revista' => $revistas,
         ]);
     }
 }

@@ -8,6 +8,8 @@ use App\Support\Contable\MayorConceptoListadoFiltros;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaComprobanteEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCentrocostoFiltroSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaEmisorEnricher;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaExcelPlanoEnricher;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaExcelPlanoSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaOrdencompraEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaProcesador;
 use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
@@ -26,6 +28,7 @@ class MayorPlanoCuentaReporteService
         private readonly MayorPlanoCuentaOrdencompraEnricher $ordencompraEnricher,
         private readonly MayorPlanoCuentaEmisorEnricher $emisorEnricher,
         private readonly MayorPlanoCuentaComprobanteEnricher $comprobanteEnricher,
+        private readonly MayorPlanoCuentaExcelPlanoEnricher $excelPlanoEnricher,
     ) {
     }
 
@@ -349,6 +352,26 @@ class MayorPlanoCuentaReporteService
         }
 
         return $filas;
+    }
+
+    /**
+     * Una fila por movimiento (l-mayor.c salida excel plana), con OC/facturas/CAPEX.
+     *
+     * @param  array<string, mixed>  $resultado
+     * @param  array<string, mixed>  $filtros
+     * @return list<array<string, mixed>>
+     */
+    public function aplanarFilasExcelPlano(array $resultado, array $filtros = []): array
+    {
+        $filas = MayorPlanoCuentaExcelPlanoSupport::soloMovimientos(
+            $this->aplanarFilas($resultado, $filtros, false),
+        );
+        $filas = $this->excelPlanoEnricher->enriquecer($filas, false);
+
+        return MayorPlanoCuentaExcelPlanoSupport::ordenar(
+            $filas,
+            MayorPlanoCuentaExcelPlanoSupport::dimensionOrden($filtros),
+        );
     }
 
     /**

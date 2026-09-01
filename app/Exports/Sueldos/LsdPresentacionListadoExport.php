@@ -104,7 +104,7 @@ class LsdPresentacionListadoExport implements FromView, ShouldAutoSize, WithColu
     public function columnWidths(): array
     {
         return $this->flDesdeIndex
-            ? ['A' => 12, 'B' => 10, 'C' => 10, 'D' => 8, 'E' => 12, 'F' => 28, 'G' => 16, 'H' => 12, 'I' => 12, 'J' => 28]
+            ? ['A' => 18, 'B' => 10, 'C' => 10, 'D' => 8, 'E' => 12, 'F' => 28, 'G' => 16, 'H' => 12, 'I' => 12, 'J' => 28]
             : [];
     }
 

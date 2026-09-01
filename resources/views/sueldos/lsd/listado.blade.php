@@ -55,7 +55,7 @@
         <tbody>
             @foreach ($datas as $p)
                 <tr>
-                    <td>{{ $p->periodo }}</td>
+                    <td>{{ $p->periodoLabel() }}</td>
                     <td>{{ $p->nro_liquidacion_afip }}</td>
                     <td>{{ $p->identificacion }}</td>
                     <td>{{ optional($p->liquidacion)->numero }} {{ optional($p->liquidacion)->descripcion }}</td>
