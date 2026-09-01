@@ -59,7 +59,9 @@ final class LibroIvaDigitalVentasAlicuotaSupport
             $registro['cabecera'] = $cabecera;
             $registro['alicuotas'] = [];
 
-            return LibroIvaDigitalComprasImportesSupport::equilibrarTipoC($registro);
+            return LibroIvaDigitalComprasImportesSupport::cerrarRegistro(
+                LibroIvaDigitalComprasImportesSupport::equilibrarTipoC($registro),
+            );
         }
 
         $alicuotas = self::compactarAlicuotas($registro['alicuotas'] ?? []);
@@ -80,7 +82,7 @@ final class LibroIvaDigitalVentasAlicuotaSupport
         $registro['cabecera'] = $cabecera;
         $registro['alicuotas'] = $alicuotas;
 
-        return LibroIvaDigitalComprasImportesSupport::reconciliarAlicuotasRedondeo($registro);
+        return LibroIvaDigitalComprasImportesSupport::cerrarRegistro($registro);
     }
 
     /**

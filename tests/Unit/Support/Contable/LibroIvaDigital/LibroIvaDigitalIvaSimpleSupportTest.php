@@ -161,6 +161,44 @@ class LibroIvaDigitalIvaSimpleSupportTest extends TestCase
         $this->assertSame(80.0, $armado['total_monotributo']);
     }
 
+    public function test_credito_desde_libro_resta_descuento_exento_negativo(): void
+    {
+        $armado = LibroIvaDigitalIvaSimpleSupport::creditoDesdeRegistrosLibro([
+            [
+                'iva_simple' => ['restitucion' => false],
+                'cabecera' => [
+                    'tipo_comprobante' => '001',
+                    'operaciones_exentas' => 100.0,
+                    'no_integra_neto' => 0.0,
+                    'importe_total' => 221.0,
+                ],
+                'alicuotas' => [[
+                    'neto_gravado' => 100.0,
+                    'impuesto_liquidado' => 21.0,
+                    'alicuota_iva' => '0005',
+                    'concepto_iva_simple' => 1,
+                ]],
+            ],
+            [
+                'iva_simple' => ['restitucion' => false],
+                'cabecera' => [
+                    'tipo_comprobante' => '001',
+                    'operaciones_exentas' => -40.0,
+                    'no_integra_neto' => 0.0,
+                    'importe_total' => 81.0,
+                ],
+                'alicuotas' => [[
+                    'neto_gravado' => 100.0,
+                    'impuesto_liquidado' => 21.0,
+                    'alicuota_iva' => '0005',
+                    'concepto_iva_simple' => 1,
+                ]],
+            ],
+        ]);
+
+        $this->assertSame(60.0, $armado['total_exento']);
+    }
+
     public function test_nota_credito_por_tipo_003_se_resta_como_en_portal(): void
     {
         $armado = LibroIvaDigitalIvaSimpleSupport::creditoDesdeRegistrosLibro([

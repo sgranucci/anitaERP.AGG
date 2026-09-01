@@ -60,8 +60,8 @@ final class LibroIvaDigitalConceptoIvacompraSupport
                 'concepto_iva_simple' => (int) ($row['concepto_iva_simple'] ?? 1),
             ];
         }
-        $resultado['exento'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['exento']);
-        $resultado['no_integra'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['no_integra']);
+        $resultado['exento'] = LibroIvaDigitalComprasImportesSupport::importeNeteado((float) $resultado['exento']);
+        $resultado['no_integra'] = LibroIvaDigitalComprasImportesSupport::importeNeteado((float) $resultado['no_integra']);
         $resultado['neto_gravado'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['neto_gravado']);
         $resultado['iva'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['iva']);
         $resultado['perc_iva'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['perc_iva']);

@@ -466,6 +466,99 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         $this->assertEqualsWithDelta(0.0, $residual, 0.02);
     }
 
+    public function test_descuento_exento_mayor_al_no_gravado_conserva_signo_y_cierra_total(): void
+    {
+        $registro = LibroIvaDigitalComprasAlicuotaSupport::asegurarRegistro([
+            'cabecera' => [
+                'tipo_comprobante' => '001',
+                'punto_venta' => 9904,
+                'numero_comprobante' => 2691570,
+                'codigo_documento' => '80',
+                'numero_identificacion' => '30535324183',
+                'importe_total' => 22170271.01,
+                'no_integra_neto' => 0.0,
+                'operaciones_exentas' => LibroIvaDigitalComprasImportesSupport::importeNeteado(3457361.80 + (-70425644.38)),
+                'percepciones_iva' => 1315819.72,
+                'cantidad_alicuotas' => 2,
+            ],
+            'alicuotas' => [
+                [
+                    'tipo_comprobante' => '001',
+                    'punto_venta' => 9904,
+                    'numero_comprobante' => 2691570,
+                    'neto_gravado' => 43860657.17,
+                    'alicuota_iva' => '0006',
+                    'impuesto_liquidado' => 11842377.44,
+                ],
+                [
+                    'tipo_comprobante' => '001',
+                    'punto_venta' => 9904,
+                    'numero_comprobante' => 2691570,
+                    'neto_gravado' => 26545206.00,
+                    'alicuota_iva' => '0005',
+                    'impuesto_liquidado' => 5574493.26,
+                ],
+            ],
+        ]);
+
+        $this->assertLessThan(0.0, $registro['cabecera']['operaciones_exentas']);
+        $this->assertEqualsWithDelta(
+            0.0,
+            LibroIvaDigitalComprasImportesSupport::residualCabecera($registro['cabecera'], $registro['alicuotas']),
+            0.02,
+        );
+    }
+
+    public function test_iva_10_5_con_neto_etiquetado_21_se_reubica(): void
+    {
+        $registro = LibroIvaDigitalComprasAlicuotaSupport::asegurarRegistro([
+            'cabecera' => [
+                'tipo_comprobante' => '002',
+                'punto_venta' => 0,
+                'numero_comprobante' => 15321,
+                'codigo_documento' => '80',
+                'numero_identificacion' => '30500010084',
+                'importe_total' => 18010232.91,
+                'percepciones_iva' => 241186.94,
+                'percepciones_iibb' => 1607.91,
+                'cantidad_alicuotas' => 2,
+            ],
+            'alicuotas' => [
+                [
+                    'tipo_comprobante' => '002',
+                    'punto_venta' => 0,
+                    'numero_comprobante' => 15321,
+                    'neto_gravado' => 0.0,
+                    'alicuota_iva' => '0004',
+                    'impuesto_liquidado' => 1688308.59,
+                ],
+                [
+                    'tipo_comprobante' => '002',
+                    'punto_venta' => 0,
+                    'numero_comprobante' => 15321,
+                    'neto_gravado' => 16079129.47,
+                    'alicuota_iva' => '0005',
+                    'impuesto_liquidado' => 0.0,
+                ],
+            ],
+        ]);
+
+        $this->assertCount(1, $registro['alicuotas']);
+        $this->assertSame('0004', $registro['alicuotas'][0]['alicuota_iva']);
+        $this->assertEqualsWithDelta(16079129.47, $registro['alicuotas'][0]['neto_gravado'], 0.02);
+        $this->assertEqualsWithDelta(1688308.59, $registro['alicuotas'][0]['impuesto_liquidado'], 0.02);
+        $this->assertEqualsWithDelta(
+            1688308.59,
+            round($registro['alicuotas'][0]['neto_gravado'] * 10.5 / 100, 2),
+            0.02,
+        );
+        $this->assertEqualsWithDelta(
+            0.0,
+            LibroIvaDigitalComprasImportesSupport::residualCabecera($registro['cabecera'], $registro['alicuotas']),
+            0.02,
+        );
+    }
+
     public function test_redondeo_dolar_por_cotizacion_ajusta_neto_y_cierra_21(): void
     {
         $neto = round(48.27 * 1495, 2);

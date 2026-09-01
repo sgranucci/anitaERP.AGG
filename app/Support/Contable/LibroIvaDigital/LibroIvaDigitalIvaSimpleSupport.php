@@ -263,14 +263,14 @@ final class LibroIvaDigitalIvaSimpleSupport
                 || LibroIvaDigitalMapeosSupport::esTipoNotaCredito($tipo);
             $esTipoC = in_array($tipo, LibroIvaDigitalVentasAlicuotaSupport::TIPOS_SIN_ALICUOTA, true);
 
-            $exento = abs((float) ($cabecera['operaciones_exentas'] ?? 0));
-            $noIntegra = abs((float) ($cabecera['no_integra_neto'] ?? 0));
+            $exento = (float) ($cabecera['operaciones_exentas'] ?? 0);
+            $noIntegra = (float) ($cabecera['no_integra_neto'] ?? 0);
             if ($esTipoC) {
                 $montoC = abs((float) ($cabecera['importe_total'] ?? 0));
                 $totalMonotributo += $restitucion ? -$montoC : $montoC;
             } elseif ($restitucion) {
-                $totalExento -= $exento;
-                $totalNoIntegra -= $noIntegra;
+                $totalExento -= abs($exento);
+                $totalNoIntegra -= abs($noIntegra);
             } else {
                 $totalExento += $exento;
                 $totalNoIntegra += $noIntegra;

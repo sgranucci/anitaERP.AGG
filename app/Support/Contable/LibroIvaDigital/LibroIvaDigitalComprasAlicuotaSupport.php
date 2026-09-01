@@ -54,6 +54,6 @@ final class LibroIvaDigitalComprasAlicuotaSupport
 
         $registro = LibroIvaDigitalComprasImportesSupport::equilibrarTipoC($registro);
 
-        return LibroIvaDigitalComprasImportesSupport::reconciliarAlicuotasRedondeo($registro);
+        return LibroIvaDigitalComprasImportesSupport::cerrarRegistro($registro);
     }
 }

@@ -265,8 +265,8 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         $credito = array_sum(array_column($filas, 'iva'));
 
         return [
-            'no_integra' => $esC ? 0.0 : LibroIvaDigitalComprasImportesSupport::absolutoInformable($noIntegra),
-            'exento' => $esC ? 0.0 : LibroIvaDigitalComprasImportesSupport::absolutoInformable($exento),
+            'no_integra' => $esC ? 0.0 : LibroIvaDigitalComprasImportesSupport::importeNeteado($noIntegra),
+            'exento' => $esC ? 0.0 : LibroIvaDigitalComprasImportesSupport::importeNeteado($exento),
             'perc_iva' => LibroIvaDigitalComprasImportesSupport::absolutoInformable($percIva),
             'perc_nacional' => LibroIvaDigitalComprasImportesSupport::absolutoInformable($percNac),
             'perc_iibb' => LibroIvaDigitalComprasImportesSupport::absolutoInformable($percIibb),
