@@ -155,6 +155,48 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
             }
         }
 
+        return self::buscarEnVentaPorAfip($sucursal, $numero, $tipoAfip);
+    }
+
+    /**
+     * Hueco en vencae: el comprobante puede existir solo en venta (ej. NDP A Bierzo).
+     *
+     * @return array{
+     *   tipo_anita: string,
+     *   letra: string,
+     *   sucursal: int,
+     *   numero: int,
+     *   tipo_afip: int,
+     *   nro_caea: string,
+     *   fecha?: string
+     * }|null
+     */
+    private static function buscarEnVentaPorAfip(int $sucursal, int $numero, int $tipoAfip): ?array
+    {
+        $letra = ArcaCaeaAnitaTipoAfipSupport::letraDesdeTipoAfip($tipoAfip);
+        if ($letra === '') {
+            return null;
+        }
+
+        foreach (ArcaCaeaAnitaTipoAfipSupport::tiposAnitaParaTipoAfip($tipoAfip) as $tipoAnita) {
+            $cab = ArcaCaeaInformeDatosDesdeAnitaSupport::leerCabecera($tipoAnita, $letra, $sucursal, $numero);
+            if ($cab === null) {
+                continue;
+            }
+
+            $fecha = preg_replace('/\D+/', '', (string) ($cab['ven_fecha'] ?? '')) ?? '';
+
+            return [
+                'tipo_anita' => $tipoAnita,
+                'letra' => $letra,
+                'sucursal' => $sucursal,
+                'numero' => $numero,
+                'tipo_afip' => $tipoAfip,
+                'nro_caea' => '',
+                'fecha' => strlen($fecha) >= 8 ? substr($fecha, 0, 8) : '',
+            ];
+        }
+
         return null;
     }
 

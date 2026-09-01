@@ -290,6 +290,10 @@ class ArcaCaeaPresentacionService
                 (string) $anita['nro_caea'],
                 $periodoActual,
                 $ordenActual,
+            ) || $this->fechaAnitaEsDeQuincena(
+                (string) ($anita['fecha'] ?? ''),
+                $periodoActual,
+                $ordenActual,
             );
 
             return [
@@ -891,6 +895,9 @@ class ArcaCaeaPresentacionService
             return null;
         }
 
+        $bloqueos = [];
+        $hayInformableAhora = false;
+
         foreach ($ultimosMemoria as $clave => $ultimoArca) {
             [$ptoVta, $tipoAfip] = array_map('intval', explode('|', (string) $clave));
             if ($ptoVta <= 0 || $tipoAfip <= 0) {
@@ -914,6 +921,8 @@ class ArcaCaeaPresentacionService
             );
 
             if ($ubicacion !== null && ! empty($ubicacion['informable_ahora'])) {
+                $hayInformableAhora = true;
+
                 continue;
             }
 
@@ -933,7 +942,7 @@ class ArcaCaeaPresentacionService
                     $proximo + 1,
                 );
 
-                return $this->mensajeBloqueoProximoEsperado(
+                $bloqueos[] = $this->mensajeBloqueoProximoEsperado(
                     (int) $registro->empresa_id,
                     $ptoVta,
                     $tipoAfip,
@@ -943,7 +952,12 @@ class ArcaCaeaPresentacionService
             }
         }
 
-        return null;
+        // Un hueco en una serie (ej. ND #7414 inexistente) no debe frenar FAC/NC/FB de esta quincena.
+        if ($hayInformableAhora) {
+            return null;
+        }
+
+        return $bloqueos[0] ?? null;
     }
 
     private function mensajeBloqueoProximoEsperado(
@@ -1720,6 +1734,41 @@ class ArcaCaeaPresentacionService
     }
 
     /**
+     * @param  array<string, mixed>  $item
+     */
+    private function anitaItemPerteneceAQuincena(ArcaCaea $registro, array $item): bool
+    {
+        if ($this->caeaAnitaEsDeQuincena(
+            (int) $registro->empresa_id,
+            (string) ($item['nro_caea'] ?? ''),
+            (int) $registro->periodo,
+            (int) $registro->orden,
+        )) {
+            return true;
+        }
+
+        return $this->fechaAnitaEsDeQuincena(
+            (string) ($item['fecha'] ?? ''),
+            (int) $registro->periodo,
+            (int) $registro->orden,
+        );
+    }
+
+    private function fechaAnitaEsDeQuincena(string $fechaYmd, int $periodo, int $orden): bool
+    {
+        $d = preg_replace('/\D+/', '', $fechaYmd) ?? '';
+        if (strlen($d) < 8) {
+            return false;
+        }
+
+        $pq = CaeaQuincenaSupport::periodoOrdenDesdeFecha(
+            substr($d, 0, 4).'-'.substr($d, 4, 2).'-'.substr($d, 6, 2)
+        );
+
+        return (int) $pq['periodo'] === $periodo && (int) $pq['orden'] === $orden;
+    }
+
+    /**
      * @param  array<string, int>  $ultimosMemoria
      * @return list<array<string, mixed>>
      */
@@ -1808,6 +1857,29 @@ class ArcaCaeaPresentacionService
                         'numero' => $n,
                         'tipo_anita' => (string) $item['tipo_anita'],
                         'letra' => (string) $item['letra'],
+                    ];
+                    $n++;
+
+                    continue;
+                }
+
+                [$ptoClave, $tipoClave] = array_map('intval', explode('|', $clave));
+                $faltante = $ptoClave > 0 && $tipoClave > 0
+                    ? ArcaCaeaAnitaVencaeConsultaSupport::buscarIvaVentasPorAfip($ptoClave, $n, $tipoClave)
+                    : null;
+                if ($faltante !== null && ! $this->anitaItemPerteneceAQuincena($registro, $faltante)) {
+                    $faltante = null;
+                }
+                if ($faltante !== null) {
+                    $anitaMap[$clave][$n] = $faltante;
+                    $lote[] = [
+                        'fuente' => 'anita',
+                        'venta' => null,
+                        'pto_vta' => (int) $faltante['sucursal'],
+                        'tipo_afip' => (int) $faltante['tipo_afip'],
+                        'numero' => $n,
+                        'tipo_anita' => (string) $faltante['tipo_anita'],
+                        'letra' => (string) $faltante['letra'],
                     ];
                     $n++;
 

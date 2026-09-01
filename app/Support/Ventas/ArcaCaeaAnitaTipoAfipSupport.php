@@ -20,6 +20,7 @@ final class ArcaCaeaAnitaTipoAfipSupport
             ['tipo_anita' => 'FAC', 'letra' => 'A', 'tipo_afip' => 1, 'etiqueta' => 'FAC A (1)'],
             ['tipo_anita' => 'FAC', 'letra' => 'B', 'tipo_afip' => 6, 'etiqueta' => 'FAC B (6)'],
             ['tipo_anita' => 'NDR', 'letra' => 'A', 'tipo_afip' => 2, 'etiqueta' => 'NDR A (2)'],
+            ['tipo_anita' => 'NDP', 'letra' => 'A', 'tipo_afip' => 2, 'etiqueta' => 'NDP A (2)'],
             ['tipo_anita' => 'NDE', 'letra' => 'A', 'tipo_afip' => 2, 'etiqueta' => 'NDE A (2)'],
             ['tipo_anita' => 'NDE', 'letra' => 'B', 'tipo_afip' => 7, 'etiqueta' => 'NDE B (7)'],
             ['tipo_anita' => 'NCD', 'letra' => 'A', 'tipo_afip' => 3, 'etiqueta' => 'NCD A (3)'],
