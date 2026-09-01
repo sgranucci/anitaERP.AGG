@@ -202,36 +202,63 @@ final class PedidoFacturaAnitaArchivosSupport
             ->values();
     }
 
+    /**
+     * Path Anita según sucursal. FAC A 8 / A 10 (Bierzo) nunca van a /usr2/villafranca,
+     * aunque el payload traiga path_sistema (fuga del flag de comprobante dividido).
+     */
     public static function pathSistema(?array $anitaPendiente): ?string
     {
-        $path = trim((string) ($anitaPendiente['path_sistema'] ?? ''));
-        if ($path === self::PATH_VILLAFRANCA) {
-            return self::PATH_VILLAFRANCA;
-        }
-
-        $sucursal = self::normalizarSucursal((string) ($anitaPendiente['puntoventa_codigo'] ?? ''));
-        if ($sucursal === '') {
-            return null;
-        }
-
-        $idsDivision = self::idsPuntoVentaDivision();
-        if ($idsDivision === []) {
-            return null;
-        }
-
-        $codigos = Puntoventa::query()
-            ->whereIn('id', $idsDivision)
-            ->pluck('codigo');
-        foreach ($codigos as $codigo) {
-            if (self::normalizarSucursal((string) $codigo) === $sucursal) {
-                return self::PATH_VILLAFRANCA;
-            }
-        }
-
-        return null;
+        return self::resolverPathSistema(
+            isset($anitaPendiente['path_sistema']) ? (string) $anitaPendiente['path_sistema'] : null,
+            (string) ($anitaPendiente['puntoventa_codigo'] ?? ''),
+            self::codigosPuntoVentaDivision(),
+        );
     }
 
-    private static function normalizarSucursal(string $codigo): string
+    public static function pathSistemaParaSucursal(int|string $sucursal): ?string
+    {
+        return self::resolverPathSistema(null, (string) $sucursal, self::codigosPuntoVentaDivision());
+    }
+
+    /**
+     * @param  list<string|int>  $codigosDivision
+     */
+    public static function resolverPathSistema(?string $pathDeclarado, string $sucursal, array $codigosDivision): ?string
+    {
+        $norm = self::normalizarSucursal($sucursal);
+        if ($norm !== '') {
+            foreach ($codigosDivision as $codigo) {
+                if (self::normalizarSucursal((string) $codigo) === $norm) {
+                    return self::PATH_VILLAFRANCA;
+                }
+            }
+
+            return null;
+        }
+
+        return trim((string) $pathDeclarado) === self::PATH_VILLAFRANCA
+            ? self::PATH_VILLAFRANCA
+            : null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function codigosPuntoVentaDivision(): array
+    {
+        $idsDivision = self::idsPuntoVentaDivision();
+        if ($idsDivision === []) {
+            return [];
+        }
+
+        return Puntoventa::query()
+            ->whereIn('id', $idsDivision)
+            ->pluck('codigo')
+            ->map(static fn ($codigo) => (string) $codigo)
+            ->all();
+    }
+
+    public static function normalizarSucursal(string $codigo): string
     {
         $codigo = trim($codigo);
         if ($codigo === '') {

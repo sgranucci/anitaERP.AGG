@@ -1464,9 +1464,7 @@ class FacturacionService
 								'referencia_factura' => $referenciaFactura,
 								'empresa_codigo' => $empresa->codigo,
 								'modo_facturacion_puntoventa' => $puntoventa->modofacturacion ?? null,
-								'path_sistema' => $this->flGrabaComprobanteDividido
-									? PedidoFacturaAnitaArchivosSupport::PATH_VILLAFRANCA
-									: null,
+								'path_sistema' => PedidoFacturaAnitaArchivosSupport::pathSistemaParaSucursal($puntoventa->codigo),
 							];
 						} else {
 							$anita = $this->grabaAnitaConReintentoPorDuplicado($puntoventa->codigo, $letra, $codigoPuntoventaRemito, $numeroremito,
@@ -1694,6 +1692,18 @@ class FacturacionService
 		}
 
 		return PedidoFacturaAnitaArchivosSupport::esPuntoVentaDivision((int) ($puntoventa->id ?? 0));
+	}
+
+	/**
+	 * Path Anita de escritura. Manda la sucursal, no el flag de división:
+	 * FAC A 8 / A 10 no van a /usr2/villafranca aunque flGrabaComprobanteDividido esté prendido.
+	 */
+	private function aplicarPathSistemaAnitaComprobante(array &$data, $sucursal): void
+	{
+		$path = PedidoFacturaAnitaArchivosSupport::pathSistemaParaSucursal($sucursal);
+		if ($path !== null) {
+			$data['path_sistema'] = $path;
+		}
 	}
 
 	private function ocultarComprobanteDivididoEnMensaje($retorno)
@@ -4158,9 +4168,7 @@ class FacturacionService
 							'omitir_stkmov_anita' => $omitirStkmovAnita,
 							'omitir_numera_anita_fin' => $omitirNumeraAnitaFin,
 							'modo_facturacion_puntoventa' => $puntoventa->modofacturacion ?? null,
-							'path_sistema' => $this->flGrabaComprobanteDividido
-								? PedidoFacturaAnitaArchivosSupport::PATH_VILLAFRANCA
-								: null,
+							'path_sistema' => PedidoFacturaAnitaArchivosSupport::pathSistemaParaSucursal($puntoventa->codigo),
 						];
 					} else {
 						$replicacionAnitaIntentada = true;
@@ -4996,10 +5004,7 @@ class FacturacionService
 							'".'0'."'".(config('app.empresa') == 'AGG' ? ", '".$empresa."'":"")
 					);
 
-		if ($this->flGrabaComprobanteDividido)
-		{
-			$data['path_sistema'] = '/usr2/villafranca';
-		}
+		$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);
 
 		if (! $this->debeOmitirTablaAnita('venta')) {
 			$errVta = $this->apiCallAnitaEscritura($apiAnita, $data, 'venta insert');
@@ -5037,9 +5042,7 @@ class FacturacionService
 									'".$concepto['tasa']."'
 								",
 			];
-			if ($this->flGrabaComprobanteDividido) {
-				$dataVengrav['path_sistema'] = '/usr2/villafranca';
-			}
+			$this->aplicarPathSistemaAnitaComprobante($dataVengrav, $puntoventa);
 
 			$errVengrav = $this->apiCallAnitaEscritura($apiAnitaVengrav, $dataVengrav, 'vengrav insert');
 			if ($errVengrav !== null) {
@@ -5078,10 +5081,7 @@ class FacturacionService
 									"
 							);
 
-					if ($this->flGrabaComprobanteDividido)
-					{
-						$data['path_sistema'] = '/usr2/villafranca';
-					}
+					$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);
 
 					$errVenibr = $this->apiCallAnitaEscritura($apiAnita, $data, 'venibr insert');
 					if ($errVenibr !== null) {
@@ -5157,10 +5157,7 @@ class FacturacionService
 								'".'0'."',
 								'".'I'."'".(config('app.empresa') == 'AGG' ? ", '".$empresa."'" : "")
 					);
-			if ($this->flGrabaComprobanteDividido)
-			{
-				$data['path_sistema'] = '/usr2/villafranca';
-			}
+			$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);
 
 			$errClimov = $this->apiCallAnitaEscritura($apiAnita, $data, 'climov insert');
 			if ($errClimov !== null) {
@@ -5227,10 +5224,7 @@ class FacturacionService
 							'".' '."',
 							'".date('Ymd', strtotime($fechaVencimiento))."'" : "")." "
 					);
-		if ($this->flGrabaComprobanteDividido)
-		{
-			$data['path_sistema'] = '/usr2/villafranca';
-		}
+		$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);
 
 		if (! $this->debeOmitirTablaAnita('comprob')) {
 			$errComprob = $this->apiCallAnitaEscritura($apiAnita, $data, 'comprob insert');
@@ -5441,10 +5435,7 @@ class FacturacionService
 								(config('app.empresa') == 'Calzados Ferli' ? ", '".$medida['despacho']."'" : "").
 								(config('app.empresa') == 'EL BIERZO' ? ", '".$medida['pieza']."'" : "")
 					);
-			if ($this->flGrabaComprobanteDividido)
-			{
-				$data['path_sistema'] = '/usr2/villafranca';
-			}
+			$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);
 
 			if (! $modoMinimoAnita && ! $this->debeOmitirTablaAnita('compaux')) {
 			$errCompaux = $this->apiCallAnitaEscritura($apiAnita, $data, 'compaux insert');
@@ -5560,10 +5551,7 @@ class FacturacionService
 					$data['ifx_server'] = $ifx_server;
 				}
 
-				if ($this->flGrabaComprobanteDividido)
-				{
-					$data['path_sistema'] = '/usr2/villafranca';
-				}
+				$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);
 
 				$errStkmov = $this->apiCallAnitaEscritura($apiAnita, $data, 'stkmov insert');
 				if ($errStkmov !== null) {
@@ -5613,10 +5601,7 @@ class FacturacionService
 						$data['ifx_server'] = $ifx_server;
 					}
 
-					if ($this->flGrabaComprobanteDividido)
-					{
-						$data['path_sistema'] = '/usr2/villafranca';
-					}
+					$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);
 
 					$errStkvmed = $this->apiCallAnitaEscritura($apiAnita, $data, 'stkvmed insert');
 					if ($errStkvmed !== null) {
@@ -5654,10 +5639,7 @@ class FacturacionService
 										"
 							);
 					
-					if ($this->flGrabaComprobanteDividido)
-					{
-						$data['path_sistema'] = '/usr2/villafranca';
-					}
+					$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);
 
 					$errCompley = $this->apiCallAnitaEscritura($apiAnita, $data, 'compley insert');
 					if ($errCompley !== null) {
@@ -5683,7 +5665,7 @@ class FacturacionService
 				substr($venta['codigo'], 0, 3),
 				$letra,
 				$puntoventa,
-				($this->flGrabaComprobanteDividido ? '/usr2/villafranca' : null),
+				PedidoFacturaAnitaArchivosSupport::pathSistemaParaSucursal($puntoventa),
 			);
 			// El número ya se eligió ANTES de grabar (ERP + MAX/numerador). Esto solo
 			// avanza compemis. Si no hay fila (NCD Villafranca suc. 15), AGG dejaba 0 y seguía.
@@ -6137,10 +6119,7 @@ class FacturacionService
 												ven_sucursal = '".$puntoventa."' AND
 												ven_nro = '".$numero."'
 						" );
-		if ($this->flGrabaComprobanteDividido)
-		{
-			$data['path_sistema'] = '/usr2/villafranca';
-		}							
+		$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);							
 		$raw = $apiAnita->apiCallEscritura($data);
 		$err = ApiAnita::extraerMensajeError($raw);
 		if ($err !== null) {
@@ -6398,10 +6377,7 @@ class FacturacionService
 												ven_letra = '".$letra."' AND
 												ven_sucursal = '".$sucursal."'
 						" );
-		if ($this->flGrabaComprobanteDividido)
-		{
-			$data['path_sistema'] = '/usr2/villafranca';
-		}							
+		$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);							
 		$filaUltimo = ApiAnita::primeraFilaLista($apiAnita->apiCall($data));
 
 		if ($filaUltimo !== null && isset($filaUltimo->ultimonumero)) {
@@ -6700,9 +6676,7 @@ class FacturacionService
 			'whereArmado' => $whereArmado,
 		];
 
-		if ($this->flGrabaComprobanteDividido) {
-			$data['path_sistema'] = '/usr2/villafranca';
-		}
+		$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);
 
 		try {
 			$apiAnita->apiCallEscritura($data, $contexto, 'facturacion.anita_bridge.fallo');
@@ -6751,10 +6725,7 @@ class FacturacionService
 							'".'1'."'
 						"
 				);
-		if ($this->flGrabaComprobanteDividido)
-		{
-			$data['path_sistema'] = '/usr2/villafranca';
-		}							
+		$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);							
 		$errVencae = $this->apiCallAnitaEscritura($apiAnita, $data, 'vencae insert');
 		if ($errVencae !== null) {
 			if ($this->esErrorDuplicadoComprobanteEnAnita((string) ($errVencae['mensaje'] ?? ''))) {
@@ -6815,10 +6786,7 @@ class FacturacionService
 			' , 
 			'whereArmado' => " WHERE num_clave='500' " 
 		);
-		if ($this->flGrabaComprobanteDividido)
-		{
-			$data['path_sistema'] = '/usr2/villafranca';
-		}					
+		$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);					
 		$fila = ApiAnita::primeraFilaLista($apiAnita->apiCall($data));
 		if ($fila === null || ! isset($fila->num_ult_numero)) {
 			throw new Exception('No pudo leer numerador de operación en Anita');
@@ -6833,10 +6801,7 @@ class FacturacionService
 					'valores' => 
 						" num_ult_numero = '".$numeroOperacion."' ", 
 					'whereArmado' => " WHERE num_clave = '500' " );
-		if ($this->flGrabaComprobanteDividido)
-		{
-			$data['path_sistema'] = '/usr2/villafranca';
-		}								
+		$this->aplicarPathSistemaAnitaComprobante($data, $puntoventa);								
 		$errNumerador = $this->apiCallAnitaEscritura($apiAnita, $data, 'numerador update');
 		if ($errNumerador !== null) {
 			throw new Exception($errNumerador['mensaje']);
@@ -7364,10 +7329,7 @@ class FacturacionService
 		$data['moneda_ids'] = $moneda_ids;
 		$data['cotizaciones'] = $cotizaciones;
 
-		if ($this->flGrabaComprobanteDividido)
-			$data['path_sistema'] = '/usr2/villafranca';
-		else
-			$data['path_sistema'] = null;
+		$data['path_sistema'] = PedidoFacturaAnitaArchivosSupport::pathSistemaParaSucursal($sucursal);
 
 		$data['modofacturacion_pv'] = $modoFacturacionPv;
 
@@ -7424,11 +7386,9 @@ class FacturacionService
 			throw new Exception('ctamov diferido: faltan tipo o número de comprobante.');
 		}
 
-		$path = PedidoFacturaAnitaArchivosSupport::pathSistema($anitaPendiente);
 		$prevDivision = $this->flGrabaComprobanteDividido;
-		if ($path === PedidoFacturaAnitaArchivosSupport::PATH_VILLAFRANCA) {
-			$this->flGrabaComprobanteDividido = true;
-		}
+		$path = PedidoFacturaAnitaArchivosSupport::pathSistema($anitaPendiente);
+		$this->flGrabaComprobanteDividido = $path === PedidoFacturaAnitaArchivosSupport::PATH_VILLAFRANCA;
 
 		try {
 			PedidoFacturacionProfiler::etapa('defer_ctamov_inicio');
@@ -7468,10 +7428,7 @@ class FacturacionService
 		$payload['letra'] = $letra;
 		$payload['sucursal'] = $sucursal;
 		$payload['nro'] = $nro;
-
-		if ($this->flGrabaComprobanteDividido) {
-			$payload['path_sistema'] = '/usr2/villafranca';
-		}
+		$payload['path_sistema'] = PedidoFacturaAnitaArchivosSupport::pathSistemaParaSucursal($sucursal);
 
 		$this->asientoRepository->sincronizarCtamovAnita($payload);
 	}

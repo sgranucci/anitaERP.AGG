@@ -68,13 +68,26 @@ class AsientoRepository implements AsientoRepositoryInterface
 		$this->path_sistema = null;
     }
 
+    /**
+     * Siempre pisa el path. Si el caller no lo manda, vuelve a Anita default (Bierzo).
+     * Un path Villafranca residual del asiento anterior no debe filtrar al siguiente.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function asignarPathSistema(array $data): void
+    {
+        $path = $data['path_sistema'] ?? null;
+        $this->path_sistema = (is_string($path) && trim($path) !== '')
+            ? rtrim($path, '/')
+            : null;
+    }
+
     public function create(array $data)
     {
 		$this->assertPeriodoContablePermitido($data);
 
 		//$data['numeroasiento'] = self::ultimoAsiento($data['empresa_id']);
-		if (array_key_exists('path_sistema', $data))
-			$this->path_sistema = $data['path_sistema'];
+		$this->asignarPathSistema($data);
 		
 		// Si es tipo PRE el numero de asiento es periodo y mes
 		$tipoasiento = $this->tipoasientoRepository->find($data['tipoasiento_id']);
@@ -188,9 +201,7 @@ class AsientoRepository implements AsientoRepositoryInterface
             throw new \InvalidArgumentException('Falta numeroasiento para sincronizar ctamov en Anita.');
         }
 
-        if (array_key_exists('path_sistema', $data)) {
-            $this->path_sistema = $data['path_sistema'];
-        }
+        $this->asignarPathSistema($data);
 
         $this->assertPeriodoContablePermitido($data);
         AsientoBalanceSupport::assertBalanceadoDesdePayload($data, 'asiento (Anita ctamov)');

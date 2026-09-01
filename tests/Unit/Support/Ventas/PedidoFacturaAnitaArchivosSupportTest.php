@@ -19,4 +19,33 @@ class PedidoFacturaAnitaArchivosSupportTest extends TestCase
         $this->assertFalse(PedidoFacturaAnitaArchivosSupport::esPuntoVentaDivision(8));
         $this->assertFalse(PedidoFacturaAnitaArchivosSupport::esPuntoVentaDivision(0));
     }
+
+    public function test_path_villafranca_solo_para_sucursal_de_division(): void
+    {
+        $division = ['00015', '00002', '00001'];
+
+        $this->assertSame(
+            PedidoFacturaAnitaArchivosSupport::PATH_VILLAFRANCA,
+            PedidoFacturaAnitaArchivosSupport::resolverPathSistema(
+                PedidoFacturaAnitaArchivosSupport::PATH_VILLAFRANCA,
+                '15',
+                $division,
+            ),
+        );
+        $this->assertNull(PedidoFacturaAnitaArchivosSupport::resolverPathSistema(
+            PedidoFacturaAnitaArchivosSupport::PATH_VILLAFRANCA,
+            '8',
+            $division,
+        ));
+        $this->assertNull(PedidoFacturaAnitaArchivosSupport::resolverPathSistema(
+            PedidoFacturaAnitaArchivosSupport::PATH_VILLAFRANCA,
+            '00010',
+            $division,
+        ));
+        $this->assertNull(PedidoFacturaAnitaArchivosSupport::resolverPathSistema(null, '8', $division));
+        $this->assertSame(
+            PedidoFacturaAnitaArchivosSupport::PATH_VILLAFRANCA,
+            PedidoFacturaAnitaArchivosSupport::resolverPathSistema(null, '00001', $division),
+        );
+    }
 }

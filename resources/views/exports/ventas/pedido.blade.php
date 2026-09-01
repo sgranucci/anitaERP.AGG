@@ -1,3 +1,29 @@
+@php
+	use App\Support\Ventas\FacturaPdfPaginacionSupport;
+
+	$montosReparto101 = \App\Support\Ventas\VillafrancaFacturacionSupport::montosPedidoDesdeFactura($pedido);
+	$codigoClientePedido = trim((string) ($pedido->clientes->codigo ?? ''));
+	$nombreClientePedido = trim((string) ($pedido->clientes->nombre ?? ''));
+	$clientePedidoDisplay = $codigoClientePedido !== '' && $nombreClientePedido !== ''
+		? $codigoClientePedido.' - '.$nombreClientePedido
+		: ($nombreClientePedido !== '' ? $nombreClientePedido : $codigoClientePedido);
+	$numeroPedido = trim((string) ($pedido->codigo ?? ''));
+	if ($numeroPedido === '') {
+		$numeroPedido = (string) ($pedido->id ?? '');
+	}
+	$repartoNombre = trim((string) ($pedido->transportes->nombre ?? ''));
+
+	$lineasPdf = \App\Support\Ventas\PedidoRemitoPdfLineasSupport::armar($pedido->pedido_articulos);
+	$filas = $lineasPdf['filas'];
+	$totales = $lineasPdf['totales'];
+	$totalKilosPesadaBonificacion = (float) ($totales['pesada'] ?? 0) + (float) ($totales['bonificacion'] ?? 0);
+	$paginasPedido = FacturaPdfPaginacionSupport::paginas($filas, 'pedido');
+
+	$logoPedidoPath = public_path('storage/imagenes/logos/logo-bierzo.png');
+	$logoPedidoDataUri = is_file($logoPedidoPath)
+		? 'data:image/png;base64,'.base64_encode((string) file_get_contents($logoPedidoPath))
+		: '';
+@endphp
 <!doctype html>
 <html lang="es">
 <head>
@@ -12,7 +38,7 @@
 			font-size: 13px;
 			color: #1a1a1a;
 		}
-		.pedido-pagina { page-break-inside: avoid; }
+		.pedido-pagina { page-break-inside: auto; }
 		.salto-pagina { page-break-before: always; }
 		table.pedido-header {
 			width: 100%;
@@ -49,9 +75,17 @@
 			vertical-align: middle;
 			word-wrap: break-word;
 		}
-		table.pedido-items thead { display: table-row-group; }
-		table.pedido-items tr.pedido-items-head { background-color: #e8e8e8; }
-		table.pedido-items tr.pedido-items-head td { font-size: 10px; font-weight: bold; }
+		table.pedido-items thead { display: table-header-group; }
+		table.pedido-items thead tr.pedido-encabezado-doc td {
+			border: none;
+			padding: 0 0 8px 0;
+			vertical-align: top;
+		}
+		table.pedido-items thead tr.pedido-items-head { background-color: #e8e8e8; }
+		table.pedido-items thead tr.pedido-items-head th {
+			font-size: 10px;
+			font-weight: bold;
+		}
 		table.pedido-items tbody tr:nth-child(even) { background-color: #f5f5f5; }
 		.pedido-continua { font-size: 11px; text-align: right; margin: 4px 0 0 0; }
 		.pedido-leyenda { font-size: 12px; margin-top: 8px; }
@@ -62,6 +96,7 @@
 			width: 42%;
 			margin: 8px 0 0 auto;
 			font-size: 11px;
+			page-break-inside: avoid;
 		}
 		table.pedido-kilos-cuadro td {
 			border: 1px solid #1a1a1a;
@@ -86,70 +121,58 @@
 </head>
 <body>
 <div class="pedido-espacio-superior"></div>
-@php
-	use App\Support\Ventas\FacturaPdfPaginacionSupport;
-
-	$montosReparto101 = \App\Support\Ventas\VillafrancaFacturacionSupport::montosPedidoDesdeFactura($pedido);
-	$codigoClientePedido = trim((string) ($pedido->clientes->codigo ?? ''));
-	$nombreClientePedido = trim((string) ($pedido->clientes->nombre ?? ''));
-	$clientePedidoDisplay = $codigoClientePedido !== '' && $nombreClientePedido !== ''
-		? $codigoClientePedido.' - '.$nombreClientePedido
-		: ($nombreClientePedido !== '' ? $nombreClientePedido : $codigoClientePedido);
-	$numeroPedido = trim((string) ($pedido->codigo ?? ''));
-	if ($numeroPedido === '') {
-		$numeroPedido = (string) ($pedido->id ?? '');
-	}
-	$repartoNombre = trim((string) ($pedido->transportes->nombre ?? ''));
-
-	$lineasPdf = \App\Support\Ventas\PedidoRemitoPdfLineasSupport::armar($pedido->pedido_articulos);
-	$filas = $lineasPdf['filas'];
-	$totales = $lineasPdf['totales'];
-	$totalKilosPesadaBonificacion = (float) ($totales['pesada'] ?? 0) + (float) ($totales['bonificacion'] ?? 0);
-	$paginasPedido = FacturaPdfPaginacionSupport::paginas($filas, 'pedido');
-@endphp
 @foreach ($paginasPedido as $pagIdx => $itemsPagina)
 	@php
 		$esUltima = $pagIdx === array_key_last($paginasPedido);
 	@endphp
 	<div class="pedido-pagina {{ $pagIdx > 0 ? 'salto-pagina' : '' }}">
-		<table class="pedido-header">
-			<tr>
-				<td class="pedido-logo">
-					<img style="margin: 4px 0;" width="160" height="70" src="data:image/png;base64,{{ base64_encode(file_get_contents('/var/www/html/anitaERP/public/storage/imagenes/logos/logo-bierzo.png')) }}">
-					<div class="pedido-cliente">
-						<strong>Cliente: {{ $clientePedidoDisplay }}</strong><br>
-						<strong>Zona de Vta.: {{ $pedido->zonavtas->nombre ?? '' }}</strong>
-					</div>
-				</td>
-				<td class="pedido-meta">
-					<strong>Pedido Nro.: {{ $numeroPedido }}</strong><br>
-					<strong>Fecha: {{ date('d/m/Y', strtotime($pedido->fecha ?? '')) }}</strong><br>
-					<strong>Fecha de Entrega: {{ date('d/m/Y', strtotime($pedido->fechaentrega ?? '')) }}</strong><br>
-					<strong>Reparto: {{ $repartoNombre }}</strong><br>
-					<strong>Lugar de entrega: {{ $pedido->lugarentrega ?? '' }}</strong>
-					@if ($montosReparto101)
-						<div class="pedido-totales-division">
-							{{ number_format($montosReparto101['neto'], 2, ',', '.') }}<br>
-							{{ number_format($montosReparto101['recargo'], 2, ',', '.') }}<br>
-							{{ number_format($montosReparto101['total'], 2, ',', '.') }}
-						</div>
-					@endif
-				</td>
-			</tr>
-		</table>
 		<table class="pedido-items">
-			<tr class="pedido-items-head">
-				<td style="width: 8%;">Sku</td>
-				<td style="width: 8%;">Unid.</td>
-				<td style="width: 8%;">Kg.</td>
-				<td style="width: 11%;">Descuento</td>
-				<td style="width: 22%;">Descripción</td>
-				<td style="width: 6%;">UMD</td>
-				<td style="width: 8%;">Cajas</td>
-				<td style="width: 10%;">Precio</td>
-				<td style="width: 9%;">Pesada</td>
-				<td style="width: 10%;">Bonificación</td>
-			</tr>
+			<thead>
+				<tr class="pedido-encabezado-doc">
+					<td colspan="10">
+						<table class="pedido-header">
+							<tr>
+								<td class="pedido-logo">
+									@if ($logoPedidoDataUri !== '')
+										<img style="margin: 4px 0;" width="160" height="70" src="{{ $logoPedidoDataUri }}">
+									@endif
+									<div class="pedido-cliente">
+										<strong>Cliente: {{ $clientePedidoDisplay }}</strong><br>
+										<strong>Zona de Vta.: {{ $pedido->zonavtas->nombre ?? '' }}</strong>
+									</div>
+								</td>
+								<td class="pedido-meta">
+									<strong>Pedido Nro.: {{ $numeroPedido }}</strong><br>
+									<strong>Fecha: {{ date('d/m/Y', strtotime($pedido->fecha ?? '')) }}</strong><br>
+									<strong>Fecha de Entrega: {{ date('d/m/Y', strtotime($pedido->fechaentrega ?? '')) }}</strong><br>
+									<strong>Reparto: {{ $repartoNombre }}</strong><br>
+									<strong>Lugar de entrega: {{ $pedido->lugarentrega ?? '' }}</strong>
+									@if ($montosReparto101)
+										<div class="pedido-totales-division">
+											{{ number_format($montosReparto101['neto'], 2, ',', '.') }}<br>
+											{{ number_format($montosReparto101['recargo'], 2, ',', '.') }}<br>
+											{{ number_format($montosReparto101['total'], 2, ',', '.') }}
+										</div>
+									@endif
+								</td>
+							</tr>
+						</table>
+					</td>
+				</tr>
+				<tr class="pedido-items-head">
+					<th style="width: 8%;">Sku</th>
+					<th style="width: 8%;">Unid.</th>
+					<th style="width: 8%;">Kg.</th>
+					<th style="width: 11%;">Descuento</th>
+					<th style="width: 22%;">Descripción</th>
+					<th style="width: 6%;">UMD</th>
+					<th style="width: 8%;">Cajas</th>
+					<th style="width: 10%;">Precio</th>
+					<th style="width: 9%;">Pesada</th>
+					<th style="width: 10%;">Bonificación</th>
+				</tr>
+			</thead>
+			<tbody>
 			@foreach ($itemsPagina as $item)
 				<tr>
 					<td>{{ $item['sku'] }}</td>
@@ -160,8 +183,16 @@
 					<td>{{ $item['umd'] }}</td>
 					<td>{{ number_format($item['caja'], 2) }}</td>
 					<td>{{ number_format($item['precio'], 2) }}</td>
-					<td>@if ($item['pesada'] > 0){{ number_format($item['pesada'], 2) }}@endif</td>
-					<td>@if ($item['bonificacion'] > 0){{ number_format($item['bonificacion'], 1) }}@endif</td>
+					<td>
+						@if ($item['pesada'] > 0)
+							{{ number_format($item['pesada'], 2) }}
+						@endif
+					</td>
+					<td>
+						@if ($item['bonificacion'] > 0)
+							{{ number_format($item['bonificacion'], 1) }}
+						@endif
+					</td>
 				</tr>
 			@endforeach
 			@if ($esUltima)
@@ -174,10 +205,19 @@
 					<td></td>
 					<td><strong>{{ number_format($totales['caja'], 2) }}</strong></td>
 					<td></td>
-					<td>@if ($totales['pesada'] > 0)<strong>{{ number_format($totales['pesada'], 2) }}</strong>@endif</td>
-					<td>@if ($totales['bonificacion'] > 0)<strong>{{ number_format($totales['bonificacion'], 1) }}</strong>@endif</td>
+					<td>
+						@if ($totales['pesada'] > 0)
+							<strong>{{ number_format($totales['pesada'], 2) }}</strong>
+						@endif
+					</td>
+					<td>
+						@if ($totales['bonificacion'] > 0)
+							<strong>{{ number_format($totales['bonificacion'], 1) }}</strong>
+						@endif
+					</td>
 				</tr>
 			@endif
+			</tbody>
 		</table>
 		@if ($esUltima)
 			<table class="pedido-kilos-cuadro">
