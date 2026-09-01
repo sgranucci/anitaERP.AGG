@@ -5,7 +5,7 @@
 
 @section("scripts")
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/crear.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/ingresoegreso/crear.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/cuentacontable/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/cuentacaja/consulta.js') }}" type="text/javascript"></script>
 @include('includes.contable.asiento_montos_formato_js')
@@ -95,7 +95,7 @@
                     @endif
                 </div>
             </div>
-            <form action="{{ route('actualizar_ingresoegreso', ['id' => $data->id]) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
+            <form action="{{ route('actualizar_ingresoegreso', ['id' => $data->id]) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off" data-mensaje-grabacion="Grabando OP…">
                 <input type="hidden" class="caja_id" id="caja_id" name="caja_id" value="{{ $data->caja_id ?? '' }}">
                 <input type="hidden" class="origen" id="origen" name="origen" value="{{ $origen ?? '' }}">
                 @csrf @method('put')

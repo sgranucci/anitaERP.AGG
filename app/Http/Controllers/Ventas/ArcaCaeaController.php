@@ -64,19 +64,14 @@ class ArcaCaeaController extends Controller
         $filasMeta = [];
         /** @var array<int, list<ArcaCaea>> $porEmpresaSync */
         $porEmpresaSync = [];
-        /** @var list<ArcaCaea> $soloLocal */
-        $soloLocal = [];
         foreach ($registros as $registro) {
             if (! $registro->estaAutorizado()) {
                 continue;
             }
             $resumen = is_array($registro->informe_resumen) ? $registro->informe_resumen : null;
             if ($forzarSyncArca && ($resumen === null || $this->periodoNecesitaSyncArca($resumen ?? []))) {
-                // Tras informar/actualizar: consultar ARCA.
+                // Solo la calculadora / post-informe: consultar ARCA.
                 $porEmpresaSync[(int) $registro->empresa_id][] = $registro;
-            } else {
-                // Filtro / carga normal: recalcular leyenda y contadores locales sin SOAP.
-                $soloLocal[] = $registro;
             }
         }
 
@@ -86,13 +81,6 @@ class ArcaCaeaController extends Controller
             foreach ($this->presentacionService->actualizarResumenesEmpresa($regsEmpresa, null, true) as $id => $resumen) {
                 $resumenesSync[(int) $id] = $resumen;
             }
-        }
-        foreach ($soloLocal as $registro) {
-            $resumenesSync[(int) $registro->id] = $this->presentacionService->actualizarResumenPeriodo(
-                $registro,
-                null,
-                false,
-            );
         }
 
         foreach ($registros as $registro) {
@@ -160,11 +148,10 @@ class ArcaCaeaController extends Controller
             && $this->anitaSync->estaHabilitado()
             && $registro->estaAutorizado();
         $puedeInformar = can('informar-arca-caea', false) && $registro->estaAutorizado();
-        $resumenInforme = $registro->informe_resumen;
+        $resumenInforme = is_array($registro->informe_resumen) ? $registro->informe_resumen : [];
         $erroresInforme = [];
         if ($registro->estaAutorizado()) {
-            // Modal: no golpear ARCA; usar resumen guardado / contadores locales.
-            $resumenInforme = $this->presentacionService->actualizarResumenPeriodo($registro, null, false);
+            // Modal: pintar con resumen persistido (el recálculo local pega Anita y cuelga la UI).
             $erroresInforme = $this->presentacionService->listarErroresInforme($registro, 30);
         }
         $leyendaInforme = ArcaCaeaInformeUiSupport::leyendaFaltante(is_array($resumenInforme) ? $resumenInforme : null);
@@ -300,10 +287,15 @@ class ArcaCaeaController extends Controller
                 ->with('mensaje-error', 'El CAEA no está autorizado; no se puede informar comprobantes.');
         }
 
-        if (ArcaCaeaInformeColaSupport::estaActivo((int) $registro->id)) {
+        $arcaCaeaId = (int) $registro->id;
+        $yaEnCola = ArcaCaeaInformeColaSupport::hayJobPendienteEnCola($arcaCaeaId);
+        if (ArcaCaeaInformeColaSupport::estaActivo($arcaCaeaId) && $yaEnCola) {
             return redirect()
                 ->route('arca_caea', $filtros)
                 ->with('mensaje-error', 'Ya hay una presentación CAEA en segundo plano para esta quincena. Esperá a que termine (mail de aviso) antes de volver a encolar.');
+        }
+        if (ArcaCaeaInformeColaSupport::estaActivo($arcaCaeaId) && ! $yaEnCola) {
+            ArcaCaeaInformeColaSupport::liberar($arcaCaeaId);
         }
 
         $usuario = Auth::user();
@@ -315,10 +307,18 @@ class ArcaCaeaController extends Controller
         }
 
         try {
-            ArcaCaeaInformeColaSupport::marcarActivo((int) $registro->id, $usuarioId);
+            ArcaCaeaInformeColaSupport::liberarLocksUnique($arcaCaeaId);
+            ArcaCaeaInformeColaSupport::marcarActivo($arcaCaeaId, $usuarioId);
             // Permitir mail del nuevo proceso aunque un intento anterior (p. ej. 704) ya hubiera avisado.
-            Cache::forget('arca-caea-informe-mail-'.(int) $registro->id.'-'.$usuarioId);
-            InformarArcaCaeaPeriodoJob::dispatch($registro->id, $usuarioId, $soloErrores);
+            Cache::forget('arca-caea-informe-mail-'.$arcaCaeaId.'-'.$usuarioId);
+            InformarArcaCaeaPeriodoJob::dispatch($arcaCaeaId, $usuarioId, $soloErrores);
+            if (! ArcaCaeaInformeColaSupport::hayJobPendienteEnCola($arcaCaeaId)) {
+                ArcaCaeaInformeColaSupport::liberarLocksUnique($arcaCaeaId);
+                InformarArcaCaeaPeriodoJob::dispatch($arcaCaeaId, $usuarioId, $soloErrores);
+            }
+            if (! ArcaCaeaInformeColaSupport::hayJobPendienteEnCola($arcaCaeaId)) {
+                throw new \RuntimeException('El job no quedó en la cola (unique o worker). Reintentá.');
+            }
         } catch (\Throwable $e) {
             ArcaCaeaInformeColaSupport::liberar((int) $registro->id);
             Log::error('arca.caea.informe.dispatch_fallo', [

@@ -44,6 +44,14 @@ return [
         'recepcion_estado_anulada' => env('RECEPCION_PROVEEDOR_ANITA_ESTADO_ANULADA', '3'),
     ],
 
+    /*
+    | Informe COM: períodos anteriores al primer COM ERP se leen de Anita (una consulta).
+    | Vacío = MIN(recepcion_proveedor.fecha). Forzar corte: 2025-01-01.
+    */
+    'reporte' => [
+        'anita_corte_erp' => env('RECEPCION_PROVEEDOR_REPORTE_ANITA_CORTE_ERP', ''),
+    ],
+
     'ocr' => [
         'habilitado' => filter_var(env('RECEPCION_PROVEEDOR_OCR_HABILITADO', false), FILTER_VALIDATE_BOOLEAN),
         'driver' => env('RECEPCION_PROVEEDOR_OCR_DRIVER', 'tesseract'),

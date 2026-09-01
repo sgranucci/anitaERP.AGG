@@ -86,6 +86,14 @@ class ValidacionIngresoEgreso extends FormRequest
                 $validator->errors()->add('solicitudpago_id', $e->getMessage());
             }
 
+            if (! $this->route('id') && ! $this->filled('id')) {
+                try {
+                    IngresoEgresoSolicitudpagoSupport::assertSolicitudDisponibleParaPagar($this->all());
+                } catch (InvalidArgumentException $e) {
+                    $validator->errors()->add('solicitudpago_id', $e->getMessage());
+                }
+            }
+
             try {
                 $tmp = $this->all();
                 IngresoEgresoSolicitudpagoSupport::aplicarPagoDesdeSolicitud($tmp);

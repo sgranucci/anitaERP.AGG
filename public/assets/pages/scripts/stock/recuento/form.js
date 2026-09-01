@@ -810,11 +810,21 @@
             var clavesVistas = {};
             var filaDuplicada = null;
             var faltaColorTalle = null;
+            var cantidadNegativa = null;
             var modoCt = String((document.getElementById('modo_stock_color_talle') || {}).value || '').trim() === '1';
             tbody.querySelectorAll('tr.recuento-item-row').forEach(function (tr) {
                 var aid = parseInt((tr.querySelector('.articulo_id') || {}).value, 10) || 0;
                 if (aid <= 0) return;
                 filasConArticulo++;
+                var cantInp = tr.querySelector('.input-cantidad-contada');
+                var cantVal = parseFloat((cantInp && cantInp.value) || '');
+                if (cantInp && cantInp.value !== '' && !Number.isNaN(cantVal) && cantVal < 0) {
+                    resultado.valido = false;
+                    cantidadNegativa = cantidadNegativa || cantInp;
+                    if (typeof marcarCampoObligatorio === 'function') {
+                        marcarCampoObligatorio(cantInp, true);
+                    }
+                }
                 var ct = colorTalleFila(tr);
                 if (modoCt && (ct.colorId <= 0 || ct.talleId <= 0)) {
                     resultado.valido = false;
@@ -845,6 +855,13 @@
                 if (!resultado.primerInvalido) {
                     resultado.primerInvalido = filaDuplicada.querySelector('.codigoarticulo');
                 }
+            } else if (cantidadNegativa) {
+                resultado.valido = false;
+                resultado.cantidadInvalidos = (resultado.cantidadInvalidos || 0) + 1;
+                resultado.cantidadNegativa = true;
+                if (!resultado.primerInvalido) {
+                    resultado.primerInvalido = cantidadNegativa;
+                }
             } else if (faltaColorTalle) {
                 resultado.valido = false;
                 resultado.cantidadInvalidos = (resultado.cantidadInvalidos || 0) + 1;
@@ -866,15 +883,19 @@
                     return;
                 }
                 const ct = colorTalleFila(tr);
+                const umLabel = tr.querySelector('.unidad-medida-label');
                 items.push({
                     recuento_item_id: (tr.querySelector('.recuento_item_id') || {}).value || '',
                     articulo_id: aid,
+                    sku: (tr.querySelector('.codigoarticulo') || {}).value || '',
                     unidadmedida_id: (tr.querySelector('.unidadmedida_id') || {}).value || '',
+                    unidadmedida: umLabel ? String(umLabel.textContent || '').trim() : '',
                     saldo_sistema: (tr.querySelector('.saldo_sistema_input') || {}).value || '',
                     detalle: (tr.querySelector('.descripcionarticulo') || {}).value || '',
                     color_id: ct.colorId,
                     talle_id: ct.talleId,
-                    cantidad_contada: (tr.querySelector('.input-cantidad-contada') || {}).value || 0
+                    cantidad_contada: (tr.querySelector('.input-cantidad-contada') || {}).value || 0,
+                    maneja_stock_color_talle: tr.getAttribute('data-maneja-stock-color-talle') === '1'
                 });
             });
             return items;
@@ -888,8 +909,8 @@
             ta.value = JSON.stringify(serializarItemsRecuento());
             form.querySelectorAll(
                 'input[name="recuento_item_ids[]"], input[name="articulo_ids[]"], input[name="unidadmedida_ids[]"],'
-                + ' input[name="saldos_sistema[]"], input[name="detalle_articulos[]"], select[name="colores_id[]"],'
-                + ' select[name="talles_id[]"], input[name="cantidades_contadas[]"]'
+                + ' input[name="saldos_sistema[]"], input[name="detalle_articulos[]"], input[name="codigoarticulos[]"],'
+                + ' select[name="colores_id[]"], select[name="talles_id[]"], input[name="cantidades_contadas[]"]'
             ).forEach(function (el) {
                 el.disabled = true;
             });
@@ -916,6 +937,8 @@
                     mensajeExtra = ' Valide el dep\u00f3sito (c\u00f3digo + Enter o modal).';
                 } else if (resultado.articuloDuplicado) {
                     mensajeExtra = ' Hay variantes repetidas en la grilla. Cada combinaci\u00f3n art\u00edculo/color/talle debe figurar una sola vez.';
+                } else if (resultado.cantidadNegativa) {
+                    mensajeExtra = ' Hay cantidades contadas negativas. Indique 0 o m\u00e1s en cada l\u00ednea.';
                 } else if (resultado.faltaColorTalle) {
                     mensajeExtra = ' Complete color y talle en todas las l\u00edneas de este recuento.';
                 } else if (resultado.cantidadInvalidos === 1 && resultado.primerInvalido
@@ -957,6 +980,51 @@
             });
         }
 
-        aplicarFocoInicialRecuento();
+        function restaurarLineasDesdeItemsJson() {
+            const ta = document.getElementById('recuento-items-json');
+            if (!ta || !String(ta.value || '').trim()) {
+                return;
+            }
+            let items;
+            try {
+                items = JSON.parse(ta.value);
+            } catch (e) {
+                return;
+            }
+            if (!Array.isArray(items) || !items.length) {
+                return;
+            }
+            const conArticulo = items.filter(function (it) {
+                return parseInt(it && it.articulo_id, 10) > 0;
+            });
+            if (!conArticulo.length) {
+                return;
+            }
+            let n = 0;
+            tbody.querySelectorAll('tr.recuento-item-row .articulo_id').forEach(function (el) {
+                if (parseInt(el.value, 10) > 0) {
+                    n++;
+                }
+            });
+            if (n >= conArticulo.length) {
+                return;
+            }
+            repoblarLineas(conArticulo);
+        }
+
+        restaurarLineasDesdeItemsJson();
+
+        const invalido = tbody.querySelector('.input-cantidad-contada.is-invalid');
+        if (invalido && typeof invalido.focus === 'function') {
+            setTimeout(function () {
+                invalido.focus();
+                if (typeof invalido.select === 'function') {
+                    invalido.select();
+                }
+                invalido.scrollIntoView({ block: 'center' });
+            }, 200);
+        } else {
+            aplicarFocoInicialRecuento();
+        }
     });
 })();

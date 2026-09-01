@@ -192,13 +192,14 @@
                             @php
                                 $montoLinea = '';
                                 if (is_object($cuenta) && isset($cuenta->monto)) {
-                                    $montoLinea = $preservarSignoMonto ? $cuenta->monto : abs($cuenta->monto);
+                                    $montoRaw = $preservarSignoMonto ? $cuenta->monto : abs($cuenta->monto);
+                                    $montoLinea = number_format((float) $montoRaw, 2, ',', '.');
                                 }
                             @endphp
-                            <input type="number" name="montos[]" class="form-control monto" step="0.01" value="{{ old('montos.'.$loop->index, $montoLinea) }}">
+                            <input type="text" inputmode="decimal" name="montos[]" class="form-control text-right monto" value="{{ old('montos.'.$loop->index, $montoLinea) }}" autocomplete="off">
                         </td>
                         <td>
-                            <input type="number" name="cotizaciones[]" class="form-control cotizacion" value="{{old('cotizaciones[]', $cuenta->cotizacion ?? '0')}}">
+                            <input type="text" inputmode="decimal" name="cotizaciones[]" class="form-control text-right cotizacion" value="{{old('cotizaciones[]', $cuenta->cotizacion ?? '0')}}" autocomplete="off">
                         </td>
                         <td>
                             <input type="text" name="observaciones[]" class="form-control observacion" value="{{old('observaciones[]', $cuenta->observacion ?? '')}}">

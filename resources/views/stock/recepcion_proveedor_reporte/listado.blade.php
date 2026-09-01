@@ -56,6 +56,9 @@
     @if (! empty($advertencia_cotizacion))
         <div class="aviso">{{ $advertencia_cotizacion }}</div>
     @endif
+    @if (! empty($advertencia_anita))
+        <div class="aviso">{{ $advertencia_anita }}</div>
+    @endif
     @include('stock.recepcion_proveedor_reporte.partials.tabla_datos', [
         'filas' => $filasIterable,
         'modo' => $modo ?? 'detalle',

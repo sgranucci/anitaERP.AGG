@@ -248,7 +248,7 @@
         class="mt-3 mb-0 d-inline js-arca-caea-informar-form"
         data-overlay-titulo="Encolando presentación CAEA…"
         data-overlay-subtitulo="El proceso corre en segundo plano. Al terminar recibirás un mail con el resultado."
-        onsubmit="return confirm('¿Encolar la presentación CAEA pendiente? Al terminar recibirás un mail con el resultado.');">
+        data-confirm-msg="¿Encolar la presentación CAEA pendiente? Al terminar recibirás un mail con el resultado.">
         @csrf
         @include('ventas.arca_caea.partials.filtros_index_hidden', ['filtrosQuery' => $filtrosQuery ?? []])
         <button type="submit" class="btn btn-primary btn-sm" @disabled(! ($puedePresentar ?? false))>
@@ -265,7 +265,7 @@
             class="mt-2 mb-0 d-inline js-arca-caea-informar-form"
             data-overlay-titulo="Encolando reintento CAEA…"
             data-overlay-subtitulo="El proceso corre en segundo plano. Al terminar recibirás un mail con el resultado."
-            onsubmit="return confirm('¿Encolar el reintento de errores CAEA? Al terminar recibirás un mail con el resultado.');">
+            data-confirm-msg="¿Encolar el reintento de errores CAEA? Al terminar recibirás un mail con el resultado.">
             @csrf
             @include('ventas.arca_caea.partials.filtros_index_hidden', ['filtrosQuery' => $filtrosQuery ?? []])
             <input type="hidden" name="solo_errores" value="1">

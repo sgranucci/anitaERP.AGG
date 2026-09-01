@@ -6,6 +6,8 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Ordencompra;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Services\Stock\RecepcionProveedorCambioCotizacionService;
+use App\Services\Stock\TransferenciaMercaderiaTitoRecalculoService;
+use Illuminate\Support\Facades\Log;
 use App\Support\Compras\ComprobanteProveedorConceptoIvaTipos;
 use App\Support\Compras\ComprobanteProveedorControlesConfigSupport;
 use App\Support\Compras\ComprobanteProveedorCotizacionSupport;
@@ -35,6 +37,7 @@ class ComprobanteProveedorControlesLegajoService
     public function __construct(
         private ComprobanteProveedorRecepcionesSupport $recepcionesSupport,
         private RecepcionProveedorCambioCotizacionService $cambioCotizacionService,
+        private TransferenciaMercaderiaTitoRecalculoService $titoRecalculoService,
         private OrdencompraDevolverAComprasNotificacionService $devolverCompras,
         private ComprobanteProveedorComLegajoResolucionService $comLegajoResolucion,
         private ComprobanteProveedorMatchLineasService $matchLineas,
@@ -316,9 +319,42 @@ class ComprobanteProveedorControlesLegajoService
                 $recepcion->id,
                 number_format($cotFactura, 4, ',', '.'),
             );
+            $this->recalcularTraTitoSilencioso($resultado, $recepcion);
         }
 
         return $resultado;
+    }
+
+    /**
+     * @param  array{ok: bool, avisos: list<string>, errores: list<string>}  $resultado
+     */
+    private function recalcularTraTitoSilencioso(array &$resultado, Recepcion_Proveedor $recepcion): void
+    {
+        try {
+            $recalc = $this->titoRecalculoService->aplicarAutomaticoMesEnCurso((int) $recepcion->id);
+        } catch (\Throwable $e) {
+            Log::warning('TITO TRA: fallo recálculo automático al alinear cotización COM', [
+                'recepcion_id' => (int) $recepcion->id,
+                'error' => $e->getMessage(),
+            ]);
+            $resultado['avisos'][] = sprintf(
+                'No se pudieron recalcular TRA TITO de la recepción #%s: %s',
+                $recepcion->id,
+                $e->getMessage()
+            );
+
+            return;
+        }
+
+        if (! ($recalc['aplicado'] ?? false) || (int) ($recalc['lineas_actualizadas'] ?? 0) <= 0) {
+            return;
+        }
+
+        $resultado['avisos'][] = sprintf(
+            'Se recalcularon %d TRA TITO del mes en curso de la recepción #%s.',
+            (int) $recalc['lineas_actualizadas'],
+            $recepcion->id
+        );
     }
 
     /**

@@ -2,11 +2,14 @@
 
 namespace App\Services\Stock;
 
+use App\Models\Configuracion\Empresa;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Models\Stock\Recepcion_Proveedor_Articulo;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Configuracion\CotizacionVigenteSupport;
+use App\Support\Database\SqlDialectSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
+use App\Support\Stock\RecepcionProveedorReporteAnitaFallbackSupport;
 use App\Support\Stock\RecepcionProveedorReporteFiltros;
 use App\Support\Stock\RecepcionProveedorVisibilidadSupport;
 use Carbon\Carbon;
@@ -24,12 +27,15 @@ class RecepcionProveedorReporteService
      *     filas: \Illuminate\Support\Collection<int, array<string, mixed>>,
      *     totales: array<string, mixed>,
      *     kpis: array<string, mixed>,
-     *     advertencia_cotizacion: ?string
+     *     advertencia_cotizacion: ?string,
+     *     advertencia_anita: ?string
      * }
      */
     public function generar(array $filtros): array
     {
-        $lineas = $this->consultarLineas($filtros);
+        $lineasErp = $this->consultarLineas($filtros);
+        $anita = $this->consultarAnitaSiCorresponde($filtros, $lineasErp);
+        $lineas = $this->fusionarLineas($lineasErp, $anita['filas'], $filtros);
         $lineas = $this->enriquecerMonedaLocal($lineas);
 
         $modo = (string) ($filtros['modo'] ?? RecepcionProveedorReporteFiltros::MODO_DETALLE);
@@ -48,6 +54,7 @@ class RecepcionProveedorReporteService
             'totales' => $totales,
             'kpis' => $kpis,
             'advertencia_cotizacion' => $advertencia,
+            'advertencia_anita' => $anita['advertencia'],
         ];
     }
 
@@ -125,6 +132,9 @@ class RecepcionProveedorReporteService
         if (trim((string) ($filtros['deposito'] ?? '')) !== '') {
             $partes[] = 'Depósito: '.$filtros['deposito'];
         }
+        if (RecepcionProveedorReporteAnitaFallbackSupport::correspondeFallback($filtros)) {
+            $partes[] = 'Histórico Anita hasta el corte ERP';
+        }
 
         return implode(' · ', $partes);
     }
@@ -169,7 +179,26 @@ class RecepcionProveedorReporteService
             ->join('empresa', 'empresa.id', '=', 'recepcion_proveedor.empresa_id')
             ->join('proveedor', 'proveedor.id', '=', 'recepcion_proveedor.proveedor_id')
             ->leftJoin('ordencompra', 'ordencompra.id', '=', 'recepcion_proveedor.ordencompra_id')
-            ->leftJoin('requisicion', 'requisicion.id', '=', 'ordencompra.requisicion_id')
+            ->leftJoin('ordencompra_articulo as oca', 'oca.id', '=', 'recepcion_proveedor_articulo.ordencompra_articulo_id')
+            ->leftJoin('requisicion_articulo as raoc', 'raoc.id', '=', 'oca.requisicion_articulo_id')
+            ->leftJoin('requisicion', function ($join) {
+                $join->on('requisicion.id', '=', DB::raw(SqlDialectSupport::coalesce('ordencompra.requisicion_id', 'raoc.requisicion_id')));
+            })
+            ->leftJoin('usuario as ureq', 'ureq.id', '=', 'requisicion.creousuario_id')
+            ->leftJoinSub(
+                $this->subqueryUltimaAprobacionRequisicion(),
+                'reap',
+                'reap.requisicion_id',
+                '=',
+                'requisicion.id',
+            )
+            ->leftJoinSub(
+                $this->subqueryUltimoFirmanteArbolRequisicion(),
+                'arb',
+                'arb.requisicion_id',
+                '=',
+                'requisicion.id',
+            )
             ->leftJoin('articulo', 'articulo.id', '=', 'recepcion_proveedor_articulo.articulo_id')
             ->leftJoin('categoria', 'categoria.id', '=', 'articulo.categoria_id')
             ->leftJoin('subcategoria', 'subcategoria.id', '=', 'articulo.subcategoria_id')
@@ -262,6 +291,9 @@ class RecepcionProveedorReporteService
                 'requisicion.id as requisicion_id',
                 'requisicion.numerorequisicion',
                 'requisicion.fecha as fecha_requisicion',
+                'ureq.nombre as usuario_requisicion',
+                'ureq.usuario as login_requisicion',
+                DB::raw(SqlDialectSupport::coalesce('reap.autorizante_nombre', 'arb.autorizante_nombre').' as autorizante_requisicion'),
                 'npu.npu_desde',
                 'npu.npu_hasta',
                 'ent.cantidad_entregada_oc',
@@ -466,6 +498,7 @@ class RecepcionProveedorReporteService
 
         return [
             'tipo_fila' => 'dato',
+            'fuente' => 'erp',
             'linea_id' => (int) ($row->linea_id ?? 0),
             'recepcion_id' => (int) ($row->recepcion_id ?? 0),
             'articulo_id' => (int) ($row->articulo_id ?? 0),
@@ -490,6 +523,8 @@ class RecepcionProveedorReporteService
                 $row->anita_sucursal ?? null,
                 $row->anita_nro ?? null,
             ),
+            'anita_sucursal' => (int) ($row->anita_sucursal ?? 0),
+            'anita_nro' => (int) ($row->anita_nro ?? 0),
             'codigo_proveedor' => (string) ($row->codigo_proveedor ?? ''),
             'nombreproveedor' => (string) ($row->nombreproveedor ?? ''),
             'fecha' => $fecha,
@@ -519,6 +554,8 @@ class RecepcionProveedorReporteService
             'numerorequisicion' => $row->numerorequisicion !== null ? (string) $row->numerorequisicion : '',
             'fecha_requisicion' => $this->fechaYmd($row->fecha_requisicion ?? null),
             'fecha_requisicion_fmt' => RecepcionProveedorReporteFiltros::formatearFechaPantalla($this->fechaYmd($row->fecha_requisicion ?? null)),
+            'usuario_requisicion' => (string) ($row->usuario_requisicion ?: $row->login_requisicion ?: ''),
+            'autorizante_requisicion' => (string) ($row->autorizante_requisicion ?? ''),
             'comentario' => $comentario,
             'usuario' => (string) ($row->nombre_usuario ?: $row->login_usuario ?: ''),
             'usuario_orig' => (string) ($row->nombre_usuario_orig ?: $row->login_usuario_orig ?: ''),
@@ -599,7 +636,7 @@ class RecepcionProveedorReporteService
     private function agruparPorCom(Collection $lineas): Collection
     {
         return $lineas
-            ->groupBy(fn (array $f) => (int) ($f['recepcion_id'] ?? 0))
+            ->groupBy(fn (array $f) => $this->claveAgrupacionCom($f))
             ->map(function (Collection $grupo) {
                 $base = $grupo->first() ?? [];
                 $cantidad = round($grupo->sum(fn (array $f) => (float) ($f['cantidad'] ?? 0)), 4);
@@ -636,14 +673,14 @@ class RecepcionProveedorReporteService
 
         return [
             'cantidad_filas' => $datos->count(),
-            'cantidad_com' => $datos->pluck('recepcion_id')->unique()->count(),
+            'cantidad_com' => $datos->map(fn (array $f) => $this->claveAgrupacionCom($f))->unique()->count(),
             'cantidad_total' => round($datos->sum(fn (array $f) => (float) ($f['cantidad'] ?? 0)), 4),
             'importe_total' => round($datos->sum(fn (array $f) => (float) ($f['total'] ?? 0)), 4),
             'importe_mn' => round($datos->sum(fn (array $f) => (float) ($f['importe_mn'] ?? 0)), 4),
             'con_diferencia' => $datos->filter(fn (array $f) => ! empty($f['tiene_diff']))->count(),
             'sin_facturar' => $datos
                 ->filter(fn (array $f) => empty($f['facturado']) && ($f['tipo'] ?? '') === Recepcion_Proveedor::TIPO_RECEPCION)
-                ->pluck('recepcion_id')
+                ->map(fn (array $f) => $this->claveAgrupacionCom($f))
                 ->unique()
                 ->count(),
             'devoluciones' => $datos->filter(fn (array $f) => ($f['tipo'] ?? '') === Recepcion_Proveedor::TIPO_DEVOLUCION)->count(),
@@ -667,7 +704,7 @@ class RecepcionProveedorReporteService
         $totales['aging_maximo'] = $aging->isNotEmpty() ? (int) $aging->max() : null;
         $totales['precio_pendiente'] = $lineas
             ->filter(fn (array $f) => ! empty($f['fl_precio_pendiente']))
-            ->pluck('recepcion_id')
+            ->map(fn (array $f) => $this->claveAgrupacionCom($f))
             ->unique()
             ->count();
 
@@ -869,6 +906,186 @@ class RecepcionProveedorReporteService
         $sucursal = (int) $sucursal;
 
         return trim($letra.' '.sprintf('%04d', $sucursal).'-'.$numero);
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $lineasErp
+     * @return array{filas: Collection<int, array<string, mixed>>, advertencia: ?string}
+     */
+    private function consultarAnitaSiCorresponde(array $filtros, Collection $lineasErp): array
+    {
+        if (! RecepcionProveedorReporteAnitaFallbackSupport::correspondeFallback($filtros)) {
+            return ['filas' => collect(), 'advertencia' => null];
+        }
+
+        $resultado = RecepcionProveedorReporteAnitaFallbackSupport::consultar(
+            $filtros,
+            $this->sucursalesAnita($filtros),
+        );
+        $filas = $resultado['filas'];
+        if ($filas->isEmpty() && $resultado['error'] === null) {
+            return ['filas' => $filas, 'advertencia' => null];
+        }
+
+        $clavesErp = [];
+        foreach ($lineasErp as $fila) {
+            $suc = (int) ($fila['anita_sucursal'] ?? 0);
+            $nro = (int) ($fila['anita_nro'] ?? 0);
+            if ($suc > 0 && $nro > 0) {
+                $clavesErp[$suc.'|'.$nro] = true;
+            }
+        }
+        if ($clavesErp !== []) {
+            $filas = $filas->reject(function (array $fila) use ($clavesErp) {
+                $clave = ((int) ($fila['anita_sucursal'] ?? 0)).'|'.((int) ($fila['anita_nro'] ?? 0));
+
+                return isset($clavesErp[$clave]);
+            })->values();
+        }
+
+        $advertencia = $resultado['error'];
+        if ($advertencia === null && $filas->isNotEmpty()) {
+            $advertencia = $filas->count().' línea(s) históricas leídas de Anita (una consulta: recepmov/recepmae + requisición/aprobcomp).';
+        } elseif ($advertencia !== null) {
+            $advertencia = 'No se pudo leer el histórico Anita: '.$advertencia;
+        }
+
+        return ['filas' => $filas, 'advertencia' => $advertencia];
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $erp
+     * @param  Collection<int, array<string, mixed>>  $anita
+     * @param  array<string, mixed>  $filtros
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function fusionarLineas(Collection $erp, Collection $anita, array $filtros): Collection
+    {
+        if ($anita->isEmpty()) {
+            return $erp;
+        }
+        if ($erp->isEmpty()) {
+            return $anita;
+        }
+
+        $orden = (string) ($filtros['orden'] ?? RecepcionProveedorReporteFiltros::ORDEN_FECHA);
+
+        return $anita->concat($erp)->sortBy(function (array $fila) use ($orden) {
+            return match ($orden) {
+                RecepcionProveedorReporteFiltros::ORDEN_ARTICULO => [
+                    (string) ($fila['sku'] ?? ''),
+                    (string) ($fila['fecha'] ?? ''),
+                    (string) ($fila['numerorecepcion'] ?? ''),
+                ],
+                RecepcionProveedorReporteFiltros::ORDEN_PROVEEDOR => [
+                    (string) ($fila['nombreproveedor'] ?? ''),
+                    (string) ($fila['fecha'] ?? ''),
+                    (string) ($fila['numerorecepcion'] ?? ''),
+                ],
+                RecepcionProveedorReporteFiltros::ORDEN_CENTROCOSTO => [
+                    (string) ($fila['codigo_cc'] ?? ''),
+                    (string) ($fila['sku'] ?? ''),
+                    (string) ($fila['fecha'] ?? ''),
+                ],
+                RecepcionProveedorReporteFiltros::ORDEN_CUENTA => [
+                    (string) ($fila['codigo_cuenta'] ?? ''),
+                    (string) ($fila['sku'] ?? ''),
+                    (string) ($fila['fecha'] ?? ''),
+                ],
+                RecepcionProveedorReporteFiltros::ORDEN_COMPROBANTE => [
+                    (string) ($fila['numerorecepcion'] ?? ''),
+                    (string) ($fila['fecha'] ?? ''),
+                ],
+                default => [
+                    (string) ($fila['fecha'] ?? ''),
+                    (string) ($fila['numerorecepcion'] ?? ''),
+                ],
+            };
+        })->values();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     * @return list<int>
+     */
+    private function sucursalesAnita(array $filtros): array
+    {
+        $ids = RecepcionProveedorReporteFiltros::empresaIds($filtros);
+        if ($ids === []) {
+            return [];
+        }
+
+        return Empresa::query()
+            ->whereIn('id', $ids)
+            ->pluck('codigo')
+            ->map(fn ($c) => (int) $c)
+            ->filter(fn (int $c) => $c > 0)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Última fila APROBADA de la historia de la requisición.
+     */
+    private function subqueryUltimaAprobacionRequisicion()
+    {
+        return DB::table('requisicion_estado as re')
+            ->leftJoin('usuario as uap', 'uap.id', '=', 're.usuario_id')
+            ->where('re.estado', 'APROBADA')
+            ->whereRaw(
+                're.id = (SELECT MAX(re2.id) FROM requisicion_estado AS re2 WHERE re2.requisicion_id = re.requisicion_id AND re2.estado = ?)',
+                ['APROBADA']
+            )
+            ->select([
+                're.requisicion_id',
+                'uap.nombre as autorizante_nombre',
+            ]);
+    }
+
+    /**
+     * Último firmante del árbol (movimiento Aprobado). Cubre RQ históricas sin fila APROBADA.
+     */
+    private function subqueryUltimoFirmanteArbolRequisicion()
+    {
+        return DB::table('arbolaprobacion_movimiento as am')
+            ->leftJoin('usuario as uam', 'uam.id', '=', 'am.destinatariousuario_id')
+            ->where('am.estado', 'Aprobado')
+            ->whereNotNull('am.requisicion_id')
+            ->whereRaw(
+                'am.id = (SELECT MAX(am2.id) FROM arbolaprobacion_movimiento AS am2 WHERE am2.requisicion_id = am.requisicion_id AND am2.estado = ?)',
+                ['Aprobado']
+            )
+            ->select([
+                'am.requisicion_id',
+                'uam.nombre as autorizante_nombre',
+            ]);
+    }
+
+    /**
+     * ERP: id de recepción. Anita: sucursal + nro (recepcion_id queda 0).
+     *
+     * @param  array<string, mixed>  $fila
+     */
+    private function claveAgrupacionCom(array $fila): string
+    {
+        $id = (int) ($fila['recepcion_id'] ?? 0);
+        if ($id > 0) {
+            return 'erp:'.$id;
+        }
+
+        $suc = (int) ($fila['anita_sucursal'] ?? 0);
+        $nro = (int) ($fila['anita_nro'] ?? 0);
+        if ($nro > 0) {
+            return 'anita:'.$suc.':'.$nro;
+        }
+
+        return 'tmp:'.md5(implode('|', [
+            (string) ($fila['fecha'] ?? ''),
+            (string) ($fila['numerorecepcion'] ?? ''),
+            (string) ($fila['sku'] ?? ''),
+            (string) ($fila['codigo_proveedor'] ?? ''),
+        ]));
     }
 
     private function fechaYmd(mixed $fecha): string

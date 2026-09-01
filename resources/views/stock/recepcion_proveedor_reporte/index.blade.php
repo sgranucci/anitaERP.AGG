@@ -42,6 +42,8 @@
                         Movimientos de mercader&iacute;a recibida de proveedores (COM), con cruce contra OC, requisici&oacute;n,
                         factura ERP y diferencias de cantidad/precio.
                         El per&iacute;odo por defecto es de 90 d&iacute;as.
+                        Incluye qui&eacute;n pidi&oacute; y qui&eacute;n aprob&oacute; la requisici&oacute;n de la OC.
+                        Las fechas anteriores al primer COM del ERP se leen de Anita en una sola consulta (sin importar).
                         Las filas en amarillo tienen diferencias; en celeste, precio pendiente de aprobaci&oacute;n.
                     </p>
 
@@ -192,11 +194,18 @@
                         'kpis' => $resultado['kpis'] ?? [],
                     ])
 
-                    @if (! empty($resultado['advertencia_cotizacion']))
+                    @if (! empty($resultado['advertencia_cotizacion']) || ! empty($resultado['advertencia_anita']))
                         <div class="px-3 py-2 border-bottom">
-                            <div class="alert alert-warning mb-0 py-2">
-                                {{ $resultado['advertencia_cotizacion'] }}
-                            </div>
+                            @if (! empty($resultado['advertencia_cotizacion']))
+                                <div class="alert alert-warning mb-0 py-2">
+                                    {{ $resultado['advertencia_cotizacion'] }}
+                                </div>
+                            @endif
+                            @if (! empty($resultado['advertencia_anita']))
+                                <div class="alert alert-info mb-0 py-2 {{ empty($resultado['advertencia_cotizacion']) ? '' : 'mt-2' }}">
+                                    {{ $resultado['advertencia_anita'] }}
+                                </div>
+                            @endif
                         </div>
                     @endif
 

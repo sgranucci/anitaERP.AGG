@@ -61,6 +61,7 @@ class IngresoEgresoAnularRevertirService
         return DB::transaction(function () use ($movimiento, $leyendaSp) {
             IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport::eliminarDesdeMovimiento($movimiento);
             $this->solicitudpagoPagoService->revertirAAutorizada($movimiento, $leyendaSp);
+            $this->solicitudpagoPagoService->remarcPagadaSiQuedaPagoVigente($movimiento);
 
             $asientos = Asiento::query()->where('caja_movimiento_id', (int) $movimiento->id)->get();
             foreach ($asientos as $asiento) {
@@ -133,6 +134,9 @@ class IngresoEgresoAnularRevertirService
             }
 
             $lineasCaja = [
+                'tipotransaccion_caja_id' => (int) $movimiento->tipotransaccion_caja_id,
+                'fecha' => $fechaOp,
+                'observaciones' => [],
                 'cuentacaja_ids' => [],
                 'montos' => [],
                 'moneda_ids' => [],
@@ -144,6 +148,7 @@ class IngresoEgresoAnularRevertirService
                 $lineasCaja['montos'][] = $monto >= 0 ? ($monto * -1.0) : abs($monto);
                 $lineasCaja['moneda_ids'][] = (int) ($linea->moneda_id ?: 1);
                 $lineasCaja['cotizaciones'][] = (float) ($linea->cotizacion ?: 1);
+                $lineasCaja['observaciones'][] = $leyenda;
             }
             if ($lineasCaja['cuentacaja_ids'] !== []) {
                 $this->cuentacajaRepository->create($lineasCaja, (int) $reverso->id);
@@ -202,6 +207,7 @@ class IngresoEgresoAnularRevertirService
                 $movimiento,
                 'Reversión '.$abrev.' '.$nroOrig.' → anulación N° '.$reverso->numerotransaccion
             );
+            $this->solicitudpagoPagoService->remarcPagadaSiQuedaPagoVigente($movimiento);
 
             return [
                 'mensaje' => 'ok',

@@ -14,7 +14,7 @@
     $puedeVerProveedor = ! $paraPdf && ! $paraExcel && ($puede_ver_proveedor ?? false);
     $puedeVerCuenta = ! $paraPdf && ! $paraExcel && ($puede_ver_cuentacontable ?? false);
     $puedeVerCp = ! $paraPdf && ! $paraExcel && ($puede_ver_comprobante ?? false);
-    $colspanCompleto = $esResumen ? 16 : ($columnasCompletas ? 41 : 17);
+    $colspanCompleto = $esResumen ? 18 : ($columnasCompletas ? 43 : 17);
     $tableClass = $table_class ?? 'table table-hover table-striped table-sm mb-0';
     $soloTheadTbody = ! empty($solo_thead_tbody);
     $filasIterable = $filas ?? [];
@@ -38,6 +38,8 @@
                 <th class="text-right">Importe</th>
                 <th class="text-right">Importe MN</th>
                 <th>Usuario</th>
+                <th>Pide requi</th>
+                <th>Autoriza requi</th>
                 <th>Estado fact.</th>
                 <th class="text-right">D&iacute;as s/fact.</th>
                 <th>Dep&oacute;sito</th>
@@ -91,6 +93,8 @@
                     <th class="text-right">D&iacute;as s/fact.</th>
                     <th>Nr.requi</th>
                     <th>Fec.req.</th>
+                    <th>Pide requi</th>
+                    <th>Autoriza requi</th>
                     <th>CC dest.</th>
                     <th>Comentario</th>
                     <th>Usu. orig.</th>
@@ -129,7 +133,7 @@
                     <td colspan="7"><strong>Total {{ $fila['etiqueta_grupo'] ?? '' }}</strong></td>
                     <td class="text-right"><strong>{{ number_format((float) ($fila['total'] ?? 0), 2, ',', '.') }}</strong></td>
                     <td class="text-right"><strong>{{ number_format((float) ($fila['importe_mn'] ?? 0), 2, ',', '.') }}</strong></td>
-                    <td colspan="7"></td>
+                    <td colspan="9"></td>
                 @else
                     <td colspan="{{ $columnasCompletas ? 12 : 5 }}"><strong>Total {{ $fila['etiqueta_grupo'] ?? '' }}</strong></td>
                     <td class="text-right"><strong>{{ number_format((float) ($fila['cantidad'] ?? 0), 2, ',', '.') }}</strong></td>
@@ -141,7 +145,7 @@
                     @if ($columnasCompletas)
                         <td class="text-right"><strong>{{ number_format((float) ($fila['importe_mn'] ?? 0), 2, ',', '.') }}</strong></td>
                     @endif
-                    <td colspan="{{ $columnasCompletas ? 24 : 9 }}"></td>
+                    <td colspan="{{ $columnasCompletas ? 26 : 9 }}"></td>
                 @endif
             </tr>
         @else
@@ -198,6 +202,8 @@
                     <td class="text-right">{{ number_format((float) ($fila['total'] ?? 0), 2, ',', '.') }}</td>
                     <td class="text-right">{{ number_format((float) ($fila['importe_mn'] ?? 0), 2, ',', '.') }}</td>
                     <td>{{ $fila['usuario'] ?? '' }}</td>
+                    <td>{{ $fila['usuario_requisicion'] ?? '' }}</td>
+                    <td>{{ $fila['autorizante_requisicion'] ?? '' }}</td>
                     <td>{{ $fila['estado_facturacion'] ?? '' }}</td>
                     <td class="text-right">
                         @if ($dias !== null)
@@ -312,6 +318,8 @@
                             @endif
                         </td>
                         <td>{{ $fila['fecha_requisicion_fmt'] ?? '' }}</td>
+                        <td>{{ $fila['usuario_requisicion'] ?? '' }}</td>
+                        <td>{{ $fila['autorizante_requisicion'] ?? '' }}</td>
                         <td>{{ $fila['codigo_cc_req'] ?? '' }}</td>
                         <td>{{ $fila['comentario'] ?? '' }}</td>
                         <td>{{ $fila['usuario_orig'] ?? '' }}</td>

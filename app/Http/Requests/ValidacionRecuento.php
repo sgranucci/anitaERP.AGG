@@ -21,16 +21,28 @@ class ValidacionRecuento extends FormRequest
     protected function prepareForValidation(): void
     {
         $raw = $this->input('items_json');
-        if ($raw === null || $raw === '') {
+        if ($raw !== null && $raw !== '') {
+            $arrays = RecuentoItemsRequestSupport::arraysDesdeItemsJson($raw);
+            if ($arrays !== null) {
+                $this->merge($arrays);
+            }
+        }
+
+        $this->normalizarCantidadesContadas();
+    }
+
+    private function normalizarCantidadesContadas(): void
+    {
+        $cantidades = $this->input('cantidades_contadas');
+        if (! is_array($cantidades)) {
             return;
         }
 
-        $arrays = RecuentoItemsRequestSupport::arraysDesdeItemsJson($raw);
-        if ($arrays === null) {
-            return;
+        foreach ($cantidades as $i => $cantidad) {
+            $cantidades[$i] = RecuentoItemsRequestSupport::normalizarCantidadContada($cantidad);
         }
 
-        $this->merge($arrays);
+        $this->merge(['cantidades_contadas' => $cantidades]);
     }
 
     public function rules(): array
@@ -139,5 +151,31 @@ class ValidacionRecuento extends FormRequest
                 $validator->errors()->add('articulo_ids', $e->getMessage());
             }
         });
+    }
+
+    public function attributes(): array
+    {
+        $attrs = [];
+        $detalles = $this->input('detalle_articulos', []);
+        $cantidades = $this->input('cantidades_contadas', []);
+        $indices = array_unique(array_merge(
+            array_keys(is_array($detalles) ? $detalles : []),
+            array_keys(is_array($cantidades) ? $cantidades : [])
+        ));
+        foreach ($indices as $i) {
+            $detalle = trim((string) (is_array($detalles) ? ($detalles[$i] ?? '') : ''));
+            $ref = $detalle !== '' ? $detalle : ('línea '.(((int) $i) + 1));
+            $attrs['cantidades_contadas.'.$i] = 'cantidad contada ('.$ref.')';
+        }
+
+        return $attrs;
+    }
+
+    public function messages(): array
+    {
+        return [
+            'cantidades_contadas.*.min' => 'La :attribute no puede ser negativa. Indique 0 si no había existencias.',
+            'cantidades_contadas.*.numeric' => 'La :attribute debe ser un número.',
+        ];
     }
 }

@@ -115,7 +115,10 @@ class RecepcionProveedorReporteController extends Controller
         $totales = $resultado['totales'] ?? [];
         $kpis = $resultado['kpis'] ?? [];
         $modo = (string) ($filtros['modo'] ?? RecepcionProveedorReporteFiltros::MODO_DETALLE);
-        $advertencia = $resultado['advertencia_cotizacion'] ?? null;
+        $advertencia = trim(implode(' ', array_filter([
+            $resultado['advertencia_cotizacion'] ?? null,
+            $resultado['advertencia_anita'] ?? null,
+        ]))) ?: null;
 
         switch (strtoupper((string) $formato)) {
             case 'PDF':

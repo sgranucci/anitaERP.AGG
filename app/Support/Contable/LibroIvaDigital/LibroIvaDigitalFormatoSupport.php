@@ -21,8 +21,9 @@ final class LibroIvaDigitalFormatoSupport
     public static function tipoCambio10(float $valor): string
     {
         $scaled = (int) round(abs($valor) * 1_000_000);
+        $digits = substr((string) $scaled, -10);
 
-        return str_pad((string) $scaled, 10, '0', STR_PAD_LEFT);
+        return str_pad($digits, 10, '0', STR_PAD_LEFT);
     }
 
     public static function parseImporte15(string $campo): float

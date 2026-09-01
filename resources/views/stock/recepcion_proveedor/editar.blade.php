@@ -14,7 +14,11 @@ Recepción {{ $recepcion->numerorecepcion }}
 <script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/modal_articulo_proveedor.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recepcion_proveedor/modal_articulo_proveedor.js')) ?: time() }}" type="text/javascript"></script>
 @endif
 @if (can('cambiar-cotizacion-recepcion-proveedor', false))
+<script>
+window.abrirRecalcularTraTito = @json(session('abrir_recalcular_tra_tito'));
+</script>
 <script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/cambiar_cotizacion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recepcion_proveedor/cambiar_cotizacion.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/stock/recepcion_proveedor/recalcular_tra_tito.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/recepcion_proveedor/recalcular_tra_tito.js')) ?: time() }}" type="text/javascript"></script>
 @endif
 <script src="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/modal.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/seguridad/ingreso_proveedor/modal.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/autorizar.js') }}" type="text/javascript"></script>
@@ -152,6 +156,11 @@ Recepción {{ $recepcion->numerorecepcion }}
 @include('includes.stock.modalconsultadeposito')
 @include('includes.stock.modalconsultaordencompra_recepcion')
 @include('stock.recepcion_proveedor.partials.modal_cambiar_cotizacion')
+@if (can('cambiar-cotizacion-recepcion-proveedor', false))
+@include('stock.recepcion_proveedor.partials.modal_recalcular_tra_tito')
+<input type="hidden" id="rp-preview-recalcular-tra-tito-url" value="{{ route('recepcion_proveedor_preview_recalcular_tra_tito', ['id' => '__ID__']) }}">
+<input type="hidden" id="rp-aplicar-recalcular-tra-tito-url" value="{{ route('recepcion_proveedor_aplicar_recalcular_tra_tito', ['id' => '__ID__']) }}">
+@endif
 @if (!empty($mostrar_solapa_ingresos))
     @include('includes.seguridad.modal_ingreso_proveedor', [
         'ingresoContexto' => [

@@ -196,9 +196,25 @@
             ev.preventDefault();
             return;
         }
+        var confirmMsg = form.getAttribute('data-confirm-msg');
+        if (confirmMsg && form.getAttribute('data-confirmado') !== '1') {
+            ev.preventDefault();
+            if (!window.confirm(confirmMsg)) {
+                return;
+            }
+            form.setAttribute('data-confirmado', '1');
+            var idConfirm = idDesdeAction(form.getAttribute('action'));
+            if (idConfirm > 0) {
+                marcarActivoLocal(idConfirm);
+            }
+            var tituloC = form.getAttribute('data-overlay-titulo') || 'Presentando comprobantes CAEA…';
+            var subtituloC = form.getAttribute('data-overlay-subtitulo') || '';
+            mostrarOverlay(tituloC, subtituloC);
+            form.submit();
+            return;
+        }
         var id = idDesdeAction(form.getAttribute('action'));
         if (id > 0) {
-            // Deshabilitar al toque (antes del redirect) para que no quede el avión azul.
             marcarActivoLocal(id);
         }
         var titulo = form.getAttribute('data-overlay-titulo') || 'Presentando comprobantes CAEA…';

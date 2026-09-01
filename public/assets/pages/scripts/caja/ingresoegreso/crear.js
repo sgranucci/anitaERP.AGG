@@ -181,6 +181,9 @@ var montoPendienteSp = 0;
 			agregaUnRenglon();
 		}
 		asegurarRenglonesCuentaPorTipo();
+		if (window.AsientoMontosFormato && typeof AsientoMontosFormato.initEnContenedor === 'function') {
+			AsientoMontosFormato.initEnContenedor('#cuenta-table');
+		}
 
 		// Lee monedas
 		$.get(carpetaBase+'/configuracion/leermoneda', function(data){
@@ -199,6 +202,11 @@ var montoPendienteSp = 0;
 		}, 300);
 
 		$( "#botonform0" ).click(function() {
+			if (window.ieGrabacionEnCurso) {
+				return;
+			}
+			iniciarBannerGrabacionIe();
+
 			let flError = false;
 	
 			$("#tbody-cuenta-table .moneda").each(function() {
@@ -222,6 +230,7 @@ var montoPendienteSp = 0;
 			}
 	
 			if (flError) {
+				liberarBannerGrabacionIe();
 				return;
 			}
 
@@ -230,10 +239,12 @@ var montoPendienteSp = 0;
 				flModificaAsiento = true;
 				generaAsientoContable(function (ok) {
 					if (!ok) {
+						liberarBannerGrabacionIe();
 						return;
 					}
 					sumaMontoAsiento();
 					if (!validarBalanceAsientoTransferencia()) {
+						liberarBannerGrabacionIe();
 						muestraVentanaAsiento();
 						return;
 					}
@@ -253,10 +264,12 @@ var montoPendienteSp = 0;
 					flModificaAsiento = true;
 					generaAsientoContable(function (ok) {
 						if (!ok) {
+							liberarBannerGrabacionIe();
 							return;
 						}
 						sumaMontoAsiento();
 						if (!validarBalanceAsientoIe()) {
+							liberarBannerGrabacionIe();
 							muestraVentanaAsiento();
 							return;
 						}
@@ -273,6 +286,8 @@ var montoPendienteSp = 0;
 			if (!flError)
 			{
 				continuarGrabacionTrasValidaciones();
+			} else {
+				liberarBannerGrabacionIe();
 			}
 		});
 
@@ -288,6 +303,7 @@ var montoPendienteSp = 0;
 			if (comprobantesIva.length > 0 && typeof window.validarComprobantesIvaContraCaja === 'function') {
 				window.validarComprobantesIvaContraCaja(function (valido) {
 					if (!valido) {
+						liberarBannerGrabacionIe();
 						return;
 					}
 					continuarGrabacionIngresoEgreso(totalDebe, totalHaber, parseTotalAsientoCampo($("#totaldebeasiento").val()));
@@ -360,8 +376,11 @@ var montoPendienteSp = 0;
 				}
 			}
 	
-			if (!flError)
+			if (!flError) {
 				$( "#form-general" ).submit();
+			} else {
+				liberarBannerGrabacionIe();
+			}
 		}
     });
 
@@ -416,6 +435,7 @@ var montoPendienteSp = 0;
 		}
 		aplicarMontoDefaultSpSiCorresponde($tr);
 		flModificaAsiento = true;
+		sumaMonto();
 	}
 
 	function enfocarCampoCuentaIe(el) {
@@ -500,14 +520,28 @@ var montoPendienteSp = 0;
 			});
 	}
 
+	function setMontoCuentaIe($input, numero) {
+		if (!$input || !$input.length) {
+			return;
+		}
+		var n = Number(numero);
+		if (isNaN(n)) {
+			n = 0;
+		}
+		$input.val(n.toFixed(2));
+		if (window.AsientoMontosFormato && typeof AsientoMontosFormato.formatearInput === 'function') {
+			AsientoMontosFormato.formatearInput($input[0]);
+		}
+	}
+
 	function validarMontoCuentaIe(input) {
 		var raw = String(input.value || '').trim();
 		if (raw === '') {
 			alert('Ingrese un monto');
 			return false;
 		}
-		var valor = parseFloat(raw);
-		if (isNaN(valor)) {
+		var valor = parseTotalAsientoCampo(raw);
+		if (isNaN(valor) || Math.abs(valor) < 0.000001) {
 			alert('Monto inválido');
 			return false;
 		}
@@ -520,7 +554,7 @@ var montoPendienteSp = 0;
 			alert('Ingrese la cotización');
 			return false;
 		}
-		var valor = parseFloat(raw);
+		var valor = parseTotalAsientoCampo(raw);
 		if (isNaN(valor) || valor <= 0) {
 			alert('Cotización inválida');
 			return false;
@@ -872,7 +906,11 @@ var montoPendienteSp = 0;
 			let url_cot = carpetaBase+'/configuracion/leercotizacion/'+fecha+'/'+moneda_id;
 		
 			$.get(url_cot, function(data){
-				$(ptr).parents("tr").find('.cotizacion').val(data.cotizacionventa);
+				var $cot = $(ptr).parents("tr").find('.cotizacion');
+				$cot.val(data.cotizacionventa);
+				if (window.AsientoMontosFormato && typeof AsientoMontosFormato.formatearInput === 'function') {
+					AsientoMontosFormato.formatearInput($cot[0]);
+				}
 				sumaMonto();
 			});
 		}
@@ -893,9 +931,18 @@ var montoPendienteSp = 0;
 
 		$("#tbody-cuenta-table .monto").each(function() {
             let valor = parseTotalAsientoCampo($(this).val());
+			if (isNaN(valor)) {
+				valor = 0;
+			}
 			let moneda = $(this).parents("tr").find('.moneda').val();
 			let cotizacion = parseTotalAsientoCampo($(this).parents("tr").find('.cotizacion').val());
+			if (isNaN(cotizacion)) {
+				cotizacion = 0;
+			}
 			let coef = calculaCoeficienteMoneda(monedaDefault, moneda, cotizacion);
+			if (typeof coef !== 'number' || isNaN(coef) || !isFinite(coef)) {
+				coef = 1;
+			}
 
             if (valor >= 0)
                 totalDebe += valor * coef;
@@ -905,6 +952,12 @@ var montoPendienteSp = 0;
 					totalHaber += Math.abs(valor) * coef;
 			}
 
+			if (moneda === '' || moneda == null) {
+				return;
+			}
+			if (typeof totalMoneda[moneda] !== 'number' || isNaN(totalMoneda[moneda])) {
+				totalMoneda[moneda] = 0;
+			}
 			totalMoneda[moneda] += valor;
         });
 
@@ -938,7 +991,7 @@ var montoPendienteSp = 0;
 		idMoneda.forEach(function(moneda, indice, array) {
 			let detalleLabel = 'Total '+descripcionMoneda[moneda];
 
-			if (totalMoneda[moneda] !== undefined && totalMoneda[moneda] != 0) 
+			if (typeof totalMoneda[moneda] === 'number' && !isNaN(totalMoneda[moneda]) && totalMoneda[moneda] != 0)
 			{
 				$(wrapper).append('<label class="col-lg-2 col-form-label">'+detalleLabel+'</label>');
 				$(wrapper).append('<input type="text" class="form-control col-lg-1" readonly value="'+totalMoneda[moneda].toFixed(2)+'" />');
@@ -976,7 +1029,7 @@ var montoPendienteSp = 0;
 		if (!(totalAsiento > 0.02)) {
 			return false;
 		}
-		$tr.find('.monto').val(totalAsiento.toFixed(2));
+		setMontoCuentaIe($tr.find('.monto'), totalAsiento);
 		return true;
 	}
 
@@ -1141,13 +1194,13 @@ var montoPendienteSp = 0;
 								'<input type="hidden" class="monedaasiento_id_previo" name="monedaasiento_id_previo[]" value="'+monedaId+'" >'+
 							'</td>'+
 							'<td>'+
-								'<input type="number" name="debeasientos[]" class="form-control debeasiento" value="'+debe+'">'+
+								'<input type="text" inputmode="decimal" name="debeasientos[]" class="form-control text-right debeasiento" value="'+debe+'">'+
 							'</td>'+
 							'<td>'+
-								'<input type="number" name="haberasientos[]" class="form-control haberasiento" value="'+haber+'">'+
+								'<input type="text" inputmode="decimal" name="haberasientos[]" class="form-control text-right haberasiento" value="'+haber+'">'+
 							'</td>'+
 							'<td>'+
-								'<input type="number" name="cotizacionasientos[]" class="form-control cotizacionasiento" value="'+cotizacion+'">'+
+								'<input type="text" inputmode="decimal" name="cotizacionasientos[]" class="form-control text-right cotizacionasiento" value="'+cotizacion+'">'+
 							'</td>'+
 							'<td>'+
 								'<input type="text" name="observacionasientos[]" class="form-control observacionasiento" value="'+observacion+'">'+
@@ -1259,6 +1312,13 @@ var montoPendienteSp = 0;
 
 	$("#form-general").submit(function (e) {
 		e.preventDefault();
+		if ($(this).data('ie-ajax-enviado')) {
+			return;
+		}
+		$(this).data('ie-ajax-enviado', true);
+		if (!window.ieGrabacionEnCurso) {
+			iniciarBannerGrabacionIe();
+		}
 		if (window.AsientoMontosFormato && typeof AsientoMontosFormato.normalizarAntesDeEnviar === 'function') {
 			AsientoMontosFormato.normalizarAntesDeEnviar(this);
 		}
@@ -1309,9 +1369,13 @@ var montoPendienteSp = 0;
 				}
 
 				var detalle = data.errores || data.error || data.message || '';
+				$("#form-general").data('ie-ajax-enviado', false);
+				liberarBannerGrabacionIe();
 				alert(detalle ? ("Error de grabación: " + detalle) : "Error de grabación");
 			},
 			error :function( data ) {
+				$("#form-general").data('ie-ajax-enviado', false);
+				liberarBannerGrabacionIe();
 				if( data.status === 422 ) {
 					var msg = "Error de grabación, verifique los datos";
 					if (data.responseJSON && data.responseJSON.errors) {
@@ -1336,6 +1400,44 @@ var montoPendienteSp = 0;
 		});
 	});
 	
+	function iniciarBannerGrabacionIe()
+	{
+		if (window.ieGrabacionEnCurso) {
+			return false;
+		}
+		window.ieGrabacionEnCurso = true;
+		$('#botonform0').prop('disabled', true).addClass('disabled');
+		var form = document.getElementById('form-general');
+		if (window.AnitaGrabacion) {
+			if (form && typeof AnitaGrabacion.marcar === 'function') {
+				AnitaGrabacion.marcar(form);
+			} else if (typeof AnitaGrabacion.mostrar === 'function') {
+				var titulo = (form && form.getAttribute('data-mensaje-grabacion')) || 'Grabando OP…';
+				AnitaGrabacion.mostrar(titulo);
+			}
+			return true;
+		}
+		var ui = window.IngresoEgresoAnularRevertirUi;
+		if (ui && ui.mostrarProcesando) {
+			ui.mostrarProcesando('Grabando OP…', 'No cierre ni recargue. Cada envío extra genera una OP duplicada en Anita.');
+		}
+		return true;
+	}
+
+	function liberarBannerGrabacionIe()
+	{
+		window.ieGrabacionEnCurso = false;
+		$('#botonform0').prop('disabled', false).removeClass('disabled');
+		if (window.AnitaGrabacion && typeof AnitaGrabacion.liberar === 'function') {
+			AnitaGrabacion.liberar();
+		} else {
+			var ui = window.IngresoEgresoAnularRevertirUi;
+			if (ui && ui.ocultarProcesando) {
+				ui.ocultarProcesando();
+			}
+		}
+	}
+
 	function BeforeSend()
 	{
 		$("#loading").show();
@@ -1446,7 +1548,7 @@ var montoPendienteSp = 0;
 			if ($trExcluir && $trExcluir.length && this === $trExcluir[0]) {
 				return;
 			}
-			usado += Math.abs(parseFloat($(this).find('.monto').val()) || 0);
+			usado += Math.abs(parseTotalAsientoCampo($(this).find('.monto').val()));
 		});
 		return Math.round((montoPendienteSp - usado) * 100) / 100;
 	}
@@ -1457,13 +1559,13 @@ var montoPendienteSp = 0;
 			return;
 		}
 		var $monto = $tr.find('.monto');
-		var actual = String($monto.val() || '').trim();
-		if (actual !== '' && Math.abs(parseFloat(actual) || 0) > 0.000001) {
+		var actual = parseTotalAsientoCampo($monto.val());
+		if (Math.abs(actual) > 0.000001) {
 			return;
 		}
 		var resto = restoMontoPendienteSpIe($tr);
 		if (resto > 0.009) {
-			$monto.val(resto.toFixed(2));
+			setMontoCuentaIe($monto, resto);
 		}
 	}
 
@@ -1531,7 +1633,7 @@ var montoPendienteSp = 0;
 	{
 		var cta = parseInt($tr.find('.cuentacaja_id').val() || '0', 10);
 		var codigo = String($tr.find('.codigo').val() || '').trim();
-		var monto = parseFloat($tr.find('.monto').val() || '0');
+		var monto = parseTotalAsientoCampo($tr.find('.monto').val());
 		return cta <= 0 && codigo === '' && (isNaN(monto) || Math.abs(monto) < 0.000001);
 	}
 
@@ -1581,7 +1683,7 @@ var montoPendienteSp = 0;
 		var lineas = 0;
 		$("#tbody-cuenta-table .item-cuenta").each(function () {
 			var cta = parseInt($(this).find('.cuentacaja_id').val() || '0', 10);
-			var monto = parseFloat($(this).find('.monto').val() || '0');
+			var monto = parseTotalAsientoCampo($(this).find('.monto').val());
 			if (cta > 0 && Math.abs(monto) > 0.000001) {
 				lineas++;
 			}

@@ -18,6 +18,7 @@
                     <p class="text-muted small mb-3">
                         Se actualiza <strong>solo la cotización</strong> en la recepción, el asiento contable del ERP
                         y en Anita (ctamov y recepmov). No se modifican cantidades ni precios.
+                        Si la COM tiene artículos TITO, después se abre el recálculo de TRA del mes en curso de esa empresa.
                     </p>
                     <div class="form-group mb-0">
                         <label for="cambiar-cotizacion-valor">Nueva cotización</label>

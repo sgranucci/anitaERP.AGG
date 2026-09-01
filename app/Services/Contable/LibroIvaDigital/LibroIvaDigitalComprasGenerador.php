@@ -265,6 +265,7 @@ class LibroIvaDigitalComprasGenerador
             'denominacion_emisor_corredor' => '',
             'iva_comision' => 0,
         ];
+        $cabecera = LibroIvaDigitalMapeosSupport::cabeceraImportesEnPesos($cabecera);
 
         $alicuotas = [];
         foreach ($totales['alicuotas'] as $row) {

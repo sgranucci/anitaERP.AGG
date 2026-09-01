@@ -1051,6 +1051,10 @@ Route::get('contable/canon-municipal-config/{id}/editar', 'Contable\CanonMunicip
 Route::put('contable/canon-municipal-config/{id}', 'Contable\CanonMunicipalConfigController@actualizar')->name('actualizar_canon_municipal_config');
 Route::delete('contable/canon-municipal-config/{id}', 'Contable\CanonMunicipalConfigController@eliminar')->name('eliminar_canon_municipal_config');
 
+Route::get('contable/canon-entidades', 'Contable\CanonEntidadesReporteController@index')->name('canon_entidades');
+Route::get('contable/exportar-canon-entidades-formulario', 'Contable\CanonEntidadesReporteController@exportarFormulario')->name('exportar_canon_entidades_formulario');
+Route::get('contable/listar-canon-entidades/{formato?}', 'Contable\CanonEntidadesReporteController@listar')->name('listar_canon_entidades');
+
 Route::get('contable/efe-mensual', 'Contable\EfeMensualController@index')->name('efe_mensual');
 Route::get('contable/listar-efe-mensual/{formato}', 'Contable\EfeMensualController@exportar')->name('listar_efe_mensual');
 
@@ -1474,6 +1478,8 @@ Route::post('stock/recepcion-proveedor/{id}/confirmar', 'Stock\RecepcionProveedo
 Route::get('stock/recepcion-proveedor/{id}/validacion-abono', 'Compras\ContratoValidacionAbonoController@editarRecepcion')->name('editar_validacion_abono_recepcion');
 Route::post('stock/recepcion-proveedor/{id}/validacion-abono', 'Compras\ContratoValidacionAbonoController@guardarRecepcion')->name('guardar_validacion_abono_recepcion');
 Route::post('stock/recepcion-proveedor/{id}/cambiar-cotizacion', 'Stock\RecepcionProveedorController@cambiarCotizacion')->name('cambiar_cotizacion_recepcion_proveedor');
+Route::get('stock/recepcion-proveedor/{id}/api/preview-recalcular-tra-tito', 'Stock\RecepcionProveedorController@apiPreviewRecalcularTraTito')->name('recepcion_proveedor_preview_recalcular_tra_tito');
+Route::post('stock/recepcion-proveedor/{id}/api/aplicar-recalcular-tra-tito', 'Stock\RecepcionProveedorController@apiAplicarRecalcularTraTito')->name('recepcion_proveedor_aplicar_recalcular_tra_tito');
 Route::post('stock/recepcion-proveedor/api/preview-articulo-proveedor', 'Stock\RecepcionProveedorController@apiPreviewArticuloProveedor')->name('recepcion_proveedor_preview_articulo_proveedor');
 Route::get('stock/recepcion-proveedor/api/precarga-oc', 'Stock\RecepcionProveedorController@apiPrecargaOc')->name('recepcion_proveedor_precarga_oc');
 Route::get('stock/recepcion-proveedor/api/cotizacion-moneda-fecha', 'Stock\RecepcionProveedorController@apiCotizacionMonedaFecha')->name('recepcion_proveedor_cotizacion_moneda_fecha');

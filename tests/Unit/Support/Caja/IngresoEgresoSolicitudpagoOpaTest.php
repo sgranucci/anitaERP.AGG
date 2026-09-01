@@ -20,6 +20,13 @@ class IngresoEgresoSolicitudpagoOpaTest extends TestCase
         $this->assertSame('OPA', IngresoEgresoSolicitudpagoSupport::abreviaturaTipoPago($sp));
     }
 
+    public function test_assert_disponible_sin_solicitud_no_lanza(): void
+    {
+        IngresoEgresoSolicitudpagoSupport::assertSolicitudDisponibleParaPagar([]);
+        IngresoEgresoSolicitudpagoSupport::assertSolicitudDisponibleParaPagar(['solicitudpago_id' => 0]);
+        $this->assertTrue(true);
+    }
+
     public function test_tratamiento_normal_sigue_como_opp(): void
     {
         $sp = new Solicitudpago(['tratamiento' => SolicitudpagoTratamientos::NORMAL]);

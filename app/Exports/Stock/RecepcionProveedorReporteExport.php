@@ -35,7 +35,7 @@ class RecepcionProveedorReporteExport implements FromView, ShouldAutoSize, WithC
 
     private int $filaPrimeraDatosExcel = 3;
 
-    private string $colUltima = 'AO';
+    private string $colUltima = 'AQ';
 
     /** @var list<string> */
     private array $rutasLogosExcel = [];
@@ -54,7 +54,7 @@ class RecepcionProveedorReporteExport implements FromView, ShouldAutoSize, WithC
         private string $modo = RecepcionProveedorReporteFiltros::MODO_DETALLE,
         private ?string $advertencia = null,
     ) {
-        $this->colUltima = $this->modo === RecepcionProveedorReporteFiltros::MODO_RESUMEN ? 'P' : 'AO';
+        $this->colUltima = $this->modo === RecepcionProveedorReporteFiltros::MODO_RESUMEN ? 'R' : 'AQ';
     }
 
     public function view(): View
@@ -80,7 +80,7 @@ class RecepcionProveedorReporteExport implements FromView, ShouldAutoSize, WithC
             'advertencia_cotizacion' => $this->advertencia,
             'total_lineas' => $coleccion->filter(fn ($f) => (is_array($f) ? ($f['tipo_fila'] ?? 'dato') : 'dato') === 'dato')->count(),
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
-            'colspan_excel' => $this->modo === RecepcionProveedorReporteFiltros::MODO_RESUMEN ? 16 : 41,
+            'colspan_excel' => $this->modo === RecepcionProveedorReporteFiltros::MODO_RESUMEN ? 18 : 43,
             'para_pdf' => true,
             'para_excel' => true,
             'columnas_completas' => true,
@@ -145,7 +145,7 @@ class RecepcionProveedorReporteExport implements FromView, ShouldAutoSize, WithC
             return [
                 'A' => 12, 'B' => 10, 'C' => 16, 'D' => 12, 'E' => 12, 'F' => 28,
                 'G' => 22, 'H' => 14, 'I' => 14, 'J' => 16, 'K' => 18, 'L' => 10,
-                'M' => 14, 'N' => 22, 'O' => 14, 'P' => 16,
+                'M' => 14, 'N' => 22, 'O' => 14, 'P' => 16, 'Q' => 18, 'R' => 18,
             ];
         }
 
@@ -157,6 +157,7 @@ class RecepcionProveedorReporteExport implements FromView, ShouldAutoSize, WithC
             'Y' => 14, 'Z' => 10, 'AA' => 10, 'AB' => 14, 'AC' => 16, 'AD' => 10,
             'AE' => 10, 'AF' => 12, 'AG' => 10, 'AH' => 24, 'AI' => 14, 'AJ' => 16,
             'AK' => 8, 'AL' => 14, 'AM' => 10, 'AN' => 16, 'AO' => 12,
+            'AP' => 18, 'AQ' => 18,
         ];
     }
 
@@ -221,7 +222,7 @@ class RecepcionProveedorReporteExport implements FromView, ShouldAutoSize, WithC
                     ],
                 ]);
 
-                $sheet->getStyle('AH'.$this->filaPrimeraDatosExcel.':AH'.$sheet->getHighestRow())
+                $sheet->getStyle('AI'.$this->filaPrimeraDatosExcel.':AI'.$sheet->getHighestRow())
                     ->getAlignment()
                     ->setWrapText(true);
 

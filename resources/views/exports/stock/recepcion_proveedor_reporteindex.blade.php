@@ -1,5 +1,5 @@
 @php
-    $colspan = (int) ($colspan_excel ?? 41);
+    $colspan = (int) ($colspan_excel ?? 43);
 @endphp
 <table>
     @if (! empty($reservarFilaLogoExcel))

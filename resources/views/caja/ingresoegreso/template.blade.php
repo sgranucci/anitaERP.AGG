@@ -24,10 +24,10 @@
             </select>
         </td>
         <td>
-            <input type="number" name="montos[]" class="form-control monto" value="">
+            <input type="text" inputmode="decimal" name="montos[]" class="form-control text-right monto" value="" autocomplete="off">
         </td>
         <td>
-            <input type="number" name="cotizaciones[]" class="form-control cotizacion" value="0">
+            <input type="text" inputmode="decimal" name="cotizaciones[]" class="form-control text-right cotizacion" value="0" autocomplete="off">
         </td>
         <td>
             <input type="text" name="observaciones[]" class="form-control observacion" value="">

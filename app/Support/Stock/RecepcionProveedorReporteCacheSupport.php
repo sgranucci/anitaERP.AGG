@@ -28,7 +28,7 @@ final class RecepcionProveedorReporteCacheSupport
     {
         $userId = (int) (auth()->id() ?? 0);
 
-        return 'recepcion_proveedor_reporte_v1_'.$userId.'_'.self::firma($filtros);
+        return 'recepcion_proveedor_reporte_v3_'.$userId.'_'.self::firma($filtros);
     }
 
     /**

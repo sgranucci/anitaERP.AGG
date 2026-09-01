@@ -63,4 +63,55 @@ class RecuentoItemsRequestSupportTest extends TestCase
         $this->assertNull(RecuentoItemsRequestSupport::arraysDesdeItemsJson('{no-json'));
         $this->assertNull(RecuentoItemsRequestSupport::arraysDesdeItemsJson(null));
     }
+
+    public function test_reconstruye_todas_las_lineas_desde_items_json(): void
+    {
+        $items = [];
+        for ($i = 1; $i <= 35; $i++) {
+            $items[] = [
+                'articulo_id' => $i,
+                'sku' => 'SKU-'.$i,
+                'detalle' => 'Artículo '.$i,
+                'cantidad_contada' => $i === 35 ? -2 : $i,
+                'saldo_sistema' => 1,
+                'unidadmedida_id' => 1,
+                'unidadmedida' => 'UN',
+                'color_id' => 0,
+                'talle_id' => 0,
+            ];
+        }
+
+        $lineas = RecuentoItemsRequestSupport::lineasDesdeOldInput(json_encode($items), []);
+
+        $this->assertNotNull($lineas);
+        $this->assertCount(35, $lineas);
+        $this->assertSame(35, $lineas[34]['articulo_id']);
+        $this->assertSame('SKU-35', $lineas[34]['sku']);
+        $this->assertSame(-2, $lineas[34]['cantidad_contada']);
+    }
+
+    public function test_reconstruye_lineas_desde_arrays_old_si_no_hay_json(): void
+    {
+        $lineas = RecuentoItemsRequestSupport::lineasDesdeOldInput('', [
+            'articulo_ids' => [10, 20, 0],
+            'detalle_articulos' => ['A', 'B', 'vacío'],
+            'cantidades_contadas' => [1, -3, 0],
+            'codigoarticulos' => ['AA', 'BB', ''],
+            'saldos_sistema' => [5, 2, 0],
+        ]);
+
+        $this->assertNotNull($lineas);
+        $this->assertCount(2, $lineas);
+        $this->assertSame(20, $lineas[1]['articulo_id']);
+        $this->assertSame('BB', $lineas[1]['sku']);
+        $this->assertSame(-3, $lineas[1]['cantidad_contada']);
+    }
+
+    public function test_normaliza_cantidad_vacia_y_con_coma(): void
+    {
+        $this->assertSame(0, RecuentoItemsRequestSupport::normalizarCantidadContada(''));
+        $this->assertSame(0, RecuentoItemsRequestSupport::normalizarCantidadContada(null));
+        $this->assertSame(1.5, RecuentoItemsRequestSupport::normalizarCantidadContada('1,5'));
+        $this->assertSame(-2.0, RecuentoItemsRequestSupport::normalizarCantidadContada('-2'));
+    }
 }

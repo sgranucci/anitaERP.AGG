@@ -11,7 +11,7 @@
         @json(url('ventas/arca-caea/__ID__/estado-informe'))
     );
 </script>
-<script src="{{ asset('assets/pages/scripts/ventas/arca_caea/informe.js') }}?v=20260722c"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/arca_caea/informe.js') }}?v=20260901a"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/arca_caea/manual.js') }}?v=20260811a"></script>
 @endsection
 
@@ -261,7 +261,7 @@
                                                 class="d-inline js-arca-caea-informar-form"
                                                 data-overlay-titulo="Encolando presentación CAEA…"
                                                 data-overlay-subtitulo="El proceso corre en segundo plano. Al terminar recibirás un mail con el resultado."
-                                                onsubmit="return confirm('¿Encolar la presentación CAEA de este periodo? Al terminar recibirás un mail con el resultado.');">
+                                                data-confirm-msg="¿Encolar la presentación CAEA de este periodo? Al terminar recibirás un mail con el resultado.">
                                                 @csrf
                                                 @include('ventas.arca_caea.partials.filtros_index_hidden', ['filtrosQuery' => $filtrosQuery ?? []])
                                                 <button type="submit"

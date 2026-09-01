@@ -6,6 +6,8 @@ namespace App\Support\Ventas;
 
 use App\Jobs\Ventas\InformarArcaCaeaPeriodoJob;
 use Carbon\Carbon;
+use Illuminate\Bus\UniqueLock;
+use Illuminate\Contracts\Cache\Repository as CacheRepository;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redis;
@@ -48,6 +50,7 @@ final class ArcaCaeaInformeColaSupport
         $ttl = now()->addSeconds(self::ttlSegundos());
         Cache::put(self::claveActivo($arcaCaeaId), $payload, $ttl);
         Cache::put(self::claveProgreso($arcaCaeaId), $payload, $ttl);
+        unset(self::$activoMemo[$arcaCaeaId]);
     }
 
     /**
@@ -103,7 +106,12 @@ final class ArcaCaeaInformeColaSupport
             $progreso['updated_at'] = now()->toIso8601String();
             Cache::put(self::claveProgreso($arcaCaeaId), $progreso, now()->addHours(6));
         }
+        unset(self::$activoMemo[$arcaCaeaId]);
+        self::liberarLocksUnique($arcaCaeaId);
     }
+
+    /** @var array<int, bool> */
+    private static array $activoMemo = [];
 
     public static function estaActivo(int $arcaCaeaId): bool
     {
@@ -111,6 +119,18 @@ final class ArcaCaeaInformeColaSupport
             return false;
         }
 
+        if (array_key_exists($arcaCaeaId, self::$activoMemo)) {
+            return self::$activoMemo[$arcaCaeaId];
+        }
+
+        $activo = self::resolverEstaActivo($arcaCaeaId);
+        self::$activoMemo[$arcaCaeaId] = $activo;
+
+        return $activo;
+    }
+
+    private static function resolverEstaActivo(int $arcaCaeaId): bool
+    {
         // 1) Job todavía en tabla jobs (pendiente o reserved por el worker).
         if (self::hayJobPendienteEnCola($arcaCaeaId)) {
             return true;
@@ -262,7 +282,7 @@ final class ArcaCaeaInformeColaSupport
         return $updated->greaterThan(now()->subSeconds(self::ttlSegundos()));
     }
 
-    private static function hayJobPendienteEnCola(int $arcaCaeaId): bool
+    public static function hayJobPendienteEnCola(int $arcaCaeaId): bool
     {
         if (config('queue.default') !== 'database') {
             return false;
@@ -296,16 +316,6 @@ final class ArcaCaeaInformeColaSupport
             foreach (['cache', 'default'] as $connection) {
                 $redis = Redis::connection($connection);
                 foreach ($suffixes as $suffix) {
-                    $patterns = [
-                        '*laravel_unique_job*InformarArcaCaeaPeriodoJob*'.$suffix.'*',
-                        '*unique_job*'.$suffix.'*',
-                    ];
-                    foreach ($patterns as $pattern) {
-                        $keys = $redis->keys($pattern);
-                        if (is_array($keys) && $keys !== []) {
-                            return true;
-                        }
-                    }
                     $exact = 'laravel_unique_job:'.InformarArcaCaeaPeriodoJob::class.':'.$suffix;
                     $prefixed = (string) config('cache.prefix').$exact;
                     if ($redis->exists($exact) || ($prefixed !== $exact && $redis->exists($prefixed))) {
@@ -318,5 +328,23 @@ final class ArcaCaeaInformeColaSupport
         }
 
         return false;
+    }
+
+    /**
+     * Suelta ShouldBeUnique para que un clic nuevo pueda encolar (lock fantasma de 2 h).
+     */
+    public static function liberarLocksUnique(int $arcaCaeaId): void
+    {
+        if ($arcaCaeaId < 1) {
+            return;
+        }
+
+        try {
+            $lock = new UniqueLock(app(CacheRepository::class));
+            foreach ([false, true] as $soloErrores) {
+                $lock->release(new InformarArcaCaeaPeriodoJob($arcaCaeaId, 0, $soloErrores));
+            }
+        } catch (\Throwable) {
+        }
     }
 }

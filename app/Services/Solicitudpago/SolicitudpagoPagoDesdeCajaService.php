@@ -85,6 +85,55 @@ class SolicitudpagoPagoDesdeCajaService
         app(LiquidacionSolicitudpagoService::class)->revertirPago($sp);
     }
 
+    /**
+     * Si al revertir/anular una OP duplicada queda otra OP vigente de la misma SP,
+     * la solicitud vuelve a PAGADA (no debe quedar impaga).
+     */
+    public function remarcPagadaSiQuedaPagoVigente(Caja_Movimiento $movimiento): void
+    {
+        $spId = (int) ($movimiento->solicitudpago_id ?? 0);
+        if ($spId <= 0) {
+            return;
+        }
+
+        $vigente = Caja_Movimiento::query()
+            ->with(['tipotransaccioncajas'])
+            ->where('solicitudpago_id', $spId)
+            ->whereNull('caja_movimiento_origen_id')
+            ->whereNull('caja_movimiento_revertido_por_id')
+            ->where('id', '!=', (int) $movimiento->id)
+            ->orderByDesc('id')
+            ->first();
+
+        if ($vigente === null) {
+            return;
+        }
+
+        $sp = $this->repository->findOrFail($spId);
+        if ($sp->estado === SolicitudpagoEstados::PAGADA) {
+            return;
+        }
+
+        $abrev = strtoupper(trim((string) ($vigente->tipotransaccioncajas->abreviatura ?? 'OPP')));
+        if ($abrev === '') {
+            $abrev = 'OPP';
+        }
+        $nro = (string) ($vigente->numerotransaccion ?? '');
+        $leyenda = $nro !== ''
+            ? 'Sigue PAGADA: queda '.$abrev.' '.$nro.' (IE id '.$vigente->id.')'
+            : 'Sigue PAGADA: queda IE '.$vigente->id;
+
+        $this->repository->cambiarEstado($spId, SolicitudpagoEstados::PAGADA, $leyenda);
+        $sp = $this->repository->findOrFail($spId);
+        app(LiquidacionSolicitudpagoService::class)->marcarPagada($sp);
+
+        Log::info('solicitudpago.remarc_pagada_op_vigente', [
+            'solicitudpago_id' => $spId,
+            'caja_movimiento_revertido_id' => (int) $movimiento->id,
+            'caja_movimiento_vigente_id' => (int) $vigente->id,
+        ]);
+    }
+
     private static function leyendaPagadaDesdeMovimiento(Caja_Movimiento $movimiento): string
     {
         $movimiento->loadMissing(['tipotransaccioncajas']);

@@ -271,7 +271,9 @@
                                         Neto Portal ${{ number_format($resultado['compras']['resumen']['neto_portal'] ?? 0, 2, ',', '.') }}
                                         (facturas ${{ number_format($resultado['compras']['resumen']['neto_facturas'] ?? 0, 2, ',', '.') }}
                                         − NC ${{ number_format($resultado['compras']['resumen']['neto_nc'] ?? 0, 2, ',', '.') }});
-                                        IVA Portal ${{ number_format($resultado['compras']['resumen']['iva_portal'] ?? 0, 2, ',', '.') }}
+                                        IVA Portal ${{ number_format($resultado['compras']['resumen']['iva_portal'] ?? 0, 2, ',', '.') }}.
+                                        TXT en pesos (PES, tipo de cambio 1). Si Portal muestra miles de millones,
+                                        borrar el libro de compras e importar de nuevo.
                                     </td>
                                 </tr>
                                 <tr>

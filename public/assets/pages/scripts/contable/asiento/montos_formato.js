@@ -24,6 +24,10 @@
         });
     }
 
+    function esInputNumeroNativo(el) {
+        return el && String(el.type || '').toLowerCase() === 'number';
+    }
+
     function formatearInput(el) {
         if (!el) {
             return;
@@ -32,7 +36,13 @@
             el.value = '';
             return;
         }
-        el.value = fmt(parseDecimal(el.value));
+        var n = parseDecimal(el.value);
+        // type=number no acepta miles/coma (1.600.432,00): el browser vacía el campo.
+        if (esInputNumeroNativo(el)) {
+            el.value = String(n);
+            return;
+        }
+        el.value = fmt(n);
     }
 
     function desformatearInput(el) {

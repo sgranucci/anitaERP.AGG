@@ -580,6 +580,14 @@ class RecuentoService
                 continue;
             }
 
+            if ($cantidad !== null && $cantidad < 0) {
+                $evaluaciones[] = $base + [
+                    'estado' => 'omitido',
+                    'mensaje' => 'La cantidad contada no puede ser negativa',
+                ];
+                continue;
+            }
+
             $articulo = $this->buscarArticuloImport($sku);
             if (! $articulo) {
                 $evaluaciones[] = $base + ['estado' => 'omitido', 'mensaje' => 'Artículo no encontrado o inactivo'];

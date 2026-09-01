@@ -2,12 +2,14 @@
 
 namespace App\Support\Caja;
 
+use App\Models\Caja\Caja_Movimiento;
 use App\Models\Caja\Cuentacaja;
 use App\Models\Caja\Tipotransaccion_Caja;
 use App\Models\Contable\Cuentacontable;
 use App\Models\Solicitudpago\Solicitudpago;
 use App\Support\Compras\ProveedorAnticipoCuentaContableSupport;
 use App\Support\Contable\CuentacajaCuentacontableResolverSupport;
+use App\Support\Solicitudpago\SolicitudpagoEstados;
 use App\Support\Solicitudpago\SolicitudpagoTratamientos;
 use InvalidArgumentException;
 
@@ -547,6 +549,45 @@ class IngresoEgresoSolicitudpagoSupport
             throw new InvalidArgumentException(
                 'El total del pago ('.number_format($actual, 2, ',', '.').') debe ser exactamente '
                 .'el monto pendiente de la solicitud ('.number_format($esperado, 2, ',', '.').').'
+            );
+        }
+    }
+
+    /**
+     * Impide una segunda OP sobre una SP ya pagada o con IE vigente.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    public static function assertSolicitudDisponibleParaPagar(array $data, bool $conLock = false): void
+    {
+        $spId = self::solicitudpagoIdDesdeData($data);
+        if ($spId <= 0) {
+            return;
+        }
+
+        $query = Solicitudpago::query();
+        if ($conLock) {
+            $query->lockForUpdate();
+        }
+        $sp = $query->find($spId);
+        if ($sp === null) {
+            throw new InvalidArgumentException('No se encontró la solicitud de pago vinculada.');
+        }
+
+        if (strtoupper(trim((string) $sp->estado)) === SolicitudpagoEstados::PAGADA) {
+            throw new InvalidArgumentException(
+                'La solicitud de pago #'.$sp->codigo.' ya está PAGADA. No se puede generar otra OP.'
+            );
+        }
+
+        $existe = Caja_Movimiento::query()
+            ->where('solicitudpago_id', $spId)
+            ->whereNull('caja_movimiento_origen_id')
+            ->whereNull('caja_movimiento_revertido_por_id')
+            ->exists();
+        if ($existe) {
+            throw new InvalidArgumentException(
+                'La solicitud de pago #'.$sp->codigo.' ya tiene una OP vigente. No se puede generar otra.'
             );
         }
     }

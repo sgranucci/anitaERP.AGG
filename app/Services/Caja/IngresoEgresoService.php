@@ -128,6 +128,7 @@ class IngresoEgresoService
 
 		if ($origen)
 		{
+			IngresoEgresoSolicitudpagoSupport::assertSolicitudDisponibleParaPagar($data, true);
 			$caja_movimiento = $this->caja_movimientoRepository->create($request->all());
 
 			if (!$caja_movimiento)
@@ -140,6 +141,7 @@ class IngresoEgresoService
 			DB::beginTransaction();
 			try
 			{
+				IngresoEgresoSolicitudpagoSupport::assertSolicitudDisponibleParaPagar($data, true);
 				$caja_movimiento = $this->caja_movimientoRepository->create($request->all());
 
 				if ($caja_movimiento == 'Error')

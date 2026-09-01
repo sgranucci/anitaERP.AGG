@@ -1,8 +1,11 @@
 @php
+    use App\Support\Stock\RecuentoItemsRequestSupport;
+
     $soloLectura = $soloLectura ?? false;
     $importLineas = session('recuento_import_lineas', []);
-    $lineas = old('articulo_ids')
-        ? null
+    $lineasOld = RecuentoItemsRequestSupport::lineasDesdeOldInput(old('items_json', ''), old() ?? []);
+    $lineas = ($lineasOld !== null && $lineasOld !== [])
+        ? RecuentoItemsRequestSupport::enriquecerLineasConArticulos($lineasOld)
         : (count($importLineas) ? $importLineas : null);
     if ($lineas === null && isset($recuento)) {
         $lineas = $recuento->items->map(fn ($i) => [
@@ -128,7 +131,7 @@
                                     <i class="fa fa-search text-primary"></i>
                                 </button>
                                 @endif
-                                <input type="text" class="codigoarticulo form-control form-control-sm ml-1" style="width:150px; min-width:150px;" value="{{ old('codigoarticulos.'.$idx, $linea['sku'] ?? '') }}" @if ($soloLectura) readonly @endif>
+                                <input type="text" class="codigoarticulo form-control form-control-sm ml-1" style="width:150px; min-width:150px;" name="codigoarticulos[]" value="{{ old('codigoarticulos.'.$idx, $linea['sku'] ?? '') }}" @if ($soloLectura) readonly @endif>
                             </div>
                         </td>
                         <td>
@@ -142,7 +145,7 @@
                         <td><span class="unidad-medida-label text-monospace">{{ old('unidadmedida_labels.'.$idx, $linea['unidadmedida'] ?? '—') }}</span></td>
                         <td><span class="saldo-deposito text-monospace">{{ $saldo !== '' ? rtrim(rtrim(number_format((float) $saldo, 6, '.', ''), '0'), '.') : '—' }}</span></td>
                         <td>
-                            <input type="number" step="0.000001" min="0" name="cantidades_contadas[]" class="form-control form-control-sm input-cantidad-contada" value="{{ $contado }}" @if ($soloLectura) readonly @endif>
+                            <input type="number" step="0.000001" min="0" name="cantidades_contadas[]" class="form-control form-control-sm input-cantidad-contada @error('cantidades_contadas.'.$idx) is-invalid @enderror" value="{{ $contado }}" @if ($soloLectura) readonly @endif>
                         </td>
                         <td><span class="diferencia-linea text-monospace @if ($dif !== null && abs($dif) > 1e-9) text-danger @endif">{{ $dif !== null ? rtrim(rtrim(number_format($dif, 6, '.', ''), '0'), '.') : '—' }}</span></td>
                         <td class="text-nowrap text-right">
@@ -193,7 +196,7 @@
                 <button type="button" title="Consulta art&iacute;culos (F1)" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
                     <i class="fa fa-search text-primary"></i>
                 </button>
-                <input type="text" class="codigoarticulo form-control form-control-sm ml-1" style="width:150px; min-width:150px;">
+                <input type="text" class="codigoarticulo form-control form-control-sm ml-1" style="width:150px; min-width:150px;" name="codigoarticulos[]">
             </div>
         </td>
         <td><input type="text" class="descripcionarticulo form-control form-control-sm" name="detalle_articulos[]" readonly></td>

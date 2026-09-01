@@ -15,6 +15,7 @@ use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
 use App\Services\Stock\RecepcionProveedorAsientoService;
 use App\Services\Stock\RecepcionProveedorCambioCotizacionService;
+use App\Services\Stock\TransferenciaMercaderiaTitoRecalculoService;
 use App\Services\Stock\RecepcionProveedorOcrService;
 use App\Services\Stock\RecepcionProveedorOrdencompraResolverService;
 use App\Services\Stock\RecepcionProveedorPdfService;
@@ -45,6 +46,7 @@ class RecepcionProveedorController extends Controller
         private readonly RecepcionProveedorPdfService $pdfService,
         private readonly RecepcionProveedorAsientoService $asientoService,
         private readonly RecepcionProveedorCambioCotizacionService $cambioCotizacionService,
+        private readonly TransferenciaMercaderiaTitoRecalculoService $titoRecalculoService,
         private readonly Recepcion_ProveedorRepositoryInterface $repository,
         private readonly EmpresaRepositoryInterface $empresaRepository,
         private readonly CotizacionQueryInterface $cotizacionQuery,
@@ -283,13 +285,56 @@ class RecepcionProveedorController extends Controller
             'cotizacion' => 'required|numeric|gt:0',
         ]);
 
+        $nuevaCotizacion = (float) $request->input('cotizacion');
+        $recepcion = Recepcion_Proveedor::query()->findOrFail($id);
+        $contextoTito = $this->titoRecalculoService->contextoSiHayTito($recepcion);
+        if ($contextoTito !== null) {
+            $contextoTito['cotizacion_anterior'] = (float) ($recepcion->cotizacion ?: 1);
+            $contextoTito['cotizacion_nueva'] = $nuevaCotizacion;
+        }
+
         try {
-            $this->cambioCotizacionService->cambiar($id, (float) $request->input('cotizacion'));
+            $this->cambioCotizacionService->cambiar($id, $nuevaCotizacion);
         } catch (\Throwable $e) {
             return back()->with('mensaje', 'Error al cambiar la cotización: '.$e->getMessage());
         }
 
-        return back()->with('mensaje', 'Cotización actualizada en la recepción, asiento contable ERP y Anita (ctamov y recepmov).');
+        $redirect = back()->with(
+            'mensaje',
+            'Cotización actualizada en la recepción, asiento contable ERP y Anita (ctamov y recepmov).'
+        );
+        if ($contextoTito !== null) {
+            $redirect->with('abrir_recalcular_tra_tito', $contextoTito);
+        }
+
+        return $redirect;
+    }
+
+    public function apiPreviewRecalcularTraTito(int $id): JsonResponse
+    {
+        can('cambiar-cotizacion-recepcion-proveedor');
+
+        try {
+            return response()->json($this->titoRecalculoService->preview($id));
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
+    }
+
+    public function apiAplicarRecalcularTraTito(Request $request, int $id): JsonResponse
+    {
+        can('cambiar-cotizacion-recepcion-proveedor');
+
+        $lineaIds = $request->input('linea_ids', []);
+        if (! is_array($lineaIds)) {
+            $lineaIds = [];
+        }
+
+        try {
+            return response()->json($this->titoRecalculoService->aplicar($id, $lineaIds));
+        } catch (\Throwable $e) {
+            return response()->json(['error' => $e->getMessage()], 422);
+        }
     }
 
     public function apiPreviewArticuloProveedor(Request $request): JsonResponse

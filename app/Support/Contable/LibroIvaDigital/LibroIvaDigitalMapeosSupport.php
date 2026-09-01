@@ -206,6 +206,22 @@ final class LibroIvaDigitalMapeosSupport
     }
 
     /**
+     * El TXT de compras lleva importes ya convertidos a pesos (Anita concmov × cotización,
+     * ERP en moneda local). Si se informa DOL + tipo de cambio, Portal «moneda original»
+     * vuelve a multiplicar y el Libro IVA Compras muestra miles de millones.
+     *
+     * @param  array<string, mixed>  $cabecera
+     * @return array<string, mixed>
+     */
+    public static function cabeceraImportesEnPesos(array $cabecera): array
+    {
+        $cabecera['codigo_moneda'] = 'PES';
+        $cabecera['tipo_cambio'] = 1.0;
+
+        return $cabecera;
+    }
+
+    /**
      * IVA simple — tipo de sujeto comprador (1=RI, 2=Monotributo, 3=CF/Exento/No alcanzado).
      */
     public static function tipoSujetoCompradorIvaSimple(?string $codigoExternoCondicionIva): int
