@@ -179,7 +179,7 @@ class Padron_ExclusionpercepcionivaController extends Controller
         can('importar-padron-exclusion-percepcion-iva');
 
         $this->validate($request, [
-            'file' => 'required|file|mimes:csv,txt',
+            'file' => 'required|file',
         ]);
 
         ini_set('memory_limit', '-1');

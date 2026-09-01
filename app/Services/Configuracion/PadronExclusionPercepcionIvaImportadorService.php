@@ -2,19 +2,25 @@
 
 namespace App\Services\Configuracion;
 
+use App\Support\Configuracion\PadronIibb\PadronIibbArchivoSupport;
 use DateTime;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Throwable;
 
 /**
  * Importa el CSV AFIP de sujetos no alcanzados (percepción IVA) a padron_exclusionpercepcioniva.
  *
  * Formato esperado (delimiter `;`, encoding ISO-8859-1 típico AFIP):
  * CUIT;DENOMINACION;FECHA_DESDE;FECHA_HASTA
+ *
+ * Acepta el CSV/TXT suelto o el ZIP oficial: se descomprime y se importa el archivo de adentro.
  */
 class PadronExclusionPercepcionIvaImportadorService
 {
     private const TAMANIO_LOTE = 500;
+
+    private const EXTENSIONES_DATOS = ['csv', 'txt', 'dat', ''];
 
     /**
      * Reemplaza el padrón completo con el contenido del archivo.
@@ -23,16 +29,39 @@ class PadronExclusionPercepcionIvaImportadorService
      */
     public function importarDesdeArchivo(UploadedFile|string $archivo): array
     {
-        $ruta = $archivo instanceof UploadedFile
-            ? $archivo->getRealPath()
+        $rutaOrigen = $archivo instanceof UploadedFile
+            ? (string) $archivo->getRealPath()
             : (string) $archivo;
 
-        if ($ruta === '' || ! is_readable($ruta)) {
+        if ($rutaOrigen === '' || ! is_readable($rutaOrigen)) {
             return $this->error('No se pudo leer el archivo de importación.');
         }
 
-        $handle = fopen($ruta, 'rb');
+        $nombreOriginal = $archivo instanceof UploadedFile
+            ? (string) $archivo->getClientOriginalName()
+            : basename($rutaOrigen);
+        if (! $this->archivoAdmitido($rutaOrigen, $nombreOriginal)) {
+            return $this->error('El archivo debe ser CSV, TXT o ZIP con el padrón adentro.');
+        }
+
+        $rutaDatos = $rutaOrigen;
+        $nombreExtraido = null;
+
+        try {
+            $rutaDatos = $this->resolverRutaDatos($rutaOrigen);
+            if ($rutaDatos !== $rutaOrigen) {
+                $nombreExtraido = basename($rutaDatos);
+            }
+        } catch (Throwable $e) {
+            return $this->error($e->getMessage());
+        }
+
+        $handle = fopen($rutaDatos, 'rb');
         if ($handle === false) {
+            if ($rutaDatos !== $rutaOrigen) {
+                PadronIibbArchivoSupport::limpiarTemporal($rutaDatos);
+            }
+
             return $this->error('No se pudo abrir el archivo de importación.');
         }
 
@@ -75,12 +104,15 @@ class PadronExclusionPercepcionIvaImportadorService
             }
 
             DB::commit();
-        } catch (\Throwable $e) {
+        } catch (Throwable $e) {
             DB::rollBack();
 
             return $this->error('Error al importar el padrón: '.$e->getMessage());
         } finally {
             fclose($handle);
+            if ($rutaDatos !== $rutaOrigen) {
+                PadronIibbArchivoSupport::limpiarTemporal($rutaDatos);
+            }
         }
 
         if ($importados === 0) {
@@ -88,7 +120,9 @@ class PadronExclusionPercepcionIvaImportadorService
         }
 
         $mensaje = "Padrón exclusión percepción IVA importado: {$importados} registros"
-            .($omitidas > 0 ? " ({$omitidas} filas omitidas)." : '.');
+            .($omitidas > 0 ? " ({$omitidas} filas omitidas)" : '')
+            .($nombreExtraido !== null ? " (descomprimido {$nombreExtraido})" : '')
+            .'.';
 
         return [
             'ok' => true,
@@ -96,6 +130,41 @@ class PadronExclusionPercepcionIvaImportadorService
             'importados' => $importados,
             'omitidas' => $omitidas,
         ];
+    }
+
+    /**
+     * Si el archivo es un ZIP (extensión o firma PK), extrae el CSV/TXT de adentro.
+     * También resuelve ZIP anidado (el oficial a veces trae otro ZIP adentro).
+     */
+    private function resolverRutaDatos(string $entrada): string
+    {
+        $ruta = PadronIibbArchivoSupport::resolver($entrada, self::EXTENSIONES_DATOS);
+        if ($ruta === $entrada || ! PadronIibbArchivoSupport::pareceZip($ruta)) {
+            return $ruta;
+        }
+
+        try {
+            $anidado = PadronIibbArchivoSupport::resolver($ruta, self::EXTENSIONES_DATOS);
+        } catch (Throwable $e) {
+            PadronIibbArchivoSupport::limpiarTemporal($ruta);
+            throw $e;
+        }
+
+        if ($anidado !== $ruta) {
+            PadronIibbArchivoSupport::limpiarTemporal($ruta);
+        }
+
+        return $anidado;
+    }
+
+    private function archivoAdmitido(string $ruta, string $nombreOriginal): bool
+    {
+        $ext = strtolower((string) pathinfo($nombreOriginal, PATHINFO_EXTENSION));
+        if (in_array($ext, ['csv', 'txt', 'zip', 'dat'], true)) {
+            return true;
+        }
+
+        return PadronIibbArchivoSupport::pareceZip($ruta);
     }
 
     /**

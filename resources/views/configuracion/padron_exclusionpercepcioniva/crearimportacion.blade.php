@@ -59,8 +59,10 @@
                         <div class="col-lg-3"></div>
                         <div class="col-lg-8">
                             <p class="text-muted small mb-0">
-                                CSV AFIP de sujetos no alcanzados (separador <code>;</code>):
-                                CUIT;DENOMINACION;FECHA_DESDE;FECHA_HASTA. Reemplaza el padrón completo.
+                                CSV/TXT AFIP de sujetos no alcanzados (separador <code>;</code>):
+                                CUIT;DENOMINACION;FECHA_DESDE;FECHA_HASTA. También acepta el
+                                <strong>ZIP</strong> oficial: se descomprime y se importa el archivo de adentro.
+                                Reemplaza el padrón completo.
                             </p>
                         </div>
                     </div>
