@@ -256,8 +256,28 @@ final class LibroIvaDigitalValidacionSupport
             return;
         }
 
+        $alicTxt = (string) data_get($resultado, 'compras.compras_alicuotas', '');
+        $alicuotasPorClave = [];
+        foreach (self::lineas($alicTxt) as $i => $linea) {
+            if (strlen($linea) < 84) {
+                continue;
+            }
+            $clave = substr($linea, 0, 3).'|'.substr($linea, 3, 5).'|'.substr($linea, 8, 20);
+            $alicuotasPorClave[$clave][] = [
+                'linea' => $i + 1,
+                'neto' => LibroIvaDigitalFormatoSupport::parseImporte15(substr($linea, 50, 15)),
+                'codigo' => substr($linea, 65, 4),
+                'iva' => LibroIvaDigitalFormatoSupport::parseImporte15(substr($linea, 69, 15)),
+            ];
+        }
+
         $pesTipoCambioMal = 0;
         $primera = null;
+        $desbalance = 0;
+        $alicMal = 0;
+        $cuitLargo = 0;
+        $ejDesbalance = null;
+        $ejAlic = null;
         foreach (self::lineas($cbteTxt) as $i => $linea) {
             if (strlen($linea) < 238) {
                 continue;
@@ -275,6 +295,9 @@ final class LibroIvaDigitalValidacionSupport
                     'COMPRAS_CBTE línea '.($i + 1).": nro. de documento 0 solo es válido con código 99 (tiene {$codDoc}).",
                 );
             }
+            if ($codDoc === '80' && strlen($nroDoc) > 11) {
+                $cuitLargo++;
+            }
 
             if ($moneda === 'PES' && abs($tipoCambio - 1.0) > 0.000001) {
                 $pesTipoCambioMal++;
@@ -286,6 +309,59 @@ final class LibroIvaDigitalValidacionSupport
             if (! $esTipoC && $cantAlic < 1) {
                 self::agregar($avisos, 'COMPRAS_CBTE línea '.($i + 1).": tipo {$tipo} debe informar alícuotas IVA (tiene {$cantAlic}).");
             }
+
+            $clave = $tipo.'|'.substr($linea, 11, 5).'|'.substr($linea, 16, 20);
+            $filasAlic = $alicuotasPorClave[$clave] ?? [];
+            $neto = 0.0;
+            $iva = 0.0;
+            foreach ($filasAlic as $fila) {
+                $neto += $fila['neto'];
+                $iva += $fila['iva'];
+                $tasa = match ($fila['codigo']) {
+                    '0004' => 10.5,
+                    '0005' => 21.0,
+                    '0006' => 27.0,
+                    '0008' => 5.0,
+                    '0009' => 2.5,
+                    default => 0.0,
+                };
+                if ($tasa > 0 && abs(round($fila['neto'] * $tasa / 100, 2) - $fila['iva']) > 0.05) {
+                    $alicMal++;
+                    $ejAlic ??= sprintf(
+                        'COMPRAS_ALICUOTAS línea %d: IVA no es el %s%% del neto gravado.',
+                        $fila['linea'],
+                        rtrim(rtrim(number_format($tasa, 1, '.', ''), '0'), '.'),
+                    );
+                }
+            }
+            $total = LibroIvaDigitalFormatoSupport::parseImporte15(substr($linea, 104, 15));
+            $suma = $neto + $iva
+                + LibroIvaDigitalFormatoSupport::parseImporte15(substr($linea, 119, 15))
+                + LibroIvaDigitalFormatoSupport::parseImporte15(substr($linea, 134, 15))
+                + LibroIvaDigitalFormatoSupport::parseImporte15(substr($linea, 149, 15))
+                + LibroIvaDigitalFormatoSupport::parseImporte15(substr($linea, 164, 15))
+                + LibroIvaDigitalFormatoSupport::parseImporte15(substr($linea, 179, 15))
+                + LibroIvaDigitalFormatoSupport::parseImporte15(substr($linea, 194, 15))
+                + LibroIvaDigitalFormatoSupport::parseImporte15(substr($linea, 209, 15))
+                + LibroIvaDigitalFormatoSupport::parseImporte15(substr($linea, 254, 15));
+            if (abs($suma - $total) > 0.05) {
+                $desbalance++;
+                $ejDesbalance ??= sprintf(
+                    'COMPRAS_CBTE línea %d: total %.2f distinto de la suma de componentes %.2f.',
+                    $i + 1,
+                    $total,
+                    $suma,
+                );
+            }
+        }
+        if ($desbalance > 0 && $ejDesbalance !== null) {
+            self::agregar($avisos, $ejDesbalance.($desbalance > 1 ? " Hay {$desbalance} registros." : ''));
+        }
+        if ($alicMal > 0 && $ejAlic !== null) {
+            self::agregar($avisos, $ejAlic.($alicMal > 1 ? " Hay {$alicMal} alícuotas." : ''));
+        }
+        if ($cuitLargo > 0) {
+            self::agregar($avisos, "Hay {$cuitLargo} CUIT(s) de vendedor con más de 11 dígitos (tipo documento 80).");
         }
         if ($pesTipoCambioMal > 0) {
             self::agregar(

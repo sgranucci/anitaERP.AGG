@@ -4,6 +4,7 @@ namespace Tests\Unit\Support\Contable\LibroIvaDigital;
 
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAlicuotaSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasCuitSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasImportesSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalComprasAnitaArmadoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalFormatoSupport;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalIdentificacionSupport;
@@ -400,6 +401,7 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
                 'tipo_comprobante' => '011',
                 'punto_venta' => 3,
                 'numero_comprobante' => 10,
+                'importe_total' => 500000.0,
                 'cantidad_alicuotas' => 0,
                 'codigo_operacion' => ' ',
             ],
@@ -408,6 +410,108 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
 
         $this->assertSame(0, $registro['cabecera']['cantidad_alicuotas']);
         $this->assertSame([], $registro['alicuotas']);
+        $this->assertEqualsWithDelta(500000.0, $registro['cabecera']['no_integra_neto'], 0.001);
+    }
+
+    public function test_cuit_vendedor_con_mas_de_once_digitos_queda_en_11(): void
+    {
+        $this->assertSame(
+            '30525390086',
+            LibroIvaDigitalIdentificacionSupport::cuitOnceDigitos('0030525390086'),
+        );
+        $this->assertSame(
+            ['codigo_documento' => '80', 'numero_identificacion' => '30525390086'],
+            LibroIvaDigitalIdentificacionSupport::asegurar('80', '0030525390086'),
+        );
+        $this->assertSame(
+            '30525390086',
+            LibroIvaDigitalComprasCuitSupport::resolver('30-52539008-6 extra 99', ''),
+        );
+    }
+
+    public function test_descuento_gravado_netea_el_neto_y_cierra_la_alicuota(): void
+    {
+        $neto = LibroIvaDigitalComprasImportesSupport::absolutoInformable(1503418.05 + (-559911.93));
+        $iva = 198136.30;
+        $this->assertEqualsWithDelta(943506.12, $neto, 0.001);
+        $this->assertEqualsWithDelta(198136.29, round($neto * 0.21, 2), 0.02);
+
+        $registro = LibroIvaDigitalComprasAlicuotaSupport::asegurarRegistro([
+            'cabecera' => [
+                'tipo_comprobante' => '001',
+                'punto_venta' => 607,
+                'numero_comprobante' => 438695,
+                'codigo_documento' => '80',
+                'numero_identificacion' => '30525390086',
+                'importe_total' => 1240422.80,
+                'no_integra_neto' => 67442.35,
+                'percepciones_iva' => 28305.19,
+                'percepciones_iibb' => 3032.84,
+                'cantidad_alicuotas' => 1,
+            ],
+            'alicuotas' => [[
+                'tipo_comprobante' => '001',
+                'punto_venta' => 607,
+                'numero_comprobante' => 438695,
+                'neto_gravado' => $neto,
+                'alicuota_iva' => '0005',
+                'impuesto_liquidado' => $iva,
+            ]],
+        ]);
+
+        $residual = LibroIvaDigitalComprasImportesSupport::residualCabecera(
+            $registro['cabecera'],
+            $registro['alicuotas'],
+        );
+        $this->assertEqualsWithDelta(0.0, $residual, 0.02);
+    }
+
+    public function test_redondeo_dolar_por_cotizacion_ajusta_neto_y_cierra_21(): void
+    {
+        $neto = round(48.27 * 1495, 2);
+        $iva = round(10.14 * 1495, 2);
+        $registro = LibroIvaDigitalComprasImportesSupport::reconciliarAlicuotasRedondeo([
+            'cabecera' => [
+                'importe_total' => round(58.41 * 1495, 2),
+                'no_integra_neto' => 0.0,
+            ],
+            'alicuotas' => [[
+                'neto_gravado' => $neto,
+                'alicuota_iva' => '0005',
+                'impuesto_liquidado' => $iva,
+            ]],
+        ]);
+
+        $netoAjustado = $registro['alicuotas'][0]['neto_gravado'];
+        $this->assertEqualsWithDelta(21.0, $registro['alicuotas'][0]['impuesto_liquidado'] * 100 / $netoAjustado, 0.0001);
+        $this->assertEqualsWithDelta(
+            0.0,
+            LibroIvaDigitalComprasImportesSupport::residualCabecera($registro['cabecera'], $registro['alicuotas']),
+            0.02,
+        );
+    }
+
+    public function test_redondeo_de_alicuota_ajusta_neto_sin_romper_el_total(): void
+    {
+        $registro = LibroIvaDigitalComprasImportesSupport::reconciliarAlicuotasRedondeo([
+            'cabecera' => [
+                'importe_total' => 121.05,
+                'no_integra_neto' => 0.0,
+            ],
+            'alicuotas' => [[
+                'neto_gravado' => 100.05,
+                'alicuota_iva' => '0005',
+                'impuesto_liquidado' => 21.0,
+            ]],
+        ]);
+
+        $this->assertEqualsWithDelta(100.0, $registro['alicuotas'][0]['neto_gravado'], 0.001);
+        $this->assertEqualsWithDelta(0.05, $registro['cabecera']['no_integra_neto'], 0.001);
+        $this->assertEqualsWithDelta(
+            0.0,
+            LibroIvaDigitalComprasImportesSupport::residualCabecera($registro['cabecera'], $registro['alicuotas']),
+            0.001,
+        );
     }
 
     public function test_clave_natural_compras_anita_es_estable(): void

@@ -130,6 +130,7 @@ final class RecepcionProveedorReporteAnitaFallbackSupport
             'aprobc_usuario as autorizante_anita',
             'aprobc_cod_usuario as autorizante_codigo',
             'aprobc_estado as aprobc_estado',
+            'aprobc_tipo as aprobc_tipo',
             'aprobc_fecha_modif as fecha_aprob',
         ];
     }
@@ -184,7 +185,10 @@ final class RecepcionProveedorReporteAnitaFallbackSupport
             // recm_com_nro suele ser 0 o un nro chico; el OR con com_nro multiplica el OUTER.
             .' AND penmp_nro = recm_nro_fac'
             .' AND reqm_nro = penmp_requisicion'
-            .' AND aprobc_nro = reqm_nro';
+            // l-proy busca_aprobacion("REQ"): sin el tipo, un PEP posterior
+            // con el mismo número (COM 109755 / REQ 184935) pisa el autorizante.
+            .' AND aprobc_nro = reqm_nro'
+            ." AND aprobc_tipo MATCHES 'R*'";
 
         $estado = (string) ($filtros['estado'] ?? RecepcionProveedorReporteFiltros::ESTADO_CONFIRMADA);
         $estadoConf = AnitaSqlLiteral::char(
@@ -306,6 +310,7 @@ final class RecepcionProveedorReporteAnitaFallbackSupport
 
     /**
      * Si aprobcomp tiene más de un Aprobado, Informix puede repetir la línea COM.
+     * Solo cuenta tipo REQ (un PEP con el mismo nro no es el autorizante de la requi).
      *
      * @param  list<object>  $filas
      * @return list<object>
@@ -318,20 +323,44 @@ final class RecepcionProveedorReporteAnitaFallbackSupport
             $nro = (int) ($fila->recm_nro ?? 0);
             $orden = (int) ($fila->linea_orden ?? 0);
             $clave = $suc.'|'.$nro.'|'.$orden;
-            $estado = (int) ($fila->aprobc_estado ?? 0);
             $prev = $porClave[$clave] ?? null;
-            if ($prev === null) {
-                $porClave[$clave] = $fila;
-
-                continue;
-            }
-            $prevEstado = (int) ($prev->aprobc_estado ?? 0);
-            if ($estado === RequisicionAnitaAprobcompMapper::ESTADO_APROBADO && $prevEstado !== RequisicionAnitaAprobcompMapper::ESTADO_APROBADO) {
-                $porClave[$clave] = $fila;
+            if ($prev === null || self::puntajeAprobacionReq($fila) > self::puntajeAprobacionReq($prev)) {
+                $porClave[$clave] = self::sanearAprobacionSiNoEsReq($fila);
             }
         }
 
         return array_values($porClave);
+    }
+
+    public static function esAprobacionRequisicion(?string $tipo): bool
+    {
+        $tipo = strtoupper(trim((string) $tipo));
+
+        return $tipo !== '' && str_starts_with($tipo, 'R');
+    }
+
+    private static function puntajeAprobacionReq(object $fila): int
+    {
+        if (! self::esAprobacionRequisicion((string) ($fila->aprobc_tipo ?? ''))) {
+            return 0;
+        }
+
+        return (int) ($fila->aprobc_estado ?? 0) === RequisicionAnitaAprobcompMapper::ESTADO_APROBADO
+            ? 2
+            : 1;
+    }
+
+    private static function sanearAprobacionSiNoEsReq(object $fila): object
+    {
+        if (self::esAprobacionRequisicion((string) ($fila->aprobc_tipo ?? ''))) {
+            return $fila;
+        }
+
+        $fila->autorizante_anita = '';
+        $fila->autorizante_codigo = '';
+        $fila->aprobc_estado = '';
+
+        return $fila;
     }
 
     /**

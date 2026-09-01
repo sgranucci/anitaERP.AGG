@@ -175,8 +175,8 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
 
         foreach ($conceptos as $linea) {
             $codigo = (int) ($linea['concepto'] ?? 0);
-            $importe = abs((float) ($linea['importe'] ?? 0)) * $coef;
-            if ($codigo <= 0 || $importe < 0.0001) {
+            $importe = (float) ($linea['importe'] ?? 0) * $coef;
+            if ($codigo <= 0 || abs($importe) < 0.0001) {
                 continue;
             }
 
@@ -245,8 +245,8 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
 
         $filas = [];
         foreach ($alicuotas as $row) {
-            $neto = (float) ($row['neto'] ?? 0);
-            $iva = (float) ($row['iva'] ?? 0);
+            $neto = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) ($row['neto'] ?? 0));
+            $iva = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) ($row['iva'] ?? 0));
             $tasa = (float) ($row['tasa'] ?? 0);
             if ($neto <= 0 && $iva <= 0) {
                 continue;
@@ -265,13 +265,13 @@ final class LibroIvaDigitalComprasAnitaArmadoSupport
         $credito = array_sum(array_column($filas, 'iva'));
 
         return [
-            'no_integra' => $esC ? 0.0 : $noIntegra,
-            'exento' => $esC ? 0.0 : $exento,
-            'perc_iva' => $percIva,
-            'perc_nacional' => $percNac,
-            'perc_iibb' => $percIibb,
-            'perc_municipal' => $percMun,
-            'imp_interno' => $impInterno,
+            'no_integra' => $esC ? 0.0 : LibroIvaDigitalComprasImportesSupport::absolutoInformable($noIntegra),
+            'exento' => $esC ? 0.0 : LibroIvaDigitalComprasImportesSupport::absolutoInformable($exento),
+            'perc_iva' => LibroIvaDigitalComprasImportesSupport::absolutoInformable($percIva),
+            'perc_nacional' => LibroIvaDigitalComprasImportesSupport::absolutoInformable($percNac),
+            'perc_iibb' => LibroIvaDigitalComprasImportesSupport::absolutoInformable($percIibb),
+            'perc_municipal' => LibroIvaDigitalComprasImportesSupport::absolutoInformable($percMun),
+            'imp_interno' => LibroIvaDigitalComprasImportesSupport::absolutoInformable($impInterno),
             'cantidad_alicuotas' => $cantidad,
             'credito_computable' => $cantidad > 0 ? $credito : 0.0,
             'alicuotas' => $cantidad > 0 ? $filas : [],

@@ -288,21 +288,11 @@ final class ArcaCaeaInformeColaSupport
             return false;
         }
 
-        // Serialización PHP del job (promoted property): arcaCaeaId";i:{id};
-        $needles = [
-            'arcaCaeaId";i:'.$arcaCaeaId.';',
-            'arcaCaeaId";i:'.$arcaCaeaId.'"',
-            '"arcaCaeaId";i:'.$arcaCaeaId.';',
-        ];
-
-        $query = DB::table('jobs')->where('payload', 'like', '%InformarArcaCaeaPeriodoJob%');
-        $query->where(function ($q) use ($needles): void {
-            foreach ($needles as $needle) {
-                $q->orWhere('payload', 'like', '%'.$needle.'%');
-            }
-        });
-
-        return $query->exists();
+        // Payload JSON escapa comillas: s:10:\"arcaCaeaId\";i:46;
+        return DB::table('jobs')
+            ->where('payload', 'like', '%InformarArcaCaeaPeriodoJob%')
+            ->where('payload', 'like', '%arcaCaeaId%i:'.$arcaCaeaId.';%')
+            ->exists();
     }
 
     private static function hayLockUniqueRedis(int $arcaCaeaId): bool

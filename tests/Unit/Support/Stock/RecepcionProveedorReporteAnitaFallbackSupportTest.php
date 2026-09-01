@@ -28,6 +28,7 @@ class RecepcionProveedorReporteAnitaFallbackSupportTest extends TestCase
         }
         $this->assertStringContainsString('reqm_usuario as reqm_usuario', RecepcionProveedorReporteAnitaFallbackSupport::camposCsv());
         $this->assertStringContainsString('aprobc_usuario as autorizante_anita', RecepcionProveedorReporteAnitaFallbackSupport::camposCsv());
+        $this->assertStringContainsString('aprobc_tipo as aprobc_tipo', RecepcionProveedorReporteAnitaFallbackSupport::camposCsv());
     }
 
     public function test_where_une_com_oc_req_y_aprobado_de_aprobcomp(): void
@@ -43,6 +44,7 @@ class RecepcionProveedorReporteAnitaFallbackSupportTest extends TestCase
         $this->assertStringNotContainsString('penmp_nro = recm_com_nro', $where);
         $this->assertStringContainsString('reqm_nro = penmp_requisicion', $where);
         $this->assertStringContainsString('aprobc_nro = reqm_nro', $where);
+        $this->assertStringContainsString("aprobc_tipo MATCHES 'R*'", $where);
         $this->assertStringNotContainsString('aprobc_estado =', $where);
         $this->assertStringContainsString('recm_fecha >= 20210101', $where);
         $this->assertStringContainsString('recm_fecha <= 20221231', $where);
@@ -169,6 +171,7 @@ class RecepcionProveedorReporteAnitaFallbackSupportTest extends TestCase
             'recm_sucursal' => 1,
             'recm_nro' => 10,
             'linea_orden' => 1,
+            'aprobc_tipo' => 'REQ',
         ];
         $filas = RecepcionProveedorReporteAnitaFallbackSupport::deduplicarAprobado([
             (object) array_merge($base, ['aprobc_estado' => 1, 'autorizante_anita' => 'PENDIENTE']),
@@ -177,5 +180,47 @@ class RecepcionProveedorReporteAnitaFallbackSupportTest extends TestCase
 
         $this->assertCount(1, $filas);
         $this->assertSame('APROBADO', $filas[0]->autorizante_anita);
+    }
+
+    public function test_dedupe_no_usa_aprobcomp_pep_con_el_mismo_nro_que_la_req(): void
+    {
+        $base = [
+            'recm_sucursal' => 1,
+            'recm_nro' => 109755,
+            'linea_orden' => 1,
+        ];
+        $filas = RecepcionProveedorReporteAnitaFallbackSupport::deduplicarAprobado([
+            (object) array_merge($base, [
+                'aprobc_tipo' => 'PEP',
+                'aprobc_estado' => 3,
+                'autorizante_anita' => 'esanchez',
+            ]),
+            (object) array_merge($base, [
+                'aprobc_tipo' => 'REQ',
+                'aprobc_estado' => 3,
+                'autorizante_anita' => 'vfernandez',
+            ]),
+        ]);
+
+        $this->assertCount(1, $filas);
+        $this->assertSame('vfernandez', $filas[0]->autorizante_anita);
+        $this->assertSame('REQ', $filas[0]->aprobc_tipo);
+    }
+
+    public function test_dedupe_limpia_autorizante_si_solo_hay_aprobcomp_pep(): void
+    {
+        $filas = RecepcionProveedorReporteAnitaFallbackSupport::deduplicarAprobado([
+            (object) [
+                'recm_sucursal' => 1,
+                'recm_nro' => 109755,
+                'linea_orden' => 1,
+                'aprobc_tipo' => 'PEP',
+                'aprobc_estado' => 3,
+                'autorizante_anita' => 'esanchez',
+            ],
+        ]);
+
+        $this->assertCount(1, $filas);
+        $this->assertSame('', $filas[0]->autorizante_anita);
     }
 }

@@ -1,0 +1,41 @@
+---
+description: No escribir en la base de datos (INSERT/UPDATE/DELETE, tinker, artisan) sin preguntar y esperar OK
+alwaysApply: true
+---
+
+# Base de datos: no escribir sin preguntar
+
+Este entorno es **producción** (`anitaERP`). El agente puede **consultar** (SELECT, `count()`, `explain`) sin permiso. **No** puede persistir nada hasta que el operador lo autorice en el chat.
+
+Incidente 1/sep/2026: el pedido «confirmar cierre de módulos al 31/8/2026 contables» se interpretó como ejecutar. Un tinker registró 3 `contable_periodo_cierre` (`mod_contable` al 31/08) sin POST a la pantalla y sin pregunta previa. Complementa `comandos-actualizacion-dry-run-obligatorio.mdc` y `produccion-bd-y-tests.mdc`.
+
+## Obligatorio antes de cualquier escritura
+
+1. **Mostrar** qué se haría: tabla, ids/filas, empresas, SQL o llamada (`create`/`update`/`delete`/`registrarCierre`).
+2. **Preguntar** en el chat si se aplica. Frases como «habría que anularlo», «confirmar», «fijate» **no** son autorización.
+3. **Esperar** un sí explícito («sí, borralos», «ok, ejecutá el DELETE»). Silencio ≠ OK.
+4. Recién entonces persistir, con el **mismo alcance** mostrado.
+
+## Prohibido sin ese OK
+
+- `INSERT` / `UPDATE` / `DELETE` / `REPLACE` / `TRUNCATE` (mysql, tinker, `DB::`, Eloquent).
+- `php artisan tinker` que cree, actualice o borre modelos.
+- Comandos Artisan o scripts que persistan (`--ejecutar`, `--force`, jobs, seeders).
+- Encadenar «verifico y ya lo aplico» en el mismo turno.
+
+```bash
+# ❌ Tinker que escribe (aunque el usuario “confirme” un estado)
+php artisan tinker --execute="app(PeriodoCierreContableService::class)->registrarCierre(...)"
+
+# ❌ SQL de escritura
+mysql ... -e "DELETE FROM contable_periodo_cierre WHERE id IN (39,40,41)"
+
+# ✅ Solo lectura
+mysql ... -e "SELECT id, alcance, fecha_hasta FROM contable_periodo_cierre WHERE ..."
+```
+
+## Seguro sin preguntar
+
+`SELECT`, `SHOW`, `DESCRIBE`, `EXPLAIN`, `count()`, `php artisan route:list`, `--dry-run` / consultas que no persistan.
+
+Si no puedo responder «el operador vio estas filas y dijo que sí», **no escribo**.

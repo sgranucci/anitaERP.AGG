@@ -14,6 +14,7 @@ use App\Support\Ventas\ArcaCaeaInformeUiSupport;
 use App\Support\Ventas\CaeaQuincenaSupport;
 use Auth;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
@@ -271,6 +272,11 @@ class ArcaCaeaController extends Controller
     {
         can('informar-arca-caea');
 
+        Log::info('arca.caea.informe.post', [
+            'arca_caea_id' => $id,
+            'usuario_id' => (int) Auth::id(),
+        ]);
+
         $registro = $this->resolverRegistroPermitido($id);
         $registro->loadMissing('empresa');
         $data = $request->validate([
@@ -311,14 +317,7 @@ class ArcaCaeaController extends Controller
             ArcaCaeaInformeColaSupport::marcarActivo($arcaCaeaId, $usuarioId);
             // Permitir mail del nuevo proceso aunque un intento anterior (p. ej. 704) ya hubiera avisado.
             Cache::forget('arca-caea-informe-mail-'.$arcaCaeaId.'-'.$usuarioId);
-            InformarArcaCaeaPeriodoJob::dispatch($arcaCaeaId, $usuarioId, $soloErrores);
-            if (! ArcaCaeaInformeColaSupport::hayJobPendienteEnCola($arcaCaeaId)) {
-                ArcaCaeaInformeColaSupport::liberarLocksUnique($arcaCaeaId);
-                InformarArcaCaeaPeriodoJob::dispatch($arcaCaeaId, $usuarioId, $soloErrores);
-            }
-            if (! ArcaCaeaInformeColaSupport::hayJobPendienteEnCola($arcaCaeaId)) {
-                throw new \RuntimeException('El job no quedó en la cola (unique o worker). Reintentá.');
-            }
+            Bus::dispatch(new InformarArcaCaeaPeriodoJob($arcaCaeaId, $usuarioId, $soloErrores));
         } catch (\Throwable $e) {
             ArcaCaeaInformeColaSupport::liberar((int) $registro->id);
             Log::error('arca.caea.informe.dispatch_fallo', [

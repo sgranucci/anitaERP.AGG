@@ -117,8 +117,7 @@ class SussListadoExport implements FromView, WithColumnFormatting, WithColumnWid
     public function columnWidths(): array
     {
         // Detalle: Cert | Documento | Razón | Fecha | Alícuota | Base | Importe
-        // Conciliación reutiliza las mismas columnas: Cód | Concepto | Total SUSS |
-        // Total mayor | Diferencia | Saldo | Dif. vs saldo.
+        // Conciliación: Cód | Concepto | Total SUSS | Total mayor | Diferencia | Estado.
         // D/F/G deben alcanzar para montos tipo -19.537.010,57 (si no, Excel muestra ####).
         return [
             'A' => 10,

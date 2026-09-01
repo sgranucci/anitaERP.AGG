@@ -28,7 +28,12 @@ final class LibroIvaDigitalIdentificacionSupport
             $codigo = self::CODIGO_SIN_IDENTIFICAR;
         }
 
-        if (self::numeroEsCero($numero) && $codigo !== self::CODIGO_SIN_IDENTIFICAR) {
+        $digits = preg_replace('/\D+/', '', $numero) ?? '';
+        if ($codigo === '80') {
+            $digits = self::cuitOnceDigitos($digits);
+        }
+
+        if (self::numeroEsCero($digits) && $codigo !== self::CODIGO_SIN_IDENTIFICAR) {
             return [
                 'codigo_documento' => self::CODIGO_SIN_IDENTIFICAR,
                 'numero_identificacion' => '0',
@@ -37,7 +42,7 @@ final class LibroIvaDigitalIdentificacionSupport
 
         return [
             'codigo_documento' => $codigo,
-            'numero_identificacion' => self::numeroEsCero($numero) ? '0' : (preg_replace('/\D+/', '', $numero) ?? $numero),
+            'numero_identificacion' => self::numeroEsCero($digits) ? '0' : $digits,
         ];
     }
 
@@ -55,5 +60,26 @@ final class LibroIvaDigitalIdentificacionSupport
         $cabecera['numero_identificacion'] = $id['numero_identificacion'];
 
         return $cabecera;
+    }
+
+    /**
+     * Tipo 80 (CUIT): ARCA rechaza más de 11 dígitos.
+     */
+    public static function cuitOnceDigitos(string $digits): string
+    {
+        if (strlen($digits) <= 11) {
+            return $digits;
+        }
+
+        $ultimo = substr($digits, -11);
+        if (LibroIvaDigitalComprasCuitSupport::esCuitValido($ultimo)) {
+            return $ultimo;
+        }
+        $primero = substr($digits, 0, 11);
+        if (LibroIvaDigitalComprasCuitSupport::esCuitValido($primero)) {
+            return $primero;
+        }
+
+        return $ultimo;
     }
 }

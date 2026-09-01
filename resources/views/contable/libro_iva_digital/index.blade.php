@@ -389,9 +389,10 @@
                             Misma fuente que el Libro IVA Digital de compras (ERP + Anita sin solapar).
                             El CSV de crédito solo admite gravado + IVA. Las NC van en <strong>Neto NC</strong>
                             e <strong>IVA restitución</strong> (Portal = gravado − NC).
-                            Las facturas C (monotributo) no se escriben en exento/no gravado del TXT:
-                            el tipo 011-016 las identifica. Portal suele sumarlas en «No gravado + exento»;
-                            acá van aparte para cruzar con el Libro IVA Compras de Anita.
+                            En el TXT, las facturas C (monotributo) van en no gravado para que
+                            el total cierre; el tipo 011-016 las identifica. En este resumen
+                            quedan en <strong>Monotributo</strong> para cruzar con el Libro IVA
+                            Compras de Anita (Portal suele sumarlas en «No gravado + exento»).
                         </p>
                         <div class="table-responsive mb-3">
                             <table class="table table-bordered table-sm" id="tabla-iva-simple-concepto">

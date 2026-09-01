@@ -47,17 +47,28 @@ final class LibroIvaDigitalConceptoIvacompraSupport
 
         $filasAlicuota = [];
         foreach ($resultado['alicuotas'] as $tasaKey => $row) {
-            if (($row['neto'] ?? 0) <= 0 && ($row['iva'] ?? 0) <= 0) {
+            $neto = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) ($row['neto'] ?? 0));
+            $iva = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) ($row['iva'] ?? 0));
+            if ($neto <= 0 && $iva <= 0) {
                 continue;
             }
             $filasAlicuota[] = [
-                'neto' => (float) ($row['neto'] ?? 0),
-                'iva' => (float) ($row['iva'] ?? 0),
+                'neto' => $neto,
+                'iva' => $iva,
                 'tasa' => (float) ($row['tasa'] ?? 0),
                 'codigo_lid' => LibroIvaDigitalMapeosSupport::codigoAlicuotaLid((float) ($row['tasa'] ?? 0)),
                 'concepto_iva_simple' => (int) ($row['concepto_iva_simple'] ?? 1),
             ];
         }
+        $resultado['exento'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['exento']);
+        $resultado['no_integra'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['no_integra']);
+        $resultado['neto_gravado'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['neto_gravado']);
+        $resultado['iva'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['iva']);
+        $resultado['perc_iva'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['perc_iva']);
+        $resultado['perc_iibb'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['perc_iibb']);
+        $resultado['perc_municipal'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['perc_municipal']);
+        $resultado['perc_nacional'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['perc_nacional']);
+        $resultado['imp_interno'] = LibroIvaDigitalComprasImportesSupport::absolutoInformable((float) $resultado['imp_interno']);
 
         $esC = strtoupper($letra) === 'C';
         $cantidad = $esC ? 0 : count($filasAlicuota);
@@ -88,8 +99,8 @@ final class LibroIvaDigitalConceptoIvacompraSupport
             return;
         }
 
-        $monto = abs((float) $concepto->monto);
-        if ($monto <= 0) {
+        $monto = (float) $concepto->monto;
+        if (abs($monto) < 0.0001) {
             return;
         }
 

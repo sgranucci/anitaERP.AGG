@@ -20,15 +20,15 @@ final class ArcaCaeaInformeUiSupportTest extends TestCase
         ]));
     }
 
-    public function test_puede_presentar_con_pendientes_aunque_no_haya_informable_ahora(): void
+    public function test_no_puede_presentar_si_esta_bloqueado_por_otra_quincena(): void
     {
-        self::assertTrue(ArcaCaeaInformeUiSupport::puedePresentarAhora([
-            'total' => 55,
-            'pendientes' => 55,
+        self::assertFalse(ArcaCaeaInformeUiSupport::puedePresentarAhora([
+            'total' => 1,
+            'pendientes' => 1,
             'errores' => 0,
             'informables_ahora' => 0,
             'ultimos_arca' => [
-                ['pto_vta' => 5, 'tipo_afip' => 1, 'ultimo_arca' => 360000],
+                ['pto_vta' => 30, 'tipo_afip' => 1, 'ultimo_arca' => 1],
             ],
         ]));
     }

@@ -187,30 +187,35 @@
         }
     }
 
+    function enviarFormularioNativo(form) {
+        HTMLFormElement.prototype.submit.call(form);
+    }
+
     document.addEventListener('submit', function (ev) {
         var form = ev.target;
         if (!form || !form.classList || !form.classList.contains('js-arca-caea-informar-form')) {
             return;
         }
-        if (form.querySelector('button[type="submit"]:disabled')) {
+        var confirmado = form.getAttribute('data-confirmado') === '1';
+        if (!confirmado && form.querySelector('button[type="submit"]:disabled')) {
             ev.preventDefault();
             return;
         }
         var confirmMsg = form.getAttribute('data-confirm-msg');
-        if (confirmMsg && form.getAttribute('data-confirmado') !== '1') {
+        if (confirmMsg && !confirmado) {
             ev.preventDefault();
             if (!window.confirm(confirmMsg)) {
                 return;
             }
             form.setAttribute('data-confirmado', '1');
             var idConfirm = idDesdeAction(form.getAttribute('action'));
-            if (idConfirm > 0) {
-                marcarActivoLocal(idConfirm);
-            }
             var tituloC = form.getAttribute('data-overlay-titulo') || 'Presentando comprobantes CAEA…';
             var subtituloC = form.getAttribute('data-overlay-subtitulo') || '';
             mostrarOverlay(tituloC, subtituloC);
-            form.submit();
+            if (idConfirm > 0) {
+                marcarActivoLocal(idConfirm);
+            }
+            enviarFormularioNativo(form);
             return;
         }
         var id = idDesdeAction(form.getAttribute('action'));

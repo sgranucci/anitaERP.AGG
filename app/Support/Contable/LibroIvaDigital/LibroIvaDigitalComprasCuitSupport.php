@@ -34,6 +34,9 @@ final class LibroIvaDigitalComprasCuitSupport
     public static function resolver(?string $cuit, ?string $nombreVendedor): string
     {
         $digits = self::soloDigitos($cuit);
+        if (strlen($digits) > 11) {
+            $digits = LibroIvaDigitalIdentificacionSupport::cuitOnceDigitos($digits);
+        }
         if (self::esCuitValido($digits)) {
             return $digits;
         }

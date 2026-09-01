@@ -21,7 +21,8 @@ final class SussFormatoF2004Support
     /** Orden de pago (tabla TIPO_COMPROBANTE SIRE). */
     public const TIPO_COMPROBANTE_ORDEN_PAGO = 6;
 
-    public const TOLERANCIA = 0.05;
+    /** Tolerancia de conciliación SUSS vs mayor (col. P), en pesos. */
+    public const TOLERANCIA = 100.0;
 
     /** @var list<array{nombre:string,long:int,tipo:string}> */
     private const CAMPOS = [

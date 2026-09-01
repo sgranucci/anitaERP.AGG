@@ -20,13 +20,12 @@
             <td><strong>Total SUSS</strong></td>
             <td><strong>Total mayor</strong></td>
             <td><strong>Diferencia</strong></td>
-            <td><strong>Saldo ejerc.</strong></td>
-            <td><strong>Dif. vs saldo</strong></td>
+            <td><strong>Estado</strong></td>
+            <td></td>
         </tr>
         @foreach ($conciliacion['items'] as $item)
             @php
                 $totalIibb = $item['total_suss'] ?? $item['total_sicore'] ?? 0;
-                $difSaldo = $item['diferencia_suss_saldo'] ?? $item['diferencia_sicore_saldo'] ?? 0;
             @endphp
             <tr>
                 <td>{{ $item['codigo_impuesto'] ?? '' }}</td>
@@ -34,8 +33,8 @@
                 <td style="text-align:right;">{{ $fmtMontoExcel($totalIibb) }}</td>
                 <td style="text-align:right;">{{ $fmtMontoExcel($item['total_mayor'] ?? 0) }}</td>
                 <td style="text-align:right;">{{ $fmtMontoExcel($item['diferencia'] ?? 0) }}</td>
-                <td style="text-align:right;">{{ $fmtMontoExcel($item['saldo_ejercicio'] ?? 0) }}</td>
-                <td style="text-align:right;">{{ $fmtMontoExcel($difSaldo) }}</td>
+                <td>{{ ! empty($item['cuadra']) ? 'OK' : 'Diferencia' }}</td>
+                <td></td>
             </tr>
         @endforeach
         <tr>
@@ -45,14 +44,12 @@
         <h3 style="font-size:10px;margin:8px 0 4px;">Conciliación SUSS vs mayor contable</h3>
         <table class="data tabla-conciliacion" style="margin-bottom:10px;">
             <colgroup>
-                <col style="width:5%;">
-                <col style="width:28%;">
-                <col style="width:12%;">
-                <col style="width:12%;">
-                <col style="width:10%;">
                 <col style="width:8%;">
+                <col style="width:32%;">
+                <col style="width:16%;">
+                <col style="width:16%;">
+                <col style="width:16%;">
                 <col style="width:12%;">
-                <col style="width:13%;">
             </colgroup>
             <thead>
                 <tr>
@@ -62,41 +59,26 @@
                     <th class="num">Total mayor</th>
                     <th class="num">Dif.</th>
                     <th>Estado</th>
-                    <th class="num">Saldo ejerc.</th>
-                    <th class="num">Dif. vs saldo</th>
                 </tr>
             </thead>
             <tbody>
                 @foreach ($conciliacion['items'] as $item)
                     @php
                         $totalIibb = $item['total_suss'] ?? $item['total_sicore'] ?? 0;
-                        $difSaldo = $item['diferencia_suss_saldo'] ?? $item['diferencia_sicore_saldo'] ?? 0;
                     @endphp
                     <tr>
                         <td>{{ $item['codigo_impuesto'] ?? '' }}</td>
-                        <td>
-                            {{ $item['nombre'] ?? '' }}
-                            <div style="font-size:6.5px;color:#555;">
-                                Reg. {{ $item['registros'] ?? 0 }}
-                                @if (! empty($item['cuadra_saldo']))
-                                    · saldo OK
-                                @else
-                                    · saldo dif.
-                                @endif
-                            </div>
-                        </td>
+                        <td>{{ $item['nombre'] ?? '' }}</td>
                         <td class="num">{{ number_format((float) $totalIibb, 2, ',', '.') }}</td>
                         <td class="num">{{ number_format((float) ($item['total_mayor'] ?? 0), 2, ',', '.') }}</td>
                         <td class="num">{{ number_format((float) ($item['diferencia'] ?? 0), 2, ',', '.') }}</td>
                         <td>
                             @if (! empty($item['cuadra']))
-                                Cuadra
+                                OK
                             @else
                                 Dif.
                             @endif
                         </td>
-                        <td class="num">{{ number_format((float) ($item['saldo_ejercicio'] ?? 0), 2, ',', '.') }}</td>
-                        <td class="num">{{ number_format((float) $difSaldo, 2, ',', '.') }}</td>
                     </tr>
                 @endforeach
             </tbody>

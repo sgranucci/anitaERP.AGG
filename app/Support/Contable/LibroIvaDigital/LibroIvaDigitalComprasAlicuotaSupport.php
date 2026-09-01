@@ -52,6 +52,8 @@ final class LibroIvaDigitalComprasAlicuotaSupport
             $registro['alicuotas'][$i]['numero_identificacion'] = $cuit;
         }
 
-        return $registro;
+        $registro = LibroIvaDigitalComprasImportesSupport::equilibrarTipoC($registro);
+
+        return LibroIvaDigitalComprasImportesSupport::reconciliarAlicuotasRedondeo($registro);
     }
 }

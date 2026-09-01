@@ -34,14 +34,24 @@ final class ArcaCaeaInformeUiSupport
     }
 
     /**
-     * El avión se habilita si hay pendientes o errores de ESTA quincena.
-     * El job consulta ARCA al arrancar; no exigir informables_ahora (sin SOAP da 0).
+     * Avión azul solo si hay algo informable ahora, o si aún no hay último ARCA
+     * (el job lo consulta al arrancar). Si está bloqueado por otra quincena, gris.
      *
      * @param  array<string, mixed>|null  $resumen
      */
     public static function puedePresentarAhora(?array $resumen): bool
     {
-        return self::tienePendienteInforme($resumen);
+        if (! self::tienePendienteInforme($resumen)) {
+            return false;
+        }
+
+        if ((int) ($resumen['informables_ahora'] ?? 0) > 0) {
+            return true;
+        }
+
+        $ultimos = $resumen['ultimos_arca'] ?? [];
+
+        return ! is_array($ultimos) || $ultimos === [];
     }
 
     /**

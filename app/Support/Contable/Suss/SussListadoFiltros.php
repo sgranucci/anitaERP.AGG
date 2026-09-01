@@ -133,7 +133,7 @@ final class SussListadoFiltros
     public static function firma(array $filtros): string
     {
         return md5(json_encode([
-            'v' => 2,
+            'v' => 3,
             'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
             'fecha_desde' => (string) ($filtros['fecha_desde'] ?? ''),
             'fecha_hasta' => (string) ($filtros['fecha_hasta'] ?? ''),
@@ -146,6 +146,6 @@ final class SussListadoFiltros
      */
     public static function claveCacheResultado(array $filtros): string
     {
-        return generaKey('suss_resultado_v2_'.self::firma($filtros));
+        return generaKey('suss_resultado_v3_'.self::firma($filtros));
     }
 }
