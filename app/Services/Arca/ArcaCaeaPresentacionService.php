@@ -14,6 +14,7 @@ use App\Support\Ventas\ArcaCaeaAnitaTipoAfipSupport;
 use App\Support\Ventas\ArcaCaeaAnitaVencaeConsultaSupport;
 use App\Support\Ventas\ArcaCaeaInformeDatosDesdeAnitaSupport;
 use App\Support\Ventas\ArcaCaeaInformeDatosDesdeVentaSupport;
+use App\Support\Ventas\ArcaCaeaSucursalesInformeSupport;
 use App\Support\Ventas\ArcaPuntoventaWebserviceSupport;
 use App\Support\Ventas\ArcaWsfeEmisionResiliencia;
 use App\Support\Ventas\CaeaQuincenaSupport;
@@ -540,7 +541,7 @@ class ArcaCaeaPresentacionService
         $fechas = CaeaQuincenaSupport::fechasQuincena((int) $registro->periodo, (int) $registro->orden);
         $nroCaea = trim((string) ($registro->nro_caea ?? ''));
 
-        $rows = DB::table('venta')
+        $queryErrores = DB::table('venta')
             ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
             ->where('puntoventa.empresa_id', (int) $registro->empresa_id)
             ->where('puntoventa.modofacturacion', 'A')
@@ -552,8 +553,9 @@ class ArcaCaeaPresentacionService
             ->when($nroCaea !== '', fn ($q) => $q->where('venta.cae', $nroCaea))
             ->where('venta.caea_informado_estado', 'error')
             ->orderBy('venta.numerocomprobante')
-            ->limit($limite)
-            ->get([
+            ->limit($limite);
+        $this->aplicarFiltroSucursalesInforme($queryErrores, (int) $registro->empresa_id);
+        $rows = $queryErrores->get([
                 'venta.id as venta_id',
                 'venta.numerocomprobante as numero',
                 'puntoventa.codigo as pto_vta',
@@ -585,7 +587,7 @@ class ArcaCaeaPresentacionService
         $fechas = CaeaQuincenaSupport::fechasQuincena((int) $registro->periodo, (int) $registro->orden);
         $nroCaea = trim((string) ($registro->nro_caea ?? ''));
 
-        $rows = DB::table('venta')
+        $queryAgrupados = DB::table('venta')
             ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
             ->where('puntoventa.empresa_id', (int) $registro->empresa_id)
             ->where('puntoventa.modofacturacion', 'A')
@@ -603,8 +605,9 @@ class ArcaCaeaPresentacionService
             ])
             ->groupBy('venta.caea_informado_codigo_error', 'venta.caea_informado_mensaje')
             ->orderByDesc('cantidad')
-            ->limit($limiteMensajes)
-            ->get();
+            ->limit($limiteMensajes);
+        $this->aplicarFiltroSucursalesInforme($queryAgrupados, (int) $registro->empresa_id);
+        $rows = $queryAgrupados->get();
 
         $out = [];
         foreach ($rows as $row) {
@@ -1088,7 +1091,7 @@ class ArcaCaeaPresentacionService
         $nroCaea = trim((string) ($registro->nro_caea ?? ''));
         $excluidas = ArcaCaeaAnitaIvaVentasSupport::tiposQueNoVanAlIvaVentas();
 
-        return Venta::query()
+        $query = Venta::query()
             ->select('venta.*')
             ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
             ->leftJoin('tipotransaccion', 'tipotransaccion.id', '=', 'venta.tipotransaccion_id')
@@ -1106,6 +1109,10 @@ class ArcaCaeaPresentacionService
                 $w->whereNull('tipotransaccion.abreviatura')
                     ->orWhereNotIn('tipotransaccion.abreviatura', $excluidas);
             }));
+
+        $this->aplicarFiltroSucursalesInforme($query, (int) $registro->empresa_id);
+
+        return $query;
     }
 
     /**
@@ -1251,7 +1258,7 @@ class ArcaCaeaPresentacionService
      */
     private function listarCombinacionesTipoPvEmpresa(int $empresaId): array
     {
-        $rows = DB::table('venta')
+        $query = DB::table('venta')
             ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
             ->join('tipotransaccion', 'tipotransaccion.id', '=', 'venta.tipotransaccion_id')
             ->where('puntoventa.empresa_id', $empresaId)
@@ -1271,10 +1278,10 @@ class ArcaCaeaPresentacionService
                 'tipotransaccion.codigo as tipo_codigo',
             ])
             ->distinct()
-            ->orderBy('puntoventa.codigo')
-            ->get();
+            ->orderBy('puntoventa.codigo');
+        $this->aplicarFiltroSucursalesInforme($query, $empresaId);
 
-        return $this->mapearCombinacionesTipoPv($rows);
+        return $this->mapearCombinacionesTipoPv($query->get());
     }
 
     /**
@@ -1285,7 +1292,7 @@ class ArcaCaeaPresentacionService
         $fechas = CaeaQuincenaSupport::fechasQuincena((int) $registro->periodo, (int) $registro->orden);
         $nroCaea = trim((string) ($registro->nro_caea ?? ''));
 
-        $rows = DB::table('venta')
+        $query = DB::table('venta')
             ->join('puntoventa', 'puntoventa.id', '=', 'venta.puntoventa_id')
             ->join('tipotransaccion', 'tipotransaccion.id', '=', 'venta.tipotransaccion_id')
             ->where('puntoventa.empresa_id', (int) $registro->empresa_id)
@@ -1306,10 +1313,10 @@ class ArcaCaeaPresentacionService
                 'tipotransaccion.codigo as tipo_codigo',
             ])
             ->distinct()
-            ->orderBy('puntoventa.codigo')
-            ->get();
+            ->orderBy('puntoventa.codigo');
+        $this->aplicarFiltroSucursalesInforme($query, (int) $registro->empresa_id);
 
-        return $this->fusionarCombinacionesAnita($registro, $this->mapearCombinacionesTipoPv($rows));
+        return $this->fusionarCombinacionesAnita($registro, $this->mapearCombinacionesTipoPv($query->get()));
     }
 
     /**
@@ -1457,7 +1464,25 @@ class ArcaCaeaPresentacionService
             $out[(int) $pv->codigo] = $pv;
         }
 
-        return $out;
+        return ArcaCaeaSucursalesInformeSupport::filtrarPorCodigo($out, $empresaId);
+    }
+
+    /**
+     * El Bierzo: solo sucursal 5. Villafranca no informa CAEA.
+     */
+    private function aplicarFiltroSucursalesInforme(Builder|\Illuminate\Database\Query\Builder $query, int $empresaId): void
+    {
+        $ids = [];
+        foreach ($this->puntosVentaCaeaPorCodigo($empresaId) as $pv) {
+            $ids[] = (int) $pv->id;
+        }
+        if ($ids === []) {
+            $query->whereRaw('0 = 1');
+
+            return;
+        }
+
+        $query->whereIn('puntoventa.id', $ids);
     }
 
     /**

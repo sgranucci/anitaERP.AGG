@@ -37,7 +37,7 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
         $nroCaea = trim($nroCaea);
         $sucursales = array_values(array_unique(array_filter(
             array_map(static fn ($s): int => (int) $s, $sucursales),
-            static fn (int $s): bool => $s > 0,
+            static fn (int $s): bool => ArcaCaeaSucursalesInformeSupport::esSucursalPermitida($s),
         )));
         if ($nroCaea === '' || $sucursales === []) {
             return [];
@@ -50,14 +50,16 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
 
         $in = implode(',', $sucursales);
         try {
-            $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita)->apiCall([
-                'acc' => 'list',
-                'sistema' => 'ventas',
-                'tabla' => 'vencae',
-                'campos' => 'venc_tipo,venc_letra,venc_sucursal,venc_nro,venc_nro_cae',
-                'whereArmado' => " WHERE venc_nro_cae = '".addslashes($nroCaea)."'"
-                    .' AND venc_sucursal IN ('.$in.')',
-            ]));
+            $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita)->apiCall(
+                ArcaCaeaSucursalesInformeSupport::mergePathAnita([
+                    'acc' => 'list',
+                    'sistema' => 'ventas',
+                    'tabla' => 'vencae',
+                    'campos' => 'venc_tipo,venc_letra,venc_sucursal,venc_nro,venc_nro_cae',
+                    'whereArmado' => " WHERE venc_nro_cae = '".addslashes($nroCaea)."'"
+                        .' AND venc_sucursal IN ('.$in.')',
+                ])
+            ));
         } catch (Throwable $e) {
             Log::warning('arca.caea.anita.vencae_fallo', ['caea' => $nroCaea, 'msg' => $e->getMessage()]);
 
@@ -110,7 +112,9 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
      */
     public static function buscarIvaVentasPorAfip(int $sucursal, int $numero, int $tipoAfip, string $nroCaea = ''): ?array
     {
-        if ($sucursal < 1 || $numero < 1 || $tipoAfip < 1) {
+        if ($sucursal < 1 || $numero < 1 || $tipoAfip < 1
+            || ! ArcaCaeaSucursalesInformeSupport::esSucursalPermitida($sucursal)
+        ) {
             return null;
         }
 
@@ -121,13 +125,15 @@ final class ArcaCaeaAnitaVencaeConsultaSupport
         }
 
         try {
-            $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita)->apiCall([
-                'acc' => 'list',
-                'sistema' => 'ventas',
-                'tabla' => 'vencae',
-                'campos' => 'venc_tipo,venc_letra,venc_sucursal,venc_nro,venc_nro_cae',
-                'whereArmado' => $where,
-            ]));
+            $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita)->apiCall(
+                ArcaCaeaSucursalesInformeSupport::mergePathAnita([
+                    'acc' => 'list',
+                    'sistema' => 'ventas',
+                    'tabla' => 'vencae',
+                    'campos' => 'venc_tipo,venc_letra,venc_sucursal,venc_nro,venc_nro_cae',
+                    'whereArmado' => $where,
+                ])
+            ));
         } catch (Throwable $e) {
             Log::warning('arca.caea.anita.vencae_buscar_fallo', [
                 'sucursal' => $sucursal,

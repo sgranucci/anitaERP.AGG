@@ -30,6 +30,11 @@
                 <p class="text-muted small mb-3">
                     <i class="fa fa-info-circle"></i>
                     El ícono <i class="fa fa-paper-plane text-primary"></i> encola la presentación de comprobantes pendientes o con error en ARCA (segundo plano).
+                    @if (\App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo())
+                        Incluye las facturas de Anita (bridge) de la sucursal 5 de Bierzo; Villafranca no se informa.
+                    @else
+                        Incluye también los comprobantes CAEA que viven en Anita (bridge) y no están en el ERP.
+                    @endif
                     Solo está activo cuando falta informar comprobantes de la quincena y no hay otro proceso de esa quincena en cola.
                     Mientras corre, el avión se deshabilita y verás <i class="fa fa-spinner fa-spin text-warning"></i>.
                     Al terminar el proceso recibirás un mail con el resultado.

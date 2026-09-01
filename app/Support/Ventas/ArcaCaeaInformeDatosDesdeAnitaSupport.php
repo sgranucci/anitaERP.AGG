@@ -37,6 +37,12 @@ final class ArcaCaeaInformeDatosDesdeAnitaSupport
         if ($tipoAnita === '' || $letra === '' || $sucursal < 1 || $numero < 1) {
             throw new InvalidArgumentException('Comprobante Anita inválido (tipo/letra/sucursal/número).');
         }
+        if (! ArcaCaeaSucursalesInformeSupport::esSucursalPermitida($sucursal)) {
+            throw new InvalidArgumentException(sprintf(
+                'La sucursal %d no entra en la presentación CAEA.',
+                $sucursal,
+            ));
+        }
 
         $cab = self::leerCabecera($tipoAnita, $letra, $sucursal, $numero);
         if ($cab === null) {
@@ -427,13 +433,15 @@ final class ArcaCaeaInformeDatosDesdeAnitaSupport
      */
     private static function listar(string $tabla, string $campos, string $where): array
     {
-        $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita)->apiCall([
-            'acc' => 'list',
-            'tabla' => $tabla,
-            'sistema' => self::SISTEMA,
-            'campos' => $campos,
-            'whereArmado' => $where,
-        ]));
+        $parsed = ApiAnita::parsearRespuestaLista((new ApiAnita)->apiCall(
+            ArcaCaeaSucursalesInformeSupport::mergePathAnita([
+                'acc' => 'list',
+                'tabla' => $tabla,
+                'sistema' => self::SISTEMA,
+                'campos' => $campos,
+                'whereArmado' => $where,
+            ])
+        ));
 
         if ($parsed['error_lectura'] !== null) {
             throw new InvalidArgumentException("Error leyendo Anita {$tabla}: ".$parsed['error_lectura']);

@@ -45,11 +45,22 @@ final class ArcaCaeaInformeUiSupport
             return false;
         }
 
-        if (! array_key_exists('informables_ahora', $resumen)) {
-            return self::tienePendienteInforme($resumen);
+        if (! self::tienePendienteInforme($resumen)) {
+            return false;
         }
 
-        return (int) ($resumen['informables_ahora'] ?? 0) > 0;
+        if (! array_key_exists('informables_ahora', $resumen)) {
+            return true;
+        }
+
+        if ((int) ($resumen['informables_ahora'] ?? 0) > 0) {
+            return true;
+        }
+
+        // Sin último ARCA consultado el job lo pide al arrancar (Anita + ERP).
+        $ultimos = $resumen['ultimos_arca'] ?? [];
+
+        return ! is_array($ultimos) || $ultimos === [];
     }
 
     /**

@@ -10,6 +10,7 @@ use App\Models\Ventas\Venta;
 use App\Services\Ventas\FacturaelectronicaService;
 use App\Support\Database\SqlDialectSupport;
 use App\Support\Ventas\ArcaCaeaAnitaIvaVentasSupport;
+use App\Support\Ventas\ArcaCaeaSucursalesInformeSupport;
 use App\Support\Ventas\ArcaCaeaAnitaTipoAfipSupport;
 use App\Support\Ventas\ArcaCaeaAnitaVencaeConsultaSupport;
 use App\Support\Ventas\ArcaCaeaInformeDatosDesdeAnitaSupport;
@@ -569,7 +570,7 @@ class ArcaCaeaPresentacionManualService
             $out[(int) $pv->codigo] = $pv;
         }
 
-        return $out;
+        return ArcaCaeaSucursalesInformeSupport::filtrarPorCodigo($out, $empresaId);
     }
 
     private function resolverPuntoventa(int $empresaId, int $ptoVta): ?Puntoventa
