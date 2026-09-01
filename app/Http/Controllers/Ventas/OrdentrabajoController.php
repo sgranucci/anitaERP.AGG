@@ -23,14 +23,14 @@ use App\Exports\Ventas\OrdentrabajoExport;
 
 class OrdentrabajoController extends Controller
 {
-	private $ordentrabajoQuery;
-	private $clienteQuery;
-	private $ordentrabajoService;
-	private $articuloService;
-	private $puntoventaRepository;
-	private $tipotransaccionRepository;
-	private $incotermRepository;
-	private $formpagoRepository;
+	protected $ordentrabajoQuery;
+	protected $clienteQuery;
+	protected $ordentrabajoService;
+	protected $articuloQuery;
+	protected $puntoventaRepository;
+	protected $tipotransaccionRepository;
+	protected $incotermRepository;
+	protected $formpagoRepository;
 
     public function __construct(
     	OrdentrabajoService $ordentrabajoservice,

@@ -2,7 +2,6 @@
 
 namespace App\Exports\Ventas;
 
-use App\Services\Ventas\PedidoService;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -25,19 +24,18 @@ use App\ApiAnita;
 class GeneralPedidoExport implements FromView, WithColumnFormatting, WithMapping, ShouldAutoSize, WithStyles, WithColumnWidths, WithEvents, WithTitle
 {
 	use Exportable;
-	private $desdefecha, $hastafecha,
+	protected $desdefecha, $hastafecha,
 		$desdevendedor_id, $hastavendedor_id,
 		$desdecliente_id, $hastacliente_id,
 		$desdearticulo_id, $hastaarticulo_id,
 		$desdelinea_id, $hastalinea_id,
+		$desdefondo_id, $hastafondo_id,
 		$tipolistado, $estado, $mventa_id, $nombremventa;
 
 	protected $dates = ['fecha'];
-    private $pedidoService;
+    protected $pedidoService;
 
-    public function __construct(
-                                PedidoService $pedidoservice
-								)
+    public function __construct($pedidoservice)
     {
         $this->pedidoService = $pedidoservice;
     }

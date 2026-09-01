@@ -286,4 +286,4 @@
 @include('ventas.pedido_ferli.modal3')
 @include('includes.stock.modalarticuloxsku')
 @include('ventas.ordentrabajo.modalcrearordentrabajo')
-@include('ventas.ordentrabajo.modalfacturaordentrabajo')
+@include('ventas.ordentrabajo_ferli.modalfacturaordentrabajo')

@@ -749,11 +749,21 @@ Route::get('stock/precio/consulta-por-articulo', 'Stock\PrecioController@consult
  * Tienda nube
  */
 
-Route::get('stock/crearimportaciontiendanube', 'Stock\TiendaNubeController@crearImportacion')->name('crear_importacion_tiendanube');
-Route::post('stock/importartiendanube', 'Stock\TiendaNubeController@importar')->name('importar_tiendanube');
-Route::get('ventas/crearimportacionfacturastiendanube', 'Ventas\FacturanteController@crearImportacion')->name('crear_importacion_facturas_tiendanube');
-Route::post('ventas/listarfacturastiendanube', 'Ventas\FacturanteController@listarComprobanteFull')->name('listar_facturas_tiendanube');
-Route::post('ventas/generarfacturastiendanube', 'Ventas\FacturanteController@generarFacturasTiendaNube')->name('generar_facturas_tiendanube');
+if ((string) config('app.empresa') === 'Calzados Ferli') {
+    Route::get('stock/crearimportaciontiendanube', 'Stock\TiendaNubeControllerFerli@crearImportacion')->name('crear_importacion_tiendanube');
+    Route::post('stock/importartiendanube', 'Stock\TiendaNubeControllerFerli@importar')->name('importar_tiendanube');
+    Route::get('ventas/crearimportacionfacturastiendanube', 'Ventas\FacturanteControllerFerli@crearImportacion')->name('crear_importacion_facturas_tiendanube');
+    Route::post('ventas/listarfacturastiendanube', 'Ventas\FacturanteControllerFerli@listarComprobanteFull')->name('listar_facturas_tiendanube');
+    Route::post('ventas/generarfacturastiendanube', 'Ventas\FacturanteControllerFerli@generarFacturasTiendaNube')->name('generar_facturas_tiendanube');
+    Route::post('ventas/recuperarstockfacturante', 'Ventas\FacturanteControllerFerli@recuperarStockLocal')->name('recuperar_stock_facturante');
+    Route::post('ventas/verificarimportacionfacturante', 'Ventas\FacturanteControllerFerli@verificarImportacionFacturante')->name('verificar_importacion_facturante');
+} else {
+    Route::get('stock/crearimportaciontiendanube', 'Stock\TiendaNubeController@crearImportacion')->name('crear_importacion_tiendanube');
+    Route::post('stock/importartiendanube', 'Stock\TiendaNubeController@importar')->name('importar_tiendanube');
+    Route::get('ventas/crearimportacionfacturastiendanube', 'Ventas\FacturanteController@crearImportacion')->name('crear_importacion_facturas_tiendanube');
+    Route::post('ventas/listarfacturastiendanube', 'Ventas\FacturanteController@listarComprobanteFull')->name('listar_facturas_tiendanube');
+    Route::post('ventas/generarfacturastiendanube', 'Ventas\FacturanteController@generarFacturasTiendaNube')->name('generar_facturas_tiendanube');
+}
 
 /*
  * Unidades de medida
@@ -1608,8 +1618,13 @@ Route::get('ventas/reppercepcioniibb', 'Ventas\ReppercepcioniibbController@index
 Route::post('ventas/crearreppercepcioniibb', 'Ventas\ReppercepcioniibbController@crearReporteControlPercepcionesIIBB')->name('crear_reppercepcioniibb');
 
 // Pedidos
-Route::get('ventas/reppedido', 'Ventas\PedidoController@indexReportePedido')->name('rep_pedido');
-Route::post('ventas/crearreppedido', 'Ventas\PedidoController@crearReportePedido')->name('crear_reppedido');
+if ((string) config('app.empresa') === 'Calzados Ferli') {
+    Route::get('ventas/reppedido', 'Ventas\PedidoFerliController@indexReportePedido')->name('rep_pedido');
+    Route::post('ventas/crearreppedido', 'Ventas\PedidoFerliController@crearReportePedido')->name('crear_reppedido');
+} else {
+    Route::get('ventas/reppedido', 'Ventas\PedidoController@indexReportePedido')->name('rep_pedido');
+    Route::post('ventas/crearreppedido', 'Ventas\PedidoController@crearReportePedido')->name('crear_reppedido');
+}
 
 // Kilos Pedidos
 Route::get('ventas/repkilopedido', 'Ventas\PedidoController@indexReporteKiloPedido')->name('rep_kilopedido');
@@ -1627,16 +1642,21 @@ Route::get('ventas/listar-cot-electronico/{formato?}', 'Ventas\CotElectronicoCon
 Route::get('ventas/listar-cot-electronico-sesion/{id}/{formato?}', 'Ventas\CotElectronicoController@exportarSesion')->name('listar_cot_electronico_sesion')->where('id', '[0-9]+');
 
 // Totales de Pedidos
-Route::get('ventas/reptotalpedido', 'Ventas\PedidoController@indexReporteTotalPedido')->name('rep_totalpedido');
-Route::post('ventas/crearreptotalpedido', 'Ventas\PedidoController@crearReporteTotalPedido')->name('crear_reptotalpedido');
-
-// General de Pedidos
-Route::get('ventas/repgeneralpedido', 'Ventas\PedidoController@indexReporteGeneralPedido')->name('rep_generalpedido');
-Route::post('ventas/crearrepgeneralpedido', 'Ventas\PedidoController@crearReporteGeneralPedido')->name('crear_repgeneralpedido');
-
-// Consumo de materiales
-Route::get('ventas/repconsumomaterial', 'Ventas\PedidoController@indexReporteConsumoMaterial')->name('rep_consumomaterial');
-Route::post('ventas/crearrepconsumomaterial', 'Ventas\PedidoController@crearReporteConsumoMaterial')->name('crear_repconsumomaterial');
+if ((string) config('app.empresa') === 'Calzados Ferli') {
+    Route::get('ventas/reptotalpedido', 'Ventas\PedidoFerliController@indexReporteTotalPedido')->name('rep_totalpedido');
+    Route::post('ventas/crearreptotalpedido', 'Ventas\PedidoFerliController@crearReporteTotalPedido')->name('crear_reptotalpedido');
+    Route::get('ventas/repgeneralpedido', 'Ventas\PedidoFerliController@indexReporteGeneralPedido')->name('rep_generalpedido');
+    Route::post('ventas/crearrepgeneralpedido', 'Ventas\PedidoFerliController@crearReporteGeneralPedido')->name('crear_repgeneralpedido');
+    Route::get('ventas/repconsumomaterial', 'Ventas\PedidoFerliController@indexReporteConsumoMaterial')->name('rep_consumomaterial');
+    Route::post('ventas/crearrepconsumomaterial', 'Ventas\PedidoFerliController@crearReporteConsumoMaterial')->name('crear_repconsumomaterial');
+} else {
+    Route::get('ventas/reptotalpedido', 'Ventas\PedidoController@indexReporteTotalPedido')->name('rep_totalpedido');
+    Route::post('ventas/crearreptotalpedido', 'Ventas\PedidoController@crearReporteTotalPedido')->name('crear_reptotalpedido');
+    Route::get('ventas/repgeneralpedido', 'Ventas\PedidoController@indexReporteGeneralPedido')->name('rep_generalpedido');
+    Route::post('ventas/crearrepgeneralpedido', 'Ventas\PedidoController@crearReporteGeneralPedido')->name('crear_repgeneralpedido');
+    Route::get('ventas/repconsumomaterial', 'Ventas\PedidoController@indexReporteConsumoMaterial')->name('rep_consumomaterial');
+    Route::post('ventas/crearrepconsumomaterial', 'Ventas\PedidoController@crearReporteConsumoMaterial')->name('crear_repconsumomaterial');
+}
 
 // Etiquetas de OT
 Route::get('ventas/repetiquetaot', 'Ventas\OrdentrabajoController@indexEtiqueta')->name('repetiquetaot');
@@ -2259,7 +2279,8 @@ if ((string) config('app.empresa') !== 'Calzados Ferli') {
     Route::post('ventas/pedido/ejecutacierre', 'Ventas\PedidoController@ejecutaCierre')->name('ejecuta_cierre_pedido');
 }
 
-if (strtoupper((string) config('app.empresa')) !== 'INTERFORMING') {
+if (strtoupper((string) config('app.empresa')) !== 'INTERFORMING'
+    && (string) config('app.empresa') !== 'Calzados Ferli') {
     Route::get('ventas/remito', 'Ventas\RemitoController@index')->name('remito');
     Route::get('ventas/remito/crear', 'Ventas\RemitoController@crear')->name('crear_remito');
     Route::post('ventas/remito', 'Ventas\RemitoController@guardar')->name('guardar_remito');
@@ -2288,29 +2309,34 @@ Route::get('ventas/leerhistoriaitempedido/{pedido_articulo_id}', 'Ventas\PedidoC
 
 /*
  * Ordenes de trabajo
+ * Calzados Ferli: OrdentrabajoFerliController (transporte L8, cache de PV).
+ * AGG / Bierzo / Interforming: OrdentrabajoController.
  */
+$ordentrabajoCtrl = ((string) config('app.empresa') === 'Calzados Ferli')
+    ? 'Ventas\OrdentrabajoFerliController'
+    : 'Ventas\OrdentrabajoController';
 
-Route::get('ventas/ordenestrabajo', 'Ventas\OrdentrabajoController@indexp')->name('ordentrabajo');
+Route::get('ventas/ordenestrabajo', $ordentrabajoCtrl.'@indexp')->name('ordentrabajo');
 // Route::get('ventas/ordenestrabajop', 'Ventas\OrdentrabajoController@indexp')->name('ordentrabajop');
-Route::get('ventas/consultaordenestrabajo', 'Ventas\OrdentrabajoController@indexp')->name('consulta_ordentrabajo');
-Route::get('ventas/ordenestrabajo/crear', 'Ventas\OrdentrabajoController@crear')->name('crear_ordentrabajo');
-Route::get('ventas/ordenestrabajo/{id}/editar', 'Ventas\OrdentrabajoController@editar')->name('editar_ordentrabajo');
-Route::put('ventas/ordenestrabajo/{id}', 'Ventas\OrdentrabajoController@actualizar')->name('actualizar_ordentrabajo');
-Route::delete('ventas/ordenestrabajo/{id}', 'Ventas\OrdentrabajoController@eliminar')->name('eliminar_ordentrabajo');
+Route::get('ventas/consultaordenestrabajo', $ordentrabajoCtrl.'@indexp')->name('consulta_ordentrabajo');
+Route::get('ventas/ordenestrabajo/crear', $ordentrabajoCtrl.'@crear')->name('crear_ordentrabajo');
+Route::get('ventas/ordenestrabajo/{id}/editar', $ordentrabajoCtrl.'@editar')->name('editar_ordentrabajo');
+Route::put('ventas/ordenestrabajo/{id}', $ordentrabajoCtrl.'@actualizar')->name('actualizar_ordentrabajo');
+Route::delete('ventas/ordenestrabajo/{id}', $ordentrabajoCtrl.'@eliminar')->name('eliminar_ordentrabajo');
 if ((string) config('app.empresa') === 'Calzados Ferli') {
     Route::post('ventas/pedido/consultapendientesot', 'Ventas\PedidoFerliController@consultarPendienteOT')->name('consultar_pendiente_ot');
 } else {
     Route::post('ventas/pedido/consultapendientesot', 'Ventas\PedidoController@consultarPendienteOt')->name('consultar_pendiente_ot');
 }
-Route::post('ventas/ordenestrabajo/generar', 'Ventas\OrdentrabajoController@generar')->name('generar_ordentrabajo');
+Route::post('ventas/ordenestrabajo/generar', $ordentrabajoCtrl.'@generar')->name('generar_ordentrabajo');
 Route::get('ventas/guardaordenestrabajo/{origen}/{ids}/{checkotstock}/{ordentrabajo_stock_codigo}/{deposito_id}/{leyenda?}',
-    'Ventas\OrdentrabajoController@guardar')->name('guardar_ordentrabajo');
-Route::get('ventas/listaordenestrabajo/{id}', 'Ventas\OrdentrabajoController@listar')->name('listar_ordentrabajo');
-Route::get('ventas/estadoot/{id}/{pedido_combinacion_id?}', 'Ventas\OrdentrabajoController@estadoOt')->name('estado_ot');
-Route::get('ventas/controlaordentrabajostock/{id}/{articulo_id}/{combinacion_id}', 'Ventas\OrdentrabajoController@controlaOtStock')->name('controla_ordetrabajo_stock');
-Route::post('ventas/ordenestrabajo/limpiafiltro', 'Ventas\OrdentrabajoController@limpiafiltro')->name('ordentrabajo.limpiafiltro');
-Route::get('ventas/listaordentrabajo/{formato?}/{busqueda?}', 'Ventas\OrdentrabajoController@lista')->name('lista_ordentrabajo');
-Route::post('ventas/ordenestrabajo/borrarOt', 'Ventas\OrdentrabajoController@borrarOt')->name('borrar_ot');
+    $ordentrabajoCtrl.'@guardar')->name('guardar_ordentrabajo');
+Route::get('ventas/listaordenestrabajo/{id}', $ordentrabajoCtrl.'@listar')->name('listar_ordentrabajo');
+Route::get('ventas/estadoot/{id}/{pedido_combinacion_id?}', $ordentrabajoCtrl.'@estadoOt')->name('estado_ot');
+Route::get('ventas/controlaordentrabajostock/{id}/{articulo_id}/{combinacion_id}', $ordentrabajoCtrl.'@controlaOtStock')->name('controla_ordetrabajo_stock');
+Route::post('ventas/ordenestrabajo/limpiafiltro', $ordentrabajoCtrl.'@limpiafiltro')->name('ordentrabajo.limpiafiltro');
+Route::get('ventas/listaordentrabajo/{formato?}/{busqueda?}', $ordentrabajoCtrl.'@lista')->name('lista_ordentrabajo');
+Route::post('ventas/ordenestrabajo/borrarOt', $ordentrabajoCtrl.'@borrarOt')->name('borrar_ot');
 
 /*
  * Comprobantes de venta

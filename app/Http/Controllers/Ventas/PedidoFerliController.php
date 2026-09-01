@@ -32,7 +32,7 @@ use App\Models\Ventas\Vendedor;
 use App\Models\Ventas\Condicionventa;
 use App\Exports\Ventas\PedidoExportFerli;
 use App\Exports\Ventas\TotalPedidoExport;
-use App\Exports\Ventas\GeneralPedidoExport;
+use App\Exports\Ventas\GeneralPedidoExportFerli;
 use App\Exports\Ventas\ConsumoMaterialExport;
 use Illuminate\Pagination\Paginator;
 use DB;
@@ -231,7 +231,7 @@ class PedidoFerliController extends Controller
 			$extension = "csv";
 			break;
 		}
-		return (new PedidoExport($this->pedidoService))->rangoFecha($request->desdefecha, $request->hastafecha)
+		return (new PedidoExportFerli($this->pedidoService))->rangoFecha($request->desdefecha, $request->hastafecha)
 								->asignaRangoVendedor($request->desdevendedor_id, $request->hastavendedor_id)
 								->asignaTipoListado($request->tipolistado, $request->origen)
 								->download('pedido.'.$extension);
@@ -349,7 +349,7 @@ class PedidoFerliController extends Controller
 				$nombreMventa = $mventa->nombre;
 		}
 	
-		return (new GeneralPedidoExport($this->pedidoService))
+		return (new GeneralPedidoExportFerli($this->pedidoService))
 				->parametros($request->tipolistado, $request->estado, $request->mventa_id,
 							$nombreMventa,
 							$request->desdefecha, $request->hastafecha,

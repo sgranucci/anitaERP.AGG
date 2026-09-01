@@ -2,6 +2,7 @@
 
 namespace App\Models\Admin;
 
+use App\Support\Admin\MenuFerliSupport;
 use Illuminate\Database\Eloquent\Model;
 use OwenIt\Auditing\Contracts\Auditable;
 
@@ -32,18 +33,20 @@ class Menu extends Model implements Auditable
     public function getPadres($front)
     {
         if ($front) {
-            return $this->whereHas('roles', function ($query) {
+            $menus = $this->whereHas('roles', function ($query) {
                 $query->where('rol_id', session()->get('rol_id'))->orderby('menu_id');
             })->orderby('menu_id')
                 ->orderby('orden')
                 ->get()
                 ->toArray();
         } else {
-            return $this->orderby('menu_id')
+            $menus = $this->orderby('menu_id')
                 ->orderby('orden')
                 ->get()
                 ->toArray();
         }
+
+        return MenuFerliSupport::filtrar($menus);
     }
 
     public static function getMenu($front = false, $nivelActual)

@@ -110,6 +110,9 @@ class FacturanteService
 		case '4':
 			$tarjeta = 'TR';
 			break;
+		case '5':
+			$tarjeta = 'NBO';
+			break;
 		}
 	
 		// Busca cuenta
@@ -126,6 +129,9 @@ class FacturanteService
 			break;
 		case "TR":
 			$cuentaFinanciera = "004781/5";
+			break;
+		case "NBO":
+			$cuentaFinanciera = "11310112";
 			break;
 		}
 
@@ -239,17 +245,66 @@ class FacturanteService
 
 		$cae['cae'] = $numeroCae;
 		$cae['fechavencimientocae'] = $fechavencimientocae;
-		//try {
-			$anita = $this->facturacionService->grabaAnita($puntoVenta, $letra, 0, 0,
-							$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo, 
-							$cuentaVenta, $contrapartida, true,
-							'LOCAL_IP', 'IFX_SERVER_LOCAL');
+		$comprobante = $tipoComprobante.' '.$letra.' '.$puntoVenta.'-'.$numero;
 
-			if ($anita == 'Error')
-				throw new Exception('Error en grabacion anita.');
+		$validacionVenta = $this->validarVentaExistente(
+			$tipoComprobante, $letra, $puntoVenta, $numero, $venta, $dataCAE,
+			floatval($percepcioniibb), $condicionVenta_Id
+		);
+		if ($validacionVenta !== null && config('app.empresa') === 'Calzados Ferli')
+		{
+			if ($validacionVenta['estado'] === 'identica')
+			{
+				return [
+					'error' => 'Success',
+					'estado' => 'omitida',
+					'comprobante' => $comprobante,
+					'mensaje' => $comprobante.' ya existe con los mismos datos'
+				];
+			}
 
-			if ($anita == 'Errvend')
-				throw new Exception('No tiene vendedor asignado.');
+			return [
+				'error' => 'Success',
+				'estado' => 'conflicto',
+				'comprobante' => $comprobante,
+				'diferencias' => $validacionVenta['diferencias'],
+				'mensaje' => $comprobante.' existe con datos distintos: '
+					.implode('; ', $validacionVenta['diferencias'])
+			];
+		}
+
+		try {
+			if (config('app.empresa') === 'Calzados Ferli') {
+				$dataCAE['codigoempresa'] = $dataCAE['codigoempresa'] ?? 1;
+				$anita = $this->facturacionService->grabaAnita(
+								$puntoVenta, $letra, 0, 0,
+								$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
+								'V', 0, true, 0, 0, '',
+								'LOCAL_IP', 'IFX_SERVER_LOCAL');
+
+				if (is_array($anita) && isset($anita['error']) && $anita['error'] !== '' && $anita['error'] !== 'Success') {
+					if (($anita['error'] ?? '') == 'Errvend')
+						throw new Exception('No tiene vendedor asignado.');
+					throw new Exception($anita['mensaje'] ?? $anita['error']);
+				}
+
+				if ($anita === 'Error' || (is_string($anita) && strpos($anita, 'Error') !== false))
+					throw new Exception(is_string($anita) ? $anita : 'Error en grabacion anita.');
+
+				if ($anita === 'Errvend')
+					throw new Exception('No tiene vendedor asignado.');
+			} else {
+				$anita = $this->facturacionService->grabaAnita($puntoVenta, $letra, 0, 0,
+								$venta, $dataCAE, $conceptosTotales, $cuentacorriente, $dataFactura, $signo,
+								$cuentaVenta, $contrapartida, true,
+								'LOCAL_IP', 'IFX_SERVER_LOCAL');
+
+				if ($anita == 'Error')
+					throw new Exception('Error en grabacion anita.');
+
+				if ($anita == 'Errvend')
+					throw new Exception('No tiene vendedor asignado.');
+			}
 			
 			$fecha = Carbon::now();
 			$tipo = 'COC';
@@ -327,16 +382,21 @@ class FacturanteService
 			$vencae = $this->facturacionService->grabaVenCae(substr($venta['codigo'], 0, 3), $letra, 
 				$puntoVenta, $venta['numerocomprobante'], $cae['cae'], 
 				date('Ymd', strtotime($cae['fechavencimientocae'])));
-		//}
-		//catch ( \Exception $e) {
 
-			//Log::info('Error al generar factura TiendaNube '. $e->getMessage());
+			return ['error' => 'Success', 'estado' => 'grabada', 'comprobante' => $comprobante];
+		}
+		catch (\Exception $e) {
+			Log::info('Error al generar factura TiendaNube '. $e->getMessage());
 
-			// Borra factura de anita
-			//if ($venta['codigo'] ?? '')
-			//	$this->facturacionService->borraAnita(substr($venta['codigo'], 0, 3), $letra, 
-			//					$puntoVenta, $venta['numerocomprobante']);
-		//}
+			if (config('app.empresa') === 'Calzados Ferli') {
+				if ($tipoComprobante ?? '')
+					$this->facturacionService->borraAnita($tipoComprobante, $letra, $puntoVenta, $numero, 1);
+
+				return ['error' => $e->getMessage()];
+			}
+
+			throw $e;
+		}
 	}
 
 	private function procesaUnItem($item, &$dataFactura)
@@ -461,6 +521,9 @@ class FacturanteService
 			break;
 		case '4':
 			$tarjeta = 'TR';
+			break;
+		case '5':
+			$tarjeta = 'NBO';
 			break;
 		}
 
@@ -713,9 +776,427 @@ class FacturanteService
 		case "TR":
 			$cuentaFinanciera = "004781/5";
 			break;
+		case "NBO":
+			$cuentaFinanciera = "11310112";
+			break;
 		}
 
 		return $cuentaFinanciera;
+	}
+
+	public function leeVentaAnita($tipocomprobante, $letra, $sucursal, $numero)
+	{
+		$apiAnita = new ApiAnita();
+		$data = array(
+			'acc' => 'list',
+			'tabla' => 'venta',
+			'sistema' => 'ventas',
+			'campos' => '
+				ven_tipo, ven_letra, ven_sucursal, ven_nro, ven_fecha, ven_exento,
+				ven_gravado, ven_impuesto1, ven_monto, ven_cuit_cli, ven_nombre_cliente,
+				ven_perc_ing_bruto, ven_cond_venta, ven_cod_mon
+			',
+			'whereArmado' => " WHERE ven_tipo='".$tipocomprobante."' ".
+				"AND ven_letra='".$letra."' ".
+				"AND ven_sucursal=".$sucursal." ".
+				"AND ven_nro=".$numero." "
+		);
+
+		$venta = json_decode($apiAnita->apiCall($data));
+		if (!is_array($venta) || count($venta) == 0)
+			return null;
+
+		return $venta[0];
+	}
+
+	public function validarVentaExistente($tipoComprobante, $letra, $puntoVenta, $numero,
+		$venta, $dataCAE, $percepcionIibb, $condicionVentaId)
+	{
+		$existente = $this->leeVentaAnita($tipoComprobante, $letra, $puntoVenta, $numero);
+		if ($existente === null)
+			return null;
+
+		$esperado = [
+			'fecha' => date('Ymd', strtotime($venta['fecha'])),
+			'exento' => floatval($dataCAE['exento']) + floatval($dataCAE['nogravado']),
+			'gravado' => floatval($dataCAE['gravado']),
+			'iva' => floatval($dataCAE['iva']),
+			'monto' => abs(floatval($venta['total'])),
+			'cuit' => trim($venta['documentocliente'] ?? ''),
+			'percepcion_iibb' => floatval($percepcionIibb),
+			'condicion_venta' => intval($condicionVentaId),
+			'moneda' => intval($venta['moneda_id'])
+		];
+
+		$actual = [
+			'fecha' => trim($existente->ven_fecha),
+			'exento' => floatval($existente->ven_exento),
+			'gravado' => floatval($existente->ven_gravado),
+			'iva' => floatval($existente->ven_impuesto1),
+			'monto' => floatval($existente->ven_monto),
+			'cuit' => trim($existente->ven_cuit_cli),
+			'percepcion_iibb' => floatval($existente->ven_perc_ing_bruto),
+			'condicion_venta' => intval($existente->ven_cond_venta),
+			'moneda' => intval($existente->ven_cod_mon)
+		];
+
+		$etiquetas = [
+			'fecha' => 'fecha',
+			'exento' => 'exento',
+			'gravado' => 'gravado',
+			'iva' => 'IVA',
+			'monto' => 'total',
+			'cuit' => 'documento cliente',
+			'percepcion_iibb' => 'percepcion IIBB',
+			'condicion_venta' => 'condicion de venta',
+			'moneda' => 'moneda'
+		];
+
+		$diferencias = [];
+		foreach ($esperado as $campo => $valor)
+		{
+			if (!$this->valoresVentaCoinciden($campo, $valor, $actual[$campo]))
+			{
+				$diferencias[] = $etiquetas[$campo].' (existente: '.$actual[$campo]
+					.', nuevo: '.$valor.')';
+			}
+		}
+
+		if (count($diferencias) == 0)
+			return ['estado' => 'identica'];
+
+		return ['estado' => 'distinta', 'diferencias' => $diferencias];
+	}
+
+	public function armaMensajeResumenFacturacion($resumen)
+	{
+		$partes = [];
+		$partes[] = 'Grabadas: '.$resumen['grabadas'];
+		$partes[] = 'Omitidas (mismos datos): '.count($resumen['omitidas']);
+
+		if (count($resumen['omitidas']) > 0)
+			$partes[] = 'Omitidas: '.implode(', ', $resumen['omitidas']);
+
+		if (count($resumen['conflictos']) > 0)
+		{
+			$partes[] = 'Conflictos (datos distintos): '.count($resumen['conflictos']);
+			$partes[] = implode(' | ', $resumen['conflictos']);
+		}
+
+		return implode('. ', $partes);
+	}
+
+	private function valoresVentaCoinciden($campo, $esperado, $actual)
+	{
+		if (in_array($campo, ['fecha', 'cuit', 'condicion_venta', 'moneda']))
+			return (string) $esperado === (string) $actual;
+
+		return abs(floatval($esperado) - floatval($actual)) < 0.02;
+	}
+
+	public function verificarPeriodoFacturante($desdefecha, $hastafecha)
+	{
+		$retorno = $this->listadoComprobanteFull([
+			'desdefecha' => $desdefecha,
+			'hastafecha' => $hastafecha
+		]);
+
+		if ($retorno instanceof \Exception)
+			return ['error' => 'Error al leer Facturante: '.$retorno->getMessage()];
+
+		if ($retorno === null)
+		{
+			return [
+				'desdefecha' => $desdefecha,
+				'hastafecha' => $hastafecha,
+				'resumen' => [
+					'total' => 0,
+					'completos' => 0,
+					'sin_admin' => 0,
+					'sin_stock' => 0,
+					'no_importa' => 0,
+					'todo_ok' => true,
+					'mensaje' => 'No hay comprobantes en Facturante para el periodo seleccionado.'
+				],
+				'detalle' => []
+			];
+		}
+
+		$comprobantes = is_array($retorno) ? $retorno : [$retorno];
+		$detalle = [];
+		$resumen = [
+			'total' => 0,
+			'completos' => 0,
+			'sin_admin' => 0,
+			'sin_stock' => 0,
+			'no_importa' => 0,
+		];
+
+		foreach ($comprobantes as $comprobante)
+		{
+			if (!isset($comprobante->Prefijo))
+				continue;
+
+			$resumen['total']++;
+			$letra = substr($comprobante->TipoComprobante, -1);
+			$tipoComprobante = $this->mapearTipoComprobanteAnita($comprobante->TipoComprobante);
+			$puntoVenta = intval($comprobante->Prefijo);
+			$numero = $comprobante->Numero;
+			$comprobanteLabel = $tipoComprobante.' '.$letra.' '.$puntoVenta.'-'.$numero;
+			$mediopago = $this->resolverMedioPago($comprobante->Prefijo);
+			$enAdmin = $this->existeEnAdministracion($tipoComprobante, $letra, $puntoVenta, $numero);
+			$enStock = $this->tieneStockLocal($tipoComprobante, $letra, $puntoVenta, $numero);
+
+			if ($mediopago == '6')
+			{
+				$estado = 'no_importa';
+				$resumen['no_importa']++;
+				$estadoTexto = 'No requiere importacion ERP';
+			}
+			elseif (!$enAdmin)
+			{
+				$estado = 'sin_admin';
+				$resumen['sin_admin']++;
+				$estadoTexto = 'Falta en administracion';
+			}
+			elseif (!$enStock)
+			{
+				$estado = 'sin_stock';
+				$resumen['sin_stock']++;
+				$estadoTexto = 'Falta stock en Lugano';
+			}
+			else
+			{
+				$estado = 'completo';
+				$resumen['completos']++;
+				$estadoTexto = 'OK';
+			}
+
+			$clienteNombre = isset($comprobante->Cliente->RazonSocial)
+				? $comprobante->Cliente->RazonSocial : '';
+
+			$detalle[] = [
+				'comprobante' => $comprobanteLabel,
+				'fecha' => isset($comprobante->FechaHora)
+					? date('d/m/Y', strtotime($comprobante->FechaHora)) : '',
+				'cliente' => $clienteNombre,
+				'total' => isset($comprobante->Total) ? $comprobante->Total : '',
+				'mediopago' => $mediopago,
+				'en_admin' => $enAdmin,
+				'en_stock' => $enStock,
+				'estado' => $estado,
+				'estado_texto' => $estadoTexto
+			];
+		}
+
+		$resumen['todo_ok'] = ($resumen['sin_admin'] == 0 && $resumen['sin_stock'] == 0);
+		$resumen['mensaje'] = $this->armaMensajeVerificacion($resumen);
+
+		return [
+			'desdefecha' => $desdefecha,
+			'hastafecha' => $hastafecha,
+			'resumen' => $resumen,
+			'detalle' => $detalle
+		];
+	}
+
+	public function armaMensajeVerificacion($resumen)
+	{
+		if ($resumen['total'] == 0)
+			return 'No hay comprobantes en Facturante para el periodo.';
+
+		$partes = [
+			'Facturante: '.$resumen['total'],
+			'Completos: '.$resumen['completos'],
+		];
+
+		if ($resumen['sin_admin'] > 0)
+			$partes[] = 'Sin administracion: '.$resumen['sin_admin'];
+		if ($resumen['sin_stock'] > 0)
+			$partes[] = 'Sin stock Lugano: '.$resumen['sin_stock'];
+		if ($resumen['no_importa'] > 0)
+			$partes[] = 'No importa ERP: '.$resumen['no_importa'];
+
+		if ($resumen['todo_ok'])
+			$partes[] = 'Todo correcto en comprobantes que requieren importacion';
+
+		return implode('. ', $partes);
+	}
+
+	public function recuperarStockLocal($desdefecha, $hastafecha, $dryRun = false)
+	{
+		$comprobantes = $this->listadoComprobanteFull([
+			'desdefecha' => $desdefecha,
+			'hastafecha' => $hastafecha
+		]);
+
+		if (!is_array($comprobantes))
+			return ['error' => 'No se pudieron leer comprobantes de Facturante', 'procesados' => 0];
+
+		$resultado = [
+			'procesados' => 0,
+			'omitidos_sin_admin' => 0,
+			'omitidos_con_stock' => 0,
+			'omitidos_mediopago' => 0,
+			'errores' => [],
+			'detalle' => []
+		];
+
+		foreach ($comprobantes as $comprobante)
+		{
+			if (!isset($comprobante->Prefijo))
+				continue;
+
+			$mediopago = $this->resolverMedioPago($comprobante->Prefijo);
+			if ($mediopago == '6')
+			{
+				$resultado['omitidos_mediopago']++;
+				continue;
+			}
+
+			$letra = substr($comprobante->TipoComprobante, -1);
+			$tipoComprobante = $this->mapearTipoComprobanteAnita($comprobante->TipoComprobante);
+			$puntoVenta = intval($comprobante->Prefijo);
+			$numero = $comprobante->Numero;
+
+			if (!$this->existeEnAdministracion($tipoComprobante, $letra, $puntoVenta, $numero))
+			{
+				$resultado['omitidos_sin_admin']++;
+				continue;
+			}
+
+			if ($this->tieneStockLocal($tipoComprobante, $letra, $puntoVenta, $numero))
+			{
+				$resultado['omitidos_con_stock']++;
+				continue;
+			}
+
+			$tipoFacturante = $this->mapearTipoComprobanteFacturante($comprobante->TipoComprobante);
+			$dataFactura = $this->armaDataFacturaDesdeItems($comprobante->Items);
+			if (count($dataFactura) == 0)
+			{
+				$resultado['errores'][] = $tipoComprobante.' '.$letra.' '.$puntoVenta.'-'.$numero.': sin items validos';
+				continue;
+			}
+
+			$venta = [
+				'codigo' => $tipoFacturante,
+				'numerocomprobante' => $numero,
+				'fecha' => $comprobante->FechaHora,
+				'moneda_id' => 1
+			];
+
+			$detalle = $tipoComprobante.' '.$letra.' '.$puntoVenta.'-'.$numero;
+			if ($dryRun)
+			{
+				$resultado['procesados']++;
+				$resultado['detalle'][] = $detalle.' (simulacion)';
+				continue;
+			}
+
+			$stock = app(FacturacionServiceFerli::class)->grabaStockLocal(
+				$puntoVenta, $letra, $venta, $dataFactura
+			);
+
+			if ($stock != 'Success')
+			{
+				$resultado['errores'][] = $detalle.': '.$stock;
+				continue;
+			}
+
+			$resultado['procesados']++;
+			$resultado['detalle'][] = $detalle;
+		}
+
+		$resultado['mensaje'] = ($dryRun ? 'Simulacion: ' : 'Recuperados: ').$resultado['procesados']
+			.', sin venta en admin: '.$resultado['omitidos_sin_admin']
+			.', ya con stock: '.$resultado['omitidos_con_stock']
+			.', medio pago no transfiere: '.$resultado['omitidos_mediopago']
+			.', errores: '.count($resultado['errores']);
+
+		return $resultado;
+	}
+
+	public function armaDataFacturaDesdeItems($items)
+	{
+		$dataFactura = [];
+		if (!isset($items->ComprobanteItem))
+			return $dataFactura;
+
+		if (is_object($items->ComprobanteItem))
+		{
+			$this->procesaUnItem($items->ComprobanteItem, $dataFactura);
+		}
+		else
+		{
+			foreach ($items->ComprobanteItem as $item)
+				$this->procesaUnItem($item, $dataFactura);
+		}
+
+		return $dataFactura;
+	}
+
+	public function tieneStockLocal($tipoComprobante, $letra, $puntoVenta, $numero)
+	{
+		$apiAnita = new ApiAnita();
+		$data = array(
+			'acc' => 'list',
+			'tabla' => 'stkmov',
+			'sistema' => 'ventas',
+			'campos' => 'stkv_nro',
+			'whereArmado' => " WHERE stkv_tipo='".$tipoComprobante."' AND stkv_letra='".$letra
+				."' AND stkv_sucursal=".$puntoVenta." AND stkv_nro=".$numero,
+			'servidor' => 'LOCAL_IP',
+			'ifx_server' => 'IFX_SERVER_LOCAL'
+		);
+		$stkmov = json_decode($apiAnita->apiCall($data));
+
+		return is_array($stkmov) && count($stkmov) > 0;
+	}
+
+	private function existeEnAdministracion($tipoComprobante, $letra, $puntoVenta, $numero)
+	{
+		$venta = $this->leeComprobante($tipoComprobante, $letra, $puntoVenta, $numero);
+
+		return isset($venta[0]->ven_nro) && $venta[0]->ven_nro == $numero;
+	}
+
+	private function resolverMedioPago($prefijo)
+	{
+		if ($prefijo == 21 || $prefijo == 27)
+			return '1';
+		if ($prefijo == 23)
+			return '2';
+		if ($prefijo == 26)
+			return '5';
+
+		return '6';
+	}
+
+	private function mapearTipoComprobanteAnita($tipoComprobante)
+	{
+		switch ($tipoComprobante)
+		{
+			case 'FA':
+			case 'FB':
+			case 'FC':
+				return 'FAC';
+			case 'NCA':
+			case 'NCB':
+			case 'NCC':
+				return 'NCD';
+			case 'NDA':
+			case 'NDB':
+			case 'NDC':
+				return 'NDB';
+		}
+
+		return substr($tipoComprobante, 0, 3);
+	}
+
+	private function mapearTipoComprobanteFacturante($tipoComprobante)
+	{
+		return $this->mapearTipoComprobanteAnita($tipoComprobante);
 	}
 
 }

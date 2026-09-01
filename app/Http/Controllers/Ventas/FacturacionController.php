@@ -9,6 +9,8 @@ use App\Support\Ventas\UsuarioPreferenciaFacturacionSupport;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Storage;
 use App\Services\Ventas\FacturacionService;
+use App\Services\Ventas\FacturacionServiceFerli;
+use App\Support\Stock\MovimientoStockFerliSupport;
 use App\Queries\Ventas\ClienteQueryInterface;
 use App\Repositories\Ventas\TipotransaccionRepository;
 use App\Repositories\Ventas\TransporteRepositoryInterface;
@@ -310,6 +312,10 @@ class FacturacionController extends Controller
 
     public function facturarItemOt(Request $request)
     {
+        if (MovimientoStockFerliSupport::esCalzadosFerli()) {
+            return app(FacturacionServiceFerli::class)->generaFacturaPorItemOt($request->all());
+        }
+
         return $this->facturacionService->generaFacturaPorItemOt($request->all());
     }
 
@@ -353,11 +359,19 @@ class FacturacionController extends Controller
 
     public function calculaFacturaPorPedido(Request $request)
     {
+        if (MovimientoStockFerliSupport::esCalzadosFerli()) {
+            return response()->json(['error' => 'La facturación Ferli es por OT y combinación.'], 422);
+        }
+
         return $this->facturacionService->calculaFacturaPorPedido($request->all());
     }
 
     public function facturarPorPedido(Request $request)
     {
+        if (MovimientoStockFerliSupport::esCalzadosFerli()) {
+            return response()->json(['error' => 'La facturación Ferli es por OT y combinación.'], 422);
+        }
+
         return $this->facturacionService->generaFacturaPorPedido($request->all());
     }
 

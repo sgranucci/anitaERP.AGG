@@ -62,4 +62,9 @@ final class EntornoEmpresaSupport
     {
         return self::es(self::LAB_PG);
     }
+
+    public static function esFerli(): bool
+    {
+        return self::es(self::FERLI);
+    }
 }

@@ -2,7 +2,6 @@
 
 namespace App\Exports\Ventas;
 
-use App\Services\Ventas\PedidoService;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\FromView;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -36,11 +35,9 @@ class ConsumoMaterialExport implements FromView, WithColumnFormatting, WithMappi
 		$tipocapellada, $tipoavio;
 
 	protected $dates = ['fecha'];
-    private $pedidoService;
+    protected $pedidoService;
 
-    public function __construct(
-                                PedidoService $pedidoservice
-								)
+    public function __construct($pedidoservice)
     {
         $this->pedidoService = $pedidoservice;
     }

@@ -3163,7 +3163,7 @@ class FacturacionService
 
 	public function generaFacturaPorItemOt(array $data)
 	{
-		UsuarioPreferenciaFacturacionSupport::guardar($data);
+		$this->prepararSesionFacturaOt($data);
 
 		// Recibe datos para facturar
 		$pedidos_combinacion_id = $data['pedido_combinacion_id'];
@@ -3269,30 +3269,16 @@ class FacturacionService
 							$letra = $condicioniva->letra;
 
 						// Trae el pedido
-						$pedido_query = 
-							$this->pedidoQuery->leePedidoporId($item->pedido_combinacion_talles->pedidos_combinacion->pedido_id);
+						$pedido_query = $this->leePedidoFacturaOt($item->pedido_combinacion_talles->pedidos_combinacion->pedido_id);
 
 						if (!$pedido_query)
 							return ['error' => 'Pedido inexistente'];
 						else	
 							$pedido = $pedido_query[0];
 
-						// Verifica si la OT fue recodificada para traer lugar de entrega y descuento del cliente
-						if ($cliente->id != $pedido->cliente_id)
-						{
-							$cliente_entrega = $this->cliente_entregaRepository->leeClienteEntrega($cliente->id);
-
-							if ($cliente_entrega)
-								$pedido->lugarentrega = $cliente_entrega[0]->nombre;	
-							
-							$this->descuentoPie = $cliente->descuento;
-						}
-						else
-						{
-							$errorEntrega = $this->resolverLugarEntregaPedido($cliente, $pedido, [], true);
-							if ($errorEntrega) {
-								return $errorEntrega;
-							}
+						$errorEntrega = $this->aplicarLugarEntregaFacturaOt($cliente, $pedido);
+						if ($errorEntrega) {
+							return $errorEntrega;
 						}
 						// Trae el lote
 						$lotestock_id = $item->ordentrabajo_stock_id;
@@ -3315,8 +3301,7 @@ class FacturacionService
 
 					if ($talle)
 					{
-						$precio = $this->precioService->
-										asignaPrecio($articulo->id, $talle->id, $fechaFactura);
+						$precio = $this->asignaPrecioLineaItemOt($articulo, $combinacion_id, $talle, $fechaFactura);
 
 						if ($precio[0]['precio'] == 0)
 						{
@@ -3406,7 +3391,7 @@ class FacturacionService
 				}
 			}
 		}
-		$this->sincronizarLugarEntregaPedido($pedido);
+		$this->sincronizarLugarEntregaFacturaOt($pedido);
 		$provinciaPercepcion = $this->provinciaPercepcionDesdePedido($cliente, $pedido);
 
 		// Lee punto de venta (empresa jurídica = sucursal elegida)
@@ -3433,7 +3418,7 @@ class FacturacionService
 		$cuentacorriente = $this->calculaCondicionVenta($fechaFactura, 
 														$totalComprobante, 
 														$pedido->condicionventa_id);
-		$cuentacorriente = $this->aplicarVencimientoVillafrancaSiCorresponde($cuentacorriente, $fechaFactura, $puntoventa);
+		$cuentacorriente = $this->aplicarVencimientosFacturaOt($cuentacorriente, $fechaFactura, $puntoventa);
 		// Lee punto de venta del remito
 		$puntoventaremito = null;
 		if ($this->puntoventaremito_id >= 1)
@@ -3564,7 +3549,7 @@ class FacturacionService
 						'cliente_id' => $cliente->id,
 						'condicionventa_id' => $pedido->condicionventa_id,
 						'vendedor_id' => $pedido->vendedor_id,
-						'transporte_id' => $pedido->transporte_id,
+						'transporte_id' => $this->transporteIdFacturaOt($data, $pedido),
 						'total' => $totalComprobante * $signo,
 						'moneda_id' => $moneda_id,
 						'cotizacion' => 1,
@@ -3788,6 +3773,53 @@ class FacturacionService
 		}
 		else
 			return 'Error con punto de venta asignado';
+	}
+
+	protected function asignaPrecioLineaItemOt($articulo, $combinacion_id, $talle, $fechaFactura)
+	{
+		return $this->precioService->asignaPrecio($articulo->id, $talle->id, $fechaFactura);
+	}
+
+	protected function aplicarVencimientosFacturaOt(array $cuentacorriente, $fechaFactura, $puntoventa): array
+	{
+		return $this->aplicarVencimientoVillafrancaSiCorresponde($cuentacorriente, $fechaFactura, $puntoventa);
+	}
+
+	protected function prepararSesionFacturaOt(array $data): void
+	{
+		UsuarioPreferenciaFacturacionSupport::guardar($data);
+	}
+
+	protected function leePedidoFacturaOt($id)
+	{
+		return $this->pedidoQuery->leePedidoporId($id);
+	}
+
+	protected function aplicarLugarEntregaFacturaOt($cliente, $pedido)
+	{
+		if ($cliente->id != $pedido->cliente_id) {
+			$cliente_entrega = $this->cliente_entregaRepository->leeClienteEntrega($cliente->id);
+
+			if ($cliente_entrega) {
+				$pedido->lugarentrega = $cliente_entrega[0]->nombre;
+			}
+
+			$this->descuentoPie = $cliente->descuento;
+
+			return null;
+		}
+
+		return $this->resolverLugarEntregaPedido($cliente, $pedido, [], true);
+	}
+
+	protected function sincronizarLugarEntregaFacturaOt($pedido): void
+	{
+		$this->sincronizarLugarEntregaPedido($pedido);
+	}
+
+	protected function transporteIdFacturaOt(array $data, $pedido)
+	{
+		return $pedido->transporte_id;
 	}
 
 	public function grabaFacturaERP($empresa, $codigoTipoTransaccion, $tipotransaccion, $fechaFactura,  
