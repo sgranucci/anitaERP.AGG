@@ -80,6 +80,43 @@ final class PedidoCertificadoLinea
         );
     }
 
+    public function conDestinoZona(string $localidadNombre, string $provinciaNombre, ?int $localidadSenasaCodigo): self
+    {
+        return new self(
+            codigoPedido: $this->codigoPedido,
+            origen: $this->origen,
+            codigoCliente: $this->codigoCliente,
+            clienteId: $this->clienteId,
+            transporteId: $this->transporteId,
+            codigoTransporte: $this->codigoTransporte,
+            zonavtaId: $this->zonavtaId,
+            codigoZona: $this->codigoZona,
+            sku: $this->sku,
+            articuloNombre: $this->articuloNombre,
+            articuloId: $this->articuloId,
+            kilos: $this->kilos,
+            cajas: $this->cajas,
+            piezas: $this->piezas,
+            codigosenasaId: $this->codigosenasaId,
+            llevafrio: $this->llevafrio,
+            registroSenasa: $this->registroSenasa,
+            prefijoSenasa: $this->prefijoSenasa,
+            envasesenasaId: $this->envasesenasaId,
+            envaseNombre: $this->envaseNombre,
+            marca: $this->marca,
+            vencimientoEnDias: $this->vencimientoEnDias,
+            pesoAprox: $this->pesoAprox,
+            localidadSenasaCodigo: $localidadSenasaCodigo,
+            clienteNombre: $this->clienteNombre,
+            clienteDireccion: $this->clienteDireccion,
+            clienteCp: $this->clienteCp,
+            clienteTelefono: $this->clienteTelefono,
+            localidadNombre: $localidadNombre,
+            provinciaNombre: $provinciaNombre,
+            certificadoOrigen: $this->certificadoOrigen,
+        );
+    }
+
     public function claveAgrupacion(bool $abrePorLocalidad): string
     {
         $transporte = (string) ($this->codigoTransporte ?? $this->transporteId ?? '0');

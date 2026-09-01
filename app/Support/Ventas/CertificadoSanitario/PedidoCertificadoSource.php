@@ -58,7 +58,9 @@ final class PedidoCertificadoSource
 
         if (! $fallback) {
             return new PedidoCertificadoListado(
-                CertificadoSanitarioOrigenSupport::enriquecerLineas($lineasErp->values()),
+                CertificadoSanitarioDestinoAnitaSupport::enriquecerLineas(
+                    CertificadoSanitarioOrigenSupport::enriquecerLineas($lineasErp->values())
+                ),
                 $this->omitidosSinSenasa->values()
             );
         }
@@ -66,8 +68,10 @@ final class PedidoCertificadoSource
         $lineasAnita = $this->lineasDesdeAnita($fecha, $filtros, $codigosErp);
 
         return new PedidoCertificadoListado(
-            CertificadoSanitarioOrigenSupport::enriquecerLineas(
-                $lineasErp->concat($lineasAnita)->values()
+            CertificadoSanitarioDestinoAnitaSupport::enriquecerLineas(
+                CertificadoSanitarioOrigenSupport::enriquecerLineas(
+                    $lineasErp->concat($lineasAnita)->values()
+                )
             ),
             $this->omitidosSinSenasa->values()
         );

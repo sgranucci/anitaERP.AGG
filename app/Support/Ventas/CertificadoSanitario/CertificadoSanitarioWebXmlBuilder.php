@@ -32,7 +32,10 @@ final class CertificadoSanitarioWebXmlBuilder
         }
 
         $fecha = $cert->fecha instanceof Carbon ? $cert->fecha : Carbon::parse($cert->fecha);
-        $destino = $this->armarLugarDestino($filtradas, $cert);
+        $destino = $this->lugarDestinoDesdeDestinos($cert);
+        if ($destino === '') {
+            $destino = $this->armarLugarDestino($filtradas, $cert);
+        }
         $agrupadas = $this->agruparPorProducto($filtradas);
 
         $xml = [];
@@ -175,25 +178,38 @@ final class CertificadoSanitarioWebXmlBuilder
     }
 
     /**
+     * certsan.fc: se:lugarDestino = dest_localidad de la tabla destino (por zona).
+     * El ERP guarda también provincia; se concatena como en el PDF.
+     */
+    public function lugarDestinoDesdeDestinos(CertificadoSanitario $cert): string
+    {
+        $destinos = $cert->destinos;
+        if (! $destinos || $destinos->count() === 0) {
+            return '';
+        }
+
+        $parts = [];
+        foreach ($destinos as $d) {
+            $p = trim((string) ($d->localidad ?? ''));
+            if ($d->provincia) {
+                $p .= ($p !== '' ? '-' : '').trim((string) $d->provincia);
+            }
+            if ($p !== '' && ! in_array($p, $parts, true)) {
+                $parts[] = $p;
+            }
+        }
+
+        return implode('-', $parts);
+    }
+
+    /**
      * @param  Collection<int, PedidoCertificadoLinea>  $lineas
      */
     private function armarLugarDestino(Collection $lineas, CertificadoSanitario $cert): string
     {
-        $destinos = $cert->destinos;
-        if ($destinos && $destinos->count() > 0) {
-            $parts = [];
-            foreach ($destinos as $d) {
-                $p = trim((string) ($d->localidad ?? ''));
-                if ($d->provincia) {
-                    $p .= ($p !== '' ? '-' : '').trim((string) $d->provincia);
-                }
-                if ($p !== '' && ! in_array($p, $parts, true)) {
-                    $parts[] = $p;
-                }
-            }
-            if ($parts !== []) {
-                return implode('-', $parts);
-            }
+        $desdeDestinos = $this->lugarDestinoDesdeDestinos($cert);
+        if ($desdeDestinos !== '') {
+            return $desdeDestinos;
         }
 
         $primera = $lineas->first();

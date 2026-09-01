@@ -12,6 +12,7 @@ use App\Models\Ventas\Transporte;
 use App\Repositories\Stock\CodigosenasaRepositoryInterface;
 use App\Support\Ventas\CertificadoSanitarioListadoFiltros;
 use App\Support\Ventas\CertificadoSanitario\CertificadoSanitarioAnitaNumeracionSupport;
+use App\Support\Ventas\CertificadoSanitario\CertificadoSanitarioDestinoAnitaSupport;
 use App\Support\Ventas\CertificadoSanitario\CertificadoSanitarioOrigenSupport;
 use App\Support\Ventas\CertificadoSanitario\CertificadoSanitarioWebXmlBuilder;
 use App\Support\Ventas\CertificadoSanitario\PedidoCertificadoLinea;
@@ -298,14 +299,15 @@ class CertificadoSanitarioService
 
         $lineaDest = 1;
         foreach ($lineas->unique(fn (PedidoCertificadoLinea $l) => (string) ($l->codigoZona ?? $l->zonavtaId)) as $dest) {
+            $anitaDest = CertificadoSanitarioDestinoAnitaSupport::porCodigoZona($dest->codigoZona);
             CertificadoSanitarioDestino::create([
                 'certificado_sanitario_id' => $cert->id,
                 'linea' => $lineaDest++,
                 'zonavta_id' => $dest->zonavtaId,
                 'codigo_destino' => $dest->codigoZona,
-                'localidad' => $dest->localidadNombre,
-                'provincia' => $dest->provinciaNombre,
-                'patagonico' => $this->esPatagonico($dest),
+                'localidad' => $anitaDest['localidad'] ?? $dest->localidadNombre,
+                'provincia' => $anitaDest['provincia'] ?? $dest->provinciaNombre,
+                'patagonico' => $anitaDest['patagonico'] ?? $this->esPatagonico($dest),
             ]);
         }
 
@@ -322,7 +324,8 @@ class CertificadoSanitarioService
      * Regenera XML WEB si el certificado se marcó para generar y el archivo no está en disco
      * (o el proceso web no puede leerlo: directorios 0700 creados desde CLI),
      * o si faltan amparos de terceros en líneas SENASA,
-     * o si el maestro SENASA cambió (jamones crudos 9066 / frío).
+     * o si el maestro SENASA cambió (jamones crudos 9066 / frío),
+     * o si el destino no coincide con la tabla Anita destino (zona, no cliente).
      */
     public function regenerarXmlsSiFaltan(CertificadoSanitario $cert): CertificadoSanitario
     {
@@ -345,6 +348,7 @@ class CertificadoSanitarioService
         ]);
 
         $necesitaAmparo = $this->completarCertTerceroFaltantes($cert);
+        $destinoAlineado = $this->alinearDestinosConAnita($cert);
         $lineas = $this->lineasDesdeCertificado($cert->fresh([
             'camion',
             'destinos',
@@ -363,7 +367,16 @@ class CertificadoSanitarioService
         $xmlSinTagOrigen = $this->xmlTerceroSinTagOrigen($cert, $lineas);
         $xmlMaestroViejo = $this->xmlDesactualizadoRespectoMaestro($cert, $lineas);
         $xmlCantidadCajas = $this->xmlCantidadNoEsPiezas($cert, $lineas);
-        if (! $necesitaAmparo && ! $xmlFalta && ! $xmlSinTagOrigen && ! $xmlMaestroViejo && ! $xmlCantidadCajas) {
+        $xmlDestinoViejo = $this->xmlLugarDestinoDesactualizado($cert);
+        if (
+            ! $necesitaAmparo
+            && ! $destinoAlineado
+            && ! $xmlFalta
+            && ! $xmlSinTagOrigen
+            && ! $xmlMaestroViejo
+            && ! $xmlCantidadCajas
+            && ! $xmlDestinoViejo
+        ) {
             return $cert;
         }
 
@@ -579,7 +592,57 @@ class CertificadoSanitarioService
             ));
         }
 
-        return CertificadoSanitarioOrigenSupport::enriquecerLineas($out);
+        return CertificadoSanitarioDestinoAnitaSupport::enriquecerLineas(
+            CertificadoSanitarioOrigenSupport::enriquecerLineas($out)
+        );
+    }
+
+    /**
+     * XML con lugarDestino distinto al de destinos (ya alineados a Anita).
+     */
+    private function xmlLugarDestinoDesactualizado(CertificadoSanitario $cert): bool
+    {
+        $esperado = $this->xmlBuilder->lugarDestinoDesdeDestinos($cert);
+        if ($esperado === '') {
+            return false;
+        }
+
+        foreach ([$cert->xml_frio, $cert->xml_sin_frio] as $path) {
+            if (! $this->xmlLegible($path)) {
+                continue;
+            }
+            $xml = (string) Storage::disk('local')->get($path);
+            if ($xml === '') {
+                continue;
+            }
+            if (! preg_match('/<se:lugarDestino>([^<]*)<\/se:lugarDestino>/', $xml, $m)) {
+                return true;
+            }
+            if (trim((string) html_entity_decode($m[1], ENT_XML1 | ENT_QUOTES, 'UTF-8')) !== $esperado) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * p-certsan.c / certsan.fc: localidad del destino = tabla destino (zona), no el cliente.
+     */
+    private function alinearDestinosConAnita(CertificadoSanitario $cert): bool
+    {
+        $cambio = false;
+        foreach ($cert->destinos as $destino) {
+            if (CertificadoSanitarioDestinoAnitaSupport::aplicarADestino($destino)) {
+                $cambio = true;
+            }
+        }
+        if ($cambio) {
+            $cert->unsetRelation('destinos');
+            $cert->load('destinos');
+        }
+
+        return $cambio;
     }
 
     /**
@@ -686,6 +749,11 @@ class CertificadoSanitarioService
 
     private function esPatagonico(PedidoCertificadoLinea $l): bool
     {
+        $dest = CertificadoSanitarioDestinoAnitaSupport::porCodigoZona($l->codigoZona);
+        if ($dest !== null) {
+            return $dest['patagonico'];
+        }
+
         $prov = mb_strtoupper($l->provinciaNombre);
         foreach (['NEUQUEN', 'NEUQUÉN', 'RIO NEGRO', 'RÍO NEGRO', 'CHUBUT', 'SANTA CRUZ', 'TIERRA DEL FUEGO'] as $p) {
             if ($prov !== '' && str_contains($prov, $p)) {
