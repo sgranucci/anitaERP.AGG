@@ -76,4 +76,45 @@ final class LogisticaBierzoSupportTest extends TestCase
         $this->assertSame('Gravado al 21%', $ordenado[2]['concepto']);
         $this->assertSame(21, $ordenado[2]['tasa']);
     }
+
+    public function test_preparar_conceptos_totales_fusiona_iva_duplicado_de_facturas_viejas(): void
+    {
+        $conceptos = [
+            ['concepto' => 'Subtotal', 'tasa' => 0, 'importe' => 6361755.0, 'baseimponible' => 0],
+            ['concepto' => 'Gravado al 21.000%', 'tasa' => 21, 'importe' => 6361755.0, 'baseimponible' => 0],
+            ['concepto' => 'Total Logistica', 'tasa' => 21, 'importe' => 95426.33, 'baseimponible' => 0],
+            ['concepto' => 'Iva 21.000%', 'tasa' => 21, 'importe' => 1335968.55, 'baseimponible' => 6361755.0],
+            ['concepto' => 'Iva 21%', 'tasa' => 21, 'importe' => 20039.53, 'baseimponible' => 95426.33],
+            ['concepto' => 'Percepcion IVA 3%', 'tasa' => 3, 'importe' => 193715.44, 'baseimponible' => 0],
+            ['concepto' => 'Total', 'tasa' => 0, 'importe' => 8039190.76, 'baseimponible' => 0],
+        ];
+
+        $ordenado = LogisticaBierzoSupport::prepararConceptosTotalesParaImpresion($conceptos);
+
+        $this->assertSame('Subtotal', $ordenado[0]['concepto']);
+        $this->assertSame('Total Logistica', $ordenado[1]['concepto']);
+        $this->assertSame(0, $ordenado[1]['tasa']);
+        $this->assertSame('Gravado al 21.000%', $ordenado[2]['concepto']);
+        // Gravado impreso = mercadería + logística (base del IVA), no el Subtotal otra vez.
+        $this->assertSame(6457181.33, $ordenado[2]['importe']);
+        $this->assertSame('Iva 21.000%', $ordenado[3]['concepto']);
+        $this->assertSame(1356008.08, $ordenado[3]['importe']);
+        $this->assertSame(6457181.33, $ordenado[3]['baseimponible']);
+        $this->assertSame('Percepcion IVA 3%', $ordenado[4]['concepto']);
+        $this->assertCount(6, $ordenado);
+    }
+
+    public function test_preparar_netos_no_suma_logistica_al_gravado_para_grabar(): void
+    {
+        $netos = [
+            ['concepto' => 'Gravado al 21%', 'tasa' => 21, 'importe' => 1000.0],
+            ['concepto' => 'Total Logistica', 'tasa' => 21, 'importe' => 15.0],
+        ];
+
+        $ordenado = LogisticaBierzoSupport::prepararNetosParaImpresion($netos);
+
+        $this->assertSame('Total Logistica', $ordenado[0]['concepto']);
+        $this->assertSame('Gravado al 21%', $ordenado[1]['concepto']);
+        $this->assertSame(1000.0, $ordenado[1]['importe']);
+    }
 }

@@ -47,9 +47,11 @@ class StockPrestamoAvisoDespachoHandler implements ModuloAvisoDespachoHandlerInt
         $prestamo = $this->prestamoRepository->findConRelaciones($entityId);
 
         return [
-            'empresa_id' => optional($prestamo->depositoDestino)->empresa_id
-                ? (int) $prestamo->depositoDestino->empresa_id
-                : null,
+            'empresa_id' => optional($prestamo->depositoOrigen)->empresa_id
+                ? (int) $prestamo->depositoOrigen->empresa_id
+                : (optional($prestamo->depositoDestino)->empresa_id
+                    ? (int) $prestamo->depositoDestino->empresa_id
+                    : null),
             'centrocosto_id' => null,
         ];
     }
@@ -77,12 +79,19 @@ class StockPrestamoAvisoDespachoHandler implements ModuloAvisoDespachoHandlerInt
         }
 
         $prestamo = $this->prestamoRepository->findConRelaciones($entityId);
-        $prestamo->loadMissing(['items.articulos:id,sku,descripcion', 'depositoOrigen', 'depositoDestino', 'solicitante']);
+        $prestamo->loadMissing([
+            'items.articulos:id,sku,descripcion',
+            'depositoOrigen',
+            'depositoDestino',
+            'destinatarioUsuario',
+            'solicitante',
+        ]);
 
-        $admins = $this->depAdminRepository->porDeposito($prestamo->deposito_destino_id);
-        if ($admins->isEmpty()) {
-            Log::warning('Prestamo aviso solicitud: depósito destino sin administradores', [
+        $usuariosDestino = $this->resolverUsuariosAprobacion($prestamo);
+        if ($usuariosDestino === []) {
+            Log::warning('Salida de bienes aviso solicitud: sin destinatarios de aprobación', [
                 'prestamo_id' => $entityId,
+                'destinatario_tipo' => $prestamo->destinatario_tipo,
                 'deposito_destino_id' => $prestamo->deposito_destino_id,
             ]);
         }
@@ -91,9 +100,7 @@ class StockPrestamoAvisoDespachoHandler implements ModuloAvisoDespachoHandlerInt
         $expira = now()->addHours((int) ($config->horas_validez_token ?? 168));
         $enviados = [];
 
-        foreach ($admins as $admin) {
-            /** @var Usuario|null $usuario */
-            $usuario = $admin->usuarios;
+        foreach ($usuariosDestino as $usuario) {
             if (! UsuarioOperativoSupport::esOperativo($usuario) || empty($usuario->email)) {
                 continue;
             }
@@ -107,7 +114,7 @@ class StockPrestamoAvisoDespachoHandler implements ModuloAvisoDespachoHandlerInt
                 Mail::to($usuario->email)->send($mailable);
                 $enviados[] = strtolower($usuario->email);
             } catch (\Throwable $e) {
-                Log::error('Prestamo aviso solicitud: falló envío a admin', [
+                Log::error('Salida de bienes aviso solicitud: falló envío', [
                     'prestamo_id' => $entityId,
                     'usuario_id' => $usuario->id,
                     'error' => $e->getMessage(),
@@ -118,20 +125,61 @@ class StockPrestamoAvisoDespachoHandler implements ModuloAvisoDespachoHandlerInt
         $this->enviarCopiaInformativa($tipo, $config, $prestamo, $placeholders, $enviados);
     }
 
+    /**
+     * @return list<Usuario>
+     */
+    private function resolverUsuariosAprobacion(Prestamo $prestamo): array
+    {
+        if ($prestamo->esDestinoUsuario()) {
+            $usuario = $prestamo->destinatarioUsuario;
+            return $usuario ? [$usuario] : [];
+        }
+
+        if (! $prestamo->esDestinoDeposito() || ! $prestamo->deposito_destino_id) {
+            return [];
+        }
+
+        $admins = $this->depAdminRepository->porDeposito($prestamo->deposito_destino_id);
+        $usuarios = [];
+        foreach ($admins as $admin) {
+            if ($admin->usuarios) {
+                $usuarios[] = $admin->usuarios;
+            }
+        }
+
+        return $usuarios;
+    }
+
     private function despacharRecordatorio(ModuloAvisoTipo $tipo, int $entityId, bool $vencido): void
     {
         $config = Configuracion_Prestamo::vigente();
         $prestamo = $this->prestamoRepository->findConRelaciones($entityId);
-        $prestamo->loadMissing(['items.articulos:id,sku,descripcion', 'depositoOrigen', 'depositoDestino', 'solicitante']);
+        $prestamo->loadMissing([
+            'items.articulos:id,sku,descripcion',
+            'depositoOrigen',
+            'depositoDestino',
+            'destinatarioUsuario',
+            'solicitante',
+        ]);
 
-        $admins = $this->depAdminRepository->porDeposito($prestamo->deposito_destino_id);
-        $destinatarios = $admins->pluck('usuarios.email')->filter()->unique()->values()->all();
+        $destinatarios = [];
+        foreach ($this->resolverUsuariosAprobacion($prestamo) as $usuario) {
+            if (! empty($usuario->email)) {
+                $destinatarios[] = $usuario->email;
+            }
+        }
+        if ($prestamo->esDestinoExterno() && ! empty($prestamo->externo_email)) {
+            $destinatarios[] = $prestamo->externo_email;
+        }
+        if ($prestamo->solicitante && ! empty($prestamo->solicitante->email)) {
+            $destinatarios[] = $prestamo->solicitante->email;
+        }
+        $destinatarios = array_values(array_unique(array_filter($destinatarios)));
         if ($destinatarios === []) {
             return;
         }
 
         $placeholders = $this->placeholdersPrestamo($prestamo);
-        $vencido = (bool) ($opciones['vencido'] ?? false);
 
         try {
             $mailable = new PrestamoRecordatorio($prestamo, $config, $vencido, $tipo, $placeholders);
@@ -216,10 +264,10 @@ class StockPrestamoAvisoDespachoHandler implements ModuloAvisoDespachoHandlerInt
             $placeholders,
             $config,
             'mail_asunto_aprobacion',
-            'Préstamo de materiales: pendiente de aprobación'
+            'Salida de bienes: pendiente de aprobación'
         );
         $texto = PrestamoAvisoPlantillaSupport::textoIntro($tipo, $placeholders, $config, 'mail_texto_aprobacion')
-            ?? 'Se registró un préstamo de materiales pendiente de aprobación por el administrador del depósito destino.';
+            ?? 'Se registró una salida de bienes pendiente de aprobación.';
 
         foreach ($copias as $email) {
             try {
@@ -248,9 +296,9 @@ class StockPrestamoAvisoDespachoHandler implements ModuloAvisoDespachoHandlerInt
         $tokenVer = $this->crearToken($prestamo, Prestamo_Token::ACCION_VISUALIZAR, (int) $usuario->id, $expira);
 
         return [
-            'aprobar' => route('prestamo_aprobar_publico', ['token' => $tokenAprobar->token]),
-            'rechazar' => route('prestamo_rechazar_publico', ['token' => $tokenRechazar->token]),
-            'visualizar' => route('prestamo_ver_publico', ['token' => $tokenVer->token]),
+            'aprobar' => route('salida_bienes_aprobar_publico', ['token' => $tokenAprobar->token]),
+            'rechazar' => route('salida_bienes_rechazar_publico', ['token' => $tokenRechazar->token]),
+            'visualizar' => route('salida_bienes_ver_publico', ['token' => $tokenVer->token]),
         ];
     }
 
@@ -273,10 +321,13 @@ class StockPrestamoAvisoDespachoHandler implements ModuloAvisoDespachoHandlerInt
         return [
             'codigo' => (string) ($prestamo->codigo ?? $prestamo->id),
             'numero' => (string) ($prestamo->codigo ?? $prestamo->id),
+            'tipo' => $prestamo->etiquetaTipo(),
             'solicitante' => (string) (optional($prestamo->solicitante)->nombre ?? '—'),
             'deposito_origen' => (string) (optional($prestamo->depositoOrigen)->nombre ?? '—'),
-            'deposito_destino' => (string) (optional($prestamo->depositoDestino)->nombre ?? '—'),
+            'deposito_destino' => $prestamo->etiquetaDestinatario(),
+            'destinatario' => $prestamo->etiquetaDestinatario(),
             'fecha_prestamo' => $prestamo->fecha_prestamo ? $prestamo->fecha_prestamo->format('d/m/Y') : '—',
+            'fecha_salida' => $prestamo->fecha_prestamo ? $prestamo->fecha_prestamo->format('d/m/Y') : '—',
             'fecha_devolucion' => $prestamo->fecha_devolucion_prometida ? $prestamo->fecha_devolucion_prometida->format('d/m/Y') : '—',
             'estado' => (string) ($prestamo->estado ?? '—'),
             'link_consulta' => $this->linkConsulta((int) $prestamo->id) ?? '',

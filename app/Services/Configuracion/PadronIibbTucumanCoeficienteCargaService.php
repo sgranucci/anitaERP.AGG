@@ -37,7 +37,11 @@ class PadronIibbTucumanCoeficienteCargaService
 
     private const POS_COEFICIENTE_FINAL = [184, 6];
 
-    private const LARGO_MINIMO = 190;
+    /**
+     * El padrón real trae líneas de 189 caracteres (el coeficiente final queda
+     * en 5 chars). Con 190 se omitían todas las filas de datos.
+     */
+    private const LARGO_MINIMO = 189;
 
     /**
      * @param  callable(array<string,mixed>):void|null  $onProgreso

@@ -1441,22 +1441,24 @@ Route::get('stock/reporte-recepcion-proveedor', 'Stock\RecepcionProveedorReporte
 Route::get('stock/listar-reporte-recepcion-proveedor/{formato?}', 'Stock\RecepcionProveedorReporteController@exportar')->name('listar_reporte_recepcion_proveedor');
 
 /*
- * Préstamos de materiales
+ * Salida de bienes (evolución de préstamos)
  */
-Route::get('stock/prestamo', 'Stock\PrestamoController@index')->name('prestamo');
-Route::get('stock/prestamo/crear', 'Stock\PrestamoController@crear')->name('crear_prestamo');
-Route::post('stock/prestamo', 'Stock\PrestamoController@guardar')->name('guardar_prestamo');
-Route::get('stock/prestamo/{id}/editar', 'Stock\PrestamoController@editar')->name('editar_prestamo');
-Route::put('stock/prestamo/{id}', 'Stock\PrestamoController@actualizar')->name('actualizar_prestamo');
-Route::delete('stock/prestamo/{id}', 'Stock\PrestamoController@eliminar')->name('eliminar_prestamo');
-Route::get('stock/prestamo/{id}/ver', 'Stock\PrestamoController@ver')->name('ver_prestamo');
-Route::post('stock/prestamo/{id}/confirmar-envio', 'Stock\PrestamoController@confirmarEnvio')->name('confirmar_envio_prestamo');
-Route::post('stock/prestamo/{id}/aprobar', 'Stock\PrestamoController@aprobar')->name('aprobar_prestamo');
-Route::post('stock/prestamo/{id}/rechazar', 'Stock\PrestamoController@rechazar')->name('rechazar_prestamo');
-Route::post('stock/prestamo/{id}/devolver', 'Stock\PrestamoController@devolver')->name('devolver_prestamo');
-Route::post('stock/prestamo/{id}/cancelar', 'Stock\PrestamoController@cancelar')->name('cancelar_prestamo');
-Route::post('stock/prestamo/{id}/reenviar-correo', 'Stock\PrestamoController@reenviarCorreo')->name('reenviar_correo_prestamo');
-Route::get('stock/prestamo/api/saldo-articulo', 'Stock\PrestamoController@saldoArticulo')->name('prestamo_saldo_articulo');
+Route::get('stock/salida-bienes', 'Stock\PrestamoController@index')->name('salida_bienes');
+Route::get('stock/salida-bienes/crear', 'Stock\PrestamoController@crear')->name('crear_salida_bienes');
+Route::post('stock/salida-bienes', 'Stock\PrestamoController@guardar')->name('guardar_salida_bienes');
+Route::get('stock/salida-bienes/api/saldo-articulo', 'Stock\PrestamoController@saldoArticulo')->name('salida_bienes_saldo_articulo');
+Route::get('stock/salida-bienes/{id}/editar', 'Stock\PrestamoController@editar')->name('editar_salida_bienes');
+Route::put('stock/salida-bienes/{id}', 'Stock\PrestamoController@actualizar')->name('actualizar_salida_bienes');
+Route::delete('stock/salida-bienes/{id}', 'Stock\PrestamoController@eliminar')->name('eliminar_salida_bienes');
+Route::get('stock/salida-bienes/{id}/ver', 'Stock\PrestamoController@ver')->name('ver_salida_bienes');
+Route::get('stock/salida-bienes/{id}/pdf', 'Stock\PrestamoController@pdf')->name('pdf_salida_bienes');
+Route::post('stock/salida-bienes/{id}/confirmar-envio', 'Stock\PrestamoController@confirmarEnvio')->name('confirmar_envio_salida_bienes');
+Route::post('stock/salida-bienes/{id}/aprobar', 'Stock\PrestamoController@aprobar')->name('aprobar_salida_bienes');
+Route::post('stock/salida-bienes/{id}/rechazar', 'Stock\PrestamoController@rechazar')->name('rechazar_salida_bienes');
+Route::post('stock/salida-bienes/{id}/devolver', 'Stock\PrestamoController@devolver')->name('devolver_salida_bienes');
+Route::post('stock/salida-bienes/{id}/cerrar', 'Stock\PrestamoController@cerrar')->name('cerrar_salida_bienes');
+Route::post('stock/salida-bienes/{id}/cancelar', 'Stock\PrestamoController@cancelar')->name('cancelar_salida_bienes');
+Route::post('stock/salida-bienes/{id}/reenviar-correo', 'Stock\PrestamoController@reenviarCorreo')->name('reenviar_correo_salida_bienes');
 
 /*
  * Recepción y devolución a proveedores
@@ -1570,18 +1572,17 @@ Route::post('stock/recuento/{id}/importar', 'Stock\RecuentoController@importar')
 Route::get('stock/recuento/{id}/archivo/{nombre}', 'Stock\RecuentoController@descargarArchivo')->name('descargar_archivo_recuento');
 
 /*
- * Endpoints públicos por token (sin login) que reciben los administradores
- * destinatarios del préstamo en su correo para aprobar / rechazar / ver.
+ * Endpoints públicos por token (sin login) — salida de bienes.
  */
-Route::get('stock/prestamo/publico/{token}/aprobar', 'Stock\PrestamoController@aprobarPublico')->name('prestamo_aprobar_publico');
-Route::match(['get', 'post'], 'stock/prestamo/publico/{token}/rechazar', 'Stock\PrestamoController@rechazarPublico')->name('prestamo_rechazar_publico');
-Route::get('stock/prestamo/publico/{token}/ver', 'Stock\PrestamoController@verPublico')->name('prestamo_ver_publico');
+Route::get('stock/salida-bienes/publico/{token}/aprobar', 'Stock\PrestamoController@aprobarPublico')->name('salida_bienes_aprobar_publico');
+Route::match(['get', 'post'], 'stock/salida-bienes/publico/{token}/rechazar', 'Stock\PrestamoController@rechazarPublico')->name('salida_bienes_rechazar_publico');
+Route::get('stock/salida-bienes/publico/{token}/ver', 'Stock\PrestamoController@verPublico')->name('salida_bienes_ver_publico');
 
 /*
- * Configuración de Préstamos
+ * Configuración de salida de bienes
  */
-Route::get('stock/configuracion-prestamo', 'Stock\ConfiguracionPrestamoController@index')->name('configuracion_prestamo');
-Route::put('stock/configuracion-prestamo', 'Stock\ConfiguracionPrestamoController@actualizar')->name('actualizar_configuracion_prestamo');
+Route::get('stock/configuracion-salida-bienes', 'Stock\ConfiguracionPrestamoController@index')->name('configuracion_salida_bienes');
+Route::put('stock/configuracion-salida-bienes', 'Stock\ConfiguracionPrestamoController@actualizar')->name('actualizar_configuracion_salida_bienes');
 
 /*
  * Administradores de depósito

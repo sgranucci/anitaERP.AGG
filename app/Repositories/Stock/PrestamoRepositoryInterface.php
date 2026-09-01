@@ -6,6 +6,9 @@ interface PrestamoRepositoryInterface
 {
     public function all();
 
+    /** @return array<string, int> */
+    public function resumenKpis(): array;
+
     public function find(int $id);
 
     public function findConRelaciones(int $id);

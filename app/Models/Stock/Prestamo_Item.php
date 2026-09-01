@@ -11,6 +11,10 @@ class Prestamo_Item extends Model
     protected $fillable = [
         'prestamo_id',
         'articulo_id',
+        'descripcion',
+        'nro_serie',
+        'condicion_salida',
+        'condicion_devolucion',
         'cantidad',
         'cantidad_devuelta',
         'observaciones',
@@ -29,6 +33,20 @@ class Prestamo_Item extends Model
     public function articulos()
     {
         return $this->belongsTo(Articulo::class, 'articulo_id');
+    }
+
+    public function tieneArticulo(): bool
+    {
+        return (int) ($this->articulo_id ?? 0) > 0;
+    }
+
+    public function descripcionMostrada(): string
+    {
+        if ($this->descripcion) {
+            return (string) $this->descripcion;
+        }
+
+        return (string) (optional($this->articulos)->descripcion ?? '');
     }
 
     public function getCantidadPendienteAttribute(): float

@@ -13,6 +13,7 @@ use App\Services\Stock\PrestamoService;
 use Auth;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use PDF;
 
 class PrestamoController extends Controller
 {
@@ -24,38 +25,39 @@ class PrestamoController extends Controller
 
     public function index()
     {
-        can('listar-prestamo');
+        can('listar-salida-bienes');
         $prestamos = $this->service->listar();
+        $kpis = $this->service->resumenKpis();
 
-        return view('stock.prestamo.index', compact('prestamos'));
+        return view('stock.salida_bienes.index', compact('prestamos', 'kpis'));
     }
 
     public function crear()
     {
-        can('crear-prestamo');
+        can('crear-salida-bienes');
         $empresa_query = $this->empresaRepository->allFiltrado();
         $empresa_id = old('empresa_id', $empresa_query->first()->id ?? null);
 
-        return view('stock.prestamo.crear', compact('empresa_query', 'empresa_id'));
+        return view('stock.salida_bienes.crear', compact('empresa_query', 'empresa_id'));
     }
 
     public function guardar(ValidacionPrestamo $request)
     {
-        can('crear-prestamo');
+        can('crear-salida-bienes');
 
         try {
             $prestamo = $this->service->guardar($request->validated());
         } catch (\Throwable $e) {
-            return back()->withInput()->with('mensaje', 'Error al crear el préstamo: '.$e->getMessage());
+            return back()->withInput()->with('mensaje', 'Error al crear la salida: '.$e->getMessage());
         }
 
-        return redirect('stock/prestamo/'.$prestamo->id.'/editar')
-            ->with('mensaje', 'Préstamo creado en estado BORRADOR. Verificá los datos y luego confirmá el envío.');
+        return redirect()->route('editar_salida_bienes', ['id' => $prestamo->id])
+            ->with('mensaje', 'Salida creada en BORRADOR. Verificá los datos y confirmá el envío.');
     }
 
     public function editar(int $id)
     {
-        can('editar-prestamo');
+        can('editar-salida-bienes');
         $prestamo = $this->service->buscar($id);
         $empresa_query = $this->empresaRepository->allFiltrado();
         $empresa_id = old(
@@ -64,16 +66,18 @@ class PrestamoController extends Controller
                 ?? $empresa_query->first()->id)
         );
         $saldosOrigen = $this->saldosArticulosDelPrestamo($prestamo, (int) $prestamo->deposito_origen_id);
-        $saldosDestino = $this->saldosArticulosDelPrestamo($prestamo, (int) $prestamo->deposito_destino_id);
+        $saldosDestino = $prestamo->deposito_destino_id
+            ? $this->saldosArticulosDelPrestamo($prestamo, (int) $prestamo->deposito_destino_id)
+            : [];
 
-        return view('stock.prestamo.editar', compact(
+        return view('stock.salida_bienes.editar', compact(
             'prestamo', 'saldosOrigen', 'saldosDestino', 'empresa_query', 'empresa_id'
         ));
     }
 
     public function actualizar(ValidacionPrestamo $request, int $id)
     {
-        can('actualizar-prestamo');
+        can('actualizar-salida-bienes');
 
         try {
             $this->service->actualizar($id, $request->validated());
@@ -81,13 +85,13 @@ class PrestamoController extends Controller
             return back()->withInput()->with('mensaje', 'Error al actualizar: '.$e->getMessage());
         }
 
-        return redirect('stock/prestamo/'.$id.'/editar')
-            ->with('mensaje', 'Préstamo actualizado.');
+        return redirect()->route('editar_salida_bienes', ['id' => $id])
+            ->with('mensaje', 'Salida actualizada.');
     }
 
     public function eliminar(Request $request, int $id)
     {
-        can('borrar-prestamo');
+        can('borrar-salida-bienes');
         try {
             $this->service->eliminar($id);
         } catch (\Throwable $e) {
@@ -102,59 +106,69 @@ class PrestamoController extends Controller
             return response()->json(['mensaje' => 'ok']);
         }
 
-        return redirect('stock/prestamo')->with('mensaje', 'Préstamo eliminado.');
+        return redirect()->route('salida_bienes')->with('mensaje', 'Salida eliminada.');
     }
 
     public function ver(int $id)
     {
-        can('listar-prestamo');
+        can('listar-salida-bienes');
         $prestamo = $this->service->buscar($id);
 
-        return view('stock.prestamo.ver', compact('prestamo'));
+        return view('stock.salida_bienes.ver', compact('prestamo'));
+    }
+
+    public function pdf(int $id)
+    {
+        can('listar-salida-bienes');
+        $prestamo = $this->service->buscar($id);
+        $pdf = PDF::loadView('stock.salida_bienes.pdf', compact('prestamo'))
+            ->setPaper('a4', 'portrait');
+
+        return $pdf->stream('salida_bienes_'.$prestamo->codigo.'.pdf');
     }
 
     public function confirmarEnvio(int $id)
     {
-        can('confirmar-envio-prestamo');
+        can('confirmar-envio-salida-bienes');
         try {
             $this->service->confirmarEnvio($id);
         } catch (\Throwable $e) {
             return back()->with('mensaje', 'No se pudo confirmar el envío: '.$e->getMessage());
         }
 
-        return redirect('stock/prestamo/'.$id.'/ver')
-            ->with('mensaje', 'Préstamo enviado. Se notificó al destinatario para que apruebe la recepción.');
+        return redirect()->route('ver_salida_bienes', ['id' => $id])
+            ->with('mensaje', 'Envío confirmado.');
     }
 
     public function aprobar(Request $request, int $id)
     {
-        can('aprobar-recepcion-prestamo');
+        can('aprobar-recepcion-salida-bienes');
         try {
             $this->service->aprobarRecepcion($id, Auth::id(), $request->input('observaciones'));
         } catch (\Throwable $e) {
             return back()->with('mensaje', 'No se pudo aprobar: '.$e->getMessage());
         }
 
-        return redirect('stock/prestamo/'.$id.'/ver')
-            ->with('mensaje', 'Préstamo aprobado y stock actualizado en el depósito destino.');
+        return redirect()->route('ver_salida_bienes', ['id' => $id])
+            ->with('mensaje', 'Recepción aprobada.');
     }
 
     public function rechazar(Request $request, int $id)
     {
-        can('rechazar-recepcion-prestamo');
+        can('rechazar-recepcion-salida-bienes');
         try {
             $this->service->rechazarRecepcion($id, Auth::id(), $request->input('motivo_rechazo'));
         } catch (\Throwable $e) {
             return back()->with('mensaje', 'No se pudo rechazar: '.$e->getMessage());
         }
 
-        return redirect('stock/prestamo/'.$id.'/ver')
-            ->with('mensaje', 'Préstamo rechazado, se reversó la salida del depósito origen.');
+        return redirect()->route('ver_salida_bienes', ['id' => $id])
+            ->with('mensaje', 'Salida rechazada; se reversó el stock de artículos si correspondía.');
     }
 
     public function devolver(Request $request, int $id)
     {
-        can('devolver-prestamo');
+        can('devolver-salida-bienes');
         $devoluciones = $request->input('devoluciones', []);
         try {
             $this->service->registrarDevolucion(
@@ -166,25 +180,38 @@ class PrestamoController extends Controller
             return back()->with('mensaje', 'No se pudo registrar la devolución: '.$e->getMessage());
         }
 
-        return redirect('stock/prestamo/'.$id.'/ver')
+        return redirect()->route('ver_salida_bienes', ['id' => $id])
             ->with('mensaje', 'Devolución registrada.');
+    }
+
+    public function cerrar(Request $request, int $id)
+    {
+        can('cerrar-salida-bienes');
+        try {
+            $this->service->cerrarSinDevolucion($id, $request->input('motivo'));
+        } catch (\Throwable $e) {
+            return back()->with('mensaje', 'No se pudo cerrar: '.$e->getMessage());
+        }
+
+        return redirect()->route('ver_salida_bienes', ['id' => $id])
+            ->with('mensaje', 'Salida cerrada sin devolución.');
     }
 
     public function cancelar(Request $request, int $id)
     {
-        can('cancelar-prestamo');
+        can('cancelar-salida-bienes');
         try {
             $this->service->cancelar($id, $request->input('motivo'));
         } catch (\Throwable $e) {
             return back()->with('mensaje', 'No se pudo cancelar: '.$e->getMessage());
         }
 
-        return redirect('stock/prestamo/'.$id.'/ver')->with('mensaje', 'Préstamo cancelado.');
+        return redirect()->route('ver_salida_bienes', ['id' => $id])->with('mensaje', 'Salida cancelada.');
     }
 
     public function reenviarCorreo(int $id)
     {
-        can('reenviar-correo-prestamo');
+        can('reenviar-correo-salida-bienes');
         try {
             $this->service->reenviarCorreoAprobacion($id);
         } catch (\Throwable $e) {
@@ -196,7 +223,7 @@ class PrestamoController extends Controller
 
     public function saldoArticulo(Request $request): JsonResponse
     {
-        can('listar-prestamo');
+        can('listar-salida-bienes');
         $articuloId = (int) $request->input('articulo_id', 0);
         $empresaId = (int) $request->input('empresa_id', 0);
         $depositoIds = array_filter(array_map('intval', (array) $request->input('depositos', [])));
@@ -216,8 +243,6 @@ class PrestamoController extends Controller
         return response()->json(['saldos' => $saldos]);
     }
 
-    /* ---------------------- Endpoints públicos por token ---------------------- */
-
     public function aprobarPublico(string $token)
     {
         return $this->procesarAccionPublica($token, Prestamo_Token::ACCION_APROBAR);
@@ -232,7 +257,7 @@ class PrestamoController extends Controller
     {
         $row = Prestamo_Token::where('token', $token)->first();
         if (! $row || ! $row->estaActivo()) {
-            return response()->view('stock.prestamo.publico_resultado', [
+            return response()->view('stock.salida_bienes.publico_resultado', [
                 'titulo' => 'Enlace no válido',
                 'detalle' => 'Este enlace ya fue utilizado, fue invalidado o expiró.',
                 'tipo' => 'error',
@@ -241,7 +266,7 @@ class PrestamoController extends Controller
 
         $prestamo = $this->service->buscar((int) $row->prestamo_id);
 
-        return view('stock.prestamo.publico_ver', compact('prestamo'));
+        return view('stock.salida_bienes.publico_ver', compact('prestamo'));
     }
 
     private function procesarAccionPublica(string $token, string $accion, ?string $motivo = null)
@@ -249,7 +274,7 @@ class PrestamoController extends Controller
         try {
             $row = $this->service->consumirToken($token, $accion);
         } catch (\Throwable $e) {
-            return response()->view('stock.prestamo.publico_resultado', [
+            return response()->view('stock.salida_bienes.publico_resultado', [
                 'titulo' => 'Acción no procesada',
                 'detalle' => $e->getMessage(),
                 'tipo' => 'error',
@@ -263,8 +288,8 @@ class PrestamoController extends Controller
                     (int) $row->usuario_destino_id,
                     'Aprobado por enlace de correo'
                 );
-                $titulo = 'Préstamo aprobado';
-                $detalle = 'Se generó el ingreso al depósito destino y se notificó al solicitante.';
+                $titulo = 'Salida aprobada';
+                $detalle = 'Se registró la recepción y se notificó al solicitante.';
                 $tipo = 'ok';
             } else {
                 $this->service->rechazarRecepcion(
@@ -272,28 +297,24 @@ class PrestamoController extends Controller
                     (int) $row->usuario_destino_id,
                     $motivo
                 );
-                $titulo = 'Préstamo rechazado';
-                $detalle = 'Se reversó la salida en el depósito origen y se notificó al solicitante.';
+                $titulo = 'Salida rechazada';
+                $detalle = 'Se reversó el stock en origen (si había artículos) y se notificó al solicitante.';
                 $tipo = 'ok';
             }
         } catch (\Throwable $e) {
-            return response()->view('stock.prestamo.publico_resultado', [
+            return response()->view('stock.salida_bienes.publico_resultado', [
                 'titulo' => 'Acción no procesada',
                 'detalle' => $e->getMessage(),
                 'tipo' => 'error',
             ], 422);
         }
 
-        return view('stock.prestamo.publico_resultado', compact('titulo', 'detalle', 'tipo'));
+        return view('stock.salida_bienes.publico_resultado', compact('titulo', 'detalle', 'tipo'));
     }
 
-    /**
-     * Devuelve los artículos del préstamo (cargados como relación) ya
-     * resueltos como mapa articulo_id => cantidad para el depósito dado.
-     */
     private function saldosArticulosDelPrestamo(Prestamo $prestamo, int $depositoId): array
     {
-        $ids = $prestamo->items->pluck('articulo_id')->unique()->all();
+        $ids = $prestamo->items->pluck('articulo_id')->filter()->unique()->all();
         if (empty($ids)) {
             return [];
         }
@@ -305,5 +326,4 @@ class PrestamoController extends Controller
 
         return $resultado;
     }
-
 }

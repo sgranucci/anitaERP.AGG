@@ -7614,6 +7614,10 @@ class FacturacionService
 					return true;
 				}
 			));
+			// Logística antes del gravado, sin tasa, IVA fusionado, Gravado = mercadería + logística.
+			$conceptosTotales = \App\Support\Ventas\LogisticaBierzoSupport::prepararConceptosTotalesParaImpresion(
+				$conceptosTotales
+			);
 		}
 
 		$qrPng = QrCode::encoding('UTF-8')->format('png')->size(500)->margin(10)->generate(

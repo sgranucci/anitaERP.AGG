@@ -1,6 +1,6 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-Configuración de Préstamos
+Configuración de salida de bienes
 @endsection
 
 @section('contenido')
@@ -10,15 +10,15 @@ Configuración de Préstamos
         @include('includes.mensaje')
         <div class="card card-info">
             <div class="card-header">
-                <h3 class="card-title"><i class="fa fa-cog"></i> Configuración del módulo de Préstamos</h3>
+                <h3 class="card-title"><i class="fa fa-cog"></i> Configuración de salida de bienes</h3>
             </div>
-            <form action="{{ route('actualizar_configuracion_prestamo') }}" id="form-general" class="form-horizontal" method="POST" autocomplete="off">
+            <form action="{{ route('actualizar_configuracion_salida_bienes') }}" id="form-general" class="form-horizontal" method="POST" autocomplete="off">
                 @csrf @method('put')
                 <div class="card-body">
                     <div class="alert alert-info py-2">
                         Las <strong>plantillas de correo</strong> (asunto y textos de notificación) se configuran en
                         <a href="{{ route('consultar_modulo_aviso') }}">Configuración → Avisos por módulo</a>
-                        (tipos de aviso del módulo Stock / Préstamos).
+                        (tipos de aviso del módulo Stock / salida de bienes).
                         En esta pantalla se mantienen las reglas operativas del circuito.
                     </div>
                     <h5>Notificaciones</h5>

@@ -14,6 +14,7 @@ class PrestamoRepository implements PrestamoRepositoryInterface
             ->with([
                 'depositoOrigen:id,nombre',
                 'depositoDestino:id,nombre',
+                'destinatarioUsuario:id,nombre,email',
                 'solicitante:id,nombre,email',
                 'aprobador:id,nombre,email',
                 'items',
@@ -22,11 +23,49 @@ class PrestamoRepository implements PrestamoRepositoryInterface
             ->get();
     }
 
+    public function resumenKpis(): array
+    {
+        $base = Prestamo::query();
+
+        return [
+            'pendiente_aprobacion' => (clone $base)->where('estado', Prestamo::ESTADO_PENDIENTE_APROBACION)->count(),
+            'en_transito' => (clone $base)->whereIn('estado', [
+                Prestamo::ESTADO_PENDIENTE_APROBACION,
+                Prestamo::ESTADO_ENVIADO,
+            ])->count(),
+            'en_custodia' => (clone $base)->whereIn('estado', [
+                Prestamo::ESTADO_APROBADO,
+                Prestamo::ESTADO_ENVIADO,
+                Prestamo::ESTADO_DEVUELTO_PARCIAL,
+            ])->count(),
+            'vencidos' => (clone $base)
+                ->where('espera_devolucion', true)
+                ->whereIn('estado', [
+                    Prestamo::ESTADO_APROBADO,
+                    Prestamo::ESTADO_ENVIADO,
+                    Prestamo::ESTADO_DEVUELTO_PARCIAL,
+                ])
+                ->whereNotNull('fecha_devolucion_prometida')
+                ->whereDate('fecha_devolucion_prometida', '<', now()->toDateString())
+                ->count(),
+            'alta_prioridad' => (clone $base)
+                ->where('prioridad', Prestamo::PRIORIDAD_ALTA)
+                ->whereIn('estado', [
+                    Prestamo::ESTADO_BORRADOR,
+                    Prestamo::ESTADO_PENDIENTE_APROBACION,
+                    Prestamo::ESTADO_ENVIADO,
+                    Prestamo::ESTADO_APROBADO,
+                    Prestamo::ESTADO_DEVUELTO_PARCIAL,
+                ])
+                ->count(),
+        ];
+    }
+
     public function find(int $id)
     {
         $prestamo = Prestamo::find($id);
         if (! $prestamo) {
-            throw new ModelNotFoundException('Préstamo no encontrado');
+            throw new ModelNotFoundException('Salida de bienes no encontrada');
         }
 
         return $prestamo;
@@ -38,6 +77,7 @@ class PrestamoRepository implements PrestamoRepositoryInterface
             ->with([
                 'depositoOrigen',
                 'depositoDestino',
+                'destinatarioUsuario:id,nombre,email',
                 'solicitante:id,nombre,email',
                 'aprobador:id,nombre,email',
                 'items.articulos:id,sku,descripcion',
@@ -49,7 +89,7 @@ class PrestamoRepository implements PrestamoRepositoryInterface
             ->find($id);
 
         if (! $prestamo) {
-            throw new ModelNotFoundException('Préstamo no encontrado');
+            throw new ModelNotFoundException('Salida de bienes no encontrada');
         }
 
         return $prestamo;
@@ -91,14 +131,18 @@ class PrestamoRepository implements PrestamoRepositoryInterface
             ->with([
                 'depositoOrigen:id,nombre',
                 'depositoDestino:id,nombre',
+                'destinatarioUsuario:id,nombre,email',
                 'solicitante:id,nombre,email',
                 'aprobador:id,nombre,email',
                 'items.articulos:id,sku,descripcion',
             ])
+            ->where('espera_devolucion', true)
             ->whereIn('estado', [
                 Prestamo::ESTADO_APROBADO,
+                Prestamo::ESTADO_ENVIADO,
                 Prestamo::ESTADO_DEVUELTO_PARCIAL,
             ])
+            ->whereNotNull('fecha_devolucion_prometida')
             ->where('fecha_devolucion_prometida', '<=', $limiteAviso)
             ->where(function ($q) use ($hoy, $diasRepeticion) {
                 $q->whereNull('ultimo_recordatorio_enviado_el')

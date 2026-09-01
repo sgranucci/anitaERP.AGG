@@ -27,6 +27,6 @@ final class PrestamoEnlacePublicoSupport
             $horas,
         );
 
-        return urlAppAbsoluta('stock/prestamo/publico/'.$token.'/ver');
+        return urlAppAbsoluta('stock/salida-bienes/publico/'.$token.'/ver');
     }
 }

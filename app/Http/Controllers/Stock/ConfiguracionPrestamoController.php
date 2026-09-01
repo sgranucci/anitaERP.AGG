@@ -10,7 +10,7 @@ class ConfiguracionPrestamoController extends Controller
 {
     public function index()
     {
-        can('editar-configuracion-prestamo');
+        can('editar-configuracion-salida-bienes');
         $config = Configuracion_Prestamo::vigente();
 
         return view('stock.configuracion_prestamo.editar', compact('config'));
@@ -18,16 +18,15 @@ class ConfiguracionPrestamoController extends Controller
 
     public function actualizar(ValidacionConfiguracionPrestamo $request)
     {
-        can('actualizar-configuracion-prestamo');
+        can('actualizar-configuracion-salida-bienes');
 
         $config = Configuracion_Prestamo::vigente();
         $data = $request->validated();
-        // Checkboxes ausentes en el POST se interpretan como false.
         $data['enviar_aprobacion'] = (bool) ($request->input('enviar_aprobacion', false));
         $data['enviar_recordatorios'] = (bool) ($request->input('enviar_recordatorios', false));
         $config->fill($data)->save();
 
-        return redirect('stock/configuracion-prestamo')
-            ->with('mensaje', 'Configuración actualizada.');
+        return redirect()->route('configuracion_salida_bienes')
+            ->with('mensaje', 'Configuración de salida de bienes actualizada.');
     }
 }

@@ -13,28 +13,16 @@ use App\Models\Stock\Prestamo_Token;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 use App\Repositories\Stock\PrestamoRepositoryInterface;
+use App\Services\Configuracion\ModuloAvisoService;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\ArticuloMovimientoPrecioHistoricoSupport;
-use App\Services\Configuracion\ModuloAvisoService;
 use Auth;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-
 /**
- * Orquesta todas las transiciones del préstamo:
- *
- *  - guardar() / actualizar(): preparan la cabecera + ítems en estado BORRADOR.
- *  - confirmarEnvio(): genera la salida del depósito origen (movimiento
- *    de stock con tipo PRSAL) y dispara mail al destinatario.
- *  - aprobarRecepcion(): genera el ingreso al depósito destino (PRING)
- *    y notifica al solicitante.
- *  - rechazarRecepcion(): reversa la salida (PRRCH) y notifica.
- *  - registrarDevolucion(): genera salida del destino (PRDSL) y entrada
- *    al origen (PRDIN) por la cantidad devuelta de cada ítem.
- *  - cancelar(): solo para BORRADOR / PENDIENTE_APROBACION pendientes.
- *
- * Todos los cambios de estado se loguean en `prestamo_estado`.
+ * Orquesta el circuito de salida de bienes (evolución de préstamos).
  */
 class PrestamoService
 {
@@ -49,6 +37,11 @@ class PrestamoService
         return $this->prestamoRepository->all();
     }
 
+    public function resumenKpis(): array
+    {
+        return $this->prestamoRepository->resumenKpis();
+    }
+
     public function buscar(int $id): Prestamo
     {
         return $this->prestamoRepository->findConRelaciones($id);
@@ -56,27 +49,21 @@ class PrestamoService
 
     public function guardar(array $data): Prestamo
     {
-        $this->validarDatosBasicos($data);
+        $payload = $this->normalizarCabecera($data);
 
-        return DB::transaction(function () use ($data) {
-            $prestamo = $this->prestamoRepository->create([
-                'codigo' => $data['codigo'] ?? null,
-                'fecha_prestamo' => $data['fecha_prestamo'],
-                'fecha_devolucion_prometida' => $data['fecha_devolucion_prometida'],
-                'deposito_origen_id' => (int) $data['deposito_origen_id'],
-                'deposito_destino_id' => (int) $data['deposito_destino_id'],
+        return DB::transaction(function () use ($payload, $data) {
+            $prestamo = $this->prestamoRepository->create(array_merge($payload, [
                 'solicitante_id' => Auth::id() ?? (int) ($data['solicitante_id'] ?? 0),
                 'estado' => Prestamo::ESTADO_BORRADOR,
-                'observaciones' => $data['observaciones'] ?? null,
-            ]);
+            ]));
 
             if (empty($prestamo->codigo)) {
-                $prestamo->codigo = 'PR-'.str_pad((string) $prestamo->id, 6, '0', STR_PAD_LEFT);
+                $prestamo->codigo = 'SB-'.str_pad((string) $prestamo->id, 6, '0', STR_PAD_LEFT);
                 $prestamo->save();
             }
 
             $this->reemplazarItems($prestamo, $data['items'] ?? []);
-            $this->logEstado($prestamo, null, Prestamo::ESTADO_BORRADOR, 'Préstamo creado');
+            $this->logEstado($prestamo, null, Prestamo::ESTADO_BORRADOR, 'Salida de bienes creada');
 
             return $prestamo->fresh(['items']);
         });
@@ -88,21 +75,14 @@ class PrestamoService
 
         if ($prestamo->estado !== Prestamo::ESTADO_BORRADOR) {
             throw new \RuntimeException(
-                'Solo se puede editar un préstamo mientras está en BORRADOR. Estado actual: '.$prestamo->estado
+                'Solo se puede editar una salida en BORRADOR. Estado actual: '.$prestamo->estado
             );
         }
 
-        $this->validarDatosBasicos($data, true);
+        $payload = $this->normalizarCabecera($data);
 
-        return DB::transaction(function () use ($prestamo, $data) {
-            $prestamo->fill([
-                'fecha_prestamo' => $data['fecha_prestamo'],
-                'fecha_devolucion_prometida' => $data['fecha_devolucion_prometida'],
-                'deposito_origen_id' => (int) $data['deposito_origen_id'],
-                'deposito_destino_id' => (int) $data['deposito_destino_id'],
-                'observaciones' => $data['observaciones'] ?? null,
-            ])->save();
-
+        return DB::transaction(function () use ($prestamo, $payload, $data) {
+            $prestamo->fill($payload)->save();
             $this->reemplazarItems($prestamo, $data['items'] ?? []);
 
             return $prestamo->fresh(['items']);
@@ -113,33 +93,43 @@ class PrestamoService
     {
         $prestamo = $this->prestamoRepository->find($id);
 
-        if (! in_array($prestamo->estado, [Prestamo::ESTADO_BORRADOR], true)) {
+        if ($prestamo->estado !== Prestamo::ESTADO_BORRADOR) {
             throw new \RuntimeException('Solo se puede confirmar el envío desde BORRADOR.');
         }
 
         $items = Prestamo_Item::where('prestamo_id', $prestamo->id)->get();
         if ($items->isEmpty()) {
-            throw new \RuntimeException('El préstamo no tiene ítems cargados.');
+            throw new \RuntimeException('La salida no tiene ítems cargados.');
         }
 
-        $this->validarStockOrigen($prestamo->deposito_origen_id, $items);
+        $itemsStock = $this->itemsConArticulo($items);
+        $this->validarStockOrigen((int) $prestamo->deposito_origen_id, $itemsStock);
 
-        return DB::transaction(function () use ($prestamo, $items) {
-            $movId = $this->generarMovimientoStock(
-                $prestamo,
-                $items,
-                'PRSAL',
-                'salida',
-                "Préstamo {$prestamo->codigo} - Salida de origen"
-            );
+        return DB::transaction(function () use ($prestamo, $itemsStock) {
+            if ($itemsStock->isNotEmpty()) {
+                $movId = $this->generarMovimientoStock(
+                    $prestamo,
+                    $itemsStock,
+                    'PRSAL',
+                    'salida',
+                    "Salida {$prestamo->codigo} - Salida de origen"
+                );
+                $prestamo->movimientostock_salida_id = $movId;
+            }
 
-            $prestamo->movimientostock_salida_id = $movId;
             $estadoAnterior = $prestamo->estado;
-            $prestamo->estado = Prestamo::ESTADO_PENDIENTE_APROBACION;
-            $prestamo->save();
 
-            $this->logEstado($prestamo, $estadoAnterior, $prestamo->estado, 'Confirmación de envío');
-            $this->generarTokensYNotificarAprobacion($prestamo);
+            if ($prestamo->esDestinoExterno()) {
+                $prestamo->estado = Prestamo::ESTADO_ENVIADO;
+                $prestamo->fecha_aprobacion = now()->toDateString();
+                $prestamo->save();
+                $this->logEstado($prestamo, $estadoAnterior, $prestamo->estado, 'Envío a externo confirmado');
+            } else {
+                $prestamo->estado = Prestamo::ESTADO_PENDIENTE_APROBACION;
+                $prestamo->save();
+                $this->logEstado($prestamo, $estadoAnterior, $prestamo->estado, 'Confirmación de envío');
+                $this->generarTokensYNotificarAprobacion($prestamo);
+            }
 
             return $prestamo->fresh();
         });
@@ -150,22 +140,26 @@ class PrestamoService
         $prestamo = $this->prestamoRepository->find($id);
 
         if ($prestamo->estado !== Prestamo::ESTADO_PENDIENTE_APROBACION) {
-            throw new \RuntimeException('Solo se puede aprobar un préstamo en estado PENDIENTE_APROBACION.');
+            throw new \RuntimeException('Solo se puede aprobar una salida en estado PENDIENTE_APROBACION.');
         }
 
-        $items = Prestamo_Item::where('prestamo_id', $prestamo->id)->get();
+        $itemsStock = $this->itemsConArticulo(
+            Prestamo_Item::where('prestamo_id', $prestamo->id)->get()
+        );
 
-        return DB::transaction(function () use ($prestamo, $items, $usuarioAprobadorId, $observaciones) {
-            $movId = $this->generarMovimientoStock(
-                $prestamo,
-                $items,
-                'PRING',
-                'ingreso_destino',
-                "Préstamo {$prestamo->codigo} - Ingreso a destino"
-            );
+        return DB::transaction(function () use ($prestamo, $itemsStock, $usuarioAprobadorId, $observaciones) {
+            if ($prestamo->esDestinoDeposito() && $itemsStock->isNotEmpty()) {
+                $movId = $this->generarMovimientoStock(
+                    $prestamo,
+                    $itemsStock,
+                    'PRING',
+                    'ingreso_destino',
+                    "Salida {$prestamo->codigo} - Ingreso a destino"
+                );
+                $prestamo->movimientostock_ingreso_id = $movId;
+            }
 
             $estadoAnterior = $prestamo->estado;
-            $prestamo->movimientostock_ingreso_id = $movId;
             $prestamo->aprobador_id = $usuarioAprobadorId ?? Auth::id();
             $prestamo->fecha_aprobacion = now()->toDateString();
             $prestamo->estado = Prestamo::ESTADO_APROBADO;
@@ -184,20 +178,23 @@ class PrestamoService
         $prestamo = $this->prestamoRepository->find($id);
 
         if ($prestamo->estado !== Prestamo::ESTADO_PENDIENTE_APROBACION) {
-            throw new \RuntimeException('Solo se puede rechazar un préstamo en estado PENDIENTE_APROBACION.');
+            throw new \RuntimeException('Solo se puede rechazar una salida en estado PENDIENTE_APROBACION.');
         }
 
-        $items = Prestamo_Item::where('prestamo_id', $prestamo->id)->get();
+        $itemsStock = $this->itemsConArticulo(
+            Prestamo_Item::where('prestamo_id', $prestamo->id)->get()
+        );
 
-        return DB::transaction(function () use ($prestamo, $items, $usuarioId, $motivo) {
-            // Reversa la salida en el origen.
-            $this->generarMovimientoStock(
-                $prestamo,
-                $items,
-                'PRRCH',
-                'reverso',
-                "Préstamo {$prestamo->codigo} - Reverso por rechazo"
-            );
+        return DB::transaction(function () use ($prestamo, $itemsStock, $usuarioId, $motivo) {
+            if ($itemsStock->isNotEmpty()) {
+                $this->generarMovimientoStock(
+                    $prestamo,
+                    $itemsStock,
+                    'PRRCH',
+                    'reverso',
+                    "Salida {$prestamo->codigo} - Reverso por rechazo"
+                );
+            }
 
             $estadoAnterior = $prestamo->estado;
             $prestamo->aprobador_id = $usuarioId ?? Auth::id();
@@ -214,20 +211,20 @@ class PrestamoService
     }
 
     /**
-     * Registra una devolución parcial o total.
-     *
-     * @param  array<int, array{prestamo_item_id:int, cantidad:float}>  $devoluciones
+     * @param  array<int, array{prestamo_item_id:int, cantidad:float, condicion_devolucion?:string}>  $devoluciones
      */
     public function registrarDevolucion(int $id, array $devoluciones, ?string $observaciones = null): Prestamo
     {
         $prestamo = $this->prestamoRepository->find($id);
 
         if (! $prestamo->estaPendienteDevolucion()) {
-            throw new \RuntimeException('El préstamo no admite devolución en este estado.');
+            throw new \RuntimeException('La salida no admite devolución en este estado.');
         }
 
         $items = Prestamo_Item::where('prestamo_id', $prestamo->id)->get()->keyBy('id');
         $movItems = [];
+        $updatesCondicion = [];
+
         foreach ($devoluciones as $d) {
             $itemId = (int) ($d['prestamo_item_id'] ?? 0);
             $cantidad = (float) ($d['cantidad'] ?? 0);
@@ -241,45 +238,60 @@ class PrestamoService
                     "Cantidad devuelta ({$cantidad}) excede pendiente ({$pendiente}) del ítem {$item->id}."
                 );
             }
-            $movItems[] = (object) [
-                'articulo_id' => $item->articulo_id,
-                'cantidad' => $cantidad,
-                'item_origen' => $item,
-            ];
+            if (! empty($d['condicion_devolucion'])) {
+                $updatesCondicion[$itemId] = (string) $d['condicion_devolucion'];
+            }
+            if ($item->tieneArticulo()) {
+                $movItems[] = (object) [
+                    'articulo_id' => $item->articulo_id,
+                    'cantidad' => $cantidad,
+                    'item_origen' => $item,
+                ];
+            } else {
+                $movItems[] = (object) [
+                    'articulo_id' => null,
+                    'cantidad' => $cantidad,
+                    'item_origen' => $item,
+                ];
+            }
         }
 
         if (empty($movItems)) {
             throw new \RuntimeException('No se indicó ninguna cantidad de devolución válida.');
         }
 
-        return DB::transaction(function () use ($prestamo, $movItems, $observaciones) {
-            $itemsCol = collect($movItems);
-            // Salida del depósito destino...
-            $this->generarMovimientoStock(
-                $prestamo,
-                $itemsCol,
-                'PRDSL',
-                'devolucion_salida',
-                "Préstamo {$prestamo->codigo} - Devolución salida destino"
-            );
-            // ...e ingreso al origen.
-            $this->generarMovimientoStock(
-                $prestamo,
-                $itemsCol,
-                'PRDIN',
-                'devolucion_ingreso',
-                "Préstamo {$prestamo->codigo} - Devolución ingreso origen"
-            );
+        return DB::transaction(function () use ($prestamo, $movItems, $updatesCondicion, $observaciones) {
+            $itemsConArticulo = collect($movItems)->filter(fn ($m) => (int) ($m->articulo_id ?? 0) > 0)->values();
 
-            // Actualiza ítems acumulando lo devuelto.
+            if ($itemsConArticulo->isNotEmpty()) {
+                if ($prestamo->esDestinoDeposito()) {
+                    $this->generarMovimientoStock(
+                        $prestamo,
+                        $itemsConArticulo,
+                        'PRDSL',
+                        'devolucion_salida',
+                        "Salida {$prestamo->codigo} - Devolución salida destino"
+                    );
+                }
+                $this->generarMovimientoStock(
+                    $prestamo,
+                    $itemsConArticulo,
+                    'PRDIN',
+                    'devolucion_ingreso',
+                    "Salida {$prestamo->codigo} - Devolución ingreso origen"
+                );
+            }
+
             foreach ($movItems as $mov) {
                 /** @var Prestamo_Item $item */
                 $item = $mov->item_origen;
                 $item->cantidad_devuelta = (float) $item->cantidad_devuelta + $mov->cantidad;
+                if (isset($updatesCondicion[$item->id])) {
+                    $item->condicion_devolucion = $updatesCondicion[$item->id];
+                }
                 $item->save();
             }
 
-            // Si no queda pendiente en ningún ítem el préstamo queda DEVUELTO.
             $pendientes = Prestamo_Item::where('prestamo_id', $prestamo->id)
                 ->whereColumn('cantidad_devuelta', '<', 'cantidad')
                 ->count();
@@ -300,30 +312,58 @@ class PrestamoService
         });
     }
 
+    public function cerrarSinDevolucion(int $id, ?string $motivo = null): Prestamo
+    {
+        $prestamo = $this->prestamoRepository->find($id);
+
+        if (! $prestamo->puedeCerrarSinDevolucion()) {
+            throw new \RuntimeException('La salida no admite cierre en este estado.');
+        }
+
+        return DB::transaction(function () use ($prestamo, $motivo) {
+            $estadoAnterior = $prestamo->estado;
+            $prestamo->estado = Prestamo::ESTADO_CERRADO;
+            $prestamo->fecha_devolucion_real = now()->toDateString();
+            $prestamo->save();
+            $this->logEstado(
+                $prestamo,
+                $estadoAnterior,
+                $prestamo->estado,
+                $motivo ?? 'Cierre sin devolución (custodia finalizada)'
+            );
+
+            return $prestamo->fresh();
+        });
+    }
+
     public function cancelar(int $id, ?string $motivo = null): Prestamo
     {
         $prestamo = $this->prestamoRepository->find($id);
 
-        if (! in_array($prestamo->estado, [Prestamo::ESTADO_BORRADOR, Prestamo::ESTADO_PENDIENTE_APROBACION], true)) {
+        $cancelables = [Prestamo::ESTADO_BORRADOR, Prestamo::ESTADO_PENDIENTE_APROBACION];
+        if (! in_array($prestamo->estado, $cancelables, true)) {
             throw new \RuntimeException('Solo se puede cancelar en BORRADOR o PENDIENTE_APROBACION.');
         }
 
         return DB::transaction(function () use ($prestamo, $motivo) {
-            // Si ya generó la salida, la reversamos.
             if ($prestamo->estado === Prestamo::ESTADO_PENDIENTE_APROBACION) {
-                $items = Prestamo_Item::where('prestamo_id', $prestamo->id)->get();
-                $this->generarMovimientoStock(
-                    $prestamo,
-                    $items,
-                    'PRRCH',
-                    'reverso',
-                    "Préstamo {$prestamo->codigo} - Cancelación: reverso de salida"
+                $itemsStock = $this->itemsConArticulo(
+                    Prestamo_Item::where('prestamo_id', $prestamo->id)->get()
                 );
+                if ($itemsStock->isNotEmpty()) {
+                    $this->generarMovimientoStock(
+                        $prestamo,
+                        $itemsStock,
+                        'PRRCH',
+                        'reverso',
+                        "Salida {$prestamo->codigo} - Cancelación: reverso de salida"
+                    );
+                }
             }
             $estadoAnterior = $prestamo->estado;
             $prestamo->estado = Prestamo::ESTADO_CANCELADO;
             $prestamo->save();
-            $this->logEstado($prestamo, $estadoAnterior, $prestamo->estado, $motivo ?? 'Préstamo cancelado');
+            $this->logEstado($prestamo, $estadoAnterior, $prestamo->estado, $motivo ?? 'Salida cancelada');
             $this->invalidarTokens($prestamo);
 
             return $prestamo->fresh();
@@ -336,7 +376,7 @@ class PrestamoService
 
         if ($prestamo->estado !== Prestamo::ESTADO_BORRADOR) {
             throw new \RuntimeException(
-                'Solo se puede borrar un préstamo en BORRADOR. Cancelar o devolver primero.'
+                'Solo se puede borrar una salida en BORRADOR. Cancelar o devolver primero.'
             );
         }
 
@@ -344,12 +384,9 @@ class PrestamoService
     }
 
     /**
-     * Devuelve mapa deposito_id => cantidad para los artículos pasados,
-     * útil para mostrar "saldo origen / saldo destino" al armar el préstamo.
-     *
      * @param  list<int>  $articuloIds
      * @param  list<int>  $depositoIds
-     * @return array<int, array<int, float>>  [articulo_id][deposito_id] = cantidad
+     * @return array<int, array<int, float>>
      */
     public function saldosArticulos(array $articuloIds, array $depositoIds): array
     {
@@ -375,10 +412,6 @@ class PrestamoService
         $this->generarTokensYNotificarAprobacion($prestamo);
     }
 
-    /**
-     * Envía recordatorios para todos los préstamos pendientes que
-     * cumplen las reglas de la configuración.
-     */
     public function enviarRecordatorios(): int
     {
         $config = Configuracion_Prestamo::vigente();
@@ -427,39 +460,113 @@ class PrestamoService
     }
 
     /* ============================================================ */
-    /*                       Helpers privados                       */
-    /* ============================================================ */
 
-    private function validarDatosBasicos(array $data, bool $esActualizacion = false): void
+    /**
+     * @return array<string, mixed>
+     */
+    private function normalizarCabecera(array $data): array
     {
-        foreach (['fecha_prestamo', 'fecha_devolucion_prometida', 'deposito_origen_id', 'deposito_destino_id'] as $campo) {
-            if (empty($data[$campo])) {
-                throw new \RuntimeException("Campo requerido: {$campo}");
-            }
+        $tipo = (string) ($data['tipo'] ?? Prestamo::TIPO_PRESTAMO);
+        $destTipo = (string) ($data['destinatario_tipo'] ?? Prestamo::DEST_DEPOSITO);
+        $espera = array_key_exists('espera_devolucion', $data)
+            ? (bool) $data['espera_devolucion']
+            : ($tipo !== Prestamo::TIPO_ENTREGA);
+
+        if (empty($data['fecha_prestamo'])) {
+            throw new \RuntimeException('Campo requerido: fecha_prestamo');
         }
-        if ((int) $data['deposito_origen_id'] === (int) $data['deposito_destino_id']) {
-            throw new \RuntimeException('El depósito origen y destino deben ser distintos.');
+        if (empty($data['deposito_origen_id'])) {
+            throw new \RuntimeException('Campo requerido: deposito_origen_id');
         }
-        if (strtotime($data['fecha_devolucion_prometida']) < strtotime($data['fecha_prestamo'])) {
-            throw new \RuntimeException('La fecha prometida de devolución no puede ser anterior a la fecha del préstamo.');
+
+        if ($espera && empty($data['fecha_devolucion_prometida'])) {
+            throw new \RuntimeException('Campo requerido: fecha_devolucion_prometida');
         }
+        if (! empty($data['fecha_devolucion_prometida'])
+            && strtotime((string) $data['fecha_devolucion_prometida']) < strtotime((string) $data['fecha_prestamo'])) {
+            throw new \RuntimeException('La fecha prometida de devolución no puede ser anterior a la fecha de la salida.');
+        }
+
+        $depositoDestinoId = null;
+        $destUsuarioId = null;
+        $externo = [
+            'externo_nombre' => null,
+            'externo_documento' => null,
+            'externo_telefono' => null,
+            'externo_email' => null,
+            'externo_empresa' => null,
+        ];
+
+        switch ($destTipo) {
+            case Prestamo::DEST_DEPOSITO:
+                $depositoDestinoId = (int) ($data['deposito_destino_id'] ?? 0);
+                if ($depositoDestinoId <= 0) {
+                    throw new \RuntimeException('Campo requerido: deposito_destino_id');
+                }
+                if ($depositoDestinoId === (int) $data['deposito_origen_id']) {
+                    throw new \RuntimeException('El depósito origen y destino deben ser distintos.');
+                }
+                break;
+            case Prestamo::DEST_USUARIO:
+                $destUsuarioId = (int) ($data['destinatario_usuario_id'] ?? 0);
+                if ($destUsuarioId <= 0) {
+                    throw new \RuntimeException('Campo requerido: destinatario_usuario_id');
+                }
+                break;
+            case Prestamo::DEST_EXTERNO:
+                $nombre = trim((string) ($data['externo_nombre'] ?? ''));
+                if ($nombre === '') {
+                    throw new \RuntimeException('Campo requerido: externo_nombre');
+                }
+                $externo = [
+                    'externo_nombre' => $nombre,
+                    'externo_documento' => $data['externo_documento'] ?? null,
+                    'externo_telefono' => $data['externo_telefono'] ?? null,
+                    'externo_email' => $data['externo_email'] ?? null,
+                    'externo_empresa' => $data['externo_empresa'] ?? null,
+                ];
+                break;
+            default:
+                throw new \RuntimeException('destinatario_tipo inválido.');
+        }
+
+        return array_merge([
+            'codigo' => $data['codigo'] ?? null,
+            'tipo' => $tipo,
+            'destinatario_tipo' => $destTipo,
+            'fecha_prestamo' => $data['fecha_prestamo'],
+            'fecha_devolucion_prometida' => $espera ? ($data['fecha_devolucion_prometida'] ?? null) : ($data['fecha_devolucion_prometida'] ?? null),
+            'deposito_origen_id' => (int) $data['deposito_origen_id'],
+            'deposito_destino_id' => $depositoDestinoId,
+            'destinatario_usuario_id' => $destUsuarioId,
+            'espera_devolucion' => $espera,
+            'prioridad' => $data['prioridad'] ?? Prestamo::PRIORIDAD_NORMAL,
+            'observaciones' => $data['observaciones'] ?? null,
+        ], $externo);
     }
 
     /**
-     * @param  list<array{articulo_id:int, cantidad:float, observaciones?:string}>  $itemsData
+     * @param  list<array<string, mixed>>  $itemsData
      */
     private function reemplazarItems(Prestamo $prestamo, array $itemsData): void
     {
         Prestamo_Item::where('prestamo_id', $prestamo->id)->delete();
         foreach ($itemsData as $row) {
             $articuloId = (int) ($row['articulo_id'] ?? 0);
+            $descripcion = trim((string) ($row['descripcion'] ?? ''));
             $cantidad = (float) ($row['cantidad'] ?? 0);
-            if ($articuloId <= 0 || $cantidad <= 0) {
+            if ($cantidad <= 0) {
+                continue;
+            }
+            if ($articuloId <= 0 && $descripcion === '') {
                 continue;
             }
             Prestamo_Item::create([
                 'prestamo_id' => $prestamo->id,
-                'articulo_id' => $articuloId,
+                'articulo_id' => $articuloId > 0 ? $articuloId : null,
+                'descripcion' => $descripcion !== '' ? $descripcion : null,
+                'nro_serie' => $row['nro_serie'] ?? null,
+                'condicion_salida' => $row['condicion_salida'] ?? null,
                 'cantidad' => $cantidad,
                 'cantidad_devuelta' => 0,
                 'observaciones' => $row['observaciones'] ?? null,
@@ -471,7 +578,12 @@ class PrestamoService
         }
     }
 
-    private function validarStockOrigen(int $depositoOrigenId, $items): void
+    private function itemsConArticulo(Collection $items): Collection
+    {
+        return $items->filter(fn ($item) => (int) ($item->articulo_id ?? 0) > 0)->values();
+    }
+
+    private function validarStockOrigen(int $depositoOrigenId, Collection $items): void
     {
         foreach ($items as $item) {
             $saldo = $this->saldoRepository->saldo((int) $item->articulo_id, $depositoOrigenId);
@@ -484,10 +596,6 @@ class PrestamoService
         }
     }
 
-    /**
-     * El préstamo no pasa por MovimientoStockService: el cierre se valida acá,
-     * con la empresa del depósito que recibe el movimiento.
-     */
     private function assertPeriodoContableStock(int $depositoId, string $fecha): void
     {
         $empresaId = (int) (Depmae::query()->whereKey($depositoId)->value('empresa_id') ?? 0);
@@ -503,19 +611,14 @@ class PrestamoService
     }
 
     /**
-     * Genera un MovimientoStock + sus articulo_movimiento creando los
-     * registros directamente. No usa MovimientoStockService porque
-     * éste asume artículos con categoría de calzado que no aplican a
-     * los materiales del laboratorio.
-     *
-     * El observer Articulo_MovimientoObserver actualiza la tabla de
-     * saldos por (articulo, deposito) automáticamente.
-     *
      * @param  string  $abreviatura  PRSAL | PRING | PRRCH | PRDSL | PRDIN
-     * @param  string  $contexto  origen del movimiento (informativo)
      */
-    private function generarMovimientoStock(Prestamo $prestamo, $items, string $abreviatura, string $contexto, string $leyenda): int
+    private function generarMovimientoStock(Prestamo $prestamo, Collection $items, string $abreviatura, string $contexto, string $leyenda): int
     {
+        if ($items->isEmpty()) {
+            throw new \RuntimeException('No hay ítems con artículo para generar movimiento de stock.');
+        }
+
         $tipo = Tipotransaccion_Stock::where('abreviatura', $abreviatura)->first();
         if (! $tipo) {
             throw new \RuntimeException("No existe tipo de transacción de stock {$abreviatura}.");
@@ -530,13 +633,16 @@ class PrestamoService
             case 'ingreso_destino':
             case 'devolucion_salida':
                 $depositoId = (int) $prestamo->deposito_destino_id;
+                if ($depositoId <= 0) {
+                    throw new \RuntimeException('La salida no tiene depósito destino para este movimiento.');
+                }
                 break;
             default:
                 $depositoId = (int) $prestamo->deposito_origen_id;
         }
 
         $signo = (int) $tipo->signo === -1 ? -1 : 1;
-        $codigo = 'PR-'.$tipo->abreviatura.'-'.str_pad((string) $prestamo->id, 6, '0', STR_PAD_LEFT);
+        $codigo = 'SB-'.$tipo->abreviatura.'-'.str_pad((string) $prestamo->id, 6, '0', STR_PAD_LEFT);
 
         $this->assertPeriodoContableStock($depositoId, now()->toDateString());
 
@@ -557,8 +663,6 @@ class PrestamoService
             $cantidad = (float) abs((float) $item->cantidad) * $signo;
             $articuloId = (int) $item->articulo_id;
             $datoPrecio = $preciosUltimaCompra[$articuloId] ?? ['precio' => 0.0, 'costo' => 0.0, 'moneda_id' => null];
-            // create() dispara el observer Articulo_MovimientoObserver
-            // que actualiza la tabla articulo_saldo_deposito.
             Articulo_Movimiento::create([
                 'fecha' => now()->toDateString(),
                 'fechajornada' => now()->toDateString(),

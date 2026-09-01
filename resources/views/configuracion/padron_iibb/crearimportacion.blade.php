@@ -57,11 +57,36 @@
             });
         }
 
-        // Mientras haya una importación corriendo, refrescar el panel de estado.
+        // Mientras haya una importación corriendo, refrescar SOLO el panel de
+        // estado. Un reload completo borraba provincia/archivo/ruta del form.
+        function refrescarPanelEstadoPadron() {
+            var panel = document.getElementById('padron-iibb-panel-estado');
+            if (!panel) {
+                return;
+            }
+            fetch(window.location.href, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'text/html' },
+                credentials: 'same-origin',
+            })
+                .then(function (r) { return r.text(); })
+                .then(function (html) {
+                    var doc = new DOMParser().parseFromString(html, 'text/html');
+                    var nuevo = doc.getElementById('padron-iibb-panel-estado');
+                    if (!nuevo || !panel.parentNode) {
+                        return;
+                    }
+                    panel.replaceWith(nuevo);
+                    if (nuevo.getAttribute('data-carga-en-proceso') === '1') {
+                        setTimeout(refrescarPanelEstadoPadron, 15000);
+                    }
+                })
+                .catch(function () {
+                    setTimeout(refrescarPanelEstadoPadron, 30000);
+                });
+        }
+
         if (@json($hay_carga_en_proceso ?? false)) {
-            setTimeout(function () {
-                window.location.reload();
-            }, 15000);
+            setTimeout(refrescarPanelEstadoPadron, 15000);
         }
     });
 </script>
@@ -101,7 +126,10 @@
                 </div>
             </form>
         </div>
-        @include('configuracion.padron_iibb.partials.panel_estado')
+        <div id="padron-iibb-panel-estado"
+             data-carga-en-proceso="{{ ($hay_carga_en_proceso ?? false) ? '1' : '0' }}">
+            @include('configuracion.padron_iibb.partials.panel_estado')
+        </div>
     </div>
 </div>
 @include('includes.configuracion.modalconsultaprovincia')
