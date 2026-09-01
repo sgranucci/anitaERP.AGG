@@ -9,13 +9,13 @@
             </select>
         </td>
         <td>
-            <input type="number" name="tasas[]" min="0" max="100" step="0.01" value="" class="form-control tasa" placeholder="Tasa de percepción por defecto">
+            <input type="number" name="tasas[]" min="0" max="100" step="any" value="" class="form-control tasa" placeholder="Tasa de percepción por defecto">
         </td>
         <td>
-            <input type="number" name="minimonetos[]" step="0.01" value="" class="form-control minimoneto" placeholder="Mínimo neto sujeto a percepción">
+            <input type="number" name="minimonetos[]" step="any" value="" class="form-control minimoneto" placeholder="Mínimo neto sujeto a percepción">
         </td>
         <td>
-            <input type="number" name="minimopercepciones[]" step="0.01" value="" class="form-control minimopercepcion" placeholder="Monto mínimo de percepción">
+            <input type="number" name="minimopercepciones[]" step="any" value="" class="form-control minimopercepcion" placeholder="Monto mínimo de percepción">
         </td>
         <td class="text-center">
             <button type="button" title="Elimina esta línea" class="btn-accion-tabla eliminar_tasaiibb tooltipsC">

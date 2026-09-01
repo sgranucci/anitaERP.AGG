@@ -1,4 +1,14 @@
 @php
+    // DECIMAL(22,6) pinta 6.000000; step=0.01 falla en Firefox (6 % 0.01 ≠ 0).
+    $fmtNumeroInput = static function ($valor, int $decimales = 6): string {
+        if ($valor === null || $valor === '') {
+            return '';
+        }
+        $texto = number_format((float) $valor, $decimales, '.', '');
+        $texto = rtrim(rtrim($texto, '0'), '.');
+
+        return $texto === '' ? '0' : $texto;
+    };
     $tasasForm = [];
     $oldCondiciones = old('condicioniibb_ids');
     if (is_array($oldCondiciones)) {
@@ -48,13 +58,13 @@
                                 </select>
                             </td>
                             <td>
-                                <input type="number" name="tasas[]" min="0" max="100" step="0.01" value="{{ $tasa->tasa ?? '' }}" class="form-control tasa" placeholder="Tasa de percepción por defecto">
+                                <input type="number" name="tasas[]" min="0" max="100" step="any" value="{{ $fmtNumeroInput($tasa->tasa ?? '') }}" class="form-control tasa" placeholder="Tasa de percepción por defecto">
                             </td>
                             <td>
-                                <input type="number" name="minimonetos[]" step="0.01" value="{{ $tasa->minimoneto ?? '' }}" class="form-control minimoneto" placeholder="Mínimo neto sujeto a percepción">
+                                <input type="number" name="minimonetos[]" step="any" value="{{ $fmtNumeroInput($tasa->minimoneto ?? '', 2) }}" class="form-control minimoneto" placeholder="Mínimo neto sujeto a percepción">
                             </td>
                             <td>
-                                <input type="number" name="minimopercepciones[]" step="0.01" value="{{ $tasa->minimopercepcion ?? '' }}" class="form-control minimopercepcion" placeholder="Monto mínimo de percepción">
+                                <input type="number" name="minimopercepciones[]" step="any" value="{{ $fmtNumeroInput($tasa->minimopercepcion ?? '') }}" class="form-control minimopercepcion" placeholder="Monto mínimo de percepción">
                             </td>
                             <td class="text-center">
                                 <button type="button" title="Elimina esta línea" class="btn-accion-tabla eliminar_tasaiibb tooltipsC">
