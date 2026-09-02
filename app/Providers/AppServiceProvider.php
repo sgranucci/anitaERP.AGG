@@ -2059,6 +2059,11 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Ventas\DestinoRepositoryInterface',
+            'App\Repositories\Ventas\DestinoRepository',
+        );
+
+        $this->app->bind(
             'App\Repositories\Ventas\ComprobanteImpresionProgramaRepositoryInterface',
             'App\Repositories\Ventas\ComprobanteImpresionProgramaRepository',
         );

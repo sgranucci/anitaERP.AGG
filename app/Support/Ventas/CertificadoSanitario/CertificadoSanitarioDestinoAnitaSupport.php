@@ -5,18 +5,19 @@ namespace App\Support\Ventas\CertificadoSanitario;
 use App\ApiAnita;
 use App\Models\Configuracion\Localidad;
 use App\Models\Ventas\CertificadoSanitarioDestino;
+use App\Models\Ventas\Destino;
+use App\Models\Ventas\Zonavta;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Destino SENASA = tabla Anita `destino` (dest_destino = zonavta.codigo).
+ * Destino SENASA = maestro `destino` (Anita dest_destino = zonavta.codigo).
  *
- * p-certsan.c una_zona_reparto():
- *   dest_destino = penm_zonavta;
- *   lee(fddest) → dest_localidad / dest_provincia / dest_patagonico
- *
- * certsan.fc CERTS_genera_certificado_web:
- *   se:lugarDestino = dest_localidad (no la localidad del cliente).
+ * p-certsan.c / certsan.fc El Bierzo:
+ *   se:lugarDestino = dest_localidad (+ dest_provincia)
+ *   se:localidad = loc_cod_senasa de la localidad del cliente
+ *   Si el cliente no tiene código: fallback ERP = dest_cod_localidad cargado.
+ *   Si aún no hay ninguno: buscar loc_cod_senasa por nombre de destino.
  */
 final class CertificadoSanitarioDestinoAnitaSupport
 {
@@ -24,11 +25,26 @@ final class CertificadoSanitarioDestinoAnitaSupport
     private static array $cache = [];
 
     /**
+     * dest_destino = zonv_codigo de Anita, nunca zonavta.id del ERP.
+     */
+    public static function codigoAnitaZona(?int $codigoZona, ?int $zonavtaId): int
+    {
+        if ($zonavtaId !== null && $zonavtaId > 0) {
+            $anita = Zonavta::codigoAnitaDesdeId($zonavtaId);
+            if ($anita > 0) {
+                return $anita;
+            }
+        }
+
+        return max(0, (int) ($codigoZona ?? 0));
+    }
+
+    /**
      * @return array{localidad: string, provincia: string, patagonico: bool, senasa: ?int}|null
      */
-    public static function porCodigoZona(?int $codigoZona): ?array
+    public static function porCodigoZona(?int $codigoZona, ?int $zonavtaId = null): ?array
     {
-        $codigo = (int) $codigoZona;
+        $codigo = self::codigoAnitaZona($codigoZona, $zonavtaId);
         if ($codigo <= 0) {
             return null;
         }
@@ -36,10 +52,18 @@ final class CertificadoSanitarioDestinoAnitaSupport
             return self::$cache[$codigo];
         }
 
+        $erp = Destino::porCodigo($codigo);
+        if ($erp !== null) {
+            $dest = $erp->aArraySenasa();
+            self::$cache[$codigo] = $dest;
+
+            return $dest;
+        }
+
         $fila = self::buscarEnAnita($codigo);
         $dest = $fila ? self::desdeFilaAnita($fila) : null;
-        if ($dest !== null) {
-            $dest['senasa'] = self::codigoSenasaLocalidad($dest['localidad'], $dest['provincia']);
+        if ($fila && Destino::tablaLista()) {
+            Destino::upsertDesdeFilaAnita($fila);
         }
         self::$cache[$codigo] = $dest;
 
@@ -56,11 +80,13 @@ final class CertificadoSanitarioDestinoAnitaSupport
             return null;
         }
 
+        $senasa = (int) ($row->dest_cod_localidad ?? 0);
+
         return [
             'localidad' => $localidad,
             'provincia' => self::normalizarTexto($row->dest_provincia ?? ''),
             'patagonico' => strtoupper(substr(trim((string) ($row->dest_patagonico ?? 'N')), 0, 1)) === 'S',
-            'senasa' => null,
+            'senasa' => $senasa > 0 ? $senasa : null,
         ];
     }
 
@@ -71,22 +97,31 @@ final class CertificadoSanitarioDestinoAnitaSupport
     public static function enriquecerLineas(Collection $lineas): Collection
     {
         return $lineas->map(function (PedidoCertificadoLinea $l) {
-            $dest = self::porCodigoZona($l->codigoZona);
+            $dest = self::porCodigoZona($l->codigoZona, $l->zonavtaId);
             if ($dest === null) {
                 return $l;
             }
 
+            $senasaCliente = (int) ($l->localidadSenasaCodigo ?? 0);
+            $senasaDestino = (int) ($dest['senasa'] ?? 0);
+
+            $nombreLoc = trim((string) ($dest['localidad'] ?? ''));
+            $nombreProv = trim((string) ($dest['provincia'] ?? ''));
+
             return $l->conDestinoZona(
-                $dest['localidad'],
-                $dest['provincia'],
-                $dest['senasa']
+                $nombreLoc !== '' ? $nombreLoc : $l->localidadNombre,
+                $nombreProv !== '' ? $nombreProv : $l->provinciaNombre,
+                self::senasaLocalidadXml($senasaCliente > 0 ? $senasaCliente : null, $senasaDestino > 0 ? $senasaDestino : null)
             );
         });
     }
 
     public static function aplicarADestino(CertificadoSanitarioDestino $destino): bool
     {
-        $dest = self::porCodigoZona((int) ($destino->codigo_destino ?? 0));
+        $dest = self::porCodigoZona(
+            (int) ($destino->codigo_destino ?? 0),
+            $destino->zonavta_id ? (int) $destino->zonavta_id : null
+        );
         if ($dest === null) {
             return false;
         }
@@ -129,7 +164,7 @@ final class CertificadoSanitarioDestinoAnitaSupport
                 'acc' => 'list',
                 'sistema' => 'ventas',
                 'tabla' => 'destino',
-                'campos' => 'dest_destino, dest_localidad, dest_provincia, dest_patagonico',
+                'campos' => 'dest_destino, dest_localidad, dest_provincia, dest_pais, dest_patagonico, dest_cod_localidad',
                 'whereArmado' => ' WHERE dest_destino = '.$codigo.' ',
             ]);
             $rawStr = is_string($raw) ? $raw : json_encode($raw);
@@ -154,7 +189,26 @@ final class CertificadoSanitarioDestinoAnitaSupport
         }
     }
 
-    private static function codigoSenasaLocalidad(string $localidad, string $provincia): ?int
+    /**
+     * se:localidad (certsan.fc Bierzo): manda el código SENASA de la localidad del cliente.
+     * Fallback ERP: dest_cod_localidad del maestro destino si está cargado.
+     */
+    public static function senasaLocalidadXml(?int $senasaCliente, ?int $senasaDestino): ?int
+    {
+        $cliente = (int) ($senasaCliente ?? 0);
+        if ($cliente > 0) {
+            return $cliente;
+        }
+        $destino = (int) ($senasaDestino ?? 0);
+
+        return $destino > 0 ? $destino : null;
+    }
+
+    /**
+     * loc_cod_senasa del maestro ERP por nombre (último recurso para se:localidad).
+     * dest_provincia viene abreviado (BS AS, BS-AS); provincia.nombre es "Buenos Aires".
+     */
+    public static function codigoSenasaLocalidad(string $localidad, string $provincia): ?int
     {
         $loc = mb_strtoupper(trim($localidad));
         $prov = mb_strtoupper(trim($provincia));
@@ -162,20 +216,76 @@ final class CertificadoSanitarioDestinoAnitaSupport
             return null;
         }
 
-        $query = Localidad::query()
+        $base = Localidad::query()
             ->whereRaw('UPPER(TRIM(nombre)) = ?', [$loc])
             ->whereNotNull('codigosenasa')
             ->where('codigosenasa', '!=', '')
             ->where('codigosenasa', '!=', '0');
 
-        if ($prov !== '') {
-            $query->whereHas('provincias', function ($p) use ($prov) {
-                $p->whereRaw('UPPER(TRIM(nombre)) = ?', [$prov]);
+        $nombresProv = self::equivalentesProvincia($prov);
+        if ($nombresProv !== []) {
+            $conProv = (clone $base)->whereHas('provincias', function ($p) use ($nombresProv, $prov) {
+                $p->where(function ($q) use ($nombresProv, $prov) {
+                    foreach ($nombresProv as $nombre) {
+                        $q->orWhereRaw('UPPER(TRIM(nombre)) = ?', [$nombre]);
+                    }
+                    $compacto = self::compactarProvincia($prov);
+                    if ($compacto !== '') {
+                        $q->orWhereRaw(
+                            'UPPER(REPLACE(REPLACE(REPLACE(TRIM(abreviatura), ".", ""), "-", ""), " ", "")) = ?',
+                            [$compacto]
+                        );
+                    }
+                });
             });
+            $codigo = $conProv->value('codigosenasa');
+            if ($codigo !== null && $codigo !== '') {
+                return (int) $codigo;
+            }
         }
 
-        $codigo = $query->value('codigosenasa');
+        $codigos = $base->pluck('codigosenasa')->map(fn ($v) => (int) $v)->filter()->unique()->values();
+        if ($codigos->count() === 1) {
+            return (int) $codigos->first();
+        }
 
-        return $codigo !== null && $codigo !== '' ? (int) $codigo : null;
+        return null;
+    }
+
+    /**
+     * @return list<string>
+     */
+    public static function equivalentesProvincia(string $provincia): array
+    {
+        $prov = mb_strtoupper(trim($provincia));
+        if ($prov === '') {
+            return [];
+        }
+
+        $compacto = self::compactarProvincia($prov);
+        $out = [$prov];
+        if (in_array($compacto, ['BSAS', 'BS', 'BAI', 'PBA', 'GBA'], true)
+            || in_array($prov, ['BS AS', 'BS-AS', 'BS.AS', 'BS. AS.', 'PCIA BS AS'], true)
+        ) {
+            $out[] = 'BUENOS AIRES';
+            $out[] = 'BS AS';
+            $out[] = 'BS-AS';
+        }
+        if (in_array($compacto, ['CABA', 'CF', 'CAPFED'], true)
+            || str_contains($prov, 'CAPITAL FEDERAL')
+        ) {
+            $out[] = 'CAPITAL FEDERAL';
+        }
+
+        return array_values(array_unique($out));
+    }
+
+    public static function compactarProvincia(string $provincia): string
+    {
+        $p = mb_strtoupper(trim($provincia));
+        $p = str_replace(['.', '-', '/'], ' ', $p);
+        $p = preg_replace('/\s+/', '', $p) ?? $p;
+
+        return $p;
     }
 }

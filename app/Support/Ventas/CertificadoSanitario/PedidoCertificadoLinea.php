@@ -121,7 +121,10 @@ final class PedidoCertificadoLinea
     {
         $transporte = (string) ($this->codigoTransporte ?? $this->transporteId ?? '0');
         if ($abrePorLocalidad) {
-            return $transporte.'|'.(string) ($this->codigoZona ?? $this->zonavtaId ?? '0');
+            return $transporte.'|'.(string) CertificadoSanitarioDestinoAnitaSupport::codigoAnitaZona(
+                $this->codigoZona,
+                $this->zonavtaId
+            );
         }
 
         return $transporte;

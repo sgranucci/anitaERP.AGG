@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Storage;
 use App\Repositories\Ventas\ZonavtaRepositoryInterface;
 use App\Http\Requests\ValidacionZonavta;
 use App\ApiAnita;
+use App\Support\Ventas\ZonavtaDestinoElBierzoSupport;
 
 class ZonavtaController extends Controller
 {
@@ -37,6 +38,10 @@ class ZonavtaController extends Controller
         	$datas = Zonavta::orderBy('id')->get();
 		}
 
+        if (ZonavtaDestinoElBierzoSupport::activo()) {
+            $datas->load('destino');
+        }
+
         return view('ventas.zonavta.index', compact('datas'));
     }
 
@@ -48,7 +53,12 @@ class ZonavtaController extends Controller
     public function crear()
     {
         can('crear-zonas-de-venta');
-        return view('ventas.zonavta.crear');
+        $data = new Zonavta();
+        if (ZonavtaDestinoElBierzoSupport::activo()) {
+            $data->setRelation('destino', null);
+        }
+
+        return view('ventas.zonavta.crear', compact('data'));
     }
 
     /**
@@ -71,6 +81,11 @@ class ZonavtaController extends Controller
 		$Zonavta = new Zonavta();
         $Zonavta->guardarAnita($request, $codigo);
 
+        ZonavtaDestinoElBierzoSupport::sincronizar(
+            $zonavta,
+            ZonavtaDestinoElBierzoSupport::entradaAltaDesdeZona($request->all(), (string) $request->input('nombre', ''))
+        );
+
         return redirect('ventas/zonavta')->with('mensaje', 'Zona de venta creada con exito');
     }
 
@@ -91,6 +106,10 @@ class ZonavtaController extends Controller
             $referer = null;
 
         $data = Zonavta::findOrFail($id);
+        if (ZonavtaDestinoElBierzoSupport::activo()) {
+            $data->load('destino');
+        }
+
         return view('ventas.zonavta.editar', compact('data', 'referer'));
     }
 
@@ -104,11 +123,14 @@ class ZonavtaController extends Controller
     public function actualizar(ValidacionZonavta $request, $id)
     {
         can('actualizar-zonas-de-venta');
-        Zonavta::findOrFail($id)->update($request->all());
+        $zonavta = Zonavta::findOrFail($id);
+        $zonavta->update($request->all());
 
 		// Actualiza anita
 		$Zonavta = new Zonavta();
         $Zonavta->actualizarAnita($request, $request->codigo);
+
+        ZonavtaDestinoElBierzoSupport::sincronizar($zonavta->fresh(), $request->all());
 
         if ($request->referer != null)
             return redirect($request->referer)->with('mensaje', 'Zona de venta actualizada con éxito');

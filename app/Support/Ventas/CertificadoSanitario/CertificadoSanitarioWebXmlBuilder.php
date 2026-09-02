@@ -49,9 +49,8 @@ final class CertificadoSanitarioWebXmlBuilder
         $xml[] = '<se:paisDestino>'.(int) config('senasa.pais_destino').'</se:paisDestino>';
         $xml[] = '<se:establecimiento>'.(int) config('senasa.establecimiento').'</se:establecimiento>';
 
-        $locs = $filtradas->pluck('localidadSenasaCodigo')->filter()->unique()->values();
         if ((int) ($cert->establecimiento_destino ?? 0) === 0) {
-            foreach ($locs as $locSenasa) {
+            foreach ($this->codigosLocalidadSenasa($cert, $filtradas) as $locSenasa) {
                 $xml[] = '<se:localidad>'.(int) $locSenasa.'</se:localidad>';
             }
         }
@@ -178,8 +177,53 @@ final class CertificadoSanitarioWebXmlBuilder
     }
 
     /**
-     * certsan.fc: se:lugarDestino = dest_localidad de la tabla destino (por zona).
-     * El ERP guarda también provincia; se concatena como en el PDF.
+     * certsan.fc Bierzo: se:localidad = loc_cod_senasa de la localidad del cliente
+     * si no hay establecimientoDestino. Fallback: dest_cod_localidad cargado.
+     * Si no queda ninguno, busca por nombre de destino en localidad.codigosenasa.
+     *
+     * @param  Collection<int, PedidoCertificadoLinea>  $lineas
+     * @return list<int>
+     */
+    public function codigosLocalidadSenasa(CertificadoSanitario $cert, Collection $lineas): array
+    {
+        $codigos = [];
+        foreach ($lineas as $l) {
+            $c = (int) ($l->localidadSenasaCodigo ?? 0);
+            if ($c > 0) {
+                $codigos[$c] = $c;
+            }
+        }
+
+        if ($codigos === []) {
+            foreach ($cert->destinos ?? [] as $d) {
+                $dest = CertificadoSanitarioDestinoAnitaSupport::porCodigoZona(
+                    (int) ($d->codigo_destino ?? 0),
+                    $d->zonavta_id ? (int) $d->zonavta_id : null
+                );
+                $c = (int) ($dest['senasa'] ?? 0);
+                if ($c > 0) {
+                    $codigos[$c] = $c;
+                }
+            }
+        }
+
+        if ($codigos === []) {
+            foreach ($cert->destinos ?? [] as $d) {
+                $c = CertificadoSanitarioDestinoAnitaSupport::codigoSenasaLocalidad(
+                    (string) ($d->localidad ?? ''),
+                    (string) ($d->provincia ?? '')
+                );
+                if ($c !== null && $c > 0) {
+                    $codigos[$c] = $c;
+                }
+            }
+        }
+
+        return array_values($codigos);
+    }
+
+    /**
+     * certsan.fc: se:lugarDestino = dest_localidad (+ dest_provincia) de la tabla destino (por zona).
      */
     public function lugarDestinoDesdeDestinos(CertificadoSanitario $cert): string
     {

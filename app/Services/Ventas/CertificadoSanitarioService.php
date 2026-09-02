@@ -298,13 +298,14 @@ class CertificadoSanitarioService
         }
 
         $lineaDest = 1;
-        foreach ($lineas->unique(fn (PedidoCertificadoLinea $l) => (string) ($l->codigoZona ?? $l->zonavtaId)) as $dest) {
-            $anitaDest = CertificadoSanitarioDestinoAnitaSupport::porCodigoZona($dest->codigoZona);
+        foreach ($lineas->unique(fn (PedidoCertificadoLinea $l) => (string) CertificadoSanitarioDestinoAnitaSupport::codigoAnitaZona($l->codigoZona, $l->zonavtaId)) as $dest) {
+            $codigoAnita = CertificadoSanitarioDestinoAnitaSupport::codigoAnitaZona($dest->codigoZona, $dest->zonavtaId);
+            $anitaDest = CertificadoSanitarioDestinoAnitaSupport::porCodigoZona($codigoAnita, $dest->zonavtaId);
             CertificadoSanitarioDestino::create([
                 'certificado_sanitario_id' => $cert->id,
                 'linea' => $lineaDest++,
                 'zonavta_id' => $dest->zonavtaId,
-                'codigo_destino' => $dest->codigoZona,
+                'codigo_destino' => $codigoAnita > 0 ? $codigoAnita : null,
                 'localidad' => $anitaDest['localidad'] ?? $dest->localidadNombre,
                 'provincia' => $anitaDest['provincia'] ?? $dest->provinciaNombre,
                 'patagonico' => $anitaDest['patagonico'] ?? $this->esPatagonico($dest),
@@ -368,6 +369,7 @@ class CertificadoSanitarioService
         $xmlMaestroViejo = $this->xmlDesactualizadoRespectoMaestro($cert, $lineas);
         $xmlCantidadCajas = $this->xmlCantidadNoEsPiezas($cert, $lineas);
         $xmlDestinoViejo = $this->xmlLugarDestinoDesactualizado($cert);
+        $xmlSinLocalidad = $this->xmlSinLocalidadSenasa($cert, $lineas);
         if (
             ! $necesitaAmparo
             && ! $destinoAlineado
@@ -376,6 +378,7 @@ class CertificadoSanitarioService
             && ! $xmlMaestroViejo
             && ! $xmlCantidadCajas
             && ! $xmlDestinoViejo
+            && ! $xmlSinLocalidad
         ) {
             return $cert;
         }
@@ -565,7 +568,10 @@ class CertificadoSanitarioService
                 transporteId: $cert->transporte_id,
                 codigoTransporte: $transporte?->codigo !== null ? (string) $transporte->codigo : null,
                 zonavtaId: $dest?->zonavta_id,
-                codigoZona: $dest?->codigo_destino,
+                codigoZona: CertificadoSanitarioDestinoAnitaSupport::codigoAnitaZona(
+                    $dest?->codigo_destino,
+                    $dest?->zonavta_id
+                ) ?: null,
                 sku: (string) ($item->sku ?? ''),
                 articuloNombre: trim((string) ($art->descripcion ?? $art->nombre ?? '')),
                 articuloId: $item->articulo_id ? (int) $item->articulo_id : null,
@@ -619,6 +625,33 @@ class CertificadoSanitarioService
                 return true;
             }
             if (trim((string) html_entity_decode($m[1], ENT_XML1 | ENT_QUOTES, 'UTF-8')) !== $esperado) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * SENASA exige al menos un se:localidad si no hay establecimientoDestino.
+     *
+     * @param  Collection<int, PedidoCertificadoLinea>  $lineas
+     */
+    private function xmlSinLocalidadSenasa(CertificadoSanitario $cert, Collection $lineas): bool
+    {
+        if ((int) ($cert->establecimiento_destino ?? 0) > 0) {
+            return false;
+        }
+        if ($this->xmlBuilder->codigosLocalidadSenasa($cert, $lineas) === []) {
+            return false;
+        }
+
+        foreach ([$cert->xml_frio, $cert->xml_sin_frio] as $path) {
+            if (! $this->xmlLegible($path)) {
+                continue;
+            }
+            $xml = (string) Storage::disk('local')->get($path);
+            if ($xml !== '' && ! str_contains($xml, '<se:localidad>')) {
                 return true;
             }
         }
@@ -749,7 +782,7 @@ class CertificadoSanitarioService
 
     private function esPatagonico(PedidoCertificadoLinea $l): bool
     {
-        $dest = CertificadoSanitarioDestinoAnitaSupport::porCodigoZona($l->codigoZona);
+        $dest = CertificadoSanitarioDestinoAnitaSupport::porCodigoZona($l->codigoZona, $l->zonavtaId);
         if ($dest !== null) {
             return $dest['patagonico'];
         }

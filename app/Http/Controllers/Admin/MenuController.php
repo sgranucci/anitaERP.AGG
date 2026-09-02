@@ -104,4 +104,33 @@ class MenuController extends Controller
             abort(404);
         }
     }
+
+    public function eliminarVarios(Request $request)
+    {
+        $ids = $request->input('ids', []);
+        if (! is_array($ids)) {
+            $ids = [];
+        }
+
+        try {
+            $cantidad = MenuEliminacionSupport::eliminarVarios($ids);
+
+            return redirect('admin/menu')->with(
+                'mensaje',
+                $cantidad === 1
+                    ? 'Se eliminó 1 ítem de menú (incluye submenús marcados).'
+                    : 'Se eliminaron '.$cantidad.' ítems de menú (incluye submenús).'
+            );
+        } catch (\RuntimeException $e) {
+            return redirect('admin/menu')->with('errores', [$e->getMessage()]);
+        } catch (QueryException $e) {
+            return redirect('admin/menu')->with('errores', [
+                EliminacionRegistroSupport::mensajeDesdeQueryException($e, 'el menú'),
+            ]);
+        } catch (\Throwable $e) {
+            return redirect('admin/menu')->with('errores', [
+                EliminacionRegistroSupport::mensajeDesdeExcepcion($e, 'el menú'),
+            ]);
+        }
+    }
 }

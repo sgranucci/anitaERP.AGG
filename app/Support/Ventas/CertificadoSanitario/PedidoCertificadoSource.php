@@ -172,7 +172,10 @@ final class PedidoCertificadoSource
                     transporteId: $transporte?->id,
                     codigoTransporte: $transporte?->codigo !== null ? (string) $transporte->codigo : null,
                     zonavtaId: $zona?->id,
-                    codigoZona: $zona?->codigo !== null ? (int) $zona->codigo : ($zona?->id),
+                    codigoZona: CertificadoSanitarioDestinoAnitaSupport::codigoAnitaZona(
+                        $zona?->codigo !== null && $zona->codigo !== '' ? (int) $zona->codigo : null,
+                        $zona?->id
+                    ) ?: null,
                     sku: $sku,
                     articuloNombre: trim((string) ($art->descripcion ?? $art->nombre ?? '')),
                     articuloId: (int) $art->id,

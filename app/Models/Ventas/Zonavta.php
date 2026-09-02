@@ -5,6 +5,7 @@ namespace App\Models\Ventas;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use App\ApiAnita;
 
 class Zonavta extends Model
@@ -28,6 +29,11 @@ class Zonavta extends Model
         }
 
         return (int) $codigo;
+    }
+
+    public function destino(): HasOne
+    {
+        return $this->hasOne(Destino::class, 'zonavta_id');
     }
 
     public function sincronizarConAnita(){

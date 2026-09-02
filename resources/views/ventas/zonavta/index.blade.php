@@ -26,11 +26,15 @@ Zonas de venta
             </div>
             <div class="card-body table-responsive p-0">
                 <table class="table table-striped table-bordered table-hover" id="tabla-data">
-                    <thead>
+                    <thead @if(\App\Support\Ventas\ZonavtaDestinoElBierzoSupport::activo()) style="background:#85C1E9;color:#17202A;" @endif>
                         <tr>
                             <th class="width20">ID</th>
                             <th>Nombre</th>
                             <th>Código Anita</th>
+                            @if(\App\Support\Ventas\ZonavtaDestinoElBierzoSupport::activo())
+                                <th>Localidad destino</th>
+                                <th>Cód. localidad SENASA</th>
+                            @endif
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -40,6 +44,10 @@ Zonas de venta
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
                             <td>{{$data->codigo}}</td>
+                            @if(\App\Support\Ventas\ZonavtaDestinoElBierzoSupport::activo())
+                                <td>{{ $data->destino->localidad ?? '' }}</td>
+                                <td>{{ $data->destino->codigo_localidad_senasa ?? '' }}</td>
+                            @endif
                             <td>
                        			@if (can('editar-zonas-de-venta', false))
                                 	<a href="{{route('editar_zonavta', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

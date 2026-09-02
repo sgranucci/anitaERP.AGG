@@ -71,6 +71,7 @@ Route::group(['prefix' => 'admin', 'namespace' => 'Admin', 'middleware' => ['aut
     Route::get('menu', 'MenuController@index')->name('menu');
     Route::get('menu/crear', 'MenuController@crear')->name('crear_menu');
     Route::post('menu', 'MenuController@guardar')->name('guardar_menu');
+    Route::post('menu/eliminar-varios', 'MenuController@eliminarVarios')->name('eliminar_varios_menu');
     Route::get('menu/{id}/editar', 'MenuController@editar')->name('editar_menu');
     Route::put('menu/{id}', 'MenuController@actualizar')->name('actualizar_menu');
     Route::get('menu/{id}/eliminar', 'MenuController@eliminar')->name('eliminar_menu');
@@ -5012,6 +5013,14 @@ Route::get('ventas/certificado-sanitario/{id}', 'Ventas\CertificadoSanitarioCont
 Route::delete('ventas/certificado-sanitario/{id}', 'Ventas\CertificadoSanitarioController@eliminar')
     ->whereNumber('id')
     ->name('eliminar_certificado_sanitario');
+
+Route::get('ventas/destino', 'Ventas\DestinoController@index')->name('destino');
+Route::get('ventas/lista-destino/{formato?}/{busqueda?}', 'Ventas\DestinoController@listar')->name('lista_destino');
+Route::get('ventas/destino/crear', 'Ventas\DestinoController@crear')->name('crear_destino');
+Route::post('ventas/destino', 'Ventas\DestinoController@guardar')->name('guardar_destino');
+Route::get('ventas/destino/{id}/editar', 'Ventas\DestinoController@editar')->name('editar_destino')->middleware('modo.consulta');
+Route::put('ventas/destino/{id}', 'Ventas\DestinoController@actualizar')->name('actualizar_destino')->middleware('modo.consulta');
+Route::delete('ventas/destino/{id}', 'Ventas\DestinoController@eliminar')->name('eliminar_destino');
 
 /*
  * CAI remitos ARCA (letra R)
