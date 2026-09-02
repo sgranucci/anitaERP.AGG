@@ -25,11 +25,13 @@
                             @if ($mostrarCc)
                                 <th>Centro de costo</th>
                             @endif
-                            @if (! $expandido)
-                                <th class="text-right">Saldo inicial</th>
-                            @endif
+                            <th class="text-right">Saldo inicial</th>
                             <th class="text-right">Debe</th>
                             <th class="text-right">Haber</th>
+                            @if ($expandido)
+                                <th class="text-right">Neto (H−D)</th>
+                            @endif
+                            <th class="text-right">Saldo</th>
                             <th class="text-right">Líneas</th>
                         </tr>
                     </thead>
@@ -55,11 +57,17 @@
                                         @endif
                                     </td>
                                 @endif
-                                @if (! $expandido)
-                                    <td class="text-right">{{ $formatearMonto($row['saldo_inicial'] ?? 0) }}</td>
-                                @endif
+                                <td class="text-right">{{ $formatearMonto($row['saldo_inicial'] ?? 0) }}</td>
                                 <td class="text-right">{{ $formatearMonto($row['total_debe'] ?? 0) }}</td>
                                 <td class="text-right">{{ $formatearMonto($row['total_haber'] ?? 0) }}</td>
+                                @if ($expandido)
+                                    <td class="text-right">{{ $formatearMonto((float) ($row['total_haber'] ?? 0) - (float) ($row['total_debe'] ?? 0)) }}</td>
+                                @endif
+                                <td class="text-right">{{ $formatearMonto(
+                                    (float) ($row['saldo_inicial'] ?? 0)
+                                    + (float) ($row['total_debe'] ?? 0)
+                                    - (float) ($row['total_haber'] ?? 0)
+                                ) }}</td>
                                 <td class="text-right">{{ (int) ($row['cantidad_lineas'] ?? 0) }}</td>
                             </tr>
                         @endforeach
@@ -83,11 +91,13 @@
                     <thead>
                         <tr style="background-color: #85C1E9; color: #17202A;">
                             <th>Centro de costo</th>
-                            @if (! $expandido)
-                                <th class="text-right">Saldo inicial</th>
-                            @endif
+                            <th class="text-right">Saldo inicial</th>
                             <th class="text-right">Debe</th>
                             <th class="text-right">Haber</th>
+                            @if ($expandido)
+                                <th class="text-right">Neto (H−D)</th>
+                            @endif
+                            <th class="text-right">Saldo</th>
                             <th class="text-right">Cuentas</th>
                             <th class="text-right">L&iacute;neas</th>
                         </tr>
@@ -101,11 +111,17 @@
                                         — {{ $rowCc['centrocosto_nombre'] }}
                                     @endif
                                 </td>
-                                @if (! $expandido)
-                                    <td class="text-right">{{ $formatearMonto($rowCc['saldo_inicial'] ?? 0) }}</td>
-                                @endif
+                                <td class="text-right">{{ $formatearMonto($rowCc['saldo_inicial'] ?? 0) }}</td>
                                 <td class="text-right">{{ $formatearMonto($rowCc['total_debe'] ?? 0) }}</td>
                                 <td class="text-right">{{ $formatearMonto($rowCc['total_haber'] ?? 0) }}</td>
+                                @if ($expandido)
+                                    <td class="text-right">{{ $formatearMonto((float) ($rowCc['total_haber'] ?? 0) - (float) ($rowCc['total_debe'] ?? 0)) }}</td>
+                                @endif
+                                <td class="text-right">{{ $formatearMonto(
+                                    (float) ($rowCc['saldo_inicial'] ?? 0)
+                                    + (float) ($rowCc['total_debe'] ?? 0)
+                                    - (float) ($rowCc['total_haber'] ?? 0)
+                                ) }}</td>
                                 <td class="text-right">{{ (int) ($rowCc['cantidad_cuentas'] ?? 0) }}</td>
                                 <td class="text-right">{{ (int) ($rowCc['cantidad_lineas'] ?? 0) }}</td>
                             </tr>

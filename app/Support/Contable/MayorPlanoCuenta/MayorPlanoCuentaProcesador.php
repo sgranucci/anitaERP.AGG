@@ -84,18 +84,18 @@ class MayorPlanoCuentaProcesador
         }
 
         if ($this->soloMovimientosVentas) {
-            // El saldo de la cuenta mezcla todos los orígenes; en modo ventas no aplica.
+            // Saldo inicial solo con movimientos de ventas desde el inicio del ejercicio.
             $planSaldo = [
                 'usar_saldos_mes' => false,
                 'por_codigo' => [],
-                'fuente' => 'omitido_solo_ventas',
+                'fuente' => 'movimientos_solo_ventas',
                 'movimientos_restados' => 0,
-                'fecha_saldo_movimientos_desde' => $fechaDesde,
+                'fecha_saldo_movimientos_desde' => $inicioEjercicio,
                 'advertencias' => [],
             ];
             $saldosInicialesPorCuenta = [];
             $omitirCargaSaldoErpCompleto = true;
-            $fechaSaldoMovimientosDesde = $fechaDesde;
+            $fechaSaldoMovimientosDesde = $inicioEjercicio;
         } else {
             $planSaldo = $this->planSaldoInicialDesdeSaldosMes(
                 $empresaIds,
@@ -126,7 +126,8 @@ class MayorPlanoCuentaProcesador
             $cuentaHasta,
             $cuentas,
             $this->soloMovimientosVentas
-                || ($omitirCargaSaldoErpCompleto && $fechaSaldoMovimientosDesde <= 0),
+                ? true
+                : ($omitirCargaSaldoErpCompleto && $fechaSaldoMovimientosDesde <= 0),
         );
 
         $erroresBridge = $datos['errores'] ?? [];
@@ -628,10 +629,16 @@ class MayorPlanoCuentaProcesador
         $movs = [];
         $centrocostoFiltro ??= new MayorPlanoCuentaCentrocostoFiltroSupport();
 
-        foreach ($ctamov as $linea) {
-            $mov = $this->desdeCtamov($linea, $leyendasPago);
-            if ($mov !== null && $this->movimientoAplica($mov, $monedaConverter, $monedaReporteId, $soloMonedaOrigen, $modoInclusionAsientos, $cuentaDesde, $cuentaHasta, $cuentas, $centrocostoFiltro)) {
-                $movs[] = $mov;
+        // El mayor de ventas es el subdiario sistema V. Los ctamov VTA del ERP
+        // (asi_mon_ref = -1) duplican facturas que ya están en subdiario.
+        $omitirCtamov = $this->soloMovimientosVentas && $incluyeSubdiario && $subdiario !== [];
+
+        if (! $omitirCtamov) {
+            foreach ($ctamov as $linea) {
+                $mov = $this->desdeCtamov($linea, $leyendasPago);
+                if ($mov !== null && $this->movimientoAplica($mov, $monedaConverter, $monedaReporteId, $soloMonedaOrigen, $modoInclusionAsientos, $cuentaDesde, $cuentaHasta, $cuentas, $centrocostoFiltro)) {
+                    $movs[] = $mov;
+                }
             }
         }
 

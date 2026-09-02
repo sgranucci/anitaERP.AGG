@@ -17,10 +17,10 @@ if (array_key_exists('path_sistema', $data) && trim((string) $data['path_sistema
 }
 $sistema = (array_key_exists('sistema', $data) ? $data['sistema'] : 'ventas');
 $proceso = getmypid();
-$ts = substr((string) microtime(true), 0, 8);
+$ts = str_replace('.', '', sprintf('%.6F', microtime(true))).'_'.$proceso;
 
 $_nombre_file = $path_sistema.'/'.$sistema.'/cmd_sql.'.$ts.'.sql';
-$_nombre_ret = $path_sistema.'/'.$sistema.'/cmd_sql.'.$ts.'-'.$data['acc'].'-'.$proceso.'.csv';
+$_nombre_ret = $path_sistema.'/'.$sistema.'/cmd_sql.'.$ts.'-'.$data['acc'].'.csv';
 
 if (array_key_exists('DB_NAME', $data)) {
 	putenv ("DBPATH="        . $data["IFX_DB_PATH"]);

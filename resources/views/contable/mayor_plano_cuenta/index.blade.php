@@ -168,7 +168,7 @@
                                     </div>
                                     <small class="text-muted d-block mt-2">
                                         El subdiario completa las imputaciones que no existen en ctamov.
-                                        El tilde de ventas filtra sistema V (subdiario/subhist/ctamov) y asientos de facturas de venta del ERP; muestra solo totales por cuenta, sin saldo inicial.
+                                        El tilde de ventas filtra sistema V; muestra totales por cuenta con saldo inicial de ventas desde el inicio del ejercicio y saldo (SI + Debe − Haber).
                                     </small>
                                 </div>
                             </div>

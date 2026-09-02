@@ -3,6 +3,7 @@
 namespace App\Support\Contable\MayorPlanoCuenta;
 
 use App\ApiAnita;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -19,6 +20,15 @@ class MayorPlanoCuentaAnitaBridgeReader
         .'ctav_sistema,ctav_tipo_asiento,ctav_ccosto,ctav_balancea,ctav_o_compra,ctav_asi_mon_ref,ctav_desc_mov';
 
     private const SUBDIARIO_CAMPOS = 'subd_empresa,subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,'
+        .'subd_emisor,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_nro_operacion,subd_ref_tipo,subd_ref_letra,'
+        .'subd_ref_sucursal,subd_ref_nro,subd_importe,subd_cod_mon,subd_cotizacion,subd_nro_asiento,'
+        .'subd_nro_interno,subd_ccosto_cta,subd_ccosto_con,subd_desc_mov';
+
+    /**
+     * El Bierzo: UNLOAD/WHERE sobre subd_empresa no devuelve filas (columna no usable en el bridge).
+     * El Informix /usr2/bierzo ya es el mayor de esa instalación.
+     */
+    private const SUBDIARIO_CAMPOS_SIN_EMPRESA = 'subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,'
         .'subd_emisor,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_nro_operacion,subd_ref_tipo,subd_ref_letra,'
         .'subd_ref_sucursal,subd_ref_nro,subd_importe,subd_cod_mon,subd_cotizacion,subd_nro_asiento,'
         .'subd_nro_interno,subd_ccosto_cta,subd_ccosto_con,subd_desc_mov';
@@ -157,6 +167,9 @@ class MayorPlanoCuentaAnitaBridgeReader
             $filtroSubdiario .= MayorPlanoCuentaVentasFiltroSupport::condicionSqlSistema('subd_sistema');
         }
 
+        $filtraEmpresaSubdiario = $this->subdiarioUsaColumnaEmpresa();
+        $subdiarioYaCargado = false;
+
         foreach ($empresaIds as $empresaId) {
             $empresaId = (int) $empresaId;
             if ($empresaId <= 0) {
@@ -196,17 +209,15 @@ class MayorPlanoCuentaAnitaBridgeReader
                 ),
             );
 
-            if ($incluyeSubdiario) {
+            if ($incluyeSubdiario && ($filtraEmpresaSubdiario || ! $subdiarioYaCargado)) {
                 if ($fechaSaldoHasta >= $fechaSaldoDesde) {
                     $subdiario = array_merge(
                         $subdiario,
-                        $this->listar(
-                            'contab',
-                            'subdiario',
-                            self::SUBDIARIO_CAMPOS,
-                            ' WHERE subd_empresa='.$empresaId
-                            .' AND subd_fecha BETWEEN '.$fechaSaldoDesde.' AND '.$fechaSaldoHasta
-                            .$filtroSubdiario,
+                        $this->listarSubdiario(
+                            $empresaId,
+                            $fechaSaldoDesde,
+                            $fechaSaldoHasta,
+                            $filtroSubdiario,
                             $errores,
                             'subdiario-saldo-empresa-'.$empresaId,
                         ),
@@ -215,17 +226,16 @@ class MayorPlanoCuentaAnitaBridgeReader
 
                 $subdiario = array_merge(
                     $subdiario,
-                    $this->listar(
-                        'contab',
-                        'subdiario',
-                        self::SUBDIARIO_CAMPOS,
-                        ' WHERE subd_empresa='.$empresaId
-                        .' AND subd_fecha BETWEEN '.$fechaDesde.' AND '.$fechaHasta
-                        .$filtroSubdiario,
+                    $this->listarSubdiario(
+                        $empresaId,
+                        $fechaDesde,
+                        $fechaHasta,
+                        $filtroSubdiario,
                         $errores,
                         'subdiario-periodo-empresa-'.$empresaId,
                     ),
                 );
+                $subdiarioYaCargado = true;
             }
 
             $timings['empresa_'.$empresaId.'_ms'] = round((microtime(true) - $tEmp) * 1000, 1);
@@ -321,6 +331,52 @@ class MayorPlanoCuentaAnitaBridgeReader
         }
 
         return false;
+    }
+
+    /**
+     * En El Bierzo el UNLOAD de subd_empresa (y el WHERE equivalente) no devuelve filas.
+     */
+    private function subdiarioUsaColumnaEmpresa(): bool
+    {
+        return ! EntornoEmpresaSupport::esElBierzo();
+    }
+
+    /**
+     * @param  list<string>  $errores
+     * @return list<object>
+     */
+    private function listarSubdiario(
+        int $empresaId,
+        int $fechaDesde,
+        int $fechaHasta,
+        string $filtroExtra,
+        array &$errores,
+        string $etiqueta,
+    ): array {
+        $usaEmpresa = $this->subdiarioUsaColumnaEmpresa();
+        $where = ' WHERE subd_fecha BETWEEN '.$fechaDesde.' AND '.$fechaHasta.$filtroExtra;
+        if ($usaEmpresa) {
+            $where = ' WHERE subd_empresa='.$empresaId
+                .' AND subd_fecha BETWEEN '.$fechaDesde.' AND '.$fechaHasta
+                .$filtroExtra;
+        }
+
+        $filas = $this->listar(
+            'contab',
+            'subdiario',
+            $usaEmpresa ? self::SUBDIARIO_CAMPOS : self::SUBDIARIO_CAMPOS_SIN_EMPRESA,
+            $where,
+            $errores,
+            $etiqueta,
+        );
+
+        if (! $usaEmpresa) {
+            foreach ($filas as $fila) {
+                $fila->subd_empresa = $empresaId;
+            }
+        }
+
+        return $filas;
     }
 
     /**
