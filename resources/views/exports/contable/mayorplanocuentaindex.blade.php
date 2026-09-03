@@ -1,7 +1,12 @@
 @php
     $multiempresa = (bool) ($multiempresa ?? false);
+    $soloVentas = ! empty($filtros['solo_movimientos_ventas']);
+    $resumen = is_array($resumen ?? null) ? $resumen : [];
+    $mostrarCcResumen = collect($resumen)->contains(fn ($row) => array_key_exists('centrocosto_codigo', $row));
     $mostrarCentrocosto = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros ?? []);
-    $colSpan = ($multiempresa ? 17 : 16) - ($mostrarCentrocosto ? 0 : 1);
+    $colSpan = $soloVentas
+        ? (8 + ($mostrarCcResumen ? 1 : 0))
+        : (($multiempresa ? 17 : 16) - ($mostrarCentrocosto ? 0 : 1));
     $colSpanAntesImportes = $mostrarCentrocosto ? 12 : 11;
     $vaciasSaldoInicial = $mostrarCentrocosto ? 14 : 13;
     $totales = is_array($totales ?? null) ? $totales : [];
@@ -11,6 +16,7 @@
     );
     $fmt = \App\Support\Export\ExcelFormatoNumero::formateadorMonto($formatoExcel, 2);
     $fmtCotiz = \App\Support\Export\ExcelFormatoNumero::formateadorMonto($formatoExcel, 4);
+    $cuadre = $cuadre_cobro_ventas ?? null;
 @endphp
 <table>
     @if (! empty($reservarFilaLogoExcel))
@@ -40,6 +46,82 @@
         </tr>
     @endif
 
+    @if ($soloVentas)
+    <tr>
+        <th>Cuenta</th>
+        <th>Nombre</th>
+        @if ($mostrarCcResumen)
+            <th>Centro de costo</th>
+        @endif
+        <th>Saldo inicial</th>
+        <th>Debe</th>
+        <th>Haber</th>
+        <th>Neto (H-D)</th>
+        <th>Saldo</th>
+        <th>Líneas</th>
+    </tr>
+    @foreach ($resumen as $row)
+        @php
+            $debe = (float) ($row['total_debe'] ?? 0);
+            $haber = (float) ($row['total_haber'] ?? 0);
+            $saldoIni = (float) ($row['saldo_inicial'] ?? 0);
+        @endphp
+        <tr>
+            <td>{{ $row['cuenta_codigo'] ?? '' }}</td>
+            <td>{{ $row['cuenta_nombre'] ?? '' }}</td>
+            @if ($mostrarCcResumen)
+                <td>
+                    {{ ($row['centrocosto_codigo'] ?? '') !== '' ? $row['centrocosto_codigo'] : 'Sin CC' }}
+                    @if (! empty($row['centrocosto_nombre']))
+                        {{ $row['centrocosto_nombre'] }}
+                    @endif
+                </td>
+            @endif
+            <td>{{ $fmt($saldoIni) }}</td>
+            <td>{{ $fmt($debe) }}</td>
+            <td>{{ $fmt($haber) }}</td>
+            <td>{{ $fmt($haber - $debe) }}</td>
+            <td>{{ $fmt($saldoIni + $debe - $haber) }}</td>
+            <td>{{ (int) ($row['cantidad_lineas'] ?? 0) }}</td>
+        </tr>
+    @endforeach
+    @if (! empty($cuadre))
+        <tr>
+            <td colspan="{{ $colSpan }}"></td>
+        </tr>
+        <tr>
+            <td colspan="{{ $colSpan }}">Cuadre total comprobantes (listado IVA ventas / subdiario)</td>
+        </tr>
+        <tr>
+            <th>Concepto</th>
+            <th>Neto Debe (D-H)</th>
+            @for ($i = 2; $i < $colSpan; $i++)
+                <th></th>
+            @endfor
+        </tr>
+        <tr>
+            <td>Deudores por ventas ({{ $cuadre['deudores_codigo'] ?: '113100' }})</td>
+            <td>{{ $fmt($cuadre['deudores'] ?? 0) }}</td>
+            @for ($i = 2; $i < $colSpan; $i++)
+                <td></td>
+            @endfor
+        </tr>
+        <tr>
+            <td>Caja contado ({{ $cuadre['caja_codigo'] ?: '111100' }})</td>
+            <td>{{ $fmt($cuadre['caja'] ?? 0) }}</td>
+            @for ($i = 2; $i < $colSpan; $i++)
+                <td></td>
+            @endfor
+        </tr>
+        <tr>
+            <td>Total cobro (= columna Total del listado)</td>
+            <td>{{ $fmt($cuadre['total_cobro'] ?? 0) }}</td>
+            @for ($i = 2; $i < $colSpan; $i++)
+                <td></td>
+            @endfor
+        </tr>
+    @endif
+    @else
     <tr>
         <th>Fecha</th>
         <th>N.Asi.</th>
@@ -136,4 +218,5 @@
             </tr>
         @endif
     @endforeach
+    @endif
 </table>

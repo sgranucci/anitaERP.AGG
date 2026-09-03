@@ -63,11 +63,18 @@
     </table>
 
     @if (! empty($filtros['solo_movimientos_ventas']) && ! empty($resumen))
+        @php
+            $mostrarCcPdf = collect($resumen)->contains(fn ($row) => array_key_exists('centrocosto_codigo', $row));
+            $cuadrePdf = $cuadreCobroVentas ?? $cuadre_cobro_ventas ?? null;
+        @endphp
         <table class="data">
             <thead>
                 <tr>
                     <th>Cuenta</th>
                     <th>Nombre</th>
+                    @if ($mostrarCcPdf)
+                        <th>Centro de costo</th>
+                    @endif
                     <th class="text-right">Saldo inicial</th>
                     <th class="text-right">Debe</th>
                     <th class="text-right">Haber</th>
@@ -81,6 +88,14 @@
                     <tr>
                         <td>{{ $row['cuenta_codigo'] ?? '' }}</td>
                         <td>{{ $row['cuenta_nombre'] ?? '' }}</td>
+                        @if ($mostrarCcPdf)
+                            <td>
+                                {{ ($row['centrocosto_codigo'] ?? '') !== '' ? $row['centrocosto_codigo'] : 'Sin CC' }}
+                                @if (! empty($row['centrocosto_nombre']))
+                                    — {{ $row['centrocosto_nombre'] }}
+                                @endif
+                            </td>
+                        @endif
                         <td class="text-right">{{ number_format((float) ($row['saldo_inicial'] ?? 0), 2, ',', '.') }}</td>
                         <td class="text-right">{{ number_format((float) ($row['total_debe'] ?? 0), 2, ',', '.') }}</td>
                         <td class="text-right">{{ number_format((float) ($row['total_haber'] ?? 0), 2, ',', '.') }}</td>
@@ -91,6 +106,31 @@
                 @endforeach
             </tbody>
         </table>
+        @if (! empty($cuadrePdf))
+            <p class="meta" style="margin-top: 10px; font-weight: bold;">Cuadre total comprobantes (listado IVA ventas / subdiario)</p>
+            <table class="data" style="width: 60%;">
+                <thead>
+                    <tr>
+                        <th>Concepto</th>
+                        <th class="text-right">Neto Debe (D-H)</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Deudores por ventas ({{ $cuadrePdf['deudores_codigo'] ?: '113100' }})</td>
+                        <td class="text-right">{{ number_format((float) ($cuadrePdf['deudores'] ?? 0), 2, ',', '.') }}</td>
+                    </tr>
+                    <tr>
+                        <td>Caja contado ({{ $cuadrePdf['caja_codigo'] ?: '111100' }})</td>
+                        <td class="text-right">{{ number_format((float) ($cuadrePdf['caja'] ?? 0), 2, ',', '.') }}</td>
+                    </tr>
+                    <tr>
+                        <td>Total cobro (= columna Total del listado)</td>
+                        <td class="text-right">{{ number_format((float) ($cuadrePdf['total_cobro'] ?? 0), 2, ',', '.') }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        @endif
     @else
     <table class="data">
         @include('contable.mayor_plano_cuenta.partials.tabla_datos', [

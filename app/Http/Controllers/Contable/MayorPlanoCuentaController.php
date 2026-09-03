@@ -64,6 +64,7 @@ class MayorPlanoCuentaController extends Controller
         $totales = null;
         $erroresBridge = [];
         $resultado = null;
+        $cuadreCobroVentas = null;
 
         if ($request->boolean('consultar') && MayorPlanoCuentaListadoFiltros::tieneCriteriosAplicados($filtros)) {
             MayorPlanoCuentaRuntimeSupport::elevarLimites();
@@ -83,6 +84,9 @@ class MayorPlanoCuentaController extends Controller
             $erroresBridge = $resultado['errores_bridge'] ?? [];
             $perPage = max(10, min(200, (int) $request->input('per_page', 50)));
             $soloTotalesVentas = ! empty($filtros['solo_movimientos_ventas']);
+            $cuadreCobroVentas = $soloTotalesVentas
+                ? $this->reporteService->cuadreCobroVentasDesdeResumen($resumen)
+                : null;
             $filasAplanadas = $soloTotalesVentas
                 ? []
                 : $this->reporteService->aplanarFilas($resultado, $filtros, false);
@@ -126,6 +130,7 @@ class MayorPlanoCuentaController extends Controller
             'centrocostos_texto' => $this->reporteService->formatearCentrocostosTexto($filtros),
             'origen_movimientos_texto' => $this->reporteService->formatearOrigenMovimientosTexto($filtros),
             'solo_totales_ventas' => ! empty($filtros['solo_movimientos_ventas']),
+            'cuadre_cobro_ventas' => $cuadreCobroVentas ?? null,
             'mes_actual' => (int) date('n'),
             'anio_actual' => (int) date('Y'),
             'puede_ver_asiento' => can('listar-asiento', false) || can('editar-asiento', false),
@@ -176,6 +181,12 @@ class MayorPlanoCuentaController extends Controller
         $formatoNorm = strtoupper($formato);
 
         if ($formatoNorm === 'EXCEL_PLANO') {
+            if (! empty($filtros['solo_movimientos_ventas'])) {
+                return (new MayorPlanoCuentaExport($this->reporteService))
+                    ->parametros($filtros, $resultado)
+                    ->download($this->armarNombreArchivoExport($filtros, 'xlsx'));
+            }
+
             return (new MayorPlanoCuentaExcelPlanoExport($this->reporteService))
                 ->parametros($filtros, $resultado)
                 ->download($this->armarNombreArchivoExport($filtros, 'xlsx', 'mayor_plano_anita'));
@@ -183,8 +194,13 @@ class MayorPlanoCuentaController extends Controller
 
         $filas = $this->reporteService->aplanarFilas($resultado, $filtros, true);
         $resumen = $this->reporteService->resumenPorCuenta($resultado);
+        $cuadreCobroVentas = ! empty($filtros['solo_movimientos_ventas'])
+            ? $this->reporteService->cuadreCobroVentasDesdeResumen($resumen)
+            : null;
         $totales = $this->armarTotalesDesdeResultado($resultado);
-        $titulo = 'Mayor analítico por cuenta contable';
+        $titulo = ! empty($filtros['solo_movimientos_ventas'])
+            ? 'Mayor analítico por cuenta — solo movimientos de ventas'
+            : 'Mayor analítico por cuenta contable';
         $subtitulo = $this->armarSubtituloExport($filtros);
 
         switch ($formatoNorm) {
@@ -200,6 +216,7 @@ class MayorPlanoCuentaController extends Controller
                     'totales',
                     'titulo',
                     'subtitulo',
+                    'cuadreCobroVentas',
                 ))->render();
 
                 return $this->descargarPdf(
@@ -575,6 +592,9 @@ class MayorPlanoCuentaController extends Controller
 
                 $filas = $this->reporteService->aplanarFilas($resultado, $filtrosEmpresa, true);
                 $resumen = $this->reporteService->resumenPorCuenta($resultado);
+                $cuadreCobroVentas = ! empty($filtros['solo_movimientos_ventas'])
+                    ? $this->reporteService->cuadreCobroVentasDesdeResumen($resumen)
+                    : null;
                 $totales = $this->armarTotalesDesdeResultado($resultado);
                 $subtitulo = $this->armarSubtituloExport($filtrosEmpresa);
 
@@ -585,6 +605,7 @@ class MayorPlanoCuentaController extends Controller
                     'totales' => $totales,
                     'titulo' => $titulo,
                     'subtitulo' => $subtitulo,
+                    'cuadreCobroVentas' => $cuadreCobroVentas,
                 ])->render();
 
                 $temp = $dir.'/mayor_plano_tmp_'.uniqid('', true).'.pdf';

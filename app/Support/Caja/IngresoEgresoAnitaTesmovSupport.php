@@ -570,11 +570,12 @@ final class IngresoEgresoAnitaTesmovSupport
     ): void {
         $tipoAp = self::tipoAplicacionPorCuentaCaja($codigoCuenta);
         $imputacion = self::imputacionTctesDesdeCodigo($codigoCuenta);
-        // pago.c TES: axp_nro=0, axp_fecha_co=0, axp_sucursal_comp=0, letra_comp=letra OP
+        // pago.c TES: axp_nro=0, axp_fecha_co=0, letra_comp=letra OP.
+        // axp_sucursal_cob = sucursal de la OP (empresa Anita / nroemp). Con 0 Anita no encuentra la OP.
         $nroAp = $desdePagoProveedor ? 0 : (int) $ctx['nro'];
         $fechaCo = $desdePagoProveedor ? '0' : $ctx['fecha'];
         $letraComp = $desdePagoProveedor ? self::esc($ctx['letra']) : ' ';
-        $sucursalComp = $desdePagoProveedor ? 0 : (int) $ctx['sucursal'];
+        $sucursalCob = $desdePagoProveedor ? (int) $ctx['empresa'] : (int) $ctx['sucursal'];
 
         $raw = (new ApiAnita)->apiCallEscritura([
             'tabla' => 'auxpag',
@@ -614,7 +615,7 @@ final class IngresoEgresoAnitaTesmovSupport
                 '".$letraComp."',
                 '".$ctx['sucursal']."',
                 '".self::esc($ctx['letra'])."',
-                '".$sucursalComp."',
+                '".$sucursalCob."',
                 '0',
                 '0',
                 '".$ctx['empresa']."',
@@ -628,7 +629,8 @@ final class IngresoEgresoAnitaTesmovSupport
     /**
      * pago.c graba_auxpag(FAC): una fila por factura aplicada.
      * axp_tipo_ap = tipo del comprobante (FNB/FAC/… o APA si es OPA),
-     * axp_nro / letra_comp / sucursal_cob = clave de la factura,
+     * axp_nro / letra_comp / axp_sucursal = clave de la factura (sucursal_comp),
+     * axp_sucursal_cob = sucursal de la OP (empresa Anita), clave MultiEmpresa,
      * axp_banco = nro de cuota (6 dígitos), axp_nro_interno = interno Anita.
      *
      * @param  array<string, mixed>  $ctx
@@ -729,9 +731,9 @@ final class IngresoEgresoAnitaTesmovSupport
                     '".$fechaCo."',
                     '".$bancoCuota."',
                     '".self::esc((string) $lado['letra'])."',
-                    '".$ctx['sucursal']."',
-                    '".self::esc($ctx['letra'])."',
                     '".(int) $lado['sucursal']."',
+                    '".self::esc($ctx['letra'])."',
+                    '".$ctx['empresa']."',
                     '0',
                     '".(int) ($lado['nro_interno'] ?? 0)."',
                     '".$ctx['empresa']."',

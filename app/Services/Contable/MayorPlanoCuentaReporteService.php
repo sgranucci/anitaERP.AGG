@@ -181,6 +181,50 @@ class MayorPlanoCuentaReporteService
     }
 
     /**
+     * Cuadre contra total del listado IVA ventas / subdiario: el total del comprobante
+     * imputa Debe en Deudores (113100) o Caja (111100) según contado/cuenta corriente.
+     *
+     * @param  list<array<string, mixed>>  $resumen
+     * @return array{deudores: float, caja: float, total_cobro: float, deudores_codigo: string, caja_codigo: string}|null
+     */
+    public function cuadreCobroVentasDesdeResumen(array $resumen): ?array
+    {
+        $deudores = 0.0;
+        $caja = 0.0;
+        $codDeudores = '';
+        $codCaja = '';
+
+        foreach ($resumen as $row) {
+            $codigo = (int) preg_replace('/\D/', '', (string) ($row['cuenta_codigo'] ?? ''));
+            if ($codigo <= 0) {
+                continue;
+            }
+
+            $netoDebe = round((float) ($row['total_debe'] ?? 0) - (float) ($row['total_haber'] ?? 0), 2);
+
+            if ($codigo >= 113100000 && $codigo < 113101000) {
+                $deudores = round($deudores + $netoDebe, 2);
+                $codDeudores = (string) ($row['cuenta_codigo'] ?? $codDeudores);
+            } elseif ($codigo >= 111100000 && $codigo < 111101000) {
+                $caja = round($caja + $netoDebe, 2);
+                $codCaja = (string) ($row['cuenta_codigo'] ?? $codCaja);
+            }
+        }
+
+        if ($deudores === 0.0 && $caja === 0.0) {
+            return null;
+        }
+
+        return [
+            'deudores' => $deudores,
+            'caja' => $caja,
+            'total_cobro' => round($deudores + $caja, 2),
+            'deudores_codigo' => $codDeudores,
+            'caja_codigo' => $codCaja,
+        ];
+    }
+
+    /**
      * @param  array<string, mixed>  $resultado
      * @return list<array<string, mixed>>
      */

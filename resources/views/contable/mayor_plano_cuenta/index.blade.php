@@ -345,6 +345,10 @@
                         'expandido' => ! empty($solo_totales_ventas),
                     ])
 
+                    @include('contable.mayor_plano_cuenta.partials.cuadre_cobro_ventas', [
+                        'cuadre_cobro_ventas' => $cuadre_cobro_ventas ?? null,
+                    ])
+
                     @if (empty($solo_totales_ventas))
                     <div class="px-3 pt-2 pb-1">
                         <h6 class="mb-0 font-weight-bold">Detalle de movimientos</h6>

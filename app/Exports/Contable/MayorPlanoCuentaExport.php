@@ -81,7 +81,14 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
         $resultado = $this->resultado ?? $this->reporteService->generarDesdeFiltros($this->filtros);
         $this->resultado = $resultado;
 
-        $filas = $this->reporteService->aplanarFilas($resultado, $this->filtros, true);
+        $soloVentas = $this->esTotalesVentas();
+        $resumen = $soloVentas ? $this->reporteService->resumenPorCuenta($resultado) : [];
+        $cuadre = $soloVentas
+            ? $this->reporteService->cuadreCobroVentasDesdeResumen($resumen)
+            : null;
+        $filas = $soloVentas
+            ? []
+            : $this->reporteService->aplanarFilas($resultado, $this->filtros, true);
         $totales = [
             'cantidad_filas' => (int) ($resultado['totales']['lineas'] ?? 0),
             'cantidad_cuentas' => (int) ($resultado['totales']['cuentas'] ?? 0),
@@ -92,7 +99,12 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
         $this->multiempresa = count($this->filtros['empresa_ids'] ?? []) > 1
             || empty($this->filtros['consolidar_empresas']);
 
-        $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($filas);
+        $coleccionLogos = $filas !== []
+            ? $filas
+            : collect($this->filtros['empresa_ids'] ?? [])->map(fn ($id) => [
+                'empresa_id' => (int) $id,
+            ]);
+        $this->rutasLogosExcel = EmpresaLogoArchivo::rutasLogosCabeceraDesdeColeccion($coleccionLogos);
         $this->hayFilaLogos = count($this->rutasLogosExcel) > 0;
 
         $subtituloPartes = [
@@ -108,9 +120,13 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
 
         return view('exports.contable.mayorplanocuentaindex', [
             'filas' => $filas,
+            'resumen' => $resumen,
+            'cuadre_cobro_ventas' => $cuadre,
             'totales' => $totales,
             'filtros' => $this->filtros,
-            'titulo' => 'Mayor analítico por cuenta contable',
+            'titulo' => $soloVentas
+                ? 'Mayor analítico por cuenta — solo movimientos de ventas'
+                : 'Mayor analítico por cuenta contable',
             'subtitulo' => $subtitulo,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'multiempresa' => $this->multiempresa,
@@ -140,13 +156,34 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
     }
 
+    private function esTotalesVentas(): bool
+    {
+        return ! empty($this->filtros['solo_movimientos_ventas']);
+    }
+
     private function mostrarColumnaCentrocosto(): bool
     {
         return MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($this->filtros);
     }
 
+    private function mostrarCcResumen(): bool
+    {
+        $resultado = $this->resultado ?? [];
+        foreach ($resultado['secciones'] ?? [] as $seccion) {
+            if (($seccion['grupos_cc'] ?? []) !== []) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private function colUltima(): string
     {
+        if ($this->esTotalesVentas()) {
+            return $this->mostrarCcResumen() ? 'I' : 'H';
+        }
+
         $conCc = $this->mostrarColumnaCentrocosto();
         if ($this->multiempresa) {
             return $conCc ? 'Q' : 'P';
@@ -158,6 +195,33 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
     public function columnFormats(): array
     {
         $formato = ExcelFormatoNumero::preferenciaGlobal();
+        if ($this->esTotalesVentas()) {
+            if ($this->mostrarCcResumen()) {
+                return [
+                    'A' => NumberFormat::FORMAT_TEXT,
+                    'B' => NumberFormat::FORMAT_TEXT,
+                    'C' => NumberFormat::FORMAT_TEXT,
+                    'D' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                    'E' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                    'F' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                    'G' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                    'H' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                    'I' => NumberFormat::FORMAT_NUMBER,
+                ];
+            }
+
+            return [
+                'A' => NumberFormat::FORMAT_TEXT,
+                'B' => NumberFormat::FORMAT_TEXT,
+                'C' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'D' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'E' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'F' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'G' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'H' => NumberFormat::FORMAT_NUMBER,
+            ];
+        }
+
         if ($this->mostrarColumnaCentrocosto()) {
             $fmt = [
                 'A' => NumberFormat::FORMAT_TEXT,
@@ -197,6 +261,33 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
 
     public function columnWidths(): array
     {
+        if ($this->esTotalesVentas()) {
+            if ($this->mostrarCcResumen()) {
+                return [
+                    'A' => 14,
+                    'B' => 36,
+                    'C' => 22,
+                    'D' => 16,
+                    'E' => 16,
+                    'F' => 16,
+                    'G' => 16,
+                    'H' => 16,
+                    'I' => 10,
+                ];
+            }
+
+            return [
+                'A' => 14,
+                'B' => 40,
+                'C' => 16,
+                'D' => 16,
+                'E' => 16,
+                'F' => 16,
+                'G' => 16,
+                'H' => 10,
+            ];
+        }
+
         // Anchos para importes con separadores (ej. -12.345.678,90) sin #####.
         // No achicar L–O: Excel muestra ##### si el ancho no alcanza.
         $widths = [
@@ -333,6 +424,18 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
                     ->applyFromArray($estiloCabecera);
                 $sheet->getRowDimension($filaCabDetalle)->setRowHeight(30);
 
+                if ($this->esTotalesVentas()) {
+                    $highestRow = min($sheet->getHighestRow(), 800);
+                    for ($row = $filaCabDetalle + 1; $row <= $highestRow; $row++) {
+                        $a = trim((string) ($sheet->getCell('A'.$row)->getValue() ?? ''));
+                        if ($a === 'Concepto') {
+                            $sheet->getStyle('A'.$row.':'.$colUltima.$row)->applyFromArray($estiloCabecera);
+                            $sheet->getRowDimension($row)->setRowHeight(24);
+                            break;
+                        }
+                    }
+                }
+
                 if ($filaCabDetalle <= 40) {
                     $sheet->freezePane('A'.($filaCabDetalle + 1));
                 } else {
@@ -362,6 +465,9 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
             if ($a === 'Fecha' && (str_starts_with($b, 'N.Asi') || $b === 'N.Asi.')) {
                 return $row;
             }
+            if ($a === 'Cuenta' && $b === 'Nombre') {
+                return $row;
+            }
             if ($a === 'Fecha') {
                 $c = trim((string) ($sheet->getCell('C'.$row)->getValue() ?? ''));
                 if ($c === 'Tip') {
@@ -381,9 +487,15 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
         }
 
         $desde = max(1, $this->filaPrimeraDatosExcel);
-        $colsImportes = $this->mostrarColumnaCentrocosto()
-            ? ['K', 'L', 'M', 'N', 'O', 'P']
-            : ['J', 'K', 'L', 'M', 'N', 'O'];
+        if ($this->esTotalesVentas()) {
+            $colsImportes = $this->mostrarCcResumen()
+                ? ['D', 'E', 'F', 'G', 'H']
+                : ['C', 'D', 'E', 'F', 'G'];
+        } else {
+            $colsImportes = $this->mostrarColumnaCentrocosto()
+                ? ['K', 'L', 'M', 'N', 'O', 'P']
+                : ['J', 'K', 'L', 'M', 'N', 'O'];
+        }
         foreach ($colsImportes as $col) {
             $sheet->getStyle($col.$desde.':'.$col.$highestRow)->applyFromArray([
                 'alignment' => [
