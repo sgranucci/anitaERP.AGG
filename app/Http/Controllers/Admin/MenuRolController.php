@@ -9,6 +9,7 @@ use App\Models\Admin\Permiso;
 use App\Models\Admin\Rol;
 use App\Models\Contable\Centrocosto;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
+use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
 use Illuminate\Support\Collection;
 
 class MenuRolController extends Controller
@@ -96,8 +97,15 @@ class MenuRolController extends Controller
 
         $menuIds = $this->collectMenuIdsConDescendientes((int) $menu->id);
         $nombresMenu = Menu::whereIn('id', $menuIds)->pluck('nombre', 'id');
+        $slugsExtra = OrdencompraSectorVisibilidadSupport::slugsExtraParaMenuIds($menuIds);
 
-        $permisos = Permiso::whereIn('menu_id', $menuIds)
+        $permisos = Permiso::query()
+            ->where(function ($q) use ($menuIds, $slugsExtra) {
+                $q->whereIn('menu_id', $menuIds);
+                if ($slugsExtra !== []) {
+                    $q->orWhereIn('slug', $slugsExtra);
+                }
+            })
             ->with('roles')
             ->orderBy('nombre')
             ->get()
