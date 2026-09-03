@@ -2,6 +2,7 @@
 
 namespace App\Support\Contable\MayorPlanoCuenta;
 
+use App\Services\Contable\AnitaAsientoImportService;
 use App\Support\Contable\CuentacontableSaldoMesSupport;
 use App\Support\Contable\MayorConcepto\MayorConceptoMonedaConverter;
 use App\Support\Contable\SumasSaldos\SumasSaldosProcesador;
@@ -68,35 +69,48 @@ class MayorPlanoCuentaProcesador
             $fechaDesde,
             $inicioEjercicio,
         );
-        $diagSaldo = $this->reader->diagnosticarSaldoInicial(
-            $empresaIds,
-            $fechaDesde,
-            $fechaComienzoAjustada,
-        );
-        $fechaSaldoDesde = (int) ($diagSaldo['fecha_saldo_desde'] ?? MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD);
         $cutoffErp = $this->fuenteErpHastaYmd();
 
-        // Tramo cubierto por asientos ERP importados: no aplicar piso Anita 20260101.
-        if ($cutoffErp > 0 && $fechaDesde <= $cutoffErp) {
-            $fechaSaldoDesde = $inicioEjercicio;
-            $diagSaldo['fecha_saldo_desde'] = $fechaSaldoDesde;
-            $diagSaldo['origen'] = 'erp_ejercicio';
-        }
-
         if ($this->soloMovimientosVentas) {
-            // Saldo inicial solo con movimientos de ventas desde el inicio del ejercicio.
+            // Totales del mes: subdiario sistema V (detalle Anita) + ctamov ERP (asi_mon_ref=-1),
+            // sin tramo de saldo previo. El resumen ctamov (asi_mon_ref ≠ -1) se deduplica al normalizar.
+            $diagSaldo = [
+                'fecha_comienzo_ejercicio' => $inicioEjercicio,
+                'fecha_comienzo_ajustada' => $fechaComienzoAjustada,
+                'fecha_saldo_desde' => $fechaDesde,
+                'origen_minimo' => MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD,
+                'por_empresa' => [],
+                'origen' => 'solo_ventas_periodo',
+            ];
+            $fechaSaldoDesde = $fechaDesde;
             $planSaldo = [
                 'usar_saldos_mes' => false,
                 'por_codigo' => [],
                 'fuente' => 'movimientos_solo_ventas',
                 'movimientos_restados' => 0,
-                'fecha_saldo_movimientos_desde' => $inicioEjercicio,
+                'fecha_saldo_movimientos_desde' => $fechaDesde,
                 'advertencias' => [],
             ];
             $saldosInicialesPorCuenta = [];
             $omitirCargaSaldoErpCompleto = true;
-            $fechaSaldoMovimientosDesde = $inicioEjercicio;
+            $fechaSaldoMovimientosDesde = $fechaDesde;
+            $incluyeSubdiarioEfectivo = true;
+            $soloPeriodoBridge = true;
         } else {
+            $diagSaldo = $this->reader->diagnosticarSaldoInicial(
+                $empresaIds,
+                $fechaDesde,
+                $fechaComienzoAjustada,
+            );
+            $fechaSaldoDesde = (int) ($diagSaldo['fecha_saldo_desde'] ?? MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD);
+
+            // Tramo cubierto por asientos ERP importados: no aplicar piso Anita 20260101.
+            if ($cutoffErp > 0 && $fechaDesde <= $cutoffErp) {
+                $fechaSaldoDesde = $inicioEjercicio;
+                $diagSaldo['fecha_saldo_desde'] = $fechaSaldoDesde;
+                $diagSaldo['origen'] = 'erp_ejercicio';
+            }
+
             $planSaldo = $this->planSaldoInicialDesdeSaldosMes(
                 $empresaIds,
                 $fechaDesde,
@@ -114,6 +128,8 @@ class MayorPlanoCuentaProcesador
             $saldosInicialesPorCuenta = $planSaldo['por_codigo'];
             $omitirCargaSaldoErpCompleto = (bool) ($planSaldo['usar_saldos_mes'] ?? false);
             $fechaSaldoMovimientosDesde = (int) ($planSaldo['fecha_saldo_movimientos_desde'] ?? $fechaSaldoDesde);
+            $incluyeSubdiarioEfectivo = $incluyeSubdiario;
+            $soloPeriodoBridge = false;
         }
 
         $datos = $this->cargarPeriodoHibrido(
@@ -121,13 +137,14 @@ class MayorPlanoCuentaProcesador
             $fechaDesde,
             $fechaHasta,
             $omitirCargaSaldoErpCompleto ? $fechaSaldoMovimientosDesde : $fechaSaldoDesde,
-            $incluyeSubdiario,
+            $incluyeSubdiarioEfectivo,
             $cuentaDesde,
             $cuentaHasta,
             $cuentas,
             $this->soloMovimientosVentas
                 ? true
                 : ($omitirCargaSaldoErpCompleto && $fechaSaldoMovimientosDesde <= 0),
+            $soloPeriodoBridge,
         );
 
         $erroresBridge = $datos['errores'] ?? [];
@@ -162,7 +179,7 @@ class MayorPlanoCuentaProcesador
         $movimientos = $this->normalizarMovimientos(
             $datos['ctamov'] ?? [],
             $datos['subdiario'] ?? [],
-            $incluyeSubdiario,
+            $incluyeSubdiarioEfectivo,
             $leyendasPago,
             $monedaConverter,
             $monedaReporteId,
@@ -251,7 +268,8 @@ class MayorPlanoCuentaProcesador
                 'cuentas' => $cuentas,
                 'moneda_id' => $monedaReporteId,
                 'solo_moneda_origen' => $soloMonedaOrigen,
-                'incluye_subdiario' => $incluyeSubdiario,
+                'incluye_subdiario' => $incluyeSubdiarioEfectivo,
+                'incluye_subdiario_solicitado' => $incluyeSubdiario,
                 'solo_movimientos_ventas' => $this->soloMovimientosVentas,
                 'modo_inclusion_asientos' => $modoInclusionAsientos,
                 'centrocostos_codigo' => $centrocostoFiltro->codigos(),
@@ -306,6 +324,7 @@ class MayorPlanoCuentaProcesador
         int $cuentaHasta,
         array $cuentas,
         bool $omitirCargaSaldoErp = false,
+        bool $soloPeriodoBridge = false,
     ): array {
         $cutoff = $this->fuenteErpHastaYmd();
 
@@ -321,6 +340,7 @@ class MayorPlanoCuentaProcesador
                 $cuentaHasta,
                 $cuentas,
                 $this->soloMovimientosVentas,
+                $soloPeriodoBridge,
             );
 
             $anita['ctamov'] = MayorPlanoCuentaAnitaErpMetadatosSupport::adjuntarEmisorDesdeAsientoErp(
@@ -416,6 +436,7 @@ class MayorPlanoCuentaProcesador
                 $cuentaHasta,
                 $cuentas,
                 $this->soloMovimientosVentas,
+                $soloPeriodoBridge,
             );
             $ctamov = array_merge($ctamov, $anita['ctamov'] ?? []);
             $subdiario = array_merge($subdiario, $anita['subdiario'] ?? []);
@@ -629,16 +650,18 @@ class MayorPlanoCuentaProcesador
         $movs = [];
         $centrocostoFiltro ??= new MayorPlanoCuentaCentrocostoFiltroSupport();
 
-        // El mayor de ventas es el subdiario sistema V. Los ctamov VTA del ERP
-        // (asi_mon_ref = -1) duplican facturas que ya están en subdiario.
-        $omitirCtamov = $this->soloMovimientosVentas && $incluyeSubdiario && $subdiario !== [];
+        // El mayor de ventas toma el detalle de subdiario sistema V. El ctamov de
+        // cierre (V/C/T y asi_mon_ref ≠ -1) duplica ese detalle. Las FAC del ERP
+        // (asi_mon_ref = -1) no están en subdiario: hay que sumarlas desde ctamov.
+        $omitirResumenCtamov = $this->soloMovimientosVentas && $incluyeSubdiario && $subdiario !== [];
 
-        if (! $omitirCtamov) {
-            foreach ($ctamov as $linea) {
-                $mov = $this->desdeCtamov($linea, $leyendasPago);
-                if ($mov !== null && $this->movimientoAplica($mov, $monedaConverter, $monedaReporteId, $soloMonedaOrigen, $modoInclusionAsientos, $cuentaDesde, $cuentaHasta, $cuentas, $centrocostoFiltro)) {
-                    $movs[] = $mov;
-                }
+        foreach ($ctamov as $linea) {
+            if ($omitirResumenCtamov && AnitaAsientoImportService::esAsientoResumenSubdiario($linea)) {
+                continue;
+            }
+            $mov = $this->desdeCtamov($linea, $leyendasPago);
+            if ($mov !== null && $this->movimientoAplica($mov, $monedaConverter, $monedaReporteId, $soloMonedaOrigen, $modoInclusionAsientos, $cuentaDesde, $cuentaHasta, $cuentas, $centrocostoFiltro)) {
+                $movs[] = $mov;
             }
         }
 
@@ -687,7 +710,7 @@ class MayorPlanoCuentaProcesador
             return false;
         }
 
-        if (($mov['balancea'] ?? 'S') !== 'S') {
+        if (! $this->soloMovimientosVentas && ($mov['balancea'] ?? 'S') !== 'S') {
             return false;
         }
 

@@ -15,9 +15,13 @@ class MayorPlanoCuentaAnitaBridgeReader
      * `*_desc_mov` va último: el bridge parte el CSV por `|` sin respetar el escape, así que una
      * descripción con `|` corre los campos siguientes (sistema, cotización, moneda, balancea).
      */
+    /**
+     * Sin ctav_o_compra: en algunos UNLOAD de Informix ese campo corrompe el CSV (| en el valor)
+     * y el bridge devuelve [] para todo el período. nro_oc se resuelve vía aplicped en el enricher.
+     */
     private const CTAMOV_CAMPOS = 'ctav_empresa,ctav_nro_asiento,ctav_nro_linea,ctav_d_h,ctav_cuenta,ctav_fecha,'
         .'ctav_tipo,ctav_letra,ctav_sucursal,ctav_nro,ctav_importe,ctav_cotizacion,ctav_cod_mon,'
-        .'ctav_sistema,ctav_tipo_asiento,ctav_ccosto,ctav_balancea,ctav_o_compra,ctav_asi_mon_ref,ctav_desc_mov';
+        .'ctav_sistema,ctav_tipo_asiento,ctav_ccosto,ctav_balancea,ctav_asi_mon_ref,ctav_desc_mov';
 
     private const SUBDIARIO_CAMPOS = 'subd_empresa,subd_sistema,subd_fecha,subd_tipo,subd_letra,subd_sucursal,subd_nro,'
         .'subd_emisor,subd_tipo_mov,subd_cuenta,subd_contrapartida,subd_nro_operacion,subd_ref_tipo,subd_ref_letra,'
@@ -130,6 +134,7 @@ class MayorPlanoCuentaAnitaBridgeReader
      *
      * @param  list<int>  $empresaIds
      * @param  list<int>  $cuentas
+     * @param  bool  $soloPeriodoConsultado  true → una sola lectura ctamov/subdiario del período (sin tramo de saldo)
      * @return array{
      *   ctamov: list<object>,
      *   subdiario: list<object>,
@@ -149,6 +154,7 @@ class MayorPlanoCuentaAnitaBridgeReader
         int $cuentaHasta = 0,
         array $cuentas = [],
         bool $soloMovimientosVentas = false,
+        bool $soloPeriodoConsultado = false,
     ): array {
         $t0 = microtime(true);
         $errores = [];
@@ -179,7 +185,7 @@ class MayorPlanoCuentaAnitaBridgeReader
             $tEmp = microtime(true);
             $fechaSaldoHasta = $this->fechaAnterior($fechaDesde);
 
-            if ($fechaSaldoHasta >= $fechaSaldoDesde) {
+            if (! $soloPeriodoConsultado && $fechaSaldoHasta >= $fechaSaldoDesde) {
                 $ctamov = array_merge(
                     $ctamov,
                     $this->listar(
@@ -239,6 +245,28 @@ class MayorPlanoCuentaAnitaBridgeReader
             }
 
             $timings['empresa_'.$empresaId.'_ms'] = round((microtime(true) - $tEmp) * 1000, 1);
+        }
+
+        if ($soloMovimientosVentas && $incluyeSubdiario) {
+            foreach ($empresaIds as $empresaId) {
+                $empresaId = (int) $empresaId;
+                if ($empresaId <= 0) {
+                    continue;
+                }
+
+                $extra = $this->listar(
+                    'contab',
+                    'ctamov',
+                    self::CTAMOV_CAMPOS,
+                    ' WHERE ctav_empresa='.$empresaId
+                    .' AND ctav_fecha BETWEEN '.$fechaDesde.' AND '.$fechaHasta
+                    .$filtroCtamov
+                    .' AND ctav_asi_mon_ref=-1',
+                    $errores,
+                    'ctamov-erp-origen-empresa-'.$empresaId,
+                );
+                $ctamov = $this->fusionarCtamovPorLinea($ctamov, $extra);
+            }
         }
 
         $timings['ctamov_subdiario_ms'] = round((microtime(true) - $t0) * 1000, 1);
@@ -394,6 +422,40 @@ class MayorPlanoCuentaAnitaBridgeReader
             $errores,
             'pago-empresa-'.$empresaId.'-'.$fechaDesde.'-'.$fechaHasta,
         );
+    }
+
+    /**
+     * @param  list<object>  $base
+     * @param  list<object>  $extra
+     * @return list<object>
+     */
+    private function fusionarCtamovPorLinea(array $base, array $extra): array
+    {
+        if ($extra === []) {
+            return $base;
+        }
+
+        $indices = [];
+        foreach ($base as $idx => $fila) {
+            $clave = (int) ($fila->ctav_nro_asiento ?? 0).':'.(int) ($fila->ctav_nro_linea ?? 0);
+            if ($clave !== '0:0') {
+                $indices[$clave] = $idx;
+            }
+        }
+
+        foreach ($extra as $fila) {
+            $clave = (int) ($fila->ctav_nro_asiento ?? 0).':'.(int) ($fila->ctav_nro_linea ?? 0);
+            if ($clave === '0:0') {
+                $base[] = $fila;
+                continue;
+            }
+            if (! isset($indices[$clave])) {
+                $indices[$clave] = count($base);
+                $base[] = $fila;
+            }
+        }
+
+        return $base;
     }
 
     /**

@@ -176,7 +176,8 @@
                                     </div>
                                     <small class="text-muted d-block mt-2">
                                         El subdiario completa las imputaciones que no existen en ctamov.
-                                        El tilde de ventas filtra sistema V; muestra totales por cuenta con saldo inicial de ventas desde el inicio del ejercicio y saldo (SI + Debe − Haber).
+                                        Con &laquo;Solo movimientos de ventas&raquo; se usa subdiario sistema V del mes
+                                        m&aacute;s ctamov de facturas ERP (asi_mon_ref=-1); totales por cuenta, sin tramo de saldo.
                                         La columna de centro de costo queda grabada como preferencia del usuario.
                                     </small>
                                 </div>
