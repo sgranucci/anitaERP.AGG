@@ -65,6 +65,9 @@ final class IvaVentasListadoFiltros
             'solo_moneda_origen' => $request->boolean('consultar')
                 ? $request->boolean('solo_moneda_origen')
                 : true,
+            'completar_fsl_anita' => $request->boolean('consultar')
+                ? $request->boolean('completar_fsl_anita', true)
+                : true,
             'moneda_id' => $monedaId > 0 ? $monedaId : 1,
         ];
     }
@@ -105,6 +108,7 @@ final class IvaVentasListadoFiltros
         $out['conciliar_contable'] = empty($filtros['conciliar_contable']) ? 0 : 1;
         $out['conciliar_por_unidad'] = empty($filtros['conciliar_por_unidad']) ? 0 : 1;
         $out['solo_moneda_origen'] = empty($filtros['solo_moneda_origen']) ? 0 : 1;
+        $out['completar_fsl_anita'] = empty($filtros['completar_fsl_anita']) ? 0 : 1;
 
         return $out;
     }

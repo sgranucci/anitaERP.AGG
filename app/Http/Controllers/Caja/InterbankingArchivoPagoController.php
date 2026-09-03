@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace App\Http\Controllers\Caja;
 
 use App\Http\Controllers\Controller;
+use App\Models\Caja\Cuentacaja;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Caja\InterbankingArchivoPagoService;
 use App\Support\Caja\InterbankingArchivoPagoFiltros;
+use App\Support\Compras\CbuSupport;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
@@ -37,10 +39,11 @@ class InterbankingArchivoPagoController extends Controller
         $empresaQuery = $this->empresaRepository->allFiltrado();
         $filtros = InterbankingArchivoPagoFiltros::resolverDesdeRequest($request);
         $filtros = $this->aplicarPreferencias($request, $filtros, $empresaQuery);
-
-        if ((string) ($filtros['cbu_origen'] ?? '') === '') {
-            $filtros['cbu_origen'] = $this->service->sugerirCbuOrigen((int) ($filtros['empresa_id'] ?? 0));
-        }
+        $cuentaOrigen = $this->hidratarCuentaOrigen($request, $filtros);
+        $filtros['cuentacaja_id'] = $cuentaOrigen ? (int) $cuentaOrigen->id : (int) ($filtros['cuentacaja_id'] ?? 0);
+        $filtros['cbu_origen'] = $cuentaOrigen
+            ? CbuSupport::normalizar((string) $cuentaOrigen->cbu)
+            : '';
 
         $consultado = $request->boolean('consultar')
             && InterbankingArchivoPagoFiltros::tieneCriteriosAplicados($filtros);
@@ -64,6 +67,7 @@ class InterbankingArchivoPagoController extends Controller
             'filtrosQuery' => $filtrosQuery,
             'consultado' => $consultado,
             'resultado' => $resultado,
+            'cuenta_origen' => $cuentaOrigen,
         ]);
     }
 
@@ -77,10 +81,12 @@ class InterbankingArchivoPagoController extends Controller
                 ->with('mensaje_error', 'Indique empresa y fechas para generar el archivo.');
         }
 
-        if (strlen((string) ($filtros['cbu_origen'] ?? '')) !== 22) {
+        $cbu = $this->service->cbuOrigenDesdeFiltros($filtros);
+        if (! CbuSupport::esValido($cbu)) {
             return redirect()->route('interbanking_archivo_pago', InterbankingArchivoPagoFiltros::paraQueryString($filtros))
-                ->with('mensaje_error', 'CBU origen inválido (22 dígitos).');
+                ->with('mensaje_error', 'Seleccione una cuenta de caja con CBU válido.');
         }
+        $filtros['cbu_origen'] = $cbu;
 
         ini_set('memory_limit', '512M');
         ini_set('max_execution_time', '180');
@@ -124,6 +130,13 @@ class InterbankingArchivoPagoController extends Controller
             }
         }
 
+        if (! $request->filled('cuentacaja_id')) {
+            $idPref = ReportePreferenciasUsuario::leerString(self::PREFERENCIAS_CLAVE, 'cuentacaja_id');
+            if ($idPref !== '' && ctype_digit($idPref)) {
+                $filtros['cuentacaja_id'] = (int) $idPref;
+            }
+        }
+
         if (! $request->filled('cbu_origen')) {
             $cbuPref = ReportePreferenciasUsuario::leerString(self::PREFERENCIAS_CLAVE, 'cbu_origen');
             if ($cbuPref !== '') {
@@ -156,12 +169,36 @@ class InterbankingArchivoPagoController extends Controller
         return $filtros;
     }
 
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function hidratarCuentaOrigen(Request $request, array $filtros): ?Cuentacaja
+    {
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        $cuentaId = (int) ($filtros['cuentacaja_id'] ?? 0);
+        $cbuHint = (string) ($filtros['cbu_origen'] ?? '');
+
+        if ($request->filled('cuentacaja_id') || $cuentaId > 0) {
+            $porId = $this->service->buscarCuentaOrigen($empresaId, $cuentaId);
+            if ($porId !== null) {
+                return $porId;
+            }
+        }
+
+        return $this->service->resolverCuentaOrigen($empresaId, 0, $cbuHint);
+    }
+
     /** @param  array<string, mixed>  $filtros */
     private function persistirPreferencias(array $filtros): void
     {
         ReportePreferenciasUsuario::persistir(self::PREFERENCIAS_CLAVE, [
             'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
         ]);
+        ReportePreferenciasUsuario::persistirString(
+            self::PREFERENCIAS_CLAVE,
+            'cuentacaja_id',
+            (string) max(0, (int) ($filtros['cuentacaja_id'] ?? 0))
+        );
         ReportePreferenciasUsuario::persistirString(
             self::PREFERENCIAS_CLAVE,
             'cbu_origen',

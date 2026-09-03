@@ -211,7 +211,7 @@ class CuentacajaController extends Controller
 		$columnsOut = ['cuentacaja_id', 'codigo', 'nombre', 'nombreempresa', 'codigocuentacontable', 'nombrecuentacontable',
                         'moneda_id', 'nombremoneda', 'cbu'];
 
-        $empresaId = $request->empresa_id;
+        $empresaId = $request->input('empresa_id');
         $consulta = $request->consulta;
         $usoCuentacajaId = (int) $request->get('usocuentacaja_id');
         $count = count($columns);
@@ -289,7 +289,7 @@ class CuentacajaController extends Controller
 			$output['data'] .= '<td>Sin resultados</td>';
 			$output['data'] .= '</tr>';
 		}
-		return(json_encode($output, JSON_UNESCAPED_UNICODE));
+        return response()->json($output);
 	}
 
     public function leerCuentaCajaPorCodigo(Request $request, $codigo)

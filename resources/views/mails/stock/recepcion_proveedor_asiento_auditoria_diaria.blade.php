@@ -42,10 +42,53 @@
         <td align="right"><strong>{{ count($informe['discrepancias'] ?? []) }}</strong></td>
     </tr>
     <tr>
+        <td>Sin auto-reparar (período cerrado)</td>
+        <td align="right">{{ (int) ($informe['sin_reparar_periodo_cerrado'] ?? 0) }}</td>
+    </tr>
+    <tr>
         <td>Errores de lectura Anita/ERP</td>
         <td align="right">{{ count($informe['errores_lectura'] ?? []) }}</td>
     </tr>
 </table>
+
+@php
+    $cerradas = array_values(array_filter(
+        $informe['discrepancias'] ?? [],
+        static fn ($fila): bool => ! empty($fila['reparacion_omitida_periodo_cerrado'])
+    ));
+@endphp
+
+@if ($cerradas !== [])
+    <h3 style="margin:18px 0 6px 0; color:#b45309;">Período cerrado — revisar a mano (no se modificó nada)</h3>
+    <p style="margin:0 0 8px 0; font-size:13px;">
+        Hay discrepancias en COM con fecha en período cerrado. La auditoría <strong>no reescribió</strong>
+        asientos ERP ni ctamov Anita. Hay que abrir el período (o una apertura) y corregir a mano.
+    </p>
+    <table cellpadding="6" cellspacing="0" border="1" style="border-collapse:collapse; font-size:13px; width:100%;">
+        <tr style="background:#fff8e6;">
+            <th align="left">COM</th>
+            <th align="left">Fecha</th>
+            <th align="left">Empresa</th>
+            <th align="left">Asiento ERP</th>
+            <th align="left">Aviso</th>
+        </tr>
+        @foreach ($cerradas as $fila)
+            <tr>
+                <td>{{ (int) ($fila['com'] ?? 0) }}</td>
+                <td>{{ $fila['fecha'] ?? '—' }}</td>
+                <td>{{ (int) ($fila['empresa_id'] ?? 0) }}</td>
+                <td>{{ $fila['numero_asiento'] ?? '—' }}</td>
+                <td>
+                    @foreach ($fila['problemas'] ?? [] as $p)
+                        @if (str_contains((string) $p, 'Período contable cerrado'))
+                            {{ $p }}
+                        @endif
+                    @endforeach
+                </td>
+            </tr>
+        @endforeach
+    </table>
+@endif
 
 @if (! empty($informe['discrepancias']))
     <h3 style="margin:18px 0 6px 0; color:#dc3545;">Discrepancias</h3>
@@ -90,6 +133,7 @@
 
 <p style="margin-top:24px; font-size:12px; color:#666;">
     Criterio: recepciones y devoluciones confirmadas con <code>fecha</code> en el alcance, generadas en ERP.<br>
+    Auto-reparación: no toca ERP ni Anita si el período (recepción proveedor o asientos) está cerrado; queda en este mail para revisión manual.<br>
     Clave Anita COM: tipo + letra + <code>empresa_id</code> (sucursal) + <code>numerorecepcion</code>.<br>
     Valida recepmae, asiento ERP, ctamov, importes, fechas, centros de costo y monedas (sin <code>recm_documentoid</code>).<br>
     Devoluciones: si la recepción origen tiene impuesto interno de cigarrillos, la devolución debe revertirlo (campo + asiento).<br>

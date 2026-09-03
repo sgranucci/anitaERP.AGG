@@ -80,7 +80,15 @@ class MayorPlanoCuentaListadoFiltros
             'incluir_sin_cc_manual' => $request->boolean('incluir_sin_cc_manual'),
             'filtro_texto' => trim((string) $request->input('filtro_texto', '')),
             'excel_solapas_separadas' => $request->boolean('excel_solapas_separadas'),
+            'mostrar_columna_centrocosto' => $request->has('mostrar_columna_centrocosto')
+                ? $request->boolean('mostrar_columna_centrocosto')
+                : true,
         ];
+    }
+
+    public static function mostrarColumnaCentrocosto(array $filtros): bool
+    {
+        return ($filtros['mostrar_columna_centrocosto'] ?? true) !== false;
     }
 
     /**
@@ -275,13 +283,15 @@ class MayorPlanoCuentaListadoFiltros
             $out['excel_solapas_separadas'] = 1;
         }
 
+        $out['mostrar_columna_centrocosto'] = self::mostrarColumnaCentrocosto($filtros) ? 1 : 0;
+
         return $out;
     }
 
     public static function firma(array $filtros): string
     {
         $base = self::paraQueryString($filtros);
-        unset($base['filtro_texto'], $base['excel_solapas_separadas']);
+        unset($base['filtro_texto'], $base['excel_solapas_separadas'], $base['mostrar_columna_centrocosto']);
 
         return md5(json_encode($base));
     }

@@ -14,6 +14,7 @@ final class InterbankingArchivoPagoFiltros
     /**
      * @return array{
      *   empresa_id:int,
+     *   cuentacaja_id:int,
      *   cbu_origen:string,
      *   fecha_desde:string,
      *   fecha_hasta:string,
@@ -51,6 +52,7 @@ final class InterbankingArchivoPagoFiltros
 
         return [
             'empresa_id' => max(0, (int) $request->input('empresa_id', 0)),
+            'cuentacaja_id' => max(0, (int) $request->input('cuentacaja_id', 0)),
             'cbu_origen' => preg_replace('/\D+/', '', (string) $request->input('cbu_origen', '')) ?? '',
             'fecha_desde' => $fechaDesde,
             'fecha_hasta' => $fechaHasta,
@@ -87,6 +89,7 @@ final class InterbankingArchivoPagoFiltros
     {
         return [
             'empresa_id' => (int) ($filtros['empresa_id'] ?? 0),
+            'cuentacaja_id' => (int) ($filtros['cuentacaja_id'] ?? 0),
             'cbu_origen' => (string) ($filtros['cbu_origen'] ?? ''),
             'fecha_desde' => (string) ($filtros['fecha_desde'] ?? ''),
             'fecha_hasta' => (string) ($filtros['fecha_hasta'] ?? ''),

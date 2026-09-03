@@ -7,6 +7,7 @@ namespace App\Services\Stock;
 use App\Mail\Stock\RecepcionProveedorAsientoAuditoriaDiaria;
 use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Recepcion_Proveedor;
+use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
 use App\Support\Stock\RecepcionProveedorAsientoAuditoriaSupport;
 use App\Support\Stock\RecepcionProveedorCuadreContableSupport;
@@ -87,6 +88,7 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
             'ok' => 0,
             'omitidas' => 0,
             'reparadas' => 0,
+            'sin_reparar_periodo_cerrado' => 0,
             'discrepancias' => [],
             'errores_lectura' => [],
             'filas' => [],
@@ -120,11 +122,28 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
             }
 
             if ($autoReparar && ($resultado['estado'] ?? '') === 'discrepancia') {
+                $avisoPeriodo = $this->avisoPeriodoCerradoSinReparar($recepcion);
+                if ($avisoPeriodo !== null) {
+                    $resultado['reparacion_omitida_periodo_cerrado'] = true;
+                    $resultado['problemas'][] = $avisoPeriodo;
+                    $resultado['problemas'] = array_values(array_unique($resultado['problemas']));
+                    $informe['sin_reparar_periodo_cerrado']++;
+                    Log::warning('recepcion_proveedor.auditoria_asientos_com.sin_reparar_periodo_cerrado', [
+                        'recepcion_id' => (int) $recepcion->id,
+                        'com' => (int) $recepcion->numerorecepcion,
+                        'fecha' => optional($recepcion->fecha)->format('Y-m-d'),
+                    ]);
+
+                    $informe['discrepancias'][] = $resultado;
+                    $informe['filas'][] = $resultado;
+
+                    continue;
+                }
+
                 $problemasIniciales = $resultado['problemas'] ?? [];
                 try {
                     $reparacionIi = null;
                     if (! empty($resultado['impuesto_interno_devolucion_falla'])) {
-                        // Período puede estar cerrado: forzar recuadre ctamov (misma reparación operativa).
                         $statsIi = $this->impuestoInternoDevolucionReparacion->ejecutar([
                             'id' => (int) $recepcion->id,
                             'forzar' => true,
@@ -199,6 +218,7 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
             'ok' => $informe['ok'],
             'discrepancias' => count($informe['discrepancias']),
             'reparadas' => (int) ($informe['reparadas'] ?? 0),
+            'sin_reparar_periodo_cerrado' => (int) ($informe['sin_reparar_periodo_cerrado'] ?? 0),
             'errores_lectura' => count($informe['errores_lectura']),
             'requiere_alerta' => $informe['requiere_alerta'],
             'auto_reparar' => $autoReparar,
@@ -415,6 +435,39 @@ final class RecepcionProveedorAsientoAuditoriaDiariaService
         return array_merge($base, [
             'estado' => $base['problemas'] === [] ? 'ok' : 'discrepancia',
         ]);
+    }
+
+    /**
+     * No reescribe ERP/Anita si la fecha de la COM está en período cerrado
+     * (recepción proveedor o asientos), aunque auto_reparar esté activo.
+     */
+    private function avisoPeriodoCerradoSinReparar(Recepcion_Proveedor $recepcion): ?string
+    {
+        $fecha = optional($recepcion->fecha)->format('Y-m-d');
+        if ($fecha === null || $fecha === '') {
+            return null;
+        }
+
+        $empresaId = (int) $recepcion->empresa_id;
+        $alcances = [
+            PeriodoContableCierreSupport::ALCANCE_RECEPCION_PROVEEDOR,
+            PeriodoContableCierreSupport::ALCANCE_CONTABLE,
+        ];
+
+        foreach ($alcances as $alcance) {
+            if (! PeriodoContableCierreSupport::fechaEnPeriodoCerrado($empresaId, $fecha, $alcance)) {
+                continue;
+            }
+
+            $cierre = PeriodoContableCierreSupport::fechaCierreVigente($empresaId, $alcance);
+            $hasta = $cierre !== null ? $cierre->format('d/m/Y') : '—';
+
+            return 'Período contable cerrado hasta el '.$hasta
+                .' ('.PeriodoContableCierreSupport::etiquetaAlcance($alcance).').'
+                .' No se modificó ERP ni Anita; revisar a mano.';
+        }
+
+        return null;
     }
 
     /**

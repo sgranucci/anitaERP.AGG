@@ -45,8 +45,15 @@ final class IvaVentasDesgloseSupport
     public static function signoVenta(Venta $venta): float
     {
         $raw = (int) ($venta->tipotransacciones?->getRawOriginal('signo') ?? 1);
+        if ($raw < 0) {
+            return -1.0;
+        }
+        // FSL/FBI de máquinas: el tipo es factura (+), pero el neto del día puede ser reintegro.
+        if ((float) ($venta->getAttributes()['total'] ?? $venta->total ?? 0) < -0.0001) {
+            return -1.0;
+        }
 
-        return $raw < 0 ? -1.0 : 1.0;
+        return 1.0;
     }
 
     public static function letra(Venta $venta): string

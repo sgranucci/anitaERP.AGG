@@ -23,6 +23,7 @@ use App\Services\Ventas\Gastronomia\GastronomiaCategoriafidelidadCanjeService;
 use App\Services\Ventas\Gastronomia\GastronomiaTicketCanjePremioService;
 use App\Services\Ventas\Gastronomia\GastronomiaPreflightEmisionService;
 use App\Services\Ventas\Gastronomia\GastronomiaEmisionDiagnosticoService;
+use App\Services\Ventas\Gastronomia\GastronomiaProximoComprobantePreviewService;
 use App\Services\Ventas\Gastronomia\GastronomiaTicketDiagnosticoService;
 use App\Services\Ventas\Gastronomia\GastronomiaFormulaOpcionalesService;
 use App\Services\Ventas\Gastronomia\GastronomiaTurnoOperativoService;
@@ -58,6 +59,7 @@ class GastronomiaProcesoFacturacionController extends Controller
         private readonly GastronomiaTicketCanjePremioService $ticketCanjePremioService,
         private readonly GastronomiaCategoriafidelidadCanjeService $categoriafidelidadCanjeService,
         private readonly GastronomiaEmisionDiagnosticoService $emisionDiagnosticoService,
+        private readonly GastronomiaProximoComprobantePreviewService $proximoComprobantePreviewService,
         private readonly GastronomiaTicketDiagnosticoService $ticketDiagnosticoService,
     ) {}
 
@@ -84,6 +86,30 @@ class GastronomiaProcesoFacturacionController extends Controller
                 'cuello_botella_probable' => $this->interpretarCuelloBotella($medicion),
             ],
         ]);
+    }
+
+    public function apiProximoComprobanteArca(Request $request)
+    {
+        can('usar-proceso-facturacion-gastronomia');
+
+        $cfg = $this->requireCfgPv($request);
+        if ($cfg instanceof \Illuminate\Http\JsonResponse) {
+            return $cfg;
+        }
+
+        try {
+            $preview = $this->proximoComprobantePreviewService->consultar($cfg);
+        } catch (\InvalidArgumentException $e) {
+            return response()->json([
+                'ok' => false,
+                'error' => $e->getMessage(),
+                'identificador_pc' => GastronomiaIdentificadorPc::resolver($request),
+            ], 422);
+        }
+
+        $preview['identificador_pc'] = GastronomiaIdentificadorPc::resolver($request);
+
+        return response()->json($preview);
     }
 
     public function apiDiagnosticoTicket(Request $request)
@@ -1489,6 +1515,8 @@ class GastronomiaProcesoFacturacionController extends Controller
             'medios_pago.*.ticket_id' => 'nullable|integer|min:1',
             'medios_pago.*.numeroticket' => 'nullable|integer|min:1',
             'facturacion_con_descuento' => 'nullable|boolean',
+            'numerocomprobante_sugerido' => 'nullable|integer|min:1',
+            'forzar_caea' => 'nullable|boolean',
         ]);
 
         $cuenta = $this->cuentaService->cuentaConLineas((int) $request->get('cuenta_id'));
@@ -1511,6 +1539,9 @@ class GastronomiaProcesoFacturacionController extends Controller
             $mediosPago,
             false,
             $facturacionConDescuento,
+            (int) $request->get('numerocomprobante_sugerido') > 0
+                ? (int) $request->get('numerocomprobante_sugerido')
+                : null,
         );
 
         if (isset($res['error'])) {

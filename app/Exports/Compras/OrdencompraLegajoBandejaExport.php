@@ -25,6 +25,7 @@ class OrdencompraLegajoBandejaExport implements FromCollection, ShouldAutoSize, 
     public function headings(): array
     {
         $head = [
+            'Id',
             'OC',
             'Fecha',
             'Empresa',
@@ -50,6 +51,7 @@ class OrdencompraLegajoBandejaExport implements FromCollection, ShouldAutoSize, 
     public function collection(): Collection
     {
         return collect($this->filas)->map(static fn (array $f) => [
+            $f['id'] ?? '',
             $f['numero'] ?? '',
             $f['fecha'] ?? '',
             $f['empresa'] ?? '',

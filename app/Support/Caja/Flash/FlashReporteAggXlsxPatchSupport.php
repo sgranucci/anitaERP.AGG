@@ -66,6 +66,18 @@ final class FlashReporteAggXlsxPatchSupport
                 $reemplazos[$ruta] = $this->aplicarCeldas($xml, $celdas, $shared);
             }
 
+            foreach (['Rebisco S.A.', 'Kandiko S.A'] as $hojaPresentacion) {
+                $ruta = $hojas[$hojaPresentacion] ?? null;
+                if ($ruta === null) {
+                    continue;
+                }
+                $xml = $reemplazos[$ruta] ?? $zip->getFromName($ruta);
+                if (! is_string($xml)) {
+                    continue;
+                }
+                $reemplazos[$ruta] = $this->sanearXmlIfIncompletoPresentacion($xml);
+            }
+
             $xmlTabla = $reemplazos[$rutaTabla] ?? $zip->getFromName($rutaTabla);
             if (is_string($xmlTabla)) {
                 $reemplazos[$rutaTabla] = $this->sanearXmlHojaTabla($xmlTabla);
@@ -121,6 +133,41 @@ final class FlashReporteAggXlsxPatchSupport
         } finally {
             $zip->close();
         }
+    }
+
+    /**
+     * Rebisco (y totales Kandiko) dejan IF(...,) sin rama falsa.
+     * PhpSpreadsheet no calcula el HLOOKUP Electronic y la máscara del mail queda vacía.
+     */
+    public function sanearXmlIfIncompletoPresentacion(string $xml): string
+    {
+        $xml = str_replace(
+            [
+                'IF(A7="","",IF($BA$7>0,(C7-BA7)/BA7,))',
+                'IF(A7="","",IF($BA$7&gt;0,(C7-BA7)/BA7,))',
+                'IF(A8="","",IF($BA$7>0,(C8-BA8)/BA8,))',
+                'IF(A8="","",IF($BA$7&gt;0,(C8-BA8)/BA8,))',
+            ],
+            [
+                'IF(A7="","",IF(BA7>0,(C7-BA7)/BA7,100%))',
+                'IF(A7="","",IF(BA7&gt;0,(C7-BA7)/BA7,100%))',
+                'IF(A8="","",IF(BA8>0,(C8-BA8)/BA8,100%))',
+                'IF(A8="","",IF(BA8&gt;0,(C8-BA8)/BA8,100%))',
+            ],
+            $xml
+        );
+        $xml = preg_replace(
+            '/IF\(\$AK(\d+)&gt;0,\(C\1-\(\$BA\1\)\)\/\(\$BA\$\1\),\)/',
+            'IF($AK$1>0,(C$1-($BA$1))/($BA$$1),0)',
+            $xml
+        ) ?? $xml;
+        $xml = preg_replace(
+            '/IF\(\$AK(\d+)>0,\(C\1-\(\$BA\1\)\)\/\(\$BA\$\1\),\)/',
+            'IF($AK$1>0,(C$1-($BA$1))/($BA$$1),0)',
+            $xml
+        ) ?? $xml;
+
+        return $xml;
     }
 
     public function sanearXmlHojaTabla(string $xml): string

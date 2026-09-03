@@ -47,6 +47,8 @@ class LoginController extends Controller
         if ($roles->isNotEmpty()) {
             $user->loadMissing(['centrocostos', 'sectorLegajocompra', 'depositosAutorizados', 'tipotransaccionesStockAutorizadas']);
             $user->setSession($roles->toArray(), $empresas->toArray());
+
+            return redirect()->intended(route('inicio'));
         } else {
             $this->guard()->logout();
             $request->session()->invalidate();

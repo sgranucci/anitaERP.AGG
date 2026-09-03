@@ -47,10 +47,12 @@ class InterbankingArchivoPagoService
             return $this->vacio('Indique empresa y rango de fechas.');
         }
 
-        $cbuOrigen = CbuSupport::normalizar((string) ($filtros['cbu_origen'] ?? ''));
-        if (strlen($cbuOrigen) !== 22) {
-            return $this->vacio('El CBU de cuenta origen debe tener 22 dígitos.');
+        $cbuOrigen = $this->cbuOrigenDesdeFiltros($filtros);
+        $valCbu = CbuSupport::validarConMensaje($cbuOrigen);
+        if (! $valCbu['ok']) {
+            return $this->vacio('Seleccione una cuenta de caja con CBU válido. '.($valCbu['mensaje'] ?? ''));
         }
+        $cbuOrigen = $valCbu['cbu'];
 
         $empresaId = (int) $filtros['empresa_id'];
         $fechaDesde = (string) $filtros['fecha_desde'];
@@ -183,18 +185,45 @@ class InterbankingArchivoPagoService
     }
 
     /**
-     * Sugiere CBU origen: default Anita (config) o primera cuentacaja con CBU válido.
+     * CBU origen: siempre el de la cuentacaja elegida; si no hay id, el texto (compatibilidad).
      */
-    public function sugerirCbuOrigen(int $empresaId = 0): string
+    public function cbuOrigenDesdeFiltros(array $filtros): string
     {
-        $default = CbuSupport::normalizar((string) config('interbanking.archivo_pago_cbu_origen', ''));
-        $valDefault = CbuSupport::validarConMensaje($default);
-        if ($valDefault['ok']) {
-            return $valDefault['cbu'];
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        $cuentaId = (int) ($filtros['cuentacaja_id'] ?? 0);
+        if ($cuentaId > 0) {
+            $cuenta = $this->buscarCuentaOrigen($empresaId, $cuentaId);
+
+            return $cuenta ? CbuSupport::normalizar((string) $cuenta->cbu) : '';
+        }
+
+        return CbuSupport::normalizar((string) ($filtros['cbu_origen'] ?? ''));
+    }
+
+    /**
+     * Cuenta de caja origen: por id, por CBU (preferencia vieja / config Anita) o primera con CBU válido.
+     */
+    public function resolverCuentaOrigen(int $empresaId, int $cuentacajaId = 0, string $cbuHint = ''): ?Cuentacaja
+    {
+        if ($cuentacajaId > 0) {
+            $porId = $this->buscarCuentaOrigen($empresaId, $cuentacajaId);
+            if ($porId !== null) {
+                return $porId;
+            }
+        }
+
+        $hints = [];
+        $hintNorm = CbuSupport::normalizar($cbuHint);
+        if ($hintNorm !== '') {
+            $hints[] = $hintNorm;
+        }
+        $config = CbuSupport::normalizar((string) config('interbanking.archivo_pago_cbu_origen', ''));
+        if ($config !== '' && ! in_array($config, $hints, true)) {
+            $hints[] = $config;
         }
 
         if ($empresaId <= 0) {
-            return '';
+            return null;
         }
 
         $cuentas = Cuentacaja::query()
@@ -202,16 +231,49 @@ class InterbankingArchivoPagoService
             ->whereNotNull('cbu')
             ->where('cbu', '!=', '')
             ->orderBy('codigo')
-            ->get(['cbu']);
+            ->get(['id', 'codigo', 'nombre', 'cbu', 'empresa_id']);
+
+        foreach ($hints as $hint) {
+            foreach ($cuentas as $cta) {
+                $val = CbuSupport::validarConMensaje((string) $cta->cbu);
+                if ($val['ok'] && $val['cbu'] === $hint) {
+                    return $cta;
+                }
+            }
+        }
 
         foreach ($cuentas as $cta) {
             $val = CbuSupport::validarConMensaje((string) $cta->cbu);
             if ($val['ok']) {
-                return $val['cbu'];
+                return $cta;
             }
         }
 
-        return '';
+        return null;
+    }
+
+    public function buscarCuentaOrigen(int $empresaId, int $cuentacajaId): ?Cuentacaja
+    {
+        if ($cuentacajaId <= 0) {
+            return null;
+        }
+
+        $q = Cuentacaja::query()->whereKey($cuentacajaId);
+        if ($empresaId > 0) {
+            $q->paraEmpresa($empresaId);
+        }
+
+        return $q->first();
+    }
+
+    /**
+     * @deprecated Usar resolverCuentaOrigen(); se mantiene por compatibilidad.
+     */
+    public function sugerirCbuOrigen(int $empresaId = 0): string
+    {
+        $cta = $this->resolverCuentaOrigen($empresaId);
+
+        return $cta ? CbuSupport::normalizar((string) $cta->cbu) : '';
     }
 
     /**

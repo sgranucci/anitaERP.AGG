@@ -37,12 +37,13 @@ final class OcArbolTriggerDispatcherService
         int $ordencompraId,
         ?int $sectorAnteriorId,
         int $sectorNuevoId,
-        ?string $observacionEnvio = null
+        ?string $observacionEnvio = null,
+        ?int $destinatarioUsuarioId = null
     ): void {
         $this->disparar($ordencompraId, self::CONTEXTO_CAMBIO_SECTOR, [
             'sector_anterior_id' => $sectorAnteriorId,
             'sector_nuevo_id' => $sectorNuevoId,
-        ], $observacionEnvio);
+        ], $observacionEnvio, $destinatarioUsuarioId);
     }
 
     /**
@@ -52,7 +53,8 @@ final class OcArbolTriggerDispatcherService
         int $ordencompraId,
         string $contextoEvento,
         array $contexto,
-        ?string $observacionEnvio = null
+        ?string $observacionEnvio = null,
+        ?int $destinatarioUsuarioId = null
     ): void {
         if ($ordencompraId <= 0) {
             return;
@@ -69,6 +71,9 @@ final class OcArbolTriggerDispatcherService
         }
 
         $opcionesArbol = $this->opcionesConObservacionEnvio([], $observacionEnvio);
+        if ($destinatarioUsuarioId !== null && $destinatarioUsuarioId > 0) {
+            $opcionesArbol['destinatario_usuario_id'] = $destinatarioUsuarioId;
+        }
 
         $triggers = Arbolaprobacion_OcTrigger::query()
             ->where('arbolaprobacion_id', $arbol->id)
@@ -78,7 +83,7 @@ final class OcArbolTriggerDispatcherService
             ->get();
 
         if ($triggers->isEmpty()) {
-            $this->dispararLegacy($arbol, $ordencompraId, $contextoEvento, $contexto, $oc, $observacionEnvio);
+            $this->dispararLegacy($arbol, $ordencompraId, $contextoEvento, $contexto, $oc, $observacionEnvio, $destinatarioUsuarioId);
 
             return;
         }
@@ -184,9 +189,13 @@ final class OcArbolTriggerDispatcherService
         string $contextoEvento,
         array $contexto,
         $oc,
-        ?string $observacionEnvio = null
+        ?string $observacionEnvio = null,
+        ?int $destinatarioUsuarioId = null
     ): void {
         $opciones = $this->opcionesConObservacionEnvio([], $observacionEnvio);
+        if ($destinatarioUsuarioId !== null && $destinatarioUsuarioId > 0) {
+            $opciones['destinatario_usuario_id'] = $destinatarioUsuarioId;
+        }
 
         if ($contextoEvento === self::CONTEXTO_ALTA) {
             if ($this->arbolaprobacionService->ocDispararArbolAlAlta($arbol)) {
@@ -201,7 +210,8 @@ final class OcArbolTriggerDispatcherService
             $this->arbolaprobacionService->dispararArbolOrdencompraAlCambiarSector(
                 $ordencompraId,
                 $sectorNuevo,
-                $observacionEnvio
+                $observacionEnvio,
+                $destinatarioUsuarioId
             );
 
             return;

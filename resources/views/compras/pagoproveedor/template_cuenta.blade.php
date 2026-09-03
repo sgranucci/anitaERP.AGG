@@ -24,7 +24,7 @@
             </select>
         </td>
         <td>
-            <input type="number" name="montos[]" class="form-control monto" value="">
+            <input type="number" step="0.01" name="montos[]" class="form-control monto text-right" value="">
         </td>
         <td>
             <input type="number" name="cotizaciones[]" class="form-control cotizacion" value="0">

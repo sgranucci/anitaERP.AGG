@@ -6,15 +6,21 @@ use App\Models\Compras\Comprobante_Proveedor;
 use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Precarga_Comprobante_Proveedor;
 use App\Models\Compras\Precarga_Comprobante_Proveedor_Recepcion;
+use App\Models\Compras\Proveedor;
 use App\Models\Compras\Proveedor_Cuentacorriente;
+use App\Models\Compras\Tipotransaccion_Compra;
+use App\Models\Configuracion\Moneda;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Repositories\Configuracion\EmpresaRepository;
 use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
+use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraLegajoAnitaScanFacturaSupport;
 use App\Support\Compras\OrdencompraSectorVisibilidadSupport;
+use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
@@ -25,6 +31,7 @@ class OrdencompraLegajoBandejaPaqueteService
 {
     public function __construct(
         private PrecargaFacturaScanPathResolver $scanPathResolver,
+        private OrdencompraLegajoFacturaPdfService $facturaPdfService,
     ) {
     }
 
@@ -47,8 +54,9 @@ class OrdencompraLegajoBandejaPaqueteService
     public function paquete(Ordencompra $oc): array
     {
         $oc->loadMissing('empresas:id,codigo,nombre');
+        $this->materializarPdfsScanAnita($oc);
         $facturas = $this->facturasDelLegajo($oc);
-        $facturas = array_merge($facturas, OrdencompraLegajoAnitaScanFacturaSupport::facturasDeOc($oc));
+        $facturas = array_merge($facturas, $this->scansAnitaSinPrecarga($oc, $facturas));
         $coms = $this->comsDelLegajo($oc);
         $precargaIds = [];
         foreach ($facturas as $f) {
@@ -87,9 +95,9 @@ class OrdencompraLegajoBandejaPaqueteService
     /**
      * @param  list<int>  $recepcionIds
      */
-    public function asignar(Ordencompra $oc, int $precargaId, array $recepcionIds): void
+    public function asignar(Ordencompra $oc, int|string $facturaRef, array $recepcionIds): void
     {
-        $this->assertPrecargaDelLegajo($oc, $precargaId);
+        $precargaId = (int) $this->resolverPrecargaParaAsignacion($oc, $facturaRef)->id;
         $ids = array_values(array_unique(array_filter(
             array_map(static fn ($id) => (int) $id, $recepcionIds),
             static fn (int $id) => $id > 0
@@ -128,6 +136,9 @@ class OrdencompraLegajoBandejaPaqueteService
 
     public function assertPrecargaDelLegajo(Ordencompra $oc, int $precargaId): Precarga_Comprobante_Proveedor
     {
+        if ($precargaId <= 0) {
+            abort(404, 'La factura no pertenece a este legajo.');
+        }
         $precarga = Precarga_Comprobante_Proveedor::query()->find($precargaId);
         if (! $precarga || ! $this->precargaPerteneceAlLegajo($oc, $precarga)) {
             abort(404, 'La factura no pertenece a este legajo.');
@@ -182,7 +193,7 @@ class OrdencompraLegajoBandejaPaqueteService
             ->orderByDesc('id')
             ->get([
                 'id', 'letra', 'sucursal', 'numerocomprobante', 'fechafactura',
-                'total', 'rutaalmacenamiento', 'estado',
+                'total', 'rutaalmacenamiento', 'estado', 'origen_entrada',
             ]);
 
         $out = [];
@@ -191,6 +202,7 @@ class OrdencompraLegajoBandejaPaqueteService
             $out[] = [
                 'id' => $id,
                 'origen' => 'precarga',
+                'origen_label' => PrecargaComprobanteOrigenEntrada::etiqueta($pre->origen_entrada ?? null),
                 'etiqueta' => $this->etiquetaFactura($pre),
                 'fecha' => $pre->fechafactura ? $pre->fechafactura->format('d/m/Y') : '',
                 'total' => $pre->total !== null ? (float) $pre->total : null,
@@ -337,10 +349,297 @@ class OrdencompraLegajoBandejaPaqueteService
         return $out;
     }
 
+    public function resolverPrecargaParaAsignacion(Ordencompra $oc, int|string $facturaRef): Precarga_Comprobante_Proveedor
+    {
+        $ref = trim((string) $facturaRef);
+        if (preg_match('/^anita-(\d+)$/i', $ref, $m)) {
+            return $this->precargaDesdeFacturaAnita($oc, (int) $m[1]);
+        }
+
+        return $this->assertPrecargaDelLegajo($oc, (int) $ref);
+    }
+
+    private function precargaDesdeFacturaAnita(Ordencompra $oc, int $documentoId): Precarga_Comprobante_Proveedor
+    {
+        $fila = OrdencompraLegajoAnitaScanFacturaSupport::filaDeOc($oc, $documentoId);
+        if ($fila === null) {
+            abort(404, 'La factura no pertenece a este legajo.');
+        }
+
+        $existente = $this->precargaDelLegajoCompatibleConScan($oc, $fila);
+        if ($existente) {
+            return $this->asegurarPdfScanEnPrecarga($oc, $existente, $documentoId, $fila);
+        }
+
+        $empresaId = (int) $oc->empresa_id;
+        $proveedorId = (int) $oc->proveedor_id;
+        $tipoId = OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraDefaultId();
+        if ($empresaId <= 0 || $proveedorId <= 0 || $tipoId <= 0) {
+            throw ValidationException::withMessages([
+                'precarga_id' => 'No se puede crear la precarga del legajo para asignar la COM (faltan empresa, proveedor o tipo de factura).',
+            ]);
+        }
+
+        $letra = strtoupper(trim((string) ($fila['cletra'] ?? ''))) ?: 'A';
+        $sucursal = (int) ($fila['isucursal'] ?? 0);
+        $numero = (int) ($fila['inumero'] ?? 0);
+        $fecha = $this->fechaYmdDesdeScanAnita((string) ($fila['ifecha'] ?? ''));
+
+        if ($numero > 0) {
+            $dup = ComprobanteProveedorUnicidadSupport::findDuplicadoPrecarga(
+                $empresaId,
+                $tipoId,
+                $letra,
+                $sucursal,
+                $numero,
+                ComprobanteProveedorUnicidadSupport::resolverCuitDigitos($proveedorId, null),
+            );
+            if ($dup && $this->precargaPerteneceAlLegajo($oc, $dup)) {
+                return $this->asegurarPdfScanEnPrecarga($oc, $dup, $documentoId, $fila);
+            }
+            if ($dup) {
+                throw ValidationException::withMessages([
+                    'precarga_id' => 'Ya existe una precarga con esa factura; no se puede asignar la COM desde este scan Anita.',
+                ]);
+            }
+        }
+
+        $monedaId = $this->monedaIdParaPrecarga($oc);
+        $moneda = Moneda::query()->whereKey($monedaId)->first();
+
+        $precarga = Precarga_Comprobante_Proveedor::query()->create([
+            'empresa_id' => $empresaId,
+            'proveedor_id' => $proveedorId,
+            'tipotransaccion_compra_id' => $tipoId,
+            'letra' => $letra,
+            'sucursal' => $sucursal,
+            'numerocomprobante' => $numero,
+            'fechafactura' => $fecha,
+            'numeroordencompra' => (string) $oc->numeroordencompra,
+            'subtotal' => 0,
+            'total' => 0,
+            'estado' => 'PENDIENTE',
+            'origen_entrada' => PrecargaComprobanteOrigenEntrada::SCAN_ANITA,
+            'pararevisar' => 1,
+            'moneda' => strtoupper(trim((string) ($moneda->abreviatura ?: $moneda->nombre ?: 'PESOS'))),
+            'moneda_id' => $monedaId,
+            'cotizacion' => 1,
+        ]);
+
+        return $this->asegurarPdfScanEnPrecarga($oc, $precarga, $documentoId, $fila);
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     */
+    private function precargaDelLegajoCompatibleConScan(Ordencompra $oc, array $fila): ?Precarga_Comprobante_Proveedor
+    {
+        $letra = strtoupper(trim((string) ($fila['cletra'] ?? '')));
+        $sucursal = (int) ($fila['isucursal'] ?? 0);
+        $numero = (int) ($fila['inumero'] ?? 0);
+
+        $candidatas = Precarga_Comprobante_Proveedor::query()
+            ->where('empresa_id', (int) $oc->empresa_id)
+            ->where(function ($q) {
+                $q->whereNull('estado')
+                    ->orWhereRaw('UPPER(TRIM(estado)) != ?', ['ANULADA']);
+            })
+            ->orderByDesc('id')
+            ->get();
+
+        $delLegajo = $candidatas->filter(
+            fn (Precarga_Comprobante_Proveedor $p) => $this->precargaPerteneceAlLegajo($oc, $p)
+        );
+        if ($delLegajo->isEmpty()) {
+            return null;
+        }
+
+        if ($numero > 0) {
+            $porNumero = $delLegajo->first(function (Precarga_Comprobante_Proveedor $p) use ($letra, $sucursal, $numero) {
+                $mismaLetra = $letra === '' || strtoupper(trim((string) $p->letra)) === $letra;
+
+                return $mismaLetra
+                    && (int) $p->sucursal === $sucursal
+                    && (int) $p->numerocomprobante === $numero;
+            });
+            if ($porNumero) {
+                return $porNumero;
+            }
+        }
+
+        return OrdencompraEnvioCuentasAPagarGateSupport::precargaDelLegajo($oc)
+            ?? $delLegajo->first();
+    }
+
+    private function fechaYmdDesdeScanAnita(string $ymd): string
+    {
+        $ymd = preg_replace('/\D+/', '', $ymd) ?? '';
+        if (strlen($ymd) === 8) {
+            return substr($ymd, 0, 4).'-'.substr($ymd, 4, 2).'-'.substr($ymd, 6, 2);
+        }
+
+        return now()->format('Y-m-d');
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $precargas
+     * @return list<array<string, mixed>>
+     */
+    private function scansAnitaSinPrecarga(Ordencompra $oc, array $precargas): array
+    {
+        $claves = [];
+        foreach ($precargas as $pre) {
+            $claves[$this->claveFacturaEtiqueta((string) ($pre['etiqueta'] ?? ''))] = true;
+        }
+        $out = [];
+        foreach (OrdencompraLegajoAnitaScanFacturaSupport::facturasDeOc($oc) as $scan) {
+            $clave = $this->claveFacturaEtiqueta((string) ($scan['etiqueta'] ?? ''));
+            if ($clave !== '' && isset($claves[$clave])) {
+                continue;
+            }
+            $out[] = $scan;
+        }
+
+        return $out;
+    }
+
+    private function claveFacturaEtiqueta(string $etiqueta): string
+    {
+        $etiqueta = strtoupper(trim($etiqueta));
+        if (preg_match('/([A-Z])\s+(\d{1,5})-(\d{1,8})/', $etiqueta, $m)) {
+            return $m[1].'|'.((int) $m[2]).'|'.((int) $m[3]);
+        }
+
+        return $etiqueta;
+    }
+
+    private function materializarPdfsScanAnita(Ordencompra $oc): void
+    {
+        foreach (OrdencompraLegajoAnitaScanFacturaSupport::facturasDeOc($oc) as $scan) {
+            $docId = (int) ($scan['documento_id'] ?? 0);
+            if ($docId <= 0) {
+                continue;
+            }
+            try {
+                $this->precargaDesdeFacturaAnita($oc, $docId);
+            } catch (\Throwable $e) {
+                Log::warning('bandeja.scan_pdf_precarga', [
+                    'oc' => (int) $oc->id,
+                    'documento' => $docId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $fila
+     */
+    private function asegurarPdfScanEnPrecarga(
+        Ordencompra $oc,
+        Precarga_Comprobante_Proveedor $precarga,
+        int $documentoId,
+        array $fila,
+    ): Precarga_Comprobante_Proveedor {
+        $precarga = $this->marcarOrigenScanAnitaSiNoEsIa($precarga);
+        $ruta = trim((string) ($precarga->rutaalmacenamiento ?? ''));
+        if ($ruta !== '' && $this->scanPathResolver->resolve($ruta)) {
+            return $precarga;
+        }
+
+        $origen = OrdencompraLegajoAnitaScanFacturaSupport::rutaPdf($documentoId);
+        $proveedor = Proveedor::query()->find((int) $oc->proveedor_id);
+        if ($origen === null || ! $proveedor) {
+            throw ValidationException::withMessages([
+                'precarga_id' => 'No se encontró el PDF del scan Anita para grabarlo en la carpeta de precargas.',
+            ]);
+        }
+
+        $tipoId = (int) ($precarga->tipotransaccion_compra_id
+            ?: OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraDefaultId());
+        $tipoAbrev = (string) (Tipotransaccion_Compra::query()->whereKey($tipoId)->value('abreviatura') ?? 'FAC');
+        $fecha = $this->fechaYmdDesdeScanAnita((string) ($fila['ifecha'] ?? ''));
+        if ($precarga->fechafactura) {
+            $fecha = $precarga->fechafactura->format('Y-m-d');
+        }
+
+        try {
+            $storage = $this->facturaPdfService->copiarPdfLocalAAlmacenPrecarga(
+                $origen,
+                $proveedor,
+                $fecha,
+                $tipoAbrev,
+                (string) ($precarga->letra ?: ($fila['cletra'] ?? 'A')),
+                (int) ($precarga->sucursal ?? $fila['isucursal'] ?? 0),
+                (int) ($precarga->numerocomprobante ?? $fila['inumero'] ?? 0),
+            );
+        } catch (\Throwable $e) {
+            throw ValidationException::withMessages([
+                'precarga_id' => $e->getMessage(),
+            ]);
+        }
+
+        $precarga->rutaalmacenamiento = $storage;
+        $precarga->save();
+
+        return $precarga;
+    }
+
+    private function monedaIdParaPrecarga(Ordencompra $oc): int
+    {
+        $oc->loadMissing('ordencompra_articulos');
+        $candidatos = [];
+        $linea = $oc->ordencompra_articulos->first();
+        if ($linea) {
+            $candidatos[] = (int) ($linea->moneda_id ?? 0);
+        }
+        $candidatos[] = (int) ($oc->contrato_moneda_id ?? 0);
+
+        foreach ($candidatos as $id) {
+            if ($id > 0 && Moneda::query()->whereKey($id)->exists()) {
+                return $id;
+            }
+        }
+
+        $fallback = (int) (Moneda::query()->orderBy('id')->value('id') ?? 0);
+        if ($fallback <= 0) {
+            throw ValidationException::withMessages([
+                'precarga_id' => 'No hay una moneda válida para crear la precarga del scan Anita.',
+            ]);
+        }
+
+        return $fallback;
+    }
+
+    private function marcarOrigenScanAnitaSiNoEsIa(Precarga_Comprobante_Proveedor $precarga): Precarga_Comprobante_Proveedor
+    {
+        if (PrecargaComprobanteOrigenEntrada::esLecturaIa((string) ($precarga->origen_entrada ?? ''))) {
+            return $precarga;
+        }
+        if ((string) ($precarga->origen_entrada ?? '') === PrecargaComprobanteOrigenEntrada::SCAN_ANITA) {
+            return $precarga;
+        }
+        $precarga->origen_entrada = PrecargaComprobanteOrigenEntrada::SCAN_ANITA;
+        $precarga->save();
+
+        return $precarga;
+    }
+
     public function precargaPerteneceAlLegajo(Ordencompra $oc, Precarga_Comprobante_Proveedor $precarga): bool
     {
-        return (int) $precarga->empresa_id === (int) $oc->empresa_id
-            && trim((string) $precarga->numeroordencompra) === trim((string) $oc->numeroordencompra);
+        if ((int) $precarga->empresa_id !== (int) $oc->empresa_id) {
+            return false;
+        }
+
+        $a = trim((string) $precarga->numeroordencompra);
+        $b = trim((string) $oc->numeroordencompra);
+        if ($a === $b) {
+            return true;
+        }
+        $na = preg_replace('/\D+/', '', $a) ?? '';
+        $nb = preg_replace('/\D+/', '', $b) ?? '';
+
+        return $na !== '' && $na === $nb;
     }
 
     private function etiquetaFactura(Precarga_Comprobante_Proveedor $pre): string
@@ -348,11 +647,14 @@ class OrdencompraLegajoBandejaPaqueteService
         $letra = trim((string) ($pre->letra ?? ''));
         $suc = (int) ($pre->sucursal ?? 0);
         $nro = (int) ($pre->numerocomprobante ?? 0);
-        if ($letra !== '' || $nro > 0) {
-            return trim(sprintf('%s %04d-%08d', $letra !== '' ? $letra : 'FC', $suc, $nro));
+        $base = ($letra !== '' || $nro > 0)
+            ? trim(sprintf('%s %04d-%08d', $letra !== '' ? $letra : 'FC', $suc, $nro))
+            : 'Factura #'.$pre->id;
+        if ((string) ($pre->origen_entrada ?? '') === PrecargaComprobanteOrigenEntrada::SCAN_ANITA) {
+            return $base.' ('.PrecargaComprobanteOrigenEntrada::etiqueta(PrecargaComprobanteOrigenEntrada::SCAN_ANITA).')';
         }
 
-        return 'Factura #'.$pre->id;
+        return $base;
     }
 
     private function documentoCom(Recepcion_Proveedor $rec): string

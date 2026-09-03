@@ -5,14 +5,26 @@
 <div class="card form2" style="display: none">
     <h3>Cuentas de caja</h3>
     <div class="card-body">
-        <table class="table" id="cuenta-table">
-            <thead>
+        <div class="border rounded p-2 mb-3" style="background:#f8f9fa;color:#1b2631;" id="pp-ref-cuentas-caja">
+            <strong>Referencia de lo aplicado:</strong>
+            <span id="pp-ref-aplicado-txt">0,00</span>
+            <span class="text-muted"> (equiv. OP, pantalla Deuda)</span>
+            · Total esta pantalla:
+            <strong id="pp-ref-cuentas-txt">0,00</strong>
+            · Falta / sobra:
+            <strong id="pp-ref-falta-txt">0,00</strong>
+            <div class="small text-muted mb-0 mt-1">
+                Cargue acá el desembolso. Las retenciones restan en el asiento, no en esta grilla.
+            </div>
+        </div>
+        <table class="table table-sm table-bordered" id="cuenta-table">
+            <thead style="background:#85C1E9;color:#17202A;">
                 <tr>
                     <th style="width: 12%;">Código</th>
                     <th style="width: 18%;">Descripción</th>
                     <th style="width: 7%;">Moneda</th>
-                    <th style="width: 15%;">Monto</th>
-                    <th style="width: 12%;">Cotización</th>
+                    <th class="text-right" style="width: 15%;">Monto</th>
+                    <th class="text-right" style="width: 12%;">Cotización</th>
                     <th>Observación</th>
                     <th></th>
                 </tr>
@@ -44,7 +56,7 @@
                         </select>
                     </td>
                     <td>
-                        <input type="number" name="montos[]" class="form-control monto" value="{{ abs((float) ($cuenta->monto ?? 0)) }}">
+                        <input type="number" step="0.01" name="montos[]" class="form-control monto text-right" value="{{ abs((float) ($cuenta->monto ?? 0)) }}">
                     </td>
                     <td>
                         <input type="number" name="cotizaciones[]" class="form-control cotizacion" value="{{ $cuenta->cotizacion ?? '0' }}">

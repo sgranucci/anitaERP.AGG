@@ -50,7 +50,7 @@ class CierreSalaExentaEmisionService
         string $leyenda,
     ): array {
         $monto = round($monto, 2);
-        if ($monto <= 0.0001) {
+        if (abs($monto) <= 0.0001) {
             throw new InvalidArgumentException(
                 'No hay monto para emitir '.$tipo->abreviatura.' exenta.',
             );

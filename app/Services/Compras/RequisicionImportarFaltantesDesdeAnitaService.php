@@ -12,8 +12,10 @@ use App\Models\Contable\Centrocosto;
 use App\Models\Presupuesto\Capex;
 use App\Models\Presupuesto\Partidagasto;
 use App\Models\Stock\Articulo;
+use App\Support\Compras\AnitaSync\AnitaUsuarioBridgeSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaNumeracionSupport;
 use App\Support\Compras\AnitaSync\Ordencompra\OrdencompraAnitaWhereSupport;
+use App\Support\Compras\AnitaSync\Requisicion\RequisicionAnitaAprobcompMapper;
 use App\Support\Compras\AnitaSync\Requisicion\RequisicionAnitaEstadoMapper;
 use App\Support\Compras\RequisicionAnitaSyncEstado;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
@@ -53,7 +55,10 @@ class RequisicionImportarFaltantesDesdeAnitaService
             'faltantes' => 0,
             'importadas' => 0,
             'lineas_completadas' => 0,
+            'alineadas' => 0,
+            'autorizaciones' => 0,
             'omitidas' => 0,
+            'omitidas_erp_nativas' => 0,
             'errores_import' => [],
             'oc_vinculadas' => 0,
             'oc_anita' => 0,
@@ -63,30 +68,50 @@ class RequisicionImportarFaltantesDesdeAnitaService
         ];
 
         $desdeYmd = $anio * 10000 + 101;
-        $lote = $this->leerLoteAnita($desdeYmd);
+        $hastaYmd = $anio * 10000 + 1231;
+        $lote = $this->leerLoteAnita($desdeYmd, $hastaYmd);
         $stats['lecturas_bridge'] = $lote['lecturas'];
         $stats['anita_cabeceras'] = count($lote['cabeceras']);
         $stats['anita_lineas'] = count($lote['lineas']);
 
-        $existentes = DB::table('requisicion')
-            ->pluck('id', 'numerorequisicion')
-            ->mapWithKeys(static fn ($id, $nro) => [(int) $nro => (int) $id])
-            ->all();
+        $existentes = Requisicion::query()
+            ->whereIn('numerorequisicion', array_keys($lote['cabeceras']) ?: [0])
+            ->get(['id', 'numerorequisicion', 'comentario', 'estado', 'creousuario_id'])
+            ->keyBy(static fn (Requisicion $r) => (int) $r->numerorequisicion);
 
         $faltantes = [];
+        $existentesAnita = [];
         foreach ($lote['cabeceras'] as $nro => $cab) {
-            if (! isset($existentes[$nro])) {
+            $req = $existentes->get($nro);
+            if ($req === null) {
                 $faltantes[$nro] = $cab;
+
+                continue;
+            }
+            if ($this->requisicionNacioEnAnita($req)) {
+                $existentesAnita[$nro] = $req;
+            } else {
+                $stats['omitidas_erp_nativas']++;
             }
         }
         $stats['faltantes'] = count($faltantes);
 
+        $mapas = $this->mapasErp();
+        $mapas['usuarios'] = $this->mapaUsuariosAnita($lote);
+
         if (! $dryRun) {
-            $mapas = $this->mapasErp();
             foreach ($faltantes as $nro => $cab) {
                 try {
-                    $this->importarUna($cab, $lote['lineas'][$nro] ?? [], $lote['refs'][$nro] ?? null, $mapas, $usuarioId);
+                    $this->importarUna(
+                        $cab,
+                        $lote['lineas'][$nro] ?? [],
+                        $lote['refs'][$nro] ?? null,
+                        $lote['aprobcomp'][$nro] ?? null,
+                        $mapas,
+                        $usuarioId
+                    );
                     $stats['importadas']++;
+                    $stats['autorizaciones'] += ($lote['aprobcomp'][$nro] ?? null) !== null ? 1 : 0;
                 } catch (\Throwable $e) {
                     $stats['errores_import'][] = $nro.': '.$e->getMessage();
                     Log::warning('RequisicionImportarFaltantes: error importando', [
@@ -98,8 +123,27 @@ class RequisicionImportarFaltantesDesdeAnitaService
             $lote = $this->completarLoteLineasVacias($lote);
             $stats['lineas_completadas'] = $this->completarLineasVacias($lote, $mapas);
             $stats['lecturas_bridge'] += $lote['lecturas_extra'] ?? 0;
+
+            foreach ($existentesAnita as $nro => $req) {
+                try {
+                    if ($this->alinearExistenteAnita(
+                        $req,
+                        $lote['cabeceras'][$nro],
+                        $lote['lineas'][$nro] ?? [],
+                        $lote['refs'][$nro] ?? null,
+                        $lote['aprobcomp'][$nro] ?? null,
+                        $mapas,
+                        $usuarioId
+                    )) {
+                        $stats['alineadas']++;
+                    }
+                } catch (\Throwable $e) {
+                    $stats['errores_import'][] = $nro.': alinear '.$e->getMessage();
+                }
+            }
         } else {
             $stats['omitidas'] = count($faltantes);
+            $stats['alineadas'] = count($existentesAnita);
             $stats['lineas_completadas'] = 0;
         }
 
@@ -154,6 +198,7 @@ class RequisicionImportarFaltantesDesdeAnitaService
 
         $lote = $this->leerLotePorNros($faltan);
         $mapas = $this->mapasErp();
+        $mapas['usuarios'] = $this->mapaUsuariosAnita($lote);
         foreach ($faltan as $nro) {
             if (! isset($lote['cabeceras'][$nro])) {
                 $stats['errores'][] = $nro.': no está en reqmae Anita';
@@ -161,7 +206,14 @@ class RequisicionImportarFaltantesDesdeAnitaService
                 continue;
             }
             try {
-                $this->importarUna($lote['cabeceras'][$nro], $lote['lineas'][$nro] ?? [], $lote['refs'][$nro] ?? null, $mapas, $usuarioId);
+                $this->importarUna(
+                    $lote['cabeceras'][$nro],
+                    $lote['lineas'][$nro] ?? [],
+                    $lote['refs'][$nro] ?? null,
+                    $lote['aprobcomp'][$nro] ?? null,
+                    $mapas,
+                    $usuarioId
+                );
                 $stats['importadas']++;
             } catch (\Throwable $e) {
                 $stats['errores'][] = $nro.': '.$e->getMessage();
@@ -291,13 +343,15 @@ class RequisicionImportarFaltantesDesdeAnitaService
             }
         }
 
-        return compact('cabeceras', 'lineas', 'refs');
+        $aprobcomp = $this->leerAprobcompPorNros(array_keys($cabeceras));
+
+        return compact('cabeceras', 'lineas', 'refs', 'aprobcomp');
     }
 
     /**
-     * @return array{cabeceras: array<int, object>, lineas: array<int, list<object>>, refs: array<int, object>, lecturas: int}
+     * @return array{cabeceras: array<int, object>, lineas: array<int, list<object>>, refs: array<int, object>, aprobcomp: array<int, object>, lecturas: int}
      */
-    private function leerLoteAnita(int $desdeYmd): array
+    private function leerLoteAnita(int $desdeYmd, int $hastaYmd): array
     {
         $api = new ApiAnita;
         $lecturas = 0;
@@ -307,7 +361,7 @@ class RequisicionImportarFaltantesDesdeAnitaService
             'sistema' => 'compras',
             'tabla' => 'reqmae',
             'campos' => 'reqm_nro, reqm_fecha, reqm_fecha_ent, reqm_ccosto, reqm_estado, reqm_leyenda, reqm_empresa, reqm_proveedor, reqm_cod_mon, reqm_ccosto_dest, reqm_cond_pago, reqm_es_urgente, reqm_mot_urgencia, reqm_cont_directa, reqm_usuario, reqm_fecha_ing, reqm_hora_ing',
-            'whereArmado' => ' WHERE reqm_fecha >= '.$desdeYmd,
+            'whereArmado' => ' WHERE reqm_fecha BETWEEN '.$desdeYmd.' AND '.$hastaYmd,
         ]);
         $lecturas++;
         $this->assertListOk($rawMae, 'reqmae');
@@ -357,12 +411,54 @@ class RequisicionImportarFaltantesDesdeAnitaService
             }
         }
 
+        $aprobcomp = $this->leerAprobcompPorNros(array_keys($cabeceras));
+        $lecturas++;
+
         return [
             'cabeceras' => $cabeceras,
             'lineas' => $lineas,
             'refs' => $refs,
+            'aprobcomp' => $aprobcomp,
             'lecturas' => $lecturas,
         ];
+    }
+
+    /**
+     * @param  list<int>  $nros
+     * @return array<int, object>
+     */
+    private function leerAprobcompPorNros(array $nros): array
+    {
+        $nros = array_values(array_filter(array_map('intval', $nros), static fn (int $n) => $n > 0));
+        if ($nros === []) {
+            return [];
+        }
+
+        $whereNros = $this->whereNrosEnRangos($nros, 'aprobc_nro');
+        $andNros = preg_replace('/^\s*WHERE\s+/i', '', $whereNros) ?? '1=0';
+        $api = new ApiAnita;
+        $raw = $api->apiCall([
+            'acc' => 'list',
+            'sistema' => 'compras',
+            'tabla' => RequisicionAnitaAprobcompMapper::TABLA,
+            'campos' => 'aprobc_nro, aprobc_cod_usuario, aprobc_usuario, aprobc_estado, aprobc_motivo, aprobc_fecha_modif, aprobc_fecha_envio, aprobc_hora_modif, aprobc_hora_envio',
+            'whereArmado' => " WHERE aprobc_tipo MATCHES 'R*' AND (".$andNros.')',
+        ]);
+        $this->assertListOk($raw, 'aprobcomp');
+
+        $out = [];
+        foreach (ApiAnita::decodificarListaFilas($raw) as $fila) {
+            $nro = (int) ($fila->aprobc_nro ?? 0);
+            if ($nro <= 0) {
+                continue;
+            }
+            $estado = (int) ($fila->aprobc_estado ?? 0);
+            if (! isset($out[$nro]) || $estado === RequisicionAnitaAprobcompMapper::ESTADO_APROBADO) {
+                $out[$nro] = $fila;
+            }
+        }
+
+        return $out;
     }
 
     /**
@@ -636,17 +732,120 @@ class RequisicionImportarFaltantesDesdeAnitaService
     }
 
     /**
+     * @param  array{cabeceras?: array<int, object>, aprobcomp?: array<int, object>}  $lote
+     * @return array<int, int>
+     */
+    private function mapaUsuariosAnita(array $lote): array
+    {
+        $codigos = [];
+        foreach ($lote['cabeceras'] ?? [] as $cab) {
+            $codigos[] = (int) ($cab->reqm_usuario ?? 0);
+        }
+        foreach ($lote['aprobcomp'] ?? [] as $ap) {
+            $codigos[] = (int) ($ap->aprobc_cod_usuario ?? 0);
+        }
+
+        return AnitaUsuarioBridgeSupport::mapaErpIdPorUsuUsuario($codigos);
+    }
+
+    private function requisicionNacioEnAnita(Requisicion $req): bool
+    {
+        return str_starts_with(trim((string) $req->comentario), 'Importada desde Anita');
+    }
+
+    private function usuarioErpDesdeAnita(object $cab, array $mapas, int $fallback): int
+    {
+        $cod = (int) ($cab->reqm_usuario ?? 0);
+        $id = (int) (($mapas['usuarios'][$cod] ?? 0));
+
+        return $id > 0 ? $id : $fallback;
+    }
+
+    /**
      * @param  list<object>  $lineas
      * @param  array<string, mixed>  $mapas
      */
-    private function importarUna(object $cab, array $lineas, ?object $ref, array $mapas, int $usuarioId): void
+    private function alinearExistenteAnita(
+        Requisicion $req,
+        object $cab,
+        array $lineas,
+        ?object $ref,
+        ?object $aprobcomp,
+        array $mapas,
+        int $usuarioId
+    ): bool {
+        $hubo = false;
+        $estadoAnita = RequisicionAnitaEstadoMapper::anitaCharToErpNombre($cab->reqm_estado ?? '0');
+        if ((string) $req->estado !== $estadoAnita) {
+            $req->forceFill(['estado' => $estadoAnita])->save();
+            Requisicion_Estado::query()->create([
+                'requisicion_id' => $req->id,
+                'fecha' => now(),
+                'estado' => $estadoAnita,
+                'usuario_id' => $this->usuarioErpDesdeAnita($cab, $mapas, $usuarioId),
+                'observacion' => 'Ajuste estado desde Anita (discrepancia)',
+            ]);
+            $hubo = true;
+        }
+
+        $creo = $this->usuarioErpDesdeAnita($cab, $mapas, 0);
+        if ($creo > 0 && (int) $req->creousuario_id !== $creo) {
+            $req->forceFill(['creousuario_id' => $creo])->save();
+            $hubo = true;
+        }
+
+        if ($this->asegurarAutorizacionDesdeAprobcomp($req, $aprobcomp, $cab, $mapas, $usuarioId)) {
+            $hubo = true;
+        }
+
+        return $hubo;
+    }
+
+    /**
+     * @param  array<string, mixed>  $mapas
+     */
+    private function asegurarAutorizacionDesdeAprobcomp(
+        Requisicion $req,
+        ?object $aprobcomp,
+        object $cab,
+        array $mapas,
+        int $usuarioId
+    ): bool {
+        if ($aprobcomp === null || (int) ($aprobcomp->aprobc_estado ?? 0) !== RequisicionAnitaAprobcompMapper::ESTADO_APROBADO) {
+            return false;
+        }
+        if (Requisicion_Estado::query()->where('requisicion_id', $req->id)->where('estado', 'APROBADA')->exists()) {
+            return false;
+        }
+
+        $codAprob = (int) ($aprobcomp->aprobc_cod_usuario ?? 0);
+        $usuarioAprob = (int) (($mapas['usuarios'][$codAprob] ?? 0) ?: $this->usuarioErpDesdeAnita($cab, $mapas, $usuarioId));
+        $fechaYmd = (string) ($aprobcomp->aprobc_fecha_modif ?? $aprobcomp->aprobc_fecha_envio ?? $cab->reqm_fecha ?? '');
+
+        Requisicion_Estado::query()->create([
+            'requisicion_id' => $req->id,
+            'fecha' => $this->ymdAFecha($fechaYmd),
+            'estado' => 'APROBADA',
+            'usuario_id' => $usuarioAprob > 0 ? $usuarioAprob : $usuarioId,
+            'observacion' => 'Aprobación histórica desde Anita aprobcomp',
+        ]);
+
+        return true;
+    }
+
+    /**
+     * @param  list<object>  $lineas
+     * @param  array<string, mixed>  $mapas
+     */
+    private function importarUna(object $cab, array $lineas, ?object $ref, ?object $aprobcomp, array $mapas, int $usuarioId): void
     {
         $nro = (int) $cab->reqm_nro;
         $proveedorCod = ltrim((string) ($cab->reqm_proveedor ?? ''), '0');
         $ccAnita = (int) ($cab->reqm_ccosto ?? 0);
         $monAnita = trim((string) ($cab->reqm_cod_mon ?? ''));
+        $creousuarioId = $this->usuarioErpDesdeAnita($cab, $mapas, $usuarioId);
 
-        DB::transaction(function () use ($cab, $lineas, $ref, $mapas, $usuarioId, $nro, $proveedorCod, $ccAnita, $monAnita) {
+        DB::transaction(function () use ($cab, $lineas, $ref, $aprobcomp, $mapas, $usuarioId, $nro, $proveedorCod, $ccAnita, $monAnita, $creousuarioId) {
             $req = Requisicion::query()->create([
                 'empresa_id' => (int) ($cab->reqm_empresa ?? 0) ?: 1,
                 'centrocosto_id' => $mapas['ccostos'][$ccAnita] ?? null,
@@ -661,7 +860,7 @@ class RequisicionImportarFaltantesDesdeAnitaService
                 'proveedor_id' => $proveedorCod !== '' ? ($mapas['proveedores'][$proveedorCod] ?? null) : null,
                 'formapago_id' => 2,
                 'estado' => RequisicionAnitaEstadoMapper::anitaCharToErpNombre($cab->reqm_estado ?? '0'),
-                'creousuario_id' => $usuarioId,
+                'creousuario_id' => $creousuarioId,
                 'oficinacompra_id' => null,
                 'anita_sync_estado' => RequisicionAnitaSyncEstado::SYNC_OK,
                 'anita_sync_error' => null,
@@ -698,9 +897,11 @@ class RequisicionImportarFaltantesDesdeAnitaService
                 'requisicion_id' => $req->id,
                 'fecha' => now(),
                 'estado' => $req->estado,
-                'usuario_id' => $usuarioId,
+                'usuario_id' => $creousuarioId,
                 'observacion' => 'Alta de requisición desde Anita (lote 2026)',
             ]);
+
+            $this->asegurarAutorizacionDesdeAprobcomp($req, $aprobcomp, $cab, $mapas, $usuarioId);
         });
     }
 

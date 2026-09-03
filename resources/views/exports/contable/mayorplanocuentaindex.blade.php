@@ -1,6 +1,9 @@
 @php
     $multiempresa = (bool) ($multiempresa ?? false);
-    $colSpan = $multiempresa ? 17 : 16;
+    $mostrarCentrocosto = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros ?? []);
+    $colSpan = ($multiempresa ? 17 : 16) - ($mostrarCentrocosto ? 0 : 1);
+    $colSpanAntesImportes = $mostrarCentrocosto ? 12 : 11;
+    $vaciasSaldoInicial = $mostrarCentrocosto ? 14 : 13;
     $totales = is_array($totales ?? null) ? $totales : [];
     $cantidadLineas = (int) ($totales['cantidad_filas'] ?? 0);
     $formatoExcel = \App\Support\Export\ExcelFormatoNumero::normalizar(
@@ -45,7 +48,9 @@
         <th>Emisor</th>
         <th>CUIT</th>
         <th>Descripción mov.</th>
-        <th>Centro de costo</th>
+        @if ($mostrarCentrocosto)
+            <th>Centro de costo</th>
+        @endif
         <th>O.Compra</th>
         <th>Mon</th>
         <th>Cotiz.</th>
@@ -81,20 +86,9 @@
         @elseif ($tipo === 'saldo_inicial')
             <tr>
                 <td>Saldo Inicial</td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
-                <td></td>
+                @for ($i = 0; $i < $vaciasSaldoInicial; $i++)
+                    <td></td>
+                @endfor
                 <td>{{ $fmt($fila['saldo_ejercicio'] ?? null) }}</td>
                 @if ($multiempresa)
                     <td></td>
@@ -102,7 +96,7 @@
             </tr>
         @elseif ($tipo === 'total_cuenta' || $tipo === 'total_cc')
             <tr>
-                <td colspan="12">
+                <td colspan="{{ $colSpanAntesImportes }}">
                     {{ $tipo === 'total_cc' ? 'Total centro de costo '.(($fila['centrocosto_codigo'] ?? '') !== '' ? $fila['centrocosto_codigo'] : 'Sin CC') : 'Total cuenta '.($fila['cuenta_codigo'] ?? '') }}
                 </td>
                 <td>{{ $fmt($fila['debe'] ?? null) }}</td>
@@ -122,10 +116,12 @@
                 <td>{{ ($fila['emisor_fmt'] ?? '') !== '' ? $fila['emisor_fmt'] : ($fila['emisor'] ?? '') }}</td>
                 <td>{{ $fila['cuit'] ?? '' }}</td>
                 <td>{{ $fila['descripcion'] ?? '' }}</td>
-                <td>
-                    {{ ($fila['centrocosto_codigo'] ?? '') !== '' ? $fila['centrocosto_codigo'] : 'Sin CC' }}
-                    {{ $fila['centrocosto_nombre'] ?? '' }}
-                </td>
+                @if ($mostrarCentrocosto)
+                    <td>
+                        {{ ($fila['centrocosto_codigo'] ?? '') !== '' ? $fila['centrocosto_codigo'] : 'Sin CC' }}
+                        {{ $fila['centrocosto_nombre'] ?? '' }}
+                    </td>
+                @endif
                 <td>{{ (int) ($fila['nro_oc'] ?? 0) > 0 ? $fila['nro_oc'] : '' }}</td>
                 <td>{{ $fila['moneda_abrev'] ?? '' }}</td>
                 <td>{{ $fmtCotiz($fila['cotizacion'] ?? null) }}</td>

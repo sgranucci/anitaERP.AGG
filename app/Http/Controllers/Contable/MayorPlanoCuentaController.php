@@ -50,6 +50,11 @@ class MayorPlanoCuentaController extends Controller
                 'empresa_ids' => $filtros['empresa_ids'] ?? [],
                 'consolidar_empresas' => (bool) ($filtros['consolidar_empresas'] ?? true),
             ]);
+            ReportePreferenciasUsuario::persistirBool(
+                self::PREFERENCIAS_CLAVE,
+                'mostrar_columna_centrocosto',
+                MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros),
+            );
         }
 
         $consultado = false;
@@ -153,6 +158,13 @@ class MayorPlanoCuentaController extends Controller
         MayorPlanoCuentaRuntimeSupport::elevarLimites();
 
         $filtros = MayorPlanoCuentaListadoFiltros::resolverDesdeRequest($request);
+        if (! $request->has('mostrar_columna_centrocosto')) {
+            $filtros['mostrar_columna_centrocosto'] = ReportePreferenciasUsuario::leerBool(
+                self::PREFERENCIAS_CLAVE,
+                'mostrar_columna_centrocosto',
+                true,
+            );
+        }
         $this->assertAccesoEmpresas($filtros['empresa_ids'] ?? []);
 
         if (! MayorPlanoCuentaListadoFiltros::tieneCriteriosAplicados($filtros)) {
@@ -477,6 +489,14 @@ class MayorPlanoCuentaController extends Controller
             $filtros['consolidar_empresas'] = ReportePreferenciasUsuario::leerBool(
                 self::PREFERENCIAS_CLAVE,
                 'consolidar_empresas',
+                true,
+            );
+        }
+
+        if (! $request->has('mostrar_columna_centrocosto')) {
+            $filtros['mostrar_columna_centrocosto'] = ReportePreferenciasUsuario::leerBool(
+                self::PREFERENCIAS_CLAVE,
+                'mostrar_columna_centrocosto',
                 true,
             );
         }

@@ -62,6 +62,11 @@
         <div class="card">
             <div class="card-body login-card-body">
                 <p class="login-box-msg">Inicio de Sesión</p>
+                @if (session('url.intended'))
+                <div class="alert alert-info py-2">
+                    Ingresá con tu usuario de Anita ERP para abrir el documento del mail.
+                </div>
+                @endif
                 @if (session('status'))
                 <div class="alert alert-success" role="alert">
                     {{ session('status') }}

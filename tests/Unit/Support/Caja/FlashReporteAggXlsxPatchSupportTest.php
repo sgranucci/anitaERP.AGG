@@ -83,4 +83,43 @@ class FlashReporteAggXlsxPatchSupportTest extends TestCase
         $this->assertStringContainsString('width="17.138671875"', $saneado);
         $this->assertStringNotContainsString('<row r="14"', $saneado);
     }
+
+    public function test_completa_if_vacio_de_rebisco_para_electronic(): void
+    {
+        $patcher = new FlashReporteAggXlsxPatchSupport;
+        $xml = '<c r="BB7"><f>IF(A7="","",IF($BA$7>0,(C7-BA7)/BA7,))</f></c>'
+            .'<c r="BB8"><f t="shared" ref="BB8:BB38" si="21">IF(A8="","",IF($BA$7>0,(C8-BA8)/BA8,))</f></c>'
+            .'<c r="BB39"><f>IF($AK39&gt;0,(C39-($BA39))/($BA$39),)</f></c>';
+
+        $saneado = $patcher->sanearXmlIfIncompletoPresentacion($xml);
+
+        $this->assertStringContainsString('IF(BA7>0,(C7-BA7)/BA7,100%)', $saneado);
+        $this->assertStringContainsString('IF(BA8>0,(C8-BA8)/BA8,100%)', $saneado);
+        $this->assertStringContainsString('IF($AK39>0,(C39-($BA39))/($BA$39),0)', $saneado);
+        $this->assertStringNotContainsString('BA7/BA7,))', $saneado);
+    }
+
+    public function test_rellenar_corrige_if_de_rebisco_en_la_plantilla(): void
+    {
+        $plantilla = (new FlashReporteAggExcelService)->rutaPlantilla();
+        $path = sys_get_temp_dir().'/flash-agg-rebisco-if-'.uniqid('', true).'.xlsx';
+
+        try {
+            (new FlashReporteAggXlsxPatchSupport)->rellenar($plantilla, $path, [
+                'Datos Rebisco' => ['A1' => 'ok'],
+            ]);
+
+            $zip = new ZipArchive;
+            $this->assertTrue($zip->open($path) === true);
+            $rebisco = $zip->getFromName('xl/worksheets/sheet4.xml');
+            $zip->close();
+            $this->assertNotFalse($rebisco);
+            $this->assertStringContainsString('IF(BA7&gt;0,(C7-BA7)/BA7,100%)', (string) $rebisco);
+            $this->assertStringNotContainsString('$BA$7', (string) $rebisco);
+        } finally {
+            if (is_file($path)) {
+                unlink($path);
+            }
+        }
+    }
 }

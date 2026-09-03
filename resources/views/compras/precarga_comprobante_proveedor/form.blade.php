@@ -91,7 +91,7 @@
 			</div>
 			<label for="Total" class="col-lg-2 col-form-label">Cotizacion</label>
             <div class="col-lg-3">
-			    <input type="text" id="cotizacion" name="cotizacion" class="form-control" value="{{number_format($data->cotizacion ?? 0, 2)}}" readonly></input>
+			    <input type="text" id="cotizacion" name="cotizacion" class="form-control" value="{{ number_format((float) ($data->cotizacion ?? 0), 4, ',', '.') }}" readonly>
             </div>
 		</div>           
     </div>
@@ -128,13 +128,13 @@
     	<div class="form-group row">
 			<label for="Subtotal" class="col-lg-4 col-form-label">Subtotal</label>
             <div class="col-lg-3">
-			    <input type="text" id="subtotal" name="subtotal" class="form-control" value="{{number_format($data->subtotal ?? 0, 2)}}"></input>
+			    <input type="text" id="subtotal" name="subtotal" class="form-control" value="{{ number_format((float) ($data->subtotal ?? 0), 2, ',', '.') }}">
             </div>
 		</div>
 		<div class="form-group row">
 			<label for="Total" class="col-lg-4 col-form-label">Total</label>
             <div class="col-lg-3">
-			    <input type="text" id="total" name="total" class="form-control" value="{{number_format($data->total ?? 0, 2)}}"></input>
+			    <input type="text" id="total" name="total" class="form-control" value="{{ number_format((float) ($data->total ?? 0), 2, ',', '.') }}">
             </div>
 		</div>              
     </div>

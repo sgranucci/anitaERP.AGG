@@ -272,6 +272,23 @@ class PeriodoContableCierreSupport
     }
 
     /**
+     * True si la fecha de operación está cubierta por el cierre vigente (sin bypass de permiso ni apertura).
+     */
+    public static function fechaEnPeriodoCerrado(int $empresaId, string $fecha, string $alcance): bool
+    {
+        if ($empresaId <= 0 || trim($fecha) === '') {
+            return false;
+        }
+
+        $fechaCierre = self::fechaCierreVigente($empresaId, $alcance);
+        if ($fechaCierre === null) {
+            return false;
+        }
+
+        return ! Carbon::parse($fecha)->startOfDay()->gt($fechaCierre);
+    }
+
+    /**
      * Facturación electrónica (WSFE/CAE): la fecha la valida AFIP/ARCA.
      * Manual (M) y CAEA (A) sí aplican cierre contable.
      */

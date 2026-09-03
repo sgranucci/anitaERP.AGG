@@ -332,6 +332,38 @@ return [
     'emision_profile_en_respuesta' => filter_var(env('GASTRONOMIA_EMISION_PROFILE_EN_RESPUESTA', false), FILTER_VALIDATE_BOOLEAN),
 
     /**
+     * Timeout SOAP (segundos) solo para la lectura previa de último número ARCA en el POS.
+     * La emisión sigue usando ARCA_WSFE_SOAP_TIMEOUT_POS (p. ej. 18).
+     */
+    'preview_arca_soap_timeout' => max(5, (int) env('GASTRONOMIA_PREVIEW_ARCA_SOAP_TIMEOUT', 10)),
+
+    /**
+     * Si true, al emitir usa el próximo número preleído (ARCA) cuando es > 0 y no es CAEA.
+     * false = como antes (siempre FECompUltimoAutorizado al facturar). PV nuevo (último 0 sin ventas) sí usa 1.
+     */
+    'emitir_usar_numero_preview' => filter_var(env('GASTRONOMIA_EMITIR_USAR_NUMERO_PREVIEW', true), FILTER_VALIDATE_BOOLEAN),
+
+    /**
+     * Costo de insumos diferido al emitir (POS / cierre Waitry / NC).
+     * habilitado=true: los movimientos de insumo se graban con costo 0 y los completa
+     * gastronomia:completar-costo-insumos (scheduler, cada hora). Evita en la emisión el
+     * barrido de articulo_movimiento + bridge Anita por cada línea con fórmula (~1 s por factura).
+     * dias: ventana hacia atrás (por fechajornada) que revisa el job; lo que quede en 0 fuera
+     * de la ventana lo toma stock:backfill-precio-articulo-movimiento --solo=insumos.
+     */
+    /**
+     * Canje premio Wigos: buscar el artículo del GIFT_ID primero por sku = ? (índice) y solo si no aparece
+     * con UPPER(TRIM(sku)) como antes. false = solo el UPPER(TRIM()) histórico (45 ms por ítem).
+     */
+    'canje_premio_sku_indexado' => filter_var(env('GASTRONOMIA_CANJE_PREMIO_SKU_INDEXADO', true), FILTER_VALIDATE_BOOLEAN),
+
+    'insumos_costo_diferido' => [
+        'habilitado' => filter_var(env('GASTRONOMIA_INSUMOS_COSTO_DIFERIDO', true), FILTER_VALIDATE_BOOLEAN),
+        'dias' => max(1, (int) env('GASTRONOMIA_INSUMOS_COSTO_DIFERIDO_DIAS', 2)),
+        'max_articulos' => max(20, (int) env('GASTRONOMIA_INSUMOS_COSTO_DIFERIDO_MAX_ARTICULOS', 300)),
+    ],
+
+    /**
      * Si el total de emisión supera este umbral (ms), se loguea gastronomia.emision.lento con las etapas más costosas.
      */
     'emision_umbral_advertencia_ms' => max(0, (int) env('GASTRONOMIA_EMISION_UMBRAL_ADVERTENCIA_MS', 10000)),

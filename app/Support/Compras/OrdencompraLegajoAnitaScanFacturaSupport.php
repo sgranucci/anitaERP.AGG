@@ -47,11 +47,12 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
             $out[$ocId][] = [
                 'id' => 'anita-'.$docId,
                 'origen' => 'anita',
+                'origen_label' => PrecargaComprobanteOrigenEntrada::etiqueta(PrecargaComprobanteOrigenEntrada::SCAN_ANITA),
                 'documento_id' => $docId,
                 'etiqueta' => self::etiqueta($fila),
                 'fecha' => self::fecha($fila['ifecha'] ?? ''),
                 'total' => null,
-                'estado' => 'Anita',
+                'estado' => PrecargaComprobanteOrigenEntrada::etiqueta(PrecargaComprobanteOrigenEntrada::SCAN_ANITA),
                 'url_pdf' => route('ordencompra_legajo_bandeja_factura_anita_pdf', [
                     'id' => $ocId,
                     'documento' => $docId,
@@ -94,13 +95,21 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
 
     public static function perteneceAlLegajo(Ordencompra $oc, int $documentoId): bool
     {
+        return self::filaDeOc($oc, $documentoId) !== null;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    public static function filaDeOc(Ordencompra $oc, int $documentoId): ?array
+    {
         if ($documentoId <= 0) {
-            return false;
+            return null;
         }
         $nro = (int) preg_replace('/\D+/', '', (string) $oc->numeroordencompra);
         $emp = self::empresaAnitaId($oc);
         if ($nro <= 0 || $emp <= 0) {
-            return false;
+            return null;
         }
         $filas = self::listarScanFactura([$nro], $documentoId);
 
@@ -108,11 +117,11 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
             if ((int) ($fila['iempresaid'] ?? 0) === $emp
                 && (int) ($fila['iotid'] ?? 0) === $nro
                 && (int) ($fila['idocumentoid'] ?? 0) === $documentoId) {
-                return true;
+                return $fila;
             }
         }
 
-        return false;
+        return null;
     }
 
     private static function empresaAnitaId(Ordencompra $oc): int
@@ -172,7 +181,13 @@ final class OrdencompraLegajoAnitaScanFacturaSupport
         $suc = (int) ($fila['isucursal'] ?? 0);
         $nro = (int) ($fila['inumero'] ?? 0);
 
-        return trim(sprintf('%s %04d-%08d (Anita)', $letra !== '' ? $letra : 'FC', $suc, $nro));
+        return trim(sprintf(
+            '%s %04d-%08d (%s)',
+            $letra !== '' ? $letra : 'FC',
+            $suc,
+            $nro,
+            PrecargaComprobanteOrigenEntrada::etiqueta(PrecargaComprobanteOrigenEntrada::SCAN_ANITA)
+        ));
     }
 
     private static function fecha(string $ymd): string

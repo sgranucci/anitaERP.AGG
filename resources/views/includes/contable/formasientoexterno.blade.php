@@ -1,6 +1,9 @@
 @php
     // hasOne del comprobante: no usar Asiento::first() (eso toma el primer asiento de toda la tabla).
-    $asientoEdicion = ($data ?? null)?->asientos;
+    // En altas (p. ej. OP) $data puede ser stdClass sin relación asientos: ?-> igual dispara el notice.
+    $asientoEdicion = (isset($data) && is_object($data) && isset($data->asientos))
+        ? $data->asientos
+        : null;
     $lineasAsiento = $asientoEdicion?->asiento_movimientos ?? collect();
     $totalDebeAsientoExt = 0.0;
     $totalHaberAsientoExt = 0.0;

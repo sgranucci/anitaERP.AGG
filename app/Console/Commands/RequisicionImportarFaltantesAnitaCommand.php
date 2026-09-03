@@ -64,6 +64,8 @@ class RequisicionImportarFaltantesAnitaCommand extends Command
             ['Faltantes en ERP', (string) $stats['faltantes']],
             ['Importadas', (string) $stats['importadas']],
             ['Req. con líneas completadas', (string) ($stats['lineas_completadas'] ?? 0)],
+            ['Alineadas (Anita)', (string) ($stats['alineadas'] ?? 0)],
+            ['ERP nativas omitidas', (string) ($stats['omitidas_erp_nativas'] ?? 0)],
             ['OC vinculadas ERP', (string) $stats['oc_vinculadas']],
             ['OC escritas en Anita', (string) $stats['oc_anita']],
             ['Escrituras bridge', (string) $stats['escrituras_bridge']],

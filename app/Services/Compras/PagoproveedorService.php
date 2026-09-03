@@ -30,7 +30,10 @@ use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
+use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
+use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 
 class PagoproveedorService
 {
@@ -46,6 +49,7 @@ class PagoproveedorService
         private RetencionesPagoCalculator $retencionesPagoCalculator,
         private CuentacajaRepositoryInterface $cuentacajaRepository,
         private CuentacontableRepositoryInterface $cuentacontableRepository,
+        private ProveedorCuentacorrienteAplicacionAnitaSyncService $cuentacorrienteAnitaSyncService,
     ) {
     }
 
@@ -115,7 +119,8 @@ class PagoproveedorService
 
                 $pago = $this->pagoproveedorRepository->create([
                     'empresa_id' => $empresaId,
-                    'tipotransaccion_caja_id' => ($data['tipotransaccion_caja_id'] ?? null) ?: null,
+                    'tipotransaccion_caja_id' => ($data['tipotransaccion_caja_id'] ?? null)
+                        ?: (IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorConfig() ?: null),
                     'tipocomprobante' => (string) ($data['tipocomprobante'] ?? config('pagoproveedor.tipocomprobante_default', 'OPP')),
                     'letra' => (string) ($data['letra'] ?? config('pagoproveedor.letra_default', 'A')),
                     'sucursal' => $sucursal,
@@ -140,11 +145,19 @@ class PagoproveedorService
                 return $pago;
             });
 
+            $this->sincronizarAnitaTesoreria($pago->fresh(), false);
+
             return [
                 'mensaje' => 'ok',
                 'pagoproveedor_id' => $pago->id,
             ];
         } catch (\Throwable $e) {
+            Log::error('pagoproveedor.guardar.fallo', [
+                'mensaje' => $e->getMessage(),
+                'archivo' => $e->getFile(),
+                'linea' => $e->getLine(),
+            ]);
+
             return ['errores' => $e->getMessage()];
         }
     }
@@ -188,7 +201,8 @@ class PagoproveedorService
                     'cotizacion' => (float) ($data['cotizacion'] ?? $pago->cotizacion),
                     'moneda_id' => (int) ($data['moneda_id'] ?? $pago->moneda_id),
                     'modo_cotizacion' => (string) ($data['modo_cotizacion'] ?? $pago->modo_cotizacion),
-                    'tipotransaccion_caja_id' => ($data['tipotransaccion_caja_id'] ?? null) ?: null,
+                    'tipotransaccion_caja_id' => ($data['tipotransaccion_caja_id'] ?? null)
+                        ?: ($pago->tipotransaccion_caja_id ?: IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorConfig() ?: null),
                 ], $id);
 
                 $pago = $this->pagoproveedorRepository->findOrFail($id);
@@ -196,8 +210,17 @@ class PagoproveedorService
                 $this->persistirDetalle($pago, $data, $request, false);
             });
 
+            $this->sincronizarAnitaTesoreria($this->pagoproveedorRepository->findOrFail($id), true);
+
             return ['mensaje' => 'ok'];
         } catch (\Throwable $e) {
+            Log::error('pagoproveedor.actualizar.fallo', [
+                'id' => $id,
+                'mensaje' => $e->getMessage(),
+                'archivo' => $e->getFile(),
+                'linea' => $e->getLine(),
+            ]);
+
             return ['errores' => $e->getMessage()];
         }
     }
@@ -316,8 +339,14 @@ class PagoproveedorService
      */
     private function persistirCajaMovimiento(Pagoproveedor $pago, array $data, bool $esAlta): int
     {
+        $cuentacajaIds = array_values(array_filter(
+            $data['cuentacaja_ids'] ?? [],
+            static fn ($id) => (int) $id > 0
+        ));
+        $data['cuentacaja_ids'] = $cuentacajaIds;
+
         if (
-            empty($data['cuentacaja_ids'])
+            $cuentacajaIds === []
             && empty($data['numerocheque_emitidos'])
             && empty($data['numerocheque_recibidos'])
         ) {
@@ -325,13 +354,23 @@ class PagoproveedorService
         }
 
         $payload = $data;
+        $tipoOppId = (int) ($pago->tipotransaccion_caja_id ?: IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorConfig());
+        if ($tipoOppId <= 0) {
+            throw new Exception('No hay tipo de transacción OPP configurado para el movimiento de caja de la OP.');
+        }
+
         $payload['empresa_id'] = $pago->empresa_id;
         $payload['fecha'] = $pago->fecha?->format('Y-m-d');
         $payload['caja_id'] = $pago->caja_id;
         $payload['detalle'] = $pago->detalle;
         $payload['pagoproveedor_id'] = $pago->id;
+        $payload['proveedor_id'] = $pago->proveedor_id;
         $payload['monto'] = $pago->monto;
         $payload['usuario_id'] = Auth::id();
+        $payload['tipotransaccion_caja_id'] = $tipoOppId;
+        $payload['numerotransaccion'] = (string) $pago->numerotransaccion;
+        $payload['proveedor_formapago_id'] = $pago->proveedor_formapago_id;
+        $payload['observaciones'] = $payload['observaciones'] ?? [];
 
         if (! $esAlta && $pago->caja_movimiento_id) {
             $this->cajaMovimientoRepository->update($payload, $pago->caja_movimiento_id);
@@ -344,7 +383,10 @@ class PagoproveedorService
             }
             $cajaMovimientoId = (int) $cajaMovimiento->id;
             $this->cajaMovimientoCuentacajaRepository->create($payload, $cajaMovimientoId);
-            $this->pagoproveedorRepository->update(['caja_movimiento_id' => $cajaMovimientoId], $pago->id);
+            $this->pagoproveedorRepository->update([
+                'caja_movimiento_id' => $cajaMovimientoId,
+                'tipotransaccion_caja_id' => $tipoOppId,
+            ], $pago->id);
 
             if (Schema::hasColumn('caja_movimiento', 'pagoproveedor_id')) {
                 Caja_Movimiento::query()->where('id', $cajaMovimientoId)->update(['pagoproveedor_id' => $pago->id]);
@@ -360,6 +402,38 @@ class PagoproveedorService
         $this->cajaMovimientoEstadoRepository->create($estadoData, $cajaMovimientoId);
 
         return $cajaMovimientoId;
+    }
+
+    /**
+     * Replica pago/auxpag/tesmov en Anita (mismo camino que Ingreso/Egreso OPP).
+     */
+    public function sincronizarAnitaTesoreria(Pagoproveedor $pago, bool $reemplazar): void
+    {
+        if ((string) $pago->estado === 'PRE CARGA') {
+            return;
+        }
+
+        $cajaId = (int) ($pago->caja_movimiento_id ?? 0);
+        if ($cajaId <= 0) {
+            Log::warning('pagoproveedor.anita.sin_movimiento_caja', [
+                'pagoproveedor_id' => $pago->id,
+                'numero' => $pago->numerotransaccion,
+            ]);
+
+            return;
+        }
+
+        $movimiento = Caja_Movimiento::query()->find($cajaId);
+        if ($movimiento === null) {
+            return;
+        }
+
+        if ($reemplazar) {
+            IngresoEgresoAnitaTesmovSupport::eliminarDesdeMovimiento($movimiento);
+        }
+
+        IngresoEgresoAnitaTesmovSupport::grabarDesdeMovimiento($movimiento->fresh());
+        $this->cuentacorrienteAnitaSyncService->syncPorPagoproveedor((int) $pago->id);
     }
 
     /**
@@ -719,6 +793,8 @@ class PagoproveedorService
 
                 return $pago->fresh();
             });
+
+            $this->sincronizarAnitaTesoreria($pago->fresh(), false);
 
             return [
                 'mensaje' => 'ok',

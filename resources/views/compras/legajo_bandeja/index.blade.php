@@ -3,13 +3,21 @@
 Bandeja de legajos
 @endsection
 
+@section('styles')
+<link rel="stylesheet" href="{{ asset('assets/pages/css/compras/ordencompra/asignar_factura_legajo.css') }}?v={{ @filemtime(public_path('assets/pages/css/compras/ordencompra/asignar_factura_legajo.css')) ?: time() }}">
+@endsection
+
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/ordencompra/enviar_gastronomia_firmante.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/enviar_gastronomia_firmante.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/ordencompra/asignar_factura_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/asignar_factura_legajo.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/legajo_bandeja/bandeja.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/legajo_bandeja/bandeja.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @section('contenido')
+@include('compras.ordencompra.partials.modal_asignar_factura_legajo')
+@include('compras.ordencompra.partials.modal_firmante_gastronomia_arbol')
 @php
     use App\Support\Compras\OrdencompraLegajoBandejaFiltros;
     use App\Support\Compras\OrdencompraListadoFiltros;
@@ -279,7 +287,7 @@ Bandeja de legajos
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span aria-hidden="true">&times;</span></button>
                 </div>
                 <div class="modal-body">
-                    <p class="text-muted small">Deja la COM vinculada a la precarga para que Cuentas a pagar abra el alta con esa recepción ya elegida.</p>
+                    <p class="text-muted small">Deja la COM vinculada a la factura para que Cuentas a pagar abra el alta con esa recepción ya elegida. Si la factura viene de scan Anita, el origen queda como <strong>scan manual (no IA)</strong>.</p>
                     <div class="mb-3">
                         <label class="small font-weight-bold">Factura</label>
                         <div id="bandejaAsignarPrecarga"></div>
@@ -420,6 +428,7 @@ Bandeja de legajos
                 <table class="table table-striped table-bordered table-hover">
                     <thead>
                         <tr>
+                            <th>Id</th>
                             <th>OC</th>
                             <th>Fecha</th>
                             <th>Empresa</th>
@@ -437,6 +446,7 @@ Bandeja de legajos
                     <tbody>
                         @forelse ($filas as $row)
                             <tr>
+                                <td>{{ $row['id'] }}</td>
                                 <td>
                                     <a href="{{ $row['url_oc'] }}" target="_blank" rel="noopener">{{ $row['numero'] }}</a>
                                     @if (!empty($row['es_gastronomia']))
@@ -501,6 +511,15 @@ Bandeja de legajos
                                     <a href="{{ $row['url_oc'] }}" class="btn btn-xs btn-info" title="Ver orden de compra" target="_blank" rel="noopener">
                                         <i class="fa fa-file-text-o"></i>
                                     </a>
+                                    @if (!empty($puede_actualizar) && !empty($row['url_asignar_factura']))
+                                        <button type="button" class="btn btn-xs btn-outline-danger js-oc-asignar-factura"
+                                                data-url="{{ $row['url_asignar_factura'] }}"
+                                                data-numero="{{ $row['numero'] }}"
+                                                data-proveedor="{{ $row['proveedor'] }}"
+                                                title="Asignar PDF de factura al legajo">
+                                            <i class="fa fa-cloud-upload"></i>
+                                        </button>
+                                    @endif
                                     @if (!empty($row['url_factura']))
                                         <button type="button" class="btn btn-xs btn-outline-danger js-bandeja-ver-factura"
                                                 data-url-pdf="{{ $row['url_factura'] }}"
@@ -607,7 +626,7 @@ Bandeja de legajos
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="{{ $vista !== OrdencompraLegajoBandejaFiltros::VISTA_PENDIENTES ? 10 : 9 }}" class="text-center text-muted">
+                                <td colspan="{{ $vista !== OrdencompraLegajoBandejaFiltros::VISTA_PENDIENTES ? 11 : 10 }}" class="text-center text-muted">
                                     @if (!empty($sinSectorAsignado))
                                         No tiene sector de legajo asignado. No se muestran registros.
                                     @else

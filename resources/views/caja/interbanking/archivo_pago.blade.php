@@ -63,12 +63,38 @@
                                 <p class="text-danger small mb-0">Sin empresas asignadas.</p>
                             @endif
                         </div>
-                        <label for="cbu_origen" class="{{ $colLabel }} requerido">CBU cta. origen</label>
+                        <label class="{{ $colLabel }} requerido">Cuenta de caja</label>
                         <div class="{{ $colInput }}">
-                            <input type="text" name="cbu_origen" id="cbu_origen" class="form-control"
-                                   maxlength="22" pattern="[0-9]{22}" required
+                            <input type="hidden" name="cuentacaja_id" id="cuentacaja_id"
+                                   value="{{ (int) ($filtros['cuentacaja_id'] ?? 0) ?: '' }}">
+                            <input type="hidden" name="cbu_origen" id="cbu_origen"
+                                   value="{{ $filtros['cbu_origen'] ?? '' }}">
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="codigo_cuentacaja" autocomplete="off"
+                                       value="{{ $cuenta_origen->codigo ?? '' }}"
+                                       placeholder="Código" title="Código. F1 = consulta">
+                                <div class="input-group-append">
+                                    <button type="button" class="btn btn-outline-secondary consultacuentacaja"
+                                            title="Consultar cuentas de caja (F1)">
+                                        <i class="fa fa-search"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group row">
+                        <label for="nombre_cuentacaja" class="{{ $colLabel }}">Nombre cuenta</label>
+                        <div class="{{ $colInput }}">
+                            <input type="text" class="form-control" id="nombre_cuentacaja" readonly
+                                   value="{{ $cuenta_origen->nombre ?? '' }}">
+                        </div>
+                        <label for="cbu_origen_mostrar" class="{{ $colLabel }} requerido">CBU origen</label>
+                        <div class="{{ $colInput }}">
+                            <input type="text" class="form-control text-monospace" id="cbu_origen_mostrar" readonly
                                    value="{{ $filtros['cbu_origen'] ?? '' }}"
-                                   placeholder="22 dígitos">
+                                   placeholder="Se toma de la cuenta de caja">
+                            <small class="form-text text-muted">CBU de la cuenta de caja elegida (queda recordada para el usuario).</small>
                         </div>
                     </div>
 
@@ -270,9 +296,14 @@
     'titulo' => 'Consultando pagos…',
     'subtitulo' => 'Puede demorar si lee Anita. No cierre la página.',
 ])
+@include('includes.caja.modalconsultacuentacaja')
 @endsection
 
 @section('scripts')
+<script>
+    window.ibArchivoPagoCuentacajaPorCodigoUrl = @json(route('leer_cuentacaja_por_codigo', ['codigo' => '__CODIGO__']));
+</script>
+<script src="{{ asset('assets/pages/scripts/caja/interbanking/archivo_pago.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/interbanking/archivo_pago.js')) ?: time() }}" type="text/javascript"></script>
 <script>
 (function () {
     var form = document.getElementById('form-ib-archivo-pago');
@@ -295,6 +326,7 @@
     }
     if (form) {
         form.addEventListener('submit', function (e) {
+            if (e.defaultPrevented) return;
             if (!form.checkValidity()) return;
             mostrar('Consultando pagos…');
         });

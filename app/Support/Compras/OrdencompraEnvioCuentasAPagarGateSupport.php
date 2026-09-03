@@ -51,13 +51,17 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
      */
     public static function evaluar(Ordencompra $oc): array
     {
-        $factura = self::resolverPrecargaConPdf($oc);
+        $oc->loadMissing('empresas:id,codigo,nombre');
+        $facturaPdf = self::resolverPrecargaConPdf($oc);
+        $precarga = $facturaPdf ?? self::queryPrecargaDelLegajo($oc)->first();
+        $tieneScanAnita = OrdencompraLegajoAnitaScanFacturaSupport::facturasDeOc($oc) !== [];
+        $tieneFactura = $facturaPdf !== null || $precarga !== null || $tieneScanAnita;
         $tieneCom = self::tieneComDisponible((int) $oc->id);
         $politica = ComprobanteProveedorFlujoOcComFacSupport::resolverPolitica($oc, $tieneCom);
         $exigeCom = self::exigeRecepcionSegunPolitica($politica);
 
         $errores = [];
-        if ($factura === null) {
+        if (! $tieneFactura) {
             $errores[] = 'Debe asignar una factura (precarga o PDF escaneado) al legajo antes de enviarlo a Cuentas a pagar.';
         }
         if ($exigeCom && ! $tieneCom) {
@@ -73,12 +77,12 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
         return [
             'ok' => $errores === [],
             'errores' => $errores,
-            'requiere_pdf' => $factura === null,
-            'tiene_factura' => $factura !== null,
+            'requiere_pdf' => ! $tieneFactura,
+            'tiene_factura' => $tieneFactura,
             'tiene_com' => $tieneCom,
             'exige_com' => $exigeCom,
             'exige_flujo_empresa' => (bool) ($politica['exige_flujo'] ?? false),
-            'precarga_id' => $factura?->id,
+            'precarga_id' => $facturaPdf?->id ?? $precarga?->id,
         ];
     }
 
@@ -230,5 +234,22 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
         }
 
         return (int) (DB::table('tipotransaccion_compra')->orderBy('id')->value('id') ?? 0);
+    }
+
+    public static function tipotransaccionCompraIdPorCodigoAfip(string $codigoAfip): int
+    {
+        $norm = ComprobanteProveedorUnicidadSupport::normalizarCodigoAfip($codigoAfip);
+        $ids = ComprobanteProveedorUnicidadSupport::tipotransaccionIdsPorCodigoAfip($norm);
+        if ($ids === []) {
+            return 0;
+        }
+
+        $prefer = (int) (DB::table('tipotransaccion_compra')
+            ->whereIn('id', $ids)
+            ->whereIn('abreviatura', ['FGA', 'FGB', 'FGC', 'NDA', 'NDB', 'NDC', 'NCA', 'NCB', 'NCC'])
+            ->orderBy('id')
+            ->value('id') ?? 0);
+
+        return $prefer > 0 ? $prefer : (int) $ids[0];
     }
 }

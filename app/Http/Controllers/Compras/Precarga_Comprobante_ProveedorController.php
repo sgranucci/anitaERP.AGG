@@ -366,9 +366,21 @@ class Precarga_Comprobante_ProveedorController extends Controller
      * @param  int  $id
      * @return \Illuminate\Http\Response
      */
-    public function editar($id)
+    public function editar(Request $request, $id)
     {
-        can('editar-precarga-proveedores');
+        $soloConsulta = $request->query('origen') === 'modal_consulta'
+            || $request->query('vista') === 'consulta';
+
+        if ($soloConsulta) {
+            // Mails de aviso (cotización, etc.) abren esta URL. Destinatarios (pagos/admin)
+            // suelen poder listar comprobantes/OC pero no editar precarga: sin este bypass
+            // can() redirige a Inicio y la pantalla queda vacía.
+            if (! puedeVerPrecargaFacturaPdf()) {
+                can('listar-precarga-proveedores');
+            }
+        } else {
+            can('editar-precarga-proveedores');
+        }
 
 		$data = $this->precarga_comprobante_proveedorRepository->find($id);
         $data->load('comprobante_proveedor:id,precarga_comprobante_proveedor_id,estado,letra,sucursal,numerocomprobante');
@@ -376,9 +388,18 @@ class Precarga_Comprobante_ProveedorController extends Controller
         $empresa_query = $this->empresaRepository->allFiltrado();
         $tipotransaccion_compra_query = $this->tipotransaccion_compraRepository->all('*');
         $concepto_ivacompra_query = $this->concepto_ivacompraRepository->all();
+        $puedeActualizar = can('actualizar-precarga-proveedores', false);
+        $soloLectura = $soloConsulta && ! $puedeActualizar;
 
-        return view('compras.precarga_comprobante_proveedor.editar', compact('data', 'empresa_query', 'tipotransaccion_compra_query',
-                                                                                'concepto_ivacompra_query'));
+        return view('compras.precarga_comprobante_proveedor.editar', compact(
+            'data',
+            'empresa_query',
+            'tipotransaccion_compra_query',
+            'concepto_ivacompra_query',
+            'soloConsulta',
+            'soloLectura',
+            'puedeActualizar'
+        ));
     }
 
     public function marcarCargadaEnAnita(Request $request, int $id)

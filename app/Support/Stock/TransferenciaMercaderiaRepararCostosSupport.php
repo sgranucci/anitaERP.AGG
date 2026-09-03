@@ -313,6 +313,94 @@ final class TransferenciaMercaderiaRepararCostosSupport
         return ['movimientos_actualizados' => $mov];
     }
 
+    /**
+     * Corrige costo unitario destino (origen / coef) sin alterar cantidades ya recuentadas.
+     *
+     * @return array{movimientos_actualizados: int}
+     */
+    public static function aplicarPrecioDestinoConservandoCantidad(
+        Transferencia_Mercaderia_Articulo $linea,
+        float $coeficiente,
+        ?float $precioOrigenOverride = null
+    ): array {
+        $coef = $coeficiente > 0 ? $coeficiente : 1.0;
+        $precioOrigen = $precioOrigenOverride !== null
+            ? (float) $precioOrigenOverride
+            : (float) $linea->precio_costo_origen;
+        $precioDestino = $coef > 0 ? round($precioOrigen / $coef, 6) : round($precioOrigen, 6);
+
+        $payload = [
+            'precio_costo_destino' => $precioDestino,
+            'coeficienteconversion' => $coef,
+            'fl_conversion_formula' => true,
+        ];
+        if ($precioOrigenOverride !== null) {
+            $payload['precio_costo_origen'] = round($precioOrigen, 6);
+        }
+        $linea->update($payload);
+        $linea->refresh();
+
+        $tm = $linea->transferencias ?? Transferencia_Mercaderia::query()->find((int) $linea->transferencia_mercaderia_id);
+        if ($tm === null) {
+            throw new \RuntimeException('Transferencia no encontrada para la línea.');
+        }
+
+        $coleccion = collect([$linea]);
+        $mov = 0;
+        if ((int) ($tm->movimientostock_salida_id ?? 0) > 0) {
+            $mov += self::sincronizarMovimientoPrecio((int) $tm->movimientostock_salida_id, $coleccion, 'salida');
+        }
+        if ((int) ($tm->movimientostock_entrada_id ?? 0) > 0) {
+            $mov += self::sincronizarMovimientoPrecio((int) $tm->movimientostock_entrada_id, $coleccion, 'entrada');
+        }
+
+        return ['movimientos_actualizados' => $mov];
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, \App\Models\Stock\Transferencia_Mercaderia_Articulo>  $lineas
+     */
+    private static function sincronizarMovimientoPrecio(int $movimientoStockId, $lineas, string $lado): int
+    {
+        $actualizados = 0;
+
+        foreach ($lineas as $linea) {
+            $articuloId = $lado === 'salida'
+                ? (int) $linea->articulo_origen_id
+                : (int) $linea->articulo_destino_id;
+            $precio = $lado === 'salida'
+                ? (float) $linea->precio_costo_origen
+                : (float) $linea->precio_costo_destino;
+
+            $mov = Articulo_Movimiento::query()
+                ->where('movimientostock_id', $movimientoStockId)
+                ->where('articulo_id', $articuloId)
+                ->orderBy('id')
+                ->first();
+
+            if ($mov === null) {
+                continue;
+            }
+
+            $cambio = false;
+            if (abs((float) $mov->precio - $precio) > 0.000001) {
+                $mov->precio = $precio;
+                $cambio = true;
+            }
+            if (abs((float) ($mov->costo ?? 0) - $precio) > 0.000001) {
+                $mov->costo = $precio;
+                $cambio = true;
+            }
+
+            if ($cambio) {
+                $mov->save();
+                $actualizados++;
+            }
+        }
+
+        return $actualizados;
+    }
+
     private static function resolverCoeficiente(Articulo $articulo, mixed $coefOpcional): float
     {
         if ($coefOpcional !== null && $coefOpcional !== '') {

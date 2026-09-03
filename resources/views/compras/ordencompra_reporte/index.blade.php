@@ -130,6 +130,35 @@
                                 @endforeach
                             </select>
                         </div>
+                        <label for="moneda_id" class="{{ $colLabel }}">Expresado en</label>
+                        <div class="{{ $colInput }}">
+                            <select name="moneda_id" id="moneda_id" class="form-control oc-campo-corto">
+                                @foreach ($moneda_query ?? [] as $moneda)
+                                    <option value="{{ $moneda->id }}"
+                                        @selected((int) ($filtros['moneda_id'] ?? 0) === (int) $moneda->id)>
+                                        {{ $moneda->nombre ?? $moneda->abreviatura }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group row">
+                        <label for="modo_moneda" class="{{ $colLabel }}">Criterio moneda</label>
+                        <div class="{{ $colInput }}">
+                            <select name="modo_moneda" id="modo_moneda" class="form-control">
+                                @foreach ($opciones_modo_moneda ?? [] as $opcion)
+                                    <option value="{{ $opcion['valor'] }}"
+                                        @selected(($filtros['modo_moneda'] ?? 'todas') === $opcion['valor'])>
+                                        {{ $opcion['etiqueta'] }}
+                                    </option>
+                                @endforeach
+                            </select>
+                            <small class="form-text text-muted">
+                                Origen: solo l&iacute;neas de OC en esa moneda, sin convertir.
+                                Todas: incluye el resto y convierte importes con la cotizaci&oacute;n de cada l&iacute;nea de OC.
+                            </small>
+                        </div>
                     </div>
 
                     <div class="form-group row" id="oc-reporte-ordencompra-campo">
@@ -238,6 +267,21 @@
                             <strong>Per&iacute;odo:</strong> {{ $periodo_texto ?? '' }}
                             @if (! empty($subtitulo_estado))
                                 &middot; <strong>{{ $subtitulo_estado }}</strong>
+                            @endif
+                            @php
+                                $monedaReporte = collect($moneda_query ?? [])->firstWhere('id', (int) ($filtros['moneda_id'] ?? 0));
+                                $nombreMonedaReporte = $monedaReporte
+                                    ? trim((string) (($monedaReporte->nombre ?? '') !== '' ? $monedaReporte->nombre : ($monedaReporte->abreviatura ?? '')))
+                                    : '';
+                                $opcionModoMoneda = collect($opciones_modo_moneda ?? [])
+                                    ->firstWhere('valor', $filtros['modo_moneda'] ?? 'todas');
+                                $etiquetaModoMoneda = is_array($opcionModoMoneda) ? (string) ($opcionModoMoneda['etiqueta'] ?? '') : '';
+                            @endphp
+                            @if ($nombreMonedaReporte !== '')
+                                &middot; <strong>Expresado en:</strong> {{ $nombreMonedaReporte }}
+                                @if ($etiquetaModoMoneda !== '')
+                                    ({{ $etiquetaModoMoneda }})
+                                @endif
                             @endif
                             @if (! empty($resultado['totales']))
                                 &middot; <strong>OC:</strong> {{ (int) ($resultado['totales']['total_ordenes'] ?? 0) }}

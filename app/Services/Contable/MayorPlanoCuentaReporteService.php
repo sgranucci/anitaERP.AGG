@@ -339,8 +339,8 @@ class MayorPlanoCuentaReporteService
         }
 
         $filas = $this->enriquecerEnlaces($filas, $empresaIds);
-        $filas = $this->ordencompraEnricher->enriquecer($filas);
         $filas = $this->comprobanteEnricher->enriquecer($filas);
+        $filas = $this->ordencompraEnricher->enriquecer($filas);
         $filas = $this->completarNroOcDesdeIds($filas);
         $filas = $this->emisorEnricher->enriquecer($filas);
 
@@ -366,7 +366,7 @@ class MayorPlanoCuentaReporteService
         $filas = MayorPlanoCuentaExcelPlanoSupport::soloMovimientos(
             $this->aplanarFilas($resultado, $filtros, false),
         );
-        $filas = $this->excelPlanoEnricher->enriquecer($filas, false);
+        $filas = $this->excelPlanoEnricher->enriquecer($filas, true);
 
         return MayorPlanoCuentaExcelPlanoSupport::ordenar(
             $filas,

@@ -25,6 +25,12 @@ final class ComprobanteProveedorOrigenEntrada
     /** Histórico importado desde Anita (compra/promov/aplmovp). */
     public const ANITA_IMPORT = 'ANITA_IMPORT';
 
+    /** PDF de scanfactura Anita, sin lectura por IA. */
+    public const SCAN_ANITA = 'SCAN_ANITA';
+
+    /** PDF asignado al legajo desde Compras. */
+    public const LEGAJO = 'LEGAJO';
+
     /** @return list<string> */
     public static function todos(): array
     {
@@ -35,6 +41,8 @@ final class ComprobanteProveedorOrigenEntrada
             self::PDF_IA,
             self::INGRESO_EGRESO,
             self::ANITA_IMPORT,
+            self::SCAN_ANITA,
+            self::LEGAJO,
         ];
     }
 
@@ -47,6 +55,8 @@ final class ComprobanteProveedorOrigenEntrada
             self::PDF_IA => 'PDF — modelo IA Anita',
             self::INGRESO_EGRESO => 'Ingresos y egresos (tesorería)',
             self::ANITA_IMPORT => 'Importado desde Anita',
+            self::SCAN_ANITA => 'Scan Anita (manual, no IA)',
+            self::LEGAJO => 'Legajo compras (PDF)',
             default => $origen,
         };
     }

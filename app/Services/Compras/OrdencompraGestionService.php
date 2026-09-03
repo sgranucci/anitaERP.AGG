@@ -691,6 +691,7 @@ class OrdencompraGestionService
         ?string $leyenda,
         ?UploadedFile $facturaPdf = null,
         bool $omitirGateYTrigger = false,
+        ?int $destinatarioUsuarioId = null,
     ): array {
         $sec = Sector_Legajocompra::find($sectorLegajocompraId);
         if (! $sec) {
@@ -754,7 +755,8 @@ class OrdencompraGestionService
                     $id,
                     $sectorAnteriorId > 0 ? $sectorAnteriorId : null,
                     $sectorLegajocompraId,
-                    $observacion
+                    $observacion,
+                    $destinatarioUsuarioId
                 );
             }
 
@@ -776,6 +778,7 @@ class OrdencompraGestionService
         ?string $observacion,
         ?string $leyenda,
         ?UploadedFile $facturaPdf = null,
+        ?int $destinatarioUsuarioId = null,
     ): array {
         $oc = $this->ordencompraRepository->find($id);
         if (! $oc) {
@@ -793,12 +796,64 @@ class OrdencompraGestionService
             return ['mensaje' => 'error', 'errores' => 'No está configurado el sector GASTRONOMIA.'];
         }
 
+        $preview = $this->arbolaprobacionService->firmantesEnvioGastronomiaOrdencompra($oc);
+        if (! empty($preview['requiere_seleccion'])) {
+            if ($destinatarioUsuarioId === null || $destinatarioUsuarioId <= 0) {
+                return [
+                    'mensaje' => 'seleccionar_firmante',
+                    'nivel' => $preview['nivel'],
+                    'firmantes' => $preview['firmantes'],
+                ];
+            }
+            $idsValidos = array_column($preview['firmantes'], 'id');
+            if (! in_array($destinatarioUsuarioId, $idsValidos, true)) {
+                return [
+                    'mensaje' => 'error',
+                    'errores' => 'El firmante seleccionado no es válido para este nivel del árbol.',
+                    'nivel' => $preview['nivel'],
+                    'firmantes' => $preview['firmantes'],
+                ];
+            }
+        }
+
         $obs = trim((string) $observacion);
         if ($obs === '') {
             $obs = 'Enviar a Gastronomía para autorización del legajo';
         }
 
-        return $this->cambiarSector($id, $sectorId, $obs, $leyenda, $facturaPdf);
+        return $this->cambiarSector(
+            $id,
+            $sectorId,
+            $obs,
+            $leyenda,
+            $facturaPdf,
+            false,
+            ($preview['requiere_seleccion'] ?? false) ? $destinatarioUsuarioId : null
+        );
+    }
+
+    /**
+     * @return array{mensaje: string, errores?: string, nivel?: int, firmantes?: list<array<string, mixed>>, requiere_seleccion?: bool}
+     */
+    public function firmantesEnvioGastronomia(int $id): array
+    {
+        $oc = $this->ordencompraRepository->find($id);
+        if (! $oc) {
+            return ['mensaje' => 'error', 'errores' => 'Orden de compra inexistente.'];
+        }
+
+        $erroresCircuito = OrdencompraLegajoGastronomiaSupport::erroresEnvioGastronomia($oc);
+        if ($erroresCircuito !== []) {
+            return ['mensaje' => 'error', 'errores' => implode(' ', $erroresCircuito)];
+        }
+
+        try {
+            $preview = $this->arbolaprobacionService->firmantesEnvioGastronomiaOrdencompra($oc);
+        } catch (\RuntimeException $e) {
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        return array_merge(['mensaje' => 'ok'], $preview);
     }
 
     /**

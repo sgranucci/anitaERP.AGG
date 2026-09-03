@@ -28,6 +28,7 @@ use App\Repositories\Ventas\FormapagoRepositoryInterface;
 use App\Services\Compras\OrdencompraAnitaSyncService;
 use App\Services\Compras\OrdencompraEnvioProveedorService;
 use App\Services\Compras\OrdencompraGestionService;
+use App\Services\Compras\OrdencompraLegajoFacturaPdfService;
 use App\Services\Compras\OrdencompraListadoPdfService;
 use App\Services\Compras\OrdencompraOpcionesPrecioService;
 use App\Services\Compras\OrdencompraPdfService;
@@ -60,6 +61,7 @@ use App\Support\Compras\RequisicionTotalesCabecera;
 use App\Models\Stock\Recepcion_Proveedor;
 use Auth;
 use Illuminate\Http\Request;
+use RuntimeException;
 class OrdencompraController extends Controller
 {
     public function __construct(
@@ -83,6 +85,7 @@ class OrdencompraController extends Controller
         private OrdencompraArticuloPrecioHistoriaService $ordencompraArticuloPrecioHistoriaService,
         private RecepcionProveedorPrecioPendienteService $recepcionPrecioPendienteService,
         private OrdencompraRevertirCierreLineaService $ordencompraRevertirCierreLineaService,
+        private OrdencompraLegajoFacturaPdfService $ordencompraLegajoFacturaPdfService,
     ) {}
 
     public function index(Request $request)
@@ -761,23 +764,46 @@ class OrdencompraController extends Controller
             'observacion' => 'nullable|string|max:255',
             'leyenda' => 'nullable|string|max:2000',
             'factura_pdf' => 'nullable|file|mimes:pdf|max:20480',
+            'destinatario_usuario_id' => 'nullable|integer',
         ]);
+        $destinatarioId = (int) $request->input('destinatario_usuario_id', 0);
         $ret = $this->ordencompraGestionService->enviarAGastronomia(
             (int) $id,
             $request->observacion,
             $request->leyenda,
             $request->file('factura_pdf'),
+            $destinatarioId > 0 ? $destinatarioId : null,
         );
 
         if ($request->ajax() || $request->wantsJson()) {
-            return response()->json($ret, ($ret['mensaje'] ?? '') === 'ok' ? 200 : 422);
+            $ok = in_array(($ret['mensaje'] ?? ''), ['ok', 'seleccionar_firmante'], true);
+
+            return response()->json($ret, $ok ? 200 : 422);
         }
 
         if (($ret['mensaje'] ?? '') === 'ok') {
             return redirect()->back()->with('mensaje', 'Legajo enviado a Gastronomía');
         }
 
+        if (($ret['mensaje'] ?? '') === 'seleccionar_firmante') {
+            return redirect()->back()->with('errores', ['Hay más de un firmante en el árbol. Elija a quién enviar el legajo.']);
+        }
+
         return redirect()->back()->with('errores', [$ret['errores'] ?? 'Error']);
+    }
+
+    public function firmantesGastronomiaArbol(int $id)
+    {
+        can('actualizar-ordencompra');
+        $ret = $this->ordencompraGestionService->firmantesEnvioGastronomia($id);
+        if (($ret['mensaje'] ?? '') === 'ok') {
+            return response()->json($ret);
+        }
+
+        return response()->json([
+            'mensaje' => 'error',
+            'errores' => $ret['errores'] ?? 'No se pudieron consultar los firmantes del árbol.',
+        ], 422);
     }
 
     public function enviarCuentasAPagar(Request $request, $id)
@@ -944,6 +970,58 @@ class OrdencompraController extends Controller
         $gate['exige_com'] = $paquete['exige_com'];
 
         return response()->json($gate);
+    }
+
+    public function asignarFacturaPdf(Request $request, $id)
+    {
+        can('actualizar-ordencompra');
+
+        $request->validate([
+            'factura_pdf' => 'required|file|mimes:pdf|max:20480',
+            'tipo_arca' => 'required|string|max:8',
+            'letra' => 'required|string|size:1',
+            'sucursal' => 'required|integer|min:0|max:99999',
+            'numerocomprobante' => 'required|integer|min:1',
+            'fechafactura' => 'required|date',
+        ]);
+
+        $oc = Ordencompra::query()->find((int) $id);
+        if (! $oc) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['ok' => false, 'errores' => ['Orden de compra inexistente.']], 404);
+            }
+
+            return redirect()->back()->with('errores', ['Orden de compra inexistente.']);
+        }
+
+        try {
+            $precarga = $this->ordencompraLegajoFacturaPdfService->asignarPdfConDatosArca(
+                $oc,
+                $request->file('factura_pdf'),
+                (string) $request->input('tipo_arca'),
+                strtoupper((string) $request->input('letra')),
+                (int) $request->input('sucursal'),
+                (int) $request->input('numerocomprobante'),
+                (string) $request->input('fechafactura'),
+            );
+        } catch (RuntimeException $e) {
+            if ($request->ajax() || $request->wantsJson()) {
+                return response()->json(['ok' => false, 'errores' => [$e->getMessage()]], 422);
+            }
+
+            return redirect()->back()->with('errores', [$e->getMessage()]);
+        }
+
+        $msg = 'Factura asignada al legajo OC '.$oc->numeroordencompra.'.';
+        if ($request->ajax() || $request->wantsJson()) {
+            return response()->json([
+                'ok' => true,
+                'mensaje' => $msg,
+                'precarga_id' => (int) $precarga->id,
+            ]);
+        }
+
+        return redirect()->back()->with('mensaje', $msg);
     }
 
     public function visualizarFacturaLegajo(Request $request, int $id, string $hash)

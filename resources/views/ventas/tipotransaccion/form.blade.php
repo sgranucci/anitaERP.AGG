@@ -154,3 +154,18 @@
 <small class="form-text text-muted col-lg-8 offset-lg-3 mb-2">
     Con concepto asignado, el facturador lo muestra al elegir este tipo. Sin asignar, en FAC se elige en el renglón (ícono de documento) y se completa el detalle.
 </small>
+<div class="form-group row">
+    <div class="col-lg-3"></div>
+    <div class="col-lg-6">
+        <div class="form-check">
+            <input type="hidden" name="iva_ventas" value="0">
+            <input type="checkbox" class="form-check-input" name="iva_ventas" id="iva_ventas" value="1"
+                @checked(old('iva_ventas', $data?->iva_ventas ?? false))>
+            <label class="form-check-label" for="iva_ventas">Va al IVA ventas</label>
+        </div>
+        <small class="form-text text-muted">
+            Si está tildado, los comprobantes de este tipo entran al listado IVA ventas (y las FSL de máquinas se completan desde Anita).
+            Presupuestos, remitos internos y tipos que no informan IVA van destildados.
+        </small>
+    </div>
+</div>

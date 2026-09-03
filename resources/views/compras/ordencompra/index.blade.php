@@ -3,12 +3,17 @@
 Órdenes de compra
 @endsection
 
+@section('styles')
+<link rel="stylesheet" href="{{ asset('assets/pages/css/compras/ordencompra/asignar_factura_legajo.css') }}?v={{ @filemtime(public_path('assets/pages/css/compras/ordencompra/asignar_factura_legajo.css')) ?: time() }}">
+@endsection
+
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/admin/index.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/includes/listado-filtros.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/filtro.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/enviar-proveedor.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/ordencompra/asignar_factura_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/asignar_factura_legajo.js')) ?: time() }}" type="text/javascript"></script>
 @if (session('sugerir_envio_oc'))
 <script>
     window.ocSugerirEnvioProveedor = { ordencompra_id: {{ (int) session('sugerir_envio_oc') }} };
@@ -53,6 +58,7 @@ $(function () {
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
 @endphp
 @include('compras.ordencompra.partials.modal_enviar_proveedor')
+@include('compras.ordencompra.partials.modal_asignar_factura_legajo')
 
 <div class="modal fade" id="modalIndexOcCambiarEstado" tabindex="-1" role="dialog" aria-hidden="true">
     <div class="modal-dialog" role="document">
@@ -235,6 +241,15 @@ $(function () {
                                         <a href="{{ route('editar_requisicion', ['id' => $row->requisicion_id]) }}" class="btn-accion-tabla tooltipsC text-warning" title="Ver requisición" target="_blank" rel="noopener noreferrer">
                                             <i class="fa fa-link"></i>
                                         </a>
+                                    @endif
+                                    @if (can('actualizar-ordencompra', false) && !empty($row->proveedor_id))
+                                        <button type="button" class="btn-accion-tabla tooltipsC js-oc-asignar-factura btn-oc-asignar-factura"
+                                                title="Asignar PDF de factura al legajo"
+                                                data-url="{{ route('ordencompra_asignar_factura_pdf', ['id' => $row->id]) }}"
+                                                data-numero="{{ $row->numeroordencompra }}"
+                                                data-proveedor="{{ $row->nombreproveedor }}">
+                                            <i class="fa fa-file-pdf-o"></i>
+                                        </button>
                                     @endif
                                     @if (can('actualizar-ordencompra', false))
                                         <button type="button" class="btn-accion-tabla tooltipsC js-oc-index-abrir-estado text-dark" title="Cambiar estado"

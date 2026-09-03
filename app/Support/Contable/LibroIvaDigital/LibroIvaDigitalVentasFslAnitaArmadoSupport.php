@@ -31,15 +31,8 @@ final class LibroIvaDigitalVentasFslAnitaArmadoSupport
      */
     public static function armarRegistroLibro(array $fila, bool $porFechaJornada, int $puntoVentaDefault = 0): ?array
     {
-        $monto = abs(self::importeCampo($fila, 'ven_monto', 'monto', 'importe'));
-        $exento = abs(self::importeCampo($fila, 'ven_exento', 'exento'));
-        if ($exento <= 0.0001) {
-            $exento = $monto;
-        }
-        if ($monto <= 0.0001) {
-            $monto = $exento;
-        }
-        if ($monto <= 0.0001) {
+        [$monto, $exento] = self::importesConSigno($fila);
+        if ($monto === null) {
             return null;
         }
 
@@ -108,7 +101,7 @@ final class LibroIvaDigitalVentasFslAnitaArmadoSupport
             'cabecera' => $cabecera,
             'alicuotas' => $alicuotas,
         ]);
-        $registro['iva_simple'] = self::metaIvaSimple();
+        $registro['iva_simple'] = self::metaIvaSimple($monto < 0);
 
         return $registro;
     }
@@ -116,13 +109,13 @@ final class LibroIvaDigitalVentasFslAnitaArmadoSupport
     /**
      * @return array{actividad_codigo: string, actividad_nombre: string, tipo_sujeto: int, restitucion: bool}
      */
-    public static function metaIvaSimple(): array
+    public static function metaIvaSimple(bool $restitucion = false): array
     {
         return [
             'actividad_codigo' => self::ACTIVIDAD_APUESTAS_CODIGO,
             'actividad_nombre' => 'Servicios de apuestas',
             'tipo_sujeto' => 3,
-            'restitucion' => false,
+            'restitucion' => $restitucion,
         ];
     }
 
@@ -134,21 +127,17 @@ final class LibroIvaDigitalVentasFslAnitaArmadoSupport
         bool $porFechaJornada = false,
         int $puntoVentaDefault = 0,
     ): ?array {
-        if (self::armarRegistroLibro($fila, $porFechaJornada, $puntoVentaDefault) === null) {
+        [$monto, $exento] = self::importesConSigno($fila);
+        if ($monto === null || self::armarRegistroLibro($fila, $porFechaJornada, $puntoVentaDefault) === null) {
             return null;
         }
-        $exento = abs(self::importeCampo($fila, 'ven_exento', 'exento'));
-        if ($exento <= 0.0001) {
-            $exento = abs(self::importeCampo($fila, 'ven_monto', 'monto', 'importe'));
-        }
-        if ($exento <= 0.0001) {
-            return null;
-        }
+
+        $restitucion = $monto < 0;
 
         return [
             'actividad_codigo' => self::ACTIVIDAD_APUESTAS_CODIGO,
             'actividad_nombre' => 'Servicios de apuestas',
-            'tipo_operacion' => '3',
+            'tipo_operacion' => $restitucion ? '2' : '3',
             'tipo_sujeto' => null,
             'alicuota_codigo' => null,
             'tasa' => null,
@@ -156,9 +145,32 @@ final class LibroIvaDigitalVentasFslAnitaArmadoSupport
             'iva' => 0.0,
             'iva_computable' => 0.0,
             'exento' => $exento,
-            'restitucion' => false,
+            'restitucion' => $restitucion,
             'fuente' => 'anita_fsl',
         ];
+    }
+
+    /**
+     * Conserva el signo: un día con más reintegros que ventas (neto negativo) no puede
+     * informarse como factura positiva. Solo se descarta el comprobante vacío.
+     *
+     * @return array{0: float, 1: float}|array{0: null, 1: null}
+     */
+    public static function importesConSigno(array $fila): array
+    {
+        $monto = self::importeCampo($fila, 'ven_monto', 'monto', 'importe');
+        $exento = self::importeCampo($fila, 'ven_exento', 'exento');
+        if (abs($exento) <= 0.0001) {
+            $exento = $monto;
+        }
+        if (abs($monto) <= 0.0001) {
+            $monto = $exento;
+        }
+        if (abs($monto) <= 0.0001) {
+            return [null, null];
+        }
+
+        return [round($monto, 2), round($exento, 2)];
     }
 
     /**

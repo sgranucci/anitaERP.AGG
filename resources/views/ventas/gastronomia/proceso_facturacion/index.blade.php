@@ -107,6 +107,62 @@
         flex-direction: column;
         min-height: 0;
     }
+    #tr-gastro-linea-articulo {
+        display: flex;
+        align-items: center;
+        width: 100%;
+        gap: 0.5rem;
+    }
+    #tr-gastro-linea-articulo > td {
+        display: block;
+        padding-top: 0.25rem;
+        padding-bottom: 0.25rem;
+        border: 0;
+    }
+    #tr-gastro-linea-articulo td:first-child {
+        flex: 0 0 auto;
+        width: auto;
+        white-space: nowrap;
+        padding-left: 0;
+        padding-right: 0;
+    }
+    #tr-gastro-linea-articulo td:nth-child(2) {
+        flex: 1 1 auto;
+        min-width: 0;
+        width: auto;
+        overflow: hidden;
+    }
+    #tr-gastro-linea-articulo td:last-child {
+        flex: 0 0 auto;
+        width: auto;
+        white-space: nowrap;
+        padding-right: 0;
+    }
+    #tr-gastro-linea-articulo .descripcionarticulo {
+        display: block;
+        width: 100%;
+        max-width: 100%;
+        box-sizing: border-box;
+        padding-left: 0.75rem;
+        padding-right: 0.5rem;
+        text-align: left;
+        text-indent: 0;
+        text-overflow: ellipsis;
+    }
+    #tr-gastro-linea-articulo .gastro-sku-grupo {
+        width: auto;
+        max-width: 8.5rem;
+        vertical-align: middle;
+    }
+    #tr-gastro-linea-articulo .gastro-sku-sufijo {
+        min-width: 3.25rem;
+        width: 3.75rem;
+        flex: 0 0 3.75rem;
+    }
+    #tr-gastro-linea-articulo .codigoarticulo.gastro-carga-sku {
+        width: 5.5rem;
+        vertical-align: middle;
+    }
     .gastro-aviso-caea {
         font-size: 0.85rem;
         line-height: 1.35;
@@ -554,6 +610,34 @@
         border-radius: 0.5rem;
         animation: gastroOpcShake 0.45s linear;
     }
+    #gastro-proximo-comprobante {
+        font-size: 0.8rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        color: #212529;
+        font-variant-numeric: tabular-nums;
+        white-space: nowrap;
+        line-height: 1.2;
+        max-width: 22rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    #gastro-proximo-comprobante .gastro-prox-lbl {
+        font-weight: 500;
+        color: #6c757d;
+        font-size: 0.68rem;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        display: block;
+    }
+    #gastro-proximo-comprobante.is-loading {
+        color: #6c757d;
+        font-weight: 500;
+    }
+    #gastro-proximo-comprobante.is-error {
+        color: #868e96;
+        font-weight: 500;
+    }
     #modal-gastro-aviso .gastro-aviso-detalle {
         font-size: 0.9rem;
         color: #495057;
@@ -669,7 +753,7 @@
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/mozo_gastronomia/consulta.js') }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/descuento_gastronomia/consulta.js') }}"></script>
-<script src="{{ asset('assets/pages/scripts/ventas/gastronomia/proceso_facturacion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/proceso_facturacion.js')) ?: time() }}"></script>
+<script src="{{ asset('assets/pages/scripts/ventas/gastronomia/proceso_facturacion.js') }}?v={{ (@filemtime(public_path('assets/pages/scripts/ventas/gastronomia/proceso_facturacion.js')) ?: time()) }}-np5"></script>
 @if ($requiere_habilitacion_turno ?? true)
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/totales_turno_render.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/totales_turno_render.js')) }}"></script>
 <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/saneamiento_huecos_arca.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/saneamiento_huecos_arca.js')) }}"></script>
@@ -819,7 +903,7 @@
                         <table class="table table-sm table-borderless mb-0">
                             <tbody>
                             <tr id="tr-gastro-linea-articulo">
-                                <td class="align-middle py-1" style="white-space:nowrap;">
+                                <td class="align-middle py-1">
                                     <input type="hidden" class="articulo_id" id="gastro_linea_articulo_id" value="">
                                     <input type="hidden" class="categoria_id" value="">
                                     <input type="hidden" class="subcategoria_id" value="">
@@ -828,13 +912,13 @@
                                         <i class="fa fa-search text-primary"></i>
                                     </button>
                                     @if ((int) $sku_catalogo_digitos_sufijo > 0)
-                                        <div class="input-group input-group-sm d-inline-flex align-middle" style="width:auto;max-width:200px;vertical-align:middle;">
+                                        <div class="input-group input-group-sm d-inline-flex align-middle gastro-sku-grupo">
                                             <div class="input-group-prepend"><span class="input-group-text py-0 px-2">{{ $prefijo_sku }}</span></div>
-                                            <input type="text" name="gastro_sku_sufijo" class="form-control gastro-sku-sufijo gastro-carga-sku" maxlength="{{ (int) $sku_catalogo_digitos_sufijo }}" inputmode="numeric" pattern="[0-9]*" placeholder="" autocomplete="off" style="min-width:72px;">
+                                            <input type="text" name="gastro_sku_sufijo" class="form-control gastro-sku-sufijo gastro-carga-sku" maxlength="{{ (int) $sku_catalogo_digitos_sufijo }}" inputmode="numeric" pattern="[0-9]*" placeholder="" autocomplete="off">
                                             <input type="hidden" class="codigoarticulo" value="">
                                         </div>
                                     @else
-                                        <input type="text" class="form-control form-control-sm codigoarticulo gastro-carga-sku d-inline-block align-middle" style="width:118px;vertical-align:middle;" placeholder="SKU" autocomplete="off">
+                                        <input type="text" class="form-control form-control-sm codigoarticulo gastro-carga-sku d-inline-block align-middle" placeholder="SKU" autocomplete="off">
                                     @endif
                                 </td>
                                 <td class="py-1">
@@ -949,7 +1033,11 @@
                 <div class="card card-outline card-dark mb-3 gastro-card-detalle-cuenta">
                     <div class="card-header py-2 d-flex justify-content-between align-items-center">
                         <span><i class="fa fa-list"></i> Consumos / herramientas</span>
-                        <div class="d-flex align-items-center flex-wrap" style="gap: 0.35rem;">
+                            <div class="d-flex align-items-center flex-wrap" style="gap: 0.35rem;">
+                            <span id="gastro-proximo-comprobante" class="is-loading" title="Próximo número según ARCA (informativo; al facturar se vuelve a consultar)">
+                                <span class="gastro-prox-lbl">Próxima factura</span>
+                                <span class="gastro-prox-val">…</span>
+                            </span>
                             <div class="btn-group btn-group-sm">
                                 <button type="button" class="btn btn-outline-success" id="tool-facturar" title="Facturar"><i class="fa fa-file-invoice-dollar"></i></button>
                                 <button type="button" class="btn btn-outline-info" id="tool-asignar-cliente" title="Enfocar cliente para facturar"><i class="fa fa-user"></i></button>

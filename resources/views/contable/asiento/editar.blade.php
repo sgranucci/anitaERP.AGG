@@ -15,6 +15,7 @@
         + '/contable/cierre-periodo/validar-fecha';
 </script>
 <script src="{{ asset('assets/pages/scripts/contable/asiento/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/asiento/crear.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/asiento/copiar_revertir.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/asiento/copiar_revertir.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/asiento/validar_fecha_cierre.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/asiento/validar_fecha_cierre.js')) ?: time() }}" type="text/javascript"></script>
 <script>
     $( "#botonform0" ).click(function() {
@@ -124,18 +125,20 @@
                     <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
-                    <button type="button" id="botonform3" class="btn btn-outline-secondary btn-sm">
-                        <span class="fa fa-copy"></span> Copia asiento
-                    </button>
-                    @if ($asientoConOrigenProceso)
-                        <button type="button" class="btn btn-secondary btn-sm" disabled
-                                title="{{ \App\Support\Contable\AsientoOrigenProcesoSupport::mensajeBloqueo($data ?? [], 'revertir') }}">
-                            <span class="fa fa-history"></span> Revierte asiento
+                    @if (can('crear-asiento', false))
+                        <button type="button" id="botonform3" class="btn btn-info btn-sm">
+                            <span class="fa fa-copy"></span> Copiar asiento
                         </button>
-                    @else
-                        <button type="button" id="botonform4" class="btn btn-outline-secondary btn-sm">
-                            <span class="fa fa-history"></span> Revierte asiento
-                        </button>
+                        @if ($asientoConOrigenProceso)
+                            <button type="button" class="btn btn-warning btn-sm" disabled
+                                    title="{{ \App\Support\Contable\AsientoOrigenProcesoSupport::mensajeBloqueo($data ?? [], 'revertir') }}">
+                                <span class="fa fa-undo"></span> Revertir asiento
+                            </button>
+                        @else
+                            <button type="button" id="botonform4" class="btn btn-warning btn-sm">
+                                <span class="fa fa-undo"></span> Revertir asiento
+                            </button>
+                        @endif
                     @endif
                 </div>
             </div>

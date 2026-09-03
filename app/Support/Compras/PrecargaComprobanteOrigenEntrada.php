@@ -23,6 +23,12 @@ final class PrecargaComprobanteOrigenEntrada
     /** Ingesta automática desde la casilla de correo (compras:ingestar-facturas-mail). */
     public const MAIL = 'MAIL';
 
+    /** PDF escaneado en Anita (scanfactura), sin lectura por IA. */
+    public const SCAN_ANITA = 'SCAN_ANITA';
+
+    /** PDF asignado al legajo desde Compras (reemplazo de scanfactura). */
+    public const LEGAJO = 'LEGAJO';
+
     public static function etiqueta(?string $origen): string
     {
         return match ($origen) {
@@ -32,12 +38,24 @@ final class PrecargaComprobanteOrigenEntrada
             self::PORTAL => 'Portal de proveedores',
             self::BATCH_IA => 'Lote automático — IA Anita',
             self::MAIL => 'Correo — IA Anita',
+            self::SCAN_ANITA => 'Scan Anita (manual, no IA)',
+            self::LEGAJO => 'Legajo compras (PDF)',
             default => 'Agente / API',
         };
     }
 
+    public static function esLecturaIa(?string $origen): bool
+    {
+        return in_array($origen, [self::PDF_IA, self::BATCH_IA, self::MAIL], true);
+    }
+
     public static function origenComprobanteDesdePrecarga(?string $origenPrecarga): string
     {
+        if ($origenPrecarga === self::SCAN_ANITA || $origenPrecarga === self::LEGAJO) {
+            return $origenPrecarga === self::LEGAJO
+                ? ComprobanteProveedorOrigenEntrada::LEGAJO
+                : ComprobanteProveedorOrigenEntrada::SCAN_ANITA;
+        }
         if (in_array($origenPrecarga, [self::PDF_IA, self::PORTAL, self::BATCH_IA, self::MAIL], true)) {
             return ComprobanteProveedorOrigenEntrada::PDF_IA;
         }

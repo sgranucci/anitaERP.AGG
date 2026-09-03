@@ -7,6 +7,7 @@
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/contable/asiento/filtro.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/contable/asiento/copiar_revertir.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/asiento/copiar_revertir.js')) ?: time() }}" type="text/javascript"></script>
 <script>
     function eliminarAsiento(event) {
         if (!confirm('¿Desea eliminar el asiento?')) {
@@ -141,6 +142,20 @@
                                     <i class="fas fa-file-excel text-success"></i>
                                 	</a>
 								@endif
+                                @if (can('crear-asiento', false) && ($data->estado_aprobacion ?? 'confirmado') !== 'pendiente')
+                                    <button type="button" class="btn-accion-tabla tooltipsC btn-copiar-asiento" title="Copiar asiento" data-asiento-id="{{ $data->id }}">
+                                        <i class="fa fa-copy text-info"></i>
+                                    </button>
+                                    @if (\App\Support\Contable\AsientoOrigenProcesoSupport::tieneOrigenProceso($data))
+                                        <span class="btn-accion-tabla text-muted" title="{{ \App\Support\Contable\AsientoOrigenProcesoSupport::mensajeBloqueo($data, 'revertir') }}">
+                                            <i class="fa fa-undo"></i>
+                                        </span>
+                                    @else
+                                        <button type="button" class="btn-accion-tabla tooltipsC btn-revertir-asiento" title="Revertir asiento" data-asiento-id="{{ $data->id }}">
+                                            <i class="fa fa-undo text-warning"></i>
+                                        </button>
+                                    @endif
+                                @endif
                             </td>
                         </tr>
                         @endforeach
@@ -151,4 +166,6 @@
     </div>
 </div>
 {{ $asientos->appends($filtrosQuery ?? [])->links() }}
+@include('contable.asiento.copiarasientomodal')
+@include('contable.asiento.revertirasientomodal')
 @endsection

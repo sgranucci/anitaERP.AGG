@@ -6,6 +6,7 @@ use App\Models\Compras\Ordencompra_Articulo_Precio_Historia;
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Services\Stock\StkmaeUltimaCompraAnitaService;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -28,6 +29,19 @@ final class ArticuloPrecioUltimaCompraSupport
     public const ORIGEN_ERP_ENTRADA = 'erp_entrada';
 
     public const ORIGEN_ARTICULO = 'articulo';
+
+    /** Ajustes de recuento: no son compra; no deben pisar última compra. */
+    private const ABREV_ENTRADA_NO_COMPRA = ['RCAJP', 'RCAJN', 'RCAJR'];
+
+    /**
+     * Índice (articulo_id, fecha, id, cantidad, precio) sobre articulo_movimiento. Si existe, la
+     * "última entrada" se resuelve con una consulta LIMIT 1 por artículo (backward index scan +
+     * ICP) en vez de barrer y ordenar todos los movimientos de los artículos pedidos.
+     * DDL: ALTER TABLE articulo_movimiento ADD INDEX idx_am_ultima_entrada (articulo_id, fecha, id, cantidad, precio), ALGORITHM=INPLACE, LOCK=NONE;
+     */
+    public const IDX_ULTIMA_ENTRADA = 'idx_am_ultima_entrada';
+
+    private const CACHE_KEY_IDX_ULTIMA_ENTRADA = 'stock.articulo_movimiento.idx_ultima_entrada';
 
     /** Prioridad en empate de fecha (mayor gana). */
     private const PRIORIDAD_ORIGEN = [
@@ -640,13 +654,13 @@ final class ArticuloPrecioUltimaCompraSupport
             ];
         }
 
-        $movs = DB::table('articulo_movimiento')
-            ->whereIn('articulo_id', $articuloIds)
-            ->where('cantidad', '>', 0)
-            ->where('precio', '>', 0)
-            ->orderByDesc('fecha')
-            ->orderByDesc('id')
-            ->get(['articulo_id', 'precio', 'fecha']);
+        $movs = self::tieneIndiceUltimaEntrada()
+            ? self::ultimaEntradaMovimientoPorArticulo($articuloIds)
+            : self::queryEntradasMovimiento()
+                ->whereIn('am.articulo_id', $articuloIds)
+                ->orderByDesc('am.fecha')
+                ->orderByDesc('am.id')
+                ->get(['am.articulo_id', 'am.precio', 'am.fecha']);
 
         foreach ($movs as $fila) {
             $articuloId = (int) $fila->articulo_id;
@@ -671,6 +685,72 @@ final class ArticuloPrecioUltimaCompraSupport
         }
 
         return $candidatos;
+    }
+
+    /**
+     * Movimientos que cuentan como entrada de compra (cantidad y precio > 0, sin recuentos).
+     */
+    private static function queryEntradasMovimiento(): \Illuminate\Database\Query\Builder
+    {
+        return DB::table('articulo_movimiento as am')
+            ->leftJoin('tipotransaccion_stock as tts', 'tts.id', '=', 'am.tipotransaccion_stock_id')
+            ->where('am.cantidad', '>', 0)
+            ->where('am.precio', '>', 0)
+            ->where(function ($q) {
+                $q->whereNull('tts.abreviatura')
+                    ->orWhereNotIn('tts.abreviatura', self::ABREV_ENTRADA_NO_COMPRA);
+            })
+            ->where(function ($q) {
+                $q->whereNull('am.concepto')
+                    ->orWhere('am.concepto', 'not like', 'Recuento%');
+            });
+    }
+
+    /**
+     * Última entrada por artículo con IDX_ULTIMA_ENTRADA: una consulta LIMIT 1 por artículo,
+     * que recorre el índice hacia atrás y corta en la primera entrada válida.
+     *
+     * @param  list<int>  $articuloIds
+     * @return list<object{articulo_id: int, precio: string, fecha: string}>
+     */
+    private static function ultimaEntradaMovimientoPorArticulo(array $articuloIds): array
+    {
+        $out = [];
+        foreach ($articuloIds as $articuloId) {
+            $fila = self::queryEntradasMovimiento()
+                ->useIndex(self::IDX_ULTIMA_ENTRADA)
+                ->where('am.articulo_id', $articuloId)
+                ->orderByDesc('am.fecha')
+                ->orderByDesc('am.id')
+                ->first(['am.articulo_id', 'am.precio', 'am.fecha']);
+            if ($fila !== null) {
+                $out[] = $fila;
+            }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Existencia del índice, cacheada 10 min: al crearlo (o borrarlo) el cambio de estrategia
+     * entra solo, sin flag ni deploy. Con `php artisan cache:forget` de la clave se fuerza.
+     */
+    public static function tieneIndiceUltimaEntrada(): bool
+    {
+        return (bool) Cache::remember(self::CACHE_KEY_IDX_ULTIMA_ENTRADA, 600, static function (): int {
+            try {
+                $filas = DB::select('SHOW INDEX FROM articulo_movimiento WHERE Key_name = ?', [self::IDX_ULTIMA_ENTRADA]);
+
+                return $filas !== [] ? 1 : 0;
+            } catch (\Throwable) {
+                return 0;
+            }
+        });
+    }
+
+    public static function olvidarCacheIndiceUltimaEntrada(): void
+    {
+        Cache::forget(self::CACHE_KEY_IDX_ULTIMA_ENTRADA);
     }
 
     public static function fallbackPrecioDesdeArticulo(Articulo $articulo): ?float

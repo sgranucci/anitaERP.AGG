@@ -133,9 +133,9 @@ class OrdencompraLegajoBandejaController extends Controller
         }
 
         $oc = $this->paqueteService->encontrarOcVisible($id);
-        $precargaId = (int) $request->input('precarga_id', 0);
+        $facturaRef = (string) $request->input('precarga_id', '');
         $recepcionIds = (array) $request->input('recepcion_ids', []);
-        $this->paqueteService->asignar($oc, $precargaId, $recepcionIds);
+        $this->paqueteService->asignar($oc, $facturaRef, $recepcionIds);
 
         $mensaje = $recepcionIds === [] || $recepcionIds === ['']
             ? 'Se quitó la asignación de COM de la factura.'

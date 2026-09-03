@@ -58,9 +58,9 @@ class OrdencompraAnitaSyncService
     }
 
     /**
-     * @return array{en_anita:int, importados:int, omitidos:int, errores:list<string>}
+     * @return array{en_anita:int, importados:int, omitidos:int, omitidos_erp_nativas:int, alineadas:int, lineas_completadas:int, errores:list<string>}
      */
-    public function sincronizarConAnita(?int $usuarioId = null): array
+    public function sincronizarConAnita(?int $usuarioId = null, ?int $fechaDesde = null, ?int $fechaHasta = null, ?callable $onProgreso = null): array
     {
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
@@ -71,7 +71,12 @@ class OrdencompraAnitaSyncService
         }
 
         $ctx = $this->nuevoContexto($uid);
-        $fechaDesde = (int) config('ordencompra_anita.fecha_desde', 20250100);
+        $desde = $fechaDesde ?? (int) config('ordencompra_anita.fecha_desde', 20250100);
+        $hasta = $fechaHasta ?? 0;
+
+        $where = $hasta > 0
+            ? " WHERE penmp_fecha BETWEEN {$desde} AND {$hasta}"
+            : " WHERE penmp_fecha >= {$desde}";
 
         $api = new ApiAnita;
         $lista = json_decode($api->apiCall([
@@ -79,24 +84,70 @@ class OrdencompraAnitaSyncService
             'campos' => 'penmp_nro',
             'tabla' => config('ordencompra_anita.tablas.cabecera'),
             'sistema' => 'compras',
-            'whereArmado' => " WHERE penmp_fecha >= {$fechaDesde}",
+            'whereArmado' => $where,
         ]));
 
-        $ret = ['en_anita' => is_array($lista) ? count($lista) : 0, 'importados' => 0, 'omitidos' => 0, 'errores' => []];
+        $ret = [
+            'en_anita' => is_array($lista) ? count($lista) : 0,
+            'importados' => 0,
+            'omitidos' => 0,
+            'omitidos_erp_nativas' => 0,
+            'alineadas' => 0,
+            'lineas_completadas' => 0,
+            'errores' => [],
+        ];
 
         if (! is_array($lista)) {
             return $ret;
         }
 
+        $nros = [];
         foreach ($lista as $item) {
             $nro = (int) ($item->penmp_nro ?? 0);
-            if ($nro <= 0) {
-                continue;
+            if ($nro > 0) {
+                $nros[] = $nro;
+            }
+        }
+        $nros = array_values(array_unique($nros));
+
+        $existentes = Ordencompra::query()
+            ->whereIn('numeroordencompra', $nros ?: [0])
+            ->get(['id', 'numeroordencompra', 'comentario', 'requisicion_id']);
+        $porNumero = $existentes->keyBy(static fn (Ordencompra $oc) => (int) $oc->numeroordencompra);
+
+        $total = count($nros);
+        $i = 0;
+        foreach ($nros as $nro) {
+            $i++;
+            if ($onProgreso !== null && ($i === 1 || $i % 25 === 0 || $i === $total)) {
+                $onProgreso($i, $total, $nro);
             }
             try {
+                $existente = $porNumero->get($nro);
+                if ($existente !== null) {
+                    if (! $this->ordencompraNacioEnAnita($existente)) {
+                        $ret['omitidos_erp_nativas']++;
+                        $ret['omitidos']++;
+
+                        continue;
+                    }
+                    $r = $this->alinearExistenteDesdeAnita($existente, $ctx);
+                    if ($r === 'alineada') {
+                        $ret['alineadas']++;
+                    } elseif ($r === 'lineas_completadas') {
+                        $ret['lineas_completadas']++;
+                    } else {
+                        $ret['omitidos']++;
+                    }
+
+                    continue;
+                }
+
                 $r = $this->traerRegistroDeAnita($nro, $ctx);
                 if ($r === 'importado') {
                     $ret['importados']++;
+                } elseif ($r === 'lineas_completadas') {
+                    $ret['lineas_completadas']++;
                 } elseif ($r === 'omitido') {
                     $ret['omitidos']++;
                 }
@@ -254,6 +305,72 @@ class OrdencompraAnitaSyncService
         return 'importado';
     }
 
+    private function ordencompraNacioEnAnita(Ordencompra $oc): bool
+    {
+        $c = (string) $oc->comentario;
+        if (str_contains($c, 'Fecha ingreso Anita:') || str_contains($c, 'Importada desde Anita')) {
+            return true;
+        }
+
+        return $oc->ordencompra_estados()
+            ->where('observacion', 'like', '%desde Anita%')
+            ->exists();
+    }
+
+    /**
+     * @return 'alineada'|'lineas_completadas'|'omitido'
+     */
+    private function alinearExistenteDesdeAnita(Ordencompra $oc, OrdencompraAnitaSyncContext $ctx): string
+    {
+        $numeroOc = (int) $oc->numeroordencompra;
+        $hubo = false;
+
+        $completadas = $this->completarLineasFaltantesDesdeAnita($numeroOc, $ctx);
+        if ($completadas > 0) {
+            $hubo = true;
+        }
+
+        $cabecera = $this->leerPendmaep($numeroOc);
+        if ($cabecera === null) {
+            return $completadas > 0 ? 'lineas_completadas' : 'omitido';
+        }
+
+        if (! $oc->requisicion_id) {
+            $reqId = $ctx->fkRequisicionPorNumero($cabecera->penmp_requisicion ?? null);
+            if ($reqId) {
+                $oc->forceFill(['requisicion_id' => $reqId])->save();
+                $hubo = true;
+            }
+        }
+
+        $clave = AnitaOcClave::desdePendmaep($cabecera);
+        if (! $oc->ordencompra_comprobantes()->exists()) {
+            $cuotas = $this->leerOccuota($clave);
+            if ($cuotas !== []) {
+                $this->importarComprobantesCuotas($cuotas, $cabecera, $ctx, (int) $oc->id);
+                $hubo = true;
+            }
+        }
+        if (! $oc->ordencompra_historias()->exists()) {
+            $historias = $this->leerLegcompra($numeroOc);
+            if ($historias !== []) {
+                $this->importarHistorias(
+                    $historias,
+                    $ctx,
+                    (int) $oc->id,
+                    $oc->sector_legajocompra_id
+                );
+                $hubo = true;
+            }
+        }
+
+        if ($completadas > 0 && ! $hubo) {
+            return 'lineas_completadas';
+        }
+
+        return $hubo ? 'alineada' : 'omitido';
+    }
+
     private function nuevoContexto(int $usuarioSyncId): OrdencompraAnitaSyncContext
     {
         return new OrdencompraAnitaSyncContext(
@@ -303,9 +420,11 @@ class OrdencompraAnitaSyncService
                 'penmp_proveedor', 'penmp_tipo', 'penmp_letra', 'penmp_sucursal', 'penmp_nro',
                 'penmp_fecha', 'penmp_fecha_ent', 'penmp_cond_compra', 'penmp_cond_entrega', 'penmp_cond_pago',
                 'penmp_entrega', 'penmp_dto', 'penmp_expreso', 'penmp_razon_susp', 'penmp_cod_mon', 'penmp_cotizacion',
-                'penmp_fecha_ing', 'penmp_hora_ing', 'penmp_estado', 'penmp_leyenda', 'penmp_requisicion',
+                'penmp_fecha_ing', 'penmp_hora_ing', 'penmp_estado', 'penmp_requisicion',
                 'penmp_ccosto', 'penmp_legajo', 'penmp_empresa', 'penmp_usuario_ini', 'penmp_estado_aprob',
                 'penmp_fecha_aprob', 'penmp_hora_aprob', 'penmp_usu_aprob', 'penmp_ccosto_dest', 'penmp_es_anticipo',
+                // Último: si la leyenda trae "|" el UNLOAD parte la fila; el resto de columnas ya quedó leído.
+                'penmp_leyenda',
             ]),
             'whereArmado' => " WHERE penmp_nro={$numeroOc}",
         ]));

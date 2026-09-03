@@ -7,6 +7,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraReporteCriteriosSupport;
 use App\Support\Compras\OrdencompraReporteFiltros;
+use App\Support\Compras\OrdencompraTotalesCabecera;
 use App\Support\Compras\RequisicionReporteCriteriosSupport;
 use Carbon\Carbon;
 use Illuminate\Database\Query\Builder;
@@ -53,7 +54,7 @@ class OrdencompraReporteService
     {
         $lineas = $this->consultarLineas($filtros);
         $filas = $this->aplanarFilas($lineas, $filtros);
-        $totales = $this->totalesDesdeLineas($lineas);
+        $totales = $this->totalesDesdeLineas($lineas, $filtros);
 
         return [
             'filas' => $filas,
@@ -246,6 +247,8 @@ class OrdencompraReporteService
                 'oa.cantidad',
                 'oa.cantidadalternativa',
                 'oa.precio',
+                'oa.moneda_id',
+                'oa.cotizacion',
                 'oa.detalle as leyenda_linea',
                 'oa.fechaentrega as fecha_entrega_linea',
                 'oa.estado_linea_oc',
@@ -351,6 +354,8 @@ class OrdencompraReporteService
             (string) ($filtros['anticipada'] ?? OrdencompraReporteFiltros::ANTICIPADA_TODAS),
         );
 
+        $this->aplicarFiltroMoneda($query, $filtros);
+
         $this->aplicarFiltroPendiente(
             $query,
             (string) ($filtros['pendiente'] ?? OrdencompraReporteFiltros::PENDIENTE_PENDIENTES),
@@ -360,6 +365,24 @@ class OrdencompraReporteService
         $this->aplicarOrden($query, $agrupacion);
 
         return $query->get();
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function aplicarFiltroMoneda(Builder $query, array $filtros): void
+    {
+        $modo = (string) ($filtros['modo_moneda'] ?? OrdencompraReporteFiltros::MONEDA_TODAS);
+        if ($modo !== OrdencompraReporteFiltros::MONEDA_ORIGEN) {
+            return;
+        }
+
+        $monedaId = (int) ($filtros['moneda_id'] ?? 0);
+        if ($monedaId <= 0) {
+            return;
+        }
+
+        $query->where('oa.moneda_id', $monedaId);
     }
 
     private function aplicarFiltroPendiente(Builder $query, string $pendiente, string $sqlPendiente): void
@@ -504,7 +527,7 @@ class OrdencompraReporteService
             $pendiente = max(0, $cantidad - $entregado);
             $facturado = $entregado;
             $pendFact = max(0, $cantidad - $facturado);
-            $precio = (float) ($row->precio ?? 0);
+            $precio = $this->precioEnMonedaReporte($row, $filtros);
             $importePend = $pendiente * $precio;
             $importeOc = $cantidad * $precio;
 
@@ -534,7 +557,7 @@ class OrdencompraReporteService
 
         $cerrarGrupo();
 
-        $totales = $this->totalesDesdeLineas($lineas);
+        $totales = $this->totalesDesdeLineas($lineas, $filtros);
         $filas[] = array_merge(['tipo_fila' => 'total_general'], $totales);
 
         return $filas;
@@ -743,9 +766,10 @@ class OrdencompraReporteService
 
     /**
      * @param  Collection<int, object>  $lineas
+     * @param  array<string, mixed>  $filtros
      * @return array<string, float|int>
      */
-    public function totalesDesdeLineas(Collection $lineas): array
+    public function totalesDesdeLineas(Collection $lineas, array $filtros = []): array
     {
         $totalCantidad = 0.0;
         $totalEntregado = 0.0;
@@ -757,7 +781,7 @@ class OrdencompraReporteService
             $cantidad = (float) ($row->cantidad ?? 0);
             $entregado = min($cantidad, max(0, (float) ($row->cantidad_entregada ?? 0)));
             $pendiente = max(0, $cantidad - $entregado);
-            $precio = (float) ($row->precio ?? 0);
+            $precio = $this->precioEnMonedaReporte($row, $filtros);
             $totalCantidad += $cantidad;
             $totalEntregado += $entregado;
             $totalFacturado += $entregado;
@@ -812,6 +836,7 @@ class OrdencompraReporteService
         $partes[] = OrdencompraReporteFiltros::etiquetaModoListado(
             (string) ($filtros['modo_listado'] ?? OrdencompraReporteFiltros::MODO_MOVIMIENTOS),
         );
+        $partes[] = $this->textoMonedaReporte($filtros);
 
         foreach ([
             OrdencompraReporteCriteriosSupport::subtituloOrdenescompra($filtros),
@@ -825,6 +850,65 @@ class OrdencompraReporteService
         }
 
         return implode(' · ', $partes);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function textoMonedaReporte(array $filtros): string
+    {
+        $nombre = $this->nombreMoneda((int) ($filtros['moneda_id'] ?? 0));
+        $modo = OrdencompraReporteFiltros::etiquetaModoMoneda(
+            (string) ($filtros['modo_moneda'] ?? OrdencompraReporteFiltros::MONEDA_TODAS),
+        );
+
+        return 'Expresado en: '.($nombre !== '' ? $nombre : '—').' ('.$modo.')';
+    }
+
+    private function nombreMoneda(int $monedaId): string
+    {
+        if ($monedaId <= 0) {
+            return '';
+        }
+
+        $row = DB::table('moneda')->where('id', $monedaId)->first(['nombre', 'abreviatura']);
+        if ($row === null) {
+            return '#'.$monedaId;
+        }
+
+        $nombre = trim((string) ($row->nombre ?? ''));
+        if ($nombre !== '') {
+            return $nombre;
+        }
+
+        $abrev = trim((string) ($row->abreviatura ?? ''));
+
+        return $abrev !== '' ? $abrev : ('#'.$monedaId);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function precioEnMonedaReporte(object $row, array $filtros): float
+    {
+        $precio = (float) ($row->precio ?? 0);
+        $monedaDestino = (int) ($filtros['moneda_id'] ?? 0);
+        if ($monedaDestino <= 0) {
+            return $precio;
+        }
+
+        $modo = (string) ($filtros['modo_moneda'] ?? OrdencompraReporteFiltros::MONEDA_TODAS);
+        if ($modo === OrdencompraReporteFiltros::MONEDA_ORIGEN) {
+            return $precio;
+        }
+
+        return OrdencompraTotalesCabecera::importeLineaEnMonedaReferencia(
+            $monedaDestino,
+            (int) ($row->moneda_id ?: $monedaDestino ?: 1),
+            1.0,
+            $precio,
+            (float) ($row->cotizacion ?? 1),
+        );
     }
 
     /**

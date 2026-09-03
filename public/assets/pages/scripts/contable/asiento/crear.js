@@ -50,61 +50,6 @@
 			$(this).closest('.asiento-archivo-item').remove();
 		});
 
-		// copia asiento
-		$("#botonform3").click(function(){
-			$('#copiarasientoModal').modal('show');
-        });
-
-		$('#aceptacopiarasientoModal').on('click', function () {
-
-			$('#copiarasientoModal').modal('hide');
-
-			let url = carpetaBase+'/contable/copiar_asiento';
-
-			$.post(url, {_token: $('input[name=_token]').val(), 
-						id: $('#id').val(),
-						fecha: $('#fechacopia').val()}, function(data)
-						{ 
-							alert("ASIENTO COPIADO CORRECTAMENTE GENERO EL ASIENTO CON ID:"+data.asiento_id+" NUMERO: "+data.numeroasiento); 
-						});
-    	});
-
-		$('#cierracopiarasientoModal').on('click', function () {
-			$('#copiarasientoModal').modal('hide');
-		});
-
-		// revierte asiento
-		$("#botonform4").click(function(){
-			$('#revertirasientoModal').modal('show');
-        });
-
-		$('#aceptarevertirasientoModal').on('click', function () {
-
-			$('#revertirasientoModal').modal('hide');
-
-			let url = carpetaBase+'/contable/copiar_asiento';
-
-			$.post(url, {_token: $('input[name=_token]').val(), 
-						id: $('#id').val(),
-						fecha: $('#fechacopia').val(),
-						revierte: 1}, function(data)
-						{
-							if (data && data.errores) {
-								alert(data.errores);
-								return;
-							}
-							if (!data || !data.asiento_id) {
-								alert('No se pudo revertir el asiento.');
-								return;
-							}
-							alert("ASIENTO REVERTIDO CORRECTAMENTE GENERO EL ASIENTO CON ID:"+data.asiento_id+" NUMERO: "+data.numeroasiento); 
-						});
-    	});
-
-		$('#cierrarevertirasientoModal').on('click', function () {
-			$('#revertirasientoModal').modal('hide');
-		});
-
 		// Muestra sumatoria de montos del asiento
 		if (window.AsientoMontosFormato) {
 			AsientoMontosFormato.initEnContenedor('#tbody-cuenta-table');

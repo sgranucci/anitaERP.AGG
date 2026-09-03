@@ -16,8 +16,10 @@
     $puedeVerCliente = $puede_ver_cliente ?? false;
     $puedeVerCuentacaja = $puede_ver_cuentacaja ?? false;
     $mostrarEmpresa = $multiempresa ?? false;
-    $totalColumnas = $mostrarEmpresa ? 17 : 16;
-    $colSpanAntesImportes = 12;
+    $mostrarCentrocosto = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros ?? []);
+    $totalColumnas = ($mostrarEmpresa ? 17 : 16) - ($mostrarCentrocosto ? 0 : 1);
+    $colSpanAntesImportes = $mostrarCentrocosto ? 12 : 11;
+    $colSpanSaldoInicialVacias = $mostrarCentrocosto ? 14 : 13;
 @endphp
 <thead>
     <tr>
@@ -28,7 +30,9 @@
         <th>Emisor</th>
         <th>CUIT</th>
         <th>Descripción mov.</th>
-        <th>Centro de costo</th>
+        @if ($mostrarCentrocosto)
+            <th>Centro de costo</th>
+        @endif
         <th>O.Compra</th>
         <th>Mon</th>
         <th class="text-right">Cotiz.</th>
@@ -83,7 +87,7 @@
         @elseif ($tipoFila === 'saldo_inicial')
             <tr style="background-color: #f8f9fa;">
                 <td>Saldo Inicial</td>
-                <td colspan="14"></td>
+                <td colspan="{{ $colSpanSaldoInicialVacias }}"></td>
                 <td class="text-right">{{ $formatearMonto($fila['saldo_ejercicio'] ?? null, true) }}</td>
                 @if ($mostrarEmpresa)
                     <td></td>
@@ -243,12 +247,14 @@
                 </td>
                 <td>{{ $fila['cuit'] ?? '' }}</td>
                 <td>{{ $fila['descripcion'] ?? '' }}</td>
-                <td>
-                    {{ ($fila['centrocosto_codigo'] ?? '') !== '' ? $fila['centrocosto_codigo'] : 'Sin CC' }}
-                    @if (! empty($fila['centrocosto_nombre']))
-                        — {{ $fila['centrocosto_nombre'] }}
-                    @endif
-                </td>
+                @if ($mostrarCentrocosto)
+                    <td>
+                        {{ ($fila['centrocosto_codigo'] ?? '') !== '' ? $fila['centrocosto_codigo'] : 'Sin CC' }}
+                        @if (! empty($fila['centrocosto_nombre']))
+                            — {{ $fila['centrocosto_nombre'] }}
+                        @endif
+                    </td>
+                @endif
                 <td>
                     @php
                         $nroOcFila = (int) ($fila['nro_oc'] ?? 0);

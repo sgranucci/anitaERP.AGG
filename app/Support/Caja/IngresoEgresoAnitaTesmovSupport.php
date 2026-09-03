@@ -5,6 +5,9 @@ namespace App\Support\Caja;
 use App\ApiAnita;
 use App\Models\Caja\Caja_Movimiento;
 use App\Models\Caja\Cheque;
+use App\Models\Compras\Proveedor_Cuentacorriente;
+use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
+use App\Support\Compras\AnitaSync\AplicacionCuentacorriente\AplicacionCuentacorrienteAnitaLadoSupport;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
@@ -12,7 +15,8 @@ use Illuminate\Support\Facades\Log;
 /**
  * Escritura Anita che_ban al emitir IE/OPP (a-movim.c + pago.c):
  * - pago (cabecera)
- * - auxpag + tesmov por cada línea de cuentacaja (axp_tipo_ap desde tctes por imputación)
+ * - auxpag TES + tesmov por cada línea de cuentacaja (pago.c TES / a-movim.c OPP)
+ * - auxpag FAC por factura aplicada (pago.c graba_auxpag(FAC))
  * - si hay cheques propios emitidos: cpromae + auxpag CHP + tesmov CHP
  */
 final class IngresoEgresoAnitaTesmovSupport
@@ -118,8 +122,19 @@ final class IngresoEgresoAnitaTesmovSupport
             $monedaId = (int) ($linea->moneda_id ?: 1);
             $cotizacion = self::cotizacionTesmov($monedaId, (float) ($linea->cotizacion ?: 1));
 
-            self::insertAuxpagCuentaCaja($ctx, $codigoCuenta, $importe, $monedaId, $cotizacion);
+            self::insertAuxpagCuentaCaja(
+                $ctx,
+                $codigoCuenta,
+                $importe,
+                $monedaId,
+                $cotizacion,
+                (int) ($movimiento->pagoproveedor_id ?? 0) > 0
+            );
             self::insertTesmovComprobante($ctx, $codigoCuenta, $importe, $monedaId, $cotizacion);
+        }
+
+        if ((int) ($movimiento->pagoproveedor_id ?? 0) > 0 && $movimientoChequesOrigen === null) {
+            self::insertAuxpagFacturasAplicadas($ctx, (int) $movimiento->pagoproveedor_id, (float) $ctx['factor']);
         }
 
         if ($movimientoChequesOrigen !== null) {
@@ -550,10 +565,16 @@ final class IngresoEgresoAnitaTesmovSupport
         string $codigoCuenta,
         float $importe,
         int $monedaId,
-        float $cotizacion
+        float $cotizacion,
+        bool $desdePagoProveedor = false
     ): void {
         $tipoAp = self::tipoAplicacionPorCuentaCaja($codigoCuenta);
         $imputacion = self::imputacionTctesDesdeCodigo($codigoCuenta);
+        // pago.c TES: axp_nro=0, axp_fecha_co=0, axp_sucursal_comp=0, letra_comp=letra OP
+        $nroAp = $desdePagoProveedor ? 0 : (int) $ctx['nro'];
+        $fechaCo = $desdePagoProveedor ? '0' : $ctx['fecha'];
+        $letraComp = $desdePagoProveedor ? self::esc($ctx['letra']) : ' ';
+        $sucursalComp = $desdePagoProveedor ? 0 : (int) $ctx['sucursal'];
 
         $raw = (new ApiAnita)->apiCallEscritura([
             'tabla' => 'auxpag',
@@ -584,16 +605,16 @@ final class IngresoEgresoAnitaTesmovSupport
                 '".$ctx['fecha']."',
                 '".$ctx['nro']."',
                 '".self::esc($ctx['tipo'])."',
-                '".$ctx['nro']."',
+                '".$nroAp."',
                 '".self::esc($tipoAp)."',
                 '".$importe."',
                 '".$monedaId."',
-                '".$ctx['fecha']."',
+                '".$fechaCo."',
                 '".$imputacion."',
-                ' ',
+                '".$letraComp."',
                 '".$ctx['sucursal']."',
                 '".self::esc($ctx['letra'])."',
-                '".$ctx['sucursal']."',
+                '".$sucursalComp."',
                 '0',
                 '0',
                 '".$ctx['empresa']."',
@@ -602,6 +623,124 @@ final class IngresoEgresoAnitaTesmovSupport
         ], 'caja IE auxpag '.$tipoAp);
 
         self::assertOk($raw, 'auxpag '.$tipoAp, (int) $ctx['nro']);
+    }
+
+    /**
+     * pago.c graba_auxpag(FAC): una fila por factura aplicada.
+     * axp_tipo_ap = tipo del comprobante (FNB/FAC/… o APA si es OPA),
+     * axp_nro / letra_comp / sucursal_cob = clave de la factura,
+     * axp_banco = nro de cuota (6 dígitos), axp_nro_interno = interno Anita.
+     *
+     * @param  array<string, mixed>  $ctx
+     */
+    private static function insertAuxpagFacturasAplicadas(array $ctx, int $pagoproveedorId, float $factor): void
+    {
+        $aplicaciones = Proveedor_Cuentacorriente_Aplicacion::query()
+            ->where('pagoproveedor_id', $pagoproveedorId)
+            ->where('total', '<', 0)
+            ->orderBy('id')
+            ->get();
+
+        foreach ($aplicaciones as $apl) {
+            $deuda = Proveedor_Cuentacorriente::query()
+                ->with([
+                    'proveedores',
+                    'empresas',
+                    'monedas',
+                    'comprobante_proveedores.tipotransaccion_compras',
+                    'comprobante_proveedores.monedas',
+                    'comprobante_proveedor_cuotas',
+                    'pagoproveedores',
+                ])
+                ->find((int) $apl->proveedor_cuentacorriente_id);
+            if ($deuda === null) {
+                continue;
+            }
+
+            $lado = AplicacionCuentacorrienteAnitaLadoSupport::desdeCc($deuda);
+            if ($lado === null) {
+                Log::warning('caja.ie.anita.auxpag_fac_sin_clave', [
+                    'pagoproveedor_id' => $pagoproveedorId,
+                    'cc_id' => $deuda->id,
+                ]);
+                continue;
+            }
+
+            $tipoAp = strtoupper(substr(trim((string) $lado['tipo']), 0, 3));
+            if ($tipoAp === 'OPA') {
+                $tipoAp = 'APA';
+            }
+
+            $monto = round(abs((float) $apl->total) * ($factor < 0 ? -1.0 : 1.0), 2);
+            if (abs($monto) < 0.01) {
+                continue;
+            }
+
+            $fechaCo = '0';
+            $fechaFac = $deuda->comprobante_proveedores?->fechacomprobante
+                ?? $deuda->fecha
+                ?? null;
+            if ($fechaFac) {
+                $fechaCo = date('Ymd', strtotime((string) $fechaFac));
+            }
+
+            $cuota = (int) ($lado['nro_cuota'] ?? 1);
+            if ($cuota <= 0) {
+                $cuota = 1;
+            }
+            $bancoCuota = str_pad((string) $cuota, 6, '0', STR_PAD_LEFT);
+
+            $codMon = (string) ((int) ($apl->moneda_id ?: $deuda->moneda_id ?: 1));
+            $codMon = $codMon !== '' ? substr($codMon, 0, 1) : '1';
+
+            $raw = (new ApiAnita)->apiCallEscritura([
+                'tabla' => 'auxpag',
+                'acc' => 'insert',
+                'sistema' => self::sistema(),
+                'campos' => '
+                    axp_pro,
+                    axp_fecha,
+                    axp_rec,
+                    axp_tipo,
+                    axp_nro,
+                    axp_tipo_ap,
+                    axp_monto_ap,
+                    axp_cod_mon_co,
+                    axp_fecha_co,
+                    axp_banco,
+                    axp_letra_comp,
+                    axp_sucursal,
+                    axp_letra_cob,
+                    axp_sucursal_cob,
+                    axp_vendedor,
+                    axp_nro_interno,
+                    axp_empresa,
+                    axp_concepto,
+                    axp_cbu',
+                'valores' => "
+                    '".$ctx['proveedorCodigo']."',
+                    '".$ctx['fecha']."',
+                    '".$ctx['nro']."',
+                    '".self::esc($ctx['tipo'])."',
+                    '".(int) $lado['numero']."',
+                    '".self::esc($tipoAp)."',
+                    '".$monto."',
+                    '".$codMon."',
+                    '".$fechaCo."',
+                    '".$bancoCuota."',
+                    '".self::esc((string) $lado['letra'])."',
+                    '".$ctx['sucursal']."',
+                    '".self::esc($ctx['letra'])."',
+                    '".(int) $lado['sucursal']."',
+                    '0',
+                    '".(int) ($lado['nro_interno'] ?? 0)."',
+                    '".$ctx['empresa']."',
+                    '0',
+                    ' '",
+            ], 'caja IE auxpag FAC '.$lado['etiqueta']);
+
+            self::assertOk($raw, 'auxpag FAC '.$lado['etiqueta'], (int) $ctx['nro']);
+        }
     }
 
     private static function cbuAnita22(string $cbu): string

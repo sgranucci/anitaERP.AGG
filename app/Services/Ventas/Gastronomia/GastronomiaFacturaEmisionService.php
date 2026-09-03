@@ -251,6 +251,8 @@ final class GastronomiaFacturaEmisionService
         array $mediosPago = [],
         bool $bloqueoPvYaAdquirido = false,
         bool $facturacionConDescuento = false,
+        ?int $numerocomprobanteSugerido = null,
+        bool $yaReleidoNumeroArca = false,
     ): array {
         $profiler = GastronomiaEmisionProfiler::iniciarSiConfigurado();
 
@@ -320,6 +322,20 @@ final class GastronomiaFacturaEmisionService
             $opcionalesPorItem,
             $omitirStkmovAnitaPorItem,
         );
+
+        $usoNumeroPreview = false;
+        if (
+            ! $usaCaea
+            && ! $forzarPvCaea
+            && ! $yaReleidoNumeroArca
+            && filter_var(config('gastronomia.emitir_usar_numero_preview', true), FILTER_VALIDATE_BOOLEAN)
+            && $numerocomprobanteSugerido !== null
+            && $numerocomprobanteSugerido > 0
+        ) {
+            $payload['numerocomprobante_forzado'] = $numerocomprobanteSugerido;
+            $usoNumeroPreview = true;
+            $profiler?->marcar('numero_preview_aplicado');
+        }
 
         try {
             $payload = $this->jornadaService->aplicarFechasAlPayload($payload, (int) $cuenta->empresa_id);
@@ -530,7 +546,32 @@ final class GastronomiaFacturaEmisionService
                     'usa_caea' => $usaCaea,
                     'clase_error' => $claseError,
                     'msg' => $e->getMessage(),
+                    'numero_preview' => $usoNumeroPreview ? $numerocomprobanteSugerido : null,
                 ]);
+
+                if (
+                    $usoNumeroPreview
+                    && ! $yaReleidoNumeroArca
+                    && $this->esErrorNumeracionArcaParaReleer($e->getMessage())
+                ) {
+                    Log::warning('gastronomia.emitir_factura.releer_numero_arca', [
+                        'cuenta_id' => $cuenta->id,
+                        'numero_preview' => $numerocomprobanteSugerido,
+                        'msg' => $e->getMessage(),
+                    ]);
+
+                    return $this->emitirFacturaDesdeCuenta(
+                        $cuenta,
+                        $monedaId,
+                        $actividadArcaId,
+                        $forzarPvCaea,
+                        $mediosPago,
+                        true,
+                        $facturacionConDescuento,
+                        null,
+                        true,
+                    );
+                }
 
                 if (! $forzarPvCaea && ArcaWsfeEmisionResiliencia::debeReintentarTransaccionConCaea($e->getMessage(), $usaCaea)) {
                     Log::warning('gastronomia.emitir_factura.reintento_caea', [
@@ -596,6 +637,36 @@ final class GastronomiaFacturaEmisionService
         $profiler?->marcar('numeracion_caea_reservada');
 
         return $errorReserva;
+    }
+
+    private function esErrorNumeracionArcaParaReleer(?string $mensaje): bool
+    {
+        $m = strtolower(trim((string) $mensaje));
+        if ($m === '') {
+            return false;
+        }
+
+        foreach ([
+            'correlativ',
+            'no correlativo',
+            'numerocomprobante',
+            'nro. de cbte',
+            'nro de cbte',
+            'comprobante duplicado',
+            'ya existe un comprobante',
+            'ya se encuentra registrado',
+            'no pudo numerar',
+            'cbte nro',
+            '10016',
+            '10015',
+        ] as $needle) {
+            if (str_contains($m, $needle)) {
+                return true;
+            }
+        }
+
+        return ArcaWsfeEmisionResiliencia::clasificarError($mensaje) === ArcaWsfeEmisionResiliencia::CLASE_DATOS
+            && (str_contains($m, 'numero') || str_contains($m, 'nro'));
     }
 
     private function letraComprobanteDesdePayload(array $payload): string
@@ -702,7 +773,21 @@ final class GastronomiaFacturaEmisionService
                 $cuenta->fresh(),
             );
 
-            // 3) Ingredientes por fórmula
+            GastronomiaComentarioCocinaSupport::persistirDesdeCuenta(
+                $venta->fresh(['venta_emisiones']),
+                $cuenta->fresh(['lineas']),
+            );
+
+            // 3) CAE/CAEA en ARCA (si falla, rollback de factura y cobranza; aún no hay stock).
+            $vencaePendiente = null;
+            if (! empty($resultado['cae_pendiente']) && is_array($resultado['cae_pendiente'])) {
+                $profiler?->marcar('tx_vencae_inicio');
+                $vencaePendiente = $this->facturacionGastronomiaService->completarSolicitudCaePendiente($resultado['cae_pendiente']);
+                $profiler?->marcar('tx_vencae_fin');
+            }
+
+            // 4) Ingredientes después del CAE: el lock de articulo_saldo_deposito no se sostiene
+            // durante el SOAP a ARCA (locales que comparten depósito de insumos).
             $tipo = Tipotransaccion::query()->find($tipoFacturaId);
             $nombreTipo = $tipo !== null ? (string) ($tipo->nombre ?? 'Venta') : 'Venta';
 
@@ -719,19 +804,6 @@ final class GastronomiaFacturaEmisionService
             );
             $profiler?->marcar('tx_ingredientes_fin');
 
-            GastronomiaComentarioCocinaSupport::persistirDesdeCuenta(
-                $venta->fresh(['venta_emisiones']),
-                $cuenta->fresh(['lineas']),
-            );
-
-            // 4) CAE/CAEA en ARCA (obligatorio antes del commit; si falla, rollback de factura y cobranza).
-            $vencaePendiente = null;
-            if (! empty($resultado['cae_pendiente']) && is_array($resultado['cae_pendiente'])) {
-                $profiler?->marcar('tx_vencae_inicio');
-                $vencaePendiente = $this->facturacionGastronomiaService->completarSolicitudCaePendiente($resultado['cae_pendiente']);
-                $profiler?->marcar('tx_vencae_fin');
-            }
-
             $waitryOrderIdEmision = (int) ($cuenta->waitry_order_id ?? 0);
 
             VentaGastronomiaEmision::updateOrCreate(
@@ -746,7 +818,7 @@ final class GastronomiaFacturaEmisionService
                 ],
             );
 
-            // 5) Cerrar cuenta/mesa
+            // 5) Metadata POS y cierre de cuenta/mesa
             $this->cuentaService->marcarFacturada($cuenta->fresh(), $venta->id);
 
             $ventaAnitaRevertir = null;

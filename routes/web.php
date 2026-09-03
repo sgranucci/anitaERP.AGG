@@ -2061,6 +2061,7 @@ Route::get('ventas/gastronomia/api/canjes-premio-turno', 'Ventas\GastronomiaProc
 Route::get('ventas/gastronomia/api/tickets-tarjeta-turno', 'Ventas\GastronomiaProcesoFacturacionController@apiListarTicketsTarjetaTurno')->name('gastronomia_api_tickets_tarjeta_turno');
 Route::get('ventas/gastronomia/api/invitaciones-turno', 'Ventas\GastronomiaProcesoFacturacionController@apiListarInvitacionesTurno')->name('gastronomia_api_invitaciones_turno');
 Route::get('ventas/gastronomia/api/diagnostico-emision', 'Ventas\GastronomiaProcesoFacturacionController@apiDiagnosticoEmision')->name('gastronomia_api_diagnostico_emision');
+Route::get('ventas/gastronomia/api/proximo-comprobante-arca', 'Ventas\GastronomiaProcesoFacturacionController@apiProximoComprobanteArca')->name('gastronomia_api_proximo_comprobante_arca');
 Route::get('ventas/gastronomia/api/diagnostico-ticket', 'Ventas\GastronomiaProcesoFacturacionController@apiDiagnosticoTicket')->name('gastronomia_api_diagnostico_ticket');
 Route::post('ventas/gastronomia/api/emitir-factura', 'Ventas\GastronomiaProcesoFacturacionController@apiEmitirFactura')->name('gastronomia_api_emitir_factura');
 
@@ -3369,7 +3370,7 @@ Route::post('compras/precarga_comprobante_proveedor/{id}/marcar-cargada-anita', 
 Route::post('compras/precarga_comprobante_proveedor/{id}/generar-comprobante', 'Compras\Comprobante_ProveedorController@generarDesdePrecarga')->name('generar_comprobante_desde_precarga');
 Route::get('compras/precarga_comprobante_proveedor/crear', 'Compras\Precarga_Comprobante_ProveedorController@crear')->name('crear_precarga_comprobante_proveedor');
 Route::post('compras/precarga_comprobante_proveedor', 'Compras\Precarga_Comprobante_ProveedorController@guardar')->name('guardar_precarga_comprobante_proveedor');
-Route::get('compras/precarga_comprobante_proveedor/{id}/editar', 'Compras\Precarga_Comprobante_ProveedorController@editar')->name('editar_precarga_comprobante_proveedor');
+Route::get('compras/precarga_comprobante_proveedor/{id}/editar', 'Compras\Precarga_Comprobante_ProveedorController@editar')->name('editar_precarga_comprobante_proveedor')->middleware('auth');
 Route::put('compras/precarga_comprobante_proveedor/{id}', 'Compras\Precarga_Comprobante_ProveedorController@actualizar')->name('actualizar_precarga_comprobante_proveedor');
 Route::delete('compras/precarga_comprobante_proveedor/{id}', 'Compras\Precarga_Comprobante_ProveedorController@eliminar')->name('eliminar_precarga_comprobante_proveedor');
 
@@ -3588,6 +3589,8 @@ Route::post('compras/ordencompra/{id}/cambiar-estado', 'Compras\OrdencompraContr
 Route::post('compras/ordencompra/{id}/reactivar', 'Compras\OrdencompraController@reactivarSuspendida')->name('ordencompra_reactivar');
 Route::post('compras/ordencompra/{id}/revertir-cierre-lineas', 'Compras\OrdencompraController@revertirCierreLineas')->name('ordencompra_revertir_cierre_lineas');
 Route::post('compras/ordencompra/{id}/cambiar-sector', 'Compras\OrdencompraController@cambiarSector')->name('ordencompra_cambiar_sector');
+Route::post('compras/ordencompra/{id}/asignar-factura-pdf', 'Compras\OrdencompraController@asignarFacturaPdf')->name('ordencompra_asignar_factura_pdf');
+Route::get('compras/ordencompra/{id}/firmantes-gastronomia-arbol', 'Compras\OrdencompraController@firmantesGastronomiaArbol')->name('ordencompra_firmantes_gastronomia_arbol');
 Route::post('compras/ordencompra/{id}/enviar-gastronomia', 'Compras\OrdencompraController@enviarGastronomia')->name('ordencompra_enviar_gastronomia');
 Route::post('compras/ordencompra/{id}/enviar-cuentas-a-pagar', 'Compras\OrdencompraController@enviarCuentasAPagar')->name('ordencompra_enviar_cuentas_a_pagar');
 Route::post('compras/ordencompra/{id}/enviar-pagos', 'Compras\OrdencompraController@enviarPagos')->name('ordencompra_enviar_pagos');

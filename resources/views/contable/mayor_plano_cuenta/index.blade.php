@@ -166,9 +166,18 @@
                                             Solo movimientos de ventas (totales)
                                         </label>
                                     </div>
+                                    <div class="form-check">
+                                        <input type="hidden" name="mostrar_columna_centrocosto" value="0">
+                                        <input class="form-check-input" type="checkbox" name="mostrar_columna_centrocosto" id="mostrar_columna_centrocosto" value="1"
+                                            @checked(\App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros ?? []))>
+                                        <label class="form-check-label" for="mostrar_columna_centrocosto">
+                                            Mostrar columna centro de costo
+                                        </label>
+                                    </div>
                                     <small class="text-muted d-block mt-2">
                                         El subdiario completa las imputaciones que no existen en ctamov.
                                         El tilde de ventas filtra sistema V; muestra totales por cuenta con saldo inicial de ventas desde el inicio del ejercicio y saldo (SI + Debe − Haber).
+                                        La columna de centro de costo queda grabada como preferencia del usuario.
                                     </small>
                                 </div>
                             </div>

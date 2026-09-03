@@ -20,7 +20,8 @@
             </ul>
         @endif
         <p class="text-muted small mt-3 mb-0">
-            Las retenciones se recalculan y graban al guardar la OP (certificados Anita G/V/T/S).
+            Las retenciones se calculan solas al aplicar la deuda y al abrir esta solapa, y se vuelven a grabar al guardar la OP (certificados Anita G/V/T/S).
+            El botón Calcular sirve para refrescar la vista previa.
         </p>
     </div>
 </div>

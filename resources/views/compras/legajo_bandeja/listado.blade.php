@@ -20,6 +20,7 @@
     <table class="data">
         <thead>
             <tr>
+                <th>Id</th>
                 <th>OC</th>
                 <th>Fecha</th>
                 <th>Empresa</th>
@@ -37,6 +38,7 @@
         <tbody>
             @foreach ($filas as $row)
                 <tr>
+                    <td>{{ $row['id'] ?? '' }}</td>
                     <td>{{ $row['numero'] ?? '' }}</td>
                     <td>{{ $row['fecha'] ?? '' }}</td>
                     <td>{{ $row['empresa'] ?? '' }}</td>

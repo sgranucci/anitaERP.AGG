@@ -98,6 +98,7 @@ class RecepcionProveedorAuditoriaAsientosComCommand extends Command
                 ['COM en alcance', (string) ($informe['total_com'] ?? 0)],
                 ['OK (recepción = ERP = Anita)', (string) ($informe['ok'] ?? 0)],
                 ['Reparadas en auditoría', (string) ($informe['reparadas'] ?? 0)],
+                ['Sin reparar (período cerrado)', (string) ($informe['sin_reparar_periodo_cerrado'] ?? 0)],
                 ['Omitidas (sin contabilidad / importe 0)', (string) ($informe['omitidas'] ?? 0)],
                 ['Con discrepancia', (string) count($informe['discrepancias'] ?? [])],
                 ['Errores de lectura', (string) count($informe['errores_lectura'] ?? [])],

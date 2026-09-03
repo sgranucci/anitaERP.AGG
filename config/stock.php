@@ -146,6 +146,7 @@ return [
     | Resolución en ArticuloPrecioUltimaCompraSupport (gana la fuente con fecha más reciente):
     |   1) ERP COM: historia OC / recepción confirmada
     |   2) ERP entrada: TRA confirmada (precio destino) o movimiento cantidad &gt; 0
+    |      (excluye ajustes de recuento RCAJP/RCAJN/RCAJR)
     |   3) Anita stkmae.stkm_pre_compra3 unificado entre empresas (fecha máx.)
     |   4) articulo.costo / articulo.ppp
     | TITO (promedio TRCONT): ArticuloPrecioPromedioCompraSupport

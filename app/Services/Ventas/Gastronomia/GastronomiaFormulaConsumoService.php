@@ -103,9 +103,7 @@ final class GastronomiaFormulaConsumoService
             $aggregados = [];
             $this->expandFormula($formulaId, (float) $linea->cantidad, $opcMap, $aggregados, 0);
 
-            $preciosInsumo = ArticuloMovimientoPrecioHistoricoSupport::resolverUltimaCompraInsumoPorArticuloIds(
-                array_map('intval', array_keys($aggregados))
-            );
+            $preciosInsumo = $this->resolverPreciosInsumo(array_map('intval', array_keys($aggregados)));
 
             foreach ($aggregados as $ingArticuloId => $cantidad) {
                 if ($cantidad <= 0) {
@@ -196,9 +194,7 @@ final class GastronomiaFormulaConsumoService
             $aggregados = [];
             $this->expandFormula((int) $articulo->formula, (float) $emision->cantidad, [], $aggregados, 0);
 
-            $preciosInsumo = ArticuloMovimientoPrecioHistoricoSupport::resolverUltimaCompraInsumoPorArticuloIds(
-                array_map('intval', array_keys($aggregados))
-            );
+            $preciosInsumo = $this->resolverPreciosInsumo(array_map('intval', array_keys($aggregados)));
 
             foreach ($aggregados as $ingArticuloId => $cantidad) {
                 if ($cantidad <= 0) {
@@ -267,6 +263,26 @@ final class GastronomiaFormulaConsumoService
     /**
      * @param  array<string, mixed>  $data
      */
+    /**
+     * Costo/precio última compra por insumo. Con gastronomia.insumos_costo_diferido.habilitado
+     * devuelve [] y los movimientos quedan en costo 0 para que los complete
+     * gastronomia:completar-costo-insumos fuera de la transacción de emisión.
+     *
+     * @param  list<int>  $articuloIds
+     * @return array<int, array{precio: float, costo: float, moneda_id: int|null}>
+     */
+    private function resolverPreciosInsumo(array $articuloIds): array
+    {
+        if ($articuloIds === []) {
+            return [];
+        }
+        if ((bool) config('gastronomia.insumos_costo_diferido.habilitado', false)) {
+            return [];
+        }
+
+        return ArticuloMovimientoPrecioHistoricoSupport::resolverUltimaCompraInsumoPorArticuloIds($articuloIds);
+    }
+
     private function persistirMovimientoStock(Tipotransaccion $tipo, array $data): void
     {
         $dataFirmado = TipotransaccionOperacionStockSupport::firmarPayloadDesdeTipotransaccion($data, $tipo);

@@ -5,21 +5,28 @@ declare(strict_types=1);
 namespace App\Services\Ventas;
 
 use App\Models\Ventas\Puntoventa;
+use App\Models\Ventas\Tipotransaccion;
 use App\Models\Ventas\Venta;
+use App\Support\Contable\CierreRendicionMaquinaConfigSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasFslAnitaArmadoSupport;
+use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasFslAnitaBridgeReader;
 use App\Support\Ventas\IvaVentas\IvaVentasAuditoriaCorrelatividadSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasColumnasSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasDesgloseSupport;
+use App\Support\Ventas\IvaVentas\IvaVentasFslAnitaArmadoSupport;
 use App\Support\Ventas\IvaVentas\IvaVentasUnidadNegocioSupport;
 use App\Support\Ventas\IvaVentasListadoFiltros;
+use App\Support\Ventas\MaquinaFslTipoSupport;
+use App\Support\Ventas\TipotransaccionIvaVentasSupport;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Pagination\LengthAwarePaginator as PaginatorImpl;
-use Illuminate\Support\Collection;
 
 final class IvaVentasReporteService
 {
     public function __construct(
         private readonly IvaVentasConciliacionContableService $conciliacionContableService,
+        private readonly LibroIvaDigitalVentasFslAnitaBridgeReader $fslAnitaBridgeReader,
     ) {
     }
 
@@ -45,14 +52,18 @@ final class IvaVentasReporteService
         $clasificarHost = ! empty($filtros['clasificar_por_host']);
         $vendingPvIds = IvaVentasUnidadNegocioSupport::vendingPuntoventaIds((int) ($filtros['empresa_id'] ?? 0));
         $excluidasPre = 0;
+        $excluidasTipo = 0;
         $excluidasSubdiario = 0;
         $excluidasMoneda = 0;
+        $clavesErpFsl = [];
 
         foreach ($ventas as $venta) {
             $motivoExclusion = $this->motivoExclusionNegocio($venta, $filtros);
             if ($motivoExclusion !== null) {
                 if ($motivoExclusion === 'pre') {
                     $excluidasPre++;
+                } elseif ($motivoExclusion === 'tipo') {
+                    $excluidasTipo++;
                 } elseif ($motivoExclusion === 'subdiario') {
                     $excluidasSubdiario++;
                 }
@@ -111,6 +122,13 @@ final class IvaVentasReporteService
 
             $filas[] = $fila;
 
+            if ($tipo === MaquinaFslTipoSupport::ABREVIATURA) {
+                $clavesErpFsl[LibroIvaDigitalVentasFslAnitaArmadoSupport::claveNatural(
+                    $sucursal,
+                    (int) $venta->numerocomprobante,
+                )] = true;
+            }
+
             $clavePv = $seccion.'|'.$pvId;
             if (! isset($totalesPorPv[$clavePv])) {
                 $totalesPorPv[$clavePv] = [
@@ -127,6 +145,17 @@ final class IvaVentasReporteService
             $totalesPorPv[$clavePv]['cantidad']++;
             IvaVentasColumnasSupport::acumular($totalesPorPv[$clavePv]['columnas'], $columnas);
             IvaVentasColumnasSupport::acumular($totalesGeneral, $columnas);
+        }
+
+        $conteoFslAnita = 0;
+        if (! empty($filtros['completar_fsl_anita']) && TipotransaccionIvaVentasSupport::fslVaAlIvaVentas()) {
+            $conteoFslAnita = $this->incorporarFslAnita(
+                $filtros,
+                $filas,
+                $totalesPorPv,
+                $totalesGeneral,
+                $clavesErpFsl,
+            );
         }
 
         $filas = $this->ordenarFilas($filas, $filtros, $clasificarHost);
@@ -160,9 +189,11 @@ final class IvaVentasReporteService
                 'ventas' => count($filas),
                 'puntoventa' => count($totalesPorPvLista),
                 'excluidas_pre' => $excluidasPre,
+                'excluidas_tipo' => $excluidasTipo,
                 'excluidas_subdiario' => $excluidasSubdiario,
                 'excluidas_moneda' => $excluidasMoneda,
                 'ventas_periodo' => $ventas->count(),
+                'ventas_fsl_anita' => $conteoFslAnita,
             ],
             'conciliacion_contable' => ! empty($filtros['conciliar_contable'])
                 ? $this->conciliacionContableService->conciliar($filtros, [
@@ -230,6 +261,10 @@ final class IvaVentasReporteService
         $abrev = strtoupper(trim((string) ($venta->tipotransacciones->abreviatura ?? '')));
         if ($abrev === 'PRE') {
             return 'pre';
+        }
+
+        if (! TipotransaccionIvaVentasSupport::vaAlIvaVentas($venta->tipotransacciones)) {
+            return 'tipo';
         }
 
         $letra = IvaVentasDesgloseSupport::letra($venta);
@@ -390,6 +425,112 @@ final class IvaVentasReporteService
     private function sucursalDesdeCodigoPuntoventa(string $codigo): int
     {
         return (int) preg_replace('/\D+/', '', trim($codigo));
+    }
+
+    /**
+     * Completa FSL de máquinas/ruletas desde Anita (Informix) si aún no están en el ERP.
+     *
+     * @param  list<array<string, mixed>>  $filas
+     * @param  array<string, array<string, mixed>>  $totalesPorPv
+     * @param  array<string, float>  $totalesGeneral
+     * @param  array<string, true>  $clavesErpFsl
+     */
+    private function incorporarFslAnita(
+        array $filtros,
+        array &$filas,
+        array &$totalesPorPv,
+        array &$totalesGeneral,
+        array $clavesErpFsl,
+    ): int {
+        $empresaId = (int) ($filtros['empresa_id'] ?? 0);
+        $desde = (string) ($filtros['fecha_desde'] ?? '');
+        $hasta = (string) ($filtros['fecha_hasta'] ?? '');
+        if ($empresaId <= 0 || $desde === '' || $hasta === '') {
+            return 0;
+        }
+
+        $porFechaJornada = ($filtros['orden_fecha'] ?? IvaVentasListadoFiltros::ORDEN_FECHA_JORNADA)
+            === IvaVentasListadoFiltros::ORDEN_FECHA_JORNADA;
+        $pvDefault = CierreRendicionMaquinaConfigSupport::puntoventaFsl($empresaId);
+        $pvPorSucursal = $this->mapaPuntoventaPorSucursal($empresaId);
+        $tipoFslId = (int) (Tipotransaccion::query()
+            ->where('abreviatura', MaquinaFslTipoSupport::ABREVIATURA)
+            ->whereNull('deleted_at')
+            ->value('id') ?? 0);
+
+        $conteo = 0;
+        foreach ($this->fslAnitaBridgeReader->listarPeriodo($empresaId, $desde, $hasta, $porFechaJornada) as $filaAnita) {
+            $clave = LibroIvaDigitalVentasFslAnitaArmadoSupport::claveDesdeFilaAnita($filaAnita, $pvDefault);
+            if (isset($clavesErpFsl[$clave])) {
+                continue;
+            }
+
+            $sucursal = LibroIvaDigitalVentasFslAnitaArmadoSupport::puntoVentaDesdeFila($filaAnita, $pvDefault);
+            $pv = $pvPorSucursal[$sucursal] ?? [
+                'puntoventa_id' => 0,
+                'puntoventa_codigo' => (string) $sucursal,
+                'puntoventa_nombre' => 'PV '.$sucursal,
+                'sucursal' => $sucursal,
+                'nombreempresa' => '',
+            ];
+            $pv['tipotransaccion_id'] = $tipoFslId;
+            $pv['sucursal'] = $sucursal;
+
+            $fila = IvaVentasFslAnitaArmadoSupport::filaReporte($filaAnita, $pv, $filtros);
+            if ($fila === null) {
+                continue;
+            }
+
+            $filas[] = $fila;
+            $clavesErpFsl[$clave] = true;
+            $conteo++;
+
+            $clavePv = $fila['seccion'].'|'.(int) $fila['puntoventa_id'];
+            if (! isset($totalesPorPv[$clavePv])) {
+                $totalesPorPv[$clavePv] = [
+                    'seccion' => $fila['seccion'],
+                    'seccion_label' => $fila['seccion_label'],
+                    'puntoventa_id' => (int) $fila['puntoventa_id'],
+                    'puntoventa_codigo' => (string) $fila['puntoventa_codigo'],
+                    'puntoventa_nombre' => (string) $fila['puntoventa_nombre'],
+                    'sucursal' => (int) $fila['sucursal'],
+                    'cantidad' => 0,
+                    'columnas' => IvaVentasColumnasSupport::montosVacios(),
+                ];
+            }
+            $totalesPorPv[$clavePv]['cantidad']++;
+            IvaVentasColumnasSupport::acumular($totalesPorPv[$clavePv]['columnas'], $fila['columnas']);
+            IvaVentasColumnasSupport::acumular($totalesGeneral, $fila['columnas']);
+        }
+
+        return $conteo;
+    }
+
+    /**
+     * @return array<int, array{puntoventa_id: int, puntoventa_codigo: string, puntoventa_nombre: string, sucursal: int, nombreempresa: string}>
+     */
+    private function mapaPuntoventaPorSucursal(int $empresaId): array
+    {
+        $out = [];
+        $query = Puntoventa::query()->with('empresas');
+        if ($empresaId > 0) {
+            $query->where('empresa_id', $empresaId);
+        }
+        foreach ($query->get() as $pv) {
+            $sucursal = $this->sucursalDesdeCodigoPuntoventa((string) ($pv->codigo ?? ''));
+            if ($sucursal <= 0) {
+                continue;
+            }
+            $out[$sucursal] = [
+                'puntoventa_id' => (int) $pv->id,
+                'puntoventa_codigo' => (string) ($pv->codigo ?? ''),
+                'puntoventa_nombre' => trim((string) ($pv->nombre ?? $pv->codigo)),
+                'sucursal' => $sucursal,
+                'nombreempresa' => (string) ($pv->empresas->nombre ?? ''),
+            ];
+        }
+
+        return $out;
     }
 
     /**

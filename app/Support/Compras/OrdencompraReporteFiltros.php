@@ -57,6 +57,10 @@ final class OrdencompraReporteFiltros
 
     public const MODO_TOTALES = 'totales';
 
+    public const MONEDA_ORIGEN = 'origen';
+
+    public const MONEDA_TODAS = 'todas';
+
     /** @var list<array{valor: string, etiqueta: string}> */
     public const OPCIONES_ESTADO = [
         ['valor' => self::ESTADO_ACTIVOS, 'etiqueta' => 'Activos'],
@@ -100,6 +104,12 @@ final class OrdencompraReporteFiltros
         ['valor' => self::MODO_TOTALES, 'etiqueta' => 'Totales solamente'],
     ];
 
+    /** @var list<array{valor: string, etiqueta: string}> */
+    public const OPCIONES_MODO_MONEDA = [
+        ['valor' => self::MONEDA_ORIGEN, 'etiqueta' => 'Solo OC en esa moneda (origen)'],
+        ['valor' => self::MONEDA_TODAS, 'etiqueta' => 'Todas convertidas al cambio de la OC'],
+    ];
+
     /**
      * @return array<string, mixed>
      */
@@ -137,6 +147,16 @@ final class OrdencompraReporteFiltros
             $modoListado = self::MODO_MOVIMIENTOS;
         }
 
+        $modoMoneda = trim((string) $request->input('modo_moneda', self::MONEDA_TODAS));
+        if (! self::modoMonedaValido($modoMoneda)) {
+            $modoMoneda = self::MONEDA_TODAS;
+        }
+
+        $monedaId = (int) $request->input('moneda_id', config('cotizacion.ID_MONEDA_DEFAULT', 1));
+        if ($monedaId <= 0) {
+            $monedaId = (int) config('cotizacion.ID_MONEDA_DEFAULT', 1);
+        }
+
         [$ocDesde, $ocHasta] = RequisicionReporteCriteriosSupport::normalizarRangoNumeros(
             trim((string) $request->input('ordencompra_desde', '')),
             trim((string) $request->input('ordencompra_hasta', '')),
@@ -157,6 +177,8 @@ final class OrdencompraReporteFiltros
             'anticipada' => $anticipada,
             'agrupacion' => $agrupacion,
             'modo_listado' => $modoListado,
+            'moneda_id' => $monedaId,
+            'modo_moneda' => $modoMoneda,
         ];
     }
 
@@ -196,6 +218,10 @@ final class OrdencompraReporteFiltros
             'modo_listado' => ($filtros['modo_listado'] ?? self::MODO_MOVIMIENTOS) !== self::MODO_MOVIMIENTOS
                 ? ($filtros['modo_listado'] ?? null)
                 : null,
+            'moneda_id' => (int) ($filtros['moneda_id'] ?? 0) > 0
+                ? (int) $filtros['moneda_id']
+                : null,
+            'modo_moneda' => $filtros['modo_moneda'] ?? self::MONEDA_TODAS,
             'consultar' => 1,
         ], fn ($v) => $v !== null && $v !== '');
 
@@ -239,6 +265,8 @@ final class OrdencompraReporteFiltros
             'anticipada' => self::ANTICIPADA_TODAS,
             'agrupacion' => self::AGRUPACION_PEDIDO,
             'modo_listado' => self::MODO_MOVIMIENTOS,
+            'moneda_id' => (int) config('cotizacion.ID_MONEDA_DEFAULT', 1),
+            'modo_moneda' => self::MONEDA_TODAS,
         ];
     }
 
@@ -251,6 +279,17 @@ final class OrdencompraReporteFiltros
         }
 
         return self::OPCIONES_AGRUPACION[0]['etiqueta'];
+    }
+
+    public static function etiquetaModoMoneda(string $modoMoneda): string
+    {
+        foreach (self::OPCIONES_MODO_MONEDA as $opcion) {
+            if ($opcion['valor'] === $modoMoneda) {
+                return $opcion['etiqueta'];
+            }
+        }
+
+        return self::OPCIONES_MODO_MONEDA[1]['etiqueta'];
     }
 
     public static function etiquetaModoListado(string $modoListado): string
@@ -422,6 +461,17 @@ final class OrdencompraReporteFiltros
     {
         foreach (self::OPCIONES_MODO_LISTADO as $opcion) {
             if ($opcion['valor'] === $modoListado) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static function modoMonedaValido(string $modoMoneda): bool
+    {
+        foreach (self::OPCIONES_MODO_MONEDA as $opcion) {
+            if ($opcion['valor'] === $modoMoneda) {
                 return true;
             }
         }

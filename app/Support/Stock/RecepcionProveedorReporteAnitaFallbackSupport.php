@@ -19,9 +19,9 @@ use Illuminate\Support\Facades\Log;
 /**
  * Histórico COM Anita (antes del primer COM ERP) en una sola lectura Informix.
  *
- * FROM recepmov + recepmae + OUTER (pendmaep, OUTER (reqmae, OUTER aprobcomp)).
- * Informix no admite un 4.º OUTER a usuario: el pedidor llega en reqm_usuario
- * y el autorizante en aprobc_usuario; los nombres se resuelven en MySQL.
+ * FROM recepmov + recepmae + OUTER (pendmaep, OUTER reqmae).
+ * El autorizante no va en ese JOIN: un PEP con el mismo nro que la REQ
+ * pisa o anula aprobcomp. Se lee aprobcomp tipo R* aparte y se nombra en MySQL.
  */
 final class RecepcionProveedorReporteAnitaFallbackSupport
 {
@@ -127,11 +127,6 @@ final class RecepcionProveedorReporteAnitaFallbackSupport
             'reqm_fecha as fecha_req',
             'reqm_ccosto_dest as cc_dest',
             'reqm_usuario as reqm_usuario',
-            'aprobc_usuario as autorizante_anita',
-            'aprobc_cod_usuario as autorizante_codigo',
-            'aprobc_estado as aprobc_estado',
-            'aprobc_tipo as aprobc_tipo',
-            'aprobc_fecha_modif as fecha_aprob',
         ];
     }
 
@@ -142,10 +137,8 @@ final class RecepcionProveedorReporteAnitaFallbackSupport
 
     public static function tablaFrom(): string
     {
-        // Paréntesis Informix: sin ellos, AND sobre reqmae/aprobcomp elimina el COM.
-        // Informix no acepta 4 OUTER anidados; usuario se omite (el nombre del autorizante
-        // ya viene en aprobc_usuario). El pedidor queda en reqm_usuario.
-        return 'recepmov, recepmae, OUTER (pendmaep, OUTER (reqmae, OUTER aprobcomp))';
+        // Paréntesis Informix: sin ellos, AND sobre reqmae elimina el COM.
+        return 'recepmov, recepmae, OUTER (pendmaep, OUTER reqmae)';
     }
 
     /**
@@ -184,11 +177,7 @@ final class RecepcionProveedorReporteAnitaFallbackSupport
             // Histórico: el PEP vive en recm_nro_fac (l-recprov / aplicped).
             // recm_com_nro suele ser 0 o un nro chico; el OR con com_nro multiplica el OUTER.
             .' AND penmp_nro = recm_nro_fac'
-            .' AND reqm_nro = penmp_requisicion'
-            // l-proy busca_aprobacion("REQ"): sin el tipo, un PEP posterior
-            // con el mismo número (COM 109755 / REQ 184935) pisa el autorizante.
-            .' AND aprobc_nro = reqm_nro'
-            ." AND aprobc_tipo MATCHES 'R*'";
+            .' AND reqm_nro = penmp_requisicion';
 
         $estado = (string) ($filtros['estado'] ?? RecepcionProveedorReporteFiltros::ESTADO_CONFIRMADA);
         $estadoConf = AnitaSqlLiteral::char(
@@ -299,7 +288,7 @@ final class RecepcionProveedorReporteAnitaFallbackSupport
             return ['filas' => collect(), 'error' => $err];
         }
 
-        $filas = self::deduplicarAprobado(ApiAnita::decodificarListaFilas($raw));
+        $filas = self::deduplicarLineasCom(ApiAnita::decodificarListaFilas($raw));
         $enriquecidas = self::enriquecerLocal($filas);
 
         return [
@@ -309,9 +298,53 @@ final class RecepcionProveedorReporteAnitaFallbackSupport
     }
 
     /**
-     * Si aprobcomp tiene más de un Aprobado, Informix puede repetir la línea COM.
-     * Solo cuenta tipo REQ (un PEP con el mismo nro no es el autorizante de la requi).
+     * @param  list<object>  $filas
+     * @return list<object>
+     */
+    public static function deduplicarLineasCom(array $filas): array
+    {
+        $porClave = [];
+        foreach ($filas as $fila) {
+            $suc = (int) ($fila->recm_sucursal ?? 0);
+            $nro = (int) ($fila->recm_nro ?? 0);
+            $orden = (int) ($fila->linea_orden ?? 0);
+            $clave = $suc.'|'.$nro.'|'.$orden;
+            if (! isset($porClave[$clave])) {
+                $porClave[$clave] = $fila;
+            }
+        }
+
+        return array_values($porClave);
+    }
+
+    /**
+     * Si aprobcomp tiene más de un Aprobado, se queda la mejor fila REQ.
+     * Un PEP con el mismo nro no es el autorizante de la requi.
      *
+     * @param  list<object>  $filas
+     * @return array<int, object>  aprobc_nro => fila
+     */
+    public static function mejorAprobacionPorRequisicion(array $filas): array
+    {
+        $porNro = [];
+        foreach ($filas as $fila) {
+            if (! self::esAprobacionRequisicion((string) ($fila->aprobc_tipo ?? ''))) {
+                continue;
+            }
+            $nro = (int) ($fila->aprobc_nro ?? 0);
+            if ($nro <= 0) {
+                continue;
+            }
+            $prev = $porNro[$nro] ?? null;
+            if ($prev === null || self::puntajeAprobacionReq($fila) > self::puntajeAprobacionReq($prev)) {
+                $porNro[$nro] = $fila;
+            }
+        }
+
+        return $porNro;
+    }
+
+    /**
      * @param  list<object>  $filas
      * @return list<object>
      */
@@ -345,9 +378,14 @@ final class RecepcionProveedorReporteAnitaFallbackSupport
             return 0;
         }
 
-        return (int) ($fila->aprobc_estado ?? 0) === RequisicionAnitaAprobcompMapper::ESTADO_APROBADO
-            ? 2
-            : 1;
+        $estado = (int) ($fila->aprobc_estado ?? 0);
+        $nombre = trim((string) (($fila->aprobc_usuario ?? '') ?: ($fila->autorizante_anita ?? '')));
+        $score = $estado === RequisicionAnitaAprobcompMapper::ESTADO_APROBADO ? 20 : ($estado > 0 ? 10 : 1);
+        if ($nombre !== '') {
+            $score += 5;
+        }
+
+        return $score;
     }
 
     private static function sanearAprobacionSiNoEsReq(object $fila): object
@@ -541,11 +579,11 @@ final class RecepcionProveedorReporteAnitaFallbackSupport
             $fila->nombreproveedor = $prov ? (string) $prov->nombre : '';
         }
 
-        return self::enriquecerNombresLocal($filas);
+        return self::enriquecerAutorizanteAprobcomp(self::enriquecerNombresLocal($filas));
     }
 
     /**
-     * Nombres de pedidor/autorizante sin segunda lectura Anita:
+     * Nombres de pedidor sin segunda lectura Anita:
      * usuario ERP (id o login) y, si la OC/REQ ya está en el ERP, su creador.
      *
      * @param  list<object>  $filas
@@ -688,14 +726,141 @@ final class RecepcionProveedorReporteAnitaFallbackSupport
             if ($pedidor !== '') {
                 $fila->usuario_requisicion = $pedidor;
             }
+        }
 
-            $loginApr = mb_strtolower(trim((string) ($fila->autorizante_anita ?? '')));
-            if ($loginApr !== '' && isset($porLogin[$loginApr])) {
-                $fila->autorizante_anita = $porLogin[$loginApr];
+        return $filas;
+    }
+
+    /**
+     * Autorizante: lectura aparte de aprobcomp tipo R* (l-proy). No se cruza
+     * en el SELECT de COM porque un PEP con el mismo nro anula el OUTER.
+     *
+     * @param  list<object>  $filas
+     * @return list<object>
+     */
+    private static function enriquecerAutorizanteAprobcomp(array $filas): array
+    {
+        $nrosReq = [];
+        foreach ($filas as $fila) {
+            $nroReq = (int) (($fila->reqm_nro ?? 0) ?: ($fila->nro_req ?? 0));
+            if ($nroReq > 0) {
+                $nrosReq[$nroReq] = true;
+            }
+        }
+        if ($nrosReq === []) {
+            return $filas;
+        }
+
+        $aprobadas = self::consultarAprobcompReq(array_keys($nrosReq));
+        if ($aprobadas === []) {
+            return $filas;
+        }
+
+        $idsUsuario = [];
+        $logins = [];
+        foreach ($aprobadas as $aprob) {
+            $codigo = (int) ($aprob->aprobc_cod_usuario ?? $aprob->autorizante_codigo ?? 0);
+            if ($codigo > 0) {
+                $idsUsuario[$codigo] = true;
+            }
+            $login = mb_strtolower(trim((string) ($aprob->aprobc_usuario ?? $aprob->autorizante_anita ?? '')));
+            if ($login !== '') {
+                $logins[$login] = true;
+            }
+        }
+
+        $porId = [];
+        $porLogin = [];
+        if ($idsUsuario !== [] || $logins !== []) {
+            $usuarios = Usuario::query()
+                ->where(function ($q) use ($idsUsuario, $logins) {
+                    if ($idsUsuario !== []) {
+                        $q->orWhereIn('id', array_keys($idsUsuario));
+                    }
+                    if ($logins !== []) {
+                        $q->orWhereIn('usuario', array_keys($logins));
+                    }
+                })
+                ->get(['id', 'usuario', 'nombre']);
+            foreach ($usuarios as $u) {
+                $nombre = trim((string) $u->nombre) ?: trim((string) $u->usuario);
+                $porId[(int) $u->id] = $nombre;
+                $login = mb_strtolower(trim((string) $u->usuario));
+                if ($login !== '') {
+                    $porLogin[$login] = $nombre;
+                }
+            }
+        }
+
+        foreach ($filas as $fila) {
+            $nroReq = (int) (($fila->reqm_nro ?? 0) ?: ($fila->nro_req ?? 0));
+            $aprob = $nroReq > 0 ? ($aprobadas[$nroReq] ?? null) : null;
+            if ($aprob === null) {
+                continue;
+            }
+            $nombre = self::nombreAutorizanteDesdeAprobcomp($aprob, $porId, $porLogin);
+            if ($nombre !== '') {
+                $fila->autorizante_anita = $nombre;
             }
         }
 
         return $filas;
+    }
+
+    /**
+     * @param  list<int>  $nros
+     * @return array<int, object>
+     */
+    private static function consultarAprobcompReq(array $nros): array
+    {
+        $limpios = array_values(array_unique(array_filter(array_map('intval', $nros), static fn (int $n) => $n > 0)));
+        if ($limpios === []) {
+            return [];
+        }
+
+        $api = new ApiAnita;
+        $acumuladas = [];
+        foreach (array_chunk($limpios, 150) as $chunk) {
+            $raw = (string) $api->apiCall([
+                'acc' => 'list',
+                'sistema' => (string) config('recepcion_proveedor.anita.sistema_compras', 'compras'),
+                'tabla' => RequisicionAnitaAprobcompMapper::TABLA,
+                'campos' => 'aprobc_tipo as aprobc_tipo, aprobc_nro as aprobc_nro, aprobc_estado as aprobc_estado, aprobc_usuario as aprobc_usuario, aprobc_cod_usuario as aprobc_cod_usuario',
+                'whereArmado' => RequisicionAnitaAprobcompMapper::whereReqIn($chunk),
+            ]);
+            $err = ApiAnita::extraerMensajeError($raw === '' ? null : $raw);
+            if ($err !== null) {
+                Log::warning('RecepcionProveedorReporteAnita: fallo lectura aprobcomp REQ', [
+                    'error' => $err,
+                    'nros' => count($chunk),
+                ]);
+                continue;
+            }
+            foreach (ApiAnita::decodificarListaFilas($raw) as $fila) {
+                $acumuladas[] = $fila;
+            }
+        }
+
+        return self::mejorAprobacionPorRequisicion($acumuladas);
+    }
+
+    /**
+     * @param  array<int, string>  $porId
+     * @param  array<string, string>  $porLogin
+     */
+    public static function nombreAutorizanteDesdeAprobcomp(object $aprob, array $porId, array $porLogin): string
+    {
+        $crudo = trim((string) ($aprob->aprobc_usuario ?? $aprob->autorizante_anita ?? ''));
+        $login = mb_strtolower($crudo);
+        if ($login !== '' && isset($porLogin[$login])) {
+            return $porLogin[$login];
+        }
+        if ($crudo !== '') {
+            return $crudo;
+        }
+        $codigo = (int) ($aprob->aprobc_cod_usuario ?? $aprob->autorizante_codigo ?? 0);
+
+        return $codigo > 0 ? (string) ($porId[$codigo] ?? '') : '';
     }
 
     private static function nroOcDesdeFilaAnita(object $row): int

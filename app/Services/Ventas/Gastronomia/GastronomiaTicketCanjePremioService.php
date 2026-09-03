@@ -449,12 +449,24 @@ final class GastronomiaTicketCanjePremioService
             $this->normalizarSkuCanje($giftId),
         ], static fn (string $s) => $s !== '')));
 
+        // Primer intento por igualdad (usa el índice de sku; la collation ya ignora mayúsculas y espacios finales).
+        // Si no aparece, cae al UPPER(TRIM()) histórico. GASTRONOMIA_CANJE_PREMIO_SKU_INDEXADO=false vuelve al comportamiento anterior.
+        if ((bool) config('gastronomia.canje_premio_sku_indexado', true)) {
+            foreach ($candidatos as $skuBusqueda) {
+                $articulo = $this->queryArticuloPorSkuPreferEmpresa($empresaId)
+                    ->where('sku', trim($skuBusqueda))
+                    ->first();
+
+                if ($articulo) {
+                    return $articulo;
+                }
+            }
+        }
+
         foreach ($candidatos as $skuBusqueda) {
             $skuUpper = mb_strtoupper(trim($skuBusqueda), 'UTF-8');
-            // Preferir artículo de la empresa del PV; si no, el del catálogo (otra empresa o null).
-            $articulo = Articulo::query()
+            $articulo = $this->queryArticuloPorSkuPreferEmpresa($empresaId)
                 ->whereRaw('UPPER(TRIM(sku)) = ?', [$skuUpper])
-                ->orderByRaw('CASE WHEN empresa_id = ? THEN 0 WHEN empresa_id IS NULL OR empresa_id = 0 THEN 1 ELSE 2 END', [$empresaId])
                 ->first();
 
             if ($articulo) {
@@ -463,6 +475,19 @@ final class GastronomiaTicketCanjePremioService
         }
 
         return null;
+    }
+
+    /**
+     * Preferir artículo de la empresa del PV; si no, el del catálogo (otra empresa o null).
+     *
+     * @return \Illuminate\Database\Eloquent\Builder<Articulo>
+     */
+    private function queryArticuloPorSkuPreferEmpresa(int $empresaId): \Illuminate\Database\Eloquent\Builder
+    {
+        // Desempate por id: hay SKU duplicados solo por mayúsculas (V0694/v0694) y la collation los iguala.
+        return Articulo::query()
+            ->orderByRaw('CASE WHEN empresa_id = ? THEN 0 WHEN empresa_id IS NULL OR empresa_id = 0 THEN 1 ELSE 2 END', [$empresaId])
+            ->orderBy('id');
     }
 
     /**

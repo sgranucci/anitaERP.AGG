@@ -4,6 +4,7 @@ namespace App\Exports\Contable;
 
 use App\Services\Contable\MayorPlanoCuentaReporteService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
 use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -124,14 +125,40 @@ class MayorPlanoCuentaExcelPlanoExport implements FromView, WithColumnFormatting
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
     }
 
+    private function mostrarColumnaCentrocosto(): bool
+    {
+        return MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($this->filtros);
+    }
+
     private function colUltima(): string
     {
-        return 'Q';
+        return $this->mostrarColumnaCentrocosto() ? 'Q' : 'P';
     }
 
     public function columnFormats(): array
     {
         $formato = ExcelFormatoNumero::preferenciaGlobal();
+        if ($this->mostrarColumnaCentrocosto()) {
+            return [
+                'A' => NumberFormat::FORMAT_TEXT,
+                'B' => NumberFormat::FORMAT_TEXT,
+                'C' => NumberFormat::FORMAT_TEXT,
+                'D' => NumberFormat::FORMAT_TEXT,
+                'E' => NumberFormat::FORMAT_TEXT,
+                'F' => NumberFormat::FORMAT_TEXT,
+                'G' => NumberFormat::FORMAT_TEXT,
+                'H' => ExcelFormatoNumero::codigoColumna($formato, 4),
+                'I' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'J' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'K' => NumberFormat::FORMAT_TEXT,
+                'L' => NumberFormat::FORMAT_TEXT,
+                'M' => NumberFormat::FORMAT_TEXT,
+                'N' => NumberFormat::FORMAT_TEXT,
+                'O' => NumberFormat::FORMAT_TEXT,
+                'P' => NumberFormat::FORMAT_TEXT,
+                'Q' => NumberFormat::FORMAT_TEXT,
+            ];
+        }
 
         return [
             'A' => NumberFormat::FORMAT_TEXT,
@@ -140,17 +167,16 @@ class MayorPlanoCuentaExcelPlanoExport implements FromView, WithColumnFormatting
             'D' => NumberFormat::FORMAT_TEXT,
             'E' => NumberFormat::FORMAT_TEXT,
             'F' => NumberFormat::FORMAT_TEXT,
-            'G' => NumberFormat::FORMAT_TEXT,
-            'H' => ExcelFormatoNumero::codigoColumna($formato, 4),
+            'G' => ExcelFormatoNumero::codigoColumna($formato, 4),
+            'H' => ExcelFormatoNumero::codigoColumna($formato, 2),
             'I' => ExcelFormatoNumero::codigoColumna($formato, 2),
-            'J' => ExcelFormatoNumero::codigoColumna($formato, 2),
+            'J' => NumberFormat::FORMAT_TEXT,
             'K' => NumberFormat::FORMAT_TEXT,
             'L' => NumberFormat::FORMAT_TEXT,
             'M' => NumberFormat::FORMAT_TEXT,
             'N' => NumberFormat::FORMAT_TEXT,
             'O' => NumberFormat::FORMAT_TEXT,
             'P' => NumberFormat::FORMAT_TEXT,
-            'Q' => NumberFormat::FORMAT_TEXT,
         ];
     }
 
@@ -161,24 +187,45 @@ class MayorPlanoCuentaExcelPlanoExport implements FromView, WithColumnFormatting
 
     public function columnWidths(): array
     {
+        if ($this->mostrarColumnaCentrocosto()) {
+            return [
+                'A' => 10,  // Empresa
+                'B' => 11,  // Nro.Asi.
+                'C' => 11,  // Fecha
+                'D' => 13,  // Cuenta
+                'E' => 28,  // Descripcion
+                'F' => 10,  // C.Costo
+                'G' => 6,   // Mon
+                'H' => 11,  // Cotizacion
+                'I' => 16,  // Debe
+                'J' => 16,  // Haber
+                'K' => 28,  // Detalle
+                'L' => 12,  // Usuario
+                'M' => 14,  // fecha ult. mod
+                'N' => 11,  // O.Compra
+                'O' => 16,  // proyecto CAPEX
+                'P' => 32,  // Observación de la OC
+                'Q' => 36,  // Numeros de Facturas
+            ];
+        }
+
         return [
-            'A' => 10,  // Empresa
-            'B' => 11,  // Nro.Asi.
-            'C' => 11,  // Fecha
-            'D' => 13,  // Cuenta
-            'E' => 28,  // Descripcion
-            'F' => 10,  // C.Costo
-            'G' => 6,   // Mon
-            'H' => 11,  // Cotizacion
-            'I' => 16,  // Debe
-            'J' => 16,  // Haber
-            'K' => 28,  // Detalle
-            'L' => 12,  // Usuario
-            'M' => 14,  // fecha ult. mod
-            'N' => 11,  // O.Compra
-            'O' => 16,  // proyecto CAPEX
-            'P' => 32,  // Observación de la OC
-            'Q' => 36,  // Numeros de Facturas
+            'A' => 10,
+            'B' => 11,
+            'C' => 11,
+            'D' => 13,
+            'E' => 28,
+            'F' => 6,
+            'G' => 11,
+            'H' => 16,
+            'I' => 16,
+            'J' => 28,
+            'K' => 12,
+            'L' => 14,
+            'M' => 11,
+            'N' => 16,
+            'O' => 32,
+            'P' => 36,
         ];
     }
 
@@ -275,8 +322,10 @@ class MayorPlanoCuentaExcelPlanoExport implements FromView, WithColumnFormatting
                 $estiloNuevas = $estiloCabecera;
                 $estiloNuevas['fill']['color'] = ['rgb' => 'C0392B'];
 
-                $sheet->getStyle('A'.$filaCabDetalle.':O'.$filaCabDetalle)->applyFromArray($estiloCabecera);
-                $sheet->getStyle('P'.$filaCabDetalle.':Q'.$filaCabDetalle)->applyFromArray($estiloNuevas);
+                $colUltima = $this->colUltima();
+                $sheet->getStyle('A'.$filaCabDetalle.':'.$colUltima.$filaCabDetalle)->applyFromArray($estiloCabecera);
+                $colObs = $this->mostrarColumnaCentrocosto() ? 'P' : 'O';
+                $sheet->getStyle($colObs.$filaCabDetalle.':'.$colUltima.$filaCabDetalle)->applyFromArray($estiloNuevas);
                 $sheet->getRowDimension($filaCabDetalle)->setRowHeight(30);
 
                 if ($filaCabDetalle <= 40) {
@@ -287,14 +336,18 @@ class MayorPlanoCuentaExcelPlanoExport implements FromView, WithColumnFormatting
 
                 $highestRow = $sheet->getHighestRow();
                 $desde = max(1, $this->filaPrimeraDatosExcel);
+                $colDebe = $this->mostrarColumnaCentrocosto() ? 'I' : 'H';
+                $colHaber = $this->mostrarColumnaCentrocosto() ? 'J' : 'I';
+                $colObs = $this->mostrarColumnaCentrocosto() ? 'P' : 'O';
+                $colFact = $this->colUltima();
                 if ($highestRow >= $desde) {
-                    $sheet->getStyle('I'.$desde.':J'.$highestRow)->applyFromArray([
+                    $sheet->getStyle($colDebe.$desde.':'.$colHaber.$highestRow)->applyFromArray([
                         'alignment' => [
                             'horizontal' => Alignment::HORIZONTAL_RIGHT,
                             'vertical' => Alignment::VERTICAL_CENTER,
                         ],
                     ]);
-                    $sheet->getStyle('P'.$desde.':Q'.$highestRow)->applyFromArray([
+                    $sheet->getStyle($colObs.$desde.':'.$colFact.$highestRow)->applyFromArray([
                         'alignment' => ['wrapText' => true, 'vertical' => Alignment::VERTICAL_CENTER],
                     ]);
                 }

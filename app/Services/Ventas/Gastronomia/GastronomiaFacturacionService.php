@@ -475,7 +475,7 @@ final class GastronomiaFacturacionService
             'omitir_sincronizacion_anita' => ! config('gastronomia.sincronizar_anita_al_facturar', true),
             'anita_modo_minimo' => (bool) config('gastronomia.anita_modo_minimo', true),
             'omitir_stkmov_anita' => filter_var(config('gastronomia.anita_omitir_stkmov', true), FILTER_VALIDATE_BOOLEAN),
-            // CAE al final del proceso gastronómico (misma transacción que cobranza e ingredientes).
+            // CAE en el proceso gastronómico (misma transacción); el POS aplica ingredientes después del CAE.
             'omitir_solicitud_arca_cae' => true,
             // POS: timeout ARCA corto + failover/reintento CAEA coordinado en GastronomiaFacturaEmisionService.
             'emision_pos_arca' => true,

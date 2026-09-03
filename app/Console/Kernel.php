@@ -110,6 +110,14 @@ class Kernel extends ConsoleKernel
             ->appendOutputTo(storage_path('logs/purge-anita-caches-schedule.log'))
             ->when(fn () => (bool) config('gastronomia.anita_storage_cache_purge.habilitado', true));
 
+        // Costo de insumos diferido: la emisión graba costo 0 y acá se completa (liviano: 1 resolución por artículo).
+        $schedule->command('gastronomia:completar-costo-insumos')
+            ->hourlyAt(5)
+            ->runInBackground()
+            ->withoutOverlapping(50)
+            ->appendOutputTo(storage_path('logs/gastronomia-costo-insumos-schedule.log'))
+            ->when(fn () => (bool) config('gastronomia.insumos_costo_diferido.habilitado', false));
+
         $schedule->command('arca:solicitar-caea-quincenal')
             ->dailyAt('06:30')
             ->when(fn () => config('arca.caea.pedido_automatico', true));

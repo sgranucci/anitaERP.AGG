@@ -174,6 +174,16 @@ if (!function_exists('canUser')) {
         $pos = strpos($url, $urlPermitida);
         if ($pos !== false)
             return(true);
+        if (! auth()->check()) {
+            if ($redirect) {
+                if (! request()->ajax()) {
+                    return redirect()->guest(route('login'))->send();
+                }
+                abort(401, 'Debe iniciar sesión');
+            }
+
+            return false;
+        }
         if (session()->get('rol_nombre') == 'administrador') {
             return true;
         } else {

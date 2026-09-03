@@ -83,6 +83,73 @@
         };
     }
 
+    function hoyYmd() {
+        var d = new Date();
+        var m = String(d.getMonth() + 1).padStart(2, '0');
+        var day = String(d.getDate()).padStart(2, '0');
+        return d.getFullYear() + '-' + m + '-' + day;
+    }
+
+    function calcularResumenDeuda() {
+        var saldo = 0;
+        var aplicado = 0;
+        var equiv = 0;
+        var dc = 0;
+        var n = 0;
+        $('#tabla-deuda-proveedor tbody tr').each(function () {
+            var $tr = $(this);
+            var $monto = $tr.find('.pp-monto-aplicar');
+            if (!$monto.length) {
+                return;
+            }
+            saldo += parseFloat($monto.data('saldo') || '0') || 0;
+            var liq = pintarFila($tr);
+            var monto = parseFloat($monto.val() || '0') || 0;
+            var chk = $tr.find('.pp-sel-deuda').is(':checked');
+            if (chk && monto > 0) {
+                aplicado += monto;
+                equiv += liq.equivalente || 0;
+                dc += liq.dc || 0;
+                n += 1;
+            }
+        });
+        return { saldo: saldo, aplicado: aplicado, equiv: equiv, dc: dc, n: n };
+    }
+
+    function textoDc(dc) {
+        if (Math.abs(dc) < 0.01) {
+            return '—';
+        }
+        return fmt(Math.abs(dc)) + (dc > 0 ? ' pérdida' : ' ganancia');
+    }
+
+    function pintarResumenDesembolso() {
+        var d = calcularResumenDeuda();
+        var medios = Number(window.ppTotalMedios || 0);
+        var dif = Math.round((medios - d.equiv) * 100) / 100;
+        $('#pp-card-saldo, #pp-tfoot-saldo').text(fmt(d.saldo));
+        $('#pp-card-aplicado, #pp-tfoot-aplicado').text(fmt(d.aplicado));
+        $('#pp-card-equiv, #pp-tfoot-equiv').text(fmt(d.equiv));
+        $('#pp-card-dc, #pp-tfoot-dc').text(textoDc(d.dc));
+        $('#pp-bar-aplicado').text(fmt(d.equiv));
+        $('#pp-bar-medios').text(fmt(medios));
+        $('#pp-bar-dif').text(fmt(dif));
+        $('#pp-bar-dc').text(textoDc(d.dc));
+        $('#pp-ref-aplicado-txt').text(fmt(d.equiv));
+        $('#pp-ref-cuentas-txt').text(fmt(medios));
+        $('#pp-ref-falta-txt').text(fmt(dif));
+        var $dif = $('#pp-bar-dif, #pp-ref-falta-txt');
+        $dif.toggleClass('text-danger', Math.abs(dif) >= 0.01 && dif < 0);
+        $dif.toggleClass('text-success', Math.abs(dif) >= 0.01 && dif > 0);
+        var hayFilas = $('#tabla-deuda-proveedor tbody .pp-monto-aplicar').length > 0;
+        $('.pp-deuda-tfoot').toggle(hayFilas);
+        window.ppResumenDeuda = d;
+        $('#tbody-cuenta-table .monto').attr('placeholder', d.equiv > 0 ? d.equiv.toFixed(2) : '');
+        return d;
+    }
+
+    window.pintarResumenDesembolso = pintarResumenDesembolso;
+
     function pintarFila($tr) {
         var $monto = $tr.find('.pp-monto-aplicar');
         if (!$monto.length) {
@@ -105,32 +172,48 @@
         return liq;
     }
 
+    function mensajeDeuda(texto) {
+        $('#tabla-deuda-proveedor tbody').html(
+            '<tr><td colspan="9" class="text-muted text-center">' + $('<div>').text(texto).html() + '</td></tr>'
+        );
+        pintarResumenDesembolso();
+    }
+
     function cargarDeuda() {
         var proveedorId = parseInt($('#proveedor_id').val() || '0', 10);
         var empresaId = parseInt($('#empresa_id').val() || '0', 10);
         var $tb = $('#tabla-deuda-proveedor tbody');
+        if (!empresaId) {
+            mensajeDeuda(proveedorId ? 'Seleccione empresa para ver la deuda' : 'Seleccione empresa y proveedor');
+            return;
+        }
         if (!proveedorId) {
-            $tb.html('<tr><td colspan="9" class="text-muted text-center">Seleccione proveedor</td></tr>');
+            mensajeDeuda('Seleccione proveedor');
             return;
         }
 
+        $tb.html('<tr><td colspan="9" class="text-muted text-center">Cargando deuda…</td></tr>');
         $.getJSON(urlDeuda, { proveedor_id: proveedorId, empresa_id: empresaId })
             .done(function (res) {
                 var filas = res.filas || [];
                 if (!filas.length) {
-                    $tb.html('<tr><td colspan="9" class="text-muted text-center">Sin deuda pendiente</td></tr>');
+                    mensajeDeuda(res.aviso || 'Sin deuda pendiente');
                     return;
                 }
                 var html = '';
+                var hoy = hoyYmd();
                 filas.forEach(function (f) {
-                    html += '<tr data-cc-id="' + f.id + '">'
-                        + '<td><input type="checkbox" class="pp-sel-deuda"></td>'
+                    var vencida = f.vencimiento && String(f.vencimiento) < hoy;
+                    html += '<tr data-cc-id="' + f.id + '"' + (vencida ? ' class="table-danger"' : '') + '>'
+                        + '<td class="text-center"><input type="checkbox" class="pp-sel-deuda"></td>'
                         + '<td>' + $('<div>').text(f.comprobante).html() + '</td>'
                         + '<td>' + (f.vencimiento || '') + '</td>'
                         + '<td>' + (f.moneda || '') + '</td>'
-                        + '<td class="text-right">' + fmt(f.saldo) + '</td>'
-                        + '<td><input type="number" step="0.01" class="form-control form-control-sm pp-monto-aplicar" value="0"'
-                        + ' data-saldo="' + f.saldo + '" data-moneda="' + f.moneda_id + '" data-cotizacion="' + f.cotizacion + '"></td>'
+                        + '<td class="text-right text-nowrap">' + fmt(f.saldo) + '</td>'
+                        + '<td class="text-right pp-col-aplicar">'
+                        + '<input type="number" step="0.01" min="0" class="form-control form-control-sm text-right pp-monto-aplicar" value="0"'
+                        + ' data-saldo="' + f.saldo + '" data-moneda="' + f.moneda_id + '" data-cotizacion="' + f.cotizacion + '">'
+                        + '</td>'
                         + '<td class="text-right pp-cot-liq">—</td>'
                         + '<td class="text-right pp-equiv">—</td>'
                         + '<td class="text-right pp-dc">—</td>'
@@ -138,6 +221,7 @@
                 });
                 $tb.html(html);
                 refrescarCotDia(filas);
+                sincronizarCamposAplicacion();
             });
     }
 
@@ -193,6 +277,7 @@
         });
         $('#monto').val(totalPago.toFixed(2));
         $('#importe_neto_retencion').val(totalPago.toFixed(2));
+        pintarResumenDesembolso();
     }
 
     $(document).on('change', '.pp-sel-deuda', function () {
@@ -218,8 +303,14 @@
         }
     });
 
-    $('#proveedor_id, #empresa_id').on('change', cargarDeuda);
+    $('#proveedor_id').on('change', cargarDeuda);
     $(document).on('change.cpProveedorCargado', '#proveedor_id', cargarDeuda);
+    $(document).on('change.ppEmpresaDeuda', '#empresa_id', function () {
+        cargarDeuda();
+        if (typeof window.calcularRetencionesPagoproveedor === 'function') {
+            window.calcularRetencionesPagoproveedor();
+        }
+    });
     $('#moneda_id, #cotizacion, #modo_cotizacion, #fecha').on('change', function () {
         if (this.id === 'fecha' || this.id === 'moneda_id') {
             var filas = [];
@@ -234,35 +325,73 @@
         }
     });
 
-    $('#btn-calcular-retenciones').on('click', function () {
+    function pintarResumenRetenciones(res) {
+        var html = 'Total retenciones: <strong>' + fmt(res.total) + '</strong><ul class="mb-0">';
+        ['ganancias', 'iva', 'suss', 'iibb'].forEach(function (k) {
+            var r = res[k] || {};
+            html += '<li>' + k.toUpperCase() + ': ' + fmt(r.importe) + ' — ' + (r.motivo || '') + '</li>';
+        });
+        html += '</ul>';
+        $('#pp-retenciones-resumen').removeClass('text-muted').html(html);
+        $('#pp-retenciones-json').val(JSON.stringify(res));
+        window.ppTotalRetenciones = Number(res.total) || 0;
+        if (typeof flModificaAsiento !== 'undefined') {
+            flModificaAsiento = true;
+        }
+        if (typeof window.pintarResumenDesembolso === 'function') {
+            window.pintarResumenDesembolso();
+        }
+    }
+
+    function calcularRetencionesPagoproveedor() {
+        var proveedorId = parseInt($('#proveedor_id').val() || '0', 10);
+        if (!proveedorId) {
+            return $.Deferred().resolve().promise();
+        }
         sincronizarCamposAplicacion();
-        $.ajax({
+        return $.ajax({
             url: urlRet,
             type: 'POST',
             dataType: 'json',
             headers: { 'X-CSRF-TOKEN': $('meta[name="csrf-token"]').attr('content') || $('input[name="_token"]').val() },
             data: {
-                proveedor_id: $('#proveedor_id').val(),
+                proveedor_id: proveedorId,
+                empresa_id: $('#empresa_id').val(),
                 fecha: $('#fecha').val(),
                 importe_neto: $('#importe_neto_retencion').val(),
                 importe_iva: $('#importe_iva_retencion').val()
             }
         }).done(function (res) {
-            var html = 'Total retenciones: <strong>' + fmt(res.total) + '</strong><ul class="mb-0">';
-            ['ganancias', 'iva', 'suss', 'iibb'].forEach(function (k) {
-                var r = res[k] || {};
-                html += '<li>' + k.toUpperCase() + ': ' + fmt(r.importe) + ' — ' + (r.motivo || '') + '</li>';
-            });
-            html += '</ul>';
-            $('#pp-retenciones-resumen').removeClass('text-muted').html(html);
-            $('#pp-retenciones-json').val(JSON.stringify(res));
-            if (typeof flModificaAsiento !== 'undefined') {
-                flModificaAsiento = true;
-            }
+            pintarResumenRetenciones(res);
         }).fail(function (xhr) {
-            alert((xhr.responseJSON && xhr.responseJSON.error) || 'No se pudo calcular retenciones');
+            $('#pp-retenciones-resumen').addClass('text-muted').text(
+                (xhr.responseJSON && xhr.responseJSON.error) || 'No se pudieron calcular retenciones'
+            );
+        });
+    }
+
+    window.calcularRetencionesPagoproveedor = calcularRetencionesPagoproveedor;
+
+    var timerRetenciones = null;
+    function programarCalculoRetenciones() {
+        if (timerRetenciones) {
+            clearTimeout(timerRetenciones);
+        }
+        timerRetenciones = setTimeout(function () {
+            timerRetenciones = null;
+            calcularRetencionesPagoproveedor();
+        }, 350);
+    }
+
+    $('#btn-calcular-retenciones').on('click', function () {
+        calcularRetencionesPagoproveedor().fail(function (xhr) {
+            if (xhr && xhr.responseJSON) {
+                alert(xhr.responseJSON.error || 'No se pudo calcular retenciones');
+            }
         });
     });
+
+    $(document).on('change.ppRetenciones input.ppRetenciones', '.pp-monto-aplicar, .pp-sel-deuda', programarCalculoRetenciones);
 
     $form.on('submit', function () {
         sincronizarCamposAplicacion();

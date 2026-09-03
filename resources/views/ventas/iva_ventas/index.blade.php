@@ -26,7 +26,8 @@
                 <div class="card-body pb-2">
                     <p class="text-muted small mb-3">
                         Listado de ventas con desglose impositivo desde AnitaERP (tablas <code>venta</code> / <code>venta_impuesto</code>).
-                        Facturas de administración se muestran en apartado separado. Orden por fecha de movimiento o jornada y tipo de comprobante.
+                        Solo entran los tipos de transacción con el tilde <strong>Va al IVA ventas</strong> (bingo FBI, máquinas FSL, facturas, NC/ND, etc.).
+                        Las FSL que aún viven en Anita se completan si el tipo FSL está tildado.
                     </p>
 
                     @php
@@ -129,10 +130,16 @@
                                     @checked(! empty($filtros['solo_moneda_origen']))>
                                 <label class="form-check-label" for="solo_moneda_origen">Convertir moneda extranjera con cotización del comprobante</label>
                             </div>
-                            <div class="form-check">
+                            <div class="form-check mb-1">
                                 <input class="form-check-input js-auto-consultar" type="checkbox" name="auditar_ctamov" id="auditar_ctamov" value="1"
                                     @checked(! empty($filtros['auditar_ctamov']))>
                                 <label class="form-check-label" for="auditar_ctamov">Auditar contra ctamov (Anita) — lee el bridge, puede demorar</label>
+                            </div>
+                            <input type="hidden" name="completar_fsl_anita" value="0">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="completar_fsl_anita" id="completar_fsl_anita" value="1"
+                                    @checked(! empty($filtros['completar_fsl_anita']))>
+                                <label class="form-check-label" for="completar_fsl_anita">Incluir FSL máquinas/ruletas desde Anita (sin duplicar ERP)</label>
                             </div>
                         </div>
                     </div>
@@ -175,6 +182,9 @@
                                 <strong>{{ (int) ($resultado['stats']['ventas'] ?? 0) }}</strong>
                                 · Puntos de venta <strong>{{ (int) ($resultado['stats']['puntoventa'] ?? 0) }}</strong>
                                 · Total <strong>{{ number_format((float) ($resultado['totales_general']['total'] ?? 0), 2, ',', '.') }}</strong>
+                                @if ((int) ($resultado['stats']['ventas_fsl_anita'] ?? 0) > 0)
+                                    · FSL Anita <strong>{{ (int) $resultado['stats']['ventas_fsl_anita'] }}</strong>
+                                @endif
                                 @php $corrStats = $resultado['auditoria_correlatividad'] ?? []; @endphp
                                 @if (! empty($corrStats['habilitada']) && (int) ($corrStats['total_saltos'] ?? 0) > 0)
                                     · <span class="text-danger" title="Saltos de numeración detectados">
@@ -190,6 +200,7 @@
                         $statsIva = $resultado['stats'] ?? [];
                         $sinComprobantes = (int) ($statsIva['ventas'] ?? 0) === 0;
                         $exclSubdiario = (int) ($statsIva['excluidas_subdiario'] ?? 0);
+                        $exclTipo = (int) ($statsIva['excluidas_tipo'] ?? 0);
                         $ventasPeriodo = (int) ($statsIva['ventas_periodo'] ?? 0);
                     @endphp
                     @if (! empty($subdiario_ajustado))
@@ -202,6 +213,11 @@
                             Hay {{ $exclSubdiario }} comprobante(s) en el per&iacute;odo excluido(s) por el subdiario
                             <strong>{{ $subdiario_texto ?? '' }}</strong>.
                             Pruebe con <strong>Ventas A y B</strong> si factura con letra A o C.
+                        </div>
+                    @elseif ($sinComprobantes && $exclTipo > 0 && $ventasPeriodo > 0)
+                        <div class="alert alert-warning mx-3 mt-3 mb-0">
+                            Hay {{ $exclTipo }} comprobante(s) cuyo tipo de transacci&oacute;n no tiene tildado
+                            <strong>Va al IVA ventas</strong>. Revise el ABM de tipos (FBI, FSL, FAC, etc.).
                         </div>
                     @elseif ($sinComprobantes && $ventasPeriodo === 0)
                         <div class="alert alert-info mx-3 mt-3 mb-0">

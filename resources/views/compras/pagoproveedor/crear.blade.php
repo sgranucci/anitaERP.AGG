@@ -6,15 +6,15 @@
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/cuentacontable/consulta.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/caja/cuentacaja/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/caja/cuentacaja/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/caja/cuentacaja/consulta.js')) ?: time() }}" type="text/javascript"></script>
 @include('includes.contable.asiento_montos_formato_js')
 <script src="{{ asset('assets/pages/scripts/contable/asiento/asiento_externo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/asiento/asiento_externo.js')) ?: time() }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/proveedor/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/proveedor/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/proveedor/cbu_pago.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/banco/consulta.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/caja/ingresoegreso/cheques.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/form.js') }}" type="text/javascript"></script>
-<script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/crear.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/pagoproveedor/form.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/pagoproveedor/crear.js')) ?: time() }}" type="text/javascript"></script>
 <script>
     $(function () {
         if (typeof activa_eventos_consulta_cbu_pago === 'function') {
@@ -46,6 +46,7 @@
                     <button type="button" id="botonform5" class="btn btn-info btn-sm"><span class="fa fa-copy"></span> Historia</button>
                     <button type="button" id="botonform6" class="btn btn-info btn-sm"><span class="fa fa-copy"></span> Asiento Contable</button>
                 </div>
+                @include('compras.pagoproveedor.partials.resumen_desembolso')
                 <div class="card-body">
                     @include('compras.pagoproveedor.form')
                     @include('compras.pagoproveedor.form2')

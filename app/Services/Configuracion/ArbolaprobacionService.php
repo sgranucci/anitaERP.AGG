@@ -37,6 +37,7 @@ use App\Services\Configuracion\Ai\ExplicarContextoArbolAprobacionSkill;
 use App\Support\Configuracion\ArbolAprobacionContextoSupport;
 use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
 use App\Support\Configuracion\OcArbolTriggerCatalog;
+use App\Support\Configuracion\OcArbolTriggerEvaluators\OcArbolTriggerEvaluatorRegistry;
 use App\Support\Sala\RequisicionSalaTransferenciaLaboratorioDeferred;
 use Auth;
 use Carbon\Carbon;
@@ -538,7 +539,15 @@ class ArbolaprobacionService
             if (! is_array($uids) || count($uids) === 0) {
                 $uids = [$proximoNivel['proximousuario']];
             }
-            $uids = array_values(array_unique(array_filter($uids)));
+            $uids = array_values(array_unique(array_filter(array_map('intval', $uids))));
+
+            $destinatarioElegido = (int) ($opciones['destinatario_usuario_id'] ?? 0);
+            if ($destinatarioElegido > 0 && count($uids) > 1) {
+                if (! in_array($destinatarioElegido, $uids, true)) {
+                    throw new \RuntimeException('Debe seleccionar un firmante válido para enviar la orden de compra al árbol de aprobación.');
+                }
+                $uids = [$destinatarioElegido];
+            }
 
             $yaQuery = Arbolaprobacion_Movimiento::where('ordencompra_id', $comprobante_id)
                 ->where('nivel', $proximoNivel['proximonivel'])
@@ -2447,7 +2456,8 @@ class ArbolaprobacionService
     public function dispararArbolOrdencompraAlCambiarSector(
         int $ordencompraId,
         int $sectorLegajocompraId,
-        ?string $observacionEnvio = null
+        ?string $observacionEnvio = null,
+        ?int $destinatarioUsuarioId = null
     ): void {
         if ($ordencompraId <= 0 || $sectorLegajocompraId <= 0) {
             return;
@@ -2477,8 +2487,152 @@ class ArbolaprobacionService
         if ($obs !== '') {
             $opciones['observacion_envio'] = $obs;
         }
+        if ($destinatarioUsuarioId !== null && $destinatarioUsuarioId > 0) {
+            $opciones['destinatario_usuario_id'] = $destinatarioUsuarioId;
+        }
 
         $this->procesaArbolaprobacion('OC', $ordencompraId, 'insert', $opciones);
+    }
+
+    /**
+     * Firmantes del primer nivel aplicable al enviar el legajo a Gastronomía (circuito por cambio de sector).
+     *
+     * @return array{nivel: int, requiere_seleccion: bool, firmantes: list<array{id: int, nombre: string, usuario: string, email: string}>}
+     */
+    public function firmantesEnvioGastronomiaOrdencompra(Ordencompra $ordencompra): array
+    {
+        $vacio = [
+            'nivel' => 0,
+            'requiere_seleccion' => false,
+            'firmantes' => [],
+        ];
+
+        $arbol = $this->arbolOrdencompraActivoParaEmpresa((int) ($ordencompra->empresa_id ?? 0));
+        if (! $arbol) {
+            return $vacio;
+        }
+
+        $circuito = OrdencompraLegajoGastronomiaSupport::circuitoDeEmpresa((int) ($ordencompra->empresa_id ?? 0));
+        $sectorNuevo = (int) ($circuito['sector_disparo_id'] ?? 0);
+        if ($sectorNuevo <= 0) {
+            $sectorNuevo = OrdencompraLegajoGastronomiaSupport::sectorGastronomiaId();
+        }
+        if ($sectorNuevo <= 0) {
+            return $vacio;
+        }
+
+        $sectorAnterior = (int) ($ordencompra->sector_legajocompra_id ?? 0);
+        $triggers = Arbolaprobacion_OcTrigger::query()
+            ->where('arbolaprobacion_id', $arbol->id)
+            ->where('activo', 'S')
+            ->orderBy('prioridad')
+            ->orderBy('id')
+            ->get();
+
+        $trigger = null;
+        if ($triggers->isNotEmpty()) {
+            $trigger = $this->primerTriggerCambioSectorAplicable(
+                $triggers,
+                $sectorAnterior > 0 ? $sectorAnterior : null,
+                $sectorNuevo
+            );
+            if (! $trigger) {
+                return $vacio;
+            }
+        } elseif (! $this->tieneCircuitoCambioSectorConfigurado($arbol)
+            || ! $this->sectorDisparaCircuitoCambio($arbol, $sectorNuevo)
+        ) {
+            return $vacio;
+        }
+
+        $ocTriggerId = $trigger ? (int) $trigger->id : null;
+        $circuitoOc = self::CIRCUITO_OC_CAMBIO_SECTOR;
+
+        if ($trigger !== null) {
+            $centrocostoArbol = (int) ($trigger->centrocosto_circuito_id ?? 0);
+            if ($centrocostoArbol <= 0) {
+                $centrocostoArbol = $this->centroCostoParaArbolAprobacionDesdeOrdencompra($ordencompra);
+            }
+            if ($centrocostoArbol <= 0) {
+                return $vacio;
+            }
+        } else {
+            $centrocostoArbol = (int) ($arbol->oc_sector_cambio_centrocosto_id ?? 0);
+            if ($centrocostoArbol <= 0) {
+                return $vacio;
+            }
+        }
+
+        $totalesOc = OrdencompraTotalesCabecera::desdeModelo($ordencompra, $this->cotizacionQuery);
+        $estadoAprobacionActual = $this->leeAprobacionComprobante(
+            $this->nombreTipoArbolOrdenesCompra(),
+            (int) $ordencompra->id,
+            $circuitoOc,
+            $ocTriggerId
+        );
+        $proximoNivel = $this->buscaProximoNivel(
+            $arbol,
+            $centrocostoArbol,
+            $estadoAprobacionActual['nivelactual'],
+            $ordencompra->fecha,
+            $totalesOc['monto'],
+            $totalesOc['moneda_id']
+        );
+
+        if (($proximoNivel['proximonivel'] ?? 0) <= 0) {
+            return $vacio;
+        }
+
+        $uids = $proximoNivel['proximousuarios'] ?? [];
+        if (! is_array($uids) || count($uids) === 0) {
+            $uids = $proximoNivel['proximousuario'] ? [(int) $proximoNivel['proximousuario']] : [];
+        }
+        $uids = array_values(array_unique(array_filter(array_map('intval', $uids))));
+
+        $firmantes = [];
+        foreach ($uids as $uid) {
+            $usuario = $this->usuarioRepository->findOperativo($uid);
+            if (! $usuario) {
+                continue;
+            }
+            $nombre = trim((string) ($usuario->nombre ?? ''));
+            $firmantes[] = [
+                'id' => (int) $usuario->id,
+                'nombre' => $nombre !== '' ? $nombre : (string) ($usuario->usuario ?? ''),
+                'usuario' => (string) ($usuario->usuario ?? ''),
+                'email' => (string) ($usuario->email ?? ''),
+            ];
+        }
+
+        return [
+            'nivel' => (int) $proximoNivel['proximonivel'],
+            'requiere_seleccion' => count($firmantes) > 1,
+            'firmantes' => $firmantes,
+        ];
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, Arbolaprobacion_OcTrigger>  $triggers
+     */
+    private function primerTriggerCambioSectorAplicable(
+        $triggers,
+        ?int $sectorAnteriorId,
+        int $sectorNuevoId
+    ): ?Arbolaprobacion_OcTrigger {
+        $registry = app(OcArbolTriggerEvaluatorRegistry::class);
+        foreach ($triggers as $trigger) {
+            if ($trigger->tipo !== OcArbolTriggerCatalog::TIPO_EVENTO) {
+                continue;
+            }
+            if ($trigger->evento !== OcArbolTriggerCatalog::EVENTO_CAMBIO_SECTOR) {
+                continue;
+            }
+            if ($registry->aplicaEventoCambioSector($trigger, $sectorAnteriorId, $sectorNuevoId)) {
+                return $trigger;
+            }
+        }
+
+        return null;
     }
 
     public function arbolOrdencompraActivoParaEmpresa(int $empresaId): ?Arbolaprobacion

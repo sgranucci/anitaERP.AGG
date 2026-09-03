@@ -255,6 +255,7 @@ class OrdencompraLegajoBandejaService
                 'url_historia' => route('ordencompra_legajo_bandeja_historia', ['id' => $id]),
                 'url_paquete' => route('ordencompra_legajo_bandeja_paquete', ['id' => $id]),
                 'url_asignar_com' => route('ordencompra_legajo_bandeja_asignar_com', ['id' => $id]),
+                'url_asignar_factura' => route('ordencompra_asignar_factura_pdf', ['id' => $id]),
                 'url_cargar_cxp' => (empty($primeraCp)
                     && OrdencompraEnvioCuentasAPagarGateSupport::esSectorCuentasAPagar((int) ($oc->sector_legajocompra_id ?? 0)))
                     ? $this->urlCargarFacturaDesdeLegajo($id, $primeraFac)

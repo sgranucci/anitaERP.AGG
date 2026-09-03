@@ -10,6 +10,10 @@
 @endsection
 
 @section('contenido')
+@php
+    $soloConsulta = ! empty($soloConsulta);
+    $soloLectura = ! empty($soloLectura);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -53,7 +57,7 @@
         @endif
         <div class="card card-danger">
             <div class="card-header">
-                <h3 class="card-title">Editar Precarga de Comprobantes de Proveedores</h3>&nbsp;ID:&nbsp;{{$data->id }}
+                <h3 class="card-title">{{ $soloLectura ? 'Consultar' : 'Editar' }} Precarga de Comprobantes de Proveedores</h3>&nbsp;ID:&nbsp;{{$data->id }}
                 <div class="card-tools">
                     @if ($data->comprobante_proveedor && (can('editar-comprobante-proveedor', false) || can('listar-comprobante-proveedor', false)))
                     <a href="{{ route('editar_comprobante_proveedor', ['id' => $data->comprobante_proveedor->id]) }}" class="btn btn-outline-primary btn-sm mr-2">
@@ -65,21 +69,29 @@
                         'rutaalmacenamiento' => $data->rutaalmacenamiento ?? null,
                         'claseExtra' => 'mr-2',
                     ])
+                    @if (can('listar-precarga-proveedores', false) && ! $soloConsulta)
                     <a href="{{route('precarga_comprobante_proveedor')}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
+                    @endif
                 </div>
             </div>
             <form action="{{route('actualizar_precarga_comprobante_proveedor', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
                 @csrf @method("put")
+                @if ($soloConsulta)
+                    <input type="hidden" name="origen" value="modal_consulta">
+                    <input type="hidden" name="vista" value="consulta">
+                @endif
                 <div class="card-body">
+                    <fieldset @if ($soloLectura) disabled @endif>
                     @include('compras.precarga_comprobante_proveedor.form')
+                    </fieldset>
                 </div>
                 <div class="card-footer">
                     <div class="row">
                         <div class="col-lg-3"></div>
                         <div class="col-lg-6">
-                            @if (($data->estado ?? '') !== \App\Support\Compras\PrecargaComprobanteEstados::CARGADA_ANITA)
+                            @if (! $soloLectura && ($data->estado ?? '') !== \App\Support\Compras\PrecargaComprobanteEstados::CARGADA_ANITA)
                                 @include('includes.boton-form-editar')
                             @endif
                         </div>

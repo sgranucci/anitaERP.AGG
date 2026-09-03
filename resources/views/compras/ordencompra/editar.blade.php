@@ -3,6 +3,10 @@
 Órdenes de compra
 @endsection
 
+@section('styles')
+<link rel="stylesheet" href="{{ asset('assets/pages/css/compras/ordencompra/asignar_factura_legajo.css') }}?v={{ @filemtime(public_path('assets/pages/css/compras/ordencompra/asignar_factura_legajo.css')) ?: time() }}">
+@endsection
+
 @section('scripts')
 <script src="{{ asset('assets/pages/scripts/admin/crear.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/stock/articulo/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/stock/articulo/consulta.js')) ?: time() }}" type="text/javascript"></script>
@@ -21,6 +25,8 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/formulario.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/formulario.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/enviar-proveedor.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/cambiar_sector_legajo.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/ordencompra/enviar_gastronomia_firmante.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/enviar_gastronomia_firmante.js')) ?: time() }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/ordencompra/asignar_factura_legajo.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/ordencompra/asignar_factura_legajo.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/modal.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/seguridad/ingreso_proveedor/modal.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/seguridad/ingreso_proveedor/autorizar.js') }}" type="text/javascript"></script>
 <script>
@@ -56,6 +62,8 @@ $(function () {
         @include('includes.mensaje')
 
         @include('compras.ordencompra.partials.modal_enviar_proveedor')
+        @include('compras.ordencompra.partials.modal_asignar_factura_legajo')
+        @include('compras.ordencompra.partials.modal_firmante_gastronomia_arbol')
 
         @if (isset($data) && $data && empty($visualizar))
             <div class="modal fade" id="modalOcCambiarEstado" tabindex="-1" role="dialog" aria-hidden="true">
@@ -139,6 +147,7 @@ $(function () {
                               id="formOcEnviarGastronomia"
                               enctype="multipart/form-data"
                               data-ordencompra-id="{{ $data->id }}"
+                              data-firmantes-url="{{ route('ordencompra_firmantes_gastronomia_arbol', ['id' => $data->id]) }}"
                               data-sector-gastronomia-id="{{ (int) ($oc_sector_gastronomia_id ?? 0) }}">
                             @csrf
                             <div class="modal-header">
@@ -370,6 +379,14 @@ $(function () {
                     @if (can('crear-ingreso-proveedor', false) && !empty($mostrar_solapa_ingresos))
                         <button type="button" class="btn btn-outline-light btn-sm js-ingreso-ticket-nuevo" title="Solicitar ticket de ingreso a planta">
                             <i class="fa fa-id-badge"></i> Ticket de ingreso
+                        </button>
+                    @endif
+                    @if (isset($data) && $data && empty($visualizar) && can('actualizar-ordencompra', false) && !empty($data->proveedor_id))
+                        <button type="button" class="btn btn-outline-light btn-sm js-oc-asignar-factura"
+                                data-url="{{ route('ordencompra_asignar_factura_pdf', ['id' => $data->id]) }}"
+                                data-numero="{{ $data->numeroordencompra }}"
+                                data-proveedor="{{ $data->proveedores->nombre ?? '' }}">
+                            <i class="fa fa-file-pdf-o"></i> Asignar factura PDF
                         </button>
                     @endif
                     @if (isset($data) && $data && empty($visualizar))

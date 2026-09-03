@@ -13,8 +13,12 @@ class Tipotransaccion extends Model
     use SoftDeletes;
 	use TipotransaccionTrait;
 
-    protected $fillable = ['nombre', 'operacion', 'operacionstock', 'abreviatura', 'codigo', 'signo', 'estado', 'concepto_venta_id'];
+    protected $fillable = ['nombre', 'operacion', 'operacionstock', 'abreviatura', 'codigo', 'signo', 'estado', 'iva_ventas', 'concepto_venta_id'];
     protected $table = 'tipotransaccion';
+
+    protected $casts = [
+        'iva_ventas' => 'boolean',
+    ];
 
     public function setSignoAttribute($signo)
     {
@@ -77,6 +81,11 @@ class Tipotransaccion extends Model
     public function usaConceptoVentaEnFacturador(): bool
     {
         return (int) ($this->concepto_venta_id ?? 0) > 0;
+    }
+
+    public function vaAlIvaVentas(): bool
+    {
+        return \App\Support\Ventas\TipotransaccionIvaVentasSupport::vaAlIvaVentas($this);
     }
 
     /**

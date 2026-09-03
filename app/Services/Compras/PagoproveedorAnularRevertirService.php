@@ -11,6 +11,7 @@ use App\Models\Contable\Asiento;
 use App\Repositories\Compras\PagoproveedorRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Support\Caja\CajaMovimientoEloquentDeleteSupport;
+use App\Support\Caja\IngresoEgresoAnitaTesmovSupport;
 use App\Support\Compras\PagoproveedorAplicacionCuentacorrienteSupport;
 use App\Support\Contable\AsientoReversoSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
@@ -62,6 +63,23 @@ class PagoproveedorAnularRevertirService
             EloquentAuditDeleteSupport::each(
                 Cheque::query()->where('pagoproveedor_id', (int) $pago->id)
             );
+
+            $cajaIds = Caja_Movimiento::query()
+                ->where('pagoproveedor_id', (int) $pago->id)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->filter()
+                ->unique()
+                ->all();
+            if ((int) ($pago->caja_movimiento_id ?? 0) > 0) {
+                $cajaIds[] = (int) $pago->caja_movimiento_id;
+            }
+            foreach (array_unique($cajaIds) as $cajaId) {
+                $mov = Caja_Movimiento::query()->find($cajaId);
+                if ($mov) {
+                    IngresoEgresoAnitaTesmovSupport::eliminarDesdeMovimiento($mov);
+                }
+            }
 
             CajaMovimientoEloquentDeleteSupport::eliminarPorQuery(
                 Caja_Movimiento::query()->where('pagoproveedor_id', (int) $pago->id)

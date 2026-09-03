@@ -14,6 +14,7 @@ use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasFslAnitaArmadoSupp
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasFslAnitaBridgeReader;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalVentasPeriodoSupport;
 use App\Support\Contable\CierreRendicionMaquinaConfigSupport;
+use App\Support\Ventas\IvaVentas\IvaVentasDesgloseSupport;
 use App\Support\Database\SqlDialectSupport;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -146,7 +147,6 @@ class LibroIvaDigitalVentasGenerador
                 $conteoFbiFsl++;
                 $conteoFslAnita++;
                 $clavesErpFsl[$clave] = true;
-                $registro['iva_simple'] = LibroIvaDigitalVentasFslAnitaArmadoSupport::metaIvaSimple();
                 $registrosIndividuales[] = $registro;
             }
         }
@@ -266,8 +266,7 @@ class LibroIvaDigitalVentasGenerador
                 $totales,
             );
 
-        $signoRaw = (int) ($venta->tipotransacciones?->getRawOriginal('signo') ?? 1);
-        $signo = $signoRaw < 0 ? -1 : 1;
+        $signo = (int) IvaVentasDesgloseSupport::signoVenta($venta);
         $codigoMoneda = LibroIvaDigitalMapeosSupport::codigoMonedaAfip(
             $venta->monedas->codigo ?? null,
             $venta->monedas->nombre ?? null,

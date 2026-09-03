@@ -129,13 +129,13 @@ function resolverPtrProveedorDesdeBoton($btn) {
     if ($ctx.length) {
         return {
             $id: $ctx.find('#proveedor_id, .proveedor_id').first(),
-            $nombre: $ctx.find('#nombreproveedor, .nombreproveedor').first(),
+            $nombre: $ctx.find('#nombreproveedor, .nombreproveedor, #descripcionproveedor, .descripcionproveedor').first(),
             $codigo: $ctx.find('#codigoproveedor, .codigoproveedor').first(),
         };
     }
     return {
         $id: $('#proveedor_id'),
-        $nombre: $('#nombreproveedor'),
+        $nombre: $('#nombreproveedor, #descripcionproveedor').first(),
         $codigo: $('#codigoproveedor'),
     };
 }
@@ -202,7 +202,7 @@ function limpiarProveedorEnPantalla() {
     limpiarEstadoConsultaProveedor();
     $('#proveedor_id').val('');
     $('#codigoproveedor').val('');
-    $('#nombreproveedor').val('');
+    $('#nombreproveedor, #descripcionproveedor, .descripcionproveedor').val('');
     $('#proveedor').val('');
     actualizarCondicionPagoProveedorDesdeJson(null);
     actualizarLinkEditarProveedor(0);
@@ -213,7 +213,7 @@ function limpiarProveedorEnPantalla() {
 
 function limpiarProveedorEnPantallaManteniendoCodigo() {
     $('#proveedor_id').val('');
-    $('#nombreproveedor').val('');
+    $('#nombreproveedor, #descripcionproveedor, .descripcionproveedor').val('');
     $('#proveedor').val('');
     actualizarCondicionPagoProveedorDesdeJson(null);
     actualizarLinkEditarProveedor(0);
@@ -302,7 +302,7 @@ function aplicarProveedorEnPantalla(data, ctx) {
     }
 
     $('#proveedor_id').val(data.id);
-    $('#nombreproveedor').val(data.nombre || '');
+    $('#nombreproveedor, #descripcionproveedor, .descripcionproveedor').val(data.nombre || '');
     $('#codigoproveedor').val(data.codigo || '');
     $('#proveedor').val(data.nombre || '');
 

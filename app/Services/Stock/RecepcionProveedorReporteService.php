@@ -952,7 +952,7 @@ class RecepcionProveedorReporteService
 
         $advertencia = $resultado['error'];
         if ($advertencia === null && $filas->isNotEmpty()) {
-            $advertencia = $filas->count().' línea(s) históricas leídas de Anita (una consulta: recepmov/recepmae + requisición/aprobcomp).';
+            $advertencia = $filas->count().' línea(s) históricas leídas de Anita (COM + requisición; autorizante en aprobcomp tipo REQ).';
         } elseif ($advertencia !== null) {
             $advertencia = 'No se pudo leer el histórico Anita: '.$advertencia;
         }

@@ -36,6 +36,28 @@ final class AplicacionCuentacorrienteAnitaLadoSupport
             return null;
         }
 
+        $pago = $cc->pagoproveedores;
+        if ($pago !== null && (int) ($cc->pagoproveedor_id ?? 0) > 0) {
+            $tipo = ComprobanteProveedorAnitaImportClaveSupport::tipo((string) $pago->tipocomprobante);
+            $numero = (int) $pago->numerotransaccion;
+            if ($tipo === '' || $numero <= 0) {
+                return null;
+            }
+
+            return self::armar(
+                $proveedor,
+                $tipo,
+                (string) $pago->letra,
+                (int) $pago->sucursal,
+                $numero,
+                0,
+                1,
+                (int) ($cc->empresas?->codigo ?? $pago->empresa_id ?? 0),
+                self::codMonDesdeCc($cc),
+                self::cotizacionDesdeCc($cc),
+            );
+        }
+
         $comp = $cc->comprobante_proveedores;
         if ($comp !== null && (int) ($cc->comprobante_proveedor_id ?? 0) > 0) {
             $tipo = ComprobanteProveedorAnitaImportClaveSupport::tipo(
@@ -55,28 +77,6 @@ final class AplicacionCuentacorrienteAnitaLadoSupport
                 (int) ($comp->anita_nro_interno ?? 0),
                 (int) ($cc->comprobante_proveedor_cuotas?->numero_cuota ?? 1) ?: 1,
                 (int) ($cc->empresas?->codigo ?? $cc->empresa_id ?? 0),
-                self::codMonDesdeCc($cc),
-                self::cotizacionDesdeCc($cc),
-            );
-        }
-
-        $pago = $cc->pagoproveedores;
-        if ($pago !== null && (int) ($cc->pagoproveedor_id ?? 0) > 0) {
-            $tipo = ComprobanteProveedorAnitaImportClaveSupport::tipo((string) $pago->tipocomprobante);
-            $numero = (int) $pago->numerotransaccion;
-            if ($tipo === '' || $numero <= 0) {
-                return null;
-            }
-
-            return self::armar(
-                $proveedor,
-                $tipo,
-                (string) $pago->letra,
-                (int) $pago->sucursal,
-                $numero,
-                0,
-                1,
-                (int) ($cc->empresas?->codigo ?? $pago->empresa_id ?? 0),
                 self::codMonDesdeCc($cc),
                 self::cotizacionDesdeCc($cc),
             );

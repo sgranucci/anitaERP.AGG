@@ -84,16 +84,44 @@ class MayorPlanoCuentaExcelPlanoSupport
     }
 
     /**
-     * Último recurso si la OC no tiene ítems: comentario o detalle de cabecera.
+     * Último recurso si la OC no tiene ítems: texto humano de cabecera.
+     * El comentario de OCs importadas de Anita es metadata (fecha/hora/usuario), no “qué se compró”.
      */
     public static function observacionOc(?string $comentario, ?string $detalle): string
     {
         $comentario = trim((string) $comentario);
-        if ($comentario !== '') {
+        $detalle = trim((string) $detalle);
+
+        if ($comentario !== '' && ! self::esComentarioTecnicoAnita($comentario)) {
             return $comentario;
         }
 
-        return trim((string) $detalle);
+        if ($detalle !== '') {
+            return $detalle;
+        }
+
+        return self::extraerSuspensionAnita($comentario);
+    }
+
+    public static function esComentarioTecnicoAnita(string $comentario): bool
+    {
+        $c = trim($comentario);
+        if ($c === '') {
+            return false;
+        }
+
+        return str_contains($c, 'Fecha ingreso Anita:')
+            || str_contains($c, 'Importada desde Anita')
+            || (str_contains($c, 'Usuario ini:') && str_contains($c, 'Hora:'));
+    }
+
+    public static function extraerSuspensionAnita(string $comentario): string
+    {
+        if (! preg_match('/Suspensión:\s*(.+)$/u', $comentario, $m)) {
+            return '';
+        }
+
+        return trim((string) ($m[1] ?? ''));
     }
 
     /**

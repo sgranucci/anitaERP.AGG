@@ -4,6 +4,7 @@ namespace App\Exports\Contable;
 
 use App\Services\Contable\MayorPlanoCuentaReporteService;
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
 use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
@@ -139,29 +140,52 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
         $this->filaPrimeraDatosExcel = $this->filaCabecerasExcel + 1;
     }
 
+    private function mostrarColumnaCentrocosto(): bool
+    {
+        return MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($this->filtros);
+    }
+
     private function colUltima(): string
     {
-        return $this->multiempresa ? 'Q' : 'P';
+        $conCc = $this->mostrarColumnaCentrocosto();
+        if ($this->multiempresa) {
+            return $conCc ? 'Q' : 'P';
+        }
+
+        return $conCc ? 'P' : 'O';
     }
 
     public function columnFormats(): array
     {
         $formato = ExcelFormatoNumero::preferenciaGlobal();
-        $fmt = [
-            'A' => NumberFormat::FORMAT_TEXT,
-            'B' => NumberFormat::FORMAT_TEXT,
-            'E' => NumberFormat::FORMAT_TEXT,
-            'H' => NumberFormat::FORMAT_TEXT,
-            'I' => NumberFormat::FORMAT_TEXT,
-            'K' => ExcelFormatoNumero::codigoColumna($formato, 4),
-            'L' => ExcelFormatoNumero::codigoColumna($formato, 2),
-            'M' => ExcelFormatoNumero::codigoColumna($formato, 2),
-            'N' => ExcelFormatoNumero::codigoColumna($formato, 2),
-            'O' => ExcelFormatoNumero::codigoColumna($formato, 2),
-            'P' => ExcelFormatoNumero::codigoColumna($formato, 2),
-        ];
-
-        // Resumen (mismas columnas A–E numéricas cuando aplica): formato en AfterSheet por rango.
+        if ($this->mostrarColumnaCentrocosto()) {
+            $fmt = [
+                'A' => NumberFormat::FORMAT_TEXT,
+                'B' => NumberFormat::FORMAT_TEXT,
+                'E' => NumberFormat::FORMAT_TEXT,
+                'H' => NumberFormat::FORMAT_TEXT,
+                'I' => NumberFormat::FORMAT_TEXT,
+                'K' => ExcelFormatoNumero::codigoColumna($formato, 4),
+                'L' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'M' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'N' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'O' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'P' => ExcelFormatoNumero::codigoColumna($formato, 2),
+            ];
+        } else {
+            $fmt = [
+                'A' => NumberFormat::FORMAT_TEXT,
+                'B' => NumberFormat::FORMAT_TEXT,
+                'E' => NumberFormat::FORMAT_TEXT,
+                'H' => NumberFormat::FORMAT_TEXT,
+                'J' => ExcelFormatoNumero::codigoColumna($formato, 4),
+                'K' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'L' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'M' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'N' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'O' => ExcelFormatoNumero::codigoColumna($formato, 2),
+            ];
+        }
 
         return $fmt;
     }
@@ -183,18 +207,32 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
             'E' => 30,  // Emisor (código — nombre)
             'F' => 13,  // CUIT
             'G' => 32,  // Descripción mov.
-            'H' => 20,  // Centro de costo
-            'I' => 11,  // O.Compra
-            'J' => 5,   // Mon
-            'K' => 11,  // Cotiz.
-            'L' => 13,  // Mon. Ref.
-            'M' => 16,  // Debe
-            'N' => 16,  // Haber
-            'O' => 16,  // Saldo del mes
-            'P' => 18,  // Saldo ejerc.
         ];
-        if ($this->multiempresa) {
-            $widths['Q'] = 8;
+        if ($this->mostrarColumnaCentrocosto()) {
+            $widths['H'] = 20;  // Centro de costo
+            $widths['I'] = 11;  // O.Compra
+            $widths['J'] = 5;   // Mon
+            $widths['K'] = 11;  // Cotiz.
+            $widths['L'] = 13;  // Mon. Ref.
+            $widths['M'] = 16;  // Debe
+            $widths['N'] = 16;  // Haber
+            $widths['O'] = 16;  // Saldo del mes
+            $widths['P'] = 18;  // Saldo ejerc.
+            if ($this->multiempresa) {
+                $widths['Q'] = 8;
+            }
+        } else {
+            $widths['H'] = 11;  // O.Compra
+            $widths['I'] = 5;   // Mon
+            $widths['J'] = 11;  // Cotiz.
+            $widths['K'] = 13;  // Mon. Ref.
+            $widths['L'] = 16;  // Debe
+            $widths['M'] = 16;  // Haber
+            $widths['N'] = 16;  // Saldo del mes
+            $widths['O'] = 18;  // Saldo ejerc.
+            if ($this->multiempresa) {
+                $widths['P'] = 8;
+            }
         }
 
         return $widths;
@@ -343,7 +381,10 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
         }
 
         $desde = max(1, $this->filaPrimeraDatosExcel);
-        foreach (['K', 'L', 'M', 'N', 'O', 'P'] as $col) {
+        $colsImportes = $this->mostrarColumnaCentrocosto()
+            ? ['K', 'L', 'M', 'N', 'O', 'P']
+            : ['J', 'K', 'L', 'M', 'N', 'O'];
+        foreach ($colsImportes as $col) {
             $sheet->getStyle($col.$desde.':'.$col.$highestRow)->applyFromArray([
                 'alignment' => [
                     'horizontal' => Alignment::HORIZONTAL_RIGHT,

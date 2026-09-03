@@ -121,6 +121,7 @@ class PagoproveedorController extends Controller
             'cheques' => collect(),
             'pagoproveedor_estados' => collect(),
             'pagoproveedor_retenciones' => collect(),
+            'asientos' => null,
         ];
         if ($proveedorId > 0) {
             $proveedor = Proveedor::query()->find($proveedorId);
@@ -271,13 +272,25 @@ class PagoproveedorController extends Controller
         }
         $proveedorId = (int) $request->query('proveedor_id', 0);
         $empresaId = (int) $request->query('empresa_id', 0);
-        if ($proveedorId <= 0) {
-            return response()->json(['filas' => []]);
+        if ($proveedorId <= 0 || $empresaId <= 0) {
+            return response()->json([
+                'filas' => [],
+                'aviso' => $empresaId <= 0
+                    ? 'Seleccione empresa para ver la deuda.'
+                    : 'Seleccione proveedor.',
+            ]);
         }
 
-        $filas = $this->proveedorCuentacorrienteRepository->listarDeudaProveedor('', $proveedorId, false);
-        if ($empresaId > 0) {
-            $filas = $filas->where('empresa_id', $empresaId)->values();
+        $filasTodas = $this->proveedorCuentacorrienteRepository->listarDeudaProveedor('', $proveedorId, false);
+        $filas = $filasTodas->where('empresa_id', $empresaId)->values();
+        $aviso = null;
+        if ($filas->isEmpty() && $filasTodas->isNotEmpty()) {
+            $nombres = $filasTodas
+                ->map(static fn ($cc) => (string) ($cc->empresas->nombre ?? ('empresa '.$cc->empresa_id)))
+                ->unique()
+                ->values()
+                ->implode(', ');
+            $aviso = 'Sin deuda pendiente en la empresa elegida. Hay comprobantes en: '.$nombres.'.';
         }
 
         $out = $filas->map(static function ($cc) {
@@ -307,7 +320,7 @@ class PagoproveedorController extends Controller
             ];
         })->values();
 
-        return response()->json(['filas' => $out]);
+        return response()->json(['filas' => $out, 'aviso' => $aviso]);
     }
 
     public function apiCalcularRetenciones(Request $request)

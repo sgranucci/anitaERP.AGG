@@ -8,13 +8,14 @@ use Tests\TestCase;
 
 class RecepcionProveedorReporteAnitaFallbackSupportTest extends TestCase
 {
-    public function test_una_sola_lectura_con_outer_a_req_y_aprobcomp(): void
+    public function test_lectura_com_con_outer_a_req_sin_aprobcomp(): void
     {
         $from = RecepcionProveedorReporteAnitaFallbackSupport::tablaFrom();
 
         $this->assertStringContainsString('recepmov', $from);
         $this->assertStringContainsString('recepmae', $from);
-        $this->assertStringContainsString('OUTER (pendmaep, OUTER (reqmae, OUTER aprobcomp))', $from);
+        $this->assertStringContainsString('OUTER (pendmaep, OUTER reqmae)', $from);
+        $this->assertStringNotContainsString('aprobcomp', $from);
         $this->assertStringNotContainsString('usuario', $from);
         $this->assertSame(1, substr_count($from, 'recepmov'));
     }
@@ -27,11 +28,10 @@ class RecepcionProveedorReporteAnitaFallbackSupportTest extends TestCase
             $this->assertStringNotContainsString(',', $expr, $campo);
         }
         $this->assertStringContainsString('reqm_usuario as reqm_usuario', RecepcionProveedorReporteAnitaFallbackSupport::camposCsv());
-        $this->assertStringContainsString('aprobc_usuario as autorizante_anita', RecepcionProveedorReporteAnitaFallbackSupport::camposCsv());
-        $this->assertStringContainsString('aprobc_tipo as aprobc_tipo', RecepcionProveedorReporteAnitaFallbackSupport::camposCsv());
+        $this->assertStringNotContainsString('aprobc_usuario', RecepcionProveedorReporteAnitaFallbackSupport::camposCsv());
     }
 
-    public function test_where_une_com_oc_req_y_aprobado_de_aprobcomp(): void
+    public function test_where_une_com_oc_y_req_sin_aprobcomp(): void
     {
         $where = RecepcionProveedorReporteAnitaFallbackSupport::whereArmado(
             ['estado' => RecepcionProveedorReporteFiltros::ESTADO_CONFIRMADA],
@@ -43,9 +43,8 @@ class RecepcionProveedorReporteAnitaFallbackSupportTest extends TestCase
         $this->assertStringContainsString('penmp_nro = recm_nro_fac', $where);
         $this->assertStringNotContainsString('penmp_nro = recm_com_nro', $where);
         $this->assertStringContainsString('reqm_nro = penmp_requisicion', $where);
-        $this->assertStringContainsString('aprobc_nro = reqm_nro', $where);
-        $this->assertStringContainsString("aprobc_tipo MATCHES 'R*'", $where);
-        $this->assertStringNotContainsString('aprobc_estado =', $where);
+        $this->assertStringNotContainsString('aprobc_nro', $where);
+        $this->assertStringNotContainsString("aprobc_tipo MATCHES 'R*'", $where);
         $this->assertStringContainsString('recm_fecha >= 20210101', $where);
         $this->assertStringContainsString('recm_fecha <= 20221231', $where);
         $this->assertStringContainsString('recm_sucursal IN (1,3)', $where);
@@ -222,5 +221,48 @@ class RecepcionProveedorReporteAnitaFallbackSupportTest extends TestCase
 
         $this->assertCount(1, $filas);
         $this->assertSame('', $filas[0]->autorizante_anita);
+    }
+
+    public function test_mejor_aprobacion_ignora_pep_y_prefiere_nombre_en_aprobado(): void
+    {
+        $porNro = RecepcionProveedorReporteAnitaFallbackSupport::mejorAprobacionPorRequisicion([
+            (object) [
+                'aprobc_tipo' => 'PEP',
+                'aprobc_nro' => 199201,
+                'aprobc_estado' => 3,
+                'aprobc_usuario' => 'gsosa',
+            ],
+            (object) [
+                'aprobc_tipo' => 'REQ',
+                'aprobc_nro' => 199638,
+                'aprobc_estado' => 3,
+                'aprobc_usuario' => ' ',
+                'aprobc_cod_usuario' => 1087,
+            ],
+            (object) [
+                'aprobc_tipo' => 'REQ',
+                'aprobc_nro' => 199638,
+                'aprobc_estado' => 3,
+                'aprobc_usuario' => 'Sergio Granucci',
+                'aprobc_cod_usuario' => 1087,
+            ],
+        ]);
+
+        $this->assertArrayNotHasKey(199201, $porNro);
+        $this->assertSame('Sergio Granucci', $porNro[199638]->aprobc_usuario);
+    }
+
+    public function test_nombre_autorizante_usa_login_o_codigo_si_el_nombre_viene_vacio(): void
+    {
+        $this->assertSame('Alejandro Blanco', RecepcionProveedorReporteAnitaFallbackSupport::nombreAutorizanteDesdeAprobcomp(
+            (object) ['aprobc_usuario' => 'ablanco', 'aprobc_cod_usuario' => 1094],
+            [1094 => 'Alejandro Blanco'],
+            ['ablanco' => 'Alejandro Blanco'],
+        ));
+        $this->assertSame('Sergio Granucci', RecepcionProveedorReporteAnitaFallbackSupport::nombreAutorizanteDesdeAprobcomp(
+            (object) ['aprobc_usuario' => ' ', 'aprobc_cod_usuario' => 1087],
+            [1087 => 'Sergio Granucci'],
+            [],
+        ));
     }
 }

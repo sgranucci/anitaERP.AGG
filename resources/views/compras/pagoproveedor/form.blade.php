@@ -20,11 +20,11 @@
         </div>
         <div class="form-group row">
             <label class="col-lg-2 col-form-label text-right">Proveedor</label>
-            <div class="col-lg-6">
+            <div class="col-lg-6" id="div-proveedor">
                 <div class="input-group">
                     <input type="hidden" name="proveedor_id" id="proveedor_id" class="proveedor_id" value="{{ old('proveedor_id', $data->proveedor_id ?? '') }}">
-                    <input type="text" class="form-control codigoproveedor" id="codigoproveedor" placeholder="Código" value="{{ old('codigoproveedor', $data->proveedores->codigo ?? '') }}">
-                    <input type="text" class="form-control descripcionproveedor" id="descripcionproveedor" readonly placeholder="Nombre" value="{{ old('descripcionproveedor', $data->proveedores->nombre ?? '') }}">
+                    <input type="text" class="form-control codigoproveedor" id="codigoproveedor" placeholder="Código" autocomplete="off" value="{{ old('codigoproveedor', $data->proveedores->codigo ?? '') }}">
+                    <input type="text" class="form-control descripcionproveedor nombreproveedor" id="descripcionproveedor" readonly placeholder="Nombre" value="{{ old('descripcionproveedor', $data->proveedores->nombre ?? '') }}">
                     <div class="input-group-append">
                         <button type="button" class="btn btn-info consultaproveedor" title="Consultar"><i class="fa fa-search"></i></button>
                     </div>
@@ -92,27 +92,67 @@
         <hr>
         <h5>Comprobantes a pagar</h5>
         <p class="text-muted small mb-2">
-            El monto a aplicar va en moneda de la factura. Si la OP está en otra moneda se convierte con la cotización de liquidación
-            (factura o del día según el modo), se muestra el equivalente y la diferencia de cambio. El matching de CC queda en la cubeta de la factura; la DC se asienta, no abre un ítem en pesos.
+            El monto a aplicar va en moneda de la factura (alineado a la derecha, como el saldo). Si la OP está en otra moneda se convierte con la cotización de liquidación
+            (factura o del día según el modo). La DC se asienta; no abre un ítem extra en pesos.
         </p>
+        <div class="table-responsive mb-2 pp-resumen-deuda-cards">
+            <table class="table table-sm table-bordered mb-0" style="background:#fff;">
+                <thead style="background:#d6eaf8;color:#1b2631;">
+                    <tr>
+                        <th class="text-right">Saldo</th>
+                        <th class="text-right">A aplicar</th>
+                        <th class="text-right">Equiv. OP</th>
+                        <th class="text-right">DC</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="text-right font-weight-bold" id="pp-card-saldo">0,00</td>
+                        <td class="text-right font-weight-bold" id="pp-card-aplicado">0,00</td>
+                        <td class="text-right font-weight-bold" id="pp-card-equiv">0,00</td>
+                        <td class="text-right font-weight-bold" id="pp-card-dc">—</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+        <style>
+            #tabla-deuda-proveedor .pp-col-aplicar { width: 9.5rem; min-width: 8.5rem; }
+            #tabla-deuda-proveedor .pp-monto-aplicar {
+                width: 100%;
+                max-width: 9rem;
+                margin-left: auto;
+                display: block;
+                text-align: right;
+            }
+        </style>
         <div class="table-responsive">
-            <table class="table table-sm table-bordered" id="tabla-deuda-proveedor">
+            <table class="table table-sm table-bordered table-hover" id="tabla-deuda-proveedor">
                 <thead style="background:#85C1E9;color:#17202A;">
                     <tr>
-                        <th></th>
+                        <th class="text-center" style="width:2.5rem;">Incl.</th>
                         <th>Comprobante</th>
                         <th>Vto</th>
                         <th>Moneda</th>
                         <th class="text-right">Saldo</th>
-                        <th class="text-right">A aplicar</th>
+                        <th class="text-right pp-col-aplicar">A aplicar</th>
                         <th class="text-right">Cot. liq.</th>
                         <th class="text-right">Equiv. OP</th>
                         <th class="text-right">DC</th>
                     </tr>
                 </thead>
                 <tbody>
-                    <tr><td colspan="9" class="text-muted text-center">Seleccione proveedor y empresa</td></tr>
+                    <tr><td colspan="9" class="text-muted text-center">Seleccione empresa y proveedor</td></tr>
                 </tbody>
+                <tfoot class="pp-deuda-tfoot" style="display:none;background:#e9ecef;font-weight:700;">
+                    <tr>
+                        <td colspan="4" class="text-right">Totales</td>
+                        <td class="text-right" id="pp-tfoot-saldo">0,00</td>
+                        <td class="text-right" id="pp-tfoot-aplicado">0,00</td>
+                        <td></td>
+                        <td class="text-right" id="pp-tfoot-equiv">0,00</td>
+                        <td class="text-right" id="pp-tfoot-dc">—</td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
         <input type="hidden" name="monto" id="monto" value="{{ old('monto', $data->monto ?? 0) }}">

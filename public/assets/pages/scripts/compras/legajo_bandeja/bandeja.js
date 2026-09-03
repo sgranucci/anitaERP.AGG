@@ -75,7 +75,7 @@
             return;
         }
         facs.forEach(function (f, i) {
-            var origen = (f.origen === 'anita') ? 'Anita' : (f.estado || 'Precarga');
+            var origen = f.origen_label || ((f.origen === 'anita') ? 'Scan Anita (manual, no IA)' : (f.estado || 'Precarga'));
             var $tr = $('<tr class="js-bandeja-pdf-row" style="cursor:pointer;"></tr>');
             $tr.attr('data-url-pdf', f.url_pdf || '');
             $tr.append('<td>' + esc(f.etiqueta || ('#' + f.id)) + '</td>');
@@ -100,10 +100,18 @@
         if (!facs.length) {
             $fac.append('<p class="text-muted mb-0">No hay factura precargada. Adjuntela al enviar el legajo o desde la OC.</p>');
         } else {
+            var idxDefault = 0;
+            var hayPrecarga = false;
+            facs.forEach(function (f, i) {
+                if (!hayPrecarga && (f.origen || 'precarga') === 'precarga') {
+                    idxDefault = i;
+                    hayPrecarga = true;
+                }
+            });
             facs.forEach(function (f, i) {
                 $fac.append(
                     '<div class="form-check">' +
-                    '<input class="form-check-input" type="radio" name="precarga_id" id="ban_pre_' + f.id + '" value="' + f.id + '"' + (i === 0 ? ' checked' : '') + '>' +
+                    '<input class="form-check-input" type="radio" name="precarga_id" id="ban_pre_' + f.id + '" value="' + f.id + '"' + (i === idxDefault ? ' checked' : '') + '>' +
                     '<label class="form-check-label" for="ban_pre_' + f.id + '">' + esc(f.etiqueta) +
                     (f.fecha ? ' <small class="text-muted">' + esc(f.fecha) + '</small>' : '') + '</label></div>'
                 );
@@ -112,7 +120,15 @@
         if (!coms.length) {
             $coms.append('<p class="text-muted mb-0">No hay COM confirmada para asignar.</p>');
         } else {
-            var preId = facs.length ? facs[0].id : 0;
+            var preId = 0;
+            Object.keys(asignadas).forEach(function (k) {
+                if (!preId && asignadas[k] && asignadas[k].length) {
+                    preId = k;
+                }
+            });
+            if (!preId && facs.length && (facs[0].origen || 'precarga') === 'precarga') {
+                preId = facs[0].id;
+            }
             var idsAsig = asignadas[preId] || [];
             coms.forEach(function (c) {
                 var checked = idsAsig.indexOf(c.id) !== -1 || idsAsig.indexOf(String(c.id)) !== -1;
@@ -154,13 +170,24 @@
 
         $('.js-bandeja-enviar-gastro').on('click', function () {
             var $form = $('#formBandejaEnviarGastro');
+            var ocId = $(this).data('ordencompra-id') || '';
             $form.attr('action', $(this).data('url'));
             $form.find('input[name=observacion]').val('');
             $form.find('textarea[name=leyenda]').val('');
             $form.find('input[type=file]').val('');
-            $form.data('ordencompra-id', $(this).data('ordencompra-id') || '');
+            $form.find('input[name=destinatario_usuario_id]').val('');
+            $form.data('ordencompra-id', ocId);
+            $form.attr('data-ordencompra-id', ocId);
             if (window.OcCambiarSectorLegajo) {
                 window.OcCambiarSectorLegajo.initForm($form, { forzarPaquete: true });
+            }
+            if (window.OcEnviarGastronomiaFirmante) {
+                var base = (typeof window.carpetaBase !== 'undefined' && window.carpetaBase) ? window.carpetaBase : '';
+                window.OcEnviarGastronomiaFirmante.setOrdencompraId(
+                    $form,
+                    ocId,
+                    ocId ? (base + '/compras/ordencompra/' + ocId + '/firmantes-gastronomia-arbol') : ''
+                );
             }
             $('#modalBandejaEnviarGastro').modal('show');
         });

@@ -246,6 +246,32 @@ class LibroIvaDigitalVentasAlicuotaSupportTest extends TestCase
         $this->assertNull(LibroIvaDigitalVentasFslAnitaArmadoSupport::filaIvaSimpleExento($fila));
     }
 
+    public function test_fsl_anita_reintegro_neto_conserva_signo_y_marca_restitucion(): void
+    {
+        $fila = [
+            'ven_tipo' => 'FSL',
+            'ven_letra' => 'B',
+            'ven_sucursal' => '39',
+            'ven_nro' => '7248',
+            'ven_fecha' => '20260814',
+            'ven_exento' => '-58691547.80',
+            'ven_monto' => '-58691547.80',
+            'ven_nombre_cliente' => 'Venta maquinas',
+        ];
+
+        $reg = LibroIvaDigitalVentasFslAnitaArmadoSupport::armarRegistroLibro($fila, false);
+        $this->assertNotNull($reg);
+        $this->assertEqualsWithDelta(-58691547.80, $reg['cabecera']['importe_total'], 0.01);
+        $this->assertEqualsWithDelta(-58691547.80, $reg['cabecera']['operaciones_exentas'], 0.01);
+        $this->assertTrue($reg['iva_simple']['restitucion']);
+
+        $exento = LibroIvaDigitalVentasFslAnitaArmadoSupport::filaIvaSimpleExento($fila);
+        $this->assertNotNull($exento);
+        $this->assertTrue($exento['restitucion']);
+        $this->assertSame('2', $exento['tipo_operacion']);
+        $this->assertEqualsWithDelta(-58691547.80, $exento['exento'], 0.01);
+    }
+
     public function test_fecha_jornada_usa_jornada_y_cae_si_falta(): void
     {
         $this->assertSame(

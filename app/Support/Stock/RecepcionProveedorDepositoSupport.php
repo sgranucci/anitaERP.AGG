@@ -306,8 +306,6 @@ class RecepcionProveedorDepositoSupport
         ?int $empresaId = null
     ): array {
         $coefProv = $coefProveedor > 0 ? $coefProveedor : 1.0;
-        $coefArt = (float) ($articulo->coeficienteconversion ?? 0);
-        $coefArt = $coefArt > 0 ? $coefArt : 1.0;
         $esFormula = self::esDepositoFormula($deposito);
 
         if ($esFormula) {
@@ -315,6 +313,8 @@ class RecepcionProveedorDepositoSupport
             if ($insumo === null) {
                 throw new \RuntimeException(DepositoFormulaInsumoFaltanteSupport::mensajeArticulo($articulo));
             }
+
+            $coefArt = self::coeficienteConversionFormula($articulo, $insumo);
 
             return [
                 'cantidad_stock' => RecepcionProveedorConversionSupport::cantidadStock($cantidadCompra, $coefArt),
@@ -338,6 +338,22 @@ class RecepcionProveedorDepositoSupport
             'articulo_stock_id' => null,
             'articulo_stock_sku' => null,
         ];
+    }
+
+    /**
+     * Coef. caja → UM insumo. Si el artículo de compra no tiene coeficiente (&gt; 0),
+     * usa el del insumo; si ambos faltan, 1 (no convertir).
+     */
+    public static function coeficienteConversionFormula(Articulo $articuloCompra, Articulo $insumo): float
+    {
+        $coefCompra = (float) ($articuloCompra->coeficienteconversion ?? 0);
+        if ($coefCompra > 0) {
+            return $coefCompra;
+        }
+
+        $coefInsumo = (float) ($insumo->coeficienteconversion ?? 0);
+
+        return $coefInsumo > 0 ? $coefInsumo : 1.0;
     }
 
     public static function coeficienteProveedor(

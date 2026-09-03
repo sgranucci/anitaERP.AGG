@@ -457,10 +457,19 @@ class AsientoController extends Controller
 
     // Copiar o copia revirtiendo asiento
 
+    public function revertirAsiento(Request $request)
+    {
+        $request->merge(['revierte' => 1]);
+
+        return $this->copiarAsiento($request);
+    }
+
     public function copiarAsiento(Request $request)
     {
+        can('crear-asiento');
+
         $id = $request->id;
-        $fechacopia = $request->fechacopia;
+        $fechacopia = $request->input('fechacopia', $request->input('fecha'));
         $flRevierte = false;
 
         if (isset($request->revierte))

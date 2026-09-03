@@ -11,6 +11,7 @@ use App\Support\Compras\OrdencompraReporteFiltros;
 use App\Support\Compras\RequisicionReporteCriteriosSupport;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Maatwebsite\Excel\Excel;
 
 class OrdencompraReporteController extends Controller
@@ -70,6 +71,8 @@ class OrdencompraReporteController extends Controller
             'opciones_anticipada' => OrdencompraReporteFiltros::OPCIONES_ANTICIPADA,
             'opciones_agrupacion' => OrdencompraReporteFiltros::OPCIONES_AGRUPACION,
             'opciones_modo_listado' => OrdencompraReporteFiltros::OPCIONES_MODO_LISTADO,
+            'opciones_modo_moneda' => OrdencompraReporteFiltros::OPCIONES_MODO_MONEDA,
+            'moneda_query' => DB::table('moneda')->orderBy('id')->get(),
             'filtros' => $filtros,
             'filtrosQuery' => $filtrosQuery,
             'consultado' => $consultado,
@@ -168,6 +171,14 @@ class OrdencompraReporteController extends Controller
 
         if (empty($filtros['fecha_hasta']) && ! $request->has('fecha_hasta')) {
             $filtros['fecha_hasta'] = $defaults['fecha_hasta'];
+        }
+
+        if ((int) ($filtros['moneda_id'] ?? 0) <= 0) {
+            $filtros['moneda_id'] = (int) $defaults['moneda_id'];
+        }
+
+        if (($filtros['modo_moneda'] ?? '') === '') {
+            $filtros['modo_moneda'] = $defaults['modo_moneda'];
         }
 
         if (($filtros['empresa_ids'] ?? []) === []) {

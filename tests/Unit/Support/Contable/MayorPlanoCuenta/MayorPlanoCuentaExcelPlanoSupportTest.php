@@ -49,6 +49,21 @@ class MayorPlanoCuentaExcelPlanoSupportTest extends TestCase
         $this->assertSame('', MayorPlanoCuentaExcelPlanoSupport::observacionOc(null, null));
     }
 
+    public function test_observacion_oc_ignora_metadata_anita(): void
+    {
+        $this->assertSame('Canon mensual transporte', MayorPlanoCuentaExcelPlanoSupport::observacionOc(
+            'Fecha ingreso Anita: 20191126 | Hora: 14:39:46 | Usuario ini: 46781',
+            'Canon mensual transporte',
+        ));
+        $this->assertSame('canon mensual', MayorPlanoCuentaExcelPlanoSupport::observacionOc(
+            'Fecha ingreso Anita: 20191212 | Hora: 12:49:14 | Usuario ini: 30812 | Suspensión: canon mensual',
+            '',
+        ));
+        $this->assertTrue(MayorPlanoCuentaExcelPlanoSupport::esComentarioTecnicoAnita(
+            'Importada desde Anita',
+        ));
+    }
+
     public function test_ordenar_por_cuenta_o_por_centro_de_costo(): void
     {
         $filas = [

@@ -102,7 +102,7 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
                 'cotizacion' => $cotizacion,
                 'empresa_id' => $pago->empresa_id,
                 'comprobante_proveedor_id' => $deuda->comprobante_proveedor_id,
-                'comprobante_proveedor_cuota_id' => $deuda->comprobante_proveedor_cuota_id,
+                'comprobante_proveedor_cuota_id' => null,
                 'pagoproveedor_id' => $pago->id,
             ]);
 

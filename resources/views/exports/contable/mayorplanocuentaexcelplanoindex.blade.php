@@ -1,5 +1,6 @@
 @php
-    $colSpan = 17;
+    $mostrarCentrocosto = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros ?? []);
+    $colSpan = $mostrarCentrocosto ? 17 : 16;
     $totales = is_array($totales ?? null) ? $totales : [];
     $cantidadLineas = (int) ($totales['cantidad_filas'] ?? 0);
     $formatoExcel = \App\Support\Export\ExcelFormatoNumero::normalizar(
@@ -41,7 +42,9 @@
         <th>Fecha</th>
         <th>Cuenta</th>
         <th>Descripcion</th>
-        <th>C.Costo</th>
+        @if ($mostrarCentrocosto)
+            <th>C.Costo</th>
+        @endif
         <th>Mon</th>
         <th>Cotizacion</th>
         <th>Debe</th>
@@ -62,7 +65,9 @@
             <td>{{ $fila['fecha_fmt'] ?? '' }}</td>
             <td>{{ $fila['cuenta_codigo'] ?? '' }}</td>
             <td>{{ $fila['cuenta_nombre'] ?? '' }}</td>
-            <td>{{ $fila['centrocosto_codigo'] ?? '' }}</td>
+            @if ($mostrarCentrocosto)
+                <td>{{ $fila['centrocosto_codigo'] ?? '' }}</td>
+            @endif
             <td>{{ $fila['moneda_abrev'] ?? '' }}</td>
             <td>{{ $fmtCotiz($fila['cotizacion'] ?? null) }}</td>
             <td>{{ $fmt($fila['debe'] ?? null) }}</td>

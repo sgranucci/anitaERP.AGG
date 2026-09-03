@@ -1055,12 +1055,22 @@ class MayorConceptoAnitaBridgeReader
      */
     public function cargarAplicpedPorReferenciasCom(array $nrosCom, array &$errores): array
     {
+        return $this->cargarAplicpedPorReferenciasTipo('COM', $nrosCom, $errores);
+    }
+
+    /**
+     * @param  list<int>  $nros
+     * @return list<object>
+     */
+    public function cargarAplicpedPorReferenciasTipo(string $refTipo, array $nros, array &$errores): array
+    {
+        $refTipo = strtoupper(trim($refTipo));
         $nros = array_values(array_unique(array_filter(array_map(
             static fn ($n) => (int) $n,
-            $nrosCom,
+            $nros,
         ), static fn (int $n) => $n > 0)));
 
-        if ($nros === []) {
+        if ($refTipo === '' || $nros === []) {
             return [];
         }
 
@@ -1073,9 +1083,46 @@ class MayorConceptoAnitaBridgeReader
                     'compras',
                     'aplicped',
                     'aplp_proveedor,aplp_tipo,aplp_letra,aplp_sucursal,aplp_nro,aplp_ref_tipo,aplp_ref_letra,aplp_ref_sucursal,aplp_ref_nro,aplp_orden,aplp_cantfact',
-                    ' WHERE aplp_ref_tipo="COM" AND aplp_ref_nro IN ('.$in.')',
+                    ' WHERE aplp_ref_tipo="'.$refTipo.'" AND aplp_ref_nro IN ('.$in.')',
                     $errores,
-                    'aplicped-ref-com-batch',
+                    'aplicped-ref-'.strtolower($refTipo).'-batch',
+                ),
+            );
+        }
+
+        return $filas;
+    }
+
+    /**
+     * Líneas de OC Anita (pendmovp) por número de orden.
+     *
+     * @param  list<int>  $nrosOc
+     * @return list<object>
+     */
+    public function cargarPendmovpPorNrosOc(array $nrosOc, array &$errores): array
+    {
+        $nros = array_values(array_unique(array_filter(array_map(
+            static fn ($n) => (int) $n,
+            $nrosOc,
+        ), static fn (int $n) => $n > 0)));
+
+        if ($nros === []) {
+            return [];
+        }
+
+        $tabla = (string) config('ordencompra_anita.tablas.linea', 'pendmovp');
+        $filas = [];
+        foreach (array_chunk($nros, 80) as $lote) {
+            $in = implode(',', $lote);
+            $filas = array_merge(
+                $filas,
+                $this->listar(
+                    'compras',
+                    $tabla,
+                    'penvp_nro,penvp_tipo,penvp_articulo,penvp_desc,penvp_cantidad,penvp_partida',
+                    ' WHERE penvp_nro IN ('.$in.') AND penvp_tipo IN ("PEP","COM")',
+                    $errores,
+                    'pendmovp-nros-oc',
                 ),
             );
         }

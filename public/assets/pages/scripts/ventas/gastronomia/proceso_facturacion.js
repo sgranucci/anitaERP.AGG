@@ -325,6 +325,157 @@
         return data;
     }
 
+    let proximoComprobanteSeq = 0;
+
+    let forzarCaeaAlEmitir = false;
+    let previewNumeroEmitir = 0;
+    /** No bajar el próximo local si ARCA aún no refleja la factura recién emitida. */
+    let previewNumeroPiso = 0;
+    let previewEtiquetaBase = '';
+
+    function extraerNumeroDeComprobante(texto) {
+        const s = String(texto || '');
+        const m = s.match(/(\d+)\s*$/);
+        if (!m) {
+            return 0;
+        }
+        return parseInt(m[1], 10) || 0;
+    }
+
+    function etiquetaConNumero(etiqueta, numero) {
+        const base = String(etiqueta || previewEtiquetaBase || '');
+        if (!base || numero <= 0) {
+            return numero > 0 ? String(numero) : '—';
+        }
+        if (/\d+\s*$/.test(base)) {
+            return base.replace(/\d+\s*$/, String(numero).padStart(8, '0'));
+        }
+        return base + '-' + String(numero).padStart(8, '0');
+    }
+
+    function fijarPreviewLocal(numero, etiquetaOpcional) {
+        const n = parseInt(String(numero || '0'), 10) || 0;
+        if (n <= 0) {
+            return;
+        }
+        previewNumeroEmitir = n;
+        if (n > previewNumeroPiso) {
+            previewNumeroPiso = n;
+        }
+        if (etiquetaOpcional) {
+            previewEtiquetaBase = String(etiquetaOpcional);
+        }
+        pintarProximoComprobante(
+            'ok',
+            etiquetaConNumero(previewEtiquetaBase, n),
+            'Próxima: ' +
+                etiquetaConNumero(previewEtiquetaBase, n) +
+                '. Ese número se usa al facturar. El CAE sigue tardando ~6–7 s.',
+        );
+    }
+
+    function avanzarPreviewTrasEmision(data) {
+        const n = extraerNumeroDeComprobante(data && data.factura);
+        if (n <= 0) {
+            return;
+        }
+        forzarCaeaAlEmitir = false;
+        fijarPreviewLocal(n + 1, data.factura);
+    }
+
+    function pintarProximoComprobante(estado, texto, titulo) {
+        const root = document.getElementById('gastro-proximo-comprobante');
+        if (!root) {
+            return;
+        }
+        const val = root.querySelector('.gastro-prox-val');
+        root.classList.remove('is-loading', 'is-error');
+        if (estado === 'loading') {
+            root.classList.add('is-loading');
+        } else if (estado === 'error') {
+            root.classList.add('is-error');
+        }
+        if (val) {
+            val.textContent = texto;
+        }
+        if (titulo) {
+            root.title = titulo;
+        }
+    }
+
+    async function refrescarProximoComprobanteArca() {
+        const seq = ++proximoComprobanteSeq;
+        const teniaNumero = previewNumeroEmitir > 0;
+        if (!teniaNumero) {
+            pintarProximoComprobante('loading', '…', 'Consultando último número en ARCA…');
+        }
+        try {
+            const data = await api('/ventas/gastronomia/api/proximo-comprobante-arca', { headers: hdrJson() });
+            if (seq !== proximoComprobanteSeq) {
+                return;
+            }
+            if (!data || !data.ok) {
+                if (!teniaNumero) {
+                    forzarCaeaAlEmitir = false;
+                    pintarProximoComprobante(
+                        'error',
+                        '—',
+                        (data && data.error) || 'No se pudo leer el próximo número (informativo).',
+                    );
+                }
+                return;
+            }
+            const proximoArca = parseInt(String(data.proximo || '0'), 10) || 0;
+            const usable = !!data.usable_al_emitir && proximoArca > 0 && proximoArca >= previewNumeroPiso;
+            if (data.etiqueta && !data.salto_caea) {
+                previewEtiquetaBase = data.etiqueta;
+            }
+            if (usable) {
+                forzarCaeaAlEmitir = !!data.forzar_caea_al_emitir;
+                fijarPreviewLocal(proximoArca, data.etiqueta);
+            } else if (data.salto_caea) {
+                forzarCaeaAlEmitir = true;
+                pintarProximoComprobante(
+                    'error',
+                    (data.etiqueta || '—') + ' · CAEA',
+                    data.warn || 'ARCA no respondió; al facturar se usa CAEA.',
+                );
+            } else if (!teniaNumero) {
+                forzarCaeaAlEmitir = !!data.forzar_caea_al_emitir;
+                pintarProximoComprobante(
+                    data.etiqueta ? 'ok' : 'error',
+                    data.etiqueta || '—',
+                    (data.warn || 'Al facturar se vuelve a consultar el último número en ARCA (~3 s).'),
+                );
+            }
+            const fuente = data.fuente === 'erp'
+                ? (data.salto_caea ? 'CAEA (ARCA no respondió en 10 s)' : 'secuencia ERP (CAEA)')
+                : 'ARCA FECompUltimoAutorizado';
+            if (usable || teniaNumero) {
+                const root = document.getElementById('gastro-proximo-comprobante');
+                if (root && data.ms != null) {
+                    const extra =
+                        ' · ' +
+                        fuente +
+                        ' · ' +
+                        data.ms +
+                        ' ms' +
+                        (data.warn ? ' ' + data.warn : '');
+                    if (root.title && extra) {
+                        root.title = (root.title.split(' · ARCA')[0].split(' · CAEA')[0] || root.title) + extra;
+                    }
+                }
+            }
+        } catch (e) {
+            if (seq !== proximoComprobanteSeq) {
+                return;
+            }
+            if (!teniaNumero) {
+                pintarProximoComprobante('error', '—', e.message || 'No se pudo leer ARCA.');
+            }
+        }
+    }
+
     let iframeImpresionFactura = null;
 
     function obtenerIframeImpresionFactura() {
@@ -596,30 +747,7 @@
     }
 
     function mensajesProcesoEmision(cuenta) {
-        const mensajes = [
-            'Generando comprobante fiscal…',
-            'Registrando venta en el sistema…',
-        ];
-        if (G.sincronizarAnitaAlFacturar !== false) {
-            mensajes.push('Registrando en Anita…');
-        }
-        mensajes.push(
-            'Registrando cobranza…',
-            'Actualizando stock e insumos…',
-            'Solicitando autorización ARCA (CAE)…',
-            'Imprimiendo ticket térmico…',
-        );
-        const cuentaWaitry =
-            cuenta && (cuenta.waitry_order_id || cuenta.waitry_cobro_totem);
-        if (G.waitryHabilitado === true && cuentaWaitry) {
-            if (G.waitryTrasRespuesta === false) {
-                mensajes.push('Sincronizando pago y comanda en Waitry…');
-            } else {
-                mensajes.push('Finalizando registro en Waitry…');
-            }
-        }
-
-        return mensajes;
+        return ['Solicitando CAE en ARCA… (suele tardar unos 6–7 s)'];
     }
 
     function escHtml(s) {
@@ -3679,6 +3807,19 @@
             if (!cuenta || !cuenta.lineas || !cuenta.lineas.length) {
                 return true;
             }
+            const ids = [];
+            (cuenta.lineas || []).forEach((ln) => {
+                const aid = parseInt(String((ln.articulo && ln.articulo.id) || ln.articulo_id || '0'), 10);
+                if (aid > 0 && ids.indexOf(aid) < 0) {
+                    ids.push(aid);
+                }
+            });
+            try {
+                await Promise.all(ids.map((id) => fetchGruposOpcionales(id)));
+            } catch (e) {
+                toast(e.message, 'error');
+                return false;
+            }
             let lineaIncompleta = null;
             let gruposIncompletos = [];
             for (const ln of cuenta.lineas) {
@@ -3686,13 +3827,7 @@
                 if (!(articulo.id > 0)) {
                     continue;
                 }
-                let grupos;
-                try {
-                    grupos = await fetchGruposOpcionales(articulo.id);
-                } catch (e) {
-                    toast(e.message, 'error');
-                    return false;
-                }
+                const grupos = cacheGruposOpcionales.get(articulo.id) || [];
                 if (grupos.length && !lineaTieneOpcionalesCompletos(ln, grupos)) {
                     lineaIncompleta = ln;
                     gruposIncompletos = grupos;
@@ -5345,6 +5480,7 @@
             });
             seleccionarCuenta(r.cuenta_id);
             toast(r.reutilizada ? 'Mesa ya abierta — cargando cuenta.' : 'Mesa abierta.', 'success');
+            void refrescarProximoComprobanteArca();
             cargarMesas();
         } catch (e) {
             if (e.message !== 'cancelado') {
@@ -5369,6 +5505,7 @@
             });
             seleccionarCuenta(r.cuenta_id);
             toast('Cuenta libre creada.', 'success');
+            void refrescarProximoComprobanteArca();
             cargarCuentasActivas();
         } catch (e) {
             if (e.message !== 'cancelado') {
@@ -6284,9 +6421,44 @@
         return { map, faltantes };
     }
 
+    /** Grupos de fórmula ya pedidos en esta sesión (alta de línea). Un fallo no se guarda. */
+    const cacheGruposOpcionales = new Map();
+    const inflightGruposOpcionales = new Map();
+
+    function recordarGruposOpcionales(articuloId, grupos) {
+        const id = parseInt(String(articuloId || '0'), 10);
+        if (!(id > 0) || !Array.isArray(grupos)) {
+            return;
+        }
+        cacheGruposOpcionales.set(id, grupos);
+    }
+
     async function fetchGruposOpcionales(articuloId) {
-        const opData = await api(`/ventas/gastronomia/api/opcionales-articulo/${articuloId}`, { headers: hdrJson() });
-        return opData && Array.isArray(opData.grupos) ? opData.grupos : [];
+        const id = parseInt(String(articuloId || '0'), 10);
+        if (!(id > 0)) {
+            return [];
+        }
+        if (cacheGruposOpcionales.has(id)) {
+            return cacheGruposOpcionales.get(id);
+        }
+        if (inflightGruposOpcionales.has(id)) {
+            return inflightGruposOpcionales.get(id);
+        }
+        const pedido = api(`/ventas/gastronomia/api/opcionales-articulo/${id}`, { headers: hdrJson() })
+            .then((opData) => {
+                const grupos = opData && Array.isArray(opData.grupos) ? opData.grupos : [];
+                cacheGruposOpcionales.set(id, grupos);
+                return grupos;
+            })
+            .catch((err) => {
+                cacheGruposOpcionales.delete(id);
+                throw err;
+            })
+            .finally(() => {
+                inflightGruposOpcionales.delete(id);
+            });
+        inflightGruposOpcionales.set(id, pedido);
+        return pedido;
     }
 
     /**
@@ -6386,7 +6558,9 @@
         tr.querySelector('.articulo_id').value = a.id;
         const cod = tr.querySelector('.codigoarticulo');
         if (cod) cod.value = a.sku || '';
-        tr.querySelector('.descripcionarticulo').value = a.descripcion || '';
+        const desc = tr.querySelector('.descripcionarticulo');
+        desc.value = a.descripcion || '';
+        desc.scrollLeft = 0;
         syncSufijoDesdeSkuCompleto(a.sku || '');
     }
 
@@ -6528,6 +6702,7 @@
             focusSkuConsumo();
         } catch (e) {
             if (e.payload && e.payload.requiere_opcionales && Array.isArray(e.payload.grupos) && e.payload.grupos.length) {
+                recordarGruposOpcionales(articulo.id, e.payload.grupos);
                 pendingOpcionalesCtx = {
                     articulo,
                     cantidad,
@@ -6692,15 +6867,18 @@
             return toast('Seleccione cuenta', 'warning');
         }
         try {
-            setFacturacionLoading(true, 'Validando cuenta y cobranza…');
-            let cuenta = opts.cuentaPrecargada || (await guardarCabecera(true));
-            setFacturacionLoading(true, 'Completando opcionales de fórmula…');
+            setFacturacionLoading(true, mensajesProcesoEmision(null)[0], {
+                subtitulo: 'No cierre ni recargue. El aviso no cambia hasta que ARCA responda.',
+            });
+            let cuenta = opts.cuentaPrecargada || cuentaActivaConLineas;
+            if (!cuenta || !cuenta.lineas || !cuenta.lineas.length) {
+                cuenta = await guardarCabecera(true);
+            }
             const opcionesOk = await asegurarOpcionalesEnCuentaAntesDeFacturar(cuenta);
             if (!opcionesOk) {
                 return;
             }
             cuenta = cuentaActivaConLineas || cuenta;
-            setFacturacionLoading(true, 'Validando cuenta y cobranza…');
             let montoArs = totalFacturarDesdeCuenta(cuenta) || leerTotalAFacturarArs();
             const errTotem = mensajeBloqueoTotemDesfasado(cuenta, montoArs);
             if (errTotem) {
@@ -6761,7 +6939,9 @@
                 sincronizarUltimoMontoCobranzaConTotal(montoArs);
                 mediosPago = recogerMediosPagoFromGrid();
             }
-            iniciarRotacionMensajesProceso(mensajesProcesoEmision(cuenta));
+            setFacturacionLoading(true, mensajesProcesoEmision(cuenta)[0], {
+                subtitulo: 'No cierre ni recargue. El aviso no cambia hasta que ARCA responda.',
+            });
             const tInicioEmisionMs = performance.now();
             const data = await api('/ventas/gastronomia/api/emitir-factura', {
                 method: 'POST',
@@ -6771,19 +6951,29 @@
                     moneda_id: MONEDA_PESOS_ID,
                     medios_pago: mediosPago,
                     facturacion_con_descuento: facturacionConDescuento,
+                    forzar_caea: !!forzarCaeaAlEmitir,
+                    numerocomprobante_sugerido: previewNumeroEmitir > 0 ? previewNumeroEmitir : undefined,
                 }),
             });
-            detenerRotacionMensajesProceso();
             registrarControlTiemposEmision(data, tInicioEmisionMs);
             mostrarResultadoEmisionFactura(data);
+            avanzarPreviewTrasEmision(data);
+            setFacturacionLoading(false);
+            limpiarEstadoCuentaActiva();
+            void refrescarProximoComprobanteArca();
             cargarMesas();
             cargarCuentasActivas();
             if (modoSeleccion === 'waitry') {
                 void cargarOrdenesWaitry({ refresh: true });
             }
-            limpiarEstadoCuentaActiva();
         } catch (e) {
-            const detalleErr = (e.payload && e.payload.factura) ? 'Comprobante: ' + e.payload.factura : '';
+            const dataErr = e.payload || {};
+            if (dataErr.venta_id || dataErr.factura) {
+                limpiarEstadoCuentaActiva();
+                cargarMesas();
+                cargarCuentasActivas();
+            }
+            const detalleErr = dataErr.factura ? 'Comprobante: ' + dataErr.factura : '';
             if (debeUsarAvisoPersistente(e.message, 'error')) {
                 mostrarAvisoPersistente(e.message, 'error', {
                     titulo: 'Error al facturar',
@@ -7521,6 +7711,7 @@
 
         try {
             await cargarConfigPv();
+            void refrescarProximoComprobanteArca();
         } catch (e) {
             const msg = e.message || String(e);
             const esSesion = e.httpStatus === 401 || e.httpStatus === 419 || e.httpStatus === 403;

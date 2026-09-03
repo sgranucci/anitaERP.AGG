@@ -117,6 +117,7 @@ return [
         // Días calendario inclusive hasta hoy que audita el cron diario (--desde / --hasta).
         'ventana_dias' => max(1, (int) env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_VENTANA_DIAS', 7)),
         // Ante discrepancia: repara Anita (ctamov/recepmae) y, si falta II en devolución, recuadra asiento+II.
+        // Si el período está cerrado no repara: avisa en el mail para revisión manual.
         'auto_reparar' => filter_var(env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_AUTO_REPARAR', true), FILTER_VALIDATE_BOOLEAN),
     ],
 
