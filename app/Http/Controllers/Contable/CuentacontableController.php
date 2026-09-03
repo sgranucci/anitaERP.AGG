@@ -353,7 +353,7 @@ class CuentacontableController extends Controller
         return $this->cuentacontableRepository->findPorCodigo($empresa_id, $codigo);
     }
 
-    public function leerCuentaContableCentroCosto($cuentacontable_id)
+    public function leerCuentaContableCentroCosto(Request $request, $cuentacontable_id)
     {
         $cuentacontable = $this->cuentacontableRepository->find($cuentacontable_id);
 
@@ -362,7 +362,7 @@ class CuentacontableController extends Controller
                 $centrocosto = $this->cuentacontable_centrocostoRepository->leeCuentacontable_Centrocosto($cuentacontable->id);
 
                 if (count($centrocosto) > 0) {
-                    return $centrocosto;
+                    return $this->incluirCentrocostoActualEnLista($centrocosto, (int) $request->query('incluir', 0));
                 }
 
                 return $this->centrocostoRepository->all();
@@ -372,6 +372,40 @@ class CuentacontableController extends Controller
         }
 
         return 'Cuenta inexistente';
+    }
+
+    /**
+     * La SP / asiento puede traer un CC que no está en la matriz de la cuenta.
+     * Si no se agrega, el combo no lo muestra y el grabado del IE falla.
+     *
+     * @param  \Illuminate\Support\Collection<int, mixed>  $centrocostos
+     * @return \Illuminate\Support\Collection<int, mixed>
+     */
+    private function incluirCentrocostoActualEnLista($centrocostos, int $incluirId)
+    {
+        if ($incluirId <= 0) {
+            return $centrocostos;
+        }
+
+        $yaEsta = $centrocostos->contains(static function ($cc) use ($incluirId) {
+            return (int) ($cc->id ?? 0) === $incluirId;
+        });
+        if ($yaEsta) {
+            return $centrocostos;
+        }
+
+        $extra = $this->centrocostoRepository->find($incluirId);
+        if (! $extra) {
+            return $centrocostos;
+        }
+
+        $centrocostos->push((object) [
+            'id' => (int) $extra->id,
+            'codigo' => $extra->codigo,
+            'nombre' => $extra->nombre,
+        ]);
+
+        return $centrocostos;
     }
 
     /**

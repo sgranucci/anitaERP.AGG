@@ -172,34 +172,48 @@ var totalHaberAsiento = 0;
     	});
     }
 
+	function urlCentrocostoCuentaContable(cuentacontable_id, centrocosto_id) {
+		var url = carpetaBase+'/contable/cuentacontable/leercuentacontablecentrocosto/'+cuentacontable_id;
+		var cc = parseInt(centrocosto_id || '0', 10) || 0;
+		if (cc > 0) {
+			url += (url.indexOf('?') === -1 ? '?' : '&') + 'incluir=' + cc;
+		}
+		return url;
+	}
+
+	function llenarSelectCentroCostoAsiento($sel, data, centrocosto_id) {
+		if (data === "No maneja centro de costo" || data === "Cuenta inexistente") {
+			$sel.empty();
+			$sel.append('<option value="0" selected>Sin CC</option>');
+			$sel.attr("readonly", true);
+			return;
+		}
+
+		var cta = $.map(data, function(value, index){
+			return [value];
+		});
+		$sel.empty();
+		$sel.append('<option value="">-- Seleccione CC --</option>');
+		var seleccionado = false;
+		$.each(cta, function(index,value){
+			if (value.id == centrocosto_id) {
+				$sel.append('<option value="'+value.id+'" selected>'+value.codigo+'-'+value.nombre+'</option>');
+				seleccionado = true;
+			} else {
+				$sel.append('<option value="'+value.id+'">'+value.codigo+'-'+value.nombre+'</option>');
+			}
+		});
+		if (!seleccionado && parseInt(centrocosto_id || '0', 10) > 0) {
+			$sel.append('<option value="'+centrocosto_id+'" selected>'+centrocosto_id+'</option>');
+		}
+		$sel.attr("readonly", false);
+	}
+
 	// Devuelve la promesa del $.get para que el llamador pueda esperar el alta de los CC.
 	function completarCentroCostoAsiento(ptrcodigo, cuentacontable_id, centrocosto_id){
-		let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontablecentrocosto/'+cuentacontable_id;
-
-		return $.get(url_cta, function(data){
-			if (data === "No maneja centro de costo")
-			{
-				$(ptrcodigo).parents("tr").find('.centrocostoasiento').empty();
-				$(ptrcodigo).parents("tr").find('.centrocostoasiento').append('<option value="0" selected>Sin CC</option>');
-				$(ptrcodigo).parents("tr").find('.centrocostoasiento').attr("readonly", true);
-			}
-			else
-			{
-				var cta = $.map(data, function(value, index){
-					return [value];
-				});
-				$(ptrcodigo).parents("tr").find('.centrocostoasiento').empty();
-				$(ptrcodigo).parents("tr").find('.centrocostoasiento').append('<option value="">-- Seleccione CC --</option>');
-				$.each(cta, function(index,value){
-					if (value.id == centrocosto_id)
-						$(ptrcodigo).parents("tr").find('.centrocostoasiento').append('<option value="'+value.id+'" selected>'+value.codigo+'-'+value.nombre+'</option>');
-					else
-						$(ptrcodigo).parents("tr").find('.centrocostoasiento').append('<option value="'+value.id+'">'+value.codigo+'-'+value.nombre+'</option>');
-				});
-			}
+		return $.get(urlCentrocostoCuentaContable(cuentacontable_id, centrocosto_id), function(data){
+			llenarSelectCentroCostoAsiento($(ptrcodigo).parents("tr").find('.centrocostoasiento'), data, centrocosto_id);
         });
-        setTimeout(() => {
-        }, 3000);
     }
 
 	function leeCentroCostoAsiento(ptr) 
@@ -244,32 +258,9 @@ var totalHaberAsiento = 0;
 	}
 
 	function completarCentroCosto(ptrcodigo, cuentacontable_id, centrocosto_id){
-		let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontablecentrocosto/'+cuentacontable_id;
-
-		return $.get(url_cta, function(data){
-			if (data === "No maneja centro de costo")
-			{
-				$(ptrcodigo).parents("tr").find('.centrocostoasiento').empty();
-				$(ptrcodigo).parents("tr").find('.centrocostoasiento').append('<option value="0" selected>Sin CC</option>');
-				$(ptrcodigo).parents("tr").find('.centrocostoasiento').attr("readonly", true);
-			}
-			else
-			{
-				var cta = $.map(data, function(value, index){
-					return [value];
-				});
-				$(ptrcodigo).parents("tr").find('.centrocostoasiento').empty();
-				$(ptrcodigo).parents("tr").find('.centrocostoasiento').append('<option value="">-- Seleccione CC --</option>');
-				$.each(cta, function(index,value){
-					if (value.id == centrocosto_id)
-						$(ptrcodigo).parents("tr").find('.centrocostoasiento').append('<option value="'+value.id+'" selected>'+value.codigo+'-'+value.nombre+'</option>');
-					else
-						$(ptrcodigo).parents("tr").find('.centrocostoasiento').append('<option value="'+value.id+'">'+value.codigo+'-'+value.nombre+'</option>');
-				});
-			}
+		return $.get(urlCentrocostoCuentaContable(cuentacontable_id, centrocosto_id), function(data){
+			llenarSelectCentroCostoAsiento($(ptrcodigo).parents("tr").find('.centrocostoasiento'), data, centrocosto_id);
         });
-        setTimeout(() => {
-        }, 3000);
     }
 
 	function controlaCentroCosto()

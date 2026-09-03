@@ -380,6 +380,10 @@
 		}
 
 		let url_cta = carpetaBase+'/contable/cuentacontable/leercuentacontablecentrocosto/'+cuentacontable_id;
+		var ccIncluir = parseInt(valorPrev || '0', 10) || 0;
+		if (ccIncluir > 0) {
+			url_cta += '?incluir=' + ccIncluir;
+		}
 
 		$.get(url_cta, function(data){
 			if (data === "No maneja centro de costo" || data === "Cuenta inexistente")
