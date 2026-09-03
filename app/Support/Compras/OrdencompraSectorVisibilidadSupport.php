@@ -5,6 +5,7 @@ namespace App\Support\Compras;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Alcance por sector de legajo de compras (listado de OC y bandeja).
@@ -17,9 +18,40 @@ final class OrdencompraSectorVisibilidadSupport
 {
     public const PERMISO_VER_TODOS = 'listar-todos-sector-legajo-compra';
 
+    /**
+     * El permiso vive en un solo menu_id (tabla permiso), pero se ofrece en ambos
+     * ítems de menú-rol: Bierzo no usa la bandeja de legajos.
+     *
+     * @var list<string>
+     */
+    public const URLS_MENU_PERMISO_VER_TODOS = [
+        'compras/legajos',
+        'compras/ordencompra',
+    ];
+
     public static function puedeVerTodos(): bool
     {
         return can(self::PERMISO_VER_TODOS, false);
+    }
+
+    /**
+     * Slugs que el modal menú-rol debe listar aunque el permiso esté colgado de otro menú.
+     *
+     * @param  list<int>  $menuIds
+     * @return list<string>
+     */
+    public static function slugsExtraParaMenuIds(array $menuIds): array
+    {
+        if ($menuIds === []) {
+            return [];
+        }
+
+        $hayUrl = DB::table('menu')
+            ->whereIn('id', $menuIds)
+            ->whereIn('url', self::URLS_MENU_PERMISO_VER_TODOS)
+            ->exists();
+
+        return $hayUrl ? [self::PERMISO_VER_TODOS] : [];
     }
 
     public static function sectorUsuarioId(): ?int
