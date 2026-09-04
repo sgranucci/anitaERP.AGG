@@ -315,9 +315,15 @@ $(function () {
 		var $tbody = $('#tabla-articulos-requisicion tbody');
 		var $table = $('#tabla-articulos-requisicion');
 		var $first = $tbody.find('tr.item-requisicion-articulo').first();
+		var $firstSub = $first.next('tr.item-requisicion-articulo-sub');
+		if (!$first.length) {
+			return;
+		}
 		var $clone = $first.clone();
+		var $cloneSub = $firstSub.length ? $firstSub.clone() : $();
 		$clone.removeClass('req-requisicion-linea-cerrada').removeAttr('title');
 		$clone.find('input,select').val('');
+		$clone.find('.req-ta-detalle-linea').val('');
 		$clone.find('select.ms-color-id, select.ms-talle-id').val('').attr('data-selected', '');
 		$clone.attr('data-maneja-stock-color-talle', '0');
 		reqLimpiarCantidadAlternativaHint($clone);
@@ -328,6 +334,12 @@ $(function () {
 			$(this).prop('selectedIndex', 0);
 		});
 		$tbody.append($clone);
+		if ($cloneSub.length) {
+			$tbody.append($cloneSub);
+		}
+		if (typeof window.reqRefreshDetalleLineaBadge === 'function') {
+			window.reqRefreshDetalleLineaBadge($clone);
+		}
 		if (typeof window.reqLineasAplicarPatronFila === 'function') {
 			window.reqLineasAplicarPatronFila($clone);
 		} else {
@@ -358,11 +370,13 @@ $(function () {
 		event.preventDefault();
 		var $tbody = $('#tabla-articulos-requisicion tbody');
 		var $rows = $tbody.find('tr.item-requisicion-articulo');
+		var $tr = $(this).closest('tr.item-requisicion-articulo');
+		var $sub = $tr.next('tr.item-requisicion-articulo-sub');
 		if ($rows.length > 1) {
-			$(this).closest('tr.item-requisicion-articulo').remove();
+			$sub.remove();
+			$tr.remove();
 		} else {
-			var $tr = $(this).closest('tr.item-requisicion-articulo');
-			$tr.find('input,select').each(function () {
+			$tr.find('input,select,textarea').each(function () {
 				if ($(this).is('select')) {
 					$(this).prop('selectedIndex', 0);
 				} else {
@@ -370,6 +384,9 @@ $(function () {
 				}
 			});
 			reqLimpiarCantidadAlternativaHint($tr);
+			if (typeof window.reqRefreshDetalleLineaBadge === 'function') {
+				window.reqRefreshDetalleLineaBadge($tr);
+			}
 		}
 		if (typeof window.reqLineasScheduleTotales === 'function') {
 			window.reqLineasScheduleTotales();

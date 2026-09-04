@@ -46,6 +46,7 @@ class Cliente_UifService
 	private $cotizacionService;
 	private $clienteUifSexoAprendizajeService;
 	private ModuloAvisoService $moduloAvisoService;
+	private ClienteUifMatrizRiesgoExplicacionService $matrizRiesgoExplicacionService;
 
     public function __construct(Cliente_UifRepositoryInterface $cliente_uifrepository,
                                 Cliente_Archivo_UifRepositoryInterface $cliente_archivo_uifrepository,
@@ -59,7 +60,8 @@ class Cliente_UifService
 								Frecuencia_UifRepositoryInterface $frecuencia_uifrepository,
 								CotizacionService $cotizacionservice,
 								ClienteUifSexoAprendizajeService $clienteUifSexoAprendizajeService,
-								ModuloAvisoService $moduloAvisoService
+								ModuloAvisoService $moduloAvisoService,
+								ClienteUifMatrizRiesgoExplicacionService $matrizRiesgoExplicacionService
 								)
     {
 		$this->cliente_uifRepository = $cliente_uifrepository;
@@ -75,6 +77,7 @@ class Cliente_UifService
 		$this->cotizacionService = $cotizacionservice;
 		$this->clienteUifSexoAprendizajeService = $clienteUifSexoAprendizajeService;
 		$this->moduloAvisoService = $moduloAvisoService;
+		$this->matrizRiesgoExplicacionService = $matrizRiesgoExplicacionService;
     }
 
 	public function guardaCliente_Uif($request, $origen = null)
@@ -364,89 +367,11 @@ class Cliente_UifService
 
 	public function calculaRiesgo($cliente_uif_id, $periodo, $inusualidad_uif_id)
 	{
-		if (strlen($periodo) == 5)
-			$periodo = '0'.$periodo;
-
-		// Trae el cliente
-		$cliente_uif = $this->cliente_uifRepository->find($cliente_uif_id);		
-
-		// En base al periodo arma rango de fechas
-		$anio = substr($periodo,2,5);
-		$mes = substr($periodo,0,2);
-		$dias = cal_days_in_month(CAL_GREGORIAN, $mes, $anio);
-		$fecha = $anio.'-'.$mes.'-01';
-		$desdeFecha = Carbon::createFromFormat('Y-m-d', $fecha); // Pasa a formato fecha
-		$fecha = $anio.'-'.$mes.'-'.$dias;
-		$hastaFecha = Carbon::createFromFormat('Y-m-d', $fecha); // Pasa a formato fecha
-
-		$fecha2 = Carbon::createFromFormat('Y-m-d', '2025-12-31');
-
-		// Trae los premios del mes
-		$montoOperadoMensual = 0;
-		$puntajeJuego = 0;
-		$cantidadVisita = 0;
-		$puntaje = [];
-		foreach ($cliente_uif->cliente_premios_uif as $premio)
-		{
-			if ($desdeFecha < $premio->fechaentrega &&
-				$hastaFecha > $premio->fechaentrega)
-			{
-				// Convierte a pesos
-				$cotizacion = $this->cotizacionService->leeCotizacionDiaria($premio->fechaentrega, $premio->moneda_id);
-				$coeficienteConversion = calculaCoeficienteMoneda(config('cotizacion.ID_MONEDA_DEFAULT'), $premio->moneda_id, $cotizacion);
-				$montoOperadoMensual += ($premio->monto * $coeficienteConversion);
-
-				// Deja el puntaje del ultimo juego del periodo
-				$puntaje[7] = $premio->juegos_uif->puntaje;
-
-				$cantidadVisita++;
-			}
-		}
-
-		// Calcula puntajes
-		$puntaje[1] = $cliente_uif->actividades_uif->puntaje;
-		$puntaje[2] = $cliente_uif->paises_uif->puntaje;
-		$puntaje[3] = $cliente_uif->peps_uif->puntaje;
-		$puntaje[4] = $cliente_uif->provincias_uif->puntaje;
-		$puntaje[5] = $cliente_uif->sos_uif->puntaje;
-
-		// Calcula puntaje de inusualidad
-		$inusualidad_uif = $this->inusualidad_uifRepository->find($inusualidad_uif_id);
-
-		$puntaje[8] = 0;
-		if ($inusualidad_uif)
-			$puntaje[8] = $inusualidad_uif->puntaje;
-
-		// Calcula puntaje en funcion del monto de juego mensual
-		$monto_uif = $this->monto_uifRepository->findPorMonto($montoOperadoMensual);
-
-		$puntaje[9] = 0;
-		foreach($monto_uif as $monto)
-		{
-			$puntaje[9] += $monto->puntaje;
-		}
-		
-		// Calcula puntaje en funcion de frecuencia
-		$frecuencia_uif = $this->frecuencia_uifRepository->findPorFrecuencia($cantidadVisita);
-
-		$puntaje[6] = 0;
-		foreach($frecuencia_uif as $frecuencia)
-		{
-			$puntaje[6] += $frecuencia->puntaje;
-		}
-
-		// Lee factor de riesgo para sacar ponderacion
-		$factorriesgo_uif = $this->factorriesgo_uifRepository->all();
-		$valorPuntaje = 0;
-		foreach($factorriesgo_uif as $factor)
-			$valorPuntaje += $factor->ponderacion * $puntaje[$factor->id] / 100.;
-
-		// Busca en puntaje el valor calculado para sacar el riesgo
-		$puntaje_uif = $this->puntaje_uifRepository->findPorPuntaje($valorPuntaje);
-
-		$riesgo = 'FALTAN DATOS';
-		if ($puntaje_uif)
-			$riesgo = $puntaje_uif->riesgo;
+		$riesgo = $this->matrizRiesgoExplicacionService->riesgoDesdePeriodoMmYyyy(
+			(int) $cliente_uif_id,
+			(string) $periodo,
+			(int) $inusualidad_uif_id
+		);
 
 		return ['riesgo' => $riesgo];
 	}

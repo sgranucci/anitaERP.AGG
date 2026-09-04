@@ -58,10 +58,18 @@ class PagoproveedorListadoFiltros
         'menor' => 'Hasta',
     ];
 
-    public static function resolverDesdeRequest(Request $request, ?string $busquedaRuta = null): array
-    {
+    public static function resolverDesdeRequest(
+        Request $request,
+        ?string $busquedaRuta = null,
+        ?int $empresaDefault = null
+    ): array {
+        [$empresaId, $empresaScope] = self::resolverEmpresaExterna($request, $empresaDefault);
+
         if (FiltrosListadoRequest::solicitudLimpiaFiltros($request)) {
-            return self::filtrosVacios();
+            return array_merge(self::filtrosVacios(), [
+                'empresa_id' => $empresaId,
+                'empresa_scope' => $empresaScope,
+            ]);
         }
 
         $valor = FiltrosListadoRequest::valorBusqueda($request, $busquedaRuta);
@@ -94,37 +102,37 @@ class PagoproveedorListadoFiltros
             'valor_hasta' => trim((string) $request->input('filtro_valor_hasta', '')),
             'busqueda' => $valor,
             'busqueda_rapida' => $busquedaRapida,
-            'empresa_id' => (int) $request->input('empresa_id', 0),
+            'empresa_id' => $empresaId,
+            'empresa_scope' => $empresaScope,
         ];
     }
 
+    /**
+     * Filtro externo del index: empresa (default primera asignada) o todas (`empresa_todas=1`).
+     *
+     * @return array{0:?int,1:string}  [empresa_id, empresa_scope]
+     */
+    private static function resolverEmpresaExterna(Request $request, ?int $empresaDefault): array
+    {
+        if ($request->boolean('empresa_todas') || $request->input('empresa_scope') === 'todas') {
+            return [null, 'todas'];
+        }
+        if ($request->filled('empresa_id')) {
+            return [(int) $request->input('empresa_id'), 'una'];
+        }
+        if ($empresaDefault !== null && $empresaDefault > 0) {
+            return [$empresaDefault, 'una'];
+        }
+
+        return [null, 'todas'];
+    }
+
+    /**
+     * Criterios del panel / búsqueda rápida (sin el filtro externo de empresa).
+     */
     public static function tieneCriteriosAplicados(array $filtros): bool
     {
-        if ((int) ($filtros['empresa_id'] ?? 0) > 0) {
-            return true;
-        }
-
-        if (($filtros['operador'] ?? '') === 'vacio') {
-            return true;
-        }
-
-        if (trim((string) ($filtros['valor'] ?? '')) !== '') {
-            return true;
-        }
-
-        if (trim((string) ($filtros['valor_hasta'] ?? '')) !== '') {
-            return true;
-        }
-
-        if (($filtros['modo'] ?? self::MODO_TODOS) === self::MODO_CAMPO) {
-            return true;
-        }
-
-        if (($filtros['operador'] ?? 'contiene') !== 'contiene') {
-            return true;
-        }
-
-        return false;
+        return self::tieneCriteriosTexto($filtros);
     }
 
     /**
@@ -139,7 +147,8 @@ class PagoproveedorListadoFiltros
             'valor' => '',
             'valor_hasta' => '',
             'busqueda' => '',
-            'empresa_id' => 0,
+            'empresa_id' => null,
+            'empresa_scope' => 'una',
         ];
     }
 
@@ -148,7 +157,8 @@ class PagoproveedorListadoFiltros
      */
     public static function paraQueryString(array $filtros): array
     {
-        $params = [];
+        $params = self::paraQueryStringEmpresa($filtros);
+
         if (($filtros['modo'] ?? self::MODO_TODOS) !== self::MODO_TODOS) {
             $params['filtro_modo'] = $filtros['modo'];
         }
@@ -164,11 +174,25 @@ class PagoproveedorListadoFiltros
         if (! empty($filtros['valor_hasta'])) {
             $params['filtro_valor_hasta'] = $filtros['valor_hasta'];
         }
-        if ((int) ($filtros['empresa_id'] ?? 0) > 0) {
-            $params['empresa_id'] = (int) $filtros['empresa_id'];
-        }
 
         return $params;
+    }
+
+    /**
+     * Solo el filtro externo de empresa (para Limpiar texto sin perder empresa).
+     *
+     * @return array<string, int>
+     */
+    public static function paraQueryStringEmpresa(array $filtros): array
+    {
+        if (($filtros['empresa_scope'] ?? 'una') === 'todas') {
+            return ['empresa_todas' => 1];
+        }
+        if (! empty($filtros['empresa_id'])) {
+            return ['empresa_id' => (int) $filtros['empresa_id']];
+        }
+
+        return [];
     }
 
     /**
@@ -176,7 +200,7 @@ class PagoproveedorListadoFiltros
      */
     public static function aplicar(Builder $query, array $filtros): void
     {
-        if ((int) ($filtros['empresa_id'] ?? 0) > 0) {
+        if (! empty($filtros['empresa_id'])) {
             $query->where('pagoproveedor.empresa_id', (int) $filtros['empresa_id']);
         }
 

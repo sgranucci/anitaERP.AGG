@@ -132,6 +132,55 @@ class ArcaWsfeFacturaElectronicaServiceBuildersTest extends TestCase
         self::assertNull($this->invoke('buildCbtesAsoc', []));
     }
 
+    public function test_build_fe_caea_det_request_incluye_cbte_fch_hs_gen(): void
+    {
+        $out = $this->invoke('buildFeCaeaDetRequest', 6, 3, [
+            'fechacomprobante' => '20260801',
+            'cbte_fch_hs_gen' => '20260801143522',
+            'tipodoc' => 96,
+            'numerodocumento' => '30111222',
+            'numerocomprobante' => 1,
+            'total' => 121,
+            'nogravado' => 0,
+            'gravado' => 100,
+            'exento' => 0,
+            'tributo' => 0,
+            'iva' => 21,
+            'moneda' => 'PES',
+            'cotizacion' => 1,
+            'condicioniva_id' => 1,
+            'impuestos' => [],
+            'tributos' => [],
+            'comprobantesasociados' => [],
+        ], '12345678901234', 0);
+
+        self::assertArrayHasKey('CbteFchHsGen', $out);
+        self::assertSame('20260801143522', $out['CbteFchHsGen']);
+        self::assertSame('12345678901234', $out['CAEA']);
+    }
+
+    public function test_build_fe_caea_det_request_exige_cbte_fch_hs_gen_o_fecha(): void
+    {
+        $this->expectException(\InvalidArgumentException::class);
+        $this->expectExceptionMessage('CbteFchHsGen');
+
+        $this->invoke('buildFeCaeaDetRequest', 6, 3, [
+            'fechacomprobante' => '',
+            'tipodoc' => 96,
+            'numerodocumento' => '30111222',
+            'numerocomprobante' => 1,
+            'total' => 100,
+            'nogravado' => 0,
+            'gravado' => 100,
+            'exento' => 0,
+            'tributo' => 0,
+            'iva' => 0,
+            'moneda' => 'PES',
+            'cotizacion' => 1,
+            'condicioniva_id' => 1,
+        ], '1', 0);
+    }
+
     /**
      * Guarda explícita contra la forma envuelta histórica
      * [['AlicIva' => {...}], ['AlicIva' => {...}]] que rompe el SoapClient nativo.

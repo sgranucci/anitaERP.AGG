@@ -7,6 +7,7 @@ use App\Models\Configuracion\Empresa;
 use App\Support\Caja\Flash\FlashCajaLFlashCalculoSupport;
 use App\Support\Caja\Flash\FlashCajaReporteSupport;
 use App\Support\Caja\Flash\FlashReporteAggMapeoSupport;
+use App\Support\Caja\Flash\FlashReporteAggPerfilVistaSupport;
 use App\Support\Caja\Flash\FlashReporteAggXlsxPatchSupport;
 use Carbon\Carbon;
 use RuntimeException;
@@ -34,9 +35,25 @@ class FlashReporteAggExcelService
     public const MARCA_DIA_SIN_DATOS = '-';
 
     /**
-     * @return array{path: string, nombre: string, mime: string, dias: int, empresas: list<string>, imagen_path?: string, tabla_resumen?: list<list<array{texto: string, negrita: bool, rojo: bool, encabezado: bool}>>}
+     * @return array{path: string, nombre: string, mime: string, dias: int, empresas: list<string>, imagen_path?: string, tabla_resumen?: list<list<array{texto: string, negrita: bool, rojo: bool, encabezado: bool}>>, perfil_vista?: string}
      */
-    public function generar(Carbon $desde, Carbon $hasta): array
+    public function generar(Carbon $desde, Carbon $hasta, string $perfilVista = FlashReporteAggPerfilVistaSupport::COMPLETA): array
+    {
+        $perfilVista = FlashReporteAggPerfilVistaSupport::normalizar($perfilVista);
+        if (FlashReporteAggPerfilVistaSupport::esFinanzas($perfilVista)) {
+            $archivo = app(FlashReporteAggFinanzasExcelService::class)->generar($desde, $hasta);
+            $archivo['perfil_vista'] = FlashReporteAggPerfilVistaSupport::FINANZAS;
+
+            return $archivo;
+        }
+
+        return $this->generarCompleto($desde, $hasta);
+    }
+
+    /**
+     * @return array{path: string, nombre: string, mime: string, dias: int, empresas: list<string>, imagen_path?: string, tabla_resumen?: list<list<array{texto: string, negrita: bool, rojo: bool, encabezado: bool}>>, perfil_vista: string}
+     */
+    private function generarCompleto(Carbon $desde, Carbon $hasta): array
     {
         $plantilla = $this->rutaPlantilla();
         if (! is_file($plantilla)) {
@@ -121,6 +138,7 @@ class FlashReporteAggExcelService
             'dias' => $diasConDatos,
             'empresas' => $nombres,
             'tabla_resumen' => $extra['tabla_resumen'] ?? [],
+            'perfil_vista' => FlashReporteAggPerfilVistaSupport::COMPLETA,
         ];
         if (is_file($imagenPath)) {
             $out['imagen_path'] = $imagenPath;

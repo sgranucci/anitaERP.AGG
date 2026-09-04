@@ -4,6 +4,7 @@ namespace App\Services\Compras;
 
 use App\ApiAnita;
 use App\Models\Compras\Requisicion;
+use App\Models\Compras\Requisicion_Articulo;
 use App\Models\Compras\Requisicion_Estado;
 use App\Models\Compras\Ordencompra;
 use App\Models\Stock\Articulo;
@@ -21,6 +22,7 @@ use App\Services\Configuracion\ArbolaprobacionService;
 use App\Support\Compras\RequisicionAnitaColisionSupport;
 use App\Support\Compras\RequisicionAnitaSyncEstado;
 use App\Support\Compras\RequisicionCentrocostoArbolOrigenSupport;
+use App\Support\Compras\RequisicionLineasOcSupport;
 use App\Support\Compras\RequisicionProvisorioSupport;
 use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
 use App\Support\Database\DbContencionSupport;
@@ -587,6 +589,77 @@ class RequisicionService
         }
 
         return ['mensaje' => 'ok'];
+    }
+
+    /**
+     * Cierre administrativo: APROBADA / GENERO ORDEN COMPRA → CUMPLIDA.
+     * Cierra ítems pendientes sin OC (misma etiqueta que el wizard) para no reabrir el circuito.
+     *
+     * @return array{mensaje: string, errores?: string, lineas_cerradas?: int}
+     */
+    public function marcarComoCumplida(int $id): array
+    {
+        $req = $this->requisicionRepository->find($id);
+        if (! $req) {
+            return ['mensaje' => 'error', 'errores' => 'Requisición no encontrada.'];
+        }
+
+        $nombreAprobada = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
+        $nombreGeneroOc = Requisicion_Estado::$enumEstado[array_search('O', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
+        $nombreCumplida = Requisicion_Estado::$enumEstado[array_search('C', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
+        $estado = (string) ($req->estado ?? '');
+
+        $permitidos = [$nombreAprobada, $nombreGeneroOc, 'GENERO OC'];
+        if (! in_array($estado, $permitidos, true)) {
+            return [
+                'mensaje' => 'error',
+                'errores' => 'Solo se puede marcar como CUMPLIDA cuando la requisición está en APROBADA o GENERO ORDEN COMPRA.',
+            ];
+        }
+
+        if (! $this->usuarioPuedeEditarRequisicionEnCompras($req)) {
+            return [
+                'mensaje' => 'error',
+                'errores' => 'No puede actuar sobre esta requisición en compras: su oficina de compra no coincide con la de la requisición.',
+            ];
+        }
+
+        if ($estado === $nombreCumplida) {
+            return ['mensaje' => 'ok', 'lineas_cerradas' => 0];
+        }
+
+        DB::beginTransaction();
+        try {
+            $pendientes = RequisicionLineasOcSupport::idsPendientesOc($id);
+            $lineasCerradas = 0;
+            if ($pendientes !== []) {
+                $lineasCerradas = Requisicion_Articulo::query()
+                    ->where('requisicion_id', $id)
+                    ->whereIn('id', $pendientes)
+                    ->update(['precio_origen_etiqueta' => RequisicionLineasOcSupport::etiquetaLineaCerradaSinOc()]);
+            }
+
+            $observacion = $lineasCerradas > 0
+                ? 'Marcada como CUMPLIDA (cierre administrativo; '.$lineasCerradas.' ítem(es) pendientes cerrados sin OC)'
+                : 'Marcada como CUMPLIDA (cierre administrativo)';
+
+            $this->requisicion_estadoRepository->creaEstado(
+                $id,
+                Carbon::now()->toDateTimeString(),
+                $nombreCumplida,
+                Auth::user()->id,
+                $observacion
+            );
+            $this->requisicionRepository->update(['estado' => $nombreCumplida], $id);
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollback();
+
+            return ['mensaje' => 'error', 'errores' => $e->getMessage()];
+        }
+
+        return ['mensaje' => 'ok', 'lineas_cerradas' => $lineasCerradas];
     }
 
     public function actualizaRequisicion($request, $id)

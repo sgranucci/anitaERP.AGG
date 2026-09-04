@@ -821,7 +821,7 @@ function mayorPlanoDispararDescargaBlob(blob, filename) {
 function mayorPlanoDescargarExportacion(href) {
     var formato = mayorPlanoFormatoExportacion(href);
     var subtitulo = formato === 'Excel plano'
-        ? 'Armando Excel plano con el mayor ya consultado. Pulse Esc para cerrar este aviso.'
+        ? 'Armando CSV del Excel plano (emisor, OC, CAPEX, facturas; sin IA). El aviso se cierra al terminar la descarga. Esc cancela el aviso.'
         : 'Generando ' + formato + '… Puede demorar según el período. Pulse Esc para cerrar este aviso.';
 
     mayorPlanoMostrarOverlay('Exportando el mayor…', subtitulo);
@@ -858,11 +858,12 @@ function mayorPlanoDescargarExportacion(href) {
             throw new Error('Error HTTP ' + res.status + ' al exportar.');
         }
         var fallback = 'mayor_plano';
-        if (formato === 'Excel' || formato === 'Excel plano') {
+        if (formato === 'Excel') {
             fallback += '.xlsx';
         } else if (formato === 'PDF') {
             fallback += '.pdf';
-        } else if (formato === 'CSV') {
+        } else {
+            // Excel plano y CSV salen como .csv
             fallback += '.csv';
         }
         var filename = mayorPlanoNombreArchivoDisposition(res.headers.get('Content-Disposition'), fallback);
@@ -913,7 +914,7 @@ function mayorPlanoActivarOverlayProceso() {
             }
             mayorPlanoMostrarOverlay(
                 'Calculando el mayor…',
-                'Puede demorar según el período y las empresas. No cierre la página.'
+                'Un mes sale en pantalla. Períodos largos (más de un mes) se encolan y el Excel plano (CSV con emisor/OC/CAPEX/facturas) llega por mail. No cierres la página hasta ver el aviso.'
             );
         });
     });

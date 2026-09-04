@@ -373,7 +373,7 @@ class OrdencompraLegajoBandejaPaqueteService
 
         $empresaId = (int) $oc->empresa_id;
         $proveedorId = (int) $oc->proveedor_id;
-        $tipoId = OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraDefaultId();
+        $tipoId = OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraIdParaOrdencompra($oc);
         if ($empresaId <= 0 || $proveedorId <= 0 || $tipoId <= 0) {
             throw ValidationException::withMessages([
                 'precarga_id' => 'No se puede crear la precarga del legajo para asignar la COM (faltan empresa, proveedor o tipo de factura).',
@@ -556,7 +556,7 @@ class OrdencompraLegajoBandejaPaqueteService
         }
 
         $tipoId = (int) ($precarga->tipotransaccion_compra_id
-            ?: OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraDefaultId());
+            ?: OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraIdParaOrdencompra($oc));
         $tipoAbrev = (string) (Tipotransaccion_Compra::query()->whereKey($tipoId)->value('abreviatura') ?? 'FAC');
         $fecha = $this->fechaYmdDesdeScanAnita((string) ($fila['ifecha'] ?? ''));
         if ($precarga->fechafactura) {
@@ -644,12 +644,15 @@ class OrdencompraLegajoBandejaPaqueteService
 
     private function etiquetaFactura(Precarga_Comprobante_Proveedor $pre): string
     {
+        $pre->loadMissing('tipotransaccion_compras:id,abreviatura');
+        $abrev = strtoupper(trim((string) ($pre->tipotransaccion_compras->abreviatura ?? '')));
         $letra = trim((string) ($pre->letra ?? ''));
         $suc = (int) ($pre->sucursal ?? 0);
         $nro = (int) ($pre->numerocomprobante ?? 0);
-        $base = ($letra !== '' || $nro > 0)
+        $numero = ($letra !== '' || $nro > 0)
             ? trim(sprintf('%s %04d-%08d', $letra !== '' ? $letra : 'FC', $suc, $nro))
             : 'Factura #'.$pre->id;
+        $base = $abrev !== '' ? $abrev.' '.$numero : $numero;
         if ((string) ($pre->origen_entrada ?? '') === PrecargaComprobanteOrigenEntrada::SCAN_ANITA) {
             return $base.' ('.PrecargaComprobanteOrigenEntrada::etiqueta(PrecargaComprobanteOrigenEntrada::SCAN_ANITA).')';
         }

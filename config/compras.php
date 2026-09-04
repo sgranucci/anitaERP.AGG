@@ -111,4 +111,13 @@ return [
         'limite_mail' => max(10, (int) env('COMPRAS_FACTURA_BORRADOR_AVISO_LIMITE_MAIL', 80)),
     ],
 
+    /*
+    | Reporte sábana de pagos: lectura temporal Anita (pago + auxpag) en 2 lists.
+    | Apagar cuando el circuito de pagos esté 100% en ERP.
+    */
+    'pagos_sabana_anita_habilitada' => filter_var(
+        env('COMPRAS_PAGOS_SABANA_ANITA_HABILITADA', false),
+        FILTER_VALIDATE_BOOLEAN
+    ),
+
 ];

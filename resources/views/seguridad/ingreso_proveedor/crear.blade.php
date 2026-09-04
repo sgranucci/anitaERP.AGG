@@ -21,6 +21,11 @@
             <div class="card-header">
                 <h3 class="card-title">Crear Ticket de Ingreso de Proveedor</h3>
                 <div class="card-tools">
+                    @include('includes.ayuda.boton-guia', [
+                        'slug' => 'ingreso-proveedores',
+                        'titulo' => 'Guía: carga de tickets de ingreso de proveedores',
+                        'clase' => 'btn btn-light btn-sm mr-1',
+                    ])
                     @if (!empty($soloConsulta))
                         <button type="button" class="btn btn-secondary btn-sm" onclick="window.close()">
                             <i class="fa fa-fw fa-times"></i> Cerrar solapa

@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\Schema;
  *
  * Orden de resolución (ver también config/stock.php → precio_ultima_compra):
  * Entre candidatos con precio &gt; 0 gana la fecha más reciente; empate → COM &gt; entrada ERP &gt; Anita.
- * 1. ERP COM: historia OC / recepción confirmada
+ * 1. ERP COM: historia OC / recepción confirmada (cigarrillos: precio línea + II/u, como a-stock.c)
  * 2. ERP entrada: TRA confirmada (precio destino) o movimiento con cantidad &gt; 0
  * 3. Anita: stkmae.stkm_pre_compra3 unificado entre empresas (fecha máx.)
  * 4. Fallback: articulo.costo / articulo.ppp / articulo.precio
@@ -527,15 +527,25 @@ final class ArticuloPrecioUltimaCompraSupport
 
         $candidatos = [];
 
+        $columnasHistoria = ['articulo_id', 'precio_nuevo', 'fecha'];
+        if (Schema::hasColumn('ordencompra_articulo_precio_historia', 'recepcion_proveedor_id')) {
+            $columnasHistoria[] = 'recepcion_proveedor_id';
+        }
+
         $historia = Ordencompra_Articulo_Precio_Historia::query()
             ->whereIn('articulo_id', $articuloIds)
             ->orderByDesc('fecha')
             ->orderByDesc('id')
-            ->get(['articulo_id', 'precio_nuevo', 'fecha']);
+            ->get($columnasHistoria);
 
         foreach ($historia as $fila) {
             $articuloId = (int) $fila->articulo_id;
             if ($articuloId <= 0 || isset($candidatos[$articuloId])) {
+                continue;
+            }
+            // Historia nacida de una COM: el neto de línea no incluye II.
+            // La recepción (abajo) aplica precio + II/u como a-stock.c.
+            if ((int) ($fila->recepcion_proveedor_id ?? 0) > 0) {
                 continue;
             }
             $precio = (float) $fila->precio_nuevo;
@@ -571,9 +581,12 @@ final class ArticuloPrecioUltimaCompraSupport
                 'rpa.precio',
                 'rpa.moneda_id',
                 'rpa.cotizacion',
+                'rp.id as recepcion_id',
                 'rp.fecha',
             ]);
 
+        /** @var array<int, array{precio_local: float, moneda_id: int|null, ref_ts: int, recepcion_id: int}> $pendientes */
+        $pendientes = [];
         foreach ($recepciones as $fila) {
             $articuloId = (int) $fila->articulo_id;
             $precioRaw = (float) ($fila->precio ?? 0);
@@ -594,12 +607,60 @@ final class ArticuloPrecioUltimaCompraSupport
             if (isset($candidatos[$articuloId]) && ($candidatos[$articuloId]['ref_ts'] ?? 0) >= $refTs) {
                 continue;
             }
+            if (isset($pendientes[$articuloId])) {
+                continue;
+            }
+
+            $pendientes[$articuloId] = [
+                'precio_local' => $precio,
+                'moneda_id' => (int) config('cotizacion.ID_MONEDA_DEFAULT', 1),
+                'ref_ts' => $refTs,
+                'recepcion_id' => (int) ($fila->recepcion_id ?? 0),
+            ];
+        }
+
+        if ($pendientes === []) {
+            return $candidatos;
+        }
+
+        $tipoCigarrilloId = RecepcionProveedorImpuestoInternoSupport::tipoArticuloCigarrilloId();
+        $tipoPorArticulo = DB::table('articulo')
+            ->whereIn('id', array_keys($pendientes))
+            ->pluck('tipoarticulo_id', 'id');
+
+        $recepcionIdsCig = [];
+        if ($tipoCigarrilloId !== null) {
+            foreach ($pendientes as $articuloId => $dato) {
+                if ((int) ($tipoPorArticulo[$articuloId] ?? 0) === $tipoCigarrilloId
+                    && ($dato['recepcion_id'] ?? 0) > 0) {
+                    $recepcionIdsCig[] = (int) $dato['recepcion_id'];
+                }
+            }
+        }
+        $iiPorRecepcion = RecepcionProveedorImpuestoInternoSupport::impuestoInternoPorUnidadPorRecepcionIds(
+            $recepcionIdsCig
+        );
+
+        foreach ($pendientes as $articuloId => $dato) {
+            $esCigarrillo = $tipoCigarrilloId !== null
+                && (int) ($tipoPorArticulo[$articuloId] ?? 0) === $tipoCigarrilloId;
+            $iiUnidad = $esCigarrillo
+                ? (float) ($iiPorRecepcion[(int) $dato['recepcion_id']] ?? 0)
+                : 0.0;
+            $precio = RecepcionProveedorImpuestoInternoSupport::precioUltimaCompraConImpuestoInterno(
+                (float) $dato['precio_local'],
+                $iiUnidad,
+                $esCigarrillo,
+            );
+            if ($precio <= 0) {
+                continue;
+            }
 
             $candidatos[$articuloId] = [
                 'precio' => $precio,
-                'moneda_id' => (int) config('cotizacion.ID_MONEDA_DEFAULT', 1),
+                'moneda_id' => $dato['moneda_id'],
                 'origen' => self::ORIGEN_ERP_COM,
-                'ref_ts' => $refTs,
+                'ref_ts' => $dato['ref_ts'],
             ];
         }
 

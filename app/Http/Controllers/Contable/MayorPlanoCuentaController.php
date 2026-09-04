@@ -2,21 +2,25 @@
 
 namespace App\Http\Controllers\Contable;
 
-use App\Exports\Contable\MayorPlanoCuentaExcelPlanoExport;
 use App\Exports\Contable\MayorPlanoCuentaExport;
 use App\Exports\Contable\MayorPlanoCuentaMultiExport;
 use App\Http\Controllers\Controller;
+use App\Jobs\Contable\GenerarMayorPlanoCuentaJob;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Services\Contable\MayorPlanoCuentaReporteService;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCacheSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCentrocostoFiltroSupport;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaConsultaAsyncSupport;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCsvExportSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaRuntimeSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
 use App\Support\Reportes\ReportePreferenciasUsuario;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Jurosh\PDFMerge\PDFMerger;
 use Maatwebsite\Excel\Excel;
 
@@ -67,10 +71,28 @@ class MayorPlanoCuentaController extends Controller
         $cuadreCobroVentas = null;
 
         if ($request->boolean('consultar') && MayorPlanoCuentaListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            // Período largo (ej. ene–ago): cola + mail. Un mes / rango corto: pantalla.
+            if (MayorPlanoCuentaConsultaAsyncSupport::debeEncolar($filtros)) {
+                return $this->encolarConsultaLarga($filtros);
+            }
+
             MayorPlanoCuentaRuntimeSupport::elevarLimites();
-            $resultado = $this->generarYCachear($filtros);
-            $consultado = true;
-        } elseif (MayorPlanoCuentaListadoFiltros::tieneCriteriosAplicados($filtros)) {
+            // Si el browser cortó a mitad de un run anterior, el cache puede estar listo.
+            if ($this->leerCache($filtros) === null) {
+                ignore_user_abort(true);
+                $this->generarYCachear($filtros);
+            }
+
+            // PRG: no armar HTML en la misma request.
+            return redirect()
+                ->route('mayor_plano_cuenta', MayorPlanoCuentaListadoFiltros::paraQueryString($filtros))
+                ->with('mensaje', 'Mayor listo. Mostrando resultado desde cache.');
+        }
+
+        // Tras encolar período largo: no pintar cache viejo (engañaba: flash verde 3s + grilla enorme).
+        $omitirCachePantalla = (bool) session('mayor_plano_async_pendiente');
+
+        if (! $omitirCachePantalla && MayorPlanoCuentaListadoFiltros::tieneCriteriosAplicados($filtros)) {
             $resultado = $this->leerCache($filtros);
             if ($resultado !== null) {
                 $consultado = true;
@@ -78,6 +100,8 @@ class MayorPlanoCuentaController extends Controller
         }
 
         if ($consultado && $resultado !== null) {
+            MayorPlanoCuentaRuntimeSupport::elevarLimites();
+            $t0 = microtime(true);
             $totales = $this->armarTotalesDesdeResultado($resultado);
             $resumen = $this->reporteService->resumenPorCuenta($resultado);
             $resumenCc = $this->reporteService->resumenPorCentrocosto($resultado);
@@ -87,10 +111,14 @@ class MayorPlanoCuentaController extends Controller
             $cuadreCobroVentas = $soloTotalesVentas
                 ? $this->reporteService->cuadreCobroVentasDesdeResumen($resumen)
                 : null;
-            $filasAplanadas = $soloTotalesVentas
-                ? []
-                : $this->reporteService->aplanarFilas($resultado, $filtros, false);
-            $filas = $this->reporteService->paginarFilas($filasAplanadas, $perPage);
+            $filas = $soloTotalesVentas
+                ? $this->reporteService->paginarFilas([], $perPage)
+                : $this->reporteService->aplanarYPaginarParaPantalla($resultado, $filtros, $perPage);
+            \Illuminate\Support\Facades\Log::info('mayor_plano_cuenta.render_pantalla', [
+                'lineas' => (int) ($resultado['totales']['lineas'] ?? 0),
+                'ms' => round((microtime(true) - $t0) * 1000, 1),
+                'mem_mb' => round(memory_get_usage(true) / 1048576, 1),
+            ]);
         }
 
         $filtrosQuery = MayorPlanoCuentaListadoFiltros::paraQueryString($filtros);
@@ -179,17 +207,30 @@ class MayorPlanoCuentaController extends Controller
         // Reutilizar resultado de pantalla (evita regenerar Anita al exportar).
         $resultado = $this->obtenerResultado($filtros);
         $formatoNorm = strtoupper($formato);
+        $lineas = (int) ($resultado['totales']['lineas'] ?? 0);
 
+        // Excel plano: siempre CSV streameado (mismas columnas enriquecidas).
+        // PhpSpreadsheet FromView arma HTML de decenas de MB y traba el download (~17k filas).
         if ($formatoNorm === 'EXCEL_PLANO') {
-            if (! empty($filtros['solo_movimientos_ventas'])) {
-                return (new MayorPlanoCuentaExport($this->reporteService))
-                    ->parametros($filtros, $resultado)
-                    ->download($this->armarNombreArchivoExport($filtros, 'xlsx'));
+            ignore_user_abort(true);
+            Log::info('mayor_plano_cuenta.export_excel_plano_csv', [
+                'lineas' => $lineas,
+                'usuario_id' => (int) (auth()->id() ?? 0),
+            ]);
+
+            return $this->descargarCsvPlanoStream($filtros, $resultado, true);
+        }
+
+        // PhpSpreadsheet / DomPDF no bancan volúmenes grandes: CSV streameado.
+        if ($lineas > 15000 && in_array($formatoNorm, ['EXCEL', 'PDF', 'CSV'], true)) {
+            if ($formatoNorm === 'PDF') {
+                return redirect()->route('mayor_plano_cuenta', MayorPlanoCuentaListadoFiltros::paraQueryString($filtros))
+                    ->with('error', 'El PDF no admite este volumen ('.$lineas.' movimientos). Use Excel plano o CSV.');
             }
 
-            return (new MayorPlanoCuentaExcelPlanoExport($this->reporteService))
-                ->parametros($filtros, $resultado)
-                ->download($this->armarNombreArchivoExport($filtros, 'xlsx', 'mayor_plano_anita'));
+            ignore_user_abort(true);
+
+            return $this->descargarCsvPlanoStream($filtros, $resultado, $formatoNorm === 'CSV');
         }
 
         $filas = $this->reporteService->aplanarFilas($resultado, $filtros, true);
@@ -253,6 +294,105 @@ class MayorPlanoCuentaController extends Controller
     }
 
     /**
+     * Excel plano → CSV en disco y descarga (sin PhpSpreadsheet ni IA).
+     * Escribir el archivo completo evita buffers de Apache/proxy que tragan el stream.
+     *
+     * @param  array<string, mixed>  $filtros
+     * @param  array<string, mixed>  $resultado
+     */
+    private function descargarCsvPlanoStream(array $filtros, array $resultado, bool $estiloAnita)
+    {
+        $nombre = $this->armarNombreArchivoExport(
+            $filtros,
+            'csv',
+            $estiloAnita ? 'mayor_plano_anita' : 'mayor_analitico_cuenta',
+        );
+
+        $stamp = now()->format('Ymd_His');
+        $usuarioId = (int) (auth()->id() ?? 0);
+        $rutaRelativa = 'exports/mayor_plano_sync/'.$stamp.'_u'.$usuarioId.'_'.$nombre;
+        $rutaAbsoluta = storage_path('app/public/'.$rutaRelativa);
+
+        $t0 = microtime(true);
+        $export = MayorPlanoCuentaCsvExportSupport::escribirCsvExcelPlano(
+            $this->reporteService,
+            $resultado,
+            $filtros,
+            $rutaAbsoluta,
+        );
+        Log::info('mayor_plano_cuenta.export_excel_plano_csv_ok', [
+            'lineas' => $export['filas'],
+            'bytes' => $export['bytes'],
+            'ms' => round((microtime(true) - $t0) * 1000, 1),
+            'archivo' => $rutaRelativa,
+        ]);
+
+        if ($export['bytes'] <= 0 || ! is_file($rutaAbsoluta)) {
+            return redirect()
+                ->route('mayor_plano_cuenta', MayorPlanoCuentaListadoFiltros::paraQueryString($filtros))
+                ->with('mensaje-error', 'No se pudo generar el CSV del Excel plano.');
+        }
+
+        return response()->download($rutaAbsoluta, $nombre, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Cache-Control' => 'no-store, no-cache, must-revalidate',
+        ]);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    private function encolarConsultaLarga(array $filtros)
+    {
+        $usuario = auth()->user();
+        $usuarioId = (int) (auth()->id() ?? 0);
+        $email = trim((string) ($usuario->email ?? ''));
+
+        if ($usuarioId <= 0) {
+            abort(403);
+        }
+
+        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return redirect()
+                ->route('mayor_plano_cuenta', MayorPlanoCuentaListadoFiltros::paraQueryString($filtros))
+                ->with('mensaje-error', 'Tu usuario no tiene un email válido; no se puede enviar el mayor de período largo por correo. Pedí un mes por pantalla o cargá el email en tu usuario.');
+        }
+
+        try {
+            Bus::dispatch(new GenerarMayorPlanoCuentaJob($filtros, $usuarioId));
+        } catch (\Throwable $e) {
+            Log::error('mayor_plano_cuenta.async.dispatch_fallo', [
+                'usuario_id' => $usuarioId,
+                'error' => $e->getMessage(),
+            ]);
+
+            return redirect()
+                ->route('mayor_plano_cuenta', MayorPlanoCuentaListadoFiltros::paraQueryString($filtros))
+                ->with('mensaje-error', 'No se pudo encolar el mayor: '.$e->getMessage());
+        }
+
+        $periodo = $this->reporteService->formatearPeriodoTexto($filtros);
+        $dias = MayorPlanoCuentaConsultaAsyncSupport::diasPeriodo($filtros);
+        Log::info('mayor_plano_cuenta.async.encolado', [
+            'usuario_id' => $usuarioId,
+            'email' => $email,
+            'dias' => $dias,
+            'periodo' => $periodo,
+            'firma' => MayorPlanoCuentaListadoFiltros::firma($filtros),
+        ]);
+
+        return redirect()
+            ->route('mayor_plano_cuenta', MayorPlanoCuentaListadoFiltros::paraQueryString($filtros))
+            ->with(
+                'mensaje-aviso',
+                'Período largo ('.$dias.' días'.($periodo !== '' ? ', '.$periodo : '').'): el mayor se genera en segundo plano. '
+                .'Cuando termine te llega un mail a '.$email.' con el Excel plano (CSV: emisor, OC, CAPEX, facturas). '
+                .'Podés seguir trabajando; un mes solo sigue saliendo en pantalla. Este aviso no se cierra solo.'
+            )
+            ->with('mayor_plano_async_pendiente', 1);
+    }
+
+    /**
      * @param  array<string, mixed>  $filtros
      * @return array<string, mixed>
      */
@@ -273,6 +413,13 @@ class MayorPlanoCuentaController extends Controller
     private function generarYCachear(array $filtros): array
     {
         $resultado = $this->reporteService->generarDesdeFiltros($filtros);
+        $lineas = (int) ($resultado['totales']['lineas'] ?? 0);
+        \Illuminate\Support\Facades\Log::info('mayor_plano_cuenta.post_generar', [
+            'lineas' => $lineas,
+            'secciones' => count($resultado['secciones'] ?? []),
+            'mem_mb' => round(memory_get_usage(true) / 1048576, 1),
+            'peak_mb' => round(memory_get_peak_usage(true) / 1048576, 1),
+        ]);
         $this->persistirCache($resultado, $filtros);
 
         return $resultado;
@@ -285,12 +432,10 @@ class MayorPlanoCuentaController extends Controller
     private function persistirCache(array $resultado, array $filtros): void
     {
         $firma = MayorPlanoCuentaListadoFiltros::firma($filtros);
-        Cache::store('file')->put($this->cacheKey($filtros), [
-            'firma' => $firma,
-            'resultado' => $resultado,
-        ], now()->addHours(4));
+        // Secciones gzip por archivo: evita serialize del pack completo (OOM ene–ago).
+        MayorPlanoCuentaCacheSupport::guardar($resultado, $filtros);
 
-        // Solo marca de firma en sesión (el payload grande va a file cache).
+        // Solo marca de firma en sesión (el payload grande va a disco).
         session()->forget(self::SESSION_CACHE_KEY);
         session([
             self::SESSION_CACHE_KEY => [
@@ -306,44 +451,22 @@ class MayorPlanoCuentaController extends Controller
     private function leerCache(array $filtros): ?array
     {
         $firma = MayorPlanoCuentaListadoFiltros::firma($filtros);
-        $pack = Cache::store('file')->get($this->cacheKey($filtros));
-
-        if (is_array($pack) && isset($pack['resultado']) && is_array($pack['resultado'])) {
-            if (($pack['firma'] ?? '') === $firma) {
-                return $pack['resultado'];
-            }
-
-            return null;
+        $resultado = MayorPlanoCuentaCacheSupport::recuperar($filtros);
+        if ($resultado !== null) {
+            return $resultado;
         }
 
-        // Migrar cache legacy en sesión (payload completo) → file cache.
+        // Limpiar sesión legacy hinchada (formato viejo con resultado completo).
         $legacy = session(self::SESSION_CACHE_KEY);
-        if (is_array($legacy)
-            && isset($legacy['resultado'])
-            && is_array($legacy['resultado'])
-            && ($legacy['firma'] ?? '') === $firma
-        ) {
-            $this->persistirCache($legacy['resultado'], $filtros);
-
-            return $legacy['resultado'];
-        }
-
         if (is_array($legacy) && isset($legacy['resultado'])) {
             session()->forget(self::SESSION_CACHE_KEY);
         }
 
+        if (is_array($legacy) && ($legacy['firma'] ?? '') !== '' && ($legacy['firma'] ?? '') !== $firma) {
+            return null;
+        }
+
         return null;
-    }
-
-    /**
-     * @param  array<string, mixed>  $filtros
-     */
-    private function cacheKey(array $filtros): string
-    {
-        $userId = (int) (auth()->id() ?? 0);
-
-        // v5: las líneas guardan la entidad del emisor (proveedor, cliente, cuenta de caja).
-        return 'mayor_plano_cuenta_v5_'.$userId.'_'.MayorPlanoCuentaListadoFiltros::firma($filtros);
     }
 
     /**

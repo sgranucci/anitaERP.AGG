@@ -163,7 +163,7 @@ final class ArcaCaeaInformeDatosDesdeAnitaSupport
             'numerocomprobante' => $numero,
             'fechacomprobante' => $fecha,
             'fechavencimiento' => $fechaVto !== '' ? $fechaVto : $fecha,
-            'cbte_fch_hs_gen' => $fecha.'120000',
+            'cbte_fch_hs_gen' => ArcaCaeaCbteFchHsGenSupport::resolverDigits(['fechacomprobante' => $fecha]),
             'total' => $total,
             'nogravado' => 0.0,
             'gravado' => $gravado,

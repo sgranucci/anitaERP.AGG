@@ -7,7 +7,9 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionPagoproveedor;
 use App\Models\Caja\Cheque;
 use App\Models\Compras\Pagoproveedor;
+use App\Models\Compras\Pagoproveedor_Comprobante;
 use App\Models\Compras\Proveedor;
+use App\Models\Compras\Proveedor_Cuentacorriente_Aplicacion;
 use App\Repositories\Caja\CajaRepositoryInterface;
 use App\Repositories\Caja\ChequeraRepositoryInterface;
 use App\Repositories\Compras\PagoproveedorRepositoryInterface;
@@ -16,6 +18,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Services\Compras\PagoproveedorAnularRevertirService;
+use App\Services\Compras\PagoproveedorComprobantePdfService;
 use App\Services\Compras\PagoproveedorService;
 use App\Services\Compras\RetencionesPagoCalculator;
 use App\Support\Compras\PagoproveedorListadoFiltros;
@@ -39,6 +42,7 @@ class PagoproveedorController extends Controller
         private CentrocostoRepositoryInterface $centrocostoRepository,
         private Proveedor_CuentacorrienteRepositoryInterface $proveedorCuentacorrienteRepository,
         private RetencionesPagoCalculator $retencionesPagoCalculator,
+        private PagoproveedorComprobantePdfService $pagoproveedorComprobantePdfService,
     ) {
     }
 
@@ -46,7 +50,7 @@ class PagoproveedorController extends Controller
     {
         can('listar-pagoproveedor');
 
-        $filtros = PagoproveedorListadoFiltros::resolverDesdeRequest($request);
+        $filtros = $this->resolverFiltrosListado($request);
         $filtrosQuery = PagoproveedorListadoFiltros::paraQueryString($filtros);
         $coleccion = $this->pagoproveedorRepository->leePagoproveedor($filtros, true);
         $empresa_query = $this->empresaRepository->allFiltrado();
@@ -67,7 +71,7 @@ class PagoproveedorController extends Controller
         ini_set('memory_limit', '512M');
         ini_set('max_execution_time', '120');
 
-        $filtros = PagoproveedorListadoFiltros::resolverDesdeRequest($request, $busqueda);
+        $filtros = $this->resolverFiltrosListado($request, $busqueda);
         $formato = strtoupper((string) $formato);
 
         if (! in_array($formato, ['PDF', 'EXCEL', 'CSV'], true)) {
@@ -272,6 +276,7 @@ class PagoproveedorController extends Controller
         }
         $proveedorId = (int) $request->query('proveedor_id', 0);
         $empresaId = (int) $request->query('empresa_id', 0);
+        $pagoId = (int) $request->query('pagoproveedor_id', 0);
         if ($proveedorId <= 0 || $empresaId <= 0) {
             return response()->json([
                 'filas' => [],
@@ -293,13 +298,19 @@ class PagoproveedorController extends Controller
             $aviso = 'Sin deuda pendiente en la empresa elegida. Hay comprobantes en: '.$nombres.'.';
         }
 
-        $out = $filas->map(static function ($cc) {
+        $puedeVerComprobante = can('editar-comprobante-proveedor', false)
+            || can('listar-comprobante-proveedor', false);
+
+        $mapearFila = static function ($cc, float $aplicadoOp = 0.0) use ($puedeVerComprobante): array {
             $comp = $cc->comprobante_proveedores;
             $aplicado = (float) ($cc->aplicado ?? 0);
-            $saldo = abs((float) $cc->total + $aplicado);
+            $saldoPendiente = abs((float) $cc->total + $aplicado);
+            // Al editar una OP, el saldo editable incluye lo que esta OP ya aplicó.
+            $saldo = round($saldoPendiente + $aplicadoOp, 4);
+            $compId = $comp ? (int) $comp->id : 0;
 
             return [
-                'id' => $cc->id,
+                'id' => (int) $cc->id,
                 'fecha' => optional($cc->fecha)->format('Y-m-d'),
                 'vencimiento' => optional($cc->fechavencimiento)->format('Y-m-d'),
                 'comprobante' => $comp
@@ -311,14 +322,71 @@ class PagoproveedorController extends Controller
                         $comp->numerocomprobante
                     )
                     : 'CC#'.$cc->id,
+                'comprobante_proveedor_id' => $compId > 0 ? $compId : null,
+                'comprobante_url' => ($compId > 0 && $puedeVerComprobante)
+                    ? route('editar_comprobante_proveedor', [
+                        'id' => $compId,
+                        'origen' => 'modal_consulta',
+                        'vista' => 'consulta',
+                    ])
+                    : null,
                 'moneda_id' => (int) $cc->moneda_id,
                 'moneda' => $cc->monedas?->abreviatura,
                 'cotizacion' => (float) $cc->cotizacion,
                 'total' => (float) $cc->total,
-                'saldo' => round($saldo, 4),
+                'saldo' => $saldo,
+                'aplicado_op' => round($aplicadoOp, 4),
                 'ordencompra_id' => $comp?->ordencompra_id,
             ];
-        })->values();
+        };
+
+        $porCcId = [];
+        foreach ($filas as $cc) {
+            $porCcId[(int) $cc->id] = $mapearFila($cc, 0.0);
+        }
+
+        if ($pagoId > 0) {
+            $aplicaciones = Pagoproveedor_Comprobante::query()
+                ->with([
+                    'proveedor_cuentacorrientes.comprobante_proveedores.tipotransaccion_compras',
+                    'proveedor_cuentacorrientes.monedas',
+                    'proveedor_cuentacorrientes.empresas',
+                ])
+                ->where('pagoproveedor_id', $pagoId)
+                ->get();
+
+            foreach ($aplicaciones as $apl) {
+                $cc = $apl->proveedor_cuentacorrientes;
+                if ($cc === null) {
+                    continue;
+                }
+                if ((int) $cc->empresa_id !== $empresaId) {
+                    continue;
+                }
+                $ccId = (int) $cc->id;
+                $montoApl = abs((float) $apl->montoaplicado);
+                if (isset($porCcId[$ccId])) {
+                    $porCcId[$ccId]['aplicado_op'] = round($montoApl, 4);
+                    $porCcId[$ccId]['saldo'] = round(
+                        (float) $porCcId[$ccId]['saldo'] + $montoApl,
+                        4
+                    );
+                } else {
+                    // Recalcular aplicado de la CC (puede venir sin el select de deuda pendiente).
+                    if (! isset($cc->aplicado)) {
+                        $cc->aplicado = (float) Proveedor_Cuentacorriente_Aplicacion::query()
+                            ->where('proveedor_cuentacorriente_id', $ccId)
+                            ->sum('total');
+                    }
+                    $porCcId[$ccId] = $mapearFila($cc, $montoApl);
+                }
+            }
+        }
+
+        $out = collect($porCcId)->values();
+        if ($out->isEmpty() && $aviso === null && $pagoId <= 0) {
+            $aviso = 'Sin deuda pendiente';
+        }
 
         return response()->json(['filas' => $out, 'aviso' => $aviso]);
     }
@@ -389,42 +457,28 @@ class PagoproveedorController extends Controller
             abort(403);
         }
 
-        $pago = $this->pagoproveedorRepository->find($id);
-        $pdf = Pdf::loadView('compras.pagoproveedor.comprobante', [
-            'pago' => $pago,
-            'retenciones' => $pago->pagoproveedor_retenciones,
-            'aplicaciones' => $pago->pagoproveedor_comprobantes,
-        ])->setPaper('a4');
-
-        $dir = storage_path('pdf/pagoproveedor');
-        if (! is_dir($dir)) {
-            mkdir($dir, 0755, true);
-        }
-        $path = $dir.'/op_'.$pago->id.'.pdf';
-        $pdf->save($path);
-
-        return response()->file($path, [
-            'Content-Type' => 'application/pdf',
-            'Content-Disposition' => 'inline; filename="op_'.$pago->id.'.pdf"',
-        ]);
+        return $this->pagoproveedorComprobantePdfService->generarRespuesta($id);
     }
 
     public function imprimirRetencion(int $id, int $retencionId)
     {
         can('listar-pagoproveedor');
 
-        $pago = $this->pagoproveedorRepository->find($id);
-        $retencion = $pago->pagoproveedor_retenciones->firstWhere('id', $retencionId);
-        if ($retencion === null) {
-            abort(404);
-        }
+        return $this->pagoproveedorComprobantePdfService->streamRetencion($id, $retencionId);
+    }
 
-        $pdf = Pdf::loadView('compras.pagoproveedor.retencion', [
-            'pago' => $pago,
-            'retencion' => $retencion,
-        ])->setPaper('a4');
+    /**
+     * @return array<string, mixed>
+     */
+    private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
+    {
+        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
 
-        return $pdf->stream('retencion_'.$retencion->id.'.pdf');
+        return PagoproveedorListadoFiltros::resolverDesdeRequest(
+            $request,
+            $busquedaRuta,
+            $empresaDefault ? (int) $empresaDefault : null
+        );
     }
 
     /**

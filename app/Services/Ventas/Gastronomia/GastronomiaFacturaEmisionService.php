@@ -370,7 +370,7 @@ final class GastronomiaFacturaEmisionService
                 $lockPv = GastronomiaPuntoventaEmisionLock::adquirir($puntoventaId);
                 $profiler?->marcar('despues_lock_pv');
             } catch (InvalidArgumentException $e) {
-                GastronomiaEmisionProfiler::finalizar($profiler, ['cuenta_id' => $cuenta->id, 'error' => 'lock']);
+                GastronomiaEmisionProfiler::finalizar($profiler, $this->contextoProfileEmision($cuenta, 'lock'));
 
                 return ['error' => $e->getMessage()];
             }
@@ -388,7 +388,6 @@ final class GastronomiaFacturaEmisionService
                 if ($mantenerLockEmisionCompleta) {
                     GastronomiaPuntoventaEmisionLock::liberar($lockPv);
                 }
-                GastronomiaEmisionProfiler::finalizar($profiler, ['cuenta_id' => $cuenta->id, 'error' => 'numeracion_caea']);
 
                 return $this->adjuntarProfileEmision(['error' => $errorReserva], $profiler, $cuenta);
             }
@@ -1033,6 +1032,22 @@ final class GastronomiaFacturaEmisionService
      * @param  array<string, mixed>  $resultado
      * @return array<string, mixed>
      */
+    /**
+     * @return array{cuenta_id:int,origen_pos:?string,error?:string}
+     */
+    private function contextoProfileEmision(CuentaGastronomia $cuenta, ?string $error = null): array
+    {
+        $ctx = [
+            'cuenta_id' => (int) $cuenta->id,
+            'origen_pos' => $cuenta->origen_pos !== null ? (string) $cuenta->origen_pos : null,
+        ];
+        if ($error !== null) {
+            $ctx['error'] = $error;
+        }
+
+        return $ctx;
+    }
+
     private function adjuntarProfileEmision(
         array $resultado,
         ?GastronomiaEmisionProfiler $profiler,
@@ -1043,7 +1058,7 @@ final class GastronomiaFacturaEmisionService
             $etapasLentas = $profiler->etapasMasLentas(5);
         }
 
-        $etapas = GastronomiaEmisionProfiler::finalizar($profiler, ['cuenta_id' => $cuenta->id]);
+        $etapas = GastronomiaEmisionProfiler::finalizar($profiler, $this->contextoProfileEmision($cuenta));
         if (
             $etapas !== null
             && filter_var(config('gastronomia.emision_profile_en_respuesta', false), FILTER_VALIDATE_BOOLEAN)
@@ -1059,6 +1074,9 @@ final class GastronomiaFacturaEmisionService
                 0,
                 (int) config('gastronomia.emision_umbral_advertencia_ms', 10000),
             );
+            $resultado['emision_origen_pos'] = $cuenta->origen_pos !== null
+                ? (string) $cuenta->origen_pos
+                : null;
         }
 
         return $resultado;

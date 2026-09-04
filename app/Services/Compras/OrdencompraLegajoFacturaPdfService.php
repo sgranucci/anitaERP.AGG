@@ -153,7 +153,7 @@ class OrdencompraLegajoFacturaPdfService
                 'empresa_id' => $empresaId,
                 'proveedor_id' => $proveedorId,
                 'tipotransaccion_compra_id' => (int) ($existente->tipotransaccion_compra_id
-                    ?: OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraDefaultId()),
+                    ?: OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraIdParaOrdencompra($oc)),
                 'letra' => (string) ($existente->letra ?: 'A'),
                 'sucursal' => (int) ($existente->sucursal ?? 0),
                 'numerocomprobante' => (int) ($existente->numerocomprobante ?? 0),
@@ -166,7 +166,7 @@ class OrdencompraLegajoFacturaPdfService
             return Precarga_Comprobante_Proveedor::query()->findOrFail($existente->id);
         }
 
-        $tipoId = OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraDefaultId();
+        $tipoId = OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraIdParaOrdencompra($oc);
         if ($tipoId <= 0) {
             throw new RuntimeException('No hay tipo de transacción de compra configurado para la precarga.');
         }

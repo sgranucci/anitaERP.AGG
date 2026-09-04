@@ -239,6 +239,10 @@ class FlashReporteAggSuscripcionSupport
             $activo = filter_var($activo, FILTER_VALIDATE_BOOLEAN);
         }
 
+        $perfilVista = FlashReporteAggPerfilVistaSupport::normalizar(
+            (string) ($datos['perfil_vista'] ?? FlashReporteAggPerfilVistaSupport::COMPLETA)
+        );
+
         return [
             'nombre' => mb_substr($nombre, 0, 160),
             'activo' => (bool) $activo,
@@ -248,6 +252,7 @@ class FlashReporteAggSuscripcionSupport
             'hora' => $hora,
             'periodo_relativo' => $periodoRelativo,
             'mes_fijo' => $mesFijo !== '' ? $mesFijo : null,
+            'perfil_vista' => $perfilVista,
             'destinatarios' => $destinatarios,
             'mensaje' => trim((string) ($datos['mensaje'] ?? '')) ?: null,
         ];

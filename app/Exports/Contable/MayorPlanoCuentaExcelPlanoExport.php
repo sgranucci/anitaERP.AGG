@@ -132,7 +132,7 @@ class MayorPlanoCuentaExcelPlanoExport implements FromView, WithColumnFormatting
 
     private function colUltima(): string
     {
-        return $this->mostrarColumnaCentrocosto() ? 'Q' : 'P';
+        return $this->mostrarColumnaCentrocosto() ? 'S' : 'R';
     }
 
     public function columnFormats(): array
@@ -157,6 +157,8 @@ class MayorPlanoCuentaExcelPlanoExport implements FromView, WithColumnFormatting
                 'O' => NumberFormat::FORMAT_TEXT,
                 'P' => NumberFormat::FORMAT_TEXT,
                 'Q' => NumberFormat::FORMAT_TEXT,
+                'R' => NumberFormat::FORMAT_TEXT,
+                'S' => NumberFormat::FORMAT_TEXT,
             ];
         }
 
@@ -177,6 +179,8 @@ class MayorPlanoCuentaExcelPlanoExport implements FromView, WithColumnFormatting
             'N' => NumberFormat::FORMAT_TEXT,
             'O' => NumberFormat::FORMAT_TEXT,
             'P' => NumberFormat::FORMAT_TEXT,
+            'Q' => NumberFormat::FORMAT_TEXT,
+            'R' => NumberFormat::FORMAT_TEXT,
         ];
     }
 
@@ -200,12 +204,14 @@ class MayorPlanoCuentaExcelPlanoExport implements FromView, WithColumnFormatting
                 'I' => 16,  // Debe
                 'J' => 16,  // Haber
                 'K' => 28,  // Detalle
-                'L' => 12,  // Usuario
-                'M' => 14,  // fecha ult. mod
-                'N' => 11,  // O.Compra
-                'O' => 16,  // proyecto CAPEX
-                'P' => 32,  // Observación de la OC
-                'Q' => 36,  // Numeros de Facturas
+                'L' => 12,  // Cód. emisor
+                'M' => 28,  // Nombre emisor
+                'N' => 12,  // Usuario
+                'O' => 14,  // fecha ult. mod
+                'P' => 11,  // O.Compra
+                'Q' => 16,  // proyecto CAPEX
+                'R' => 32,  // Observación de la OC
+                'S' => 36,  // Numeros de Facturas
             ];
         }
 
@@ -220,12 +226,14 @@ class MayorPlanoCuentaExcelPlanoExport implements FromView, WithColumnFormatting
             'H' => 16,
             'I' => 16,
             'J' => 28,
-            'K' => 12,
-            'L' => 14,
-            'M' => 11,
-            'N' => 16,
-            'O' => 32,
-            'P' => 36,
+            'K' => 12,  // Cód. emisor
+            'L' => 28,  // Nombre emisor
+            'M' => 12,
+            'N' => 14,
+            'O' => 11,
+            'P' => 16,
+            'Q' => 32,
+            'R' => 36,
         ];
     }
 

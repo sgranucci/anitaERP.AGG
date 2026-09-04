@@ -8,24 +8,29 @@
             'col_input' => 'col-lg-7',
         ])
         <input type="hidden" class="codigoempresa" id="codigoempresa" name="codigoempresa" value="{{ $data->empresas->codigo ?? '' }}" readonly>
-        <div class="form-group row">
-            <label for="tipotransaccion_compra" class="col-lg-3 col-form-label">Tipo de transacción</label>
-            <select name="tipotransaccion_compra_id" id="tipotransaccion_compra_id" data-placeholder="Tipo de transacción" class="col-lg-3 form-control required" data-fouc required>
-                <option value="">-- Seleccionar --</option>
-                @foreach($tipotransaccion_compra_query as $key => $value)
-                    @if( (int) $value->id == (int) old('tipotransaccion_compra_id', $data->tipotransaccion_compra_id ?? session('tipotransaccioncobranza_compra_id')))
-                        <option value="{{ $value->id }}" data-abreviatura="{{ $value->abreviatura }}" selected="select">{{ $value->nombre }}</option>    
-                    @else
-                        <option value="{{ $value->id }}" data-abreviatura="{{ $value->abreviatura }}">{{ $value->nombre }}</option>    
-                    @endif
-                @endforeach
+        <div class="form-group row align-items-center">
+            <label for="tipotransaccion_compra" class="col-lg-3 col-form-label text-right pr-2">Tipo de transacci&oacute;n</label>
+            <div class="col-lg-9 d-flex flex-nowrap align-items-center" style="gap: 4px;">
+                <select name="tipotransaccion_compra_id" id="tipotransaccion_compra_id" data-placeholder="Tipo de transacción" class="form-control required" data-fouc required style="min-width: 0; flex: 1 1 auto;">
+                    <option value="">-- Seleccionar --</option>
+                    @foreach($tipotransaccion_compra_query as $key => $value)
+                        @php
+                            $etiqTipo = trim(($value->abreviatura ? $value->abreviatura.' — ' : '').$value->nombre);
+                        @endphp
+                        @if( (int) $value->id == (int) old('tipotransaccion_compra_id', $data->tipotransaccion_compra_id ?? session('tipotransaccioncobranza_compra_id')))
+                            <option value="{{ $value->id }}" data-abreviatura="{{ $value->abreviatura }}" selected="select">{{ $etiqTipo }}</option>
+                        @else
+                            <option value="{{ $value->id }}" data-abreviatura="{{ $value->abreviatura }}">{{ $etiqTipo }}</option>
+                        @endif
+                    @endforeach
+                </select>
                 <input type="hidden" class="tipo" id="tipo" name="tipo" value="{{$data->tipotransaccion_compras->abreviatura ?? ''}}" readonly>
-            </select>
-            <input type="text" name="letra" id="letra" class="col-lg-1 form-control" placeholder="Letra" aria-label="Letra" value="{{$data->letra ?? ''}}" readonly>
-            <span class="input-group-text">#</span>                
-            <input type="text" name="sucursal" id="sucursal" class="col-lg-1 form-control" placeholder="Sucursal" aria-label="Sucursal" value="{{$data->sucursal ?? ''}}" readonly>
-            <span class="input-group-text">#</span>                
-            <input type="text" name="numerocomprobante" id="numerocomprobante" class="col-lg-2 form-control" placeholder="Numero de Comprobante" aria-label="Numero de Comprobante" value="{{$data->numerocomprobante ?? ''}}" readonly>
+                <input type="text" name="letra" id="letra" class="form-control" placeholder="Letra" aria-label="Letra" value="{{$data->letra ?? ''}}" readonly style="width: 3rem; flex-shrink: 0;">
+                <span class="input-group-text flex-shrink-0">#</span>
+                <input type="text" name="sucursal" id="sucursal" class="form-control" placeholder="Suc." aria-label="Sucursal" value="{{$data->sucursal ?? ''}}" readonly style="width: 4rem; flex-shrink: 0;">
+                <span class="input-group-text flex-shrink-0">#</span>
+                <input type="text" name="numerocomprobante" id="numerocomprobante" class="form-control" placeholder="N&uacute;mero" aria-label="Numero de Comprobante" value="{{$data->numerocomprobante ?? ''}}" readonly style="width: 6.5rem; flex-shrink: 0;">
+            </div>
         </div>
         @include('includes.compras.campo_proveedor_consulta', [
             'proveedor_id' => ($data ?? null)?->proveedor_id,

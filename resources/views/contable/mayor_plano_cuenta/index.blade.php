@@ -57,7 +57,9 @@
 
                     <p class="text-muted small mb-2">
                         Defina el período y combine cuentas puntuales o por rango. Los centros de costo pueden filtrar el mayor sin cambiar su clasificación.
-                        El <strong>Excel plano</strong> (formato Anita) sale después de consultar: una fila por movimiento, por cuenta o por centro de costo. La columna de OC resume qué se compró (ítems; IA si está habilitada). Las facturas van en una sola celda; no se lista la COM.
+                        El <strong>Excel plano</strong> (formato Anita) sale después de consultar: una fila por movimiento, por cuenta o por centro de costo.
+                        Baja como <strong>CSV</strong> (se abre en Excel) con emisor, OC, CAPEX y facturas — sin armar un .xlsx pesado en el servidor.
+                        La columna de OC resume qué se compró (ítems; IA si está habilitada). Las facturas van en una sola celda; no se lista la COM.
                     </p>
 
                     @include('includes.reportes.asignacion_empresas_checkboxes', [

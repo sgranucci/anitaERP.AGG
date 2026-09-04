@@ -44,9 +44,10 @@
             <dd class="col-sm-8 text-break">{{ $oc->detalle !== null && $oc->detalle !== '' ? $oc->detalle : '—' }}</dd>
         </dl>
         @php
-            $paquete = $paquete_legajo ?? ['factura' => null, 'recepciones' => []];
+            $paquete = $paquete_legajo ?? ['factura' => null, 'recepciones' => [], 'url_pdf_oc' => null];
             $facturaLegajo = $paquete['factura'] ?? null;
             $recepcionesLegajo = $paquete['recepciones'] ?? [];
+            $urlPdfOc = $paquete['url_pdf_oc'] ?? null;
         @endphp
         <div class="px-3 pb-3">
             <h3 class="h6 text-muted mb-2">Factura del legajo</h3>
@@ -84,6 +85,11 @@
                             @if (!empty($com['resumen_diferencias']))
                                 <br><span class="small">{{ $com['resumen_diferencias'] }}</span>
                             @endif
+                            @if (!empty($com['url_pdf']))
+                                <a href="{{ $com['url_pdf'] }}" class="btn btn-outline-primary btn-sm btn-block mt-2" target="_blank" rel="noopener noreferrer">
+                                    <i class="fa fa-file-pdf-o"></i> Ver PDF {{ $com['numero'] }}
+                                </a>
+                            @endif
                         </li>
                     @endforeach
                 </ul>
@@ -91,9 +97,14 @@
                 <p class="text-muted small mb-3">No hay recepción COM confirmada en este legajo.</p>
             @endif
 
+            @if (!empty($urlPdfOc))
+            <a href="{{ $urlPdfOc }}" class="btn btn-outline-primary btn-sm btn-block mb-2" target="_blank" rel="noopener noreferrer">
+                <i class="fa fa-file-pdf-o"></i> Ver PDF de la orden de compra
+            </a>
+            @endif
             @if($mov && !empty($mov->hashvisualizar))
-            <a href="{{ route('visualizar_ordencompra', ['id' => $oc->id, 'hash' => $mov->hashvisualizar]) }}" class="btn btn-outline-secondary btn-sm btn-block mb-2" target="_blank" rel="noopener noreferrer">
-                <i class="fa fa-eye"></i> Ver orden de compra (solo lectura)
+            <a href="{{ route('visualizar_ordencompra', ['id' => $oc->id, 'hash' => $mov->hashvisualizar]) }}?form=1" class="btn btn-outline-secondary btn-sm btn-block mb-2" target="_blank" rel="noopener noreferrer">
+                <i class="fa fa-eye"></i> Ver formulario OC
             </a>
             @endif
         </div>

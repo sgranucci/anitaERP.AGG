@@ -24,6 +24,7 @@ class PrecargaComprobanteProveedorListadoFiltros
         'nombreempresa' => ['column' => 'empresa.nombre', 'type' => 'texto', 'label' => 'Empresa'],
         'nombreproveedor' => ['column' => 'proveedor.nombre', 'type' => 'texto', 'label' => 'Proveedor'],
         'nombretipotransaccion' => ['column' => 'tipotransaccion_compra.nombre', 'type' => 'texto', 'label' => 'Tipo de comprobante'],
+        'abreviaturatipotransaccion' => ['column' => 'tipotransaccion_compra.abreviatura', 'type' => 'texto', 'label' => 'Abreviatura tipo'],
         'letra' => ['column' => 'precarga_comprobante_proveedor.letra', 'type' => 'texto', 'label' => 'Letra'],
         'sucursal' => ['column' => 'precarga_comprobante_proveedor.sucursal', 'type' => 'entero', 'label' => 'Sucursal'],
         'numerocomprobante' => ['column' => 'precarga_comprobante_proveedor.numerocomprobante', 'type' => 'entero', 'label' => 'Número comprobante'],
@@ -40,6 +41,7 @@ class PrecargaComprobanteProveedorListadoFiltros
         'empresa.nombre',
         'proveedor.nombre',
         'tipotransaccion_compra.nombre',
+        'tipotransaccion_compra.abreviatura',
         'precarga_comprobante_proveedor.numeroordencompra',
     ];
 
@@ -316,6 +318,7 @@ class PrecargaComprobanteProveedorListadoFiltros
             'empresa.nombre',
             'proveedor.nombre',
             'tipotransaccion_compra.nombre',
+            'tipotransaccion_compra.abreviatura',
             'precarga_comprobante_proveedor.letra',
             'precarga_comprobante_proveedor.numeroordencompra',
             'precarga_comprobante_proveedor.total',

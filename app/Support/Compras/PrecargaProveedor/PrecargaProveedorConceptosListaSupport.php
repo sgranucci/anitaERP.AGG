@@ -61,21 +61,14 @@ final class PrecargaProveedorConceptosListaSupport
 
         $tipoItem = PrecargaProveedorTipoItemSupport::resolver($itemsOrdenCompra, $cuitProveedor);
 
-        $inicial = match ($tipoComprobante) {
-            'FC' => 'F',
-            'ND' => 'D',
-            'NC' => 'C',
-            default => '',
-        };
-
-        if (! in_array($tipoComprobante, ['REC', 'REM'], true)) {
-            $abreviatura = match ((int) $centroCostoDestino) {
-                85 => $inicial.'GA',
-                104 => $inicial.'EG',
-                default => $inicial.substr($tipoIva, 0, 1).$tipoItem,
-            };
-        } else {
-            $abreviatura = $tipoComprobante;
+        $abreviatura = PrecargaProveedorAbreviaturaTipoSupport::abreviatura(
+            $tipoComprobante,
+            $centroCostoDestino,
+            $tipoIva,
+            $tipoItem,
+        );
+        if ($abreviatura === '') {
+            throw new RuntimeException('Tipo de comprobante genérico inválido para listaConcepto');
         }
 
         $comprobante = $this->comprobanteService->leeTipoTransaccionCompraPorAbreviatura($abreviatura);

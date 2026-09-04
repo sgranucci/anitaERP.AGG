@@ -4,6 +4,7 @@ namespace App\Services\Caja\Flash;
 
 use App\Mail\Caja\Flash\FlashReporteAggDistribucion;
 use App\Models\Caja\Flash\FlashReporteSuscripcion;
+use App\Support\Caja\Flash\FlashReporteAggPerfilVistaSupport;
 use App\Support\Caja\Flash\FlashReporteAggSmtpReintentoSupport;
 use App\Support\Caja\Flash\FlashReporteAggSuscripcionSupport;
 use Carbon\Carbon;
@@ -35,7 +36,11 @@ class FlashReporteAggDistribucionService
         $periodo = $this->suscripcionSupport->periodoEfectivo($suscripcion, $ahora);
 
         try {
-            $archivo = $this->excelService->generar($periodo['desde'], $periodo['hasta']);
+            $archivo = $this->excelService->generar(
+                $periodo['desde'],
+                $periodo['hasta'],
+                FlashReporteAggPerfilVistaSupport::normalizar($suscripcion->perfil_vista ?? null),
+            );
         } catch (\Throwable $e) {
             Log::error('Flash Report AGG: no se pudo generar el Excel', [
                 'suscripcion_id' => $suscripcion->id,

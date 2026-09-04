@@ -39,7 +39,8 @@
                                             <p class="card-text text-muted small">{{ $manual['bajada'] }}</p>
                                         </div>
                                         <a href="{{ $manual['url'] }}" class="btn btn-primary btn-sm mt-auto" target="_blank" rel="noopener">
-                                            <i class="fas fa-book-open"></i> Abrir manual completo
+                                            <i class="fas fa-book-open"></i>
+                                            {{ $manual['etiqueta_boton'] ?? 'Abrir manual completo' }}
                                         </a>
                                     @else
                                         <span class="badge badge-secondary mt-2">Próximamente</span>

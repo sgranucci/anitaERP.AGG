@@ -12,7 +12,7 @@
 @php
     use App\Support\Compras\PagoproveedorListadoFiltros;
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
-    $limpiarUrl = route('pagoproveedor');
+    $limpiarUrl = route('pagoproveedor', PagoproveedorListadoFiltros::paraQueryStringEmpresa($filtros ?? []));
 @endphp
 
 @section('contenido')
@@ -42,6 +42,7 @@
                     'limpiarUrl' => $limpiarUrl,
                 ])
             </form>
+            @include('compras.pagoproveedor.partials.filtros_externos')
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_pagoproveedor',

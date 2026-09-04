@@ -3482,6 +3482,8 @@ Route::get('compras/requisicion-reporte', 'Compras\RequisicionReporteController@
 Route::get('compras/listar-requisicion-reporte/{formato?}', 'Compras\RequisicionReporteController@exportar')->name('listar_reporte_requisicion_compras');
 Route::get('compras/proyeccion-pagos', 'Compras\ProyeccionPagosReporteController@index')->name('reporte_proyeccion_pagos');
 Route::get('compras/listar-proyeccion-pagos/{formato?}', 'Compras\ProyeccionPagosReporteController@exportar')->name('listar_reporte_proyeccion_pagos');
+Route::get('compras/pagos-sabana', 'Compras\PagosSabanaReporteController@index')->name('reporte_pagos_sabana');
+Route::get('compras/listar-pagos-sabana/{formato?}', 'Compras\PagosSabanaReporteController@exportar')->name('listar_reporte_pagos_sabana');
 Route::get('compras/requisicion/crear', 'Compras\RequisicionController@crear')->name('crear_requisicion');
 Route::post('compras/requisicion', 'Compras\RequisicionController@guardar')->name('guardar_requisicion');
 Route::get('compras/requisicion/{id}/editar', 'Compras\RequisicionController@editar')->name('editar_requisicion');
@@ -3499,6 +3501,7 @@ Route::get('compras/requisicion/{requisicion}/presupuestos', 'Compras\Requisicio
 Route::get('compras/requisicion/{id}/firmantes-retome-arbol', 'Compras\RequisicionController@firmantesRetomeArbol')->name('firmantes_retome_arbol_requisicion');
 Route::post('compras/requisicion/{id}/enviar-arbol-aprobacion', 'Compras\RequisicionController@enviarArbolAprobacion')->name('enviar_arbol_requisicion');
 Route::post('compras/requisicion/{id}/volver-compras', 'Compras\RequisicionController@volverCompras')->name('volver_compras_requisicion');
+Route::post('compras/requisicion/{id}/marcar-cumplida', 'Compras\RequisicionController@marcarCumplida')->name('marcar_cumplida_requisicion');
 Route::put('compras/requisicion/{id}', 'Compras\RequisicionController@actualizar')->name('actualizar_requisicion');
 Route::delete('compras/requisicion/{id}', 'Compras\RequisicionController@eliminar')->name('eliminar_requisicion');
 Route::get('compras/listarequisicion/{formato?}/{busqueda?}', 'Compras\RequisicionController@listar')->name('listar_requisicion');
@@ -3609,11 +3612,21 @@ Route::get('compras/legajos/{id}/com-pdf/{recepcion}', 'Compras\OrdencompraLegaj
 Route::get('compras/ordencompra/soloconsulta/{id}', 'Compras\OrdencompraController@soloConsulta')->name('solo_consulta_ordencompra');
 Route::get('compras/ordencompra/visualizar/{id}/{hash}', 'Compras\OrdencompraController@visualizar')->name('visualizar_ordencompra');
 Route::get('compras/ordencompra/visualizar/{id}/{hash}/factura-pdf', 'Compras\OrdencompraController@visualizarFacturaLegajo')->name('visualizar_factura_legajo_ordencompra');
+Route::get('compras/ordencompra/visualizar/{id}/{hash}/com-pdf/{recepcion}', 'Compras\OrdencompraController@visualizarComLegajo')->name('visualizar_com_legajo_ordencompra');
+Route::get('compras/ordencompra/visualizar/{id}/{hash}/oc-pdf', 'Compras\OrdencompraController@visualizarOcPdfLegajo')->name('visualizar_oc_pdf_legajo_ordencompra');
 
 /*
  * Centro de ayuda (manuales por módulo)
  */
 Route::get('ayuda', 'AyudaController@index')->name('ayuda');
+
+/*
+ * Guías paso a paso (HTML interactivo; archivos en docs/guias/)
+ */
+Route::get('ayuda/guia/{slug}', 'Ayuda\GuiaPasoAPasoController@mostrar')
+    ->where('slug', '[a-z0-9\-]+')
+    ->middleware('auth')
+    ->name('guia_paso_a_paso');
 
 /*
  * Manual de usuario — Módulo UIF
@@ -4157,6 +4170,7 @@ Route::middleware('uif.pc_configurada')->group(function () {
     Route::post('uif/cliente_uif', 'Uif\Cliente_UifController@guardar')->name('guarda_cliente_uif');
     Route::get('uif/cliente_uif/{id}/editar', 'Uif\Cliente_UifController@editar')->name('edita_cliente_uif')->middleware('modo.consulta');
     Route::get('uif/cliente_uif/{id}/listar-premios/{formato?}', 'Uif\Cliente_UifController@listarPremiosCliente')->name('lista_premios_cliente_uif');
+    Route::get('uif/cliente_uif/{id}/explicacion-matriz-riesgo/{formato?}', 'Uif\Cliente_UifController@exportarMatrizRiesgoExplicacion')->name('explicacion_matriz_riesgo_cliente_uif');
     Route::get('uif/cliente_uif/{id}/fotodocumento', 'Uif\Cliente_UifController@mostrarFotodocumento')->name('cliente_uif_fotodocumento');
     Route::get('uif/cliente_uif/{id}/archivo/{archivo}', 'Uif\Cliente_UifController@mostrarArchivo')->name('cliente_uif_archivo')->where('archivo', '.*');
     Route::delete('uif/cliente_uif/{id}/fotodocumento', 'Uif\Cliente_UifController@eliminarFotodocumento')->name('elimina_fotodocumento_cliente_uif');

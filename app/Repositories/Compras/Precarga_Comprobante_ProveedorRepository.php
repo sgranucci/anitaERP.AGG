@@ -201,6 +201,7 @@ class Precarga_Comprobante_ProveedorRepository implements Precarga_Comprobante_P
             'empresa.nombre as nombreempresa',
             'proveedor.nombre as nombreproveedor',
             'tipotransaccion_compra.nombre as nombretipotransaccion_compra',
+            'tipotransaccion_compra.abreviatura as abreviaturatipotransaccion_compra',
             'precarga_comprobante_proveedor.letra as letra',
             'precarga_comprobante_proveedor.sucursal as sucursal',
             'precarga_comprobante_proveedor.numerocomprobante as numerocomprobante',

@@ -24,6 +24,38 @@ class RecepcionProveedorImpuestoInternoSupportTest extends TestCase
         parent::tearDown();
     }
 
+    public function test_precio_ultima_compra_suma_ii_en_linea_neta(): void
+    {
+        $this->assertSame(
+            5831.545,
+            RecepcionProveedorImpuestoInternoSupport::precioUltimaCompraConImpuestoInterno(
+                1242.865,
+                4588.68,
+                true,
+            )
+        );
+    }
+
+    public function test_precio_ultima_compra_no_duplica_ii_si_linea_ya_incluye(): void
+    {
+        $this->assertSame(
+            5831.544,
+            RecepcionProveedorImpuestoInternoSupport::precioUltimaCompraConImpuestoInterno(
+                5831.544,
+                4588.68,
+                true,
+            )
+        );
+    }
+
+    public function test_precio_ultima_compra_sin_cigarrillo_no_suma_ii(): void
+    {
+        $this->assertSame(
+            100.0,
+            RecepcionProveedorImpuestoInternoSupport::precioUltimaCompraConImpuestoInterno(100.0, 50.0, false)
+        );
+    }
+
     public function test_impuesto_interno_por_unidad_prorratea_sobre_cantidad_cigarrillos(): void
     {
         $recepcion = $this->recepcionConLineas([

@@ -17,10 +17,27 @@
     ];
     $anioMinRiesgoUif = 2010;
     $anioMaxRiesgoUif = (int) date('Y') + 5;
+    $clienteUifIdRiesgo = $tieneClienteForm4 ? (int) $data->id : null;
 @endphp
 
 <div class="card form4" style="display: none">
     <div class="card-body">
+        @if ($clienteUifIdRiesgo && esSupervisorUif())
+        <div class="d-flex flex-wrap align-items-center mb-2" style="gap: 0.5rem;">
+            <div>
+                <a href="{{ route('explicacion_matriz_riesgo_cliente_uif', ['id' => $clienteUifIdRiesgo, 'formato' => 'PDF']) }}"
+                   class="btn btn-app bg-danger" target="_blank" rel="noopener"
+                   title="Explicación de la matriz de riesgo período por período">
+                    <i class="fas fa-file-pdf"></i> Pdf matriz
+                </a>
+                <a href="{{ route('explicacion_matriz_riesgo_cliente_uif', ['id' => $clienteUifIdRiesgo, 'formato' => 'EXCEL']) }}"
+                   class="btn btn-app bg-success" target="_blank" rel="noopener"
+                   title="Explicación de la matriz de riesgo período por período">
+                    <i class="fas fa-file-excel"></i> Excel matriz
+                </a>
+            </div>
+        </div>
+        @endif
     	<table class="table" id="riesgo-table">
     		<thead>
     			<tr>

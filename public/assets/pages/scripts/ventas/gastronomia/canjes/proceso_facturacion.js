@@ -111,10 +111,64 @@
         }, 3200);
     }
 
-    function mostrarResultadoEmisionCanje(data) {
+    function registrarControlTiemposEmisionCm(data, tInicioMs, cuentaId) {
+        if (typeof tInicioMs !== 'number' || tInicioMs <= 0) {
+            return;
+        }
+        const tClienteMs = Math.round(performance.now() - tInicioMs);
+        const tServidorMs =
+            data && data.emision_profile_total_ms != null ? Math.round(Number(data.emision_profile_total_ms)) : null;
+        const umbralMs = Number(G.emisionUmbralAdvertenciaMs || 10000);
+        const payload = {
+            origen: 'canje_marketing',
+            cliente_ms: tClienteMs,
+            servidor_ms: tServidorMs,
+            factura: (data && data.factura) || null,
+            cuenta_id: cuentaId || null,
+        };
+        if (G.emisionProfileEnRespuesta && data && Array.isArray(data.emision_profile)) {
+            payload.etapas = data.emision_profile;
+            payload.etapas_lentas = data.emision_profile_etapas_lentas || null;
+        }
+        if (typeof console !== 'undefined' && console.info) {
+            console.info('[canje_marketing.emision.tiempos]', payload);
+            if (payload.etapas && console.table) {
+                console.table(
+                    payload.etapas.map(function (e) {
+                        return { etapa: e.etapa, ms: e.ms, acum_ms: e.acum_ms };
+                    }),
+                );
+            }
+        }
+        const referenciaMs = tClienteMs;
+        if (umbralMs > 0 && referenciaMs >= umbralMs && typeof console !== 'undefined' && console.warn) {
+            console.warn(
+                '[canje_marketing.emision.lento] ' +
+                    referenciaMs +
+                    ' ms (umbral ' +
+                    umbralMs +
+                    ' ms). Cliente=' +
+                    tClienteMs +
+                    ' ms' +
+                    (tServidorMs != null ? ', servidor=' + tServidorMs + ' ms' : '') +
+                    '.',
+                payload.etapas_lentas || payload.etapas,
+            );
+        }
+        return { cliente_ms: tClienteMs, servidor_ms: tServidorMs };
+    }
+
+    function mostrarResultadoEmisionCanje(data, tiempos) {
         const factura = (data && data.factura) || '';
-        const txt = (data && String(data.mensaje || '').trim()) ||
+        let txt = (data && String(data.mensaje || '').trim()) ||
             (factura ? 'Factura ' + factura + ' emitida correctamente.' : 'Factura emitida correctamente.');
+        if (tiempos && tiempos.servidor_ms != null && G.emisionProfileEnRespuesta) {
+            txt += ' (' + tiempos.servidor_ms + ' ms servidor';
+            if (tiempos.cliente_ms != null) {
+                txt += ', ' + tiempos.cliente_ms + ' ms pantalla';
+            }
+            txt += ')';
+        }
         const warn = data && String(data.warn || '').trim();
         $('#modal-cm-f8-descuento').modal('hide');
         restaurarPanelDescuentoVipEnTarjeta();
@@ -1755,6 +1809,8 @@
     async function emitirFactura() {
         if (emitiendo || !cuenta) { return; }
         emitiendo = true;
+        const cuentaIdEmision = cuenta.id;
+        const tInicioEmisionMs = performance.now();
         try {
             setFacturacionLoadingCm(true, 'Validando cuenta…');
             await guardarCabeceraFacturacion();
@@ -1771,7 +1827,8 @@
                 moneda_id: G.monedaFacturaId || 1,
             });
             detenerRotacionMensajesCm();
-            mostrarResultadoEmisionCanje(res);
+            const tiempos = registrarControlTiemposEmisionCm(res, tInicioEmisionMs, cuentaIdEmision);
+            mostrarResultadoEmisionCanje(res, tiempos);
         } catch (e) {
             toast(e.message, 'error');
         } finally {

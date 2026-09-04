@@ -125,7 +125,10 @@
 
     function pintarResumenDesembolso() {
         var d = calcularResumenDeuda();
-        var medios = Number(window.ppTotalMedios || 0);
+        var medios = typeof window.totalMediosPagoproveedor === 'function'
+            ? window.totalMediosPagoproveedor()
+            : Number(window.ppTotalMedios || 0);
+        window.ppTotalMedios = medios;
         var dif = Math.round((medios - d.equiv) * 100) / 100;
         $('#pp-card-saldo, #pp-tfoot-saldo').text(fmt(d.saldo));
         $('#pp-card-aplicado, #pp-tfoot-aplicado').text(fmt(d.aplicado));
@@ -182,6 +185,7 @@
     function cargarDeuda() {
         var proveedorId = parseInt($('#proveedor_id').val() || '0', 10);
         var empresaId = parseInt($('#empresa_id').val() || '0', 10);
+        var pagoId = parseInt($('#pagoproveedor_id').val() || '0', 10);
         var $tb = $('#tabla-deuda-proveedor tbody');
         if (!empresaId) {
             mensajeDeuda(proveedorId ? 'Seleccione empresa para ver la deuda' : 'Seleccione empresa y proveedor');
@@ -193,7 +197,11 @@
         }
 
         $tb.html('<tr><td colspan="9" class="text-muted text-center">Cargando deuda…</td></tr>');
-        $.getJSON(urlDeuda, { proveedor_id: proveedorId, empresa_id: empresaId })
+        var params = { proveedor_id: proveedorId, empresa_id: empresaId };
+        if (pagoId > 0) {
+            params.pagoproveedor_id = pagoId;
+        }
+        $.getJSON(urlDeuda, params)
             .done(function (res) {
                 var filas = res.filas || [];
                 if (!filas.length) {
@@ -204,14 +212,25 @@
                 var hoy = hoyYmd();
                 filas.forEach(function (f) {
                     var vencida = f.vencimiento && String(f.vencimiento) < hoy;
+                    var aplicadoOp = parseFloat(f.aplicado_op || 0) || 0;
+                    var montoIni = aplicadoOp > 0 ? aplicadoOp : 0;
+                    var checked = aplicadoOp > 0 ? ' checked' : '';
+                    var linkComp = '';
+                    if (f.comprobante_url) {
+                        linkComp = ' <a class="btn-accion-tabla tooltipsC text-primary" href="'
+                            + $('<div>').text(f.comprobante_url).html()
+                            + '" target="_blank" rel="noopener" title="Ver factura">'
+                            + '<i class="fa fa-edit"></i></a>';
+                    }
                     html += '<tr data-cc-id="' + f.id + '"' + (vencida ? ' class="table-danger"' : '') + '>'
-                        + '<td class="text-center"><input type="checkbox" class="pp-sel-deuda"></td>'
-                        + '<td>' + $('<div>').text(f.comprobante).html() + '</td>'
+                        + '<td class="text-center"><input type="checkbox" class="pp-sel-deuda"' + checked + '></td>'
+                        + '<td>' + $('<div>').text(f.comprobante).html() + linkComp + '</td>'
                         + '<td>' + (f.vencimiento || '') + '</td>'
                         + '<td>' + (f.moneda || '') + '</td>'
                         + '<td class="text-right text-nowrap">' + fmt(f.saldo) + '</td>'
                         + '<td class="text-right pp-col-aplicar">'
-                        + '<input type="number" step="0.01" min="0" class="form-control form-control-sm text-right pp-monto-aplicar" value="0"'
+                        + '<input type="number" step="0.01" min="0" class="form-control form-control-sm text-right pp-monto-aplicar" value="'
+                        + montoIni + '"'
                         + ' data-saldo="' + f.saldo + '" data-moneda="' + f.moneda_id + '" data-cotizacion="' + f.cotizacion + '">'
                         + '</td>'
                         + '<td class="text-right pp-cot-liq">—</td>'

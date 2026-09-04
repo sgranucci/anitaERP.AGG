@@ -666,6 +666,87 @@
 		sincronizarPatronesTabla();
 	}
 
+	var ptrReqDetalleLineaRow = null;
+
+	function reqSubRowArticulo($mainTr) {
+		var $s = $mainTr.next('tr.item-requisicion-articulo-sub');
+		return $s.length ? $s : $();
+	}
+
+	function reqRefreshDetalleLineaBadge($row) {
+		var $ta = $row.find('.req-ta-detalle-linea');
+		var t = ($ta.val() || '').trim();
+		var $sub = reqSubRowArticulo($row);
+		var $bd = $sub.find('.req-detalle-linea-badge');
+		if ($sub.length) {
+			$sub.toggleClass('d-none', !t.length);
+		}
+		if (!$bd.length) {
+			return;
+		}
+		if (!t.length) {
+			$bd.text('—').removeAttr('title');
+			return;
+		}
+		$bd.text(t).attr('title', t);
+	}
+
+	window.reqRefreshDetalleLineaBadge = reqRefreshDetalleLineaBadge;
+
+	function registrarDetalleLineaModal() {
+		var $modal = $('#modalReqDetalleLinea');
+		if ($modal.length && $modal.parent()[0] !== document.body) {
+			$modal.appendTo('body');
+		}
+
+		$(document).on('click', '.req-abrir-detalle-linea', function () {
+			ptrReqDetalleLineaRow = $(this).closest('tr.item-requisicion-articulo');
+			var v = ptrReqDetalleLineaRow.find('.req-ta-detalle-linea').val() || '';
+			$('#req_detalle_linea_editor').val(v);
+			// data-toggle/data-target abre el modal; si no están, forzamos show.
+			if (!$(this).attr('data-toggle')) {
+				$modal.modal('show');
+			}
+		});
+
+		$(document).on('click', '.req-detalle-linea-badge', function () {
+			var $sub = $(this).closest('tr.item-requisicion-articulo-sub');
+			var $row = $sub.prev('tr.item-requisicion-articulo');
+			if (!$row.length) {
+				return;
+			}
+			$row.find('.req-abrir-detalle-linea').trigger('click');
+		});
+
+		$modal.on('show.bs.modal', function () {
+			var ro = !$('#req_detalle_linea_guardar').length;
+			$('#req_detalle_linea_editor').prop('readonly', ro);
+			if (ptrReqDetalleLineaRow && ptrReqDetalleLineaRow.length) {
+				var v = ptrReqDetalleLineaRow.find('.req-ta-detalle-linea').val() || '';
+				$('#req_detalle_linea_editor').val(v);
+			}
+		});
+
+		$modal.on('shown.bs.modal', function () {
+			$('#req_detalle_linea_editor').trigger('focus');
+		});
+
+		$(document).on('click', '#req_detalle_linea_guardar', function () {
+			if (!ptrReqDetalleLineaRow || !ptrReqDetalleLineaRow.length) {
+				return;
+			}
+			ptrReqDetalleLineaRow.find('.req-ta-detalle-linea').val($('#req_detalle_linea_editor').val() || '');
+			reqRefreshDetalleLineaBadge(ptrReqDetalleLineaRow);
+			$modal.modal('hide');
+		});
+	}
+
+	function initDetalleLineaBadges() {
+		$filas().each(function () {
+			reqRefreshDetalleLineaBadge($(this));
+		});
+	}
+
 	function initRequisicionLineas() {
 		if (!$(SELECTOR_TABLA).length) {
 			return;
@@ -674,7 +755,9 @@
 		registrarEventoArticuloCargado();
 		registrarAtajosF1();
 		registrarEnterLineas();
+		registrarDetalleLineaModal();
 		initPatronesIniciales();
+		initDetalleLineaBadges();
 		if (esPantallaRequisicionLineas()) {
 			reqScheduleTotales();
 		}

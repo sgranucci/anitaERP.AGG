@@ -25,17 +25,18 @@ window.requisicionUsaCcOrigenArbol = @json(\App\Support\Compras\RequisicionCentr
 window.msColoresOpciones = @json(($color_query ?? collect())->map(fn ($c) => ['id' => (int) $c->id, 'nombre' => $c->nombre])->values());
 window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id' => (int) $t->id, 'nombre' => $t->nombre])->values());
 </script>
-<script src="{{asset("assets/pages/scripts/compras/requisicion/lineas.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/requisicion/lineas.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/lineas.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/form-color-talle.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/centrocosto-arbol-modal.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/centrocosto-arbol-modal.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/centrocosto/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/centrocosto-arbol-grabacion.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/centrocosto-arbol-grabacion.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/configuracion/arbolaprobacion/panel_ia.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/compras/requisicion/crear.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/requisicion/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/crear.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/consulta-listasprecio.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/presupuestos.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/requisicion/enviar-arbol.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/volver-compras.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/requisicion/marcar-cumplida.js') }}" type="text/javascript"></script>
 @include('compras.requisicion.partials.banner_enviando_arbol_styles')
 @if(!empty($es_provisorio))
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/confirmar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/confirmar.js')) ?: time() }}" type="text/javascript"></script>
@@ -92,6 +93,10 @@ window.msTallesOpciones = @json(($talle_query ?? collect())->map(fn ($t) => ['id
                             <i class="fa fa-truck-loading"></i> Cumplir requisición
                         </a>
                         @endif
+                        @include('compras.requisicion.partials.boton_marcar_cumplida', [
+                            'data' => $data,
+                            'filtrosQuery' => $filtrosQuery ?? [],
+                        ])
                         @include('compras.requisicion.partials.boton_volver_compras', [
                             'data' => $data,
                             'filtrosQuery' => $filtrosQuery ?? [],

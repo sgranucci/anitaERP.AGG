@@ -371,25 +371,107 @@ final class OrdencompraLegajoGastronomiaSupport
 
     /**
      * @return array{
+     *     cabecera: array<string, mixed>,
      *     factura: array<string, mixed>|null,
-     *     recepciones: list<array<string, mixed>>
+     *     ordencompra: array<string, mixed>,
+     *     recepciones: list<array<string, mixed>>,
+     *     url_pdf_oc: string|null,
+     *     importe_total_con_iva: float|null
      * }
      */
     public static function paqueteParaPortal(Ordencompra $oc, ?string $hash = null): array
     {
+        $oc->loadMissing([
+            'empresas:id,nombre',
+            'proveedores:id,codigo,nombre',
+            'centrocostos:id,codigo,nombre',
+            'usuarios:id,nombre',
+            'requisiciones:id,numerorequisicion,creousuario_id',
+            'requisiciones.usuarios:id,nombre',
+            'ordencompra_articulos.articulos:id,sku,descripcion',
+        ]);
+
         $factura = OrdencompraEnvioCuentasAPagarGateSupport::resolverPrecargaConPdf($oc);
+        if ($factura) {
+            $factura->loadMissing([
+                'proveedores:id,nombre',
+            ]);
+        }
+
         $hash = trim((string) $hash);
+        $ocId = (int) $oc->id;
         $urlPdf = null;
-        if ($factura && $hash !== '') {
-            $urlPdf = route('visualizar_factura_legajo_ordencompra', [
-                'id' => (int) $oc->id,
+        $urlPdfOc = null;
+        if ($hash !== '') {
+            if ($factura) {
+                $urlPdf = route('visualizar_factura_legajo_ordencompra', [
+                    'id' => $ocId,
+                    'hash' => $hash,
+                ]).'?inline=1';
+            }
+            $urlPdfOc = route('visualizar_oc_pdf_legajo_ordencompra', [
+                'id' => $ocId,
                 'hash' => $hash,
             ]).'?inline=1';
         }
 
+        $resumenFactura = $factura ? self::resumenFactura($factura, $urlPdf) : null;
+        $subtotalOc = self::subtotalItemsOc($oc);
+        $importeTotal = $resumenFactura['total'] ?? $subtotalOc;
+
         return [
-            'factura' => $factura ? self::resumenFactura($factura, $urlPdf) : null,
-            'recepciones' => self::resumenRecepciones((int) $oc->id),
+            'cabecera' => [
+                'numero_oc' => (string) ($oc->numeroordencompra ?? ''),
+                'proveedor' => (string) (optional($oc->proveedores)->nombre ?? '—'),
+                'empresa' => (string) (optional($oc->empresas)->nombre ?? '—'),
+                'centrocosto' => trim(
+                    (string) (optional($oc->centrocostos)->codigo ?? '').' - '.
+                    (string) (optional($oc->centrocostos)->nombre ?? '')
+                ) ?: '—',
+                'estado_badge' => 'GASTRONOMÍA — PENDIENTE DE AUTORIZAR',
+                'importe_total_con_iva' => $importeTotal,
+            ],
+            'factura' => $resumenFactura,
+            'ordencompra' => self::resumenOrdencompra($oc, $subtotalOc, $urlPdfOc),
+            'recepciones' => self::resumenRecepciones($ocId, $hash !== '' ? $hash : null),
+            'url_pdf_oc' => $urlPdfOc,
+            'importe_total_con_iva' => $importeTotal,
+        ];
+    }
+
+    /**
+     * Datos extra para el mail del árbol cuando es circuito legajo Gastronomía.
+     *
+     * @return array<string, mixed>
+     */
+    public static function extrasMailLegajo(Ordencompra $oc, float $montoItems = 0.0, string $monedaAbrev = ''): array
+    {
+        if (! self::requiereCircuito($oc)) {
+            return ['es_legajo_gastronomia' => false];
+        }
+
+        $oc->loadMissing(['proveedores:id,nombre', 'centrocostos:id,codigo,nombre']);
+        $factura = OrdencompraEnvioCuentasAPagarGateSupport::resolverPrecargaConPdf($oc);
+        $totalFactura = $factura && $factura->total !== null ? (float) $factura->total : null;
+
+        return [
+            'es_legajo_gastronomia' => true,
+            'proveedor_nombre' => (string) (optional($oc->proveedores)->nombre ?? '—'),
+            'centrocosto_corto' => trim((string) (optional($oc->centrocostos)->nombre ?? 'Gastronomía')) ?: 'Gastronomía',
+            'monto_items' => $montoItems,
+            'moneda_abrev_items' => $monedaAbrev,
+            'total_factura' => $totalFactura,
+            'total_factura_fmt' => $totalFactura !== null
+                ? number_format($totalFactura, 2, ',', '.')
+                : null,
+            'alerta_importe' => $totalFactura !== null ? $totalFactura : $montoItems,
+            'alerta_importe_fmt' => number_format(
+                $totalFactura !== null ? $totalFactura : $montoItems,
+                2,
+                ',',
+                '.'
+            ),
+            'alerta_con_iva' => $totalFactura !== null,
         ];
     }
 
@@ -455,32 +537,103 @@ final class OrdencompraLegajoGastronomiaSupport
      */
     private static function resumenFactura(Precarga_Comprobante_Proveedor $factura, ?string $urlPdf): array
     {
-        $numero = trim(sprintf(
-            '%s %s-%s',
-            (string) ($factura->letra ?? ''),
-            (string) ($factura->sucursal ?? ''),
-            (string) ($factura->numerocomprobante ?? '')
-        ));
+        $suc = ltrim((string) ($factura->sucursal ?? ''), '0');
+        $nro = ltrim((string) ($factura->numerocomprobante ?? ''), '0');
+        $numeroCorto = trim($suc.'-'.$nro, '-');
+        $numero = $numeroCorto !== '' ? 'FAC '.$numeroCorto : ('Precarga #'.$factura->id);
+
+        $neto = $factura->subtotal !== null ? (float) $factura->subtotal : null;
+        $total = $factura->total !== null ? (float) $factura->total : null;
+        $iva = null;
+        $ivaLabel = 'IVA';
+        if ($neto !== null && $total !== null && $total >= $neto) {
+            $iva = round($total - $neto, 2);
+            if ($neto > 0.0001) {
+                $alicuota = round(($iva / $neto) * 100);
+                if ($alicuota > 0) {
+                    $ivaLabel = 'IVA '.$alicuota.'%';
+                }
+            }
+        }
+
+        $cuit = trim((string) ($factura->identificacion_proveedor_cuit ?? ''));
 
         return [
             'id' => (int) $factura->id,
-            'numero' => $numero !== '' ? $numero : ('Precarga #'.$factura->id),
+            'numero' => $numero,
             'fecha' => $factura->fechafactura?->format('d/m/Y'),
-            'total' => $factura->total !== null ? (float) $factura->total : null,
+            'cuit' => $cuit !== '' ? $cuit : null,
+            'neto' => $neto,
+            'iva' => $iva,
+            'iva_label' => $ivaLabel,
+            'total' => $total,
             'url_pdf' => $urlPdf,
         ];
     }
 
     /**
+     * @return array<string, mixed>
+     */
+    private static function resumenOrdencompra(Ordencompra $oc, float $subtotal, ?string $urlPdfOc): array
+    {
+        $req = $oc->requisiciones;
+        $reqLabel = null;
+        if ($req) {
+            $reqNro = (string) ($req->numerorequisicion ?? $req->id);
+            $reqUser = trim((string) (optional($req->usuarios)->nombre ?? ''));
+            $reqLabel = $reqUser !== '' ? $reqNro.' — '.$reqUser : $reqNro;
+        }
+
+        $itemResumen = null;
+        $articulos = $oc->ordencompra_articulos ?? collect();
+        if ($articulos->isNotEmpty()) {
+            $primero = $articulos->first();
+            $desc = trim((string) (optional($primero->articulos)->descripcion ?? $primero->detalle ?? ''));
+            $cant = (float) ($primero->cantidad ?? 0);
+            $itemResumen = $desc !== ''
+                ? ($desc.' — '.number_format($cant, 2, ',', '.').' u.')
+                : null;
+            if ($articulos->count() > 1) {
+                $itemResumen = ($itemResumen ?? 'Ítems').' (+'.($articulos->count() - 1).' más)';
+            }
+        }
+
+        return [
+            'numero' => 'OC '.((string) ($oc->numeroordencompra ?? $oc->id)),
+            'fecha' => $oc->fecha ? date('d/m/Y', strtotime((string) $oc->fecha)) : null,
+            'solicitante' => (string) (optional($oc->usuarios)->nombre ?? '—'),
+            'requisicion' => $reqLabel,
+            'detalle' => trim((string) ($oc->detalle ?? '')) !== '' ? (string) $oc->detalle : null,
+            'item_resumen' => $itemResumen,
+            'subtotal' => $subtotal,
+            'url_pdf' => $urlPdfOc,
+        ];
+    }
+
+    private static function subtotalItemsOc(Ordencompra $oc): float
+    {
+        $suma = 0.0;
+        foreach ($oc->ordencompra_articulos ?? [] as $linea) {
+            $suma += (float) ($linea->cantidad ?? 0) * (float) ($linea->precio ?? 0);
+        }
+
+        return round($suma, 2);
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
-    private static function resumenRecepciones(int $ordencompraId): array
+    private static function resumenRecepciones(int $ordencompraId, ?string $hash = null): array
     {
         if ($ordencompraId <= 0) {
             return [];
         }
 
         $recepciones = Recepcion_Proveedor::query()
+            ->with([
+                'creousuarios:id,nombre',
+                'recepcion_proveedor_articulos:id,recepcion_proveedor_id,cantidad,cantidad_oc',
+            ])
             ->where('ordencompra_id', $ordencompraId)
             ->where('tipo', Recepcion_Proveedor::TIPO_RECEPCION)
             ->where('estado', '!=', Recepcion_Proveedor::ESTADO_ANULADA)
@@ -488,6 +641,7 @@ final class OrdencompraLegajoGastronomiaSupport
             ->orderBy('id')
             ->get();
 
+        $hash = trim((string) $hash);
         $filas = [];
         foreach ($recepciones as $rec) {
             $diferencias = [];
@@ -504,17 +658,59 @@ final class OrdencompraLegajoGastronomiaSupport
                 $diferencias[] = 'Faltante OC';
             }
             $resumen = trim((string) ($rec->resumen_diferencias ?? ''));
-            $nro = $rec->numerorecepcion ?: $rec->id;
+            $numero = self::etiquetaCom($rec);
+            $urlPdf = null;
+            if ($hash !== '') {
+                $urlPdf = route('visualizar_com_legajo_ordencompra', [
+                    'id' => $ordencompraId,
+                    'hash' => $hash,
+                    'recepcion' => (int) $rec->id,
+                ]).'?inline=1';
+            }
+
+            $cantOc = 0.0;
+            $cantRec = 0.0;
+            foreach ($rec->recepcion_proveedor_articulos as $linea) {
+                $cantOc += (float) ($linea->cantidad_oc ?? 0);
+                $cantRec += (float) ($linea->cantidad ?? 0);
+            }
+
             $filas[] = [
                 'id' => (int) $rec->id,
-                'numero' => 'COM #'.$nro,
+                'numero' => $numero,
                 'fecha' => $rec->fecha?->format('d/m/Y'),
                 'estado' => (string) $rec->estado,
+                'usuario' => (string) (optional($rec->creousuarios)->nombre ?? '—'),
+                'cantidad_oc' => $cantOc,
+                'cantidad_recibida' => $cantRec,
                 'diferencias' => $diferencias,
                 'resumen_diferencias' => $resumen !== '' ? $resumen : null,
+                'sin_diferencias' => $diferencias === [] && $resumen === '',
+                'url_pdf' => $urlPdf,
             ];
         }
 
         return $filas;
+    }
+
+    private static function etiquetaCom(Recepcion_Proveedor $rec): string
+    {
+        $anitaTipo = trim((string) ($rec->anita_tipo ?? ''));
+        $anitaLetra = trim((string) ($rec->anita_letra ?? ''));
+        $anitaSuc = ltrim((string) ($rec->anita_sucursal ?? ''), '0');
+        $anitaNro = ltrim((string) ($rec->anita_nro ?? ''), '0');
+        if ($anitaNro !== '') {
+            $pref = $anitaTipo !== '' ? $anitaTipo : 'COM';
+            $medio = trim($anitaLetra.' '.$anitaSuc, ' ');
+            if ($medio !== '') {
+                return $pref.' '.$medio.'-'.$anitaNro;
+            }
+
+            return $pref.' '.$anitaNro;
+        }
+
+        $nro = $rec->numerorecepcion ?: $rec->id;
+
+        return 'COM #'.$nro;
     }
 }

@@ -6,9 +6,9 @@
     $mostrarCentrocosto = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros ?? []);
     $colSpan = $soloVentas
         ? (8 + ($mostrarCcResumen ? 1 : 0))
-        : (($multiempresa ? 17 : 16) - ($mostrarCentrocosto ? 0 : 1));
-    $colSpanAntesImportes = $mostrarCentrocosto ? 12 : 11;
-    $vaciasSaldoInicial = $mostrarCentrocosto ? 14 : 13;
+        : (($multiempresa ? 18 : 17) - ($mostrarCentrocosto ? 0 : 1));
+    $colSpanAntesImportes = $mostrarCentrocosto ? 13 : 12;
+    $vaciasSaldoInicial = $mostrarCentrocosto ? 15 : 14;
     $totales = is_array($totales ?? null) ? $totales : [];
     $cantidadLineas = (int) ($totales['cantidad_filas'] ?? 0);
     $formatoExcel = \App\Support\Export\ExcelFormatoNumero::normalizar(
@@ -127,7 +127,8 @@
         <th>N.Asi.</th>
         <th>Tip</th>
         <th>Comprobante</th>
-        <th>Emisor</th>
+        <th>Cód. emisor</th>
+        <th>Nombre emisor</th>
         <th>CUIT</th>
         <th>Descripción mov.</th>
         @if ($mostrarCentrocosto)
@@ -195,7 +196,8 @@
                 <td>{{ $fila['nro_asiento_fmt'] ?? $fila['nro_asiento'] ?? '' }}</td>
                 <td>{{ $fila['tipo_comp'] ?? '' }}</td>
                 <td>{{ $fila['comprobante'] ?? '' }}</td>
-                <td>{{ ($fila['emisor_fmt'] ?? '') !== '' ? $fila['emisor_fmt'] : ($fila['emisor'] ?? '') }}</td>
+                <td>{{ $fila['emisor'] ?? '' }}</td>
+                <td>{{ $fila['emisor_nombre'] ?? '' }}</td>
                 <td>{{ $fila['cuit'] ?? '' }}</td>
                 <td>{{ $fila['descripcion'] ?? '' }}</td>
                 @if ($mostrarCentrocosto)

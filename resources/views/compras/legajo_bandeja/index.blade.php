@@ -315,6 +315,11 @@ Bandeja de legajos
             <div class="card-header">
                 <h3 class="card-title">Bandeja de legajos</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.ayuda.boton-guia', [
+                        'slug' => 'bandeja-legajos',
+                        'titulo' => 'Guía: bandeja de legajos (COM y envío)',
+                        'clase' => 'btn btn-outline-light btn-sm mr-1',
+                    ])
                     <a href="{{ route('consultar_ordencompra') }}" class="btn btn-outline-light btn-sm mr-1">
                         <i class="fa fa-file-text-o"></i> Órdenes de compra
                     </a>

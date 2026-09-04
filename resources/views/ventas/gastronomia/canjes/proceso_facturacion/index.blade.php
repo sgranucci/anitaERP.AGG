@@ -801,6 +801,8 @@ window.CANJE_MARKETING = {
     imprimirTicket: @json((bool) config('gastronomia.ticket_impresion_automatica', true)),
     tieneCfgPv: @json($tiene_cfg_pv),
     csrfToken: @json(csrf_token()),
+    emisionProfileEnRespuesta: @json((bool) config('gastronomia.emision_profile_en_respuesta', false)),
+    emisionUmbralAdvertenciaMs: {{ max(0, (int) config('gastronomia.emision_umbral_advertencia_ms', 10000)) }},
 };
 </script>
 <script src="{{ asset('assets/pages/scripts/ventas/mozo_gastronomia/consulta.js') }}"></script>

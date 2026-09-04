@@ -28,6 +28,15 @@
         .items th, .items td { font-size: 10px; padding: 4px 5px; word-wrap: break-word; }
         .items .num { text-align: right; white-space: nowrap; }
         .items .cen { text-align: center; }
+        .item-leyenda { font-size: 9px; color: #222; background: #f7f7f7; padding: 4px 6px !important; border-top: none !important; }
+        .item-leyenda .item-leyenda-detalle {
+            font-size: 10px;
+            line-height: 1.3;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            margin-bottom: 2px;
+        }
+        .item-leyenda .muted { font-size: 8px; color: #555; }
         .bloque-texto { white-space: pre-wrap; word-wrap: break-word; max-width: 100%; }
         .subtotal { font-weight: bold; background: #f5f5f5; }
     </style>
@@ -145,6 +154,7 @@
                     $part = $linea->partidagastos;
                     $cpx = $linea->capexs;
                     $art = $linea->articulos;
+                    $detLin = trim((string) ($linea->detalle ?? ''));
                 @endphp
                 <tr>
                     <td class="cen">{{ $i + 1 }}</td>
@@ -160,6 +170,14 @@
                     <td>{{ $cpx->codigo ?? '' }} @if($cpx) — {{ $cpx->nombre ?? '' }} @endif</td>
                     <td class="num">{{ number_format($sub, 2, ',', '.') }}</td>
                 </tr>
+                @if ($detLin !== '')
+                <tr class="item-leyenda">
+                    <td colspan="12">
+                        <div class="item-leyenda-detalle">{{ $linea->detalle }}</div>
+                        <span class="muted">Leyenda del ítem</span>
+                    </td>
+                </tr>
+                @endif
             @endforeach
             <tr class="subtotal">
                 <td colspan="11" style="text-align:right;">Total ítems (suma cant × precio por línea)</td>

@@ -64,7 +64,11 @@ class StkmaePrecioCompraAnitaBridgeSupportTest extends TestCase
     {
         $precioRecepcion = 50.0;
         $impPorUnidad = 10.0;
-        $precioUltimaCompra = $precioRecepcion + $impPorUnidad;
+        $precioUltimaCompra = \App\Support\Stock\RecepcionProveedorImpuestoInternoSupport::precioUltimaCompraConImpuestoInterno(
+            $precioRecepcion,
+            $impPorUnidad,
+            true,
+        );
 
         $resultado = StkmaePrecioCompraAnitaBridgeSupport::calcularPushPrecioCompra(
             [
@@ -83,5 +87,16 @@ class StkmaePrecioCompraAnitaBridgeSupportTest extends TestCase
         );
 
         $this->assertSame(60.0, $resultado['stkm_pre_compra3']);
+    }
+
+    public function test_precio_ultima_compra_no_duplica_cuando_linea_ya_trae_ii(): void
+    {
+        $precio = \App\Support\Stock\RecepcionProveedorImpuestoInternoSupport::precioUltimaCompraConImpuestoInterno(
+            5831.544,
+            4588.68,
+            true,
+        );
+
+        $this->assertSame(5831.544, $precio);
     }
 }

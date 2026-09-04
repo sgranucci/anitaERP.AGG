@@ -236,6 +236,22 @@ final class OrdencompraEnvioCuentasAPagarGateSupport
         return (int) (DB::table('tipotransaccion_compra')->orderBy('id')->value('id') ?? 0);
     }
 
+    /**
+     * Tipo de factura según CC destino de la OC (listaConcepto). Si no se puede resolver, FGA.
+     */
+    public static function tipotransaccionCompraIdParaOrdencompra(Ordencompra $oc, string $tipoComprobante = 'FC'): int
+    {
+        $id = PrecargaProveedor\PrecargaProveedorAbreviaturaTipoSupport::tipotransaccionIdDesdeOrdencompra(
+            $oc,
+            $tipoComprobante
+        );
+        if ($id > 0) {
+            return $id;
+        }
+
+        return self::tipotransaccionCompraDefaultId();
+    }
+
     public static function tipotransaccionCompraIdPorCodigoAfip(string $codigoAfip): int
     {
         $norm = ComprobanteProveedorUnicidadSupport::normalizarCodigoAfip($codigoAfip);

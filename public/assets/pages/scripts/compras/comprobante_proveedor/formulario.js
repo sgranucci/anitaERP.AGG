@@ -917,6 +917,34 @@ $(function () {
         return id > 0 ? { centrocosto_id: id } : {};
     };
 
+    function hayConceptosCargados() {
+        var hay = false;
+        $('#tbody-concepto-table tr.item-concepto').each(function () {
+            if (parseInt(String($(this).find('.concepto_ivacompra_id').val() || '0'), 10) > 0) {
+                hay = true;
+                return false;
+            }
+        });
+        return hay;
+    }
+
+    function alCambiarTipoComprobante(tipoId) {
+        actualizarAbreviaturaTipoComprobante();
+        // Si ya hay conceptos (p. ej. al editar FNB→CNB), conservarlos: el asiento
+        // se recalcula con el signo del tipo nuevo (NC/ND invierte Debe/Haber).
+        if (hayConceptosCargados()) {
+            var $aviso = $('#cp-conceptos-tipo-aviso');
+            if ($aviso.length) {
+                $aviso.removeClass('d-none').html(
+                    '<i class="fa fa-info-circle"></i> Se conservaron los conceptos y montos. El asiento se recalcula según el nuevo tipo (NC/ND invierte Debe/Haber).'
+                );
+            }
+            programarPreviewAsiento();
+            return;
+        }
+        precargarConceptosPorTipo(tipoId, true);
+    }
+
     if (typeof activa_eventos_consultatipotransaccioncompra === 'function') {
         activa_eventos_consultatipotransaccioncompra();
     }
@@ -924,8 +952,7 @@ $(function () {
     actualizarAbreviaturaTipoComprobante();
 
     $(document).on('cp:tipotransaccion-compra-elegido', function (e, tipoId) {
-        actualizarAbreviaturaTipoComprobante();
-        precargarConceptosPorTipo(tipoId, true);
+        alCambiarTipoComprobante(tipoId);
     });
 
     // Si el alta viene con tipo y sin conceptos con monto, precargar plantilla del tipo.
@@ -952,8 +979,7 @@ $(function () {
     // Compat legado: si queda un select (otras pantallas), mantener el aviso.
     $('#tipotransaccion_compra_id').on('change', function () {
         if ($(this).is('select')) {
-            actualizarAbreviaturaTipoComprobante();
-            precargarConceptosPorTipo($(this).val(), true);
+            alCambiarTipoComprobante($(this).val());
         }
     });
 

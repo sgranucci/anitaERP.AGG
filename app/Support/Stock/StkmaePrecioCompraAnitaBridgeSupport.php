@@ -232,10 +232,11 @@ final class StkmaePrecioCompraAnitaBridgeSupport
             }
 
             $precioRaw = (float) ($linea->precio_stock ?? $linea->precio);
-            if ($impuestoInternoPorUnidad > 0.000001
-                && RecepcionProveedorImpuestoInternoSupport::articuloEsCigarrillo($articuloMovimiento)) {
-                $precioRaw += $impuestoInternoPorUnidad;
-            }
+            $precioRaw = RecepcionProveedorImpuestoInternoSupport::precioUltimaCompraConImpuestoInterno(
+                $precioRaw,
+                $impuestoInternoPorUnidad,
+                RecepcionProveedorImpuestoInternoSupport::articuloEsCigarrillo($articuloMovimiento),
+            );
             $monedaAnita = self::codigoMonedaAnita((int) $linea->moneda_id);
             $coef = $monedaAnita !== '1' ? (float) ($linea->cotizacion ?? 1) : 1.0;
             $precioPesos = $precioRaw * $coef;

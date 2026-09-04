@@ -1531,8 +1531,7 @@ class ArbolaprobacionService
         string $observacionEnvio = ''
     ): array {
         $totales = OrdencompraTotalesCabecera::desdeModelo($ordencompra, $this->cotizacionQuery);
-
-        return [
+        $extras = [
             'estado_tras_aprobar' => $estadoAlAprobarEsteNivel !== null && $estadoAlAprobarEsteNivel !== ''
                 ? $estadoAlAprobarEsteNivel
                 : null,
@@ -1540,6 +1539,15 @@ class ArbolaprobacionService
             'moneda_abrev_items' => $totales['monedacabecera_abreviatura'],
             'comentario_envio' => $observacionEnvio,
         ];
+
+        return array_merge(
+            $extras,
+            OrdencompraLegajoGastronomiaSupport::extrasMailLegajo(
+                $ordencompra,
+                (float) ($totales['monto'] ?? 0),
+                (string) ($totales['monedacabecera_abreviatura'] ?? '')
+            )
+        );
     }
 
     /**

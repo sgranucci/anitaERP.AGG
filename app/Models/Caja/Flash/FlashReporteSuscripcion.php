@@ -3,6 +3,7 @@
 namespace App\Models\Caja\Flash;
 
 use App\Models\Seguridad\Usuario;
+use App\Support\Caja\Flash\FlashReporteAggPerfilVistaSupport;
 use App\Support\Caja\Flash\FlashReporteAggSmtpReintentoSupport;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -38,6 +39,7 @@ class FlashReporteSuscripcion extends Model
         'hora',
         'periodo_relativo',
         'mes_fijo',
+        'perfil_vista',
         'destinatarios',
         'mensaje',
         'ultima_ejecucion',
@@ -80,6 +82,21 @@ class FlashReporteSuscripcion extends Model
             self::PERIODO_MES_ANTERIOR => 'Mes anterior completo',
             self::PERIODO_FIJO => 'El mes fijo cargado en el envío',
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function perfilesVista(): array
+    {
+        return FlashReporteAggPerfilVistaSupport::etiquetas();
+    }
+
+    public function perfilVistaTexto(): string
+    {
+        $perfil = FlashReporteAggPerfilVistaSupport::normalizar($this->perfil_vista ?? null);
+
+        return FlashReporteAggPerfilVistaSupport::etiquetas()[$perfil] ?? $perfil;
     }
 
     /**

@@ -471,6 +471,7 @@ class RequisicionController extends Controller
         $estado_en_compras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
         $estado_en_arbol_aprobacion = Requisicion_Estado::$enumEstado[array_search('R', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
         $estado_aprobada_requisicion = $nombreAprobada;
+        $estado_genero_oc_requisicion = Requisicion_Estado::$enumEstado[array_search('O', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
         $tratamiento_enum = Requisicion::$enumTratamiento;
         $contratacionDirecta_enum = Requisicion::$enumContratacionDirecta;
 
@@ -505,6 +506,7 @@ class RequisicionController extends Controller
             'estado_en_compras',
             'estado_en_arbol_aprobacion',
             'estado_aprobada_requisicion',
+            'estado_genero_oc_requisicion',
             'tratamiento_enum',
             'contratacionDirecta_enum',
             'acceso_visualizacion_por_hash',
@@ -761,6 +763,28 @@ class RequisicionController extends Controller
         }
 
         return redirect()->back()->with('mensaje', $ret['errores'] ?? 'No se pudo devolver la requisición a compras.');
+    }
+
+    public function marcarCumplida(Request $request, int $id)
+    {
+        can('actualizar-requisicion');
+
+        if (! $this->requisicionQuery->requisicionAccesiblePorUsuario($id)) {
+            return redirect()->route('consultar_requisicion')->with('mensaje', 'Requisición no encontrada o sin acceso.');
+        }
+
+        $ret = $this->requisicionService->marcarComoCumplida($id);
+
+        if ($ret['mensaje'] === 'ok') {
+            $cerradas = (int) ($ret['lineas_cerradas'] ?? 0);
+            $mensaje = $cerradas > 0
+                ? 'Requisición marcada como CUMPLIDA. Se cerraron '.$cerradas.' ítem(es) pendientes sin orden de compra.'
+                : 'Requisición marcada como CUMPLIDA.';
+
+            return redirect()->back()->with('mensaje', $mensaje);
+        }
+
+        return redirect()->back()->with('mensaje_error', $ret['errores'] ?? 'No se pudo marcar la requisición como CUMPLIDA.');
     }
 
     public function eliminar(Request $request, $id)
@@ -1188,6 +1212,7 @@ class RequisicionController extends Controller
             $estado_en_compras = Requisicion_Estado::$enumEstado[array_search('K', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
             $estado_en_arbol_aprobacion = Requisicion_Estado::$enumEstado[array_search('R', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
             $estado_aprobada_requisicion = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
+            $estado_genero_oc_requisicion = Requisicion_Estado::$enumEstado[array_search('O', array_column(Requisicion_Estado::$enumEstado, 'valor'), true)]['nombre'];
             $tratamiento_enum = Requisicion::$enumTratamiento;
             $contratacionDirecta_enum = Requisicion::$enumContratacionDirecta;
             $visualizar = true;
@@ -1215,6 +1240,7 @@ class RequisicionController extends Controller
                 'estado_en_compras',
                 'estado_en_arbol_aprobacion',
                 'estado_aprobada_requisicion',
+                'estado_genero_oc_requisicion',
                 'tratamiento_enum',
                 'contratacionDirecta_enum',
                 'visualizar',

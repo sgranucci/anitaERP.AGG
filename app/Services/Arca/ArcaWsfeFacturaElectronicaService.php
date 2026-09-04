@@ -5,6 +5,7 @@ namespace App\Services\Arca;
 use App\Models\Ventas\Puntoventa;
 use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
+use App\Support\Ventas\ArcaCaeaCbteFchHsGenSupport;
 use App\Support\Ventas\ArcaFceDatosAdicionalesSupport;
 use Exception;
 use Illuminate\Support\Facades\Log;
@@ -884,11 +885,8 @@ class ArcaWsfeFacturaElectronicaService
     {
         $det = $this->buildFecaDetRequest($cbteTipo, $ptoVta, $datos, $empresaId);
         $det['CAEA'] = $caeaNum;
-
-        $cbteFchHsGen = trim((string) ($datos['cbte_fch_hs_gen'] ?? ''));
-        if ($cbteFchHsGen !== '') {
-            $det['CbteFchHsGen'] = preg_replace('/\D+/', '', $cbteFchHsGen);
-        }
+        // RG 5782: CbteFchHsGen obligatorio en PV/modalidad CAEA (contingencia).
+        $det['CbteFchHsGen'] = ArcaCaeaCbteFchHsGenSupport::paraWsfe($datos);
 
         return $det;
     }

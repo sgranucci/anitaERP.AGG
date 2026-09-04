@@ -17,9 +17,9 @@
     $puedeVerCuentacaja = $puede_ver_cuentacaja ?? false;
     $mostrarEmpresa = $multiempresa ?? false;
     $mostrarCentrocosto = \App\Support\Contable\MayorPlanoCuentaListadoFiltros::mostrarColumnaCentrocosto($filtros ?? []);
-    $totalColumnas = ($mostrarEmpresa ? 17 : 16) - ($mostrarCentrocosto ? 0 : 1);
-    $colSpanAntesImportes = $mostrarCentrocosto ? 12 : 11;
-    $colSpanSaldoInicialVacias = $mostrarCentrocosto ? 14 : 13;
+    $totalColumnas = ($mostrarEmpresa ? 18 : 17) - ($mostrarCentrocosto ? 0 : 1);
+    $colSpanAntesImportes = $mostrarCentrocosto ? 13 : 12;
+    $colSpanSaldoInicialVacias = $mostrarCentrocosto ? 15 : 14;
 @endphp
 <thead>
     <tr>
@@ -27,7 +27,8 @@
         <th>N.Asi.</th>
         <th>Tip</th>
         <th>Comprobante</th>
-        <th>Emisor</th>
+        <th>Cód. emisor</th>
+        <th>Nombre emisor</th>
         <th>CUIT</th>
         <th>Descripción mov.</th>
         @if ($mostrarCentrocosto)
@@ -223,26 +224,34 @@
                         </a>
                     @endif
                 </td>
+                @php
+                    $codigoEmisor = (string) ($fila['emisor'] ?? '');
+                    $nombreEmisor = (string) ($fila['emisor_nombre'] ?? '');
+                    $hrefEmisor = null;
+                    if ($puedeVerProveedor && (int) ($fila['proveedor_id'] ?? 0) > 0) {
+                        $hrefEmisor = route('editar_proveedor', ['id' => $fila['proveedor_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']);
+                    } elseif ($puedeVerCliente && (int) ($fila['cliente_id'] ?? 0) > 0) {
+                        $hrefEmisor = route('editar_cliente', ['id' => $fila['cliente_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']);
+                    } elseif ($puedeVerCuentacaja && (int) ($fila['cuentacaja_id'] ?? 0) > 0) {
+                        $hrefEmisor = route('editar_cuentacaja', ['id' => $fila['cuentacaja_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']);
+                    }
+                @endphp
                 <td>
-                    @php
-                        $textoEmisor = ($fila['emisor_fmt'] ?? '') !== ''
-                            ? $fila['emisor_fmt']
-                            : ($fila['emisor'] ?? '');
-                        $hrefEmisor = null;
-                        if ($puedeVerProveedor && (int) ($fila['proveedor_id'] ?? 0) > 0) {
-                            $hrefEmisor = route('editar_proveedor', ['id' => $fila['proveedor_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']);
-                        } elseif ($puedeVerCliente && (int) ($fila['cliente_id'] ?? 0) > 0) {
-                            $hrefEmisor = route('editar_cliente', ['id' => $fila['cliente_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']);
-                        } elseif ($puedeVerCuentacaja && (int) ($fila['cuentacaja_id'] ?? 0) > 0) {
-                            $hrefEmisor = route('editar_cuentacaja', ['id' => $fila['cuentacaja_id'], 'origen' => 'modal_consulta', 'vista' => 'consulta']);
-                        }
-                    @endphp
-                    @if ($hrefEmisor)
+                    @if ($hrefEmisor && $codigoEmisor !== '')
                         <a href="{{ $hrefEmisor }}" target="_blank" rel="noopener" class="text-primary">
-                            {{ $textoEmisor }}
+                            {{ $codigoEmisor }}
                         </a>
                     @else
-                        {{ $textoEmisor }}
+                        {{ $codigoEmisor }}
+                    @endif
+                </td>
+                <td>
+                    @if ($hrefEmisor && $nombreEmisor !== '')
+                        <a href="{{ $hrefEmisor }}" target="_blank" rel="noopener" class="text-primary">
+                            {{ $nombreEmisor }}
+                        </a>
+                    @else
+                        {{ $nombreEmisor }}
                     @endif
                 </td>
                 <td>{{ $fila['cuit'] ?? '' }}</td>

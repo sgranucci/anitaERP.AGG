@@ -28,13 +28,19 @@
     </p>
 @endif
 
-@if (!empty($archivo['imagen_path']) && is_file($archivo['imagen_path']))
+@if (!empty($archivo['perfil_vista']) && $archivo['perfil_vista'] === 'finanzas')
+    <p style="margin:0 0 8px 0; color:#555;">Vista Finanzas — día y MTD consolidado</p>
+@elseif (!empty($archivo['imagen_path']) && is_file($archivo['imagen_path']))
     <p style="margin:0 0 8px 0; color:#555;">Resumen solapa Tabla (A1:G13)</p>
+@elseif (!empty($archivo['tabla_resumen']))
+    <p style="margin:0 0 8px 0; color:#555;">Resumen solapa Tabla (A1:G13)</p>
+@endif
+
+@if (!empty($archivo['imagen_path']) && is_file($archivo['imagen_path']) && (($archivo['perfil_vista'] ?? '') !== 'finanzas'))
     <p style="margin:0 0 16px 0;">
         <img src="{{ $message->embed($archivo['imagen_path']) }}" alt="Tabla Flash A1:G13" style="max-width:100%;border:1px solid #cccccc;">
     </p>
 @elseif (!empty($archivo['tabla_resumen']))
-    <p style="margin:0 0 8px 0; color:#555;">Resumen solapa Tabla (A1:G13)</p>
     <table cellpadding="6" cellspacing="0" style="border-collapse:collapse;margin:0 0 16px 0;font-size:12px;">
         @foreach ($archivo['tabla_resumen'] as $fila)
             <tr>

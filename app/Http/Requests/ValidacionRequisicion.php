@@ -22,6 +22,8 @@ class ValidacionRequisicion extends FormRequest
             'oficinacompra_id' => 'nullable|integer',
             'comentario' => 'nullable|string|max:255',
             'detalle' => 'nullable|string',
+            'detalle_articulos' => 'nullable|array',
+            'detalle_articulos.*' => 'nullable|string|max:2000',
             'tratamiento' => 'required|string|max:50',
             'motivotratamiento' => 'nullable|string|max:255',
             'contrataciondirecta' => 'nullable|string|max:50',

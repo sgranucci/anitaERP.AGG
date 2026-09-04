@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Uif;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionCliente_Uif;
 use App\Services\Uif\Cliente_UifService;
+use App\Services\Uif\ClienteUifMatrizRiesgoExplicacionService;
 use App\Services\Uif\ClienteUifSexoAprendizajeService;
 use App\Exports\Uif\Cliente_UifExport;
+use App\Exports\Uif\ClienteUifMatrizRiesgoExplicacionExport;
 use App\Exports\Uif\ClienteUifPremiosExport;
 use App\Exports\Uif\ClienteUifReportablesExport;
 use App\Models\Uif\Cliente_Uif;
@@ -59,9 +61,11 @@ class Cliente_UifController extends Controller
     private $so_uifRepository;
     private $tipodocumentoRepository;
     private $clienteUifSexoAprendizajeService;
+    private ClienteUifMatrizRiesgoExplicacionService $matrizRiesgoExplicacionService;
 
 	public function __construct(Cliente_UifService $cliente_uifservice,
                                 ClienteUifSexoAprendizajeService $clienteUifSexoAprendizajeService,
+                                ClienteUifMatrizRiesgoExplicacionService $matrizRiesgoExplicacionService,
                                 Cliente_UifRepositoryInterface $cliente_uifrepository,
                                 Cliente_Premio_UifRepository $clientePremioUifRepository,
                                 Localidad_UifRepositoryInterface $localidad_uifrepository,
@@ -97,6 +101,7 @@ class Cliente_UifController extends Controller
         $this->so_uifRepository = $so_uifrepository;
         $this->tipodocumentoRepository = $tipodocumentorepository;
         $this->clienteUifSexoAprendizajeService = $clienteUifSexoAprendizajeService;
+        $this->matrizRiesgoExplicacionService = $matrizRiesgoExplicacionService;
     }
 
     /**
@@ -532,6 +537,46 @@ class Cliente_UifController extends Controller
         }
 
         return redirect()->route('edita_cliente_uif', ['id' => $id, 'uif_tab' => 3]);
+    }
+
+    public function exportarMatrizRiesgoExplicacion(Request $request, $id, $formato = null)
+    {
+        if (! esSupervisorUif()) {
+            abort(403);
+        }
+
+        $cliente_uif = $this->cliente_uifRepository->find($id);
+        if ($cliente_uif === null) {
+            abort(404);
+        }
+
+        ini_set('memory_limit', '-1');
+        ini_set('max_execution_time', '0');
+
+        $reporte = $this->matrizRiesgoExplicacionService->explicarCliente((int) $id);
+        $nombreBase = 'matriz_riesgo_uif_'.$id;
+
+        switch ($formato) {
+            case 'PDF':
+                $view = \View::make('uif.cliente_uif.matriz_riesgo_explicacion_listado', compact('reporte'))->render();
+                $path = storage_path('pdf/listados');
+                if (! is_dir($path)) {
+                    @mkdir($path, 0775, true);
+                }
+                $nombrePdf = $nombreBase.'.pdf';
+
+                $pdf = \App::make('dompdf.wrapper');
+                $pdf->setPaper('legal', 'portrait');
+                $pdf->loadHTML($view, 'UTF-8')->save($path.'/'.$nombrePdf);
+
+                return response()->download($path.'/'.$nombrePdf);
+            case 'EXCEL':
+                return (new ClienteUifMatrizRiesgoExplicacionExport())
+                    ->parametros($reporte)
+                    ->download($nombreBase.'.xlsx');
+        }
+
+        return redirect()->route('edita_cliente_uif', ['id' => $id, 'uif_tab' => 4]);
     }
 
     public function crearExportaOperacion()

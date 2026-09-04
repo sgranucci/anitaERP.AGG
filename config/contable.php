@@ -55,9 +55,16 @@ return [
     | después sigue el bridge Anita. Vacío = solo Anita (legacy).
     */
     'mayor_plano_cuenta' => [
-        'memory_limit' => env('MAYOR_PLANO_CUENTA_MEMORY_LIMIT', '1024M'),
+        'memory_limit' => env('MAYOR_PLANO_CUENTA_MEMORY_LIMIT', '4096M'),
         'max_execution_time' => (int) env('MAYOR_PLANO_CUENTA_MAX_EXECUTION_TIME', 900),
         'fuente_erp_hasta' => env('MAYOR_PLANO_CUENTA_FUENTE_ERP_HASTA', '2025-12-31'),
+        // Período > async_dias_minimos → cola reports + mail (un mes sigue en pantalla).
+        'async_habilitado' => filter_var(env('MAYOR_PLANO_CUENTA_ASYNC_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'async_dias_minimos' => (int) env('MAYOR_PLANO_CUENTA_ASYNC_DIAS_MINIMOS', 32),
+        'async_cola' => env('MAYOR_PLANO_CUENTA_ASYNC_COLA', 'reports'),
+        'async_job_timeout' => (int) env('MAYOR_PLANO_CUENTA_ASYNC_JOB_TIMEOUT', 5400),
+        'async_unique_for' => (int) env('MAYOR_PLANO_CUENTA_ASYNC_UNIQUE_FOR', 10800),
+        'async_adjunto_max_mb' => (int) env('MAYOR_PLANO_CUENTA_ASYNC_ADJUNTO_MAX_MB', 8),
     ],
 
     /*

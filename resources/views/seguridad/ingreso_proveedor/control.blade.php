@@ -32,6 +32,13 @@
             <p class="porteria-kicker">Seguridad &middot; Porter&iacute;a</p>
             <h1>Control de ingreso</h1>
             <p class="porteria-sub">Una persona. Un DNI. Dos decisiones: entr&oacute; o sali&oacute;. El resto queda para reportes y KPIs.</p>
+            <p class="mb-0 mt-2">
+                @include('includes.ayuda.boton-guia', [
+                    'slug' => 'autorizacion-ingresos',
+                    'titulo' => 'Guía: autorización y control de ingresos',
+                    'clase' => 'btn btn-outline-light btn-sm',
+                ])
+            </p>
         </div>
         <form id="porteria-form-dni" class="porteria-dni" autocomplete="off">
             @csrf

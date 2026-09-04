@@ -11,6 +11,7 @@ Requisiciones
 <script src="{{ asset('assets/pages/scripts/contable/centrocosto/consulta.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/contable/centrocosto/consulta.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/enviar-arbol.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/volver-compras.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/compras/requisicion/marcar-cumplida.js') }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/requisicion/confirmar.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/requisicion/confirmar.js')) ?: time() }}" type="text/javascript"></script>
 @include('compras.requisicion.partials.banner_confirmando_styles')
 @include('compras.requisicion.partials.banner_enviando_arbol_styles')
@@ -177,6 +178,12 @@ Requisiciones
                                     <i class="fa fa-truck-loading"></i>
                                 </a>
                                 @endif
+                                @include('compras.requisicion.partials.boton_marcar_cumplida', [
+                                    'data' => $data,
+                                    'filtrosQuery' => $retornoListadoQuery,
+                                    'claseBoton' => 'btn-accion-tabla tooltipsC text-secondary',
+                                    'soloIcono' => true,
+                                ])
                                 @if ((int) ($data->ordencompra_vinculadas_count ?? 0) > 0 && (can('editar-requisicion', false) || can('listar-requisicion', false)))
                                 <button type="button" class="btn-accion-tabla tooltipsC text-warning js-requisicion-comprobantes" title="Ver órdenes de compra vinculadas" data-id="{{ $data->id }}" data-numero="{{ $data->numerorequisicion }}">
                                     <i class="fa fa-shopping-cart"></i>

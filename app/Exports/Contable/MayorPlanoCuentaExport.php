@@ -186,10 +186,10 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
 
         $conCc = $this->mostrarColumnaCentrocosto();
         if ($this->multiempresa) {
-            return $conCc ? 'Q' : 'P';
+            return $conCc ? 'R' : 'Q';
         }
 
-        return $conCc ? 'P' : 'O';
+        return $conCc ? 'Q' : 'P';
     }
 
     public function columnFormats(): array
@@ -227,7 +227,22 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
                 'A' => NumberFormat::FORMAT_TEXT,
                 'B' => NumberFormat::FORMAT_TEXT,
                 'E' => NumberFormat::FORMAT_TEXT,
-                'H' => NumberFormat::FORMAT_TEXT,
+                'F' => NumberFormat::FORMAT_TEXT,
+                'I' => NumberFormat::FORMAT_TEXT,
+                'J' => NumberFormat::FORMAT_TEXT,
+                'L' => ExcelFormatoNumero::codigoColumna($formato, 4),
+                'M' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'N' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'O' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'P' => ExcelFormatoNumero::codigoColumna($formato, 2),
+                'Q' => ExcelFormatoNumero::codigoColumna($formato, 2),
+            ];
+        } else {
+            $fmt = [
+                'A' => NumberFormat::FORMAT_TEXT,
+                'B' => NumberFormat::FORMAT_TEXT,
+                'E' => NumberFormat::FORMAT_TEXT,
+                'F' => NumberFormat::FORMAT_TEXT,
                 'I' => NumberFormat::FORMAT_TEXT,
                 'K' => ExcelFormatoNumero::codigoColumna($formato, 4),
                 'L' => ExcelFormatoNumero::codigoColumna($formato, 2),
@@ -235,19 +250,6 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
                 'N' => ExcelFormatoNumero::codigoColumna($formato, 2),
                 'O' => ExcelFormatoNumero::codigoColumna($formato, 2),
                 'P' => ExcelFormatoNumero::codigoColumna($formato, 2),
-            ];
-        } else {
-            $fmt = [
-                'A' => NumberFormat::FORMAT_TEXT,
-                'B' => NumberFormat::FORMAT_TEXT,
-                'E' => NumberFormat::FORMAT_TEXT,
-                'H' => NumberFormat::FORMAT_TEXT,
-                'J' => ExcelFormatoNumero::codigoColumna($formato, 4),
-                'K' => ExcelFormatoNumero::codigoColumna($formato, 2),
-                'L' => ExcelFormatoNumero::codigoColumna($formato, 2),
-                'M' => ExcelFormatoNumero::codigoColumna($formato, 2),
-                'N' => ExcelFormatoNumero::codigoColumna($formato, 2),
-                'O' => ExcelFormatoNumero::codigoColumna($formato, 2),
             ];
         }
 
@@ -289,18 +291,31 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
         }
 
         // Anchos para importes con separadores (ej. -12.345.678,90) sin #####.
-        // No achicar L–O: Excel muestra ##### si el ancho no alcanza.
+        // No achicar M–Q: Excel muestra ##### si el ancho no alcanza.
         $widths = [
             'A' => 11,  // Fecha
             'B' => 11,  // N.Asi.
             'C' => 5,   // Tip
             'D' => 15,  // Comprobante
-            'E' => 30,  // Emisor (código — nombre)
-            'F' => 13,  // CUIT
-            'G' => 32,  // Descripción mov.
+            'E' => 12,  // Cód. emisor
+            'F' => 28,  // Nombre emisor
+            'G' => 13,  // CUIT
+            'H' => 32,  // Descripción mov.
         ];
         if ($this->mostrarColumnaCentrocosto()) {
-            $widths['H'] = 20;  // Centro de costo
+            $widths['I'] = 20;  // Centro de costo
+            $widths['J'] = 11;  // O.Compra
+            $widths['K'] = 5;   // Mon
+            $widths['L'] = 11;  // Cotiz.
+            $widths['M'] = 13;  // Mon. Ref.
+            $widths['N'] = 16;  // Debe
+            $widths['O'] = 16;  // Haber
+            $widths['P'] = 16;  // Saldo del mes
+            $widths['Q'] = 18;  // Saldo ejerc.
+            if ($this->multiempresa) {
+                $widths['R'] = 8;
+            }
+        } else {
             $widths['I'] = 11;  // O.Compra
             $widths['J'] = 5;   // Mon
             $widths['K'] = 11;  // Cotiz.
@@ -311,18 +326,6 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
             $widths['P'] = 18;  // Saldo ejerc.
             if ($this->multiempresa) {
                 $widths['Q'] = 8;
-            }
-        } else {
-            $widths['H'] = 11;  // O.Compra
-            $widths['I'] = 5;   // Mon
-            $widths['J'] = 11;  // Cotiz.
-            $widths['K'] = 13;  // Mon. Ref.
-            $widths['L'] = 16;  // Debe
-            $widths['M'] = 16;  // Haber
-            $widths['N'] = 16;  // Saldo del mes
-            $widths['O'] = 18;  // Saldo ejerc.
-            if ($this->multiempresa) {
-                $widths['P'] = 8;
             }
         }
 
@@ -493,8 +496,8 @@ class MayorPlanoCuentaExport implements FromView, WithColumnFormatting, WithColu
                 : ['C', 'D', 'E', 'F', 'G'];
         } else {
             $colsImportes = $this->mostrarColumnaCentrocosto()
-                ? ['K', 'L', 'M', 'N', 'O', 'P']
-                : ['J', 'K', 'L', 'M', 'N', 'O'];
+                ? ['L', 'M', 'N', 'O', 'P', 'Q']
+                : ['K', 'L', 'M', 'N', 'O', 'P'];
         }
         foreach ($colsImportes as $col) {
             $sheet->getStyle($col.$desde.':'.$col.$highestRow)->applyFromArray([

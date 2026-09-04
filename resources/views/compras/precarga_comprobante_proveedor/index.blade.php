@@ -87,7 +87,21 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombreempresa ?? ($data->empresas->nombre ?? '')}}</td>
                             <td>{{$data->nombreproveedor ?? ($data->proveedores->nombre ?? '')}}</td>
-                            <td>{{$data->nombretipotransaccion_compra ?? ($data->tipotransaccion_compras->nombre ?? '')}}</td>
+                            <td>
+                                @php
+                                    $abrevTipo = trim((string) ($data->abreviaturatipotransaccion_compra
+                                        ?? ($data->tipotransaccion_compras->abreviatura ?? '')));
+                                    $nombreTipo = trim((string) ($data->nombretipotransaccion_compra
+                                        ?? ($data->tipotransaccion_compras->nombre ?? '')));
+                                @endphp
+                                @if ($abrevTipo !== '' && $nombreTipo !== '')
+                                    <strong>{{ $abrevTipo }}</strong> — {{ $nombreTipo }}
+                                @elseif ($abrevTipo !== '')
+                                    <strong>{{ $abrevTipo }}</strong>
+                                @else
+                                    {{ $nombreTipo }}
+                                @endif
+                            </td>
                             <td>{{$data->letra}}{{$data->sucursal}}-{{$data->numerocomprobante}}</td>
                             <td>{{ filled($data->fechafactura) ? \Carbon\Carbon::parse($data->fechafactura)->format('d/m/Y') : '' }}</td>
                             <td>{{ filled($data->fecharecepcionemail) ? \Carbon\Carbon::parse($data->fecharecepcionemail)->format('d/m/Y') : '' }}</td>

@@ -534,13 +534,6 @@ class ComprobanteProveedorAsientoService
      */
     public function previewDesdeFormulario(Request $request, ?Comprobante_Proveedor $existente = null): array
     {
-        if ($existente && $existente->estado === ComprobanteProveedorEstados::CONTABILIZADO) {
-            return array_merge(
-                $this->previewAsientoGrabado($existente),
-                ['avisos' => []],
-            );
-        }
-
         try {
             $comprobante = $this->previewSupport->construirDesdeRequest($request, $existente);
         } catch (\RuntimeException $e) {
@@ -554,7 +547,20 @@ class ComprobanteProveedorAsientoService
         }
 
         $preview = $this->previewBorrador($comprobante);
-        $preview['avisos'] = $this->previewSupport->avisosFaltantes($comprobante);
+        $preview['avisos'] = array_merge(
+            $this->previewSupport->avisosFaltantes($comprobante),
+            $preview['avisos'] ?? []
+        );
+
+        if ($existente && $existente->estado === ComprobanteProveedorEstados::CONTABILIZADO) {
+            $preview['avisos'][] = [
+                'tipo' => 'info',
+                'mensaje' => 'Vista previa del asiento que se regenerará al guardar (el tipo NC/ND invierte Debe/Haber).',
+            ];
+            // Marcar como preview aunque exista asiento grabado: el HTML no debe confundirse con el asiento vigente.
+            $preview['es_preview'] = true;
+            unset($preview['asiento_id'], $preview['numeroasiento']);
+        }
 
         return $preview;
     }

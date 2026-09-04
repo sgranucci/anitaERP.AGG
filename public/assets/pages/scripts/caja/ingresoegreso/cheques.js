@@ -139,21 +139,33 @@ function agregaRenglonChequeReemplazo(e) {
 function borraRenglonChequeEmitido(e) {
     e.preventDefault();
     $(this).closest('tr').remove();
-    sumaMontosChequesIngresoEgreso();
+    if (typeof sumaMonto === 'function') {
+        sumaMonto();
+    } else {
+        sumaMontosChequesIngresoEgreso();
+    }
     flModificaAsiento = true;
 }
 
 function borraRenglonChequeRecibido(e) {
     e.preventDefault();
     $(this).closest('tr').remove();
-    sumaMontosChequesIngresoEgreso();
+    if (typeof sumaMonto === 'function') {
+        sumaMonto();
+    } else {
+        sumaMontosChequesIngresoEgreso();
+    }
     flModificaAsiento = true;
 }
 
 function borraRenglonChequeReemplazo(e) {
     e.preventDefault();
     $(this).closest('tr').remove();
-    sumaMontosChequesIngresoEgreso();
+    if (typeof sumaMonto === 'function') {
+        sumaMonto();
+    } else {
+        sumaMontosChequesIngresoEgreso();
+    }
     flModificaAsiento = true;
 }
 

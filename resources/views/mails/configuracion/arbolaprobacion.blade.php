@@ -13,10 +13,12 @@
     @elseif ($tipoArbol == 'Ordenes de compra')
         <p>Hola! Tiene una Orden de compra para aprobación</p>
         @php $mx = $mailExtras ?? []; @endphp
-        @if (!empty($mx['estado_tras_aprobar']))
-            <p>Al <strong>aprobar este paso</strong>, la orden de compra quedará en estado <strong>{{ $mx['estado_tras_aprobar'] }}</strong>.</p>
-        @else
-            <p>En este nivel del árbol <strong>no está definido</strong> un estado destino al aprobar; solo avanzará la aprobación del flujo.</p>
+        @if (empty($mx['es_legajo_gastronomia']))
+            @if (!empty($mx['estado_tras_aprobar']))
+                <p>Al <strong>aprobar este paso</strong>, la orden de compra quedará en estado <strong>{{ $mx['estado_tras_aprobar'] }}</strong>.</p>
+            @else
+                <p>En este nivel del árbol <strong>no está definido</strong> un estado destino al aprobar; solo avanzará la aprobación del flujo.</p>
+            @endif
         @endif
     @elseif ($tipoArbol == 'Solicitudes de pago')
         @php $mx = $mailExtras ?? []; @endphp
@@ -92,28 +94,76 @@
         </div>
     @elseif ($tipoArbol == 'Ordenes de compra')
         @php $mx = $mailExtras ?? []; @endphp
-        <p style="font-size:14px;color:#444;">Al abrir los enlaces de <strong>Autorizar</strong> o <strong>Rechazar</strong> verá el detalle y podrá cargar observaciones antes de confirmar.</p>
-        <ul>
-            <li>Empresa: {{ $datosComprobante->empresas->nombre ?? '' }}</li>
-            <li>Número OC: {{ $datosComprobante->numeroordencompra }}</li>
-            <li>Fecha: {{ date('d/m/Y', strtotime($datosComprobante->fecha ?? '')) }}</li>
-            <li>Monto total ítems: {{ $mx['moneda_abrev_items'] ?? '—' }} {{ number_format($mx['monto_items'] ?? 0, 2) }}</li>
-            <li>Proveedor: {{ $datosComprobante->proveedores->nombre ?? '—' }}</li>
-            <li>Comentarios: {{ $datosComprobante->comentario }}</li>
-            @if (!empty($mx['comentario_envio']))
-            <li><strong>Comentario al enviar al árbol:</strong> {{ $mx['comentario_envio'] }}</li>
+        @if (!empty($mx['es_legajo_gastronomia']))
+            <div style="background:#fff3cd;border:1px solid #ffeeba;border-radius:4px;padding:12px 14px;margin:12px 0;font-size:14px;color:#856404;line-height:1.45;">
+                &#9888; Tenés un <strong>legajo pendiente</strong> de
+                <strong>{{ $mx['proveedor_nombre'] ?? ($datosComprobante->proveedores->nombre ?? '—') }}</strong>
+                por <strong>$ {{ $mx['alerta_importe_fmt'] ?? number_format($mx['monto_items'] ?? 0, 2, ',', '.') }}</strong>
+                @if (!empty($mx['alerta_con_iva']))
+                    (IVA incluido)
+                @endif
+                — {{ $mx['centrocosto_corto'] ?? 'Gastronomía' }},
+                OC {{ $datosComprobante->numeroordencompra }}.
+            </div>
+            @if (!empty($mx['estado_tras_aprobar']))
+                <p>Al <strong>aprobar este paso</strong>, la orden de compra quedará en estado <strong>{{ $mx['estado_tras_aprobar'] }}</strong>.</p>
             @endif
-            <li>Detalle: {{ $datosComprobante->detalle }}</li>
-        </ul>
-        <br>
-        <label for="Autorizar">Autorizar:</label>
-        <div><p><a href="{{ $linkAprobacion }}">{{ $linkAprobacion }}</a></p></div>
-        <br>
-        <label for="Rechazar">Rechazar:</label>
-        <div><p><a href="{{ $linkRechazo }}">{{ $linkRechazo }}</a></p></div>
-        <br>
-        <label for="Visualizar">Visualizar:</label>
-        <div><p><a href="{{ $linkVisualizar }}">{{ $linkVisualizar }}</a></p></div>
+            <p style="font-size:14px;color:#444;">
+                Use los enlaces de abajo para <strong>Autorizar</strong>, <strong>Rechazar</strong>
+                o <strong>Visualizar</strong> el legajo completo (Factura + OC + COM).
+            </p>
+            <ul>
+                <li>Empresa: {{ $datosComprobante->empresas->nombre ?? '' }}</li>
+                <li>Número OC: {{ $datosComprobante->numeroordencompra }}</li>
+                <li>Fecha: {{ date('d/m/Y', strtotime($datosComprobante->fecha ?? '')) }}</li>
+                <li>
+                    Monto total ítems: {{ $mx['moneda_abrev_items'] ?? '—' }}
+                    {{ number_format($mx['monto_items'] ?? 0, 2, ',', '.') }} (sin IVA)
+                    @if (!empty($mx['total_factura_fmt']))
+                        — <strong>Total factura:</strong> {{ $mx['moneda_abrev_items'] ?? 'PES' }}
+                        {{ $mx['total_factura_fmt'] }} (con IVA)
+                    @endif
+                </li>
+                <li>Proveedor: {{ $datosComprobante->proveedores->nombre ?? '—' }}</li>
+                <li>Comentarios: {{ $datosComprobante->comentario }}</li>
+                @if (!empty($mx['comentario_envio']))
+                <li><strong>Comentario al enviar al árbol:</strong> {{ $mx['comentario_envio'] }}</li>
+                @endif
+                <li>Detalle: {{ $datosComprobante->detalle }}</li>
+            </ul>
+            <br>
+            <label for="Autorizar">Autorizar:</label>
+            <div><p><a href="{{ $linkAprobacion }}">{{ $linkAprobacion }}</a></p></div>
+            <br>
+            <label for="Rechazar">Rechazar:</label>
+            <div><p><a href="{{ $linkRechazo }}">{{ $linkRechazo }}</a></p></div>
+            <br>
+            <label for="Visualizar">Visualizar (Factura + OC + COM):</label>
+            <div><p><a href="{{ $linkVisualizar }}">{{ $linkVisualizar }}</a></p></div>
+        @else
+            <p style="font-size:14px;color:#444;">Al abrir los enlaces de <strong>Autorizar</strong> o <strong>Rechazar</strong> verá el detalle y podrá cargar observaciones antes de confirmar.</p>
+            <ul>
+                <li>Empresa: {{ $datosComprobante->empresas->nombre ?? '' }}</li>
+                <li>Número OC: {{ $datosComprobante->numeroordencompra }}</li>
+                <li>Fecha: {{ date('d/m/Y', strtotime($datosComprobante->fecha ?? '')) }}</li>
+                <li>Monto total ítems: {{ $mx['moneda_abrev_items'] ?? '—' }} {{ number_format($mx['monto_items'] ?? 0, 2) }}</li>
+                <li>Proveedor: {{ $datosComprobante->proveedores->nombre ?? '—' }}</li>
+                <li>Comentarios: {{ $datosComprobante->comentario }}</li>
+                @if (!empty($mx['comentario_envio']))
+                <li><strong>Comentario al enviar al árbol:</strong> {{ $mx['comentario_envio'] }}</li>
+                @endif
+                <li>Detalle: {{ $datosComprobante->detalle }}</li>
+            </ul>
+            <br>
+            <label for="Autorizar">Autorizar:</label>
+            <div><p><a href="{{ $linkAprobacion }}">{{ $linkAprobacion }}</a></p></div>
+            <br>
+            <label for="Rechazar">Rechazar:</label>
+            <div><p><a href="{{ $linkRechazo }}">{{ $linkRechazo }}</a></p></div>
+            <br>
+            <label for="Visualizar">Visualizar:</label>
+            <div><p><a href="{{ $linkVisualizar }}">{{ $linkVisualizar }}</a></p></div>
+        @endif
     @elseif ($tipoArbol == 'Requisiciones de sala')
         @php $mx = $mailExtras ?? []; @endphp
         <p style="font-size:14px;color:#444;">Al abrir los enlaces de <strong>Autorizar</strong> o <strong>Rechazar</strong> verá el detalle en una pantalla adaptable a celular y podrá cargar observaciones antes de confirmar.</p>

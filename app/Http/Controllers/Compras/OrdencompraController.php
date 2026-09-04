@@ -36,6 +36,7 @@ use App\Services\Compras\OrdencompraArticuloPrecioHistoriaService;
 use App\Services\Compras\OrdencompraRecepcionesListadoService;
 use App\Services\Compras\OrdencompraRecepcionPrecioSyncService;
 use App\Services\Compras\OrdencompraRevertirCierreLineaService;
+use App\Services\Stock\RecepcionProveedorPdfService;
 use App\Services\Stock\RecepcionProveedorPrecioPendienteService;
 use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
 use App\Support\Compras\OrdencompraArticuloPrecioHistoriaOrigen;
@@ -267,25 +268,45 @@ class OrdencompraController extends Controller
         return $this->formularioOrdencompra((int) $id, true, null, $request, false);
     }
 
-    public function visualizar($id, $hash = null)
+    public function visualizar(Request $request, $id, $hash = null)
     {
-        $movs = $this->arbolaprobacion_movimientoRepository->findPorOrdencompra((int) $id);
-        $flEncontro = ! $hash;
-        if ($hash) {
-            foreach ($movs as $movimiento) {
-                if ($movimiento->hashvisualizar == $hash) {
-                    $flEncontro = true;
-                    break;
+        $id = (int) $id;
+        $hashStr = is_string($hash) ? trim($hash) : '';
+        $accesoHash = $hashStr !== '';
+
+        if ($accesoHash) {
+            if (! OrdencompraLegajoGastronomiaSupport::hashVisualizarValido($id, $hashStr)) {
+                return redirect()->route('inicio')->with('mensaje', 'No tiene permisos para visualizar la orden de compra');
+            }
+
+            if (! $request->boolean('form')) {
+                $oc = Ordencompra::query()->with([
+                    'empresas:id,nombre',
+                    'proveedores:id,codigo,nombre',
+                    'centrocostos:id,codigo,nombre',
+                    'usuarios:id,nombre',
+                ])->find($id);
+                if (! $oc) {
+                    abort(404);
+                }
+                if (OrdencompraLegajoGastronomiaSupport::requiereCircuito($oc)) {
+                    $paquete = OrdencompraLegajoGastronomiaSupport::paqueteParaPortal($oc, $hashStr);
+                    $urlFormulario = route('visualizar_ordencompra', [
+                        'id' => $id,
+                        'hash' => $hashStr,
+                    ]).'?form=1';
+
+                    return view('compras.ordencompra.visualizar_paquete_legajo', [
+                        'ordencompra' => $oc,
+                        'paquete_legajo' => $paquete,
+                        'url_formulario' => $urlFormulario,
+                        'hash' => $hashStr,
+                    ]);
                 }
             }
         }
-        if (! $flEncontro) {
-            return redirect()->route('inicio')->with('mensaje', 'No tiene permisos para visualizar la orden de compra');
-        }
 
-        $accesoHash = is_string($hash) && $hash !== '';
-
-        return $this->formularioOrdencompra((int) $id, true, null, null, $accesoHash);
+        return $this->formularioOrdencompra($id, true, null, null, $accesoHash);
     }
 
     public function buscarRequisicionesAprobadas(Request $request)
@@ -1053,6 +1074,50 @@ class OrdencompraController extends Controller
         }
 
         return response()->download($path, $nombre);
+    }
+
+    public function visualizarComLegajo(Request $request, int $id, string $hash, int $recepcion)
+    {
+        if (! OrdencompraLegajoGastronomiaSupport::hashVisualizarValido($id, $hash)) {
+            abort(403, 'El enlace de la COM no es válido.');
+        }
+
+        $oc = Ordencompra::query()->find($id);
+        if (! $oc) {
+            abort(404);
+        }
+
+        $com = Recepcion_Proveedor::query()
+            ->whereKey($recepcion)
+            ->where('ordencompra_id', $id)
+            ->where('tipo', Recepcion_Proveedor::TIPO_RECEPCION)
+            ->where('estado', '!=', Recepcion_Proveedor::ESTADO_ANULADA)
+            ->first();
+        if (! $com) {
+            abort(404, 'La COM no pertenece a este legajo.');
+        }
+
+        return app(RecepcionProveedorPdfService::class)
+            ->descargarCom($recepcion, $request->boolean('inline', true));
+    }
+
+    public function visualizarOcPdfLegajo(Request $request, int $id, string $hash)
+    {
+        if (! OrdencompraLegajoGastronomiaSupport::hashVisualizarValido($id, $hash)) {
+            abort(403, 'El enlace del PDF de la OC no es válido.');
+        }
+
+        if (! Ordencompra::query()->whereKey($id)->exists()) {
+            abort(404);
+        }
+
+        $pdf = $this->ordencompraPdfService->generarArchivo($id, false);
+        $disposition = $request->boolean('inline', true) ? 'inline' : 'attachment';
+
+        return response()->file($pdf['ruta'], [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => $disposition.'; filename="'.$pdf['nombre'].'"',
+        ])->deleteFileAfterSend(true);
     }
 
     /**

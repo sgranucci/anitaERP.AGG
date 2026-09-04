@@ -102,11 +102,15 @@ final class ArcaCaeaInformeDatosDesdeVentaSupport
     public static function fechaHoraGeneracion(Venta $venta): string
     {
         $ts = $venta->created_at ?? null;
-        if ($ts instanceof Carbon) {
-            return $ts->format('YmdHis');
-        }
+        $cbte = ($ts instanceof Carbon)
+            ? $ts->format('YmdHis')
+            : '';
+        $fechaCbte = Carbon::parse((string) $venta->fecha)->format('Ymd');
 
-        return Carbon::parse((string) $venta->fecha)->format('Ymd').'120000';
+        return ArcaCaeaCbteFchHsGenSupport::resolverDigits([
+            'cbte_fch_hs_gen' => $cbte,
+            'fechacomprobante' => $fechaCbte,
+        ]);
     }
 
     public static function monedaAfipDesdeVenta(Venta $venta): string

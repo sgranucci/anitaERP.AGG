@@ -17,6 +17,7 @@ use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ConceptoIvacompraConsultaSupport;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
+use App\Models\Compras\Tipotransaccion_Compra;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -180,6 +181,8 @@ class ComprobanteProveedorPrefillService
         $data->setRelation('ordencompras', $ordencompra);
         $data->setRelation('precarga_comprobante_proveedores', $precarga);
 
+        $this->corregirTipoScanAnitaSegunOc($data, $precarga, $ordencompra);
+
         $conceptos = $precarga->precarga_comprobante_proveedor_conceptos->map(function ($c) {
             return new Comprobante_Proveedor_Concepto([
                 'concepto_ivacompra_id' => $c->concepto_ivacompra_id,
@@ -188,9 +191,9 @@ class ComprobanteProveedorPrefillService
             ]);
         });
 
-        if ($conceptos->isEmpty() && (int) ($precarga->tipotransaccion_compra_id ?? 0) > 0) {
+        if ($conceptos->isEmpty() && (int) ($data->tipotransaccion_compra_id ?? 0) > 0) {
             $conceptos = ConceptoIvacompraConsultaSupport::renglonesPlantillaParaTipo(
-                (int) $precarga->tipotransaccion_compra_id
+                (int) $data->tipotransaccion_compra_id
             );
         }
 
@@ -288,6 +291,43 @@ class ComprobanteProveedorPrefillService
         );
 
         return $prefill;
+    }
+
+    /**
+     * Scan Anita creaba precargas con FGA fijo; al abrir el alta se corrige según CC de la OC.
+     */
+    private function corregirTipoScanAnitaSegunOc(
+        Comprobante_Proveedor $data,
+        Precarga_Comprobante_Proveedor $precarga,
+        ?Ordencompra $ordencompra,
+    ): void {
+        if (! $ordencompra) {
+            return;
+        }
+        if ((string) ($precarga->origen_entrada ?? '') !== PrecargaComprobanteOrigenEntrada::SCAN_ANITA) {
+            return;
+        }
+
+        $tipoId = OrdencompraEnvioCuentasAPagarGateSupport::tipotransaccionCompraIdParaOrdencompra($ordencompra);
+        if ($tipoId <= 0 || $tipoId === (int) ($data->tipotransaccion_compra_id ?? 0)) {
+            return;
+        }
+
+        $tipo = Tipotransaccion_Compra::query()->find($tipoId);
+        if (! $tipo) {
+            return;
+        }
+
+        Log::info('comprobante_proveedor.prefill_corrige_tipo_scan_anita', [
+            'precarga_id' => (int) $precarga->id,
+            'ordencompra_id' => (int) $ordencompra->id,
+            'tipo_previo' => (int) ($precarga->tipotransaccion_compra_id ?? 0),
+            'tipo_nuevo' => $tipoId,
+            'abreviatura' => (string) $tipo->abreviatura,
+        ]);
+
+        $data->tipotransaccion_compra_id = $tipoId;
+        $data->setRelation('tipotransaccion_compras', $tipo);
     }
 
     /** @return array<string, mixed> */

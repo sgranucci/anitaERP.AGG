@@ -45,27 +45,46 @@ var flModificaAsiento = false;
         });
     }
 
-    function sumaMonto() {
+    function totalMediosPagoproveedor() {
         var total = 0;
         $('#tbody-cuenta-table .monto').each(function () {
-            total += parseFloat($(this).val()) || 0;
+            total += Math.abs(parseFloat(String($(this).val()).replace(',', '.')) || 0);
         });
         if (typeof sumaMontosChequesIngresoEgreso === 'function') {
-            var extra = sumaMontosChequesIngresoEgreso();
-            total += (extra.extraHaber || 0) + (extra.extraDebe || 0);
+            try {
+                var extra = sumaMontosChequesIngresoEgreso();
+                total += Math.abs(extra.extraHaber || 0) + Math.abs(extra.extraDebe || 0);
+            } catch (e) {
+                // coef/moneda aún no listos
+            }
         }
+        return Math.round(total * 100) / 100;
+    }
+
+    function sumaMonto() {
+        var total = totalMediosPagoproveedor();
         window.ppTotalMedios = total;
         var aplicado = (window.ppResumenDeuda && window.ppResumenDeuda.equiv) ? window.ppResumenDeuda.equiv : 0;
         var dif = Math.round((total - aplicado) * 100) / 100;
         $('.totales-pagoproveedor').html(
-            '<div class="col-lg-12">' +
-            '<strong>Total medios: </strong>' +
+            '<div class="col-6 col-md-4 mb-1">' +
+            '<div class="border rounded px-2 py-1" style="background:#eaf2f8;">' +
+            '<div class="small text-muted text-right">Total medios</div>' +
+            '<div class="font-weight-bold text-right text-nowrap">' +
             total.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
-            ' &nbsp;|&nbsp; <strong>Aplicado deuda: </strong>' +
+            '</div></div></div>' +
+            '<div class="col-6 col-md-4 mb-1">' +
+            '<div class="border rounded px-2 py-1" style="background:#eaf2f8;">' +
+            '<div class="small text-muted text-right">Aplicado deuda</div>' +
+            '<div class="font-weight-bold text-right text-nowrap">' +
             aplicado.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
-            ' &nbsp;|&nbsp; <strong>Dif.: </strong>' +
+            '</div></div></div>' +
+            '<div class="col-6 col-md-4 mb-1">' +
+            '<div class="border rounded px-2 py-1" style="background:#eaf2f8;">' +
+            '<div class="small text-muted text-right">Dif.</div>' +
+            '<div class="font-weight-bold text-right text-nowrap">' +
             dif.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) +
-            '</div>'
+            '</div></div></div>'
         );
         if (typeof window.pintarResumenDesembolso === 'function') {
             window.pintarResumenDesembolso();
@@ -73,6 +92,7 @@ var flModificaAsiento = false;
     }
 
     window.sumaMonto = sumaMonto;
+    window.totalMediosPagoproveedor = totalMediosPagoproveedor;
 
     function montoRestanteCaja($trExcluir) {
         var aplicado = (window.ppResumenDeuda && window.ppResumenDeuda.equiv) ? window.ppResumenDeuda.equiv : 0;
@@ -676,5 +696,10 @@ var flModificaAsiento = false;
                 $('#tbody-cheque-emitido-table tr:last .anombrede_emitido').val(nombre);
             }, 50);
         });
+
+        // Al abrir editar/crear: pintar medios ya cargados (cuentas/cheques) en la barra superior.
+        setTimeout(function () {
+            sumaMonto();
+        }, 0);
     });
 }(jQuery));

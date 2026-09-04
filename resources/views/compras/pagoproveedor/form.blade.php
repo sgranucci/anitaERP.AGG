@@ -79,14 +79,10 @@
                 </select>
             </div>
         </div>
-        @if($esEdicion)
-        <div class="form-group row">
-            <label class="col-lg-2 col-form-label text-right">OP</label>
-            <div class="col-lg-4 col-form-label">
-                <strong>{{ $data->etiquetaComprobante() }}</strong>
-                <a class="btn btn-sm btn-secondary ml-2" target="_blank" rel="noopener" href="{{ route('imprimir_pagoproveedor', $data->id) }}"><i class="fa fa-print"></i> Imprimir</a>
-            </div>
-        </div>
+        @if ($esEdicion)
+            <input type="hidden" id="pagoproveedor_id" value="{{ (int) $data->id }}">
+        @else
+            <input type="hidden" id="pagoproveedor_id" value="">
         @endif
 
         <hr>
@@ -95,25 +91,31 @@
             El monto a aplicar va en moneda de la factura (alineado a la derecha, como el saldo). Si la OP está en otra moneda se convierte con la cotización de liquidación
             (factura o del día según el modo). La DC se asienta; no abre un ítem extra en pesos.
         </p>
-        <div class="table-responsive mb-2 pp-resumen-deuda-cards">
-            <table class="table table-sm table-bordered mb-0" style="background:#fff;">
-                <thead style="background:#d6eaf8;color:#1b2631;">
-                    <tr>
-                        <th class="text-right">Saldo</th>
-                        <th class="text-right">A aplicar</th>
-                        <th class="text-right">Equiv. OP</th>
-                        <th class="text-right">DC</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <tr>
-                        <td class="text-right font-weight-bold" id="pp-card-saldo">0,00</td>
-                        <td class="text-right font-weight-bold" id="pp-card-aplicado">0,00</td>
-                        <td class="text-right font-weight-bold" id="pp-card-equiv">0,00</td>
-                        <td class="text-right font-weight-bold" id="pp-card-dc">—</td>
-                    </tr>
-                </tbody>
-            </table>
+        <div class="row no-gutters mb-2 pp-resumen-deuda-cards">
+            <div class="col-6 col-md-3 pr-1 mb-1">
+                <div class="border rounded px-2 py-1 h-100" style="background:#d6eaf8;">
+                    <div class="small text-muted text-right">Saldo</div>
+                    <div class="font-weight-bold text-right text-nowrap" id="pp-card-saldo" style="font-size:1.05rem;">0,00</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3 px-1 mb-1">
+                <div class="border rounded px-2 py-1 h-100" style="background:#d6eaf8;">
+                    <div class="small text-muted text-right">A aplicar</div>
+                    <div class="font-weight-bold text-right text-nowrap" id="pp-card-aplicado" style="font-size:1.05rem;">0,00</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3 px-1 mb-1">
+                <div class="border rounded px-2 py-1 h-100" style="background:#d6eaf8;">
+                    <div class="small text-muted text-right">Equiv. OP</div>
+                    <div class="font-weight-bold text-right text-nowrap" id="pp-card-equiv" style="font-size:1.05rem;">0,00</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3 pl-1 mb-1">
+                <div class="border rounded px-2 py-1 h-100" style="background:#d6eaf8;">
+                    <div class="small text-muted text-right">Dif. de cambio</div>
+                    <div class="font-weight-bold text-right text-nowrap" id="pp-card-dc" style="font-size:1.05rem;">—</div>
+                </div>
+            </div>
         </div>
         <style>
             #tabla-deuda-proveedor .pp-col-aplicar { width: 9.5rem; min-width: 8.5rem; }
@@ -137,7 +139,7 @@
                         <th class="text-right pp-col-aplicar">A aplicar</th>
                         <th class="text-right">Cot. liq.</th>
                         <th class="text-right">Equiv. OP</th>
-                        <th class="text-right">DC</th>
+                        <th class="text-right">Dif. cambio</th>
                     </tr>
                 </thead>
                 <tbody>

@@ -70,7 +70,26 @@ final class CanjeMarketingFacturaEmisionService
         }
 
         $ventaId = (int) $resultado['venta_id'];
+        $tEntrega = microtime(true);
         $this->registrarEntregaTrasEmision($ventaId, $cuenta->fresh(['clienteVip', 'mozo', 'descuentoGastronomia']));
+        $msEntrega = round((microtime(true) - $tEntrega) * 1000, 2);
+        if (
+            filter_var(config('gastronomia.emision_profile', false), FILTER_VALIDATE_BOOLEAN)
+            || filter_var(config('gastronomia.emision_profile_en_respuesta', false), FILTER_VALIDATE_BOOLEAN)
+        ) {
+            $resultado['canje_marketing_entrega_ms'] = $msEntrega;
+            if (isset($resultado['emision_profile']) && is_array($resultado['emision_profile'])) {
+                $acum = isset($resultado['emision_profile_total_ms'])
+                    ? (float) $resultado['emision_profile_total_ms']
+                    : 0.;
+                $resultado['emision_profile'][] = [
+                    'etapa' => 'canje_marketing_entrega',
+                    'ms' => $msEntrega,
+                    'acum_ms' => round($acum + $msEntrega, 2),
+                ];
+                $resultado['emision_profile_total_ms'] = round($acum + $msEntrega, 2);
+            }
+        }
 
         return $resultado;
     }

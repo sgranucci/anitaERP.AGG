@@ -37,13 +37,18 @@
                         'nuevoRegistroUrl' => empty($bandejaPendientes) ? route('crear_ingreso_proveedor', $retornoListadoQuery) : null,
                         'nuevoRegistroCan' => empty($bandejaPendientes) ? 'crear-ingreso-proveedor' : null,
                     ])
+                    @if (!empty($bandejaPendientes))
+                        @include('includes.seguridad.boton-guia-autorizacion-ingresos')
+                    @else
+                        @include('includes.seguridad.boton-guia-ingreso-proveedores')
+                    @endif
                     @if (empty($bandejaPendientes) && can('autorizar-ingreso-proveedor', false))
-                        <a href="{{ route('pendientes_ingreso_proveedor') }}" class="btn btn-outline-warning btn-sm ml-2">
+                        <a href="{{ route('pendientes_ingreso_proveedor') }}" class="btn btn-outline-warning btn-sm ml-1">
                             <i class="fa fa-clock-o"></i> Pendientes
                         </a>
                     @endif
                     @if (!empty($bandejaPendientes))
-                        <a href="{{ route('ingreso_proveedor') }}" class="btn btn-outline-info btn-sm ml-2">
+                        <a href="{{ route('ingreso_proveedor') }}" class="btn btn-outline-info btn-sm ml-1">
                             <i class="fa fa-fw fa-reply-all"></i> Todos los tickets
                         </a>
                     @endif

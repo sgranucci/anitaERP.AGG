@@ -8,6 +8,7 @@ use App\Models\Caja\Flash\FlashReporteSuscripcion;
 use App\Services\Caja\Flash\FlashReporteAggDistribucionService;
 use App\Services\Caja\Flash\FlashReporteAggExcelService;
 use App\Support\Caja\Flash\FlashReporteAggFechaProduccionSupport;
+use App\Support\Caja\Flash\FlashReporteAggPerfilVistaSupport;
 use App\Support\Caja\Flash\FlashReporteAggSuscripcionSupport;
 use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
@@ -38,7 +39,12 @@ class FlashReporteAggController extends Controller
             'suscripcion_editar' => $this->suscripcionEditar($request),
             'periodicidades' => FlashReporteSuscripcion::periodicidades(),
             'periodos_relativos' => FlashReporteSuscripcion::periodosRelativos(),
+            'perfiles_vista' => FlashReporteSuscripcion::perfilesVista(),
+            'perfiles_vista_desc' => FlashReporteAggPerfilVistaSupport::descripciones(),
             'dias_semana' => FlashReporteSuscripcion::diasSemana(),
+            'perfil_vista_consulta' => FlashReporteAggPerfilVistaSupport::normalizar(
+                (string) $request->input('perfil_vista', FlashReporteAggPerfilVistaSupport::COMPLETA)
+            ),
         ]);
     }
 
@@ -47,9 +53,12 @@ class FlashReporteAggController extends Controller
         can('exportar-flash-reporte-agg');
 
         $periodo = $this->resolverPeriodo($request);
+        $perfilVista = FlashReporteAggPerfilVistaSupport::normalizar(
+            (string) $request->input('perfil_vista', '')
+        );
 
         try {
-            $archivo = $this->excelService->generar($periodo['desde'], $periodo['hasta']);
+            $archivo = $this->excelService->generar($periodo['desde'], $periodo['hasta'], $perfilVista);
         } catch (Throwable $e) {
             return redirect()
                 ->route('flash_reporte_agg', [

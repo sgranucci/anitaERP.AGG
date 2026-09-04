@@ -286,6 +286,10 @@
         Este comprobante usa stock por color y talle: todas las líneas deben tener color y talle.
     </div>
     <input type="hidden" name="modo_stock_color_talle" id="modo_stock_color_talle" value="{{ $modoStockColorTalleInicial }}">
+    @php
+        // art, desc, prov, color, talle, cant, cant.alt, precio, mon, cc, partida, capex, detalle (+ eliminar si editable)
+        $reqColspanMetaArticulos = $lineasSoloLectura ? 13 : 14;
+    @endphp
     <style>
         #tabla-articulos-requisicion tbody tr.req-requisicion-linea-cerrada td {
             background-color: rgba(25, 135, 84, 0.1);
@@ -311,6 +315,34 @@
             color: #6c757d;
             margin-left: 0.15rem;
         }
+        #tabla-articulos-requisicion tr.item-requisicion-articulo-sub td {
+            border-top: none !important;
+            padding-top: 0.15rem !important;
+            padding-bottom: 0.15rem !important;
+            vertical-align: middle;
+        }
+        #tabla-articulos-requisicion .req-meta-fila-una-linea {
+            display: flex;
+            flex-wrap: nowrap;
+            align-items: center;
+            gap: 0.35rem 0.75rem;
+            line-height: 1.25;
+        }
+        #tabla-articulos-requisicion .req-meta-fila-una-linea > .req-meta-bloque {
+            display: flex;
+            flex-wrap: nowrap;
+            align-items: center;
+            min-width: 0;
+            flex: 1 1 auto;
+        }
+        #tabla-articulos-requisicion .req-linea-item-leyenda {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            font-size: 0.8125rem;
+            min-width: 0;
+            flex: 1 1 0;
+        }
     </style>
     <table class="table" id="tabla-articulos-requisicion" data-requisicion-cc-destino-default="{{ $centrocostoDefaultDestino }}" data-requisicion-moneda-default="{{ $monedaDefaultLinea }}">
         <thead>
@@ -325,8 +357,9 @@
                 <th style="width: 7%;">Precio unit.</th>
                 <th style="width: 5%;">Moneda</th>
                 <th style="width: 9%;">CC destino</th>
-                <th style="width: 18%;">Partida presupuesto</th>
-                <th style="width: 18%;">Capex</th>
+                <th style="width: 16%;">Partida presupuesto</th>
+                <th style="width: 16%;">Capex</th>
+                <th style="width: 3%;" class="text-center" title="Detalle / leyenda de la línea">Det.</th>
                 @if(!$lineasSoloLectura)
                 <th style="width: 4%;"></th>
                 @endif
@@ -389,6 +422,7 @@
                     <input type="hidden" class="linea-codigo-articulo-proveedor" name="linea_codigo_articulo_proveedor[]" value="{{ $_apCodigo }}">
                     <input type="hidden" class="linea-coef-conversion" value="{{ $_apCoef !== '' && $_apCoef !== null ? $_apCoef : '' }}">
                     <input type="hidden" class="linea-um-compra-abrev" value="{{ $_apUm }}">
+                    <textarea name="detalle_articulos[]" class="d-none req-ta-detalle-linea" aria-hidden="true">{{ old('detalle_articulos.'.$idx, $linea->detalle ?? '') }}</textarea>
                     <div class="form-group row celda-articulo-requisicion mb-0 d-flex align-items-center flex-nowrap">
                         <input type="hidden" class="articulo_id" name="articulo_ids[]" value="{{ old('articulo_ids.'.$idx, $linea->articulo_id ?? '') }}" >
                         <button type="button" title="Consulta art&iacute;culos (F1)" style="padding:1;" class="btn-accion-tabla consultaarticulo tooltipsC flex-shrink-0">
@@ -475,6 +509,17 @@
                         <input type="text" class="descripcioncapex form-control form-control-sm ml-1 flex-grow-1" style="min-width: 0; font-size: 0.8rem;" name="descripcioncapexs[]" value="{{ old('descripcioncapexs.'.$idx, optional($linea->capexs)->nombre ?? '') }}" readonly title="{{ old('descripcioncapexs.'.$idx, optional($linea->capexs)->nombre ?? '') }}">
                     </div>
                 </td>
+                <td class="align-middle p-1 text-center">
+                    @if (!$lineasSoloLectura)
+                        <button type="button" title="Editar detalle de la línea" class="btn btn-sm btn-outline-secondary req-abrir-detalle-linea" data-toggle="modal" data-target="#modalReqDetalleLinea">
+                            <i class="fa fa-align-left"></i>
+                        </button>
+                    @else
+                        <button type="button" title="Ver detalle de la línea" class="btn btn-sm btn-outline-secondary req-abrir-detalle-linea" data-toggle="modal" data-target="#modalReqDetalleLinea">
+                            <i class="fa fa-eye"></i>
+                        </button>
+                    @endif
+                </td>
                 @if(!$lineasSoloLectura)
                 <td class="text-center">
                     <button type="button" title="Eliminar línea" class="btn-accion-tabla eliminar_requisicion_articulo tooltipsC">
@@ -483,9 +528,39 @@
                 </td>
                 @endif
             </tr>
+            <tr class="item-requisicion-articulo-sub{{ trim((string) old('detalle_articulos.'.$idx, $linea->detalle ?? '')) === '' ? ' d-none' : '' }}">
+                <td colspan="{{ $reqColspanMetaArticulos }}" class="px-2 bg-light">
+                    <div class="req-meta-fila-una-linea">
+                        <div class="req-meta-bloque req-meta-bloque-detalle">
+                            <span class="font-weight-bold text-secondary small text-nowrap flex-shrink-0 mr-1">Detalle línea</span>
+                            <div class="req-detalle-linea-badge req-linea-item-leyenda text-body" role="button" tabindex="0" title="Editar detalle de la línea" style="cursor:pointer;"></div>
+                        </div>
+                    </div>
+                </td>
+            </tr>
             @endforeach
         </tbody>
     </table>
+    <div class="modal fade" id="modalReqDetalleLinea" tabindex="-1" role="dialog" aria-labelledby="modalReqDetalleLineaLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg" role="document">
+            <div class="modal-content">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title" id="modalReqDetalleLineaLabel">Detalle de la línea</h5>
+                    <button type="button" class="close" data-dismiss="modal" aria-label="Cerrar"><span aria-hidden="true">&times;</span></button>
+                </div>
+                <div class="modal-body">
+                    <p class="small text-muted mb-2">Texto adicional guardado en la línea del ítem (requisición).</p>
+                    <textarea id="req_detalle_linea_editor" class="form-control" rows="7" placeholder="Observaciones específicas de esta línea…"></textarea>
+                </div>
+                <div class="modal-footer py-2">
+                    <button type="button" class="btn btn-secondary btn-sm" data-dismiss="modal">Cerrar</button>
+                    @if (!$lineasSoloLectura)
+                        <button type="button" class="btn btn-primary btn-sm" id="req_detalle_linea_guardar">Guardar</button>
+                    @endif
+                </div>
+            </div>
+        </div>
+    </div>
     @php
         $reqTotMonto = 0.0;
         $reqTotMonAbrev = '—';

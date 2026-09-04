@@ -8,12 +8,21 @@ use App\Models\Stock\Articulo;
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Models\Stock\Recepcion_Proveedor_Articulo;
 use App\Models\Stock\Tipoarticulo;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Impuesto interno en recepciones con artículos tipo CIGARRILLO (réplica carga_final / graba_stkmae en a-stock.c).
+ *
+ * Última compra Anita: precio línea + II/u. Ese mismo número debe usarse en ERP
+ * ({@see precioUltimaCompraConImpuestoInterno}) para TRA, recuento y stkmae.
  */
 final class RecepcionProveedorImpuestoInternoSupport
 {
+    /**
+     * Si el remanente (precio − II/u) es ≤ esta fracción del precio, se asume que la
+     * línea ya trae el II (evita duplicar cuando cargaron neto+II en el renglón).
+     */
+    private const FRACCION_MAX_NETO_SI_LINEA_INCLUYE_II = 0.55;
     private static ?int $tipoArticuloCigarrilloIdCache = null;
 
     private static bool $tipoArticuloCigarrilloIdResolved = false;
@@ -199,6 +208,92 @@ final class RecepcionProveedorImpuestoInternoSupport
         }
 
         return round($impuestoInterno / $totalCigarrillos, 6);
+    }
+
+    /**
+     * Precio de última compra (a-stock / graba_stkmae): línea + II/u en cigarrillos.
+     * Si la línea ya incluye el II, no vuelve a sumarlo.
+     */
+    public static function precioUltimaCompraConImpuestoInterno(
+        float $precioLinea,
+        float $impuestoInternoPorUnidad,
+        bool $articuloEsCigarrillo,
+    ): float {
+        $precioLinea = round($precioLinea, 6);
+        if ($precioLinea <= 0.0) {
+            return 0.0;
+        }
+
+        if (! $articuloEsCigarrillo || $impuestoInternoPorUnidad <= 0.000001) {
+            return $precioLinea;
+        }
+
+        $netoImplicito = $precioLinea - $impuestoInternoPorUnidad;
+        if ($netoImplicito > 0.000001
+            && ($netoImplicito / $precioLinea) <= self::FRACCION_MAX_NETO_SI_LINEA_INCLUYE_II) {
+            return $precioLinea;
+        }
+
+        return round($precioLinea + $impuestoInternoPorUnidad, 6);
+    }
+
+    /**
+     * II/u por recepción (mismo criterio que {@see impuestoInternoPorUnidad}).
+     *
+     * @param  list<int>  $recepcionIds
+     * @return array<int, float>
+     */
+    public static function impuestoInternoPorUnidadPorRecepcionIds(array $recepcionIds): array
+    {
+        $recepcionIds = array_values(array_unique(array_filter(
+            array_map('intval', $recepcionIds),
+            static fn (int $id): bool => $id > 0
+        )));
+        if ($recepcionIds === []) {
+            return [];
+        }
+
+        $tipoCigarrilloId = self::tipoArticuloCigarrilloId();
+        if ($tipoCigarrilloId === null) {
+            return [];
+        }
+
+        $lineas = DB::table('recepcion_proveedor as rp')
+            ->join('recepcion_proveedor_articulo as rpa', 'rpa.recepcion_proveedor_id', '=', 'rp.id')
+            ->join('articulo as a', 'a.id', '=', 'rpa.articulo_id')
+            ->whereIn('rp.id', $recepcionIds)
+            ->where('a.tipoarticulo_id', $tipoCigarrilloId)
+            ->get([
+                'rp.id',
+                'rp.impuesto_interno',
+                'rpa.cantidad',
+                'rpa.cantidad_stock',
+            ]);
+
+        $qtyPorRecepcion = [];
+        $iiPorRecepcion = [];
+        foreach ($lineas as $linea) {
+            $recepcionId = (int) $linea->id;
+            $cantidadStock = (float) ($linea->cantidad_stock ?? 0);
+            $cantidad = $cantidadStock > 0.000001
+                ? $cantidadStock
+                : (float) ($linea->cantidad ?? 0);
+            if ($cantidad <= 0.000001) {
+                continue;
+            }
+            $qtyPorRecepcion[$recepcionId] = ($qtyPorRecepcion[$recepcionId] ?? 0.0) + $cantidad;
+            $iiPorRecepcion[$recepcionId] = (float) ($linea->impuesto_interno ?? 0);
+        }
+
+        $out = [];
+        foreach ($qtyPorRecepcion as $recepcionId => $qty) {
+            $ii = (float) ($iiPorRecepcion[$recepcionId] ?? 0);
+            $out[$recepcionId] = ($qty > 0.000001 && $ii > 0.000001)
+                ? round($ii / $qty, 6)
+                : 0.0;
+        }
+
+        return $out;
     }
 
     public static function importeImpuestoInternoContable(Recepcion_Proveedor $recepcion, float $cotizacionRecepcion): float

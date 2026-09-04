@@ -9,6 +9,7 @@ use App\Models\Ventas\Puntoventa;
 use App\Repositories\Configuracion\CondicionivaRepositoryInterface;
 use App\Support\Contable\LibroIvaDigital\LibroIvaDigitalMapeosSupport;
 use App\Support\Configuracion\EntornoEmpresaSupport;
+use App\Support\Ventas\ArcaCaeaCbteFchHsGenSupport;
 use App\Support\Ventas\ArcaFceDatosAdicionalesSupport;
 use App\Support\Ventas\ArcaMtxcaComprobanteTotalesSupport;
 use App\Support\Ventas\ConceptoVentaMostradorSupport;
@@ -598,10 +599,7 @@ class ArcaMtxcaFacturaElectronicaService
 
         // RG 5782 / CAEA contingencia: fechaHoraGen obligatoria (equivalente WSFE CbteFchHsGen).
         if ($authCaea !== null) {
-            $fechaHoraGen = $this->formatFechaHoraGen($datos);
-            if ($fechaHoraGen !== null) {
-                $req['fechaHoraGen'] = $fechaHoraGen;
-            }
+            $req['fechaHoraGen'] = ArcaCaeaCbteFchHsGenSupport::paraMtxca($datos);
         }
 
         $tributos = $this->buildOtrosTributos($datos['tributos'] ?? []);
@@ -1548,39 +1546,6 @@ class ArcaMtxcaFacturaElectronicaService
         }
 
         return Carbon::parse($fecha)->format('Y-m-d');
-    }
-
-    /**
-     * MTXCA dateTime AAAA-MM-DDTHH:MM:SS para CAEA por contingencia.
-     *
-     * @param  array<string, mixed>  $datos
-     */
-    private function formatFechaHoraGen(array $datos): ?string
-    {
-        $raw = trim((string) ($datos['fecha_hora_gen'] ?? $datos['cbte_fch_hs_gen'] ?? ''));
-        if ($raw === '') {
-            $fch = preg_replace('/\D+/', '', (string) ($datos['fechacomprobante'] ?? '')) ?? '';
-            if (strlen($fch) !== 8) {
-                return null;
-            }
-
-            return substr($fch, 0, 4).'-'.substr($fch, 4, 2).'-'.substr($fch, 6, 2).'T12:00:00';
-        }
-
-        $digits = preg_replace('/\D+/', '', $raw) ?? '';
-        if (strlen($digits) >= 14) {
-            return substr($digits, 0, 4).'-'.substr($digits, 4, 2).'-'.substr($digits, 6, 2)
-                .'T'.substr($digits, 8, 2).':'.substr($digits, 10, 2).':'.substr($digits, 12, 2);
-        }
-        if (strlen($digits) === 8) {
-            return substr($digits, 0, 4).'-'.substr($digits, 4, 2).'-'.substr($digits, 6, 2).'T12:00:00';
-        }
-
-        try {
-            return Carbon::parse($raw)->format('Y-m-d\TH:i:s');
-        } catch (\Throwable) {
-            return null;
-        }
     }
 
     private function fechaArcaToYmd(string $fecha): string
