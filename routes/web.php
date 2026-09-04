@@ -729,6 +729,9 @@ Route::delete('stock/linea/{id}', 'Stock\LineaController@eliminar')->name('elimi
  */
 
 Route::get('stock/precio', 'Stock\PrecioController@index')->name('precio');
+if ((string) config('app.empresa') === 'Calzados Ferli') {
+    Route::get('stock/precio/datatable', 'Stock\PrecioController@datatableFerli')->name('precio.datatable');
+}
 Route::get('stock/listar_precio/{formato?}', 'Stock\PrecioController@listar')->name('listar_precio');
 Route::get('stock/precio/crear', 'Stock\PrecioController@crear')->name('crear_precio');
 Route::post('stock/precio', 'Stock\PrecioController@guardar')->name('guardar_precio');
