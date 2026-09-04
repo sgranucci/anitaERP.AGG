@@ -31,8 +31,9 @@ class PedidoInterformingService
                 'zonavtas',
                 'deposito',
                 'moneda',
-                'pedido_articulos.articulos',
+                'pedido_articulos.articulos.unidadesdemedidas',
                 'pedido_articulos.monedas',
+                'pedido_articulos.unidadmedida',
                 'pedido_articulos.unidadmedidaAlter',
             ])
             ->find($id);

@@ -42,6 +42,11 @@ class PedidoArticuloInterforming extends Pedido_Articulo
         return $this->belongsTo(PedidoInterforming::class, 'pedido_id', 'id');
     }
 
+    public function unidadmedida(): BelongsTo
+    {
+        return $this->belongsTo(Unidadmedida::class, 'unidadmedida_id');
+    }
+
     public function unidadmedidaAlter(): BelongsTo
     {
         return $this->belongsTo(Unidadmedida::class, 'unidadmedida_alter_id');

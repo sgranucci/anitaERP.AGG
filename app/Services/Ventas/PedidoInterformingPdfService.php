@@ -2,17 +2,17 @@
 
 namespace App\Services\Ventas;
 
-use App\Models\Ventas\PedidoInterforming;
-use App\Support\Ventas\PedidoEstadosInterforming;
+use App\Services\Configuracion\ImpuestoService;
+use App\Support\Ventas\PedidoInterformingPdfSupport;
 use App\Support\Ventas\PedidoInterformingSupport;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\View;
-use PDF;
 
 class PedidoInterformingPdfService
 {
     public function __construct(
-        private PedidoInterformingService $pedidoService
+        private PedidoInterformingService $pedidoService,
+        private ImpuestoService $impuestoService,
     ) {
     }
 
@@ -28,20 +28,19 @@ class PedidoInterformingPdfService
             return null;
         }
 
-        $estadosCabecera = PedidoEstadosInterforming::etiquetasCabecera();
-        $estadosItem = PedidoEstadosInterforming::etiquetasItem();
+        $pdfData = PedidoInterformingPdfSupport::armar($pedido, $this->impuestoService);
 
-        $html = View::make('exports.ventas.pedido_interforming', compact(
-            'pedido',
-            'estadosCabecera',
-            'estadosItem'
-        ))->render();
+        $html = View::make('exports.ventas.pedido_interforming', [
+            'pedido' => $pedido,
+            'pdf' => $pdfData,
+        ])->render();
 
         $pdf = App::make('dompdf.wrapper');
-        $pdf->setPaper('legal', 'landscape');
+        $pdf->setPaper('a4', 'portrait');
         $pdf->loadHTML($html, 'UTF-8');
 
-        $nombre = 'pedido_'.$pedido->codigo.'_'.date('Ymd_His').'.pdf';
+        $nombre = 'pedido_'.$pdfData['numeroPedido'].'_'.date('Ymd_His').'.pdf';
+        $nombre = preg_replace('/[^A-Za-z0-9_\.\-]/', '_', $nombre) ?: ('pedido_'.$pedidoId.'.pdf');
 
         return [
             'contenido' => $pdf->output(),
