@@ -66,6 +66,12 @@ class PrecioController extends Controller
     {
         can('listar-precios');
 
+        if (MovimientoStockFerliSupport::esCalzadosFerli()) {
+            $this->guardarFiltrosSesionFerli($request);
+
+            return view('stock.precio.index_ferli');
+        }
+
         if (! Precio::query()->exists()) {
             (new Precio)->sincronizarConAnita();
         }
@@ -81,6 +87,157 @@ class PrecioController extends Controller
             'filtrosQuery' => PrecioListadoFiltros::paraQueryString($filtros),
             'camposFiltro' => PrecioListadoFiltros::CAMPOS,
         ]);
+    }
+
+    /**
+     * DataTables server-side Ferli (L8): evita cargar ~17k precios en HTML.
+     */
+    public function datatableFerli(Request $request)
+    {
+        can('listar-precios');
+
+        if (! MovimientoStockFerliSupport::esCalzadosFerli()) {
+            abort(404);
+        }
+
+        $canEdit = can('editar-precios', false);
+        $canDelete = can('borrar-precios', false);
+        $csrf = csrf_token();
+
+        $columns = [
+            0 => 'precio.id',
+            1 => 'articulo.sku',
+            2 => 'listaprecio.nombre',
+            3 => 'precio.fechavigencia',
+            4 => 'moneda.nombre',
+            5 => 'precio.precio',
+            6 => 'precio.precioanterior',
+        ];
+
+        $base = Precio::query()
+            ->leftJoin('articulo', 'precio.articulo_id', '=', 'articulo.id')
+            ->leftJoin('listaprecio', 'precio.listaprecio_id', '=', 'listaprecio.id')
+            ->leftJoin('moneda', 'precio.moneda_id', '=', 'moneda.id')
+            ->whereExists(function ($query) {
+                $query->select(DB::raw(1))
+                    ->from('combinacion')
+                    ->whereRaw('combinacion.articulo_id = precio.articulo_id');
+            });
+
+        $this->aplicarFiltrosPreciosFerli($base, session('filtrosPrecios'));
+
+        $recordsTotal = (clone $base)->count('precio.id');
+
+        $search = $request->input('search.value');
+        if ($search !== null && $search !== '') {
+            $base->where(function ($q) use ($search) {
+                $q->where('articulo.sku', 'like', "%{$search}%")
+                    ->orWhere('articulo.descripcion', 'like', "%{$search}%")
+                    ->orWhere('listaprecio.nombre', 'like', "%{$search}%")
+                    ->orWhere('moneda.nombre', 'like', "%{$search}%")
+                    ->orWhere('precio.id', 'like', "%{$search}%")
+                    ->orWhere('precio.precio', 'like', "%{$search}%");
+            });
+        }
+
+        $recordsFiltered = (clone $base)->count('precio.id');
+
+        $orderCol = (int) $request->input('order.0.column', 0);
+        $orderDir = $request->input('order.0.dir', 'desc') === 'asc' ? 'asc' : 'desc';
+        $orderBy = $columns[$orderCol] ?? 'precio.id';
+
+        $start = max(0, (int) $request->input('start', 0));
+        $length = (int) $request->input('length', 10);
+        if ($length < 1 || $length > 100) {
+            $length = 10;
+        }
+
+        $rows = $base
+            ->select(
+                'precio.id',
+                'precio.fechavigencia',
+                'precio.precio',
+                'precio.precioanterior',
+                'articulo.sku',
+                'articulo.descripcion',
+                'listaprecio.nombre as lista_nombre',
+                'moneda.nombre as moneda_nombre'
+            )
+            ->orderBy($orderBy, $orderDir)
+            ->skip($start)
+            ->take($length)
+            ->get();
+
+        $data = [];
+        foreach ($rows as $precio) {
+            $acciones = '';
+            if ($canEdit) {
+                $urlEdit = route('editar_precio', ['id' => $precio->id]);
+                $acciones .= '<a href="'.$urlEdit.'" class="btn-accion-tabla tooltipsC" title="Editar este registro">'
+                    .'<i class="fa fa-edit"></i></a> ';
+            }
+            if ($canDelete) {
+                $urlDel = route('eliminar_precio', ['id' => $precio->id]);
+                $acciones .= '<form action="'.$urlDel.'" class="d-inline form-eliminar" method="POST">'
+                    .'<input type="hidden" name="_token" value="'.$csrf.'">'
+                    .'<input type="hidden" name="_method" value="DELETE">'
+                    .'<button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">'
+                    .'<i class="fa fa-times-circle text-danger"></i></button></form>';
+            }
+
+            $data[] = [
+                $precio->id,
+                trim(($precio->sku ?? '').' '.($precio->descripcion ?? '')),
+                $precio->lista_nombre ?? '',
+                $precio->fechavigencia ? date('d/m/Y', strtotime($precio->fechavigencia)) : '',
+                $precio->moneda_nombre ?? '',
+                number_format((float) $precio->precio, 2, '.', ''),
+                number_format((float) $precio->precioanterior, 2, '.', ''),
+                $acciones,
+            ];
+        }
+
+        return response()->json([
+            'draw' => (int) $request->input('draw', 1),
+            'recordsTotal' => $recordsTotal,
+            'recordsFiltered' => $recordsFiltered,
+            'data' => $data,
+        ]);
+    }
+
+    private function guardarFiltrosSesionFerli(Request $request)
+    {
+        if ($request->url() != $request->fullUrl()) {
+            $url = urldecode($request->fullUrl());
+            $components = parse_url($url);
+            parse_str($components['query'] ?? '', $filtros);
+            session(['filtrosPrecios' => $filtros]);
+        }
+    }
+
+    private function aplicarFiltrosPreciosFerli($query, $filtros)
+    {
+        if ($filtros == '' || empty($filtros['filter_column'])) {
+            return;
+        }
+
+        for ($ii = 0; $ii < count($filtros['filter_column']); $ii++) {
+            if (($filtros['filter_column'][$ii]['type'] ?? '') == '') {
+                continue;
+            }
+
+            if (($filtros['filter_column'][$ii]['column'] ?? '') == 'estado'
+                && $filtros['filter_column'][$ii]['type'] == '=') {
+                switch ($filtros['filter_column'][$ii]['value']) {
+                    case 'F':
+                        $query->where('articulo.nofactura', '0');
+                        break;
+                    case 'N':
+                        $query->where('articulo.nofactura', '1');
+                        break;
+                }
+            }
+        }
     }
 
     public function listar(Request $request, ?string $formato = null)
