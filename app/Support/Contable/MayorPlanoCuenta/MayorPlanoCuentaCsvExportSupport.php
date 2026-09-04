@@ -74,8 +74,18 @@ final class MayorPlanoCuentaCsvExportSupport
         string $rutaAbsoluta,
     ): array {
         $dir = dirname($rutaAbsoluta);
-        if (! is_dir($dir) && ! @mkdir($dir, 0775, true) && ! is_dir($dir)) {
-            throw new \RuntimeException('No se pudo crear directorio de export: '.$dir);
+        if (! is_dir($dir)) {
+            if (! @mkdir($dir, 0775, true) && ! is_dir($dir)) {
+                throw new \RuntimeException('No se pudo crear directorio de export: '.$dir);
+            }
+            @chmod($dir, 0775);
+        }
+        // Asegurar escritura por www-data aunque el mkdir lo haya hecho otro usuario.
+        if (! is_writable($dir)) {
+            @chmod($dir, 0777);
+        }
+        if (! is_writable($dir)) {
+            throw new \RuntimeException('Directorio de export sin permiso de escritura: '.$dir);
         }
 
         $out = fopen($rutaAbsoluta, 'w');

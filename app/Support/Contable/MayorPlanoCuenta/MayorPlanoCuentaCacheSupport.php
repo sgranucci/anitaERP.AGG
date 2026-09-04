@@ -101,10 +101,10 @@ final class MayorPlanoCuentaCacheSupport
      * @param  array<string, mixed>  $filtros
      * @return array<string, mixed>|null
      */
-    public static function recuperar(array $filtros): ?array
+    public static function recuperar(array $filtros, ?int $usuarioId = null): ?array
     {
         $firma = MayorPlanoCuentaListadoFiltros::firma($filtros);
-        $dir = self::dirPath($filtros);
+        $dir = self::dirPath($filtros, $usuarioId);
         $metaPath = $dir.'/meta.gz';
 
         if (! is_file($metaPath)) {
