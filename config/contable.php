@@ -58,9 +58,14 @@ return [
         'memory_limit' => env('MAYOR_PLANO_CUENTA_MEMORY_LIMIT', '4096M'),
         'max_execution_time' => (int) env('MAYOR_PLANO_CUENTA_MAX_EXECUTION_TIME', 900),
         'fuente_erp_hasta' => env('MAYOR_PLANO_CUENTA_FUENTE_ERP_HASTA', '2025-12-31'),
-        // Período > async_dias_minimos → cola reports + mail (un mes sigue en pantalla).
+        // Período > async_dias_minimos Y cuentas amplias → cola reports + mail.
+        // Un mes, o período largo con pocas cuentas / rango chico → pantalla.
         'async_habilitado' => filter_var(env('MAYOR_PLANO_CUENTA_ASYNC_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
         'async_dias_minimos' => (int) env('MAYOR_PLANO_CUENTA_ASYNC_DIAS_MINIMOS', 32),
+        // Lista puntual: con menos cuentas que esto, no se encola (análisis en pantalla).
+        'async_cuentas_lista_minimas' => (int) env('MAYOR_PLANO_CUENTA_ASYNC_CUENTAS_LISTA_MINIMAS', 20),
+        // Rango cuenta_desde..hasta: span de códigos >= esto se considera “grande”.
+        'async_cuentas_rango_span_minimo' => (int) env('MAYOR_PLANO_CUENTA_ASYNC_CUENTAS_RANGO_SPAN_MINIMO', 50000000),
         'async_cola' => env('MAYOR_PLANO_CUENTA_ASYNC_COLA', 'reports'),
         'async_job_timeout' => (int) env('MAYOR_PLANO_CUENTA_ASYNC_JOB_TIMEOUT', 5400),
         'async_unique_for' => (int) env('MAYOR_PLANO_CUENTA_ASYNC_UNIQUE_FOR', 10800),

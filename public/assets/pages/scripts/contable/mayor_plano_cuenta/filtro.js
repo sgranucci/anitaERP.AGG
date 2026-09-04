@@ -914,7 +914,7 @@ function mayorPlanoActivarOverlayProceso() {
             }
             mayorPlanoMostrarOverlay(
                 'Calculando el mayor…',
-                'Un mes sale en pantalla. Períodos largos (más de un mes) se encolan y el Excel plano (CSV con emisor/OC/CAPEX/facturas) llega por mail. No cierres la página hasta ver el aviso.'
+                'Un mes, o un período largo con pocas cuentas, sale en pantalla. Solo períodos largos con todas las cuentas (o rango/lista grande) se encolan y el CSV llega por mail. No cierres la página hasta ver el aviso.'
             );
         });
     });

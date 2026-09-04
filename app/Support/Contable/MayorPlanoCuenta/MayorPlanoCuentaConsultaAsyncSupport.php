@@ -6,13 +6,16 @@ use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
 use Carbon\Carbon;
 
 /**
- * Decide si la consulta del mayor plano debe ir a cola (período largo) o salir en pantalla.
+ * Decide si la consulta del mayor plano debe ir a cola (período largo + cuentas amplias) o salir en pantalla.
  */
 final class MayorPlanoCuentaConsultaAsyncSupport
 {
     /**
-     * Un mes calendario (modo mes) o un rango ≤ umbral de días → sincrónico.
-     * Rangos más largos (ej. ene–ago) → cola + mail.
+     * Cola + mail solo si:
+     * - período largo (rango de fechas > umbral; modo mes nunca), y
+     * - selección de cuentas amplia (todas las cuentas, lista grande o rango de códigos grande).
+     *
+     * Con pocas cuentas / rango chico, aunque sea ene–ago, sigue en pantalla para analizar y exportar.
      *
      * @param  array<string, mixed>  $filtros
      */
@@ -22,6 +25,18 @@ final class MayorPlanoCuentaConsultaAsyncSupport
             return false;
         }
 
+        if (! self::periodoLargo($filtros)) {
+            return false;
+        }
+
+        return self::seleccionCuentasAmplia($filtros);
+    }
+
+    /**
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function periodoLargo(array $filtros): bool
+    {
         if (($filtros['modo_periodo'] ?? 'mes') === 'mes') {
             return false;
         }
@@ -45,6 +60,45 @@ final class MayorPlanoCuentaConsultaAsyncSupport
         $umbral = max(1, (int) config('contable.mayor_plano_cuenta.async_dias_minimos', 32));
 
         return $dias > $umbral;
+    }
+
+    /**
+     * Todas las cuentas, lista con muchas cuentas, o rango de códigos “ancho”.
+     *
+     * @param  array<string, mixed>  $filtros
+     */
+    public static function seleccionCuentasAmplia(array $filtros): bool
+    {
+        if (! MayorPlanoCuentaListadoFiltros::tieneSeleccionParticularCuentas($filtros)) {
+            return true;
+        }
+
+        $cuentas = array_values(array_filter(
+            array_map('intval', $filtros['cuentas'] ?? []),
+            static fn (int $c) => $c > 0,
+        ));
+        if ($cuentas !== []) {
+            $minLista = max(1, (int) config('contable.mayor_plano_cuenta.async_cuentas_lista_minimas', 20));
+
+            return count($cuentas) >= $minLista;
+        }
+
+        $desde = (int) ($filtros['cuenta_desde'] ?? 0);
+        $hasta = (int) ($filtros['cuenta_hasta'] ?? 0);
+
+        // Rango abierto (solo desde o solo hasta) ≈ barrido amplio.
+        if ($desde <= 0 || $hasta <= 0) {
+            return true;
+        }
+
+        if ($hasta < $desde) {
+            [$desde, $hasta] = [$hasta, $desde];
+        }
+
+        $span = $hasta - $desde;
+        $spanMinimo = max(0, (int) config('contable.mayor_plano_cuenta.async_cuentas_rango_span_minimo', 50_000_000));
+
+        return $span >= $spanMinimo;
     }
 
     /**
