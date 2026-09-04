@@ -1642,8 +1642,10 @@ class MayorConceptoPeriodoProcesador
         }
 
         if ($this->esAsientoCtamovDirectoCobranzaCreditoComercial($lineasOp)) {
-            $refTipoDirecto = trim((string) ($lineasOp[0]->subd_ref_tipo ?? $lineasOp[0]->subd_tipo ?? ''));
-            if ($refTipoDirecto === '') {
+            // Tipo Anita "0" dispara traspaso doble (banco+113) y deja neto concepto 0
+            // contra analítico del banco. Tratarlo como VTA: solo contrapartida 113.
+            $refTipoDirecto = strtoupper(trim((string) ($lineasOp[0]->subd_ref_tipo ?? $lineasOp[0]->subd_tipo ?? '')));
+            if ($refTipoDirecto === '' || $refTipoDirecto === '0') {
                 $refTipoDirecto = 'VTA';
             }
 
@@ -3316,6 +3318,12 @@ class MayorConceptoPeriodoProcesador
                 if (! isset($porClave[$clave])) {
                     $porClave[$clave] = $item;
 
+                    continue;
+                }
+
+                // Con dedupePorImporte la clave ya incluye el monto: colisión = misma
+                // imputación vista desde las dos piernas ctamov (banco↔113), no sumar.
+                if ($dedupePorImporte) {
                     continue;
                 }
 
