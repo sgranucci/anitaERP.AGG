@@ -8,6 +8,7 @@ use App\Models\Compras\Configuracion_ComprobanteProveedorTolerancia;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
+use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use Illuminate\Http\Request;
 
 class ConfiguracionComprobanteProveedorController extends Controller
@@ -130,7 +131,11 @@ class ConfiguracionComprobanteProveedorController extends Controller
         }
 
         if (! $tieneDefault) {
-            $default = $this->upsertTolerancia($empresaId, null, 0.0);
+            $default = $this->upsertTolerancia(
+                $empresaId,
+                null,
+                ComprobanteProveedorToleranciaImporteSupport::PCT_DEFAULT,
+            );
             $keptIds[] = $default->id;
         }
 

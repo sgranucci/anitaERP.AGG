@@ -28,7 +28,12 @@ final class GastronomiaFormulaOpcionalesService
             return [];
         }
 
-        if (! $articulo->formula) {
+        // Articulos parciales (ej. catálogo POS solo id/sku/descripcion) no traen formula en atributos.
+        $formulaId = array_key_exists('formula', $articulo->getAttributes())
+            ? (int) ($articulo->formula ?? 0)
+            : (int) (Articulo::query()->whereKey($articulo->getKey())->value('formula') ?? 0);
+
+        if ($formulaId <= 0) {
             return [];
         }
 
@@ -37,7 +42,7 @@ final class GastronomiaFormulaOpcionalesService
                 'formula_articulo_hijos.articulos',
                 'formula_articulo_hijos.formula_hija.articulos',
             ])
-            ->find($articulo->formula);
+            ->find($formulaId);
 
         if (! $formula) {
             return [];

@@ -10,6 +10,9 @@ use App\Models\Compras\Ordencompra;
  */
 final class ComprobanteProveedorToleranciaImporteSupport
 {
+    /** Default de negocio si no hay fila en configuración (sin CC / sin registro). */
+    public const PCT_DEFAULT = 5.0;
+
     public static function porcentajeDesdeOc(object $ordencompra): float
     {
         if ($ordencompra instanceof Ordencompra) {
@@ -26,7 +29,7 @@ final class ComprobanteProveedorToleranciaImporteSupport
     public static function porcentajeParaOc(int $empresaId, ?int $centrocostoId): float
     {
         if ($empresaId <= 0) {
-            return 0.0;
+            return self::PCT_DEFAULT;
         }
 
         if ($centrocostoId !== null && $centrocostoId > 0) {
@@ -47,7 +50,7 @@ final class ComprobanteProveedorToleranciaImporteSupport
             ->where('activo', true)
             ->value('tolerancia_importe_pct');
 
-        return $default !== null ? (float) $default : 0.0;
+        return $default !== null ? (float) $default : self::PCT_DEFAULT;
     }
 
     /**

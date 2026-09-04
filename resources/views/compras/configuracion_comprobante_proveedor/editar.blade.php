@@ -61,7 +61,7 @@ Configuración comprobante proveedor
                             <p class="text-muted small mb-0">
                                 Si está activo: tolerancia de importe factura vs recepción COM por centro de costo de la OC,
                                 cotización ME y (si se habilitan arriba) match SKU/precio.
-                                Default importe (sin CC específico): 0%. Centro de costo 85 (Gastronomía): 5% salvo que se indique otra cosa.
+                                Default importe (sin CC específico): 5% (editable en la grilla de abajo). Centro de costo 85 (Gastronomía): 5% salvo que se indique otra cosa.
                             </p>
                         </div>
                     </div>

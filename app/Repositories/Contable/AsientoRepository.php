@@ -14,6 +14,7 @@ use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Contable\AsientoAlcanceCierreSupport;
 use App\Support\Ventas\PedidoFacturacionProfiler;
 use App\Support\Contable\AsientoAnitaNumeracionLock;
+use App\Support\Contable\AsientoAnitaNumeracionSupport;
 use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Contable\AsientoCtamovRollbackSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaEmisorSupport;
@@ -638,11 +639,12 @@ class AsientoRepository implements AsientoRepositoryInterface
         }
     }
 
-	private function guardarAnita($request) 
+	private function guardarAnita($request, int $intento = 1) 
 	{
 		// Graba asiento
 		$this->assertPayloadCtamovGrabable($request);
 
+		$maxIntentos = max(1, 1 + (int) config('contable.asiento_ctamov_reintentos_si_vacio', 1));
 		$apiAnita = new ApiAnita();
 
 		$centrocostos = $request['centrocosto_ids'] ?? [];
@@ -718,6 +720,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 		}
 
 		$lineasInsertadas = 0;
+		$insertsSinConfirmacion = 0;
 		$debeEsperado = 0.0;
 		$haberEsperado = 0.0;
 
@@ -834,7 +837,17 @@ class AsientoRepository implements AsientoRepositoryInterface
       			);
 				if (isset($this->path_sistema))
 					$data['path_sistema'] = $this->path_sistema;	
-        		$apiAnita->apiCallEscritura($data, 'asiento_ctamov_insert');
+        		$respuestaInsert = $apiAnita->apiCallEscritura($data, 'asiento_ctamov_insert');
+				if (! ApiAnita::respuestaBridgeEscrituraExitosa($respuestaInsert)) {
+					$insertsSinConfirmacion++;
+					Log::warning('asiento_ctamov.insert_sin_confirmacion_filas', [
+						'empresa' => $codigoEmpresa,
+						'numeroasiento' => $request['numeroasiento'] ?? null,
+						'nro_linea' => $i_movimiento,
+						'intento' => $intento,
+						'respuesta' => mb_substr(trim((string) $respuestaInsert), 0, 200),
+					]);
+				}
 				$lineasInsertadas++;
 				if ($d_h === 'D') {
 					$debeEsperado += abs((float) $monto);
@@ -883,18 +896,51 @@ class AsientoRepository implements AsientoRepositoryInterface
 				}
 			}
 
-			if (count($filasVerificadas) !== $lineasInsertadas
-				|| abs($debeVerificado - $debeEsperado) >= 0.01
-				|| abs($haberVerificado - $haberEsperado) >= 0.01) {
-				throw new \RuntimeException(sprintf(
-					'Verificación ctamov fallida: esperado %d líneas D %.2f H %.2f; leído %d líneas D %.2f H %.2f.',
+			$verificacionOk = count($filasVerificadas) === $lineasInsertadas
+				&& abs($debeVerificado - $debeEsperado) < 0.01
+				&& abs($haberVerificado - $haberEsperado) < 0.01;
+
+			if (! $verificacionOk) {
+				$detalle = sprintf(
+					'esperado %d líneas D %.2f H %.2f; leído %d líneas D %.2f H %.2f',
 					$lineasInsertadas,
 					$debeEsperado,
 					$haberEsperado,
 					count($filasVerificadas),
 					$debeVerificado,
 					$haberVerificado
-				));
+				);
+
+				// Bridge “OK” vacío / Anita ocupado: borrar restos y reintentar una vez.
+				if ($intento < $maxIntentos) {
+					Log::warning('asiento_ctamov.verificacion_fallida_reintento', [
+						'empresa' => $codigoEmpresa,
+						'numeroasiento' => $request['numeroasiento'] ?? null,
+						'intento' => $intento,
+						'max_intentos' => $maxIntentos,
+						'inserts_sin_confirmacion' => $insertsSinConfirmacion,
+						'detalle' => $detalle,
+					]);
+					try {
+						$this->eliminarAnita($codigoEmpresa, (string) $request['numeroasiento']);
+					} catch (\Throwable $cleanupEx) {
+						Log::warning('asiento_ctamov.reintento_cleanup_fallo', [
+							'empresa' => $codigoEmpresa,
+							'numeroasiento' => $request['numeroasiento'] ?? null,
+							'error' => $cleanupEx->getMessage(),
+						]);
+					}
+					usleep(300000);
+
+					return $this->guardarAnita($request, $intento + 1);
+				}
+
+				$msg = 'Verificación ctamov fallida: '.$detalle.'.';
+				if (count($filasVerificadas) === 0) {
+					$msg .= ' El bridge no persistió las líneas (Anita ocupado o respuesta vacía). Reintente en unos segundos.';
+				}
+
+				throw new \RuntimeException($msg);
 			}
 		} catch (\Throwable $e) {
 			// Sin TX Informix: si falló a mitad, borrar lo ya insertado para no dejar ctamov desbalanceado.
@@ -1072,82 +1118,140 @@ class AsientoRepository implements AsientoRepositoryInterface
 		});
 	}
 
+	/**
+	 * Reserva el próximo número en el numerador Anita y garantiza que ctamov
+	 * no tenga ya líneas para ese nro (salta ocupados dejados por Anita nativo).
+	 */
 	private function reservarNumeroAsientoAnita(int $empresa_id)
 	{
-		if (strtoupper(config('app.empresa')) == 'EL BIERZO')
-		{
-			// Lee numero de operacion
-			$apiAnita = new ApiAnita();
-			$data = array( 
-				'acc' => 'list', 
+		$empresa = $this->empresaRepository->find($empresa_id);
+		$codigoEmpresa = $empresa ? $empresa->codigo : $empresa_id;
+
+		$candidato = $this->leerSiguienteCandidatoNumeradorAnita($codigoEmpresa);
+		$eleccion = AsientoAnitaNumeracionSupport::siguienteLibre(
+			$candidato,
+			fn (int $nro) => $this->ctamovTieneLineas($codigoEmpresa, $nro),
+		);
+
+		$this->persistirNumeradorAnita($codigoEmpresa, $eleccion['numero']);
+
+		if ($eleccion['saltados'] !== []) {
+			Log::warning('asiento_anita.numeracion.salto_ocupados', [
+				'empresa_id' => $empresa_id,
+				'codigo_empresa' => $codigoEmpresa,
+				'candidato_inicial' => $candidato,
+				'asignado' => $eleccion['numero'],
+				'saltados' => $eleccion['saltados'],
+			]);
+		}
+
+		return $eleccion['numero'];
+	}
+
+	/**
+	 * Lee numabm / numerador y devuelve el candidato (último + 1) sin persistir.
+	 */
+	private function leerSiguienteCandidatoNumeradorAnita(int|string $codigoEmpresa): int
+	{
+		$apiAnita = new ApiAnita();
+
+		if (strtoupper(config('app.empresa')) == 'EL BIERZO') {
+			$data = [
+				'acc' => 'list',
 				'tabla' => 'numerador',
 				'sistema' => 'ventas',
-				'campos' => '
-					num_ult_numero
-				' , 
-				'whereArmado' => " WHERE num_clave='501'"
-			);
-			if (isset($this->path_sistema))
+				'campos' => 'num_ult_numero',
+				'whereArmado' => " WHERE num_clave='501'",
+			];
+			if (isset($this->path_sistema)) {
 				$data['path_sistema'] = $this->path_sistema;
-			$dataAnita = json_decode($apiAnita->apiCall($data));
-
-			$numeroOperacion = $dataAnita[0]->num_ult_numero + 1;
-
-			// Actualiza numero
-			$apiAnita = new ApiAnita();
-			$data = array( 'acc' => 'update', 
-						'tabla' => 'numerador', 
-						'sistema' => 'ventas',
-						'valores' => 
-							" num_ult_numero = '".$numeroOperacion."' ", 
-						'whereArmado' => " WHERE num_clave='501'" );
-			if (isset($this->path_sistema))
-				$data['path_sistema'] = $this->path_sistema;						
-			$numerador = $apiAnita->apiCallEscritura($data);
-		}
-		else
-		{
-			$empresa = $this->empresaRepository->find($empresa_id);
-
-			if ($empresa)
-				$codigoEmpresa = $empresa->codigo;
-			else
-				$codigoEmpresa = $empresa_id;
-
-			// Lee numero de operacion
-			$apiAnita = new ApiAnita();
-			$data = array( 
-				'acc' => 'list', 
-				'tabla' => 'numabm', 
-				'sistema' => 'shared',
-				'campos' => '
-					numa_ult_numero
-				' , 
-				'whereArmado' => " WHERE numa_sistema='contab' and numa_programa='a-ctamov.c' and numa_referencia='".$codigoEmpresa."'"
-			);
-			if (isset($this->path_sistema))
-				$data['path_sistema'] = $this->path_sistema;			
-			$dataAnita = json_decode($apiAnita->apiCall($data));
-
-			if ($dataAnita)
-			{
-				$numeroOperacion = $dataAnita[0]->numa_ult_numero + 1;
-
-				// Actualiza numero
-				$apiAnita = new ApiAnita();
-				$data = array( 'acc' => 'update', 
-							'tabla' => 'numabm', 
-							'sistema' => 'shared',
-							'valores' => 
-								" numa_ult_numero = '".$numeroOperacion."' ", 
-							'whereArmado' => " WHERE numa_sistema='contab' and numa_programa='a-ctamov.c' and numa_referencia='".$codigoEmpresa."'" );
-				if (isset($this->path_sistema))
-					$data['path_sistema'] = $this->path_sistema;						
-				$numerador = $apiAnita->apiCallEscritura($data);
 			}
+			$parsed = ApiAnita::parsearRespuestaLista((string) $apiAnita->apiCall($data));
+			if ($parsed['error_lectura'] !== null || $parsed['filas'] === []) {
+				throw new \RuntimeException(
+					'No se pudo leer numerador Anita (clave 501): '
+					.($parsed['error_lectura'] ?? 'sin filas')
+				);
+			}
+
+			return (int) ($parsed['filas'][0]->num_ult_numero ?? 0) + 1;
 		}
 
-		return $numeroOperacion;
+		$data = [
+			'acc' => 'list',
+			'tabla' => 'numabm',
+			'sistema' => 'shared',
+			'campos' => 'numa_ult_numero',
+			'whereArmado' => " WHERE numa_sistema='contab' and numa_programa='a-ctamov.c' and numa_referencia='"
+				.str_replace("'", "''", (string) $codigoEmpresa)."'",
+		];
+		if (isset($this->path_sistema)) {
+			$data['path_sistema'] = $this->path_sistema;
+		}
+		$parsed = ApiAnita::parsearRespuestaLista((string) $apiAnita->apiCall($data));
+		if ($parsed['error_lectura'] !== null || $parsed['filas'] === []) {
+			throw new \RuntimeException(
+				'No se pudo leer numabm Anita (a-ctamov.c emp '.$codigoEmpresa.'): '
+				.($parsed['error_lectura'] ?? 'sin filas')
+			);
+		}
+
+		return (int) ($parsed['filas'][0]->numa_ult_numero ?? 0) + 1;
+	}
+
+	private function persistirNumeradorAnita(int|string $codigoEmpresa, int $numeroAsignado): void
+	{
+		$apiAnita = new ApiAnita();
+
+		if (strtoupper(config('app.empresa')) == 'EL BIERZO') {
+			$data = [
+				'acc' => 'update',
+				'tabla' => 'numerador',
+				'sistema' => 'ventas',
+				'valores' => " num_ult_numero = '".$numeroAsignado."' ",
+				'whereArmado' => " WHERE num_clave='501'",
+			];
+		} else {
+			$data = [
+				'acc' => 'update',
+				'tabla' => 'numabm',
+				'sistema' => 'shared',
+				'valores' => " numa_ult_numero = '".$numeroAsignado."' ",
+				'whereArmado' => " WHERE numa_sistema='contab' and numa_programa='a-ctamov.c' and numa_referencia='"
+					.str_replace("'", "''", (string) $codigoEmpresa)."'",
+			];
+		}
+		if (isset($this->path_sistema)) {
+			$data['path_sistema'] = $this->path_sistema;
+		}
+		$apiAnita->apiCallEscritura($data, 'asiento_numerador_reservar');
+	}
+
+	/**
+	 * true si Informix ya tiene al menos una línea ctamov para empresa+nro.
+	 */
+	private function ctamovTieneLineas(int|string $codigoEmpresa, int $nroAsiento): bool
+	{
+		$apiAnita = new ApiAnita();
+		$data = [
+			'acc' => 'list',
+			'tabla' => $this->tableAnita[0],
+			'sistema' => 'contab',
+			'campos' => 'ctav_nro_asiento',
+			'whereArmado' => " WHERE ctav_empresa = '".str_replace("'", "''", (string) $codigoEmpresa)."'"
+				." AND ctav_nro_asiento = '".(int) $nroAsiento."'",
+		];
+		if (isset($this->path_sistema)) {
+			$data['path_sistema'] = $this->path_sistema;
+		}
+		$parsed = ApiAnita::parsearRespuestaLista((string) $apiAnita->apiCall($data));
+		if ($parsed['error_lectura'] !== null) {
+			throw new \RuntimeException(
+				'No se pudo verificar ocupación de ctamov asiento '.$nroAsiento.': '.$parsed['error_lectura']
+			);
+		}
+
+		return count($parsed['filas']) > 0;
 	}
 
 	private function assertPeriodoContablePermitido(array $data): void

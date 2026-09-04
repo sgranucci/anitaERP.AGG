@@ -126,9 +126,11 @@ class GastronomiaCuentaService
             return null;
         }
 
+        // Incluir formula: sin ella gruposOpcionalesPorArticulo() cree que no hay opcionales
+        // (import Waitry intenta agregar la línea y falla; el POS no abre el asistente a tiempo).
         return $this->queryArticulosCatalogo($cfg, null, 1)
             ->whereRaw('UPPER(sku) = ?', [mb_strtoupper($sku, 'UTF-8')])
-            ->first(['id', 'sku', 'descripcion']);
+            ->first(['id', 'sku', 'descripcion', 'formula']);
     }
 
     /**

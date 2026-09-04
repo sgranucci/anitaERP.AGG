@@ -78,6 +78,10 @@ return [
     'cierre_maquina_lock_espera_segundos' => (int) env('CIERRE_MAQUINA_LOCK_ESPERA_SEGUNDOS', 30),
     'asiento_numeracion_lock_segundos' => (int) env('ASIENTO_NUMERACION_LOCK_SEGUNDOS', 60),
     'asiento_numeracion_lock_espera_segundos' => (int) env('ASIENTO_NUMERACION_LOCK_ESPERA_SEGUNDOS', 30),
+    // Tras leer numabm+1: si ctamov ya tiene ese nro (Anita nativo en paralelo), saltar hasta N libres.
+    'asiento_numeracion_max_saltos_ocupados' => (int) env('ASIENTO_NUMERACION_MAX_SALTOS_OCUPADOS', 50),
+    // Si la verificación post-insert lee 0/desbalance, reintentar delete+insert N veces (Anita ocupado / body vacío).
+    'asiento_ctamov_reintentos_si_vacio' => (int) env('ASIENTO_CTAMOV_REINTENTOS_SI_VACIO', 1),
 
     /*
     | Balance de sumas y saldos (l-sumsal). Períodos → cuentacontable_saldo_mes; rango → asientos.

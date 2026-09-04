@@ -920,7 +920,8 @@
                     toast('No se encontró «' + sku + '» en catálogo para cargar opcionales.', 'warning');
                     continue;
                 }
-                await iniciarAltaLinea(a, { pedirCantidad: true });
+                // Cantidad 1 directa (como Enter en SKU): menos un modal tras import Waitry.
+                await procesarAltaConsumo(a, 1);
                 return;
             } catch (e) {
                 toast((e.message || 'Error al abrir opcionales') + ' (' + sku + ')', 'error');

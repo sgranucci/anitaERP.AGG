@@ -668,10 +668,12 @@ class MayorConceptoPeriodoProcesador
         $facturas = $this->filtrarAplicacionesFactura($auxpag, $totalBancoHaber);
         $retenciones = array_values(array_filter($auxpag, fn ($f) => $this->esRetencion($f)));
         $cheques = $this->filtrarAplicacionesCheque($auxpag);
+        $mediosBancarios = $this->filtrarAplicacionesMedioPagoBancario($auxpag);
         $totalFacturas = array_sum(array_map(fn ($f) => (float) ($f->axp_monto_ap ?? 0), $facturas));
         $totalCheques = array_sum(array_map(fn ($f) => (float) ($f->axp_monto_ap ?? 0), $cheques));
+        $totalMediosBancarios = array_sum(array_map(fn ($f) => (float) ($f->axp_monto_ap ?? 0), $mediosBancarios));
 
-        if ($totalFacturas <= 0 && $totalCheques <= 0) {
+        if ($totalFacturas <= 0 && $totalCheques <= 0 && $totalMediosBancarios <= 0) {
             $lineas = $this->procesarDirectoAsiento($empresaId, $lineasOp, $monedaConverter, $monedaReporteId, false);
 
             if ($this->asientoTieneProveedor($lineasOp)) {
@@ -700,24 +702,28 @@ class MayorConceptoPeriodoProcesador
 
         $imputoGastoDesdeFacturas = false;
 
-        if ($this->debeImputarChequeProveedor($totalCheques, $totalFacturas, $totalBancoHaber, $auxpag)) {
-            foreach ($cheques as $cheque) {
+        if ($this->debeImputarChequeProveedor($totalMediosBancarios, $totalFacturas, $totalBancoHaber, $auxpag)) {
+            foreach ($mediosBancarios as $cheque) {
                 $monto = (float) ($cheque->axp_monto_ap ?? 0);
                 if ($monto <= 0) {
                     continue;
                 }
 
                 $cuentaCheque = $this->cuentaChequeMayorConcepto($cheque, $auxpag, $empresaId, $lineasOp);
+                $tipoMedio = strtoupper(trim((string) ($cheque->axp_tipo_ap ?? 'CHP')));
+                if ($tipoMedio === '') {
+                    $tipoMedio = 'CHP';
+                }
 
                 $lineas[] = $this->lineaReporte(
                     $lineaBanco ?? $lineaRef,
                     $cuentaCheque,
-                    $this->conceptoImputacionGasto($empresaId, $cuentaCheque, 'CHP'),
+                    $this->conceptoImputacionGasto($empresaId, $cuentaCheque, $tipoMedio),
                     $monto,
                     'D',
                     $monedaConverter,
                     $monedaReporteId,
-                    'OPP cheque CHP',
+                    'OPP medio '.$tipoMedio,
                     $this->metaPagoProveedor($empresaId, $cheque, null, $cuentaBanco),
                 );
             }
@@ -4753,6 +4759,30 @@ class MayorConceptoPeriodoProcesador
     }
 
     /**
+     * Medios de pago bancarios en auxpag: CHP + transferencias TMB/TMK/TMR.
+     * Usar para decidir imputación cuando no hay gasto de factura recuperable.
+     * No usar en totalBancoEfectivoOp (ahí solo CHP, como Anita).
+     *
+     * @param  list<object>  $auxpag
+     * @return list<object>
+     */
+    private function filtrarAplicacionesMedioPagoBancario(array $auxpag): array
+    {
+        if ($this->auxpagTieneFga($auxpag)) {
+            return [];
+        }
+
+        return array_values(array_filter(
+            $auxpag,
+            fn ($f) => in_array(
+                strtoupper(trim((string) ($f->axp_tipo_ap ?? ''))),
+                ['CHP', 'TMB', 'TMK', 'TMR'],
+                true,
+            ),
+        ));
+    }
+
+    /**
      * @param  list<object>  $auxpag
      */
     private function auxpagTieneFga(array $auxpag): bool
@@ -5013,6 +5043,12 @@ class MayorConceptoPeriodoProcesador
             return $cuentaGaming;
         }
 
+        // FIU/bienes de uso sin subdiario recuperable: no caer en 211 proveedores.
+        $cuentaBienesUso = $this->resolverCuentaBienesUsoOpSinGasto($auxpag);
+        if ($cuentaBienesUso > 0) {
+            return $cuentaBienesUso;
+        }
+
         if ($cheque !== null) {
             $prov = trim((string) ($cheque->axp_pro ?? ''));
             if ($prov !== '' && isset($this->cuentaPrepagaPorProveedor[$prov])) {
@@ -5021,11 +5057,34 @@ class MayorConceptoPeriodoProcesador
         }
 
         $cuentaAsiento = $this->cuentaContrapartidaNoDisponibilidadAsiento($lineasOp);
-        if ($cuentaAsiento > 0) {
+        if ($cuentaAsiento > 0 && ! $this->motor->esProveedor($cuentaAsiento)) {
             return $cuentaAsiento;
         }
 
         return 117010001;
+    }
+
+    /**
+     * OP con aplicación FIU (u otra fac. ind.) sin gasto en Anita: puente bienes de uso.
+     *
+     * @param  list<object>  $auxpag
+     */
+    private function resolverCuentaBienesUsoOpSinGasto(array $auxpag): int
+    {
+        foreach ($auxpag as $aplicacion) {
+            $tipoAp = strtoupper(trim((string) ($aplicacion->axp_tipo_ap ?? '')));
+            if (! in_array($tipoAp, ['FIU', 'FIB', 'FIC', 'FID', 'FIE', 'FIF', 'FIG', 'FIH', 'FIA'], true)) {
+                continue;
+            }
+
+            if ($this->cargarGastoDesdeAplicacion($aplicacion) !== []) {
+                continue;
+            }
+
+            return 123010001;
+        }
+
+        return 0;
     }
 
     /**
@@ -5566,7 +5625,8 @@ class MayorConceptoPeriodoProcesador
         }
 
         // --- FIX-FIB-COM-VIA-PEP (2026-08-06) — ver docs/mayor-concepto-fix-fib-com-via-pep.md ---
-        if (in_array($tipoAp, ['FIB', 'FIC', 'FID', 'FIE', 'FIF', 'FIG', 'FIH', 'FIA'], true)) {
+        // FIU = Fac. Ind. Bienes de Uso (misma familia FIB…; no estaba en la lista).
+        if (in_array($tipoAp, ['FIB', 'FIC', 'FID', 'FIE', 'FIF', 'FIG', 'FIH', 'FIA', 'FIU'], true)) {
             $comGasto = $this->filtrarComGasto($this->cargarComDesdeFactura($aplicacion));
             if ($comGasto !== [] && $this->lineasGastoIncluyenResultadoCompras($comGasto)) {
                 return $comGasto;

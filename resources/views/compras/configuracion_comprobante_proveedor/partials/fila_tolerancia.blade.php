@@ -1,6 +1,7 @@
 @php
     $esDefault = ! empty($forzar_default) || ($fila && $fila->centrocosto_id === null);
-    $pct = old('tolerancias.'.$indice.'.tolerancia_importe_pct', $fila->tolerancia_importe_pct ?? ($esDefault ? 0 : 0));
+    $pctDefault = \App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport::PCT_DEFAULT;
+    $pct = old('tolerancias.'.$indice.'.tolerancia_importe_pct', $fila->tolerancia_importe_pct ?? ($esDefault ? $pctDefault : 0));
 @endphp
 <tr class="item-tolerancia-cp">
     <td>

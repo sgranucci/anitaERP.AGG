@@ -130,8 +130,17 @@ class ApiAnita {
             if ($acc === 'list') {
                 return '[]';
             }
-            // insert/update/delete exitosos en legacy devuelven []; el HTTP a veces body vacío.
+            // insert/update/delete: body vacío NO confirma persistencia (Informix ocupado /
+            // bridge cortado). Se normaliza a [] por compat legacy; quien grabe ctamov debe
+            // verificar leyendo de vuelta (AsientoRepository) o exigirFilasAfectadas.
             if (in_array($acc, ['insert', 'update', 'delete'], true)) {
+                Log::warning('anita_bridge.escritura_body_vacio', [
+                    'acc' => $acc,
+                    'tabla' => $data['tabla'] ?? null,
+                    'sistema' => $data['sistema'] ?? null,
+                    'curl_ok' => $response !== false,
+                ]);
+
                 return '[]';
             }
 

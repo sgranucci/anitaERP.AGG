@@ -11,6 +11,8 @@ use RuntimeException;
 /**
  * Serializa el incremento de numabm (a-ctamov.c) por empresa.
  * Sin esto, dos cierres concurrentes leen el mismo último número y ctamov choca UNIQUE.
+ * La ocupación real en ctamov (Anita nativo en paralelo) la resuelve
+ * AsientoAnitaNumeracionSupport::siguienteLibre dentro del lock.
  */
 final class AsientoAnitaNumeracionLock
 {
