@@ -3,10 +3,10 @@
 namespace App\Services\Ticket;
 
 use App\Mail\Ticket\TareaAsignadaNotificacion;
+use App\Models\Seguridad\Usuario;
 use App\Models\Ticket\Tecnico_Ticket;
 use App\Models\Ticket\Ticket;
 use App\Models\Ticket\Turno_Ticket;
-use App\Models\Seguridad\Usuario;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
@@ -63,6 +63,21 @@ class TicketTareaAsignadaNotificacionService
                 'destino' => $creador->email,
                 'error' => $e->getMessage(),
             ]);
+        }
+
+        try {
+            $cantidad = count($tareasEnriquecidas);
+            app(\App\Services\Configuracion\AnitaNotificacionService::class)->avisarSistema(
+                (int) $creador->id,
+                $cantidad === 1
+                    ? "Nueva tarea en ticket #{$ticketId}"
+                    : "{$cantidad} tareas nuevas en ticket #{$ticketId}",
+                'Revisá el ticket para ver la asignación.',
+                $urlTicket,
+                ['origen' => 'ticket_tarea', 'ticket_id' => $ticketId]
+            );
+        } catch (\Throwable) {
+            // El mail ya se intentó; el aviso in-app no debe romper el circuito.
         }
     }
 

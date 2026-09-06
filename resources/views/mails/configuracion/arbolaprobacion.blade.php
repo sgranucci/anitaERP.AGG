@@ -6,6 +6,21 @@
     <title>Aprobación @if(isset($datosComprobante->numeroordenventa)) OV {{ $datosComprobante->numeroordenventa }} @elseif(isset($datosComprobante->numerorequisicion)) REQ {{ $datosComprobante->numerorequisicion }} @elseif(isset($datosComprobante->numeroordencompra)) OC {{ $datosComprobante->numeroordencompra }} @elseif($tipoArbol == 'Solicitudes de pago') SP {{ $datosComprobante->codigo ?? $datosComprobante->id }} @endif</title>
 </head>
 <body>
+    @php $mxTop = $mailExtras ?? []; @endphp
+    @if (!empty($mxTop['es_recordatorio']))
+        <p style="padding:10px;background:#fff3cd;border:1px solid #ffc107;">
+            <strong>Recordatorio:</strong> este comprobante sigue pendiente de tu aprobación.
+        </p>
+    @endif
+    @if (!empty($mxTop['link_bandeja']))
+        <p>
+            <a href="{{ $mxTop['link_bandeja'] }}" style="display:inline-block;padding:10px 16px;background:#0f3d56;color:#fff;text-decoration:none;font-weight:700;border-radius:3px;">
+                Abrir mi bandeja en Anita
+            </a>
+        </p>
+        <p style="font-size:12px;color:#666;">También podés aprobar o rechazar con los enlaces de abajo (sin ingresar al sistema).</p>
+    @endif
+
     @if ($tipoArbol == 'Ordenes de venta')
         <p>Hola! Tiene una Orden de venta para aprobación</p>
     @elseif ($tipoArbol == 'Pedidos')

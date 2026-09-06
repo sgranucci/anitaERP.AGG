@@ -57,7 +57,18 @@ class OrdencompraDevolverAComprasNotificacionService
             });
         }
 
-        $emails = $this->emailsSectorCompras($sectorComprasId, (int) $oc->empresa_id);
+        $usuariosCompras = UsuarioOperativoSupport::listadoParaSelector(
+            empresaId: ((int) $oc->empresa_id) > 0 ? (int) $oc->empresa_id : null,
+            soloConEmail: true,
+            sectorLegajocompraId: $sectorComprasId,
+        );
+        $emails = $usuariosCompras
+            ->pluck('email')
+            ->map(fn ($e) => trim((string) $e))
+            ->filter(fn ($e) => $e !== '' && filter_var($e, FILTER_VALIDATE_EMAIL))
+            ->unique()
+            ->values()
+            ->all();
         $datos = [
             'numero_oc' => $oc->numeroordencompra,
             'ordencompra_id' => (int) $oc->id,
@@ -78,26 +89,21 @@ class OrdencompraDevolverAComprasNotificacionService
             }
         }
 
+        try {
+            app(\App\Services\Configuracion\AnitaNotificacionService::class)->avisarSistemaAUsuarios(
+                $usuariosCompras->pluck('id')->all(),
+                'Legajo OC '.$oc->numeroordencompra.' devuelto a COMPRAS',
+                mb_substr($motivo !== '' ? $motivo : 'Revisá el legajo en Compras.', 0, 500),
+                $datos['url'],
+                ['origen' => 'oc_devolver_compras', 'ordencompra_id' => (int) $oc->id]
+            );
+        } catch (\Throwable) {
+        }
+
         return [
             'ok' => true,
             'mensaje' => 'Legajo OC '.$oc->numeroordencompra.' devuelto a COMPRAS.',
             'emails' => $emails,
         ];
-    }
-
-    /** @return list<string> */
-    private function emailsSectorCompras(int $sectorComprasId, int $empresaId): array
-    {
-        return UsuarioOperativoSupport::listadoParaSelector(
-            empresaId: $empresaId > 0 ? $empresaId : null,
-            soloConEmail: true,
-            sectorLegajocompraId: $sectorComprasId,
-        )
-            ->pluck('email')
-            ->map(fn ($e) => trim((string) $e))
-            ->filter(fn ($e) => $e !== '' && filter_var($e, FILTER_VALIDATE_EMAIL))
-            ->unique()
-            ->values()
-            ->all();
     }
 }

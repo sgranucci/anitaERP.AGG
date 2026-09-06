@@ -18,6 +18,7 @@
         <input type="hidden" name="aprobacion_id" value="{{ $movimiento->id }}">
         <input type="hidden" name="usuario_id" value="{{ $movimiento->destinatariousuario_id }}">
         <input type="hidden" name="hash_aprobacion" value="{{ $hash_aprobacion }}">
+        <input type="hidden" name="tipocomprobante" value="{{ $tipocomprobante ?? 'OC' }}">
         <div class="form-group">
             <label for="observacion">Observaciones <span class="text-muted font-weight-normal">(opcional)</span></label>
             <textarea class="form-control" id="observacion" name="observacion" rows="4" maxlength="4000" placeholder="Comentarios internos sobre esta aprobación…">{{ old('observacion') }}</textarea>
@@ -25,6 +26,8 @@
         <button type="submit" class="btn btn-success btn-block btn-lg">
             @if (!empty($es_circuito_legajo_gastronomia))
                 Autorizar legajo (pasa a Cuentas a pagar)
+            @elseif (($tipocomprobante ?? 'OC') === 'SU')
+                Autorizar suscripción
             @else
                 Aprobar orden de compra
             @endif

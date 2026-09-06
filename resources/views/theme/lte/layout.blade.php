@@ -1,5 +1,6 @@
 @php
     $modoConsulta = request()->input('vista') === 'consulta';
+    $modoEmbed = request()->boolean('embed');
 @endphp
 <!DOCTYPE html>
 <html>
@@ -8,9 +9,16 @@
     <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="IE=edge">
     <meta name="csrf-token" content="{{ csrf_token() }}">
-    <title>{{ $modoConsulta ? '[Consulta] ' : '' }}@yield('titulo', 'Anita ERP') | Anita ERP</title>
+    <title>{{ $modoConsulta ? '[Consulta] ' : '' }}{{ $modoEmbed ? '[Solapa] ' : '' }}@yield('titulo', 'Anita ERP') | Anita ERP</title>
     <!-- Tell the browser to be responsive to screen width -->
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0c3b52">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Aprobaciones">
+    <link rel="manifest" href="{{ asset('manifest.webmanifest') }}">
+    <link rel="apple-touch-icon" href="{{ asset('assets/pwa/icon-192.png') }}">
     <!-- Font Awesome -->
     <link rel="stylesheet" href="{{asset("assets/$theme/plugins/fontawesome-free/css/all.min.css")}}">
     <link rel="stylesheet" href="{{asset("assets/$theme/plugins/fontawesome-free/css/v4-shims.min.css")}}">
@@ -33,9 +41,12 @@
 
     <link rel="stylesheet" href="{{ asset('assets/css/custom.css') }}?v={{ @filemtime(public_path('assets/css/custom.css')) ?: time() }}">
     <link rel="stylesheet" href="{{ asset('assets/css/sidebar.css') }}?v={{ @filemtime(public_path('assets/css/sidebar.css')) ?: time() }}">
-    <link rel="stylesheet" href="{{ asset('assets/css/barra-tareas.css') }}?v={{ @filemtime(public_path('assets/css/barra-tareas.css')) ?: time() }}">
+    @if (! $modoEmbed)
+        <link rel="stylesheet" href="{{ asset('assets/css/barra-tareas.css') }}?v={{ @filemtime(public_path('assets/css/barra-tareas.css')) ?: time() }}">
+    @endif
+    <link rel="stylesheet" href="{{ asset('assets/css/erp-workspace-panel.css') }}?v={{ @filemtime(public_path('assets/css/erp-workspace-panel.css')) ?: time() }}">
     @auth
-        @if (!$modoConsulta && can('ejecutar-consulta-ia', false) && filter_var(config('ai.habilitado', false), FILTER_VALIDATE_BOOLEAN) && filter_var(config('ai.skills.consultar_contexto_operativo.habilitada', false), FILTER_VALIDATE_BOOLEAN))
+        @if (!$modoConsulta && !$modoEmbed && can('ejecutar-consulta-ia', false) && filter_var(config('ai.habilitado', false), FILTER_VALIDATE_BOOLEAN) && filter_var(config('ai.skills.consultar_contexto_operativo.habilitada', false), FILTER_VALIDATE_BOOLEAN))
             <link rel="stylesheet" href="{{ asset('assets/css/ai-consulta-operativa.css') }}?v={{ @filemtime(public_path('assets/css/ai-consulta-operativa.css')) ?: time() }}">
         @endif
     @endauth
@@ -52,16 +63,28 @@
     <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,400,600,700,300italic,400italic,600italic">
 </head>
 
-<body class="hold-transition sidebar-mini{{ $modoConsulta ? ' modo-consulta sidebar-collapse' : '' }}">
+<body class="hold-transition sidebar-mini{{ $modoConsulta ? ' modo-consulta sidebar-collapse' : '' }}{{ $modoEmbed ? ' modo-embed' : '' }}">
     <!-- Site wrapper -->
     <div class="wrapper">
-        <!-- Inicio Header -->
-        @include("theme/$theme/header")
-        <!-- Fin Header -->
-        @if (!$modoConsulta)
-            <!-- Inicio Aside -->
-            @include("theme/$theme/aside")
-            <!-- Fin Aside -->
+        @if ($modoEmbed)
+            <div class="erp-embed-bar">
+                <div class="erp-embed-bar-txt">
+                    Solapa de trabajo
+                    <small>Sin menú · al cerrar volvés al listado</small>
+                </div>
+                <button type="button" class="erp-embed-cerrar" id="erp-embed-cerrar">
+                    <i class="fa fa-times"></i> Cerrar solapa
+                </button>
+            </div>
+        @else
+            <!-- Inicio Header -->
+            @include("theme/$theme/header")
+            <!-- Fin Header -->
+            @if (!$modoConsulta)
+                <!-- Inicio Aside -->
+                @include("theme/$theme/aside")
+                <!-- Fin Aside -->
+            @endif
         @endif
         <div class="content-wrapper">
             <!-- Content Header (Page header) -->
@@ -74,16 +97,18 @@
                 </div>
             </section>
         </div>
-        <!--Inicio Footer -->
-        @include("theme/$theme/footer")
-        <!-- Fin Footer -->
-        <!-- Control Sidebar -->
-        <aside class="control-sidebar control-sidebar-dark">
-          <!-- Control sidebar content goes here -->
-        </aside>
-        <!-- /.control-sidebar -->
+        @if (! $modoEmbed)
+            <!--Inicio Footer -->
+            @include("theme/$theme/footer")
+            <!-- Fin Footer -->
+            <!-- Control Sidebar -->
+            <aside class="control-sidebar control-sidebar-dark">
+              <!-- Control sidebar content goes here -->
+            </aside>
+            <!-- /.control-sidebar -->
+        @endif
         <!--Inicio de ventana modal para login con más de un rol -->
-		@if(session()->get("roles") && count(session()->get("roles")) > 1)
+		@if(! $modoEmbed && session()->get("roles") && count(session()->get("roles")) > 1)
             @csrf
             <div class="modal fade" id="modal-seleccionar-rol" data-rol-set="{{empty(session()->get("rol_id")) ? 'NO' : 'SI'}}" tabindex="-1" data-backdrop="static" data-keyboard="false">
                 <div class="modal-dialog">
@@ -187,20 +212,56 @@
     <script src="{{asset("assets/js/funciones.js")}}"></script>
     <script src="{{asset('assets/js/modo-consulta.js')}}"></script>
     <script src="{{ asset('assets/js/grabacion-bloqueo-submit.js') }}?v={{ @filemtime(public_path('assets/js/grabacion-bloqueo-submit.js')) ?: time() }}"></script>
+    @if ($modoEmbed)
+    <script>
+        (function () {
+            var btn = document.getElementById('erp-embed-cerrar');
+            if (!btn) {
+                return;
+            }
+            btn.addEventListener('click', function () {
+                if (window.parent && window.parent !== window) {
+                    window.parent.postMessage({ type: 'erp-workspace-close' }, '*');
+                    return;
+                }
+                if (window.history.length > 1) {
+                    window.history.back();
+                    return;
+                }
+                window.close();
+            });
+        })();
+    </script>
+    @endif
     @auth
-        <script src="{{ asset('assets/js/barra-tareas.js') }}"></script>
-        <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/articulos_vendidos_procesando.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/articulos_vendidos_procesando.js')) ?: time() }}" type="text/javascript"></script>
-        @if (!$modoConsulta && can('ejecutar-consulta-ia', false) && filter_var(config('ai.habilitado', false), FILTER_VALIDATE_BOOLEAN) && filter_var(config('ai.skills.consultar_contexto_operativo.habilitada', false), FILTER_VALIDATE_BOOLEAN))
-            @include('includes.ai.panel_consulta_operativa')
-            <script>
-                window.AnitaAiConsulta = {
-                    urlIntents: @json(route('ai_consulta_intents')),
-                    urlConsultar: @json(route('ai_consulta_contexto')),
-                    urlExportar: @json(route('ai_consulta_exportar', ['formato' => 'EXCEL'])),
-                    urlConfirmarPedido: @json(route('ai_consulta_confirmar_pedido_consumo')),
-                };
-            </script>
-            <script src="{{ asset('assets/pages/scripts/configuracion/ai/consulta_operativa.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/ai/consulta_operativa.js')) ?: time() }}" type="text/javascript"></script>
+        @if (! $modoEmbed)
+            <script src="{{ asset('assets/js/barra-tareas.js') }}"></script>
+            @if (!$modoConsulta)
+                <script src="{{ asset('assets/js/mis-aprobaciones-badge.js') }}?v={{ @filemtime(public_path('assets/js/mis-aprobaciones-badge.js')) ?: time() }}"></script>
+                <script src="{{ asset('assets/js/anita-notificaciones.js') }}?v={{ @filemtime(public_path('assets/js/anita-notificaciones.js')) ?: time() }}"></script>
+                <script>
+                (function () {
+                    if (!('serviceWorker' in navigator)) return;
+                    var swUrl = @json(asset('sw-anita.js'));
+                    window.addEventListener('load', function () {
+                        navigator.serviceWorker.register(swUrl).catch(function () {});
+                    });
+                })();
+                </script>
+            @endif
+            <script src="{{ asset('assets/pages/scripts/ventas/gastronomia/articulos_vendidos_procesando.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/ventas/gastronomia/articulos_vendidos_procesando.js')) ?: time() }}" type="text/javascript"></script>
+            @if (!$modoConsulta && can('ejecutar-consulta-ia', false) && filter_var(config('ai.habilitado', false), FILTER_VALIDATE_BOOLEAN) && filter_var(config('ai.skills.consultar_contexto_operativo.habilitada', false), FILTER_VALIDATE_BOOLEAN))
+                @include('includes.ai.panel_consulta_operativa')
+                <script>
+                    window.AnitaAiConsulta = {
+                        urlIntents: @json(route('ai_consulta_intents')),
+                        urlConsultar: @json(route('ai_consulta_contexto')),
+                        urlExportar: @json(route('ai_consulta_exportar', ['formato' => 'EXCEL'])),
+                        urlConfirmarPedido: @json(route('ai_consulta_confirmar_pedido_consumo')),
+                    };
+                </script>
+                <script src="{{ asset('assets/pages/scripts/configuracion/ai/consulta_operativa.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/configuracion/ai/consulta_operativa.js')) ?: time() }}" type="text/javascript"></script>
+            @endif
         @endif
     @endauth
     @yield("scripts")

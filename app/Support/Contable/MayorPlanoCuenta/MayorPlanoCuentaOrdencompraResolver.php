@@ -34,10 +34,9 @@ class MayorPlanoCuentaOrdencompraResolver
     private int $movimientosResueltos = 0;
 
     public function __construct(
-        private readonly MayorConceptoAnitaBridgeReader $reader = new MayorConceptoAnitaBridgeReader(),
-        private readonly MayorConceptoMediopagoSupport $mediopagoSupport = new MayorConceptoMediopagoSupport(),
-    ) {
-    }
+        private readonly MayorConceptoAnitaBridgeReader $reader = new MayorConceptoAnitaBridgeReader,
+        private readonly MayorConceptoMediopagoSupport $mediopagoSupport = new MayorConceptoMediopagoSupport,
+    ) {}
 
     /**
      * @param  list<object>  $auxpag
@@ -183,14 +182,17 @@ class MayorPlanoCuentaOrdencompraResolver
         }
 
         // ctamov: ctav_o_compra es la OC real (en recepciones COM, ctav_nro es el nro de recepción).
+        // Si Anita copió el nro del COM en ctav_o_compra, no es una OC.
         if ($existente > 0) {
+            if ($tipo === 'COM' && $nro > 0 && $existente === $nro) {
+                return 0;
+            }
+
             return $existente;
         }
 
-        // Subdiario COM sin o_compra: el nro del comprobante COM es la OC.
-        if ($tipo === 'COM' && $nro > 0) {
-            return $nro;
-        }
+        // No usar el nro COM como OC: choca con recepciones Anita (COM X-nro) homónimas
+        // a OCs de otro proveedor. La recepción se enlaza en MayorPlanoCuentaRecepcionAnitaEnricher.
 
         return 0;
     }

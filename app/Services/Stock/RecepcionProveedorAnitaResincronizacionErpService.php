@@ -24,8 +24,7 @@ class RecepcionProveedorAnitaResincronizacionErpService
     public function __construct(
         private readonly RecepcionProveedorAnitaBridgeService $anitaBridge,
         private readonly RecepcionProveedorAsientoService $asientoService,
-    ) {
-    }
+    ) {}
 
     public function contar(?int $id = null, bool $soloReparacionDetalleRef = false): int
     {
@@ -335,7 +334,7 @@ class RecepcionProveedorAnitaResincronizacionErpService
         ]));
 
         if ((int) $recepcion->asiento_id > 0) {
-            $this->asientoService->sincronizarCtamovAnitaRecepcion($recepcion->fresh([
+            $this->asientoService->reconciliarCtamovConErp($recepcion->fresh([
                 'asientos',
                 'empresas',
                 'proveedores',

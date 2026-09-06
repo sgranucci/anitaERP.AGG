@@ -143,6 +143,7 @@ class MayorPlanoCuentaController extends Controller
             'resumen_cc' => $resumenCc,
             'totales' => $totales,
             'errores_bridge' => $erroresBridge,
+            'fuente_etiqueta' => (string) data_get($resultado, 'parametros.fuente_etiqueta', ''),
             'moneda' => $moneda,
             'cuenta_desde_meta' => $this->metaCuentaFiltro((int) ($filtros['cuenta_desde'] ?? 0), $empresaRefId),
             'cuenta_hasta_meta' => $this->metaCuentaFiltro((int) ($filtros['cuenta_hasta'] ?? 0), $empresaRefId),

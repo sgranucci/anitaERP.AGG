@@ -2,40 +2,47 @@
     <tr class="item-arbolaprobacion-nivel">
         <td>
             <input type="hidden" class="id form-control" name="ids[]" value="">
-            <input type="text" name="arbolaprobacion_nivel[]" class="form-control iiarbolaprobacion_nivel" readonly value="1" />
+            <input type="text" name="arbolaprobacion_nivel[]" class="form-control form-control-sm iiarbolaprobacion_nivel" readonly value="1" />
         </td>
         <td>
-            <input type="number" min="1" class="nivel form-control" name="niveles[]" required value="">
+            <input type="number" min="1" class="nivel form-control form-control-sm" name="niveles[]" required value="">
+        </td>
+        <td class="col-rama-re">
+            <select name="ramas[]" class="form-control form-control-sm rama-re" title="Vacío = circuito único">
+                <option value="">—</option>
+                <option value="A">A</option>
+                <option value="B">B</option>
+            </select>
         </td>
         <td>
-            <select name="centrocosto_ids[]" data-placeholder="Centro de Costo" class="centrocosto form-control required" required data-fouc>
-                <option value="">-- Elija centro de costo --</option>
+            <select name="centrocosto_ids[]" class="centrocosto form-control form-control-sm required" required data-fouc>
+                <option value="">-- CC --</option>
                 @foreach($centrocosto_query as $key => $value)
-                    <option value="{{ $value->id }}">{{ $value->codigo }} - {{ $value->nombre }}</option>    
+                    <option value="{{ $value->id }}">{{ $value->codigo }} - {{ $value->nombre }}</option>
                 @endforeach
             </select>
-        </td>                    
+        </td>
         <td>
             <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;">
                 <input type="hidden" class="usuario_id_arbol" name="usuario_ids[]" value="" >
                 <input type="hidden" class="usuario_id_previa" name="usuario_id_previa[]" value="" >
-                <input type="text" style="flex: 0 0 110px; width: 110px; height: 38px;" class="usuario_codigo_arbol form-control" value="" placeholder="Código usuario" title="Código de login o ID numérico; Tab fuera para cargar el nombre" autocomplete="off">
-                <button type="button" title="Consulta usuarios" style="padding:1; flex: 0 0 auto;" class="btn-accion-tabla consultausuario tooltipsC">
-                        <i class="fa fa-search text-primary"></i>
+                <input type="text" style="flex: 0 0 96px; width: 96px;" class="usuario_codigo_arbol form-control form-control-sm" value="" placeholder="Código" title="Login o ID; Tab para cargar nombre" autocomplete="off">
+                <button type="button" title="Consulta usuarios" class="btn-accion-tabla consultausuario tooltipsC">
+                    <i class="fa fa-search text-primary"></i>
                 </button>
-                <input type="text" style="flex: 1 1 auto; min-width: 0; height: 38px; font-size: 14px;" class="nombreusuario form-control" name="nombreusuarios[]" value="" placeholder="(opcional)" >
+                <input type="text" style="flex: 1 1 auto; min-width: 0;" class="nombreusuario form-control form-control-sm" name="nombreusuarios[]" value="" placeholder="(opcional)" >
             </div>
         </td>
         <td>
-            <input type="number" class="desdemonto form-control" name="desdemontos[]" value="">
+            <input type="number" class="desdemonto form-control form-control-sm" name="desdemontos[]" value="">
         </td>
         <td>
-            <input type="number" class="hastamonto form-control" name="hastamontos[]" value="">
-        </td>        
+            <input type="number" class="hastamonto form-control form-control-sm" name="hastamontos[]" value="">
+        </td>
         <td>
-            <select name="moneda_ids[]" data-placeholder="Moneda" class="moneda form-control required" required data-fouc>
+            <select name="moneda_ids[]" class="moneda form-control form-control-sm required" required data-fouc>
                 @foreach($moneda_query as $key => $value)
-                    <option value="{{ $value->id }}">{{ $value->abreviatura }}</option>    
+                    <option value="{{ $value->id }}">{{ $value->abreviatura }}</option>
                 @endforeach
             </select>
         </td>
@@ -55,10 +62,10 @@
         </td>
         <td class="text-center col-doble-aprobacion">
             <input type="hidden" name="doble_aprobacions[]" class="doble_aprobacion_valor" value="N">
-            <input type="checkbox" class="doble_aprobacion_check" value="S" title="Doble aprobación para este centro de costo">
+            <input type="checkbox" class="doble_aprobacion_check" value="S" title="Doble aprobación para este CC">
         </td>
         <td>
-            <button type="button" style="width: 7%;" title="Elimina esta linea" class="btn-accion-tabla eliminar_arbolaprobacion_nivel tooltipsC">
+            <button type="button" title="Eliminar línea" class="btn-accion-tabla eliminar_arbolaprobacion_nivel tooltipsC">
                 <i class="fa fa-times-circle text-danger"></i>
             </button>
         </td>

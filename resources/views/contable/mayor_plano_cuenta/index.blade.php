@@ -146,6 +146,12 @@
 
                                 <div class="col-lg-4">
                                     <label class="small font-weight-bold d-block mb-2">Origen de movimientos</label>
+                                    @include('contable.partials.fuente_mayor_selector', [
+                                        'filtros' => $filtros ?? [],
+                                        'id_prefix' => 'mpc',
+                                        'compact' => true,
+                                        'config_key' => 'contable.mayor_plano_cuenta.fuente_erp_hasta',
+                                    ])
                                     <div class="form-check mb-2">
                                         <input class="form-check-input" type="checkbox" name="solo_moneda_origen" id="solo_moneda_origen" value="1"
                                             @checked(! empty($filtros['solo_moneda_origen']))>
@@ -339,6 +345,10 @@
                             @endforeach
                         </div>
                     @endif
+
+                    @include('contable.partials.fuente_mayor_badge', [
+                        'fuente_etiqueta' => $fuente_etiqueta ?? '',
+                    ])
 
                     @include('contable.mayor_plano_cuenta.partials.resumen_totales', [
                         'resumen' => $resumen ?? [],

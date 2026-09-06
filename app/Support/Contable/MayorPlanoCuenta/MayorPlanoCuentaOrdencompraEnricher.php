@@ -51,6 +51,20 @@ class MayorPlanoCuentaOrdencompraEnricher
             }
 
             $nroOc = (int) ($fila['nro_oc'] ?? 0);
+            // COM Anita: el nro del comprobante no es OC (homónimas de otro proveedor).
+            if ($nroOc > 0 && strtoupper(trim((string) ($fila['tipo_comp'] ?? ''))) === 'COM') {
+                $nroCom = (int) ($fila['nro'] ?? 0);
+                if ($nroCom <= 0 && preg_match('/(\d+)\s*$/', trim((string) ($fila['comprobante'] ?? '')), $m) === 1) {
+                    $nroCom = (int) $m[1];
+                }
+                if ($nroCom > 0 && $nroOc === $nroCom) {
+                    $filas[$idx]['nro_oc'] = 0;
+                    $filas[$idx]['ordencompra_id'] = 0;
+
+                    continue;
+                }
+            }
+
             $cpId = (int) ($fila['comprobante_proveedor_id'] ?? 0);
             $ocId = $nroOc > 0 ? (int) ($this->cachePorNumero[$nroOc] ?? 0) : 0;
             if ($ocId <= 0 && $cpId > 0) {

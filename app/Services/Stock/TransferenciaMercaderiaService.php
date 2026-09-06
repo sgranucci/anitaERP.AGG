@@ -4,6 +4,7 @@ namespace App\Services\Stock;
 
 use App\Models\Stock\Articulo;
 use App\Models\Stock\Depmae;
+use App\Models\Stock\Deposito_Administrador;
 use App\Models\Stock\MovimientoStock;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Models\Stock\Transferencia_Mercaderia;
@@ -13,31 +14,32 @@ use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
 use App\Repositories\Stock\Tipotransaccion_StockRepositoryInterface;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Services\Stock\Surmar\MovimientoStockSurmarEtiquetaService;
+use App\Support\Configuracion\OperacionPublicaTokenSupport;
 use App\Support\Contable\AsientoReversoSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
-use App\Support\Stock\DepositoFormulaInsumoFaltanteSupport;
+use App\Support\Stock\ArticuloSeleccionOperativaSupport;
 use App\Support\Stock\DepmaeControlStockSupport;
-use App\Support\Stock\RecepcionProveedorDepositoSupport;
-use App\Support\Configuracion\OperacionPublicaTokenSupport;
+use App\Support\Stock\DepositoFormulaInsumoFaltanteSupport;
 use App\Support\Stock\MovimientoStockSalidaSaldoSupport;
+use App\Support\Stock\RecepcionProveedorDepositoSupport;
 use App\Support\Stock\RecuentoBloqueoSalidaDepositoSupport;
+use App\Support\Stock\StkmaePrecioCompraAnitaBridgeSupport;
 use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Stock\TransferenciaMercaderiaAprobacionSupport;
 use App\Support\Stock\TransferenciaMercaderiaCodigoSupport;
 use App\Support\Stock\TransferenciaMercaderiaDestinatarioSupport;
 use App\Support\Stock\TransferenciaMercaderiaEstados;
-use App\Support\Stock\TransferenciaMercaderiaLineaContableSupport;
 use App\Support\Stock\TransferenciaMercaderiaIntercompanySupport;
+use App\Support\Stock\TransferenciaMercaderiaLineaContableSupport;
 use App\Support\Stock\TransferenciaMercaderiaLineaReversoSupport;
-use App\Support\Stock\ArticuloSeleccionOperativaSupport;
 use App\Support\Stock\TransferenciaMercaderiaLineaSupport;
 use App\Support\Stock\TransferenciaMercaderiaPickeoSupport;
-use App\Support\Stock\StkmaePrecioCompraAnitaBridgeSupport;
 use App\Support\Stock\TransferenciaMercaderiaSignoSupport;
 use App\Support\Stock\UnidadesCajaPiezaSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Auth;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -253,6 +255,65 @@ class TransferenciaMercaderiaService
         }
 
         return $query->get()->all();
+    }
+
+    /**
+     * Pendientes accionables para la bandeja unificada (asignado o depósito destino explícito).
+     * Evita inundar a usuarios sin restricción de depósitos con toda la cola global.
+     *
+     * @return Collection<int, Transferencia_Mercaderia>
+     */
+    public function listarPendientesAprobacionParaUsuario(int $usuarioId): Collection
+    {
+        if ($usuarioId <= 0) {
+            return collect();
+        }
+
+        $pendientes = Transferencia_Mercaderia::query()
+            ->with(['depositoOrigen:id,nombre', 'depositoDestino:id,nombre', 'bienUsoOrigen', 'bienUsoDestino', 'usuarioDestino:id,nombre'])
+            ->where('estado', TransferenciaMercaderiaEstados::PENDIENTE_RECEPCION)
+            ->orderByDesc('fecha')
+            ->orderByDesc('id')
+            ->get();
+
+        return $pendientes->filter(fn (Transferencia_Mercaderia $t) => $this->usuarioPuedeAprobarEnBandeja($t, $usuarioId))->values();
+    }
+
+    public function usuarioPuedeAprobarEnBandeja(Transferencia_Mercaderia $transferencia, int $usuarioId): bool
+    {
+        if ($usuarioId <= 0 || $transferencia->estado !== TransferenciaMercaderiaEstados::PENDIENTE_RECEPCION) {
+            return false;
+        }
+
+        if ((int) ($transferencia->usuario_destino_id ?? 0) === $usuarioId) {
+            return true;
+        }
+
+        // Bien de uso: en inbox solo el destinatario designado (arriba).
+        if ((int) ($transferencia->bien_uso_destino_id ?? 0) > 0) {
+            return false;
+        }
+
+        $depositoDestinoId = (int) ($transferencia->deposito_destino_id ?? 0);
+        if ($depositoDestinoId <= 0) {
+            return false;
+        }
+
+        $esAdmin = Deposito_Administrador::query()
+            ->where('deposito_id', $depositoDestinoId)
+            ->where('usuario_id', $usuarioId)
+            ->where('aprueba_transferencia', true)
+            ->exists();
+
+        if ($esAdmin) {
+            return true;
+        }
+
+        // Solo asignación explícita al depósito (no el caso "sin restricción = todos").
+        return DB::table('usuario_deposito')
+            ->where('deposito_id', $depositoDestinoId)
+            ->where('usuario_id', $usuarioId)
+            ->exists();
     }
 
     public function buscar(int $id): Transferencia_Mercaderia
@@ -560,92 +621,92 @@ class TransferenciaMercaderiaService
                         $ccDestinoId,
                         $manejaContabilidad
                     ) {
-                $asignado = TransferenciaMercaderiaCodigoSupport::reservar();
-                $codigoBase = $asignado['codigo'];
-                $lote = $asignado['lote'];
+                        $asignado = TransferenciaMercaderiaCodigoSupport::reservar();
+                        $codigoBase = $asignado['codigo'];
+                        $lote = $asignado['lote'];
 
-                $transferencia = Transferencia_Mercaderia::create([
-                    'codigo' => $codigoBase,
-                    'lote' => $lote,
-                    'empresa_id' => $empresaId > 0 ? $empresaId : TransferenciaMercaderiaIntercompanySupport::empresaIdDesdeDepositos($depositoEntrada, $depositoSalida),
-                    'deposito_origen_id' => $origenBienUso ? null : $depositoSalidaId,
-                    'bien_uso_origen_id' => $origenBienUso ? $bienUsoOrigenId : null,
-                    'deposito_destino_id' => $destinoBienUso ? null : $depositoEntradaId,
-                    'bien_uso_destino_id' => $destinoBienUso ? $bienUsoDestinoId : null,
-                    'tipotransaccion_stock_id' => $tipoTransferencia->id,
-                    'centrocosto_destino_id' => $manejaContabilidad ? $ccDestinoId : null,
-                    'estado' => $requiereAprobacion
-                        ? TransferenciaMercaderiaEstados::PENDIENTE_RECEPCION
-                        : TransferenciaMercaderiaEstados::CONFIRMADA,
-                    'requiere_aprobacion' => $requiereAprobacion,
-                    'usuario_origen_id' => Auth::id(),
-                    'usuario_destino_id' => $usuarioDestino?->id,
-                    'fecha' => $fecha,
-                    'observacion' => trim((string) ($cabecera['observacion'] ?? '')) ?: null,
-                ]);
+                        $transferencia = Transferencia_Mercaderia::create([
+                            'codigo' => $codigoBase,
+                            'lote' => $lote,
+                            'empresa_id' => $empresaId > 0 ? $empresaId : TransferenciaMercaderiaIntercompanySupport::empresaIdDesdeDepositos($depositoEntrada, $depositoSalida),
+                            'deposito_origen_id' => $origenBienUso ? null : $depositoSalidaId,
+                            'bien_uso_origen_id' => $origenBienUso ? $bienUsoOrigenId : null,
+                            'deposito_destino_id' => $destinoBienUso ? null : $depositoEntradaId,
+                            'bien_uso_destino_id' => $destinoBienUso ? $bienUsoDestinoId : null,
+                            'tipotransaccion_stock_id' => $tipoTransferencia->id,
+                            'centrocosto_destino_id' => $manejaContabilidad ? $ccDestinoId : null,
+                            'estado' => $requiereAprobacion
+                                ? TransferenciaMercaderiaEstados::PENDIENTE_RECEPCION
+                                : TransferenciaMercaderiaEstados::CONFIRMADA,
+                            'requiere_aprobacion' => $requiereAprobacion,
+                            'usuario_origen_id' => Auth::id(),
+                            'usuario_destino_id' => $usuarioDestino?->id,
+                            'fecha' => $fecha,
+                            'observacion' => trim((string) ($cabecera['observacion'] ?? '')) ?: null,
+                        ]);
 
-                $this->persistirLineasTransferencia($transferencia, $lineasResueltas);
+                        $this->persistirLineasTransferencia($transferencia, $lineasResueltas);
 
-                $payloadSalida = $this->armarPayloadMovimiento($lineasResueltas, 'salida');
-                $salida = $this->grabarMovimiento(
-                    $tipoTransferencia->id,
-                    $origenBienUso ? null : $depositoSalidaId,
-                    $fecha,
-                    $lote,
-                    $codigoBase.'-S',
-                    $origenBienUso
-                        ? 'Desasignación hacia '.$etiquetaDestino
-                        : 'Transferencia a '.$etiquetaDestino,
-                    $payloadSalida,
-                    esSalida: true,
-                    bienUsoId: $origenBienUso ? $bienUsoOrigenId : null,
-                    empresaId: $empresaId > 0 ? $empresaId : TransferenciaMercaderiaIntercompanySupport::empresaIdDesdeDepositos($depositoEntrada, $depositoSalida)
-                );
-                $transferencia->movimientostock_salida_id = (int) $salida['id'];
-                $transferencia->save();
+                        $payloadSalida = $this->armarPayloadMovimiento($lineasResueltas, 'salida');
+                        $salida = $this->grabarMovimiento(
+                            $tipoTransferencia->id,
+                            $origenBienUso ? null : $depositoSalidaId,
+                            $fecha,
+                            $lote,
+                            $codigoBase.'-S',
+                            $origenBienUso
+                                ? 'Desasignación hacia '.$etiquetaDestino
+                                : 'Transferencia a '.$etiquetaDestino,
+                            $payloadSalida,
+                            esSalida: true,
+                            bienUsoId: $origenBienUso ? $bienUsoOrigenId : null,
+                            empresaId: $empresaId > 0 ? $empresaId : TransferenciaMercaderiaIntercompanySupport::empresaIdDesdeDepositos($depositoEntrada, $depositoSalida)
+                        );
+                        $transferencia->movimientostock_salida_id = (int) $salida['id'];
+                        $transferencia->save();
 
-                if (! $requiereAprobacion) {
-                    $payloadEntrada = $this->armarPayloadMovimiento($lineasResueltas, 'entrada');
-                    $entrada = $this->grabarMovimiento(
-                        $tipoTransferencia->id,
-                        $destinoBienUso ? null : $depositoEntradaId,
-                        $fecha,
-                        $lote,
-                        $codigoBase.'-E',
-                        'Transferencia desde '.$etiquetaOrigen,
-                        $payloadEntrada,
-                        esSalida: false,
-                        bienUsoId: $destinoBienUso ? $bienUsoDestinoId : null,
-                        empresaId: $empresaId > 0 ? $empresaId : TransferenciaMercaderiaIntercompanySupport::empresaIdDesdeDepositos($depositoEntrada, $depositoSalida)
-                    );
-                    $transferencia->movimientostock_entrada_id = (int) $entrada['id'];
-                    $transferencia->save();
+                        if (! $requiereAprobacion) {
+                            $payloadEntrada = $this->armarPayloadMovimiento($lineasResueltas, 'entrada');
+                            $entrada = $this->grabarMovimiento(
+                                $tipoTransferencia->id,
+                                $destinoBienUso ? null : $depositoEntradaId,
+                                $fecha,
+                                $lote,
+                                $codigoBase.'-E',
+                                'Transferencia desde '.$etiquetaOrigen,
+                                $payloadEntrada,
+                                esSalida: false,
+                                bienUsoId: $destinoBienUso ? $bienUsoDestinoId : null,
+                                empresaId: $empresaId > 0 ? $empresaId : TransferenciaMercaderiaIntercompanySupport::empresaIdDesdeDepositos($depositoEntrada, $depositoSalida)
+                            );
+                            $transferencia->movimientostock_entrada_id = (int) $entrada['id'];
+                            $transferencia->save();
 
-                    $this->actualizarStkmaePrecioDestino($transferencia);
+                            $this->actualizarStkmaePrecioDestino($transferencia);
 
-                    $this->confirmarAsientoContable($transferencia->fresh([
-                        'articulos.articuloOrigen.articulo_cuentacontables',
-                        'tipotransaccion_stock',
-                    ]));
+                            $this->confirmarAsientoContable($transferencia->fresh([
+                                'articulos.articuloOrigen.articulo_cuentacontables',
+                                'tipotransaccion_stock',
+                            ]));
 
-                    $this->generarTokenConsultaPublica($transferencia->fresh());
-                    $this->moduloAvisoService->enviar('stock', 'transferencia_confirmada', (int) $transferencia->id);
-                } else {
-                    $this->generarTokensYNotificarAprobacion($transferencia->fresh(['articulos', 'depositoOrigen', 'depositoDestino']));
-                }
+                            $this->generarTokenConsultaPublica($transferencia->fresh());
+                            $this->moduloAvisoService->enviar('stock', 'transferencia_confirmada', (int) $transferencia->id);
+                        } else {
+                            $this->generarTokensYNotificarAprobacion($transferencia->fresh(['articulos', 'depositoOrigen', 'depositoDestino']));
+                        }
 
-                $mensaje = $requiereAprobacion
-                    ? 'Se generó '.$codigoBase.'. Pendiente de aprobación por el depósito destino ('.count($lineasResueltas).' artículos).'
-                    : 'Se generó '.$codigoBase.' ('.count($lineasResueltas).' artículos).';
+                        $mensaje = $requiereAprobacion
+                            ? 'Se generó '.$codigoBase.'. Pendiente de aprobación por el depósito destino ('.count($lineasResueltas).' artículos).'
+                            : 'Se generó '.$codigoBase.' ('.count($lineasResueltas).' artículos).';
 
-                return [
-                    'ok' => true,
-                    'mensaje' => $mensaje,
-                    'codigo' => $codigoBase,
-                    'transferencia_id' => (int) $transferencia->id,
-                    'tipotransaccion_stock_id' => (int) $tipoTransferencia->id,
-                    'requiere_aprobacion' => $requiereAprobacion,
-                ];
+                        return [
+                            'ok' => true,
+                            'mensaje' => $mensaje,
+                            'codigo' => $codigoBase,
+                            'transferencia_id' => (int) $transferencia->id,
+                            'tipotransaccion_stock_id' => (int) $tipoTransferencia->id,
+                            'requiere_aprobacion' => $requiereAprobacion,
+                        ];
                     });
                 } catch (\Throwable $e) {
                     if (! TransferenciaMercaderiaCodigoSupport::esCodigoDuplicado($e)
@@ -851,6 +912,7 @@ class TransferenciaMercaderiaService
                     if (RecepcionProveedorDepositoSupport::esDepositoFormula($depositoEntrada)
                         && RecepcionProveedorDepositoSupport::resolverArticuloInsumo($articulo, $empresaId > 0 ? $empresaId : null) === null) {
                         $faltantesInsumo[] = DepositoFormulaInsumoFaltanteSupport::mensajeArticulo($articulo);
+
                         continue;
                     }
 
@@ -1588,8 +1650,8 @@ class TransferenciaMercaderiaService
             $depositoEntradaId,
             $etiquetaOrigenRev,
             $etiquetaDestinoRev,
-            $manejaContabilidad,
-            $tipo
+            $manejaContabilidad
+
         ) {
             // Surmar TRA: liberar consumos (salida) y anular hijas (entrada) del original.
             app(MovimientoStockSurmarEtiquetaService::class)->revertirEtiquetasPorMovimientos([

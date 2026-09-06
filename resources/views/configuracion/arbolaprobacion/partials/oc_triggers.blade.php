@@ -26,19 +26,25 @@
     $nombreTipoOc = \App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol[array_search('OC', array_column(\App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
     $esOrdenesCompra = (old('tipoarbol', isset($data) ? ($data->tipoarbol ?? '') : '') === $nombreTipoOc);
 @endphp
-<div id="oc-triggers-panel" class="row" style="{{ $esOrdenesCompra ? '' : 'display:none;' }}">
-    <div class="col-sm-12">
-        <div class="alert alert-secondary" role="alert" style="margin-top: 10px;">
-            <strong>Triggers OC</strong> — eventos (alta, cambio de sector) y condiciones (ej. CAPEX mensual excedido).
-            Prioridad menor = se eval&uacute;a primero. Gastronom&iacute;a: evento <em>Cambio de sector</em> hacia GASTRONOMIA, CC del circuito y acci&oacute;n final a Cuentas a pagar.
+<div id="oc-triggers-panel" class="anita-arbol-panel" style="{{ $esOrdenesCompra ? '' : 'display:none;' }}">
+    <div class="anita-arbol-panel-head">
+        <div>
+            <h2 class="anita-arbol-panel-title">Triggers OC</h2>
+            <p class="anita-arbol-panel-hint">
+                Eventos (alta, cambio de sector) y condiciones (ej. CAPEX). Prioridad menor = primero.
+            </p>
         </div>
+        <span class="anita-arbol-chip anita-arbol-chip-warn">Órdenes de compra</span>
     </div>
-    <div class="col-sm-12">
-        <button type="button" class="btn btn-sm btn-primary" id="agrega_oc_trigger">Agregar trigger</button>
+    <div class="anita-arbol-toolbar mb-2" style="margin-top:0;">
+        <span></span>
+        <button type="button" class="btn btn-sm anita-arbol-btn-teal" id="agrega_oc_trigger">
+            <i class="fa fa-plus"></i> Agregar trigger
+        </button>
     </div>
-    <div class="col-sm-12" style="margin-top: 10px; overflow-x: auto;">
-        <table class="table table-bordered table-sm" id="tabla-oc-triggers">
-            <thead style="background:#85C1E9;color:#17202A;">
+    <div class="anita-arbol-table-wrap">
+        <table class="table table-sm mb-0" id="tabla-oc-triggers">
+            <thead>
                 <tr>
                     <th>Nombre</th>
                     <th>Tipo</th>
@@ -47,8 +53,8 @@
                     <th>Sector dest.</th>
                     <th>CC circuito</th>
                     <th>Estado al aprobar</th>
-                    <th>Acci&oacute;n final</th>
-                    <th>Sector/estado acci&oacute;n</th>
+                    <th>Acción final</th>
+                    <th>Sector/estado acción</th>
                     <th>Prio.</th>
                     <th>Anula auto</th>
                     <th>Reeval.</th>

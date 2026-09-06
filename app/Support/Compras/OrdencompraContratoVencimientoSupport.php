@@ -423,6 +423,24 @@ final class OrdencompraContratoVencimientoSupport
 
         $lineas = [];
         foreach ($contratos as $contrato) {
+            // Una suscripción se renueva sola: el aviso tiene que decir qué servicio es,
+            // con qué tarjeta se debita y a quién hay que preguntarle si sigue en uso.
+            if (! empty($contrato['es_suscripcion'])) {
+                $lineas[] = sprintf(
+                    'SUSCRIPCIÓN %s | OC %s | %s | %s | Renueva %s | %s | Tarjeta ••%s | Dueño del servicio: %s',
+                    $contrato['servicio'] !== '' ? $contrato['servicio'] : '(sin nombre)',
+                    $contrato['numero'],
+                    $contrato['empresa'],
+                    $contrato['proveedor'],
+                    self::fmtFecha($contrato['vigencia_hasta']),
+                    self::motivo($contrato),
+                    $contrato['tarjeta_ult4'] !== '' ? $contrato['tarjeta_ult4'] : '····',
+                    $contrato['owner'] !== '' ? $contrato['owner'] : 'SIN ASIGNAR'
+                );
+
+                continue;
+            }
+
             $lineas[] = sprintf(
                 'OC %s | %s | %s | Vigencia %s a %s | %s | Responsable: %s',
                 $contrato['numero'],
@@ -537,6 +555,8 @@ final class OrdencompraContratoVencimientoSupport
             ->join('proveedor as p', 'p.id', '=', 'oc.proveedor_id')
             ->join('empresa as e', 'e.id', '=', 'oc.empresa_id')
             ->leftJoin('usuario as u', 'u.id', '=', 'oc.contrato_responsable_id')
+            // Dueño del servicio: en una suscripción es el único que sabe si sigue en uso.
+            ->leftJoin('usuario as ow', 'ow.id', '=', 'oc.suscripcion_owner_usuario_id')
             ->leftJoin('moneda as m', 'm.id', '=', 'oc.contrato_moneda_id')
             ->where('oc.es_contrato', true)
             ->whereIn('oc.estadoordencompra', self::estadosVigilados())
@@ -565,10 +585,15 @@ final class OrdencompraContratoVencimientoSupport
                 'oc.contrato_dias_preaviso',
                 'oc.contrato_dias_aviso',
                 'oc.contrato_responsable_id',
+                'oc.es_suscripcion',
+                'oc.suscripcion_nombre',
+                'oc.suscripcion_tarjeta_ult4',
                 'p.nombre as proveedor_nombre',
                 'e.nombre as empresa_nombre',
                 'u.nombre as responsable_nombre',
                 'u.email as responsable_email',
+                'ow.nombre as owner_nombre',
+                'ow.email as owner_email',
                 'm.nombre as moneda_nombre',
             ]);
     }
@@ -794,6 +819,11 @@ final class OrdencompraContratoVencimientoSupport
             'responsable_id' => (int) ($fila->contrato_responsable_id ?? 0),
             'responsable' => (string) ($fila->responsable_nombre ?? ''),
             'responsable_email' => (string) ($fila->responsable_email ?? ''),
+            'es_suscripcion' => (bool) ($fila->es_suscripcion ?? false),
+            'servicio' => (string) ($fila->suscripcion_nombre ?? ''),
+            'tarjeta_ult4' => (string) ($fila->suscripcion_tarjeta_ult4 ?? ''),
+            'owner' => (string) ($fila->owner_nombre ?? ''),
+            'owner_email' => (string) ($fila->owner_email ?? ''),
             'avisos' => [],
             'aviso_principal' => null,
             'motivo' => '',

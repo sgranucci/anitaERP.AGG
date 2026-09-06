@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\Cache;
  * Multiempresa: precargarPeriodoEmpresas() lee subdiario/ctamov/auxpag/ctaconc una vez
  * con IN (...); cargarPeriodo() reutiliza el slice por empresa (memoria o file cache).
  */
-class MayorConceptoAnitaBridgeReader
+class MayorConceptoAnitaBridgeReader implements MayorConceptoLectorInterface
 {
     private const PERIODO_FILE_TTL_HOURS = 2;
 
@@ -29,11 +29,18 @@ class MayorConceptoAnitaBridgeReader
 
     private ?string $periodoCacheFirma = null;
 
-    public function __construct(
-        private readonly ApiAnita $api = new ApiAnita(),
-        private readonly MayorConceptoTCompSupport $tcompSupport = new MayorConceptoTCompSupport(),
-    ) {
+    /** Lecturas que agotaron los reintentos: el reporte quedó armado con datos faltantes. */
+    private int $fallosLectura = 0;
+
+    public function fallosLectura(): int
+    {
+        return $this->fallosLectura;
     }
+
+    public function __construct(
+        private readonly ApiAnita $api = new ApiAnita,
+        private readonly MayorConceptoTCompSupport $tcompSupport = new MayorConceptoTCompSupport,
+    ) {}
 
     /**
      * Precarga el período para varias empresas en 4 lecturas bridge (IN).
@@ -487,15 +494,27 @@ class MayorConceptoAnitaBridgeReader
             'whereArmado' => $whereArmado,
         ];
 
-        $raw = (string) $this->api->apiCall($payload);
-        $msg = ApiAnita::extraerMensajeError($raw);
-        if ($msg !== null) {
-            $errores[] = $etiqueta.': '.$msg;
+        $intentos = max(1, (int) config('anita.bridge_list_reintentos', 6));
+        $msg = null;
 
-            return [];
+        for ($i = 1; $i <= $intentos; $i++) {
+            $raw = (string) $this->api->apiCall($payload);
+            $msg = ApiAnita::extraerMensajeError($raw);
+            if ($msg === null) {
+                return ApiAnita::decodificarListaFilas($raw);
+            }
+
+            if ($i < $intentos) {
+                usleep(200000 * $i);
+            }
         }
 
-        return ApiAnita::decodificarListaFilas($raw);
+        // Agotados los reintentos: la lista vacía que devolvemos NO significa "sin filas".
+        // Queda en $errores para que el reporte lo muestre y no se lea como dato válido.
+        $errores[] = $etiqueta.': '.$msg.' (tras '.$intentos.' intentos)';
+        $this->fallosLectura++;
+
+        return [];
     }
 
     /**
@@ -715,9 +734,6 @@ class MayorConceptoAnitaBridgeReader
         return 'subh_empresa,subh_sistema,subh_fecha,subh_tipo,subh_letra,subh_sucursal,subh_nro,subh_emisor,subh_tipo_mov,subh_cuenta,subh_contrapartida,subh_importe,subh_nro_operacion,subh_nro_interno,subh_cod_mon,subh_cotizacion,subh_nro_asiento,subh_desc_mov';
     }
 
-    /**
-     * @return object
-     */
     private function remapearSubhistComoSubdiario(object $fila): object
     {
         $out = [];

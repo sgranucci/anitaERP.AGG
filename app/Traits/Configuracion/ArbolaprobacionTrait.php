@@ -2,27 +2,27 @@
 
 namespace App\Traits\Configuracion;
 
-trait ArbolaprobacionTrait {
+trait ArbolaprobacionTrait
+{
+    public static $enumTipoArbol = [
+        ['id' => '1', 'valor' => 'RE', 'nombre' => 'Requisiciones'],
+        ['id' => '2', 'valor' => 'OC', 'nombre' => 'Ordenes de compra'],
+        ['id' => '9', 'valor' => 'SU', 'nombre' => 'Suscripciones'],
+        ['id' => '3', 'valor' => 'SP', 'nombre' => 'Solicitudes de pago'],
+        ['id' => '4', 'valor' => 'OV', 'nombre' => 'Ordenes de venta'],
+        ['id' => '5', 'valor' => 'RS', 'nombre' => 'Requisiciones de sala'],
+        ['id' => '6', 'valor' => 'PE', 'nombre' => 'Pedidos'],
+        ['id' => '7', 'valor' => 'PP', 'nombre' => 'Propuesta de pagos'],
+        ['id' => '8', 'valor' => 'AR', 'nombre' => 'Artículos'],
+    ];
 
-	public static $enumTipoArbol = [
-		['id' => '1', 'valor' => 'RE', 'nombre'  => 'Requisiciones'],
-		['id' => '2', 'valor' => 'OC', 'nombre'  => 'Ordenes de compra'],
-		['id' => '3', 'valor' => 'SP', 'nombre'  => 'Solicitudes de pago'],
-		['id' => '4', 'valor' => 'OV', 'nombre'  => 'Ordenes de venta'],
-		['id' => '5', 'valor' => 'RS', 'nombre'  => 'Requisiciones de sala'],
-		['id' => '6', 'valor' => 'PE', 'nombre'  => 'Pedidos'],
-		['id' => '7', 'valor' => 'PP', 'nombre'  => 'Propuesta de pagos'],
-			];
+    public static $enumRecordatorio = [
+        ['id' => '1', 'valor' => 'N', 'nombre' => 'No Envía mail recordatorio'],
+        ['id' => '2', 'valor' => 'S', 'nombre' => 'Envía mail recordatorio'],
+    ];
 
-	public static $enumRecordatorio = [
-		['id' => '1', 'valor' => 'N', 'nombre'  => 'No Envía mail recordatorio'],
-		['id' => '2', 'valor' => 'S', 'nombre'  => 'Envía mail recordatorio'],
-			];
-
-	public static $enumEstado = [
-		['id' => '1', 'valor' => 'A', 'nombre'  => 'Activo'],
-		['id' => '2', 'valor' => 'S', 'nombre'  => 'Suspendido'],
-			];
-
+    public static $enumEstado = [
+        ['id' => '1', 'valor' => 'A', 'nombre' => 'Activo'],
+        ['id' => '2', 'valor' => 'S', 'nombre' => 'Suspendido'],
+    ];
 }
-

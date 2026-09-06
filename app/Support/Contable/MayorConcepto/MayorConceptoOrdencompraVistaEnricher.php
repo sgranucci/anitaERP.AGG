@@ -22,7 +22,7 @@ class MayorConceptoOrdencompraVistaEnricher
      * @param  list<array<string, mixed>>  $filas
      * @return list<array<string, mixed>>
      */
-    public function enriquecer(array $filas, ?MayorConceptoAnitaBridgeReader $bridge = null): array
+    public function enriquecer(array $filas, ?MayorConceptoLectorInterface $bridge = null): array
     {
         unset($bridge);
         $this->cacheResolucion = [];

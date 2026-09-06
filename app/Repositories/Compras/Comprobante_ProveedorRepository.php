@@ -80,6 +80,11 @@ class Comprobante_ProveedorRepository implements Comprobante_ProveedorRepository
             ->leftJoin('tipotransaccion_compra', 'tipotransaccion_compra.id', '=', 'comprobante_proveedor.tipotransaccion_compra_id')
             ->leftJoin('ordencompra', 'ordencompra.id', '=', 'comprobante_proveedor.ordencompra_id')
             ->with(['empresas', 'proveedores', 'tipotransaccion_compras', 'ordencompras:id,numeroordencompra'])
+            // Por fecha y no por id: la importación desde Anita cargó el
+            // histórico después de los comprobantes nativos, así que los ids
+            // altos son los movimientos más viejos. Ordenando por id, la
+            // primera página del listado muestra 2025 y esconde lo de hoy.
+            ->orderByDesc('comprobante_proveedor.fechacomprobante')
             ->orderByDesc('comprobante_proveedor.id');
 
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'comprobante_proveedor.empresa_id');

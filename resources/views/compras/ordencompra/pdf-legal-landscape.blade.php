@@ -158,12 +158,24 @@
                 @endif
             </td>
             <td style="text-align: right;">
+                @if (!empty($data->es_suscripcion))
+                    <p class="muted" style="margin:0 0 4px 0;font-size:9px;font-weight:bold;letter-spacing:0.04em;color:#1e4d7b;">SUSCRIPCIÓN · OC ABIERTA</p>
+                @elseif (!empty($data->es_contrato))
+                    <p class="muted" style="margin:0 0 4px 0;font-size:9px;font-weight:bold;letter-spacing:0.04em;color:#1e4d7b;">CONTRATO · OC ABIERTA</p>
+                @endif
                 <p class="titulo-doc">ORDEN DE COMPRA NRO {{ $data->numeroordencompra }}</p>
                 <p class="fecha-doc-oc">Fecha orden de compra: {{ $fechaOc }}</p>
                 <p class="muted" style="margin:3px 0 0 0;font-size:9px;">Impresión {{ date('d/m/Y H:i') }}</p>
             </td>
         </tr>
     </table>
+
+    @php
+        $susc = \App\Support\Compras\SuscripcionPdfSupport::datos($data);
+    @endphp
+    @if ($susc)
+        @include('compras.ordencompra.pdf-partials-suscripcion-franja', ['susc' => $susc])
+    @endif
 
     <h2>Datos generales y trazabilidad</h2>
     <table class="cabecera">
@@ -219,7 +231,7 @@
             <td class="lbl">Sector</td>
             <td>{{ optional($data->sector_legajocompras)->nombre ?? '—' }}</td>
             <td class="lbl">Tratamiento</td>
-            <td>{{ $data->tratamiento ?? '—' }}</td>
+            <td>{{ $susc ? $susc['tratamiento'] : ($data->tratamiento ?? '—') }}</td>
         </tr>
         <tr>
             <td class="lbl">Cond. compra</td>
@@ -229,7 +241,7 @@
         </tr>
         <tr>
             <td class="lbl">Cond. pago</td>
-            <td colspan="3">{{ optional($data->condicionpagos)->nombre ?? '—' }}</td>
+            <td colspan="3">{{ $susc ? $susc['condicion_pago'] : (optional($data->condicionpagos)->nombre ?? '—') }}</td>
         </tr>
         <tr>
             <td class="lbl">Transporte</td>
@@ -387,6 +399,10 @@
     </table>
 
     @include('compras.ordencompra.pdf-partials-resumen-financiero')
+
+    @if ($susc)
+        @include('compras.ordencompra.pdf-partials-suscripcion-condiciones', ['susc' => $susc])
+    @endif
 
     <h2>Historia estados (OC)</h2>
     <table class="historia">

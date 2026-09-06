@@ -11,6 +11,7 @@ class RecepcionProveedorAnitaImportSupport
     private static array $monedaIdPorCodigoAnita = [];
 
     private static bool $monedaIdPorCodigoAnitaCargado = false;
+
     public static function sistemaCompras(): string
     {
         return (string) config('recepcion_proveedor.anita.sistema_compras', 'compras');
@@ -97,6 +98,32 @@ class RecepcionProveedorAnitaImportSupport
             'campos' => 'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro,recm_tipo_fac,recm_letra_fac,recm_sucursal_fac,recm_nro_fac',
             'whereArmado' => $where,
             'limit' => 'FIRST 1',
+        ]));
+    }
+
+    /**
+     * Cabeceras COM por lista de nros (pantalla mayor: PEP/OC vía recm_nro_fac).
+     *
+     * @param  list<int>  $nros
+     * @return list<object>
+     */
+    public static function listarRecepmaePorNros(array $nros): array
+    {
+        $nros = array_values(array_unique(array_filter(array_map('intval', $nros), static fn (int $n) => $n > 0)));
+        if ($nros === []) {
+            return [];
+        }
+
+        $api = new ApiAnita;
+        $where = " WHERE recm_tipo = 'COM' AND recm_nro IN (".implode(',', $nros).')';
+
+        return ApiAnita::decodificarListaFilas($api->apiCall([
+            'acc' => 'list',
+            'sistema' => self::sistemaCompras(),
+            'tabla' => config('recepcion_proveedor.anita.tablas.recepcion_cabecera', 'recepmae'),
+            'campos' => 'recm_proveedor,recm_tipo,recm_letra,recm_sucursal,recm_nro,recm_fecha,recm_estado,recm_observacion,recm_empresa,recm_com_tipo,recm_com_letra,recm_com_sucursal,recm_com_nro,recm_tipo_fac,recm_letra_fac,recm_sucursal_fac,recm_nro_fac',
+            'orderBy' => 'recm_sucursal, recm_nro',
+            'whereArmado' => $where,
         ]));
     }
 

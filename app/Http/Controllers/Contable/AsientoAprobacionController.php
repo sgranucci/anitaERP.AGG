@@ -18,9 +18,7 @@ class AsientoAprobacionController extends Controller
     {
         can('listar-aprobacion-asiento');
 
-        $asientos = $this->service->listarPendientes();
-
-        return view('contable.aprobacion_asiento.index', compact('asientos'));
+        return redirect()->to(url('mis-aprobaciones').'?fuente=asiento');
     }
 
     public function ver(int $id)
@@ -30,7 +28,7 @@ class AsientoAprobacionController extends Controller
         $data = $this->service->buscar($id);
 
         if (! $data->estaPendienteAprobacion()) {
-            return redirect()->route('aprobacion_asientos')
+            return redirect()->to(url('mis-aprobaciones').'?fuente=asiento')
                 ->with('mensaje', 'El asiento ya no está pendiente de aprobación.');
         }
 

@@ -41,6 +41,7 @@ class ValidacionConfiguracionGeneral extends FormRequest
             $rules['parametros.'.$clave] = match ($def['tipo']) {
                 'entero' => 'required|integer|min:0',
                 'cuentacaja' => 'nullable|integer|min:1|exists:cuentacaja,id',
+                'boolean' => 'required|in:0,1',
                 default => 'required|numeric|min:0',
             };
         }

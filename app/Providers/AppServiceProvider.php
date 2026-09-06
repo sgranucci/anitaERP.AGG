@@ -15,25 +15,25 @@ use App\Models\Ventas\Pedido_Combinacion;
 use App\Models\Ventas\Pedido_Combinacion_Estado;
 use App\Models\Ventas\Venta;
 use App\Models\Ventas\Venta_Emision;
-use App\Observers\Contable\AsientoObserver;
 use App\Observers\Contable\Asiento_MovimientoObserver;
+use App\Observers\Contable\AsientoObserver;
 use App\Observers\Stock\Articulo_MovimientoObserver;
 use App\Observers\Stock\MovimientoStockObserver;
 use App\Observers\Stock\Transferencia_MercaderiaObserver;
-use App\Observers\Ventas\OrdentrabajoObserver;
 use App\Observers\Ventas\Ordentrabajo_TareaObserver;
+use App\Observers\Ventas\OrdentrabajoObserver;
 use App\Observers\Ventas\Pedido_Combinacion_EstadoObserver;
 use App\Observers\Ventas\Pedido_CombinacionObserver;
-use App\Observers\Ventas\VentaObserver;
 use App\Observers\Ventas\Venta_EmisionObserver;
+use App\Observers\Ventas\VentaObserver;
 use App\Support\AyudaManuales;
-use App\Support\Seguridad\BarraTareasSupport;
 use App\Support\Console\ProteccionComandosDestructivosProduccion;
+use App\Support\Seguridad\BarraTareasSupport;
 use Carbon\Carbon;
 use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\URL;
 use Illuminate\Support\Facades\View;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -74,6 +74,37 @@ class AppServiceProvider extends ServiceProvider
         });
         View::composer('theme.lte.header', function ($view) {
             $view->with('urlCentroAyuda', AyudaManuales::urlCentroAyuda());
+
+            $misAprobacionesCount = 0;
+            $puedeVerMisAprobaciones = false;
+            $anitaNotifUnread = 0;
+            // Misma estrategia que Cambia password / menú: url()/route() respetan el root real
+            // (IP con /anitaERP/public o vhost anitaERP con DocumentRoot=public).
+            $urlMisAprobaciones = url('mis-aprobaciones');
+            if (auth()->check()) {
+                try {
+                    $bandeja = app(\App\Services\Configuracion\UserTaskBandejaService::class);
+                    $puedeVerMisAprobaciones = $bandeja->puedeAcceder();
+                    if ($puedeVerMisAprobaciones) {
+                        $misAprobacionesCount = $bandeja->contarPendientes((int) auth()->id());
+                    }
+                } catch (\Throwable) {
+                    $misAprobacionesCount = 0;
+                    $puedeVerMisAprobaciones = false;
+                }
+                try {
+                    if (\Illuminate\Support\Facades\Schema::hasTable('anita_notificacion')) {
+                        $anitaNotifUnread = app(\App\Services\Configuracion\AnitaNotificacionService::class)
+                            ->contarNoLeidas((int) auth()->id());
+                    }
+                } catch (\Throwable) {
+                    $anitaNotifUnread = 0;
+                }
+            }
+            $view->with('misAprobacionesCount', $misAprobacionesCount);
+            $view->with('urlMisAprobaciones', $urlMisAprobaciones);
+            $view->with('puedeVerMisAprobaciones', $puedeVerMisAprobaciones);
+            $view->with('anitaNotifUnread', $anitaNotifUnread);
         });
         View::composer(['ventas.cliente.editar'], function ($view) {
             $view->with('suitecrmHabilitado', \App\Support\SuitecrmPermiso::integracionActiva());
@@ -1162,6 +1193,20 @@ class AppServiceProvider extends ServiceProvider
         );
 
         $this->app->bind(
+            'App\Repositories\Configuracion\Arbolaprobacion_CuentaExcepcionRepositoryInterface',
+            'App\Repositories\Configuracion\Arbolaprobacion_CuentaExcepcionRepository',
+        );
+
+        $this->app->bind(
+            'App\Repositories\Configuracion\Arbolaprobacion_ReTriggerRepositoryInterface',
+            'App\Repositories\Configuracion\Arbolaprobacion_ReTriggerRepository',
+        );
+
+        $this->app->singleton(
+            \App\Support\Configuracion\ReArbolTriggerEvaluators\ReArbolTriggerEvaluatorRegistry::class
+        );
+
+        $this->app->bind(
             'App\Repositories\Configuracion\ArbolaprobacionRepositoryInterface',
             'App\Repositories\Configuracion\ArbolaprobacionRepository',
         );
@@ -1448,6 +1493,17 @@ class AppServiceProvider extends ServiceProvider
         // Una sola lectura Anita del período (mes) compartida entre mayor por concepto y EFE.
         $this->app->singleton(
             \App\Support\Contable\MayorConcepto\MayorConceptoAnitaBridgeReader::class
+        );
+
+        // Resuelve al mismo singleton: el lector cachea el período y no debe duplicarse.
+        $this->app->singleton(
+            \App\Support\Contable\MayorConcepto\MayorConceptoErpReader::class
+        );
+
+        // El híbrido decide Anita o ERP según contable.mayor_concepto.fuente_erp_hasta.
+        $this->app->bind(
+            \App\Support\Contable\MayorConcepto\MayorConceptoLectorInterface::class,
+            fn ($app) => $app->make(\App\Support\Contable\MayorConcepto\MayorConceptoLectorHibrido::class),
         );
 
         $this->app->bind(

@@ -7,6 +7,7 @@
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/precarga_comprobante_proveedor/filtro.js') }}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/includes/erp-workspace-panel.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/erp-workspace-panel.js')) ?: time() }}" type="text/javascript"></script>
 @if (!empty($pdfIaHabilitado) && can('crear-precarga-proveedores', false))
 <script src="{{ asset('assets/pages/scripts/compras/precarga_comprobante_proveedor/pdf_ia.js') }}" type="text/javascript"></script>
 @endif
@@ -16,7 +17,7 @@
 use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
 
 @section('contenido')
-<div class="row">
+<div class="row erp-ws-host">
     <div class="col-lg-12">
         @include('includes.mensaje')
         <div class="card card-info">
@@ -83,7 +84,7 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                     </thead>
                     <tbody>
                         @foreach ($datas as $data)
-                        <tr>
+                        <tr data-ws-id="precarga-{{ $data->id }}">
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombreempresa ?? ($data->empresas->nombre ?? '')}}</td>
                             <td>{{$data->nombreproveedor ?? ($data->proveedores->nombre ?? '')}}</td>
@@ -136,26 +137,56 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                             </td>
                             <td><small>{{ \App\Support\Compras\PrecargaComprobanteOrigenEntrada::etiqueta($data->origen_entrada ?? null) }}</small></td>
                             <td class="text-nowrap">
-                                @if (filled($data->rutaalmacenamiento) && puedeVerPrecargaFacturaPdf())
-                                <a href="{{ urlAppCarpeta('compras/precarga_comprobante_proveedor/'.$data->id.'/factura-pdf?inline=1') }}"
-                                   class="btn-accion-tabla tooltipsC"
-                                   title="Ver PDF escaneado"
-                                   target="_blank"
-                                   rel="noopener noreferrer">
+                                @php
+                                    $urlPdfPrecarga = filled($data->rutaalmacenamiento) && puedeVerPrecargaFacturaPdf()
+                                        ? urlAppCarpeta('compras/precarga_comprobante_proveedor/'.$data->id.'/factura-pdf?inline=1')
+                                        : null;
+                                    $tituloPrecarga = trim(sprintf(
+                                        'Precarga #%s %s',
+                                        $data->id,
+                                        $data->nombreproveedor ?? ($data->proveedores->nombre ?? '')
+                                    ));
+                                @endphp
+                                @if ($urlPdfPrecarga)
+                                <a href="{{ $urlPdfPrecarga }}"
+                                   class="btn-accion-tabla tooltipsC js-erp-workspace"
+                                   title="Vista previa PDF (listado a la izquierda)"
+                                   data-ws-id="precarga-{{ $data->id }}"
+                                   data-ws-modo="pdf"
+                                   data-ws-titulo="{{ $tituloPrecarga }}"
+                                   data-ws-meta="{{ \App\Support\Compras\PrecargaComprobanteOrigenEntrada::etiqueta($data->origen_entrada ?? null) }}"
+                                   data-ws-pdf="{{ $urlPdfPrecarga }}"
+                                   @if (can('editar-precarga-proveedores', false))
+                                       data-ws-edit="{{ route('editar_precarga_comprobante_proveedor', ['id' => $data->id]) }}"
+                                   @endif>
                                     <i class="fa fa-file-pdf-o text-danger"></i>
                                 </a>
                                 @endif
                                 @if (!empty($data->comprobante_proveedor_id) && (can('editar-comprobante-proveedor', false) || can('listar-comprobante-proveedor', false)))
                                 <a href="{{ route('editar_comprobante_proveedor', ['id' => $data->comprobante_proveedor_id]) }}"
-                                   class="btn-accion-tabla tooltipsC text-primary"
-                                   title="Abrir comprobante #{{ $data->comprobante_proveedor_id }}">
+                                   class="btn-accion-tabla tooltipsC text-primary js-erp-workspace"
+                                   title="Abrir comprobante #{{ $data->comprobante_proveedor_id }} en solapa"
+                                   data-ws-id="precarga-{{ $data->id }}"
+                                   data-ws-modo="edit"
+                                   data-ws-titulo="Comprobante #{{ $data->comprobante_proveedor_id }}"
+                                   data-ws-edit="{{ route('editar_comprobante_proveedor', ['id' => $data->comprobante_proveedor_id]) }}"
+                                   @if ($urlPdfPrecarga)
+                                       data-ws-pdf="{{ $urlPdfPrecarga }}"
+                                   @endif>
                                     <i class="fa fa-external-link"></i>
                                 </a>
                                 @elseif (can('crear-comprobante-proveedor', false)
                                     && \App\Support\Compras\PrecargaComprobanteEstados::puedeGenerarComprobante((string) ($data->estado ?? '')))
                                 <a href="{{ route('crear_comprobante_proveedor', ['precarga_id' => $data->id]) }}"
-                                   class="btn-accion-tabla tooltipsC text-success"
-                                   title="Abrir alta de comprobante desde esta precarga (no graba hasta Guardar)">
+                                   class="btn-accion-tabla tooltipsC text-success js-erp-workspace"
+                                   title="Alta de comprobante en solapa (sin menú)"
+                                   data-ws-id="precarga-{{ $data->id }}"
+                                   data-ws-modo="edit"
+                                   data-ws-titulo="Alta desde precarga #{{ $data->id }}"
+                                   data-ws-edit="{{ route('crear_comprobante_proveedor', ['precarga_id' => $data->id]) }}"
+                                   @if ($urlPdfPrecarga)
+                                       data-ws-pdf="{{ $urlPdfPrecarga }}"
+                                   @endif>
                                     <i class="fa fa-file-text-o"></i>
                                 </a>
                                 @endif
@@ -166,7 +197,16 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                                     ])
                                 @endif
                        			@if (can('editar-precarga-proveedores', false))
-                                	<a href="{{route('editar_precarga_comprobante_proveedor', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
+                                	<a href="{{route('editar_precarga_comprobante_proveedor', ['id' => $data->id])}}"
+                                       class="btn-accion-tabla tooltipsC js-erp-workspace"
+                                       title="Editar precarga en solapa (sin menú)"
+                                       data-ws-id="precarga-{{ $data->id }}"
+                                       data-ws-modo="edit"
+                                       data-ws-titulo="{{ $tituloPrecarga }}"
+                                       data-ws-edit="{{ route('editar_precarga_comprobante_proveedor', ['id' => $data->id]) }}"
+                                       @if ($urlPdfPrecarga)
+                                           data-ws-pdf="{{ $urlPdfPrecarga }}"
+                                       @endif>
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif

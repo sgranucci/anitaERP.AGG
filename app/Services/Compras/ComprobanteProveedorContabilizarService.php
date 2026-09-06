@@ -7,6 +7,7 @@ use App\Models\Compras\Comprobante_Proveedor_Estado;
 use App\Models\Compras\Proveedor_Cuentacorriente;
 use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
+use App\Support\Compras\ComprobanteProveedorConceptogastoResolverSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
@@ -84,6 +85,9 @@ class ComprobanteProveedorContabilizarService
                     'asiento_id' => $asientoErp['asiento_id'],
                     'estado' => ComprobanteProveedorEstados::CONTABILIZADO,
                 ])->save();
+
+                // Concepto cash-flow desde COM o desde la pierna de activo/resultado del asiento.
+                ComprobanteProveedorConceptogastoResolverSupport::resolverYPersistir($comprobante);
 
                 Comprobante_Proveedor_Estado::query()->create([
                     'comprobante_proveedor_id' => $comprobante->id,

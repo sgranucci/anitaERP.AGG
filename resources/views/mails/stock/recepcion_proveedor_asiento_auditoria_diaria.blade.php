@@ -134,6 +134,7 @@
 <p style="margin-top:24px; font-size:12px; color:#666;">
     Criterio: recepciones y devoluciones confirmadas con <code>fecha</code> en el alcance, generadas en ERP.<br>
     Auto-reparación: no toca ERP ni Anita si el período (recepción proveedor o asientos) está cerrado; queda en este mail para revisión manual.<br>
+    Si Anita editó ctamov después del alta (<code>ctav_fecha_umod</code>) y los montos coinciden, no se pisa Anita: se copian cuentas al ERP.<br>
     Clave Anita COM: tipo + letra + <code>empresa_id</code> (sucursal) + <code>numerorecepcion</code>.<br>
     Valida recepmae, asiento ERP, ctamov, importes, fechas, centros de costo y monedas (sin <code>recm_documentoid</code>).<br>
     Devoluciones: si la recepción origen tiene impuesto interno de cigarrillos, la devolución debe revertirlo (campo + asiento).<br>

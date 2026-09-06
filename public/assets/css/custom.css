@@ -686,3 +686,132 @@ body.modo-consulta .navbar-text.text-warning {
     padding-top: 6px;
     padding-bottom: 6px;
 }
+
+/* Toast live badge Mis aprobaciones (global) */
+.anita-inbox-toast {
+    position: fixed;
+    right: 1rem;
+    bottom: 1rem;
+    z-index: 2000;
+    max-width: 20rem;
+    padding: 0.85rem 1rem;
+    border-radius: 12px;
+    background: #0c3b52;
+    color: #fff;
+    box-shadow: 0 12px 28px rgba(7, 38, 54, 0.28);
+    font-family: "Source Sans Pro", sans-serif;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+.anita-inbox-toast a {
+    color: #9fddd4;
+    font-weight: 700;
+}
+
+/* Centro de avisos (campanita) */
+.anita-notif-panel {
+    min-width: 20rem;
+    max-width: 22rem;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+.anita-notif-header {
+    font-weight: 700;
+    color: #0c3b52;
+}
+.anita-notif-list {
+    max-height: 22rem;
+    overflow-y: auto;
+}
+.anita-notif-item {
+    white-space: normal;
+    line-height: 1.25;
+}
+.anita-notif-item.is-unread {
+    background: rgba(12, 59, 82, 0.06);
+}
+.anita-notif-item-title {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: #102433;
+}
+.anita-notif-item-body {
+    margin-top: 0.15rem;
+    font-size: 0.8rem;
+    color: #5a6b7a;
+}
+.anita-notif-item-when {
+    display: block;
+    margin-top: 0.25rem;
+    font-size: 0.72rem;
+    color: #8a97a3;
+}
+#anita-notif-badge {
+    font-size: 0.65rem;
+}
+
+/* Badge de Aprobaciones: inline al lado del texto (no overlay AdminLTE navbar-badge) */
+#anita-nav-aprobaciones {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+#anita-nav-aprobaciones .anita-aprob-label {
+    margin-right: 0;
+}
+#anita-aprob-badge.anita-aprob-count,
+#anita-nav-aprobaciones .anita-aprob-count {
+    position: static;
+    top: auto;
+    right: auto;
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0.28em 0.5em;
+    border-radius: 0.65rem;
+    vertical-align: middle;
+    transform: none;
+}
+
+.anita-manual-md {
+    max-width: 920px;
+    line-height: 1.55;
+}
+.anita-manual-md h1 {
+    font-size: 1.6rem;
+    margin-top: 0;
+}
+.anita-manual-md h2 {
+    font-size: 1.25rem;
+    margin-top: 1.75rem;
+    padding-bottom: 0.35rem;
+    border-bottom: 1px solid #dee2e6;
+}
+.anita-manual-md h3 {
+    font-size: 1.05rem;
+    margin-top: 1.25rem;
+}
+.anita-manual-md table {
+    width: 100%;
+    margin: 0.75rem 0 1.25rem;
+    border-collapse: collapse;
+}
+.anita-manual-md th,
+.anita-manual-md td {
+    border: 1px solid #dee2e6;
+    padding: 0.4rem 0.55rem;
+    vertical-align: top;
+}
+.anita-manual-md th {
+    background: #f4f6f9;
+}
+.anita-manual-md code {
+    font-size: 0.9em;
+}
+.anita-manual-md pre {
+    background: #f4f6f9;
+    padding: 0.75rem 1rem;
+    border-radius: 0.25rem;
+    overflow-x: auto;
+}

@@ -343,7 +343,7 @@ class ProveedorCuentacorrienteAplicacionAnitaSyncService
 
     private function esTipoPagoAnita(string $tipo): bool
     {
-        return in_array(strtoupper(substr(trim($tipo), 0, 3)), ['OPP', 'OPA', 'OPV'], true);
+        return in_array(strtoupper(substr(trim($tipo), 0, 3)), ['OPP', 'OPA', 'OPV', 'AOP'], true);
     }
 
     /**

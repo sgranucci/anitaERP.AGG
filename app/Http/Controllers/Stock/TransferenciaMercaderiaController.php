@@ -6,21 +6,19 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionTransferenciaMercaderia;
 use App\Models\Contable\BienUso;
 use App\Models\Stock\Articulo;
-use App\Models\Seguridad\Usuario;
 use App\Models\Stock\Depmae;
 use App\Models\Stock\Transferencia_Mercaderia_Token;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Stock\DepmaeRepositoryInterface;
 use App\Repositories\Stock\Tipotransaccion_StockRepository;
 use App\Services\Stock\TransferenciaMercaderiaService;
-use App\Support\Stock\TransferenciaMercaderiaDepositoRecepcionSupport;
-use App\Support\Stock\CodigoBarrasImagenSupport;
-use App\Support\Stock\TransferenciaMercaderiaLineaContableSupport;
-use App\Support\Stock\TransferenciaMercaderiaAprobacionSupport;
-use App\Support\Stock\TransferenciaMercaderiaDestinatarioSupport;
-use App\Support\Stock\TransferenciaMercaderiaEstados;
-use App\Support\Stock\TransferenciaBienUsoSupport;
 use App\Support\Seguridad\UsuarioOperativoSupport;
+use App\Support\Stock\CodigoBarrasImagenSupport;
+use App\Support\Stock\TransferenciaBienUsoSupport;
+use App\Support\Stock\TransferenciaMercaderiaAprobacionSupport;
+use App\Support\Stock\TransferenciaMercaderiaDepositoRecepcionSupport;
+use App\Support\Stock\TransferenciaMercaderiaDestinatarioSupport;
+use App\Support\Stock\TransferenciaMercaderiaLineaContableSupport;
 use App\Support\Stock\UsuarioDepositoAutorizado;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -87,12 +85,7 @@ class TransferenciaMercaderiaController extends Controller
     {
         can('listar-transferencias-pendientes');
 
-        $pendientes = $this->transferenciaService->listarPendientes();
-
-        return view('stock.transferencia_mercaderia.pendientes', [
-            'pendientes' => $pendientes,
-            'estados' => TransferenciaMercaderiaEstados::etiquetas(),
-        ]);
+        return redirect()->to(url('mis-aprobaciones').'?fuente=transferencia');
     }
 
     public function destinatarios(Request $request): JsonResponse
@@ -428,18 +421,18 @@ class TransferenciaMercaderiaController extends Controller
         }
 
         $cabecera = $request->only([
-                'empresa_id',
-                'deposito_salida_id',
-                'deposito_entrada_id',
-                'bien_uso_destino_id',
-                'bien_uso_origen_id',
-                'tipotransaccion_id',
-                'tipotransaccion_stock_id',
-                'usuario_destino_id',
-                'centrocosto_destino_id',
-                'enviar_aviso',
-                'observacion',
-            ]);
+            'empresa_id',
+            'deposito_salida_id',
+            'deposito_entrada_id',
+            'bien_uso_destino_id',
+            'bien_uso_origen_id',
+            'tipotransaccion_id',
+            'tipotransaccion_stock_id',
+            'usuario_destino_id',
+            'centrocosto_destino_id',
+            'enviar_aviso',
+            'observacion',
+        ]);
         $cabecera['seleccion_automatica_trcont'] = true;
 
         $resultado = $this->transferenciaService->grabarTransferencia(

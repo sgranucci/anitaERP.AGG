@@ -24,6 +24,9 @@ class MayorConceptoConciliacionAsientoSupport
     {
         $analitico = $this->normalizarAnaliticoPorAsiento($resultado['analitico_por_asiento'] ?? []);
         $concepto = $this->totalesConceptoPorAsiento($resultado);
+        $motivos = is_array($resultado['motivos_por_asiento'] ?? null)
+            ? $resultado['motivos_por_asiento']
+            : [];
 
         $numeros = array_unique(array_merge(array_keys($analitico), array_keys($concepto)));
         sort($numeros, SORT_NUMERIC);
@@ -73,6 +76,7 @@ class MayorConceptoConciliacionAsientoSupport
                 'diferencia' => $diferencia,
                 'cuadra' => $cuadra,
                 'origen' => $origen,
+                'motivo' => implode(' ', $motivos[(int) $nro] ?? []),
                 'asiento_id' => 0,
             ];
         }

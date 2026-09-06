@@ -6,20 +6,22 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionArbolaprobacion;
 use App\Models\Compras\Requisicion_Estado;
 use App\Models\Compras\Sector_Legajocompra;
-use App\Models\Sala\RequisicionSalaEstado;
-use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
-use App\Support\Configuracion\ArbolaprobacionListadoFiltros;
-use App\Support\Compras\OrdencompraEstados;
 use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
+use App\Models\Sala\RequisicionSalaEstado;
+use App\Repositories\Configuracion\Arbolaprobacion_CuentaExcepcionRepositoryInterface;
 use App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepositoryInterface;
 use App\Repositories\Configuracion\Arbolaprobacion_NivelRepositoryInterface;
 use App\Repositories\Configuracion\Arbolaprobacion_OcTriggerRepositoryInterface;
+use App\Repositories\Configuracion\Arbolaprobacion_ReTriggerRepositoryInterface;
 use App\Repositories\Configuracion\ArbolaprobacionRepositoryInterface;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Configuracion\MonedaRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Services\Configuracion\ArbolaprobacionService;
+use App\Support\Compras\OrdencompraEstados;
+use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
+use App\Support\Configuracion\ArbolaprobacionListadoFiltros;
 use DB;
 use Exception;
 use Illuminate\Http\Request;
@@ -45,10 +47,16 @@ class ArbolaprobacionController extends Controller
 
     private $arbolaprobacion_ocTriggerRepository;
 
+    private $arbolaprobacion_cuentaExcepcionRepository;
+
+    private $arbolaprobacion_reTriggerRepository;
+
     public function __construct(ArbolaprobacionRepositoryInterface $arbolaprobacionrepository,
         Arbolaprobacion_NivelRepositoryInterface $arbolaprobacion_nivelrepository,
         Arbolaprobacion_MovimientoRepositoryInterface $arbolaprobacion_movimientorepository,
         Arbolaprobacion_OcTriggerRepositoryInterface $arbolaprobacion_ocTriggerrepository,
+        Arbolaprobacion_CuentaExcepcionRepositoryInterface $arbolaprobacion_cuentaExcepcionrepository,
+        Arbolaprobacion_ReTriggerRepositoryInterface $arbolaprobacion_reTriggerrepository,
         CentrocostoRepositoryInterface $centrocostorepository,
         EmpresaRepositoryInterface $empresarepository,
         MonedaRepositoryInterface $monedarepository,
@@ -58,6 +66,8 @@ class ArbolaprobacionController extends Controller
         $this->arbolaprobacion_nivelRepository = $arbolaprobacion_nivelrepository;
         $this->arbolaprobacion_movimientoRepository = $arbolaprobacion_movimientorepository;
         $this->arbolaprobacion_ocTriggerRepository = $arbolaprobacion_ocTriggerrepository;
+        $this->arbolaprobacion_cuentaExcepcionRepository = $arbolaprobacion_cuentaExcepcionrepository;
+        $this->arbolaprobacion_reTriggerRepository = $arbolaprobacion_reTriggerrepository;
         $this->centrocostoRepository = $centrocostorepository;
         $this->empresaRepository = $empresarepository;
         $this->monedaRepository = $monedarepository;
@@ -135,6 +145,10 @@ class ArbolaprobacionController extends Controller
                 if (($request->input('tipoarbol') ?? '') === $this->arbolaprobacionService->nombreTipoArbolOrdenesCompra()) {
                     $this->arbolaprobacion_ocTriggerRepository->syncFromRequest($request->all(), $arbolaprobacion->id);
                 }
+                if (($request->input('tipoarbol') ?? '') === $this->arbolaprobacionService->nombreTipoArbolRequisiciones()) {
+                    $this->arbolaprobacion_cuentaExcepcionRepository->syncFromRequest($request->all(), $arbolaprobacion->id);
+                    $this->arbolaprobacion_reTriggerRepository->syncFromRequest($request->all(), $arbolaprobacion->id);
+                }
             }
 
             DB::commit();
@@ -200,6 +214,10 @@ class ArbolaprobacionController extends Controller
                 $arbolaprobacion_nivel = $this->arbolaprobacion_nivelRepository->update($request->all(), $id);
                 if (($request->input('tipoarbol') ?? '') === $this->arbolaprobacionService->nombreTipoArbolOrdenesCompra()) {
                     $this->arbolaprobacion_ocTriggerRepository->syncFromRequest($request->all(), $id);
+                }
+                if (($request->input('tipoarbol') ?? '') === $this->arbolaprobacionService->nombreTipoArbolRequisiciones()) {
+                    $this->arbolaprobacion_cuentaExcepcionRepository->syncFromRequest($request->all(), $id);
+                    $this->arbolaprobacion_reTriggerRepository->syncFromRequest($request->all(), $id);
                 }
             }
 
@@ -274,6 +292,7 @@ class ArbolaprobacionController extends Controller
                     ->findPorPropuestaPago((int) $comprobante_id);
                 break;
             case 'OC':
+            case 'SU':
                 $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorOrdencompra($comprobante_id);
                 break;
         }
@@ -311,7 +330,7 @@ class ArbolaprobacionController extends Controller
             ]));
         }
 
-        if ($flEncontro && $tipocomprobante === 'OC') {
+        if ($flEncontro && ($tipocomprobante === 'OC' || $tipocomprobante === 'SU')) {
             $datos = $this->arbolaprobacionService->portalDatosOrdencompraPorHash((int) $comprobante_id, $hash, 'aprobacion');
             if ($datos === null) {
                 return $this->portalFinOrdencompra(false, ArbolAprobacionEnlaceSupport::mensajeEnlaceNoDisponible($arbolaprobacion_movimiento, $hash, 'aprobacion'));
@@ -319,6 +338,7 @@ class ArbolaprobacionController extends Controller
 
             return view('configuracion.arbolaprobacion.ordencompra_portal_aprobar', array_merge($datos, [
                 'hash_aprobacion' => $hash,
+                'tipocomprobante' => $tipocomprobante,
             ]));
         }
 
@@ -357,7 +377,13 @@ class ArbolaprobacionController extends Controller
         }
 
         if ($flEncontro) {
-            $this->arbolaprobacionService->aprobar($tipocomprobante, $comprobante_id, $aprobacion_id, $usuario_id);
+            $this->arbolaprobacionService->aprobar(
+                $tipocomprobante,
+                $comprobante_id,
+                $aprobacion_id,
+                $usuario_id,
+                ArbolAprobacionEnlaceSupport::observacionConCanal(null, 'enlace')
+            );
 
             return redirect()->route('inicio')->with('mensaje', 'Comprobante aprobado con éxito')->send();
         }
@@ -370,7 +396,7 @@ class ArbolaprobacionController extends Controller
             return $this->portalFinRequisicionSala(false, ArbolAprobacionEnlaceSupport::mensajeEnlaceNoDisponible($arbolaprobacion_movimiento, $hash, 'aprobacion'));
         }
 
-        if ($tipocomprobante === 'OC') {
+        if ($tipocomprobante === 'OC' || $tipocomprobante === 'SU') {
             return $this->portalFinOrdencompra(false, ArbolAprobacionEnlaceSupport::mensajeEnlaceNoDisponible($arbolaprobacion_movimiento, $hash, 'aprobacion'));
         }
 
@@ -419,7 +445,7 @@ class ArbolaprobacionController extends Controller
             (int) $request->comprobante_id,
             (int) $request->aprobacion_id,
             (int) $request->usuario_id,
-            $request->input('observacion')
+            ArbolAprobacionEnlaceSupport::observacionConCanal($request->input('observacion'), 'enlace')
         );
 
         $movPost = Arbolaprobacion_Movimiento::find((int) $request->aprobacion_id);
@@ -463,7 +489,7 @@ class ArbolaprobacionController extends Controller
             (int) $request->comprobante_id,
             (int) $request->aprobacion_id,
             (int) $request->usuario_id,
-            $request->input('observacion')
+            ArbolAprobacionEnlaceSupport::observacionConCanal($request->input('observacion'), 'enlace')
         );
 
         if (($resultado['mensaje'] ?? '') === 'error') {
@@ -513,7 +539,13 @@ class ArbolaprobacionController extends Controller
             'usuario_id' => 'required|integer',
             'hash_aprobacion' => 'required|string',
             'observacion' => 'nullable|string|max:4000',
+            'tipocomprobante' => 'nullable|string|in:OC,SU',
         ]);
+
+        $tipo = strtoupper(trim((string) $request->input('tipocomprobante', 'OC')));
+        if (! in_array($tipo, ['OC', 'SU'], true)) {
+            $tipo = 'OC';
+        }
 
         $datos = $this->arbolaprobacionService->portalDatosOrdencompraPorHash(
             (int) $request->comprobante_id,
@@ -529,11 +561,11 @@ class ArbolaprobacionController extends Controller
         }
 
         $this->arbolaprobacionService->aprobar(
-            'OC',
+            $tipo,
             (int) $request->comprobante_id,
             (int) $request->aprobacion_id,
             (int) $request->usuario_id,
-            $request->input('observacion')
+            ArbolAprobacionEnlaceSupport::observacionConCanal($request->input('observacion'), 'enlace')
         );
 
         $movPost = Arbolaprobacion_Movimiento::find((int) $request->aprobacion_id);
@@ -593,7 +625,7 @@ class ArbolaprobacionController extends Controller
             (int) $request->comprobante_id,
             (int) $request->aprobacion_id,
             (int) $request->usuario_id,
-            $request->input('observacion')
+            ArbolAprobacionEnlaceSupport::observacionConCanal($request->input('observacion'), 'enlace')
         );
 
         $movPost = Arbolaprobacion_Movimiento::find((int) $request->aprobacion_id);
@@ -676,6 +708,7 @@ class ArbolaprobacionController extends Controller
                     ->findPorPropuestaPago((int) $comprobante_id);
                 break;
             case 'OC':
+            case 'SU':
                 $arbolaprobacion_movimiento = $this->arbolaprobacion_movimientoRepository->findPorOrdencompra($comprobante_id);
                 break;
         }
@@ -721,7 +754,7 @@ class ArbolaprobacionController extends Controller
             ]));
         }
 
-        if ($flEncontro && $tipocomprobante === 'OC') {
+        if ($flEncontro && ($tipocomprobante === 'OC' || $tipocomprobante === 'SU')) {
             $datos = $this->arbolaprobacionService->portalDatosOrdencompraPorHash((int) $comprobante_id, $hash, 'rechazo');
             if ($datos === null) {
                 return $this->portalFinOrdencompra(false, ArbolAprobacionEnlaceSupport::mensajeEnlaceNoDisponible($arbolaprobacion_movimiento, $hash, 'rechazo'));
@@ -768,7 +801,7 @@ class ArbolaprobacionController extends Controller
             return $this->portalFinRequisicionSala(false, ArbolAprobacionEnlaceSupport::mensajeEnlaceNoDisponible($arbolaprobacion_movimiento, $hash, 'rechazo'));
         }
 
-        if ($tipocomprobante === 'OC') {
+        if ($tipocomprobante === 'OC' || $tipocomprobante === 'SU') {
             return $this->portalFinOrdencompra(false, ArbolAprobacionEnlaceSupport::mensajeEnlaceNoDisponible($arbolaprobacion_movimiento, $hash, 'rechazo'));
         }
 
@@ -813,7 +846,7 @@ class ArbolaprobacionController extends Controller
             }
         }
 
-        if ($portalPublico && $tipocomprobante === 'OC' && filled($request->hash_rechazo)) {
+        if ($portalPublico && in_array($tipocomprobante, ['OC', 'SU'], true) && filled($request->hash_rechazo)) {
             $datos = $this->arbolaprobacionService->portalDatosOrdencompraPorHash((int) $comprobante_id, $request->hash_rechazo, 'rechazo');
             if ($datos === null
                 || (int) $datos['movimiento']->id !== (int) $aprobacion_id
@@ -849,7 +882,7 @@ class ArbolaprobacionController extends Controller
             $request->validate(['observacion' => 'required|string|min:3|max:4000']);
         }
 
-        if ($tipocomprobante === 'OC' && $portalPublico) {
+        if (in_array($tipocomprobante, ['OC', 'SU'], true) && $portalPublico) {
             $request->validate(['observacion' => 'required|string|min:3|max:4000']);
         }
 
@@ -857,7 +890,7 @@ class ArbolaprobacionController extends Controller
             $request->validate(['observacion' => 'required|string|min:3|max:4000']);
         }
 
-        $this->arbolaprobacionService->rechazar($tipocomprobante, $comprobante_id, $aprobacion_id, $usuario_id, $observacion);
+        $this->arbolaprobacionService->rechazar($tipocomprobante, $comprobante_id, $aprobacion_id, $usuario_id, ArbolAprobacionEnlaceSupport::observacionConCanal($observacion, 'enlace'));
 
         if ($portalPublico && $tipocomprobante === 'RE') {
             $movPost = Arbolaprobacion_Movimiento::find((int) $aprobacion_id);
@@ -887,12 +920,16 @@ class ArbolaprobacionController extends Controller
             return $this->portalFinRequisicionSala(false, 'Este paso ya fue gestionado por otro usuario o el enlace ya no es válido.');
         }
 
-        if ($portalPublico && $tipocomprobante === 'OC') {
+        if ($portalPublico && in_array($tipocomprobante, ['OC', 'SU'], true)) {
             $movPost = Arbolaprobacion_Movimiento::find((int) $aprobacion_id);
             $nombreRechazado = Arbolaprobacion_Movimiento::$enumEstado[array_search('R', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
             $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
             if ($movPost && $movPost->estado === $nombreRechazado) {
-                return $this->portalFinOrdencompra(true, 'El rechazo quedó registrado correctamente; la orden quedó en estado suspendido.');
+                $msg = $tipocomprobante === 'SU'
+                    ? 'El rechazo quedó registrado correctamente; la suscripción quedó en estado suspendido.'
+                    : 'El rechazo quedó registrado correctamente; la orden quedó en estado suspendido.';
+
+                return $this->portalFinOrdencompra(true, $msg);
             }
             if ($movPost && $movPost->estado === $nombrePendiente) {
                 return $this->portalFinOrdencompra(false, 'No se pudo registrar el rechazo. Intente nuevamente.');

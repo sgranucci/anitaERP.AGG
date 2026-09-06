@@ -1,4 +1,5 @@
 <?php
+
 // Constantes de arbol de aprobacion / maestro artículo
 
 $filtroEmpresa = filter_var(env('ARTICULO_FILTRO_EMPRESA', false), FILTER_VALIDATE_BOOLEAN);
@@ -17,4 +18,14 @@ return [
     ],
     // Default false = AGG/Bierzo sin cambio de UI/filtros. Activar solo donde se filtre por empresa_id.
     'filtro_empresa' => $filtroEmpresa,
+
+    /*
+    | Circuito de aprobación de alta (opt-in). false = comportamiento histórico (nace ACTIVO).
+    | Creadores: permiso Spatie `crear-articulos` (asignable a roles/sectores).
+    | Por uso (ABM usoarticulo): aprobacion_modo = auto | arbol | default + arbolaprobacion_id.
+    */
+    'aprobacion_alta' => [
+        'habilitado' => filter_var(env('ARTICULO_APROBACION_ALTA', false), FILTER_VALIDATE_BOOLEAN),
+        'creadores_permiso' => 'crear-articulos',
+    ],
 ];

@@ -17,8 +17,7 @@ final class SicoreLiquidacionService
 {
     public function __construct(
         private readonly SicoreReporteService $reporteService,
-    ) {
-    }
+    ) {}
 
     /**
      * Arma liquidación quincenal + PDF combinado (liquidación + compras + sueldos).
@@ -167,9 +166,9 @@ final class SicoreLiquidacionService
             $itemConc = $this->itemConciliacionPorCodigo($data['conciliacion'], (int) $cod);
             $totalSicore = (float) ($itemConc['total_sicore'] ?? $totalDetalle);
             $totalMayor = (float) ($itemConc['total_mayor'] ?? 0);
-            $estado = ! empty($itemConc['cuadra']) ? 'Cuadra' : 'Diferencia';
+            $estado = ! empty($itemConc['cuadra']) ? 'OK' : 'Diferencia';
             $okDet = SicoreFormatoV8Support::cuadra($totalDetalle, $totalSicore);
-            $okMay = $itemConc === [] || SicoreFormatoV8Support::cuadra($totalSicore, $totalMayor);
+            $okMay = $itemConc === [] || SicoreFormatoV8Support::cuadraConciliacion($totalSicore, $totalMayor);
             $ok = $okDet && $okMay;
             $okGlobal = $okGlobal && $ok;
             $items[] = [

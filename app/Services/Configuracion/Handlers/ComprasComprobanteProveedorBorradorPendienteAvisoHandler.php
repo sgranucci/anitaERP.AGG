@@ -84,7 +84,9 @@ class ComprasComprobanteProveedorBorradorPendienteAvisoHandler implements Modulo
 
     public function linkConsulta(int $entityId): ?string
     {
-        return url('compras/comprobante-proveedor?estado='.ComprobanteProveedorEstados::BORRADOR);
+        return urlAppAbsoluta(
+            'compras/comprobante-proveedor?estado='.ComprobanteProveedorEstados::BORRADOR
+        );
     }
 
     public function generarPdf(int $entityId): ?array

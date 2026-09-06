@@ -95,6 +95,8 @@ En el mismo preflight (no exclusivas de canje):
 | `WIGOS_TRUST_SERVER_CERTIFICATE` | `yes` por default. `no` sólo con cert válido. |
 | `WIGOS_LOGIN_TIMEOUT` | Segundos antes de fallback A→B (default `5`). |
 | `WIGOS_APPNAME` | Nombre app en SQL Server (default `AnitaERP-Gastronomia-Wigos`). |
+| `WIGOS_MONITOR_SERVIDOR_ACTIVO` | Schedule `wigos:monitorear-servidor-activo` (default true). Publica alias ONLINE por empresa. |
+| `WIGOS_MONITOR_OK_PARA_PREFERIDO` | OK consecutivos en el preferido de config para volver a él si ambos sanos (default `2`). |
 | `GASTRONOMIA_CANJE_PREMIO_DESCUENTO_CODIGO` | Descuento obligatorio al aplicar (default `10`) |
 | `GASTRONOMIA_CANJE_PREMIO_CLIENTE_CODIGO` | Cliente factura (default `500`) |
 | `GASTRONOMIA_CANJE_PREMIO_VENCIMIENTO_DIAS` | Días desde fecha premio (default `2`) |
@@ -103,7 +105,7 @@ En el mismo preflight (no exclusivas de canje):
 
 **OpenSSL 3 + SQL Server 2012:** sin tocar `/etc/ssl/openssl.cnf` (afectaría SOAP ARCA), `WigosSqlServerProcess` lanza `scripts/wigos-sqlserver.php` con `OPENSSL_CONF` apuntando a `config/openssl/wigos-mssql.cnf` (`WIGOS_OPENSSL_CONF` opcional). `putenv` en el mismo worker PHP no alcanza al driver ODBC.
 
-**Fallback A↔B:** sólo si falla la **conexión** al primario (no si el SP devuelve filas vacías). Equivalente a `Connect() == false` del legacy.
+**Fallback A↔B:** sólo si falla la **conexión** / espejo RESTORING al primario (no si el SP devuelve filas vacías ni errores de datos). Equivalente a `Connect() == false` del legacy. El monitor `wigos:monitorear-servidor-activo` publica el ONLINE para evitar el timeout al espejo en lecturas normales.
 
 **Diagnóstico:** `php artisan wigos:probar-conexion [--cupon=...] [--trackdata=...]` valida la conexión SQL (A y B con `SELECT @@VERSION`), opcionalmente ejecuta `spVoucherGiftData` con un cupón real y prueba la URL HTTP `AccountInfoJSON`. Correr **desde el host de producción** (no desde desarrollo) ya que la red a Wigos suele estar segmentada.
 
@@ -124,7 +126,7 @@ En el mismo preflight (no exclusivas de canje):
 | Cupón vacío | Debe indicar número de cupón |
 | Sin filas en Wigos | Ticket no encontrado o no pendiente |
 | `STATUS` ≠ `PENDING` | Ticket no disponible (muestra estado) |
-| Fallback servidor A/B | Si A falla, intenta B si está configurado |
+| Fallback servidor A/B | Solo si falla conexión/espejo en el primario (no errores de SP/datos) |
 
 ### Backend — validar / aplicar (`GastronomiaTicketCanjePremioService`)
 

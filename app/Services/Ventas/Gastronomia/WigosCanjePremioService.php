@@ -50,6 +50,10 @@ final class WigosCanjePremioService
             $filas = $this->ejecutarSp($primario, $codigo, $empresaId);
         } catch (RuntimeException $e) {
             $errores[$primario] = $e->getMessage();
+            // Solo A↔B ante conexión/espejo (como flash); errores de SP/datos no reintentan.
+            if (! WigosSqlServerProcess::esErrorConexionOEspejo($e)) {
+                throw $e;
+            }
             $filas = null;
         }
 

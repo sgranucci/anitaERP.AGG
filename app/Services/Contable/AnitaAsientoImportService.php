@@ -46,7 +46,7 @@ final class AnitaAsientoImportService
     public const ASI_MON_REF_ORIGEN_ERP = -1;
 
     /** Hasta esta fecha inclusive, Anita es fuente de verdad en colisiones. */
-    public const ANITA_FUENTE_VERDAD_HASTA = '2026-05-31';
+    public const ANITA_FUENTE_VERDAD_HASTA = '2026-08-31';
 
     /** Etiquetas momentáneas en observacion para distinguir origen en el mayor ERP. */
     public const TAG_SUBHIST = '[SUBH]';

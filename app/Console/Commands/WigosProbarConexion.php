@@ -60,6 +60,12 @@ class WigosProbarConexion extends Command
 
         $primario = WigosConfigResolver::currWigos($empresaId);
         $secundario = $primario === 'A' ? 'B' : 'A';
+        $preferido = WigosConfigResolver::currWigosConfigurado($empresaId);
+        if ($primario !== $preferido) {
+            $this->info("Alias lectura (monitor): {$primario} — preferido config: {$preferido}");
+        } else {
+            $this->info("Alias lectura / preferido config: {$primario}");
+        }
 
         foreach ([$primario, $secundario] as $alias) {
             $this->probarConexionAlias($alias, $empresaId);

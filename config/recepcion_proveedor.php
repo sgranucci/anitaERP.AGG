@@ -118,6 +118,7 @@ return [
         'ventana_dias' => max(1, (int) env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_VENTANA_DIAS', 7)),
         // Ante discrepancia: repara Anita (ctamov/recepmae) y, si falta II en devolución, recuadra asiento+II.
         // Si el período está cerrado no repara: avisa en el mail para revisión manual.
+        // Si ctamov fue editado en Anita (ctav_fecha_umod/usuario) y los montos coinciden, no se pisa Anita: se copia al ERP.
         'auto_reparar' => filter_var(env('RECEPCION_PROVEEDOR_AUDITORIA_ASIENTOS_AUTO_REPARAR', true), FILTER_VALIDATE_BOOLEAN),
     ],
 

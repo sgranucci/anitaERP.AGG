@@ -4,6 +4,8 @@ namespace App\Services\Stock;
 
 use App\Models\Stock\Recepcion_Proveedor;
 use App\Support\Stock\RecepcionProveedorAsientoAnitaCtamovSupport;
+use App\Support\Stock\RecepcionProveedorAsientoAuditoriaSupport;
+use App\Support\Stock\RecepcionProveedorCtamovAuditoriaAnitaSupport;
 use App\Support\Stock\RecepcionProveedorCtamovCuadreSupport;
 use App\Support\Stock\RecepcionProveedorCuadreContableSupport;
 use App\Support\Stock\RecepcionProveedorEstados;
@@ -17,8 +19,7 @@ class RecepcionProveedorAsientoRecuadreService
 {
     public function __construct(
         private readonly RecepcionProveedorAsientoService $asientoService,
-    ) {
-    }
+    ) {}
 
     /**
      * @param  array{
@@ -89,6 +90,8 @@ class RecepcionProveedorAsientoRecuadreService
                 } elseif ($estado === 'actualizada_erp_anita') {
                     $stats['actualizadas_erp']++;
                     $stats['actualizadas_anita']++;
+                } elseif ($estado === 'actualizada_erp_desde_anita') {
+                    $stats['actualizadas_erp']++;
                 }
             } catch (\Throwable $e) {
                 $stats['errores']++;
@@ -186,7 +189,9 @@ class RecepcionProveedorAsientoRecuadreService
             $preview,
             $tol
         );
-        $necesitaErp = ! $soloAnita && (abs($diffErp) >= $tol || $lineasErpDifieren);
+        $filasCtamov = RecepcionProveedorAsientoAuditoriaSupport::lineasCtamovPorCom($recepcion);
+        $anitaEditado = RecepcionProveedorCtamovAuditoriaAnitaSupport::fueModificadoTrasAlta($filasCtamov);
+        $necesitaErp = ! $soloAnita && ! $anitaEditado && (abs($diffErp) >= $tol || $lineasErpDifieren);
         $necesitaAnita = (bool) ($evaluacionCtamov['requiere_reparacion'] ?? false);
 
         $base = [
@@ -223,9 +228,11 @@ class RecepcionProveedorAsientoRecuadreService
         }
 
         if ($necesitaAnita) {
-            $this->asientoService->sincronizarCtamovAnitaRecepcion($recepcion, $preview);
+            $modo = $this->asientoService->reconciliarCtamovConErp($recepcion, $preview);
 
-            return array_merge($base, ['estado' => 'actualizada_anita']);
+            return array_merge($base, [
+                'estado' => $modo === 'erp_desde_anita' ? 'actualizada_erp_desde_anita' : 'actualizada_anita',
+            ]);
         }
 
         return array_merge($base, ['estado' => 'ya_cuadrada']);

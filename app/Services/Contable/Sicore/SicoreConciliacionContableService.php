@@ -5,26 +5,21 @@ declare(strict_types=1);
 namespace App\Services\Contable\Sicore;
 
 use App\Models\Contable\Sicore_Config;
-use App\Repositories\Contable\Sicore_ConfigRepositoryInterface;
-use App\Support\Contable\Anita\AnitaMayorAnaliticoSupport;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\Sicore\SicoreConciliacionAuditoriaSupport;
-use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use App\Support\Contable\Sicore\SicoreFormatoV8Support;
-use App\Support\Contable\Sicore\SicoreMayorComparableSupport;
-use App\Support\Contable\Sicore\SicoreProveedorErpSupport;
 use App\Support\Contable\Sicore\SicoreSaldoEjercicioSupport;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 
+/**
+ * Conciliación SICORE vs mayor: suma del período vs col. P (saldo ejerc.)
+ * del último movimiento de la quincena/mes elegida.
+ */
 final class SicoreConciliacionContableService
 {
     public function __construct(
-        private readonly Sicore_ConfigRepositoryInterface $configRepository,
-        private readonly AnitaMayorAnaliticoSupport $mayorAnaliticoSupport,
         private readonly SicoreSaldoEjercicioSupport $saldoEjercicioSupport,
-        private readonly SicoreProveedorErpSupport $proveedorSupport = new SicoreProveedorErpSupport(),
-    ) {
-    }
+    ) {}
 
     /**
      * @param  array<string, mixed>  $filtros
@@ -39,10 +34,10 @@ final class SicoreConciliacionContableService
             return ['habilitada' => false, 'items' => []];
         }
 
-        $desde = (string) ($filtros['fecha_desde'] ?? '');
         $hasta = (string) ($filtros['fecha_hasta'] ?? '');
+        $tolerancia = SicoreFormatoV8Support::toleranciaConciliacion();
 
-        // Precarga saldos de ejercicio (col. O) de todas las cuentas del proceso en un solo mayor plano.
+        // Precarga saldos de ejercicio (col. P) de todas las cuentas del proceso en un solo mayor plano.
         $codigosSaldo = [];
         foreach ($configs as $configPrecarga) {
             foreach ($configPrecarga->cuentas->where('empresa_id', $empresaId) as $c) {
@@ -57,7 +52,6 @@ final class SicoreConciliacionContableService
         $items = [];
         foreach ($configs as $config) {
             $configId = (int) $config->id;
-            $cuentaIds = $this->configRepository->cuentaIdsPorConfigEmpresa($configId, $empresaId);
 
             $registrosConfig = array_values(array_filter(
                 $registros,
@@ -82,90 +76,15 @@ final class SicoreConciliacionContableService
 
             $cuentaInversa = SicoreConciliacionAuditoriaSupport::cuentasSonInversas($cuentasDetalle);
 
-            $esSueldos = (string) $config->criterio === 'sueldos';
-
-            // 4ta categoría: mayor = ctamov con ctav_tipo_asiento='PER' sobre la cuenta configurada.
-            // Compras/ventas: mayor analítico habitual (subdiario+ctamov o ERP).
-            if ($esSueldos) {
-                $movimientosErp = [];
-                $movimientosAnita = $this->listarMayorAnitaAsientosPer($empresaId, $desde, $hasta, $config, $cuentaIds);
-                $movimientosMayorCompleto = $movimientosAnita;
-                $fuenteMayor = $movimientosAnita !== [] ? 'anita' : 'ninguna';
-            } else {
-                $movimientosErp = $this->listarMayorAnaliticoErp($empresaId, $desde, $hasta, $cuentaIds);
-                $movimientosAnita = $this->listarMayorAnaliticoAnita($empresaId, $desde, $hasta, $config, $cuentaIds);
-                $movimientosMayorCompleto = $movimientosErp !== [] ? $movimientosErp : $movimientosAnita;
-                $fuenteMayor = $movimientosErp !== [] ? 'erp' : ($movimientosAnita !== [] ? 'anita' : 'ninguna');
-            }
-
-            // Compras: retención OPP/AOP y devoluciones CHP con subd_emisor en maestro.
-            $emisoresProveedor = null;
-            if (in_array((string) $config->criterio, ['compras_ganancias', 'compras_iva'], true)) {
-                $emisoresProveedor = $this->resolverEmisoresProveedor($movimientosMayorCompleto);
-            }
-
-            // Totales/matching: generación-anulación retención (sin pago DDJJ / reclas / no-OPP).
-            $particion = SicoreMayorComparableSupport::particionar(
-                $movimientosMayorCompleto,
-                $esSueldos ? null : $emisoresProveedor,
-            );
-            $movimientosComparable = $particion['comparables'];
-            $movimientosExcluidos = $particion['excluidos'];
-            $totalMayorNeto = $particion['total_comparable'];
-            $movimientosMayorCompleto = array_merge($movimientosComparable, $movimientosExcluidos);
-            usort($movimientosMayorCompleto, static function (array $a, array $b): int {
-                return [(string) ($a['fecha'] ?? ''), (int) ($a['asiento_id'] ?? 0)]
-                    <=> [(string) ($b['fecha'] ?? ''), (int) ($b['asiento_id'] ?? 0)];
-            });
-
-            // Matching ±1 día solo compras (AOP contable al día siguiente). Sueldos PER: mismo pool.
-            $movimientosComparableMatch = $esSueldos
-                ? $movimientosComparable
-                : $this->movimientosComparablesParaMatch(
-                    $empresaId,
-                    $desde,
-                    $hasta,
-                    $config,
-                    $cuentaIds,
-                    $fuenteMayor,
-                    $movimientosComparable,
-                    $emisoresProveedor,
-                );
-
-            $totalMayorNetoErp = $fuenteMayor === 'erp'
-                ? $totalMayorNeto
-                : SicoreMayorComparableSupport::particionar($movimientosErp, $emisoresProveedor)['total_comparable'];
-            $totalMayorNetoAnita = $fuenteMayor === 'anita'
-                ? $totalMayorNeto
-                : SicoreMayorComparableSupport::particionar($movimientosAnita, $emisoresProveedor)['total_comparable'];
-
-            $tolerancia = SicoreFormatoV8Support::tolerancia();
-
-            $auditoria = SicoreConciliacionAuditoriaSupport::auditarOperaciones(
-                $registrosConfig,
-                $movimientosComparable,
-                $cuentaInversa,
-                $tolerancia,
-                $movimientosComparableMatch,
-            );
-
-            $explicacion = SicoreConciliacionAuditoriaSupport::explicacionDiferencia(
-                $totalSicore,
-                $totalMayorNeto,
-                $auditoria['resumen'] ?? [],
-            );
-
-            $dif = (float) ($explicacion['diferencia'] ?? round($totalSicore - $totalMayorNeto, 2));
-
-            // Saldo de ejercicio (col. O mayor plano): 01/01/2026 → fecha_hasta.
-            // Independiente del Total mayor del período; no altera el badge Cuadra.
-            $saldoEjercicio = $this->saldoEjercicioSupport->saldoComparable(
+            // Col. P del mayor plano: saldo de ejercicio al último movimiento ≤ fecha_hasta.
+            $totalMayor = $this->saldoEjercicioSupport->saldoComparable(
                 $empresaId,
                 $hasta,
                 $cuentasDetalle,
                 $cuentaInversa,
             );
-            $difSaldo = round($totalSicore - $saldoEjercicio, 2);
+
+            $dif = round($totalSicore - $totalMayor, 2);
 
             $items[] = [
                 'config_id' => $configId,
@@ -177,259 +96,27 @@ final class SicoreConciliacionContableService
                 'cuentas' => $cuentasDetalle,
                 'cuenta_inversa' => $cuentaInversa,
                 'total_sicore' => $totalSicore,
-                'total_mayor' => $totalMayorNeto,
-                'total_mayor_neto' => $totalMayorNeto,
-                'total_mayor_completo' => SicoreConciliacionAuditoriaSupport::totalMayorNeto($movimientosMayorCompleto),
-                'total_mayor_excluido' => $particion['total_excluido'],
-                'total_mayor_saldo_invertido' => SicoreConciliacionAuditoriaSupport::totalMayorSaldoInvertido(
-                    $movimientosComparable,
-                    $cuentaInversa,
-                ),
-                'total_mayor_erp' => $totalMayorNetoErp,
-                'total_mayor_anita' => $totalMayorNetoAnita,
+                'total_mayor' => $totalMayor,
                 'diferencia' => $dif,
-                'cuadra' => SicoreFormatoV8Support::cuadra($totalSicore, $totalMayorNeto),
-                'saldo_ejercicio' => $saldoEjercicio,
-                'diferencia_sicore_saldo' => $difSaldo,
-                'cuadra_saldo' => SicoreFormatoV8Support::cuadra($totalSicore, $saldoEjercicio),
-                'explicacion_diferencia' => $explicacion,
+                'cuadra' => SicoreFormatoV8Support::cuadraConciliacion($totalSicore, $totalMayor),
                 'registros' => count($registrosConfig),
-                'fuente_mayor' => $fuenteMayor,
-                'movimientos_mayor' => $movimientosMayorCompleto,
-                'movimientos_mayor_comparable' => $movimientosComparable,
-                'movimientos_mayor_excluidos' => $movimientosExcluidos,
-                'auditoria' => $auditoria,
+                'tolerancia' => $tolerancia,
             ];
         }
 
         return [
             'habilitada' => true,
             'items' => $items,
-            'tolerancia' => SicoreFormatoV8Support::tolerancia(),
-            'saldo_ejercicio_desde' => '2026-01-01',
+            'tolerancia' => $tolerancia,
+            'saldo_ejercicio_desde' => self::ymdAIso(MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD),
             'saldo_ejercicio_hasta' => $hasta,
         ];
     }
 
-    /**
-     * Pool de mayor para matching: incluye ±1 día calendario respecto del filtro,
-     * sin alterar los totales del período.
-     *
-     * @param  list<int>  $cuentaIds
-     * @param  list<array<string, mixed>>  $movimientosComparablePeriodo
-     * @param  array<string, true>|null  $emisoresProveedor
-     * @return list<array<string, mixed>>
-     */
-    private function movimientosComparablesParaMatch(
-        int $empresaId,
-        string $desde,
-        string $hasta,
-        Sicore_Config $config,
-        array $cuentaIds,
-        string $fuenteMayor,
-        array $movimientosComparablePeriodo,
-        ?array $emisoresProveedor = null,
-    ): array {
-        if ($desde === '' || $hasta === '' || $fuenteMayor === 'ninguna') {
-            return $movimientosComparablePeriodo;
-        }
-
-        try {
-            $desdeMatch = (new \DateTimeImmutable($desde))->modify('-1 day')->format('Y-m-d');
-            $hastaMatch = (new \DateTimeImmutable($hasta))->modify('+1 day')->format('Y-m-d');
-        } catch (\Exception) {
-            return $movimientosComparablePeriodo;
-        }
-
-        if ($desdeMatch === $desde && $hastaMatch === $hasta) {
-            return $movimientosComparablePeriodo;
-        }
-
-        $ampliado = $fuenteMayor === 'erp'
-            ? $this->listarMayorAnaliticoErp($empresaId, $desdeMatch, $hastaMatch, $cuentaIds)
-            : $this->listarMayorAnaliticoAnita($empresaId, $desdeMatch, $hastaMatch, $config, $cuentaIds);
-
-        if ($emisoresProveedor === null && in_array((string) $config->criterio, ['compras_ganancias', 'compras_iva'], true)) {
-            $emisoresProveedor = $this->resolverEmisoresProveedor($ampliado);
-        }
-
-        return SicoreMayorComparableSupport::particionar($ampliado, $emisoresProveedor)['comparables'];
-    }
-
-    /**
-     * @param  list<array<string, mixed>>  $movimientos
-     * @return array<string, true>
-     */
-    private function resolverEmisoresProveedor(array $movimientos): array
+    private static function ymdAIso(int $ymd): string
     {
-        $codigos = [];
-        foreach ($movimientos as $mov) {
-            $emisor = trim((string) ($mov['subd_emisor'] ?? ''));
-            if ($emisor !== '') {
-                $codigos[] = $emisor;
-            }
-        }
+        $s = str_pad((string) $ymd, 8, '0', STR_PAD_LEFT);
 
-        return $this->proveedorSupport->indicesExistentes($codigos);
-    }
-
-    /**
-     * @param  list<int>  $cuentaIds
-     * @return list<array<string, mixed>>
-     */
-    private function listarMayorAnaliticoErp(int $empresaId, string $desde, string $hasta, array $cuentaIds): array
-    {
-        if ($cuentaIds === [] || $desde === '' || $hasta === '') {
-            return [];
-        }
-
-        $filas = DB::table('asiento_movimiento as am')
-            ->join('asiento as a', 'a.id', '=', 'am.asiento_id')
-            ->join('cuentacontable as c', 'c.id', '=', 'am.cuentacontable_id')
-            ->where('a.empresa_id', $empresaId)
-            ->whereBetween('a.fecha', [$desde, $hasta])
-            ->whereIn('am.cuentacontable_id', $cuentaIds)
-            ->orderBy('a.fecha')
-            ->orderBy('am.id')
-            ->get([
-                'a.fecha',
-                'a.id as asiento_id',
-                'c.codigo as cuenta_codigo',
-                'c.nombre as cuenta_nombre',
-                'am.monto',
-                'am.observacion',
-            ]);
-
-        $out = [];
-        foreach ($filas as $fila) {
-            $monto = (float) $fila->monto;
-            $out[] = [
-                'fecha' => (string) $fila->fecha,
-                'asiento_id' => (int) $fila->asiento_id,
-                'cuenta_codigo' => (string) $fila->cuenta_codigo,
-                'cuenta_nombre' => (string) $fila->cuenta_nombre,
-                'debe' => $monto > 0 ? round($monto, 2) : null,
-                'haber' => $monto < 0 ? round(abs($monto), 2) : null,
-                'neto_haber' => round(-$monto, 2),
-                'detalle' => trim((string) ($fila->observacion ?? '')),
-                'origen' => 'erp',
-            ];
-        }
-
-        return $out;
-    }
-
-    /**
-     * 4ta categoría: asientos de liquidación de personal (ctav_tipo_asiento = PER)
-     * sobre la cuenta de retención configurada.
-     *
-     * @param  list<int>  $cuentaIds
-     * @return list<array<string, mixed>>
-     */
-    private function listarMayorAnitaAsientosPer(
-        int $empresaId,
-        string $desde,
-        string $hasta,
-        Sicore_Config $config,
-        array $cuentaIds,
-    ): array {
-        if ($cuentaIds === [] || $desde === '' || $hasta === '') {
-            return [];
-        }
-
-        $codigosCuenta = $config->cuentas
-            ->whereIn('cuentacontable_id', $cuentaIds)
-            ->map(static fn ($c) => (int) preg_replace('/\D/', '', (string) ($c->cuentacontable?->codigo ?? '')))
-            ->filter(static fn (int $cod) => $cod > 0)
-            ->unique()
-            ->values()
-            ->all();
-
-        if ($codigosCuenta === []) {
-            return [];
-        }
-
-        $empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId);
-        $desdeAnita = (int) str_replace('-', '', $desde);
-        $hastaAnita = (int) str_replace('-', '', $hasta);
-
-        $nombresCuenta = $config->cuentas
-            ->whereIn('cuentacontable_id', $cuentaIds)
-            ->mapWithKeys(static fn ($c) => [
-                (int) preg_replace('/\D/', '', (string) ($c->cuentacontable?->codigo ?? '')) => (string) ($c->cuentacontable?->nombre ?? ''),
-            ])
-            ->all();
-
-        $out = [];
-        foreach ($this->mayorAnaliticoSupport->listarMovimientosCtamovTipoAsiento(
-            $empresaAnita,
-            $desdeAnita,
-            $hastaAnita,
-            $codigosCuenta,
-            'PER',
-        ) as $mov) {
-            $codigoCuenta = (int) ($mov['cuenta_codigo'] ?? 0);
-            $out[] = array_merge($mov, [
-                'cuenta_nombre' => $nombresCuenta[$codigoCuenta] ?? (string) ($mov['cuenta_nombre'] ?? ''),
-                'origen' => 'anita',
-            ]);
-        }
-
-        return $out;
-    }
-
-    /**
-     * @param  list<int>  $cuentaIds
-     * @return list<array<string, mixed>>
-     */
-    private function listarMayorAnaliticoAnita(
-        int $empresaId,
-        string $desde,
-        string $hasta,
-        Sicore_Config $config,
-        array $cuentaIds,
-    ): array {
-        if ($cuentaIds === [] || $desde === '' || $hasta === '') {
-            return [];
-        }
-
-        $codigosCuenta = $config->cuentas
-            ->whereIn('cuentacontable_id', $cuentaIds)
-            ->map(static fn ($c) => (int) preg_replace('/\D/', '', (string) ($c->cuentacontable?->codigo ?? '')))
-            ->filter(static fn (int $cod) => $cod > 0)
-            ->unique()
-            ->values()
-            ->all();
-
-        if ($codigosCuenta === []) {
-            return [];
-        }
-
-        $empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId);
-        $desdeAnita = (int) str_replace('-', '', $desde);
-        $hastaAnita = (int) str_replace('-', '', $hasta);
-
-        $nombresCuenta = $config->cuentas
-            ->whereIn('cuentacontable_id', $cuentaIds)
-            ->mapWithKeys(static fn ($c) => [
-                (int) preg_replace('/\D/', '', (string) ($c->cuentacontable?->codigo ?? '')) => (string) ($c->cuentacontable?->nombre ?? ''),
-            ])
-            ->all();
-
-        $out = [];
-        foreach ($this->mayorAnaliticoSupport->listarMovimientosPeriodo(
-            $empresaAnita,
-            $desdeAnita,
-            $hastaAnita,
-            $codigosCuenta,
-        ) as $mov) {
-            $codigoCuenta = (int) ($mov['cuenta_codigo'] ?? 0);
-            $out[] = array_merge($mov, [
-                'cuenta_nombre' => $nombresCuenta[$codigoCuenta] ?? (string) ($mov['cuenta_nombre'] ?? ''),
-                'origen' => 'anita',
-            ]);
-        }
-
-        return $out;
+        return substr($s, 0, 4).'-'.substr($s, 4, 2).'-'.substr($s, 6, 2);
     }
 }

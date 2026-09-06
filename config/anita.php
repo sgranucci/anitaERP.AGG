@@ -32,6 +32,10 @@ return [
 
     'bridge_list_reintentos' => (int) env('ANITA_BRIDGE_LIST_REINTENTOS', 6),
 
+    'bridge_connect_timeout' => (int) env('ANITA_BRIDGE_CONNECT_TIMEOUT', 10),
+
+    'bridge_timeout' => (int) env('ANITA_BRIDGE_TIMEOUT', 300),
+
     'ifx_server' => env('IFX_SERVER', ''),
 
     'ifx_server_local' => env('IFX_SERVER_LOCAL', ''),

@@ -163,6 +163,7 @@ final class SicoreFormatoV8Support
         return $cod === self::COD_COMP_NOTA_CREDITO || $cod === self::COD_COMP_DEVOLUCION;
     }
 
+    /** Tolerancia de redondeo / detalle vs archivo (.dat). */
     public static function tolerancia(): float
     {
         return 0.05;
@@ -171,5 +172,18 @@ final class SicoreFormatoV8Support
     public static function cuadra(float $a, float $b): bool
     {
         return abs($a - $b) <= self::tolerancia();
+    }
+
+    /** Tolerancia de conciliación SICORE vs mayor (col. P), en pesos. */
+    public const TOLERANCIA_CONCILIACION = 100.0;
+
+    public static function toleranciaConciliacion(): float
+    {
+        return self::TOLERANCIA_CONCILIACION;
+    }
+
+    public static function cuadraConciliacion(float $a, float $b): bool
+    {
+        return abs(round($a - $b, 2)) <= self::TOLERANCIA_CONCILIACION;
     }
 }

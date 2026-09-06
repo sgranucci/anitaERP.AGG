@@ -12,6 +12,7 @@ use App\Models\Stock\Prestamo_Item;
 use App\Models\Stock\Prestamo_Token;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Repositories\Stock\Articulo_Saldo_DepositoRepositoryInterface;
+use App\Repositories\Stock\Deposito_AdministradorRepositoryInterface;
 use App\Repositories\Stock\PrestamoRepositoryInterface;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Support\Contable\PeriodoContableCierreSupport;
@@ -30,11 +31,52 @@ class PrestamoService
         private readonly PrestamoRepositoryInterface $prestamoRepository,
         private readonly Articulo_Saldo_DepositoRepositoryInterface $saldoRepository,
         private readonly ModuloAvisoService $moduloAvisoService,
+        private readonly Deposito_AdministradorRepositoryInterface $depAdminRepository,
     ) {}
 
     public function listar()
     {
         return $this->prestamoRepository->all();
+    }
+
+    /**
+     * Salidas pendientes de aprobación asignadas al usuario (destinatario o admin del depósito destino).
+     *
+     * @return Collection<int, Prestamo>
+     */
+    public function listarPendientesAprobacionParaUsuario(int $usuarioId): Collection
+    {
+        if ($usuarioId <= 0) {
+            return collect();
+        }
+
+        $pendientes = Prestamo::query()
+            ->with(['depositoDestino:id,nombre', 'destinatarioUsuario:id,nombre', 'solicitante:id,nombre'])
+            ->where('estado', Prestamo::ESTADO_PENDIENTE_APROBACION)
+            ->orderByDesc('updated_at')
+            ->get();
+
+        return $pendientes->filter(fn (Prestamo $p) => $this->usuarioPuedeAprobarSalida($p, $usuarioId))->values();
+    }
+
+    public function usuarioPuedeAprobarSalida(Prestamo $prestamo, int $usuarioId): bool
+    {
+        if ($usuarioId <= 0 || $prestamo->estado !== Prestamo::ESTADO_PENDIENTE_APROBACION) {
+            return false;
+        }
+
+        if ($prestamo->esDestinoUsuario()) {
+            return (int) ($prestamo->destinatario_usuario_id ?? 0) === $usuarioId;
+        }
+
+        if ($prestamo->esDestinoDeposito() && (int) ($prestamo->deposito_destino_id ?? 0) > 0) {
+            return $this->depAdminRepository
+                ->porDeposito((int) $prestamo->deposito_destino_id)
+                ->contains(fn ($admin) => (int) ($admin->usuario_id ?? 0) === $usuarioId
+                    || (int) (optional($admin->usuarios)->id ?? 0) === $usuarioId);
+        }
+
+        return false;
     }
 
     public function resumenKpis(): array

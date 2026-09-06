@@ -13,7 +13,6 @@ use App\Models\Seguridad\IngresoProveedorArea;
 use App\Models\Seguridad\IngresoProveedorMotivo;
 use App\Models\Seguridad\IngresoProveedorPunto;
 use App\Models\Seguridad\IngresoProveedorSector;
-use App\Traits\Compras\ProveedorTrait;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Seguridad\IngresoProveedorRepositoryInterface;
 use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
@@ -24,10 +23,11 @@ use App\Support\Seguridad\IngresoProveedorEstados;
 use App\Support\Seguridad\IngresoProveedorListadoFiltros;
 use App\Support\Seguridad\IngresoProveedorVinculoSupport;
 use App\Support\Seguridad\IngresoProveedorVisibilidadSupport;
+use App\Traits\Compras\ProveedorTrait;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
-use RuntimeException;
 use Maatwebsite\Excel\Facades\Excel;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class IngresoProveedorController extends Controller
@@ -35,8 +35,7 @@ class IngresoProveedorController extends Controller
     public function __construct(
         private readonly IngresoProveedorRepositoryInterface $repository,
         private readonly EmpresaRepositoryInterface $empresaRepository,
-    ) {
-    }
+    ) {}
 
     public function index(Request $request)
     {
@@ -63,30 +62,8 @@ class IngresoProveedorController extends Controller
         if (! can('autorizar-ingreso-proveedor', false)) {
             can('listar-ingreso-proveedor');
         }
-        $request->merge([
-            'filtro_modo' => IngresoProveedorListadoFiltros::MODO_CAMPO,
-            'filtro_campo' => 'estado',
-            'filtro_operador' => 'igual',
-            'filtro_valor' => IngresoProveedorEstados::PENDIENTE,
-        ]);
-        $filtros = $this->resolverFiltros($request);
-        if (can('autorizar-ingreso-proveedor', false)) {
-            $filtros['omitir_alcance'] = true;
-        }
-        $datas = $this->repository->leeIngresoProveedor($filtros, true);
 
-        return view('seguridad.ingreso_proveedor.index', array_merge(
-            $this->catalogosIndex(),
-            [
-                'datas' => $datas,
-                'filtros' => $filtros,
-                'filtrosQuery' => IngresoProveedorListadoFiltros::paraQueryString($filtros),
-                'camposFiltro' => IngresoProveedorListadoFiltros::CAMPOS,
-                'empresa_query' => $this->empresaRepository->allFiltrado(),
-                'bandejaPendientes' => true,
-                'alcanceListado' => null,
-            ]
-        ));
+        return redirect()->to(url('mis-aprobaciones').'?fuente=ingreso_proveedor');
     }
 
     public function autorizar(Request $request, int $id)

@@ -28,8 +28,7 @@ class OrdencompraContratoAvisoService
 
     public function __construct(
         private readonly ModuloAvisoService $moduloAvisoService,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array{
@@ -133,13 +132,22 @@ class OrdencompraContratoAvisoService
         }
 
         // El responsable nominado del contrato siempre recibe los suyos, esté o no
-        // configurado como destinatario del evento.
+        // configurado como destinatario del evento. En las suscripciones se suma el dueño
+        // del servicio: es a quien hay que preguntarle si sigue en uso antes de que se
+        // renueve solo, y puede no ser el responsable administrativo del contrato.
         foreach ($contratos as $contrato) {
-            $email = strtolower(trim((string) ($contrato['responsable_email'] ?? '')));
-            if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
-                continue;
+            $claves = ['responsable_email'];
+            if (! empty($contrato['es_suscripcion'])) {
+                $claves[] = 'owner_email';
             }
-            $porEmail[$email][(int) $contrato['id']] = $contrato;
+
+            foreach ($claves as $clave) {
+                $email = strtolower(trim((string) ($contrato[$clave] ?? '')));
+                if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+                    continue;
+                }
+                $porEmail[$email][(int) $contrato['id']] = $contrato;
+            }
         }
 
         $enviados = 0;

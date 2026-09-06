@@ -64,7 +64,7 @@
                 <p class="login-box-msg">Inicio de Sesión</p>
                 @if (session('url.intended'))
                 <div class="alert alert-info py-2">
-                    Ingresá con tu usuario de Anita ERP para abrir el documento del mail.
+                    Ingresá con tu usuario de Anita ERP para continuar a la pantalla del enlace.
                 </div>
                 @endif
                 @if (session('status'))

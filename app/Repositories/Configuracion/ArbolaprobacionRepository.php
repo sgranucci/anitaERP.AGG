@@ -3,32 +3,28 @@
 namespace App\Repositories\Configuracion;
 
 use App\Models\Configuracion\Arbolaprobacion;
-use App\Repositories\Configuracion\ArbolaprobacionRepositoryInterface;
 use App\Support\Configuracion\ArbolaprobacionListadoFiltros;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Exception;
-use Carbon\Carbon;
-use Auth;
-use DB;
 
 class ArbolaprobacionRepository implements ArbolaprobacionRepositoryInterface
 {
     protected $model;
+
     protected $empresaRepository;
 
     /**
      * PostRepository constructor.
      *
-     * @param Post $post
+     * @param  Post  $post
      */
     public function __construct(Arbolaprobacion $arbolaprobacion,
-                                EmpresaRepositoryInterface $empresarepository)
+        EmpresaRepositoryInterface $empresarepository)
     {
         $this->model = $arbolaprobacion;
         $this->empresaRepository = $empresarepository;
     }
 
-	public function all()
+    public function all()
     {
         return $this->leeArbolaprobacion(ArbolaprobacionListadoFiltros::filtrosVacios());
     }
@@ -90,28 +86,27 @@ class ArbolaprobacionRepository implements ArbolaprobacionRepositoryInterface
 
     public function create(array $data)
     {
-		return $this->model->create($data);
+        return $this->model->create($data);
     }
 
     public function update(array $data, $id)
     {
-		return $this->model->findOrFail($id)->update($data);
+        return $this->model->findOrFail($id)->update($data);
     }
 
     public function delete($id)
     {
-		return $this->model->destroy($id);
+        return $this->model->destroy($id);
     }
 
     public function find($id)
     {
-        if (null == $arbolaprobacion = $this->model->with(['arbolaprobacion_niveles' => function ($query) 
-                                    {
-                                        $query->orderBy('centrocosto_id', 'asc');
-                                        $query->orderBy('nivel', 'asc');  
-                                    }
-                                    ], 'oc_triggers')->findOrFail($id)) {
-            throw new ModelNotFoundException("Registro no encontrado");
+        if (null == $arbolaprobacion = $this->model->with(['arbolaprobacion_niveles' => function ($query) {
+            $query->orderBy('centrocosto_id', 'asc');
+            $query->orderBy('nivel', 'asc');
+        },
+        ], 'oc_triggers', 'cuenta_excepciones.cuentacontables', 'cuenta_excepciones.centrocostos', 'cuenta_excepciones.empresas', 're_triggers.cuentacontables', 're_triggers.monedas', 're_triggers.centrocostos')->findOrFail($id)) {
+            throw new ModelNotFoundException('Registro no encontrado');
         }
 
         return $arbolaprobacion;
@@ -120,27 +115,25 @@ class ArbolaprobacionRepository implements ArbolaprobacionRepositoryInterface
     public function findOrFail($id)
     {
         if (null == $arbolaprobacion = $this->model
-                                    ->with(['arbolaprobacion_niveles' => function ($query) 
-                                    {
-                                        $query->orderBy('centrocosto_id', 'asc');
-                                        $query->orderBy('nivel', 'asc');  
-                                    }
-                                    ], 'oc_triggers')->findOrFail($id))
-			{
-            throw new ModelNotFoundException("Registro no encontrado");
+            ->with(['arbolaprobacion_niveles' => function ($query) {
+                $query->orderBy('centrocosto_id', 'asc');
+                $query->orderBy('nivel', 'asc');
+            },
+            ], 'oc_triggers', 'cuenta_excepciones.cuentacontables', 'cuenta_excepciones.centrocostos', 'cuenta_excepciones.empresas', 're_triggers.cuentacontables', 're_triggers.monedas', 're_triggers.centrocostos')->findOrFail($id)) {
+            throw new ModelNotFoundException('Registro no encontrado');
         }
+
         return $arbolaprobacion;
     }
 
     public function findPorTipoArbol($tipoarbol)
     {
         $arbolaprobacion = $this->model->where('tipoarbol', $tipoarbol)
-                                    ->where('estado', 'ACTIVO')
-                                    ->with(['arbolaprobacion_niveles' => function ($query) 
-                                    {
-                                        $query->orderBy('nivel', 'asc'); // O el nombre de la columna que necesites ordenar
-                                    }
-                                    ])->get();
+            ->where('estado', 'ACTIVO')
+            ->with(['arbolaprobacion_niveles' => function ($query) {
+                $query->orderBy('nivel', 'asc'); // O el nombre de la columna que necesites ordenar
+            },
+            ])->get();
 
         return $arbolaprobacion;
     }
@@ -156,5 +149,4 @@ class ArbolaprobacionRepository implements ArbolaprobacionRepositoryInterface
             ->orderBy('id')
             ->get();
     }
-
-}    
+}

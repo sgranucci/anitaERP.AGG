@@ -5,13 +5,15 @@ namespace App\Services\Contable;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Contable\MayorConcepto\MayorConceptoMonedaConverter;
 use App\Support\Contable\MayorConceptoListadoFiltros;
-use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaComprobanteEnricher;
+use App\Support\Contable\MayorFuenteConsultaSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaCentrocostoFiltroSupport;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaComprobanteEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaEmisorEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaExcelPlanoEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaExcelPlanoSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaOrdencompraEnricher;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaProcesador;
+use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaRecepcionAnitaEnricher;
 use App\Support\Contable\MayorPlanoCuentaListadoFiltros;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
@@ -29,9 +31,9 @@ class MayorPlanoCuentaReporteService
         private readonly MayorPlanoCuentaOrdencompraEnricher $ordencompraEnricher,
         private readonly MayorPlanoCuentaEmisorEnricher $emisorEnricher,
         private readonly MayorPlanoCuentaComprobanteEnricher $comprobanteEnricher,
+        private readonly MayorPlanoCuentaRecepcionAnitaEnricher $recepcionAnitaEnricher,
         private readonly MayorPlanoCuentaExcelPlanoEnricher $excelPlanoEnricher,
-    ) {
-    }
+    ) {}
 
     /**
      * @param  array<string, mixed>  $filtros
@@ -63,6 +65,9 @@ class MayorPlanoCuentaReporteService
             $centrocostoFiltro,
             (bool) ($filtros['agrupar_por_cc'] ?? false),
             (bool) ($filtros['solo_movimientos_ventas'] ?? false),
+            MayorFuenteConsultaSupport::normalizarModo(
+                $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_AUTO
+            ),
         ];
 
         if ($consolidar || count($empresaIds) <= 1) {
@@ -161,6 +166,7 @@ class MayorPlanoCuentaReporteService
                         'cantidad_lineas' => (int) ($grupoCc['cantidad_lineas'] ?? 0),
                     ];
                 }
+
                 continue;
             }
 
@@ -407,6 +413,8 @@ class MayorPlanoCuentaReporteService
 
         $filas = $this->enriquecerEnlaces($filas, $empresaIds);
         $filas = $this->comprobanteEnricher->enriquecer($filas);
+        // COM Anita → recepción ERP (antes de mapear nro_oc a OC homónima).
+        $filas = $this->recepcionAnitaEnricher->enriquecer($filas);
         $filas = $this->ordencompraEnricher->enriquecer($filas);
         $filas = $this->completarNroOcDesdeIds($filas);
         $filas = $this->emisorEnricher->enriquecer($filas);
@@ -764,6 +772,14 @@ class MayorPlanoCuentaReporteService
     public function formatearOrigenMovimientosTexto(array $filtros): string
     {
         $partes = [];
+        $fuente = MayorFuenteConsultaSupport::normalizarModo(
+            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_AUTO
+        );
+        if ($fuente === MayorFuenteConsultaSupport::MODO_ANITA) {
+            $partes[] = 'Fuente Anita (forzado)';
+        } elseif ($fuente === MayorFuenteConsultaSupport::MODO_ERP) {
+            $partes[] = 'Fuente ERP nativo';
+        }
         if (! empty($filtros['solo_movimientos_ventas'])) {
             $partes[] = 'Solo movimientos de ventas (totales)';
         }

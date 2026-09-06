@@ -7,7 +7,23 @@ namespace App\Support\Wigos;
  */
 final class WigosConfigResolver
 {
+    /**
+     * Alias SQL a usar en lecturas: el publicado por el monitor si hay estado; si no, config.
+     */
     public static function currWigos(int $empresaId = 0): string
+    {
+        $activo = WigosActiveServerStore::aliasActivo($empresaId);
+        if ($activo !== null) {
+            return $activo;
+        }
+
+        return self::currWigosConfigurado($empresaId);
+    }
+
+    /**
+     * Preferido de .env / WIGOS_POR_EMPRESA (sin override del monitor).
+     */
+    public static function currWigosConfigurado(int $empresaId = 0): string
     {
         $curr = strtoupper(trim((string) (self::perEmpresa($empresaId)['curr_wigos'] ?? config('wigos.curr_wigos', 'A'))));
 

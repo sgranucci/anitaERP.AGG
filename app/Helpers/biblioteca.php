@@ -2,10 +2,10 @@
 
 use App\Models\Admin\Permiso;
 use App\Support\Cache\PermisoCacheSupport;
-use Illuminate\Support\Facades\Request;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Request;
 
-if (!function_exists('aplanarUrlsMenu')) {
+if (! function_exists('aplanarUrlsMenu')) {
     /**
      * @param  array<int, array<string, mixed>>  $items
      * @return list<string>
@@ -29,7 +29,7 @@ if (!function_exists('aplanarUrlsMenu')) {
     }
 }
 
-if (!function_exists('urlsMenuFrontResueltas')) {
+if (! function_exists('urlsMenuFrontResueltas')) {
     /**
      * URLs de menú visibles para el rol actual (misma fuente que el aside).
      *
@@ -62,7 +62,7 @@ if (!function_exists('urlsMenuFrontResueltas')) {
     }
 }
 
-if (!function_exists('menuUrlCoincideConRuta')) {
+if (! function_exists('menuUrlCoincideConRuta')) {
     function menuUrlCoincideConRuta(string $menuUrl, string $path): bool
     {
         $menuUrl = trim($menuUrl, '/');
@@ -74,7 +74,7 @@ if (!function_exists('menuUrlCoincideConRuta')) {
     }
 }
 
-if (!function_exists('menuUrlMasEspecificaParaRuta')) {
+if (! function_exists('menuUrlMasEspecificaParaRuta')) {
     function menuUrlMasEspecificaParaRuta(string $path): ?string
     {
         $path = trim($path, '/');
@@ -97,7 +97,7 @@ if (!function_exists('menuUrlMasEspecificaParaRuta')) {
     }
 }
 
-if (!function_exists('getMenuActivo')) {
+if (! function_exists('getMenuActivo')) {
     function getMenuActivo($ruta)
     {
         $ruta = trim((string) $ruta, '/');
@@ -120,7 +120,7 @@ if (!function_exists('getMenuActivo')) {
     }
 }
 
-if (!function_exists('menuItemEsActivoOAncestro')) {
+if (! function_exists('menuItemEsActivoOAncestro')) {
     /**
      * Indica si el ítem o algún descendiente coincide con la ruta actual (para expandir el árbol en servidor).
      *
@@ -143,7 +143,7 @@ if (!function_exists('menuItemEsActivoOAncestro')) {
     }
 }
 
-if (!function_exists('clasesIconoMenu')) {
+if (! function_exists('clasesIconoMenu')) {
     /**
      * Clases CSS Font Awesome para un ícono de menú (mismo criterio que admin/menu y sidebar).
      */
@@ -166,18 +166,25 @@ if (!function_exists('clasesIconoMenu')) {
     }
 }
 
-if (!function_exists('canUser')) {
+if (! function_exists('canUser')) {
     function can($permiso, $redirect = true)
     {
         $url = Request::url();
-        $urlPermitida = "anitaERP/public/ordenventa/visualizar";
+        $urlPermitida = 'anitaERP/public/ordenventa/visualizar';
         $pos = strpos($url, $urlPermitida);
-        if ($pos !== false)
-            return(true);
+        if ($pos !== false) {
+            return true;
+        }
         if (! auth()->check()) {
             if ($redirect) {
                 if (! request()->ajax()) {
-                    return redirect()->guest(route('login'))->send();
+                    // No usar redirect()->send(): saltea cookies/sesión y pierde url.intended
+                    // (p. ej. mail → bandeja → login → inicio en vez de volver a la bandeja).
+                    throw new \Illuminate\Auth\AuthenticationException(
+                        'Unauthenticated.',
+                        [],
+                        route('login')
+                    );
                 }
                 abort(401, 'Debe iniciar sesión');
             }
@@ -194,15 +201,17 @@ if (!function_exists('canUser')) {
                 })->get()->pluck('slug')->toArray();
             });
 
-            if (!in_array($permiso, $permisos)) {
+            if (! in_array($permiso, $permisos)) {
                 if ($redirect) {
-                    if (!request()->ajax())
+                    if (! request()->ajax()) {
                         return redirect()->route('inicio')->with('mensaje', 'No tienes permisos para entrar en este modulo')->send();
+                    }
                     abort(403, 'No tiene permiso');
                 } else {
                     return false;
                 }
             }
+
             return true;
         }
     }
@@ -223,7 +232,7 @@ function traePermisosUsuario()
 /**
  * Perfil UIF para vistas cliente_uif: supervisor (completo), cajero (restringido) u operador.
  */
-if (!function_exists('perfilClienteUif')) {
+if (! function_exists('perfilClienteUif')) {
     function perfilClienteUif(): string
     {
         if (session()->get('rol_nombre') == 'administrador') {
@@ -241,7 +250,7 @@ if (!function_exists('perfilClienteUif')) {
     }
 }
 
-if (!function_exists('esSupervisorUif')) {
+if (! function_exists('esSupervisorUif')) {
     function esSupervisorUif(): bool
     {
         return perfilClienteUif() === 'supervisor';
@@ -249,7 +258,7 @@ if (!function_exists('esSupervisorUif')) {
 }
 
 /** Cajero UIF sin permiso de supervisor (ni administrador). */
-if (!function_exists('esCajeroUifSinSupervisor')) {
+if (! function_exists('esCajeroUifSinSupervisor')) {
     function esCajeroUifSinSupervisor(): bool
     {
         return perfilClienteUif() === 'cajero';
@@ -257,7 +266,7 @@ if (!function_exists('esCajeroUifSinSupervisor')) {
 }
 
 /** Solo listado/visualización: sin slug cajero-uif ni supervisor-uif (perfil operador). */
-if (!function_exists('esSoloVisualizacionClienteUif')) {
+if (! function_exists('esSoloVisualizacionClienteUif')) {
     function esSoloVisualizacionClienteUif(): bool
     {
         return perfilClienteUif() === 'operador';
@@ -268,32 +277,36 @@ if (!function_exists('esSoloVisualizacionClienteUif')) {
  * Funcion para devolver la fecha inicial y final de una
  * semana dada.
  *
- * @param integer $week
- * @param integer $year
- *
+ * @param  int  $week
+ * @param  int  $year
  * @return array array con clave->valor
  */
 function getFirstDayWeek($week, $year)
 {
-    $dt = new DateTime();
+    $dt = new DateTime;
     $return['start'] = $dt->setISODate($year, $week)->format('Y-m-d');
     $return['end'] = $dt->modify('+6 days')->format('Y-m-d');
+
     return $return;
 }
 
-// Calcula consumo 
+// Calcula consumo
 
 function calculaConsumo(&$consumo, $nombretalle, $cantidad, $consumo1, $consumo2, $consumo3, $consumo4)
 {
     $consumo = 0;
-	if ($nombretalle >= config('consprod.DESDE_INTERVALO1') && $nombretalle <= config('consprod.HASTA_INTERVALO1'))
-    	$consumo = $cantidad * $consumo1;
-	if ($nombretalle >= config('consprod.DESDE_INTERVALO2') && $nombretalle <= config('consprod.HASTA_INTERVALO2'))
-		$consumo = $cantidad * $consumo2;
-	if ($nombretalle >= config('consprod.DESDE_INTERVALO3') && $nombretalle <= config('consprod.HASTA_INTERVALO3'))
-		$consumo = $cantidad * $consumo3;
-	if ($nombretalle >= config('consprod.DESDE_INTERVALO4') && $nombretalle <= config('consprod.HASTA_INTERVALO4'))
-		$consumo = $cantidad * $consumo4;
+    if ($nombretalle >= config('consprod.DESDE_INTERVALO1') && $nombretalle <= config('consprod.HASTA_INTERVALO1')) {
+        $consumo = $cantidad * $consumo1;
+    }
+    if ($nombretalle >= config('consprod.DESDE_INTERVALO2') && $nombretalle <= config('consprod.HASTA_INTERVALO2')) {
+        $consumo = $cantidad * $consumo2;
+    }
+    if ($nombretalle >= config('consprod.DESDE_INTERVALO3') && $nombretalle <= config('consprod.HASTA_INTERVALO3')) {
+        $consumo = $cantidad * $consumo3;
+    }
+    if ($nombretalle >= config('consprod.DESDE_INTERVALO4') && $nombretalle <= config('consprod.HASTA_INTERVALO4')) {
+        $consumo = $cantidad * $consumo4;
+    }
 }
 
 // Genera rango de articulos para reportes
@@ -302,38 +315,33 @@ function generaRangoArticulo($desdearticulo_id, $hastaarticulo_id, $articuloQuer
 {
     // Prepara titulos de rangos
     $desdeArticuloRango = $hastaArticuloRango = '';
-    if ($desdearticulo_id == 0)
+    if ($desdearticulo_id == 0) {
         $desdeArticulo = 'Primero';
-    else
-    {
+    } else {
         $articulo = $articuloQuery->traeArticuloPorId($desdearticulo_id);
-        if ($articulo)
-        {
+        if ($articulo) {
             $desdeArticulo = $articulo->descripcion;
             $desdeArticuloRango = $articulo->descripcion;
-        }
-        else	
-        {
+        } else {
             $desdeArticulo = '--';
             $desdeArticuloRango = '';
         }
     }
-    
-    if ($hastaarticulo_id == 99999999)
+
+    if ($hastaarticulo_id == 99999999) {
         $hastaArticulo = 'Ultimo';
-    else
-    {
+    } else {
         $articulo = $articuloQuery->traeArticuloPorId($hastaarticulo_id);
-        if ($articulo)
-        {
+        if ($articulo) {
             $hastaArticulo = $articulo->descripcion;
             $hastaArticuloRango = $articulo->descripcion;
-        }
-        else	
+        } else {
             $hastaArticulo = '--';
+        }
     }
+
     return ['desdearticulotitulo' => $desdeArticulo, 'hastaarticulotitulo' => $hastaArticulo,
-            'desdearticulorango' => $desdeArticuloRango, 'hastaarticulorango' => $hastaArticuloRango];
+        'desdearticulorango' => $desdeArticuloRango, 'hastaarticulorango' => $hastaArticuloRango];
 }
 
 // Genera keys para guardar datos en cache por usuario
@@ -359,31 +367,33 @@ function facturaUsaLayoutItemsPedido(): bool
 }
 
 // Redondea numeros
-function redondear($n, $dec, $prec) 
+function redondear($n, $dec, $prec)
 {
-    $red = Round($n, $dec);
+    $red = round($n, $dec);
     $ent = floor($red); // Parte entera
     $dec = $red - $ent; // Parte decimal
     $r = ceil($dec / $prec) * $prec; // Decimal redondeado
-    
+
     return $ent + ($r / 100);
 }
 
 // Extrae valores del checkbox para cuando se usan en un array y se pasan por formulario a php
 
-function getAllChkboxValues($chk_name) {
-    $found = array(); //create a new array 
-    foreach($chk_name as $key => $val) {
-        //echo "KEY::".$key."VALue::".$val."<br>";
-        if($val == '1') { //replace '1' with the value you want to search
+function getAllChkboxValues($chk_name)
+{
+    $found = []; // create a new array
+    foreach ($chk_name as $key => $val) {
+        // echo "KEY::".$key."VALue::".$val."<br>";
+        if ($val == '1') { // replace '1' with the value you want to search
             $found[] = $key;
         }
     }
-    foreach($found as $kev_f => $val_f) {
-        unset($chk_name[$val_f-1]); //unset the index of un-necessary values in array
-    }   
-    $final_arr = array(); //create the final array
-    return $final_arr = array_values($chk_name); //sort the resulting array again
+    foreach ($found as $kev_f => $val_f) {
+        unset($chk_name[$val_f - 1]); // unset the index of un-necessary values in array
+    }
+    $final_arr = []; // create the final array
+
+    return $final_arr = array_values($chk_name); // sort the resulting array again
 }
 
 function calculaCoeficienteMoneda($aMoneda, $deMoneda, $cotizacion)
@@ -424,40 +434,49 @@ function chequeaPermisoTicket()
 
     $rolId = session()->get('rol_id');
     $permisos = PermisoCacheSupport::rememberSlugsPorRol($rolId, function () use ($rolId) {
-            return Permiso::whereHas('roles', function ($query) use ($rolId) {
-                $query->where('rol.id', $rolId);
-            })->get()->pluck('slug')->toArray();
-        });
+        return Permiso::whereHas('roles', function ($query) use ($rolId) {
+            $query->where('rol.id', $rolId);
+        })->get()->pluck('slug')->toArray();
+    });
     $permiso = '';
-    if (in_array('usuario-ticket', $permisos)) 
-        $permiso = 'usuario';        
+    if (in_array('usuario-ticket', $permisos)) {
+        $permiso = 'usuario';
+    }
 
-    if (in_array('tecnico-ticket', $permisos))   
+    if (in_array('tecnico-ticket', $permisos)) {
         $permiso = 'tecnico';
+    }
 
-    if (in_array('encargado-ticket', $permisos))   
+    if (in_array('encargado-ticket', $permisos)) {
         $permiso = 'encargado';
+    }
 
-    if (in_array('admin-ticket-sector', $permisos))
+    if (in_array('admin-ticket-sector', $permisos)) {
         $permiso = 'admin_sector';
+    }
 
-    if (in_array('supervisor-ticket', $permisos))   
+    if (in_array('supervisor-ticket', $permisos)) {
         $permiso = 'supervisor';
+    }
 
     return $permiso;
 }
 
-function validarHora($hora, $formato = 'H:i') {
+function validarHora($hora, $formato = 'H:i')
+{
     $d = DateTime::createFromFormat($formato, $hora);
+
     return $d && $d->format($formato) === $hora;
 }
 
-function validarFormatoHora(string $hora): bool {
+function validarFormatoHora(string $hora): bool
+{
     // La expresión regular busca un patrón H:M:S
     // HH: 00 a 23
     // MM: 00 a 59
     // SS: 00 a 59
     $patron = '/^([01]\d|2[0-3]):([0-5]\d):([0-5]\d)$/';
+
     return preg_match($patron, $hora) === 1;
 }
 
@@ -503,25 +522,19 @@ function conviertePeriodoEnRangoFecha($periodo, $flHora = null)
     $anio = $partes['anio'];
     $dias = cal_days_in_month(CAL_GREGORIAN, $mes, $anio);
     $fecha = sprintf('%04d-%02d-01', $anio, $mes);
-    if ($flHora)
-    {
+    if ($flHora) {
         $hora_string = '00:00:00';
         $desdeFecha = Carbon::createFromFormat('Y-m-d H:i:s', $fecha.' '.$hora_string); // Pasa a formato fecha
-    }
-    else
-    {
+    } else {
         $fechaFormateada = Carbon::createFromFormat('Y-m-d', $fecha); // Pasa a formato fecha
         $desdeFecha = $fechaFormateada->format('Y-m-d');
     }
 
     $fecha = sprintf('%04d-%02d-%02d', $anio, $mes, $dias);
-    if ($flHora)
-    {
+    if ($flHora) {
         $hora_string = '23:59:59';
         $hastaFecha = Carbon::createFromFormat('Y-m-d H:i:s', $fecha.' '.$hora_string); // Pasa a formato fecha
-    }
-    else
-    {
+    } else {
         $fechaFormateada = Carbon::createFromFormat('Y-m-d', $fecha); // Pasa a formato fecha
         $hastaFecha = $fechaFormateada->format('Y-m-d');
     }
@@ -529,26 +542,29 @@ function conviertePeriodoEnRangoFecha($periodo, $flHora = null)
     return ['desdefecha' => $desdeFecha, 'hastafecha' => $hastaFecha];
 }
 
-function specialChars($str, $chars = null) {
+function specialChars($str, $chars = null)
+{
 
-    if ($chars)
+    if ($chars) {
         $specialChars = $chars;
-    else
+    } else {
         $specialChars = '!@#$%^&*()-_=+[{]};:\'",<.>/?\\|';
-    
+    }
+
     return strpbrk($str, $specialChars) !== false;
 }
 
-function convertirFecha($fechaString, $formatoEntrada) {
+function convertirFecha($fechaString, $formatoEntrada)
+{
     // 1. Validar el formato
     $d = DateTime::createFromFormat($formatoEntrada, $fechaString);
-    
+
     // 2. Verificar si es una fecha válida y si el formato coincide
     if ($d && $d->format($formatoEntrada) === $fechaString) {
         // 3. Convertir al formato AAAA-MM-DD
         return $d->format('Y-m-d');
     }
-    
+
     return false; // Formato incorrecto
 }
 
@@ -619,5 +635,3 @@ if (! function_exists('puedeVerPrecargaFacturaPdf')) {
             || can('crear-comprobante-proveedor', false);
     }
 }
-
-

@@ -4,26 +4,31 @@ namespace App\Services\Stock;
 
 use App\ApiAnita;
 use App\Models\Compras\Ordencompra;
+use App\Models\Configuracion\Moneda;
+use App\Models\Contable\Asiento;
+use App\Models\Contable\Asiento_Movimiento;
 use App\Models\Contable\Tipoasiento;
 use App\Models\Stock\Articulo;
-use App\Models\Contable\Asiento;
 use App\Models\Stock\Recepcion_Proveedor;
-use App\Repositories\Contable\AsientoRepositoryInterface;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Repositories\Contable\Asiento_MovimientoRepositoryInterface;
+use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Repositories\Contable\CentrocostoRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Contable\TipoasientoRepositoryInterface;
-use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
-use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
-use App\Support\Stock\RecepcionProveedorAsientoDescripcionSupport;
-use App\Support\Stock\RecepcionProveedorCtamovCuadreSupport;
-use App\Support\Stock\RecepcionProveedorImpuestoInternoSupport;
-use App\Support\Stock\RecepcionProveedorConversionSupport;
 use App\Support\Contable\Anita\AnitaSubdiarioMayorSupport;
 use App\Support\Contable\CuentaAutomaticaClaves;
 use App\Support\Contable\CuentaAutomaticaResolver;
+use App\Support\Stock\RecepcionProveedorAnitaClaveSupport;
+use App\Support\Stock\RecepcionProveedorAsientoAuditoriaSupport;
+use App\Support\Stock\RecepcionProveedorAsientoDescripcionSupport;
+use App\Support\Stock\RecepcionProveedorConversionSupport;
+use App\Support\Stock\RecepcionProveedorCtamovAuditoriaAnitaSupport;
+use App\Support\Stock\RecepcionProveedorCtamovCuadreSupport;
 use App\Support\Stock\RecepcionProveedorCuadreContableSupport;
+use App\Support\Stock\RecepcionProveedorImpuestoInternoSupport;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class RecepcionProveedorAsientoService
@@ -35,8 +40,7 @@ class RecepcionProveedorAsientoService
         private readonly CentrocostoRepositoryInterface $centrocostoRepository,
         private readonly TipoasientoRepositoryInterface $tipoasientoRepository,
         private readonly EmpresaRepositoryInterface $empresaRepository,
-    ) {
-    }
+    ) {}
 
     public function debeGenerarAsiento(int $empresaId): bool
     {
@@ -136,17 +140,17 @@ class RecepcionProveedorAsientoService
             ->orderBy('id')
             ->get(['id', 'numeroasiento']);
 
-		// La FK recepcion_proveedor.asiento_id es RESTRICT. Desvincular antes:
-		// AsientoObserver borra primero los movimientos y, si la cabecera sigue
-		// referenciada, MySQL rechaza el delete y deja un asiento vacío (COM 166308).
-		$asientoIds = $asientos->pluck('id')->map(static fn ($id) => (int) $id)->all();
-		if ($asientoIds !== []) {
-			Recepcion_Proveedor::query()
-				->whereKey((int) $recepcion->id)
-				->whereIn('asiento_id', $asientoIds)
-				->update(['asiento_id' => null]);
-			$recepcion->asiento_id = null;
-		}
+        // La FK recepcion_proveedor.asiento_id es RESTRICT. Desvincular antes:
+        // AsientoObserver borra primero los movimientos y, si la cabecera sigue
+        // referenciada, MySQL rechaza el delete y deja un asiento vacío (COM 166308).
+        $asientoIds = $asientos->pluck('id')->map(static fn ($id) => (int) $id)->all();
+        if ($asientoIds !== []) {
+            Recepcion_Proveedor::query()
+                ->whereKey((int) $recepcion->id)
+                ->whereIn('asiento_id', $asientoIds)
+                ->update(['asiento_id' => null]);
+            $recepcion->asiento_id = null;
+        }
 
         foreach ($asientos as $asiento) {
             try {
@@ -296,8 +300,7 @@ class RecepcionProveedorAsientoService
         Recepcion_Proveedor $recepcion,
         ?array $preview = null,
         bool $omitirCierreContable = false,
-    ): void
-    {
+    ): void {
         if (! $this->debeGenerarAsiento((int) $recepcion->empresa_id)) {
             return;
         }
@@ -355,6 +358,143 @@ class RecepcionProveedorAsientoService
         $this->eliminarCtamovAnitaPorComRecepcion($recepcion);
         $this->asientoRepository->sincronizarCtamovAnita($dataAnita);
         $this->assertCtamovCuadraTrasSync($recepcion, $preview);
+    }
+
+    /**
+     * Si Anita editó el asiento después del alta, no se reescribe ctamov:
+     * se copian cuentas/CC/DH al ERP cuando los montos coinciden.
+     *
+     * @return 'anita_desde_erp'|'erp_desde_anita'
+     */
+    public function reconciliarCtamovConErp(
+        Recepcion_Proveedor $recepcion,
+        ?array $preview = null,
+        bool $omitirCierreContable = false,
+    ): string {
+        $filas = RecepcionProveedorAsientoAuditoriaSupport::lineasCtamovPorCom($recepcion);
+        if ($filas === [] || ! RecepcionProveedorCtamovAuditoriaAnitaSupport::fueModificadoTrasAlta($filas)) {
+            $this->sincronizarCtamovAnitaRecepcion($recepcion, $preview, $omitirCierreContable);
+
+            return 'anita_desde_erp';
+        }
+
+        $recepcion->unsetRelation('asientos');
+        $recepcion->load(['asientos.asiento_movimientos']);
+        $movimientos = $recepcion->asientos?->asiento_movimientos ?? collect();
+        $totalesErp = RecepcionProveedorCuadreContableSupport::totalesDesdeMovimientos($movimientos);
+        $totalesAnita = RecepcionProveedorAsientoAuditoriaSupport::totalesDesdeCtamov($filas);
+        $tol = max(0.0, (float) config(
+            'recepcion_proveedor.auditoria_asientos_com_diaria.tolerancia',
+            RecepcionProveedorCuadreContableSupport::tolerancia()
+        ));
+
+        $resumen = RecepcionProveedorCtamovAuditoriaAnitaSupport::resumenModificacion($filas);
+        if (! RecepcionProveedorCtamovAuditoriaAnitaSupport::montosCoinciden(
+            (float) ($totalesErp['debe'] ?? 0),
+            (float) ($totalesErp['haber'] ?? 0),
+            (float) ($totalesAnita['debe'] ?? 0),
+            (float) ($totalesAnita['haber'] ?? 0),
+            $tol,
+        )) {
+            throw new \RuntimeException(
+                'ctamov COM '.(int) $recepcion->numerorecepcion
+                .' fue modificado en Anita ('.$resumen.') con importes distintos al ERP.'
+                .' No se reescribe Anita; revisar a mano.'
+            );
+        }
+
+        $this->aplicarCtamovAnitaAlAsientoErp($recepcion, $filas);
+        Log::info('recepcion_proveedor.ctamov.erp_desde_anita', [
+            'recepcion_id' => (int) $recepcion->id,
+            'com' => (int) $recepcion->numerorecepcion,
+            'modificacion_anita' => $resumen,
+        ]);
+
+        return 'erp_desde_anita';
+    }
+
+    /**
+     * Reemplaza movimientos del asiento ERP con las líneas actuales de ctamov (sin tocar Anita).
+     *
+     * @param  list<array<string, mixed>>  $filasCtamov
+     */
+    public function aplicarCtamovAnitaAlAsientoErp(Recepcion_Proveedor $recepcion, array $filasCtamov): void
+    {
+        $asientoId = (int) ($recepcion->asiento_id ?? 0);
+        if ($asientoId <= 0) {
+            throw new \RuntimeException('La recepción no tiene asiento contable asociado.');
+        }
+
+        $recepcion->loadMissing(['empresas', 'asientos.asiento_movimientos']);
+        $empresaId = (int) $recepcion->empresa_id;
+        $observacionDefault = (string) ($recepcion->asientos?->asiento_movimientos->first()?->observacion ?? '');
+
+        $plan = [];
+        foreach ($filasCtamov as $fila) {
+            $importe = round((float) ($fila['ctav_importe'] ?? 0), 2);
+            if ($importe <= 0) {
+                continue;
+            }
+
+            $codigoCuenta = trim((string) ($fila['ctav_cuenta'] ?? ''));
+            $cuenta = $this->cuentacontableRepository->findPorCodigo($empresaId, $codigoCuenta);
+            if ($cuenta === null) {
+                throw new \RuntimeException(
+                    'No se encontró en el ERP la cuenta '.$codigoCuenta
+                    .' (empresa '.$empresaId.') para copiar ctamov COM '.(int) $recepcion->numerorecepcion.'.'
+                );
+            }
+
+            $dh = strtoupper(trim((string) ($fila['ctav_d_h'] ?? 'D')));
+            $monto = $dh === 'H' ? -abs($importe) : abs($importe);
+
+            $codigoCc = (int) ($fila['ctav_ccosto'] ?? 0);
+            $centrocostoId = null;
+            if ($codigoCc > 0) {
+                $cc = $this->centrocostoRepository->findPorCodigo($codigoCc);
+                $centrocostoId = $cc !== null ? (int) $cc->id : null;
+            }
+
+            $codigoMon = trim((string) ($fila['ctav_cod_mon'] ?? '1'));
+            $moneda = Moneda::query()->where('codigo', $codigoMon)->first()
+                ?? Moneda::query()->orderBy('id')->first();
+
+            $plan[] = [
+                'cuentacontable_id' => (int) $cuenta->id,
+                'centrocosto_id' => $centrocostoId,
+                'monto' => $monto,
+                'moneda_id' => (int) ($moneda->id ?? 1),
+                'cotizacion' => round((float) ($fila['ctav_cotizacion'] ?? 1), 4),
+                'observacion' => $observacionDefault,
+            ];
+        }
+
+        if ($plan === []) {
+            throw new \RuntimeException(
+                'ctamov COM '.(int) $recepcion->numerorecepcion.' no tiene líneas con importe para copiar al ERP.'
+            );
+        }
+
+        DB::transaction(function () use ($asientoId, $plan): void {
+            Asiento_Movimiento::query()
+                ->where('asiento_id', $asientoId)
+                ->get()
+                ->each(fn (Asiento_Movimiento $movimiento) => $movimiento->delete());
+
+            foreach ($plan as $mov) {
+                Asiento_Movimiento::query()->create([
+                    'asiento_id' => $asientoId,
+                    'cuentacontable_id' => $mov['cuentacontable_id'],
+                    'centrocosto_id' => $mov['centrocosto_id'],
+                    'monto' => $mov['monto'],
+                    'moneda_id' => $mov['moneda_id'],
+                    'cotizacion' => $mov['cotizacion'],
+                    'observacion' => $mov['observacion'],
+                ]);
+            }
+        });
+
+        $recepcion->unsetRelation('asientos');
     }
 
     /**

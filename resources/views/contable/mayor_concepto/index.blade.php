@@ -629,6 +629,12 @@
                         </div>
                     </div>
 
+                    @include('contable.partials.fuente_mayor_selector', [
+                        'filtros' => $filtros ?? [],
+                        'id_prefix' => 'mco',
+                        'config_key' => 'contable.mayor_concepto.fuente_erp_hasta',
+                    ])
+
                     <input type="hidden" name="agrupacion_resumen" id="agrupacion_resumen"
                         value="{{ $filtros['agrupacion_resumen'] ?? 'concepto_cuenta' }}">
                     <input type="hidden" name="excel_formato_numero" id="excel_formato_numero"
@@ -650,8 +656,17 @@
                 @php $tot = $totales ?? []; @endphp
                 <div class="card-body p-0 border-top">
                     @if (!empty($errores_bridge))
-                        <div class="alert alert-warning mx-3 mt-3 mb-0">
-                            <strong>Advertencias bridge Anita:</strong>
+                        <div class="alert {{ ($lectura_incompleta ?? false) ? 'alert-danger' : 'alert-warning' }} mx-3 mt-3 mb-0">
+                            @if ($lectura_incompleta ?? false)
+                                <strong><i class="fas fa-exclamation-triangle"></i> Reporte incompleto: no confíe en estos importes.</strong>
+                                <p class="mb-2 small">
+                                    Una o más lecturas a Anita fallaron tras agotar los reintentos. Las filas que no se
+                                    pudieron leer se procesaron como si no tuvieran datos, así que pueden aparecer
+                                    asientos descuadrados o importes de menos. Vuelva a generar el reporte.
+                                </p>
+                            @else
+                                <strong>Advertencias bridge Anita:</strong>
+                            @endif
                             <ul class="mb-0">
                                 @foreach ($errores_bridge as $err)
                                     <li>{{ $err }}</li>
@@ -758,6 +773,10 @@
                             @endforeach
                         </div>
                     @endif
+
+                    @include('contable.partials.fuente_mayor_badge', [
+                        'fuente_etiqueta' => $fuente_etiqueta ?? '',
+                    ])
 
                     @include('contable.mayor_concepto.partials.resumen_totales', [
                         'resumen' => $resumen ?? [],

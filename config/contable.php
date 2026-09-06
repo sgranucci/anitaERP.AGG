@@ -47,6 +47,13 @@ return [
         'limite_caja_banco' => (int) preg_replace('/\D/', '', (string) env('MAYOR_CONCEPTO_LIMITE_CAJA_BANCO', '112010008')),
         // Tope mayor analítico de control / conciliación (export l_mayor; ej. 112010-008).
         'limite_cuenta_analitico_control' => (int) preg_replace('/\D/', '', (string) env('MAYOR_CONCEPTO_LIMITE_CUENTA_ANALITICO_CONTROL', '112010008')),
+        // fuente_erp_hasta: Y-m-d o Ymd — hasta esa fecha inclusive lee del ERP (MayorConceptoErpReader);
+        // después sigue el bridge Anita. Vacío cae al corte del mayor plano / default 2026-08-31 vía helper.
+        // No moverlo sin comparar contra Anita el período que se quiere habilitar.
+        'fuente_erp_hasta' => env(
+            'MAYOR_CONCEPTO_FUENTE_ERP_HASTA',
+            env('MAYOR_PLANO_CUENTA_FUENTE_ERP_HASTA', '2026-08-31')
+        ),
     ],
 
     /*
@@ -57,7 +64,7 @@ return [
     'mayor_plano_cuenta' => [
         'memory_limit' => env('MAYOR_PLANO_CUENTA_MEMORY_LIMIT', '4096M'),
         'max_execution_time' => (int) env('MAYOR_PLANO_CUENTA_MAX_EXECUTION_TIME', 900),
-        'fuente_erp_hasta' => env('MAYOR_PLANO_CUENTA_FUENTE_ERP_HASTA', '2025-12-31'),
+        'fuente_erp_hasta' => env('MAYOR_PLANO_CUENTA_FUENTE_ERP_HASTA', '2026-08-31'),
         // Período > async_dias_minimos Y cuentas amplias → cola reports + mail.
         // Un mes, o período largo con pocas cuentas / rango chico → pantalla.
         'async_habilitado' => filter_var(env('MAYOR_PLANO_CUENTA_ASYNC_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),

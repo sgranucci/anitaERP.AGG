@@ -24,7 +24,7 @@ Configuración general del sistema
                 <div class="card-body">
                     <div class="alert alert-info py-2">
                         Estos valores mandan sobre los defaults de <code>config/</code> y <code>.env</code>.
-                        Se usan en facturación (FCE MiPyME), POS y Libro IVA Digital.
+                        Incluyen facturación (FCE MiPyME), POS, Libro IVA Digital y el circuito de aprobación de artículos.
                     </div>
 
                     @foreach ($grupos as $nombreGrupo => $parametros)
@@ -56,6 +56,22 @@ Configuración general del sistema
                                             value="{{ $cuenta['cbu'] ?? '' }}"
                                             placeholder="Se completa al elegir la cuenta">
                                         <small class="form-text text-muted">ARCA FCE dato adicional 21. Si la cuenta no tiene CBU, se usa tesmae 00000032.</small>
+                                    </div>
+                                </div>
+                            @elseif ($parametro['tipo'] === 'boolean')
+                                @php
+                                    $idCampo = 'param_'.$parametro['clave'];
+                                    $valorBool = old('parametros.'.$parametro['clave'], $parametro['valor']);
+                                    $valorBool = in_array(strtolower((string) $valorBool), ['1', 'true', 's', 'si', 'sí', 'yes', 'on'], true) ? '1' : '0';
+                                @endphp
+                                <div class="form-group row">
+                                    <label for="{{ $idCampo }}" class="col-lg-4 control-label text-right pr-2">{{ $parametro['etiqueta'] }}</label>
+                                    <div class="col-lg-4">
+                                        <select class="form-control" name="parametros[{{ $parametro['clave'] }}]" id="{{ $idCampo }}" required>
+                                            <option value="1" @selected($valorBool === '1')>Activo</option>
+                                            <option value="0" @selected($valorBool === '0')>Inactivo</option>
+                                        </select>
+                                        <small class="form-text text-muted">{{ $parametro['ayuda'] }}</small>
                                     </div>
                                 </div>
                             @else

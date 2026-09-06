@@ -41,7 +41,11 @@ class Ordencompra extends Model
         'comentario', 'detalle', 'lugarentrega', 'transporte_id', 'tratamiento', 'proveedor_id',
         'condicioncompra_id', 'condicionentrega_id', 'condicionpago_id', 'descuento', 'descuento_tipo', 'estadoordencompra', 'sector_legajocompra_id',
         'condiciones_contratacion', 'creousuario_id',
-        'es_contrato', 'contrato_vigencia_desde', 'contrato_vigencia_hasta', 'contrato_monto_tope',
+        'es_contrato', 'es_suscripcion', 'suscripcion_nombre', 'suscripcion_periodicidad',
+        'suscripcion_monto_periodo', 'suscripcion_tolerancia_pct', 'suscripcion_tarjeta_ult4',
+        'suscripcion_tarjeta_id', 'suscripcion_area', 'suscripcion_solicitante',
+        'suscripcion_owner_usuario_id', 'suscripcion_borrador', 'suscripcion_desvio_abierto',
+        'contrato_vigencia_desde', 'contrato_vigencia_hasta', 'contrato_monto_tope',
         'contrato_moneda_id', 'contrato_auto_renovable', 'contrato_dias_preaviso', 'contrato_dias_aviso',
         'contrato_responsable_id', 'contrato_requiere_recepcion', 'contrato_imputacion_contable',
         'contrato_cuentacontable_id',
@@ -51,6 +55,11 @@ class Ordencompra extends Model
 
     protected $casts = [
         'es_contrato' => 'boolean',
+        'es_suscripcion' => 'boolean',
+        'suscripcion_borrador' => 'boolean',
+        'suscripcion_desvio_abierto' => 'boolean',
+        'suscripcion_monto_periodo' => 'float',
+        'suscripcion_tolerancia_pct' => 'float',
         'contrato_auto_renovable' => 'boolean',
         'contrato_requiere_recepcion' => 'boolean',
         'contrato_requiere_validacion_abono' => 'boolean',
@@ -167,5 +176,21 @@ class Ordencompra extends Model
     public function contrato_avisos()
     {
         return $this->hasMany(Ordencompra_Contrato_Aviso::class, 'ordencompra_id');
+    }
+
+    public function suscripcion_tarjetas()
+    {
+        return $this->belongsTo(Suscripcion_Tarjeta::class, 'suscripcion_tarjeta_id');
+    }
+
+    /** Dueño del servicio: a quién se le pregunta si la suscripción sigue en uso. */
+    public function suscripcion_owners()
+    {
+        return $this->belongsTo(Usuario::class, 'suscripcion_owner_usuario_id');
+    }
+
+    public function suscripcion_cargos()
+    {
+        return $this->hasMany(Suscripcion_Cargo::class, 'ordencompra_id');
     }
 }

@@ -18,10 +18,11 @@ class OrdencompraLegajoAutorizadoNotificacionService
     public function notificarAutorizacion(Ordencompra $oc, string $firmante = ''): array
     {
         $oc->loadMissing(['proveedores', 'empresas']);
-        $emails = array_values(array_unique(array_merge(
-            $this->emailsSector(OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_COMPRAS, (int) $oc->empresa_id),
-            $this->emailsSector(OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_CUENTAS_A_PAGAR, (int) $oc->empresa_id),
-        )));
+        $usuarios = $this->usuariosSectores([
+            OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_COMPRAS,
+            OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_CUENTAS_A_PAGAR,
+        ], (int) $oc->empresa_id);
+        $emails = $this->emailsDesdeUsuarios($usuarios);
         if ($emails === []) {
             return [];
         }
@@ -42,6 +43,17 @@ class OrdencompraLegajoAutorizadoNotificacionService
             ]);
         }
 
+        try {
+            app(\App\Services\Configuracion\AnitaNotificacionService::class)->avisarSistemaAUsuarios(
+                $usuarios->pluck('id')->all(),
+                'Legajo OC '.$oc->numeroordencompra.' autorizado',
+                $firmante !== '' ? "Firmante: {$firmante}" : 'El legajo quedó autorizado.',
+                $datos['url'],
+                ['origen' => 'oc_legajo_autorizado', 'ordencompra_id' => (int) $oc->id]
+            );
+        } catch (\Throwable) {
+        }
+
         return $emails;
     }
 
@@ -51,7 +63,10 @@ class OrdencompraLegajoAutorizadoNotificacionService
     public function notificarRecordatorio(Ordencompra $oc, int $dias, string $referente = ''): array
     {
         $oc->loadMissing(['proveedores', 'empresas']);
-        $emails = $this->emailsSector(OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_COMPRAS, (int) $oc->empresa_id);
+        $usuarios = $this->usuariosSectores([
+            OrdencompraEnvioCuentasAPagarGateSupport::SECTOR_COMPRAS,
+        ], (int) $oc->empresa_id);
+        $emails = $this->emailsDesdeUsuarios($usuarios);
         if ($emails === []) {
             return [];
         }
@@ -73,22 +88,49 @@ class OrdencompraLegajoAutorizadoNotificacionService
             ]);
         }
 
+        try {
+            app(\App\Services\Configuracion\AnitaNotificacionService::class)->avisarSistemaAUsuarios(
+                $usuarios->pluck('id')->all(),
+                'Recordatorio legajo OC '.$oc->numeroordencompra,
+                "Lleva {$dias} día(s) en Gastronomía.",
+                $datos['url'],
+                ['origen' => 'oc_legajo_recordatorio', 'ordencompra_id' => (int) $oc->id, 'dias' => $dias]
+            );
+        } catch (\Throwable) {
+        }
+
         return $emails;
     }
 
-    /** @return list<string> */
-    private function emailsSector(string $nombreSector, int $empresaId): array
+    /**
+     * @param  list<string>  $nombresSector
+     * @return \Illuminate\Support\Collection<int, \App\Models\Seguridad\Usuario>
+     */
+    private function usuariosSectores(array $nombresSector, int $empresaId): \Illuminate\Support\Collection
     {
-        $sectorId = OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre($nombreSector);
-        if ($sectorId <= 0) {
-            return [];
+        $coleccion = collect();
+        foreach ($nombresSector as $nombreSector) {
+            $sectorId = OrdencompraEnvioCuentasAPagarGateSupport::sectorIdPorNombre($nombreSector);
+            if ($sectorId <= 0) {
+                continue;
+            }
+            $coleccion = $coleccion->merge(UsuarioOperativoSupport::listadoParaSelector(
+                empresaId: $empresaId > 0 ? $empresaId : null,
+                soloConEmail: true,
+                sectorLegajocompraId: $sectorId,
+            ));
         }
 
-        return UsuarioOperativoSupport::listadoParaSelector(
-            empresaId: $empresaId > 0 ? $empresaId : null,
-            soloConEmail: true,
-            sectorLegajocompraId: $sectorId,
-        )
+        return $coleccion->unique('id')->values();
+    }
+
+    /**
+     * @param  \Illuminate\Support\Collection<int, mixed>  $usuarios
+     * @return list<string>
+     */
+    private function emailsDesdeUsuarios(\Illuminate\Support\Collection $usuarios): array
+    {
+        return $usuarios
             ->pluck('email')
             ->map(fn ($e) => trim((string) $e))
             ->filter(fn ($e) => $e !== '' && filter_var($e, FILTER_VALIDATE_EMAIL))

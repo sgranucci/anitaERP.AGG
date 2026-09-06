@@ -1,226 +1,249 @@
-<div class="row">
-    <div class="col-sm-6">
-        <div class="form-group row">
-            <label for="nombre" class="col-lg-4 col-form-label requerido">Nombre</label>
-            <div class="col-lg-6">
-                <input type="text" name="nombre" id="nombre" class="form-control" value="{{old('nombre', $data->nombre ?? '')}}" required/>
-            </div>
-        </div>
-        <div class="form-group row">
-            <label for="tipoarbol" class="col-lg-4 col-form-label requerido">Tipo de Arbol</label>
-            <div class="col-lg-6">
-                <select id="tipoarbol" name="tipoarbol" class="form-control" required>
-                    <option value="">-- Elija tipo de árbol --</option>
-                    @foreach($tipoarbol_enum as $tipoarbol)
-                        @if ($tipoarbol['nombre'] == old('tipoarbol',$data->tipoarbol??''))
-                            <option value="{{ $tipoarbol['nombre'] }}" selected>{{ $tipoarbol['nombre'] }}</option>    
-                        @else
-                            <option value="{{ $tipoarbol['nombre'] }}">{{ $tipoarbol['nombre'] }}</option>
-                        @endif
-                    @endforeach
-                </select>
-            </div>
-        </div>
-        @include('includes.form-empresa-asignada', [
-            'empresa_query' => $empresa_query,
-            'empresa_id' => $data->empresa_id ?? session('empresa_id'),
-            'col_label' => 'col-lg-4',
-            'col_input' => 'col-lg-6',
-        ])
-        <div class="form-group row">
-            <label for="recordatorio" class="col-lg-4 col-form-label requerido">Recordatorio</label>
-            <div class="col-lg-6">
-                <select id="recordatorio" name="recordatorio" data-placeholder="Si envia mail recordatorio" class="form-control" required>
-                    <option value="">-- Elija recordatorio --</option>
-                    @foreach($recordatorio_enum as $recordatorio)
-                        @if ($recordatorio['valor'] == old('recordatorio',$data->recordatorio??''))
-                            <option value="{{ $recordatorio['valor'] }}" selected>{{ $recordatorio['nombre'] }}</option>    
-                        @else
-                            <option value="{{ $recordatorio['valor'] }}">{{ $recordatorio['nombre'] }}</option>
-                        @endif
-                    @endforeach
-                </select>
-            </div>
-        </div>    
-        <div class="form-group row div-diasinrespuesta" style="display: none">
-            <label for="diasinrespuesta" class="col-lg-4 col-form-label requerido">Días sin respuesta</label>
-            <div class="col-lg-2">
-                <input type="number" name="diasinrespuesta" id="diasinrespuesta" class="form-control" value="{{old('diasinrespuesta', $data->diasinrespuesta ?? '0')}}"/>
-            </div>
-        </div>    
-        <div class="form-group row div-diavencimientorecordatorio" style="display: none">
-            <label for="diavencimientorecordatorio" class="col-lg-4 col-form-label requerido">Días vto. recordatorio</label>
-            <div class="col-lg-2">
-                <input type="number" name="diavencimientorecordatorio" id="diavencimientorecordatorio" class="form-control" value="{{old('diavencimientorecordatorio', $data->diavencimientorecordatorio ?? '0')}}"/>
-            </div>
-        </div>     
-        <div class="form-group row">
-            <label for="estado" class="col-lg-4 col-form-label requerido">Estado</label>
-            <div class="col-lg-6">
-                <select id="estado" name="estado" data-placeholder="Estado del árbol" class="form-control" required>
-                    <option value="">-- Elija estado --</option>
-                    @foreach($estado_enum as $estado)
-                        @if ($estado['nombre'] == old('estado',$data->estado??''))
-                            <option value="{{ $estado['nombre'] }}" selected>{{ $estado['nombre'] }}</option>    
-                        @else
-                            <option value="{{ $estado['nombre'] }}">{{ $estado['nombre'] }}</option>
-                        @endif
-                    @endforeach
-                </select>
-            </div>
-        </div>                   
-    </div>
-    <div class="col-sm-6">
-        <div class="form-group row">
-            <label for="filtro_centrocosto" class="col-lg-4 col-form-label">Filtra Centro de Costo</label>
-            <div class="col-lg-6">
-                <select id="filtro_centrocosto_id" data-placeholder="Filtra Centro de Costo" class="form-control" data-fouc>
-                    <option value="">-- Elija centro de costo --</option>
-                    @foreach($centrocosto_query as $key => $value)
-                        <option value="{{ $value->id }}">{{ $value->codigo }} - {{ $value->nombre }}</option>    
-                    @endforeach
-                </select>
-            </div>
-        </div>
-    </div>
-</div>
 @php
     $esRequisiciones = (old('tipoarbol', $data->tipoarbol ?? '') === 'Requisiciones');
     $esRequisicionesSala = (old('tipoarbol', $data->tipoarbol ?? '') === 'Requisiciones de sala');
 @endphp
-@include('configuracion.arbolaprobacion.partials.oc_triggers', ['data' => $data ?? null])
-<h4>Niveles</h4>
-<div class="alert alert-info" role="alert" style="margin-top: 10px;">
-    <strong>Usuario opcional por nivel.</strong>
-    Si en un nivel no se asigna usuario, el nivel se considera <strong>aprobado automáticamente</strong>.
-    @if($esRequisiciones)
-        En requisiciones, además se aplicará el <strong>Estado req.</strong> configurado para ese nivel; si no se define, quedará en <strong>APROBADA</strong>.
-        <br>
-        <strong>Doble aprobación</strong> (por centro de costo): si está activo, el <strong>Desde monto</strong> actúa como umbral de piso
-        (como en solicitudes de pago): el responsable de área (nivel menor) firma primero y los umbrales altos
-        (Beta / Dir, etc.) recién después. Con montos por debajo del umbral alto el circuito sigue igual que hoy.
-        Si está desactivado, se usan bandas exclusivas Desde–Hasta (solo el firmante cuyo rango contiene el monto).
-    @elseif($esRequisicionesSala)
-        En requisiciones de sala, además se aplicará el <strong>Estado req.</strong> configurado para ese nivel (si está definido).
-    @else
-        (Este comportamiento aplica al circuito del árbol; en requisiciones también puede impactar el estado.)
-    @endif
-</div>
-<div class="card-body">
-    <table class="table" id="arbolaprobacion-nivel-table">
-        <thead>
-            <tr>
-                <th style="width: 4%;"></th>
-                <th style="width: 6%;">Nivel</th>
-                <th style="width: 14%;">Centro Costo</th>
-                <th style="width: 24%;" title="Opcional. Si no se asigna usuario, el nivel se aprueba automáticamente.">Usuario (opcional)</th>
-                <th style="width: 9%;">Desde Monto</th>
-                <th style="width: 9%;">Hasta Monto</th>
-                <th style="width: 7%;">Moneda</th>
-                <th style="width: 12%;" title="Estado de la requisición al aprobar este nivel (solo tipo Requisiciones; si queda vacío, APROBADA)">Estado req.</th>
-                <th style="width: 8%;" class="col-doble-aprobacion" title="Por centro de costo. Con S: área primero, luego umbrales altos (piso Desde monto).">Doble apr.</th>
-                <th></th>
-            </tr>
-        </thead>
-        <tbody id="tbody-arbolaprobacion-nivel-table">
-        @if ($data->arbolaprobacion_niveles ?? '') 
-            @foreach (old('arbolaprobacion_nivel', $data->arbolaprobacion_niveles->count() ? $data->arbolaprobacion_niveles : ['']) as $arbolaprobacion_niveles)
-                @php
-                    $idxNivel = $loop->index;
-                    $dobleSel = strtoupper((string) old('doble_aprobacions.'.$idxNivel, $arbolaprobacion_niveles->doble_aprobacion ?? 'N'));
-                    $dobleSel = $dobleSel === 'S' ? 'S' : 'N';
-                @endphp
-                <tr class="item-arbolaprobacion-nivel">
-                    <td>
-                        <input type="hidden" class="id form-control" name="ids[]" value="{{$arbolaprobacion_niveles->id ?? ''}}">
-                        <input type="text" name="arbolaprobacion_nivel[]" class="form-control iiarbolaprobacion_nivel" readonly value="{{ $loop->index+1 }}" />
-                    </td>
-                    <td>
-                        <input type="number" class="nivel form-control" name="niveles[]" min="1" value="{{$arbolaprobacion_niveles->nivel ?? ''}}" required>
-                    </td>
-                    <td>
-                        <select name="centrocosto_ids[]" data-placeholder="Centro de Costo" class="centrocosto form-control required" required data-fouc>
-                            <option value="">-- Elija centro de costo --</option>
-                            @foreach($centrocosto_query as $key => $value)
-                                @if( (int) $value->id == (int) old('centrocosto_ids[]', $arbolaprobacion_niveles->centrocosto_id ?? ''))
-                                    <option value="{{ $value->id }}" selected="select">{{ $value->codigo }} - {{ $value->nombre }}</option>    
-                                @else
-                                    <option value="{{ $value->id }}">{{ $value->codigo }} - {{ $value->nombre }}</option>    
-                                @endif
-                            @endforeach
-                        </select>
-                    </td>                    
-                    <td>
-                        <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;">
-                            <input type="hidden" class="usuario_id_arbol" name="usuario_ids[]" value="{{$arbolaprobacion_niveles->usuario_id ?? ''}}" >
-                            <input type="hidden" class="usuario_id_previa" name="usuario_id_previa[]" value="{{$arbolaprobacion_niveles->usuario_id ?? ''}}" >
-                            <input type="text" style="flex: 0 0 110px; width: 110px; height: 38px;" class="usuario_codigo_arbol form-control" value="{{ $arbolaprobacion_niveles->usuarios->usuario ?? '' }}" placeholder="Código usuario" title="Código de login o ID numérico; Tab fuera para cargar el nombre" autocomplete="off">
-                            <button type="button" title="Consulta usuarios" style="padding:1; flex: 0 0 auto;" class="btn-accion-tabla consultausuario tooltipsC">
-                                    <i class="fa fa-search text-primary"></i>
-                            </button>
-                            <input type="text" style="flex: 1 1 auto; min-width: 0; height: 38px; font-size: 14px;" class="nombreusuario form-control" name="nombreusuarios[]" value="{{$arbolaprobacion_niveles->usuarios->nombre ?? ''}}" placeholder="(opcional)">
-                        </div>
-                    </td>
-                    <td>
-                        <input type="number" class="desdemonto form-control" name="desdemontos[]" value="{{$arbolaprobacion_niveles->desdemonto ?? ''}}">
-                    </td>
-                    <td>
-                        <input type="number" class="hastamonto form-control" name="hastamontos[]" value="{{$arbolaprobacion_niveles->hastamonto ?? ''}}">
-                    </td>                    
-                    <td>
-                        <select name="moneda_ids[]" data-placeholder="Moneda" class="moneda form-control required" required data-fouc>
-                            @foreach($moneda_query as $key => $value)
-                                @if( (int) $value->id == (int) old('moneda_ids[]', $arbolaprobacion_niveles->moneda_id ?? ''))
-                                    <option value="{{ $value->id }}" selected="select">{{ $value->abreviatura }}</option>    
-                                @else
-                                    <option value="{{ $value->id }}">{{ $value->abreviatura }}</option>    
-                                @endif
-                            @endforeach
-                        </select>
-                    </td>
-                    <td>
-                        @php
-                            $nombreTipoOc = \App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol[array_search('OC', array_column(\App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
-                            $nombreTipoRs = \App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol[array_search('RS', array_column(\App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
-                            $tipoArbolSel = old('tipoarbol', isset($data) ? ($data->tipoarbol ?? '') : '');
-                            $docEstadosOpciones = ($tipoArbolSel === $nombreTipoOc)
-                                ? ($ordencompra_estados_arbol_enum ?? [])
-                                : (($tipoArbolSel === $nombreTipoRs)
-                                    ? ($requisicion_sala_estados_arbol_enum ?? [])
-                                    : ($requisicion_estados_arbol_enum ?? []));
-                            $selDoc = old('documento_estado_al_aprobar.'.$idxNivel, $arbolaprobacion_niveles->documento_estado_al_aprobar ?? '');
-                            if ($selDoc === '' && $esRequisiciones) {
-                                $selDoc = 'APROBADA';
-                            }
-                        @endphp
-                        <select name="documento_estado_al_aprobar[]" class="form-control form-control-sm" title="Opcional; estado del documento al aprobar este nivel">
-                            <option value="">—</option>
-                            @foreach($docEstadosOpciones as $estDoc)
-                                <option value="{{ $estDoc['nombre'] }}" {{ $selDoc == $estDoc['nombre'] ? 'selected' : '' }}>{{ str_replace('_', ' ', $estDoc['nombre']) }}</option>
-                            @endforeach
-                        </select>
-                    </td>
-                    <td class="text-center col-doble-aprobacion">
-                        <input type="hidden" name="doble_aprobacions[]" class="doble_aprobacion_valor" value="{{ $dobleSel }}">
-                        <input type="checkbox" class="doble_aprobacion_check" value="S" title="Doble aprobación para este centro de costo"
-                            {{ $dobleSel === 'S' ? 'checked' : '' }}>
-                    </td>
-                    <td>
-                        <button style="width: 7%;" type="button" title="Elimina esta linea" class="btn-accion-tabla eliminar_arbolaprobacion_nivel tooltipsC">
-                            <i class="fa fa-times-circle text-danger"></i>
-                        </button>
-                    </td>
-                </tr>
-            @endforeach
-        @endif
-        </tbody>
-    </table>
-    @include('configuracion.arbolaprobacion.template')
+
+<div class="anita-arbol-panel">
+    <div class="anita-arbol-panel-head">
+        <div>
+            <h2 class="anita-arbol-panel-title">Cabecera</h2>
+            <p class="anita-arbol-panel-hint">Nombre, tipo de documento, empresa y recordatorios del circuito.</p>
+        </div>
+        <span class="anita-arbol-chip anita-arbol-chip-navy">General</span>
+    </div>
     <div class="row">
-        <div class="col-md-12">
-            <button id="agrega_renglon_arbolaprobacion_nivel" class="pull-right btn btn-danger">+ Agrega rengl&oacute;n</button>
+        <div class="col-md-6">
+            <div class="form-group row">
+                <label for="nombre" class="col-lg-4 col-form-label requerido">Nombre</label>
+                <div class="col-lg-8">
+                    <input type="text" name="nombre" id="nombre" class="form-control" value="{{old('nombre', $data->nombre ?? '')}}" required/>
+                </div>
+            </div>
+            <div class="form-group row">
+                <label for="tipoarbol" class="col-lg-4 col-form-label requerido">Tipo de árbol</label>
+                <div class="col-lg-8">
+                    <select id="tipoarbol" name="tipoarbol" class="form-control" required>
+                        <option value="">-- Elija tipo de árbol --</option>
+                        @foreach($tipoarbol_enum as $tipoarbol)
+                            <option value="{{ $tipoarbol['nombre'] }}" {{ $tipoarbol['nombre'] == old('tipoarbol',$data->tipoarbol??'') ? 'selected' : '' }}>
+                                {{ $tipoarbol['nombre'] }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+            @include('includes.form-empresa-asignada', [
+                'empresa_query' => $empresa_query,
+                'empresa_id' => $data->empresa_id ?? session('empresa_id'),
+                'col_label' => 'col-lg-4',
+                'col_input' => 'col-lg-8',
+            ])
+            <div class="form-group row">
+                <label for="estado" class="col-lg-4 col-form-label requerido">Estado</label>
+                <div class="col-lg-8">
+                    <select id="estado" name="estado" class="form-control" required>
+                        <option value="">-- Elija estado --</option>
+                        @foreach($estado_enum as $estado)
+                            <option value="{{ $estado['nombre'] }}" {{ $estado['nombre'] == old('estado',$data->estado??'') ? 'selected' : '' }}>
+                                {{ $estado['nombre'] }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="form-group row">
+                <label for="recordatorio" class="col-lg-4 col-form-label requerido">Recordatorio</label>
+                <div class="col-lg-8">
+                    <select id="recordatorio" name="recordatorio" class="form-control" required>
+                        <option value="">-- Elija recordatorio --</option>
+                        @foreach($recordatorio_enum as $recordatorio)
+                            <option value="{{ $recordatorio['valor'] }}" {{ $recordatorio['valor'] == old('recordatorio',$data->recordatorio??'') ? 'selected' : '' }}>
+                                {{ $recordatorio['nombre'] }}
+                            </option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
+            <div class="form-group row div-diasinrespuesta" style="display: none">
+                <label for="diasinrespuesta" class="col-lg-4 col-form-label requerido">Días sin respuesta</label>
+                <div class="col-lg-4">
+                    <input type="number" name="diasinrespuesta" id="diasinrespuesta" class="form-control" value="{{old('diasinrespuesta', $data->diasinrespuesta ?? '0')}}"/>
+                </div>
+            </div>
+            <div class="form-group row div-diavencimientorecordatorio" style="display: none">
+                <label for="diavencimientorecordatorio" class="col-lg-4 col-form-label requerido">Días vto. recordatorio</label>
+                <div class="col-lg-4">
+                    <input type="number" name="diavencimientorecordatorio" id="diavencimientorecordatorio" class="form-control" value="{{old('diavencimientorecordatorio', $data->diavencimientorecordatorio ?? '0')}}"/>
+                </div>
+            </div>
+            <div class="form-group row">
+                <label for="filtro_centrocosto" class="col-lg-4 col-form-label">Filtrar CC en grilla</label>
+                <div class="col-lg-8">
+                    <select id="filtro_centrocosto_id" class="form-control" data-fouc>
+                        <option value="">Todos los centros de costo</option>
+                        @foreach($centrocosto_query as $value)
+                            <option value="{{ $value->id }}">{{ $value->codigo }} - {{ $value->nombre }}</option>
+                        @endforeach
+                    </select>
+                </div>
+            </div>
         </div>
     </div>
 </div>
-@include('includes.admin.modalconsultausuario')
 
+@include('configuracion.arbolaprobacion.partials.oc_triggers', ['data' => $data ?? null])
+@include('configuracion.arbolaprobacion.partials.re_circuito_cuentas', ['data' => $data ?? null])
+
+<div class="anita-arbol-panel">
+    <div class="anita-arbol-panel-head">
+        <div>
+            <h2 class="anita-arbol-panel-title">Niveles</h2>
+            <p class="anita-arbol-panel-hint">
+                Usuario vacío = auto. En RE, usá Rama A/B cuando el CC tiene dual-rama.
+            </p>
+        </div>
+        <span class="anita-arbol-chip anita-arbol-chip-teal">Circuito</span>
+    </div>
+
+    <div class="anita-arbol-callout">
+        <strong>Usuario opcional.</strong>
+        Sin usuario, el nivel se aprueba automáticamente.
+        @if($esRequisiciones)
+            En requisiciones se aplica el <strong>Estado req.</strong> (default APROBADA).
+            <strong>Rama A</strong> = allowlist/auto · <strong>Rama B</strong> = autorización (tipicamente N1 EN COMPRAS → N2 firmantes por monto).
+            Las ramas las define el bloque <strong>Circuito RE por cuentas</strong> (allowlist + triggers).
+            <strong>Doble apr.</strong> por CC: con S, Desde monto actúa como piso; con N, bandas exclusivas Desde–Hasta.
+        @elseif($esRequisicionesSala)
+            En requisiciones de sala se aplica el Estado req. si está definido.
+        @endif
+    </div>
+
+    <div class="anita-arbol-table-wrap">
+        <table class="table table-sm mb-0" id="arbolaprobacion-nivel-table">
+            <thead>
+                <tr>
+                    <th style="width: 3%;"></th>
+                    <th style="width: 5%;">Nivel</th>
+                    <th style="width: 6%;" class="col-rama-re" title="Solo RE dual-rama. Vacío = circuito único.">Rama</th>
+                    <th style="width: 14%;">Centro costo</th>
+                    <th style="width: 22%;" title="Opcional. Sin usuario = auto.">Usuario</th>
+                    <th style="width: 9%;">Desde</th>
+                    <th style="width: 9%;">Hasta</th>
+                    <th style="width: 6%;">Moneda</th>
+                    <th style="width: 12%;">Estado doc.</th>
+                    <th style="width: 7%;" class="col-doble-aprobacion" title="Doble aprobación por CC">Doble</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody id="tbody-arbolaprobacion-nivel-table">
+            @if ($data->arbolaprobacion_niveles ?? '')
+                @foreach (old('arbolaprobacion_nivel', $data->arbolaprobacion_niveles->count() ? $data->arbolaprobacion_niveles : ['']) as $arbolaprobacion_niveles)
+                    @php
+                        $idxNivel = $loop->index;
+                        $dobleSel = strtoupper((string) old('doble_aprobacions.'.$idxNivel, $arbolaprobacion_niveles->doble_aprobacion ?? 'N'));
+                        $dobleSel = $dobleSel === 'S' ? 'S' : 'N';
+                        $ramaSel = strtoupper((string) old('ramas.'.$idxNivel, $arbolaprobacion_niveles->rama ?? ''));
+                        if (! in_array($ramaSel, ['A', 'B'], true)) {
+                            $ramaSel = '';
+                        }
+                    @endphp
+                    <tr class="item-arbolaprobacion-nivel">
+                        <td>
+                            <input type="hidden" class="id form-control" name="ids[]" value="{{$arbolaprobacion_niveles->id ?? ''}}">
+                            <input type="text" name="arbolaprobacion_nivel[]" class="form-control form-control-sm iiarbolaprobacion_nivel" readonly value="{{ $loop->index+1 }}" />
+                        </td>
+                        <td>
+                            <input type="number" class="nivel form-control form-control-sm" name="niveles[]" min="1" value="{{$arbolaprobacion_niveles->nivel ?? ''}}" required>
+                        </td>
+                        <td class="col-rama-re">
+                            <select name="ramas[]" class="form-control form-control-sm rama-re" title="Vacío = circuito único">
+                                <option value="" {{ $ramaSel === '' ? 'selected' : '' }}>—</option>
+                                <option value="A" {{ $ramaSel === 'A' ? 'selected' : '' }}>A</option>
+                                <option value="B" {{ $ramaSel === 'B' ? 'selected' : '' }}>B</option>
+                            </select>
+                        </td>
+                        <td>
+                            <select name="centrocosto_ids[]" class="centrocosto form-control form-control-sm required" required data-fouc>
+                                <option value="">-- CC --</option>
+                                @foreach($centrocosto_query as $value)
+                                    <option value="{{ $value->id }}" {{ (int) $value->id == (int) old('centrocosto_ids[]', $arbolaprobacion_niveles->centrocosto_id ?? '') ? 'selected' : '' }}>
+                                        {{ $value->codigo }} - {{ $value->nombre }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </td>
+                        <td>
+                            <div class="d-flex flex-nowrap align-items-center" style="gap: 4px;">
+                                <input type="hidden" class="usuario_id_arbol" name="usuario_ids[]" value="{{$arbolaprobacion_niveles->usuario_id ?? ''}}" >
+                                <input type="hidden" class="usuario_id_previa" name="usuario_id_previa[]" value="{{$arbolaprobacion_niveles->usuario_id ?? ''}}" >
+                                <input type="text" style="flex: 0 0 96px; width: 96px;" class="usuario_codigo_arbol form-control form-control-sm" value="{{ $arbolaprobacion_niveles->usuarios->usuario ?? '' }}" placeholder="Código" title="Login o ID; Tab para cargar nombre" autocomplete="off">
+                                <button type="button" title="Consulta usuarios" class="btn-accion-tabla consultausuario tooltipsC">
+                                    <i class="fa fa-search text-primary"></i>
+                                </button>
+                                <input type="text" style="flex: 1 1 auto; min-width: 0;" class="nombreusuario form-control form-control-sm" name="nombreusuarios[]" value="{{$arbolaprobacion_niveles->usuarios->nombre ?? ''}}" placeholder="(opcional)">
+                            </div>
+                        </td>
+                        <td>
+                            <input type="number" class="desdemonto form-control form-control-sm" name="desdemontos[]" value="{{$arbolaprobacion_niveles->desdemonto ?? ''}}">
+                        </td>
+                        <td>
+                            <input type="number" class="hastamonto form-control form-control-sm" name="hastamontos[]" value="{{$arbolaprobacion_niveles->hastamonto ?? ''}}">
+                        </td>
+                        <td>
+                            <select name="moneda_ids[]" class="moneda form-control form-control-sm required" required data-fouc>
+                                @foreach($moneda_query as $value)
+                                    <option value="{{ $value->id }}" {{ (int) $value->id == (int) old('moneda_ids[]', $arbolaprobacion_niveles->moneda_id ?? '') ? 'selected' : '' }}>
+                                        {{ $value->abreviatura }}
+                                    </option>
+                                @endforeach
+                            </select>
+                        </td>
+                        <td>
+                            @php
+                                $nombreTipoOc = \App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol[array_search('OC', array_column(\App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
+                                $nombreTipoRs = \App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol[array_search('RS', array_column(\App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
+                                $tipoArbolSel = old('tipoarbol', isset($data) ? ($data->tipoarbol ?? '') : '');
+                                $docEstadosOpciones = ($tipoArbolSel === $nombreTipoOc)
+                                    ? ($ordencompra_estados_arbol_enum ?? [])
+                                    : (($tipoArbolSel === $nombreTipoRs)
+                                        ? ($requisicion_sala_estados_arbol_enum ?? [])
+                                        : ($requisicion_estados_arbol_enum ?? []));
+                                $selDoc = old('documento_estado_al_aprobar.'.$idxNivel, $arbolaprobacion_niveles->documento_estado_al_aprobar ?? '');
+                                if ($selDoc === '' && $esRequisiciones) {
+                                    $selDoc = 'APROBADA';
+                                }
+                            @endphp
+                            <select name="documento_estado_al_aprobar[]" class="form-control form-control-sm" title="Estado del documento al aplicar este nivel">
+                                <option value="">—</option>
+                                @foreach($docEstadosOpciones as $estDoc)
+                                    <option value="{{ $estDoc['nombre'] }}" {{ $selDoc == $estDoc['nombre'] ? 'selected' : '' }}>{{ str_replace('_', ' ', $estDoc['nombre']) }}</option>
+                                @endforeach
+                            </select>
+                        </td>
+                        <td class="text-center col-doble-aprobacion">
+                            <input type="hidden" name="doble_aprobacions[]" class="doble_aprobacion_valor" value="{{ $dobleSel }}">
+                            <input type="checkbox" class="doble_aprobacion_check" value="S" title="Doble aprobación para este CC"
+                                {{ $dobleSel === 'S' ? 'checked' : '' }}>
+                        </td>
+                        <td>
+                            <button type="button" title="Eliminar línea" class="btn-accion-tabla eliminar_arbolaprobacion_nivel tooltipsC">
+                                <i class="fa fa-times-circle text-danger"></i>
+                            </button>
+                        </td>
+                    </tr>
+                @endforeach
+            @endif
+            </tbody>
+        </table>
+    </div>
+    @include('configuracion.arbolaprobacion.template')
+    <div class="anita-arbol-toolbar">
+        <span class="text-muted small">Filtrá por CC arriba si la grilla es larga.</span>
+        <button type="button" id="agrega_renglon_arbolaprobacion_nivel" class="btn btn-sm anita-arbol-btn-teal">
+            <i class="fa fa-plus"></i> Agregar nivel
+        </button>
+    </div>
+</div>
+@include('includes.admin.modalconsultausuario')

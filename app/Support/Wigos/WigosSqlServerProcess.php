@@ -64,7 +64,7 @@ final class WigosSqlServerProcess
             ], $empresaId, $timeoutFlash);
         } catch (RuntimeException $e) {
             // Timeout de SP flash no reintenta B: suele ser el mismo volumen y B (Biyemas) sin wgdb_000.
-            if (! self::debeIntentarServidorWigosSecundario($e) || self::esTimeoutEjecucionSubproceso($e)) {
+            if (! self::esErrorConexionOEspejo($e) || self::esTimeoutEjecucionSubproceso($e)) {
                 throw $e;
             }
             $secundario = $alias === 'A' ? 'B' : 'A';
@@ -121,7 +121,7 @@ final class WigosSqlServerProcess
         try {
             $decoded = self::ejecutar($alias, $extra, $empresaId, $timeoutFlash);
         } catch (RuntimeException $e) {
-            if (! self::debeIntentarServidorWigosSecundario($e) || self::esTimeoutEjecucionSubproceso($e)) {
+            if (! self::esErrorConexionOEspejo($e) || self::esTimeoutEjecucionSubproceso($e)) {
                 throw $e;
             }
             $secundario = $alias === 'A' ? 'B' : 'A';
@@ -275,11 +275,12 @@ final class WigosSqlServerProcess
      * Fallback A↔B ante fallo de conexión o base inaccesible en el primario
      * (espejo RESTORING / login a DB), no ante errores de SP/datos.
      */
-    private static function debeIntentarServidorWigosSecundario(RuntimeException $e): bool
+    public static function esErrorConexionOEspejo(RuntimeException $e): bool
     {
         $mensaje = mb_strtolower($e->getMessage());
 
         return str_contains($mensaje, 'login timeout expired')
+            || str_contains($mensaje, 'no responde (login timeout)')
             || str_contains($mensaje, 'tcp provider')
             || str_contains($mensaje, 'could not connect')
             || str_contains($mensaje, 'connection refused')

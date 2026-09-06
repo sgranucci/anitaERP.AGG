@@ -188,7 +188,8 @@
                             $hrefComprobante = route('editar_ingresoegreso', ['id' => $cajaMovIdFila, 'origen' => 'modal_consulta']);
                         } elseif ($puedeVerSp && $solicitudpagoIdFila > 0) {
                             $hrefComprobante = route('editar_solicitudpago', ['id' => $solicitudpagoIdFila, 'origen' => 'modal_consulta', 'vista' => 'consulta']);
-                        } elseif ($puedeVerOc) {
+                        } elseif ($puedeVerOc && strtoupper(trim((string) ($fila['tipo_comp'] ?? ''))) !== 'COM') {
+                            // COM = recepción; no enlazar la columna Comprobante a una OC homónima.
                             $ocIdComp = (int) ($fila['ordencompra_id'] ?? 0);
                             if ($ocIdComp <= 0) {
                                 $ocIdComp = (int) ($fila['ordencompra_id_asiento'] ?? 0);

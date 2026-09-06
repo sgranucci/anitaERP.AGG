@@ -37,9 +37,21 @@ final class IngresoEgresoAnitaTesmovSupport
         return (string) config('caja.ingresoegreso_anita_tesmov_sistema', 'che_ban');
     }
 
+    /**
+     * Comprobante de anulación en Anita por tipo original. La anulación es el mismo
+     * comprobante con importes negativos: conserva el número del original y solo
+     * cambia el tipo (OPP 124466 → AOP 124466), como lo graba Anita nativamente.
+     *
+     * @var array<string, string>
+     */
+    private const TIPOS_ANULACION = [
+        'OPP' => 'AOP',
+        'OPA' => 'AOP',
+    ];
+
     public static function grabarDesdeMovimiento(Caja_Movimiento $movimiento): void
     {
-        self::grabarInterno($movimiento, 1.0, null, null);
+        self::grabarInterno($movimiento, 1.0, null, null, null);
     }
 
     /**
@@ -63,17 +75,24 @@ final class IngresoEgresoAnitaTesmovSupport
         $nroOrig = (int) $movimientoOriginal->numerotransaccion;
         $leyenda = self::recortar('ANULA '.$tipoOrig.' '.$nroOrig, 120);
 
-        self::grabarInterno($movimientoAnulacion, -1.0, $leyenda, $movimientoOriginal);
+        $refAnulacion = null;
+        if (isset(self::TIPOS_ANULACION[$tipoOrig]) && $nroOrig > 0) {
+            $refAnulacion = ['tipo' => self::TIPOS_ANULACION[$tipoOrig], 'nro' => $nroOrig];
+        }
+
+        self::grabarInterno($movimientoAnulacion, -1.0, $leyenda, $movimientoOriginal, $refAnulacion);
     }
 
     /**
      * @param  Caja_Movimiento|null  $movimientoChequesOrigen  cheques a anular en Anita (reversion)
+     * @param  array{tipo: string, nro: int}|null  $refOverride  comprobante Anita a forzar
      */
     private static function grabarInterno(
         Caja_Movimiento $movimiento,
         float $factorImporte,
         ?string $leyendaOverride,
-        ?Caja_Movimiento $movimientoChequesOrigen
+        ?Caja_Movimiento $movimientoChequesOrigen,
+        ?array $refOverride
     ): void {
         if (! self::estaHabilitada()) {
             return;
@@ -89,7 +108,7 @@ final class IngresoEgresoAnitaTesmovSupport
             'cheques.chequeras',
         ]);
 
-        $ctx = self::contexto($movimiento);
+        $ctx = self::contexto($movimiento, $refOverride);
         if ($ctx === null) {
             return;
         }
@@ -111,6 +130,7 @@ final class IngresoEgresoAnitaTesmovSupport
                     'caja_movimiento_id' => $movimiento->id,
                     'linea_id' => $linea->id,
                 ]);
+
                 continue;
             }
 
@@ -315,7 +335,8 @@ final class IngresoEgresoAnitaTesmovSupport
      *   usuario: string
      * }|null
      */
-    private static function contexto(Caja_Movimiento $movimiento): ?array
+    /** @param  array{tipo: string, nro: int}|null  $refOverride */
+    private static function contexto(Caja_Movimiento $movimiento, ?array $refOverride = null): ?array
     {
         $tipo = strtoupper(substr(trim((string) ($movimiento->tipotransaccioncajas->abreviatura ?? '')), 0, 3));
         if ($tipo === '') {
@@ -323,6 +344,12 @@ final class IngresoEgresoAnitaTesmovSupport
         }
 
         $nro = (int) $movimiento->numerotransaccion;
+
+        if ($refOverride !== null) {
+            $tipo = strtoupper(trim((string) ($refOverride['tipo'] ?? $tipo)));
+            $nro = (int) ($refOverride['nro'] ?? $nro);
+        }
+
         if ($nro <= 0) {
             return null;
         }
@@ -665,6 +692,7 @@ final class IngresoEgresoAnitaTesmovSupport
                     'pagoproveedor_id' => $pagoproveedorId,
                     'cc_id' => $deuda->id,
                 ]);
+
                 continue;
             }
 
@@ -694,6 +722,13 @@ final class IngresoEgresoAnitaTesmovSupport
 
             $codMon = (string) ((int) ($apl->moneda_id ?: $deuda->moneda_id ?: 1));
             $codMon = $codMon !== '' ? substr($codMon, 0, 1) : '1';
+
+            // pago.c arrastra el concepto de cash-flow del comprobante aplicado (com_concepto
+            // -> axp_concepto). Sin esto el EFE pierde el rubro cuando no hay cuenta de gasto.
+            $conceptoCashflow = (int) (
+                $deuda->comprobante_proveedores->conceptogasto_id
+                    ?: ($deuda->proveedores->conceptogasto_id ?? 0)
+            );
 
             $raw = (new ApiAnita)->apiCallEscritura([
                 'tabla' => 'auxpag',
@@ -737,7 +772,7 @@ final class IngresoEgresoAnitaTesmovSupport
                     '0',
                     '".(int) ($lado['nro_interno'] ?? 0)."',
                     '".$ctx['empresa']."',
-                    '0',
+                    '".$conceptoCashflow."',
                     ' '",
             ], 'caja IE auxpag FAC '.$lado['etiqueta']);
 
@@ -995,7 +1030,7 @@ final class IngresoEgresoAnitaTesmovSupport
         $cuentaPad = str_pad($codigoCuenta, 8, '0', STR_PAD_LEFT);
 
         self::deleteWhere('tesmov', " WHERE tesv_tipo = 'CHP' AND tesv_nro = ".$nroCheque
-            ." AND tesv_cuenta = ".self::escSql($cuentaPad)
+            .' AND tesv_cuenta = '.self::escSql($cuentaPad)
             .' AND tesv_empresa = '.(int) $ctx['empresa'],
             'caja IE tesmov CHP delete '.$cheque->id);
 

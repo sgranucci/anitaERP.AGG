@@ -5,6 +5,7 @@ namespace App\Support\Contable\MayorPlanoCuenta;
 use App\Services\Contable\AnitaAsientoImportService;
 use App\Support\Contable\CuentacontableSaldoMesSupport;
 use App\Support\Contable\MayorConcepto\MayorConceptoMonedaConverter;
+use App\Support\Contable\MayorFuenteConsultaSupport;
 use App\Support\Contable\SumasSaldos\SumasSaldosProcesador;
 use Illuminate\Support\Facades\DB;
 
@@ -24,12 +25,13 @@ class MayorPlanoCuentaProcesador
 
     private bool $soloMovimientosVentas = false;
 
+    private string $fuenteMayorModo = MayorFuenteConsultaSupport::MODO_AUTO;
+
     public function __construct(
-        private readonly MayorPlanoCuentaAnitaBridgeReader $reader = new MayorPlanoCuentaAnitaBridgeReader(),
-        private readonly MayorPlanoCuentaErpAsientoReader $erpReader = new MayorPlanoCuentaErpAsientoReader(),
-        private readonly SumasSaldosProcesador $sumasSaldosProcesador = new SumasSaldosProcesador(),
-    ) {
-    }
+        private readonly MayorPlanoCuentaAnitaBridgeReader $reader = new MayorPlanoCuentaAnitaBridgeReader,
+        private readonly MayorPlanoCuentaErpAsientoReader $erpReader = new MayorPlanoCuentaErpAsientoReader,
+        private readonly SumasSaldosProcesador $sumasSaldosProcesador = new SumasSaldosProcesador,
+    ) {}
 
     /**
      * @param  list<int>  $empresaIds
@@ -50,8 +52,10 @@ class MayorPlanoCuentaProcesador
         ?MayorPlanoCuentaCentrocostoFiltroSupport $centrocostoFiltro = null,
         bool $agruparPorCc = false,
         bool $soloMovimientosVentas = false,
+        string $fuenteMayor = MayorFuenteConsultaSupport::MODO_AUTO,
     ): array {
         $this->soloMovimientosVentas = $soloMovimientosVentas;
+        $this->fuenteMayorModo = MayorFuenteConsultaSupport::normalizarModo($fuenteMayor);
         $empresaIds = array_values(array_filter(array_map('intval', $empresaIds), fn (int $id) => $id > 0));
         if ($empresaIds === []) {
             return $this->resultadoVacio();
@@ -59,7 +63,7 @@ class MayorPlanoCuentaProcesador
 
         $cuentas = array_values(array_unique(array_filter(array_map('intval', $cuentas), fn (int $c) => $c > 0)));
         sort($cuentas);
-        $centrocostoFiltro ??= new MayorPlanoCuentaCentrocostoFiltroSupport();
+        $centrocostoFiltro ??= new MayorPlanoCuentaCentrocostoFiltroSupport;
 
         $t0 = microtime(true);
         $this->precargarNombres($empresaIds);
@@ -69,7 +73,10 @@ class MayorPlanoCuentaProcesador
             $fechaDesde,
             $inicioEjercicio,
         );
-        $cutoffErp = $this->fuenteErpHastaYmd();
+        $cutoffErp = MayorFuenteConsultaSupport::corteEfectivo(
+            $this->fuenteMayorModo,
+            'contable.mayor_plano_cuenta.fuente_erp_hasta',
+        );
 
         if ($this->soloMovimientosVentas) {
             // Totales del mes: subdiario sistema V (detalle Anita) + ctamov ERP (asi_mon_ref=-1),
@@ -171,7 +178,7 @@ class MayorPlanoCuentaProcesador
             $timings = array_merge($timings, $extra['timings'] ?? []);
         }
 
-        $resolverOc = new MayorPlanoCuentaOrdencompraResolver();
+        $resolverOc = new MayorPlanoCuentaOrdencompraResolver;
         $statsOc = $resolverOc->preparar($auxpag, $erroresBridge);
 
         $leyendasPago = MayorPlanoCuentaPagoLeyendaIndex::desdeFilas($pago);
@@ -281,6 +288,8 @@ class MayorPlanoCuentaProcesador
                 'tramo_erp_hasta' => (int) ($datos['tramo_erp_hasta'] ?? 0),
                 'tramo_anita_desde' => (int) ($datos['tramo_anita_desde'] ?? 0),
                 'tramo_anita_hasta' => (int) ($datos['tramo_anita_hasta'] ?? 0),
+                'fuente_mayor' => $this->fuenteMayorModo,
+                'fuente_etiqueta' => (string) ($datos['fuente_etiqueta'] ?? ''),
                 'saldo_inicial_fuente' => (string) ($planSaldo['fuente'] ?? 'movimientos'),
                 'saldo_inicial_usar_saldos_mes' => $omitirCargaSaldoErpCompleto,
             ],
@@ -309,6 +318,7 @@ class MayorPlanoCuentaProcesador
 
     /**
      * Hasta MAYOR_PLANO_CUENTA_FUENTE_ERP_HASTA lee asientos ERP; después bridge Anita.
+     * El modo `fuente_mayor` puede forzar Anita en el tramo ya migrado.
      *
      * @param  list<int>  $empresaIds
      * @param  list<int>  $cuentas
@@ -326,10 +336,16 @@ class MayorPlanoCuentaProcesador
         bool $omitirCargaSaldoErp = false,
         bool $soloPeriodoBridge = false,
     ): array {
-        $cutoff = $this->fuenteErpHastaYmd();
+        $tramos = MayorFuenteConsultaSupport::resolverTramos(
+            $fechaDesde,
+            $fechaHasta,
+            $this->fuenteMayorModo,
+            'contable.mayor_plano_cuenta.fuente_erp_hasta',
+        );
+        $cutoff = (int) $tramos['corte'];
 
-        // Sin cutoff: 100% bridge Anita (comportamiento histórico).
-        if ($cutoff <= 0) {
+        // Sin cutoff o forzar Anita: 100% bridge Anita (comportamiento histórico / control).
+        if (! $tramos['usa_erp']) {
             $anita = $this->reader->cargarPeriodo(
                 $empresaIds,
                 $fechaDesde,
@@ -348,11 +364,13 @@ class MayorPlanoCuentaProcesador
             );
 
             return array_merge($anita, [
-                'fuente_erp_hasta' => 0,
+                'fuente_erp_hasta' => $cutoff,
                 'tramo_erp_desde' => 0,
                 'tramo_erp_hasta' => 0,
                 'tramo_anita_desde' => $fechaDesde,
                 'tramo_anita_hasta' => $fechaHasta,
+                'fuente_etiqueta' => $tramos['etiqueta'],
+                'fuente_mayor' => $this->fuenteMayorModo,
             ]);
         }
 
@@ -360,7 +378,7 @@ class MayorPlanoCuentaProcesador
         $timings = [];
         $ctamov = [];
         $subdiario = [];
-        $postCutoff = $this->fechaSiguiente($cutoff);
+        $postCutoff = MayorFuenteConsultaSupport::fechaSiguiente($cutoff);
 
         // 1) Saldo inicial [fechaSaldoDesde, día anterior a fechaDesde], si aplica.
         //    Si ya se tomó de cuentacontable_saldo_mes (SyS), se omite o solo se lee
@@ -391,10 +409,10 @@ class MayorPlanoCuentaProcesador
             }
         }
 
-        // 2) Período consultado [fechaDesde, fechaHasta] — siempre, independiente del piso de saldo.
-        $erpPerDesde = $fechaDesde;
-        $erpPerHasta = min($fechaHasta, $cutoff);
-        if ($erpPerDesde <= $erpPerHasta) {
+        // 2) Período consultado [fechaDesde, fechaHasta] — tramo ERP acotado al corte.
+        $erpPerDesde = (int) $tramos['tramo_erp_desde'];
+        $erpPerHasta = (int) $tramos['tramo_erp_hasta'];
+        if ($erpPerDesde > 0 && $erpPerHasta >= $erpPerDesde) {
             if ($tramoErpDesde === 0) {
                 $tramoErpDesde = $erpPerDesde;
             }
@@ -417,10 +435,11 @@ class MayorPlanoCuentaProcesador
 
         $tramoAnitaDesde = 0;
         $tramoAnitaHasta = 0;
-        $anitaPeriodoDesde = max($fechaDesde, $postCutoff);
-        if ($anitaPeriodoDesde > 0 && $fechaHasta >= $anitaPeriodoDesde) {
+        $anitaPeriodoDesde = (int) $tramos['tramo_anita_desde'];
+        $anitaPeriodoHasta = (int) $tramos['tramo_anita_hasta'];
+        if ($anitaPeriodoDesde > 0 && $anitaPeriodoHasta >= $anitaPeriodoDesde) {
             $tramoAnitaDesde = $anitaPeriodoDesde;
-            $tramoAnitaHasta = $fechaHasta;
+            $tramoAnitaHasta = $anitaPeriodoHasta;
             $anitaSaldoPedido = max($fechaSaldoDesde, $postCutoff);
             // Saldo Anita solo si hay tramo pre-período después del cutoff.
             if ($anitaSaldoPedido >= $anitaPeriodoDesde) {
@@ -429,7 +448,7 @@ class MayorPlanoCuentaProcesador
             $anita = $this->reader->cargarPeriodo(
                 $empresaIds,
                 $anitaPeriodoDesde,
-                $fechaHasta,
+                $anitaPeriodoHasta,
                 $anitaSaldoPedido,
                 $incluyeSubdiario,
                 $cuentaDesde,
@@ -458,6 +477,8 @@ class MayorPlanoCuentaProcesador
             'tramo_erp_hasta' => $tramoErpHasta,
             'tramo_anita_desde' => $tramoAnitaDesde,
             'tramo_anita_hasta' => $tramoAnitaHasta,
+            'fuente_etiqueta' => $tramos['etiqueta'],
+            'fuente_mayor' => $this->fuenteMayorModo,
         ];
     }
 
@@ -563,35 +584,6 @@ class MayorPlanoCuentaProcesador
         ];
     }
 
-    private function fuenteErpHastaYmd(): int
-    {
-        $raw = trim((string) config('contable.mayor_plano_cuenta.fuente_erp_hasta', ''));
-        if ($raw === '') {
-            return 0;
-        }
-        if (preg_match('/^\d{8}$/', $raw)) {
-            return (int) $raw;
-        }
-        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $raw)) {
-            return (int) str_replace('-', '', $raw);
-        }
-
-        return 0;
-    }
-
-    private function fechaSiguiente(int $ymd): int
-    {
-        if ($ymd <= 0) {
-            return 0;
-        }
-        $dt = \DateTimeImmutable::createFromFormat('Ymd', (string) $ymd);
-        if (! $dt) {
-            return $ymd + 1;
-        }
-
-        return (int) $dt->modify('+1 day')->format('Ymd');
-    }
-
     /**
      * @param  list<int>  $empresaIds
      */
@@ -648,7 +640,7 @@ class MayorPlanoCuentaProcesador
         ?MayorPlanoCuentaCentrocostoFiltroSupport $centrocostoFiltro = null,
     ): array {
         $movs = [];
-        $centrocostoFiltro ??= new MayorPlanoCuentaCentrocostoFiltroSupport();
+        $centrocostoFiltro ??= new MayorPlanoCuentaCentrocostoFiltroSupport;
 
         // El mayor de ventas toma el detalle de subdiario sistema V. El ctamov de
         // cierre (V/C/T y asi_mon_ref ≠ -1) duplica ese detalle. Las FAC del ERP
@@ -721,7 +713,7 @@ class MayorPlanoCuentaProcesador
             return false;
         }
 
-        $centrocostoFiltro ??= new MayorPlanoCuentaCentrocostoFiltroSupport();
+        $centrocostoFiltro ??= new MayorPlanoCuentaCentrocostoFiltroSupport;
         if (! $centrocostoFiltro->pasaFiltro($mov['centrocosto_codigo'] ?? null)) {
             return false;
         }
@@ -788,7 +780,7 @@ class MayorPlanoCuentaProcesador
         ?MayorPlanoCuentaCentrocostoFiltroSupport $centrocostoFiltro = null,
     ): array {
         $movs = [];
-        $centrocostoFiltro ??= new MayorPlanoCuentaCentrocostoFiltroSupport();
+        $centrocostoFiltro ??= new MayorPlanoCuentaCentrocostoFiltroSupport;
 
         foreach (['cuenta', 'contrapartida'] as $pasada) {
             foreach ($this->agruparSubdiario($subdiario, $pasada) as $grupo) {
@@ -1181,6 +1173,9 @@ class MayorPlanoCuentaProcesador
                 'nro_asiento' => $nroAsiento,
                 'nro_asiento_fmt' => ($mov['es_subdiario'] ?? false) ? 'S'.$nroAsiento : (string) $nroAsiento,
                 'tipo_comp' => $mov['tipo_comp'] ?? '',
+                'letra' => trim((string) ($mov['letra'] ?? ' ')),
+                'sucursal' => (int) ($mov['sucursal'] ?? 0),
+                'nro' => (int) ($mov['nro'] ?? 0),
                 'comprobante' => MayorPlanoCuentaSupport::formatearComprobante(
                     (string) ($mov['tipo_comp'] ?? ''),
                     (string) ($mov['letra'] ?? ' '),

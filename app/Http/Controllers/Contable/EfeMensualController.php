@@ -147,6 +147,7 @@ class EfeMensualController extends Controller
         $resultado = $this->reporteService->generarDesdeFiltros($filtros);
         unset($resultado['mayor_concepto']['mayor_plano_analitico']);
         unset($resultado['mayor_concepto']['analitico_por_asiento']);
+        unset($resultado['mayor_concepto']['motivos_por_asiento']);
         session([
             self::SESSION_CACHE_KEY => [
                 'firma' => EfeMensualListadoFiltros::firma($filtros),

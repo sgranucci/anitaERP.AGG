@@ -2,14 +2,13 @@
 
 namespace App\Models\Stock;
 
+use App\Models\Configuracion\Arbolaprobacion;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
-use App\ApiAnita;
 
 class Usoarticulo extends Model
 {
-    protected $fillable = ['nombre'];
+    protected $fillable = ['nombre', 'aprobacion_modo', 'arbolaprobacion_id'];
+
     protected $table = 'usoarticulo';
 
     public function articulos()
@@ -17,4 +16,8 @@ class Usoarticulo extends Model
         return $this->hasMany(Articulo::class);
     }
 
+    public function arbolaprobacion()
+    {
+        return $this->belongsTo(Arbolaprobacion::class, 'arbolaprobacion_id');
+    }
 }

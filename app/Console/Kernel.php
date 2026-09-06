@@ -3,8 +3,8 @@
 namespace App\Console;
 
 use App\Support\Configuracion\EntornoEmpresaSupport;
-use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAutomaticoSupport;
 use App\Support\Interbanking\InterbankingCalendarioSync;
+use App\Support\Ventas\Gastronomia\CierreJornadaProcesoAutomaticoSupport;
 use Carbon\Carbon;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
@@ -56,16 +56,57 @@ class Kernel extends ConsoleKernel
             ->when(fn () => (bool) config('propuesta_pago.bridge_bancario_habilitado', false))
             ->runInBackground()
             ->withoutOverlapping(30);
+
+        // Índice del tracking de facturas. Resolver PDF, fecha de carga real y
+        // estado de pago exige consultar el puente del Anita, así que se
+        // materializa de noche: la grilla queda leyendo sólo tablas locales.
+        $trackingLote = max(1, (int) config('tracking_facturas.indice.lote', 200));
+        $trackingHabilitado = fn () => (bool) config('tracking_facturas.indice.backfill_habilitado', true);
+
+        $schedule->command('tracking-facturas:sincronizar-indice', [
+            '--lote' => $trackingLote,
+            '--solo-faltantes',
+        ])
+            ->dailyAt((string) config('tracking_facturas.indice.faltantes_hora', '02:40'))
+            ->runInBackground()
+            ->withoutOverlapping(180)
+            ->appendOutputTo(storage_path('logs/tracking-facturas-indice.log'))
+            ->when($trackingHabilitado);
+
+        // Repaso completo: los pagos de un comprobante ya indexado cambian con
+        // el tiempo y el pase de «sólo faltantes» nunca los vuelve a mirar.
+        $schedule->command('tracking-facturas:sincronizar-indice', ['--lote' => $trackingLote])
+            ->weeklyOn(
+                (int) config('tracking_facturas.indice.completo_dia', 0),
+                (string) config('tracking_facturas.indice.completo_hora', '03:10'),
+            )
+            ->runInBackground()
+            ->withoutOverlapping(600)
+            ->appendOutputTo(storage_path('logs/tracking-facturas-indice.log'))
+            ->when($trackingHabilitado);
+
+        // Copia masiva Scan → Facturas_scan: deshabilitada. Lo viejo se sirve
+        // desde /scan (ruta del índice) y lo nuevo vive en Facturas_scan.
+        $schedule->command('tracking-facturas:migrar-pdf', [
+            '--lote' => max(1, (int) config('tracking_facturas.migracion_pdf.lote', 100)),
+            '--limite' => max(1, (int) config('tracking_facturas.migracion_pdf.limite_por_corrida', 2000)),
+            '--ejecutar',
+        ])
+            ->dailyAt((string) config('tracking_facturas.migracion_pdf.hora', '04:20'))
+            ->runInBackground()
+            ->withoutOverlapping(600)
+            ->appendOutputTo(storage_path('logs/tracking-facturas-migrar-pdf.log'))
+            ->when(fn () => (bool) config('tracking_facturas.migracion_pdf.habilitada', false));
         // Red de seguridad: si el worker dedicado de supervisor no está levantado,
         // igual se drenan las importaciones de padrones encoladas desde la pantalla.
         // Con el worker activo esta corrida no encuentra trabajos y sale enseguida.
         $schedule->command('queue:work', [
-                'database',
-                '--queue' => (string) config('padrones_iibb.cola', 'padrones'),
-                '--stop-when-empty',
-                '--tries' => 1,
-                '--timeout' => (int) config('padrones_iibb.job_timeout', 7200),
-            ])
+            'database',
+            '--queue' => (string) config('padrones_iibb.cola', 'padrones'),
+            '--stop-when-empty',
+            '--tries' => 1,
+            '--timeout' => (int) config('padrones_iibb.job_timeout', 7200),
+        ])
             ->everyMinute()
             ->runInBackground()
             // Expiración corta a propósito: si el proceso muere sin liberar el
@@ -82,8 +123,8 @@ class Kernel extends ConsoleKernel
         $horaArbaSync = (string) config('padrones_iibb.arba.sync_hora', '22:00');
         $periodoArbaSync = (string) config('padrones_iibb.arba.sync_periodo', 'siguiente');
         $schedule->command('padron-iibb-arba:sincronizar', [
-                '--periodo' => $periodoArbaSync,
-            ])
+            '--periodo' => $periodoArbaSync,
+        ])
             ->lastDayOfMonth($horaArbaSync)
             ->runInBackground()
             ->withoutOverlapping(7200)
@@ -134,6 +175,13 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(8)
             ->when(fn () => filter_var(config('arca.monitor_conectividad.habilitado', true), FILTER_VALIDATE_BOOLEAN));
 
+        $schedule->command('wigos:monitorear-servidor-activo')
+            ->everyTwoMinutes()
+            ->withoutOverlapping(4)
+            ->appendOutputTo(storage_path('logs/wigos-monitor-servidor-activo.log'))
+            ->when(fn () => filter_var(config('wigos.habilitado', false), FILTER_VALIDATE_BOOLEAN)
+                && filter_var(config('wigos.monitor_servidor_activo.habilitado', true), FILTER_VALIDATE_BOOLEAN));
+
         $schedule->command('prestamo:recordatorios')->dailyAt('07:30');
 
         // Reemplazo firmante: vence_el = último día inclusive → restaura a las 00:05 del día siguiente.
@@ -170,6 +218,26 @@ class Kernel extends ConsoleKernel
             ->withoutOverlapping(30)
             ->appendOutputTo(storage_path('logs/compras-legajo-recordatorio-schedule.log'))
             ->when(fn () => (bool) config('compras.legajo.recordatorio_habilitado', true));
+
+        $schedule->command('arbolaprobacion:recordatorios')
+            ->dailyAt((string) config('arbolaprobacion.recordatorio_hora', '09:00'))
+            ->runInBackground()
+            ->withoutOverlapping(30)
+            ->appendOutputTo(storage_path('logs/arbolaprobacion-recordatorios-schedule.log'));
+
+        $schedule->command('arbolaprobacion:digest-pendientes')
+            ->dailyAt((string) config('arbolaprobacion.digest.hora', '08:30'))
+            ->runInBackground()
+            ->withoutOverlapping(30)
+            ->appendOutputTo(storage_path('logs/arbolaprobacion-digest-schedule.log'))
+            ->when(fn () => (bool) config('arbolaprobacion.digest.habilitado', true));
+
+        $schedule->command('anita-notificacion:purge')
+            ->dailyAt((string) config('anita_notificacion.retencion.hora_purge', '03:45'))
+            ->runInBackground()
+            ->withoutOverlapping(30)
+            ->appendOutputTo(storage_path('logs/anita-notificacion-purge-schedule.log'))
+            ->when(fn () => (bool) config('anita_notificacion.retencion.habilitado', true));
 
         $schedule->command('compras:avisar-comprobantes-borrador')
             ->dailyAt((string) config('compras.factura_borrador_aviso.hora', '09:30'))

@@ -5,7 +5,8 @@ namespace App;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 
-class ApiAnita {
+class ApiAnita
+{
     protected string $fecha;
 
     protected string $servidorAnita;
@@ -77,7 +78,8 @@ class ApiAnita {
         return trim((string) config('anita.ifx_server', ''));
     }
 
-    public function apiCallHttp($data){
+    public function apiCallHttp($data)
+    {
         $acc = (string) ($data['acc'] ?? '');
 
         if (isset($data['servidor'])) {
@@ -111,10 +113,12 @@ class ApiAnita {
         $curl = curl_init();
         $payload = json_encode($data);
 
-        curl_setopt_array($curl, array(
-            CURLOPT_URL => $url, CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => false, CURLOPT_CUSTOMREQUEST => "POST", CURLOPT_POSTFIELDS => $payload
-        ));
-        curl_setopt($curl, CURLOPT_HTTPHEADER, array( 'Accept: application/json', 'Content-Type: application/json' )   );
+        curl_setopt_array($curl, [
+            CURLOPT_URL => $url, CURLOPT_RETURNTRANSFER => true, CURLOPT_HEADER => false, CURLOPT_CUSTOMREQUEST => 'POST', CURLOPT_POSTFIELDS => $payload,
+        ]);
+        curl_setopt($curl, CURLOPT_HTTPHEADER, ['Accept: application/json', 'Content-Type: application/json']);
+        curl_setopt($curl, CURLOPT_CONNECTTIMEOUT, (int) config('anita.bridge_connect_timeout', 10));
+        curl_setopt($curl, CURLOPT_TIMEOUT, (int) config('anita.bridge_timeout', 120));
         $response = curl_exec($curl);
         if (curl_errno($curl)) {
             $errorMsg = curl_error($curl);
@@ -122,7 +126,14 @@ class ApiAnita {
 
             return json_encode(['Error' => 'Bridge HTTP Anita: '.$errorMsg]);
         }
+        $httpCode = (int) curl_getinfo($curl, CURLINFO_HTTP_CODE);
         curl_close($curl);
+
+        // Sin esto un 500/502 con body vacío se devolvía como '[]' en acc=list: indistinguible
+        // de "no hay filas" y por lo tanto invisible para quien consume el resultado.
+        if ($httpCode >= 400 && in_array($acc, ['list', 'customSql'], true)) {
+            return json_encode(['Error' => 'Bridge HTTP Anita: HTTP '.$httpCode.' en '.$acc.' '.($data['tabla'] ?? '?')]);
+        }
 
         $trimResponse = trim((string) $response);
         if ($response === false || $trimResponse === '') {
@@ -389,9 +400,10 @@ class ApiAnita {
         return $tipo === 'HTTP';
     }
 
-    public function apiCall($data){
-	//dd('anita.bridge'.env('ANITA_BRIDGE_TYPE'));
-	//dd(env('DB_CONNECTION'));
+    public function apiCall($data)
+    {
+        // dd('anita.bridge'.env('ANITA_BRIDGE_TYPE'));
+        // dd(env('DB_CONNECTION'));
 
         if ($this->usaBridgeHttp()) {
             return $this->apiCallHttp($data);
@@ -400,24 +412,24 @@ class ApiAnita {
         $portSSH = ($puertoSsh == null ? '' : '-p '.$puertoSsh);
         $portSCP = ($puertoSsh == null ? '' : '-P '.$puertoSsh);
         $sql = $this->armarSql($data);
-        $nomArch = $this->fecha.".sql";
+        $nomArch = $this->fecha.'.sql';
         $logsDir = storage_path('logs');
         if (! is_dir($logsDir)) {
             File::ensureDirectoryExists($logsDir);
         }
         $pathArch = $logsDir.'/'.$nomArch;
         File::put($logsDir.'/'.$this->fecha.'.sql', $sql);
-        
+
         shell_exec('scp '.$portSCP.' '.$pathArch.' sergio@'.$this->servidorAnita.':/home/sergio/tmp/'.$nomArch.' > /dev/null');
         shell_exec('ssh '.$portSSH.' sergio@'.$this->servidorAnita.' "cd /usr2/www/htdocs; ./apiERP.php '.config('anita.bdd').' /home/sergio/tmp/'.$nomArch.' '.$this->fecha.' > /dev/null"');
-        shell_exec("ssh ".$portSSH." sergio@".$this->servidorAnita." \"rm /home/sergio/tmp/".$nomArch." > /dev/null\"");
-        
-        if($data['acc'] == "list" || $data['acc'] == "customSql"){
+        shell_exec('ssh '.$portSSH.' sergio@'.$this->servidorAnita.' "rm /home/sergio/tmp/'.$nomArch.' > /dev/null"');
+
+        if ($data['acc'] == 'list' || $data['acc'] == 'customSql') {
             $csvPath = $logsDir.'/'.$this->fecha.'.csv';
             $bddPathSsh = rtrim((string) config('anita.bdd_path', ''), '/');
             $bddSsh = (string) config('anita.bdd', 'ventas');
             shell_exec('scp '.$portSCP.' sergio@'.$this->servidorAnita.':'.$bddPathSsh.'/'.$bddSsh.'/'.$this->fecha.'.csv '.$csvPath.' > /dev/null 2>&1');
-            shell_exec("ssh ".$portSSH." sergio@".$this->servidorAnita." \"cd ".$bddPathSsh.'/'.$bddSsh."; rm ".$this->fecha.".csv > /dev/null\"");
+            shell_exec('ssh '.$portSSH.' sergio@'.$this->servidorAnita.' "cd '.$bddPathSsh.'/'.$bddSsh.'; rm '.$this->fecha.'.csv > /dev/null"');
 
             if (! is_readable($csvPath)) {
                 if (is_file($logsDir.'/'.$this->fecha.'.sql')) {
@@ -427,77 +439,83 @@ class ApiAnita {
                 return json_encode([]);
             }
 
-            $dataArr = array();
+            $dataArr = [];
             $archivo = fopen($csvPath, 'r');
-            $camposArr = explode(",", $data['campos']);
+            $camposArr = explode(',', $data['campos']);
             while ($linea = fgets($archivo)) {
-                $registroAssoc = array();
-                $lineaArr = (explode("|", $linea));
+                $registroAssoc = [];
+                $lineaArr = (explode('|', $linea));
                 foreach ($camposArr as $key => $value) {
-                    $nombreAux = explode(" as ", $value);
+                    $nombreAux = explode(' as ', $value);
                     if (count($nombreAux) == 2) {
                         $value = $nombreAux[1];
-                    }else{
-                        $nombreAux = explode(" AS ", $value); 
+                    } else {
+                        $nombreAux = explode(' AS ', $value);
                         if (count($nombreAux) == 2) {
                             $value = $nombreAux[1];
                         }
                     }
                     $registroAssoc[trim($value)] = $lineaArr[$key];
                 }
-                $dataArr[] = $registroAssoc; 
+                $dataArr[] = $registroAssoc;
             }
             fclose($archivo);
 
             @unlink($csvPath);
             @unlink($logsDir.'/'.$this->fecha.'.sql');
-            //dd($dataArr);
+
+            // dd($dataArr);
             return json_encode($dataArr);
         }
-        return json_encode(array());
-    }
-    
-    public function armarSql($data){
-        $data['where'] 		 = (array_key_exists('where', $data) ? $data['where'] : "");
-        $data['campos'] 	 = (array_key_exists('campos', $data) ? $data['campos'] : "");
-        $data['tabla'] 		 = (array_key_exists('tabla', $data) ? $data['tabla'] : "");
-        $data['whereArmado'] = (array_key_exists('whereArmado', $data) ? $data['whereArmado'] : "");
-        $data['orderBy'] 	 = (array_key_exists('orderBy', $data) ? " ORDER BY ".$data['orderBy'] : "");
-        $data['groupBy'] 	 = (array_key_exists('groupBy', $data) ? " GROUP BY ".$data['groupBy'] : "");
-        $data['valores'] 	 = (array_key_exists('valores', $data) ? $data['valores'] : "");
 
-        switch ($data['acc']){
+        return json_encode([]);
+    }
+
+    public function armarSql($data)
+    {
+        $data['where'] = (array_key_exists('where', $data) ? $data['where'] : '');
+        $data['campos'] = (array_key_exists('campos', $data) ? $data['campos'] : '');
+        $data['tabla'] = (array_key_exists('tabla', $data) ? $data['tabla'] : '');
+        $data['whereArmado'] = (array_key_exists('whereArmado', $data) ? $data['whereArmado'] : '');
+        $data['orderBy'] = (array_key_exists('orderBy', $data) ? ' ORDER BY '.$data['orderBy'] : '');
+        $data['groupBy'] = (array_key_exists('groupBy', $data) ? ' GROUP BY '.$data['groupBy'] : '');
+        $data['valores'] = (array_key_exists('valores', $data) ? $data['valores'] : '');
+
+        switch ($data['acc']) {
             case 'list':
                 $first = '';
                 if (! empty($data['limit'])) {
                     $first = trim((string) $data['limit']).' ';
                 }
-                $sql = "UNLOAD TO '".$this->fecha.".csv' DELIMITER '|' SELECT ".$first.$data['campos']." FROM ".$data['tabla']." ".$data['whereArmado']." ".$data['groupBy']." ".$data['orderBy'];
-            break;
+                $sql = "UNLOAD TO '".$this->fecha.".csv' DELIMITER '|' SELECT ".$first.$data['campos'].' FROM '.$data['tabla'].' '.$data['whereArmado'].' '.$data['groupBy'].' '.$data['orderBy'];
+                break;
             case 'insert':
-                $sql = "INSERT INTO ".$data['tabla']." (".$data['campos'].") VALUES (".$data['valores'].")";
-            break;
+                $sql = 'INSERT INTO '.$data['tabla'].' ('.$data['campos'].') VALUES ('.$data['valores'].')';
+                break;
             case 'update':
-                $sql = "UPDATE ".$data['tabla']." SET ".$data['valores']." ".$data['whereArmado'];
-            break;
+                $sql = 'UPDATE '.$data['tabla'].' SET '.$data['valores'].' '.$data['whereArmado'];
+                break;
             case 'delete':
-                $sql = "DELETE FROM ".$data['tabla']." ".$data['whereArmado'];
-            break;
+                $sql = 'DELETE FROM '.$data['tabla'].' '.$data['whereArmado'];
+                break;
             case 'customSql':
                 $sql = "UNLOAD TO '".$this->fecha.".csv' DELIMITER '|' ".$data['customSql'];
-            break;
+                break;
         }
         $sql = trim(preg_replace('/\s\s+/', ' ', $sql));
+
         return $sql;
     }
 
-    public function obtenerSiguienteNumerador($tabla, $campoId = "id"){
+    public function obtenerSiguienteNumerador($tabla, $campoId = 'id')
+    {
         $id = 1;
-        $data = array( 'acc' => 'list', 'campos' => 'MAX('.$campoId.') AS id', 'tabla' => $tabla );
+        $data = ['acc' => 'list', 'campos' => 'MAX('.$campoId.') AS id', 'tabla' => $tabla];
         $fila = self::primeraFilaLista($this->apiCall($data));
         if ($fila !== null && isset($fila->id) && (string) $fila->id !== '') {
             $id = (int) $fila->id + 1;
         }
+
         return $id;
     }
 }

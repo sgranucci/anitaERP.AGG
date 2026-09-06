@@ -1,77 +1,106 @@
 @extends("theme.$theme.layout")
 @section('titulo')
-    Arboles de Aprobación
+    Árboles de aprobación
+@endsection
+
+@section("styles")
+<link rel="stylesheet" href="{{ asset('assets/css/arbolaprobacion.css') }}?v={{ @filemtime(public_path('assets/css/arbolaprobacion.css')) ?: time() }}">
 @endsection
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 @endsection
 
-<?php use App\Helpers\biblioteca ?>
-
 @section('contenido')
 <div class="row">
     <div class="col-lg-12">
-        @include('includes.mensaje')
-        <div class="card card-info">
-            <div class="card-header">
-                <h3 class="card-title">Arboles de Aprobación</h3>
-                <div class="card-tools">
-                    <a href="{{route('crea_arbolaprobacion')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crea-arbol-de-aprobacion', false))
-                        	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-						@endif
-                    </a>
+        <div class="anita-arbol anita-arbol-index">
+            @include('includes.mensaje')
+
+            <div class="anita-arbol-hero">
+                <div class="anita-arbol-hero-row">
+                    <div>
+                        <p class="anita-arbol-brand">Configuración · Circuitos</p>
+                        <h1 class="anita-arbol-title">Árboles de aprobación</h1>
+                        <p class="anita-arbol-sub">Circuitos por documento, centro de costo y dual-rama por cuenta en requisiciones.</p>
+                    </div>
+                    <div class="anita-arbol-hero-actions">
+                        @if (can('crea-arbol-de-aprobacion', false))
+                            <a href="{{ route('crea_arbolaprobacion') }}" class="btn btn-light btn-sm">
+                                <i class="fa fa-plus"></i> Nuevo árbol
+                            </a>
+                        @endif
+                    </div>
                 </div>
             </div>
-            @include('configuracion.arbolaprobacion.partials.filtros_externos')
-            <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover" id="tabla-data">
-                    <thead>
-                        <tr>
-                            <th class="width20">ID</th>
-                            <th>Nombre</th>
-                            <th>Empresa</th>
-                            <th>Tipo de Arbol</th>
-                            <th>Estado</th>
-                            <th>Niveles</th>
-                            <th class="width80" data-orderable="false"></th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        @foreach ($datas as $data)
-                        <tr>
-                            <td>{{$data->id}}</td>
-                            <td>{{$data->nombre}}</td>
-                            <td>{{$data->empresas->nombre}}</td>
-                            <td>{{$data->tipoarbol}}</td>
-                            <td>{{$data->estado}}</td>
-                            <td>
-                                <ul>
-                                @foreach($data->arbolaprobacion_niveles as $arbolaprobacion_nivel)
-                                    <li>Nivel: {{$arbolaprobacion_nivel->nivel}}-CC:{{$arbolaprobacion_nivel->centrocosto_ids->codigo}}-Usr: {{$arbolaprobacion_nivel->usuarios->nombre ?? ''}}-{{$arbolaprobacion_nivel->desdemonto}}</li>
-                                @endforeach
-                                </ul>
-                            </td>
-                            <td>
-                       			@if (can('edita-arbol-de-aprobacion', false))
-                                	<a href="{{route('edita_arbolaprobacion', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
-                                    <i class="fa fa-edit"></i>
-                                	</a>
-								@endif
-                       			@if (can('borra-arbol-de-aprobacion', false))
-                                <form action="{{route('elimina_arbolaprobacion', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
-                                    @csrf @method("delete")
-                                    <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
-                                        <i class="fa fa-times-circle text-danger"></i>
-                                    </button>
-                                </form>
-								@endif
-                            </td>
-                        </tr>
-                        @endforeach
-                    </tbody>
-                </table>
+
+            <div class="anita-arbol-panel p-0 overflow-hidden">
+                @include('configuracion.arbolaprobacion.partials.filtros_externos')
+                <div class="table-responsive">
+                    <table class="table table-hover table-striped mb-0" id="tabla-data">
+                        <thead>
+                            <tr>
+                                <th class="width20">ID</th>
+                                <th>Nombre</th>
+                                <th>Empresa</th>
+                                <th>Tipo</th>
+                                <th>Estado</th>
+                                <th>Niveles</th>
+                                <th class="width80" data-orderable="false"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach ($datas as $data)
+                            <tr>
+                                <td>{{ $data->id }}</td>
+                                <td><strong>{{ $data->nombre }}</strong></td>
+                                <td>{{ optional($data->empresas)->nombre }}</td>
+                                <td>
+                                    <span class="anita-arbol-chip anita-arbol-chip-navy">{{ $data->tipoarbol }}</span>
+                                </td>
+                                <td>
+                                    <span class="anita-arbol-chip {{ in_array((string) $data->estado, ['Activo', 'ACTIVO'], true) ? 'anita-arbol-chip-ok' : 'anita-arbol-chip-warn' }}">
+                                        {{ $data->estado }}
+                                    </span>
+                                </td>
+                                <td>
+                                    <ul class="anita-arbol-nivel-list">
+                                        @foreach($data->arbolaprobacion_niveles as $nivel)
+                                            <li class="anita-arbol-nivel-item">
+                                                <span class="anita-arbol-chip anita-arbol-chip-teal">N{{ $nivel->nivel }}</span>
+                                                @if(!empty($nivel->rama))
+                                                    <span class="anita-arbol-chip {{ $nivel->rama === 'B' ? 'anita-arbol-chip-warn' : 'anita-arbol-chip-ok' }}">Rama {{ $nivel->rama }}</span>
+                                                @endif
+                                                <span>CC {{ optional($nivel->centrocosto_ids)->codigo }}</span>
+                                                <span class="text-muted">·</span>
+                                                <span>{{ optional($nivel->usuarios)->nombre ?: 'auto' }}</span>
+                                                @if(filled($nivel->documento_estado_al_aprobar))
+                                                    <span class="text-muted">→ {{ $nivel->documento_estado_al_aprobar }}</span>
+                                                @endif
+                                            </li>
+                                        @endforeach
+                                    </ul>
+                                </td>
+                                <td>
+                                    @if (can('edita-arbol-de-aprobacion', false))
+                                        <a href="{{ route('edita_arbolaprobacion', ['id' => $data->id]) }}" class="btn-accion-tabla tooltipsC" title="Editar">
+                                            <i class="fa fa-edit"></i>
+                                        </a>
+                                    @endif
+                                    @if (can('borra-arbol-de-aprobacion', false))
+                                        <form action="{{ route('elimina_arbolaprobacion', ['id' => $data->id]) }}" class="d-inline form-eliminar" method="POST">
+                                            @csrf @method("delete")
+                                            <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar">
+                                                <i class="fa fa-times-circle text-danger"></i>
+                                            </button>
+                                        </form>
+                                    @endif
+                                </td>
+                            </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
     </div>

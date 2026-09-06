@@ -278,6 +278,9 @@ final class RecepcionProveedorAsientoAuditoriaSupport
                 'ctav_cotizacion',
                 'ctav_cod_mon',
                 'ctav_ccosto',
+                'ctav_usuario_umod',
+                'ctav_fecha_umod',
+                'ctav_hora_umod',
             ]),
             'whereArmado' => $whereArmado,
         ]);

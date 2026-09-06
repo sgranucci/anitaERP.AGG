@@ -350,6 +350,124 @@
             </div>
         </div>
 
+    @php
+    $esSuscripcion = (bool) old('es_suscripcion', $ocContrato->es_suscripcion ?? false);
+    $suscripcionNombre = old('suscripcion_nombre', $ocContrato->suscripcion_nombre ?? '');
+    $suscripcionPeriodicidad = old('suscripcion_periodicidad', $ocContrato->suscripcion_periodicidad ?? 'mensual');
+    $suscripcionMonto = old('suscripcion_monto_periodo', $ocContrato->suscripcion_monto_periodo ?? '');
+    $suscripcionTol = old('suscripcion_tolerancia_pct', $ocContrato->suscripcion_tolerancia_pct ?? \App\Support\Compras\SuscripcionSupport::TOLERANCIA_DEFAULT_PCT);
+    $suscripcionTarjeta = old('suscripcion_tarjeta_ult4', $ocContrato->suscripcion_tarjeta_ult4 ?? '');
+    $suscripcionSolicitante = old('suscripcion_solicitante', $ocContrato->suscripcion_solicitante ?? '');
+    $suscripcionCcRel = $ocContrato->centrocostos ?? null;
+    $suscripcionCcId = (int) old(
+        'centrocosto_id',
+        $ocContrato->centrocosto_id
+            ?? (auth()->user()->centrocosto_id ?? 0)
+    );
+    if ($suscripcionCcId > 0 && (! $suscripcionCcRel || (int) $suscripcionCcRel->id !== $suscripcionCcId)) {
+        $suscripcionCcRel = collect($centrocosto_query ?? [])->firstWhere('id', $suscripcionCcId)
+            ?? $suscripcionCcRel;
+    }
+    $suscripcionCcCodigo = old('centrocosto_codigo', $suscripcionCcRel->codigo ?? '');
+    $suscripcionCcNombre = old('centrocosto_nombre', $suscripcionCcRel->nombre ?? '');
+@endphp
+
+        <div class="form-group row border-top pt-3 mt-2">
+            <label class="col-lg-4 control-label text-right pr-2">Suscripción (tarjeta)</label>
+            <div class="col-lg-8">
+                <div class="custom-control custom-checkbox">
+                    <input type="hidden" name="es_suscripcion" value="0">
+                    <input type="checkbox" class="custom-control-input" id="es_suscripcion" name="es_suscripcion" value="1"
+                        {{ $esSuscripcion ? 'checked' : '' }} {{ $soloLectura ? 'disabled' : '' }}>
+                    <label class="custom-control-label" for="es_suscripcion">
+                        <strong>Es suscripción SaaS / tarjeta corporativa</strong>
+                        <small class="text-muted d-block">
+                            Servicio que se paga con tarjeta (Adobe, Zoom, etc.). Queda en el módulo Suscripciones
+                            y se concilia mes a mes contra el resumen de la tarjeta.
+                        </small>
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div id="oc-suscripcion-campos" class="mb-2" style="{{ $esSuscripcion ? '' : 'display:none;' }}">
+            <div class="form-group row mb-0">
+                <div class="offset-lg-4 col-lg-8">
+                    <div class="border rounded bg-light px-3 pt-3 pb-2">
+                        <div class="form-row">
+                            <div class="form-group col-md-8 mb-3">
+                                <label class="requerido mb-1" for="suscripcion_nombre">Nombre del servicio</label>
+                                <input type="text" name="suscripcion_nombre" id="suscripcion_nombre" class="form-control" maxlength="180"
+                                    value="{{ $suscripcionNombre }}" {{ $soloLectura ? 'readonly' : '' }}
+                                    placeholder="Ej: Adobe Creative Cloud">
+                                <small class="text-muted">Nombre comercial: así figura en listados, PDF y conciliación.</small>
+                            </div>
+                            <div class="form-group col-md-4 mb-3">
+                                <label class="mb-1" for="suscripcion_solicitante">Quién lo pidió</label>
+                                <input type="text" name="suscripcion_solicitante" id="suscripcion_solicitante" class="form-control" maxlength="120"
+                                    value="{{ $suscripcionSolicitante }}" {{ $soloLectura ? 'readonly' : '' }}
+                                    placeholder="Ej: Juan Pérez">
+                                <small class="text-muted">Referencia libre (no es usuario AnitaERP).</small>
+                            </div>
+                        </div>
+
+                        {{-- Área = centro de costo (modal F1). --}}
+                        @include('contable.partials.campo_consulta_centrocosto', [
+                            'prefix' => 'oc_suscripcion',
+                            'layout' => 'inline',
+                            'label' => 'Área que lo consume',
+                            'inputName' => 'centrocosto_id',
+                            'inputId' => 'centrocosto_oc_suscripcion_id',
+                            'centrocostoId' => $suscripcionCcId ?: '',
+                            'codigo' => $suscripcionCcCodigo,
+                            'descripcion' => $suscripcionCcNombre,
+                            'solo_lectura' => $soloLectura,
+                            'required' => false,
+                            'mostrar_editar' => true,
+                            'ayuda' => 'Centro de costo del sector. El gerente de Suscripciones › Aprobadores autoriza el alta.',
+                        ])
+
+                        <div class="form-row mt-1">
+                            <div class="form-group col-sm-6 col-md-3 mb-3">
+                                <label class="requerido mb-1" for="suscripcion_monto_periodo">Monto del período</label>
+                                <input type="number" step="0.01" min="0" name="suscripcion_monto_periodo" id="suscripcion_monto_periodo"
+                                    class="form-control" value="{{ $suscripcionMonto }}" {{ $soloLectura ? 'readonly' : '' }}
+                                    placeholder="0.00">
+                                <small class="text-muted">Lo que cobra la tarjeta cada ciclo.</small>
+                            </div>
+                            <div class="form-group col-sm-6 col-md-3 mb-3">
+                                <label class="requerido mb-1" for="suscripcion_periodicidad">Cada cuánto</label>
+                                <select name="suscripcion_periodicidad" id="suscripcion_periodicidad" class="form-control"
+                                    {{ $soloLectura ? 'disabled' : '' }}>
+                                    <option value="mensual" @selected($suscripcionPeriodicidad === 'mensual')>Mensual</option>
+                                    <option value="anual" @selected($suscripcionPeriodicidad === 'anual')>Anual</option>
+                                </select>
+                            </div>
+                            <div class="form-group col-sm-6 col-md-3 mb-3">
+                                <label class="mb-1" for="suscripcion_tolerancia_pct">Tolerancia %</label>
+                                <input type="number" step="0.01" min="0" max="100" name="suscripcion_tolerancia_pct"
+                                    id="suscripcion_tolerancia_pct" class="form-control"
+                                    value="{{ $suscripcionTol }}" {{ $soloLectura ? 'readonly' : '' }} placeholder="10">
+                                <small class="text-muted">Holgura TC/IVA. Tope = monto × (1 + %).</small>
+                            </div>
+                            <div class="form-group col-sm-6 col-md-3 mb-3">
+                                <label class="requerido mb-1" for="suscripcion_tarjeta_ult4">Últimos 4 de la tarjeta</label>
+                                <input type="text" name="suscripcion_tarjeta_ult4" id="suscripcion_tarjeta_ult4" class="form-control"
+                                    maxlength="4" pattern="\d{4}" inputmode="numeric" autocomplete="off"
+                                    value="{{ $suscripcionTarjeta }}" {{ $soloLectura ? 'readonly' : '' }} placeholder="4821">
+                                <small class="text-muted">Para cruzar el extracto.</small>
+                            </div>
+                        </div>
+
+                        <p class="text-muted small mb-1">
+                            Si no cargás <em>tope del contrato</em> arriba, se usa el tope autorizado (monto × tolerancia).
+                            Para facturar sin remito: marcá <em>No requiere recepción</em> e imputá con la cuenta del contrato.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         @if (! empty($oc_contrato_resumen))
             <div class="alert alert-light border mb-0">
                 <strong>Estado actual:</strong>

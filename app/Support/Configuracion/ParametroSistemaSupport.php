@@ -21,6 +21,8 @@ final class ParametroSistemaSupport
 
     public const CLAVE_FCE_CUENTACAJA_ID = 'fce_cuentacaja_id';
 
+    public const CLAVE_ARTICULO_APROBACION_ALTA = 'articulo_aprobacion_alta';
+
     private const CACHE_KEY = 'parametro_sistema.mapa';
 
     /**
@@ -49,6 +51,13 @@ final class ParametroSistemaSupport
                 'ayuda' => 'Cuenta cuyo CBU se envía a ARCA en FCE (dato adicional 21). En Anita era tesmae 00000032. F1 o lupa abren la consulta.',
                 'tipo' => 'cuentacaja',
                 'orden' => 30,
+            ],
+            self::CLAVE_ARTICULO_APROBACION_ALTA => [
+                'grupo' => 'Aprobaciones / Stock',
+                'etiqueta' => 'Circuito de aprobación al alta de artículos',
+                'ayuda' => 'Si está activo, el alta nace PENDIENTE y sigue el árbol tipo Artículos (router por uso). Si está apagado, nace ACTIVO como siempre. Los usos se configuran en Stock → Uso de artículos (auto / arbol / default).',
+                'tipo' => 'boolean',
+                'orden' => 40,
             ],
         ];
     }
@@ -97,6 +106,18 @@ final class ParametroSistemaSupport
         return (float) $valor;
     }
 
+    public static function boolean(string $clave, bool $fallback): bool
+    {
+        $valor = self::mapa()[$clave] ?? null;
+        if ($valor === null || $valor === '') {
+            return $fallback;
+        }
+
+        $v = strtolower(trim((string) $valor));
+
+        return in_array($v, ['1', 'true', 's', 'si', 'sí', 'yes', 'on'], true);
+    }
+
     /**
      * @return array<string, list<array{clave: string, grupo: string, etiqueta: string, ayuda: string, tipo: string, valor: string}>>
      */
@@ -133,13 +154,18 @@ final class ParametroSistemaSupport
             if (! array_key_exists($clave, $valores)) {
                 continue;
             }
-            $valor = $def['tipo'] === 'cuentacaja'
-                ? (string) max(0, (int) $valores[$clave])
-                : (is_numeric($valores[$clave])
-                    ? (string) $valores[$clave]
-                    : trim((string) $valores[$clave]));
-            if ($def['tipo'] === 'cuentacaja' && $valor === '0') {
-                $valor = '';
+            $valorRaw = $valores[$clave];
+            if ($def['tipo'] === 'cuentacaja') {
+                $valor = (string) max(0, (int) $valorRaw);
+                if ($valor === '0') {
+                    $valor = '';
+                }
+            } elseif ($def['tipo'] === 'boolean') {
+                $valor = self::normalizarBooleanGuardar($valorRaw) ? '1' : '0';
+            } else {
+                $valor = is_numeric($valorRaw)
+                    ? (string) $valorRaw
+                    : trim((string) $valorRaw);
             }
 
             Parametro_Sistema::query()->updateOrCreate(
@@ -195,8 +221,22 @@ final class ParametroSistemaSupport
                 10_000_000
             ),
             self::CLAVE_FCE_CUENTACAJA_ID => (string) self::cuentacajaIdFallbackAnita(),
+            self::CLAVE_ARTICULO_APROBACION_ALTA => filter_var(
+                config('articulo.aprobacion_alta.habilitado', false),
+                FILTER_VALIDATE_BOOLEAN
+            ) ? '1' : '0',
             default => '0',
         };
+    }
+
+    private static function normalizarBooleanGuardar(mixed $valor): bool
+    {
+        if (is_bool($valor)) {
+            return $valor;
+        }
+        $v = strtolower(trim((string) $valor));
+
+        return in_array($v, ['1', 'true', 's', 'si', 'sí', 'yes', 'on'], true);
     }
 
     /**

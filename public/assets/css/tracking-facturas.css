@@ -1,0 +1,487 @@
+/*
+ * Tracking de facturas.
+ *
+ * Toma los tokens visuales del mockup (encabezado azul, franja de totales,
+ * segmentos, filas crema, pills) y los aplica sobre la estructura AdminLTE que
+ * usa el resto del sistema. Todo cuelga de `.tracking-facturas` para que las
+ * reglas no se escapen a otras pantallas.
+ */
+
+.tracking-facturas {
+    --tf-panel: #ffffff;
+    --tf-ink: #1f2937;
+    --tf-ink-soft: #64748b;
+    --tf-ink-faint: #94a3b8;
+    --tf-border: #e2e6ec;
+    --tf-navy: #17253f;
+    --tf-blue: #3b72ac;
+    --tf-blue-dark: #2e5c8a;
+    --tf-blue-soft: #e4eef7;
+    --tf-green: #2e8b47;
+    --tf-green-dark: #256e39;
+    --tf-red: #bc4a3c;
+    --tf-red-dark: #a03d31;
+    --tf-amber: #d89b2e;
+    --tf-amber-text: #8a6417;
+    --tf-cream-stripe: #fdf8ea;
+    --tf-cream-hover: #f5efdd;
+    --tf-peach-bg: #f6deb8;
+    --tf-peach-text: #8a5a1e;
+    --tf-slate-bg: #e7eaf0;
+    --tf-slate-text: #55607a;
+
+    color: var(--tf-ink);
+}
+
+/* ---- encabezado del módulo ---- */
+
+.tracking-facturas .tf-header {
+    background: var(--tf-blue);
+    color: #fff;
+    border-radius: 6px 6px 0 0;
+    padding: 14px 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+}
+
+.tracking-facturas .tf-header h1 {
+    font-size: 16px;
+    font-weight: 700;
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+}
+
+.tracking-facturas .tf-header .tf-header-acciones {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.tracking-facturas .tf-ghost-btn {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.65);
+    color: #fff;
+    padding: 6px 13px;
+    border-radius: 5px;
+    font-size: 12.5px;
+    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.tracking-facturas .tf-ghost-btn:hover,
+.tracking-facturas .tf-ghost-btn:focus {
+    background: rgba(255, 255, 255, 0.12);
+    color: #fff;
+    text-decoration: none;
+}
+
+.tracking-facturas .tf-panel {
+    background: var(--tf-panel);
+    border: 1px solid var(--tf-border);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+}
+
+.tracking-facturas .tf-intro {
+    font-size: 13.5px;
+    color: var(--tf-ink-soft);
+    max-width: 80ch;
+    margin: 0;
+    padding: 16px 20px 0;
+}
+
+/* ---- franja de totales ---- */
+
+.tracking-facturas .tf-resumen {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 20px;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--tf-border);
+}
+
+.tracking-facturas .tf-resumen .tf-item .tf-label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--tf-ink-soft);
+    margin-bottom: 4px;
+}
+
+.tracking-facturas .tf-resumen .tf-item .tf-valor {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--tf-ink);
+    font-variant-numeric: tabular-nums;
+}
+
+.tracking-facturas .tf-resumen .tf-valor.tf-bueno {
+    color: var(--tf-green-dark);
+}
+
+.tracking-facturas .tf-resumen .tf-valor.tf-malo {
+    color: var(--tf-red-dark);
+}
+
+.tracking-facturas .tf-resumen .tf-nota {
+    font-size: 11px;
+    color: var(--tf-ink-faint);
+}
+
+/* ---- segmentos (búsquedas guardadas) ---- */
+
+.tracking-facturas .tf-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    padding: 14px 20px;
+}
+
+.tracking-facturas .tf-seg {
+    display: flex;
+    border: 1px solid var(--tf-border);
+    border-radius: 5px;
+    overflow: hidden;
+}
+
+.tracking-facturas .tf-seg > a {
+    background: var(--tf-panel);
+    border: none;
+    border-right: 1px solid var(--tf-border);
+    padding: 8px 14px;
+    font-size: 12.5px;
+    font-weight: 500;
+    color: var(--tf-ink-soft);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+}
+
+.tracking-facturas .tf-seg > a:last-child {
+    border-right: none;
+}
+
+.tracking-facturas .tf-seg > a:hover {
+    background: var(--tf-blue-soft);
+    color: var(--tf-blue-dark);
+    text-decoration: none;
+}
+
+.tracking-facturas .tf-seg > a.tf-activo {
+    background: var(--tf-blue);
+    color: #fff;
+    font-weight: 600;
+}
+
+.tracking-facturas .tf-seg .tf-conteo {
+    opacity: 0.75;
+    font-variant-numeric: tabular-nums;
+}
+
+/* ---- grilla ---- */
+
+.tracking-facturas .tf-grilla {
+    margin-bottom: 0;
+}
+
+.tracking-facturas .tf-grilla thead th {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--tf-ink-soft);
+    border-bottom: 2px solid var(--tf-border);
+    border-top: none;
+    font-weight: 700;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.tracking-facturas .tf-grilla tbody td {
+    padding: 10px 14px;
+    vertical-align: middle;
+    border-top: 1px solid var(--tf-border);
+}
+
+.tracking-facturas .tf-grilla tbody tr:nth-child(odd) {
+    background: var(--tf-cream-stripe);
+}
+
+.tracking-facturas .tf-grilla tbody tr:hover {
+    background: var(--tf-cream-hover);
+}
+
+.tracking-facturas .tf-grilla td.tf-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.tracking-facturas .tf-grilla td.tf-apagado {
+    color: var(--tf-ink-faint);
+}
+
+.tracking-facturas .tf-grilla .tf-comprobante {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.tracking-facturas .tf-grilla .tf-proveedor {
+    max-width: 280px;
+    white-space: normal;
+}
+
+/* ---- pills y tags ---- */
+
+.tracking-facturas .tf-pill {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
+
+.tracking-facturas .tf-pill.tf-ok {
+    background: var(--tf-green);
+    color: #fff;
+}
+
+.tracking-facturas .tf-pill.tf-pendiente {
+    background: var(--tf-amber);
+    color: #fff;
+}
+
+.tracking-facturas .tf-pill.tf-info {
+    background: var(--tf-blue);
+    color: #fff;
+}
+
+.tracking-facturas .tf-pill.tf-alerta {
+    background: var(--tf-red);
+    color: #fff;
+}
+
+.tracking-facturas .tf-pill.tf-neutro {
+    background: var(--tf-slate-bg);
+    color: var(--tf-slate-text);
+    text-transform: none;
+    font-weight: 600;
+}
+
+.tracking-facturas .tf-tag {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-weight: 700;
+    background: var(--tf-peach-bg);
+    color: var(--tf-peach-text);
+}
+
+.tracking-facturas .tf-tag.tf-tag-neutro {
+    background: var(--tf-slate-bg);
+    color: var(--tf-slate-text);
+}
+
+/* ---- acciones de fila ---- */
+
+.tracking-facturas .tf-icon-btn {
+    background: none;
+    border: none;
+    color: var(--tf-blue-dark);
+    padding: 4px 6px;
+    border-radius: 4px;
+    line-height: 1;
+}
+
+.tracking-facturas .tf-icon-btn:hover {
+    background: var(--tf-blue-soft);
+    color: var(--tf-blue-dark);
+    text-decoration: none;
+}
+
+.tracking-facturas .tf-icon-btn.tf-deshabilitado {
+    color: var(--tf-ink-faint);
+    cursor: not-allowed;
+}
+
+.tracking-facturas .tf-icon-btn.tf-deshabilitado:hover {
+    background: none;
+}
+
+/* ---- vacío ---- */
+
+.tracking-facturas .tf-vacio {
+    padding: 46px 20px;
+    text-align: center;
+    color: var(--tf-ink-soft);
+}
+
+.tracking-facturas .tf-vacio i {
+    font-size: 32px;
+    color: var(--tf-ink-faint);
+    margin-bottom: 10px;
+    display: block;
+}
+
+.tracking-facturas .tf-vacio .tf-vacio-titulo {
+    font-weight: 700;
+    color: var(--tf-ink);
+    margin-bottom: 4px;
+}
+
+@media (max-width: 991px) {
+    .tracking-facturas .tf-resumen {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .tracking-facturas .tf-aging-tramos {
+        grid-template-columns: repeat(2, 1fr);
+    }
+}
+
+/* ---- antigüedad de deuda ---- */
+
+.tracking-facturas .tf-aging {
+    padding: 12px 20px 4px;
+    border-bottom: 1px solid var(--tf-border);
+}
+
+.tracking-facturas .tf-aging-titulo {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--tf-ink-soft);
+    margin-bottom: 8px;
+    font-weight: 700;
+}
+
+.tracking-facturas .tf-aging-tramos {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.tracking-facturas .tf-aging-cabeza {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.tracking-facturas .tf-aging-ayuda {
+    font-size: 11px;
+    color: var(--tf-ink-faint);
+}
+
+.tracking-facturas .tf-aging-item {
+    background: var(--tf-slate-bg);
+    border-radius: 4px;
+    padding: 8px 12px;
+    display: block;
+    color: inherit;
+    text-decoration: none;
+    border: 1px solid transparent;
+    transition: border-color 0.12s ease, background 0.12s ease;
+}
+
+.tracking-facturas .tf-aging-item:hover {
+    background: var(--tf-blue-soft);
+    color: inherit;
+    text-decoration: none;
+}
+
+.tracking-facturas .tf-aging-item.tf-aging-activo {
+    border-color: var(--tf-blue);
+    background: var(--tf-blue-soft);
+}
+
+.tracking-facturas .tf-aging-item.tf-aging-urgente {
+    background: #f8e8e6;
+}
+
+.tracking-facturas .tf-aging-item.tf-aging-urgente:hover,
+.tracking-facturas .tf-aging-item.tf-aging-urgente.tf-aging-activo {
+    background: #f0d6d2;
+}
+
+.tracking-facturas .tf-aging-monto {
+    font-size: 11px;
+    color: var(--tf-ink-soft);
+    font-variant-numeric: tabular-nums;
+    margin-top: 2px;
+}
+
+.tracking-facturas .tf-aging-label {
+    font-size: 11px;
+    color: var(--tf-ink-soft);
+}
+
+.tracking-facturas .tf-aging-valor {
+    font-size: 16px;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.tracking-facturas .tf-aging-urgente .tf-aging-valor {
+    color: var(--tf-red-dark);
+}
+
+/* ---- alertas de faltantes ---- */
+
+.tracking-facturas .tf-alertas {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 0 20px 14px;
+}
+
+.tracking-facturas .tf-alerta-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 7px 12px;
+    border-radius: 4px;
+    background: #f8e8e6;
+    color: var(--tf-red-dark);
+    font-size: 12.5px;
+    text-decoration: none;
+}
+
+.tracking-facturas .tf-alerta-item:hover {
+    background: #f0d6d2;
+    color: var(--tf-red-dark);
+    text-decoration: none;
+}
+
+.tracking-facturas .tf-alerta-item.tf-alerta-urgente {
+    background: var(--tf-red);
+    color: #fff;
+}
+
+.tracking-facturas .tf-alerta-item.tf-alerta-urgente:hover {
+    background: var(--tf-red-dark);
+    color: #fff;
+}
+
+/* Workspace split: estilos en erp-workspace-panel.css */
+
+body.erp-workspace-abierto .tracking-facturas .tf-grilla {
+    font-size: 12px;
+}
+

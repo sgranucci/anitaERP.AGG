@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\Stock;
 
-use App\Support\Database\SqlDialectSupport;
 use App\Exports\Stock\ArticuloExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ValidacionArticulo;
@@ -31,7 +30,6 @@ use App\Repositories\Configuracion\OficinacompraRepositoryInterface;
 use App\Repositories\Configuracion\PeriodicidadcompraRepositoryInterface;
 use App\Repositories\Configuracion\SeteoModeloetiquetaRepositoryInterface;
 use App\Repositories\Configuracion\SeteosalidaRepositoryInterface;
-use App\Support\Configuracion\SeteoSalidaProgramaSupport;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Repositories\Stock\Articulo_ArchivoRepositoryInterface;
 use App\Repositories\Stock\Articulo_CajaRepositoryInterface;
@@ -41,27 +39,29 @@ use App\Repositories\Stock\Articulo_EstadoRepositoryInterface;
 use App\Repositories\Stock\Articulo_ProveedorRepositoryInterface;
 use App\Repositories\Stock\ArticuloRepositoryInterface;
 use App\Repositories\Ventas\DescuentoventaRepositoryInterface;
-use App\Support\Stock\PrecioListaVigenteSupport;
 use App\Services\Stock\ArticuloAnitaSyncService;
+use App\Services\Stock\ArticuloParteUnicaService;
 use App\Services\Stock\PrecioService;
 use App\Services\Stock\StkdepSaldoAnitaService;
-use App\Services\Stock\ArticuloParteUnicaService;
+use App\Support\Compras\ArticuloProveedorMatchSupport;
+use App\Support\Compras\ArticuloProveedorOperativoSupport;
+use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
+use App\Support\Configuracion\SeteoSalidaProgramaSupport;
+use App\Support\Database\SqlDialectSupport;
+use App\Support\Listado\QueryRetornoListado;
 use App\Support\Stock\ArticuloConsultaDesdeModal;
-use App\Support\Stock\ArticuloSaldosDepositoSupport;
-use App\Support\Stock\ArticuloSimilaresDescripcionSupport;
-use App\Support\Stock\MovimientosArticuloDepositoSupport;
-use App\Support\Stock\TransferenciaMercaderiaRepararCostosSupport;
 use App\Support\Stock\ArticuloEtiquetaNpuRangoSupport;
 use App\Support\Stock\ArticuloEtiquetaNpuSupport;
 use App\Support\Stock\ArticuloEtiquetaZplSupport;
 use App\Support\Stock\ArticuloListadoFiltros;
-use App\Support\Listado\QueryRetornoListado;
-use App\Support\Compras\ArticuloProveedorMatchSupport;
-use App\Support\Compras\ArticuloProveedorOperativoSupport;
-use App\Support\Compras\ArticuloProveedorPrecioListaSupport;
 use App\Support\Stock\ArticuloProveedorLineasSupport;
+use App\Support\Stock\ArticuloSaldosDepositoSupport;
+use App\Support\Stock\ArticuloSimilaresDescripcionSupport;
 use App\Support\Stock\ArticuloUltimoCreatePrefill;
+use App\Support\Stock\MovimientosArticuloDepositoSupport;
+use App\Support\Stock\PrecioListaVigenteSupport;
 use App\Support\Stock\RecepcionProveedorParteUnicaSupport;
+use App\Support\Stock\TransferenciaMercaderiaRepararCostosSupport;
 use Auth;
 use Carbon\Carbon;
 use Exception;
@@ -846,6 +846,11 @@ class ArticuloController extends Controller
         $data = ArticuloListadoFiltros::normalizarEmpresaIdEnData($request->all());
         $data['fl_precio_promedio_transferencia'] = $request->boolean('fl_precio_promedio_transferencia');
 
+        $circuitoAlta = \App\Support\Stock\ArticuloAprobacionAltaSupport::habilitado();
+        if ($circuitoAlta) {
+            $data['estado'] = \App\Support\Stock\ArticuloAprobacionAltaSupport::ESTADO_PENDIENTE;
+        }
+
         DB::beginTransaction();
         try {
             $data['foto'] = ($nombre_foto != null ? $nombre_foto.'.jpg' : null);
@@ -857,8 +862,12 @@ class ArticuloController extends Controller
             if ($articulo) {
                 // Crea estado
                 $data['estadofechas'][] = Carbon::now();
-                $data['estados'][] = $estado_enum[0]['nombre'];
-                $data['estadoobservaciones'][] = 'Alta de Artículo';
+                $data['estados'][] = $circuitoAlta
+                    ? \App\Support\Stock\ArticuloAprobacionAltaSupport::ESTADO_PENDIENTE
+                    : $estado_enum[0]['nombre'];
+                $data['estadoobservaciones'][] = $circuitoAlta
+                    ? 'Alta pendiente de aprobación'
+                    : 'Alta de Artículo';
                 $data['estadousuarios'][] = Auth::user()->id;
 
                 $articulo_estado = $this->articulo_estadoRepository->create($data, $articulo->id);
@@ -867,6 +876,11 @@ class ArticuloController extends Controller
 
                 if (can('actualizar-compras-articulos', false)) {
                     $this->articulo_proveedorRepository->syncFromRequest($data, (int) $articulo->id);
+                }
+
+                if ($circuitoAlta) {
+                    app(\App\Services\Stock\ArticuloArbolIntegracionService::class)
+                        ->iniciarCircuito((int) $articulo->id, 'insert');
                 }
             }
 
@@ -889,8 +903,8 @@ class ArticuloController extends Controller
             return ['errores' => $e->getMessage()];
         }
 
-        // Envia correo de alta del articulo
-        if (config('articulo.ENVIA_MAIL_ALTA_ARTICULO') == 'SI') {
+        // Envia correo de alta del articulo (legacy; con circuito activo el árbol avisa)
+        if (! $circuitoAlta && config('articulo.ENVIA_MAIL_ALTA_ARTICULO') == 'SI') {
             // Busca el uso del articulo para enviar mail
             $destinatario = config('articulo.DESTINATARIO_ALTA_ARTICULO');
 
@@ -903,8 +917,12 @@ class ArticuloController extends Controller
             }
         }
 
+        $mensajeOk = $circuitoAlta
+            ? 'Producto creado — pendiente de aprobación'
+            : 'Producto creado';
+
         return redirect()->route('articulo', QueryRetornoListado::desdeRequest($request, ArticuloListadoFiltros::class))
-            ->with('status', 'Producto creado');
+            ->with('status', $mensajeOk);
     }
 
     public function editar(Request $request, $id, $type = null, $filtros = null)
@@ -996,7 +1014,7 @@ class ArticuloController extends Controller
 
         $articuloPrevio = Articulo::query()
             ->whereKey((int) ($data['articulo_id'] ?? $id))
-            ->first(['id', 'coeficienteconversion']);
+            ->first(['id', 'coeficienteconversion', 'usoarticulo_id', 'estado']);
         $coefAnterior = $articuloPrevio !== null
             ? (float) ($articuloPrevio->coeficienteconversion ?? 0)
             : null;
@@ -1006,9 +1024,22 @@ class ArticuloController extends Controller
         $coeficienteCambio = $coefAnterior !== null
             && abs($coefAnterior - (float) $coefNuevo) > 0.000001;
 
+        $arbolSvc = app(\App\Services\Stock\ArticuloArbolIntegracionService::class);
+        $antesArbol = [
+            'usoarticulo_id' => (int) ($articuloPrevio->usoarticulo_id ?? 0),
+            'cuentas_fp' => $arbolSvc->fingerprintCuentas((int) $id),
+        ];
+
         DB::beginTransaction();
         try {
             $data['foto'] = ($nombre_foto != null ? $nombre_foto.'.jpg' : null);
+
+            // No permitir forzar ACTIVO desde el form si está en circuito
+            if (\App\Support\Stock\ArticuloAprobacionAltaSupport::habilitado()
+                && $articuloPrevio
+                && \App\Support\Stock\ArticuloAprobacionAltaSupport::requiereCircuito((string) $articuloPrevio->estado)) {
+                unset($data['estado']);
+            }
 
             $articulo = Articulo::findOrFail($data['articulo_id'])->update($data);
 
@@ -1020,6 +1051,12 @@ class ArticuloController extends Controller
             if (can('actualizar-compras-articulos', false)) {
                 $this->articulo_proveedorRepository->syncFromRequest($data, (int) $id);
             }
+
+            $despuesArbol = [
+                'usoarticulo_id' => (int) ($data['usoarticulo_id'] ?? $antesArbol['usoarticulo_id']),
+                'cuentas_fp' => $arbolSvc->fingerprintCuentas((int) $id),
+            ];
+            $arbolSvc->evaluarTrasActualizar((int) $id, $antesArbol, $despuesArbol);
 
             // Lee nuevo precio con relaciones para interface Anita
             $producto = Articulo::with('categorias')->with('subcategorias')->with('lineas')->with('mventas')->with('impuestos')

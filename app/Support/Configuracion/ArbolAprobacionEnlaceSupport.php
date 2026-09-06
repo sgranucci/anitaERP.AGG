@@ -19,6 +19,7 @@ final class ArbolAprobacionEnlaceSupport
     public static function normalizarHashRecibido(string $hash): string
     {
         $hash = trim(rawurldecode($hash));
+
         // Algunos proxies/clientes convierten '+' en espacio dentro de la ruta.
         return str_replace(' ', '+', $hash);
     }
@@ -148,5 +149,23 @@ final class ArbolAprobacionEnlaceSupport
         }
 
         return 'No tiene aprobación pendiente o el enlace ya no es válido. Verifique que el enlace del correo esté completo.';
+    }
+
+    public static function observacionConCanal(?string $observacion, string $canal = 'enlace'): string
+    {
+        $obs = trim((string) ($observacion ?? ''));
+        $tag = match ($canal) {
+            'bandeja' => '[vía bandeja]',
+            'enlace', 'mail' => '[vía enlace]',
+            default => '[vía '.$canal.']',
+        };
+        if ($obs === '') {
+            return $tag;
+        }
+        if (str_contains($obs, '[vía ')) {
+            return $obs;
+        }
+
+        return $obs.' · '.$tag;
     }
 }

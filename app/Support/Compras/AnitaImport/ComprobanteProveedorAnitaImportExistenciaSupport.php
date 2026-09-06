@@ -9,6 +9,11 @@ use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
 /**
  * Detecta facturas ya cargadas en ERP para no reimportarlas.
  *
+ * Reglas (en orden):
+ * 1) anita_nro_interno
+ * 2) empresa + proveedor + tipo + letra + sucursal + número
+ * 3) unicidad AFIP (empresa + código AFIP + letra + suc + nro + CUIT)
+ *
  * @phpstan-type Existente array{id: int, motivo: string, etiqueta: string}
  */
 final class ComprobanteProveedorAnitaImportExistenciaSupport
@@ -54,14 +59,17 @@ final class ComprobanteProveedorAnitaImportExistenciaSupport
             if ($tipo === '') {
                 continue;
             }
-            $clave = ComprobanteProveedorAnitaImportClaveSupport::claveDocumento(
+            $claveDocumento = ComprobanteProveedorAnitaImportClaveSupport::claveDocumento(
                 $tipo,
                 (string) $fila->letra,
                 (int) $fila->sucursal,
                 (int) $fila->numerocomprobante,
             );
-            $porClave[self::claveEmpresa((int) $fila->empresa_id, $clave)] = $id;
-            $porClave[$clave] = $id;
+            $porClave[self::claveFiscal(
+                (int) $fila->empresa_id,
+                (int) $fila->proveedor_id,
+                $claveDocumento,
+            )] = $id;
         }
 
         return [
@@ -79,10 +87,11 @@ final class ComprobanteProveedorAnitaImportExistenciaSupport
         array $indice,
         array $compra,
         int $empresaId,
+        int $proveedorId,
         ?int $tipotransaccionCompraId,
         string $cuitDigitos,
     ): ?array {
-        $hit = self::buscarSoloIndice($indice, $compra, $empresaId);
+        $hit = self::buscarSoloIndice($indice, $compra, $empresaId, $proveedorId);
         if ($hit !== null) {
             return $hit;
         }
@@ -114,8 +123,12 @@ final class ComprobanteProveedorAnitaImportExistenciaSupport
      * @param  array{por_interno: array<int, int>, por_clave: array<string, int>}  $indice
      * @param  array<string, mixed>  $compra
      */
-    public static function buscarSoloIndice(array $indice, array $compra, int $empresaId): ?array
-    {
+    public static function buscarSoloIndice(
+        array $indice,
+        array $compra,
+        int $empresaId,
+        int $proveedorId,
+    ): ?array {
         $nroInterno = (int) ($compra['com_nro_interno'] ?? 0);
         if ($nroInterno > 0 && isset($indice['por_interno'][$nroInterno])) {
             return [
@@ -125,23 +138,16 @@ final class ComprobanteProveedorAnitaImportExistenciaSupport
             ];
         }
 
-        $clave = ComprobanteProveedorAnitaImportClaveSupport::claveDocumento(
+        $claveDocumento = ComprobanteProveedorAnitaImportClaveSupport::claveDocumento(
             (string) ($compra['com_tipo'] ?? ''),
             (string) ($compra['com_letra'] ?? ''),
             (int) ($compra['com_sucursal'] ?? 0),
             (int) ($compra['com_nro'] ?? 0),
         );
-        $claveEmpresa = self::claveEmpresa($empresaId, $clave);
-        if (isset($indice['por_clave'][$claveEmpresa])) {
+        $claveFiscal = self::claveFiscal($empresaId, $proveedorId, $claveDocumento);
+        if (isset($indice['por_clave'][$claveFiscal])) {
             return [
-                'id' => $indice['por_clave'][$claveEmpresa],
-                'motivo' => 'clave',
-                'etiqueta' => self::etiquetaCompra($compra),
-            ];
-        }
-        if (isset($indice['por_clave'][$clave])) {
-            return [
-                'id' => $indice['por_clave'][$clave],
+                'id' => $indice['por_clave'][$claveFiscal],
                 'motivo' => 'clave',
                 'etiqueta' => self::etiquetaCompra($compra),
             ];
@@ -150,6 +156,18 @@ final class ComprobanteProveedorAnitaImportExistenciaSupport
         return null;
     }
 
+    /**
+     * Clave estricta: empresa + proveedor + documento fiscal.
+     * Evita que el mismo tipo/letra/suc/nro de otro proveedor (o empresa) se tome como ya importado.
+     */
+    public static function claveFiscal(int $empresaId, int $proveedorId, string $claveDocumento): string
+    {
+        return $empresaId.'#'.$proveedorId.'#'.$claveDocumento;
+    }
+
+    /**
+     * @deprecated Usar claveFiscal(); se mantiene por compatibilidad de tests viejos.
+     */
     public static function claveEmpresa(int $empresaId, string $clave): string
     {
         return $empresaId.'#'.$clave;

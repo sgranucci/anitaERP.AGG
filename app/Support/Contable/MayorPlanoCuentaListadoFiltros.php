@@ -83,6 +83,9 @@ class MayorPlanoCuentaListadoFiltros
             'mostrar_columna_centrocosto' => $request->has('mostrar_columna_centrocosto')
                 ? $request->boolean('mostrar_columna_centrocosto')
                 : true,
+            'fuente_mayor' => MayorFuenteConsultaSupport::normalizarModo(
+                $request->input('fuente_mayor', MayorFuenteConsultaSupport::MODO_AUTO)
+            ),
         ];
     }
 
@@ -285,6 +288,13 @@ class MayorPlanoCuentaListadoFiltros
 
         $out['mostrar_columna_centrocosto'] = self::mostrarColumnaCentrocosto($filtros) ? 1 : 0;
 
+        $fuenteMayor = MayorFuenteConsultaSupport::normalizarModo(
+            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_AUTO
+        );
+        if ($fuenteMayor !== MayorFuenteConsultaSupport::MODO_AUTO) {
+            $out['fuente_mayor'] = $fuenteMayor;
+        }
+
         return $out;
     }
 
@@ -292,6 +302,10 @@ class MayorPlanoCuentaListadoFiltros
     {
         $base = self::paraQueryString($filtros);
         unset($base['filtro_texto'], $base['excel_solapas_separadas'], $base['mostrar_columna_centrocosto']);
+        // La firma siempre incluye el modo (también auto) para no mezclar caches.
+        $base['fuente_mayor'] = MayorFuenteConsultaSupport::normalizarModo(
+            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_AUTO
+        );
 
         return md5(json_encode($base));
     }

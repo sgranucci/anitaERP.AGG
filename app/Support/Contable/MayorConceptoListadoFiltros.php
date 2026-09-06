@@ -90,6 +90,9 @@ class MayorConceptoListadoFiltros
             'filtro_emisor' => trim((string) $request->input('filtro_emisor', '')),
             'filtro_cuit' => trim((string) $request->input('filtro_cuit', '')),
             'filtro_texto' => trim((string) $request->input('filtro_texto', '')),
+            'fuente_mayor' => MayorFuenteConsultaSupport::normalizarModo(
+                $request->input('fuente_mayor', MayorFuenteConsultaSupport::MODO_AUTO)
+            ),
         ];
     }
 
@@ -600,6 +603,13 @@ class MayorConceptoListadoFiltros
             }
         }
 
+        $fuenteMayor = MayorFuenteConsultaSupport::normalizarModo(
+            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_AUTO
+        );
+        if ($fuenteMayor !== MayorFuenteConsultaSupport::MODO_AUTO) {
+            $out['fuente_mayor'] = $fuenteMayor;
+        }
+
         // No filtrar consolidar_empresas=0 ni arrays empresa_ids.
         return $out;
     }
@@ -611,8 +621,12 @@ class MayorConceptoListadoFiltros
         foreach (self::CAMPOS_FILTRO_DETALLE as $campo) {
             unset($filtrosConsulta[$campo]);
         }
+        $base = self::paraQueryString($filtrosConsulta);
+        $base['fuente_mayor'] = MayorFuenteConsultaSupport::normalizarModo(
+            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_AUTO
+        );
 
-        return md5(json_encode(self::paraQueryString($filtrosConsulta)));
+        return md5(json_encode($base));
     }
 
     /**

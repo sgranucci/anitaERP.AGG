@@ -11,6 +11,7 @@ use App\Models\Compras\Requisicion;
 use App\Models\Compras\Requisicion_Articulo;
 use App\Models\Compras\Requisicion_Estado;
 use App\Models\Compras\Sector_Legajocompra;
+use App\Models\Contable\Centrocosto;
 use App\Models\Contable\Cuentacontable;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Repositories\Compras\Ordencompra_ArchivoRepositoryInterface;
@@ -25,12 +26,11 @@ use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\ImpuestoService;
 use App\Services\Configuracion\ModuloAvisoService;
 use App\Services\Configuracion\OcArbolTriggerDispatcherService;
-use App\Support\Compras\OrdencompraCondicionPagoDefaultSupport;
-use App\Support\Compras\OrdencompraComprobanteEstados;
-use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Compras\ContratoPeriodoServicioSupport;
-use App\Support\Stock\SurmarSupport;
+use App\Support\Compras\OrdencompraComprobanteEstados;
 use App\Support\Compras\OrdencompraCondicionesContratacionGenerator;
+use App\Support\Compras\OrdencompraCondicionPagoDefaultSupport;
+use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Compras\OrdencompraDescuentoSupport;
 use App\Support\Compras\OrdencompraEnvioCuentasAPagarGateSupport;
 use App\Support\Compras\OrdencompraEstados;
@@ -38,13 +38,16 @@ use App\Support\Compras\OrdencompraLegajoGastronomiaSupport;
 use App\Support\Compras\OrdencompraTotalesResumen;
 use App\Support\Compras\OrdencompraTratamientoMovimientosSupport;
 use App\Support\Compras\RequisicionLineasOcSupport;
+use App\Support\Compras\SuscripcionSupport;
 use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
 use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
+use App\Support\Stock\SurmarSupport;
 use Auth;
 use Carbon\Carbon;
 use DB;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
@@ -405,7 +408,10 @@ class OrdencompraGestionService
         }
 
         try {
-            $this->arbolaprobacionService->validaOrdencompraRequestContraArbolOpcional($payload);
+            $esSuscripcionPayload = filter_var($payload['es_suscripcion'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            if (! $esSuscripcionPayload) {
+                $this->arbolaprobacionService->validaOrdencompraRequestContraArbolOpcional($payload);
+            }
         } catch (\RuntimeException $e) {
             return ['mensaje' => 'error', 'errores' => $e->getMessage()];
         }
@@ -464,10 +470,25 @@ class OrdencompraGestionService
                 ]);
             }
 
-            $this->ocArbolTriggerDispatcher->dispararPorAlta(
-                (int) $oc->id,
-                $this->observacionEnvioArbolDesdePayload($payload)
-            );
+            $esSuscripcion = filter_var($payload['es_suscripcion'] ?? false, FILTER_VALIDATE_BOOLEAN);
+            if ($esSuscripcion) {
+                $obs = $this->observacionEnvioArbolDesdePayload($payload)
+                    ?: 'Alta de suscripción (OC contrato) — árbol Suscripciones';
+                $r = $this->arbolaprobacionService->procesaArbolaprobacion('SU', (int) $oc->id, 'insert', [
+                    'observacion_envio' => $obs,
+                ]);
+                if ((int) $r === 0) {
+                    throw new \RuntimeException(
+                        'No hay árbol de aprobación tipo Suscripciones activo para la empresa, '
+                        .'o no hay nivel aplicable. Configurá el ABM de árboles antes de guardar.'
+                    );
+                }
+            } else {
+                $this->ocArbolTriggerDispatcher->dispararPorAlta(
+                    (int) $oc->id,
+                    $this->observacionEnvioArbolDesdePayload($payload)
+                );
+            }
 
             if (! $omitirMarcarRequisicionGeneroOc && ! empty($cab['requisicion_id'])) {
                 $this->sincronizarEstadoRequisicionSegunLineasOc((int) $cab['requisicion_id'], $uid);
@@ -532,7 +553,11 @@ class OrdencompraGestionService
         if (($existente->estadoordencompra ?? '') === OrdencompraEstados::PENDIENTE) {
             try {
                 $payload['ordencompra_id'] = $id;
-                $this->arbolaprobacionService->validaOrdencompraRequestContraArbolOpcional($payload);
+                $esSuscripcionPayload = filter_var($payload['es_suscripcion'] ?? false, FILTER_VALIDATE_BOOLEAN)
+                    || (bool) ($existente->es_suscripcion ?? false);
+                if (! $esSuscripcionPayload) {
+                    $this->arbolaprobacionService->validaOrdencompraRequestContraArbolOpcional($payload);
+                }
             } catch (\RuntimeException $e) {
                 return ['mensaje' => 'error', 'errores' => $e->getMessage()];
             }
@@ -592,10 +617,20 @@ class OrdencompraGestionService
             $this->ordencompraArchivoRepository->update($request, $id);
 
             if (($existente->estadoordencompra ?? '') === OrdencompraEstados::PENDIENTE) {
-                $this->ocArbolTriggerDispatcher->dispararPorActualizacion(
-                    $id,
-                    $this->observacionEnvioArbolDesdePayload($payload)
-                );
+                $esSuscripcion = filter_var($payload['es_suscripcion'] ?? false, FILTER_VALIDATE_BOOLEAN)
+                    || (bool) ($existente->es_suscripcion ?? false);
+                if ($esSuscripcion) {
+                    $obs = $this->observacionEnvioArbolDesdePayload($payload)
+                        ?: 'Actualización de suscripción — árbol Suscripciones';
+                    $this->arbolaprobacionService->procesaArbolaprobacion('SU', $id, 'insert', [
+                        'observacion_envio' => $obs,
+                    ]);
+                } else {
+                    $this->ocArbolTriggerDispatcher->dispararPorActualizacion(
+                        $id,
+                        $this->observacionEnvioArbolDesdePayload($payload)
+                    );
+                }
             }
 
             $uidAct = Auth::user()->id;
@@ -1199,6 +1234,15 @@ class OrdencompraGestionService
         if (! $esContrato) {
             return [
                 'es_contrato' => false,
+                'es_suscripcion' => false,
+                'suscripcion_nombre' => null,
+                'suscripcion_periodicidad' => null,
+                'suscripcion_monto_periodo' => null,
+                'suscripcion_tolerancia_pct' => null,
+                'suscripcion_tarjeta_ult4' => null,
+                'suscripcion_area' => null,
+                'suscripcion_solicitante' => null,
+                'suscripcion_borrador' => false,
                 'contrato_vigencia_desde' => null,
                 'contrato_vigencia_hasta' => null,
                 'contrato_monto_tope' => null,
@@ -1231,13 +1275,27 @@ class OrdencompraGestionService
             $cuentaId = 0;
         }
 
+        $esSuscripcion = filter_var($payload['es_suscripcion'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        $suscripcion = $this->armaSuscripcionDesdeRequest($payload, $esSuscripcion);
+
+        $montoTope = isset($payload['contrato_monto_tope']) && $payload['contrato_monto_tope'] !== ''
+            ? (float) $payload['contrato_monto_tope']
+            : null;
+        if ($esSuscripcion && ($montoTope === null || $montoTope <= 0)
+            && isset($suscripcion['suscripcion_monto_periodo'])
+            && (float) $suscripcion['suscripcion_monto_periodo'] > 0
+        ) {
+            $montoTope = SuscripcionSupport::topeAutorizado(
+                (float) $suscripcion['suscripcion_monto_periodo'],
+                (float) ($suscripcion['suscripcion_tolerancia_pct'] ?? SuscripcionSupport::TOLERANCIA_DEFAULT_PCT)
+            );
+        }
+
         return [
             'es_contrato' => true,
             'contrato_vigencia_desde' => ($payload['contrato_vigencia_desde'] ?? null) ?: null,
             'contrato_vigencia_hasta' => ($payload['contrato_vigencia_hasta'] ?? null) ?: null,
-            'contrato_monto_tope' => isset($payload['contrato_monto_tope']) && $payload['contrato_monto_tope'] !== ''
-                ? (float) $payload['contrato_monto_tope']
-                : null,
+            'contrato_monto_tope' => $montoTope,
             'contrato_moneda_id' => ! empty($payload['contrato_moneda_id']) ? (int) $payload['contrato_moneda_id'] : null,
             'contrato_auto_renovable' => $autoRenovable,
             'contrato_dias_preaviso' => $autoRenovable && ! empty($payload['contrato_dias_preaviso'])
@@ -1264,6 +1322,62 @@ class OrdencompraGestionService
             'contrato_minimo_ingresos' => ! empty($payload['contrato_minimo_ingresos'])
                 ? max(1, (int) $payload['contrato_minimo_ingresos'])
                 : 1,
+        ] + $suscripcion;
+    }
+
+    /**
+     * Campos del módulo Suscripciones cuando la OC contrato se marca como tal.
+     *
+     * @param  array<string, mixed>  $payload
+     * @return array<string, mixed>
+     */
+    private function armaSuscripcionDesdeRequest(array $payload, bool $esSuscripcion): array
+    {
+        if (! $esSuscripcion) {
+            return [
+                'es_suscripcion' => false,
+                'suscripcion_nombre' => null,
+                'suscripcion_periodicidad' => null,
+                'suscripcion_monto_periodo' => null,
+                'suscripcion_tolerancia_pct' => null,
+                'suscripcion_tarjeta_ult4' => null,
+                'suscripcion_area' => null,
+                'suscripcion_solicitante' => null,
+                // No pisar borrador si se desmarca accidentalmente en edición: solo limpia flag de tipo.
+                'suscripcion_borrador' => false,
+            ];
+        }
+
+        $tol = isset($payload['suscripcion_tolerancia_pct']) && $payload['suscripcion_tolerancia_pct'] !== ''
+            ? (float) $payload['suscripcion_tolerancia_pct']
+            : SuscripcionSupport::TOLERANCIA_DEFAULT_PCT;
+        $tarjeta = preg_replace('/\D/', '', (string) ($payload['suscripcion_tarjeta_ult4'] ?? ''));
+        $tarjeta = $tarjeta !== '' ? substr($tarjeta, -4) : null;
+
+        // Área = nombre del centro de costo (el CC de la OC es la fuente de verdad).
+        $area = trim((string) ($payload['suscripcion_area'] ?? ''));
+        if ($area === '') {
+            $ccId = (int) ($payload['centrocosto_id'] ?? 0);
+            if ($ccId > 0) {
+                $cc = Centrocosto::query()->find($ccId);
+                $area = $cc ? trim((string) ($cc->nombre ?? '')) : '';
+            }
+        }
+
+        return [
+            'es_suscripcion' => true,
+            'suscripcion_nombre' => trim((string) ($payload['suscripcion_nombre'] ?? $payload['detalle'] ?? '')) ?: null,
+            'suscripcion_periodicidad' => SuscripcionSupport::normalizarPeriodicidad(
+                $payload['suscripcion_periodicidad'] ?? null
+            ),
+            'suscripcion_monto_periodo' => isset($payload['suscripcion_monto_periodo']) && $payload['suscripcion_monto_periodo'] !== ''
+                ? (float) $payload['suscripcion_monto_periodo']
+                : null,
+            'suscripcion_tolerancia_pct' => $tol,
+            'suscripcion_tarjeta_ult4' => $tarjeta,
+            'suscripcion_area' => $area !== '' ? mb_substr($area, 0, 80) : null,
+            'suscripcion_solicitante' => trim((string) ($payload['suscripcion_solicitante'] ?? '')) ?: null,
+            'suscripcion_borrador' => filter_var($payload['suscripcion_borrador'] ?? false, FILTER_VALIDATE_BOOLEAN),
         ];
     }
 
@@ -1275,6 +1389,24 @@ class OrdencompraGestionService
         $esContrato = filter_var($payload['es_contrato'] ?? false, FILTER_VALIDATE_BOOLEAN);
         if (! $esContrato) {
             return;
+        }
+
+        $esSuscripcion = filter_var($payload['es_suscripcion'] ?? false, FILTER_VALIDATE_BOOLEAN);
+        if ($esSuscripcion) {
+            $nombre = trim((string) ($payload['suscripcion_nombre'] ?? ''));
+            if ($nombre === '') {
+                throw new \InvalidArgumentException('Indique el nombre de la suscripción.');
+            }
+            if ((int) ($payload['centrocosto_id'] ?? 0) <= 0) {
+                throw new \InvalidArgumentException('Indique el área (centro de costo) de la suscripción.');
+            }
+            $tarjeta = preg_replace('/\D/', '', (string) ($payload['suscripcion_tarjeta_ult4'] ?? ''));
+            if (strlen((string) $tarjeta) < 4) {
+                throw new \InvalidArgumentException('Indique los últimos 4 dígitos de la tarjeta corporativa.');
+            }
+            if (! isset($payload['suscripcion_monto_periodo']) || (float) $payload['suscripcion_monto_periodo'] <= 0) {
+                throw new \InvalidArgumentException('Indique el monto por período de la suscripción.');
+            }
         }
 
         $requiereRecepcion = filter_var($payload['contrato_requiere_recepcion'] ?? true, FILTER_VALIDATE_BOOLEAN);
@@ -1740,9 +1872,6 @@ class OrdencompraGestionService
         }
     }
 
-    /**
-     * @param  mixed  $cuotasPayload
-     */
     private function sincronizarCuotasDeComprobante(
         Ordencompra_Comprobante $comp,
         mixed $cuotasPayload,
@@ -2038,6 +2167,36 @@ class OrdencompraGestionService
         );
         if (count($ids) === 1) {
             $this->requisicionPresupuestoService->marcarComoElegidoParaOc($requisicionId, $ids[0]);
+        }
+    }
+
+    /**
+     * Alta generada por otro módulo (Suscripciones), que arma la OC sin pasar por `guardar`.
+     */
+    /**
+     * Réplica en Anita para altas hechas desde otro módulo (suscripciones).
+     *
+     * No propaga la excepción: la OC ya existe en el ERP y el bridge se reintenta después.
+     * Devuelve el motivo cuando no se pudo replicar, para poder avisarlo en pantalla.
+     */
+    public function sincronizarAltaEnAnita(int $ordencompraId): ?string
+    {
+        $oc = $this->ordencompraRepository->find($ordencompraId);
+        if (! $oc) {
+            return 'La orden de compra no existe.';
+        }
+
+        try {
+            $this->sincronizarAnitaAlta($oc);
+
+            return null;
+        } catch (\Throwable $e) {
+            Log::warning('ordencompra.anita.alta_externa', [
+                'ordencompra_id' => $ordencompraId,
+                'mensaje' => $e->getMessage(),
+            ]);
+
+            return $e->getMessage();
         }
     }
 

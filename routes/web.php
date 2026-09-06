@@ -920,6 +920,44 @@ Route::get('configuracion/arbolaprobacion/{id}/editar', 'Configuracion\Arbolapro
 Route::put('configuracion/arbolaprobacion/{id}', 'Configuracion\ArbolaprobacionController@actualizar')->name('actualiza_arbolaprobacion');
 Route::delete('configuracion/arbolaprobacion/{id}', 'Configuracion\ArbolaprobacionController@eliminar')->name('elimina_arbolaprobacion');
 
+/*
+ * Mis aprobaciones (bandeja unificada del árbol — sesión autenticada)
+ * Ruta canónica corta (navbar). Alias bajo configuracion/ por compatibilidad de menú viejo.
+ * middleware auth: conserva url.intended al pedir login desde el CTA del mail.
+ */
+Route::middleware('auth')->group(function () {
+    Route::get('mis-aprobaciones', 'Configuracion\MisAprobacionesArbolController@index')->name('mis_aprobaciones_arbol');
+    Route::get('mis-aprobaciones/contador', 'Configuracion\MisAprobacionesArbolController@contador')->name('contador_mis_aprobaciones');
+    Route::post('mis-aprobaciones/bulk-aprobar', 'Configuracion\MisAprobacionesArbolController@bulkAprobar')->name('bulk_aprobar_mis_aprobaciones');
+    Route::get('mis-aprobaciones/detalle/{fuente}/{id}', 'Configuracion\MisAprobacionesArbolController@detalle')->name('detalle_mis_aprobacion');
+    Route::post('mis-aprobaciones/limpiar-huerfanos', 'Configuracion\MisAprobacionesArbolController@limpiarHuerfanos')->name('limpiar_huerfanos_mis_aprobaciones_arbol');
+
+    Route::get('notificaciones/feed', 'Configuracion\AnitaNotificacionController@feed')->name('notificaciones_feed');
+    Route::get('notificaciones/contador', 'Configuracion\AnitaNotificacionController@contador')->name('notificaciones_contador');
+    Route::post('notificaciones/leer-todas', 'Configuracion\AnitaNotificacionController@leerTodas')->name('notificaciones_leer_todas');
+    Route::post('notificaciones/{id}/leer', 'Configuracion\AnitaNotificacionController@leer')->name('notificaciones_leer');
+    Route::post('mis-aprobaciones/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobar')->name('aprobar_mis_aprobacion_arbol');
+    Route::post('mis-aprobaciones/{id}/rechazar', 'Configuracion\MisAprobacionesArbolController@rechazar')->name('rechazar_mis_aprobacion_arbol');
+    Route::post('mis-aprobaciones/{id}/descartar-huerfano', 'Configuracion\MisAprobacionesArbolController@descartarHuerfano')->name('descartar_huerfano_mis_aprobacion_arbol');
+    Route::post('mis-aprobaciones/{id}/reenviar', 'Configuracion\MisAprobacionesArbolController@reenviar')->name('reenviar_mis_aprobacion_arbol');
+    Route::post('mis-aprobaciones/indumentaria/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobarIndumentaria')->name('aprobar_indumentaria_mis_aprobaciones');
+    Route::post('mis-aprobaciones/indumentaria/{id}/rechazar', 'Configuracion\MisAprobacionesArbolController@rechazarIndumentaria')->name('rechazar_indumentaria_mis_aprobaciones');
+    Route::post('mis-aprobaciones/salida-bienes/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobarSalidaBienes')->name('aprobar_salida_bienes_mis_aprobaciones');
+    Route::post('mis-aprobaciones/salida-bienes/{id}/rechazar', 'Configuracion\MisAprobacionesArbolController@rechazarSalidaBienes')->name('rechazar_salida_bienes_mis_aprobaciones');
+    Route::post('mis-aprobaciones/asiento/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobarAsiento')->name('aprobar_asiento_mis_aprobaciones');
+    Route::post('mis-aprobaciones/asiento/{id}/rechazar', 'Configuracion\MisAprobacionesArbolController@rechazarAsiento')->name('rechazar_asiento_mis_aprobaciones');
+    Route::post('mis-aprobaciones/transferencia/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobarTransferencia')->name('aprobar_transferencia_mis_aprobaciones');
+    Route::post('mis-aprobaciones/transferencia/{id}/rechazar', 'Configuracion\MisAprobacionesArbolController@rechazarTransferencia')->name('rechazar_transferencia_mis_aprobaciones');
+    Route::post('mis-aprobaciones/ingreso-proveedor/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobarIngresoProveedor')->name('aprobar_ingreso_proveedor_mis_aprobaciones');
+    Route::post('mis-aprobaciones/ingreso-proveedor/{id}/rechazar', 'Configuracion\MisAprobacionesArbolController@rechazarIngresoProveedor')->name('rechazar_ingreso_proveedor_mis_aprobaciones');
+    Route::get('configuracion/mis-aprobaciones', 'Configuracion\MisAprobacionesArbolController@index');
+    Route::post('configuracion/mis-aprobaciones/limpiar-huerfanos', 'Configuracion\MisAprobacionesArbolController@limpiarHuerfanos');
+    Route::post('configuracion/mis-aprobaciones/{id}/aprobar', 'Configuracion\MisAprobacionesArbolController@aprobar');
+    Route::post('configuracion/mis-aprobaciones/{id}/rechazar', 'Configuracion\MisAprobacionesArbolController@rechazar');
+    Route::post('configuracion/mis-aprobaciones/{id}/descartar-huerfano', 'Configuracion\MisAprobacionesArbolController@descartarHuerfano');
+    Route::post('configuracion/mis-aprobaciones/{id}/reenviar', 'Configuracion\MisAprobacionesArbolController@reenviar');
+});
+
 Route::get('arbolaprobacion/aprobar/{tipocomprobante}/{comprobante_id}/{hash}', 'Configuracion\ArbolaprobacionController@aprobar');
 Route::post('arbolaprobacion/aprobar-requisicion', 'Configuracion\ArbolaprobacionController@confirmarAprobacionRequisicion')->name('aprobar_requisicion_externo');
 Route::post('arbolaprobacion/aprobar-requisicion-sala', 'Configuracion\ArbolaprobacionController@confirmarAprobacionRequisicionSala')->name('aprobar_requisicion_sala_externo');
@@ -3379,6 +3417,12 @@ Route::delete('compras/precarga_comprobante_proveedor/{id}', 'Compras\Precarga_C
 
 Route::get('compras/lista_precarga_comprobante_proveedor/{formato?}/{busqueda?}', 'Compras\Precarga_Comprobante_ProveedorController@listar')->name('lista_precarga_comprobante_proveedor');
 
+// Tracking de facturas: consulta transversal de comprobantes + acceso al PDF.
+Route::get('compras/tracking-facturas', 'Compras\TrackingFacturasController@index')->name('tracking_facturas');
+Route::get('compras/tracking-facturas/{id}/pdf', 'Compras\TrackingFacturasController@verPdf')->name('tracking_facturas_pdf');
+Route::post('compras/tracking-facturas/sincronizar-pagina', 'Compras\TrackingFacturasController@sincronizarPagina')->name('tracking_facturas_sincronizar_pagina');
+Route::get('compras/lista_tracking_facturas/{formato?}/{busqueda?}', 'Compras\TrackingFacturasController@listar')->name('lista_tracking_facturas');
+
 Route::get('compras/comprobante-proveedor', 'Compras\Comprobante_ProveedorController@index')->name('comprobante_proveedor');
 Route::get('compras/comprobante-proveedor/opciones-carga', 'Compras\Comprobante_ProveedorController@opcionesCarga')->name('comprobante_proveedor_opciones_carga');
 Route::get('compras/comprobante-proveedor/resolver-oc', 'Compras\Comprobante_ProveedorController@resolverOrdencompraParaAlta')->name('comprobante_proveedor_resolver_oc');
@@ -3489,7 +3533,7 @@ Route::get('compras/pagos-sabana', 'Compras\PagosSabanaReporteController@index')
 Route::get('compras/listar-pagos-sabana/{formato?}', 'Compras\PagosSabanaReporteController@exportar')->name('listar_reporte_pagos_sabana');
 Route::get('compras/requisicion/crear', 'Compras\RequisicionController@crear')->name('crear_requisicion');
 Route::post('compras/requisicion', 'Compras\RequisicionController@guardar')->name('guardar_requisicion');
-Route::get('compras/requisicion/{id}/editar', 'Compras\RequisicionController@editar')->name('editar_requisicion');
+Route::get('compras/requisicion/{id}/editar', 'Compras\RequisicionController@editar')->name('editar_requisicion')->middleware('modo.consulta');
 Route::get('compras/requisicion/{id}/imprimir-pdf', 'Compras\RequisicionController@imprimirPdf')->name('imprimir_pdf_requisicion');
 Route::get('compras/requisicion/{id}/comprobantes-asociados', 'Compras\RequisicionController@comprobantesAsociados')->name('requisicion_comprobantes_asociados');
 Route::get('compras/requisicion/{id}/archivo/{archivo}', 'Compras\RequisicionController@descargarArchivo')->name('requisicion_archivo');
@@ -3565,6 +3609,57 @@ Route::get('compras/listar-articulo-cuenta-oc-reporte/{formato?}', 'Compras\Arti
 Route::get('compras/comprobante-proveedor-imputacion-ap-reporte', 'Compras\ComprobanteProveedorImputacionApReporteController@index')->name('reporte_imputacion_ap_proveedor');
 Route::get('compras/listar-comprobante-proveedor-imputacion-ap/{formato?}', 'Compras\ComprobanteProveedorImputacionApReporteController@exportar')->name('listar_reporte_imputacion_ap_proveedor');
 Route::get('compras/kpi', 'Compras\KpiComprasController@index')->name('consultar_kpi_compras');
+Route::get('compras/suscripciones', 'Compras\SuscripcionController@index')->name('consultar_suscripcion');
+Route::get('compras/suscripciones/crear', 'Compras\SuscripcionController@crear')->name('crear_suscripcion');
+Route::post('compras/suscripciones', 'Compras\SuscripcionController@guardar')->name('guardar_suscripcion');
+Route::get('compras/suscripciones/exportar/{formato}', 'Compras\SuscripcionController@exportar')->name('exportar_suscripcion');
+Route::get('compras/suscripciones/aprobacion', 'Compras\SuscripcionController@aprobacion')->name('aprobacion_suscripcion');
+Route::post('compras/suscripciones/aprobacion/{movimientoId}/aprobar', 'Compras\SuscripcionController@aprobar')->name('aprobar_suscripcion');
+Route::post('compras/suscripciones/aprobacion/{movimientoId}/rechazar', 'Compras\SuscripcionController@rechazar')->name('rechazar_suscripcion');
+
+// Configuración del circuito: quién autoriza y con qué tarjetas se paga.
+Route::get('compras/suscripciones/aprobadores', 'Compras\SuscripcionAprobadorController@index')->name('aprobadores_suscripcion');
+Route::get('compras/suscripciones/aprobadores/exportar/{formato}', 'Compras\SuscripcionAprobadorController@exportar')->name('exportar_aprobadores_suscripcion');
+Route::get('compras/suscripciones/aprobadores/crear', 'Compras\SuscripcionAprobadorController@crear')->name('crear_aprobador_suscripcion');
+Route::post('compras/suscripciones/aprobadores', 'Compras\SuscripcionAprobadorController@guardar')->name('guardar_aprobador_suscripcion');
+Route::get('compras/suscripciones/aprobadores/{id}/editar', 'Compras\SuscripcionAprobadorController@editar')->name('editar_aprobador_suscripcion');
+Route::put('compras/suscripciones/aprobadores/{id}', 'Compras\SuscripcionAprobadorController@actualizar')->name('actualizar_aprobador_suscripcion');
+Route::delete('compras/suscripciones/aprobadores/{id}', 'Compras\SuscripcionAprobadorController@eliminar')->name('eliminar_aprobador_suscripcion');
+Route::get('compras/suscripciones/tarjetas', 'Compras\SuscripcionTarjetaController@index')->name('tarjetas_suscripcion');
+Route::get('compras/suscripciones/tarjetas/exportar/{formato}', 'Compras\SuscripcionTarjetaController@exportar')->name('exportar_tarjetas_suscripcion');
+Route::get('compras/suscripciones/tarjetas/crear', 'Compras\SuscripcionTarjetaController@crear')->name('crear_tarjeta_suscripcion');
+Route::post('compras/suscripciones/tarjetas', 'Compras\SuscripcionTarjetaController@guardar')->name('guardar_tarjeta_suscripcion');
+Route::get('compras/suscripciones/tarjetas/{id}/editar', 'Compras\SuscripcionTarjetaController@editar')->name('editar_tarjeta_suscripcion');
+Route::put('compras/suscripciones/tarjetas/{id}', 'Compras\SuscripcionTarjetaController@actualizar')->name('actualizar_tarjeta_suscripcion');
+Route::delete('compras/suscripciones/tarjetas/{id}', 'Compras\SuscripcionTarjetaController@eliminar')->name('eliminar_tarjeta_suscripcion');
+
+// Conciliación mensual del resumen de tarjeta.
+Route::get('compras/suscripciones/conciliacion', 'Compras\SuscripcionConciliacionController@index')->name('conciliacion_suscripcion');
+Route::post('compras/suscripciones/conciliacion', 'Compras\SuscripcionConciliacionController@abrir')->name('abrir_conciliacion_suscripcion');
+Route::get('compras/suscripciones/conciliacion/{id}', 'Compras\SuscripcionConciliacionController@ver')->name('ver_conciliacion_suscripcion');
+Route::post('compras/suscripciones/conciliacion/{id}/importar', 'Compras\SuscripcionConciliacionController@importar')->name('importar_conciliacion_suscripcion');
+Route::post('compras/suscripciones/conciliacion/{id}/rematchear', 'Compras\SuscripcionConciliacionController@rematchear')->name('rematchear_conciliacion_suscripcion');
+Route::post('compras/suscripciones/conciliacion/{id}/imputar', 'Compras\SuscripcionConciliacionController@imputar')->name('imputar_conciliacion_suscripcion');
+Route::post('compras/suscripciones/conciliacion/{id}/cerrar', 'Compras\SuscripcionConciliacionController@cerrar')->name('cerrar_conciliacion_suscripcion');
+Route::get('compras/suscripciones/conciliacion/{id}/exportar/{formato}', 'Compras\SuscripcionConciliacionController@exportar')->name('exportar_conciliacion_suscripcion');
+Route::get('compras/suscripciones/cargo/{cargoId}/sugerencias', 'Compras\SuscripcionConciliacionController@sugerencias')->name('sugerencias_cargo_suscripcion');
+Route::post('compras/suscripciones/cargo/{cargoId}/asociar', 'Compras\SuscripcionConciliacionController@asociar')->name('asociar_cargo_suscripcion');
+Route::post('compras/suscripciones/cargo/{cargoId}/desasociar', 'Compras\SuscripcionConciliacionController@desasociar')->name('desasociar_cargo_suscripcion');
+Route::post('compras/suscripciones/cargo/{cargoId}/marcar', 'Compras\SuscripcionConciliacionController@marcar')->name('marcar_cargo_suscripcion');
+Route::post('compras/suscripciones/cargo/{cargoId}/revalidar', 'Compras\SuscripcionConciliacionController@revalidar')->name('revalidar_cargo_suscripcion');
+
+// Reportes y manual del circuito.
+Route::get('compras/suscripciones/reportes', 'Compras\SuscripcionReporteController@index')->name('reporte_suscripcion');
+Route::get('compras/suscripciones/reportes/exportar/{formato}', 'Compras\SuscripcionReporteController@exportar')->name('exportar_reporte_suscripcion');
+Route::get('compras/suscripciones/circuito', 'Compras\SuscripcionCircuitoController@index')->name('circuito_suscripcion');
+Route::get('compras/suscripciones/circuito/manual', 'Compras\ManualSuscripcionesController@index')->name('manual_suscripciones');
+Route::get('compras/suscripciones/circuito/pdf', 'Compras\ManualSuscripcionesController@descargarPdf')->name('manual_suscripciones_pdf');
+Route::get('compras/suscripciones/circuito/word', 'Compras\ManualSuscripcionesController@descargarWord')->name('manual_suscripciones_word');
+
+// Comodín al final: si va antes, se come /aprobadores, /tarjetas, /conciliacion y /reportes.
+Route::get('compras/suscripciones/{id}', 'Compras\SuscripcionController@ver')->whereNumber('id')->name('ver_suscripcion');
+Route::post('compras/suscripciones/{id}/enviar', 'Compras\SuscripcionController@enviarBorrador')->whereNumber('id')->name('enviar_borrador_suscripcion');
+
 Route::get('compras/ordencompra', 'Compras\OrdencompraController@index')->name('consultar_ordencompra');
 Route::get('compras/ordencompra/crear', 'Compras\OrdencompraController@crear')->name('crear_ordencompra');
 Route::post('compras/ordencompra', 'Compras\OrdencompraController@guardar')->name('guardar_ordencompra');
@@ -3622,6 +3717,15 @@ Route::get('compras/ordencompra/visualizar/{id}/{hash}/oc-pdf', 'Compras\Ordenco
  * Centro de ayuda (manuales por módulo)
  */
 Route::get('ayuda', 'AyudaController@index')->name('ayuda');
+Route::get('ayuda/manual-aprobaciones', 'Configuracion\ManualAprobacionesController@index')
+    ->middleware('auth')
+    ->name('manual_aprobaciones');
+Route::get('ayuda/manual-aprobaciones/descargar-pdf', 'Configuracion\ManualAprobacionesController@descargarPdf')
+    ->middleware('auth')
+    ->name('manual_aprobaciones_pdf');
+Route::get('ayuda/manual-aprobaciones/descargar-word', 'Configuracion\ManualAprobacionesController@descargarWord')
+    ->middleware('auth')
+    ->name('manual_aprobaciones_word');
 
 /*
  * Guías paso a paso (HTML interactivo; archivos en docs/guias/)
@@ -5248,25 +5352,25 @@ Route::get('seguridad/listar-reporte-ingresos-planta/{formato?}', 'Seguridad\Ing
 Route::get('seguridad/reporte-abono-sin-ingresos', 'Seguridad\IngresoProveedorAbonoReporteController@index')->name('reporte_abono_sin_ingresos');
 Route::get('seguridad/listar-reporte-abono-sin-ingresos/{formato?}', 'Seguridad\IngresoProveedorAbonoReporteController@exportar')->name('listar_reporte_abono_sin_ingresos');
 
-    Route::get('seguridad/ingreso-proveedor', 'Seguridad\IngresoProveedorController@index')->name('ingreso_proveedor');
-    Route::get('seguridad/lista-ingreso-proveedor/{formato?}/{busqueda?}', 'Seguridad\IngresoProveedorController@listar')->name('lista_ingreso_proveedor');
-    Route::get('seguridad/ingreso-proveedor-pendientes', 'Seguridad\IngresoProveedorController@pendientes')->name('pendientes_ingreso_proveedor');
-    Route::get('seguridad/ingreso-proveedor/pendientes', 'Seguridad\IngresoProveedorController@pendientes');
-    Route::get('seguridad/ingreso-proveedor/crear', 'Seguridad\IngresoProveedorController@crear')->name('crear_ingreso_proveedor')->middleware('modo.consulta');
-    Route::get('seguridad/ingreso-proveedor/formulario-modal', 'Seguridad\IngresoProveedorController@formularioModal')->name('formulario_modal_ingreso_proveedor');
-    Route::get('seguridad/ingreso-proveedor/grilla-vinculada', 'Seguridad\IngresoProveedorController@grillaVinculada')->name('grilla_vinculada_ingreso_proveedor');
-    Route::post('seguridad/ingreso-proveedor/consulta-contrato', 'Seguridad\IngresoProveedorController@consultaContrato')->name('consultar_contrato_ingreso_proveedor');
-    Route::get('seguridad/ingreso-proveedor/resolver-contrato', 'Seguridad\IngresoProveedorController@resolverContrato')->name('resolver_contrato_ingreso_proveedor');
-    Route::post('seguridad/ingreso-proveedor', 'Seguridad\IngresoProveedorController@guardar')->name('guardar_ingreso_proveedor');
-    Route::get('seguridad/ingreso-proveedor/visualizar/{id}/{hash}', 'Seguridad\IngresoProveedorController@visualizar')->name('visualizar_ingreso_proveedor');
-    Route::get('seguridad/ingreso-proveedor/visualizar/{id}/{hash}/archivo/{archivo}', 'Seguridad\IngresoProveedorController@visualizarArchivo')->name('visualizar_archivo_ingreso_proveedor');
-    Route::get('seguridad/ingreso-proveedor/buscar-proveedor-rapido', 'Seguridad\IngresoProveedorController@buscarProveedorRapido')->name('buscar_proveedor_rapido_ingreso_proveedor');
-    Route::get('seguridad/ingreso-proveedor/{id}/consultar', 'Seguridad\IngresoProveedorController@consultar')->name('consultar_ingreso_proveedor')->middleware('modo.consulta');
-    Route::get('seguridad/ingreso-proveedor/{id}/editar', 'Seguridad\IngresoProveedorController@editar')->name('editar_ingreso_proveedor')->middleware('modo.consulta');
-    Route::post('seguridad/ingreso-proveedor/{id}/autorizar', 'Seguridad\IngresoProveedorController@autorizar')->name('autorizar_ingreso_proveedor');
-    Route::post('seguridad/ingreso-proveedor/{id}/rechazar', 'Seguridad\IngresoProveedorController@rechazar')->name('rechazar_ingreso_proveedor');
-    Route::put('seguridad/ingreso-proveedor/{id}', 'Seguridad\IngresoProveedorController@actualizar')->name('actualizar_ingreso_proveedor')->middleware('modo.consulta');
-    Route::delete('seguridad/ingreso-proveedor/{id}', 'Seguridad\IngresoProveedorController@eliminar')->name('eliminar_ingreso_proveedor');
+Route::get('seguridad/ingreso-proveedor', 'Seguridad\IngresoProveedorController@index')->name('ingreso_proveedor');
+Route::get('seguridad/lista-ingreso-proveedor/{formato?}/{busqueda?}', 'Seguridad\IngresoProveedorController@listar')->name('lista_ingreso_proveedor');
+Route::get('seguridad/ingreso-proveedor-pendientes', 'Seguridad\IngresoProveedorController@pendientes')->name('pendientes_ingreso_proveedor');
+Route::get('seguridad/ingreso-proveedor/pendientes', 'Seguridad\IngresoProveedorController@pendientes');
+Route::get('seguridad/ingreso-proveedor/crear', 'Seguridad\IngresoProveedorController@crear')->name('crear_ingreso_proveedor')->middleware('modo.consulta');
+Route::get('seguridad/ingreso-proveedor/formulario-modal', 'Seguridad\IngresoProveedorController@formularioModal')->name('formulario_modal_ingreso_proveedor');
+Route::get('seguridad/ingreso-proveedor/grilla-vinculada', 'Seguridad\IngresoProveedorController@grillaVinculada')->name('grilla_vinculada_ingreso_proveedor');
+Route::post('seguridad/ingreso-proveedor/consulta-contrato', 'Seguridad\IngresoProveedorController@consultaContrato')->name('consultar_contrato_ingreso_proveedor');
+Route::get('seguridad/ingreso-proveedor/resolver-contrato', 'Seguridad\IngresoProveedorController@resolverContrato')->name('resolver_contrato_ingreso_proveedor');
+Route::post('seguridad/ingreso-proveedor', 'Seguridad\IngresoProveedorController@guardar')->name('guardar_ingreso_proveedor');
+Route::get('seguridad/ingreso-proveedor/visualizar/{id}/{hash}', 'Seguridad\IngresoProveedorController@visualizar')->name('visualizar_ingreso_proveedor');
+Route::get('seguridad/ingreso-proveedor/visualizar/{id}/{hash}/archivo/{archivo}', 'Seguridad\IngresoProveedorController@visualizarArchivo')->name('visualizar_archivo_ingreso_proveedor');
+Route::get('seguridad/ingreso-proveedor/buscar-proveedor-rapido', 'Seguridad\IngresoProveedorController@buscarProveedorRapido')->name('buscar_proveedor_rapido_ingreso_proveedor');
+Route::get('seguridad/ingreso-proveedor/{id}/consultar', 'Seguridad\IngresoProveedorController@consultar')->name('consultar_ingreso_proveedor')->middleware('modo.consulta');
+Route::get('seguridad/ingreso-proveedor/{id}/editar', 'Seguridad\IngresoProveedorController@editar')->name('editar_ingreso_proveedor')->middleware('modo.consulta');
+Route::post('seguridad/ingreso-proveedor/{id}/autorizar', 'Seguridad\IngresoProveedorController@autorizar')->name('autorizar_ingreso_proveedor');
+Route::post('seguridad/ingreso-proveedor/{id}/rechazar', 'Seguridad\IngresoProveedorController@rechazar')->name('rechazar_ingreso_proveedor');
+Route::put('seguridad/ingreso-proveedor/{id}', 'Seguridad\IngresoProveedorController@actualizar')->name('actualizar_ingreso_proveedor')->middleware('modo.consulta');
+Route::delete('seguridad/ingreso-proveedor/{id}', 'Seguridad\IngresoProveedorController@eliminar')->name('eliminar_ingreso_proveedor');
 
 foreach (['punto', 'area', 'motivo', 'sector'] as $tipoCatalogo) {
     Route::get("seguridad/ingreso-proveedor-{$tipoCatalogo}", 'Seguridad\IngresoProveedorCatalogoController@index')

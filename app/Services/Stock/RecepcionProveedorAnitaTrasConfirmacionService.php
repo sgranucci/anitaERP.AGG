@@ -21,8 +21,7 @@ final class RecepcionProveedorAnitaTrasConfirmacionService
         private readonly RecepcionProveedorAsientoService $asientoService,
         private readonly RecepcionProveedorAnitaBridgeService $anitaBridge,
         private readonly RecepcionProveedorAnitaResincronizacionErpService $resincronizacionErpService,
-    ) {
-    }
+    ) {}
 
     /**
      * @return array<string, mixed>
@@ -210,7 +209,7 @@ final class RecepcionProveedorAnitaTrasConfirmacionService
             && $this->asientoService->debeGenerarAsiento((int) $recepcion->empresa_id)
             && ! $this->asientoService->recepcionSinImporteContable($recepcion)
         ) {
-            $this->asientoService->sincronizarCtamovAnitaRecepcion($recepcion->fresh([
+            $this->asientoService->reconciliarCtamovConErp($recepcion->fresh([
                 'asientos',
                 'empresas',
                 'proveedores',

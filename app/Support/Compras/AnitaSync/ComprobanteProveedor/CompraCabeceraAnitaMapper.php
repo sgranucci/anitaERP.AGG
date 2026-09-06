@@ -178,9 +178,21 @@ final class CompraCabeceraAnitaMapper
     /**
      * Anita nativo graba 5 en cabeceras recientes (rubro genérico de compra).
      */
+    /**
+     * com_concepto es el concepto de cash-flow del comprobante. Anita lo arrastra desde acá
+     * hacia auxpag.axp_concepto al aplicar el pago (pago.c, graba_auxpag), y el EFE lo usa
+     * para derivar el rubro cuando no encuentra cuenta de gasto.
+     *
+     * Sale del concepto cargado en el comprobante; si no se cargó se usa el del proveedor.
+     * Derivarlo de la cuenta imputada no sirve: el renglón de mayor importe es la pierna del
+     * pasivo y las cuentas de IVA también tienen concepto propio, así que el asiento devuelve
+     * IVA o "chq emitido no entregado" en vez del gasto. 0 = sin concepto, igual que Anita.
+     */
     private static function conceptoCabecera(ComprobanteProveedorAnitaContext $ctx): int
     {
-        return 5;
+        $comprobante = $ctx->comprobante;
+
+        return (int) ($comprobante->conceptogasto_id ?: ($comprobante->proveedores->conceptogasto_id ?? 0));
     }
 
     private static function fechaProxVto(ComprobanteProveedorAnitaContext $ctx): int

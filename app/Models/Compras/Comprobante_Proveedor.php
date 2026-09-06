@@ -21,6 +21,7 @@ class Comprobante_Proveedor extends Model implements Auditable
     protected $fillable = [
         'empresa_id', 'proveedor_id', 'tipotransaccion_compra_id', 'ordencompra_id',
         'ordencompra_comprobante_id', 'precarga_comprobante_proveedor_id', 'condicionpago_id',
+        'conceptogasto_id',
         'letra', 'sucursal', 'numerocomprobante', 'fechacomprobante', 'fechaiva', 'fechavencimiento',
         'fecharecepcion', 'subtotal', 'total', 'moneda_id', 'cotizacion', 'numerocae', 'tipo_autorizacion',
         'fechavencimientocae', 'es_fce',         'leyenda', 'modo_carga', 'origen_entrada', 'tipo_tesoreria', 'estado', 'asiento_id',
@@ -80,6 +81,11 @@ class Comprobante_Proveedor extends Model implements Auditable
     public function precarga_comprobante_proveedores()
     {
         return $this->belongsTo(Precarga_Comprobante_Proveedor::class, 'precarga_comprobante_proveedor_id');
+    }
+
+    public function conceptogastos()
+    {
+        return $this->belongsTo(\App\Models\Caja\Conceptogasto::class, 'conceptogasto_id');
     }
 
     public function condicionpagos()

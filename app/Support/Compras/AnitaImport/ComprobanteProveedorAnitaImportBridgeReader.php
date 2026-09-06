@@ -68,6 +68,41 @@ final class ComprobanteProveedorAnitaImportBridgeReader
     }
 
     /**
+     * Códigos de proveedor con al menos una compra en el rango.
+     *
+     * @return list<string>
+     */
+    public function listarProveedoresConCompra(
+        ?int $fechaDesdeYmd = null,
+        ?int $fechaHastaYmd = null,
+        ?int $empresaCodigo = null,
+    ): array {
+        $where = ' WHERE 1=1';
+        if ($fechaDesdeYmd !== null && $fechaDesdeYmd > 0) {
+            $where .= ' AND com_fecha >= '.(int) $fechaDesdeYmd;
+        }
+        if ($fechaHastaYmd !== null && $fechaHastaYmd > 0) {
+            $where .= ' AND com_fecha <= '.(int) $fechaHastaYmd;
+        }
+        if ($empresaCodigo !== null && $empresaCodigo > 0) {
+            $where .= ' AND com_empresa = '.(int) $empresaCodigo;
+        }
+        // Informix: GROUP BY en whereArmado; el bridge no arma SELECT DISTINCT limpio.
+        $where .= ' GROUP BY com_proveedor';
+
+        $filas = $this->listar('compra', 'com_proveedor', $where, '1');
+        $out = [];
+        foreach ($filas as $fila) {
+            $cod = trim((string) ($fila['com_proveedor'] ?? ''));
+            if ($cod !== '') {
+                $out[$cod] = $cod;
+            }
+        }
+
+        return array_values($out);
+    }
+
+    /**
      * @return list<array<string, mixed>>
      */
     public function listarPromov(

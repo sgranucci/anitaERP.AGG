@@ -155,10 +155,12 @@
                 </div>
             </div>
 
-            <div class="form-group row">
+            <div class="form-group row" id="oc-centrocosto-select-row">
                 <label for="centrocosto_id" class="col-lg-4 control-label requerido">Centro costo</label>
                 <div class="col-lg-8">
-                    <select name="centrocosto_id" id="centrocosto_id" class="form-control" required {{ $soloLectura ? 'disabled' : '' }}>
+                    <select name="centrocosto_id" id="centrocosto_id" class="form-control" required
+                        data-oc-editable="{{ $soloLectura ? '0' : '1' }}"
+                        {{ $soloLectura ? 'disabled' : '' }}>
                         @php
                             $centrocostoUsuario_id = (isset($data) && $data)
                                 ? ($data->centrocosto_id ?? (auth()->user()->centrocosto_id ?? 1))
@@ -171,6 +173,9 @@
                             </option>
                         @endforeach
                     </select>
+                    <small class="text-muted d-none" id="oc-centrocosto-via-suscripcion-ayuda">
+                        En suscripciones el área se carga como centro de costo (modal F1) en el bloque de contrato.
+                    </small>
                 </div>
             </div>
 

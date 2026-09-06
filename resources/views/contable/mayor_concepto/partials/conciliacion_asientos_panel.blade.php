@@ -87,7 +87,14 @@
                                     <td class="text-right">{{ $formatearMonto($fila['neto_analitico'] ?? null) }}</td>
                                     <td class="text-right">{{ $formatearMonto($fila['neto_concepto'] ?? null) }}</td>
                                     <td class="text-right font-weight-bold">{{ $formatearMonto($fila['diferencia'] ?? null) }}</td>
-                                    <td>{{ $fila['origen'] ?? '' }}</td>
+                                    <td>
+                                        {{ $fila['origen'] ?? '' }}
+                                        @if (! empty($fila['motivo']))
+                                            <div class="text-danger mt-1">
+                                                <i class="fa fa-info-circle"></i> {{ $fila['motivo'] }}
+                                            </div>
+                                        @endif
+                                    </td>
                                     <td><small>{{ $fila['cuentas_analitico'] ?? '' }}</small></td>
                                     <td><small>{{ $fila['cuentas_concepto'] ?? '' }}</small></td>
                                     <td class="text-center text-nowrap">

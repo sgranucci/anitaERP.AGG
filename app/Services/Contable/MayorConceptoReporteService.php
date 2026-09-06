@@ -3,14 +3,16 @@
 namespace App\Services\Contable;
 
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
-use App\Support\Contable\MayorConcepto\MayorConceptoAnitaBridgeReader;
 use App\Support\Contable\MayorConcepto\MayorConceptoAuditoriaSupport;
 use App\Support\Contable\MayorConcepto\MayorConceptoConciliacionAsientoSupport;
+use App\Support\Contable\MayorConcepto\MayorConceptoLectorHibrido;
+use App\Support\Contable\MayorConcepto\MayorConceptoLectorInterface;
 use App\Support\Contable\MayorConcepto\MayorConceptoMonedaConverter;
 use App\Support\Contable\MayorConcepto\MayorConceptoOrdencompraVistaEnricher;
 use App\Support\Contable\MayorConcepto\MayorConceptoPeriodoProcesador;
 use App\Support\Contable\MayorConcepto\MayorConceptoRuntimeSupport;
 use App\Support\Contable\MayorConceptoListadoFiltros;
+use App\Support\Contable\MayorFuenteConsultaSupport;
 use Carbon\Carbon;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Pagination\LengthAwarePaginator as PaginatorImpl;
@@ -27,14 +29,13 @@ class MayorConceptoReporteService
         private readonly MayorConceptoAuditoriaSupport $auditoriaSupport,
         private readonly MayorConceptoConciliacionAsientoSupport $conciliacionAsientoSupport,
         private readonly MayorConceptoOrdencompraVistaEnricher $ordencompraVistaEnricher,
-    ) {
-    }
+    ) {}
 
     /**
      * Bridge Anita del período cargado por el motor (mes en una lectura).
      * EFE y post-procesos lo reutilizan; datos anteriores al mes se piden on-demand.
      */
-    public function bridgeReader(): MayorConceptoAnitaBridgeReader
+    public function bridgeReader(): MayorConceptoLectorInterface
     {
         return $this->procesador->bridgeReader();
     }
@@ -45,6 +46,8 @@ class MayorConceptoReporteService
      */
     public function generarDesdeFiltros(array $filtros): array
     {
+        $this->aplicarFuenteMayorDesdeFiltros($filtros);
+
         $empresaIds = MayorConceptoListadoFiltros::empresaIds($filtros);
         $consolidar = (bool) ($filtros['consolidar_empresas'] ?? true);
         $monedaId = (int) ($filtros['moneda_id'] ?? 1);
@@ -67,7 +70,7 @@ class MayorConceptoReporteService
         }
 
         if ($empresaIds === []) {
-            return $this->generar(
+            return $this->adjuntarMetadatosFuente($this->generar(
                 0,
                 $fechaDesde !== '' ? $fechaDesde : null,
                 $fechaHasta !== '' ? $fechaHasta : null,
@@ -76,7 +79,7 @@ class MayorConceptoReporteService
                 $usarMes,
                 $monedaId,
                 $soloOrigen,
-            );
+            ));
         }
 
         $this->precargarLecturaPeriodoSiCorresponde($empresaIds, $fechaDesde, $fechaHasta, $mes, $anio, $usarMes);
@@ -94,6 +97,7 @@ class MayorConceptoReporteService
             );
             $resultado['parametros']['empresa_ids'] = $empresaIds;
             $resultado['parametros']['consolidar_empresas'] = true;
+            $resultado = $this->adjuntarMetadatosFuente($resultado);
 
             return $resultado;
         }
@@ -113,6 +117,49 @@ class MayorConceptoReporteService
         }
 
         return $this->fusionarResultadosEmpresas($bloques, $empresaIds, $consolidar);
+    }
+
+    private function aplicarFuenteMayorDesdeFiltros(array $filtros): void
+    {
+        $modo = MayorFuenteConsultaSupport::normalizarModo(
+            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_AUTO
+        );
+        $reader = $this->procesador->bridgeReader();
+        if ($reader instanceof MayorConceptoLectorHibrido) {
+            $reader->setModoFuente($modo);
+        }
+    }
+
+    /**
+     * @param  array<string, mixed>  $resultado
+     * @return array<string, mixed>
+     */
+    private function adjuntarMetadatosFuente(array $resultado): array
+    {
+        $reader = $this->procesador->bridgeReader();
+        $modo = MayorFuenteConsultaSupport::MODO_AUTO;
+        $tramos = null;
+        if ($reader instanceof MayorConceptoLectorHibrido) {
+            $modo = $reader->modoFuente();
+            $tramos = $reader->ultimosTramos();
+        }
+
+        $resultado['parametros'] = is_array($resultado['parametros'] ?? null)
+            ? $resultado['parametros']
+            : [];
+        $resultado['parametros']['fuente_mayor'] = $modo;
+        if (is_array($tramos)) {
+            $resultado['parametros']['fuente_erp_hasta'] = (int) ($tramos['corte'] ?? 0);
+            $resultado['parametros']['tramo_erp_desde'] = (int) ($tramos['tramo_erp_desde'] ?? 0);
+            $resultado['parametros']['tramo_erp_hasta'] = (int) ($tramos['tramo_erp_hasta'] ?? 0);
+            $resultado['parametros']['tramo_anita_desde'] = (int) ($tramos['tramo_anita_desde'] ?? 0);
+            $resultado['parametros']['tramo_anita_hasta'] = (int) ($tramos['tramo_anita_hasta'] ?? 0);
+            $resultado['parametros']['fuente_etiqueta'] = (string) ($tramos['etiqueta'] ?? '');
+        } else {
+            $resultado['parametros']['fuente_etiqueta'] = $resultado['parametros']['fuente_etiqueta'] ?? '';
+        }
+
+        return $resultado;
     }
 
     /**
@@ -229,6 +276,7 @@ class MayorConceptoReporteService
         $totalHaber = 0.0;
         $totalLineas = 0;
         $erroresBridge = [];
+        $lecturaIncompleta = false;
         $stats = [];
         $resultadosPorEmpresa = [];
 
@@ -253,6 +301,8 @@ class MayorConceptoReporteService
                 $erroresBridge[] = '[Empresa '.$empresaId.'] '.$err;
             }
 
+            $lecturaIncompleta = $lecturaIncompleta || (bool) ($bloque['lectura_incompleta'] ?? false);
+
             foreach ($bloque['stats'] ?? [] as $clave => $valor) {
                 if (is_numeric($valor)) {
                     $stats[$clave] = (int) ($stats[$clave] ?? 0) + (int) $valor;
@@ -269,7 +319,7 @@ class MayorConceptoReporteService
         $parametrosBase['empresa_ids'] = $empresaIds;
         $parametrosBase['consolidar_empresas'] = $consolidar;
 
-        return [
+        return $this->adjuntarMetadatosFuente([
             'parametros' => $parametrosBase,
             'secciones' => $secciones,
             'totales' => [
@@ -278,9 +328,10 @@ class MayorConceptoReporteService
                 'lineas' => $totalLineas,
             ],
             'errores_bridge' => array_values(array_unique($erroresBridge)),
+            'lectura_incompleta' => $lecturaIncompleta,
             'stats' => $stats,
             'resultados_por_empresa' => $resultadosPorEmpresa,
-        ];
+        ]);
     }
 
     /**

@@ -162,6 +162,91 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
     }
 
     /**
+     * Reversión por compensación (AOP = OPP negativa): no borra nada.
+     *
+     * Espeja con signo invertido cada fila CC y cada aplicación de la OPP. El saldo
+     * pendiente se calcula como ABS(SUM(aplicaciones)) < ABS(cc.total), así que la
+     * aplicación positiva sobre la factura la deja impaga otra vez y el saldo vuelve
+     * a la cuenta corriente, conservando la traza de la OPP original.
+     */
+    public static function compensarPorReverso(Pagoproveedor $original, Pagoproveedor $reverso): void
+    {
+        $fecha = $reverso->fecha?->format('Y-m-d') ?? now()->format('Y-m-d');
+        $etiquetaAop = $reverso->etiquetaComprobante();
+
+        // Fila CC de la OPP → fila espejo del AOP.
+        $mapaCc = [];
+        $ccOriginales = Proveedor_Cuentacorriente::query()
+            ->where('pagoproveedor_id', (int) $original->id)
+            ->orderBy('id')
+            ->get();
+
+        foreach ($ccOriginales as $ccOrig) {
+            $ccAop = Proveedor_Cuentacorriente::query()->create([
+                'fecha' => $fecha,
+                'fechavencimiento' => $fecha,
+                'proveedor_id' => $ccOrig->proveedor_id,
+                'total' => -1 * (float) $ccOrig->total,
+                'moneda_id' => $ccOrig->moneda_id,
+                'cotizacion' => $ccOrig->cotizacion,
+                'empresa_id' => $ccOrig->empresa_id,
+                'comprobante_proveedor_id' => $ccOrig->comprobante_proveedor_id,
+                'comprobante_proveedor_cuota_id' => $ccOrig->comprobante_proveedor_cuota_id,
+                'pagoproveedor_id' => (int) $reverso->id,
+            ]);
+
+            $mapaCc[(int) $ccOrig->id] = (int) $ccAop->id;
+        }
+
+        $aplicaciones = Proveedor_Cuentacorriente_Aplicacion::query()
+            ->where('pagoproveedor_id', (int) $original->id)
+            ->orderBy('id')
+            ->get();
+
+        foreach ($aplicaciones as $apl) {
+            $ccId = (int) $apl->proveedor_cuentacorriente_id;
+            $aplicadoId = (int) $apl->proveedor_cuentacorriente_aplicado_id;
+            $dc = $apl->diferencia_cambio;
+
+            Proveedor_Cuentacorriente_Aplicacion::query()->create([
+                'fecha' => $fecha,
+                // Las filas del pago se reemplazan por su espejo; la deuda se conserva.
+                'proveedor_cuentacorriente_id' => $mapaCc[$ccId] ?? $ccId,
+                'total' => -1 * (float) $apl->total,
+                'moneda_id' => $apl->moneda_id,
+                'cotizacion' => $apl->cotizacion,
+                'cotizacion_liquidacion' => $apl->cotizacion_liquidacion,
+                'diferencia_cambio' => $dc === null ? null : -1 * (float) $dc,
+                'comprobante_proveedor_aplicado_id' => $apl->comprobante_proveedor_aplicado_id,
+                'comprobanteaplicado' => isset($mapaCc[$aplicadoId])
+                    ? $etiquetaAop
+                    : $apl->comprobanteaplicado,
+                'empresa_id' => $apl->empresa_id,
+                'proveedor_cuentacorriente_aplicado_id' => $mapaCc[$aplicadoId] ?? $aplicadoId,
+                'pagoproveedor_id' => (int) $reverso->id,
+            ]);
+        }
+
+        $comprobantes = Pagoproveedor_Comprobante::query()
+            ->where('pagoproveedor_id', (int) $original->id)
+            ->orderBy('id')
+            ->get();
+
+        foreach ($comprobantes as $pc) {
+            Pagoproveedor_Comprobante::query()->create([
+                'pagoproveedor_id' => (int) $reverso->id,
+                'proveedor_cuentacorriente_id' => $pc->proveedor_cuentacorriente_id,
+                'montoaplicado' => -1 * (float) $pc->montoaplicado,
+                'cotizacion' => $pc->cotizacion,
+                'moneda_id' => $pc->moneda_id,
+                'cotizacion_aplicada' => $pc->cotizacion_aplicada,
+                'diferencia_cambio' => -1 * (float) ($pc->diferencia_cambio ?? 0),
+                'proveedor_cuentacorriente_dc_id' => null,
+            ]);
+        }
+    }
+
+    /**
      * Anticipo a proveedor (sobrepago sin aplicar a deuda).
      */
     public static function crearAnticipo(Pagoproveedor $pago, float $monto, int $monedaId, float $cotizacion): void

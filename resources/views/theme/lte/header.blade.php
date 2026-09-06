@@ -40,6 +40,45 @@ $modoConsulta = request()->input('vista') === 'consulta';
         @endguest
         @auth
             @if (!$modoConsulta)
+                <li class="nav-item dropdown anita-notif-dropdown">
+                    <a class="nav-link" data-toggle="dropdown" href="#" id="anita-nav-notif"
+                       data-feed-url="{{ urlAppCarpeta('notificaciones/feed') }}"
+                       data-contador-url="{{ urlAppCarpeta('notificaciones/contador') }}"
+                       data-leer-todas-url="{{ urlAppCarpeta('notificaciones/leer-todas') }}"
+                       data-leer-url-base="{{ urlAppCarpeta('notificaciones') }}"
+                       title="Avisos del sistema">
+                        <i class="far fa-bell"></i>
+                        <span id="anita-notif-badge"
+                              class="badge badge-warning navbar-badge{{ ($anitaNotifUnread ?? 0) > 0 ? '' : ' d-none' }}">{{ ($anitaNotifUnread ?? 0) > 99 ? '99+' : (int) ($anitaNotifUnread ?? 0) }}</span>
+                    </a>
+                    <div class="dropdown-menu dropdown-menu-lg dropdown-menu-right anita-notif-panel" id="anita-notif-panel">
+                        <span class="dropdown-item dropdown-header anita-notif-header">
+                            Avisos
+                            <button type="button" class="btn btn-link btn-sm p-0 float-right js-anita-notif-all" id="anita-notif-mark-all">Marcar leídos</button>
+                        </span>
+                        <div class="dropdown-divider"></div>
+                        <div id="anita-notif-list" class="anita-notif-list">
+                            <span class="dropdown-item text-muted text-sm">Cargando…</span>
+                        </div>
+                        <div class="dropdown-divider"></div>
+                        <a href="{{ $urlMisAprobaciones ?? url('mis-aprobaciones') }}" class="dropdown-item dropdown-footer">Ir a Mis aprobaciones</a>
+                    </div>
+                </li>
+                @if (!empty($puedeVerMisAprobaciones))
+                <li class="nav-item">
+                    <a href="{{ $urlMisAprobaciones ?? url('mis-aprobaciones') }}"
+                       id="anita-nav-aprobaciones"
+                       class="nav-link font-weight-bold"
+                       data-contador-url="{{ urlAppCarpeta('mis-aprobaciones/contador') }}"
+                       data-count="{{ (int) ($misAprobacionesCount ?? 0) }}"
+                       title="Mis aprobaciones pendientes">
+                        <i class="fas fa-inbox"></i>
+                        <span class="d-none d-md-inline anita-aprob-label">Aprobaciones</span>
+                        <span id="anita-aprob-badge"
+                              class="badge badge-danger anita-aprob-count{{ ($misAprobacionesCount ?? 0) > 0 ? '' : ' d-none' }}">{{ ($misAprobacionesCount ?? 0) > 99 ? '99+' : (int) ($misAprobacionesCount ?? 0) }}</span>
+                    </a>
+                </li>
+                @endif
                 <li class="nav-item">
                     <a href="{{ $urlCentroAyuda }}" class="nav-link font-weight-bold" title="Manual de usuario del sistema" target="_blank" rel="noopener">
                         <i class="fas fa-book-open"></i> <span class="d-none d-md-inline">Centro de ayuda</span>

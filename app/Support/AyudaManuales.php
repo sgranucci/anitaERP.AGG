@@ -13,6 +13,20 @@ class AyudaManuales
     {
         return [
             [
+                'modulo' => 'Mis aprobaciones y circuitos',
+                'bajada' => 'Bandeja unificada, dual channel (mail + campanita), digest, artículos (tipo AR), usos y configuración admin.',
+                'url' => route('manual_aprobaciones'),
+                'icono' => 'fa-inbox',
+                'disponible' => true,
+            ],
+            [
+                'modulo' => 'Circuito de suscripciones',
+                'bajada' => 'SaaS y tarjeta corporativa: alta como OC abierta, autorización del gerente, tope y tolerancia, conciliación del resumen (CSV/XLS) e imputación. Disponible en Centro de ayuda.',
+                'url' => route('manual_suscripciones'),
+                'icono' => 'fa-refresh',
+                'disponible' => true,
+            ],
+            [
                 'modulo' => 'Compras',
                 'bajada' => 'Proveedores, tablas, requisiciones, listas de precio, presupuestos, órdenes de compra y contratos / OC abiertas.',
                 'url' => route('manual_compras'),

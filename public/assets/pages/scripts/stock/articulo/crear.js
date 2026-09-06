@@ -137,9 +137,16 @@ function mostrarSolapaArticulo(numero) {
                         '" target="_blank" rel="noopener">Consultar</a>';
                 }
                 var estado = row.estado || '';
-                var badge = estado === 'ACTIVO'
-                    ? '<span class="badge badge-success">ACTIVO</span>'
-                    : '<span class="badge badge-secondary">' + $('<div>').text(estado).html() + '</span>';
+                var badge;
+                if (estado === 'ACTIVO') {
+                    badge = '<span class="badge badge-success">ACTIVO</span>';
+                } else if (estado === 'PENDIENTE') {
+                    badge = '<span class="badge badge-warning">PENDIENTE</span>';
+                } else if (estado === 'RECHAZADO') {
+                    badge = '<span class="badge badge-danger">RECHAZADO</span>';
+                } else {
+                    badge = '<span class="badge badge-secondary">' + $('<div>').text(estado).html() + '</span>';
+                }
                 $tbody.append(
                     '<tr>' +
                     '<td>' + (row.id || '') + '</td>' +

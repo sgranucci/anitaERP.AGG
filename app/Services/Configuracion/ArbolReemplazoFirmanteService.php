@@ -28,8 +28,7 @@ class ArbolReemplazoFirmanteService
     public function __construct(
         private UsuarioRepositoryInterface $usuarioRepository,
         private ArbolaprobacionService $arbolaprobacionService,
-    ) {
-    }
+    ) {}
 
     /**
      * @param  array{
@@ -1032,6 +1031,9 @@ class ArbolReemplazoFirmanteService
         }
         if ((int) ($mov->pedido_id ?? 0) > 0) {
             return ['tipo' => 'PE', 'comprobante_id' => (int) $mov->pedido_id, 'ruta_visualizar' => 'ventas/pedido'];
+        }
+        if ((int) ($mov->propuesta_pago_id ?? 0) > 0) {
+            return ['tipo' => 'PP', 'comprobante_id' => (int) $mov->propuesta_pago_id, 'ruta_visualizar' => 'compras/propuesta-pago'];
         }
 
         return ['tipo' => '', 'comprobante_id' => 0, 'ruta_visualizar' => ''];

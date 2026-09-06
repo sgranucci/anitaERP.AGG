@@ -25,6 +25,7 @@
 @include('includes.compras.modalconsultarequisicion')
 @include('includes.compras.modal_elegir_articulo_proveedor')
 @include('includes.contable.modalconsultacuentacontable')
+@include('includes.contable.modalconsultacentrocosto')
 @if (!empty($mostrar_solapa_ingresos))
     @include('includes.seguridad.modal_ingreso_proveedor', [
         'ingresoContexto' => [

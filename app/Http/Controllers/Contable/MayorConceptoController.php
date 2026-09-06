@@ -51,6 +51,7 @@ class MayorConceptoController extends Controller
         $auditoriaPanel = null;
         $totales = null;
         $erroresBridge = [];
+        $lecturaIncompleta = false;
         $filasBase = null;
 
         if (MayorConceptoListadoFiltros::tieneCriteriosAplicados($filtros)) {
@@ -70,6 +71,7 @@ class MayorConceptoController extends Controller
                 $resumenPorCuenta = $pack['resumen_por_cuenta'];
                 $auditoriaPanel = $pack['auditoria_panel'];
                 $erroresBridge = $resultado['errores_bridge'] ?? [];
+                $lecturaIncompleta = (bool) ($resultado['lectura_incompleta'] ?? false);
                 $perPage = max(10, min(200, (int) $request->input('per_page', 50)));
                 $filasBase = $this->reporteService->aplanarFilasConTotales($resultado);
                 if (MayorConceptoListadoFiltros::tieneFiltroDetalle($filtros)) {
@@ -117,9 +119,11 @@ class MayorConceptoController extends Controller
             'agrupacion_resumen' => $filtros['agrupacion_resumen'] ?? 'concepto_cuenta',
             'totales' => $totales,
             'totales_visibles' => $totalesVisibles,
+            'fuente_etiqueta' => (string) data_get($resultado, 'parametros.fuente_etiqueta', ''),
             'filtro_detalle_activo' => MayorConceptoListadoFiltros::tieneFiltroDetalle($filtros),
             'filtros_detalle_texto' => MayorConceptoListadoFiltros::descripcionFiltrosDetalleActivos($filtros),
             'errores_bridge' => $erroresBridge,
+            'lectura_incompleta' => $lecturaIncompleta,
             'empresa' => $empresa,
             'moneda' => $moneda,
             'empresas_texto' => $this->reporteService->formatearEmpresasTexto($filtros),
@@ -300,7 +304,12 @@ class MayorConceptoController extends Controller
         $resumenPorCuenta = $this->reporteService->resumenAgrupadoPorCuenta($resultado);
         $totales = $this->armarTotalesDesdeResultado($resultado);
 
-        unset($resultado['mayor_plano_analitico'], $resultado['analitico_por_asiento'], $resultado['resultados_por_empresa']);
+        unset(
+            $resultado['mayor_plano_analitico'],
+            $resultado['analitico_por_asiento'],
+            $resultado['motivos_por_asiento'],
+            $resultado['resultados_por_empresa'],
+        );
 
         if (isset($auditoriaPanel['conciliacion']) && is_array($auditoriaPanel['conciliacion'])) {
             $cuadradas = $auditoriaPanel['conciliacion']['filas_cuadradas'] ?? [];

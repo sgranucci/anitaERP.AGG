@@ -24,7 +24,9 @@ class ValidacionUsoarticulo extends FormRequest
     public function rules()
     {
         return [
-            'nombre' => 'required|max:100|unique:usoarticulo,nombre,' . $this->route('id'),
+            'nombre' => 'required|max:100|unique:usoarticulo,nombre,'.$this->route('id'),
+            'aprobacion_modo' => 'nullable|in:auto,arbol,default',
+            'arbolaprobacion_id' => 'nullable|integer|exists:arbolaprobacion,id',
         ];
     }
 }

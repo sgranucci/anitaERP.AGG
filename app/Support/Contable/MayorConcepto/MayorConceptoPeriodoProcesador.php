@@ -39,6 +39,9 @@ class MayorConceptoPeriodoProcesador
     /** @var array<string, list<object>> auxpag de OPs anuladas (fallback a axphist) */
     private array $auxpagHistoricoCache = [];
 
+    /** @var array<int, list<string>> nro de asiento => por qué no se imputó por concepto */
+    private array $motivosPorAsiento = [];
+
     private int $empresaActiva = 0;
 
     private readonly MayorConceptoMediopagoSupport $mediopagoSupport;
@@ -52,14 +55,14 @@ class MayorConceptoPeriodoProcesador
 
     public function __construct(
         private readonly MayorConceptoMemoriaMotor $motor,
-        private readonly MayorConceptoAnitaBridgeReader $reader,
+        private readonly MayorConceptoLectorInterface $reader,
         ?MayorConceptoMediopagoSupport $mediopagoSupport = null,
         ?MayorConceptoTCompSupport $tcompSupport = null,
         ?MayorConceptoComRecepcionErpSupport $comRecepcionErpSupport = null,
     ) {
-        $this->mediopagoSupport = $mediopagoSupport ?? new MayorConceptoMediopagoSupport();
-        $this->tcompSupport = $tcompSupport ?? new MayorConceptoTCompSupport();
-        $this->comRecepcionErpSupport = $comRecepcionErpSupport ?? new MayorConceptoComRecepcionErpSupport();
+        $this->mediopagoSupport = $mediopagoSupport ?? new MayorConceptoMediopagoSupport;
+        $this->tcompSupport = $tcompSupport ?? new MayorConceptoTCompSupport;
+        $this->comRecepcionErpSupport = $comRecepcionErpSupport ?? new MayorConceptoComRecepcionErpSupport;
     }
 
     /**
@@ -76,7 +79,7 @@ class MayorConceptoPeriodoProcesador
      * Bridge Anita del período (mes). Reutilizable por EFE / post-procesos sin re-leer.
      * Lookups puntuales (COM/aplicped/axphist) van al bridge on-demand.
      */
-    public function bridgeReader(): MayorConceptoAnitaBridgeReader
+    public function bridgeReader(): MayorConceptoLectorInterface
     {
         return $this->reader;
     }
@@ -317,6 +320,7 @@ class MayorConceptoPeriodoProcesador
                 'haber' => round(array_sum(array_column($lineasReporte, 'haber')), 2),
             ],
             'errores_bridge' => $this->erroresBridge,
+            'lectura_incompleta' => $this->reader->fallosLectura() > 0,
             'stats' => array_merge([
                 'subdiario_filas' => count($subdiario),
                 'ctamov_filas' => count($ctamovLista),
@@ -326,6 +330,7 @@ class MayorConceptoPeriodoProcesador
             'mayor_plano_disponibilidad' => $mayorPlano,
             'mayor_plano_analitico' => $mayorPlanoAnalitico,
             'analitico_por_asiento' => $analiticoPorAsiento,
+            'motivos_por_asiento' => $this->motivosPorAsiento,
             'mayor_plano_contrapartidas_disponibilidad' => $this->finalizarPlanoContrapartidasDesdeDisp(),
         ];
     }
@@ -344,6 +349,39 @@ class MayorConceptoPeriodoProcesador
         $this->cuentaPrepagaPorProveedor = [];
         $this->auxpagHistoricoCache = [];
         $this->comSubdiarioErpFallback = 0;
+        $this->motivosPorAsiento = [];
+    }
+
+    /**
+     * Deja registrado por qué una operación no generó línea de concepto. Sin esto la
+     * conciliación solo puede decir "solo en analítico" y hay que rastrear a mano.
+     */
+    private function registrarMotivoAsiento(int $nroAsiento, string $motivo): void
+    {
+        if ($nroAsiento <= 0 || $motivo === '') {
+            return;
+        }
+
+        $actuales = $this->motivosPorAsiento[$nroAsiento] ?? [];
+        if (! in_array($motivo, $actuales, true)) {
+            $actuales[] = $motivo;
+            $this->motivosPorAsiento[$nroAsiento] = $actuales;
+        }
+    }
+
+    /** Comprobante aplicado en formato Anita: FIBC-0001-105. */
+    private function etiquetaAplicacion(object $aplicacion): string
+    {
+        $tipo = trim((string) ($aplicacion->axp_tipo_ap ?? ''));
+        $letra = trim((string) ($aplicacion->axp_letra_comp ?? ''));
+
+        return sprintf(
+            '%s%s-%04d-%d',
+            $tipo !== '' ? $tipo : '?',
+            $letra !== '' ? $letra : ' ',
+            (int) ($aplicacion->axp_sucursal ?? 0),
+            (int) ($aplicacion->axp_nro ?? 0),
+        );
     }
 
     /**
@@ -773,6 +811,12 @@ class MayorConceptoPeriodoProcesador
                     ))
                     : array_sum(array_map(fn ($l) => (float) ($l->subd_importe ?? 0), $lineasGasto));
                 if ($totalNeto <= 0) {
+                    $this->registrarMotivoAsiento(
+                        (int) (($lineaBanco ?? $lineaRef)->subd_nro_operacion ?? 0),
+                        'Factura '.$this->etiquetaAplicacion($aplicacion).' sin líneas COM de gasto: '
+                            .'no hay cuenta de gasto para imputar el pago.',
+                    );
+
                     continue;
                 }
 
@@ -1307,11 +1351,25 @@ class MayorConceptoPeriodoProcesador
      */
     private function construirEspejoAnulacionOp(array $lineasAnulacion, array $lineas): array
     {
-        if ($lineas === [] || $lineasAnulacion === []) {
+        if ($lineasAnulacion === []) {
             return [];
         }
 
         $lineaAnulacion = $lineasAnulacion[0];
+
+        // La imputación del AOP es el espejo de la emisión: si la emisión no imputó,
+        // se pierden las dos y hay que decir por qué.
+        if ($lineas === []) {
+            $this->registrarMotivoAsiento(
+                (int) ($lineaAnulacion->subd_nro_operacion ?? 0),
+                'Anulación de '.trim((string) ($lineaAnulacion->subd_ref_tipo ?? 'OP'))
+                    .' '.(int) ($lineaAnulacion->subd_ref_nro ?? 0)
+                    .': la emisión no generó imputación, no hay nada que revertir por concepto.',
+            );
+
+            return [];
+        }
+
         $totalAnulacionDebe = array_sum(array_map(
             fn ($l) => (float) ($l->subd_importe ?? 0),
             $lineasAnulacion,
@@ -3967,6 +4025,7 @@ class MayorConceptoPeriodoProcesador
                         'emisor' => trim((string) ($linea->subd_emisor ?? '')),
                     ],
                 );
+
                 continue;
             }
 
@@ -5551,7 +5610,7 @@ class MayorConceptoPeriodoProcesador
      * usando la base del comprobante (neto COM + percepciones), para no depender del
      * importe aplicado (axp_monto_ap), que en un pago a cuenta es una fracción mínima.
      *
-     * @return array<int, float>  cuenta => importe crudo del subdiario
+     * @return array<int, float> cuenta => importe crudo del subdiario
      */
     private function percepcionesRawDesdeAplicacion(object $aplicacion): array
     {
@@ -6841,6 +6900,7 @@ class MayorConceptoPeriodoProcesador
                     $clavesCom[$claveCom] = $claveCom;
                     // Número de OC = nro del comprobante COM (nunca aplp_orden = renglón).
                     $this->ordenesComPorFactura[$claveFac][$claveCom] = $refNro;
+
                     continue;
                 }
 

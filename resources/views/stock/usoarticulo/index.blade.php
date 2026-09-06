@@ -30,6 +30,8 @@ Uso de art&iacute;culos
                         <tr>
                             <th class="width20">ID</th>
                             <th>Nombre</th>
+                            <th>Aprobación</th>
+                            <th>Árbol</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
                     </thead>
@@ -38,6 +40,8 @@ Uso de art&iacute;culos
                         <tr>
                             <td>{{$data->id}}</td>
                             <td>{{$data->nombre}}</td>
+                            <td>{{ $data->aprobacion_modo ?? 'default' }}</td>
+                            <td>{{ optional($data->arbolaprobacion)->nombre ?? '—' }}</td>
                             <td>
                        			@if (can('editar-uso-de-articulos', false))
                                 	<a href="{{route('editar_usoarticulo', ['id' => $data->id])}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">

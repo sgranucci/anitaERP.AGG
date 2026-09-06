@@ -13,15 +13,14 @@ class ConfiguracionGeneralController extends Controller
 {
     public function __construct(
         private readonly EmpresaRepositoryInterface $empresaRepository,
-    ) {
-    }
+    ) {}
 
     public function index()
     {
         can('editar-configuracion-general');
 
         $grupos = ParametroSistemaSupport::listarParaFormulario();
-        $empresasIibb = $this->empresaRepository->all();
+        $empresasIibb = $this->empresaRepository->allFiltrado();
         $matrizIibb = EmpresaJurisdiccionIibbSupport::matrizParaFormulario($empresasIibb);
         $matrizIibbUsaEnv = EmpresaJurisdiccionIibbSupport::matrizUsaFallbackEnv();
         $matrizIibbJursEnv = EmpresaJurisdiccionIibbSupport::desdeEnv('agente_percepcion_iibb');
@@ -50,8 +49,24 @@ class ConfiguracionGeneralController extends Controller
     {
         can('actualizar-configuracion-general');
 
+        $empresasPermitidas = $this->empresaRepository->allFiltrado()
+            ->pluck('id')
+            ->map(static fn ($id) => (int) $id)
+            ->filter(static fn ($id) => $id > 0)
+            ->values()
+            ->all();
+        $agentes = $request->input('agentes', []);
+        if (! is_array($agentes)) {
+            $agentes = [];
+        }
+        $agentes = array_filter(
+            $agentes,
+            static fn ($_, $empresaId) => in_array((int) $empresaId, $empresasPermitidas, true),
+            ARRAY_FILTER_USE_BOTH
+        );
+
         try {
-            EmpresaJurisdiccionIibbSupport::guardarMatriz($request->input('agentes', []));
+            EmpresaJurisdiccionIibbSupport::guardarMatriz($agentes);
         } catch (\RuntimeException $e) {
             return redirect()
                 ->route('configuracion_general')

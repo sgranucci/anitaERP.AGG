@@ -9,7 +9,7 @@ use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaProcesador;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 
 /**
- * Saldo de ejercicio (columna O del mayor plano) a fecha_hasta,
+ * Saldo de ejercicio (columna P del mayor plano) a fecha_hasta,
  * desde {@see MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD}.
  *
  * Una sola corrida del mayor plano por (empresa, fecha_hasta) carga todas las
@@ -23,8 +23,7 @@ final class SicoreSaldoEjercicioSupport
     public function __construct(
         private readonly MayorPlanoCuentaProcesador $procesador,
         private readonly MayorConceptoMonedaConverter $monedaConverter,
-    ) {
-    }
+    ) {}
 
     /**
      * Suma el saldo de ejercicio de las cuentas en convención comparable a SICORE

@@ -16,12 +16,14 @@ use App\Repositories\Compras\Comprobante_Proveedor_ArchivoRepositoryInterface;
 use App\Repositories\Compras\Comprobante_Proveedor_ConceptoRepositoryInterface;
 use App\Repositories\Compras\Comprobante_ProveedorRepositoryInterface;
 use App\Repositories\Compras\Concepto_IvacompraRepositoryInterface;
+use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoTipos;
+use App\Support\Compras\ComprobanteProveedorConceptogastoResolverSupport;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorFechaContableSupport;
-use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
+use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorLineasFacturaSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
@@ -29,7 +31,6 @@ use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Compras\ComprobanteProveedorPagoSupport;
 use App\Support\Compras\ComprobanteProveedorTipoAutorizacion;
 use App\Support\Compras\ComprobanteProveedorUnicidadSupport;
-use App\Support\Compras\ComprobanteProveedorAnitaCompraExistenciaSupport;
 use App\Support\Compras\OrdencompraComprobanteEstados;
 use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
@@ -154,6 +155,7 @@ class ComprobanteProveedorPersistenciaService
         $this->sincronizarArticulos($request, $comprobante);
         $this->sincronizarCuotas($request, $comprobante);
         $this->sincronizarRecepciones($request, $comprobante);
+        ComprobanteProveedorConceptogastoResolverSupport::resolverYPersistir($comprobante);
         $this->registrarEstadoInicial($comprobante);
         $this->vincularArchivoPrecarga($comprobante);
         $this->marcarPrecargaGenerada(
@@ -268,6 +270,7 @@ class ComprobanteProveedorPersistenciaService
         Comprobante_Proveedor_Cuota::query()->where('comprobante_proveedor_id', $id)->delete();
         $this->sincronizarCuotas($request, $comprobante);
         $this->sincronizarRecepciones($request, $comprobante);
+        ComprobanteProveedorConceptogastoResolverSupport::resolverYPersistir($comprobante);
         $this->archivoRepository->sincronizarDesdeRequest($request, $id);
         $this->marcarPrecargaGenerada(
             isset($payload['precarga_comprobante_proveedor_id'])
@@ -588,7 +591,7 @@ class ComprobanteProveedorPersistenciaService
                 : null);
         $lineas = OrdencompraContratoRutaFacturaSupport::rellenarCuentaManualEnLineas($oc, $lineas, $fechaYmd);
 
-            foreach ($lineas as $i => $linea) {
+        foreach ($lineas as $i => $linea) {
             $conceptoId = (int) ($linea['concepto_ivacompra_id'] ?? 0);
             if ($conceptoId <= 0) {
                 continue;

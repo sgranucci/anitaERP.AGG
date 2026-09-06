@@ -20,8 +20,41 @@ return [
 
     'account_info_timeout' => max(3, (int) env('WIGOS_ACCOUNT_INFO_TIMEOUT', 8)),
 
-    /** A o B: servidor primario (fallback al otro si falla la conexión). */
+    /** A o B: servidor primario preferido (fallback al otro si falla la conexión). */
     'curr_wigos' => strtoupper(trim((string) env('CURR_WIGOS', 'A'))),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Monitor servidor SQL activo (wigos:monitorear-servidor-activo)
+    |--------------------------------------------------------------------------
+    |
+    | Publica el alias ONLINE por empresa en storage/cache (sin tocar .env).
+    | Probe: SELECT @@VERSION vía subproceso ODBC. currWigos() lee el activo.
+    | ok_para_preferido: OK consecutivos en el alias de config para volver a él
+    | cuando ambos están sanos (evita flapping tras failover de espejo).
+    |
+    | empresas: null = [0] + claves de por_empresa. Lista CSV/JSON opcional.
+    */
+    'monitor_servidor_activo' => [
+        'habilitado' => filter_var(env('WIGOS_MONITOR_SERVIDOR_ACTIVO', true), FILTER_VALIDATE_BOOLEAN),
+        'ok_para_preferido' => max(1, (int) env('WIGOS_MONITOR_OK_PARA_PREFERIDO', 2)),
+        'empresas' => (static function (): ?array {
+            $raw = env('WIGOS_MONITOR_EMPRESAS');
+            if ($raw === null || $raw === '') {
+                return null;
+            }
+            if (is_string($raw) && str_starts_with(trim($raw), '[')) {
+                $decoded = json_decode($raw, true);
+
+                return is_array($decoded) ? array_map('intval', $decoded) : null;
+            }
+
+            return array_values(array_filter(array_map(
+                static fn ($v) => (int) trim((string) $v),
+                explode(',', (string) $raw)
+            ), static fn (int $id) => $id >= 0));
+        })(),
+    ],
 
     /*
      * Opciones de conexión SQL Server (ODBC Driver 18+).

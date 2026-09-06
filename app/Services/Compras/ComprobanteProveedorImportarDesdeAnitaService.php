@@ -21,6 +21,7 @@ use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportBridgeReader;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportClaveSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportExistenciaSupport;
 use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportOpaSupport;
+use App\Support\Compras\AnitaImport\ComprobanteProveedorAnitaImportSinCcSupport;
 use App\Support\Compras\ComprobanteProveedorAnitaSyncEstado;
 use App\Support\Compras\ComprobanteProveedorEstados;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
@@ -33,6 +34,10 @@ use RuntimeException;
 /**
  * Importa comprobantes, CC (promov) y aplicaciones (aplmovp) Anita → ERP.
  * No escribe Anita. Las facturas ya cargadas en ERP se omiten.
+ *
+ * Con $sinCuentaCorriente: solo documentos consultables (comprobante + conceptos +
+ * cuotas; OPA como cabecera pagoproveedor). No crea proveedor_cuentacorriente ni
+ * aplicaciones — la deuda se trae en una etapa posterior.
  */
 class ComprobanteProveedorImportarDesdeAnitaService
 {
@@ -66,6 +71,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
         ?int $empresaCodigo = null,
         int $usuarioId = 1,
         ?int $limite = null,
+        bool $sinCuentaCorriente = false,
     ): array {
         $codigo = trim($codigoProveedor);
         if ($codigo === '') {
@@ -84,7 +90,9 @@ class ComprobanteProveedorImportarDesdeAnitaService
 
         $compras = $this->reader->listarCompra($codigo, $desdeYmd, $hastaYmd, $empresaCodigo);
         $promovs = $this->reader->listarPromov($codigo, $desdeYmd, $hastaYmd, $empresaCodigo);
-        $aplmovps = $this->reader->listarAplmovp($codigo, $desdeYmd, $hastaYmd);
+        $aplmovps = $sinCuentaCorriente
+            ? []
+            : $this->reader->listarAplmovp($codigo, $desdeYmd, $hastaYmd);
 
         $nrosInternos = [];
         foreach ($compras as $compra) {
@@ -107,6 +115,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
         }
 
         $stats = $this->statsVacios((int) $proveedor->id, (string) $proveedor->nombre);
+        $stats['sin_cuenta_corriente'] = $sinCuentaCorriente;
         $stats['anita_compra'] = count($compras);
         $stats['anita_promov'] = count($promovs);
         $stats['anita_aplmovp'] = count($aplmovps);
@@ -127,6 +136,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
             if ($preparado['estado'] === 'omitida') {
                 $stats['omitidas_ya_en_erp']++;
                 $stats['omitidas_detalle'][] = $preparado['omitida'];
+
                 continue;
             }
             if ($preparado['estado'] !== 'ok') {
@@ -134,9 +144,11 @@ class ComprobanteProveedorImportarDesdeAnitaService
                 if (! empty($preparado['error'])) {
                     $stats['errores'][] = $preparado['error'];
                 }
+
                 continue;
             }
             $claveFiscal = $preparado['empresa_id'].'|'
+                .(int) $proveedor->id.'|'
                 .((int) $preparado['tipo']->id).'|'
                 .ComprobanteProveedorAnitaImportClaveSupport::letra((string) ($preparado['compra']['com_letra'] ?? '')).'|'
                 .((int) ($preparado['compra']['com_sucursal'] ?? 0)).'|'
@@ -148,6 +160,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
                     .$preparado['resumen']['etiqueta']
                     .' nro interno '.$preparado['nro_interno']
                     .' (ya planificada nro interno '.$clavesLote[$claveFiscal].')';
+
                 continue;
             }
             $clavesLote[$claveFiscal] = $preparado['nro_interno'];
@@ -186,23 +199,36 @@ class ComprobanteProveedorImportarDesdeAnitaService
         $stats['errores'] = array_merge($stats['errores'], $adelantosPlan['errores']);
 
         if ($dryRun) {
-            $stats['aplicaciones'] = count($pares);
-            $stats['aplicaciones_pago_sintetico'] = count(array_filter(
-                $pares,
-                static fn (array $p) => $p['credito_es_pago']
-            ));
+            $stats = ComprobanteProveedorAnitaImportSinCcSupport::aplicarDryRun($stats, $pares, $sinCuentaCorriente);
             $stats['modo'] = 'dry-run';
 
             return $stats;
         }
 
-        return DB::transaction(function () use ($plan, $pares, $adelantosPlan, $stats, $proveedor, $usuarioId, $signoPorTipo) {
-            $ccPorClave = $this->indexarCcExistente(
-                (int) $proveedor->id,
-                (string) $proveedor->codigo
-            );
+        return DB::transaction(function () use (
+            $plan,
+            $pares,
+            $adelantosPlan,
+            $stats,
+            $proveedor,
+            $usuarioId,
+            $signoPorTipo,
+            $sinCuentaCorriente,
+        ) {
+            $ccPorClave = $sinCuentaCorriente
+                ? []
+                : $this->indexarCcExistente(
+                    (int) $proveedor->id,
+                    (string) $proveedor->codigo
+                );
             foreach ($plan as $item) {
-                $creado = $this->persistirComprobante($item, $proveedor, $usuarioId, $signoPorTipo);
+                $creado = $this->persistirComprobante(
+                    $item,
+                    $proveedor,
+                    $usuarioId,
+                    $signoPorTipo,
+                    $sinCuentaCorriente,
+                );
                 $stats['creadas']++;
                 $stats['cc'] += count($creado['cc_ids']);
                 foreach ($creado['cc_por_clave'] as $clave => $ccs) {
@@ -213,17 +239,29 @@ class ComprobanteProveedorImportarDesdeAnitaService
             }
 
             foreach ($adelantosPlan['a_crear'] as $adelanto) {
+                if ($sinCuentaCorriente) {
+                    $this->persistirAdelantoDocumento($adelanto, $proveedor, $usuarioId);
+                    $stats['adelantos_creados']++;
+
+                    continue;
+                }
                 $creado = $this->persistirAdelanto($adelanto, $proveedor, $usuarioId);
                 $stats['adelantos_creados']++;
                 $stats['cc']++;
                 $ccPorClave[$adelanto['clave']][] = $creado;
             }
 
-            $apl = $this->persistirAplicaciones($pares, $ccPorClave, (int) $proveedor->id);
-            $stats['aplicaciones'] = $apl['creadas'];
-            $stats['aplicaciones_pago_sintetico'] = $apl['pagos_sinteticos'];
-            $stats['aplicaciones_omitidas'] = $apl['omitidas'];
-            $stats['errores'] = array_merge($stats['errores'], $apl['errores']);
+            if ($sinCuentaCorriente) {
+                $stats['aplicaciones'] = 0;
+                $stats['aplicaciones_pago_sintetico'] = 0;
+                $stats['aplicaciones_omitidas'] = count($pares);
+            } else {
+                $apl = $this->persistirAplicaciones($pares, $ccPorClave, (int) $proveedor->id);
+                $stats['aplicaciones'] = $apl['creadas'];
+                $stats['aplicaciones_pago_sintetico'] = $apl['pagos_sinteticos'];
+                $stats['aplicaciones_omitidas'] = $apl['omitidas'];
+                $stats['errores'] = array_merge($stats['errores'], $apl['errores']);
+            }
             $stats['modo'] = 'ejecutar';
 
             return $stats;
@@ -276,6 +314,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
             $indice,
             $compra,
             $empresaId,
+            (int) $proveedor->id,
             (int) $tipo->id,
             $cuit,
         );
@@ -382,6 +421,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
         Proveedor $proveedor,
         int $usuarioId,
         array $signoPorTipo,
+        bool $sinCuentaCorriente = false,
     ): array {
         $compra = $item['compra'];
         /** @var Tipotransaccion_Compra $tipo */
@@ -439,6 +479,10 @@ class ComprobanteProveedorImportarDesdeAnitaService
                 'total_pagado' => $cuotaData['total_pagado'] ?? 0,
             ]);
 
+            if ($sinCuentaCorriente) {
+                continue;
+            }
+
             $montoCc = round((float) $cuotaData['monto'] * $signo, 4);
             if (abs($montoCc) < 0.0001) {
                 continue;
@@ -473,7 +517,9 @@ class ComprobanteProveedorImportarDesdeAnitaService
             'fecha' => $item['fecha'],
             'estado' => ComprobanteProveedorEstados::CONTABILIZADO,
             'usuario_id' => $usuarioId,
-            'observacion' => 'Importado desde Anita (compra/promov/aplmovp)',
+            'observacion' => $sinCuentaCorriente
+                ? 'Importado desde Anita (documento sin cuenta corriente)'
+                : 'Importado desde Anita (compra/promov/aplmovp)',
         ]);
 
         return [
@@ -505,10 +551,12 @@ class ComprobanteProveedorImportarDesdeAnitaService
             $empresaId = $this->resolverEmpresaId($adelanto['empresa_codigo']);
             if (! $empresaId) {
                 $errores[] = 'Empresa Anita '.$adelanto['empresa_codigo'].' no mapeada. '.$adelanto['etiqueta'];
+
                 continue;
             }
             if (isset($existentes[$adelanto['clave'].'|'.$empresaId])) {
                 $omitidos++;
+
                 continue;
             }
 
@@ -595,6 +643,43 @@ class ComprobanteProveedorImportarDesdeAnitaService
     }
 
     /**
+     * OPA como documento pagoproveedor sin fila en cuenta corriente.
+     *
+     * @param  array<string, mixed>  $adelanto
+     */
+    private function persistirAdelantoDocumento(array $adelanto, Proveedor $proveedor, int $usuarioId): int
+    {
+        $monto = round((float) $adelanto['pendiente'], 4);
+        $pago = Pagoproveedor::query()->create([
+            'empresa_id' => $adelanto['empresa_id'],
+            'tipotransaccion_caja_id' => $this->resolverTipoCajaId($adelanto['tipo']),
+            'tipocomprobante' => $adelanto['tipo'],
+            'letra' => $adelanto['letra'],
+            'sucursal' => $adelanto['sucursal'],
+            'numerotransaccion' => (string) $adelanto['numero'],
+            'fecha' => $adelanto['fecha'],
+            'proveedor_id' => $proveedor->id,
+            'detalle' => 'Importado desde Anita — OPA documento (sin cuenta corriente)',
+            'estado' => 'CONFIRMADA',
+            'monto' => $monto,
+            'cotizacion' => $adelanto['cotizacion'],
+            'moneda_id' => $adelanto['moneda_id'],
+            'modo_cotizacion' => 'dia',
+            'usuario_id' => $usuarioId,
+        ]);
+
+        Pagoproveedor_Estado::query()->create([
+            'pagoproveedor_id' => $pago->id,
+            'fecha' => now(),
+            'estado' => 'CONFIRMADA',
+            'usuario_id' => $usuarioId,
+            'observacion' => 'Importado desde Anita (OPA sin cuenta corriente)',
+        ]);
+
+        return (int) $pago->id;
+    }
+
+    /**
      * @return array<string, int>
      */
     private function indexarPagosExistentes(int $proveedorId, string $proveedorCodigo): array
@@ -638,12 +723,14 @@ class ComprobanteProveedorImportarDesdeAnitaService
             );
             if ($this->aplicacionYaExistePorEtiquetaEnCcs($idsDeuda, (string) $par['etiqueta_credito'], $monto)) {
                 $omitidas++;
+
                 continue;
             }
 
             $deuda = $this->peekCc($ccPorClave, $par['deuda']['clave'], $monto);
             if ($deuda === null) {
                 $omitidas++;
+
                 continue;
             }
 
@@ -655,11 +742,13 @@ class ComprobanteProveedorImportarDesdeAnitaService
             }
             if ($credito === null) {
                 $omitidas++;
+
                 continue;
             }
 
             if ($this->aplicacionYaExiste((int) $deuda['id'], (int) $credito['id'], $monto)) {
                 $omitidas++;
+
                 continue;
             }
 
@@ -711,7 +800,7 @@ class ComprobanteProveedorImportarDesdeAnitaService
         }
 
         foreach ($ccPorClave[$clave] as $i => $cc) {
-            if ($cc['saldo'] + 0.0001 >= $monto) {
+            if ($monto <= $cc['saldo'] + 0.0001) {
                 $cc['_idx'] = (int) $i;
 
                 return $cc;
@@ -1002,6 +1091,8 @@ class ComprobanteProveedorImportarDesdeAnitaService
             'adelantos_a_crear' => 0,
             'adelantos_creados' => 0,
             'adelantos_omitidos_ya_en_erp' => 0,
+            'adelantos_a_crear_documento' => 0,
+            'sin_cuenta_corriente' => false,
             'errores' => [],
             'muestra' => [],
             'muestra_adelantos' => [],

@@ -3,11 +3,15 @@
 namespace App\Services\Compras;
 
 use App\Models\Caja\Caja_Movimiento;
+use App\Models\Caja\Caja_Movimiento_Estado;
 use App\Models\Caja\Cheque;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Estado;
 use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Contable\Asiento;
+use App\Repositories\Caja\Caja_Movimiento_CuentacajaRepositoryInterface;
+use App\Repositories\Caja\Caja_Movimiento_EstadoRepositoryInterface;
+use App\Repositories\Caja\Caja_MovimientoRepositoryInterface;
 use App\Repositories\Compras\PagoproveedorRepositoryInterface;
 use App\Repositories\Contable\AsientoRepositoryInterface;
 use App\Support\Caja\CajaMovimientoEloquentDeleteSupport;
@@ -18,6 +22,8 @@ use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use Auth;
 use DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 
 /**
@@ -29,8 +35,11 @@ class PagoproveedorAnularRevertirService
         private PagoproveedorRepositoryInterface $pagoproveedorRepository,
         private AsientoRepositoryInterface $asientoRepository,
         private AsientoReversoSupport $asientoReversoSupport,
-    ) {
-    }
+        private Caja_MovimientoRepositoryInterface $cajaMovimientoRepository,
+        private Caja_Movimiento_CuentacajaRepositoryInterface $cajaMovimientoCuentacajaRepository,
+        private Caja_Movimiento_EstadoRepositoryInterface $cajaMovimientoEstadoRepository,
+        private ProveedorCuentacorrienteAplicacionAnitaSyncService $cuentacorrienteAnitaSyncService,
+    ) {}
 
     /**
      * @return array{mensaje: string, pagoproveedor_id: int}
@@ -129,15 +138,14 @@ class PagoproveedorAnularRevertirService
         $leyenda = 'ANULA OPP '.$nroOrig;
 
         return DB::transaction(function () use ($pago, $fechaOp, $leyenda, $nroOrig) {
-            PagoproveedorAplicacionCuentacorrienteSupport::revertirAplicacionesExistentes($pago);
-
+            // AOP: mismo comprobante con importes negativos y el número del original.
             $reverso = $this->pagoproveedorRepository->create([
                 'empresa_id' => (int) $pago->empresa_id,
                 'tipotransaccion_caja_id' => $pago->tipotransaccion_caja_id,
-                'tipocomprobante' => (string) ($pago->tipocomprobante ?? 'OPP'),
+                'tipocomprobante' => 'AOP',
                 'letra' => (string) ($pago->letra ?? 'A'),
                 'sucursal' => (int) ($pago->sucursal ?? 1),
-                'numerotransaccion' => 'R'.$nroOrig,
+                'numerotransaccion' => (string) $nroOrig,
                 'fecha' => $fechaOp,
                 'caja_id' => $pago->caja_id,
                 'proveedor_id' => (int) $pago->proveedor_id,
@@ -154,6 +162,12 @@ class PagoproveedorAnularRevertirService
 
             $this->registrarEstado($reverso, 'REVERTIDA', $leyenda);
 
+            // Cuenta corriente: se compensa, no se borra. La factura vuelve a quedar
+            // impaga y el saldo reaparece, conservando la traza de la OPP.
+            PagoproveedorAplicacionCuentacorrienteSupport::compensarPorReverso($pago, $reverso);
+
+            $cajaReverso = $this->crearMovimientoCajaCompensatorio($pago, $reverso, $fechaOp, $leyenda);
+
             foreach (Cheque::query()->where('pagoproveedor_id', (int) $pago->id)->get() as $cheque) {
                 if (strtoupper((string) $cheque->origen) !== 'E') {
                     continue;
@@ -161,6 +175,10 @@ class PagoproveedorAnularRevertirService
                 $cheque->estado = 'A';
                 $cheque->save();
             }
+
+            EloquentAuditDeleteSupport::each(
+                Pagoproveedor_Retencion::query()->where('pagoproveedor_id', (int) $pago->id)
+            );
 
             $asientoOrig = Asiento::query()
                 ->with('asiento_movimientos')
@@ -193,6 +211,8 @@ class PagoproveedorAnularRevertirService
 
             $this->registrarEstado($pago, 'REVERTIDA', $leyenda.' (compensatorio OP '.$reverso->id.')');
 
+            $this->sincronizarAnulacionAnita($pago, $reverso, $cajaReverso);
+
             return [
                 'mensaje' => 'ok',
                 'pagoproveedor_id' => (int) $pago->id,
@@ -200,6 +220,104 @@ class PagoproveedorAnularRevertirService
                 'numerotransaccion' => (string) $reverso->numerotransaccion,
             ];
         });
+    }
+
+    /**
+     * Movimiento de caja espejo con las líneas de cuentacaja invertidas: devuelve
+     * los valores al banco/caja y da a Anita las líneas para auxpag/tesmov.
+     */
+    private function crearMovimientoCajaCompensatorio(
+        Pagoproveedor $pago,
+        Pagoproveedor $reverso,
+        string $fechaOp,
+        string $leyenda
+    ): ?Caja_Movimiento {
+        $cajaOriginal = Caja_Movimiento::query()
+            ->with('caja_movimiento_cuentacajas')
+            ->find((int) ($pago->caja_movimiento_id ?? 0));
+
+        if ($cajaOriginal === null) {
+            return null;
+        }
+
+        $movimiento = $this->cajaMovimientoRepository->create([
+            'empresa_id' => (int) $pago->empresa_id,
+            'tipotransaccion_caja_id' => (int) $cajaOriginal->tipotransaccion_caja_id,
+            'fecha' => $fechaOp,
+            'caja_id' => $cajaOriginal->caja_id,
+            'proveedor_id' => $pago->proveedor_id,
+            'detalle' => $leyenda,
+            'usuario_id' => Auth::id(),
+            'solicitudpago_id' => null,
+            'caja_movimiento_origen_id' => (int) $cajaOriginal->id,
+        ]);
+
+        if (! $movimiento instanceof Caja_Movimiento) {
+            throw new RuntimeException('No se pudo grabar el movimiento de caja de la anulación.');
+        }
+
+        $lineas = [
+            'tipotransaccion_caja_id' => (int) $cajaOriginal->tipotransaccion_caja_id,
+            'fecha' => $fechaOp,
+            'observaciones' => [],
+            'cuentacaja_ids' => [],
+            'montos' => [],
+            'moneda_ids' => [],
+            'cotizaciones' => [],
+        ];
+        foreach ($cajaOriginal->caja_movimiento_cuentacajas as $linea) {
+            $monto = (float) $linea->monto;
+            $lineas['cuentacaja_ids'][] = (int) $linea->cuentacaja_id;
+            $lineas['montos'][] = $monto >= 0 ? ($monto * -1.0) : abs($monto);
+            $lineas['moneda_ids'][] = (int) ($linea->moneda_id ?: 1);
+            $lineas['cotizaciones'][] = (float) ($linea->cotizacion ?: 1);
+            $lineas['observaciones'][] = $leyenda;
+        }
+        if ($lineas['cuentacaja_ids'] !== []) {
+            $this->cajaMovimientoCuentacajaRepository->create($lineas, (int) $movimiento->id);
+        }
+
+        $this->cajaMovimientoEstadoRepository->create([
+            'fechas' => [$fechaOp],
+            'estados' => [Caja_Movimiento_Estado::$enumEstado[0]['valor'] ?? 'A'],
+            'observacionestados' => [$leyenda],
+        ], (int) $movimiento->id);
+
+        if (Schema::hasColumn('caja_movimiento', 'pagoproveedor_id')) {
+            Caja_Movimiento::query()->where('id', (int) $movimiento->id)->update([
+                'pagoproveedor_id' => (int) $reverso->id,
+            ]);
+        }
+
+        $this->pagoproveedorRepository->update([
+            'caja_movimiento_id' => (int) $movimiento->id,
+        ], (int) $reverso->id);
+
+        return $movimiento->fresh();
+    }
+
+    /**
+     * Tesorería y cuenta corriente de Anita: AOP con importes negativos (pago/auxpag/
+     * tesmov + cpromae de los cheques propios) y aplicaciones compensatorias en
+     * aplmovp/promov.
+     */
+    private function sincronizarAnulacionAnita(
+        Pagoproveedor $pago,
+        Pagoproveedor $reverso,
+        ?Caja_Movimiento $cajaReverso
+    ): void {
+        $cajaOriginal = Caja_Movimiento::query()->find((int) ($pago->caja_movimiento_id ?? 0));
+
+        if ($cajaReverso !== null && $cajaOriginal !== null) {
+            IngresoEgresoAnitaTesmovSupport::grabarAnulacionDesdeMovimiento($cajaReverso, $cajaOriginal);
+        } else {
+            Log::warning('pagoproveedor.reversion.sin_movimiento_caja', [
+                'pagoproveedor_id' => $pago->id,
+                'reverso_id' => $reverso->id,
+            ]);
+        }
+
+        $this->cuentacorrienteAnitaSyncService->syncPorPagoproveedor((int) $reverso->id);
     }
 
     private function assertNoEsCompensatorio(Pagoproveedor $pago): void

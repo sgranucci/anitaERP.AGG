@@ -18,17 +18,12 @@ class Solicitud_IndumentariaController extends Controller
         private SolicitudPrendaService $solicitudService,
     ) {}
 
-    /** Bandeja de aprobación: solicitudes pendientes que el usuario logueado puede aprobar. */
+    /** Bandeja de aprobación: redirige a Mis aprobaciones (entrada única). */
     public function bandeja(Request $request)
     {
         can('aprobar-solicitud-indumentaria');
 
-        $usuarioId = (int) (auth()->id() ?? 0);
-        $pendientes = $this->solicitudService->bandejaPendientesDe($usuarioId);
-
-        return view('sueldos.solicitud_indumentaria.bandeja', [
-            'pendientes' => $pendientes,
-        ]);
+        return redirect()->to(url('mis-aprobaciones').'?fuente=indumentaria');
     }
 
     public function aprobarBandeja(Request $request, $solicitudId)
@@ -39,10 +34,11 @@ class Solicitud_IndumentariaController extends Controller
         try {
             $this->solicitudService->aprobar($solicitud, (int) (auth()->id() ?? 0), $request->input('observacion'));
         } catch (\Throwable $e) {
-            return redirect()->route('bandeja_solicitud_indumentaria')->with('error', $e->getMessage());
+            return redirect()->to(url('mis-aprobaciones').'?fuente=indumentaria')->with('error', $e->getMessage());
         }
 
-        return redirect()->route('bandeja_solicitud_indumentaria')->with('mensaje', 'Solicitud #'.$solicitud->id.' aprobada.');
+        return redirect()->to(url('mis-aprobaciones').'?fuente=indumentaria')
+            ->with('mensaje', 'Solicitud #'.$solicitud->id.' aprobada.');
     }
 
     public function rechazarBandeja(Request $request, $solicitudId)
@@ -53,10 +49,11 @@ class Solicitud_IndumentariaController extends Controller
         try {
             $this->solicitudService->rechazar($solicitud, (int) (auth()->id() ?? 0), $request->input('observacion'));
         } catch (\Throwable $e) {
-            return redirect()->route('bandeja_solicitud_indumentaria')->with('error', $e->getMessage());
+            return redirect()->to(url('mis-aprobaciones').'?fuente=indumentaria')->with('error', $e->getMessage());
         }
 
-        return redirect()->route('bandeja_solicitud_indumentaria')->with('mensaje', 'Solicitud #'.$solicitud->id.' rechazada.');
+        return redirect()->to(url('mis-aprobaciones').'?fuente=indumentaria')
+            ->with('mensaje', 'Solicitud #'.$solicitud->id.' rechazada.');
     }
 
     /** Reporte de solicitudes (todos los estados) con filtros + export. */

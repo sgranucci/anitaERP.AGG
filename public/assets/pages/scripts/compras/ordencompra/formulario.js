@@ -2916,8 +2916,64 @@ $(function () {
 		var exigeIngresos = esContrato && $('#contrato_exige_ingresos').is(':checked');
 		$('#oc-contrato-plantilla-validacion').toggle(requiereValidacion || exigeIngresos);
 		$('#oc-contrato-minimo-ingresos').toggle(exigeIngresos);
+
+		var esSuscripcion = esContrato && $('#es_suscripcion').is(':checked');
+		$('#oc-suscripcion-campos').toggle(esSuscripcion);
+		ocSincronizarCentrocostoSuscripcion(esSuscripcion);
 	}
 
-	$(document).on('change', '#es_contrato, #contrato_auto_renovable, input[name="contrato_requiere_recepcion"], input[name="contrato_imputacion_contable"], #contrato_requiere_validacion_abono, #contrato_exige_ingresos', ocSincronizarBloqueContrato);
+	/**
+	 * En suscripción el área es el centro de costo (modal F1).
+	 * Evita duplicar name=centrocosto_id con el select del encabezado.
+	 */
+	function ocSincronizarCentrocostoSuscripcion(esSuscripcion) {
+		var $select = $('#centrocosto_id');
+		var $modalId = $('#centrocosto_oc_suscripcion_id');
+		var $ayuda = $('#oc-centrocosto-via-suscripcion-ayuda');
+		if (!$select.length || !$modalId.length) {
+			return;
+		}
+		var editable = String($select.data('oc-editable')) !== '0';
+
+		if (esSuscripcion) {
+			if (!$modalId.val() && $select.val()) {
+				var optText = $select.find('option:selected').text() || '';
+				var partes = optText.split('—');
+				$modalId.val($select.val());
+				$('#centrocosto_oc_suscripcion_id_codigo').val($.trim(partes[0] || ''));
+				$('#centrocosto_oc_suscripcion_id_descripcion').val($.trim(partes.slice(1).join('—') || ''));
+			}
+			$select.prop('disabled', true).prop('required', false).removeAttr('name');
+			if (editable) {
+				$modalId.prop('disabled', false).attr('name', 'centrocosto_id').prop('required', true);
+			} else {
+				$modalId.prop('disabled', true).prop('required', false).removeAttr('name');
+			}
+			$ayuda.removeClass('d-none');
+		} else {
+			if ($modalId.val()) {
+				$select.val($modalId.val());
+			}
+			$select.prop('disabled', !editable).prop('required', editable);
+			if (editable) {
+				$select.attr('name', 'centrocosto_id');
+			}
+			$modalId.prop('disabled', true).prop('required', false).removeAttr('name');
+			$ayuda.addClass('d-none');
+		}
+	}
+
+	$(document).on('change', '#centrocosto_oc_suscripcion_id', function () {
+		var id = $(this).val();
+		if (id) {
+			$('#centrocosto_id').val(id);
+		}
+	});
+
+	$(document).on('change', '#es_contrato, #es_suscripcion, #contrato_auto_renovable, input[name="contrato_requiere_recepcion"], input[name="contrato_imputacion_contable"], #contrato_requiere_validacion_abono, #contrato_exige_ingresos', ocSincronizarBloqueContrato);
 	ocSincronizarBloqueContrato();
+
+	if (typeof activa_eventos_consultacentrocosto === 'function') {
+		activa_eventos_consultacentrocosto();
+	}
 });

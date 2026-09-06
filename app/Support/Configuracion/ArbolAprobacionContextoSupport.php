@@ -127,12 +127,13 @@ final class ArbolAprobacionContextoSupport
     public static function entidadTipoAi(string $tipo): string
     {
         return match (strtoupper($tipo)) {
-            'OC' => 'ordencompra',
+            'OC', 'SU' => 'ordencompra',
             'RE' => 'requisicion',
             'RS' => 'requisicion_sala',
             'SP' => 'solicitudpago',
             'OV' => 'ordenventa',
             'PE' => 'pedido',
+            'AR' => 'articulo',
             default => 'arbolaprobacion_'.$tipo,
         };
     }

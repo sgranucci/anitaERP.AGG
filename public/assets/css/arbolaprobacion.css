@@ -1,0 +1,455 @@
+/* Árbol de aprobación — look Anita (colores Mis aprobaciones) en layout full-width estándar */
+
+.anita-arbol {
+    --aa-ink: #102433;
+    --aa-muted: #5a6b7a;
+    --aa-line: rgba(16, 36, 51, 0.1);
+    --aa-surface: #ffffff;
+    --aa-navy: #0c3b52;
+    --aa-navy-deep: #072636;
+    --aa-teal: #1a7a6d;
+    --aa-teal-soft: rgba(26, 122, 109, 0.12);
+    --aa-warn: #b7791f;
+    --aa-ok: #1f7a4d;
+    --aa-radius: 12px;
+    --aa-font: "Source Sans Pro", "Manrope", sans-serif;
+    --aa-display: "Source Sans Pro", "Manrope", sans-serif;
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    font-family: var(--aa-font);
+    color: var(--aa-ink);
+}
+
+.anita-arbol-hero {
+    position: relative;
+    overflow: hidden;
+    margin-bottom: 0.85rem;
+    padding: 1rem 1.15rem;
+    border-radius: var(--aa-radius);
+    background: linear-gradient(135deg, var(--aa-navy-deep) 0%, var(--aa-navy) 55%, #14556a 100%);
+    color: #f4f8fa;
+}
+
+.anita-arbol-hero-glow {
+    display: none;
+}
+
+.anita-arbol-hero-row {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.85rem;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.anita-arbol-brand {
+    margin: 0 0 0.2rem;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: rgba(255, 255, 255, 0.7);
+}
+
+.anita-arbol-title {
+    margin: 0 0 0.15rem;
+    font-family: var(--aa-display);
+    font-size: 1.35rem;
+    font-weight: 700;
+    line-height: 1.2;
+    color: #fff;
+}
+
+.anita-arbol-sub {
+    margin: 0;
+    max-width: none;
+    font-size: 0.9rem;
+    line-height: 1.35;
+    color: rgba(244, 248, 250, 0.8);
+    font-weight: 400;
+}
+
+.anita-arbol-hero-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+}
+
+.anita-arbol-hero-actions .btn {
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.82rem;
+    padding: 0.4rem 0.95rem;
+}
+
+.anita-arbol-hero-actions .btn-light {
+    background: rgba(255, 255, 255, 0.92);
+    border: none;
+    color: var(--aa-navy-deep);
+}
+
+.anita-arbol-hero-actions .btn-outline-light {
+    border-color: rgba(255, 255, 255, 0.45);
+    color: #fff;
+}
+
+.anita-arbol-panel {
+    margin-bottom: 0.85rem;
+    padding: 1rem 1.1rem 0.9rem;
+    border-radius: var(--aa-radius);
+    background: var(--aa-surface);
+    border: 1px solid var(--aa-line);
+}
+
+.anita-arbol-panel-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 0.5rem;
+    margin-bottom: 0.85rem;
+    padding-bottom: 0.65rem;
+    border-bottom: 1px solid var(--aa-line);
+}
+
+.anita-arbol-panel-title {
+    margin: 0;
+    font-family: var(--aa-display);
+    font-size: 1.2rem;
+    font-weight: 600;
+    color: var(--aa-navy-deep);
+}
+
+.anita-arbol-panel-hint {
+    margin: 0.2rem 0 0;
+    font-size: 0.84rem;
+    color: var(--aa-muted);
+    line-height: 1.35;
+    max-width: 40rem;
+}
+
+.anita-arbol-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.anita-arbol-chip-teal {
+    background: var(--aa-teal-soft);
+    color: var(--aa-teal);
+}
+
+.anita-arbol-chip-navy {
+    background: rgba(12, 59, 82, 0.1);
+    color: var(--aa-navy);
+}
+
+.anita-arbol-chip-warn {
+    background: rgba(183, 121, 31, 0.14);
+    color: var(--aa-warn);
+}
+
+.anita-arbol-chip-ok {
+    background: rgba(31, 122, 77, 0.12);
+    color: var(--aa-ok);
+}
+
+.anita-arbol .form-control,
+.anita-arbol select.form-control {
+    border-radius: 10px;
+    border-color: rgba(16, 36, 51, 0.14);
+    font-size: 0.9rem;
+}
+
+.anita-arbol .form-control:focus {
+    border-color: rgba(26, 122, 109, 0.55);
+    box-shadow: 0 0 0 0.15rem rgba(26, 122, 109, 0.18);
+}
+
+.anita-arbol .col-form-label {
+    font-size: 0.82rem;
+    font-weight: 600;
+    color: var(--aa-muted);
+}
+
+.anita-arbol-callout {
+    margin: 0 0 0.85rem;
+    padding: 0.75rem 0.9rem;
+    border-radius: 12px;
+    background: rgba(12, 59, 82, 0.05);
+    border: 1px solid rgba(12, 59, 82, 0.08);
+    font-size: 0.86rem;
+    line-height: 1.4;
+    color: var(--aa-ink);
+}
+
+.anita-arbol-callout strong {
+    color: var(--aa-navy);
+}
+
+.anita-arbol-subsection {
+    margin: 0.75rem 0 0.35rem;
+    padding: 0.85rem 0.9rem 0.75rem;
+    border-radius: 10px;
+    background: rgba(12, 59, 82, 0.03);
+    border: 1px solid rgba(12, 59, 82, 0.08);
+}
+
+.anita-arbol-subsection + .anita-arbol-subsection {
+    margin-top: 0.65rem;
+}
+
+.anita-arbol-subsection-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.45rem;
+    margin-bottom: 0.65rem;
+}
+
+.anita-arbol-subsection-title {
+    margin: 0;
+    font-size: 0.98rem;
+    font-weight: 700;
+    color: var(--aa-navy-deep);
+}
+
+.anita-arbol-collapse-toggle {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.55rem;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    text-align: left;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+}
+
+.anita-arbol-collapse-toggle:focus {
+    outline: none;
+}
+
+.anita-arbol-collapse-toggle:focus-visible {
+    outline: 2px solid rgba(26, 122, 109, 0.45);
+    outline-offset: 3px;
+    border-radius: 8px;
+}
+
+.anita-arbol-collapse-toggle-main {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.55rem;
+    min-width: 0;
+    flex: 1 1 14rem;
+}
+
+.anita-arbol-collapse-toggle-meta {
+    display: inline-flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+}
+
+.anita-arbol-collapse-caret {
+    margin-top: 0.28rem;
+    color: var(--aa-teal);
+    transition: transform 0.18s ease;
+}
+
+.anita-arbol-collapse.is-open .anita-arbol-collapse-caret {
+    transform: rotate(90deg);
+}
+
+.anita-arbol-collapse-body {
+    margin-top: 0.65rem;
+    padding-top: 0.55rem;
+    border-top: 1px solid var(--aa-line);
+}
+
+.anita-arbol-subsection.is-highlight {
+    border-color: rgba(26, 122, 109, 0.55);
+    background: rgba(26, 122, 109, 0.08);
+    transition: background 0.35s ease, border-color 0.35s ease;
+}
+
+.anita-arbol #tabla-re-exc tbody tr.fila-re-exc.is-cc-match {
+    background: rgba(26, 122, 109, 0.1);
+}
+
+.anita-arbol #tabla-re-triggers tbody tr.fila-re-trigger.is-activo {
+    background: rgba(31, 122, 77, 0.07);
+    box-shadow: inset 3px 0 0 var(--aa-ok);
+}
+
+.anita-arbol #tabla-re-triggers tbody tr.fila-re-trigger.is-inactivo {
+    background: rgba(16, 36, 51, 0.03);
+    opacity: 0.72;
+}
+
+.anita-arbol #tabla-re-triggers tbody tr.fila-re-trigger.is-inactivo .re-trigger-estado-badge {
+    background: rgba(16, 36, 51, 0.1);
+    color: var(--aa-muted);
+}
+
+.anita-arbol .re-trigger-estado-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.12rem 0.45rem;
+    border-radius: 999px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    background: rgba(31, 122, 77, 0.14);
+    color: var(--aa-ok);
+}
+
+.anita-arbol-table-wrap {
+    overflow-x: auto;
+    border-radius: 12px;
+    border: 1px solid var(--aa-line);
+}
+
+.anita-arbol #arbolaprobacion-nivel-table,
+.anita-arbol #tabla-re-exc,
+.anita-arbol #tabla-oc-triggers,
+.anita-arbol #tabla-re-triggers {
+    margin: 0;
+    background: #fff;
+}
+
+.anita-arbol #arbolaprobacion-nivel-table thead th,
+.anita-arbol #tabla-re-exc thead th,
+.anita-arbol #tabla-oc-triggers thead th,
+.anita-arbol #tabla-re-triggers thead th {
+    background: #f3f7f9 !important;
+    color: var(--aa-navy-deep) !important;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--aa-line) !important;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.anita-arbol #arbolaprobacion-nivel-table tbody td,
+.anita-arbol #tabla-re-exc tbody td,
+.anita-arbol #tabla-oc-triggers tbody td,
+.anita-arbol #tabla-re-triggers tbody td {
+    vertical-align: middle;
+    border-top-color: var(--aa-line);
+}
+
+.anita-arbol .rama-re {
+    min-width: 3.4rem;
+    font-weight: 700;
+}
+
+.anita-arbol-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 0.75rem;
+}
+
+.anita-arbol-toolbar .btn {
+    border-radius: 999px;
+    font-weight: 600;
+    font-size: 0.82rem;
+}
+
+.anita-arbol-btn-teal {
+    background: var(--aa-teal);
+    border-color: var(--aa-teal);
+    color: #fff;
+}
+
+.anita-arbol-btn-teal:hover {
+    background: #15675c;
+    border-color: #15675c;
+    color: #fff;
+}
+
+.anita-arbol-footer {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.6rem;
+    justify-content: flex-end;
+    padding: 0.85rem 0 0.25rem;
+}
+
+.anita-arbol-index .table thead th {
+    background: #f3f7f9;
+    color: var(--aa-navy-deep);
+    font-size: 0.74rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--aa-line);
+}
+
+.anita-arbol-nivel-list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+}
+
+.anita-arbol-nivel-item {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+    font-size: 0.82rem;
+    color: var(--aa-ink);
+}
+
+.anita-arbol-empresa-filter {
+    padding: 0.85rem 1.1rem;
+    border-bottom: 1px solid var(--aa-line);
+    background: rgba(243, 247, 249, 0.7);
+}
+
+.anita-arbol-empresa-filter .btn {
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 600;
+}
+
+.anita-arbol-empty-niveles {
+    padding: 1.25rem;
+    text-align: center;
+    color: var(--aa-muted);
+    font-size: 0.9rem;
+}
+
+@media (max-width: 768px) {
+    .anita-arbol-hero {
+        padding: 1.1rem;
+    }
+
+    .anita-arbol-panel {
+        padding: 0.9rem;
+    }
+}
