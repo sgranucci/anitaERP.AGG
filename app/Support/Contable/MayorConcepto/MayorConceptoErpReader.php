@@ -38,6 +38,9 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
     /** @var array<string, ?object> */
     private array $promaeCache = [];
 
+    /** Índice axp_tipo_ap|nro_medio → fila auxpag (ej. CHP|68791264). */
+    private array $auxpagMedioIndex = [];
+
     public function precargarPeriodoEmpresas(array $empresaIds, int $fechaDesde, int $fechaHasta): void
     {
         foreach ($empresaIds as $empresaId) {
@@ -56,24 +59,37 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
         $desde = self::ymdAFecha($fechaDesde);
         $hasta = self::ymdAFecha($fechaHasta);
 
+        // auxpag primero: hace falta para armar ref OPP en CHP importados.
+        $auxpag = $this->auxpagPeriodo($empresaId, $desde, $hasta, $fechaDesde, $fechaHasta);
+        $this->auxpagMedioIndex = $this->indexarAuxpagPorMedio($auxpag);
+
         $movimientos = $this->movimientosAsiento($empresaId, $desde, $hasta);
 
-        // En Anita, subdiario y ctamov son tablas distintas. En ERP la única fuente
-        // es asiento_movimiento (= ctamov). Proyectar la misma pierna a ambas hace
-        // que el motor principal doble analítico/concepto.
-        //
-        // Por eso el período ERP alimenta solo ctamov (forma nativa). El ruteo de
-        // pagos/OPP del motor ya tiene caminos ctamov; auxpag sigue aparte.
-        // cargarCtamovPorAsiento / subdiario sintético puntual no cambian.
+        // Una sola forma por asiento (nunca subd+ctamov de la misma pierna):
+        // - Importado Anita ([SUBD] / anita_origen=subdiario) → subdiario (ruteo OPP/CHP)
+        // - Nativo ERP → ctamov
+        $subdiario = [];
         $ctamov = [];
+        $subPorAsiento = [];
         foreach ($movimientos as $mov) {
-            $ctamov[] = $this->filaCtamov($mov);
+            if ($this->esMovimientoOrigenSubdiarioAnita($mov)) {
+                $fila = $this->filaSubdiario($mov);
+                $subPorAsiento[$this->numeroAsientoOperativo($mov)][] = $fila;
+            } else {
+                $ctamov[] = $this->filaCtamov($mov);
+            }
+        }
+        foreach ($subPorAsiento as $lineasAsiento) {
+            $this->completarContrapartidasSubdiario($lineasAsiento);
+            foreach ($lineasAsiento as $fila) {
+                $subdiario[] = $fila;
+            }
         }
 
         $resultado = [
-            'subdiario' => [],
+            'subdiario' => $subdiario,
             'ctamov' => $ctamov,
-            'auxpag' => $this->auxpagPeriodo($empresaId, $desde, $hasta),
+            'auxpag' => $auxpag,
             'ctaconc' => $this->ctaconc($empresaId),
             'promae' => [],
             'errores' => $errores,
@@ -120,6 +136,7 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
                 'a.anita_sucursal',
                 'a.anita_nro',
                 'a.anita_emisor',
+                'a.anita_origen',
                 'a.caja_movimiento_id',
                 'a.pagoproveedor_id',
                 'a.solicitudpago_id',
@@ -370,26 +387,54 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
         $suc = (int) ($m->anita_sucursal ?? 0);
         $nro = (int) ($m->anita_nro ?? 0);
 
+        $refTipo = $tipo;
+        $refLetra = $letra;
+        $refSuc = $suc;
+        $refNro = $nro;
+
+        // CHP/TMB… en Anita referencian la OPP (subd_ref_tipo=OPP). Sin eso el motor
+        // no entra a "OPP medio CHP" y mete banco+113 al concepto (netoC=0).
+        if (in_array($tipo, ['CHP', 'TMB', 'TMK', 'TMR'], true) && $nro > 0) {
+            $medio = $this->auxpagMedioIndex[$tipo.'|'.$nro] ?? null;
+            if ($medio !== null) {
+                $refTipo = strtoupper(trim((string) ($medio->axp_tipo ?? 'OPP')));
+                if ($refTipo === '') {
+                    $refTipo = 'OPP';
+                }
+                $refLetra = '';
+                $refSuc = (int) ($medio->axp_sucursal ?? 0);
+                $refNro = (int) ($medio->axp_rec ?? 0);
+            }
+        }
+
         return [
             'tipo' => $tipo,
             'letra' => $letra,
             'sucursal' => $suc,
             'nro' => $nro,
             'emisor' => trim((string) ($m->anita_emisor ?? '')),
-            'ref_tipo' => $tipo,
-            'ref_letra' => $letra,
-            'ref_sucursal' => $suc,
-            'ref_nro' => $nro,
+            'ref_tipo' => $refTipo,
+            'ref_letra' => $refLetra,
+            'ref_sucursal' => $refSuc,
+            'ref_nro' => $refNro,
         ];
     }
 
     /**
      * Aplicaciones de pago del período (equivalente de auxpag).
      *
+     * MySQL (pagos ERP) + fallback Informix para OPs importadas ([SUBD]) que nunca
+     * tuvieron fila en proveedor_cuentacorriente_aplicacion.
+     *
      * @return list<object>
      */
-    private function auxpagPeriodo(int $empresaId, string $desde, string $hasta): array
-    {
+    private function auxpagPeriodo(
+        int $empresaId,
+        string $desde,
+        string $hasta,
+        int $fechaDesdeYmd = 0,
+        int $fechaHastaYmd = 0,
+    ): array {
         $filas = DB::table('proveedor_cuentacorriente_aplicacion as ap')
             ->join('pagoproveedor as pp', 'pp.id', '=', 'ap.pagoproveedor_id')
             ->join('proveedor as pr', 'pr.id', '=', 'pp.proveedor_id')
@@ -446,7 +491,116 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
             ];
         }
 
+        if ($fechaDesdeYmd > 0 && $fechaHastaYmd > 0) {
+            $salida = $this->fusionarAuxpagConAnitaBridge($empresaId, $fechaDesdeYmd, $fechaHastaYmd, $salida);
+        }
+
         return $salida;
+    }
+
+    /**
+     * @param  list<object>  $erp
+     * @return list<object>
+     */
+    private function fusionarAuxpagConAnitaBridge(int $empresaId, int $desdeYmd, int $hastaYmd, array $erp): array
+    {
+        try {
+            $anita = app(MayorConceptoAnitaBridgeReader::class)->cargarPeriodo($empresaId, $desdeYmd, $hastaYmd);
+        } catch (\Throwable) {
+            return $erp;
+        }
+
+        $anitaFilas = $anita['auxpag'] ?? [];
+        if ($anitaFilas === []) {
+            return $erp;
+        }
+
+        $vistos = [];
+        foreach ($erp as $fila) {
+            $vistos[$this->claveAuxpagFila($fila)] = true;
+        }
+
+        foreach ($anitaFilas as $fila) {
+            $clave = $this->claveAuxpagFila($fila);
+            if (isset($vistos[$clave])) {
+                continue;
+            }
+            $vistos[$clave] = true;
+            $erp[] = $fila;
+        }
+
+        return $erp;
+    }
+
+    private function claveAuxpagFila(object $fila): string
+    {
+        return implode('|', [
+            trim((string) ($fila->axp_pro ?? '')),
+            (int) ($fila->axp_fecha ?? 0),
+            strtoupper(trim((string) ($fila->axp_tipo ?? ''))),
+            (int) ($fila->axp_rec ?? 0),
+            strtoupper(trim((string) ($fila->axp_tipo_ap ?? ''))),
+            (int) ($fila->axp_nro ?? 0),
+            number_format((float) ($fila->axp_monto_ap ?? 0), 2, '.', ''),
+        ]);
+    }
+
+    /**
+     * @param  list<object>  $auxpag
+     * @return array<string, object>
+     */
+    private function indexarAuxpagPorMedio(array $auxpag): array
+    {
+        $idx = [];
+        foreach ($auxpag as $fila) {
+            $tipoAp = strtoupper(trim((string) ($fila->axp_tipo_ap ?? '')));
+            $nro = (int) ($fila->axp_nro ?? 0);
+            if (! in_array($tipoAp, ['CHP', 'TMB', 'TMK', 'TMR'], true) || $nro <= 0) {
+                continue;
+            }
+            $idx[$tipoAp.'|'.$nro] = $fila;
+        }
+
+        return $idx;
+    }
+
+    private function esMovimientoOrigenSubdiarioAnita(object $m): bool
+    {
+        $origen = strtolower(trim((string) ($m->anita_origen ?? '')));
+        if ($origen === 'subdiario') {
+            return true;
+        }
+
+        return str_starts_with(trim((string) ($m->observacion ?? '')), '[SUBD]');
+    }
+
+    /**
+     * Anita trae contrapartida por renglón; el ERP no. En asientos de 2 piernas
+     * (ej. CHP 111 H / 113 D) se completa para que el motor resuelva la cuenta
+     * del medio de pago sin caer al fallback 117010.
+     *
+     * @param  list<object>  $lineas
+     */
+    private function completarContrapartidasSubdiario(array $lineas): void
+    {
+        if (count($lineas) !== 2) {
+            return;
+        }
+
+        $a = $lineas[0];
+        $b = $lineas[1];
+        $ctaA = (int) ($a->subd_cuenta ?? 0);
+        $ctaB = (int) ($b->subd_cuenta ?? 0);
+        if ($ctaA <= 0 || $ctaB <= 0 || $ctaA === $ctaB) {
+            return;
+        }
+
+        if ((int) ($a->subd_contrapartida ?? 0) <= 0) {
+            $a->subd_contrapartida = $ctaB;
+        }
+        if ((int) ($b->subd_contrapartida ?? 0) <= 0) {
+            $b->subd_contrapartida = $ctaA;
+        }
     }
 
     /**
