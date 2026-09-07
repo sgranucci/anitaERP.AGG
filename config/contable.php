@@ -48,12 +48,9 @@ return [
         // Tope mayor analítico de control / conciliación (export l_mayor; ej. 112010-008).
         'limite_cuenta_analitico_control' => (int) preg_replace('/\D/', '', (string) env('MAYOR_CONCEPTO_LIMITE_CUENTA_ANALITICO_CONTROL', '112010008')),
         // fuente_erp_hasta: Y-m-d o Ymd — hasta esa fecha inclusive lee del ERP (MayorConceptoErpReader);
-        // después sigue el bridge Anita. Vacío cae al corte del mayor plano / default 2026-08-31 vía helper.
-        // No moverlo sin comparar contra Anita el período que se quiere habilitar.
-        'fuente_erp_hasta' => env(
-            'MAYOR_CONCEPTO_FUENTE_ERP_HASTA',
-            env('MAYOR_PLANO_CUENTA_FUENTE_ERP_HASTA', '2026-08-31')
-        ),
+        // después sigue el bridge Anita. Vacío = solo Anita (no hereda el corte del mayor plano).
+        // No habilitar ERP acá sin conciliar asientos vs Anita en el período.
+        'fuente_erp_hasta' => env('MAYOR_CONCEPTO_FUENTE_ERP_HASTA', ''),
     ],
 
     /*
@@ -93,7 +90,7 @@ return [
     // Tras leer numabm+1: si ctamov ya tiene ese nro (Anita nativo en paralelo), saltar hasta N libres.
     'asiento_numeracion_max_saltos_ocupados' => (int) env('ASIENTO_NUMERACION_MAX_SALTOS_OCUPADOS', 50),
     // Si la verificación post-insert lee 0/desbalance, reintentar delete+insert N veces (Anita ocupado / body vacío).
-    'asiento_ctamov_reintentos_si_vacio' => (int) env('ASIENTO_CTAMOV_REINTENTOS_SI_VACIO', 1),
+    'asiento_ctamov_reintentos_si_vacio' => (int) env('ASIENTO_CTAMOV_REINTENTOS_SI_VACIO', 3),
 
     /*
     | Balance de sumas y saldos (l-sumsal). Períodos → cuentacontable_saldo_mes; rango → asientos.

@@ -694,7 +694,46 @@ class MayorConceptoAnitaBridgeReader implements MayorConceptoLectorInterface
         }
 
         // Período cerrado: Anita mueve el comprobante a subhist (lee_subd → Amksubhist4).
-        return $this->cargarComSubhist($empresaId, $tipo, $letra, $sucursal, $nro, $errores);
+        $filas = $this->cargarComSubhist($empresaId, $tipo, $letra, $sucursal, $nro, $errores);
+        if ($filas !== []) {
+            return $filas;
+        }
+
+        // COM generada en ERP: el asiento vive en ctamov (sin subdiario/subhist clásico).
+        return $this->cargarComCtamov($empresaId, $tipo, $letra, $sucursal, $nro, $errores);
+    }
+
+    /**
+     * Asiento COM en ctamov (recepciones ERP espejadas a Informix).
+     * Remapea ctav_* → subd_* para el motor de mayor por concepto.
+     *
+     * @return list<object>
+     */
+    public function cargarComCtamov(int $empresaId, string $tipo, string $letra, int $sucursal, int $nro, array &$errores): array
+    {
+        $tipo = trim($tipo);
+        if ($tipo === '' || $nro <= 0) {
+            return [];
+        }
+
+        $where = ' WHERE ctav_tipo="'.addslashes($tipo).'"'
+            .' AND ctav_letra='.$this->sqlChar($letra)
+            .' AND ctav_sucursal='.$sucursal
+            .' AND ctav_nro='.$nro;
+        if ($empresaId > 0) {
+            $where .= ' AND ctav_empresa='.$empresaId;
+        }
+
+        $filas = $this->listar(
+            'contab',
+            'ctamov',
+            $this->camposCtamovCom(),
+            $where,
+            $errores,
+            'ctamov-com'
+        );
+
+        return array_map(fn ($fila) => $this->remapearCtamovComoSubdiario($fila), $filas);
     }
 
     /**
@@ -1403,6 +1442,85 @@ class MayorConceptoAnitaBridgeReader implements MayorConceptoLectorInterface
             }
         }
 
+        $faltantes = array_values(array_filter(
+            $clavesCom,
+            fn ($clave) => ($porClave[$clave] ?? []) === [],
+        ));
+
+        if ($faltantes !== []) {
+            foreach ($this->cargarComCtamovLote($empresaId, $faltantes, $errores) as $clave => $lineas) {
+                if ($lineas !== []) {
+                    $porClave[$clave] = $lineas;
+                }
+            }
+        }
+
+        return $porClave;
+    }
+
+    /**
+     * Fallback masivo a ctamov para COM ERP sin subdiario/subhist.
+     *
+     * @param  list<string>  $clavesCom
+     * @return array<string, list<object>>
+     */
+    public function cargarComCtamovLote(int $empresaId, array $clavesCom, array &$errores): array
+    {
+        $clavesCom = array_values(array_unique(array_filter($clavesCom, fn ($c) => trim($c) !== '')));
+        if ($clavesCom === []) {
+            return [];
+        }
+
+        $porClave = [];
+        foreach ($clavesCom as $clave) {
+            $porClave[$clave] = [];
+        }
+
+        $campos = $this->camposCtamovCom();
+
+        foreach (array_chunk($clavesCom, 40) as $lote) {
+            $condiciones = [];
+            foreach ($lote as $clave) {
+                [$tipo, $letra, $suc, $nro] = array_pad(explode('|', $clave, 4), 4, '');
+                $tipo = trim($tipo);
+                if ($tipo === '' || (int) $nro <= 0) {
+                    continue;
+                }
+                $condiciones[] = '(ctav_tipo="'.addslashes($tipo).'" AND ctav_letra='.$this->sqlChar($letra)
+                    .' AND ctav_sucursal='.(int) $suc.' AND ctav_nro='.(int) $nro.')';
+            }
+
+            if ($condiciones === []) {
+                continue;
+            }
+
+            $where = ' WHERE ('.implode(' OR ', $condiciones).')';
+            if ($empresaId > 0) {
+                $where .= ' AND ctav_empresa='.$empresaId;
+            }
+
+            $filas = $this->listar(
+                'contab',
+                'ctamov',
+                $campos,
+                $where,
+                $errores,
+                'ctamov-com-bulk',
+            );
+
+            foreach ($filas as $fila) {
+                $remap = $this->remapearCtamovComoSubdiario($fila);
+                if ($empresaId > 0 && (int) ($remap->subd_empresa ?? 0) !== $empresaId) {
+                    continue;
+                }
+                $clave = $this->claveComDesdeSubdiario($remap);
+                if ($clave === '' || ! isset($porClave[$clave])) {
+                    continue;
+                }
+                $porClave[$clave][] = $remap;
+            }
+        }
+
         return $porClave;
     }
 
@@ -1486,6 +1604,49 @@ class MayorConceptoAnitaBridgeReader implements MayorConceptoLectorInterface
             (int) ($fila->subd_sucursal ?? 0),
             $nro,
         ]);
+    }
+
+    private function camposCtamovCom(): string
+    {
+        // Sin ctav_nro_interno: en ctamov de recepciones ERP esa columna no existe
+        // y el SELECT de Informix devuelve vacío sin error explícito.
+        return 'ctav_empresa,ctav_sistema,ctav_fecha,ctav_tipo,ctav_letra,ctav_sucursal,ctav_nro,'
+            .'ctav_d_h,ctav_cuenta,ctav_importe,ctav_nro_asiento,ctav_cod_mon,'
+            .'ctav_cotizacion,ctav_desc_mov,ctav_o_compra,ctav_tipo_asiento';
+    }
+
+    /**
+     * @return object{subd_empresa?: int, subd_tipo?: string, subd_letra?: string, subd_sucursal?: int, subd_nro?: int, subd_cuenta?: int, subd_tipo_mov?: string, subd_importe?: float, subd_origen_ctamov?: bool}
+     */
+    public function remapearCtamovComoSubdiario(object $fila): object
+    {
+        $letra = trim((string) ($fila->ctav_letra ?? ' '));
+
+        return (object) [
+            'subd_empresa' => (int) ($fila->ctav_empresa ?? 0),
+            'subd_sistema' => trim((string) ($fila->ctav_sistema ?? '')),
+            'subd_fecha' => (int) ($fila->ctav_fecha ?? 0),
+            'subd_tipo' => trim((string) ($fila->ctav_tipo ?? '')),
+            'subd_letra' => $letra !== '' ? $letra : ' ',
+            'subd_sucursal' => (int) ($fila->ctav_sucursal ?? 0),
+            'subd_nro' => (int) ($fila->ctav_nro ?? 0),
+            'subd_emisor' => '',
+            'subd_tipo_mov' => strtoupper(trim((string) ($fila->ctav_d_h ?? 'D'))),
+            'subd_cuenta' => (int) ($fila->ctav_cuenta ?? 0),
+            'subd_contrapartida' => 0,
+            'subd_importe' => (float) ($fila->ctav_importe ?? 0),
+            'subd_nro_operacion' => (int) ($fila->ctav_nro_asiento ?? 0),
+            'subd_nro_interno' => 0,
+            'subd_cod_mon' => (string) ($fila->ctav_cod_mon ?? '1'),
+            'subd_cotizacion' => (float) ($fila->ctav_cotizacion ?? 0),
+            'subd_desc_mov' => trim((string) ($fila->ctav_desc_mov ?? '')),
+            'subd_o_compra' => (int) ($fila->ctav_o_compra ?? 0),
+            'subd_ref_tipo' => '',
+            'subd_ref_letra' => ' ',
+            'subd_ref_sucursal' => 0,
+            'subd_ref_nro' => 0,
+            'subd_origen_ctamov' => true,
+        ];
     }
 
     private function sqlChar(string $valor): string

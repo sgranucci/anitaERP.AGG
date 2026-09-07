@@ -88,4 +88,28 @@ class MayorFuenteConsultaSupportTest extends TestCase
         $this->assertTrue($t['usa_anita']);
         $this->assertSame(20260901, $t['tramo_anita_desde']);
     }
+
+    public function test_mayor_concepto_vacio_no_hereda_corte_del_plano(): void
+    {
+        config(['contable.mayor_plano_cuenta.fuente_erp_hasta' => '2026-08-31']);
+        config(['contable.mayor_concepto.fuente_erp_hasta' => '']);
+
+        $this->assertSame(
+            0,
+            MayorFuenteConsultaSupport::corteYmd('contable.mayor_concepto.fuente_erp_hasta'),
+        );
+
+        $t = MayorFuenteConsultaSupport::resolverTramos(
+            20260801,
+            20260831,
+            MayorFuenteConsultaSupport::MODO_AUTO,
+            'contable.mayor_concepto.fuente_erp_hasta',
+        );
+
+        $this->assertFalse($t['usa_erp']);
+        $this->assertTrue($t['usa_anita']);
+        $this->assertSame(20260801, $t['tramo_anita_desde']);
+        $this->assertSame(20260831, $t['tramo_anita_hasta']);
+        $this->assertStringContainsString('Anita', $t['etiqueta']);
+    }
 }

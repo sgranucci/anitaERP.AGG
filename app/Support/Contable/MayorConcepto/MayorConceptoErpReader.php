@@ -15,6 +15,10 @@ use Illuminate\Support\Facades\DB;
  * `asiento` los metadatos equivalentes (anita_tipo/letra/sucursal/nro/sistema/emisor), que
  * es de donde sale acá la cabecera de cada fila.
  *
+ * Metadatos de pantalla (descripción, emisor, cotización vista, tip OPP desde caja/SP):
+ * se enriquecen sin pisar subd_tipo/subd_ref_tipo ni subd_cotizacion de conversión, para
+ * no alterar saldos ni el ruteo de imputación.
+ *
  * ATENCIÓN — todavía no validado contra Anita. Los períodos con datos completos en el ERP son
  * los que informa `contable:cobertura-erp`; fuera de ahí este lector devuelve de menos, y de
  * menos en un reporte contable se lee como un descuadre, no como un hueco. Por eso el selector
@@ -54,15 +58,20 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
 
         $movimientos = $this->movimientosAsiento($empresaId, $desde, $hasta);
 
-        $subdiario = [];
+        // En Anita, subdiario y ctamov son tablas distintas. En ERP la única fuente
+        // es asiento_movimiento (= ctamov). Proyectar la misma pierna a ambas hace
+        // que el motor principal doble analítico/concepto.
+        //
+        // Por eso el período ERP alimenta solo ctamov (forma nativa). El ruteo de
+        // pagos/OPP del motor ya tiene caminos ctamov; auxpag sigue aparte.
+        // cargarCtamovPorAsiento / subdiario sintético puntual no cambian.
         $ctamov = [];
         foreach ($movimientos as $mov) {
-            $subdiario[] = $this->filaSubdiario($mov);
             $ctamov[] = $this->filaCtamov($mov);
         }
 
         $resultado = [
-            'subdiario' => $subdiario,
+            'subdiario' => [],
             'ctamov' => $ctamov,
             'auxpag' => $this->auxpagPeriodo($empresaId, $desde, $hasta),
             'ctaconc' => $this->ctaconc($empresaId),
@@ -90,6 +99,12 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
             ->leftJoin('proveedor as ppr', 'ppr.id', '=', 'pp.proveedor_id')
             ->leftJoin('comprobante_proveedor as cp', 'cp.id', '=', 'a.comprobante_proveedor_id')
             ->leftJoin('proveedor as cpr', 'cpr.id', '=', 'cp.proveedor_id')
+            // SP / caja: la mayoría de OPP nacidos en ERP no tienen pagoproveedor_id ni anita_*.
+            ->leftJoin('caja_movimiento as cm', 'cm.id', '=', 'a.caja_movimiento_id')
+            ->leftJoin('tipotransaccion_caja as ttc', 'ttc.id', '=', 'cm.tipotransaccion_caja_id')
+            ->leftJoin('solicitudpago as sp', 'sp.id', '=', 'a.solicitudpago_id')
+            ->leftJoin('proveedor as spr', 'spr.id', '=', 'sp.proveedor_id')
+            ->leftJoin('proveedor as cmpr', 'cmpr.id', '=', 'cm.proveedor_id')
             ->where('a.empresa_id', $empresaId)
             ->whereBetween('a.fecha', [$desde, $hasta])
             ->select([
@@ -105,6 +120,10 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
                 'a.anita_sucursal',
                 'a.anita_nro',
                 'a.anita_emisor',
+                'a.caja_movimiento_id',
+                'a.pagoproveedor_id',
+                'a.solicitudpago_id',
+                'a.comprobante_proveedor_id',
                 'am.id as movimiento_id',
                 'am.monto',
                 'am.cotizacion',
@@ -123,7 +142,32 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
                 'cp.numerocomprobante as cp_nro',
                 'cp.anita_nro_interno as cp_nro_interno',
                 'cpr.codigo as cp_proveedor',
+                'ttc.abreviatura as cm_tipo',
+                'cm.numerotransaccion as cm_nro',
+                'sp.codigo as sp_codigo',
+                'sp.detalle as sp_detalle',
+                'spr.codigo as sp_proveedor',
+                'spr.nombre as sp_proveedor_nombre',
+                'cmpr.codigo as cm_proveedor',
+                'cmpr.nombre as cm_proveedor_nombre',
             ])
+            ->selectSub(
+                DB::table('caja_movimiento_cuentacaja as mcc')
+                    ->whereColumn('mcc.caja_movimiento_id', 'a.caja_movimiento_id')
+                    ->selectRaw('MAX(mcc.cotizacion)')
+                    ->limit(1),
+                'cm_cotizacion',
+            )
+            ->selectSub(
+                DB::table('cheque as ch')
+                    ->whereColumn('ch.caja_movimiento_id', 'a.caja_movimiento_id')
+                    ->whereNotNull('ch.numerocheque')
+                    ->where('ch.numerocheque', '!=', '')
+                    ->select('ch.numerocheque')
+                    ->orderByDesc('ch.id')
+                    ->limit(1),
+                'cm_cheque',
+            )
             ->orderBy('a.fecha')
             ->orderBy('a.numeroasiento')
             ->orderBy('am.id')
@@ -142,46 +186,59 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
     private function filaSubdiario(object $m): object
     {
         $doc = $this->documento($m);
+        $meta = $this->metadatosVista($m, $doc);
         $monto = (float) $m->monto;
+        $cotizMov = (float) ($m->cotizacion ?? 1);
 
         return (object) [
             'subd_empresa' => (int) $m->empresa_id,
-            'subd_sistema' => trim((string) ($m->anita_sistema ?? '')),
+            // Sistema vacío en asientos ERP nativos: T solo como pista visual, no rutea.
+            'subd_sistema' => $meta['sistema'],
             'subd_fecha' => self::fechaAYmd($m->fecha),
+            // tipo/ref de imputación: se mantienen como documento() (no inventar OPP si no hay pp/anita).
             'subd_tipo' => $doc['tipo'],
             'subd_letra' => $doc['letra'],
             'subd_sucursal' => $doc['sucursal'],
             'subd_nro' => $doc['nro'],
-            'subd_emisor' => $doc['emisor'],
+            'subd_emisor' => $meta['emisor'],
             'subd_tipo_mov' => $monto >= 0 ? 'D' : 'H',
             'subd_cuenta' => self::soloDigitos($m->cuenta_codigo),
             // El ERP no guarda contrapartida por renglón: el asiento la deja implícita en el
             // conjunto de piernas. El motor la usa sólo para desempatar, no para importes.
             'subd_contrapartida' => 0,
-            'subd_nro_operacion' => (int) $m->asiento_id,
+            // Clave operativa del mayor (= número contable). Nunca asiento.id.
+            'subd_nro_operacion' => $this->numeroAsientoOperativo($m),
             'subd_ref_tipo' => $doc['ref_tipo'],
             'subd_ref_letra' => $doc['ref_letra'],
             'subd_ref_sucursal' => $doc['ref_sucursal'],
             'subd_ref_nro' => $doc['ref_nro'],
             'subd_importe' => abs($monto),
             'subd_cod_mon' => trim((string) ($m->moneda_codigo ?? '')),
-            'subd_cotizacion' => (float) ($m->cotizacion ?? 1),
-            'subd_nro_asiento' => (int) ($m->anita_nro_asiento ?: $m->numeroasiento),
+            // Cotización del movimiento: NO se pisa (afectaría conversión ME).
+            'subd_cotizacion' => $cotizMov,
+            'subd_cotizacion_vista' => $meta['cotizacion_vista'],
+            'subd_tipo_vista' => $meta['tipo_vista'],
+            'subd_nro_vista' => $meta['nro_vista'],
+            // Resumen Anita; en proyección ERP suele coincidir con el operativo.
+            'subd_nro_asiento' => $this->numeroAsientoOperativo($m),
             'subd_nro_interno' => (int) ($m->cp_nro_interno ?? 0),
             'subd_ccosto_cta' => self::soloDigitos($m->ccosto_codigo),
             'subd_ccosto_con' => self::soloDigitos($m->ccosto_codigo),
-            'subd_desc_mov' => trim((string) ($m->mov_observacion ?: $m->observacion)),
+            'subd_desc_mov' => $meta['desc_mov'],
         ];
     }
 
     private function filaCtamov(object $m): object
     {
         $doc = $this->documento($m);
+        $meta = $this->metadatosVista($m, $doc);
         $monto = (float) $m->monto;
+        $cotizMov = (float) ($m->cotizacion ?? 1);
+        $nroAsiento = $this->numeroAsientoOperativo($m);
 
         return (object) [
             'ctav_empresa' => (int) $m->empresa_id,
-            'ctav_nro_asiento' => (int) ($m->anita_nro_asiento ?: $m->numeroasiento),
+            'ctav_nro_asiento' => $nroAsiento,
             'ctav_nro_linea' => (int) $m->movimiento_id,
             'ctav_d_h' => $monto >= 0 ? 'D' : 'H',
             'ctav_cuenta' => self::soloDigitos($m->cuenta_codigo),
@@ -191,13 +248,71 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
             'ctav_sucursal' => $doc['sucursal'],
             'ctav_nro' => $doc['nro'],
             'ctav_importe' => abs($monto),
-            'ctav_cotizacion' => (float) ($m->cotizacion ?? 1),
+            'ctav_cotizacion' => $cotizMov,
+            'ctav_cotizacion_vista' => $meta['cotizacion_vista'],
+            'ctav_tipo_vista' => $meta['tipo_vista'],
+            'ctav_nro_vista' => $meta['nro_vista'],
             'ctav_cod_mon' => trim((string) ($m->moneda_codigo ?? '')),
-            'ctav_sistema' => trim((string) ($m->anita_sistema ?? '')),
+            'ctav_sistema' => $meta['sistema'],
             'ctav_tipo_asiento' => trim((string) ($m->tipoasiento ?? '')),
             'ctav_ccosto' => self::soloDigitos($m->ccosto_codigo),
             'ctav_o_compra' => 0,
-            'ctav_desc_mov' => trim((string) ($m->mov_observacion ?: $m->observacion)),
+            'ctav_desc_mov' => $meta['desc_mov'],
+            'ctav_emisor' => $meta['emisor'],
+        ];
+    }
+
+    /**
+     * Campos de pantalla/export. No modifican tipo/ref de imputación.
+     *
+     * @param  array{tipo: string, letra: string, sucursal: int, nro: int, emisor: string, ref_tipo: string, ref_letra: string, ref_sucursal: int, ref_nro: int}  $doc
+     * @return array{emisor: string, desc_mov: string, cotizacion_vista: float, tipo_vista: string, nro_vista: int, sistema: string}
+     */
+    private function metadatosVista(object $m, array $doc): array
+    {
+        $emisor = trim((string) ($doc['emisor'] ?? ''));
+        if ($emisor === '') {
+            $emisor = trim((string) ($m->sp_proveedor ?? ''));
+        }
+        if ($emisor === '') {
+            $emisor = trim((string) ($m->cm_proveedor ?? ''));
+        }
+
+        $descRaw = trim((string) ($m->mov_observacion ?: $m->observacion));
+        $nombreProv = trim((string) ($m->sp_proveedor_nombre ?: $m->cm_proveedor_nombre ?: ''));
+        $desc = MayorConceptoErpMetadatosSupport::enriquecerDescripcion(
+            $descRaw,
+            trim((string) ($m->sp_detalle ?? '')),
+            $nombreProv,
+            trim((string) ($m->cm_cheque ?? '')),
+            trim((string) ($m->sp_codigo ?? '')),
+        );
+
+        $tipoVista = trim((string) ($doc['tipo'] ?? ''));
+        if ($tipoVista === '') {
+            $tipoVista = strtoupper(trim((string) ($m->cm_tipo ?? '')));
+        }
+
+        $nroVista = (int) ($doc['nro'] ?? 0);
+        if ($nroVista <= 0) {
+            $nroVista = (int) ($m->cm_nro ?? 0);
+        }
+
+        $sistema = trim((string) ($m->anita_sistema ?? ''));
+        if ($sistema === '' && ($tipoVista !== '' || $nroVista > 0 || filled($m->cm_tipo ?? null))) {
+            $sistema = 'T';
+        }
+
+        return [
+            'emisor' => $emisor,
+            'desc_mov' => $desc,
+            'cotizacion_vista' => MayorConceptoErpMetadatosSupport::cotizacionVista(
+                (float) ($m->cotizacion ?? 1),
+                (float) ($m->cm_cotizacion ?? 0),
+            ),
+            'tipo_vista' => $tipoVista,
+            'nro_vista' => $nroVista,
+            'sistema' => $sistema,
         ];
     }
 
@@ -434,6 +549,8 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
             'cp.anita_nro_interno as nro_interno',
             'cp.empresa_id',
             'a.fecha',
+            'a.numeroasiento',
+            'a.anita_nro_asiento',
             'a.anita_sistema',
             'am.monto',
             'am.cotizacion',
@@ -446,6 +563,7 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
         foreach ($filas as $f) {
             $clave = trim((string) $f->tipo).'|'.trim((string) $f->letra).'|'.((int) $f->sucursal).'|'.((int) $f->nro);
             $monto = (float) $f->monto;
+            $nroAsiento = $this->numeroAsientoOperativo($f);
             $salida[$clave][] = (object) [
                 'subd_empresa' => (int) $f->empresa_id,
                 'subd_sistema' => trim((string) ($f->anita_sistema ?? '')),
@@ -458,6 +576,8 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
                 'subd_cuenta' => self::soloDigitos($f->cuenta_codigo),
                 'subd_contrapartida' => 0,
                 'subd_importe' => abs($monto),
+                'subd_nro_operacion' => $nroAsiento,
+                'subd_nro_asiento' => $nroAsiento,
                 'subd_nro_interno' => (int) ($f->nro_interno ?? 0),
                 'subd_cod_mon' => trim((string) ($f->moneda_codigo ?? '')),
                 'subd_cotizacion' => (float) ($f->cotizacion ?? 1),
@@ -499,12 +619,16 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
             ->leftJoin('proveedor as ppr', 'ppr.id', '=', 'pp.proveedor_id')
             ->leftJoin('comprobante_proveedor as cp', 'cp.id', '=', 'a.comprobante_proveedor_id')
             ->leftJoin('proveedor as cpr', 'cpr.id', '=', 'cp.proveedor_id')
+            ->leftJoin('caja_movimiento as cm', 'cm.id', '=', 'a.caja_movimiento_id')
+            ->leftJoin('tipotransaccion_caja as ttc', 'ttc.id', '=', 'cm.tipotransaccion_caja_id')
+            ->leftJoin('solicitudpago as sp', 'sp.id', '=', 'a.solicitudpago_id')
+            ->leftJoin('proveedor as spr', 'spr.id', '=', 'sp.proveedor_id')
+            ->leftJoin('proveedor as cmpr', 'cmpr.id', '=', 'cm.proveedor_id')
             ->where('a.empresa_id', $empresaId)
+            // Misma clave que subd_nro_operacion / ctav_nro_asiento (nunca asiento.id).
             ->where(function ($q) use ($nroAsiento) {
                 $q->where('a.anita_nro_asiento', $nroAsiento)
-                    ->orWhere(function ($sub) use ($nroAsiento) {
-                        $sub->whereNull('a.anita_nro_asiento')->where('a.numeroasiento', $nroAsiento);
-                    });
+                    ->orWhere('a.numeroasiento', $nroAsiento);
             })
             ->select([
                 'a.id as asiento_id', 'a.empresa_id', 'a.fecha', 'a.numeroasiento', 'a.observacion',
@@ -517,7 +641,32 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
                 'pp.numerotransaccion as pp_nro', 'ppr.codigo as pp_proveedor',
                 'cp.letra as cp_letra', 'cp.sucursal as cp_sucursal', 'cp.numerocomprobante as cp_nro',
                 'cp.anita_nro_interno as cp_nro_interno', 'cpr.codigo as cp_proveedor',
+                'ttc.abreviatura as cm_tipo',
+                'cm.numerotransaccion as cm_nro',
+                'sp.codigo as sp_codigo',
+                'sp.detalle as sp_detalle',
+                'spr.codigo as sp_proveedor',
+                'spr.nombre as sp_proveedor_nombre',
+                'cmpr.codigo as cm_proveedor',
+                'cmpr.nombre as cm_proveedor_nombre',
             ])
+            ->selectSub(
+                DB::table('caja_movimiento_cuentacaja as mcc')
+                    ->whereColumn('mcc.caja_movimiento_id', 'a.caja_movimiento_id')
+                    ->selectRaw('MAX(mcc.cotizacion)')
+                    ->limit(1),
+                'cm_cotizacion',
+            )
+            ->selectSub(
+                DB::table('cheque as ch')
+                    ->whereColumn('ch.caja_movimiento_id', 'a.caja_movimiento_id')
+                    ->whereNotNull('ch.numerocheque')
+                    ->where('ch.numerocheque', '!=', '')
+                    ->select('ch.numerocheque')
+                    ->orderByDesc('ch.id')
+                    ->limit(1),
+                'cm_cheque',
+            )
             ->get();
 
         $salida = [];
@@ -663,6 +812,17 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
     public function fallosLectura(): int
     {
         return $this->fallosLectura;
+    }
+
+    /**
+     * Número contable operativo para proyectar Anita (nunca asiento.id).
+     */
+    private function numeroAsientoOperativo(object $m): int
+    {
+        return MayorConceptoErpMetadatosSupport::numeroAsientoOperativo(
+            $m->anita_nro_asiento ?? null,
+            $m->numeroasiento ?? null,
+        );
     }
 
     private static function soloDigitos(mixed $valor): int

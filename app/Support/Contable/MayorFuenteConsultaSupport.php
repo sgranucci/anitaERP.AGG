@@ -34,18 +34,22 @@ final class MayorFuenteConsultaSupport
 
     /**
      * Corte Ymd desde config. Vacío = 0 (sin tramo ERP en modo auto).
+     *
+     * Si se pasa `$configKey` (p. ej. mayor por concepto), se usa solo esa clave:
+     * vacío significa “solo Anita” y no hereda el corte del mayor plano. Sin clave,
+     * se intenta plano y luego concepto (compatibilidad).
      */
     public static function corteYmd(?string $configKey = null): int
     {
-        $keys = array_values(array_filter([
-            $configKey,
+        if ($configKey !== null && $configKey !== '') {
+            return self::parseYmd(trim((string) config($configKey, '')));
+        }
+
+        foreach ([
             'contable.mayor_plano_cuenta.fuente_erp_hasta',
             'contable.mayor_concepto.fuente_erp_hasta',
-        ]));
-
-        foreach ($keys as $key) {
-            $raw = trim((string) config($key, ''));
-            $ymd = self::parseYmd($raw);
+        ] as $key) {
+            $ymd = self::parseYmd(trim((string) config($key, '')));
             if ($ymd > 0) {
                 return $ymd;
             }

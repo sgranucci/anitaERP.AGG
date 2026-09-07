@@ -3,14 +3,12 @@
     $fuenteMayor = MayorFuenteConsultaSupport::normalizarModo($filtros['fuente_mayor'] ?? 'auto');
     $idPrefix = $id_prefix ?? 'mayor';
     $compact = ! empty($compact);
+    $configKey = $config_key ?? 'contable.mayor_plano_cuenta.fuente_erp_hasta';
+    $corteYmd = MayorFuenteConsultaSupport::corteYmd($configKey);
+    $hayCorteErp = $corteYmd > 0;
     $corteCfg = trim((string) ($corte_label ?? ''));
-    if ($corteCfg === '') {
-        $corteYmd = MayorFuenteConsultaSupport::corteYmd(
-            $config_key ?? 'contable.mayor_plano_cuenta.fuente_erp_hasta'
-        );
-        $corteCfg = $corteYmd > 0
-            ? MayorFuenteConsultaSupport::formatearYmd($corteYmd)
-            : MayorFuenteConsultaSupport::formatearYmd(MayorFuenteConsultaSupport::CORTE_DEFAULT_YMD);
+    if ($corteCfg === '' && $hayCorteErp) {
+        $corteCfg = MayorFuenteConsultaSupport::formatearYmd($corteYmd);
     }
 @endphp
 @if ($compact)
@@ -35,7 +33,11 @@
             <label class="form-check-label" for="{{ $idPrefix }}-fuente-anita">Anita</label>
         </div>
         <small class="form-text text-muted">
-            ERP hasta {{ $corteCfg }}; después siempre Anita. «Anita» fuerza bridge también antes del tope.
+            @if ($hayCorteErp)
+                ERP hasta {{ $corteCfg }}; después siempre Anita. «Anita» fuerza bridge también antes del tope.
+            @else
+                Automático = solo Anita (bridge). «ERP nativo» queda para prueba puntual.
+            @endif
         </small>
     </div>
 @else
@@ -61,9 +63,15 @@
                 <label class="form-check-label" for="{{ $idPrefix }}-fuente-anita">Anita (bridge)</label>
             </div>
             <small class="form-text text-muted d-block mt-1">
-                Hasta el {{ $corteCfg }} el ERP puede leer asientos nativos (links azules).
-                Desde el día siguiente siempre sale Anita, aunque elijas ERP.
-                «Anita (bridge)» fuerza el mayor clásico también en el tramo ya migrado.
+                @if ($hayCorteErp)
+                    Hasta el {{ $corteCfg }} el ERP puede leer asientos nativos (links azules).
+                    Desde el día siguiente siempre sale Anita, aunque elijas ERP.
+                    «Anita (bridge)» fuerza el mayor clásico también en el tramo ya migrado.
+                @else
+                    Hoy el mayor por concepto en Automático sale solo por Anita (bridge).
+                    Usá «Anita (bridge)» para forzarla siempre, o «ERP nativo» solo para comparar
+                    (hoy descuadra: no usar para cierre).
+                @endif
             </small>
         </div>
     </div>

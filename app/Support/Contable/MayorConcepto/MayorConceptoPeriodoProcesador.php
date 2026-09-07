@@ -2986,6 +2986,7 @@ class MayorConceptoPeriodoProcesador
         $tipo = trim((string) ($lineaCtamov->ctav_tipo ?? ''));
         $letra = trim((string) ($lineaCtamov->ctav_letra ?? ' '));
         $tipoAsiento = trim((string) ($lineaCtamov->ctav_tipo_asiento ?? ''));
+        $emisor = trim((string) ($lineaCtamov->ctav_emisor ?? $lineaCtamov->subd_emisor ?? ''));
 
         return (object) [
             'subd_fecha' => (int) ($lineaCtamov->ctav_fecha ?? 0),
@@ -3000,9 +3001,13 @@ class MayorConceptoPeriodoProcesador
             'subd_letra' => $letra !== '' ? $letra : ' ',
             'subd_sucursal' => (int) ($lineaCtamov->ctav_sucursal ?? 0),
             'subd_nro' => (int) ($lineaCtamov->ctav_nro ?? 0),
+            'subd_emisor' => $emisor,
             'subd_desc_mov' => trim((string) ($lineaCtamov->ctav_desc_mov ?? '')),
             'subd_cod_mon' => (string) ($lineaCtamov->ctav_cod_mon ?? '1'),
             'subd_cotizacion' => (float) ($lineaCtamov->ctav_cotizacion ?? 0),
+            'subd_cotizacion_vista' => (float) ($lineaCtamov->ctav_cotizacion_vista ?? $lineaCtamov->subd_cotizacion_vista ?? 0),
+            'subd_tipo_vista' => trim((string) ($lineaCtamov->ctav_tipo_vista ?? $lineaCtamov->subd_tipo_vista ?? '')),
+            'subd_nro_vista' => (int) ($lineaCtamov->ctav_nro_vista ?? $lineaCtamov->subd_nro_vista ?? 0),
             'subd_importe' => (float) ($lineaCtamov->ctav_importe ?? 0),
             'subd_tipo_mov' => strtoupper(trim((string) ($lineaCtamov->ctav_d_h ?? 'D'))),
             'subd_o_compra' => (int) ($lineaCtamov->ctav_o_compra ?? 0),
@@ -6498,12 +6503,22 @@ class MayorConceptoPeriodoProcesador
         $fecha = (int) ($origen->subd_fecha ?? 0);
         $codMon = (string) ($origen->subd_cod_mon ?? '1');
         $cotiz = (float) ($origen->subd_cotizacion ?? 0);
+        // Conversión SIEMPRE con la cotización del movimiento (saldos intactos).
         $importe = $monedaConverter->convertirImporte($importeOrigen, $codMon, $cotiz, $fecha, $monedaReporteId);
 
         $refTipo = trim((string) ($origen->subd_ref_tipo ?? $origen->subd_tipo ?? ''));
         $refLetra = trim((string) ($origen->subd_ref_letra ?? $origen->subd_letra ?? ' '));
         $refSuc = (int) ($origen->subd_ref_sucursal ?? $origen->subd_sucursal ?? 0);
         $refNro = (int) ($origen->subd_ref_nro ?? $origen->subd_nro ?? 0);
+        // Tip/comprobante de pantalla: si el ruteo dejó tipo vacío/TES, mostrar OPP del IE.
+        $tipoVista = trim((string) ($origen->subd_tipo_vista ?? ''));
+        if ($tipoVista !== '' && ($refTipo === '' || $refTipo === '0' || $refTipo === 'TES')) {
+            $refTipo = $tipoVista;
+        }
+        $nroVista = (int) ($origen->subd_nro_vista ?? 0);
+        if ($refNro <= 0 && $nroVista > 0) {
+            $refNro = $nroVista;
+        }
 
         $conceptoNombre = $conceptoId === 0 ? 'SIN CLASIFICAR' : DB::table('conceptogasto')->where('id', $conceptoId)->value('nombre') ?? 'Concepto '.$conceptoId;
         $cuentaNombre = DB::table('cuentacontable')
@@ -6521,6 +6536,36 @@ class MayorConceptoPeriodoProcesador
             $this->acumularPlanoContrapartidaDesdeDisp($cuenta, $importeDebe, $importeHaber);
         }
 
+        $emisorMeta = trim((string) ($meta['emisor'] ?? ''));
+        $cuitMeta = trim((string) ($meta['cuit'] ?? ''));
+        $codigoEmisor = trim((string) ($origen->subd_emisor ?? ''));
+        $provLookup = MayorConceptoErpMetadatosSupport::pareceCodigoProveedor($emisorMeta)
+            ? $emisorMeta
+            : $codigoEmisor;
+        $prom = null;
+        if ($provLookup !== '' && (
+            $cuitMeta === ''
+            || $emisorMeta === ''
+            || MayorConceptoErpMetadatosSupport::pareceCodigoProveedor($emisorMeta)
+        )) {
+            if (! isset($this->promaeCache[$provLookup])) {
+                $this->consultasBridgeIndividuales++;
+                $this->promaeCache[$provLookup] = $this->reader->cargarPromae($provLookup, $this->erroresBridge);
+            }
+            $prom = $this->promaeCache[$provLookup];
+        }
+        $emisorCuit = MayorConceptoErpMetadatosSupport::resolverEmisorCuitVista(
+            $emisorMeta,
+            $cuitMeta,
+            $codigoEmisor,
+            $prom,
+        );
+
+        $cotizVista = (float) ($origen->subd_cotizacion_vista ?? 0);
+        if ($cotizVista < 0.01) {
+            $cotizVista = $cotiz;
+        }
+
         return [
             'concepto_id' => $conceptoId,
             'concepto_nombre' => $conceptoNombre,
@@ -6536,11 +6581,11 @@ class MayorConceptoPeriodoProcesador
             'comprobante' => $this->formatearComprobante($refTipo, $refLetra, $refSuc, $refNro),
             'cheque' => $this->resolverChequeLineaReporte($meta, $origen),
             'nro_oc' => (int) ($meta['nro_oc'] ?? 0),
-            'emisor' => trim((string) ($meta['emisor'] ?? '')),
-            'cuit' => trim((string) ($meta['cuit'] ?? '')),
+            'emisor' => $emisorCuit['emisor'],
+            'cuit' => $emisorCuit['cuit'],
             'descripcion' => trim((string) ($origen->subd_desc_mov ?? '')),
             'moneda_abrev' => $monedaConverter->abreviaturaMoneda($monedaReporteId),
-            'cotizacion' => $cotiz,
+            'cotizacion' => $cotizVista,
             'debe' => $importeDebe,
             'haber' => $importeHaber,
             'disp_debe' => $dispDebe,
