@@ -28,4 +28,10 @@ final class OrdencompraUiConfigSupport
     {
         return (bool) config('compras.oc_entrega_semanal', false);
     }
+
+    /** Detalle de cabecera obligatorio. El Bierzo / Surmar: false. */
+    public static function detalleObligatorio(): bool
+    {
+        return (bool) config('compras.oc_detalle_obligatorio', true);
+    }
 }

@@ -409,6 +409,15 @@ window.SURMAR_RECEPCION = {
                     Neto <strong id="surmar-total-neto">0.00</strong> kg
                 </div>
                 <div class="d-flex flex-wrap">
+                    @if (!empty($ocConsumidaSinCerrar) && !empty($puedeCerrarOc))
+                        <form action="{{ route('cerrar_oc_recepcion_proveedor_surmar', $recepcion->id) }}" method="POST" class="d-inline mr-1"
+                              onsubmit="return confirm('¿Cerrar la OC? Después no se podrá cargar otra recepción sobre ella.');">
+                            @csrf
+                            <button type="submit" class="btn btn-outline-danger btn-sm" title="OC consumida: cerrar para no seguir recepcionando">
+                                <i class="fa fa-lock"></i> Cerrar OC
+                            </button>
+                        </form>
+                    @endif
                     @if ($editable && can('confirmar-recepcion-proveedor-surmar', false))
                         <form action="{{ route('confirmar_recepcion_proveedor_surmar', $recepcion->id) }}" method="POST" class="d-inline mr-1"
                               onsubmit="return confirm('¿Confirmar recepción y generar stock?');">

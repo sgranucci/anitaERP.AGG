@@ -287,7 +287,8 @@ var FORMULA_LINEA_CAMPOS = [
 	'esopcional',
 	'ordenopcionales',
 	'deposito_ids',
-	'ranuras'
+	'ranuras',
+	'permitidos'
 ];
 
 function formulaArticuloReindexFilas() {

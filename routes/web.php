@@ -1577,6 +1577,7 @@ Route::put('stock/recepcion-proveedor-surmar/{id}/linea/{lineaId}', 'Stock\Recep
 Route::get('stock/recepcion-proveedor-surmar/{id}/etiqueta/{etiquetaId}/preview', 'Stock\RecepcionProveedorSurmarController@apiPreviewEtiqueta')->name('api_preview_etiqueta_recepcion_proveedor_surmar');
 Route::delete('stock/recepcion-proveedor-surmar/{id}/linea/{lineaId}', 'Stock\RecepcionProveedorSurmarController@apiEliminarLinea')->name('api_eliminar_linea_recepcion_proveedor_surmar');
 Route::post('stock/recepcion-proveedor-surmar/{id}/confirmar', 'Stock\RecepcionProveedorSurmarController@confirmar')->name('confirmar_recepcion_proveedor_surmar');
+Route::post('stock/recepcion-proveedor-surmar/{id}/cerrar-oc', 'Stock\RecepcionProveedorSurmarController@cerrarOrdencompra')->name('cerrar_oc_recepcion_proveedor_surmar');
 Route::post('stock/recepcion-proveedor-surmar/{id}/anular', 'Stock\RecepcionProveedorSurmarController@anular')->name('anular_recepcion_proveedor_surmar');
 Route::delete('stock/recepcion-proveedor-surmar/{id}', 'Stock\RecepcionProveedorSurmarController@eliminar')->name('eliminar_recepcion_proveedor_surmar');
 Route::get('stock/etiqueta-surmar/{etiquetaId}/zpl', 'Stock\RecepcionProveedorSurmarController@imprimirEtiqueta')->name('imprimir_etiqueta_surmar');

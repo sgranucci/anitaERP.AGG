@@ -8,6 +8,7 @@ use App\Models\Compras\Ordencompra_Comprobante;
 use App\Models\Compras\Ordencompra_Comprobante_Cuota;
 use App\Support\Compras\ComprobanteProveedorCentrocostoSupport;
 use App\Support\Compras\OrdencompraDescuentoSupport;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Stock\RecepcionProveedorAnitaEscrituraSupport;
 use App\Support\Stock\SurmarSupport;
 
@@ -108,8 +109,6 @@ final class OrdencompraAnitaEscrituraSupport
             'penmp_estado' => RecepcionProveedorAnitaEscrituraSupport::textoSql($ctx->mapEstadoAnita((string) $oc->estadoordencompra), 1),
             'penmp_leyenda' => RecepcionProveedorAnitaEscrituraSupport::textoSql(substr($detalle, 0, 40), 40),
             'penmp_requisicion' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->numeroRequisicion((int) ($oc->requisicion_id ?? 0))),
-            'penmp_ccosto' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->codigoCentrocosto((int) ($oc->centrocosto_id ?? 0))),
-            'penmp_ccosto_dest' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ccDest),
             'penmp_empresa' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->codigoEmpresa((int) ($oc->empresa_id ?? 0))),
             'penmp_es_anticipo' => RecepcionProveedorAnitaEscrituraSupport::textoSql($ctx->mapTratamientoAnticipo((string) ($oc->tratamiento ?? '')), 1),
             'penmp_usuario_ini' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->usuarioAnitaCodigo((int) ($oc->creousuario_id ?? 0))),
@@ -118,6 +117,14 @@ final class OrdencompraAnitaEscrituraSupport
             'penmp_estado_aprob' => RecepcionProveedorAnitaEscrituraSupport::charFijoSql(' ', 1),
             'penmp_legajo' => RecepcionProveedorAnitaEscrituraSupport::enteroSql(0),
         ];
+
+        // El Bierzo (/usr2/bierzo): pendmaep no tiene penmp_ccosto / penmp_ccosto_dest (sí en AGG).
+        if (! EntornoEmpresaSupport::esElBierzo()) {
+            $columnas['penmp_ccosto'] = RecepcionProveedorAnitaEscrituraSupport::enteroSql(
+                $ctx->codigoCentrocosto((int) ($oc->centrocosto_id ?? 0))
+            );
+            $columnas['penmp_ccosto_dest'] = RecepcionProveedorAnitaEscrituraSupport::enteroSql($ccDest);
+        }
 
         if ($incluirClave) {
             $columnas = array_merge([

@@ -1674,18 +1674,23 @@ class OrdencompraAnitaBridgeService
         $sistema = OrdencompraAnitaNumeracionSupport::sistemaTComp();
         $whereCab = OrdencompraAnitaWhereSupport::pendmaep($clave);
 
+        $cabCampos = [
+            'penmp_proveedor', 'penmp_tipo', 'penmp_letra', 'penmp_sucursal', 'penmp_nro',
+            'penmp_fecha', 'penmp_fecha_ent', 'penmp_cond_compra', 'penmp_cond_entrega', 'penmp_cond_pago',
+            'penmp_entrega', 'penmp_dto', 'penmp_expreso', 'penmp_cod_mon', 'penmp_cotizacion',
+            'penmp_estado', 'penmp_leyenda', 'penmp_requisicion',
+            'penmp_empresa', 'penmp_es_anticipo', 'penmp_usuario_ini', 'penmp_fecha_ing', 'penmp_hora_ing',
+            'penmp_estado_aprob', 'penmp_legajo',
+        ];
+        if (! \App\Support\Configuracion\EntornoEmpresaSupport::esElBierzo()) {
+            array_splice($cabCampos, 16, 0, ['penmp_ccosto', 'penmp_ccosto_dest']);
+        }
+
         $cabRaw = $this->anitaCall($api, [
             'acc' => 'list',
             'sistema' => $sistema,
             'tabla' => config('ordencompra_anita.tablas.cabecera'),
-            'campos' => implode(', ', [
-                'penmp_proveedor', 'penmp_tipo', 'penmp_letra', 'penmp_sucursal', 'penmp_nro',
-                'penmp_fecha', 'penmp_fecha_ent', 'penmp_cond_compra', 'penmp_cond_entrega', 'penmp_cond_pago',
-                'penmp_entrega', 'penmp_dto', 'penmp_expreso', 'penmp_cod_mon', 'penmp_cotizacion',
-                'penmp_estado', 'penmp_leyenda', 'penmp_requisicion', 'penmp_ccosto', 'penmp_ccosto_dest',
-                'penmp_empresa', 'penmp_es_anticipo', 'penmp_usuario_ini', 'penmp_fecha_ing', 'penmp_hora_ing',
-                'penmp_estado_aprob', 'penmp_legajo',
-            ]),
+            'campos' => implode(', ', $cabCampos),
             'whereArmado' => $whereCab,
             'limit' => 'FIRST 1',
         ]);

@@ -616,14 +616,18 @@ class RecepcionProveedorSurmarAnitaSyncService
         $cacheKey = $empresaId.'-'.$codigoNorm;
         if (! array_key_exists($cacheKey, $this->cacheProveedor)) {
             $padded = str_pad($codigoNorm, 6, '0', STR_PAD_LEFT);
-            $q = Proveedor::query()->where(function ($q) use ($codigoNorm, $padded) {
-                $q->where('codigo', $codigoNorm)->orWhere('codigo', $padded);
-            });
-            if (config('proveedor.filtro_empresa')) {
-                $q->where(function ($q) use ($empresaId) {
+            // Surmar: siempre filtrar por empresa (no depender solo del flag global).
+            // Preferir match exacto de empresa_id; fallback multiempresa (null).
+            $q = Proveedor::query()
+                ->where(function ($q) use ($codigoNorm, $padded) {
+                    $q->where('codigo', $codigoNorm)->orWhere('codigo', $padded);
+                })
+                ->where(function ($q) use ($empresaId) {
                     $q->where('empresa_id', $empresaId)->orWhereNull('empresa_id');
-                });
-            }
+                })
+                ->orderByRaw('CASE WHEN empresa_id = ? THEN 0 WHEN empresa_id IS NULL THEN 1 ELSE 2 END', [$empresaId])
+                ->orderBy('id');
+
             $this->cacheProveedor[$cacheKey] = (int) ($q->value('id') ?: 0) ?: null;
         }
 

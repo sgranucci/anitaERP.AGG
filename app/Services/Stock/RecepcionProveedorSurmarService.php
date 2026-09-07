@@ -16,9 +16,13 @@ use App\Models\Stock\Stock_Etiqueta;
 use App\Models\Stock\Tipotransaccion_Stock;
 use App\Models\Stock\Unidadmedida;
 use App\Repositories\Stock\Recepcion_ProveedorRepositoryInterface;
+use App\Services\Compras\Surmar\OrdencompraSurmarAnitaBridgeService;
+use App\Support\Compras\OrdencompraEstados;
+use App\Support\Compras\OrdencompraLineaEstados;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use App\Support\Stock\ArticuloMovimientoCantidadSignoSupport;
 use App\Support\Stock\RecepcionProveedorDiferenciaSupport;
+use App\Support\Stock\RecepcionProveedorOcPendienteSupport;
 use App\Support\Stock\RecepcionProveedorSurmarListadoFiltros;
 use App\Support\Stock\Surmar\RecepcionProveedorSurmarOcSupport;
 use App\Support\Stock\Surmar\SurmarEtiquetaFechaVtoSupport;
@@ -27,6 +31,7 @@ use App\Support\Stock\SurmarEtiquetaZplSupport;
 use App\Support\Stock\SurmarSupport;
 use Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Validation\ValidationException;
 
@@ -137,7 +142,9 @@ class RecepcionProveedorSurmarService
             throw ValidationException::withMessages(['deposito_id' => 'Depósito inválido.']);
         }
         if ($ocData['lineas'] === []) {
-            throw ValidationException::withMessages(['ordencompra_id' => 'La OC no tiene líneas pendientes de recepción.']);
+            throw ValidationException::withMessages([
+                'ordencompra_id' => 'La OC no tiene líneas activas para recepción (todas cerradas o sin artículos).',
+            ]);
         }
 
         return DB::transaction(function () use ($data, $empresaId, $proveedorId, $depositoId, $fecha, $oc) {
@@ -250,7 +257,7 @@ class RecepcionProveedorSurmarService
             return [];
         }
 
-        return RecepcionProveedorSurmarOcSupport::armarLineasPendientes($oc);
+        return RecepcionProveedorSurmarOcSupport::armarLineasPendientes($oc, true);
     }
 
     /**
@@ -683,8 +690,76 @@ class RecepcionProveedorSurmarService
                 'observacion' => 'Confirmación Surmar — stock generado',
             ]);
 
-            return $recepcion->fresh();
+            return $recepcion->fresh(['ordencompras']);
         });
+    }
+
+    /**
+     * Cierra la OC vinculada a la recepción Surmar (cabecera CERRADA + líneas).
+     * Hasta ese momento se puede seguir recepcionando aunque el saldo esté consumido.
+     */
+    public function cerrarOrdencompra(int $recepcionId): Ordencompra
+    {
+        $recepcion = $this->buscar($recepcionId);
+        $ocId = (int) ($recepcion->ordencompra_id ?? 0);
+        if ($ocId <= 0) {
+            throw ValidationException::withMessages(['ordencompra_id' => 'La recepción no tiene orden de compra.']);
+        }
+
+        $oc = RecepcionProveedorSurmarOcSupport::cargarOc($ocId);
+        $estado = (string) ($oc->estadoordencompra ?? '');
+        if ($estado === OrdencompraEstados::CERRADA) {
+            return $oc;
+        }
+        if ($estado === OrdencompraEstados::SUSPENDIDA) {
+            throw ValidationException::withMessages([
+                'ordencompra_id' => 'La OC está suspendida; reactivarla antes de cerrarla.',
+            ]);
+        }
+
+        return DB::transaction(function () use ($oc) {
+            $oc->ordencompra_articulos()
+                ->where(function ($q) {
+                    $q->whereNull('estado_linea_oc')
+                        ->orWhere('estado_linea_oc', '!=', OrdencompraLineaEstados::CERRADA);
+                })
+                ->get()
+                ->each(function ($linea) {
+                    $linea->estado_linea_oc = OrdencompraLineaEstados::CERRADA;
+                    $linea->save();
+                });
+
+            $oc->estadoordencompra = OrdencompraEstados::CERRADA;
+            $oc->save();
+
+            try {
+                if (SurmarSupport::esEmpresaSurmar((int) $oc->empresa_id)) {
+                    app(OrdencompraSurmarAnitaBridgeService::class)->sincronizarActualizacion($oc->fresh());
+                }
+            } catch (\Throwable $e) {
+                Log::warning('Surmar cerrar OC: sync Anita falló', [
+                    'ordencompra_id' => $oc->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+            return $oc->fresh();
+        });
+    }
+
+    /** Indica si la OC de la recepción está consumida (sin saldo) y aún no cerrada. */
+    public function ocConsumidaSinCerrar(Recepcion_Proveedor $recepcion): bool
+    {
+        $ocId = (int) ($recepcion->ordencompra_id ?? 0);
+        if ($ocId <= 0) {
+            return false;
+        }
+        $estado = (string) (DB::table('ordencompra')->where('id', $ocId)->value('estadoordencompra') ?? '');
+        if ($estado === OrdencompraEstados::CERRADA || $estado === OrdencompraEstados::SUSPENDIDA) {
+            return false;
+        }
+
+        return ! RecepcionProveedorOcPendienteSupport::tieneSaldoPendienteEstricto($ocId);
     }
 
     public function anular(int $id): Recepcion_Proveedor

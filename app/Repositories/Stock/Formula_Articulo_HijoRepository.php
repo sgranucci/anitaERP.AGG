@@ -19,6 +19,7 @@ class Formula_Articulo_HijoRepository implements Formula_Articulo_HijoRepository
     {
         $gastronomiaOpcional = FormulaArticuloGastronomia::opcionalesHabilitados();
         $tieneRanura = Schema::hasColumn($this->model->getTable(), 'ranura');
+        $tienePermitido = Schema::hasColumn($this->model->getTable(), 'permitido');
         $tieneOrdenOpcional = Schema::hasColumn($this->model->getTable(), 'ordenopcional');
 
         $articulo_ids = $data['articulo_ids'] ?? [];
@@ -78,6 +79,11 @@ class Formula_Articulo_HijoRepository implements Formula_Articulo_HijoRepository
             if ($tieneRanura) {
                 $ran = $data['ranuras'][$i] ?? null;
                 $payload['ranura'] = ($ran === '' || $ran === null) ? null : (int) $ran;
+            }
+
+            if ($tienePermitido) {
+                $perm = strtoupper(trim((string) ($data['permitidos'][$i] ?? '')));
+                $payload['permitido'] = ($perm === 'S' || $perm === 'N') ? $perm : null;
             }
 
             $idCandidato = $idsEntrantes[$i] ?? null;

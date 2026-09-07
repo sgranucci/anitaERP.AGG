@@ -13,7 +13,7 @@ class Formula_Articulo_Hijo extends Model implements Auditable
 
     protected $fillable = [
         'formula_articulo_id', 'articulo_id', 'cantidad', 'factorcosto', 'formula_hija_id',
-        'esopcional', 'ordenopcional', 'deposito_id', 'ranura',
+        'esopcional', 'ordenopcional', 'deposito_id', 'ranura', 'permitido',
     ];
 
     protected $casts = [

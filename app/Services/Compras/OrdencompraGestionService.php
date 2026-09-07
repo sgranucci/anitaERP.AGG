@@ -37,6 +37,7 @@ use App\Support\Compras\OrdencompraEstados;
 use App\Support\Compras\OrdencompraLegajoGastronomiaSupport;
 use App\Support\Compras\OrdencompraTotalesResumen;
 use App\Support\Compras\OrdencompraTratamientoMovimientosSupport;
+use App\Support\Compras\OrdencompraUiConfigSupport;
 use App\Support\Compras\RequisicionLineasOcSupport;
 use App\Support\Compras\SuscripcionSupport;
 use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
@@ -1453,7 +1454,9 @@ class OrdencompraGestionService
             'centrocosto_id' => 'required|integer|exists:centrocosto,id',
             'comentario' => 'nullable|string|max:255',
             'comentario_envio_arbol' => 'nullable|string|max:255',
-            'detalle' => 'required|string',
+            'detalle' => OrdencompraUiConfigSupport::detalleObligatorio()
+                ? 'required|string'
+                : 'nullable|string',
             'tratamiento' => ['required', 'string', 'max:50', Rule::in(array_column(Ordencompra::$enumTratamientoCompra, 'nombre'))],
             'requisicion_id' => 'nullable|integer|exists:requisicion,id',
             'proveedor_id' => 'required|integer|exists:proveedor,id',

@@ -46,6 +46,7 @@
         $filas = 1;
     }
     $tieneRanura = config('app.empresa') === 'FRASLE' && \Illuminate\Support\Facades\Schema::hasColumn('formula_articulo_hijo', 'ranura');
+    $tienePermitido = config('app.empresa') === 'EL BIERZO' && \Illuminate\Support\Facades\Schema::hasColumn('formula_articulo_hijo', 'permitido');
     $formulaGastronomiaOpcional = FormulaArticuloGastronomia::opcionalesHabilitados();
 @endphp
 <div id="tab1" class="form1 tab-content">
@@ -179,6 +180,9 @@
                         @if ($tieneRanura)
                         <th style="width:90px;">Ranura</th>
                         @endif
+                        @if ($tienePermitido)
+                        <th style="width:90px;" title="Anita stkcv_permitido">Permitido</th>
+                        @endif
                         <th style="width:50px;"></th>
                     </tr>
                 </thead>
@@ -272,6 +276,18 @@
                             </td>
                             @if ($tieneRanura)
                             <td class="p-1 align-middle"><input type="number" name="ranuras[{{ $i }}]" class="form-control form-control-sm" value="{{ old("ranuras.$i", $h->ranura ?? '') }}" /></td>
+                            @endif
+                            @if ($tienePermitido)
+                            @php
+                                $permVal = strtoupper((string) old("permitidos.$i", $h->permitido ?? ''));
+                            @endphp
+                            <td class="p-1 align-middle">
+                                <select name="permitidos[{{ $i }}]" class="form-control form-control-sm">
+                                    <option value="" @if ($permVal !== 'S' && $permVal !== 'N') selected @endif>--</option>
+                                    <option value="S" @if ($permVal === 'S') selected @endif>S</option>
+                                    <option value="N" @if ($permVal === 'N') selected @endif>N</option>
+                                </select>
+                            </td>
                             @endif
                             <td class="p-1 align-middle text-center">
                                 <button type="button" class="btn btn-sm btn-outline-danger js-eliminar-fila-formula" title="Quitar línea">&times;</button>

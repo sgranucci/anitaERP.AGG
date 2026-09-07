@@ -213,6 +213,23 @@
 			e.stopPropagation();
 
 			if ($target.hasClass('codigoarticulo')) {
+				var sku = ($target.val() || '').toString().trim();
+				if (!sku) {
+					// Enter con SKU vacío = anular renglón (todas las empresas).
+					var $siguiente = $row.nextAll(SELECTOR_FILA).first();
+					var $previo = $row.prevAll(SELECTOR_FILA).first();
+					var $btnEliminar = $row.find('.eliminar_ordencompra_articulo').first();
+					if ($btnEliminar.length) {
+						$btnEliminar.trigger('click');
+					}
+					var $foco = $siguiente.length ? $siguiente : $previo;
+					if ($foco.length) {
+						enfocarCampoLinea($foco, 'articulo');
+					} else {
+						enfocarCampoLinea($filas().first(), 'articulo');
+					}
+					return;
+				}
 				$target.trigger('change');
 				return;
 			}

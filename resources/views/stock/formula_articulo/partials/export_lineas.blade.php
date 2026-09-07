@@ -6,6 +6,7 @@
 	$enlaces = $enlaces ?? false;
 	$gastOpc = FormulaArticuloGastronomia::opcionalesHabilitados();
 	$tieneRanura = config('app.empresa') === 'FRASLE' && Schema::hasColumn('formula_articulo_hijo', 'ranura');
+	$tienePermitido = config('app.empresa') === 'EL BIERZO' && Schema::hasColumn('formula_articulo_hijo', 'permitido');
 	$exportMostrarCodigo = FormulaArticuloNumero::mostrarCodigo();
 @endphp
 @foreach ($data->formula_articulo_hijos ?? [] as $h)
@@ -19,6 +20,7 @@
 		$dep = $h->depositos ?? null;
 		$depStr = $dep ? trim(($dep->codigo ?? '').' '.($dep->nombre ?? '')) : '';
 		$ranVal = $tieneRanura ? ($h->ranura ?? null) : null;
+		$permVal = $tienePermitido ? ($h->permitido ?? null) : null;
 	@endphp
 	@if($sku !== '' || $desc !== '')
 		@if($enlaces && !empty($h->articulo_id))
@@ -38,6 +40,9 @@
 		@endif
 		@if ($tieneRanura && $ranVal !== null && $ranVal !== '')
 			| Ranura: {{ $ranVal }}
+		@endif
+		@if ($tienePermitido && $permVal !== null && $permVal !== '')
+			| Permitido: {{ $permVal }}
 		@endif
 	@elseif($subId)
 		@php
@@ -69,6 +74,9 @@
 		@endif
 		@if ($tieneRanura && $ranVal !== null && $ranVal !== '')
 			| Ranura: {{ $ranVal }}
+		@endif
+		@if ($tienePermitido && $permVal !== null && $permVal !== '')
+			| Permitido: {{ $permVal }}
 		@endif
 	@endif
 	{!! $sep !!}

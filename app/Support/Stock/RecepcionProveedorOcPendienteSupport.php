@@ -229,22 +229,15 @@ final class RecepcionProveedorOcPendienteSupport
     /**
      * Impide alta o precarga de una COM de recepción cuando la OC no admite más cantidades.
      *
+     * @param  bool  $permitirConsumidaSinCerrar  Surmar/Bierzo: si la OC está consumida pero no
+     *                                           CERRADA, deja seguir recepcionando hasta cierre manual.
+     *
      * @throws \RuntimeException
      */
-    public static function assertPermiteNuevaRecepcion(Ordencompra $oc): void
+    public static function assertPermiteNuevaRecepcion(Ordencompra $oc, bool $permitirConsumidaSinCerrar = false): void
     {
         $numero = (int) $oc->numeroordencompra;
         $estado = (string) ($oc->estadoordencompra ?? '');
-
-        if ($estado === OrdencompraEstados::CUMPLIDA) {
-            if (! self::tieneSaldoPendienteEstricto((int) $oc->id)) {
-                throw new \RuntimeException(
-                    "Orden de compra {$numero} está {$estado}. No puede cargar otra recepción."
-                );
-            }
-
-            return;
-        }
 
         if ($estado === OrdencompraEstados::CERRADA) {
             throw new \RuntimeException(
@@ -256,6 +249,20 @@ final class RecepcionProveedorOcPendienteSupport
             throw new \RuntimeException(
                 "Orden de compra {$numero} está suspendida. No puede recepcionar hasta reactivarla."
             );
+        }
+
+        if ($permitirConsumidaSinCerrar) {
+            return;
+        }
+
+        if ($estado === OrdencompraEstados::CUMPLIDA) {
+            if (! self::tieneSaldoPendienteEstricto((int) $oc->id)) {
+                throw new \RuntimeException(
+                    "Orden de compra {$numero} está {$estado}. No puede cargar otra recepción."
+                );
+            }
+
+            return;
         }
 
         if (! self::tieneSaldoPendienteEstricto((int) $oc->id)) {

@@ -330,9 +330,12 @@
     </div>
 
     <div class="form-group row">
-        <label for="detalle" class="col-lg-2 col-form-label requerido">Detalle</label>
+        @php
+            $detalleObligatorio = \App\Support\Compras\OrdencompraUiConfigSupport::detalleObligatorio();
+        @endphp
+        <label for="detalle" class="col-lg-2 col-form-label{{ $detalleObligatorio ? ' requerido' : '' }}">Detalle</label>
         <div class="col-lg-9">
-            <textarea name="detalle" id="detalle" rows="3" class="form-control" required {{ $soloLectura ? 'readonly' : '' }}>{{ old('detalle', (isset($data) && $data) ? $data->detalle : '') }}</textarea>
+            <textarea name="detalle" id="detalle" rows="3" class="form-control"{{ $detalleObligatorio ? ' required' : '' }} {{ $soloLectura ? 'readonly' : '' }}>{{ old('detalle', (isset($data) && $data) ? $data->detalle : '') }}</textarea>
         </div>
     </div>
 

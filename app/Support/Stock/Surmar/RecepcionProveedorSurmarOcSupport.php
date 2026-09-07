@@ -86,7 +86,9 @@ final class RecepcionProveedorSurmarOcSupport
                 'oc.id', 'oc.numeroordencompra', 'oc.fecha', 'oc.proveedor_id', 'oc.empresa_id',
                 'oc.estadoordencompra', 'p.nombre', 'e.nombre'
             )
-            ->havingRaw('SUM(oa.cantidad) > COALESCE(SUM(rec.cantidad_recibida), 0) + 0.000001')
+            // Surmar: incluye OC ya consumidas (sin saldo) mientras no estén CERRADA;
+            // el operador sigue recepcionando hasta cerrar manualmente.
+            ->havingRaw('COUNT(oa.id) > 0')
             ->selectRaw('oc.id, oc.numeroordencompra, oc.fecha, oc.proveedor_id, oc.empresa_id, oc.estadoordencompra')
             ->selectRaw('p.nombre as proveedor_nombre, e.nombre as empresa_nombre')
             ->selectRaw('SUM(oa.cantidad) as cantidad_pedida')
@@ -109,12 +111,13 @@ final class RecepcionProveedorSurmarOcSupport
 
         $oc = self::cargarOc($ordencompraId);
         if ($validarNuevaRecepcion) {
-            RecepcionProveedorOcPendienteSupport::assertPermiteNuevaRecepcion($oc);
+            // Surmar: OC consumida no bloquea; solo CERRADA / SUSPENDIDA.
+            RecepcionProveedorOcPendienteSupport::assertPermiteNuevaRecepcion($oc, true);
         }
 
         return [
             'cabecera' => $oc,
-            'lineas' => self::armarLineasPendientes($oc),
+            'lineas' => self::armarLineasPendientes($oc, true),
         ];
     }
 
@@ -169,9 +172,11 @@ final class RecepcionProveedorSurmarOcSupport
     /**
      * Líneas OC con saldo pendiente (para workbench / precarga).
      *
+     * @param  bool  $incluirSinSaldo  Surmar: muestra líneas activas aunque ya no haya pendiente
+     *                                (seguir recepcionando hasta cierre manual de la OC).
      * @return list<array<string, mixed>>
      */
-    public static function armarLineasPendientes(Ordencompra $oc): array
+    public static function armarLineasPendientes(Ordencompra $oc, bool $incluirSinSaldo = false): array
     {
         $oc->loadMissing([
             'ordencompra_articulos.articulos.unidadesdemedidas',
@@ -191,7 +196,7 @@ final class RecepcionProveedorSurmarOcSupport
             $pedida = (float) ($ocArt->cantidad ?? 0);
             $recibido = (float) ($recibidos[$ocArt->id] ?? 0);
             $pendiente = RecepcionProveedorOcPendienteSupport::saldoPendienteLineaEstricto($pedida, $recibido);
-            if ($pendiente <= 0.000001) {
+            if ($pendiente <= 0.000001 && ! $incluirSinSaldo) {
                 continue;
             }
 

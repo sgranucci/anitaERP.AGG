@@ -170,6 +170,9 @@ class RecepcionProveedorSurmarController extends Controller
                 ?? $recepcion->proveedores->nombre
                 ?? 'proveedor'
             ),
+            'ocConsumidaSinCerrar' => $this->service->ocConsumidaSinCerrar($recepcion),
+            'puedeCerrarOc' => (int) ($recepcion->ordencompra_id ?? 0) > 0
+                && can('confirmar-recepcion-proveedor-surmar', false),
         ]);
     }
 
@@ -418,9 +421,34 @@ class RecepcionProveedorSurmarController extends Controller
                 ->withErrors($e->errors());
         }
 
+        $mensaje = 'Recepción Surmar confirmada. Stock generado.';
+        if ($this->service->ocConsumidaSinCerrar($recepcion)) {
+            $nroOc = (int) optional($recepcion->ordencompras)->numeroordencompra;
+            $mensaje .= ' La OC'.($nroOc > 0 ? " {$nroOc}" : '')
+                .' quedó consumida: puede seguir recepcionando o cerrarla con el botón «Cerrar OC».';
+        }
+
         return redirect()
             ->route('cargar_recepcion_proveedor_surmar', $recepcion->id)
-            ->with('mensaje', 'Recepción Surmar confirmada. Stock generado.');
+            ->with('mensaje', $mensaje);
+    }
+
+    public function cerrarOrdencompra(int $id)
+    {
+        can('confirmar-recepcion-proveedor-surmar');
+
+        $this->assertSurmar();
+        try {
+            $oc = $this->service->cerrarOrdencompra($id);
+        } catch (ValidationException $e) {
+            return redirect()
+                ->route('cargar_recepcion_proveedor_surmar', $id)
+                ->withErrors($e->errors());
+        }
+
+        return redirect()
+            ->route('cargar_recepcion_proveedor_surmar', $id)
+            ->with('mensaje', 'Orden de compra '.$oc->numeroordencompra.' cerrada. Ya no admite más recepciones.');
     }
 
     public function anular(int $id)

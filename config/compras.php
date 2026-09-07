@@ -61,6 +61,12 @@ return [
     'oc_entrega_semanal' => filter_var(env('ORDENCOMPRA_ENTREGA_SEMANAL', false), FILTER_VALIDATE_BOOLEAN),
 
     /*
+    | OC: detalle (leyenda) de cabecera obligatorio.
+    | Default true = AGG. El Bierzo / Surmar: false (Anita rellena "OC N" si vacío).
+    */
+    'oc_detalle_obligatorio' => filter_var(env('ORDENCOMPRA_DETALLE_OBLIGATORIO', true), FILTER_VALIDATE_BOOLEAN),
+
+    /*
     | Metas de KPIs de compras (tablero + panel IA).
     | Roles comprador: solo estos cuentan en OC gestionadas / productividad / ahorro.
     */

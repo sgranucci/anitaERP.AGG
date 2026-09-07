@@ -458,6 +458,20 @@
         return t;
     }
 
+    /** Día/mes chico desde piqueado_at (d/m/Y …) o fallback. */
+    function diaMesDesdePiqueo(l) {
+        var raw = (l && (l.piqueado_at || l.fecha_piqueo || '')) || '';
+        var m = String(raw).match(/^(\d{1,2})\/(\d{1,2})/);
+        if (m) {
+            return m[1] + '/' + m[2];
+        }
+        m = String(raw).match(/^(\d{4})-(\d{2})-(\d{2})/);
+        if (m) {
+            return parseInt(m[3], 10) + '/' + parseInt(m[2], 10);
+        }
+        return '';
+    }
+
     function renderFilaEtiqueta(l, idx) {
         var tr = $('<tr/>');
         tr.append($('<td class="text-nowrap"/>').text(l.orden || (idx + 1)));
@@ -473,11 +487,12 @@
         tr.append($('<td class="text-right"/>').text(fmt(l.peso_neto)));
         var $etiq = $('<td class="text-nowrap text-center align-middle"/>');
         if (l.stock_etiqueta_id) {
+            var diaMes = diaMesDesdePiqueo(l);
             $etiq.append(
                 $('<button type="button" class="btn btn-xs btn-outline-secondary js-preview-linea"/>')
                     .attr('data-id', l.id)
-                    .attr('title', 'Preview / editar etiqueta')
-                    .html('<i class="fa fa-eye"></i> #' + l.stock_etiqueta_id)
+                    .attr('title', 'Preview / editar etiqueta' + (l.stock_etiqueta_id ? ' #' + l.stock_etiqueta_id : ''))
+                    .html('<i class="fa fa-eye"></i> ' + (diaMes || '—'))
             );
         } else {
             $etiq.text('—');
@@ -622,7 +637,7 @@
                 '<th class="text-right">Unid</th><th class="text-right">Nro</th><th>Vto</th>' +
                 '<th class="text-right">Piezas</th><th class="text-right">Bruto</th>' +
                 '<th class="text-right">Tara</th><th class="text-right">Neto</th>' +
-                '<th class="text-center">Etiqueta</th><th class="text-center">Acciones</th>' +
+                '<th class="text-center">Día</th><th class="text-center">Acciones</th>' +
                 '</tr></thead><tbody></tbody></table></div>'
             );
             var $innerTb = $inner.find('tbody');
@@ -930,8 +945,8 @@
         $('#btn-etiq-guardar').prop('disabled', false);
         actualizarBadgeProceso();
         actualizarPreviewLocal();
-        // Alta rápida sin datos previos: foco en piezas (luego Enter → bruto → … → Imprime).
-        enfocarCampoModalEtiqueta('#etiq_piezas');
+        // Alta: foco en «En que separa» (luego Enter navega piezas → bruto → … → Imprime).
+        enfocarCampoModalEtiqueta('#etiq_separa');
         $('#modalEtiquetaProveedorSurmar').modal('show');
     }
 

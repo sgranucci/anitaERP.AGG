@@ -110,6 +110,7 @@ $(document).ready(function () {
                 @php
                     use App\Support\Stock\FormulaArticuloNumero;
                     $indexTieneRanura = config('app.empresa') === 'FRASLE' && \Illuminate\Support\Facades\Schema::hasColumn('formula_articulo_hijo', 'ranura');
+                    $indexTienePermitido = config('app.empresa') === 'EL BIERZO' && \Illuminate\Support\Facades\Schema::hasColumn('formula_articulo_hijo', 'permitido');
                     $indexGastOpc = ! empty($opcionalesHabilitados);
                     $indexMostrarCodigo = FormulaArticuloNumero::mostrarCodigo();
                 @endphp
@@ -168,6 +169,7 @@ $(document).ready(function () {
                                         'loop' => $loop,
                                         'indexGastOpc' => $indexGastOpc,
                                         'indexTieneRanura' => $indexTieneRanura,
+                                        'indexTienePermitido' => $indexTienePermitido,
                                     ])
                                 @empty
                                     <span class="text-muted">&mdash;</span>

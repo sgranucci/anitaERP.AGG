@@ -18,6 +18,9 @@
     if (($indexTieneRanura ?? false) && ($h->ranura ?? '') !== '' && $h->ranura !== null) {
         $idxExtras[] = 'Ranura '.$h->ranura;
     }
+    if (($indexTienePermitido ?? false) && ($h->permitido ?? '') !== '' && $h->permitido !== null) {
+        $idxExtras[] = 'Perm. '.$h->permitido;
+    }
     $idxExtrasStr = implode(' · ', $idxExtras);
 @endphp
 <div class="mb-1 @if(! $loop->last) border-bottom border-light pb-1 @endif">

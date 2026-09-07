@@ -9,6 +9,7 @@ use App\Models\Stock\Formula_Articulo;
 use App\Models\Stock\Formula_Articulo_Estado;
 use App\Models\Stock\Formula_Articulo_Hijo;
 use App\Repositories\Stock\Formula_Articulo_EstadoRepositoryInterface;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Stock\FormulaArticuloSku;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -110,7 +111,7 @@ class FormulaArticuloAnitaSyncService
     }
 
     /**
-     * @return list<array{stkcv_formula:int, stkcv_linea:int, stkcv_art_hijo:string, stkcv_cantidad:float, stkcv_formula_hija:int, stkcv_factor_costo:float, stkcv_deposito:int, stkcv_opcional:string, stkcv_ranura:?int}>
+     * @return list<array{stkcv_formula:int, stkcv_linea:int, stkcv_art_hijo:string, stkcv_cantidad:float, stkcv_formula_hija:int, stkcv_factor_costo:float, stkcv_deposito:int, stkcv_opcional:string, stkcv_permitido:?string, stkcv_ranura:?int}>
      */
     public function listarStkcmovDesdeAnita(): array
     {
@@ -160,7 +161,7 @@ class FormulaArticuloAnitaSyncService
     /**
      * Líneas de una sola fórmula Anita (stkcmov filtrado por stkcv_formula).
      *
-     * @return list<array{stkcv_formula:int, stkcv_linea:int, stkcv_art_hijo:string, stkcv_cantidad:float, stkcv_formula_hija:int, stkcv_factor_costo:float, stkcv_deposito:int, stkcv_opcional:string, stkcv_ranura:?int}>
+     * @return list<array{stkcv_formula:int, stkcv_linea:int, stkcv_art_hijo:string, stkcv_cantidad:float, stkcv_formula_hija:int, stkcv_factor_costo:float, stkcv_deposito:int, stkcv_opcional:string, stkcv_permitido:?string, stkcv_ranura:?int}>
      */
     public function listarStkcmovUnaDesdeAnita(int $anitaFormula): array
     {
@@ -270,25 +271,29 @@ class FormulaArticuloAnitaSyncService
      */
     private function camposStkcmae(): string
     {
-        $campos = [
-            'stkcm_formula', 'stkcm_detalle', 'stkcm_coef_venta',
-            'stkcm_cod_impuesto', 'stkcm_cant_porcion',
-        ];
+        // EL BIERZO: stkcm_articulo va al final del esquema Informix (no 2.ª columna).
+        // El bridge nombra campos; el orden en el SELECT no afecta el JSON.
         if ($this->empresaTieneStkcmArticulo()) {
-            $campos = ['stkcm_formula', 'stkcm_articulo', 'stkcm_detalle',
-                'stkcm_coef_venta', 'stkcm_cod_impuesto', 'stkcm_cant_porcion'];
+            if (EntornoEmpresaSupport::esElBierzo()) {
+                return 'stkcm_formula, stkcm_detalle, stkcm_coef_venta, stkcm_cod_impuesto, stkcm_cant_porcion, stkcm_articulo';
+            }
+
+            return 'stkcm_formula, stkcm_articulo, stkcm_detalle, stkcm_coef_venta, stkcm_cod_impuesto, stkcm_cant_porcion';
         }
 
-        return implode(', ', $campos);
+        return 'stkcm_formula, stkcm_detalle, stkcm_coef_venta, stkcm_cod_impuesto, stkcm_cant_porcion';
     }
 
     private function camposStkcmov(): string
     {
+        // EL BIERZO no tiene stkcv_opcional: la columna es stkcv_permitido (S/N).
+        // Pedir stkcv_opcional hace fallar el UNLOAD y el bridge responde [].
+        $flagOpcional = EntornoEmpresaSupport::esElBierzo() ? 'stkcv_permitido' : 'stkcv_opcional';
         $campos = [
             'stkcv_formula', 'stkcv_linea', 'stkcv_art_hijo', 'stkcv_cantidad',
-            'stkcv_formula_hija', 'stkcv_factor_costo', 'stkcv_deposito', 'stkcv_opcional',
+            'stkcv_formula_hija', 'stkcv_factor_costo', 'stkcv_deposito', $flagOpcional,
         ];
-        if (strtoupper((string) config('app.empresa')) === 'FRASLE') {
+        if (EntornoEmpresaSupport::es(EntornoEmpresaSupport::FRASLE)) {
             $campos[] = 'stkcv_ranura';
         }
 
@@ -297,14 +302,12 @@ class FormulaArticuloAnitaSyncService
 
     /**
      * stkcm_articulo (artículo cabecera de la fórmula en Anita) sólo existe en instalaciones
-     * heredadas tipo FRASLE/Bierzo. En gastronomía (AGG, CROWN, etc.) la cabecera se resuelve
+     * heredadas tipo FRASLE / EL BIERZO. En gastronomía (AGG, CROWN, etc.) la cabecera se resuelve
      * vía articulo.formula → stkcm_formula (y al final por código → SKU V####).
      */
     private function empresaTieneStkcmArticulo(): bool
     {
-        $empresa = strtoupper((string) config('app.empresa'));
-
-        return in_array($empresa, ['FRASLE', 'BIERZO'], true);
+        return EntornoEmpresaSupport::es(EntornoEmpresaSupport::FRASLE, EntornoEmpresaSupport::EL_BIERZO);
     }
 
     /**
@@ -352,7 +355,7 @@ class FormulaArticuloAnitaSyncService
 
     /**
      * @param  list<mixed>  $filas
-     * @return list<array{stkcv_formula:int, stkcv_linea:int, stkcv_art_hijo:string, stkcv_cantidad:float, stkcv_formula_hija:int, stkcv_factor_costo:float, stkcv_deposito:int, stkcv_opcional:string, stkcv_ranura:?int}>
+     * @return list<array{stkcv_formula:int, stkcv_linea:int, stkcv_art_hijo:string, stkcv_cantidad:float, stkcv_formula_hija:int, stkcv_factor_costo:float, stkcv_deposito:int, stkcv_opcional:string, stkcv_permitido:?string, stkcv_ranura:?int}>
      */
     private function normalizarFilasStkcmov(array $filas): array
     {
@@ -371,6 +374,7 @@ class FormulaArticuloAnitaSyncService
                 'stkcv_factor_costo' => (float) ($row['stkcv_factor_costo'] ?? 0),
                 'stkcv_deposito' => (int) ($row['stkcv_deposito'] ?? 0),
                 'stkcv_opcional' => (string) ($row['stkcv_opcional'] ?? ''),
+                'stkcv_permitido' => $this->normalizarPermitidoAnita($row['stkcv_permitido'] ?? null),
                 'stkcv_ranura' => isset($row['stkcv_ranura']) && $row['stkcv_ranura'] !== '' && $row['stkcv_ranura'] !== null
                     ? (int) $row['stkcv_ranura']
                     : null,
@@ -395,7 +399,7 @@ class FormulaArticuloAnitaSyncService
 
     /**
      * @param  list<array{stkcm_formula:int, stkcm_formula_codigo:string, stkcm_articulo:string, stkcm_detalle:string, stkcm_cant_porcion:float}>  $mae
-     * @param  list<array{stkcv_formula:int, stkcv_linea:int, stkcv_art_hijo:string, stkcv_cantidad:float, stkcv_formula_hija:int, stkcv_factor_costo:float, stkcv_deposito:int, stkcv_opcional:string, stkcv_ranura:?int}>  $mov
+     * @param  list<array{stkcv_formula:int, stkcv_linea:int, stkcv_art_hijo:string, stkcv_cantidad:float, stkcv_formula_hija:int, stkcv_factor_costo:float, stkcv_deposito:int, stkcv_opcional:string, stkcv_permitido:?string, stkcv_ranura:?int}>  $mov
      * @return array{formulas:int, lineas:int, advertencias:list<string>}
      */
     public function sincronizarInterno(array $mae, array $mov, int $usuarioId, bool $ejecutarVinculoCodigoSku = true): array
@@ -577,10 +581,14 @@ class FormulaArticuloAnitaSyncService
                         $hijoPayload['ordenopcional'] = $ordenOpcional;
                     }
 
-                    if (strtoupper((string) config('app.empresa')) === 'FRASLE'
+                    if (EntornoEmpresaSupport::es(EntornoEmpresaSupport::FRASLE)
                         && Schema::hasColumn('formula_articulo_hijo', 'ranura')) {
                         $r = $det['stkcv_ranura'] ?? null;
                         $hijoPayload['ranura'] = ($r === null || $r === 0) ? null : (int) $r;
+                    }
+
+                    if (Schema::hasColumn('formula_articulo_hijo', 'permitido')) {
+                        $hijoPayload['permitido'] = $this->normalizarPermitidoAnita($det['stkcv_permitido'] ?? null);
                     }
 
                     Formula_Articulo_Hijo::query()->create($hijoPayload);
@@ -631,7 +639,13 @@ class FormulaArticuloAnitaSyncService
                 continue;
             }
             $s = $p[0];
-            if (count($p) >= 6) {
+            // EL BIERZO UNLOAD (orden tabla): formula|detalle|coef|impuesto|cant|articulo
+            // FRASLE / otros con artículo: formula|articulo|detalle|coef|impuesto|cant
+            if (count($p) >= 6 && EntornoEmpresaSupport::esElBierzo()) {
+                $stkcmArticulo = $p[5];
+                $detalle = $p[1];
+                $cantPorcion = (float) $p[4];
+            } elseif (count($p) >= 6) {
                 $stkcmArticulo = $p[1];
                 $detalle = $p[2];
                 $cantPorcion = (float) $p[5];
@@ -653,14 +667,15 @@ class FormulaArticuloAnitaSyncService
     }
 
     /**
-     * @return list<array{stkcv_formula:int, stkcv_linea:int, stkcv_art_hijo:string, stkcv_cantidad:float, stkcv_formula_hija:int, stkcv_factor_costo:float, stkcv_deposito:int, stkcv_opcional:string, stkcv_ranura:?int}>
+     * @return list<array{stkcv_formula:int, stkcv_linea:int, stkcv_art_hijo:string, stkcv_cantidad:float, stkcv_formula_hija:int, stkcv_factor_costo:float, stkcv_deposito:int, stkcv_opcional:string, stkcv_permitido:?string, stkcv_ranura:?int}>
      */
     private function parseArchivoStkcmov(string $path): array
     {
         if (! is_readable($path)) {
             throw new \InvalidArgumentException("No se puede leer stkcmov: {$path}");
         }
-        $esFrasle = strtoupper((string) config('app.empresa')) === 'FRASLE';
+        $esFrasle = EntornoEmpresaSupport::es(EntornoEmpresaSupport::FRASLE);
+        $esBierzo = EntornoEmpresaSupport::esElBierzo();
         $out = [];
         foreach (file($path, FILE_IGNORE_NEW_LINES) as $line) {
             if (! $this->esLineaDatosPipe($line)) {
@@ -674,6 +689,8 @@ class FormulaArticuloAnitaSyncService
             if ($esFrasle && count($p) >= 9 && $p[8] !== '') {
                 $ranura = (int) $p[8];
             }
+            // EL BIERZO: col 8 = stkcv_permitido (S/N). Otros: stkcv_opcional.
+            $flagCol = $p[7] ?? '';
             $out[] = [
                 'stkcv_formula' => (int) $p[0],
                 'stkcv_linea' => (int) $p[1],
@@ -682,7 +699,8 @@ class FormulaArticuloAnitaSyncService
                 'stkcv_formula_hija' => (int) $p[4],
                 'stkcv_factor_costo' => (float) $p[5],
                 'stkcv_deposito' => (int) $p[6],
-                'stkcv_opcional' => $p[7] ?? '',
+                'stkcv_opcional' => $esBierzo ? '' : $flagCol,
+                'stkcv_permitido' => $esBierzo ? $this->normalizarPermitidoAnita($flagCol) : null,
                 'stkcv_ranura' => $ranura,
             ];
         }
@@ -726,6 +744,16 @@ class FormulaArticuloAnitaSyncService
         }
 
         return (int) $f;
+    }
+
+    /**
+     * Anita EL BIERZO stkcv_permitido: S / N. Cualquier otro valor → null.
+     */
+    private function normalizarPermitidoAnita(mixed $valor): ?string
+    {
+        $f = strtoupper(trim((string) ($valor ?? '')));
+
+        return ($f === 'S' || $f === 'N') ? $f : null;
     }
 
     /**
