@@ -12,8 +12,8 @@ use App\Support\Contable\Sicore\SicoreSaldoEjercicioSupport;
 use Illuminate\Support\Collection;
 
 /**
- * Conciliación SICORE vs mayor: suma del período vs col. P (saldo ejerc.)
- * del último movimiento de la quincena/mes elegida.
+ * Conciliación SICORE vs mayor: suma del período vs col. P (saldo ejerc. ERP)
+ * al último movimiento ≤ fecha_hasta de la quincena/mes elegida.
  */
 final class SicoreConciliacionContableService
 {

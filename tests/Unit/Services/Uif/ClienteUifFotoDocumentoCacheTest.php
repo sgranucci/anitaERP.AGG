@@ -183,6 +183,27 @@ final class ClienteUifFotoDocumentoCacheTest extends TestCase
         $this->rmTree($mount);
     }
 
+    public function test_rescata_dni_desde_fotos_tesoreria_si_se_permite(): void
+    {
+        $teso = sys_get_temp_dir().DIRECTORY_SEPARATOR.'uif_teso_rescue_'.uniqid('', true);
+        $mount = sys_get_temp_dir().DIRECTORY_SEPARATOR.'uif_dni_rescue_'.uniqid('', true);
+        self::assertTrue(mkdir($teso, 0777, true));
+        self::assertTrue(mkdir($mount, 0777, true));
+        $src = $teso.DIRECTORY_SEPARATOR.'24871990.pdf';
+        file_put_contents($src, '%PDF-rescate');
+
+        $bloqueado = ClienteUifFotoDocumento::promoverADniMountCanonico($src, '24871990', $mount, false, [$teso]);
+        $this->assertNull($bloqueado);
+        $this->assertFileDoesNotExist($mount.DIRECTORY_SEPARATOR.'24871990.pdf');
+
+        $recuperado = ClienteUifFotoDocumento::promoverADniMountCanonico($src, '24871990', $mount, true, [$teso]);
+        $this->assertSame($mount.DIRECTORY_SEPARATOR.'24871990.pdf', $recuperado);
+        $this->assertSame('%PDF-rescate', file_get_contents((string) $recuperado));
+
+        $this->rmTree($teso);
+        $this->rmTree($mount);
+    }
+
     private function rmTree(string $dir): void
     {
         if (! is_dir($dir)) {

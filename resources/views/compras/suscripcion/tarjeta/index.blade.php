@@ -36,7 +36,7 @@
                         'toggleId' => 'btn-toggle-filtros-tarjeta-suscripcion',
                         'inputId' => 'filtro_valor',
                         'nuevoRegistroUrl' => route('crear_tarjeta_suscripcion', $retornoListadoQuery),
-                        'nuevoRegistroCan' => 'configurar-suscripcion',
+                        'nuevoRegistroCan' => 'configurar-tarjetas-suscripcion',
                         'nuevoRegistroLabel' => 'Nueva tarjeta',
                     ])
                     <a href="{{ route('consultar_suscripcion') }}" class="btn btn-outline-light btn-sm ml-1">← Suscripciones</a>

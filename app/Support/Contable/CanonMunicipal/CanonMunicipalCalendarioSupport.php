@@ -161,4 +161,77 @@ final class CanonMunicipalCalendarioSupport
 
         return $diaHasta <= 15 ? 'primera' : 'segunda';
     }
+
+    /**
+     * Texto del rango en el cuerpo de la nota.
+     * Respeta períodos que cruzan mes/año (ej. «31 de agosto al 06 de septiembre de 2026»).
+     *
+     * @param  'biyemas'|'kandiko'|'rebisco'  $estilo
+     */
+    public static function textoRangoPeriodo(string $desde, string $hasta, string $estilo = 'biyemas'): string
+    {
+        $tsDesde = strtotime($desde);
+        $tsHasta = strtotime($hasta);
+        if ($tsDesde === false || $tsHasta === false) {
+            return trim($desde.' al '.$hasta);
+        }
+
+        $meses = [
+            1 => 'enero', 2 => 'febrero', 3 => 'marzo', 4 => 'abril',
+            5 => 'mayo', 6 => 'junio', 7 => 'julio', 8 => 'agosto',
+            9 => 'septiembre', 10 => 'octubre', 11 => 'noviembre', 12 => 'diciembre',
+        ];
+
+        $diaDesde = date('d', $tsDesde);
+        $diaHasta = date('d', $tsHasta);
+        $mesDesde = (int) date('n', $tsDesde);
+        $mesHasta = (int) date('n', $tsHasta);
+        $anioDesde = (int) date('Y', $tsDesde);
+        $anioHasta = (int) date('Y', $tsHasta);
+
+        $nombreMes = static function (int $mes) use ($meses, $estilo): string {
+            $txt = $meses[$mes] ?? '';
+            if ($estilo === 'kandiko') {
+                return $txt === '' ? '' : mb_convert_case($txt, MB_CASE_TITLE, 'UTF-8');
+            }
+
+            return $txt;
+        };
+
+        $conector = $estilo === 'rebisco' ? 'A' : 'al';
+
+        if ($mesDesde === $mesHasta && $anioDesde === $anioHasta) {
+            return sprintf(
+                '%s %s %s de %s de %d',
+                $diaDesde,
+                $conector,
+                $diaHasta,
+                $nombreMes($mesDesde),
+                $anioDesde,
+            );
+        }
+
+        if ($anioDesde === $anioHasta) {
+            return sprintf(
+                '%s de %s %s %s de %s de %d',
+                $diaDesde,
+                $nombreMes($mesDesde),
+                $conector,
+                $diaHasta,
+                $nombreMes($mesHasta),
+                $anioDesde,
+            );
+        }
+
+        return sprintf(
+            '%s de %s de %d %s %s de %s de %d',
+            $diaDesde,
+            $nombreMes($mesDesde),
+            $anioDesde,
+            $conector,
+            $diaHasta,
+            $nombreMes($mesHasta),
+            $anioHasta,
+        );
+    }
 }

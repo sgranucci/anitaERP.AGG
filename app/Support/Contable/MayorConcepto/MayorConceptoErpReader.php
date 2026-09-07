@@ -79,8 +79,9 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
                 $ctamov[] = $this->filaCtamov($mov);
             }
         }
-        foreach ($subPorAsiento as $lineasAsiento) {
+        foreach ($subPorAsiento as $nroAsi => $lineasAsiento) {
             $this->completarContrapartidasSubdiario($lineasAsiento);
+            $subPorAsiento[$nroAsi] = $lineasAsiento;
             foreach ($lineasAsiento as $fila) {
                 $subdiario[] = $fila;
             }
@@ -575,13 +576,13 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
     }
 
     /**
-     * Anita trae contrapartida por renglón; el ERP no. En asientos de 2 piernas
-     * (ej. CHP 111 H / 113 D) se completa para que el motor resuelva la cuenta
-     * del medio de pago sin caer al fallback 117010.
+     * Anita trae una pierna de disponibilidad con contrapartida (ej. ING 111 D / contra 113).
+     * El ERP tiene las dos piernas sueltas: si se proyectan ambas, el analítico duplica el banco.
+     * Se completa contrapartida y, en asientos 1 disp + 1 no-disp, se deja solo la de disponibilidad.
      *
      * @param  list<object>  $lineas
      */
-    private function completarContrapartidasSubdiario(array $lineas): void
+    private function completarContrapartidasSubdiario(array &$lineas): void
     {
         if (count($lineas) !== 2) {
             return;
@@ -600,6 +601,18 @@ class MayorConceptoErpReader implements MayorConceptoLectorInterface
         }
         if ((int) ($b->subd_contrapartida ?? 0) <= 0) {
             $b->subd_contrapartida = $ctaA;
+        }
+
+        $limite = (int) config(
+            'contable.mayor_concepto.limite_caja_banco',
+            MayorConceptoMemoriaMotor::LIMITE_CAJA_BANCO,
+        );
+        $aDisp = $ctaA > 0 && $ctaA <= $limite;
+        $bDisp = $ctaB > 0 && $ctaB <= $limite;
+        if ($aDisp && ! $bDisp) {
+            $lineas = [$a];
+        } elseif ($bDisp && ! $aDisp) {
+            $lineas = [$b];
         }
     }
 

@@ -105,8 +105,9 @@ class ClienteUifFotoDocumento
     }
 
     /**
-     * Directorio de grabación: {@see anitaDniMount()} si admite escritura;
-     * si no, la carpeta de fotos del origen (fotos_clientes / _KSA / _RSA).
+     * Directorio de grabación de foto DNI: solo {@see anitaDniMount()}.
+     * Nunca escribe en fotos_clientes* (retratos / pago_*); si el montaje no admite
+     * escritura, falla o usa el fallback local si está habilitado.
      */
     public static function writableBasePath(): string
     {
@@ -115,7 +116,19 @@ class ClienteUifFotoDocumento
             return $canonical;
         }
 
-        return self::ensurePrimaryWritePathReady();
+        if (config('uif.FOTOS_CLIENTES_PERMITIR_FALLBACK_ESCRITURA')) {
+            return self::ensureFallbackReady();
+        }
+
+        $mount = self::anitaDniMount();
+        $destino = $mount !== '' ? $mount : 'ANITA_UIF_DNI_MOUNT';
+
+        throw new \RuntimeException(
+            'No se puede escribir la foto del DNI en '.$destino
+            .' (usuario PHP: '.self::phpProcessUser().'). '
+            .'El montaje debe existir y permitir escritura a www-data. '
+            .'No se usa fotos_clientes* para DNI (solo retratos/pago de tesorería).'
+        );
     }
 
     /** Raíz plana de DNI si existe y www-data puede escribir. */
@@ -268,17 +281,24 @@ class ClienteUifFotoDocumento
     }
 
     /**
-     * Copia un DNI hallado en subcarpeta (o fotos_*) a dni_mount/{documento}.{ext}.
+     * Copia un DNI hallado en subcarpeta a dni_mount/{documento}.{ext}.
      * No pisa un archivo que ya esté en la raíz (mismo DNI, otro scan).
+     * Por defecto no copia desde fotos_clientes* (retratos); usar
+     * $permitirOrigenTesoreria para rescatar DNI mal grabados ahí.
      */
-    public static function promoverADniMountCanonico(string $srcPath, string $numerodocumento, ?string $dniMount = null): ?string
-    {
+    public static function promoverADniMountCanonico(
+        string $srcPath,
+        string $numerodocumento,
+        ?string $dniMount = null,
+        bool $permitirOrigenTesoreria = false,
+        ?array $prizeDirs = null
+    ): ?string {
         $dniMount = rtrim((string) ($dniMount ?? self::anitaDniMount()), DIRECTORY_SEPARATOR);
         $stem = self::sanitizeNumeroDocumento($numerodocumento);
         if ($dniMount === '' || $stem === '' || ! is_file($srcPath) || ! is_readable($srcPath)) {
             return null;
         }
-        if (self::esRutaFotoTesoreria($srcPath)) {
+        if (! $permitirOrigenTesoreria && self::esRutaFotoTesoreria($srcPath, $prizeDirs)) {
             return null;
         }
         $ext = strtolower((string) pathinfo($srcPath, PATHINFO_EXTENSION));
@@ -441,7 +461,7 @@ class ClienteUifFotoDocumento
     }
 
     /**
-     * Guarda un upload en {@see basePath()} con nombre `{numerodocumento_sanitizado}.{ext}`.
+     * Guarda un upload en {@see writableBasePath()} (dni_uif) con nombre `{numerodocumento}.{ext}`.
      * Si ya había otra foto distinta en BD, intenta eliminarla del almacén propio (no montajes externos).
      */
     public static function storeUploadedFile(UploadedFile $file, string $numerodocumento, ?string $previousBasename = null): string
@@ -540,6 +560,45 @@ class ClienteUifFotoDocumento
                     return $p;
                 }
             }
+        }
+
+        // DNI grabado por error en fotos_clientes* (fallback de escritura anterior): rescatar a dni_uif.
+        return self::recuperarBasenameDesdeFotosTesoreria($base);
+    }
+
+    /**
+     * Si el basename está en fotos_clientes* y no en dni_uif, lo copia al montaje canónico.
+     * Cubre el 404 con fotodocumento en BD tras escrituras al directorio de retratos.
+     */
+    public static function recuperarBasenameDesdeFotosTesoreria(string $basename): ?string
+    {
+        $basename = basename($basename);
+        if ($basename === '') {
+            return null;
+        }
+        $ext = strtolower((string) pathinfo($basename, PATHINFO_EXTENSION));
+        if (! in_array($ext, self::EXTENSIONES_PERMITIDAS, true)) {
+            return null;
+        }
+        $stem = self::sanitizeNumeroDocumento((string) pathinfo($basename, PATHINFO_FILENAME));
+        if ($stem === '') {
+            return null;
+        }
+
+        foreach (self::directoriosFotoTesoreria() as $dir) {
+            if ($dir === '') {
+                continue;
+            }
+            $src = $dir.DIRECTORY_SEPARATOR.$basename;
+            if (! is_file($src) || ! is_readable($src)) {
+                continue;
+            }
+            $promoted = self::promoverADniMountCanonico($src, $stem, null, true);
+            if ($promoted !== null && is_file($promoted)) {
+                return $promoted;
+            }
+            // Montaje no escribible: al menos servir el archivo varado (mejor que 404).
+            return $src;
         }
 
         return null;
@@ -772,18 +831,22 @@ class ClienteUifFotoDocumento
     }
 
     /**
-     * Si la foto canónica es DDJJ/NOSIS o un retrato de tesorería copiado a dni_uif, la borra.
+     * Si la foto canónica es DDJJ/NOSIS (u otro adjunto no-DNI) copiado a dni_uif, la borra.
+     * No borra por coincidir con retrato de tesorería: el usuario puede subir el mismo
+     * escaneo como DNI; borrarlo dejaba fotodocumento en BD y 404 al reabrir.
      */
     public static function descartarCopiaCanonicoSiEsAdjuntoNoDni(int $clienteUifId, string $absolutePath): bool
     {
         return self::descartarCopiaCanonicoSiNoEsDni($clienteUifId, $absolutePath, '');
     }
 
-    public static function descartarCopiaCanonicoSiNoEsDni(int $clienteUifId, string $absolutePath, string $numerodocumento): bool
+    public static function descartarCopiaCanonicoSiNoEsDni(int $clienteUifId, string $absolutePath, string $numerodocumento = ''): bool
     {
-        $esAdjunto = $clienteUifId > 0 && self::esCopiaDeAdjuntoNoDni($clienteUifId, $absolutePath);
-        $esTesoreria = $numerodocumento !== '' && self::esCopiaDeFotoTesoreria($absolutePath, $numerodocumento);
-        if (! $esAdjunto && ! $esTesoreria) {
+        // $numerodocumento se conserva en la firma por callers históricos; ya no se usa
+        // para descartar copias idénticas a retratos de fotos_clientes*.
+        unset($numerodocumento);
+
+        if ($clienteUifId <= 0 || ! self::esCopiaDeAdjuntoNoDni($clienteUifId, $absolutePath)) {
             return false;
         }
         $mount = self::anitaDniMount();

@@ -216,6 +216,30 @@ class ApiAnita
     }
 
     /**
+     * Detecta respuesta de lectura Informix (UNLOAD) mezclada en una escritura.
+     * Bajo carga el bridge a veces devuelve "N row(s) unloaded." en un INSERT;
+     * no confirma persistencia y reintentar el mismo nro/línea dispara Informix 239.
+     */
+    public static function mensajeRespuestaUnloadEnEscritura(string $respuesta): ?string
+    {
+        $limpia = self::limpiarRespuestaBridgeEscritura($respuesta);
+        if ($limpia === '') {
+            return null;
+        }
+
+        if (preg_match('/\brow\(s\)\s+unloaded\b/i', $limpia) !== 1) {
+            return null;
+        }
+
+        // Si también hay inserted/updated/deleted, priorizar el mensaje de escritura.
+        if (self::extraerFilasAfectadas($limpia) !== null) {
+            return null;
+        }
+
+        return 'Respuesta de lectura (unload) en escritura Anita: '.$limpia;
+    }
+
+    /**
      * Detecta error en la respuesta del bridge (HTTP o legacy).
      * [] es válido: lista sin filas (consulta) o OK ambiguo en insert/update (bridge legacy/HTTP vacío).
      * Para escrituras que deben impactar filas, usar apiCallEscritura(..., exigirFilasAfectadas: true).
@@ -256,6 +280,9 @@ class ApiAnita
         if ($filas === 0) {
             return null;
         }
+
+        // "N row(s) unloaded" lo evalúa el caller de escritura (insert ctamov); en delete
+        // el bridge a veces lo devuelve bajo carga y no debe tumbar la limpieza.
 
         if (strcasecmp($limpia, 'Error') === 0) {
             return 'Error en ejecución SQL Informix (revise el archivo .ret en el servidor Anita)';

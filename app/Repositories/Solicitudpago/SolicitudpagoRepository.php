@@ -218,6 +218,13 @@ class SolicitudpagoRepository implements SolicitudpagoRepositoryInterface
             }
             $sp->update(['estado' => $nuevoEstado]);
             $this->registrarEstadoLocal($sp, $anterior, $nuevoEstado, $leyenda !== '' ? $leyenda : 'Cambio estado');
+            if ($nuevoEstado === SolicitudpagoEstados::PAGADA) {
+                app(\App\Services\Configuracion\ArbolaprobacionService::class)
+                    ->anulaMovimientosArbolPendientesAbiertosSolicitudpago(
+                        (int) $sp->id,
+                        'Sin efecto (solicitud pagada)'
+                    );
+            }
             $sp = $sp->fresh([
                 'empresas', 'proveedores', 'conceptos', 'formapagosol', 'monedas', 'sectores', 'madre',
                 'cuentas.empresas', 'cuentas.cuentacontables', 'cuentas.centrocostos',

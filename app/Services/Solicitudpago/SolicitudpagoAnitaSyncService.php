@@ -21,6 +21,8 @@ use App\Models\Solicitudpago\Solicitudpago_Estado;
 use App\Repositories\Solicitudpago\Concepto_SolicitudpagoRepositoryInterface;
 use App\Repositories\Solicitudpago\FormapagosolRepositoryInterface;
 use App\Repositories\Solicitudpago\Sector_SolicitudpagoRepositoryInterface;
+use App\Models\Configuracion\Arbolaprobacion_Movimiento;
+use App\Services\Configuracion\ArbolaprobacionService;
 use App\Support\Solicitudpago\SolicitudpagoAnitaFechaSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use App\Support\Solicitudpago\SolicitudpagoTratamientos;
@@ -115,13 +117,48 @@ class SolicitudpagoAnitaSyncService
         $madresDesdeCuotas = $this->reconciliarMadresDesdeCuotas();
         $this->sincronizarEstados($api, $sistema, $porCodigo, $mapas);
         $this->sincronizarArchivos($api, $sistema, $porCodigo, $mapas, $idsArchivos);
+        // Anita puede poner PAGADA sin pasar por el árbol ERP: cerrar avisos N4 huérfanos.
+        $arbolCerrados = $this->cierraArbolPendientesDePagadas();
 
         return [
             'cabeceras' => count($cabeceras),
             'creados' => $creados,
             'actualizados' => $actualizados,
             'madres_desde_cuotas' => $madresDesdeCuotas,
+            'arbol_pendientes_cerrados' => $arbolCerrados,
         ];
+    }
+
+    /**
+     * Marca Sin efecto los movimientos de árbol aún Pendiente de SP ya PAGADA.
+     */
+    private function cierraArbolPendientesDePagadas(): int
+    {
+        $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[
+            array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))
+        ]['nombre'];
+
+        $ids = Arbolaprobacion_Movimiento::query()
+            ->whereNotNull('solicitudpago_id')
+            ->where('estado', $nombrePendiente)
+            ->whereNull('fechaproceso')
+            ->whereIn(
+                'solicitudpago_id',
+                Solicitudpago::query()->select('id')->where('estado', SolicitudpagoEstados::PAGADA)
+            )
+            ->distinct()
+            ->pluck('solicitudpago_id')
+            ->all();
+
+        if ($ids === []) {
+            return 0;
+        }
+
+        return app(ArbolaprobacionService::class)
+            ->anulaMovimientosArbolPendientesAbiertosSolicitudpagoIds(
+                $ids,
+                'Sin efecto (solicitud pagada)'
+            );
     }
 
     /**

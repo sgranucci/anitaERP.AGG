@@ -14,6 +14,9 @@
     <strong>{{ implode(', ', $informe['empresa_ids'] ?? []) }}</strong>
     · Tolerancia $
     <strong>{{ number_format((float) ($informe['tolerancia'] ?? 0), 2, ',', '.') }}</strong>
+    · Origen:
+    <strong>solo ERP</strong>
+    (excluye importación Anita)
 </p>
 
 <h3 style="margin:18px 0 6px 0;">Resumen</h3>

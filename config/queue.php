@@ -110,6 +110,8 @@ return [
         'email_throttle_minutos' => (int) env('QUEUE_VERIFICACION_PICO_EMAIL_THROTTLE', 15),
         // Debe ser > ARCA_CAEA_INFORME_JOB_TIMEOUT (1800). Un job CAEA reservado 3–5 min es normal.
         'reserved_stuck_sec' => max(180, (int) env('QUEUE_VERIFICACION_PICO_RESERVED_STUCK_SEC', 2100)),
+        // Fallos en failed_jobs (últimas 24 h) ≥ N → advertencia (evita spam por un SMTP aislado).
+        'failed_24h_warn' => max(1, (int) env('QUEUE_VERIFICACION_PICO_FAILED_24H_WARN', 5)),
     ],
 
 ];

@@ -61,7 +61,7 @@
                 <tr>
                     <td>{{ $oc->numeroordencompra }}</td>
                     <td>{{ $oc->suscripcion_nombre ?: $oc->detalle }}</td>
-                    <td>{{ optional($oc->proveedores)->nombre }}</td>
+                    <td>{{ \App\Support\Compras\SuscripcionSupport::etiquetaProveedor($oc) }}</td>
                     <td>{{ $oc->suscripcion_area }}</td>
                     <td>{{ optional($oc->centrocostos)->codigo }}</td>
                     <td>{{ optional($oc->suscripcion_owners)->nombre }}</td>

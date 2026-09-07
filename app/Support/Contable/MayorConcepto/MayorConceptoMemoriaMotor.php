@@ -517,6 +517,11 @@ class MayorConceptoMemoriaMotor
         return $this->nombreCuenta[$codigo]['nombre'] ?? $this->formatearCodigoCuenta($codigo);
     }
 
+    public function nombreConcepto(int $id): string
+    {
+        return $this->nombreDeConcepto($id);
+    }
+
     private function nombreDeConcepto(int $id): string
     {
         if ($id === 0) {

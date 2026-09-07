@@ -28,6 +28,13 @@ class SolicitudpagoPagoDesdeCajaService
         try {
             $sp = $this->repository->findOrFail($spId);
             if ($sp->estado === SolicitudpagoEstados::PAGADA) {
+                // IE ya pagó / sync Anita: cerrar avisos N4 que hayan quedado Pendiente.
+                app(\App\Services\Configuracion\ArbolaprobacionService::class)
+                    ->anulaMovimientosArbolPendientesAbiertosSolicitudpago(
+                        $spId,
+                        'Sin efecto (solicitud pagada)'
+                    );
+
                 return;
             }
             if ($sp->estado !== SolicitudpagoEstados::AUTORIZADA) {

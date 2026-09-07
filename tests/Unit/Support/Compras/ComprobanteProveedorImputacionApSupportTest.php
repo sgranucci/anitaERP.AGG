@@ -290,6 +290,55 @@ class ComprobanteProveedorImputacionApSupportTest extends TestCase
         $this->assertFalse(ComprobanteProveedorImputacionApSupport::esBorrador('CONTABILIZADO'));
     }
 
+    public function test_tres_patas_cc_debe_coincidir_con_factura(): void
+    {
+        $ok = ComprobanteProveedorImputacionApSupport::evaluarTresPatas(
+            1500.0,
+            1500.0,
+            1500.0,
+            true,
+            true,
+            true,
+            ComprobanteProveedorImputacionApSupport::TOLERANCIA,
+            0.0,
+            0.0,
+            1500.0
+        );
+        $this->assertTrue($ok['ok']);
+        $this->assertSame(0.0, $ok['diff_cc_factura']);
+
+        $desvio = ComprobanteProveedorImputacionApSupport::evaluarTresPatas(
+            1400.0,
+            1500.0,
+            1500.0,
+            true,
+            true,
+            true,
+            ComprobanteProveedorImputacionApSupport::TOLERANCIA,
+            0.0,
+            0.0,
+            1500.0
+        );
+        $this->assertFalse($desvio['ok']);
+        $this->assertContains('CC ≠ factura', $desvio['alertas']);
+        $this->assertContains('CC ≠ asiento', $desvio['alertas']);
+        $this->assertSame(-100.0, $desvio['diff_cc_factura']);
+    }
+
+    public function test_linea_cc_factura_ignora_aplicaciones_y_opp(): void
+    {
+        $this->assertTrue(ComprobanteProveedorImputacionApSupport::esLineaCcFactura(365));
+        $this->assertTrue(ComprobanteProveedorImputacionApSupport::esLineaCcFactura(365, null));
+        $this->assertFalse(ComprobanteProveedorImputacionApSupport::esLineaCcFactura(null));
+        $this->assertFalse(ComprobanteProveedorImputacionApSupport::esLineaCcFactura(0));
+        $this->assertFalse(ComprobanteProveedorImputacionApSupport::esLineaCcFactura(365, 99));
+
+        $deuda = (object) ['comprobante_proveedor_cuota_id' => 10, 'pagoproveedor_id' => null];
+        $opp = (object) ['comprobante_proveedor_cuota_id' => null, 'pagoproveedor_id' => null];
+        $this->assertTrue(ComprobanteProveedorImputacionApSupport::esLineaCcDeudaFactura($deuda));
+        $this->assertFalse(ComprobanteProveedorImputacionApSupport::esLineaCcDeudaFactura($opp));
+    }
+
     /**
      * @return array{mn: array<int, true>, me: array<int, true>, anticipo: array<int, true>}
      */

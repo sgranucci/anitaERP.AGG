@@ -5,15 +5,20 @@ declare(strict_types=1);
 namespace App\Support\Contable\Sicore;
 
 use App\Support\Contable\MayorConcepto\MayorConceptoMonedaConverter;
+use App\Support\Contable\MayorFuenteConsultaSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaProcesador;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 
 /**
- * Saldo de ejercicio (columna P del mayor plano) a fecha_hasta,
- * desde {@see MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD}.
+ * Saldo de ejercicio (columna P del mayor ERP) a fecha_hasta.
  *
- * Una sola corrida del mayor plano por (empresa, fecha_hasta) carga todas las
- * cuentas pedidas en el request (evita N puentes Anita).
+ * Misma criterio que SUSS: lee asientos ERP (col. P / saldo ejerc.).
+ * El rango visible es un solo día (fecha_hasta); el SI acumula desde
+ * {@see MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD}, así el saldo_ejercicio
+ * final es el de la columna P al último movimiento ≤ fecha_hasta.
+ *
+ * Una sola corrida del mayor por (empresa, fecha_hasta) carga todas las
+ * cuentas pedidas en el request.
  */
 final class SicoreSaldoEjercicioSupport
 {
@@ -108,13 +113,15 @@ final class SicoreSaldoEjercicioSupport
         }
 
         sort($faltantes);
-        $desdeYmd = MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD;
         $cuentaDesde = min($faltantes);
         $cuentaHasta = max($faltantes);
 
+        // fecha_desde = fecha_hasta: el SI ya trae el acumulado previo; la col. P
+        // del último movimiento del día es el saldo de ejercicio a conciliar.
+        // Fuente ERP (mismo criterio que SUSS / mayor contable migrado).
         $resultado = $this->procesador->generar(
             [$empresaId],
-            $desdeYmd,
+            $hastaYmd,
             $hastaYmd,
             $cuentaDesde,
             $cuentaHasta,
@@ -124,6 +131,10 @@ final class SicoreSaldoEjercicioSupport
             'sin_cierre_ni_inflacion',
             $this->monedaConverter,
             $faltantes,
+            null,
+            false,
+            false,
+            MayorFuenteConsultaSupport::MODO_ERP,
         );
 
         $encontradas = [];

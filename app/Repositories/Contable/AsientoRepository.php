@@ -206,6 +206,10 @@ class AsientoRepository implements AsientoRepositoryInterface
 
         $this->assertPeriodoContablePermitido($data);
         AsientoBalanceSupport::assertBalanceadoDesdePayload($data, 'asiento (Anita ctamov)');
+        AsientoCtamovRollbackSupport::registrarSiHayTransaccion(
+            (int) ($data['empresa_id'] ?? 0),
+            (string) ($data['numeroasiento'] ?? ''),
+        );
         $this->actualizarAnita($data);
     }
 
@@ -836,17 +840,48 @@ class AsientoRepository implements AsientoRepositoryInterface
 						".$numeroOrdenCompra." ")
       			);
 				if (isset($this->path_sistema))
-					$data['path_sistema'] = $this->path_sistema;	
-        		$respuestaInsert = $apiAnita->apiCallEscritura($data, 'asiento_ctamov_insert');
-				if (! ApiAnita::respuestaBridgeEscrituraExitosa($respuestaInsert)) {
+					$data['path_sistema'] = $this->path_sistema;
+				// apiCall (no apiCallEscritura): bajo carga el bridge a veces responde
+				// "N row(s) unloaded" en un INSERT real; lo validamos leyendo la línea.
+				$respuestaInsert = (string) $apiAnita->apiCall($data);
+				$errInsert = ApiAnita::extraerMensajeError($respuestaInsert === '' ? null : $respuestaInsert);
+				if ($errInsert !== null) {
+					Log::warning('anita_bridge.fallo', [
+						'contexto' => 'asiento_ctamov_insert',
+						'tabla' => $this->tableAnita[0],
+						'acc' => 'insert',
+						'mensaje' => $errInsert,
+					]);
+					throw new \RuntimeException(
+						'Error al grabar en Anita (asiento_ctamov_insert): '.$errInsert
+					);
+				}
+
+				$confirmado = ApiAnita::respuestaBridgeEscrituraExitosa($respuestaInsert);
+				$unload = ApiAnita::mensajeRespuestaUnloadEnEscritura($respuestaInsert);
+				if (! $confirmado || $unload !== null) {
 					$insertsSinConfirmacion++;
 					Log::warning('asiento_ctamov.insert_sin_confirmacion_filas', [
 						'empresa' => $codigoEmpresa,
 						'numeroasiento' => $request['numeroasiento'] ?? null,
 						'nro_linea' => $i_movimiento,
 						'intento' => $intento,
-						'respuesta' => mb_substr(trim((string) $respuestaInsert), 0, 200),
+						'respuesta' => mb_substr(trim($respuestaInsert), 0, 200),
+						'unload' => $unload !== null,
 					]);
+					// Si el bridge mintió y la línea no quedó, abortar el lote para reintentar limpio.
+					if (! $this->ctamovTieneLinea(
+						$codigoEmpresa,
+						(int) $request['numeroasiento'],
+						(int) $i_movimiento
+					)) {
+						throw new \RuntimeException(
+							'Error al grabar en Anita (asiento_ctamov_insert): bridge sin confirmación'
+							.' y la línea '.$i_movimiento.' no quedó en ctamov'
+							.($unload !== null ? ' ('.$unload.')' : '')
+							.'.'
+						);
+					}
 				}
 				$lineasInsertadas++;
 				if ($d_h === 'D') {
@@ -921,16 +956,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 						'inserts_sin_confirmacion' => $insertsSinConfirmacion,
 						'detalle' => $detalle,
 					]);
-					try {
-						$this->eliminarAnita($codigoEmpresa, (string) $request['numeroasiento']);
-					} catch (\Throwable $cleanupEx) {
-						Log::warning('asiento_ctamov.reintento_cleanup_fallo', [
-							'empresa' => $codigoEmpresa,
-							'numeroasiento' => $request['numeroasiento'] ?? null,
-							'error' => $cleanupEx->getMessage(),
-						]);
-					}
-					usleep(300000);
+					$this->eliminarAnitaYVerificarVacio($codigoEmpresa, (string) $request['numeroasiento']);
 
 					return $this->guardarAnita($request, $intento + 1);
 				}
@@ -943,19 +969,45 @@ class AsientoRepository implements AsientoRepositoryInterface
 				throw new \RuntimeException($msg);
 			}
 		} catch (\Throwable $e) {
+			$mensaje = $e->getMessage();
+			$esUnique239 = stripos($mensaje, '239:') !== false
+				|| stripos($mensaje, 'duplicate value') !== false;
+			$esUnloadBridge = stripos($mensaje, 'unload') !== false
+				|| stripos($mensaje, 'bridge sin confirmación') !== false;
+
 			// Sin TX Informix: si falló a mitad, borrar lo ya insertado para no dejar ctamov desbalanceado.
-			if ($lineasInsertadas > 0) {
+			if ($lineasInsertadas > 0 || $esUnique239) {
 				try {
-					$this->eliminarAnita($codigoEmpresa, (string) $request['numeroasiento']);
+					$this->eliminarAnitaYVerificarVacio($codigoEmpresa, (string) $request['numeroasiento']);
 				} catch (\Throwable $cleanupEx) {
 					Log::warning('asiento_ctamov.cleanup_parcial_fallo', [
 						'empresa' => $codigoEmpresa,
 						'numeroasiento' => $request['numeroasiento'] ?? null,
 						'lineas_insertadas' => $lineasInsertadas,
-						'error_original' => $e->getMessage(),
+						'error_original' => $mensaje,
 						'error_cleanup' => $cleanupEx->getMessage(),
 					]);
 				}
+			}
+
+			// UNIQUE / unload: reintentar una vez (opcionalmente con número libre nuevo).
+			if ($intento < $maxIntentos && ($esUnique239 || $esUnloadBridge)) {
+				Log::warning('asiento_ctamov.reintento_tras_unique_o_unload', [
+					'empresa' => $codigoEmpresa,
+					'numeroasiento' => $request['numeroasiento'] ?? null,
+					'intento' => $intento,
+					'unique_239' => $esUnique239,
+					'unload' => $esUnloadBridge,
+					'error' => mb_substr($mensaje, 0, 240),
+				]);
+
+				if ($esUnique239 && ! empty($request['empresa_id'])) {
+					$request = $this->renumerarRequestTrasColisionCtamov($request, $codigoEmpresa);
+				}
+
+				usleep(300000);
+
+				return $this->guardarAnita($request, $intento + 1);
 			}
 
 			throw $e;
@@ -1089,8 +1141,112 @@ class AsientoRepository implements AsientoRepositoryInterface
 				'sistema' => 'contab',
 				'whereArmado' => " WHERE ctav_empresa = '".$empresa."' and ctav_nro_asiento = '".$codigo."' ");
 		if (isset($this->path_sistema))
-			$data['path_sistema'] = $this->path_sistema;	
-        $apiAnita->apiCallEscritura($data);
+			$data['path_sistema'] = $this->path_sistema;
+		// No usar apiCallEscritura: bajo carga el bridge responde "unloaded" y tumbaría la limpieza.
+		$raw = (string) $apiAnita->apiCall($data);
+		$err = ApiAnita::extraerMensajeError($raw === '' ? null : $raw);
+		if ($err !== null && ApiAnita::mensajeRespuestaUnloadEnEscritura($raw) === null) {
+			Log::warning('anita_bridge.fallo', [
+				'contexto' => 'ctamov delete',
+				'tabla' => $this->tableAnita[0],
+				'acc' => 'delete',
+				'mensaje' => $err,
+			]);
+			throw new \RuntimeException('Error al grabar en Anita (ctamov delete): '.$err);
+		}
+	}
+
+	/**
+	 * true si existe la línea ctamov empresa+nro+nro_linea.
+	 */
+	private function ctamovTieneLinea(int|string $codigoEmpresa, int $nroAsiento, int $nroLinea): bool
+	{
+		$apiAnita = new ApiAnita();
+		$data = [
+			'acc' => 'list',
+			'tabla' => $this->tableAnita[0],
+			'sistema' => 'contab',
+			'campos' => 'ctav_nro_linea',
+			'whereArmado' => " WHERE ctav_empresa = '".str_replace("'", "''", (string) $codigoEmpresa)."'"
+				." AND ctav_nro_asiento = '".(int) $nroAsiento."'"
+				." AND ctav_nro_linea = '".(int) $nroLinea."'",
+		];
+		if (isset($this->path_sistema)) {
+			$data['path_sistema'] = $this->path_sistema;
+		}
+		$parsed = ApiAnita::parsearRespuestaLista((string) $apiAnita->apiCall($data));
+		if ($parsed['error_lectura'] !== null) {
+			return false;
+		}
+
+		return count($parsed['filas']) > 0;
+	}
+
+	/**
+	 * Borra ctamov y confirma que no queden líneas (evita 239 al reinsertar).
+	 */
+	private function eliminarAnitaYVerificarVacio(int|string $codigoEmpresa, string $numeroAsiento): void
+	{
+		$numeroAsiento = trim($numeroAsiento);
+		if ($numeroAsiento === '') {
+			return;
+		}
+
+		for ($i = 0; $i < 3; $i++) {
+			$this->eliminarAnita($codigoEmpresa, $numeroAsiento);
+			usleep(150000);
+			if (! $this->ctamovTieneLineas($codigoEmpresa, (int) $numeroAsiento)) {
+				return;
+			}
+			Log::warning('asiento_ctamov.delete_incompleto_reintento', [
+				'empresa' => $codigoEmpresa,
+				'numeroasiento' => $numeroAsiento,
+				'intento_delete' => $i + 1,
+			]);
+		}
+
+		throw new \RuntimeException(
+			'No se pudo limpiar ctamov del asiento '.$numeroAsiento
+			.' (empresa '.$codigoEmpresa.') antes de reintentar.'
+		);
+	}
+
+	/**
+	 * Tras Informix 239: reserva un número libre nuevo y actualiza el asiento ERP si hay id.
+	 *
+	 * @param  array<string, mixed>  $request
+	 * @return array<string, mixed>
+	 */
+	private function renumerarRequestTrasColisionCtamov(array $request, int|string $codigoEmpresa): array
+	{
+		$empresaId = (int) ($request['empresa_id'] ?? 0);
+		$anterior = (string) ($request['numeroasiento'] ?? '');
+		if ($empresaId <= 0) {
+			return $request;
+		}
+
+		$nuevo = AsientoAnitaNumeracionLock::conExclusividad($empresaId, function () use ($empresaId) {
+			return $this->reservarNumeroAsientoAnita($empresaId);
+		});
+
+		$request['numeroasiento'] = $nuevo;
+
+		$asientoId = (int) ($request['id'] ?? 0);
+		if ($asientoId > 0) {
+			$this->model->whereKey($asientoId)->update(['numeroasiento' => $nuevo]);
+		}
+
+		AsientoCtamovRollbackSupport::registrarSiHayTransaccion($empresaId, (string) $nuevo);
+
+		Log::warning('asiento_anita.numeracion.renumero_tras_unique', [
+			'empresa_id' => $empresaId,
+			'codigo_empresa' => $codigoEmpresa,
+			'anterior' => $anterior,
+			'nuevo' => $nuevo,
+			'asiento_id' => $asientoId ?: null,
+		]);
+
+		return $request;
 	}
 
 	// Devuelve ultimo codigo de asientos + 1 para agregar nuevos en Anita

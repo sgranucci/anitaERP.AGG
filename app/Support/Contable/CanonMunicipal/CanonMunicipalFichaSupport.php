@@ -24,7 +24,7 @@ final class CanonMunicipalFichaSupport
 
         /** @var Canon_Municipal_Config|null $config */
         $config = Canon_Municipal_Config::query()
-            ->with('empresa')
+            ->with(['empresa.localidad.provincias', 'empresa.provincia'])
             ->where('empresa_id', $empresaId)
             ->where('activo', true)
             ->first();
@@ -36,7 +36,11 @@ final class CanonMunicipalFichaSupport
         /** @var Empresa|null $empresa */
         $empresa = $config->empresa;
         if ($empresa === null) {
-            $empresa = Empresa::query()->find($empresaId);
+            $empresa = Empresa::query()
+                ->with(['localidad.provincias', 'provincia'])
+                ->find($empresaId);
+        } elseif (! $empresa->relationLoaded('localidad')) {
+            $empresa->load(['localidad.provincias', 'provincia']);
         }
         if ($empresa === null) {
             return null;
@@ -46,12 +50,26 @@ final class CanonMunicipalFichaSupport
         $logoPath = EmpresaLogoArchivo::rutaPngEmpresa($nombre)
             ?? EmpresaLogoArchivo::rutaPngDefault();
 
+        $codigopostal = trim((string) ($empresa->codigopostal ?? ''));
+        $localidad = trim((string) ($empresa->localidad?->nombre ?? ''));
+        $provincia = trim((string) (
+            $empresa->localidad?->provincias?->nombre
+            ?? $empresa->provincia?->nombre
+            ?? ''
+        ));
+        $direccionExtra = trim((string) ($config->direccion_extra ?? ''));
+        if ($direccionExtra === '') {
+            $direccionExtra = self::componerDireccionExtra($codigopostal, $localidad, $provincia);
+        }
+
         return [
             'empresa_id' => $empresaId,
             'nombre' => $nombre,
             'cuit' => trim((string) ($empresa->nroinscripcion ?? '')),
             'domicilio' => trim((string) ($empresa->domicilio ?? '')),
-            'codigopostal' => trim((string) ($empresa->codigopostal ?? '')),
+            'codigopostal' => $codigopostal,
+            'localidad' => $localidad,
+            'provincia' => $provincia,
             'municipio' => trim((string) $config->municipio),
             'legajo' => trim((string) $config->legajo),
             'periodicidad' => (string) $config->periodicidad,
@@ -60,11 +78,30 @@ final class CanonMunicipalFichaSupport
             'firmante_nombre' => trim((string) $config->firmante_nombre),
             'firmante_cargo' => trim((string) $config->firmante_cargo),
             'pie_razon_social' => trim((string) ($config->pie_razon_social ?: $nombre)),
-            'direccion_extra' => trim((string) ($config->direccion_extra ?? '')),
+            'direccion_extra' => $direccionExtra,
             'telefono' => trim((string) ($config->telefono ?? '')),
             'logo_path' => $logoPath,
             'config_id' => (int) $config->id,
         ];
+    }
+
+    /**
+     * Membrete secundario tipo «1870, Avellaneda, Buenos Aires».
+     */
+    public static function componerDireccionExtra(string $codigopostal, string $localidad, string $provincia): string
+    {
+        $partes = [];
+        if ($codigopostal !== '') {
+            $partes[] = $codigopostal;
+        }
+        if ($localidad !== '') {
+            $partes[] = mb_convert_case(mb_strtolower($localidad, 'UTF-8'), MB_CASE_TITLE, 'UTF-8');
+        }
+        if ($provincia !== '') {
+            $partes[] = $provincia;
+        }
+
+        return implode(', ', $partes);
     }
 
     /**

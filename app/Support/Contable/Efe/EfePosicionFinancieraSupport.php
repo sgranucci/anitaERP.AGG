@@ -222,6 +222,7 @@ class EfePosicionFinancieraSupport
                 $this->dias,
             );
         }
+        $premios = $this->asegurarPremiosEnEfectivoVisible($premios, $bingo);
 
         $valormae = $this->indexarValormae($this->bridgeReader->listarValormae($empresaId));
         $rendvalor = $this->bridgeReader->listarRendvalor($fechaDesde, $fechaHasta);
@@ -402,7 +403,7 @@ class EfePosicionFinancieraSupport
             $fechaPorOper,
         );
         $maquinasErp = $this->fuenteErp->maquinasCompletas(
-            $empresaId, $inicioMes, $finMes, $this->dias, $valormae, $apgastoDesc,
+            $empresaId, $inicioMes, $finMes, $this->dias, $valormae, $apgastoDesc, $codigosUsoMaquinas,
         );
         $etiquetasMediosMaquina = $this->etiquetasMediosDeUso(
             $empresaId,
@@ -454,11 +455,15 @@ class EfePosicionFinancieraSupport
         }
         $maquinasMedios = PosicionFinancieraOrdenConceptoSupport::reordenarMapaMedios(
             $empresaId,
-            $this->filtrarMapaPorEtiquetas(
-                $this->fuenteErp->mergePorDia(
-                    $maquinasMediosAnita, $maquinasErp['medios'], $maquinasErp['dias'], $this->dias,
+            $this->asegurarMediosMaquinaVisibles(
+                $this->filtrarMapaPorEtiquetas(
+                    $this->fuenteErp->mergePorDia(
+                        $maquinasMediosAnita, $maquinasErp['medios'], $maquinasErp['dias'], $this->dias,
+                    ),
+                    $etiquetasMediosMaquina,
                 ),
-                $etiquetasMediosMaquina,
+                $valormae,
+                $codigosUsoMaquinas,
             ),
             $valormae,
         );
@@ -1658,6 +1663,80 @@ class EfePosicionFinancieraSupport
                     2,
                 );
             }
+        }
+
+        return $out;
+    }
+
+    /**
+     * Lista todos los medios de máquinas con cuenta operativa aunque el mes
+     * esté en 0 (misma regla que gastro / apgasto). Evita huecos en Rebisco
+     * cuando TotalCoin QR Caja / Depósito QR / Transf. Check MS aún no movieron.
+     *
+     * @param  array<string, array<int, float>>  $medios
+     * @param  array<int, array{desc: string, tipo: string}>  $valormae
+     * @param  array<int, true>  $codigosPermitidos
+     * @return array<string, array<int, float>>
+     */
+    private function asegurarMediosMaquinaVisibles(
+        array $medios,
+        array $valormae,
+        array $codigosPermitidos,
+    ): array {
+        foreach ($codigosPermitidos as $codigo => $_) {
+            if ((int) $codigo === 15) {
+                continue;
+            }
+            $desc = trim((string) ($valormae[(int) $codigo]['desc'] ?? ''));
+            if ($desc === '' || isset($medios[$desc])) {
+                continue;
+            }
+            $medios[$desc] = $this->vectorDias();
+        }
+
+        return $medios;
+    }
+
+    /**
+     * Muestra «Premios en efectivo» en las 3 sedes aunque el mes esté en 0,
+     * para alinear el detalle de bingo. Solo si el período tiene actividad bingo.
+     *
+     * @param  array<string, array<int, float>>  $premios
+     * @param  array<string, array<int, float>>  $bingoBase
+     * @return array<string, array<int, float>>
+     */
+    private function asegurarPremiosEnEfectivoVisible(array $premios, array $bingoBase): array
+    {
+        $etiqueta = 'Premios en efectivo';
+        if (isset($premios[$etiqueta])) {
+            return $premios;
+        }
+
+        $tieneBingo = abs($this->totalVector($bingoBase['VENTA BINGO'] ?? [])) >= 0.01
+            || $premios !== [];
+        if (! $tieneBingo) {
+            return $premios;
+        }
+
+        $out = [];
+        $insertado = false;
+        foreach ($premios as $clave => $porDia) {
+            $claveNorm = mb_strtoupper((string) $clave);
+            if (
+                ! $insertado
+                && (
+                    str_starts_with($claveNorm, 'MUNICIPALIDAD')
+                    || str_starts_with($claveNorm, 'LOTERIA')
+                    || str_starts_with($claveNorm, 'LOTERÍA')
+                )
+            ) {
+                $out[$etiqueta] = $this->vectorDias();
+                $insertado = true;
+            }
+            $out[$clave] = $porDia;
+        }
+        if (! $insertado) {
+            $out[$etiqueta] = $this->vectorDias();
         }
 
         return $out;

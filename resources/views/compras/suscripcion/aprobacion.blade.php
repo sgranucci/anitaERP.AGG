@@ -36,7 +36,7 @@
                         </div>
                         <div class="card-body py-2">
                             <div class="row">
-                                <div class="col-md-3"><small class="text-muted">Proveedor</small><div>{{ optional(optional($oc)->proveedores)->nombre ?? '—' }}</div></div>
+                                <div class="col-md-3"><small class="text-muted">Proveedor</small><div>{{ \App\Support\Compras\SuscripcionSupport::etiquetaProveedor($oc ?? null) ?: '—' }}</div></div>
                                 <div class="col-md-2"><small class="text-muted">Área</small><div>{{ optional($oc)->suscripcion_area ?: '—' }}</div></div>
                                 <div class="col-md-2"><small class="text-muted">CC</small><div>{{ optional(optional($oc)->centrocostos)->codigo }} {{ optional(optional($oc)->centrocostos)->nombre }}</div></div>
                                 <div class="col-md-2"><small class="text-muted">Monto</small><div>{{ $moneda }} {{ number_format((float) optional($oc)->suscripcion_monto_periodo, 2, ',', '.') }} <small>/ {{ strtolower($periodo) }}</small></div></div>

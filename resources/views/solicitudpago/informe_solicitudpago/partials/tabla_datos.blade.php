@@ -9,6 +9,7 @@
 <table class="table table-sm table-bordered table-hover mb-0" id="{{ $paraExport ? 'tabla-export' : 'tabla-paginada' }}">
     <thead>
         <tr>
+            <th>Empresa</th>
             <th>N&uacute;mero</th>
             <th>Fecha</th>
             <th>Vence</th>
@@ -27,7 +28,6 @@
             <th>Estado</th>
             <th>Refer.</th>
             <th>Observaci&oacute;n</th>
-            <th>Empresa</th>
             @if ($incluirConcil)
                 <th class="num">SP Debe</th>
                 <th class="num">SP Haber</th>
@@ -51,6 +51,7 @@
                     : ($esMadre ? 'table-info' : ($esHija ? 'table-light' : ''));
             @endphp
             <tr class="{{ $claseFila }}">
+                <td>{{ $fila->nombreempresa }}</td>
                 <td>
                     @if ($puedeVerSp && ! empty($fila->id))
                         <a class="text-primary font-weight-bold" target="_blank" rel="noopener"
@@ -107,7 +108,6 @@
                     @endif
                 </td>
                 <td>{{ \Illuminate\Support\Str::limit((string) ($fila->observacion ?? ''), 40) }}</td>
-                <td>{{ $fila->nombreempresa }}</td>
                 @if ($incluirConcil)
                     <td class="num">{{ $fila->concil_sp_debe !== null ? number_format((float) $fila->concil_sp_debe, 2, ',', '.') : '' }}</td>
                     <td class="num">{{ $fila->concil_sp_haber !== null ? number_format((float) $fila->concil_sp_haber, 2, ',', '.') : '' }}</td>

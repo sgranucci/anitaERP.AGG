@@ -11,21 +11,23 @@ SUPERVISOR_PROGRAM="anitaERP-queue"
 QUEUE_CONNECTION="${QUEUE_CONNECTION:-}"
 PENDING_WARN="${PENDING_WARN:-5}"
 PENDING_CRITICAL="${PENDING_CRITICAL:-20}"
-FAILED_24H_WARN="${FAILED_24H_WARN:-1}"
+FAILED_24H_WARN="${FAILED_24H_WARN:-}"
 WORKERS_EXPECTED="${WORKERS_EXPECTED:-}"
 RESERVED_STUCK_SEC="${RESERVED_STUCK_SEC:-}"
-if [[ -z "$WORKERS_EXPECTED" || -z "$RESERVED_STUCK_SEC" ]]; then
-    read -r CFG_WORKERS CFG_RESERVED <<< "$(php -r "
+if [[ -z "$WORKERS_EXPECTED" || -z "$RESERVED_STUCK_SEC" || -z "$FAILED_24H_WARN" ]]; then
+    read -r CFG_WORKERS CFG_RESERVED CFG_FAILED <<< "$(php -r "
 require 'vendor/autoload.php';
 \$app = require 'bootstrap/app.php';
 \$app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
-echo (int) config('queue.workers_numprocs', 3).' '.(int) config('queue.verificacion_pico.reserved_stuck_sec', 2100);
-" 2>/dev/null || echo '3 2100')"
+echo (int) config('queue.workers_numprocs', 3).' '.(int) config('queue.verificacion_pico.reserved_stuck_sec', 2100).' '.(int) config('queue.verificacion_pico.failed_24h_warn', 5);
+" 2>/dev/null || echo '3 2100 5')"
     [[ -z "$WORKERS_EXPECTED" ]] && WORKERS_EXPECTED="$CFG_WORKERS"
     [[ -z "$RESERVED_STUCK_SEC" ]] && RESERVED_STUCK_SEC="$CFG_RESERVED"
+    [[ -z "$FAILED_24H_WARN" ]] && FAILED_24H_WARN="$CFG_FAILED"
 fi
 WORKERS_EXPECTED="${WORKERS_EXPECTED:-3}"
 RESERVED_STUCK_SEC="${RESERVED_STUCK_SEC:-2100}"
+FAILED_24H_WARN="${FAILED_24H_WARN:-5}"
 OUTPUT_JSON=false
 STRICT=false
 
@@ -42,7 +44,7 @@ Variables de entorno (umbrales):
   PENDING_WARN=5          Jobs pendientes → advertencia
   PENDING_CRITICAL=20     Jobs pendientes → crítico
   RESERVED_STUCK_SEC=2100 Job reservado más de N seg → crítico (default > timeout CAEA)
-  FAILED_24H_WARN=1       Fallos en 24 h ≥ N → advertencia
+  FAILED_24H_WARN=5       Fallos en 24 h ≥ N → advertencia
   WORKERS_EXPECTED=1      Cantidad de procesos queue:work esperados
 
 Códigos de salida: 0 OK | 1 CRÍTICO | 2 ADVERTENCIA

@@ -830,9 +830,11 @@ class ArbolaprobacionService
             if ((int) $nivel->centrocosto_id !== $centrocostoId) {
                 continue;
             }
-            if ($dual) {
+            // Dual + rama explícita: solo esa rama. Dual + rama null: todos los del CC
+            // (validación previa al resolver / circuito único residual).
+            if ($dual && $rama !== null) {
                 $ramaNivel = ReArbolRamaCatalog::normalizar($nivel->rama ?? null);
-                if ($rama === null || $ramaNivel !== $rama) {
+                if ($ramaNivel !== $rama) {
                     continue;
                 }
             }
@@ -1543,6 +1545,53 @@ class ArbolaprobacionService
                 'estado' => $nombreSinEfecto,
                 'observacion' => $obs,
             ]);
+    }
+
+    /**
+     * Cierra avisos N4 / firmas pendientes cuando la SP ya está PAGADA (IE, manual o sync Anita).
+     *
+     * @return int Filas actualizadas
+     */
+    public function anulaMovimientosArbolPendientesAbiertosSolicitudpago(int $solicitudpagoId, string $observacion = ''): int
+    {
+        if ($solicitudpagoId <= 0) {
+            return 0;
+        }
+
+        return $this->anulaMovimientosArbolPendientesAbiertosSolicitudpagoIds(
+            [$solicitudpagoId],
+            $observacion !== '' ? $observacion : 'Sin efecto (solicitud pagada)'
+        );
+    }
+
+    /**
+     * @param  list<int>  $solicitudpagoIds
+     * @return int Filas actualizadas
+     */
+    public function anulaMovimientosArbolPendientesAbiertosSolicitudpagoIds(array $solicitudpagoIds, string $observacion = ''): int
+    {
+        $ids = array_values(array_unique(array_filter(array_map('intval', $solicitudpagoIds), static fn (int $id) => $id > 0)));
+        if ($ids === []) {
+            return 0;
+        }
+        $nombrePendiente = Arbolaprobacion_Movimiento::$enumEstado[array_search('P', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+        $nombreSinEfecto = Arbolaprobacion_Movimiento::$enumEstado[array_search('X', array_column(Arbolaprobacion_Movimiento::$enumEstado, 'valor'))]['nombre'];
+        $obs = Str::limit(trim($observacion) !== '' ? trim($observacion) : 'Sin efecto (solicitud pagada)', 255, '');
+        $ahora = Carbon::now();
+        $total = 0;
+        foreach (array_chunk($ids, 500) as $chunk) {
+            $total += Arbolaprobacion_Movimiento::query()
+                ->whereIn('solicitudpago_id', $chunk)
+                ->where('estado', $nombrePendiente)
+                ->whereNull('fechaproceso')
+                ->update([
+                    'fechaproceso' => $ahora,
+                    'estado' => $nombreSinEfecto,
+                    'observacion' => $obs,
+                ]);
+        }
+
+        return $total;
     }
 
     private function finalizaOrdenVentaTrasArbolCompleto(int $ordenventa_id, $usuarioHistoriaId): void
@@ -2264,7 +2313,17 @@ class ArbolaprobacionService
         $nivelActual = $this->leeAprobacionComprobante($nombreTipo, $req->id)['nivelactual'];
         $arbol = $trees->first();
         $totalesReq = RequisicionTotalesCabecera::desdeModelo($req, $this->cotizacionQuery);
-        $prox = $this->buscaProximoNivel($arbol, $cc, $nivelActual, $req->fecha, $totalesReq['monto'], $totalesReq['moneda_id']);
+        $resolucionRama = ReArbolTriggerResolver::resolver($arbol, $req, $cc);
+        $circuitoRe = $resolucionRama['rama'] ?? null;
+        $prox = $this->buscaProximoNivel(
+            $arbol,
+            $cc,
+            $nivelActual,
+            $req->fecha,
+            $totalesReq['monto'],
+            $totalesReq['moneda_id'],
+            $circuitoRe
+        );
         $prox = $this->filtrarProximoNivelUsuariosPorEmpresa($prox, (int) $req->empresa_id);
         if ($prox['proximonivel'] === 0) {
             throw new \RuntimeException('El árbol de aprobación no tiene un nivel aplicable para el centro de costo de destino, el monto total y la moneda de la requisición.');

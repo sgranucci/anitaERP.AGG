@@ -93,6 +93,16 @@
         jQuery('#nombreproveedor').val('');
     }
 
+    // Si editan el nombre a mano, deja de apuntar al padrón (queda texto libre).
+    function desvincularPadronSiEditaNombre() {
+        jQuery('#nombreproveedor').on('input', function () {
+            if (jQuery('#proveedor_id').val()) {
+                jQuery('#proveedor_id').val('');
+                jQuery('#codigoproveedor').val('');
+            }
+        });
+    }
+
     if (window.jQuery) {
         jQuery(inpCcId).on('change', refrescarAprobador);
         jQuery(selEmpresa).on('change', function () {
@@ -106,6 +116,7 @@
             limpiarProveedor();
             refrescarAprobador();
         });
+        desvincularPadronSiEditaNombre();
     } else {
         inpCcId.addEventListener('change', refrescarAprobador);
         selEmpresa.addEventListener('change', refrescarAprobador);
@@ -216,21 +227,24 @@
                                 <div class="form-group col-md-6">
                                     <label>Proveedor <span class="text-danger">*</span></label>
                                     <input type="hidden" id="proveedor_id" name="proveedor_id" class="proveedor_id"
-                                           value="{{ $proveedorId ?: '' }}" required>
+                                           value="{{ $proveedorId ?: '' }}">
                                     <div class="d-flex flex-nowrap align-items-center" style="gap:4px;">
                                         <input type="text" class="form-control codigoproveedor" id="codigoproveedor"
                                                name="codigoproveedor" value="{{ $proveedorCodigo }}"
                                                placeholder="Cód." autocomplete="off" style="width:5.5rem;flex-shrink:0;"
-                                               title="Código + Enter; F1 o lupa">
+                                               title="Código + Enter; F1 o lupa (opcional)">
                                         <button type="button" title="Consulta proveedores (F1)"
                                                 class="btn-accion-tabla consultaproveedor tooltipsC flex-shrink-0">
                                             <i class="fa fa-search text-primary"></i>
                                         </button>
                                         <input type="text" class="form-control nombreproveedor" id="nombreproveedor"
                                                name="nombreproveedor" value="{{ $proveedorNombre }}"
-                                               placeholder="Nombre del proveedor" readonly style="min-width:0;flex:1 1 auto;">
+                                               placeholder="Nombre del proveedor" maxlength="180"
+                                               autocomplete="off" style="min-width:0;flex:1 1 auto;" required>
                                     </div>
-                                    <small class="text-muted">Código + Enter · <kbd>F1</kbd> o lupa</small>
+                                    <small class="text-muted">
+                                        Podés buscarlo en el padrón (código / F1) o escribir el nombre a mano si no está dado de alta.
+                                    </small>
                                 </div>
                             </div>
 

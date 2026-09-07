@@ -8,6 +8,7 @@ use App\Models\Configuracion\Empresa;
 use App\Support\Compras\ComprobanteProveedorImputacionApCuentasSupport;
 use App\Support\Compras\ComprobanteProveedorImputacionApCtamovSupport;
 use App\Support\Compras\ComprobanteProveedorImputacionApSupport;
+use App\Support\Compras\ComprobanteProveedorOrigenEntrada;
 use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Log;
@@ -58,6 +59,8 @@ final class ComprobanteProveedorImputacionApDiariaService
             'incluir_opa' => false,
             'incluir_aplicaciones' => false,
             'tolerancia' => $tolerancia,
+            // Solo origen ERP: la importación histórica Anita no pasa por el circuito de asiento ERP.
+            'excluir_origenes' => [ComprobanteProveedorOrigenEntrada::ANITA_IMPORT],
         ];
 
         $generado = $this->reporte->generar($filtros);
@@ -123,7 +126,9 @@ final class ComprobanteProveedorImputacionApDiariaService
             'mail_destino' => null,
             'mail_error' => null,
             'notas' => [
-                'Cada factura compara CC ERP vs haber a proveedores (AP MN + AP ME) del asiento y de ctamov Anita.',
+                'Cada factura compara la CC de la factura (cuotas) vs el importe de la factura, el haber AP del asiento y ctamov Anita.',
+                'No usa el saldo neto de CC: ignora aplicaciones/OPP posteriores; exige existencia e importe de la factura en CC.',
+                'Solo facturas de origen ERP (excluye importación desde Anita).',
                 'Los comprobantes en BORRADOR se listan aparte: todavía no se contabilizaron, no son un desvío de cuadre.',
                 'El debe a anticipo de una factura anticipada no se netea contra la CC; se controla aparte vs ctamov.',
                 'Importes en $ con la cotización de la operación. Haber suma, Debe resta.',
@@ -157,11 +162,25 @@ final class ComprobanteProveedorImputacionApDiariaService
         }
         $compIds = array_values(array_unique($compIds));
 
+        // Solo CC de la factura (cuotas), no aplicaciones/OPP que netean el saldo.
         $ccPorComp = $compIds === []
             ? collect()
             : Proveedor_Cuentacorriente::query()
                 ->whereIn('comprobante_proveedor_id', $compIds)
-                ->get(['comprobante_proveedor_id', 'total', 'moneda_id', 'cotizacion', 'fecha'])
+                ->whereNotNull('comprobante_proveedor_cuota_id')
+                ->where(function ($q) {
+                    $q->whereNull('pagoproveedor_id')->orWhere('pagoproveedor_id', '<=', 0);
+                })
+                ->get([
+                    'comprobante_proveedor_id',
+                    'comprobante_proveedor_cuota_id',
+                    'pagoproveedor_id',
+                    'total',
+                    'moneda_id',
+                    'cotizacion',
+                    'fecha',
+                ])
+                ->filter(static fn ($cc) => ComprobanteProveedorImputacionApSupport::esLineaCcDeudaFactura($cc))
                 ->groupBy('comprobante_proveedor_id');
 
         $empresaIds = array_values(array_unique(array_map(
@@ -228,6 +247,7 @@ final class ComprobanteProveedorImputacionApDiariaService
                 $tolerancia,
                 $asientoAnticipoArs,
                 $ctamovAnticipoArs,
+                isset($fila['esperado_ars']) ? (float) $fila['esperado_ars'] : null,
             );
 
             $fila['cc_ars'] = $ccArs;
@@ -237,6 +257,7 @@ final class ComprobanteProveedorImputacionApDiariaService
             $fila['diff_cc_asiento'] = $eval['diff_cc_asiento'];
             $fila['diff_asiento_ctamov'] = $eval['diff_asiento_ctamov'];
             $fila['diff_cc_ctamov'] = $eval['diff_cc_ctamov'];
+            $fila['diff_cc_factura'] = $eval['diff_cc_factura'];
             $fila['ok'] = $eval['ok'];
             $fila['alertas'] = $eval['alertas'];
             $fila['alertas_texto'] = implode(' · ', $eval['alertas']);

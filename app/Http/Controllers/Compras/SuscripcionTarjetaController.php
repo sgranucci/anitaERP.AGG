@@ -34,7 +34,7 @@ class SuscripcionTarjetaController extends Controller
 
     public function index(Request $request)
     {
-        can('configurar-suscripcion');
+        can('configurar-tarjetas-suscripcion');
 
         $filtros = SuscripcionTarjetaListadoFiltros::resolverDesdeRequest($request);
         $filtrosQuery = SuscripcionTarjetaListadoFiltros::paraQueryString($filtros);
@@ -56,7 +56,7 @@ class SuscripcionTarjetaController extends Controller
      */
     public function exportar(Request $request, string $formato)
     {
-        can('configurar-suscripcion');
+        can('configurar-tarjetas-suscripcion');
 
         ini_set('memory_limit', '-1');
         ini_set('max_execution_time', '0');
@@ -78,7 +78,7 @@ class SuscripcionTarjetaController extends Controller
 
     public function crear(Request $request)
     {
-        can('configurar-suscripcion');
+        can('configurar-tarjetas-suscripcion');
 
         $filtrosQuery = QueryRetornoListado::desdeRequestSiIndex($request, SuscripcionTarjetaListadoFiltros::class);
 
@@ -90,7 +90,7 @@ class SuscripcionTarjetaController extends Controller
 
     public function guardar(Request $request)
     {
-        can('configurar-suscripcion');
+        can('configurar-tarjetas-suscripcion');
 
         $data = $this->validar($request);
         Suscripcion_Tarjeta::query()->create($data);
@@ -102,7 +102,7 @@ class SuscripcionTarjetaController extends Controller
 
     public function editar(Request $request, int $id)
     {
-        can('configurar-suscripcion');
+        can('configurar-tarjetas-suscripcion');
 
         $tarjeta = Suscripcion_Tarjeta::query()
             ->with(['centrocostos', 'responsables', 'cuentacajas'])
@@ -117,7 +117,7 @@ class SuscripcionTarjetaController extends Controller
 
     public function actualizar(Request $request, int $id)
     {
-        can('configurar-suscripcion');
+        can('configurar-tarjetas-suscripcion');
 
         $tarjeta = Suscripcion_Tarjeta::query()->findOrFail($id);
         $tarjeta->update($this->validar($request, $id));
@@ -129,7 +129,7 @@ class SuscripcionTarjetaController extends Controller
 
     public function eliminar(Request $request, int $id)
     {
-        can('configurar-suscripcion');
+        can('configurar-tarjetas-suscripcion');
 
         $enUso = DB::table('ordencompra')->where('suscripcion_tarjeta_id', $id)->exists()
             || DB::table('suscripcion_cargo')->where('suscripcion_tarjeta_id', $id)->exists();

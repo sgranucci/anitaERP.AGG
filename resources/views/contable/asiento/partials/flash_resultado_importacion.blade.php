@@ -43,11 +43,3 @@
         @endif
     </div>
 @endif
-
-@if (session('mensaje-error') || session('mensaje_error') || session('error'))
-    <div class="alert alert-danger alert-dismissible mb-3">
-        <button type="button" class="close" data-dismiss="alert" aria-hidden="true">&times;</button>
-        <h4 class="alert-heading mb-2"><i class="fa fa-times"></i> Error en la importación</h4>
-        <p class="mb-0">{{ session('mensaje-error') ?? session('mensaje_error') ?? session('error') }}</p>
-    </div>
-@endif

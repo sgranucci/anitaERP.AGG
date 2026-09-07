@@ -39,6 +39,29 @@ final class ComprobanteProveedorImputacionApSupport
     }
 
     /**
+     * Línea CC de la factura (deuda/crédito por cuota), no aplicaciones ni OPP
+     * que cancelan el saldo después.
+     */
+    public static function esLineaCcFactura(
+        ?int $comprobanteProveedorCuotaId,
+        ?int $pagoproveedorId = null,
+    ): bool {
+        return (int) ($comprobanteProveedorCuotaId ?? 0) > 0
+            && (int) ($pagoproveedorId ?? 0) <= 0;
+    }
+
+    /**
+     * @param  object{comprobante_proveedor_cuota_id?: mixed, pagoproveedor_id?: mixed}  $lineaCc
+     */
+    public static function esLineaCcDeudaFactura(object $lineaCc): bool
+    {
+        return self::esLineaCcFactura(
+            isset($lineaCc->comprobante_proveedor_cuota_id) ? (int) $lineaCc->comprobante_proveedor_cuota_id : null,
+            isset($lineaCc->pagoproveedor_id) ? (int) $lineaCc->pagoproveedor_id : null,
+        );
+    }
+
+    /**
      * Lleva un importe a pesos. Si falta cotización de ME no corta el listado.
      */
     public static function aPesosTolerante(
@@ -297,7 +320,8 @@ final class ComprobanteProveedorImputacionApSupport
     }
 
     /**
-     * Control diario: CC ERP vs haber AP del asiento vs haber AP de ctamov (Haber−Debe en $).
+     * Control diario: CC de la factura vs haber AP del asiento vs haber AP de ctamov.
+     * Opcionalmente exige que la CC coincida con el importe de la factura (esperado).
      * El anticipo de una factura anticipada se controla aparte (no entra al neto vs CC).
      *
      * @return array{
@@ -305,7 +329,8 @@ final class ComprobanteProveedorImputacionApSupport
      *     alertas: list<string>,
      *     diff_cc_asiento: float,
      *     diff_asiento_ctamov: float,
-     *     diff_cc_ctamov: float
+     *     diff_cc_ctamov: float,
+     *     diff_cc_factura: float|null
      * }
      */
     public static function evaluarTresPatas(
@@ -318,6 +343,7 @@ final class ComprobanteProveedorImputacionApSupport
         float $tolerancia = self::TOLERANCIA,
         float $asientoAnticipoArs = 0.0,
         float $ctamovAnticipoArs = 0.0,
+        ?float $facturaArs = null,
     ): array {
         $alertas = [];
         if (! $tieneCc) {
@@ -330,6 +356,9 @@ final class ComprobanteProveedorImputacionApSupport
             $alertas[] = 'Sin ctamov Anita';
         }
 
+        if ($tieneCc && $facturaArs !== null && self::desvia($ccArs, $facturaArs, $tolerancia)) {
+            $alertas[] = 'CC ≠ factura';
+        }
         if ($tieneCc && $tieneAsiento && self::desvia($asientoArs, $ccArs, $tolerancia)) {
             $alertas[] = 'CC ≠ asiento';
         }
@@ -350,6 +379,7 @@ final class ComprobanteProveedorImputacionApSupport
             'diff_cc_asiento' => round($asientoArs - $ccArs, 2),
             'diff_asiento_ctamov' => round($ctamovArs - $asientoArs, 2),
             'diff_cc_ctamov' => round($ctamovArs - $ccArs, 2),
+            'diff_cc_factura' => $facturaArs === null ? null : round($ccArs - $facturaArs, 2),
         ];
     }
 

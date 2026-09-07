@@ -42,6 +42,7 @@ class SuscripcionListadoFiltros
     /** @var list<string> */
     private const COLUMNAS_COINCIDENCIA_FLEXIBLE = [
         'ordencompra.suscripcion_nombre',
+        'ordencompra.suscripcion_proveedor_nombre',
         'ordencompra.detalle',
         'ordencompra.suscripcion_area',
         'proveedor.nombre',
@@ -299,6 +300,7 @@ class SuscripcionListadoFiltros
     {
         return [
             'ordencompra.suscripcion_nombre',
+            'ordencompra.suscripcion_proveedor_nombre',
             'ordencompra.detalle',
             'ordencompra.numeroordencompra',
             'ordencompra.suscripcion_area',
@@ -338,7 +340,44 @@ class SuscripcionListadoFiltros
             return;
         }
 
+        // Proveedor: padrón o nombre libre de la suscripción.
+        if ($campoKey === 'nombreproveedor') {
+            self::aplicarProveedor($query, $operador, $valor);
+
+            return;
+        }
+
         self::aplicarTexto($query, (string) $def['column'], $operador, $valor);
+    }
+
+    /**
+     * @param  Builder<\App\Models\Compras\Ordencompra>  $query
+     */
+    private static function aplicarProveedor(Builder $query, string $operador, string $valor): void
+    {
+        if ($operador === 'vacio') {
+            $query->where(function ($q) {
+                $q->where(function ($w) {
+                    $w->whereNull('proveedor.nombre')->orWhere('proveedor.nombre', '');
+                })->where(function ($w) {
+                    $w->whereNull('ordencompra.suscripcion_proveedor_nombre')
+                        ->orWhere('ordencompra.suscripcion_proveedor_nombre', '');
+                });
+            });
+
+            return;
+        }
+        if ($valor === '') {
+            return;
+        }
+
+        $query->where(function ($q) use ($operador, $valor) {
+            self::aplicarTexto($q, 'proveedor.nombre', $operador, $valor);
+            // OR el texto libre: reabrir el where interno como orWhere group
+            $q->orWhere(function ($w) use ($operador, $valor) {
+                self::aplicarTexto($w, 'ordencompra.suscripcion_proveedor_nombre', $operador, $valor);
+            });
+        });
     }
 
     /**

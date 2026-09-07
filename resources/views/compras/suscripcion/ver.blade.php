@@ -41,7 +41,7 @@
                     <div class="col-md-6">
                         <table class="table table-sm table-bordered">
                             <tr><th style="width:40%">OC N°</th><td>{{ $oc->numeroordencompra ?: '—' }}</td></tr>
-                            <tr><th>Proveedor</th><td>{{ optional($oc->proveedores)->nombre ?? '—' }}</td></tr>
+                            <tr><th>Proveedor</th><td>{{ \App\Support\Compras\SuscripcionSupport::etiquetaProveedor($oc) ?: '—' }}</td></tr>
                             <tr><th>Empresa</th><td>{{ optional($oc->empresas)->nombre ?? '—' }}</td></tr>
                             <tr><th>Área</th><td>{{ $oc->suscripcion_area ?: '—' }}</td></tr>
                             <tr><th>Centro de costo</th><td>{{ trim((optional($oc->centrocostos)->codigo ?? '').' '.(optional($oc->centrocostos)->nombre ?? '')) }}</td></tr>

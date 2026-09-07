@@ -168,7 +168,7 @@ class Cliente_UifRepository implements Cliente_UifRepositoryInterface
     /**
      * Si fotodocumento está vacío o el archivo no está en disco, busca el DNI
      * en /scan (incl. Kandiko/rebisco) y lo referencia en BD.
-     * Si lo asociado es una DDJJ/NOSIS o un retrato de tesorería copiado, lo descarta.
+     * Si lo asociado es una DDJJ/NOSIS copiada por error, lo descarta.
      */
     private function relinkFotodocumentoDesdeDisco(Cliente_Uif $cliente_uif): void
     {

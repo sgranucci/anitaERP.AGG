@@ -702,7 +702,8 @@ class SolicitudpagoController extends Controller
         }
 
         try {
-            $resultado = $this->ingresoEgresoAnularRevertirService->anularFisicamente((int) $mov->id);
+            // Acceso ya validado por SP; no exigir alcance del ABM de IE (suele ser de otro usuario).
+            $resultado = $this->ingresoEgresoAnularRevertirService->anularFisicamente((int) $mov->id, false);
             if ($request->ajax()) {
                 return response()->json(['mensaje' => 'ok', 'resultado' => $resultado]);
             }
@@ -733,7 +734,8 @@ class SolicitudpagoController extends Controller
         }
 
         try {
-            $resultado = $this->ingresoEgresoAnularRevertirService->revertir((int) $mov->id, $request->input('fecha'));
+            // Acceso ya validado por SP; no exigir alcance del ABM de IE (suele ser de otro usuario).
+            $resultado = $this->ingresoEgresoAnularRevertirService->revertir((int) $mov->id, $request->input('fecha'), false);
             if ($request->ajax()) {
                 return response()->json(['mensaje' => 'ok', 'resultado' => $resultado]);
             }

@@ -62,7 +62,7 @@
 
             <p class="small text-muted px-3 py-2 mb-0 border-top">
                 Total SUSS: suma de retenciones del período consultado (1ra quincena, 2da o mes).
-                Total mayor: saldo acumulado (columna P del mayor plano) al último movimiento de la quincena/mes.
+                Total mayor: saldo acumulado (columna P del mayor ERP) al último movimiento de la quincena/mes.
                 Diferencia: SUSS − mayor. Si |diferencia| ≤ $ {{ number_format((float) ($conciliacion['tolerancia'] ?? 100), 2, ',', '.') }} → OK.
             </p>
         </div>

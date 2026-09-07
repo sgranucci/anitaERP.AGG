@@ -3,6 +3,7 @@
 namespace App\Exports\Solicitudpago;
 
 use App\Support\Configuracion\EmpresaLogoArchivo;
+use App\Support\Export\ExcelFormatoNumero;
 use Illuminate\Contracts\View\View;
 use Maatwebsite\Excel\Concerns\Exportable;
 use Maatwebsite\Excel\Concerns\FromView;
@@ -40,7 +41,7 @@ class SolicitudpagoMaeReporteExport implements FromView, WithColumnFormatting, W
     private string $colUltima = 'O';
 
     /** @var list<string> */
-    private array $columnasImporte = ['K'];
+    private array $columnasImporte = ['L'];
 
     /**
      * @param  list<object|array<string, mixed>>  $filas
@@ -52,6 +53,7 @@ class SolicitudpagoMaeReporteExport implements FromView, WithColumnFormatting, W
         private string $subtitulo = '',
         private bool $muestraCuota = false,
         private bool $incluirConciliacion = false,
+        private bool $esCsv = false,
     ) {
         $this->colUltima = $this->resolverColUltima();
         $this->columnasImporte = $this->resolverColumnasImporte();
@@ -78,22 +80,26 @@ class SolicitudpagoMaeReporteExport implements FromView, WithColumnFormatting, W
             'incluir_conciliacion' => $this->incluirConciliacion,
             'reservarFilaLogoExcel' => $this->hayFilaLogos,
             'colspan' => $this->contarColumnas(),
+            'formatoNumero' => $this->formatoNumeroEfectivo(),
+            'esExcel' => true,
         ]);
     }
 
     public function columnFormats(): array
     {
+        $fmtImporte = ExcelFormatoNumero::codigoColumna($this->formatoNumeroEfectivo(), 2);
+
         $formats = [
-            'A' => NumberFormat::FORMAT_TEXT,
-            'B' => NumberFormat::FORMAT_TEXT,
-            'C' => NumberFormat::FORMAT_TEXT,
-            'H' => NumberFormat::FORMAT_TEXT,
-            'J' => NumberFormat::FORMAT_TEXT,
+            'A' => NumberFormat::FORMAT_TEXT, // Empresa
+            'B' => NumberFormat::FORMAT_TEXT, // Numero
+            'C' => NumberFormat::FORMAT_TEXT, // Fecha
+            'D' => NumberFormat::FORMAT_TEXT, // Vence
+            'I' => NumberFormat::FORMAT_TEXT, // N.Pro.
+            'K' => NumberFormat::FORMAT_TEXT, // Mon
         ];
 
-        // Importes van preformateados AR (1.234.567,89) como texto
         foreach ($this->columnasImporte as $col) {
-            $formats[$col] = NumberFormat::FORMAT_TEXT;
+            $formats[$col] = $fmtImporte;
         }
 
         return $formats;
@@ -121,20 +127,21 @@ class SolicitudpagoMaeReporteExport implements FromView, WithColumnFormatting, W
     {
         // Anchos pensados para montos hasta miles de millones y textos típicos del informe
         $widths = [
-            'A' => 9,   // Numero
-            'B' => 12,  // Fecha
-            'C' => 12,  // Vence
-            'D' => 14,  // Tratamiento
-            'E' => 18,  // Sector
-            'F' => 28,  // Concepto
-            'G' => 16,  // Forma de pago
-            'H' => 9,   // N.Pro.
-            'I' => 26,  // Proveedor
-            'J' => 6,   // Mon
-            'K' => 18,  // Importe
+            'A' => 18,  // Empresa
+            'B' => 9,   // Numero
+            'C' => 12,  // Fecha
+            'D' => 12,  // Vence
+            'E' => 14,  // Tratamiento
+            'F' => 18,  // Sector
+            'G' => 28,  // Concepto
+            'H' => 16,  // Forma de pago
+            'I' => 9,   // N.Pro.
+            'J' => 26,  // Proveedor
+            'K' => 6,   // Mon
+            'L' => 18,  // Importe
         ];
 
-        $col = 'L';
+        $col = 'M';
         if ($this->muestraCuota) {
             $widths[$col] = 16; // Monto cuota
             $col++;
@@ -146,8 +153,6 @@ class SolicitudpagoMaeReporteExport implements FromView, WithColumnFormatting, W
         $widths[$col] = 9; // Refer.
         $col++;
         $widths[$col] = 28; // Observacion
-        $col++;
-        $widths[$col] = 18; // Empresa
         $col++;
         if ($this->incluirConciliacion) {
             foreach (['SP Debe', 'SP Haber', 'Mayor Debe', 'Mayor Haber', 'Diff'] as $_) {
@@ -247,7 +252,8 @@ class SolicitudpagoMaeReporteExport implements FromView, WithColumnFormatting, W
                         ->setHorizontal(Alignment::HORIZONTAL_RIGHT);
                 }
 
-                $sheet->freezePane('A'.$this->filaPrimeraDatosExcel);
+                // Congela Empresa (columna A) al desplazar horizontalmente
+                $sheet->freezePane('B'.$this->filaPrimeraDatosExcel);
             },
         ];
     }
@@ -255,6 +261,13 @@ class SolicitudpagoMaeReporteExport implements FromView, WithColumnFormatting, W
     public function title(): string
     {
         return 'Solicitudes de pago';
+    }
+
+    private function formatoNumeroEfectivo(): string
+    {
+        $global = ExcelFormatoNumero::preferenciaGlobal();
+
+        return $this->esCsv ? ExcelFormatoNumero::paraCsv($global) : $global;
     }
 
     private function contarFilasMetaEncabezado(): int
@@ -291,8 +304,9 @@ class SolicitudpagoMaeReporteExport implements FromView, WithColumnFormatting, W
      */
     private function resolverColumnasImporte(): array
     {
-        $cols = ['K']; // Importe
-        $col = 'L';
+        // Empresa es A; Importe queda en L
+        $cols = ['L'];
+        $col = 'M';
         if ($this->muestraCuota) {
             $cols[] = $col; // Monto cuota
             $col++;
@@ -301,7 +315,6 @@ class SolicitudpagoMaeReporteExport implements FromView, WithColumnFormatting, W
         $col++; // Estado
         $col++; // Refer
         $col++; // Observacion
-        $col++; // Empresa
         if ($this->incluirConciliacion) {
             for ($i = 0; $i < 5; $i++) {
                 $cols[] = $col;

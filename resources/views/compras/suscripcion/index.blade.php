@@ -148,7 +148,7 @@
                             @endphp
                             <tr>
                                 <td><strong>{{ $oc->suscripcion_nombre ?: $oc->detalle }}</strong></td>
-                                <td>{{ optional($oc->proveedores)->nombre ?? '—' }}</td>
+                                <td>{{ \App\Support\Compras\SuscripcionSupport::etiquetaProveedor($oc) ?: '—' }}</td>
                                 <td>{{ $oc->suscripcion_area ?: '—' }}</td>
                                 <td>
                                     <span class="badge badge-light">

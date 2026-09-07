@@ -5,6 +5,7 @@ namespace App\Services\Contable;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Support\Contable\MayorConcepto\MayorConceptoAuditoriaSupport;
 use App\Support\Contable\MayorConcepto\MayorConceptoConciliacionAsientoSupport;
+use App\Support\Contable\MayorConcepto\MayorConceptoErpMotor;
 use App\Support\Contable\MayorConcepto\MayorConceptoLectorHibrido;
 use App\Support\Contable\MayorConcepto\MayorConceptoLectorInterface;
 use App\Support\Contable\MayorConcepto\MayorConceptoMonedaConverter;
@@ -22,8 +23,12 @@ use Illuminate\Support\Facades\DB;
 
 class MayorConceptoReporteService
 {
+    /** Modo de fuente del request actual (auto / erp / anita). */
+    private string $modoFuenteActivo = MayorFuenteConsultaSupport::MODO_AUTO;
+
     public function __construct(
         private readonly MayorConceptoPeriodoProcesador $procesador,
+        private readonly MayorConceptoErpMotor $erpMotor,
         private readonly MayorConceptoMonedaConverter $monedaConverter,
         private readonly EmpresaRepositoryInterface $empresaRepository,
         private readonly MayorConceptoAuditoriaSupport $auditoriaSupport,
@@ -82,7 +87,9 @@ class MayorConceptoReporteService
             ));
         }
 
-        $this->precargarLecturaPeriodoSiCorresponde($empresaIds, $fechaDesde, $fechaHasta, $mes, $anio, $usarMes);
+        if (! $this->usaMotorErpNativo()) {
+            $this->precargarLecturaPeriodoSiCorresponde($empresaIds, $fechaDesde, $fechaHasta, $mes, $anio, $usarMes);
+        }
 
         if (count($empresaIds) === 1) {
             $resultado = $this->generar(
@@ -124,10 +131,16 @@ class MayorConceptoReporteService
         $modo = MayorFuenteConsultaSupport::normalizarModo(
             $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_AUTO
         );
+        $this->modoFuenteActivo = $modo;
         $reader = $this->procesador->bridgeReader();
         if ($reader instanceof MayorConceptoLectorHibrido) {
             $reader->setModoFuente($modo);
         }
+    }
+
+    private function usaMotorErpNativo(): bool
+    {
+        return $this->modoFuenteActivo === MayorFuenteConsultaSupport::MODO_ERP;
     }
 
     /**
@@ -157,6 +170,16 @@ class MayorConceptoReporteService
             $resultado['parametros']['fuente_etiqueta'] = (string) ($tramos['etiqueta'] ?? '');
         } else {
             $resultado['parametros']['fuente_etiqueta'] = $resultado['parametros']['fuente_etiqueta'] ?? '';
+        }
+
+        if (($resultado['parametros']['motor'] ?? '') === 'erp_nativo_v1'
+            || $modo === MayorFuenteConsultaSupport::MODO_ERP
+        ) {
+            $resultado['parametros']['fuente_etiqueta'] = $resultado['parametros']['fuente_etiqueta']
+                !== ''
+                ? $resultado['parametros']['fuente_etiqueta']
+                : 'ERP nativo (MySQL)';
+            $resultado['parametros']['fuente_mayor'] = MayorFuenteConsultaSupport::MODO_ERP;
         }
 
         return $resultado;
@@ -202,6 +225,8 @@ class MayorConceptoReporteService
      */
     public function generarUnaEmpresaDesdeFiltros(array $filtros, int $empresaId): array
     {
+        $this->aplicarFuenteMayorDesdeFiltros($filtros);
+
         $filtrosUna = array_merge($filtros, [
             'empresa_ids' => [$empresaId],
             'empresa_id' => $empresaId,
@@ -210,7 +235,7 @@ class MayorConceptoReporteService
 
         // Precarga batch de TODAS las empresas del filtro original (file cache entre pasos AJAX).
         $todas = MayorConceptoListadoFiltros::empresaIds($filtros);
-        if (count($todas) > 1) {
+        if (count($todas) > 1 && ! $this->usaMotorErpNativo()) {
             $usarMes = ($filtros['modo_periodo'] ?? 'mes') === 'mes';
             $fechaDesde = null;
             $fechaHasta = null;
@@ -1006,10 +1031,24 @@ class MayorConceptoReporteService
 
         [$desde, $hasta] = $this->resolverRangoFechas($fechaDesde, $fechaHasta, $mes, $anio, $usarMesCompleto);
 
+        $desdeYmd = (int) $desde->format('Ymd');
+        $hastaYmd = (int) $hasta->format('Ymd');
+
+        if ($this->usaMotorErpNativo()) {
+            return $this->erpMotor->generar(
+                $empresaId,
+                $desdeYmd,
+                $hastaYmd,
+                $monedaReporteId,
+                $soloMonedaOrigen,
+                $this->monedaConverter,
+            );
+        }
+
         return $this->procesador->generar(
             $empresaId,
-            (int) $desde->format('Ymd'),
-            (int) $hasta->format('Ymd'),
+            $desdeYmd,
+            $hastaYmd,
             $monedaReporteId,
             $soloMonedaOrigen,
             $this->monedaConverter,

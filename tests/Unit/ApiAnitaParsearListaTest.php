@@ -53,4 +53,21 @@ final class ApiAnitaParsearListaTest extends TestCase
         $this->assertFalse(ApiAnita::respuestaBridgeEscrituraExitosa('0 row(s) updated.'));
         $this->assertFalse(ApiAnita::respuestaBridgeEscrituraExitosa('[]'));
     }
+
+    public function test_unload_en_escritura_es_error(): void
+    {
+        $msg = ApiAnita::mensajeRespuestaUnloadEnEscritura('2 row(s) unloaded.');
+        $this->assertNotNull($msg);
+        $this->assertStringContainsString('unload', strtolower((string) $msg));
+
+        $this->assertSame(
+            null,
+            ApiAnita::extraerMensajeError("2 row(s) unloaded.\n")
+        );
+        $this->assertNotNull(ApiAnita::mensajeRespuestaUnloadEnEscritura('2 row(s) unloaded.'));
+
+        // Insert confirmado no se trata como unload.
+        $this->assertNull(ApiAnita::mensajeRespuestaUnloadEnEscritura('1 row(s) inserted.'));
+        $this->assertNull(ApiAnita::extraerMensajeError('1 row(s) inserted.'));
+    }
 }

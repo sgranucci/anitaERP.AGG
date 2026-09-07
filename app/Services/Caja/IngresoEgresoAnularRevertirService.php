@@ -37,12 +37,15 @@ class IngresoEgresoAnularRevertirService
     ) {}
 
     /**
+     * @param  bool  $verificarVisibilidadIe  false = ya validó acceso por SP (permiso revertir/anular pago)
      * @return array{mensaje: string, caja_movimiento_id: int}
      */
-    public function anularFisicamente(int $id): array
+    public function anularFisicamente(int $id, bool $verificarVisibilidadIe = true): array
     {
         $movimiento = $this->cargarMovimiento($id);
-        $this->assertAccesible($movimiento);
+        if ($verificarVisibilidadIe) {
+            $this->assertAccesible($movimiento);
+        }
         $this->assertNoEsCompensatorio($movimiento);
         if ((int) ($movimiento->caja_movimiento_revertido_por_id ?? 0) > 0) {
             throw new RuntimeException('El movimiento ya fue revertido; no se puede anular físicamente.');
@@ -86,12 +89,15 @@ class IngresoEgresoAnularRevertirService
     }
 
     /**
+     * @param  bool  $verificarVisibilidadIe  false = ya validó acceso por SP (permiso revertir/anular pago)
      * @return array{mensaje: string, caja_movimiento_id: int, caja_movimiento_reverso_id: int, numerotransaccion: string|int, asiento_id?: int}
      */
-    public function revertir(int $id, ?string $fecha = null): array
+    public function revertir(int $id, ?string $fecha = null, bool $verificarVisibilidadIe = true): array
     {
         $movimiento = $this->cargarMovimiento($id);
-        $this->assertAccesible($movimiento);
+        if ($verificarVisibilidadIe) {
+            $this->assertAccesible($movimiento);
+        }
         $this->assertNoEsCompensatorio($movimiento);
         if ((int) ($movimiento->caja_movimiento_revertido_por_id ?? 0) > 0) {
             throw new RuntimeException('El movimiento ya fue revertido.');

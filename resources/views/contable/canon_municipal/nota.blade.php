@@ -46,13 +46,9 @@
         5 => 'mayo', 6 => 'junio', 7 => 'julio', 8 => 'agosto',
         9 => 'septiembre', 10 => 'octubre', 11 => 'noviembre', 12 => 'diciembre',
     ];
-    $mesDesde = (int) date('n', strtotime($desde));
-    $anioDesde = (int) date('Y', strtotime($desde));
-    $diaDesde = date('d', strtotime($desde));
-    $diaHasta = date('d', strtotime($hasta));
-    $mesTxt = $mesNombre[$mesDesde] ?? '';
 
     $etiquetaQuincena = CanonMunicipalCalendarioSupport::etiquetaQuincena($desde, $hasta);
+    $textoRango = CanonMunicipalCalendarioSupport::textoRangoPeriodo($desde, $hasta, $plantilla);
 @endphp
 <!DOCTYPE html>
 <html lang="es">
@@ -70,8 +66,8 @@
         }
         .encabezado { width: 100%; margin-bottom: 14px; }
         .encabezado td { vertical-align: top; border: none; }
-        .municipio-fecha { margin: 18px 0 14px; }
-        .cuerpo { text-align: justify; margin: 12px 0 18px; }
+        .municipio-fecha { margin: 18px 0 14px; text-align: right; }
+        .cuerpo { text-align: justify; margin: 12px 0 18px; text-indent: 2.5em; }
         table.nota {
             width: 100%;
             border-collapse: collapse;
@@ -147,6 +143,9 @@
                     @if ($direccionExtra !== '')
                         <div>{{ $direccionExtra }}</div>
                     @endif
+                    @if ($telefono !== '')
+                        <div>Tel/Fax :{{ $telefono }}</div>
+                    @endif
                 </td>
             </tr>
         </table>
@@ -167,15 +166,15 @@
     <div class="cuerpo">
         @if ($plantilla === 'rebisco')
             A través de la presente, adjuntamos el detalle de la {{ $etiquetaQuincena }} quincena del
-            {{ $diaDesde }} A {{ $diaHasta }} de {{ $mesTxt }} de {{ $anioDesde }}, con la respectiva liquidación.
+            {{ $textoRango }}, con la respectiva liquidación.
         @elseif ($plantilla === 'kandiko')
             A través de la presente, adjuntamos el detalle de la recaudación de la Sala de Bingo de la
-            firma {{ $pie }} – Cuit: {{ $cuit }} Legajo {{ $legajo }} desde {{ $diaDesde }} al {{ $diaHasta }}
-            de {{ ucfirst($mesTxt) }} de {{ $anioDesde }}, con la respectiva liquidación.
+            firma {{ $pie }} – Cuit: {{ $cuit }} Legajo {{ $legajo }} desde {{ $textoRango }},
+            con la respectiva liquidación.
         @else
             A través de la presente, adjuntamos el detalle de la recaudación de la Sala de Bingo de
             {{ $pie }} con Cuit n° {{ $cuit }} Legajo Municipal N°{{ $legajo }}
-            {{ $diaDesde }} al {{ $diaHasta }} de {{ $mesTxt }} de {{ $anioDesde }}, con la respectiva liquidación.
+            {{ $textoRango }}, con la respectiva liquidación.
         @endif
     </div>
 

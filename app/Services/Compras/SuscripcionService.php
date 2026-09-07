@@ -183,6 +183,11 @@ class SuscripcionService
         }
         $data = $v->validated();
 
+        $proveedorResuelto = $this->resolverProveedorAlta($request, $data);
+        if ($proveedorResuelto['error'] !== null) {
+            return ['mensaje' => 'error', 'errores' => $proveedorResuelto['error']];
+        }
+
         try {
             $this->validarCuentaEmpresa(
                 (int) $data['contrato_cuentacontable_id'],
@@ -217,13 +222,16 @@ class SuscripcionService
         if (! empty($data['suscripcion_solicitante'])) {
             $comentarioParts[] = 'Solicita: '.$data['suscripcion_solicitante'];
         }
+        if ($proveedorResuelto['proveedor_id'] === null && $proveedorResuelto['nombre'] !== '') {
+            $comentarioParts[] = 'Proveedor: '.$proveedorResuelto['nombre'];
+        }
 
         $cab = [
             'fecha' => $hoy,
             'fechaentrega' => $renovacion,
             'empresa_id' => (int) $data['empresa_id'],
             'centrocosto_id' => (int) $data['centrocosto_id'],
-            'proveedor_id' => (int) $data['proveedor_id'],
+            'proveedor_id' => $proveedorResuelto['proveedor_id'],
             'detalle' => $nombre,
             'comentario' => implode(' · ', $comentarioParts),
             'tratamiento' => 'NO ANTICIPADA',
@@ -248,6 +256,7 @@ class SuscripcionService
             'contrato_cuentacontable_id' => (int) $data['contrato_cuentacontable_id'],
             'es_suscripcion' => true,
             'suscripcion_nombre' => $nombre,
+            'suscripcion_proveedor_nombre' => $proveedorResuelto['nombre'],
             'suscripcion_periodicidad' => $periodicidad,
             'suscripcion_monto_periodo' => $monto,
             'suscripcion_tolerancia_pct' => $tol,
@@ -519,7 +528,8 @@ class SuscripcionService
     {
         return [
             'suscripcion_nombre' => 'required|string|max:180',
-            'proveedor_id' => 'required|integer|exists:proveedor,id',
+            'proveedor_id' => 'nullable|integer|exists:proveedor,id',
+            'nombreproveedor' => 'nullable|string|max:180',
             'empresa_id' => 'required|integer|exists:empresa,id',
             'centrocosto_id' => 'required|integer|exists:centrocosto,id',
             'contrato_cuentacontable_id' => 'required|integer|exists:cuentacontable,id',
@@ -536,6 +546,44 @@ class SuscripcionService
             'contrato_auto_renovable' => 'nullable|boolean',
             'contrato_dias_preaviso' => 'nullable|integer|min:0|max:365',
             'contrato_responsable_id' => 'nullable|integer|exists:usuario,id',
+        ];
+    }
+
+    /**
+     * Padrón (proveedor_id) o texto libre (nombreproveedor). Al menos uno.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{proveedor_id: ?int, nombre: string, error: ?string}
+     */
+    private function resolverProveedorAlta(Request $request, array $data): array
+    {
+        $proveedorId = (int) ($data['proveedor_id'] ?? $request->input('proveedor_id', 0));
+        $nombreLibre = trim((string) ($data['nombreproveedor'] ?? $request->input('nombreproveedor', '')));
+
+        if ($proveedorId > 0) {
+            $nombrePadron = trim((string) (
+                DB::table('proveedor')->where('id', $proveedorId)->value('nombre') ?? ''
+            ));
+
+            return [
+                'proveedor_id' => $proveedorId,
+                'nombre' => $nombrePadron !== '' ? $nombrePadron : $nombreLibre,
+                'error' => null,
+            ];
+        }
+
+        if ($nombreLibre === '') {
+            return [
+                'proveedor_id' => null,
+                'nombre' => '',
+                'error' => 'Indicá un proveedor del padrón o escribí el nombre a mano.',
+            ];
+        }
+
+        return [
+            'proveedor_id' => null,
+            'nombre' => mb_substr($nombreLibre, 0, 180),
+            'error' => null,
         ];
     }
 

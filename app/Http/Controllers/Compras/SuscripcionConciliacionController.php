@@ -10,6 +10,7 @@ use App\Models\Compras\Suscripcion_Conciliacion;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Compras\SuscripcionConciliacionService;
 use App\Services\Compras\SuscripcionImputacionService;
+use App\Support\Compras\SuscripcionSupport;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Maatwebsite\Excel\Excel;
@@ -290,7 +291,7 @@ class SuscripcionConciliacionController extends Controller
             fn (array $s) => [
                 'id' => (int) $s['ordencompra']->id,
                 'nombre' => (string) $s['ordencompra']->suscripcion_nombre,
-                'proveedor' => (string) optional($s['ordencompra']->proveedores)->nombre,
+                'proveedor' => SuscripcionSupport::etiquetaProveedor($s['ordencompra']),
                 'numero_oc' => (string) $s['ordencompra']->numeroordencompra,
                 'monto' => (float) $s['ordencompra']->suscripcion_monto_periodo,
                 'puntaje' => $s['puntaje'],

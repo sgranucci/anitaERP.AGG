@@ -191,7 +191,7 @@
                                             <a href="{{ route('ver_suscripcion', $cargo->ordencompra_id) }}">
                                                 {{ $cargo->ordencompras->suscripcion_nombre }}
                                             </a>
-                                            <small class="text-muted d-block">{{ optional($cargo->ordencompras->proveedores)->nombre }}</small>
+                                            <small class="text-muted d-block">{{ \App\Support\Compras\SuscripcionSupport::etiquetaProveedor($cargo->ordencompras) }}</small>
                                         @else
                                             <span class="text-muted">—</span>
                                         @endif

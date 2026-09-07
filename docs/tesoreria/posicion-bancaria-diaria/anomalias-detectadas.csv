@@ -1,0 +1,4 @@
+celda_resumen,fila_saldos,detalle
+C23,84,POSIBLE ERROR: bloque Resumen USD apunta a moneda EUR (3) EUROS)
+C23,84,BUG: Kandiko Provincia USD apunta a fila 84 (Frances EUR). Esperado ~89 Provincia USD.
+D23,135,BUG: Rebisco Provincia USD apunta a fila 135 (Macro tránsito USD). Esperado ~153 Provincia USD.

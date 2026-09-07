@@ -24,7 +24,7 @@ class SuscripcionAprobadorController extends Controller
 
     public function index(Request $request)
     {
-        can('configurar-suscripcion');
+        can('configurar-aprobadores-suscripcion');
 
         $empresaId = (int) $request->input('empresa_id');
         $filas = $this->aprobadorService->listar($empresaId ?: null);
@@ -47,7 +47,7 @@ class SuscripcionAprobadorController extends Controller
      */
     public function exportar(Request $request, string $formato)
     {
-        can('configurar-suscripcion');
+        can('configurar-aprobadores-suscripcion');
 
         $filtros = $this->filtrosRetorno($request);
         $empresaId = (int) ($filtros['empresa_id'] ?? 0);
@@ -66,7 +66,7 @@ class SuscripcionAprobadorController extends Controller
 
     public function crear(Request $request)
     {
-        can('configurar-suscripcion');
+        can('configurar-aprobadores-suscripcion');
 
         $empresaQuery = $this->empresaRepository->allFiltrado();
         $filtrosQuery = $this->filtrosRetorno($request);
@@ -83,7 +83,7 @@ class SuscripcionAprobadorController extends Controller
 
     public function guardar(Request $request)
     {
-        can('configurar-suscripcion');
+        can('configurar-aprobadores-suscripcion');
 
         $data = $this->validar($request);
 
@@ -104,7 +104,7 @@ class SuscripcionAprobadorController extends Controller
 
     public function editar(Request $request, int $id)
     {
-        can('configurar-suscripcion');
+        can('configurar-aprobadores-suscripcion');
 
         $nivel = $this->aprobadorService->findNivel($id);
 
@@ -118,7 +118,7 @@ class SuscripcionAprobadorController extends Controller
 
     public function actualizar(Request $request, int $id)
     {
-        can('configurar-suscripcion');
+        can('configurar-aprobadores-suscripcion');
 
         $data = $this->validar($request, $id);
         $nivel = $this->aprobadorService->findNivel($id);
@@ -140,7 +140,7 @@ class SuscripcionAprobadorController extends Controller
 
     public function eliminar(Request $request, int $id)
     {
-        can('configurar-suscripcion');
+        can('configurar-aprobadores-suscripcion');
 
         $this->aprobadorService->findNivel($id);
         $filtrosQuery = $this->filtrosRetorno($request);

@@ -146,6 +146,7 @@ class SolicitudpagoMaeReporteController extends Controller
                     $subtitulo,
                     $muestraCuota,
                     $incluirConcil,
+                    true,
                 ))->download('informe_solicitudpago.csv', \Maatwebsite\Excel\Excel::CSV);
         }
 

@@ -35,7 +35,7 @@
                 <h3 class="card-title">Aprobadores de suscripciones</h3>
                 <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
                     @include('includes.compras.boton-manual-suscripciones')
-                    @if (can('configurar-suscripcion', false))
+                    @if (can('configurar-aprobadores-suscripcion', false))
                         <a href="{{ route('crear_aprobador_suscripcion', $retornoListadoQuery) }}" class="btn btn-primary btn-sm ml-1">
                             <i class="fa fa-plus"></i> Nuevo registro
                         </a>
@@ -94,7 +94,7 @@
                                     @endif
                                 </td>
                                 <td class="text-nowrap">
-                                    @if (can('configurar-suscripcion', false))
+                                    @if (can('configurar-aprobadores-suscripcion', false))
                                         <a href="{{ route('editar_aprobador_suscripcion', ['id' => $fila['id']] + $retornoListadoQuery) }}"
                                            class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                             <i class="fa fa-edit"></i>
@@ -114,7 +114,7 @@
                             <tr>
                                 <td colspan="6" class="text-center text-muted py-4">
                                     No hay aprobadores cargados.
-                                    @if (can('configurar-suscripcion', false))
+                                    @if (can('configurar-aprobadores-suscripcion', false))
                                         <a href="{{ route('crear_aprobador_suscripcion', $retornoListadoQuery) }}">Crear el primero</a>
                                     @endif
                                 </td>

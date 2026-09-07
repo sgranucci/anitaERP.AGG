@@ -136,6 +136,17 @@ class EfePosicionFinancieraFuenteErpSupport
             }
         }
 
+        // Alinear sedes: fila fija aunque el mes esté en 0 (concepto PREMEFEC).
+        foreach ($conceptos as $concepto) {
+            if (mb_strtoupper(trim((string) ($concepto->codigo ?? ''))) !== 'PREMEFEC') {
+                continue;
+            }
+            $desc = trim((string) ($concepto->detalle ?? ''));
+            if ($desc !== '' && ! isset($premios[$desc])) {
+                $premios[$desc] = $this->vector($diasMes);
+            }
+        }
+
         // Canones Municipalidad/Lotería: no viven en conceptos_json de sala; se
         // calculan como en el asiento de cierre (% sobre VENTA BINGO del día).
         $this->aplicarCanonesPagoBingo($base, $premios, $dias, $diasMes);
@@ -174,9 +185,13 @@ class EfePosicionFinancieraFuenteErpSupport
     /**
      * Días con cierre C de máquinas en ERP (paridad Anita post-2010).
      *
+     * Medios: como apgasto / gastro, se listan todos los conceptos operativos
+     * aunque el mes esté en cero (p. ej. TotalCoin QR Caja en Rebisco).
+     *
      * @param  list<int>  $diasMes
      * @param  array<int, array{desc: string, tipo: string}>  $valormae
      * @param  array<int, string>  $apgastoDesc
+     * @param  array<int, true>  $codigosMediosPermitidos  códigos valormae con cuenta de uso máquinas
      * @return array{
      *   base: array<string, array<int, float>>,
      *   medios: array<string, array<int, float>>,
@@ -191,6 +206,7 @@ class EfePosicionFinancieraFuenteErpSupport
         array $diasMes,
         array $valormae,
         array $apgastoDesc,
+        array $codigosMediosPermitidos = [],
     ): array {
         $base = [
             'MAQUINAS VENTAS' => $this->vector($diasMes),
@@ -203,6 +219,16 @@ class EfePosicionFinancieraFuenteErpSupport
             'Pago 24' => $this->vector($diasMes),
         ];
         $medios = [];
+        foreach ($codigosMediosPermitidos as $codigo => $_) {
+            if ((int) $codigo === 15) {
+                continue;
+            }
+            $desc = trim((string) ($valormae[(int) $codigo]['desc'] ?? ''));
+            if ($desc === '' || isset($medios[$desc])) {
+                continue;
+            }
+            $medios[$desc] = $this->vector($diasMes);
+        }
         $gastos = [];
         foreach ($apgastoDesc as $desc) {
             $gastos[$desc] = $this->vector($diasMes);
@@ -278,7 +304,11 @@ class EfePosicionFinancieraFuenteErpSupport
                 }
                 // En ERP el monto de rendicion_maquina_valor ya está en pesos
                 // (la cotización es referencia). No volver a multiplicar.
-                $this->sumar($medios, $desc, $dia, (float) $valor->monto, $diasMes);
+                $monto = (float) $valor->monto;
+                if (abs($monto) < 0.0001) {
+                    continue;
+                }
+                $this->sumar($medios, $desc, $dia, $monto, $diasMes);
             }
 
             foreach ($rendicion->gastos as $gasto) {
@@ -749,7 +779,11 @@ class EfePosicionFinancieraFuenteErpSupport
      */
     private function codigoValormaePorHeuristicaCuenta(Cuentacaja $cuenta, array $valormae): ?int
     {
-        $texto = mb_strtoupper(trim((string) $cuenta->nombre).' '.trim((string) $cuenta->codigo));
+        $texto = mb_strtoupper(trim(implode(' ', [
+            (string) $cuenta->nombre,
+            (string) $cuenta->descripcion_operaciones,
+            (string) $cuenta->codigo,
+        ])));
         $textoNorm = preg_replace('/\s+/', ' ', $texto) ?? $texto;
 
         $candidatos = [];
@@ -764,7 +798,7 @@ class EfePosicionFinancieraFuenteErpSupport
         } elseif (str_contains($textoNorm, 'DEPOSITO') && str_contains($textoNorm, 'QR')) {
             $candidatos = ['DEPOSITO EFECTIVO PAGO QR'];
         } elseif (str_contains($textoNorm, 'CRIPTO') || str_contains($textoNorm, 'USDT') || str_contains($textoNorm, 'SATOSHI')) {
-            $candidatos = ['EFECTIVO CRIPTO', 'CRIPTO USDT'];
+            $candidatos = ['EFECTIVO CRIPTO', 'CRIPTO USDT', 'EFECTIVO CRIPTO USDT'];
         } elseif (str_contains($textoNorm, 'DOLAR') || str_contains($textoNorm, 'DÓLAR')) {
             $candidatos = ['EFECTIVO DOLARES', 'EFECTIVO DÓLARES'];
         } elseif (str_contains($textoNorm, 'EURO')) {
@@ -792,48 +826,59 @@ class EfePosicionFinancieraFuenteErpSupport
             }
         }
 
-        // Contiene mutuo normalizado (último recurso).
-        foreach ($valormae as $codigo => $meta) {
-            $desc = mb_strtoupper(trim((string) ($meta['desc'] ?? '')));
-            if ($desc === '') {
-                continue;
-            }
-            $descCompact = str_replace(['.', ' '], '', $desc);
-            $textoCompact = str_replace(['.', ' '], '', $textoNorm);
-            if ($descCompact !== '' && (
-                str_contains($textoCompact, $descCompact)
-                || str_contains($descCompact, $textoCompact)
-                || str_contains($textoNorm, $desc)
-                || str_contains($desc, $textoNorm)
-            )) {
-                return (int) $codigo;
-            }
-        }
-
-        return null;
+        return $this->buscarCodigoValormaePorDesc($textoNorm, $valormae);
     }
 
     /**
+     * Busca código valormae por descripción.
+     *
+     * Primero exacto; después parcial. No permite que etiquetas cortas
+     * (p.ej. «QR») coincidan dentro de «DEPOSITO EFECTIVO PAGO QR».
+     *
      * @param  array<int, array{desc: string, tipo: string}>  $valormae
      */
     private function buscarCodigoValormaePorDesc(string $needleUpper, array $valormae): ?int
     {
         $needle = mb_strtoupper(trim($needleUpper));
         $needleCompact = str_replace(['.', ' '], '', $needle);
+        if ($needleCompact === '') {
+            return null;
+        }
+
+        $parcial = null;
+        $parcialLen = -1;
         foreach ($valormae as $codigo => $meta) {
             $desc = mb_strtoupper(trim((string) ($meta['desc'] ?? '')));
             $descCompact = str_replace(['.', ' '], '', $desc);
+            if ($descCompact === '') {
+                continue;
+            }
             if ($desc === $needle || $descCompact === $needleCompact) {
                 return (int) $codigo;
             }
-            if ($needleCompact !== '' && (
-                str_contains($descCompact, $needleCompact) || str_contains($needleCompact, $descCompact)
-            )) {
-                return (int) $codigo;
+
+            $lenNeedle = mb_strlen($needleCompact);
+            $lenDesc = mb_strlen($descCompact);
+            $minLen = min($lenNeedle, $lenDesc);
+            $maxLen = max($lenNeedle, $lenDesc);
+            // Etiquetas cortas (QR, MEP…) solo por igualdad exacta.
+            if ($minLen < 6 && $minLen !== $maxLen) {
+                continue;
+            }
+            if (
+                ! str_contains($descCompact, $needleCompact)
+                && ! str_contains($needleCompact, $descCompact)
+            ) {
+                continue;
+            }
+            // Entre parciales, preferir la descripción más específica (más larga).
+            if ($lenDesc > $parcialLen) {
+                $parcial = (int) $codigo;
+                $parcialLen = $lenDesc;
             }
         }
 
-        return null;
+        return $parcial;
     }
 
     /**

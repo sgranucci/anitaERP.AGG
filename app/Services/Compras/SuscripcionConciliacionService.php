@@ -569,7 +569,10 @@ class SuscripcionConciliacionService
         }
 
         $porServicio = SuscripcionComercioSupport::similitud($comercio, (string) $oc->suscripcion_nombre);
-        $porProveedor = SuscripcionComercioSupport::similitud($comercio, (string) optional($oc->proveedores)->nombre);
+        $porProveedor = SuscripcionComercioSupport::similitud(
+            $comercio,
+            SuscripcionSupport::etiquetaProveedor($oc)
+        );
         $texto = max($porServicio, $porProveedor);
         if ($texto <= 0) {
             return 0.0;

@@ -160,6 +160,17 @@ class ComprobanteProveedorImputacionApReporteService
         $this->aplicarEmpresaYProveedor($query, $filtros, 'empresa_id', 'proveedor_id');
         $this->aplicarFechaContableComprobante($query, $filtros);
 
+        $excluirOrigenes = array_values(array_filter(array_map(
+            'strval',
+            (array) ($filtros['excluir_origenes'] ?? [])
+        ), static fn (string $o) => $o !== ''));
+        if ($excluirOrigenes !== []) {
+            $query->where(function ($q) use ($excluirOrigenes) {
+                $q->whereNull('origen_entrada')
+                    ->orWhereNotIn('origen_entrada', $excluirOrigenes);
+            });
+        }
+
         $comprobantes = $query->orderBy('id')->get();
         $asientos = $this->cargarAsientos(
             $comprobantes->pluck('asiento_id')->filter(fn ($id) => (int) $id > 0)->map(fn ($id) => (int) $id)->unique()->values()->all()

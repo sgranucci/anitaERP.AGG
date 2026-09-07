@@ -55,6 +55,23 @@ final class SuscripcionSupport
         ];
     }
 
+    /**
+     * Nombre a mostrar: padrón si hay FK, si no el texto libre del alta.
+     */
+    public static function etiquetaProveedor(?Ordencompra $oc): string
+    {
+        if (! $oc) {
+            return '';
+        }
+
+        $delPadron = trim((string) (optional($oc->proveedores)->nombre ?? ''));
+        if ($delPadron !== '') {
+            return $delPadron;
+        }
+
+        return trim((string) ($oc->suscripcion_proveedor_nombre ?? ''));
+    }
+
     /** @return list<string> */
     public static function periodicidades(): array
     {

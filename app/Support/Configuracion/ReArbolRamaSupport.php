@@ -5,6 +5,7 @@ namespace App\Support\Configuracion;
 use App\Models\Compras\Requisicion;
 use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Configuracion\Arbolaprobacion_CuentaExcepcion;
+use App\Models\Contable\Cuentacontable;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -72,21 +73,25 @@ class ReArbolRamaSupport
     }
 
     /**
-     * Cuentas contables de las líneas válidas de la requisición (vía partidagasto).
-     * Líneas sin partida/cuenta quedan como 0 (fuerzan rama B).
+     * Cuentas contables de las líneas válidas (RE).
+     * Fuente: cuenta de compra del artículo. Si no hay, partidagasto.
+     * Sin ninguna queda 0 (fuera de allowlist / Rama B).
      *
      * @return list<int>
      */
     public static function cuentacontableIdsDesdeRequisicion(Requisicion $requisicion): array
     {
-        $requisicion->loadMissing(['requisicion_articulos.partidagastos']);
+        $requisicion->loadMissing(['requisicion_articulos.partidagastos', 'requisicion_articulos.articulos']);
 
         $ids = [];
         foreach ($requisicion->requisicion_articulos as $linea) {
             if (empty($linea->articulo_id) || (float) ($linea->cantidad ?? 0) <= 0) {
                 continue;
             }
-            $cuentaId = (int) (optional($linea->partidagastos)->cuentacontable_id ?? 0);
+            $cuentaId = (int) (optional($linea->articulos)->cuentacontablecompra_id ?? 0);
+            if ($cuentaId <= 0) {
+                $cuentaId = (int) (optional($linea->partidagastos)->cuentacontable_id ?? 0);
+            }
             $ids[] = $cuentaId;
         }
 
@@ -114,13 +119,55 @@ class ReArbolRamaSupport
             return ReArbolRamaCatalog::RAMA_B;
         }
 
-        $allowSet = array_fill_keys($allowlist, true);
+        $allowCodigos = static::codigosCuentacontable($allowlist);
         foreach ($cuentasLinea as $cuentaId) {
-            if ($cuentaId <= 0 || ! isset($allowSet[$cuentaId])) {
+            $cuentaId = (int) $cuentaId;
+            if ($cuentaId <= 0) {
+                return ReArbolRamaCatalog::RAMA_B;
+            }
+            if (in_array($cuentaId, $allowlist, true)) {
+                continue;
+            }
+            // Misma cuenta contable en otra empresa (mismo código AFIP/plan).
+            $codigo = static::codigoCuentacontable($cuentaId);
+            if ($codigo === '' || ! isset($allowCodigos[$codigo])) {
                 return ReArbolRamaCatalog::RAMA_B;
             }
         }
 
         return ReArbolRamaCatalog::RAMA_A;
+    }
+
+    /**
+     * @param  list<int>  $cuentaIds
+     * @return array<string, true>
+     */
+    private static function codigosCuentacontable(array $cuentaIds): array
+    {
+        if ($cuentaIds === []) {
+            return [];
+        }
+
+        try {
+            return Cuentacontable::query()
+                ->whereIn('id', $cuentaIds)
+                ->pluck('codigo')
+                ->map(fn ($c) => trim((string) $c))
+                ->filter(fn ($c) => $c !== '')
+                ->unique()
+                ->mapWithKeys(fn ($c) => [$c => true])
+                ->all();
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    private static function codigoCuentacontable(int $cuentaId): string
+    {
+        try {
+            return trim((string) (Cuentacontable::query()->where('id', $cuentaId)->value('codigo') ?? ''));
+        } catch (\Throwable $e) {
+            return '';
+        }
     }
 }

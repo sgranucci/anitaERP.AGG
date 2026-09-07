@@ -51,6 +51,7 @@
 	<table class="data">
 		<thead>
 			<tr>
+				<th>Empresa</th>
 				<th>N&uacute;mero</th>
 				<th>Fecha</th>
 				<th>Vence</th>
@@ -69,7 +70,6 @@
 				<th>Estado</th>
 				<th>Refer.</th>
 				<th>Observaci&oacute;n</th>
-				<th>Empresa</th>
 				@if ($incluirConcil)
 					<th class="text-right">SP D</th>
 					<th class="text-right">SP H</th>
@@ -83,6 +83,7 @@
 		<tbody>
 			@foreach ($filas as $fila)
 				<tr>
+					<td>{{ \Illuminate\Support\Str::limit((string) $fila->nombreempresa, 14) }}</td>
 					<td>{{ $fila->codigo }}</td>
 					<td>{{ $fila->fecha ? \Carbon\Carbon::parse($fila->fecha)->format('d/m/Y') : '' }}</td>
 					<td>{{ $fila->fecha_vencimiento ? \Carbon\Carbon::parse($fila->fecha_vencimiento)->format('d/m/Y') : '' }}</td>
@@ -101,7 +102,6 @@
 					<td>{{ $fila->estado_label }}</td>
 					<td>{{ $fila->referencia }}</td>
 					<td>{{ \Illuminate\Support\Str::limit((string) ($fila->observacion ?? ''), 24) }}</td>
-					<td>{{ \Illuminate\Support\Str::limit((string) $fila->nombreempresa, 14) }}</td>
 					@if ($incluirConcil)
 						<td class="text-right">{{ $fila->concil_sp_debe !== null ? number_format((float) $fila->concil_sp_debe, 2, ',', '.') : '' }}</td>
 						<td class="text-right">{{ $fila->concil_sp_haber !== null ? number_format((float) $fila->concil_sp_haber, 2, ',', '.') : '' }}</td>
@@ -115,9 +115,9 @@
 		</tbody>
 		<tfoot>
 			<tr>
-				<td colspan="{{ 10 + ($muestraCuota ? 2 : 0) }}" class="text-right">Total general ({{ $totales['registros'] ?? $totalFilas }})</td>
+				<td colspan="{{ 11 + ($muestraCuota ? 2 : 0) }}" class="text-right">Total general ({{ $totales['registros'] ?? $totalFilas }})</td>
 				<td class="text-right">{{ number_format((float) ($totales['monto'] ?? 0), 2, ',', '.') }}</td>
-				<td colspan="{{ 4 + ($incluirConcil ? 6 : 0) }}"></td>
+				<td colspan="{{ 3 + ($incluirConcil ? 6 : 0) }}"></td>
 			</tr>
 		</tfoot>
 	</table>
