@@ -21,6 +21,7 @@ use App\Repositories\Compras\OrdencompraRepositoryInterface;
 use App\Repositories\Compras\ProveedorRepositoryInterface;
 use App\Repositories\Compras\Requisicion_EstadoRepositoryInterface;
 use App\Repositories\Compras\RequisicionRepositoryInterface;
+use App\Services\Compras\Bierzo\OrdencompraBierzoAnitaBridgeService;
 use App\Services\Compras\Surmar\OrdencompraSurmarAnitaBridgeService;
 use App\Services\Configuracion\ArbolaprobacionService;
 use App\Services\Configuracion\ImpuestoService;
@@ -41,6 +42,7 @@ use App\Support\Compras\OrdencompraUiConfigSupport;
 use App\Support\Compras\RequisicionLineasOcSupport;
 use App\Support\Compras\SuscripcionSupport;
 use App\Support\Compras\ValidacionPresupuestoPartidaCapexLineas;
+use App\Support\Configuracion\EntornoEmpresaSupport;
 use App\Support\Stock\MovimientoStockColorTalleExclusividadSupport;
 use App\Support\Stock\SurmarSupport;
 use Auth;
@@ -66,6 +68,7 @@ class OrdencompraGestionService
         private RequisicionPresupuestoService $requisicionPresupuestoService,
         private OrdencompraAnitaBridgeService $ordencompraAnitaBridge,
         private OrdencompraSurmarAnitaBridgeService $ordencompraSurmarAnitaBridge,
+        private OrdencompraBierzoAnitaBridgeService $ordencompraBierzoAnitaBridge,
         private ProveedorRepositoryInterface $proveedorRepository,
         private CotizacionQueryInterface $cotizacionQuery,
         private ImpuestoService $impuestoService,
@@ -2203,11 +2206,22 @@ class OrdencompraGestionService
         }
     }
 
-    /** Surmar/El Bierzo → bridge Surmar; resto → bridge AGG (sin cambios). */
+    /**
+     * Ruteo escritura Anita:
+     * - Surmar (empresa Surmar en El Bierzo) → bridge Surmar (/usr2/surmar)
+     * - Resto El Bierzo → bridge Bierzo (/usr2/bierzo, sin columnas AGG)
+     * - Otros entornos → bridge AGG
+     */
     private function sincronizarAnitaAlta(Ordencompra $oc): void
     {
         if ($this->usaEscrituraAnitaSurmar($oc)) {
             $this->ordencompraSurmarAnitaBridge->sincronizarAlta($oc);
+
+            return;
+        }
+
+        if ($this->usaEscrituraAnitaBierzo($oc)) {
+            $this->ordencompraBierzoAnitaBridge->sincronizarAlta($oc);
 
             return;
         }
@@ -2223,6 +2237,12 @@ class OrdencompraGestionService
             return;
         }
 
+        if ($this->usaEscrituraAnitaBierzo($oc)) {
+            $this->ordencompraBierzoAnitaBridge->sincronizarActualizacion($oc);
+
+            return;
+        }
+
         $this->ordencompraAnitaBridge->sincronizarActualizacion($oc);
     }
 
@@ -2234,12 +2254,24 @@ class OrdencompraGestionService
             return;
         }
 
+        if ($this->usaEscrituraAnitaBierzo($oc)) {
+            $this->ordencompraBierzoAnitaBridge->sincronizarBaja($oc);
+
+            return;
+        }
+
         $this->ordencompraAnitaBridge->sincronizarBaja($oc);
     }
 
     private function usaEscrituraAnitaSurmar(Ordencompra $oc): bool
     {
         return SurmarSupport::esEmpresaSurmar((int) ($oc->empresa_id ?? 0));
+    }
+
+    private function usaEscrituraAnitaBierzo(Ordencompra $oc): bool
+    {
+        return EntornoEmpresaSupport::esElBierzo()
+            && ! $this->usaEscrituraAnitaSurmar($oc);
     }
 
     /**

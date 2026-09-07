@@ -109,17 +109,17 @@ final class OrdencompraAnitaEscrituraSupport
             'penmp_estado' => RecepcionProveedorAnitaEscrituraSupport::textoSql($ctx->mapEstadoAnita((string) $oc->estadoordencompra), 1),
             'penmp_leyenda' => RecepcionProveedorAnitaEscrituraSupport::textoSql(substr($detalle, 0, 40), 40),
             'penmp_requisicion' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->numeroRequisicion((int) ($oc->requisicion_id ?? 0))),
-            'penmp_empresa' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->codigoEmpresa((int) ($oc->empresa_id ?? 0))),
-            'penmp_es_anticipo' => RecepcionProveedorAnitaEscrituraSupport::textoSql($ctx->mapTratamientoAnticipo((string) ($oc->tratamiento ?? '')), 1),
-            'penmp_usuario_ini' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->usuarioAnitaCodigo((int) ($oc->creousuario_id ?? 0))),
             'penmp_fecha_ing' => RecepcionProveedorAnitaEscrituraSupport::enteroSql((int) date('Ymd')),
             'penmp_hora_ing' => RecepcionProveedorAnitaEscrituraSupport::textoSql($ctx->horaActual(), 8),
-            'penmp_estado_aprob' => RecepcionProveedorAnitaEscrituraSupport::charFijoSql(' ', 1),
-            'penmp_legajo' => RecepcionProveedorAnitaEscrituraSupport::enteroSql(0),
         ];
 
-        // El Bierzo (/usr2/bierzo): pendmaep no tiene penmp_ccosto / penmp_ccosto_dest (sí en AGG).
+        // AGG: empresa / anticipo / aprobación / ccosto. El Bierzo usa OrdencompraBierzoAnitaEscrituraSupport.
         if (! EntornoEmpresaSupport::esElBierzo()) {
+            $columnas['penmp_empresa'] = RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->codigoEmpresa((int) ($oc->empresa_id ?? 0)));
+            $columnas['penmp_es_anticipo'] = RecepcionProveedorAnitaEscrituraSupport::textoSql($ctx->mapTratamientoAnticipo((string) ($oc->tratamiento ?? '')), 1);
+            $columnas['penmp_usuario_ini'] = RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->usuarioAnitaCodigo((int) ($oc->creousuario_id ?? 0)));
+            $columnas['penmp_estado_aprob'] = RecepcionProveedorAnitaEscrituraSupport::charFijoSql(' ', 1);
+            $columnas['penmp_legajo'] = RecepcionProveedorAnitaEscrituraSupport::enteroSql(0);
             $columnas['penmp_ccosto'] = RecepcionProveedorAnitaEscrituraSupport::enteroSql(
                 $ctx->codigoCentrocosto((int) ($oc->centrocosto_id ?? 0))
             );
@@ -186,9 +186,13 @@ final class OrdencompraAnitaEscrituraSupport
             'penvp_fecha_ent' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($fechaEnt),
             'penvp_ccosto' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->codigoCentrocosto((int) ($linea->centrocostodestino_id ?? $oc->centrocosto_id))),
             'penvp_requisicion' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->numeroRequisicion((int) ($oc->requisicion_id ?? 0))),
-            'penvp_empresa' => RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->codigoEmpresa((int) ($oc->empresa_id ?? 0))),
             'penvp_nro_interno' => RecepcionProveedorAnitaEscrituraSupport::enteroSql((int) ($linea->penvp_nro_interno ?? 0)),
         ];
+
+        // AGG: penvp_empresa. El Bierzo / Surmar usan sus escrituras dedicadas.
+        if (! EntornoEmpresaSupport::esElBierzo()) {
+            $columnas['penvp_empresa'] = RecepcionProveedorAnitaEscrituraSupport::enteroSql($ctx->codigoEmpresa((int) ($oc->empresa_id ?? 0)));
+        }
 
         // Surmar Informix: campos extra de línea (no se emiten en AGG).
         if (SurmarSupport::esEmpresaSurmar((int) ($oc->empresa_id ?? 0))) {
