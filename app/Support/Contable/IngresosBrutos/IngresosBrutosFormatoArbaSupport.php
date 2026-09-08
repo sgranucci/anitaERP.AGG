@@ -21,14 +21,17 @@ final class IngresosBrutosFormatoArbaSupport
     /** Terminador de registro: LF como fprintf(...\n) en Anita. */
     public const EOL = "\n";
 
+    /** Tolerancia de conciliación IIBB vs mayor (col. P), en pesos. */
+    public const TOLERANCIA = 100.0;
+
     public static function tolerancia(): float
     {
-        return 0.05;
+        return self::TOLERANCIA;
     }
 
     public static function cuadra(float $a, float $b): bool
     {
-        return abs($a - $b) <= self::tolerancia();
+        return abs(round($a - $b, 2)) <= self::TOLERANCIA;
     }
 
     public static function normalizarCuit(string $cuit): string

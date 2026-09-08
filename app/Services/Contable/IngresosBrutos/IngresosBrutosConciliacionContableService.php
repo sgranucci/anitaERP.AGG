@@ -5,28 +5,18 @@ declare(strict_types=1);
 namespace App\Services\Contable\IngresosBrutos;
 
 use App\Models\Contable\Iibb_Presentacion_Config;
-use App\Repositories\Contable\Iibb_Presentacion_ConfigRepositoryInterface;
-use App\Support\Contable\Anita\AnitaMayorAnaliticoSupport;
 use App\Support\Contable\IngresosBrutos\IngresosBrutosFormatoArbaSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaSupport;
 use App\Support\Contable\Sicore\SicoreConciliacionAuditoriaSupport;
-use App\Support\Contable\Sicore\SicoreEmpresaAnitaSupport;
-use App\Support\Contable\Sicore\SicoreMayorComparableSupport;
 use App\Support\Contable\Sicore\SicoreSaldoEjercicioSupport;
-use Illuminate\Support\Facades\DB;
 
 /**
- * Conciliación IIBB vs mayor (período) + saldo ejercicio (col. O/P mayor plano).
- *
- * Total mayor: movimientos de la quincena excluyendo pago de liquidación ARBA
- * (ídem SICORE con pago DDJJ). Saldo ejerc.: columna Saldo ejerc. del mayor plano
- * al cierre de fecha_hasta (debe−haber, tal cual en pantalla).
+ * Conciliación IIBB vs mayor: suma del período vs col. P (saldo ejerc.)
+ * del último movimiento de la quincena/mes elegida.
  */
 final class IngresosBrutosConciliacionContableService
 {
     public function __construct(
-        private readonly Iibb_Presentacion_ConfigRepositoryInterface $configRepository,
-        private readonly AnitaMayorAnaliticoSupport $mayorAnaliticoSupport,
         private readonly SicoreSaldoEjercicioSupport $saldoEjercicioSupport,
     ) {
     }
@@ -43,9 +33,7 @@ final class IngresosBrutosConciliacionContableService
             return ['habilitada' => false, 'items' => []];
         }
 
-        $desde = (string) ($filtros['fecha_desde'] ?? '');
         $hasta = (string) ($filtros['fecha_hasta'] ?? '');
-        $cuentaIds = $this->configRepository->cuentaIdsPorConfigEmpresa((int) $config->id, $empresaId);
 
         $cuentasDetalle = $config->cuentas
             ->where('empresa_id', $empresaId)
@@ -65,45 +53,16 @@ final class IngresosBrutosConciliacionContableService
 
         $cuentaInversa = SicoreConciliacionAuditoriaSupport::cuentasSonInversas($cuentasDetalle);
 
-        $movimientosErp = $this->listarMayorAnaliticoErp($empresaId, $desde, $hasta, $cuentaIds);
-        $movimientosAnita = $this->listarMayorAnaliticoAnita($empresaId, $desde, $hasta, $config, $cuentaIds);
-        $movimientosMayorCompleto = $movimientosErp !== [] ? $movimientosErp : $movimientosAnita;
-        $fuenteMayor = $movimientosErp !== [] ? 'erp' : ($movimientosAnita !== [] ? 'anita' : 'ninguna');
-
-        // Excluye pago liquidación ARBA / DDJJ / reclas (patrones compartidos con SICORE).
-        $particion = SicoreMayorComparableSupport::particionar($movimientosMayorCompleto, null);
-        $movimientosComparable = $particion['comparables'];
-        $movimientosExcluidos = $particion['excluidos'];
-        $totalMayorNeto = $particion['total_comparable'];
-
-        $tolerancia = IngresosBrutosFormatoArbaSupport::tolerancia();
-
-        $auditoria = SicoreConciliacionAuditoriaSupport::auditarOperaciones(
-            $registros,
-            $movimientosComparable,
-            $cuentaInversa,
-            $tolerancia,
-        );
-        $explicacion = SicoreConciliacionAuditoriaSupport::explicacionDiferencia(
-            $totalIibb,
-            $totalMayorNeto,
-            $auditoria['resumen'] ?? [],
-        );
-        $dif = (float) ($explicacion['diferencia'] ?? round($totalIibb - $totalMayorNeto, 2));
-
-        // Col. O/P del mayor plano a fecha_hasta (debe − haber), tal cual en pantalla.
-        // saldoComparable() invierte a neto haber (SICORE); acá mostramos el signo del mayor.
-        $saldoComparable = $this->saldoEjercicioSupport->saldoComparable(
+        // Col. P del mayor plano: saldo de ejercicio al último movimiento ≤ fecha_hasta.
+        $totalMayor = $this->saldoEjercicioSupport->saldoComparable(
             $empresaId,
             $hasta,
             $cuentasDetalle,
             $cuentaInversa,
         );
-        $saldoEjercicio = round(-$saldoComparable, 2);
-        // Dif. vs saldo en convención comparable (Total IIBB − |saldo plano| / neto haber).
-        $difSaldo = round($totalIibb - $saldoComparable, 2);
 
-        $movimientosMayorCompletoMarcado = array_merge($movimientosComparable, $movimientosExcluidos);
+        $tolerancia = IngresosBrutosFormatoArbaSupport::tolerancia();
+        $dif = round($totalIibb - $totalMayor, 2);
 
         return [
             'habilitada' => true,
@@ -115,25 +74,11 @@ final class IngresosBrutosConciliacionContableService
                 'concilia_con' => 'ingresos_brutos',
                 'cuentas' => $cuentasDetalle,
                 'cuenta_inversa' => $cuentaInversa,
-                'total_sicore' => $totalIibb,
                 'total_iibb' => $totalIibb,
-                'total_mayor' => $totalMayorNeto,
-                'total_mayor_neto' => $totalMayorNeto,
-                'total_mayor_excluido' => $particion['total_excluido'],
+                'total_mayor' => $totalMayor,
                 'diferencia' => $dif,
-                'cuadra' => IngresosBrutosFormatoArbaSupport::cuadra($totalIibb, $totalMayorNeto),
-                'saldo_ejercicio' => $saldoEjercicio,
-                'saldo_ejercicio_comparable' => $saldoComparable,
-                'diferencia_sicore_saldo' => $difSaldo,
-                'diferencia_iibb_saldo' => $difSaldo,
-                'cuadra_saldo' => IngresosBrutosFormatoArbaSupport::cuadra($totalIibb, $saldoComparable),
-                'explicacion_diferencia' => $explicacion,
+                'cuadra' => IngresosBrutosFormatoArbaSupport::cuadra($totalIibb, $totalMayor),
                 'registros' => count($registros),
-                'fuente_mayor' => $fuenteMayor,
-                'movimientos_mayor' => $movimientosMayorCompletoMarcado,
-                'movimientos_mayor_comparable' => $movimientosComparable,
-                'movimientos_mayor_excluidos' => $movimientosExcluidos,
-                'auditoria' => $auditoria,
                 'tolerancia' => $tolerancia,
             ]],
             'tolerancia' => $tolerancia,
@@ -147,106 +92,5 @@ final class IngresosBrutosConciliacionContableService
         $s = str_pad((string) $ymd, 8, '0', STR_PAD_LEFT);
 
         return substr($s, 0, 4).'-'.substr($s, 4, 2).'-'.substr($s, 6, 2);
-    }
-
-    /**
-     * @param  list<int>  $cuentaIds
-     * @return list<array<string, mixed>>
-     */
-    private function listarMayorAnaliticoErp(int $empresaId, string $desde, string $hasta, array $cuentaIds): array
-    {
-        if ($cuentaIds === [] || $desde === '' || $hasta === '') {
-            return [];
-        }
-
-        $filas = DB::table('asiento_movimiento as am')
-            ->join('asiento as a', 'a.id', '=', 'am.asiento_id')
-            ->join('cuentacontable as c', 'c.id', '=', 'am.cuentacontable_id')
-            ->where('a.empresa_id', $empresaId)
-            ->whereBetween('a.fecha', [$desde, $hasta])
-            ->whereIn('am.cuentacontable_id', $cuentaIds)
-            ->orderBy('a.fecha')
-            ->orderBy('am.id')
-            ->get([
-                'a.fecha',
-                'a.id as asiento_id',
-                'c.codigo as cuenta_codigo',
-                'c.nombre as cuenta_nombre',
-                'am.monto',
-                'am.observacion',
-            ]);
-
-        $out = [];
-        foreach ($filas as $fila) {
-            $monto = (float) $fila->monto;
-            $out[] = [
-                'fecha' => (string) $fila->fecha,
-                'asiento_id' => (int) $fila->asiento_id,
-                'cuenta_codigo' => (string) $fila->cuenta_codigo,
-                'cuenta_nombre' => (string) $fila->cuenta_nombre,
-                'debe' => $monto > 0 ? round($monto, 2) : null,
-                'haber' => $monto < 0 ? round(abs($monto), 2) : null,
-                'neto_haber' => round(-$monto, 2),
-                'detalle' => trim((string) ($fila->observacion ?? '')),
-                'origen' => 'erp',
-            ];
-        }
-
-        return $out;
-    }
-
-    /**
-     * @param  list<int>  $cuentaIds
-     * @return list<array<string, mixed>>
-     */
-    private function listarMayorAnaliticoAnita(
-        int $empresaId,
-        string $desde,
-        string $hasta,
-        Iibb_Presentacion_Config $config,
-        array $cuentaIds,
-    ): array {
-        if ($cuentaIds === [] || $desde === '' || $hasta === '') {
-            return [];
-        }
-
-        $codigosCuenta = $config->cuentas
-            ->whereIn('cuentacontable_id', $cuentaIds)
-            ->map(static fn ($c) => (int) preg_replace('/\D/', '', (string) ($c->cuentacontable?->codigo ?? '')))
-            ->filter(static fn (int $cod) => $cod > 0)
-            ->unique()
-            ->values()
-            ->all();
-
-        if ($codigosCuenta === []) {
-            return [];
-        }
-
-        $empresaAnita = SicoreEmpresaAnitaSupport::codigoEmpresaAnita($empresaId);
-        $desdeAnita = (int) str_replace('-', '', $desde);
-        $hastaAnita = (int) str_replace('-', '', $hasta);
-
-        $nombresCuenta = $config->cuentas
-            ->whereIn('cuentacontable_id', $cuentaIds)
-            ->mapWithKeys(static fn ($c) => [
-                (int) preg_replace('/\D/', '', (string) ($c->cuentacontable?->codigo ?? '')) => (string) ($c->cuentacontable?->nombre ?? ''),
-            ])
-            ->all();
-
-        $out = [];
-        foreach ($this->mayorAnaliticoSupport->listarMovimientosPeriodo(
-            $empresaAnita,
-            $desdeAnita,
-            $hastaAnita,
-            $codigosCuenta,
-        ) as $mov) {
-            $codigoCuenta = (int) ($mov['cuenta_codigo'] ?? 0);
-            $out[] = array_merge($mov, [
-                'cuenta_nombre' => $nombresCuenta[$codigoCuenta] ?? (string) ($mov['cuenta_nombre'] ?? ''),
-                'origen' => 'anita',
-            ]);
-        }
-
-        return $out;
     }
 }

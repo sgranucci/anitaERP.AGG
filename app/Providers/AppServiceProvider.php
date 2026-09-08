@@ -1495,6 +1495,12 @@ class AppServiceProvider extends ServiceProvider
             \App\Support\Contable\MayorConcepto\MayorConceptoAnitaBridgeReader::class
         );
 
+        // Catálogo concepto/cuenta compartido: motor ERP, nativo y OPP auxpag deben ver
+        // el mismo mapa (si no, piernas literales imputan conceptogasto fallback de otra empresa).
+        $this->app->singleton(
+            \App\Support\Contable\MayorConcepto\MayorConceptoMemoriaMotor::class
+        );
+
         // Resuelve al mismo singleton: el lector cachea el período y no debe duplicarse.
         $this->app->singleton(
             \App\Support\Contable\MayorConcepto\MayorConceptoErpReader::class

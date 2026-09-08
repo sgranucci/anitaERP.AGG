@@ -21,9 +21,9 @@ use App\Services\Compras\PagoproveedorAnularRevertirService;
 use App\Services\Compras\PagoproveedorComprobantePdfService;
 use App\Services\Compras\PagoproveedorService;
 use App\Services\Compras\RetencionesPagoCalculator;
+use App\Services\Compras\RetencionesPagoContextoBuilder;
 use App\Support\Compras\PagoproveedorListadoFiltros;
 use App\Support\Compras\PropuestaPagoModoSupport;
-use App\Support\Compras\Retencion\RetencionesPagoInput;
 use App\Support\Configuracion\EmpresaLogoArchivo;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
@@ -42,6 +42,7 @@ class PagoproveedorController extends Controller
         private CentrocostoRepositoryInterface $centrocostoRepository,
         private Proveedor_CuentacorrienteRepositoryInterface $proveedorCuentacorrienteRepository,
         private RetencionesPagoCalculator $retencionesPagoCalculator,
+        private RetencionesPagoContextoBuilder $retencionesPagoContextoBuilder,
         private PagoproveedorComprobantePdfService $pagoproveedorComprobantePdfService,
     ) {
     }
@@ -402,20 +403,50 @@ class PagoproveedorController extends Controller
             return response()->json(['error' => 'Proveedor no encontrado'], 422);
         }
 
-        $resultado = $this->retencionesPagoCalculator->calcular(new RetencionesPagoInput(
+        $aplicaciones = $this->normalizarAplicacionesRequest($request->input('aplicaciones', []));
+        if ($aplicaciones === []) {
+            // Compat: UI vieja envía solo ids/montos planos.
+            $ids = $request->input('idcuentacorrientes', []);
+            $montos = $request->input('montoaplicadocomprobantes', []);
+            $cots = $request->input('cotizacion_aplicada_dia', $request->input('cotizacioncomprobantes', []));
+            $monedas = $request->input('monedacomprobante_ids', []);
+            foreach ($ids as $i => $ccId) {
+                $aplicaciones[] = [
+                    'proveedor_cuentacorriente_id' => (int) $ccId,
+                    'montoaplicado' => (float) ($montos[$i] ?? 0),
+                    'cotizacion_aplicada' => (float) ($cots[$i] ?? 0),
+                    'moneda_id' => (int) ($monedas[$i] ?? 0) ?: null,
+                ];
+            }
+        }
+
+        $empresaId = $request->filled('empresa_id')
+            ? (int) $request->input('empresa_id')
+            : ((int) session('empresa_id') ?: null);
+
+        $ctx = $this->retencionesPagoContextoBuilder->armarInput(
             proveedor: $proveedor,
-            importeNetoPago: (float) $request->input('importe_neto', 0),
-            importeIvaPago: (float) $request->input('importe_iva', 0),
+            aplicaciones: $aplicaciones,
             fecha: $request->input('fecha'),
-            retenciongananciaIdPago: $request->filled('retencionganancia_id') ? (int) $request->input('retencionganancia_id') : null,
-            retencionivaIdPago: $request->filled('retencioniva_id') ? (int) $request->input('retencioniva_id') : null,
-            retencionsussIdPago: $request->filled('retencionsuss_id') ? (int) $request->input('retencionsuss_id') : null,
-            iibbProvinciaId: $request->filled('iibb_provincia_id') ? (int) $request->input('iibb_provincia_id') : null,
-            iibbTasaOverride: $request->filled('iibb_tasa') ? (float) $request->input('iibb_tasa') : null,
-            empresaId: $request->filled('empresa_id')
-                ? (int) $request->input('empresa_id')
-                : ((int) session('empresa_id') ?: null),
-        ));
+            empresaId: $empresaId,
+            monedaPagoId: (int) ($request->input('moneda_id') ?: 1),
+            cotizacionPago: $request->filled('cotizacion') ? (float) $request->input('cotizacion') : null,
+            excluirPagoproveedorId: $request->filled('pagoproveedor_id') ? (int) $request->input('pagoproveedor_id') : null,
+            overrides: [
+                'retencionganancia_id' => $request->input('retencionganancia_id'),
+                'retencioniva_id' => $request->input('retencioniva_id'),
+                'retencionsuss_id' => $request->input('retencionsuss_id'),
+                'iibb_provincia_id' => $request->input('iibb_provincia_id'),
+                'iibb_tasa' => $request->input('iibb_tasa'),
+            ],
+            importeNetoFallback: (float) $request->input('importe_neto', 0),
+            importeIvaFallback: (float) $request->input('importe_iva', 0),
+        );
+
+        /** @var \App\Support\Compras\Retencion\RetencionesPagoInput $input */
+        $input = $ctx['input'];
+        $resultado = $this->retencionesPagoCalculator->calcular($input);
+        $bases = $ctx['bases'];
 
         return response()->json([
             'ganancias' => [
@@ -424,6 +455,7 @@ class PagoproveedorController extends Controller
                 'alicuota' => $resultado->ganancias->alicuotaAplicada,
                 'motivo' => $resultado->ganancias->motivo,
                 'detalle' => $resultado->ganancias->detalle,
+                'base' => $input->netoGanancias(),
             ],
             'iva' => [
                 'aplica' => $resultado->iva->aplica,
@@ -431,6 +463,8 @@ class PagoproveedorController extends Controller
                 'alicuota' => $resultado->iva->alicuotaAplicada,
                 'motivo' => $resultado->iva->motivo,
                 'detalle' => $resultado->iva->detalle,
+                'base_neto' => $input->importeNetoPago,
+                'base_iva' => $input->importeIvaPago,
             ],
             'suss' => [
                 'aplica' => $resultado->suss->aplica,
@@ -438,6 +472,7 @@ class PagoproveedorController extends Controller
                 'alicuota' => $resultado->suss->alicuotaAplicada,
                 'motivo' => $resultado->suss->motivo,
                 'detalle' => $resultado->suss->detalle,
+                'base' => $input->netoSuss(),
             ],
             'iibb' => [
                 'aplica' => $resultado->iibb->aplica,
@@ -446,9 +481,41 @@ class PagoproveedorController extends Controller
                 'motivo' => $resultado->iibb->motivo,
                 'detalle' => $resultado->iibb->detalle,
                 'provincia_id' => $resultado->iibb->detalle['provincia_id'] ?? null,
+                'base' => $input->netoIibb(),
             ],
+            'bases' => $bases->toArray(),
+            'acumulado_ganancias' => $ctx['acumulado_ganancias'],
             'total' => $resultado->totalRetenciones(),
         ]);
+    }
+
+    /**
+     * @param  mixed  $raw
+     * @return list<array<string, mixed>>
+     */
+    private function normalizarAplicacionesRequest(mixed $raw): array
+    {
+        if (! is_array($raw)) {
+            return [];
+        }
+        $out = [];
+        foreach ($raw as $fila) {
+            if (! is_array($fila)) {
+                continue;
+            }
+            $ccId = (int) ($fila['proveedor_cuentacorriente_id'] ?? $fila['cc_id'] ?? 0);
+            if ($ccId <= 0) {
+                continue;
+            }
+            $out[] = [
+                'proveedor_cuentacorriente_id' => $ccId,
+                'montoaplicado' => (float) ($fila['montoaplicado'] ?? $fila['monto'] ?? 0),
+                'cotizacion_aplicada' => (float) ($fila['cotizacion_aplicada'] ?? $fila['cotizacion'] ?? 0),
+                'moneda_id' => isset($fila['moneda_id']) ? (int) $fila['moneda_id'] : null,
+            ];
+        }
+
+        return $out;
     }
 
     public function imprimir(int $id)

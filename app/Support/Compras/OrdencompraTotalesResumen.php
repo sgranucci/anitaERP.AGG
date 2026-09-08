@@ -3,6 +3,7 @@
 namespace App\Support\Compras;
 
 use App\Models\Compras\Ordencompra;
+use App\Models\Compras\Proveedor;
 use App\Models\Stock\Articulo;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Services\Configuracion\ImpuestoService;
@@ -11,12 +12,14 @@ use App\Services\Configuracion\ImpuestoService;
  * Totales de orden de compra: importe por línea en moneda del primer ítem =
  * cantidad × precio × coeficiente de conversión (cotización de línea solo si la moneda difiere de la referencia).
  * Impuestos: solo IVA nacional vía {@see ImpuestoService::calculaImpuestosNacionalesItems}.
+ * Si el proveedor tiene condicioniva.coniva = N (p. ej. Monotributo C), no se discrimina IVA
+ * (mismo criterio que ventas): el precio cargado es el total, sin gross-up.
  * Descuento cabecera: % o monto ({@see OrdencompraDescuentoSupport}).
  */
 final class OrdencompraTotalesResumen
 {
     /**
-     * @param  array<string, mixed>  $data  Request-like: articulo_ids, cantidades, precios, moneda_linea_ids, cotizaciones_linea, fecha, descuento, descuento_tipo
+     * @param  array<string, mixed>  $data  Request-like: articulo_ids, cantidades, precios, moneda_linea_ids, cotizaciones_linea, fecha, descuento, descuento_tipo, proveedor_id
      * @return array{
      *   moneda_id:int,
      *   moneda_abrev:string,
@@ -26,7 +29,8 @@ final class OrdencompraTotalesResumen
      *   iva_total:float,
      *   total:float,
      *   filas_iva:list<array{tasa:float,importe:float}>,
-     *   descuento_porcentaje_efectivo:float
+     *   descuento_porcentaje_efectivo:float,
+     *   con_iva:bool
      * }
      */
     public static function desdeRequest(array $data, CotizacionQueryInterface $cotizacionQuery, ImpuestoService $impuestoService): array
@@ -39,8 +43,9 @@ final class OrdencompraTotalesResumen
         $tipo = OrdencompraDescuentoSupport::normalizarTipo($data['descuento_tipo'] ?? null);
         $subtotal = self::sumaImporteReferencia($lineas);
         $dtoPct = OrdencompraDescuentoSupport::valorAPorcentaje($valor, $tipo, $subtotal);
+        $flConIva = self::flConIvaDesdeProveedorId(isset($data['proveedor_id']) ? (int) $data['proveedor_id'] : null);
 
-        return self::armarSalida($lineas, $dtoPct, $impuestoService);
+        return self::armarSalida($lineas, $dtoPct, $impuestoService, $flConIva);
     }
 
     /**
@@ -54,7 +59,7 @@ final class OrdencompraTotalesResumen
         }
 
         $abrev = '';
-        $oc->loadMissing(['ordencompra_articulos.monedas']);
+        $oc->loadMissing(['ordencompra_articulos.monedas', 'proveedores.condicionivas']);
         $primer = collect($oc->ordencompra_articulos ?? [])->sortBy('id')->first();
         if ($primer !== null) {
             $abrev = (string) (optional($primer->monedas)->abreviatura ?? '');
@@ -64,10 +69,36 @@ final class OrdencompraTotalesResumen
         $tipo = OrdencompraDescuentoSupport::normalizarTipo($oc->descuento_tipo ?? null);
         $subtotal = self::sumaImporteReferencia($lineas);
         $dtoPct = OrdencompraDescuentoSupport::valorAPorcentaje($valor, $tipo, $subtotal);
-        $out = self::armarSalida($lineas, $dtoPct, $impuestoService);
+        $coniva = optional(optional($oc->proveedores)->condicionivas)->coniva;
+        $flConIva = self::flConIvaDesdeConiva($coniva !== null ? (string) $coniva : null);
+        $out = self::armarSalida($lineas, $dtoPct, $impuestoService, $flConIva);
         $out['moneda_abrev'] = $abrev;
 
         return $out;
+    }
+
+    /**
+     * Igual que ventas: coniva = N → sin IVA discriminado (precio = total).
+     */
+    public static function flConIvaDesdeConiva(?string $coniva): bool
+    {
+        return strtoupper(trim((string) $coniva)) !== 'N';
+    }
+
+    public static function flConIvaDesdeProveedorId(?int $proveedorId): bool
+    {
+        if ($proveedorId === null || $proveedorId <= 0) {
+            return true;
+        }
+
+        $proveedor = Proveedor::query()->with('condicionivas')->find($proveedorId);
+        if ($proveedor === null) {
+            return true;
+        }
+
+        $coniva = optional($proveedor->condicionivas)->coniva;
+
+        return self::flConIvaDesdeConiva($coniva !== null ? (string) $coniva : null);
     }
 
     /**
@@ -232,8 +263,12 @@ final class OrdencompraTotalesResumen
      * @param  list<array{cantidad:float,importe_moneda_referencia:float,impuesto_id:int}>  $lineas
      * @return array<string, mixed>
      */
-    private static function armarSalida(array $lineas, float $descuentoPorcentaje, ImpuestoService $impuestoService): array
-    {
+    private static function armarSalida(
+        array $lineas,
+        float $descuentoPorcentaje,
+        ImpuestoService $impuestoService,
+        bool $flConIva = true
+    ): array {
         $monedaId = (int) ($lineas[0]['moneda_id'] ?? 1);
         $items = [];
         foreach ($lineas as $ln) {
@@ -251,7 +286,7 @@ final class OrdencompraTotalesResumen
             ];
         }
 
-        $det = $impuestoService->calculaImpuestosNacionalesItems($items, true);
+        $det = $impuestoService->calculaImpuestosNacionalesItems($items, $flConIva);
 
         return [
             'moneda_id' => $monedaId,
@@ -263,6 +298,7 @@ final class OrdencompraTotalesResumen
             'total' => $det['total'],
             'filas_iva' => $det['filas_iva'],
             'descuento_porcentaje_efectivo' => max(0.0, $descuentoPorcentaje),
+            'con_iva' => $flConIva,
         ];
     }
 
@@ -281,6 +317,7 @@ final class OrdencompraTotalesResumen
             'total' => 0.0,
             'filas_iva' => [],
             'descuento_porcentaje_efectivo' => 0.0,
+            'con_iva' => true,
         ];
     }
 

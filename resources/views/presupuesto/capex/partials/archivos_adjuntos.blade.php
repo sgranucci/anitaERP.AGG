@@ -56,5 +56,7 @@
         @endforeach
     </div>
 @else
-    <p class="text-muted mb-0">No hay archivos adjuntos.</p>
+    <div class="text-center text-muted py-3 bg-light rounded mb-0">
+        No hay archivos adjuntos.
+    </div>
 @endif

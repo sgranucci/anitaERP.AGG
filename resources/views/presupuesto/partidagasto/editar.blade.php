@@ -19,56 +19,82 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
                 @if (!isset($visualizar))
-                    <h3 class="card-title">Editar Partida de Gasto - Número {{$data->codigo ?? ''}} - Id {{$data->id}}</h3>
+                    <h3 class="card-title">Editar Partida de Gasto — {{$data->codigo ?? ''}} <small class="text-white-50">#{{$data->id}}</small></h3>
                     <div class="card-tools">
                         <a href="{{$volverListadoUrl}}" class="btn btn-outline-info btn-sm">
                             <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                         </a>
-                        <button type="submit" onclick="anulaPartidagasto()" id="anulapartidagasto" class="btn btn-warning" style="display: none">
-                            <i class="fa fa-fw fa-cross"></i>
+                        <button type="button" onclick="anulaPartidagasto()" id="anulapartidagasto" class="btn btn-warning btn-sm" style="display: none">
+                            <i class="fa fa-fw fa-ban"></i>
                             Anular Partida
                         </button>
-                        <button type="submit" onclick="anulaPartidagasto()" id="activapartidagasto" class="btn btn-warning" style="display: none">
+                        <button type="button" onclick="anulaPartidagasto()" id="activapartidagasto" class="btn btn-warning btn-sm" style="display: none">
                             <i class="fa fa-fw fa-check"></i>
                             Activar Partida
                         </button>
-                        <button type="submit" onclick="cierraPartidagasto()" id="abrepartidagasto" class="btn btn-success" style="display: none">
+                        <button type="button" onclick="cierraPartidagasto()" id="abrepartidagasto" class="btn btn-success btn-sm" style="display: none">
                             <i class="fa fa-fw fa-check"></i>
                             Activar Partida
                         </button>
-                        <button type="submit" onclick="cierraPartidagasto()" id="cierrapartidagasto" class="btn btn-success" style="display: none">
+                        <button type="button" onclick="cierraPartidagasto()" id="cierrapartidagasto" class="btn btn-success btn-sm" style="display: none">
                             <i class="fa fa-fw fa-lock"></i>
                             Cerrar Partida
                         </button>
                     </div>
                 @else
-                    <h3 class="card-title">Visualizar Partida de Gasto - Número {{$data->codigo ?? ''}} - Id {{$data->id}}</h3>
+                    <h3 class="card-title">Visualizar Partida de Gasto — {{$data->codigo ?? ''}} <small class="text-white-50">#{{$data->id}}</small></h3>
+                    <div class="card-tools">
+                        <a href="{{$volverListadoUrl}}" class="btn btn-outline-info btn-sm">
+                            <i class="fa fa-fw fa-reply-all"></i> Volver al listado
+                        </a>
+                    </div>
                 @endif
             </div>
             <form action="{{route('actualizar_partidagasto', ['id' => $data->id] + ($filtrosQuery ?? []))}}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
                 @csrf @method("put")
-                <div align="center" style="margin: 5px;">
-                    <button type="button" id="botonform1" class="btn btn-primary btn-sm">
-                        <i class="fa fa-user"></i> Datos principales
-                    </button>
-                    <button type="button" id="botonform2" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Historia
-                    </button>                    
-                    <button type="button" id="botonform3" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Archivos asociados
-                    </button>
-                    <button type="button" id="botonform4" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Ordenes de Compra
-                    </button>     
-                </div>
                 <div class="card-body">
-                    @include('presupuesto.partidagasto.form')
-                    @include('presupuesto.partidagasto.form2')
-                    @include('presupuesto.partidagasto.form3')
-                    @include('presupuesto.partidagasto.form4')
+                    @include('includes.tabs-activas-estilos')
+                    <div class="tabs-activas">
+                        <ul class="nav nav-tabs" id="tabs-partidagasto" role="tablist">
+                            <li class="nav-item">
+                                <a class="nav-link active" data-toggle="tab" href="#tab-partidagasto-datos" role="tab">
+                                    <i class="fa fa-info-circle"></i> Datos principales
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" data-toggle="tab" href="#tab-partidagasto-historia" role="tab">
+                                    <i class="fa fa-history"></i> Historia
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" data-toggle="tab" href="#tab-partidagasto-archivos" role="tab">
+                                    <i class="fa fa-paperclip"></i> Archivos asociados
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" data-toggle="tab" href="#tab-partidagasto-oc" role="tab">
+                                    <i class="fa fa-shopping-cart"></i> Órdenes de Compra
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="tab-content pt-3" id="partidagasto-tab-content">
+                        <div class="tab-pane fade show active" id="tab-partidagasto-datos" role="tabpanel">
+                            @include('presupuesto.partidagasto.form')
+                        </div>
+                        <div class="tab-pane fade" id="tab-partidagasto-historia" role="tabpanel">
+                            @include('presupuesto.partidagasto.form2')
+                        </div>
+                        <div class="tab-pane fade" id="tab-partidagasto-archivos" role="tabpanel">
+                            @include('presupuesto.partidagasto.form3')
+                        </div>
+                        <div class="tab-pane fade" id="tab-partidagasto-oc" role="tabpanel">
+                            @include('presupuesto.partidagasto.form4')
+                        </div>
+                    </div>
                 </div>
                 <div class="card-footer">
                     <div class="row">

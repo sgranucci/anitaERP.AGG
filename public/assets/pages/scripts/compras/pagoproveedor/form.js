@@ -348,9 +348,21 @@
         var html = 'Total retenciones: <strong>' + fmt(res.total) + '</strong><ul class="mb-0">';
         ['ganancias', 'iva', 'suss', 'iibb'].forEach(function (k) {
             var r = res[k] || {};
-            html += '<li>' + k.toUpperCase() + ': ' + fmt(r.importe) + ' — ' + (r.motivo || '') + '</li>';
+            var baseTxt = (r.base != null) ? ' (base ' + fmt(r.base) + ')' : '';
+            if (k === 'iva' && (r.base_neto != null || r.base_iva != null)) {
+                baseTxt = ' (neto ' + fmt(r.base_neto) + ' / IVA ' + fmt(r.base_iva) + ')';
+            }
+            html += '<li>' + k.toUpperCase() + ': ' + fmt(r.importe) + baseTxt + ' — ' + (r.motivo || '') + '</li>';
         });
         html += '</ul>';
+        if (res.bases && res.bases.origen) {
+            html += '<div class="small text-muted">Bases: ' + res.bases.origen;
+            if (res.acumulado_ganancias && res.acumulado_ganancias.neto > 0) {
+                html += ' · Acum. Gan. mes neto ' + fmt(res.acumulado_ganancias.neto)
+                    + ' / ret. ' + fmt(res.acumulado_ganancias.retenido);
+            }
+            html += '</div>';
+        }
         $('#pp-retenciones-resumen').removeClass('text-muted').html(html);
         $('#pp-retenciones-json').val(JSON.stringify(res));
         window.ppTotalRetenciones = Number(res.total) || 0;
@@ -377,11 +389,27 @@
                 proveedor_id: proveedorId,
                 empresa_id: $('#empresa_id').val(),
                 fecha: $('#fecha').val(),
+                moneda_id: $('#moneda_id').val(),
+                cotizacion: $('#cotizacion').val(),
+                pagoproveedor_id: $('input[name="id"]').val() || $('#id').val() || '',
                 importe_neto: $('#importe_neto_retencion').val(),
-                importe_iva: $('#importe_iva_retencion').val()
+                importe_iva: $('#importe_iva_retencion').val(),
+                idcuentacorrientes: $form.find('input[name="idcuentacorrientes[]"]').map(function () { return $(this).val(); }).get(),
+                montoaplicadocomprobantes: $form.find('input[name="montoaplicadocomprobantes[]"]').map(function () { return $(this).val(); }).get(),
+                cotizacion_aplicada_dia: $form.find('input[name="cotizacion_aplicada_dia[]"]').map(function () { return $(this).val(); }).get(),
+                cotizacioncomprobantes: $form.find('input[name="cotizacioncomprobantes[]"]').map(function () { return $(this).val(); }).get(),
+                monedacomprobante_ids: $form.find('input[name="monedacomprobante_ids[]"]').map(function () { return $(this).val(); }).get()
             }
         }).done(function (res) {
             pintarResumenRetenciones(res);
+            if (res && res.bases) {
+                if (res.bases.neto_ganancias != null) {
+                    $('#importe_neto_retencion').val(Number(res.bases.neto_documental || res.bases.neto_ganancias).toFixed(2));
+                }
+                if (res.bases.importe_iva != null) {
+                    $('#importe_iva_retencion').val(Number(res.bases.importe_iva).toFixed(2));
+                }
+            }
         }).fail(function (xhr) {
             $('#pp-retenciones-resumen').addClass('text-muted').text(
                 (xhr.responseJSON && xhr.responseJSON.error) || 'No se pudieron calcular retenciones'

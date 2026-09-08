@@ -10,6 +10,7 @@ use App\Repositories\Admin\UsuarioRepositoryInterface;
 use App\Repositories\Configuracion\Arbolaprobacion_MovimientoRepositoryInterface;
 use App\Repositories\Solicitudpago\SolicitudpagoRepositoryInterface;
 use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
+use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use App\Support\Solicitudpago\SolicitudpagoEstados;
 use Auth;
@@ -674,8 +675,7 @@ class SolicitudpagoArbolIntegracionService
             $extras['link_pago'] = ArbolAprobacionEnlaceSupport::enlaceCrearIngresoEgresoDesdeSp($ip, (int) $sp->id, [
                 'empresa_id' => (int) ($sp->empresa_id ?? 0) ?: null,
                 'proveedor_id' => (int) ($sp->proveedor_id ?? 0) ?: null,
-                'detalle' => 'Pago SP '.($sp->codigo ?? $sp->id)
-                    .($sp->detalle ? ' — '.$sp->detalle : ''),
+                'detalle' => IngresoEgresoSolicitudpagoSupport::descripcionMovimientoDesdeSp($sp),
             ]);
         }
 

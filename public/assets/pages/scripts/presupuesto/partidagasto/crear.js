@@ -8,51 +8,20 @@
 	$(function () {
 		$('#agrega_renglon_partidagasto_monto').on('click', agregaRenglonPartidagasto_Monto);
         $(document).on('click', '.eliminar_partidagasto_monto', borraRenglonPartidagasto_Monto);
-		$('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
-        $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
+		$('#partidagasto-agrega-renglon-archivo').on('click', agregaRenglonArchivo);
+        $(document).on('click', '.partidagasto-eliminararchivo', borraRenglonArchivo);
         $(document).on('click', '.eliminar-archivo-partidagasto', borraTarjetaArchivoPartidagasto);
 
 		activa_eventos(true);
-		
-		$("#botonform1").click(function(){
-            $(".form1").show();
-            $(".form2").hide();
-			$(".form3").hide();
-			$(".form4").hide();
-        });
-		$("#botonform2").click(function(){
-			$(".form1").hide();
-            $(".form2").show();
-			$(".form3").hide();
-			$(".form4").hide();
 
-			// lee historia
-			leeHistoria();
-
-			$("#titulo").html("");
-			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
-        });
-		$("#botonform3").click(function(){
-			$(".form1").hide();
-            $(".form2").hide();
-			$(".form3").show();
-			$(".form4").hide();
-
-			$("#titulo").html("");
-			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
-        });
-
-		$("#botonform4").click(function(){
-			$(".form1").hide();
-            $(".form2").hide();
-			$(".form3").hide();
-			$(".form4").show();
-
-			$("#titulo").html("");
-			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
-
-			leeOrdenCompra();
-        });
+		$(document).on('shown.bs.tab', '#tabs-partidagasto a[data-toggle="tab"]', function (e) {
+			var href = $(e.target).attr('href');
+			if (href === '#tab-partidagasto-historia') {
+				leeHistoria();
+			} else if (href === '#tab-partidagasto-oc') {
+				leeOrdenCompra();
+			}
+		});
 
 		$( ".botonsubmit" ).click(function() {
 
@@ -148,14 +117,20 @@
 
 	function agregaRenglonArchivo(event){
     	event.preventDefault();
-    	var renglon = $('#template-renglon-archivo').html();
+    	var renglon = $('#partidagasto-template-renglon-archivo').html();
 
-    	$("#tbody-tabla-archivo").append(renglon);
+    	$("#partidagasto-tbody-tabla-archivo").append(renglon);
     }
 
     function borraRenglonArchivo(event) {
     	event.preventDefault();
-    	$(this).parents('tr').remove();
+    	var $tbody = $('#partidagasto-tbody-tabla-archivo');
+    	var $fila = $(this).closest('tr.item-archivo-partidagasto');
+    	if ($tbody.find('tr.item-archivo-partidagasto').length <= 1) {
+    		$fila.find('input[type=file]').val('');
+    		return;
+    	}
+    	$fila.remove();
     }
 
     function borraTarjetaArchivoPartidagasto(event) {
@@ -197,6 +172,11 @@
 		var wrapper = $(".container-historia");
 		let partidagasto_id = $("#partidagasto_id").val();
 
+		if (!partidagasto_id) {
+			$(wrapper).empty();
+			return;
+		}
+
 		let url = carpetaBase+'/presupuesto/leerhistoriapartidagasto/'+partidagasto_id;
 
 		$.get(url, function(historia){
@@ -233,7 +213,12 @@
 		var wrapper = $(".container-ordencompra");
 		let partidagasto_id = $("#partidagasto_id").val();
 
-		let url = carpetaBase+'/presupuesto/leerordencompra/'+partidagasto_id;
+		if (!partidagasto_id) {
+			$(wrapper).empty();
+			return;
+		}
+
+		let url = carpetaBase+'/presupuesto/leerordencomprapartidagasto/'+partidagasto_id;
 
 		$.get(url, function(historia){
 
@@ -294,7 +279,7 @@
 							'<td>'+
 								'<input type="text" name="detalleordencompra[]" class="form-control detalleordencompra" value="'+value.stkm_desc+'" readonly>'+
 							'</td>'+
-							'<td>'+
+							'<td class="text-center align-middle">'+
 								'<a href="#" class="btn-accion-tabla tooltipsC editaordencompra" title="Editar la Orden de Compra">'+
 									'<i class="fa fa-edit editaordencompra"></i>'+
 								'</a>'+
@@ -309,7 +294,7 @@
 		});
 	}
 
-	function anulaPartidaMonto()
+	function anulaPartidagasto()
 	{
 		if (confirm("¿Desea cambiar el estado de la Partida?"))
 		{
@@ -334,7 +319,7 @@
 
 			$.get(listarUri)
 				.done(function(data){
-					alert('Capex actualizado con éxito');
+					alert('Partida actualizada con éxito');
 
 					muestraBotonAnulacion(estadoPartidaGasto);
 				})
@@ -345,28 +330,28 @@
 		}
 	}
 
-	function cierraCapex()
+	function cierraPartidagasto()
 	{
-		if (confirm("¿Desea cambiar el estado del Capex?"))
+		if (confirm("¿Desea cambiar el estado de la Partida?"))
 		{		
-			let estadoActualCapex = $('#estado').val();
+			let estadoActual = $('#estado').val();
 
-			if (estadoActualCapex != 'ACTIVO' && estadoActualCapex != 'CERRADO')
+			if (estadoActual != 'ACTIVA' && estadoActual != 'CERRADA')
 			{
-				alert("No se puede cambiar el estado del Capex")
+				alert("No se puede cambiar el estado de la Partida");
 				return;
 			}
-			switch(estadoActualCapex)
+			switch(estadoActual)
 			{
-				case 'ACTIVO':
-					$('#estado').val('CERRADO');
+				case 'ACTIVA':
+					$('#estado').val('CERRADA');
 					break;
-				case 'CERRADO':
-					$('#estado').val('ACTIVO');
+				case 'CERRADA':
+					$('#estado').val('ACTIVA');
 					break;				
 			}
 
-			// Actualiza estado de la orden de venta
+			// Actualiza estado de la partida
 			let estadoPartidaGasto = $('#estado').val();
 			let partidagasto_id = $('#partidagasto_id').val();
 
@@ -374,7 +359,7 @@
 
 			$.get(listarUri)
 				.done(function(data){
-					alert('Capex actualizado con éxito');
+					alert('Partida actualizada con éxito');
 
 					muestraBotonAnulacion(estadoPartidaGasto);
 				})
@@ -441,5 +426,3 @@
             });
         });
     }
-
-

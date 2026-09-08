@@ -1980,6 +1980,7 @@ $(function () {
 				fecha: $('#fecha').val() || '',
 				descuento: $('#descuento').val(),
 				descuento_tipo: $('#descuento_tipo').val() || 'porcentaje',
+				proveedor_id: $('#proveedor_id').val() || '',
 				articulo_ids: articulo_ids,
 				cantidades: cantidades,
 				precios: precios,
@@ -2002,10 +2003,17 @@ $(function () {
 			$('#oc-tot-neto').text(ocFmtEsAr(res.neto_sin_iva));
 			$('#oc-tot-iva').text(ocFmtEsAr(res.iva_total));
 			$('#oc-tot-final').text(ocFmtEsAr(res.total));
+			var conIva = res.con_iva !== false;
+			$('#oc-fila-iva-resumen').toggle(conIva);
+			if (conIva) {
+				$('#oc-tot-neto-label').html('Neto ítems <span class="small" id="oc-tot-neto-hint">(sin impuesto)</span>');
+			} else {
+				$('#oc-tot-neto-label').html('Importe ítems <span class="small" id="oc-tot-neto-hint">(sin IVA discriminado)</span>');
+			}
 			$('.oc-fila-iva-detalle').remove();
 			var filas = res.filas_iva || [];
-			if (filas.length > 1) {
-				var $ivaAnchor = $('#oc-tot-iva').closest('tr');
+			if (conIva && filas.length > 1) {
+				var $ivaAnchor = $('#oc-fila-iva-resumen');
 				filas.forEach(function (fi) {
 					var t = Number(fi.tasa) || 0;
 					var lbl = 'IVA ' + String(t.toFixed(2)).replace(/\.?0+$/, '') + '%';
@@ -2017,6 +2025,14 @@ $(function () {
 							'</td></tr>'
 					);
 				});
+				$('#oc-tot-iva-label').html('Total IVA <span class="small">(nacional)</span>');
+			} else if (conIva && filas.length === 1) {
+				var t0 = Number(filas[0].tasa) || 0;
+				var lbl0 = 'IVA ' + String(t0.toFixed(2)).replace(/\.?0+$/, '') + '%';
+				$('#oc-tot-iva-label').html(lbl0 + ' <span class="small">(nacional)</span>');
+				$('#oc-tot-iva').text(ocFmtEsAr(filas[0].importe));
+			} else if (conIva) {
+				$('#oc-tot-iva-label').html('IVA <span class="small">(nacional)</span>');
 			}
 		});
 	}
@@ -2671,6 +2687,7 @@ $(function () {
 	// plantilla/origen precio pueden disparar change genérico.
 	$('#proveedor_id').on('change.ocordencompra change.cpProveedorCargado', function () {
 		var id = $(this).val();
+		ocScheduleTotales();
 		if (!id) {
 			return;
 		}

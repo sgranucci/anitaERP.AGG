@@ -27,7 +27,7 @@ class RetencionesPagoCalculator
         $ganancias = $input->calcularGanancias
             ? $this->gananciasCalculator->calcularParaProveedor(
                 $input->proveedor,
-                $input->importeNetoPago,
+                $input->netoGanancias(),
                 $input->gananciasNetoAcumulado,
                 $input->gananciasRetenidoAcumulado,
                 $input->gananciasManual,
@@ -61,7 +61,7 @@ class RetencionesPagoCalculator
         $suss = $input->calcularSuss
             ? $this->sussCalculator->calcularParaProveedor(
                 $input->proveedor,
-                $input->importeNetoPago,
+                $input->netoSuss(),
                 $input->sussNetoAcumulado,
                 $input->sussRetenidoAcumulado,
                 $input->sussManual,
@@ -77,7 +77,7 @@ class RetencionesPagoCalculator
         $iibb = $input->calcularIibb
             ? $this->iibbCalculator->calcularParaProveedor(
                 $input->proveedor,
-                $input->importeNetoPago,
+                $input->netoIibb(),
                 $input->fecha,
                 $input->iibbTasaOverride,
                 $input->iibbProvinciaId,

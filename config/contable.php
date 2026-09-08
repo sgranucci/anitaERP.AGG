@@ -47,16 +47,15 @@ return [
         'limite_caja_banco' => (int) preg_replace('/\D/', '', (string) env('MAYOR_CONCEPTO_LIMITE_CAJA_BANCO', '112010008')),
         // Tope mayor analítico de control / conciliación (export l_mayor; ej. 112010-008).
         'limite_cuenta_analitico_control' => (int) preg_replace('/\D/', '', (string) env('MAYOR_CONCEPTO_LIMITE_CUENTA_ANALITICO_CONTROL', '112010008')),
-        // fuente_erp_hasta: Y-m-d o Ymd — hasta esa fecha inclusive lee del ERP (MayorConceptoErpReader);
-        // después sigue el bridge Anita. Vacío = solo Anita (no hereda el corte del mayor plano).
-        // No habilitar ERP acá sin conciliar asientos vs Anita en el período.
+        // Documenta hasta cuándo hay import ERP (informativo). La consulta elige ERP u Anita
+        // de forma explícita; ya no hay híbrido automático por esta fecha.
         'fuente_erp_hasta' => env('MAYOR_CONCEPTO_FUENTE_ERP_HASTA', ''),
     ],
 
     /*
     | Mayor plano por cuenta (l-mayor). Bridge ctamov + subdiario; volúmenes altos en cierre mensual.
-    | fuente_erp_hasta: Y-m-d o Ymd — hasta esa fecha inclusive lee asientos ERP importados;
-    | después sigue el bridge Anita. Vacío = solo Anita (legacy).
+    | fuente_erp_hasta: tope documentado de importación (informativo en UI).
+    | La consulta usa origen ERP o Anita de forma exclusiva (sin híbrido).
     */
     'mayor_plano_cuenta' => [
         'memory_limit' => env('MAYOR_PLANO_CUENTA_MEMORY_LIMIT', '4096M'),

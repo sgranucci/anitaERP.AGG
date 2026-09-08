@@ -62,7 +62,12 @@ final class IngresoEgresoSolicitudpagoOpaCuentacorrienteSupport
             'numerotransaccion' => (string) ($movimiento->numerotransaccion ?? ''),
             'fecha' => $movimiento->fecha,
             'proveedor_id' => $proveedorId,
-            'detalle' => (string) ($movimiento->detalle ?? ('Pago SP '.$sp->codigo)),
+            'detalle' => (string) (
+                trim((string) ($movimiento->detalle ?? '')) !== ''
+                && ! IngresoEgresoSolicitudpagoSupport::esDescripcionGenericaPagoSp((string) $movimiento->detalle)
+                    ? $movimiento->detalle
+                    : IngresoEgresoSolicitudpagoSupport::descripcionMovimientoDesdeSp($sp)
+            ),
             'estado' => 'CONFIRMADA',
             'monto' => $monto,
             'cotizacion' => $cotizacion > 0 ? $cotizacion : 1,

@@ -221,9 +221,14 @@ class IngresoEgresoController extends Controller
                 if (! $request->filled('proveedor_id') && $solicitudpagoOrigen->proveedor_id) {
                     $data->proveedor_id = (int) $solicitudpagoOrigen->proveedor_id;
                 }
-                if (! $request->filled('detalle')) {
-                    $data->detalle = 'Pago SP '.$solicitudpagoOrigen->codigo
-                        .($solicitudpagoOrigen->detalle ? ' — '.$solicitudpagoOrigen->detalle : '');
+                if (! $request->filled('detalle')
+                    || \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::esDescripcionGenericaPagoSp(
+                        (string) $request->input('detalle')
+                    )
+                ) {
+                    $data->detalle = \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::descripcionMovimientoDesdeSp(
+                        $solicitudpagoOrigen
+                    );
                 }
                 $tipoSpId = IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorConfig($solicitudpagoOrigen);
                 if ($tipoSpId > 0) {
@@ -240,7 +245,17 @@ class IngresoEgresoController extends Controller
             $data->proveedor_id = (int) $request->input('proveedor_id');
         }
         if ($request->filled('detalle')) {
-            $data->detalle = (string) $request->input('detalle');
+            $detalleReq = (string) $request->input('detalle');
+            // No pisar el detalle Anita de la SP con el placeholder "Pago SP N" del redirect.
+            if ($solicitudpagoOrigen === null
+                || ! \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::esDescripcionGenericaPagoSp($detalleReq)
+            ) {
+                $data->detalle = $detalleReq;
+            } elseif (trim((string) ($data->detalle ?? '')) === '') {
+                $data->detalle = \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::descripcionMovimientoDesdeSp(
+                    $solicitudpagoOrigen
+                );
+            }
         }
         if ($data->proveedor_id && $solicitudpagoOrigen && $solicitudpagoOrigen->proveedores) {
             $data->setRelation('proveedores', $solicitudpagoOrigen->proveedores);

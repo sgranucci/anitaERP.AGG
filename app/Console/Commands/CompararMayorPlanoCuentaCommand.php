@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use App\Services\Contable\MayorPlanoCuentaReporteService;
+use App\Support\Contable\MayorFuenteConsultaSupport;
 use App\Support\Contable\MayorPlanoCuenta\MayorPlanoCuentaComparacionSupport;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Log;
@@ -16,12 +17,13 @@ class CompararMayorPlanoCuentaCommand extends Command
                             {--mes=4 : Mes 1-12}
                             {--anio=2026 : Año}
                             {--moneda=1 : Moneda de reporte}
+                            {--fuente=anita : Origen del mayor ERP: anita|erp}
                             {--tolerancia=0.05 : Tolerancia en pesos}
                             {--salida= : Directorio salida JSON}
                             {--detalle=25 : Máx. filas diff en consola}
                             {--sin-subdiario : No incluir subdiario (solo ctamov)}';
 
-    protected $description = 'Compara mayor analítico por cuenta AnitaERP vs export CSV Anita l-mayor';
+    protected $description = 'Compara mayor plano AnitaERP (fuente Anita o ERP) vs export CSV Anita l-mayor';
 
     public function handle(
         MayorPlanoCuentaReporteService $reporteService,
@@ -46,6 +48,7 @@ class CompararMayorPlanoCuentaCommand extends Command
         $monedaId = max(1, (int) $this->option('moneda'));
         $tolerancia = (float) $this->option('tolerancia');
         $maxDetalle = max(0, (int) $this->option('detalle'));
+        $fuente = MayorFuenteConsultaSupport::normalizarModo($this->option('fuente'));
 
         $filtros = [
             'empresa_ids' => [$empresaId],
@@ -61,20 +64,26 @@ class CompararMayorPlanoCuentaCommand extends Command
             'cuenta_desde' => 0,
             'cuenta_hasta' => 0,
             'filtro_texto' => '',
+            'fuente_mayor' => $fuente,
         ];
 
+        $etiquetaFuente = $fuente === MayorFuenteConsultaSupport::MODO_ERP
+            ? 'ERP nativo (asientos)'
+            : 'Anita (bridge)';
+
         $this->info(sprintf(
-            'Comparación mayor plano — empresa %d, %02d/%d, moneda %d, subdiario %s',
+            'Comparación mayor plano — empresa %d, %02d/%d, moneda %d, subdiario %s, fuente %s',
             $empresaId,
             $mes,
             $anio,
             $monedaId,
             $filtros['incluye_subdiario'] ? 'sí' : 'no',
+            $etiquetaFuente,
         ));
-        $this->line('CSV Anita: '.$rutaCsv);
+        $this->line('CSV Anita l-mayor: '.$rutaCsv);
 
         try {
-            $this->comment('Generando mayor AnitaERP vía bridge…');
+            $this->comment('Generando mayor AnitaERP ('.$etiquetaFuente.')…');
             $resultado = $reporteService->generarDesdeFiltros($filtros);
             $filas = $reporteService->aplanarFilas($resultado, [], false);
 
@@ -82,6 +91,14 @@ class CompararMayorPlanoCuentaCommand extends Command
             $csvAnita = $comparacion->leerCsvAnita($rutaCsv);
 
             $informe = $comparacion->comparar($filas, $resultado, $csvAnita, $tolerancia);
+            $informe['parametros'] = array_merge(
+                is_array($informe['parametros'] ?? null) ? $informe['parametros'] : [],
+                [
+                    'fuente_mayor' => $fuente,
+                    'fuente_etiqueta' => $etiquetaFuente,
+                    'csv' => $rutaCsv,
+                ],
+            );
 
             $directorio = is_string($this->option('salida')) && trim((string) $this->option('salida')) !== ''
                 ? trim((string) $this->option('salida'))
@@ -97,11 +114,14 @@ class CompararMayorPlanoCuentaCommand extends Command
 
         $resumen = $informe['resumen'] ?? [];
         $stats = $resultado['stats'] ?? [];
+        $params = $resultado['parametros'] ?? [];
 
         $this->newLine();
         $this->table(['Métrica', 'Valor'], [
-            ['Ctamov bridge', (string) ($stats['ctamov_filas'] ?? 0)],
-            ['Subdiario bridge', (string) ($stats['subdiario_filas'] ?? 0)],
+            ['Fuente mayor', $etiquetaFuente],
+            ['Saldo inicial fuente', (string) ($params['saldo_inicial_fuente'] ?? '')],
+            ['Ctamov / ERP filas', (string) (($stats['ctamov_filas'] ?? 0) ?: ($stats['erp_asientos_filas'] ?? 0))],
+            ['Subdiario filas', (string) ($stats['subdiario_filas'] ?? 0)],
             ['Cuentas ERP', (string) ($resumen['cuentas_erp'] ?? 0)],
             ['Líneas ERP', (string) ($resumen['lineas_erp'] ?? 0)],
             ['Líneas Anita CSV', (string) ($resumen['lineas_anita'] ?? 0)],

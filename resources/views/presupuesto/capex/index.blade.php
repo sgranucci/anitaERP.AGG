@@ -32,18 +32,23 @@ use App\Support\Presupuesto\CapexListadoFiltros; ?>
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Capex</h3>
-                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                <div class="card-tools d-flex flex-nowrap align-items-center justify-content-end overflow-auto">
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-capex',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => CapexListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
                         'limpiarUrl' => route('consultar_capex'),
-                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
+                        'placeholder' => 'Búsqueda rápida…',
                         'toggleTarget' => '#panel-filtros-capex',
                         'toggleId' => 'btn-toggle-filtros-capex',
                         'inputId' => 'filtro_valor',
                         'nuevoRegistroUrl' => route('crear_capex', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-capex',
+                    ])
+                    @include('includes.exportar-tabla-queryparams', [
+                        'ruta' => 'lista_capex',
+                        'queryparams' => $filtrosQuery ?? [],
+                        'variant' => 'compact',
                     ])
                 </div>
             </div>
@@ -53,15 +58,9 @@ use App\Support\Presupuesto\CapexListadoFiltros; ?>
                 ])
             </form>
             <div class="card-body p-0">
-                <div class="px-3 py-2 border-bottom">
-                    @include('includes.exportar-tabla-queryparams', [
-                        'ruta' => 'lista_capex',
-                        'queryparams' => $filtrosQuery ?? [],
-                    ])
-                </div>
                 <div class="table-responsive">
                     <table class="table table-striped table-bordered table-hover mb-0" id="tabla-paginada">
-                        <thead>
+                        <thead style="background:#85C1E9;color:#17202A;">
                             <tr>
                                 <th class="width20">ID</th>
                                 <th>Empresa</th>

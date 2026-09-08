@@ -1,6 +1,6 @@
 @php
     use App\Support\Contable\MayorFuenteConsultaSupport;
-    $fuenteMayor = MayorFuenteConsultaSupport::normalizarModo($filtros['fuente_mayor'] ?? 'auto');
+    $fuenteMayor = MayorFuenteConsultaSupport::normalizarModo($filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_ERP);
     $idPrefix = $id_prefix ?? 'mayor';
     $compact = ! empty($compact);
     $configKey = $config_key ?? 'contable.mayor_plano_cuenta.fuente_erp_hasta';
@@ -16,12 +16,6 @@
         <label class="small font-weight-bold d-block mb-1">Fuente del mayor</label>
         <div class="form-check form-check-inline">
             <input class="form-check-input" type="radio" name="fuente_mayor"
-                   id="{{ $idPrefix }}-fuente-auto" value="auto"
-                   @checked($fuenteMayor === 'auto')>
-            <label class="form-check-label" for="{{ $idPrefix }}-fuente-auto">Automático</label>
-        </div>
-        <div class="form-check form-check-inline">
-            <input class="form-check-input" type="radio" name="fuente_mayor"
                    id="{{ $idPrefix }}-fuente-erp" value="erp"
                    @checked($fuenteMayor === 'erp')>
             <label class="form-check-label" for="{{ $idPrefix }}-fuente-erp">ERP nativo</label>
@@ -33,10 +27,9 @@
             <label class="form-check-label" for="{{ $idPrefix }}-fuente-anita">Anita</label>
         </div>
         <small class="form-text text-muted">
+            ERP = solo asientos del ERP. Anita = solo bridge Informix.
             @if ($hayCorteErp)
-                ERP hasta {{ $corteCfg }}; después siempre Anita. «Anita» fuerza bridge también antes del tope.
-            @else
-                Automático = solo Anita (bridge). «ERP nativo» queda para prueba puntual.
+                Import documentado hasta {{ $corteCfg }}.
             @endif
         </small>
     </div>
@@ -44,12 +37,6 @@
     <div class="form-group row mb-2">
         <label class="{{ $col_label ?? 'col-lg-2' }} control-label">Fuente del mayor</label>
         <div class="{{ $col_input ?? 'col-lg-9' }}">
-            <div class="form-check form-check-inline">
-                <input class="form-check-input" type="radio" name="fuente_mayor"
-                       id="{{ $idPrefix }}-fuente-auto" value="auto"
-                       @checked($fuenteMayor === 'auto')>
-                <label class="form-check-label" for="{{ $idPrefix }}-fuente-auto">Automático</label>
-            </div>
             <div class="form-check form-check-inline">
                 <input class="form-check-input" type="radio" name="fuente_mayor"
                        id="{{ $idPrefix }}-fuente-erp" value="erp"
@@ -63,14 +50,11 @@
                 <label class="form-check-label" for="{{ $idPrefix }}-fuente-anita">Anita (bridge)</label>
             </div>
             <small class="form-text text-muted d-block mt-1">
+                Elegí una sola fuente para todo el período (sin híbrido).
+                <strong>ERP nativo</strong> lee asientos vivos del ERP.
+                <strong>Anita (bridge)</strong> replica el mayor Informix (ctamov + subdiario).
                 @if ($hayCorteErp)
-                    Hasta el {{ $corteCfg }} el ERP puede leer asientos nativos (links azules).
-                    Desde el día siguiente siempre sale Anita, aunque elijas ERP.
-                    «Anita (bridge)» fuerza el mayor clásico también en el tramo ya migrado.
-                @else
-                    Hoy el mayor por concepto en Automático sale solo por Anita (bridge).
-                    Usá «Anita (bridge)» para forzarla siempre, o «ERP nativo» solo para comparar
-                    (hoy descuadra: no usar para cierre).
+                    Tope de importación documentado: {{ $corteCfg }}.
                 @endif
             </small>
         </div>

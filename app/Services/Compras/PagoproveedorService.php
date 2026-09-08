@@ -23,7 +23,6 @@ use App\Support\Compras\PagoproveedorAplicacionCuentacorrienteSupport;
 use App\Support\Compras\PagoproveedorAsientoArmadoSupport;
 use App\Support\Compras\ProveedorCbuPagoSupport;
 use App\Support\Compras\Retencion\PagoproveedorRetencionPersistenciaSupport;
-use App\Support\Compras\Retencion\RetencionesPagoInput;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use Carbon\Carbon;
 use Exception;
@@ -47,6 +46,7 @@ class PagoproveedorService
         private Asiento_MovimientoRepositoryInterface $asientoMovimientoRepository,
         private TipoasientoRepositoryInterface $tipoasientoRepository,
         private RetencionesPagoCalculator $retencionesPagoCalculator,
+        private RetencionesPagoContextoBuilder $retencionesPagoContextoBuilder,
         private CuentacajaRepositoryInterface $cuentacajaRepository,
         private CuentacontableRepositoryInterface $cuentacontableRepository,
         private ProveedorCuentacorrienteAplicacionAnitaSyncService $cuentacorrienteAnitaSyncService,
@@ -305,25 +305,31 @@ class PagoproveedorService
             return;
         }
 
-        $neto = (float) ($data['importe_neto_retencion'] ?? $data['monto'] ?? $pago->monto);
-        $iva = (float) ($data['importe_iva_retencion'] ?? 0);
-
-        $resultado = $this->retencionesPagoCalculator->calcular(new RetencionesPagoInput(
+        $aplicaciones = $this->aplicacionesDesdeData($data);
+        $ctx = $this->retencionesPagoContextoBuilder->armarInput(
             proveedor: $proveedor,
-            importeNetoPago: $neto,
-            importeIvaPago: $iva,
+            aplicaciones: $aplicaciones,
             fecha: $pago->fecha?->format('Y-m-d'),
-            retenciongananciaIdPago: isset($data['retencionganancia_id']) ? (int) $data['retencionganancia_id'] : null,
-            retencionivaIdPago: isset($data['retencioniva_id']) ? (int) $data['retencioniva_id'] : null,
-            retencionsussIdPago: isset($data['retencionsuss_id']) ? (int) $data['retencionsuss_id'] : null,
-            iibbProvinciaId: isset($data['iibb_provincia_id']) ? (int) $data['iibb_provincia_id'] : null,
-            iibbTasaOverride: isset($data['iibb_tasa']) ? (float) $data['iibb_tasa'] : null,
-            calcularGanancias: ! isset($data['calcular_ganancias']) || (bool) $data['calcular_ganancias'],
-            calcularIva: ! isset($data['calcular_iva']) || (bool) $data['calcular_iva'],
-            calcularSuss: ! isset($data['calcular_suss']) || (bool) $data['calcular_suss'],
-            calcularIibb: ! isset($data['calcular_iibb']) || (bool) $data['calcular_iibb'],
             empresaId: (int) $pago->empresa_id ?: null,
-        ));
+            monedaPagoId: (int) ($pago->moneda_id ?: 1),
+            cotizacionPago: (float) ($pago->cotizacion ?: 0) ?: null,
+            excluirPagoproveedorId: (int) $pago->id ?: null,
+            overrides: [
+                'retencionganancia_id' => $data['retencionganancia_id'] ?? null,
+                'retencioniva_id' => $data['retencioniva_id'] ?? null,
+                'retencionsuss_id' => $data['retencionsuss_id'] ?? null,
+                'iibb_provincia_id' => $data['iibb_provincia_id'] ?? null,
+                'iibb_tasa' => $data['iibb_tasa'] ?? null,
+                'calcular_ganancias' => $data['calcular_ganancias'] ?? true,
+                'calcular_iva' => $data['calcular_iva'] ?? true,
+                'calcular_suss' => $data['calcular_suss'] ?? true,
+                'calcular_iibb' => $data['calcular_iibb'] ?? true,
+            ],
+            importeNetoFallback: (float) ($data['importe_neto_retencion'] ?? $data['monto'] ?? $pago->monto),
+            importeIvaFallback: (float) ($data['importe_iva_retencion'] ?? 0),
+        );
+
+        $resultado = $this->retencionesPagoCalculator->calcular($ctx['input']);
 
         PagoproveedorRetencionPersistenciaSupport::reemplazarDesdeResultado(
             $pago,
@@ -332,6 +338,33 @@ class PagoproveedorService
             (float) $pago->cotizacion,
             $pago->estado !== 'PRE CARGA',
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     * @return list<array<string, mixed>>
+     */
+    private function aplicacionesDesdeData(array $data): array
+    {
+        $ids = $data['idcuentacorrientes'] ?? [];
+        $montos = $data['montoaplicadocomprobantes'] ?? [];
+        $cots = $data['cotizacion_aplicada_dia'] ?? ($data['cotizacioncomprobantes'] ?? []);
+        $monedas = $data['monedacomprobante_ids'] ?? [];
+        $out = [];
+        foreach ($ids as $i => $ccId) {
+            $ccId = (int) $ccId;
+            if ($ccId <= 0) {
+                continue;
+            }
+            $out[] = [
+                'proveedor_cuentacorriente_id' => $ccId,
+                'montoaplicado' => (float) ($montos[$i] ?? 0),
+                'cotizacion_aplicada' => (float) ($cots[$i] ?? 0),
+                'moneda_id' => isset($monedas[$i]) ? (int) $monedas[$i] : null,
+            ];
+        }
+
+        return $out;
     }
 
     /**
@@ -746,7 +779,7 @@ class PagoproveedorService
                 PagoproveedorAplicacionCuentacorrienteSupport::reemplazarAplicaciones($pago, $aplicaciones);
 
                 if ($calcularRetenciones && (bool) config('propuesta_pago.calcular_retenciones_al_ejecutar', true)) {
-                    $this->persistirRetenciones($pago, [
+                    $payloadRet = [
                         'monto' => $monto,
                         'importe_neto_retencion' => $monto,
                         'importe_iva_retencion' => 0,
@@ -754,7 +787,18 @@ class PagoproveedorService
                         'calcular_iva' => true,
                         'calcular_suss' => true,
                         'calcular_iibb' => true,
-                    ]);
+                        'idcuentacorrientes' => [],
+                        'montoaplicadocomprobantes' => [],
+                        'cotizacion_aplicada_dia' => [],
+                        'monedacomprobante_ids' => [],
+                    ];
+                    foreach ($aplicaciones as $apl) {
+                        $payloadRet['idcuentacorrientes'][] = (int) ($apl['proveedor_cuentacorriente_id'] ?? 0);
+                        $payloadRet['montoaplicadocomprobantes'][] = (float) ($apl['montoaplicado'] ?? 0);
+                        $payloadRet['cotizacion_aplicada_dia'][] = (float) ($apl['cotizacion_aplicada'] ?? $apl['cotizacion'] ?? 0);
+                        $payloadRet['monedacomprobante_ids'][] = (int) ($apl['moneda_id'] ?? 0);
+                    }
+                    $this->persistirRetenciones($pago, $payloadRet);
                 }
 
                 $pago->load('pagoproveedor_retenciones');

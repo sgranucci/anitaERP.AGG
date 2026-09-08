@@ -52,9 +52,10 @@
             </tr>
         @endif
         <tr>
-            <td>Neto gravado (sin IVA)</td>
+            <td>{{ !empty($totalesOc['con_iva']) ? 'Neto gravado (sin IVA)' : 'Importe (sin IVA discriminado)' }}</td>
             <td class="num">{{ $impMon((float) ($totalesOc['neto_sin_iva'] ?? 0), $mon) }}</td>
         </tr>
+        @if (!empty($totalesOc['con_iva']))
         @foreach ($totalesOc['filas_iva'] ?? [] as $fi)
             <tr>
                 <td>IVA {{ number_format((float) ($fi['tasa'] ?? 0), 2, ',', '.') }}%</td>
@@ -66,6 +67,7 @@
                 <td>IVA</td>
                 <td class="num">{{ $impMon((float) $totalesOc['iva_total'], $mon) }}</td>
             </tr>
+        @endif
         @endif
         <tr class="pdf-totales-final">
             <td>TOTAL</td>

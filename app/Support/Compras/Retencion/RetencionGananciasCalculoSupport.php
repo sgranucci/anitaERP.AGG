@@ -115,10 +115,14 @@ final class RetencionGananciasCalculoSupport
                 'inscripto' => $input->inscripto,
                 'forma_calculo' => $regimen->formaCalculo,
                 'regimen' => $regimen->regimen,
+                'regimen_id' => $regimen->id,
                 'codigo' => $regimen->codigo,
                 'retencion_periodo' => $retencionPeriodo,
                 'retenido_previo' => $retenidoPrevio,
                 'neto_pago' => $netoPago,
+                'neto_acumulado_previo' => $regimen->tomaAcumulados()
+                    ? $this->redondear($input->netoAcumuladoPeriodo)
+                    : 0.0,
             ],
         );
     }

@@ -2,11 +2,14 @@
 
 namespace App\Support\Contable\ConciliacionBancaria;
 
+use App\Models\Caja\Cuentacaja;
+use App\Models\Tesoreria\PosicionBancariaCheque;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Schema;
 
 /**
- * Arma la solapa Pendientes (CHP) desde cpromae y el subconjunto de carátula
- * (vencimiento en el mes de corte = “emitidos/entregados no acreditados”).
+ * Arma la solapa Pendientes (CHP) preferiendo stock ERP (posicion_bancaria_cheque).
+ * Fallback Anita cpromae solo si no hay datos ERP para la cuenta.
  */
 final class ConciliacionBancariaPendientesCpromaeSupport
 {
@@ -16,7 +19,7 @@ final class ConciliacionBancariaPendientesCpromaeSupport
     }
 
     /**
-     * @param  list<string>  $numerosCheque  Números a resolver en cpromae (Excel Contaduría o Ch: mayor)
+     * @param  list<string>  $numerosCheque  Números a resolver (Excel Contaduría o Ch: mayor)
      * @param  array<string, array{tip?: string, importe?: float, fecha_emision?: string|null, fecha_cheque?: string|null, detalle?: string}>  $semillaPorNumero
      * @return array{
      *   pendientes: list<array<string,mixed>>,
@@ -33,6 +36,7 @@ final class ConciliacionBancariaPendientesCpromaeSupport
         array $numerosCheque = [],
         array $semillaPorNumero = [],
         bool $excluirAnulados = true,
+        bool $preferirErp = true,
     ): array {
         $corteYmd = (int) $fechaCorte->format('Ymd');
         $numeros = array_values(array_unique(array_filter(array_map(
@@ -40,18 +44,34 @@ final class ConciliacionBancariaPendientesCpromaeSupport
             $numerosCheque !== [] ? $numerosCheque : array_keys($semillaPorNumero),
         ), static fn (string $n) => $n !== '' && $n !== '0')));
 
-        if ($numeros !== []) {
-            $rows = $this->bridge->listarPorNumeros($codigoCuentacaja, $numeros, $empresaId);
-            $fuente = $semillaPorNumero !== [] ? 'cpromae_semilla_excel' : 'cpromae_por_numeros';
-        } else {
-            // Fallback volumoso: solo cuando no hay semilla ni Ch:.
-            $rows = $this->bridge->listarPorCuenta($codigoCuentacaja, $empresaId);
-            $fuente = 'cpromae_cuenta';
+        $rows = [];
+        $fuente = 'sin_datos';
+
+        if ($preferirErp) {
+            $erp = $this->listarDesdeErp($codigoCuentacaja, $empresaId, $numeros);
+            if ($erp !== []) {
+                $rows = $erp;
+                $fuente = $semillaPorNumero !== []
+                    ? 'erp_semilla'
+                    : ($numeros !== [] ? 'erp_por_numeros' : 'erp_cuenta');
+            }
+        }
+
+        if ($rows === []) {
+            if ($numeros !== []) {
+                $rows = $this->bridge->listarPorNumeros($codigoCuentacaja, $numeros, $empresaId);
+                $fuente = $semillaPorNumero !== [] ? 'cpromae_semilla_excel' : 'cpromae_por_numeros';
+            } else {
+                $rows = $this->bridge->listarPorCuenta($codigoCuentacaja, $empresaId);
+                $fuente = 'cpromae_cuenta';
+            }
         }
 
         $byNumero = [];
         foreach ($rows as $row) {
-            $mapped = $this->mapearFila($row);
+            $mapped = is_array($row) && isset($row['numero_cheque'])
+                ? $row
+                : $this->mapearFila($row);
             if ($mapped === null) {
                 continue;
             }
@@ -177,6 +197,73 @@ final class ConciliacionBancariaPendientesCpromaeSupport
                 'fecha_emision' => $ch['fecha_emision'] ?? null,
                 'fecha_cheque' => $ch['fecha_cheque'] ?? null,
                 'detalle' => (string) ($ch['detalle'] ?? ''),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * Stock ERP (posicion_bancaria_cheque) ya sincronizado desde cpromae/Excel.
+     *
+     * @param  list<string>  $numeros  vacío = toda la cuenta
+     * @return list<array<string,mixed>>
+     */
+    private function listarDesdeErp(string $codigoCuentacaja, int $empresaId, array $numeros): array
+    {
+        if (! Schema::hasTable('posicion_bancaria_cheque')) {
+            return [];
+        }
+
+        $codigoNorm = ltrim($codigoCuentacaja, '0');
+        if ($codigoNorm === '') {
+            $codigoNorm = '0';
+        }
+        $ccId = Cuentacaja::query()
+            ->where('empresa_id', $empresaId)
+            ->where(function ($q) use ($codigoCuentacaja, $codigoNorm) {
+                $q->where('codigo', $codigoCuentacaja)
+                    ->orWhere('codigo', $codigoNorm)
+                    ->orWhere('codigo', str_pad($codigoNorm, 8, '0', STR_PAD_LEFT));
+            })
+            ->value('id');
+        if ($ccId === null) {
+            return [];
+        }
+
+        $q = PosicionBancariaCheque::query()
+            ->where('empresa_id', $empresaId)
+            ->where('cuentacaja_id', (int) $ccId);
+
+        if ($numeros !== []) {
+            $q->whereIn('numero_cheque', $numeros);
+        }
+
+        $out = [];
+        foreach ($q->get() as $ch) {
+            $paraDep = null;
+            if (is_array($ch->origen_json)) {
+                $paraDep = $ch->origen_json['para_dep'] ?? null;
+            }
+            $out[] = [
+                'tip' => (string) ($ch->tip ?: 'CHP'),
+                'numero_cheque' => (string) $ch->numero_cheque,
+                'fecha_emision' => $ch->fecha_emision?->toDateString(),
+                'fecha_cheque' => $ch->fecha_cheque?->toDateString(),
+                'fecha_entrega' => $ch->fecha_entrega?->toDateString(),
+                'fecha_conciliacion' => null,
+                'importe' => round((float) $ch->importe, 2),
+                'estado' => (string) ($ch->estado ?? ''),
+                'estado_banco' => (string) ($ch->estado_banco ?? ''),
+                'entregado_a' => (string) ($ch->entregado_a ?? ''),
+                'proveedor_codigo' => (string) ($ch->proveedor_codigo ?? ''),
+                'nro_op' => (string) ($ch->nro_op ?? ''),
+                'para_dep' => (string) ($paraDep ?? ''),
+                'incluye_caratula' => false,
+                'origen_json' => [
+                    'fuente' => 'posicion_bancaria_cheque',
+                    'id' => $ch->id,
+                ],
             ];
         }
 

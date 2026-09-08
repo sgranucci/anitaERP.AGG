@@ -44,6 +44,32 @@ final class PrecargaComprobanteOrigenEntrada
         };
     }
 
+    /**
+     * Orígenes que solo adjuntan PDF (sin OCR/IA): la precarga suele quedar en $0
+     * y los importes se cargan al generar el comprobante.
+     */
+    public static function sinImportesEsperados(?string $origen): bool
+    {
+        return in_array($origen, [self::SCAN_ANITA, self::LEGAJO], true);
+    }
+
+    public static function leyendaSinImportes(): string
+    {
+        return 'Scan Anita / Legajo: el PDF se adjunta sin leer importes (la precarga queda en $0). '
+            .'Los montos se cargan al generar el comprobante; el badge CP # indica que ya hay uno vinculado.';
+    }
+
+    public static function avisoFilaSinImportes(?string $origen): ?string
+    {
+        if (! self::sinImportesEsperados($origen)) {
+            return null;
+        }
+
+        return $origen === self::LEGAJO
+            ? 'PDF de legajo sin OCR — importes al alta del CP'
+            : 'Scan sin OCR/IA — importes al alta del CP';
+    }
+
     public static function esLecturaIa(?string $origen): bool
     {
         return in_array($origen, [self::PDF_IA, self::BATCH_IA, self::MAIL], true);

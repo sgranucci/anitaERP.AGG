@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Support\Contable\MayorPlanoCuenta;
 
 use App\ApiAnita;
+use App\Models\Contable\Asiento;
 use App\Services\Contable\AnitaAsientoImportService;
 use App\Support\Contable\AsientoAnitaMetadatosSupport;
 use App\Support\Contable\AsientoOrigenProcesoSupport;
@@ -24,6 +25,51 @@ final class MayorPlanoCuentaErpAsientoReader
     public function __construct(
         private readonly ApiAnita $api = new ApiAnita,
     ) {}
+
+    /**
+     * Hay asiento APE en [fechaDesdeRango, fechaHastaExclusiva) → ejercicio anterior tratado como cerrado.
+     */
+    public function existeAsientoAperturaEnRango(
+        int $empresaId,
+        int $fechaDesdeRangoYmd,
+        int $fechaHastaExclusivaYmd,
+    ): bool {
+        if ($empresaId <= 0 || $fechaDesdeRangoYmd <= 0 || $fechaHastaExclusivaYmd <= 0) {
+            return false;
+        }
+
+        $hastaYmd = $this->fechaAnteriorYmd($fechaHastaExclusivaYmd);
+        if ($hastaYmd < $fechaDesdeRangoYmd) {
+            return false;
+        }
+
+        $desdeIso = $this->ymdAIso($fechaDesdeRangoYmd);
+        $hastaIso = $this->ymdAIso($hastaYmd);
+
+        return DB::table('asiento as a')
+            ->join('tipoasiento as t', 't.id', '=', 'a.tipoasiento_id')
+            ->where('a.empresa_id', $empresaId)
+            ->whereBetween('a.fecha', [$desdeIso, $hastaIso])
+            ->whereRaw('UPPER(TRIM(t.abreviatura)) = ?', [MayorPlanoCuentaSupport::TIPO_ASIENTO_APERTURA])
+            ->where(function ($q) {
+                $q->whereNull('a.estado_aprobacion')
+                    ->orWhere('a.estado_aprobacion', Asiento::ESTADO_APROBACION_CONFIRMADO);
+            })
+            ->exists();
+    }
+
+    private function fechaAnteriorYmd(int $ymd): int
+    {
+        if ($ymd <= 0) {
+            return 0;
+        }
+        $dt = \DateTimeImmutable::createFromFormat('Ymd', (string) $ymd);
+        if (! $dt) {
+            return $ymd - 1;
+        }
+
+        return (int) $dt->modify('-1 day')->format('Ymd');
+    }
 
     /**
      * @param  list<int>  $empresaIds

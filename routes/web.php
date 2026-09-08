@@ -2902,6 +2902,9 @@ Route::middleware('bingo.habilitado')->group(function () {
     Route::post('caja/posicion-financiera/confirmar-saldo', 'Caja\PosicionFinancieraController@confirmarSaldo')->name('posicion_financiera_confirmar_saldo');
     Route::delete('caja/posicion-financiera/saldo/{id}', 'Caja\PosicionFinancieraController@anularSaldo')->name('posicion_financiera_anular_saldo');
 
+    Route::get('caja/posicion-bancaria-diaria', 'Caja\PosicionBancariaDiariaController@index')->name('posicion_bancaria_diaria');
+    Route::get('caja/posicion-bancaria-diaria/exportar', 'Caja\PosicionBancariaDiariaController@exportar')->name('posicion_bancaria_diaria_exportar');
+
     Route::get('caja/cotizacion-tesoreria', 'Caja\CotizacionTesoreriaController@index')->name('cotizacion_tesoreria');
     Route::get('caja/lista-cotizacion-tesoreria/{formato?}/{busqueda?}', 'Caja\CotizacionTesoreriaController@listar')->name('lista_cotizacion_tesoreria');
     Route::get('caja/cotizacion-tesoreria/crear', 'Caja\CotizacionTesoreriaController@crear')->name('crear_cotizacion_tesoreria');

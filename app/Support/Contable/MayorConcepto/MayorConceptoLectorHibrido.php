@@ -5,17 +5,16 @@ namespace App\Support\Contable\MayorConcepto;
 use App\Support\Contable\MayorFuenteConsultaSupport;
 
 /**
- * Elige de dónde leer el Mayor por concepto según fecha + modo de consulta.
+ * Elige de dónde leer el Mayor por concepto según el modo de consulta.
  *
- * Hasta `fuente_erp_hasta` inclusive puede leer del ERP; después siempre Anita.
- * El modo `anita` fuerza bridge también en el tramo migrado. El modo `erp`/`auto`
- * parte el rango en tramos (como el mayor plano) y fusiona las lecturas.
+ * Solo ERP o Anita (sin híbrido automático). El modo define una fuente para
+ * todo el período consultado.
  */
 class MayorConceptoLectorHibrido implements MayorConceptoLectorInterface
 {
     private MayorConceptoLectorInterface $activo;
 
-    private string $modo = MayorFuenteConsultaSupport::MODO_AUTO;
+    private string $modo = MayorFuenteConsultaSupport::MODO_ERP;
 
     /** @var array<string, mixed>|null */
     private ?array $ultimosTramos = null;

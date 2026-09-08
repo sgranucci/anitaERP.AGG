@@ -14,6 +14,7 @@
 @endsection
 
 <?php use App\Helpers\biblioteca;
+use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
 use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
 
 @section('contenido')
@@ -60,6 +61,12 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                 ])
             </form>
             @include('compras.precarga_comprobante_proveedor.partials.filtros_externos')
+            <div class="px-3 pt-2 pb-0">
+                <div class="alert alert-light border mb-2 py-2 small text-body" role="note">
+                    <i class="fa fa-info-circle text-info"></i>
+                    {{ PrecargaComprobanteOrigenEntrada::leyendaSinImportes() }}
+                </div>
+            </div>
             <div class="card-body table-responsive p-0">
                 @include('includes.exportar-tabla-queryparams', [
                     'ruta' => 'lista_precarga_comprobante_proveedor',
@@ -107,7 +114,18 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                             <td>{{ filled($data->fechafactura) ? \Carbon\Carbon::parse($data->fechafactura)->format('d/m/Y') : '' }}</td>
                             <td>{{ filled($data->fecharecepcionemail) ? \Carbon\Carbon::parse($data->fecharecepcionemail)->format('d/m/Y') : '' }}</td>
                             <td>{{$data->numeroordencompra ?? ''}}</td>
-                            <td class="text-right">{{ number_format((float) ($data->total ?? 0), 2, ',', '.') }}</td>
+                            @php
+                                $origenPrecarga = $data->origen_entrada ?? null;
+                                $totalPrecarga = (float) ($data->total ?? 0);
+                                $avisoSinImportes = PrecargaComprobanteOrigenEntrada::avisoFilaSinImportes($origenPrecarga);
+                                $mostrarAvisoSinImportes = $avisoSinImportes !== null && abs($totalPrecarga) < 0.005;
+                            @endphp
+                            <td class="text-right">
+                                {{ number_format($totalPrecarga, 2, ',', '.') }}
+                                @if ($mostrarAvisoSinImportes)
+                                    <br><small class="text-muted" title="{{ PrecargaComprobanteOrigenEntrada::leyendaSinImportes() }}">sin importes (PDF sin OCR)</small>
+                                @endif
+                            </td>
                             <td>
                                 @if (($data->estado ?? '') === \App\Support\Compras\PrecargaComprobanteEstados::CARGADA_ANITA)
                                     <span class="badge badge-info" title="Factura ya existente en Anita; no se genera comprobante ERP">
@@ -129,13 +147,18 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                                         $cpEstado = $data->comprobante_proveedor_estado ?? null;
                                     @endphp
                                     @if ($cpEstado === \App\Support\Compras\ComprobanteProveedorEstados::CONTABILIZADO)
-                                        <br><span class="badge badge-success" title="Comprobante contabilizado">CP #{{ $data->comprobante_proveedor_id }}</span>
+                                        <br><span class="badge badge-success" title="Comprobante contabilizado — los importes están en el CP, no en la precarga">CP #{{ $data->comprobante_proveedor_id }}</span>
                                     @else
                                         <br><span class="badge badge-warning" title="Borrador de comprobante (aún no contabilizado)">Borrador CP #{{ $data->comprobante_proveedor_id }}</span>
                                     @endif
                                 @endif
                             </td>
-                            <td><small>{{ \App\Support\Compras\PrecargaComprobanteOrigenEntrada::etiqueta($data->origen_entrada ?? null) }}</small></td>
+                            <td>
+                                <small>{{ PrecargaComprobanteOrigenEntrada::etiqueta($origenPrecarga) }}</small>
+                                @if ($avisoSinImportes !== null)
+                                    <br><small class="text-muted">{{ $avisoSinImportes }}</small>
+                                @endif
+                            </td>
                             <td class="text-nowrap">
                                 @php
                                     $urlPdfPrecarga = filled($data->rutaalmacenamiento) && puedeVerPrecargaFacturaPdf()
@@ -154,7 +177,7 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                                    data-ws-id="precarga-{{ $data->id }}"
                                    data-ws-modo="pdf"
                                    data-ws-titulo="{{ $tituloPrecarga }}"
-                                   data-ws-meta="{{ \App\Support\Compras\PrecargaComprobanteOrigenEntrada::etiqueta($data->origen_entrada ?? null) }}"
+                                   data-ws-meta="{{ PrecargaComprobanteOrigenEntrada::etiqueta($origenPrecarga) }}"
                                    data-ws-pdf="{{ $urlPdfPrecarga }}"
                                    @if (can('editar-precarga-proveedores', false))
                                        data-ws-edit="{{ route('editar_precarga_comprobante_proveedor', ['id' => $data->id]) }}"

@@ -5,39 +5,47 @@ namespace App\Support\Contable;
 /**
  * Origen de lectura del mayor (plano y por concepto) por consulta.
  *
- * El corte `fuente_erp_hasta` es el techo duro: nunca se lee ERP después de esa fecha.
- * El modo de consulta solo decide si, dentro del tramo ya migrado, se prefiere ERP,
- * se fuerza Anita, o se sigue el híbrido automático.
+ * Solo modos explícitos: ERP (asientos nativos) o Anita (bridge).
+ * El híbrido automático se eliminó: mezclaba fuentes en un mismo informe y descuadraba
+ * contra el mayor clásico de Anita / el ERP puro.
+ *
+ * {@see self::MODO_AUTO} queda como alias de ERP por compatibilidad de requests viejos.
  */
 final class MayorFuenteConsultaSupport
 {
+    /** @deprecated Alias de {@see self::MODO_ERP}; no ofrecer en UI. */
     public const MODO_AUTO = 'auto';
 
     public const MODO_ERP = 'erp';
 
     public const MODO_ANITA = 'anita';
 
-    /** Tope operativo actual si el modo pide ERP y la config está vacía. */
+    /** Referencia operativa (documentación / defaults legacy); ya no parte tramos. */
     public const CORTE_DEFAULT_YMD = 20260831;
 
     /**
-     * @return self::MODO_*
+     * @return self::MODO_ERP|self::MODO_ANITA
      */
     public static function normalizarModo(mixed $valor): string
     {
         $modo = strtolower(trim((string) $valor));
 
-        return in_array($modo, [self::MODO_AUTO, self::MODO_ERP, self::MODO_ANITA], true)
-            ? $modo
-            : self::MODO_AUTO;
+        if ($modo === self::MODO_ANITA) {
+            return self::MODO_ANITA;
+        }
+
+        // auto / vacío / erp / basura → ERP (origen explícito por defecto).
+        return self::MODO_ERP;
     }
 
     /**
-     * Corte Ymd desde config. Vacío = 0 (sin tramo ERP en modo auto).
+     * Corte Ymd desde config. Vacío = 0.
+     *
+     * Se conserva por pantallas/documentación (hasta cuándo hay import ERP), pero
+     * ya no define un tramo híbrido en la consulta.
      *
      * Si se pasa `$configKey` (p. ej. mayor por concepto), se usa solo esa clave:
-     * vacío significa “solo Anita” y no hereda el corte del mayor plano. Sin clave,
-     * se intenta plano y luego concepto (compatibilidad).
+     * vacío significa “sin tope documentado” y no hereda el corte del mayor plano.
      */
     public static function corteYmd(?string $configKey = null): int
     {
@@ -59,22 +67,19 @@ final class MayorFuenteConsultaSupport
     }
 
     /**
-     * Corte efectivo según modo: en `erp` cae al default si la config está vacía.
+     * Corte documentado según modo (informativo). En Anita es 0; en ERP usa config o default.
      */
     public static function corteEfectivo(string $modo, ?string $configKey = null): int
     {
         $modo = self::normalizarModo($modo);
-        $corte = self::corteYmd($configKey);
 
         if ($modo === self::MODO_ANITA) {
             return 0;
         }
 
-        if ($corte > 0) {
-            return $corte;
-        }
+        $corte = self::corteYmd($configKey);
 
-        return $modo === self::MODO_ERP ? self::CORTE_DEFAULT_YMD : 0;
+        return $corte > 0 ? $corte : self::CORTE_DEFAULT_YMD;
     }
 
     /**
@@ -93,7 +98,7 @@ final class MayorFuenteConsultaSupport
     public static function resolverTramos(
         int $fechaDesde,
         int $fechaHasta,
-        string $modo = self::MODO_AUTO,
+        string $modo = self::MODO_ERP,
         ?string $configKey = null,
     ): array {
         $modo = self::normalizarModo($modo);
@@ -103,43 +108,11 @@ final class MayorFuenteConsultaSupport
 
         $corte = self::corteEfectivo($modo, $configKey);
 
-        if ($corte <= 0 || $modo === self::MODO_ANITA) {
+        if ($modo === self::MODO_ANITA) {
             return self::soloAnita($modo, $fechaDesde, $fechaHasta, 0);
         }
 
-        $postCorte = self::fechaSiguiente($corte);
-        $erpDesde = 0;
-        $erpHasta = 0;
-        $anitaDesde = 0;
-        $anitaHasta = 0;
-
-        $erpPerDesde = $fechaDesde;
-        $erpPerHasta = min($fechaHasta, $corte);
-        if ($erpPerDesde > 0 && $erpPerHasta >= $erpPerDesde) {
-            $erpDesde = $erpPerDesde;
-            $erpHasta = $erpPerHasta;
-        }
-
-        $anitaPerDesde = max($fechaDesde, $postCorte);
-        if ($anitaPerDesde > 0 && $fechaHasta >= $anitaPerDesde) {
-            $anitaDesde = $anitaPerDesde;
-            $anitaHasta = $fechaHasta;
-        }
-
-        $usaErp = $erpDesde > 0 && $erpHasta >= $erpDesde;
-        $usaAnita = $anitaDesde > 0 && $anitaHasta >= $anitaDesde;
-
-        return [
-            'modo' => $modo,
-            'corte' => $corte,
-            'usa_erp' => $usaErp,
-            'usa_anita' => $usaAnita,
-            'tramo_erp_desde' => $usaErp ? $erpDesde : 0,
-            'tramo_erp_hasta' => $usaErp ? $erpHasta : 0,
-            'tramo_anita_desde' => $usaAnita ? $anitaDesde : 0,
-            'tramo_anita_hasta' => $usaAnita ? $anitaHasta : 0,
-            'etiqueta' => self::etiqueta($modo, $corte, $usaErp, $usaAnita),
-        ];
+        return self::soloErp($modo, $fechaDesde, $fechaHasta, $corte);
     }
 
     public static function formatearYmd(int $ymd): string
@@ -207,27 +180,37 @@ final class MayorFuenteConsultaSupport
             'tramo_erp_hasta' => 0,
             'tramo_anita_desde' => $usa ? $fechaDesde : 0,
             'tramo_anita_hasta' => $usa ? $fechaHasta : 0,
-            'etiqueta' => self::etiqueta($modo, $corte, false, $usa),
+            'etiqueta' => 'Anita (bridge)',
         ];
     }
 
-    private static function etiqueta(string $modo, int $corte, bool $usaErp, bool $usaAnita): string
+    /**
+     * @return array{
+     *     modo: string,
+     *     corte: int,
+     *     usa_erp: bool,
+     *     usa_anita: bool,
+     *     tramo_erp_desde: int,
+     *     tramo_erp_hasta: int,
+     *     tramo_anita_desde: int,
+     *     tramo_anita_hasta: int,
+     *     etiqueta: string
+     * }
+     */
+    private static function soloErp(string $modo, int $fechaDesde, int $fechaHasta, int $corte): array
     {
-        if ($usaErp && $usaAnita) {
-            $post = self::fechaSiguiente($corte);
+        $usa = $fechaDesde > 0 && $fechaHasta >= $fechaDesde;
 
-            return 'Híbrido: ERP hasta '.self::formatearYmd($corte)
-                .' · Anita desde '.self::formatearYmd($post);
-        }
-
-        if ($usaErp) {
-            return 'ERP nativo (hasta '.self::formatearYmd($corte).')';
-        }
-
-        if ($modo === self::MODO_ANITA) {
-            return 'Anita (forzado)';
-        }
-
-        return 'Anita (bridge)';
+        return [
+            'modo' => $modo,
+            'corte' => $corte,
+            'usa_erp' => $usa,
+            'usa_anita' => false,
+            'tramo_erp_desde' => $usa ? $fechaDesde : 0,
+            'tramo_erp_hasta' => $usa ? $fechaHasta : 0,
+            'tramo_anita_desde' => 0,
+            'tramo_anita_hasta' => 0,
+            'etiqueta' => 'ERP nativo (asientos)',
+        ];
     }
 }

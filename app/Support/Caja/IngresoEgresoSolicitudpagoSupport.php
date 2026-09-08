@@ -74,6 +74,55 @@ class IngresoEgresoSolicitudpagoSupport
         return $abrev !== '' ? $abrev : 'OPP';
     }
 
+    /**
+     * Descripción de movimiento al estilo Anita: detalle de la SP (no "Pago SP N").
+     * Truncada a 255 (asiento_movimiento.observacion / caja_movimiento.detalle).
+     */
+    public static function descripcionMovimientoDesdeSp(?object $sp, int $maxLen = 255): string
+    {
+        if ($sp === null) {
+            return '';
+        }
+
+        $detalle = trim((string) ($sp->detalle ?? ''));
+        if ($detalle !== '') {
+            return self::truncarDescripcion($detalle, $maxLen);
+        }
+
+        $codigo = trim((string) ($sp->codigo ?? ''));
+        if ($codigo !== '') {
+            return self::truncarDescripcion('Pago SP '.$codigo, $maxLen);
+        }
+
+        $id = (int) ($sp->id ?? 0);
+
+        return $id > 0 ? self::truncarDescripcion('Pago SP '.$id, $maxLen) : '';
+    }
+
+    /**
+     * True si la descripción es el placeholder genérico del circuito SP→IE.
+     */
+    public static function esDescripcionGenericaPagoSp(string $descripcion): bool
+    {
+        $txt = trim($descripcion);
+        if ($txt === '') {
+            return true;
+        }
+
+        // "Pago SP 11317" o "Pago SP 11317 — …" (prefijo genérico del ERP).
+        return preg_match('/^Pago SP\s+\d+/i', $txt) === 1;
+    }
+
+    private static function truncarDescripcion(string $texto, int $maxLen): string
+    {
+        $texto = trim($texto);
+        if ($maxLen <= 0 || mb_strlen($texto) <= $maxLen) {
+            return $texto;
+        }
+
+        return mb_substr($texto, 0, $maxLen);
+    }
+
     private static function tipotransaccionCajaIdPorAbreviatura(string $abrev): int
     {
         if ($abrev === '') {

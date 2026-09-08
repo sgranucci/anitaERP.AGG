@@ -68,6 +68,7 @@
         .encabezado td { vertical-align: top; border: none; }
         .municipio-fecha { margin: 18px 0 14px; text-align: right; }
         .cuerpo { text-align: justify; margin: 12px 0 18px; text-indent: 2.5em; }
+        .cierre { margin-top: 18px; text-indent: 2.5em; }
         table.nota {
             width: 100%;
             border-collapse: collapse;
@@ -174,7 +175,7 @@
         @else
             A través de la presente, adjuntamos el detalle de la recaudación de la Sala de Bingo de
             {{ $pie }} con Cuit n° {{ $cuit }} Legajo Municipal N°{{ $legajo }}
-            {{ $textoRango }}, con la respectiva liquidación.
+            del {{ $textoRango }}, con la respectiva liquidación.
         @endif
     </div>
 
@@ -207,7 +208,7 @@
         </tbody>
     </table>
 
-    <div style="margin-top:18px;">Sin otro particular, saludamos atentamente.</div>
+    <div class="cierre">Sin otro particular, saludamos atentamente.</div>
 
     <div class="firma">
         <div class="nombre">{{ $firmante }}</div>

@@ -37,6 +37,14 @@
             ])
         </div>
         @endif
+        @if (\App\Support\Compras\PrecargaComprobanteOrigenEntrada::sinImportesEsperados($data->origen_entrada ?? null))
+        <div class="alert alert-light border">
+            <i class="fa fa-info-circle text-info"></i>
+            Origen <strong>{{ \App\Support\Compras\PrecargaComprobanteOrigenEntrada::etiqueta($data->origen_entrada ?? null) }}</strong>:
+            el PDF se adjuntó sin OCR/IA, por eso subtotal/total de la precarga pueden quedar en $0.
+            Los importes reales se cargan al generar el comprobante.
+        </div>
+        @endif
         @if ($data->comprobante_proveedor)
         <div class="alert alert-warning">
             <i class="fa fa-info-circle"></i>

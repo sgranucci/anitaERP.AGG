@@ -843,8 +843,15 @@ class ConciliacionBancariaService
             $semilla === [],
         );
 
-        // Distinguir Excel vs snapshot: ambos usan semilla; "por_numeros" es solo Ch: del mayor.
-        if ($origenSemilla === 'excel') {
+        // Distinguir Excel vs snapshot vs ERP: no pisar fuente erp_* con cpromae_*.
+        $fuenteBase = (string) ($arm['fuente'] ?? '');
+        if (str_starts_with($fuenteBase, 'erp')) {
+            if ($origenSemilla === 'excel') {
+                $arm['fuente'] = 'erp_semilla_excel';
+            } elseif ($origenSemilla === 'snapshot') {
+                $arm['fuente'] = 'erp_semilla_snapshot';
+            }
+        } elseif ($origenSemilla === 'excel') {
             $arm['fuente'] = 'cpromae_semilla_excel';
         } elseif ($origenSemilla === 'snapshot') {
             $arm['fuente'] = 'cpromae_semilla_snapshot';
@@ -887,9 +894,10 @@ class ConciliacionBancariaService
             $fuente = (string) ($resumen['pendientes_cheques_fuente'] ?? '');
             $mismoPeriodo = ($mes && $anio && (int) $e->mes === $mes && (int) $e->anio === $anio) ? 0 : 1;
             $prioFuente = match ($fuente) {
-                'cpromae_semilla_excel' => 0,
-                'cpromae_semilla_snapshot' => 1,
-                default => 2,
+                'cpromae_semilla_excel', 'erp_semilla_excel' => 0,
+                'cpromae_semilla_snapshot', 'erp_semilla_snapshot' => 1,
+                'erp_cuenta', 'erp_por_numeros' => 2,
+                default => 3,
             };
 
             return [$mismoPeriodo, $prioFuente, -1 * (int) $e->id];

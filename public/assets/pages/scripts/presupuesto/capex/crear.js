@@ -72,53 +72,22 @@
 	$(function () {
 		$('#agrega_renglon_capex_partida').on('click', agregaRenglonCapex_Partida);
         $(document).on('click', '.eliminar_capex_partida', borraRenglonCapex_Partida);
-		$('#agrega_renglon_archivo').on('click', agregaRenglonArchivo);
-        $(document).on('click', '.eliminararchivo', borraRenglonArchivo);
+		$('#capex-agrega-renglon-archivo').on('click', agregaRenglonArchivo);
+        $(document).on('click', '.capex-eliminararchivo', borraRenglonArchivo);
         $(document).on('click', '.eliminar-archivo-capex', borraTarjetaArchivoCapex);
 		$(document).on('click', '#agregar_renglon_partida_monto', agregaRenglonPartidaMonto);
 		$(document).on('click', '.eliminar_renglon_partida_monto', borraRenglonPartidaMonto);
 
 		activa_eventos(true);
-		
-		$("#botonform1").click(function(){
-            $(".form1").show();
-            $(".form2").hide();
-			$(".form3").hide();
-			$(".form4").hide();
-        });
-		$("#botonform2").click(function(){
-			$(".form1").hide();
-            $(".form2").show();
-			$(".form3").hide();
-			$(".form4").hide();
 
-			// lee historia
-			leeHistoria();
-
-			$("#titulo").html("");
-			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
-        });
-		$("#botonform3").click(function(){
-			$(".form1").hide();
-            $(".form2").hide();
-			$(".form3").show();
-			$(".form4").hide();
-
-			$("#titulo").html("");
-			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
-        });
-
-		$("#botonform4").click(function(){
-			$(".form1").hide();
-            $(".form2").hide();
-			$(".form3").hide();
-			$(".form4").show();
-
-			$("#titulo").html("");
-			$("#titulo").html("<span class='fa fa-cash-register'></span> Principal");
-
-			leeOrdenCompra();
-        });
+		$(document).on('shown.bs.tab', '#tabs-capex a[data-toggle="tab"]', function (e) {
+			var href = $(e.target).attr('href');
+			if (href === '#tab-capex-historia') {
+				leeHistoria();
+			} else if (href === '#tab-capex-oc') {
+				leeOrdenCompra();
+			}
+		});
 
 		$( ".botonsubmit" ).click(function() {
 
@@ -242,14 +211,20 @@
 
 	function agregaRenglonArchivo(event){
     	event.preventDefault();
-    	var renglon = $('#template-renglon-archivo').html();
+    	var renglon = $('#capex-template-renglon-archivo').html();
 
-    	$("#tbody-tabla-archivo").append(renglon);
+    	$("#capex-tbody-tabla-archivo").append(renglon);
     }
 
     function borraRenglonArchivo(event) {
     	event.preventDefault();
-    	$(this).parents('tr').remove();
+    	var $tbody = $('#capex-tbody-tabla-archivo');
+    	var $fila = $(this).closest('tr.item-archivo-capex');
+    	if ($tbody.find('tr.item-archivo-capex').length <= 1) {
+    		$fila.find('input[type=file]').val('');
+    		return;
+    	}
+    	$fila.remove();
     }
 
     function borraTarjetaArchivoCapex(event) {
@@ -291,6 +266,11 @@
 		var wrapper = $(".container-historia");
 		let capex_id = $("#capex_id").val();
 
+		if (!capex_id) {
+			$(wrapper).empty();
+			return;
+		}
+
 		let url = carpetaBase+'/presupuesto/leerhistoriacapex/'+capex_id;
 
 		$.get(url, function(historia){
@@ -326,6 +306,11 @@
 	{
 		var wrapper = $(".container-ordencompra");
 		let capex_id = $("#capex_id").val();
+
+		if (!capex_id) {
+			$(wrapper).empty();
+			return;
+		}
 
 		let url = carpetaBase+'/presupuesto/leerordencompra/'+capex_id;
 
@@ -388,7 +373,7 @@
 							'<td>'+
 								'<input type="text" name="detalleordencompra[]" class="form-control detalleordencompra" value="'+value.stkm_desc+'" readonly>'+
 							'</td>'+
-							'<td>'+
+							'<td class="text-center align-middle">'+
 								'<a href="#" class="btn-accion-tabla tooltipsC editaordencompra" title="Editar la Orden de Compra">'+
 									'<i class="fa fa-edit editaordencompra"></i>'+
 								'</a>'+

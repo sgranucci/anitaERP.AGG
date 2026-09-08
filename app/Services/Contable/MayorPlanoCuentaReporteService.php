@@ -66,7 +66,7 @@ class MayorPlanoCuentaReporteService
             (bool) ($filtros['agrupar_por_cc'] ?? false),
             (bool) ($filtros['solo_movimientos_ventas'] ?? false),
             MayorFuenteConsultaSupport::normalizarModo(
-                $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_AUTO
+                $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_ERP
             ),
         ];
 
@@ -773,12 +773,12 @@ class MayorPlanoCuentaReporteService
     {
         $partes = [];
         $fuente = MayorFuenteConsultaSupport::normalizarModo(
-            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_AUTO
+            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_ERP
         );
         if ($fuente === MayorFuenteConsultaSupport::MODO_ANITA) {
-            $partes[] = 'Fuente Anita (forzado)';
+            $partes[] = 'Fuente Anita (bridge)';
         } elseif ($fuente === MayorFuenteConsultaSupport::MODO_ERP) {
-            $partes[] = 'Fuente ERP nativo';
+            $partes[] = 'Fuente ERP nativo (asientos)';
         }
         if (! empty($filtros['solo_movimientos_ventas'])) {
             $partes[] = 'Solo movimientos de ventas (totales)';

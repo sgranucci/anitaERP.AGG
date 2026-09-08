@@ -17,9 +17,9 @@
     <div class="col-lg-12">
         @include('includes.form-error')
         @include('includes.mensaje')
-        <div class="card card-danger">
+        <div class="card card-primary">
             <div class="card-header">
-                <h3 class="card-title">Capex</h3>
+                <h3 class="card-title">Crear Capex</h3>
                 <div class="card-tools">
                     <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
@@ -28,25 +28,46 @@
             </div>
             <form action="{{ route('guardar_capex', $filtrosQuery ?? []) }}" id="form-general" class="form-horizontal form--label-right" method="POST" enctype="multipart/form-data" autocomplete="off">
                 @csrf
-                <div align="center" style="margin: 5px;">
-                    <button type="button" id="botonform1" class="btn btn-primary btn-sm">
-                        <i class="fa fa-user"></i> Datos principales
-                    </button>
-                    <button type="button" id="botonform2" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Historia
-                    </button>                    
-                    <button type="button" id="botonform3" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Archivos asociados
-                    </button>
-                    <button type="button" id="botonform4" class="btn btn-info btn-sm">
-                        <span class="fa fa-copy"></span> Ordenes de Compra
-                    </button>  
-                </div>
                 <div class="card-body">
-                    @include('presupuesto.capex.form')
-                    @include('presupuesto.capex.form2')
-                    @include('presupuesto.capex.form3')
-                    @include('presupuesto.capex.form4')
+                    @include('includes.tabs-activas-estilos')
+                    <div class="tabs-activas">
+                        <ul class="nav nav-tabs" id="tabs-capex" role="tablist">
+                            <li class="nav-item">
+                                <a class="nav-link active" data-toggle="tab" href="#tab-capex-datos" role="tab">
+                                    <i class="fa fa-info-circle"></i> Datos principales
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" data-toggle="tab" href="#tab-capex-historia" role="tab">
+                                    <i class="fa fa-history"></i> Historia
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" data-toggle="tab" href="#tab-capex-archivos" role="tab">
+                                    <i class="fa fa-paperclip"></i> Archivos asociados
+                                </a>
+                            </li>
+                            <li class="nav-item">
+                                <a class="nav-link" data-toggle="tab" href="#tab-capex-oc" role="tab">
+                                    <i class="fa fa-shopping-cart"></i> Órdenes de Compra
+                                </a>
+                            </li>
+                        </ul>
+                    </div>
+                    <div class="tab-content pt-3" id="capex-tab-content">
+                        <div class="tab-pane fade show active" id="tab-capex-datos" role="tabpanel">
+                            @include('presupuesto.capex.form')
+                        </div>
+                        <div class="tab-pane fade" id="tab-capex-historia" role="tabpanel">
+                            @include('presupuesto.capex.form2')
+                        </div>
+                        <div class="tab-pane fade" id="tab-capex-archivos" role="tabpanel">
+                            @include('presupuesto.capex.form3')
+                        </div>
+                        <div class="tab-pane fade" id="tab-capex-oc" role="tabpanel">
+                            @include('presupuesto.capex.form4')
+                        </div>
+                    </div>
                 </div>
                 <div class="card-footer">
                     <div class="row">

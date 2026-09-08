@@ -7,7 +7,9 @@ use App\Models\Compras\Proveedor;
 /**
  * Contexto único del pago para calcular las 4 retenciones.
  *
- * Acumulados los inyecta el módulo de pagos (aún no existe).
+ * Bases específicas (Ganancias/IIBB/SUSS) vienen de conceptos del comprobante;
+ * si son null se usa importeNetoPago.
+ * Acumulados mensuales Ganancias: RetencionGananciasAcumuladoMesSupport (RG 830).
  * IDs de régimen: override pago → comprobante → proveedor (vía cada Calculator).
  */
 final class RetencionesPagoInput
@@ -53,6 +55,25 @@ final class RetencionesPagoInput
         public readonly bool $calcularSuss = true,
         public readonly bool $calcularIibb = true,
         public readonly ?int $empresaId = null,
+        // Bases por impuesto (conceptos); null = importeNetoPago
+        public readonly ?float $importeNetoGanancias = null,
+        public readonly ?float $importeNetoIibb = null,
+        public readonly ?float $importeNetoSuss = null,
     ) {
+    }
+
+    public function netoGanancias(): float
+    {
+        return $this->importeNetoGanancias ?? $this->importeNetoPago;
+    }
+
+    public function netoIibb(): float
+    {
+        return $this->importeNetoIibb ?? $this->importeNetoPago;
+    }
+
+    public function netoSuss(): float
+    {
+        return $this->importeNetoSuss ?? $this->importeNetoPago;
     }
 }

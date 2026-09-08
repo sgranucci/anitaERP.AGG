@@ -681,7 +681,7 @@ class SolicitudpagoController extends Controller
             'solicitudpago_id' => $sp->id,
             'empresa_id' => $sp->empresa_id,
             'proveedor_id' => $sp->proveedor_id,
-            'detalle' => 'Pago SP '.$sp->codigo,
+            'detalle' => \App\Support\Caja\IngresoEgresoSolicitudpagoSupport::descripcionMovimientoDesdeSp($sp),
             'origen' => 'solicitudpago',
         ]);
     }

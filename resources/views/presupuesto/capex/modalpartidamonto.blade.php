@@ -10,12 +10,12 @@
         <div class="modal-body">
             <form>
                 <div class="form-group">
-                    <table class="table" id="capex-partida-monto-table">
-                        <thead>
+                    <table class="table table-sm table-bordered" id="capex-partida-monto-table">
+                        <thead style="background:#85C1E9;color:#17202A;">
                             <tr>
                                 <th style="width: 42%;">Período (año / mes)</th>
                                 <th style="width: 35%;">Monto</th>
-                                <th style="width: 8%;"></th>
+                                <th style="width: 8%;" class="text-center">Acciones</th>
                             </tr>
                         </thead>
                         <tbody id="tbody-capex-partida-monto-table" class="container-partida-monto">
@@ -26,7 +26,7 @@
             @include('presupuesto.capex.templatepartidamonto')
         </div>
         <div class="modal-footer">
-            <button style="display: block; margin-right: auto; margin-left: 0;" id="agregar_renglon_partida_monto" class="btn btn-danger">+ Agrega rengl&oacute;n</button>
+            <button type="button" style="display: block; margin-right: auto; margin-left: 0;" id="agregar_renglon_partida_monto" class="btn btn-outline-primary btn-sm"><i class="fa fa-plus"></i> Agrega rengl&oacute;n</button>
             <button type="button" id="cierraPartidaMontoModal" class="btn btn-secondary" data-dismiss="modal">Cierra</button>
             <button type="button" id="aceptaPartidaMontoModal" class="btn btn-primary">Acepta Montos</button>
         </div>

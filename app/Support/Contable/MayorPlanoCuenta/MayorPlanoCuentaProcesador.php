@@ -11,6 +11,9 @@ use Illuminate\Support\Facades\DB;
 
 /**
  * Motor del mayor analítico por cuenta (l-mayor.c): ctamov + subdiario opcional.
+ * Fuente ERP = asientos vivos; fuente Anita = bridge.
+ * Saldo inicial ERP: si hay APE (ejercicio anterior cerrado) acumula asientos desde 01/01;
+ * si no, usa snapshot mensual (y cae a asientos si el snapshot no sirve).
  */
 class MayorPlanoCuentaProcesador
 {
@@ -25,7 +28,7 @@ class MayorPlanoCuentaProcesador
 
     private bool $soloMovimientosVentas = false;
 
-    private string $fuenteMayorModo = MayorFuenteConsultaSupport::MODO_AUTO;
+    private string $fuenteMayorModo = MayorFuenteConsultaSupport::MODO_ERP;
 
     public function __construct(
         private readonly MayorPlanoCuentaAnitaBridgeReader $reader = new MayorPlanoCuentaAnitaBridgeReader,
@@ -52,7 +55,7 @@ class MayorPlanoCuentaProcesador
         ?MayorPlanoCuentaCentrocostoFiltroSupport $centrocostoFiltro = null,
         bool $agruparPorCc = false,
         bool $soloMovimientosVentas = false,
-        string $fuenteMayor = MayorFuenteConsultaSupport::MODO_AUTO,
+        string $fuenteMayor = MayorFuenteConsultaSupport::MODO_ERP,
     ): array {
         $this->soloMovimientosVentas = $soloMovimientosVentas;
         $this->fuenteMayorModo = MayorFuenteConsultaSupport::normalizarModo($fuenteMayor);
@@ -72,10 +75,6 @@ class MayorPlanoCuentaProcesador
         $fechaComienzoAjustada = MayorPlanoCuentaSupport::fechaComienzoEjercicioAjustada(
             $fechaDesde,
             $inicioEjercicio,
-        );
-        $cutoffErp = MayorFuenteConsultaSupport::corteEfectivo(
-            $this->fuenteMayorModo,
-            'contable.mayor_plano_cuenta.fuente_erp_hasta',
         );
 
         if ($this->soloMovimientosVentas) {
@@ -104,37 +103,73 @@ class MayorPlanoCuentaProcesador
             $incluyeSubdiarioEfectivo = true;
             $soloPeriodoBridge = true;
         } else {
-            $diagSaldo = $this->reader->diagnosticarSaldoInicial(
-                $empresaIds,
-                $fechaDesde,
-                $fechaComienzoAjustada,
-            );
-            $fechaSaldoDesde = (int) ($diagSaldo['fecha_saldo_desde'] ?? MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD);
+            $requiereGranoCentrocosto = $centrocostoFiltro->tieneFiltro() || $agruparPorCc;
 
-            // Tramo cubierto por asientos ERP importados: no aplicar piso Anita 20260101.
-            if ($cutoffErp > 0 && $fechaDesde <= $cutoffErp) {
-                $fechaSaldoDesde = $inicioEjercicio;
-                $diagSaldo['fecha_saldo_desde'] = $fechaSaldoDesde;
-                $diagSaldo['origen'] = 'erp_ejercicio';
+            if ($this->fuenteMayorModo === MayorFuenteConsultaSupport::MODO_ERP) {
+                $diagSaldo = $this->diagnosticarSaldoInicialErp(
+                    $empresaIds,
+                    $fechaDesde,
+                    $inicioEjercicio,
+                );
+                $fechaSaldoDesde = (int) ($diagSaldo['fecha_saldo_desde'] ?? $inicioEjercicio);
+                $ejercicioAnteriorCerrado = (bool) ($diagSaldo['ejercicio_anterior_cerrado'] ?? false);
+
+                if ($ejercicioAnteriorCerrado) {
+                    // APE en el ejercicio: el origen ya está en asientos desde 01/01.
+                    $planSaldo = [
+                        'usar_saldos_mes' => false,
+                        'por_codigo' => [],
+                        'fuente' => 'movimientos',
+                        'movimientos_restados' => 0,
+                        'fecha_saldo_movimientos_desde' => $fechaSaldoDesde,
+                        'advertencias' => [],
+                    ];
+                    $saldosInicialesPorCuenta = [];
+                    $omitirCargaSaldoErpCompleto = false;
+                    $fechaSaldoMovimientosDesde = $fechaSaldoDesde;
+                } else {
+                    // Sin APE: no hay piso de apertura → snapshot (si el grano lo permite).
+                    $planSaldo = $this->planSaldoInicialDesdeSaldosMes(
+                        $empresaIds,
+                        $fechaDesde,
+                        $fechaSaldoDesde,
+                        $cuentaDesde,
+                        $cuentaHasta,
+                        $cuentas,
+                        $monedaReporteId,
+                        $soloMonedaOrigen,
+                        $incluyeSubdiario,
+                        $modoInclusionAsientos,
+                        $requiereGranoCentrocosto,
+                    );
+                    $saldosInicialesPorCuenta = $planSaldo['por_codigo'];
+                    $omitirCargaSaldoErpCompleto = (bool) ($planSaldo['usar_saldos_mes'] ?? false);
+                    $fechaSaldoMovimientosDesde = (int) ($planSaldo['fecha_saldo_movimientos_desde'] ?? $fechaSaldoDesde);
+                    if (! $omitirCargaSaldoErpCompleto) {
+                        // Snapshot no usable → acumular asientos desde la fecha de saldo (piso 01/01/26).
+                        $fechaSaldoMovimientosDesde = $fechaSaldoDesde;
+                    }
+                }
+            } else {
+                $diagSaldo = $this->reader->diagnosticarSaldoInicial(
+                    $empresaIds,
+                    $fechaDesde,
+                    $fechaComienzoAjustada,
+                );
+                $fechaSaldoDesde = (int) ($diagSaldo['fecha_saldo_desde'] ?? MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD);
+                $planSaldo = [
+                    'usar_saldos_mes' => false,
+                    'por_codigo' => [],
+                    'fuente' => 'movimientos',
+                    'movimientos_restados' => 0,
+                    'fecha_saldo_movimientos_desde' => $fechaSaldoDesde,
+                    'advertencias' => [],
+                ];
+                $saldosInicialesPorCuenta = [];
+                $omitirCargaSaldoErpCompleto = false;
+                $fechaSaldoMovimientosDesde = $fechaSaldoDesde;
             }
 
-            $planSaldo = $this->planSaldoInicialDesdeSaldosMes(
-                $empresaIds,
-                $fechaDesde,
-                $fechaSaldoDesde,
-                $cutoffErp,
-                $cuentaDesde,
-                $cuentaHasta,
-                $cuentas,
-                $monedaReporteId,
-                $soloMonedaOrigen,
-                $incluyeSubdiario,
-                $modoInclusionAsientos,
-                $centrocostoFiltro->tieneFiltro() || $agruparPorCc,
-            );
-            $saldosInicialesPorCuenta = $planSaldo['por_codigo'];
-            $omitirCargaSaldoErpCompleto = (bool) ($planSaldo['usar_saldos_mes'] ?? false);
-            $fechaSaldoMovimientosDesde = (int) ($planSaldo['fecha_saldo_movimientos_desde'] ?? $fechaSaldoDesde);
             $incluyeSubdiarioEfectivo = $incluyeSubdiario;
             $soloPeriodoBridge = false;
         }
@@ -317,8 +352,7 @@ class MayorPlanoCuentaProcesador
     }
 
     /**
-     * Hasta MAYOR_PLANO_CUENTA_FUENTE_ERP_HASTA lee asientos ERP; después bridge Anita.
-     * El modo `fuente_mayor` puede forzar Anita en el tramo ya migrado.
+     * Lee el período desde una sola fuente (ERP o Anita), según `fuente_mayor`.
      *
      * @param  list<int>  $empresaIds
      * @param  list<int>  $cuentas
@@ -344,7 +378,7 @@ class MayorPlanoCuentaProcesador
         );
         $cutoff = (int) $tramos['corte'];
 
-        // Sin cutoff o forzar Anita: 100% bridge Anita (comportamiento histórico / control).
+        // Anita (bridge): 100% Informix.
         if (! $tramos['usa_erp']) {
             $anita = $this->reader->cargarPeriodo(
                 $empresaIds,
@@ -374,42 +408,34 @@ class MayorPlanoCuentaProcesador
             ]);
         }
 
+        // ERP nativo: asientos vivos del período + saldo inicial desde asientos del ejercicio.
         $errores = [];
         $timings = [];
         $ctamov = [];
         $subdiario = [];
-        $postCutoff = MayorFuenteConsultaSupport::fechaSiguiente($cutoff);
 
-        // 1) Saldo inicial [fechaSaldoDesde, día anterior a fechaDesde], si aplica.
-        //    Si ya se tomó de cuentacontable_saldo_mes (SyS), se omite o solo se lee
-        //    el tramo parcial del mes (fechaDesde no es día 1).
         $saldoHasta = $this->fechaAnterior($fechaDesde);
         $tramoErpDesde = 0;
         $tramoErpHasta = 0;
         if (! $omitirCargaSaldoErp && $fechaSaldoDesde > 0 && $saldoHasta >= $fechaSaldoDesde) {
-            $erpSaldoDesde = $fechaSaldoDesde;
-            $erpSaldoHasta = min($saldoHasta, $cutoff);
-            if ($erpSaldoDesde <= $erpSaldoHasta) {
-                $tramoErpDesde = $erpSaldoDesde;
-                $tramoErpHasta = $erpSaldoHasta;
-                $erp = $this->erpReader->cargarPeriodo(
-                    $empresaIds,
-                    $erpSaldoDesde,
-                    $erpSaldoHasta,
-                    $incluyeSubdiario,
-                    $cuentaDesde,
-                    $cuentaHasta,
-                    $cuentas,
-                    false,
-                    $this->soloMovimientosVentas,
-                );
-                $ctamov = array_merge($ctamov, $erp['ctamov'] ?? []);
-                $errores = array_merge($errores, $erp['errores'] ?? []);
-                $timings = array_merge($timings, ['erp_saldo' => $erp['timings'] ?? []]);
-            }
+            $tramoErpDesde = $fechaSaldoDesde;
+            $tramoErpHasta = $saldoHasta;
+            $erp = $this->erpReader->cargarPeriodo(
+                $empresaIds,
+                $fechaSaldoDesde,
+                $saldoHasta,
+                $incluyeSubdiario,
+                $cuentaDesde,
+                $cuentaHasta,
+                $cuentas,
+                false,
+                $this->soloMovimientosVentas,
+            );
+            $ctamov = array_merge($ctamov, $erp['ctamov'] ?? []);
+            $errores = array_merge($errores, $erp['errores'] ?? []);
+            $timings = array_merge($timings, ['erp_saldo' => $erp['timings'] ?? []]);
         }
 
-        // 2) Período consultado [fechaDesde, fechaHasta] — tramo ERP acotado al corte.
         $erpPerDesde = (int) $tramos['tramo_erp_desde'];
         $erpPerHasta = (int) $tramos['tramo_erp_hasta'];
         if ($erpPerDesde > 0 && $erpPerHasta >= $erpPerDesde) {
@@ -433,36 +459,6 @@ class MayorPlanoCuentaProcesador
             $timings = array_merge($timings, $erp['timings'] ?? []);
         }
 
-        $tramoAnitaDesde = 0;
-        $tramoAnitaHasta = 0;
-        $anitaPeriodoDesde = (int) $tramos['tramo_anita_desde'];
-        $anitaPeriodoHasta = (int) $tramos['tramo_anita_hasta'];
-        if ($anitaPeriodoDesde > 0 && $anitaPeriodoHasta >= $anitaPeriodoDesde) {
-            $tramoAnitaDesde = $anitaPeriodoDesde;
-            $tramoAnitaHasta = $anitaPeriodoHasta;
-            $anitaSaldoPedido = max($fechaSaldoDesde, $postCutoff);
-            // Saldo Anita solo si hay tramo pre-período después del cutoff.
-            if ($anitaSaldoPedido >= $anitaPeriodoDesde) {
-                $anitaSaldoPedido = $anitaPeriodoDesde;
-            }
-            $anita = $this->reader->cargarPeriodo(
-                $empresaIds,
-                $anitaPeriodoDesde,
-                $anitaPeriodoHasta,
-                $anitaSaldoPedido,
-                $incluyeSubdiario,
-                $cuentaDesde,
-                $cuentaHasta,
-                $cuentas,
-                $this->soloMovimientosVentas,
-                $soloPeriodoBridge,
-            );
-            $ctamov = array_merge($ctamov, $anita['ctamov'] ?? []);
-            $subdiario = array_merge($subdiario, $anita['subdiario'] ?? []);
-            $errores = array_merge($errores, $anita['errores'] ?? []);
-            $timings = array_merge($timings, $anita['timings'] ?? []);
-        }
-
         $ctamov = MayorPlanoCuentaAnitaErpMetadatosSupport::adjuntarEmisorDesdeAsientoErp($ctamov);
 
         return [
@@ -475,8 +471,8 @@ class MayorPlanoCuentaProcesador
             'fuente_erp_hasta' => $cutoff,
             'tramo_erp_desde' => $tramoErpDesde,
             'tramo_erp_hasta' => $tramoErpHasta,
-            'tramo_anita_desde' => $tramoAnitaDesde,
-            'tramo_anita_hasta' => $tramoAnitaHasta,
+            'tramo_anita_desde' => 0,
+            'tramo_anita_hasta' => 0,
             'fuente_etiqueta' => $tramos['etiqueta'],
             'fuente_mayor' => $this->fuenteMayorModo,
         ];
@@ -496,8 +492,71 @@ class MayorPlanoCuentaProcesador
     }
 
     /**
-     * Reutiliza SumasSaldosProcesador (cuentacontable_saldo_mes − exclusiones)
-     * cuando el tramo de saldo inicial está cubierto por ERP.
+     * Proxy histórico Anita/ERP: ejercicio anterior cerrado ⇔ hay APE en el ejercicio actual.
+     *
+     * @param  list<int>  $empresaIds
+     * @return array{
+     *   fecha_comienzo_ejercicio: int,
+     *   fecha_comienzo_ajustada: int,
+     *   fecha_saldo_desde: int,
+     *   origen_minimo: int,
+     *   ejercicio_anterior_cerrado: bool,
+     *   origen: string,
+     *   por_empresa: array<int, array{ape_en_ejercicio_actual: bool, fecha_saldo_desde: int}>
+     * }
+     */
+    private function diagnosticarSaldoInicialErp(
+        array $empresaIds,
+        int $fechaDesde,
+        int $inicioEjercicio,
+    ): array {
+        $porEmpresa = [];
+        $fechas = [];
+        $todasConApe = true;
+
+        foreach ($empresaIds as $empresaId) {
+            $empresaId = (int) $empresaId;
+            if ($empresaId <= 0) {
+                continue;
+            }
+
+            $ape = $this->erpReader->existeAsientoAperturaEnRango(
+                $empresaId,
+                $inicioEjercicio,
+                $fechaDesde,
+            );
+            $fechaSaldo = $ape
+                ? $inicioEjercicio
+                : MayorPlanoCuentaSupport::ejercicioAnterior($inicioEjercicio);
+            $fechaSaldo = max(MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD, $fechaSaldo);
+            $fechas[] = $fechaSaldo;
+            if (! $ape) {
+                $todasConApe = false;
+            }
+
+            $porEmpresa[$empresaId] = [
+                'ape_en_ejercicio_actual' => $ape,
+                'fecha_saldo_desde' => $fechaSaldo,
+            ];
+        }
+
+        $fechaSaldoDesde = MayorPlanoCuentaSupport::consolidarFechaSaldoDesde($fechas);
+        $cerrado = $todasConApe && $porEmpresa !== [] && $fechaSaldoDesde === $inicioEjercicio;
+
+        return [
+            'fecha_comienzo_ejercicio' => $inicioEjercicio,
+            'fecha_comienzo_ajustada' => $inicioEjercicio,
+            'fecha_saldo_desde' => $fechaSaldoDesde,
+            'origen_minimo' => MayorPlanoCuentaSupport::SALDO_ORIGEN_MINIMO_YMD,
+            'ejercicio_anterior_cerrado' => $cerrado,
+            'origen' => $cerrado ? 'erp_ape_asientos' : 'erp_sin_ape_snapshot',
+            'por_empresa' => $porEmpresa,
+        ];
+    }
+
+    /**
+     * Snapshot mensual para saldo inicial cuando el ejercicio anterior no está cerrado (sin APE).
+     * No aplica con filtro/agrupación por centro de costo (el mayor debe abrir por CC con asientos).
      *
      * @param  list<int>  $empresaIds
      * @param  list<int>  $cuentas
@@ -514,7 +573,6 @@ class MayorPlanoCuentaProcesador
         array $empresaIds,
         int $fechaDesde,
         int $fechaSaldoDesde,
-        int $cutoffErp,
         int $cuentaDesde,
         int $cuentaHasta,
         array $cuentas,
@@ -533,19 +591,19 @@ class MayorPlanoCuentaProcesador
             'advertencias' => [],
         ];
 
-        if ($requiereGranoCentrocosto
-            || $cutoffErp <= 0 || $fechaDesde > $cutoffErp || $fechaSaldoDesde <= 0) {
+        if ($requiereGranoCentrocosto || $fechaDesde <= 0 || $fechaSaldoDesde <= 0) {
             return $vacio;
         }
 
         $saldoHasta = $this->fechaAnterior($fechaDesde);
-        if ($saldoHasta < $fechaSaldoDesde || $saldoHasta > $cutoffErp) {
+        if ($saldoHasta < $fechaSaldoDesde) {
             return $vacio;
         }
 
-        // Moneda extranjera sin “solo origen” exige cotización por asiento (mismo criterio SyS).
         if (! $soloMonedaOrigen && $monedaReporteId !== CuentacontableSaldoMesSupport::monedaLocalId()) {
-            return $vacio;
+            return array_merge($vacio, [
+                'advertencias' => ['Saldo inicial por moneda extranjera no usa snapshot; se acumulan asientos.'],
+            ]);
         }
 
         $periodoDesde = (int) intdiv($fechaDesde, 100);
@@ -568,7 +626,6 @@ class MayorPlanoCuentaProcesador
         }
 
         $dia = (int) ($fechaDesde % 100);
-        // Día 1: no hace falta leer movimientos previos. Si no, solo el tramo del mes.
         $fechaMovDesde = $dia <= 1
             ? 0
             : ((int) (intdiv($fechaDesde, 100) * 100) + 1);

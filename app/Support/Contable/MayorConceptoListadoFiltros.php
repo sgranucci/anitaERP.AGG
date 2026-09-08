@@ -91,7 +91,7 @@ class MayorConceptoListadoFiltros
             'filtro_cuit' => trim((string) $request->input('filtro_cuit', '')),
             'filtro_texto' => trim((string) $request->input('filtro_texto', '')),
             'fuente_mayor' => MayorFuenteConsultaSupport::normalizarModo(
-                $request->input('fuente_mayor', MayorFuenteConsultaSupport::MODO_AUTO)
+                $request->input('fuente_mayor', MayorFuenteConsultaSupport::MODO_ERP)
             ),
         ];
     }
@@ -604,11 +604,9 @@ class MayorConceptoListadoFiltros
         }
 
         $fuenteMayor = MayorFuenteConsultaSupport::normalizarModo(
-            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_AUTO
+            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_ERP
         );
-        if ($fuenteMayor !== MayorFuenteConsultaSupport::MODO_AUTO) {
-            $out['fuente_mayor'] = $fuenteMayor;
-        }
+        $out['fuente_mayor'] = $fuenteMayor;
 
         // No filtrar consolidar_empresas=0 ni arrays empresa_ids.
         return $out;
@@ -623,7 +621,7 @@ class MayorConceptoListadoFiltros
         }
         $base = self::paraQueryString($filtrosConsulta);
         $base['fuente_mayor'] = MayorFuenteConsultaSupport::normalizarModo(
-            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_AUTO
+            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_ERP
         );
 
         return md5(json_encode($base));

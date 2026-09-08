@@ -9,8 +9,8 @@
         <td>
             <input type="text" name="montos[]" class="form-control monto" value="">
         </td>
-        <td>
-            <button style="width: 7%;" type="button" class="btn-accion-tabla eliminar_partidagasto_monto tooltipsC">
+        <td class="text-center align-middle">
+            <button type="button" class="btn-accion-tabla eliminar_partidagasto_monto tooltipsC" title="Elimina esta línea">
                 <i class="fa fa-times-circle text-danger"></i>
             </button>
         </td>

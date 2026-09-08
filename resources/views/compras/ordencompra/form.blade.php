@@ -954,6 +954,7 @@
         $ocTot = $oc_totales_resumen ?? \App\Support\Compras\OrdencompraTotalesResumen::vacioParaVista();
         $fmtOc = static fn ($v) => number_format((float) $v, 2, ',', '.');
         $filasIvaOc = $ocTot['filas_iva'] ?? [];
+        $ocConIva = array_key_exists('con_iva', $ocTot) ? (bool) $ocTot['con_iva'] : true;
     @endphp
     <div class="card border-secondary mt-3 mb-2" id="oc-panel-totales">
         <div class="card-header py-2 d-flex flex-wrap justify-content-between align-items-center">
@@ -1010,32 +1011,36 @@
                                 <td class="text-right text-nowrap" id="oc-tot-dto">-{{ $fmtOc($ocTot['importe_descuento']) }}</td>
                             </tr>
                             <tr>
-                                <td class="text-muted pl-0">Neto ítems <span class="small">(sin impuesto)</span></td>
+                                <td class="text-muted pl-0" id="oc-tot-neto-label">{{ $ocConIva ? 'Neto ítems' : 'Importe ítems' }} <span class="small" id="oc-tot-neto-hint">({{ $ocConIva ? 'sin impuesto' : 'sin IVA discriminado' }})</span></td>
                                 <td class="text-right font-weight-bold text-nowrap" id="oc-tot-neto">{{ $fmtOc($ocTot['neto_sin_iva']) }}</td>
                             </tr>
-                            @if (count($filasIvaOc) > 1)
+                            @if ($ocConIva && count($filasIvaOc) > 1)
                                 @foreach ($filasIvaOc as $fi)
                                     <tr class="oc-fila-iva-detalle">
                                         <td class="text-muted pl-0">IVA {{ rtrim(rtrim(number_format((float) $fi['tasa'], 2, ',', '.'), '0'), ',') }}%</td>
                                         <td class="text-right text-nowrap">{{ $fmtOc($fi['importe']) }}</td>
                                     </tr>
                                 @endforeach
-                                <tr>
-                                    <td class="text-muted pl-0">Total IVA <span class="small">(nacional)</span></td>
-                                    <td class="text-right text-nowrap" id="oc-tot-iva">{{ $fmtOc($ocTot['iva_total']) }}</td>
-                                </tr>
-                            @elseif (count($filasIvaOc) === 1)
-                                @php $fi0 = $filasIvaOc[0]; @endphp
-                                <tr>
-                                    <td class="text-muted pl-0">IVA {{ rtrim(rtrim(number_format((float) $fi0['tasa'], 2, ',', '.'), '0'), ',') }}% <span class="small">(nacional)</span></td>
-                                    <td class="text-right text-nowrap" id="oc-tot-iva">{{ $fmtOc($fi0['importe']) }}</td>
-                                </tr>
-                            @else
-                                <tr>
-                                    <td class="text-muted pl-0">IVA <span class="small">(nacional)</span></td>
-                                    <td class="text-right text-nowrap" id="oc-tot-iva">{{ $fmtOc($ocTot['iva_total']) }}</td>
-                                </tr>
                             @endif
+                            <tr id="oc-fila-iva-resumen" @if (! $ocConIva) style="display:none" @endif>
+                                <td class="text-muted pl-0" id="oc-tot-iva-label">
+                                    @if (count($filasIvaOc) === 1)
+                                        @php $fi0 = $filasIvaOc[0]; @endphp
+                                        IVA {{ rtrim(rtrim(number_format((float) $fi0['tasa'], 2, ',', '.'), '0'), ',') }}% <span class="small">(nacional)</span>
+                                    @elseif (count($filasIvaOc) > 1)
+                                        Total IVA <span class="small">(nacional)</span>
+                                    @else
+                                        IVA <span class="small">(nacional)</span>
+                                    @endif
+                                </td>
+                                <td class="text-right text-nowrap" id="oc-tot-iva">
+                                    @if (count($filasIvaOc) === 1)
+                                        {{ $fmtOc($filasIvaOc[0]['importe']) }}
+                                    @else
+                                        {{ $fmtOc($ocTot['iva_total']) }}
+                                    @endif
+                                </td>
+                            </tr>
                             <tr class="border-top">
                                 <td class="pl-0 pt-2"><strong>Total orden</strong></td>
                                 <td class="text-right pt-2 text-nowrap">

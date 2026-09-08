@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\DB;
 class MayorConceptoReporteService
 {
     /** Modo de fuente del request actual (auto / erp / anita). */
-    private string $modoFuenteActivo = MayorFuenteConsultaSupport::MODO_AUTO;
+    private string $modoFuenteActivo = MayorFuenteConsultaSupport::MODO_ERP;
 
     public function __construct(
         private readonly MayorConceptoPeriodoProcesador $procesador,
@@ -129,7 +129,7 @@ class MayorConceptoReporteService
     private function aplicarFuenteMayorDesdeFiltros(array $filtros): void
     {
         $modo = MayorFuenteConsultaSupport::normalizarModo(
-            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_AUTO
+            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_ERP
         );
         $this->modoFuenteActivo = $modo;
         $reader = $this->procesador->bridgeReader();
@@ -150,7 +150,7 @@ class MayorConceptoReporteService
     private function adjuntarMetadatosFuente(array $resultado): array
     {
         $reader = $this->procesador->bridgeReader();
-        $modo = MayorFuenteConsultaSupport::MODO_AUTO;
+        $modo = MayorFuenteConsultaSupport::MODO_ERP;
         $tramos = null;
         if ($reader instanceof MayorConceptoLectorHibrido) {
             $modo = $reader->modoFuente();
@@ -167,19 +167,24 @@ class MayorConceptoReporteService
             $resultado['parametros']['tramo_erp_hasta'] = (int) ($tramos['tramo_erp_hasta'] ?? 0);
             $resultado['parametros']['tramo_anita_desde'] = (int) ($tramos['tramo_anita_desde'] ?? 0);
             $resultado['parametros']['tramo_anita_hasta'] = (int) ($tramos['tramo_anita_hasta'] ?? 0);
-            $resultado['parametros']['fuente_etiqueta'] = (string) ($tramos['etiqueta'] ?? '');
+            if (! isset($resultado['parametros']['fuente_etiqueta']) || $resultado['parametros']['fuente_etiqueta'] === '') {
+                $resultado['parametros']['fuente_etiqueta'] = (string) ($tramos['etiqueta'] ?? '');
+            }
         } else {
             $resultado['parametros']['fuente_etiqueta'] = $resultado['parametros']['fuente_etiqueta'] ?? '';
         }
 
-        if (($resultado['parametros']['motor'] ?? '') === 'erp_nativo_v1'
-            || $modo === MayorFuenteConsultaSupport::MODO_ERP
-        ) {
-            $resultado['parametros']['fuente_etiqueta'] = $resultado['parametros']['fuente_etiqueta']
-                !== ''
-                ? $resultado['parametros']['fuente_etiqueta']
-                : 'ERP nativo (MySQL)';
+        // El modo del request manda: el motor ERP puede leer Anita del período
+        // sin reetiquetar el reporte como "Anita forzado".
+        if ($this->modoFuenteActivo === MayorFuenteConsultaSupport::MODO_ERP) {
             $resultado['parametros']['fuente_mayor'] = MayorFuenteConsultaSupport::MODO_ERP;
+            $etiquetaMotor = trim((string) ($resultado['parametros']['fuente_etiqueta'] ?? ''));
+            $motor = (string) ($resultado['parametros']['motor'] ?? '');
+            if ($etiquetaMotor === '' || str_starts_with(strtolower($etiquetaMotor), 'anita')) {
+                $resultado['parametros']['fuente_etiqueta'] = str_contains($motor, 'hibrido')
+                    ? 'ERP analítico MySQL + concepto nativo/espejo período'
+                    : 'ERP analítico MySQL + concepto Anita (período)';
+            }
         }
 
         return $resultado;

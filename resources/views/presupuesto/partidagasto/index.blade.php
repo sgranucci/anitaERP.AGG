@@ -22,18 +22,23 @@ use App\Support\Presupuesto\PartidagastoListadoFiltros; ?>
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Partidas de Gastos</h3>
-                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                <div class="card-tools d-flex flex-nowrap align-items-center justify-content-end overflow-auto">
                     @include('includes.listado.filtros_toolbar', [
                         'formId' => 'form-filtros-partidagasto',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => PartidagastoListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
                         'limpiarUrl' => route('consultar_partidagasto'),
-                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
+                        'placeholder' => 'Búsqueda rápida…',
                         'toggleTarget' => '#panel-filtros-partidagasto',
                         'toggleId' => 'btn-toggle-filtros-partidagasto',
                         'inputId' => 'filtro_valor',
                         'nuevoRegistroUrl' => route('crear_partidagasto', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-partidagasto',
+                    ])
+                    @include('includes.exportar-tabla-queryparams', [
+                        'ruta' => 'lista_partidagasto',
+                        'queryparams' => $filtrosQuery ?? [],
+                        'variant' => 'compact',
                     ])
                 </div>
             </div>
@@ -43,12 +48,8 @@ use App\Support\Presupuesto\PartidagastoListadoFiltros; ?>
                 ])
             </form>
             <div class="card-body table-responsive p-0">
-                @include('includes.exportar-tabla-queryparams', [
-                    'ruta' => 'lista_partidagasto',
-                    'queryparams' => $filtrosQuery ?? [],
-                ])
                 <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
-                    <thead>
+                    <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th class="width20">ID</th>
                             <th>Empresa</th>

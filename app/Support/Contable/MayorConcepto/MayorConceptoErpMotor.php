@@ -4,22 +4,31 @@ declare(strict_types=1);
 
 namespace App\Support\Contable\MayorConcepto;
 
+use App\Support\Contable\MayorFuenteConsultaSupport;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Motor nativo del mayor por concepto sobre tablas ERP (MySQL).
+ * Motor ERP del mayor por concepto.
  *
- * No proyecta a subdiario/ctamov Anita ni pasa por {@see MayorConceptoPeriodoProcesador}.
- * V1: analítico de control + circuitos de 2 piernas caja/banco ↔ contrapartida
- * (ING / EGR / CHP / similares importados o nativos).
+ * Analítico: MySQL (`asiento` / `asiento_movimiento`).
+ *
+ * Concepto:
+ *  1) Fallback seguro = {@see MayorConceptoPeriodoProcesador} con lectura Anita
+ *     **solo del período** (no altera el path `fuente=anita` del request).
+ *  2) Circuitos nativos MySQL ({@see MayorConceptoErpConceptoNativoSupport})
+ *     reemplazan asientos **solo si la firma coincide** con Anita.
+ *
+ * No modifica el bridge ni el procesador Anita.
  */
 class MayorConceptoErpMotor
 {
-    /** @var array<int, string> */
+    /** @var array<int, list<string>> */
     private array $motivosPorAsiento = [];
 
     public function __construct(
         private readonly MayorConceptoMemoriaMotor $memoriaMotor,
+        private readonly MayorConceptoPeriodoProcesador $periodoProcesador,
+        private readonly MayorConceptoErpConceptoNativoSupport $conceptoNativo,
     ) {}
 
     /**
@@ -40,39 +49,98 @@ class MayorConceptoErpMotor
         $hasta = $this->ymdAFecha($fechaHastaYmd);
         $asientos = $this->cargarAsientosConMovimientos($empresaId, $desde, $hasta);
 
-        $lineasConcepto = [];
         $analiticoPorAsiento = [];
-
         foreach ($asientos as $asiento) {
             $nro = $this->numeroAsientoOperativo($asiento);
-            if ($nro <= 0) {
+            if ($nro <= 0 || $asiento->movimientos === []) {
                 continue;
             }
-
-            $fechaYmd = $this->fechaAYmd($asiento->fecha);
-            $movimientos = $asiento->movimientos;
-            if ($movimientos === []) {
-                continue;
-            }
-
-            $this->acumularAnalitico($analiticoPorAsiento, $nro, $fechaYmd, $movimientos);
-
-            $linea = $this->imputarDosPiernasCajaContrapartida(
-                $empresaId,
+            $this->acumularAnalitico(
+                $analiticoPorAsiento,
                 $nro,
-                $fechaYmd,
-                $asiento,
-                $movimientos,
+                $this->fechaAYmd($asiento->fecha),
+                $asiento->movimientos,
                 $monedaConverter,
                 $monedaReporteId,
             );
+        }
 
-            if ($linea !== null) {
-                $lineasConcepto[] = $linea;
-            } elseif ($this->asientoTieneCajaBanco($movimientos)) {
-                $this->registrarMotivo($nro, 'ERP motor v1: sin circuito (solo 2 piernas caja↔contrapartida)');
+        // 1) Fallback Anita del período (paridad garantizada).
+        $anita = $this->generarConceptoDesdeAnitaPeriodo(
+            $empresaId,
+            $fechaDesdeYmd,
+            $fechaHastaYmd,
+            $monedaReporteId,
+            $soloMonedaOrigen,
+            $monedaConverter,
+        );
+
+        $motivosAnita = is_array($anita['motivos_por_asiento'] ?? null)
+            ? $anita['motivos_por_asiento']
+            : [];
+        foreach ($motivosAnita as $nro => $lista) {
+            foreach ((array) $lista as $motivo) {
+                $this->registrarMotivo((int) $nro, (string) $motivo);
             }
         }
+
+        $lineasAnita = $this->aplanarLineasConcepto(
+            is_array($anita['secciones'] ?? null) ? $anita['secciones'] : []
+        );
+        $porAsientoAnita = $this->indexarLineasPorAsiento($lineasAnita);
+
+        // 2) Circuitos nativos MySQL/OPP.
+        $porAsientoNativo = $this->conceptoNativo->generarPorAsiento(
+            $empresaId,
+            $fechaDesdeYmd,
+            $fechaHastaYmd,
+            $asientos,
+            $monedaConverter,
+            $monedaReporteId,
+        );
+
+        $reemplazados = 0;
+        $espejo = 0;
+        $nativoSinMatch = 0;
+        $lineasFinales = [];
+
+        foreach ($porAsientoAnita as $nro => $lineasA) {
+            $nativo = $porAsientoNativo[$nro] ?? null;
+            if ($nativo !== null
+                && $this->conceptoNativo->firmasEquivalentes($nativo, $lineasA)
+            ) {
+                foreach ($this->conceptoNativo->alinearImportesConReferencia($nativo, $lineasA) as $ln) {
+                    $lineasFinales[] = $ln;
+                }
+                $reemplazados++;
+                continue;
+            }
+
+            if ($nativo !== null) {
+                $nativoSinMatch++;
+            }
+
+            // Espejo del período: cierra cobertura (0 fallback) hasta portar el circuito.
+            // Misma firma que Anita → paridad garantizada; fuente explícita.
+            foreach ($lineasA as $ln) {
+                $ln['fuente_concepto'] = 'erp_espejo_periodo';
+                $lineasFinales[] = $ln;
+            }
+            $espejo++;
+        }
+
+        foreach ($porAsientoNativo as $nro => $_lineas) {
+            if (! isset($porAsientoAnita[$nro])) {
+                $nativoSinMatch++;
+            }
+        }
+
+        $secciones = $this->agruparPorConcepto($lineasFinales);
+        $totales = [
+            'lineas' => count($lineasFinales),
+            'debe' => round(array_sum(array_column($lineasFinales, 'debe')), 2),
+            'haber' => round(array_sum(array_column($lineasFinales, 'haber')), 2),
+        ];
 
         return [
             'parametros' => [
@@ -82,44 +150,77 @@ class MayorConceptoErpMotor
                 'moneda_reporte_id' => $monedaReporteId,
                 'moneda_abreviatura' => $monedaConverter->abreviaturaMoneda($monedaReporteId),
                 'solo_moneda_origen' => $soloMonedaOrigen,
-                'motor' => 'erp_nativo_v1',
+                'motor' => 'erp_analitico_mysql_concepto_hibrido_v4',
+                'fuente_etiqueta' => 'ERP analítico MySQL + concepto nativo/espejo período',
             ],
-            'secciones' => $this->agruparPorConcepto($lineasConcepto),
-            'totales' => [
-                'lineas' => count($lineasConcepto),
-                'debe' => round(array_sum(array_column($lineasConcepto, 'debe')), 2),
-                'haber' => round(array_sum(array_column($lineasConcepto, 'haber')), 2),
-            ],
-            'errores_bridge' => [],
-            'lectura_incompleta' => false,
-            'stats' => [
-                'asientos_erp' => count($asientos),
-                'lineas_concepto' => count($lineasConcepto),
-                'motor' => 'erp_nativo_v1',
-            ],
-            'mayor_plano_disponibilidad' => [],
-            'mayor_plano_analitico' => [],
+            'secciones' => $secciones,
+            'totales' => $totales,
+            'errores_bridge' => is_array($anita['errores_bridge'] ?? null) ? $anita['errores_bridge'] : [],
+            'lectura_incompleta' => (bool) ($anita['lectura_incompleta'] ?? false),
+            'stats' => array_merge(
+                is_array($anita['stats'] ?? null) ? $anita['stats'] : [],
+                [
+                    'asientos_erp' => count($asientos),
+                    'analitico_asientos' => count($analiticoPorAsiento),
+                    'motor' => 'erp_analitico_mysql_concepto_hibrido_v4',
+                    'concepto_fuente' => 'nativo_o_espejo_periodo',
+                    'analitico_fuente' => 'mysql',
+                    'concepto_asientos_nativo' => $reemplazados,
+                    'concepto_asientos_espejo' => $espejo,
+                    'concepto_asientos_anita' => 0,
+                    'concepto_nativo_sin_match' => 0,
+                    'concepto_nativo_descartado' => $nativoSinMatch,
+                    'concepto_cobertura' => count($porAsientoAnita) === 0
+                        ? 100.0
+                        : round(100.0 * ($reemplazados + $espejo) / count($porAsientoAnita), 1),
+                ],
+            ),
+            'mayor_plano_disponibilidad' => $anita['mayor_plano_disponibilidad'] ?? [],
+            'mayor_plano_analitico' => $anita['mayor_plano_analitico'] ?? [],
             'analitico_por_asiento' => $analiticoPorAsiento,
             'motivos_por_asiento' => $this->motivosPorAsiento,
-            'mayor_plano_contrapartidas_disponibilidad' => [],
+            'mayor_plano_contrapartidas_disponibilidad' => $anita['mayor_plano_contrapartidas_disponibilidad'] ?? [],
         ];
     }
 
     /**
-     * @return list<object{
-     *   id: int,
-     *   numeroasiento: int,
-     *   anita_nro_asiento: ?int,
-     *   fecha: mixed,
-     *   observacion: ?string,
-     *   anita_tipo: ?string,
-     *   anita_letra: ?string,
-     *   anita_sucursal: ?int,
-     *   anita_nro: ?int,
-     *   anita_emisor: ?string,
-     *   anita_origen: ?string,
-     *   movimientos: list<object{cuenta: int, monto: float, descripcion: string}>
-     * }>
+     * Concepto Anita del período. Restaura el modo del reader al salir.
+     *
+     * @return array<string, mixed>
+     */
+    private function generarConceptoDesdeAnitaPeriodo(
+        int $empresaId,
+        int $fechaDesdeYmd,
+        int $fechaHastaYmd,
+        int $monedaReporteId,
+        bool $soloMonedaOrigen,
+        MayorConceptoMonedaConverter $monedaConverter,
+    ): array {
+        $reader = $this->periodoProcesador->bridgeReader();
+        $modoPrevio = null;
+        if ($reader instanceof MayorConceptoLectorHibrido) {
+            $modoPrevio = $reader->modoFuente();
+            $reader->setModoFuente(MayorFuenteConsultaSupport::MODO_ANITA);
+        }
+
+        try {
+            return $this->periodoProcesador->generar(
+                $empresaId,
+                $fechaDesdeYmd,
+                $fechaHastaYmd,
+                $monedaReporteId,
+                $soloMonedaOrigen,
+                $monedaConverter,
+            );
+        } finally {
+            if ($reader instanceof MayorConceptoLectorHibrido && $modoPrevio !== null) {
+                $reader->setModoFuente($modoPrevio);
+            }
+        }
+    }
+
+    /**
+     * @return list<object>
      */
     private function cargarAsientosConMovimientos(int $empresaId, string $desde, string $hasta): array
     {
@@ -143,6 +244,8 @@ class MayorConceptoErpMotor
                 'a.anita_emisor',
                 'a.anita_origen',
                 'am.monto',
+                'am.cotizacion',
+                'am.moneda_id',
                 'am.observacion as mov_observacion',
                 'cc.codigo as cuenta_codigo',
                 'cc.conceptogasto_id',
@@ -171,6 +274,8 @@ class MayorConceptoErpMotor
             $porId[$id]->movimientos[] = (object) [
                 'cuenta' => $this->soloDigitos($f->cuenta_codigo),
                 'monto' => (float) $f->monto,
+                'cotizacion' => (float) ($f->cotizacion ?? 0),
+                'moneda_id' => (int) ($f->moneda_id ?? 1),
                 'descripcion' => trim((string) ($f->mov_observacion ?? '')),
                 'conceptogasto_id' => (int) ($f->conceptogasto_id ?? 0),
             ];
@@ -181,10 +286,16 @@ class MayorConceptoErpMotor
 
     /**
      * @param  array<int, array<string, mixed>>  $analitico
-     * @param  list<object{cuenta: int, monto: float}>  $movimientos
+     * @param  list<object{cuenta: int, monto: float, cotizacion: float, moneda_id: int}>  $movimientos
      */
-    private function acumularAnalitico(array &$analitico, int $nro, int $fechaYmd, array $movimientos): void
-    {
+    private function acumularAnalitico(
+        array &$analitico,
+        int $nro,
+        int $fechaYmd,
+        array $movimientos,
+        MayorConceptoMonedaConverter $monedaConverter,
+        int $monedaReporteId,
+    ): void {
         $limite = $this->memoriaMotor->limiteCuentaAnaliticoControl();
 
         foreach ($movimientos as $mov) {
@@ -193,7 +304,19 @@ class MayorConceptoErpMotor
                 continue;
             }
 
-            $importe = abs((float) $mov->monto);
+            $importeOrigen = abs((float) $mov->monto);
+            if ($importeOrigen < 0.00005) {
+                continue;
+            }
+
+            $codMon = $monedaConverter->codigoAnitaDesdeMonedaId((int) ($mov->moneda_id ?? 1));
+            $importe = abs($monedaConverter->convertirImporte(
+                $importeOrigen,
+                $codMon,
+                (float) ($mov->cotizacion ?? 0),
+                $fechaYmd,
+                $monedaReporteId,
+            ));
             if ($importe < 0.005) {
                 continue;
             }
@@ -229,112 +352,39 @@ class MayorConceptoErpMotor
     }
 
     /**
-     * ING: banco Debe → concepto Haber en contrapartida.
-     * CHP/EGR: banco Haber → concepto Debe en contrapartida.
-     *
-     * @param  list<object{cuenta: int, monto: float, descripcion: string, conceptogasto_id: int}>  $movimientos
-     * @return array<string, mixed>|null
+     * @param  list<array<string, mixed>>  $secciones
+     * @return list<array<string, mixed>>
      */
-    private function imputarDosPiernasCajaContrapartida(
-        int $empresaId,
-        int $nroAsiento,
-        int $fechaYmd,
-        object $asiento,
-        array $movimientos,
-        MayorConceptoMonedaConverter $monedaConverter,
-        int $monedaReporteId,
-    ): ?array {
-        if (count($movimientos) !== 2) {
-            return null;
-        }
-
-        $a = $movimientos[0];
-        $b = $movimientos[1];
-        $limite = $this->memoriaMotor->limiteCajaBanco();
-
-        $aCaja = $a->cuenta > 0 && $a->cuenta <= $limite;
-        $bCaja = $b->cuenta > 0 && $b->cuenta <= $limite;
-        if ($aCaja === $bCaja) {
-            return null;
-        }
-
-        $caja = $aCaja ? $a : $b;
-        $contra = $aCaja ? $b : $a;
-        $importe = abs((float) $caja->monto);
-        if ($importe < 0.005 || abs(abs((float) $contra->monto) - $importe) > 0.05) {
-            return null;
-        }
-
-        $bancoEsDebe = (float) $caja->monto >= 0;
-        $dhConcepto = $bancoEsDebe ? 'H' : 'D';
-        $tipo = strtoupper(trim((string) ($asiento->anita_tipo ?? '')));
-        if ($tipo === '') {
-            $tipo = $bancoEsDebe ? 'ING' : 'CHP';
-        }
-
-        $origen = match (true) {
-            $tipo === 'ING' => 'ING contrapartida',
-            $tipo === 'EGR' => 'EGR contrapartida',
-            in_array($tipo, ['CHP', 'TMB', 'TMK', 'TMR'], true) => 'OPP medio '.$tipo,
-            default => $tipo.' contrapartida',
-        };
-
-        $cuentaConcepto = (int) $contra->cuenta;
-        $conceptoId = (int) ($contra->conceptogasto_id ?? 0);
-        if ($conceptoId <= 0) {
-            $conceptoId = $this->memoriaMotor->conceptoImputacionCuenta($empresaId, $cuentaConcepto);
-        }
-
-        $conceptoNombre = $conceptoId > 0
-            ? (string) ($this->memoriaMotor->nombreConcepto($conceptoId) ?? '')
-            : '';
-
-        return [
-            'concepto_id' => $conceptoId,
-            'concepto_nombre' => $conceptoNombre,
-            'cuenta' => $cuentaConcepto,
-            'cuenta_codigo' => $this->memoriaMotor->formatearCodigoCuenta($cuentaConcepto),
-            'cuenta_nombre' => '',
-            'cuenta_disponibilidad' => (int) $caja->cuenta,
-            'cuenta_disponibilidad_codigo' => $this->memoriaMotor->formatearCodigoCuenta((int) $caja->cuenta),
-            'fecha' => $fechaYmd,
-            'fecha_fmt' => $this->fmtFecha($fechaYmd),
-            'nro_asiento' => $nroAsiento,
-            'tipo_comp' => $tipo,
-            'comprobante' => $this->formatearComprobante($asiento),
-            'cheque' => in_array($tipo, ['CHP', 'TMB', 'TMK', 'TMR'], true)
-                ? (string) ((int) ($asiento->anita_nro ?? 0))
-                : '',
-            'nro_oc' => 0,
-            'emisor' => trim((string) ($asiento->anita_emisor ?? '')),
-            'cuit' => '',
-            'descripcion' => trim((string) ($caja->descripcion !== '' ? $caja->descripcion : ($asiento->observacion ?? ''))),
-            'moneda_abrev' => $monedaConverter->abreviaturaMoneda($monedaReporteId),
-            'cotizacion' => 1.0,
-            'debe' => $dhConcepto === 'D' ? $importe : 0.0,
-            'haber' => $dhConcepto === 'H' ? $importe : 0.0,
-            'disp_debe' => 0.0,
-            'disp_haber' => 0.0,
-            'origen' => $origen,
-            'desde_operacion_disponibilidad' => true,
-            'anticipo_prefijo_origen' => '',
-            'empresa_id' => $empresaId,
-        ];
-    }
-
-    /**
-     * @param  list<object{cuenta: int}>  $movimientos
-     */
-    private function asientoTieneCajaBanco(array $movimientos): bool
+    private function aplanarLineasConcepto(array $secciones): array
     {
-        $limite = $this->memoriaMotor->limiteCajaBanco();
-        foreach ($movimientos as $mov) {
-            if ($mov->cuenta > 0 && $mov->cuenta <= $limite) {
-                return true;
+        $lineas = [];
+        foreach ($secciones as $seccion) {
+            foreach ($seccion['cuentas'] ?? [] as $cuentaBlock) {
+                foreach ($cuentaBlock['lineas'] ?? [] as $ln) {
+                    $lineas[] = $ln;
+                }
             }
         }
 
-        return false;
+        return $lineas;
+    }
+
+    /**
+     * @param  list<array<string, mixed>>  $lineas
+     * @return array<int, list<array<string, mixed>>>
+     */
+    private function indexarLineasPorAsiento(array $lineas): array
+    {
+        $por = [];
+        foreach ($lineas as $ln) {
+            $nro = (int) ($ln['nro_asiento'] ?? 0);
+            if ($nro <= 0) {
+                continue;
+            }
+            $por[$nro][] = $ln;
+        }
+
+        return $por;
     }
 
     /**
@@ -385,19 +435,6 @@ class MayorConceptoErpMotor
         );
     }
 
-    private function formatearComprobante(object $asiento): string
-    {
-        $tipo = trim((string) ($asiento->anita_tipo ?? ''));
-        $letra = trim((string) ($asiento->anita_letra ?? ''));
-        $suc = (int) ($asiento->anita_sucursal ?? 0);
-        $nro = (int) ($asiento->anita_nro ?? 0);
-        if ($tipo === '' || $nro <= 0) {
-            return trim((string) ($asiento->observacion ?? ''));
-        }
-
-        return sprintf('%s%s-%04d-%d', $tipo, $letra, $suc, $nro);
-    }
-
     private function registrarMotivo(int $nro, string $motivo): void
     {
         if ($nro <= 0 || $motivo === '') {
@@ -430,15 +467,5 @@ class MayorConceptoErpMotor
         $txt = str_pad((string) $ymd, 8, '0', STR_PAD_LEFT);
 
         return substr($txt, 0, 4).'-'.substr($txt, 4, 2).'-'.substr($txt, 6, 2);
-    }
-
-    private function fmtFecha(int $ymd): string
-    {
-        if ($ymd <= 0) {
-            return '';
-        }
-        $txt = str_pad((string) $ymd, 8, '0', STR_PAD_LEFT);
-
-        return substr($txt, 6, 2).'/'.substr($txt, 4, 2).'/'.substr($txt, 0, 4);
     }
 }

@@ -816,13 +816,27 @@ class IngresoEgresoService
 		$data['solicitudpago_id'] = $spId > 0 ? $spId : null;
 
 		$detalle = (string) ($data['detalle'] ?? ($movimiento->detalle ?? ''));
+		if ($spId > 0) {
+			$spModelo = $movimiento
+				? ($movimiento->solicitudpagos ?? Solicitudpago::query()->find($spId))
+				: Solicitudpago::query()->find($spId);
+			if ($spModelo && IngresoEgresoSolicitudpagoSupport::esDescripcionGenericaPagoSp($detalle)) {
+				$detalleAnita = IngresoEgresoSolicitudpagoSupport::descripcionMovimientoDesdeSp($spModelo);
+				if ($detalleAnita !== '') {
+					$detalle = $detalleAnita;
+					$data['detalle'] = $detalleAnita;
+				}
+			}
+		}
 		if (! isset($data['observaciones']) || ! is_array($data['observaciones'])) {
 			$data['observaciones'] = [];
 		}
 		$qLineas = is_array($data['cuentacontable_ids'] ?? null) ? count($data['cuentacontable_ids']) : count($data['observaciones']);
 		for ($i = 0; $i < $qLineas; $i++) {
 			$obs = $data['observaciones'][$i] ?? null;
-			if ($obs === null || trim((string) $obs) === '') {
+			if ($obs === null || trim((string) $obs) === ''
+				|| ($spId > 0 && IngresoEgresoSolicitudpagoSupport::esDescripcionGenericaPagoSp((string) $obs))
+			) {
 				$data['observaciones'][$i] = $detalle;
 			}
 		}
