@@ -42,6 +42,7 @@ class ValidacionConfiguracionGeneral extends FormRequest
                 'entero' => 'required|integer|min:0',
                 'cuentacaja' => 'nullable|integer|min:1|exists:cuentacaja,id',
                 'boolean' => 'required|in:0,1',
+                'select' => 'required|in:'.implode(',', array_keys($def['opciones'] ?? [])),
                 default => 'required|numeric|min:0',
             };
         }

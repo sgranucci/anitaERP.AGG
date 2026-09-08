@@ -697,6 +697,15 @@ class CierreRendicionMaquinaService
     public function assertCorrelatividadCierre(int $empresaId, string $fechaDia): void
     {
         $fecha = Carbon::parse($fechaDia)->toDateString();
+        $piso = CierreRendicionMaquinaConfigSupport::correlatividadDesde();
+        if ($piso !== null && $fecha < $piso) {
+            throw new InvalidArgumentException(
+                'El cierre contable máquinas ERP corre desde '
+                .Carbon::parse($piso)->format('d/m/Y')
+                .'. Las jornadas anteriores viven en Anita.',
+            );
+        }
+
         $anterior = $this->fechaPendienteMasAntiguaAnteriorA($empresaId, $fecha);
         if ($anterior === null) {
             return;

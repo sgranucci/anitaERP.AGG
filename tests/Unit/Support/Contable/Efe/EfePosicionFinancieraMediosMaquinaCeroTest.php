@@ -8,36 +8,31 @@ use Tests\TestCase;
 
 class EfePosicionFinancieraMediosMaquinaCeroTest extends TestCase
 {
-    public function test_asegura_medios_sin_movimiento_con_etiqueta_valormae(): void
+    public function test_asegura_medios_sin_movimiento_por_etiqueta_cuentacaja(): void
     {
         $support = $this->supportConDias([1, 2]);
         $medios = [
             'Efectivo pesos' => [1 => 100.0, 2 => 0.0],
-            'TotalCoin QR Maquina' => [1 => 50.0, 2 => 0.0],
+            'Totalcoin QR Máquina' => [1 => 50.0, 2 => 0.0],
         ];
-        $valormae = [
-            81 => ['desc' => 'Efectivo pesos', 'tipo' => '0'],
-            84 => ['desc' => 'TotalCoin QR Maquina', 'tipo' => '9'],
-            85 => ['desc' => 'TotalCoin QR Caja', 'tipo' => '9'],
-            99 => ['desc' => 'Transf.Check MS', 'tipo' => '7'],
-            100 => ['desc' => 'DEPOSITO EFECTIVO PAGO QR', 'tipo' => '7'],
-        ];
-        $codigos = [
-            81 => true,
-            84 => true,
-            85 => true,
-            99 => true,
-            100 => true,
+        $etiquetas = [
+            'Efectivo pesos' => true,
+            'Efectivo dólares' => true,
+            'Efectivo euros' => true,
+            'Totalcoin QR Máquina' => true,
+            'Totalcoin QR Caja' => true,
+            'Depósito efectivo pago QR' => true,
+            'Transferencia / Check MS' => true,
         ];
 
-        $out = $this->asegurar($support, $medios, $valormae, $codigos);
+        $out = $this->asegurar($support, $medios, $etiquetas);
 
-        $this->assertArrayHasKey('TotalCoin QR Caja', $out);
-        $this->assertArrayHasKey('DEPOSITO EFECTIVO PAGO QR', $out);
-        $this->assertArrayHasKey('Transf.Check MS', $out);
-        $this->assertSame(0.0, array_sum($out['TotalCoin QR Caja']));
-        $this->assertSame(0.0, array_sum($out['DEPOSITO EFECTIVO PAGO QR']));
-        $this->assertSame(0.0, array_sum($out['Transf.Check MS']));
+        $this->assertArrayHasKey('Efectivo dólares', $out);
+        $this->assertArrayHasKey('Efectivo euros', $out);
+        $this->assertArrayHasKey('Totalcoin QR Caja', $out);
+        $this->assertArrayHasKey('Depósito efectivo pago QR', $out);
+        $this->assertArrayHasKey('Transferencia / Check MS', $out);
+        $this->assertSame(0.0, array_sum($out['Efectivo dólares']));
         $this->assertSame(100.0, $out['Efectivo pesos'][1]);
     }
 
@@ -45,15 +40,12 @@ class EfePosicionFinancieraMediosMaquinaCeroTest extends TestCase
     {
         $support = $this->supportConDias([1]);
         $medios = [
-            'TotalCoin QR Caja' => [1 => 840000.0],
-        ];
-        $valormae = [
-            85 => ['desc' => 'TotalCoin QR Caja', 'tipo' => '9'],
+            'Totalcoin QR Caja' => [1 => 840000.0],
         ];
 
-        $out = $this->asegurar($support, $medios, $valormae, [85 => true]);
+        $out = $this->asegurar($support, $medios, ['Totalcoin QR Caja' => true]);
 
-        $this->assertSame(840000.0, $out['TotalCoin QR Caja'][1]);
+        $this->assertSame(840000.0, $out['Totalcoin QR Caja'][1]);
     }
 
     /**
@@ -71,19 +63,17 @@ class EfePosicionFinancieraMediosMaquinaCeroTest extends TestCase
 
     /**
      * @param  array<string, array<int, float>>  $medios
-     * @param  array<int, array{desc: string, tipo: string}>  $valormae
-     * @param  array<int, true>  $codigos
+     * @param  array<string, true>  $etiquetas
      * @return array<string, array<int, float>>
      */
     private function asegurar(
         EfePosicionFinancieraSupport $support,
         array $medios,
-        array $valormae,
-        array $codigos,
+        array $etiquetas,
     ): array {
         $method = new ReflectionMethod($support, 'asegurarMediosMaquinaVisibles');
         $method->setAccessible(true);
 
-        return $method->invoke($support, $medios, $valormae, $codigos);
+        return $method->invoke($support, $medios, $etiquetas);
     }
 }

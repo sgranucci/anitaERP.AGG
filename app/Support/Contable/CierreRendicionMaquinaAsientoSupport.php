@@ -312,6 +312,7 @@ final class CierreRendicionMaquinaAsientoSupport
 
         $pctHospital = (float) config('rendicion_maquina_anita.cierre_rendicion_contable.canon_hospital_porcentaje', 1);
         $canonHospital = round($baseCanon * $pctHospital / 100, 2);
+        // p-vtamaquina.c: solo si hubo ganancia (Sol 10/3/25).
         if ($canonHospital > 0.0001) {
             $asientos[] = [
                 'leyenda' => 'Canon ent. de bien publico',

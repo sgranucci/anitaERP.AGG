@@ -8,6 +8,7 @@ use App\Models\Compras\Ordencompra;
 use App\Models\Compras\Suscripcion_Cargo;
 use App\Models\Compras\Suscripcion_Conciliacion;
 use App\Repositories\Configuracion\EmpresaRepositoryInterface;
+use App\Services\Compras\SuscripcionComprobanteService;
 use App\Services\Compras\SuscripcionConciliacionService;
 use App\Services\Compras\SuscripcionImputacionService;
 use App\Support\Compras\SuscripcionSupport;
@@ -24,6 +25,7 @@ class SuscripcionConciliacionController extends Controller
     public function __construct(
         private SuscripcionConciliacionService $conciliacionService,
         private SuscripcionImputacionService $imputacionService,
+        private SuscripcionComprobanteService $comprobanteService,
         private EmpresaRepositoryInterface $empresaRepository,
     ) {
         $this->middleware('auth');
@@ -73,7 +75,7 @@ class SuscripcionConciliacionController extends Controller
         $busqueda = trim((string) $request->input('q', ''));
 
         $cargos = $conciliacion->suscripcion_cargos()
-            ->with(['ordencompras.proveedores', 'suscripcion_tarjetas', 'monedas'])
+            ->with(['ordencompras.proveedores', 'suscripcion_tarjetas', 'monedas', 'suscripcion_comprobantes'])
             ->when($estado !== '', fn ($q) => $q->where('estado', $estado))
             ->when($busqueda !== '', fn ($q) => $q->where(function ($sub) use ($busqueda) {
                 $sub->where('comercio', 'like', '%'.$busqueda.'%')
@@ -84,12 +86,17 @@ class SuscripcionConciliacionController extends Controller
             ->orderBy('fecha')
             ->get();
 
+        $estadosComprobante = $this->comprobanteService->estadosPorCargoIds(
+            $cargos->pluck('id')->map(fn ($id) => (int) $id)->all()
+        );
+
         return view('compras.suscripcion.conciliacion.ver', [
             'conciliacion' => $conciliacion,
             'cargos' => $cargos,
             'resumen' => $this->conciliacionService->resumen($conciliacion),
             'estado' => $estado,
             'busqueda' => $busqueda,
+            'estados_comprobante' => $estadosComprobante,
             // Períodos hermanos: cambiar de mes sin volver al listado.
             'periodos_empresa' => Suscripcion_Conciliacion::query()
                 ->where('empresa_id', $conciliacion->empresa_id)

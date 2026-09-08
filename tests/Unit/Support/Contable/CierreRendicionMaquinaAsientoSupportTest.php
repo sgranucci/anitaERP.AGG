@@ -74,6 +74,9 @@ class CierreRendicionMaquinaAsientoSupportTest extends TestCase
 
         $asientos = CierreRendicionMaquinaAsientoSupport::armarAsientos($tot, $config);
         $this->assertSame('Venta maquinas', $asientos[0]['leyenda'] ?? '');
+        $this->assertGreaterThanOrEqual(3, count($asientos));
+        $this->assertSame('Canon lotería y casinos', $asientos[1]['leyenda'] ?? '');
+        $this->assertSame('Canon ent. de bien publico', $asientos[2]['leyenda'] ?? '');
 
         $lineas = $asientos[0]['lineas'];
         $this->assertLinea($lineas, 5, 355330.0, 0.0);
@@ -108,5 +111,55 @@ class CierreRendicionMaquinaAsientoSupportTest extends TestCase
 
         $this->assertEqualsWithDelta($debe, $sumD, 0.02, 'Debe cuenta '.$cuentaId);
         $this->assertEqualsWithDelta($haber, $sumH, 0.02, 'Haber cuenta '.$cuentaId);
+    }
+
+    public function test_canon_hospital_no_se_genera_con_base_negativa_como_anita(): void
+    {
+        $config = [
+            'cuenta_caja_pesos_id' => 1,
+            'cuenta_totalcoin_id' => 1,
+            'cuenta_impuesto_esp_id' => 1,
+            'cuenta_gastos_id' => 1,
+            'cuenta_ticket_gastro_id' => 1,
+            'cuenta_pago24_id' => 1,
+            'cuenta_ticket_prom_debe_id' => 1,
+            'cuenta_ticket_prom_haber_id' => 1,
+            'cuenta_caja_transitoria_id' => 1,
+            'cuenta_ff_maquina_id' => 1,
+            'cuenta_ventas_id' => 10,
+            'cuenta_ventas_ruleta_id' => 11,
+            'cuenta_poder_publico_id' => 1,
+            'cuenta_diferencia_caja_id' => 1,
+            'cuenta_partida_pendiente_id' => 1,
+            'cuenta_canon_loteria_id' => 20,
+            'cuenta_cont_canon_loteria_id' => 21,
+            'cuenta_canon_hospital_id' => 22,
+            'cuenta_cont_canon_hospital_id' => 23,
+        ];
+
+        $tot = [
+            'valores_cuenta' => [],
+            'totalcoin' => 0.0,
+            'impuesto_esp' => 0.0,
+            'vales' => 0.0,
+            'reintegros' => 0.0,
+            'gastos_apertura' => [],
+            'ticket_gastro' => 0.0,
+            'vta_ant_gastro' => 0.0,
+            'ticket_prom' => 0.0,
+            'variacion_ff' => 0.0,
+            'tot_caja_trans' => 0.0,
+            'maquinas_online' => 1000.0,
+            'ruletas_online' => -5000.0,
+            'maquinas_real' => 0.0,
+            'ruletas_real' => 0.0,
+            'pago_diferido' => 0.0,
+        ];
+
+        $asientos = CierreRendicionMaquinaAsientoSupport::armarAsientos($tot, $config);
+        $leyendas = array_column($asientos, 'leyenda');
+        // p-vtamaquina.c: lotería siempre; hospital solo si xdbl > 0 (Sol 10/3/25).
+        $this->assertContains('Canon lotería y casinos', $leyendas);
+        $this->assertNotContains('Canon ent. de bien publico', $leyendas);
     }
 }

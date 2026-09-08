@@ -212,6 +212,14 @@
                                         @if ($cargo->imputado())
                                             <span class="badge badge-light" title="Imputado en Ingresos y egresos"><i class="fa fa-calculator"></i></span>
                                         @endif
+                                        @php
+                                            $estComp = $estados_comprobante[$cargo->id] ?? null;
+                                        @endphp
+                                        @if ($cargo->ordencompra_id && $estComp === \App\Models\Compras\Suscripcion_Comprobante::ESTADO_PENDIENTE)
+                                            <span class="badge badge-warning" title="Falta factura del portal">Sin factura</span>
+                                        @elseif ($estComp === \App\Models\Compras\Suscripcion_Comprobante::ESTADO_CARGADO)
+                                            <span class="badge badge-success" title="Factura del portal cargada">Factura OK</span>
+                                        @endif
                                     </td>
                                     <td>
                                         @if ($abierta)

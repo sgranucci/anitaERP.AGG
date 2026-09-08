@@ -32,6 +32,8 @@ return [
         'stock.recepcion_proveedor_parte_unica' => App\Services\Configuracion\Handlers\StockRecepcionProveedorAvisoHandler::class,
         'stock.recepcion_proveedor_encuesta' => App\Services\Configuracion\Handlers\StockRecepcionProveedorEncuestaAvisoHandler::class,
         'compras.contrato_validacion_abono_pendiente' => App\Services\Configuracion\Handlers\ComprasContratoValidacionAbonoPendienteAvisoHandler::class,
+        'compras.suscripcion_comprobante_faltante' => App\Services\Configuracion\Handlers\ComprasSuscripcionComprobanteFaltanteAvisoHandler::class,
+        'compras.suscripcion_comprobante_escalamiento' => App\Services\Configuracion\Handlers\ComprasSuscripcionComprobanteFaltanteAvisoHandler::class,
         'compras.aplicacion_cc_reclasificacion' => App\Services\Configuracion\Handlers\ComprasAplicacionCcReclasificacionAvisoHandler::class,
         'compras.precarga_cotizacion_invalida' => App\Services\Configuracion\Handlers\ComprasPrecargaCotizacionInvalidaAvisoHandler::class,
         'compras.comprobante_proveedor_borrador_pendiente' => App\Services\Configuracion\Handlers\ComprasComprobanteProveedorBorradorPendienteAvisoHandler::class,

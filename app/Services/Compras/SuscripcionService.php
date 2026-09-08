@@ -162,6 +162,7 @@ class SuscripcionService
                 'suscripcion_tarjetas',
                 'suscripcion_owners',
                 'suscripcion_cargos.suscripcion_conciliaciones',
+                'suscripcion_comprobantes.suscripcion_cargos',
             ])
             ->find($id);
 

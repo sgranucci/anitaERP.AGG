@@ -13,6 +13,7 @@ use App\Support\Caja\AnitaSync\RendicionEstacionamientoRendvalorCodigoSupport;
 use App\Support\Caja\AnitaSync\RendicionGastronomiaRendvalorCodigoSupport;
 use App\Support\Caja\PosicionFinancieraOrdenConceptoSupport;
 use App\Support\Caja\RendicionMaquina\RendicionMaquinaTurno;
+use App\Support\Caja\RendicionMaquina\RendicionMaquinaValoresCuentacajaSupport;
 use App\Support\Contable\CierreRendicionBingoConceptoTipos;
 use App\Support\Ventas\Gastronomia\CierreJornadaProcesoFacturaFechajornadaSupport;
 use Carbon\Carbon;
@@ -189,9 +190,9 @@ class EfePosicionFinancieraFuenteErpSupport
      * aunque el mes esté en cero (p. ej. TotalCoin QR Caja en Rebisco).
      *
      * @param  list<int>  $diasMes
-     * @param  array<int, array{desc: string, tipo: string}>  $valormae
+     * @param  array<int, array{desc: string, tipo: string}>  $valormae  legacy (ya no etiqueta medios)
      * @param  array<int, string>  $apgastoDesc
-     * @param  array<int, true>  $codigosMediosPermitidos  códigos valormae con cuenta de uso máquinas
+     * @param  array<int, true>  $codigosMediosPermitidos  legacy; medios se arman por cuentacaja
      * @return array{
      *   base: array<string, array<int, float>>,
      *   medios: array<string, array<int, float>>,
@@ -204,10 +205,12 @@ class EfePosicionFinancieraFuenteErpSupport
         Carbon $desde,
         Carbon $hasta,
         array $diasMes,
-        array $valormae,
-        array $apgastoDesc,
+        array $valormae = [],
+        array $apgastoDesc = [],
         array $codigosMediosPermitidos = [],
     ): array {
+        unset($valormae, $codigosMediosPermitidos);
+
         $base = [
             'MAQUINAS VENTAS' => $this->vector($diasMes),
             'MAQUINAS CAJA' => $this->vector($diasMes),
@@ -218,16 +221,10 @@ class EfePosicionFinancieraFuenteErpSupport
             'Caja en transito' => $this->vector($diasMes),
             'Pago 24' => $this->vector($diasMes),
         ];
+        // Filas de medios desde cuentacaja (uso máquinas), aunque el mes esté en 0.
         $medios = [];
-        foreach ($codigosMediosPermitidos as $codigo => $_) {
-            if ((int) $codigo === 15) {
-                continue;
-            }
-            $desc = trim((string) ($valormae[(int) $codigo]['desc'] ?? ''));
-            if ($desc === '' || isset($medios[$desc])) {
-                continue;
-            }
-            $medios[$desc] = $this->vector($diasMes);
+        foreach (array_keys(PosicionFinancieraOrdenConceptoSupport::etiquetasConceptosMaquina($empresaId)) as $etiqueta) {
+            $medios[$etiqueta] = $this->vector($diasMes);
         }
         $gastos = [];
         foreach ($apgastoDesc as $desc) {
@@ -286,25 +283,22 @@ class EfePosicionFinancieraFuenteErpSupport
             $this->sumar($base, 'Pago 24', $dia, $pago24);
 
             foreach ($rendicion->valores as $valor) {
-                $codigo = $this->resolverCodigoValormaeMaquina(
-                    $valor->codigo_valormae,
-                    $valor->cuentacaja,
-                    $valormae,
-                );
-                if ($codigo === 15) {
+                $cuenta = $valor->cuentacaja;
+                if (! $cuenta instanceof Cuentacaja) {
                     continue;
                 }
-                $desc = ($codigo !== null ? ($valormae[$codigo]['desc'] ?? null) : null);
-                if ($desc === null || $desc === '') {
-                    // Sin catálogo Anita: aún así marcar como medio para no restarlo del Total.
-                    $desc = trim((string) ($valor->cuentacaja?->nombre ?? ''));
-                    if ($desc === '') {
-                        continue;
-                    }
+                $desc = PosicionFinancieraOrdenConceptoSupport::etiquetaConceptoMaquina($cuenta);
+                if ($desc === '') {
+                    continue;
                 }
-                // En ERP el monto de rendicion_maquina_valor ya está en pesos
-                // (la cotización es referencia). No volver a multiplicar.
-                $monto = (float) $valor->monto;
+                // monto en moneda de la cuenta; ME → pesos con cotización (igual que depósito).
+                $monedaId = (int) ($cuenta->moneda_id ?? 1);
+                $cotizacion = (float) ($valor->cotizacion ?? 0);
+                $monto = RendicionMaquinaValoresCuentacajaSupport::montoEnPesos(
+                    $monedaId,
+                    (float) $valor->monto,
+                    $cotizacion,
+                );
                 if (abs($monto) < 0.0001) {
                     continue;
                 }

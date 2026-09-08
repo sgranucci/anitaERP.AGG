@@ -494,6 +494,17 @@ class MayorConceptoPeriodoProcesador
     private int $consultasBridgeIndividuales = 0;
 
     /**
+     * Cache de subdiario COM/FGA/FIS armada en {@see precargarCachesCompras} / cargas lazy.
+     * El motor ERP la reutiliza para que OPP nativo vea las mismas FGA que Anita.
+     *
+     * @return array<string, list<object>>
+     */
+    public function exportarCacheSubdiarioCompras(): array
+    {
+        return $this->comSubdiarioCache;
+    }
+
+    /**
      * Precarga aplicped, promae y subdiario COM vía lecturas masivas del bridge.
      *
      * @param  list<object>  $auxpagLista
@@ -611,11 +622,15 @@ class MayorConceptoPeriodoProcesador
 
         if ($faltantes !== []) {
             foreach ($this->reader->cargarComSubdiarioLote($this->empresaActiva, $faltantes, $this->erroresBridge) as $clave => $lineas) {
-                $this->comSubdiarioCache[$clave] = $lineas;
+                // No cachear vacío: un miss de Informix bajo carga envenenaba el resto del período.
+                if ($lineas !== []) {
+                    $this->comSubdiarioCache[$clave] = $lineas;
+                }
             }
         }
 
         $this->completarComSubdiarioDesdeRecepcionErp(array_values($clavesCom));
+        $this->precargarComViaPepDesdeFacturasFga($auxpagLista);
 
         foreach ($auxpagLista as $axp) {
             if (! $this->esFactura($axp)) {
@@ -652,7 +667,7 @@ class MayorConceptoPeriodoProcesador
             }
 
             $this->consultasBridgeIndividuales++;
-            $this->comSubdiarioCache[$cacheKey] = $this->reader->cargarSubdiarioFacturaCompras(
+            $subFactura = $this->reader->cargarSubdiarioFacturaCompras(
                 $this->empresaActiva,
                 $tipoAp,
                 $letraAp,
@@ -662,6 +677,9 @@ class MayorConceptoPeriodoProcesador
                 $prov,
                 $this->erroresBridge,
             );
+            if ($subFactura !== []) {
+                $this->comSubdiarioCache[$cacheKey] = $subFactura;
+            }
         }
 
         return [
@@ -6046,7 +6064,7 @@ class MayorConceptoPeriodoProcesador
         $clave = $this->claveCacheSubdiarioFactura($tipoAp, $letraAp, $sucAp, $nroAp, $nroInterno);
         if (! isset($this->comSubdiarioCache[$clave])) {
             $this->consultasBridgeIndividuales++;
-            $this->comSubdiarioCache[$clave] = $this->reader->cargarSubdiarioFacturaCompras(
+            $lineas = $this->reader->cargarSubdiarioFacturaCompras(
                 $this->empresaActiva,
                 $tipoAp,
                 $letraAp,
@@ -6056,9 +6074,26 @@ class MayorConceptoPeriodoProcesador
                 $proveedor,
                 $this->erroresBridge,
             );
+            if ($lineas === []) {
+                // Reintento único: miss vacío bajo carga concurrente al bridge.
+                $this->consultasBridgeIndividuales++;
+                $lineas = $this->reader->cargarSubdiarioFacturaCompras(
+                    $this->empresaActiva,
+                    $tipoAp,
+                    $letraAp,
+                    $sucAp,
+                    $nroAp,
+                    $nroInterno,
+                    $proveedor,
+                    $this->erroresBridge,
+                );
+            }
+            if ($lineas !== []) {
+                $this->comSubdiarioCache[$clave] = $lineas;
+            }
         }
 
-        return $this->comSubdiarioCache[$clave];
+        return $this->comSubdiarioCache[$clave] ?? [];
     }
 
     private function claveCacheSubdiarioFactura(
@@ -6832,6 +6867,48 @@ class MayorConceptoPeriodoProcesador
     }
 
     /**
+     * Precarga COM hermanas vía PEP para FGA del período (FGA→PEP←COM).
+     * Sin esto, el gasto FGA se resuelve lazy y un miss vacío de Informix
+     * dejaba el OPP solo en analítico ("sin líneas COM de gasto").
+     *
+     * @param  list<object>  $auxpagLista
+     */
+    private function precargarComViaPepDesdeFacturasFga(array $auxpagLista): void
+    {
+        $clavesCom = [];
+        foreach ($auxpagLista as $axp) {
+            if (! $this->esFactura($axp)) {
+                continue;
+            }
+            if (strtoupper(trim((string) ($axp->axp_tipo_ap ?? ''))) !== 'FGA') {
+                continue;
+            }
+            foreach ($this->resolverClavesComViaPepHermano($axp) as $claveCom) {
+                $clavesCom[$claveCom] = $claveCom;
+            }
+        }
+
+        if ($clavesCom === []) {
+            return;
+        }
+
+        $faltantes = array_values(array_filter(
+            $clavesCom,
+            fn ($c) => ! isset($this->comSubdiarioCache[$c]),
+        ));
+
+        if ($faltantes !== []) {
+            foreach ($this->reader->cargarComSubdiarioLote($this->empresaActiva, $faltantes, $this->erroresBridge) as $clave => $lineas) {
+                if ($lineas !== []) {
+                    $this->comSubdiarioCache[$clave] = $lineas;
+                }
+            }
+        }
+
+        $this->completarComSubdiarioDesdeRecepcionErp(array_values($clavesCom));
+    }
+
+    /**
      * Subdiario COM Anita; si viene vacío, recepción confirmada en ERP (asiento_movimiento).
      *
      * @return list<object>
@@ -6841,7 +6918,7 @@ class MayorConceptoPeriodoProcesador
         if (! isset($this->comSubdiarioCache[$claveCom])) {
             [$ct, $cl, $cs, $cn] = array_pad(explode('|', $claveCom, 4), 4, '');
             $this->consultasBridgeIndividuales++;
-            $this->comSubdiarioCache[$claveCom] = $this->reader->cargarComSubdiario(
+            $lineas = $this->reader->cargarComSubdiario(
                 $this->empresaActiva,
                 $ct,
                 $cl,
@@ -6849,6 +6926,20 @@ class MayorConceptoPeriodoProcesador
                 (int) $cn,
                 $this->erroresBridge,
             );
+            if ($lineas === []) {
+                $this->consultasBridgeIndividuales++;
+                $lineas = $this->reader->cargarComSubdiario(
+                    $this->empresaActiva,
+                    $ct,
+                    $cl,
+                    (int) $cs,
+                    (int) $cn,
+                    $this->erroresBridge,
+                );
+            }
+            if ($lineas !== []) {
+                $this->comSubdiarioCache[$claveCom] = $lineas;
+            }
         }
 
         if (($this->comSubdiarioCache[$claveCom] ?? []) === []) {
@@ -7090,7 +7181,7 @@ class MayorConceptoPeriodoProcesador
 
             if (! isset($this->aplicpedPorRefCache[$clavePep])) {
                 $this->consultasBridgeIndividuales++;
-                $this->aplicpedPorRefCache[$clavePep] = $this->reader->cargarAplicpedPorReferencia(
+                $hermanos = $this->reader->cargarAplicpedPorReferencia(
                     'PEP',
                     $refLetra,
                     $refSuc,
@@ -7098,9 +7189,23 @@ class MayorConceptoPeriodoProcesador
                     $prov,
                     $this->erroresBridge,
                 );
+                if ($hermanos === []) {
+                    $this->consultasBridgeIndividuales++;
+                    $hermanos = $this->reader->cargarAplicpedPorReferencia(
+                        'PEP',
+                        $refLetra,
+                        $refSuc,
+                        $refNro,
+                        $prov,
+                        $this->erroresBridge,
+                    );
+                }
+                if ($hermanos !== []) {
+                    $this->aplicpedPorRefCache[$clavePep] = $hermanos;
+                }
             }
 
-            foreach ($this->aplicpedPorRefCache[$clavePep] as $hermano) {
+            foreach ($this->aplicpedPorRefCache[$clavePep] ?? [] as $hermano) {
                 if (strtoupper(trim((string) ($hermano->aplp_tipo ?? ''))) !== 'COM') {
                     continue;
                 }

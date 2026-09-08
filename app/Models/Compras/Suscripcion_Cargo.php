@@ -6,6 +6,7 @@ use App\Models\Configuracion\Moneda;
 use App\Models\Seguridad\Usuario;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * Línea del resumen de tarjeta y su resultado de cruce contra la OC de suscripción.
@@ -82,6 +83,11 @@ class Suscripcion_Cargo extends Model
     public function asociadores(): BelongsTo
     {
         return $this->belongsTo(Usuario::class, 'asocio_usuario_id');
+    }
+
+    public function suscripcion_comprobantes(): HasOne
+    {
+        return $this->hasOne(Suscripcion_Comprobante::class, 'suscripcion_cargo_id');
     }
 
     /** Cuenta para la cobertura: identificado contra una suscripción. */

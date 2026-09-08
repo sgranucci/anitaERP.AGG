@@ -158,6 +158,10 @@
             </div>
         </div>
 
+        @include('compras.suscripcion.partials.comprobantes', [
+            'comprobantes' => $oc->suscripcion_comprobantes ?? collect(),
+        ])
+
         <div class="card">
             <div class="card-header py-2">
                 <h3 class="card-title">Cargos conciliados</h3>

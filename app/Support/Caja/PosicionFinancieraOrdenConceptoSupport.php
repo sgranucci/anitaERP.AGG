@@ -67,6 +67,44 @@ final class PosicionFinancieraOrdenConceptoSupport
     }
 
     /**
+     * Etiqueta de informe para un medio de máquinas (ERP / cuentacaja).
+     * No usa valormae Anita: familia canónica (Efectivo dólares, etc.).
+     */
+    public static function etiquetaConceptoMaquina(Cuentacaja $cuenta): string
+    {
+        $familia = self::familiaMaquina($cuenta);
+
+        return self::etiquetaFamilia(self::USO_MAQUINAS, $familia, $cuenta);
+    }
+
+    /**
+     * Etiquetas de medios de máquinas de la empresa (para filas en 0 y filtros).
+     *
+     * @return array<string, true>
+     */
+    public static function etiquetasConceptosMaquina(int $empresaId): array
+    {
+        $etiquetas = [];
+        $cuentas = Cuentacaja::query()
+            ->paraEmpresa($empresaId)
+            ->whereHas(
+                'usocuentacajas',
+                fn ($query) => $query->where('usocuentacaja.nombre', self::USO_MAQUINAS)
+            )
+            ->orderBy('id')
+            ->get();
+
+        foreach ($cuentas as $cuenta) {
+            $etiqueta = trim(self::etiquetaConceptoMaquina($cuenta));
+            if ($etiqueta !== '') {
+                $etiquetas[$etiqueta] = true;
+            }
+        }
+
+        return $etiquetas;
+    }
+
+    /**
      * Empresas que tienen cuenta propia en los usos del informe (Biyemas / Kandiko / Rebisco).
      *
      * @return Collection<int, Empresa>
@@ -669,9 +707,14 @@ final class PosicionFinancieraOrdenConceptoSupport
             ->get();
 
         foreach ($cuentas as $cuenta) {
+            $familia = self::familiaMaquina($cuenta);
             $orden = self::ordenDeCuentaEnUso($cuenta, self::USO_MAQUINAS);
             if ($orden <= 0) {
-                $orden = self::ordenCanonicoFamilia(self::USO_MAQUINAS, self::familiaMaquina($cuenta));
+                $orden = self::ordenCanonicoFamilia(self::USO_MAQUINAS, $familia);
+            }
+            $canon = self::etiquetaFamilia(self::USO_MAQUINAS, $familia, $cuenta);
+            if ($canon !== '') {
+                $rank[$canon] = $orden;
             }
             $etiqueta = $cuenta->etiquetaOperaciones();
             if ($etiqueta !== '') {

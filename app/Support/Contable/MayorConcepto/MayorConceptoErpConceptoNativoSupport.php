@@ -29,10 +29,17 @@ final class MayorConceptoErpConceptoNativoSupport
         array $asientos,
         MayorConceptoMonedaConverter $monedaConverter,
         int $monedaReporteId,
+        ?MayorConceptoPeriodoProcesador $periodoProcesador = null,
     ): array {
         // Catálogo local primero; OPP/auxpag re-prepara con ctaconc Anita si el bridge responde.
         $this->memoriaMotor->prepararEmpresa($empresaId, []);
         $this->oppAuxpag->prepararPeriodo($empresaId, $fechaDesdeYmd, $fechaHastaYmd);
+        // Reusar subdiario FGA/FIS/COM ya resuelto por Anita en el período (paridad de firma).
+        if ($periodoProcesador !== null) {
+            $this->oppAuxpag->importarCacheSubdiarioCompras(
+                $periodoProcesador->exportarCacheSubdiarioCompras()
+            );
+        }
 
         $porAsiento = [];
 

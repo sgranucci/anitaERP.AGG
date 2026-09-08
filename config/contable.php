@@ -47,9 +47,10 @@ return [
         'limite_caja_banco' => (int) preg_replace('/\D/', '', (string) env('MAYOR_CONCEPTO_LIMITE_CAJA_BANCO', '112010008')),
         // Tope mayor analítico de control / conciliación (export l_mayor; ej. 112010-008).
         'limite_cuenta_analitico_control' => (int) preg_replace('/\D/', '', (string) env('MAYOR_CONCEPTO_LIMITE_CUENTA_ANALITICO_CONTROL', '112010008')),
-        // Documenta hasta cuándo hay import ERP (informativo). La consulta elige ERP u Anita
-        // de forma explícita; ya no hay híbrido automático por esta fecha.
+        // Documenta hasta cuándo hay import ERP (informativo). Ya no hay híbrido por fecha.
         'fuente_erp_hasta' => env('MAYOR_CONCEPTO_FUENTE_ERP_HASTA', ''),
+        // UI + consulta: si false, solo Anita (bridge). Reactivar cuando el motor ERP cuadre.
+        'fuente_erp_habilitada' => filter_var(env('MAYOR_CONCEPTO_FUENTE_ERP_HABILITADA', false), FILTER_VALIDATE_BOOLEAN),
     ],
 
     /*

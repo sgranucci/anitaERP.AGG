@@ -403,14 +403,9 @@ class EfePosicionFinancieraSupport
             $fechaPorOper,
         );
         $maquinasErp = $this->fuenteErp->maquinasCompletas(
-            $empresaId, $inicioMes, $finMes, $this->dias, $valormae, $apgastoDesc, $codigosUsoMaquinas,
+            $empresaId, $inicioMes, $finMes, $this->dias, [], $apgastoDesc,
         );
-        $etiquetasMediosMaquina = $this->etiquetasMediosDeUso(
-            $empresaId,
-            PosicionFinancieraOrdenConceptoSupport::USO_MAQUINAS,
-            $valormae,
-            $codigosUsoMaquinas,
-        );
+        $etiquetasMediosMaquina = PosicionFinancieraOrdenConceptoSupport::etiquetasConceptosMaquina($empresaId);
         $etiquetasMediosOperativos = $etiquetasMediosMaquina
             + $this->etiquetasMediosDeUso(
                 $empresaId,
@@ -424,16 +419,28 @@ class EfePosicionFinancieraSupport
                 $valormae,
                 $codigosUsoEstacionamiento,
             );
+        // Medios máquinas: solo cuentacaja ERP (no filtrar por valormae Anita).
         $maquinasErp['medios'] = $this->filtrarMapaPorEtiquetas(
             $maquinasErp['medios'] ?? [],
             $etiquetasMediosMaquina,
         );
-        $maquinasBase = $this->fuenteErp->mergePorDia(
-            $maquinasBaseAnita, $maquinasErp['base'], $maquinasErp['dias'], $this->dias,
-        );
-        // Antes del corte ERP: dif_caja ERP a veces viene corrupto; si Anita tiene
-        // el día C, preferir Anita en esas filas (no afectan Total maquinas).
-        if (! $this->fuenteErpPura) {
+        if ($this->fuenteErpPura) {
+            $maquinasBase = $maquinasErp['base'];
+            $maquinasMedios = PosicionFinancieraOrdenConceptoSupport::reordenarMapaMedios(
+                $empresaId,
+                $this->asegurarMediosMaquinaVisibles(
+                    $maquinasErp['medios'] ?? [],
+                    $etiquetasMediosMaquina,
+                ),
+                $valormae,
+            );
+            $maquinasGastos = $maquinasErp['gastos'];
+        } else {
+            $maquinasBase = $this->fuenteErp->mergePorDia(
+                $maquinasBaseAnita, $maquinasErp['base'], $maquinasErp['dias'], $this->dias,
+            );
+            // Antes del corte ERP: dif_caja ERP a veces viene corrupto; si Anita tiene
+            // el día C, preferir Anita en esas filas (no afectan Total maquinas).
             foreach ($maquinasErp['dias'] as $diaErp => $_) {
                 $cajaAnita = (float) ($maquinasBaseAnita['MAQUINAS CAJA'][$diaErp] ?? 0);
                 if (abs($cajaAnita) < 0.01) {
@@ -452,30 +459,29 @@ class EfePosicionFinancieraSupport
                     2,
                 );
             }
-        }
-        $maquinasMedios = PosicionFinancieraOrdenConceptoSupport::reordenarMapaMedios(
-            $empresaId,
-            $this->asegurarMediosMaquinaVisibles(
-                $this->filtrarMapaPorEtiquetas(
-                    $this->fuenteErp->mergePorDia(
-                        $maquinasMediosAnita, $maquinasErp['medios'], $maquinasErp['dias'], $this->dias,
+            $maquinasMedios = PosicionFinancieraOrdenConceptoSupport::reordenarMapaMedios(
+                $empresaId,
+                $this->asegurarMediosMaquinaVisibles(
+                    $this->filtrarMapaPorEtiquetas(
+                        $this->fuenteErp->mergePorDia(
+                            $maquinasMediosAnita, $maquinasErp['medios'], $maquinasErp['dias'], $this->dias,
+                        ),
+                        $etiquetasMediosMaquina,
                     ),
                     $etiquetasMediosMaquina,
                 ),
                 $valormae,
-                $codigosUsoMaquinas,
-            ),
-            $valormae,
-        );
-        $maquinasGastos = $this->fuenteErp->mergePorDia(
-            $maquinasGastosAnita, $maquinasErp['gastos'], $maquinasErp['dias'], $this->dias,
-        );
-        $descsMedio = [];
+            );
+            $maquinasGastos = $this->fuenteErp->mergePorDia(
+                $maquinasGastosAnita, $maquinasErp['gastos'], $maquinasErp['dias'], $this->dias,
+            );
+        }
+        $descsMedio = $etiquetasMediosMaquina;
         foreach ($valormae as $meta) {
             $descsMedio[$meta['desc']] = true;
         }
         // Medios ERP (etiquetas Anita o fallback) no deben restarse del Total.
-        foreach (array_keys($maquinasErp['medios']) as $descMedioErp) {
+        foreach (array_keys($maquinasErp['medios'] ?? []) as $descMedioErp) {
             $descsMedio[$descMedioErp] = true;
         }
         $maquinas = array_merge($maquinasBase, $maquinasMedios, $maquinasGastos);
@@ -1670,28 +1676,20 @@ class EfePosicionFinancieraSupport
 
     /**
      * Lista todos los medios de máquinas con cuenta operativa aunque el mes
-     * esté en 0 (misma regla que gastro / apgasto). Evita huecos en Rebisco
-     * cuando TotalCoin QR Caja / Depósito QR / Transf. Check MS aún no movieron.
+     * esté en 0 (misma regla que gastro / apgasto). Etiquetas = cuentacaja ERP.
      *
      * @param  array<string, array<int, float>>  $medios
-     * @param  array<int, array{desc: string, tipo: string}>  $valormae
-     * @param  array<int, true>  $codigosPermitidos
+     * @param  array<string, true>  $etiquetas
      * @return array<string, array<int, float>>
      */
-    private function asegurarMediosMaquinaVisibles(
-        array $medios,
-        array $valormae,
-        array $codigosPermitidos,
-    ): array {
-        foreach ($codigosPermitidos as $codigo => $_) {
-            if ((int) $codigo === 15) {
+    private function asegurarMediosMaquinaVisibles(array $medios, array $etiquetas): array
+    {
+        foreach ($etiquetas as $etiqueta => $_) {
+            $etiqueta = trim((string) $etiqueta);
+            if ($etiqueta === '' || isset($medios[$etiqueta])) {
                 continue;
             }
-            $desc = trim((string) ($valormae[(int) $codigo]['desc'] ?? ''));
-            if ($desc === '' || isset($medios[$desc])) {
-                continue;
-            }
-            $medios[$desc] = $this->vectorDias();
+            $medios[$etiqueta] = $this->vectorDias();
         }
 
         return $medios;

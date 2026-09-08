@@ -90,10 +90,24 @@ class MayorConceptoListadoFiltros
             'filtro_emisor' => trim((string) $request->input('filtro_emisor', '')),
             'filtro_cuit' => trim((string) $request->input('filtro_cuit', '')),
             'filtro_texto' => trim((string) $request->input('filtro_texto', '')),
-            'fuente_mayor' => MayorFuenteConsultaSupport::normalizarModo(
-                $request->input('fuente_mayor', MayorFuenteConsultaSupport::MODO_ERP)
+            'fuente_mayor' => self::normalizarFuenteMayor(
+                $request->input('fuente_mayor')
             ),
         ];
+    }
+
+    /**
+     * Fuerza Anita mientras el motor ERP del mayor por concepto no esté habilitado.
+     */
+    public static function normalizarFuenteMayor(mixed $valor = null): string
+    {
+        if (! (bool) config('contable.mayor_concepto.fuente_erp_habilitada', false)) {
+            return MayorFuenteConsultaSupport::MODO_ANITA;
+        }
+
+        return MayorFuenteConsultaSupport::normalizarModo(
+            $valor ?? MayorFuenteConsultaSupport::MODO_ANITA
+        );
     }
 
     /**
@@ -603,10 +617,7 @@ class MayorConceptoListadoFiltros
             }
         }
 
-        $fuenteMayor = MayorFuenteConsultaSupport::normalizarModo(
-            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_ERP
-        );
-        $out['fuente_mayor'] = $fuenteMayor;
+        $out['fuente_mayor'] = self::normalizarFuenteMayor($filtros['fuente_mayor'] ?? null);
 
         // No filtrar consolidar_empresas=0 ni arrays empresa_ids.
         return $out;
@@ -620,9 +631,7 @@ class MayorConceptoListadoFiltros
             unset($filtrosConsulta[$campo]);
         }
         $base = self::paraQueryString($filtrosConsulta);
-        $base['fuente_mayor'] = MayorFuenteConsultaSupport::normalizarModo(
-            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_ERP
-        );
+        $base['fuente_mayor'] = self::normalizarFuenteMayor($filtros['fuente_mayor'] ?? null);
 
         return md5(json_encode($base));
     }

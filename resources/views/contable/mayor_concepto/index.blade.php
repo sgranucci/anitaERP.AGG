@@ -633,6 +633,7 @@
                         'filtros' => $filtros ?? [],
                         'id_prefix' => 'mco',
                         'config_key' => 'contable.mayor_concepto.fuente_erp_hasta',
+                        'erp_habilitado' => (bool) config('contable.mayor_concepto.fuente_erp_habilitada', false),
                     ])
 
                     <input type="hidden" name="agrupacion_resumen" id="agrupacion_resumen"

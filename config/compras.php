@@ -40,6 +40,23 @@ return [
     ],
 
     /*
+    | Facturas de portal de suscripción (compras:alertas-suscripcion-comprobantes).
+    | Dueño: digest diario. Escalamiento: destinatarios del tipo
+    | compras / suscripcion_comprobante_escalamiento (ABM Modulo aviso).
+    |
+    | dia_escalamiento: default/fallback si no hay fila en Configuración general
+    | (parametro_sistema.suscripcion_comprobante_dia_escalamiento).
+    |   - "ultimo" = último día del mes (cierre de tarjeta).
+    |   - 1..31 = día fijo (si el mes tiene menos días, se usa el último).
+    | Preferir editarlo en Configuración → Configuración general.
+    */
+    'suscripcion_comprobantes' => [
+        'habilitado' => filter_var(env('COMPRAS_SUSCRIPCION_COMPROBANTES_ALERTAS_HABILITADO', true), FILTER_VALIDATE_BOOLEAN),
+        'hora' => env('COMPRAS_SUSCRIPCION_COMPROBANTES_ALERTAS_HORA', '08:45'),
+        'dia_escalamiento' => env('COMPRAS_SUSCRIPCION_COMPROBANTES_DIA_ESCALAMIENTO', 'ultimo'),
+    ],
+
+    /*
     | OC: pedir partida de presupuesto y CAPEX en líneas.
     | Default true = AGG (columnas visibles + validación contra presupuesto vigente).
     | El Bierzo: false (no pide ni valida; permite operar sin presupuestos cargados).

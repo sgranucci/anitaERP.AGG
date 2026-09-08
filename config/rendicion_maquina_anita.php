@@ -87,6 +87,8 @@ return [
         })(),
         'estado_facturado_anita' => env('RENDICION_MAQUINA_CIERRE_ESTADO_FACTURADO_ANITA', 'F'),
         'conciliacion_flash_tolerancia' => (float) env('RENDICION_MAQUINA_CIERRE_FLASH_TOLERANCIA', 0.02),
+        // Piso correlatividad cierre máquinas ERP (antes vive en Anita). Vacío = sin piso.
+        'correlatividad_desde' => env('RENDICION_MAQUINA_CIERRE_CORRELATIVIDAD_DESDE', '2026-09-01'),
         'canon_loteria_porcentaje' => (float) env('RENDICION_MAQUINA_CIERRE_CANON_LOTERIA_PCT', 34),
         'canon_hospital_porcentaje' => (float) env('RENDICION_MAQUINA_CIERRE_CANON_HOSPITAL_PCT', 1),
         // p-vtamaquina.c: dft_ccosto / 89L vales; 96L ticket prom debe.

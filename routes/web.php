@@ -3637,6 +3637,11 @@ Route::get('compras/suscripciones/tarjetas/{id}/editar', 'Compras\SuscripcionTar
 Route::put('compras/suscripciones/tarjetas/{id}', 'Compras\SuscripcionTarjetaController@actualizar')->name('actualizar_tarjeta_suscripcion');
 Route::delete('compras/suscripciones/tarjetas/{id}', 'Compras\SuscripcionTarjetaController@eliminar')->name('eliminar_tarjeta_suscripcion');
 
+Route::get('compras/suscripciones/comprobantes-pendientes', 'Compras\SuscripcionComprobanteController@index')->name('comprobantes_pendientes_suscripcion');
+Route::post('compras/suscripciones/comprobantes/{id}/subir', 'Compras\SuscripcionComprobanteController@subir')->name('subir_comprobante_suscripcion');
+Route::post('compras/suscripciones/comprobantes/{id}/no-aplica', 'Compras\SuscripcionComprobanteController@noAplica')->name('noaplica_comprobante_suscripcion');
+Route::get('compras/suscripciones/comprobantes/{id}/descargar', 'Compras\SuscripcionComprobanteController@descargar')->name('descargar_comprobante_suscripcion');
+
 // Conciliación mensual del resumen de tarjeta.
 Route::get('compras/suscripciones/conciliacion', 'Compras\SuscripcionConciliacionController@index')->name('conciliacion_suscripcion');
 Route::post('compras/suscripciones/conciliacion', 'Compras\SuscripcionConciliacionController@abrir')->name('abrir_conciliacion_suscripcion');

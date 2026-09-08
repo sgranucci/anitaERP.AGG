@@ -306,6 +306,8 @@ class SuscripcionConciliacionService
     {
         $ocPrevia = (int) ($cargo->ordencompra_id ?? 0);
 
+        app(SuscripcionComprobanteService::class)->alDesasociarCargo($cargo);
+
         $cargo->update([
             'ordencompra_id' => null,
             'estado' => Suscripcion_Cargo::ESTADO_SIN_IDENTIFICAR,
@@ -619,6 +621,9 @@ class SuscripcionConciliacionService
             'asocio_usuario_id' => $usuarioId,
             'asociado_at' => now(),
         ]);
+
+        app(SuscripcionComprobanteService::class)
+            ->asegurarPendienteAlAsociar($cargo->fresh(['suscripcion_conciliaciones']), $oc);
 
         $this->refrescarDesvioAbierto((int) $oc->id);
     }

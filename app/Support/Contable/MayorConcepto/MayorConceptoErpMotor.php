@@ -89,7 +89,7 @@ class MayorConceptoErpMotor
         );
         $porAsientoAnita = $this->indexarLineasPorAsiento($lineasAnita);
 
-        // 2) Circuitos nativos MySQL/OPP.
+        // 2) Circuitos nativos MySQL/OPP (con cache subdiario del paso Anita).
         $porAsientoNativo = $this->conceptoNativo->generarPorAsiento(
             $empresaId,
             $fechaDesdeYmd,
@@ -97,6 +97,7 @@ class MayorConceptoErpMotor
             $asientos,
             $monedaConverter,
             $monedaReporteId,
+            $this->periodoProcesador,
         );
 
         $reemplazados = 0;

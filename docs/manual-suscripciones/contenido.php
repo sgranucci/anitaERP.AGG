@@ -25,9 +25,9 @@ return [
             ],
         ],
         [
-            'titulo' => '2. El circuito en seis pasos',
+            'titulo' => '2. El circuito en siete pasos',
             'parrafos' => [
-                'El recorrido completo, desde que alguien pide una herramienta hasta que el gasto queda imputado.',
+                'El recorrido completo, desde que alguien pide una herramienta hasta que el gasto queda imputado y documentado.',
             ],
             'tabla' => [
                 'caption' => 'Pasos del circuito',
@@ -38,8 +38,21 @@ return [
                     ['3. Autorización', 'Gerente del sector', 'Autoriza o rechaza con comentario, desde la bandeja del módulo, desde Mis aprobaciones o desde el enlace del mail.'],
                     ['4. Vigencia', 'Sistema', 'La suscripción queda vigente hasta la fecha de renovación, con avisos a los 60, 30 y 15 días.'],
                     ['5. Conciliación', 'Administración', 'Se importa el resumen de la tarjeta y cada cargo se cruza contra las suscripciones vigentes.'],
-                    ['6. Imputación', 'Administración', 'Los cargos conciliados generan el movimiento en Ingresos y egresos.'],
+                    ['6. Imputación', 'Administración', 'Los cargos conciliados generan el movimiento en Ingresos y egresos (no se bloquea si falta la factura del portal).'],
+                    ['7. Comprobante del portal', 'Dueño del servicio', 'Al asociar el cargo nace un pendiente: el dueño baja la factura del portal y la sube en Comprobantes pendientes o en la ficha. Si al último día del mes del período (cierre de tarjeta; configurable) sigue faltando, escala a gerencia.'],
                 ],
+            ],
+        ],
+        [
+            'titulo' => '2.1 Comprobantes de portal',
+            'parrafos' => [
+                'El gasto en tarjeta ya ocurrió: la factura del emisor del SaaS se pide aparte para cerrar el circuito documental.',
+                'El pendiente no se inventa por calendario: nace cuando el cargo del resumen se asocia a la suscripción. El listado Compras › Suscripciones › Comprobantes pendientes muestra área y dueño del servicio.',
+            ],
+            'items' => [
+                'Quién carga: el dueño del servicio (o quien configure / concilie).',
+                'Dónde: listado de pendientes o ficha de la suscripción.',
+                'Avisos: mail diario al dueño; desde el umbral de Configuración general (default último día del mes / cierre de tarjeta), escalamiento a los destinatarios del aviso de gerencia (quién recibe: Modulo aviso).',
             ],
         ],
         [
@@ -112,7 +125,8 @@ return [
                     ['3. Aprobación', 'I', 'A', 'R', 'I'],
                     ['4. Aplicación del gasto', '', 'I', 'C', 'R'],
                     ['5. Conciliación mensual', 'C', 'A', 'C', 'R'],
-                    ['6. Renovación o baja', 'R', 'A', 'C', 'I'],
+                    ['6. Factura del portal', 'R', 'I (escala fin de mes)', 'C', 'I'],
+                    ['7. Renovación o baja', 'R', 'A', 'C', 'I'],
                 ],
             ],
         ],
@@ -124,6 +138,7 @@ return [
             'items' => [
                 'Aprobadores: se agregan de a uno los centros de costo que participan, cada uno con su gerente. Es el nivel único del árbol.',
                 'Tarjetas corporativas: etiqueta, últimos cuatro dígitos y responsable. Para poder imputar hacen falta además la cuenta de caja y el tipo de transacción de egreso.',
+                'Escalamiento factura portal: Configuración → Configuración general → Compras / Suscripciones (día del mes o último día). Destinatarios del mail de gerencia: Configuración → Modulo aviso.',
             ],
         ],
         [

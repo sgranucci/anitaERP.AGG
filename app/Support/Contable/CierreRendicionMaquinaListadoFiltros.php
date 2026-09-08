@@ -173,6 +173,8 @@ final class CierreRendicionMaquinaListadoFiltros
                 $w->whereNull('rendicion_maquina.asiento_id')
                     ->orWhere('rendicion_maquina.asiento_id', 0);
             });
+            // Jornadas pre-ERP (Anita) no son pendientes de cierre contable.
+            CierreRendicionMaquinaConfigSupport::aplicarPisoCorrelatividad($query);
 
             return;
         }

@@ -194,4 +194,9 @@ class Ordencompra extends Model
     {
         return $this->hasMany(Suscripcion_Cargo::class, 'ordencompra_id');
     }
+
+    public function suscripcion_comprobantes()
+    {
+        return $this->hasMany(Suscripcion_Comprobante::class, 'ordencompra_id');
+    }
 }

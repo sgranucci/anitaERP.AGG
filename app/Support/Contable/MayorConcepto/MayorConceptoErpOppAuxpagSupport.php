@@ -71,6 +71,21 @@ final class MayorConceptoErpOppAuxpagSupport
     }
 
     /**
+     * Incorpora el cache de subdiario del PeriodoProcesador (mismas claves tipo|letra|suc|nro|interno).
+     *
+     * @param  array<string, list<object>>  $cache
+     */
+    public function importarCacheSubdiarioCompras(array $cache): void
+    {
+        foreach ($cache as $clave => $lineas) {
+            if (! is_array($lineas) || $lineas === []) {
+                continue;
+            }
+            $this->comCache['SUB|'.$clave] = $lineas;
+        }
+    }
+
+    /**
      * @param  list<object>  $movimientos
      * @return list<array<string, mixed>>|null
      */
@@ -333,37 +348,30 @@ final class MayorConceptoErpOppAuxpagSupport
             }
         }
 
-        // FGA: Anita precarga aplicped vacío → cargarGasto usa subdiario FGA (114…)
-        // antes que un COM “fresco” del bridge. Priorizar fgaSub para firmar igual.
+        // FGA: misma prioridad que PeriodoProcesador::cargarGastoDesdeAplicacion —
+        // COM directo → subdiario FGA (114…) → COM vía PEP. Priorizar fgaSub rompía
+        // la firma (nativo en 114 vs Anita en 115) una vez compartida la cache COM.
         if ($tipoAp === 'FGA') {
-            if ($this->tieneAnticipo114040($adelantada) && $comDirecto === [] && $fgaSub === [] && $comViaPep === []) {
-                return [$this->filtrarAnticipo114040($adelantada), 'Anticipo 114040'];
-            }
-            if ($fgaSub !== []) {
-                return [array_merge($fgaSub, $percepciones), 'FGA COM neto'];
-            }
-            $comDirResultado = array_values(array_filter(
-                $comDirecto,
-                fn ($l) => $this->incluyeResultadoCompras([$l]),
-            ));
-            if ($comDirResultado !== []) {
-                return [$comDirResultado, 'FGA COM neto'];
-            }
-            if ($comDirecto !== [] && ! $this->comGastoEsSolo117010($comDirecto)) {
+            if ($comDirecto !== []) {
+                if ($this->comGastoEsSolo117010($comDirecto) && $tieneChp) {
+                    return [$comDirecto, 'COM cheque 117010 reclasificado'];
+                }
+
                 return [$comDirecto, 'FGA COM neto'];
             }
-            if ($this->comGastoEsSolo117010($comDirecto !== [] ? $comDirecto : $comViaPep) && $tieneChp) {
-                return [$comDirecto !== [] ? $comDirecto : $comViaPep, 'COM cheque 117010 reclasificado'];
-            }
-            $comPepResultado = array_values(array_filter(
-                $comViaPep,
-                fn ($l) => $this->incluyeResultadoCompras([$l]),
-            ));
-            if ($comPepResultado !== []) {
-                return [$comPepResultado, 'FGA COM neto'];
+            if ($fgaSub !== []) {
+                // Sin merge de 214: Anita excluye percepciones del filtro FGA.
+                return [$fgaSub, 'FGA COM neto'];
             }
             if ($comViaPep !== []) {
+                if ($this->comGastoEsSolo117010($comViaPep) && $tieneChp) {
+                    return [$comViaPep, 'COM cheque 117010 reclasificado'];
+                }
+
                 return [$comViaPep, 'FGA COM neto'];
+            }
+            if ($this->tieneAnticipo114040($adelantada)) {
+                return [$this->filtrarAnticipo114040($adelantada), 'Anticipo 114040'];
             }
         }
 

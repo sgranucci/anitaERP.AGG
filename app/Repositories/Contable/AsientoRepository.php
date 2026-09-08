@@ -118,6 +118,8 @@ class AsientoRepository implements AsientoRepositoryInterface
 			! $omitirAnita
 			&& ($data['estado_aprobacion'] ?? Asiento::ESTADO_APROBACION_CONFIRMADO) === Asiento::ESTADO_APROBACION_CONFIRMADO
 		) {
+			// Pasar id: si Informix 239 fuerza renumerar, ERP debe actualizar el mismo número.
+			$data['id'] = (int) $asiento->id;
 			// Registrar ANTES de ctamov: si guardarAnita inserta líneas y luego tira,
 			// el afterRollBack de MySQL igual borra el huérfano en Informix.
 			AsientoCtamovRollbackSupport::registrarSiHayTransaccion(
@@ -127,6 +129,8 @@ class AsientoRepository implements AsientoRepositoryInterface
 			PedidoFacturacionProfiler::etapa('asiento_ctamov_anita_inicio');
 			self::guardarAnita($data);
 			PedidoFacturacionProfiler::etapa('asiento_ctamov_anita_fin');
+			// Refrescar: guardarAnita puede haber renumerado el asiento tras colisión 239.
+			$asiento->refresh();
 		}
 
 		return $asiento;
@@ -1005,7 +1009,8 @@ class AsientoRepository implements AsientoRepositoryInterface
 					$request = $this->renumerarRequestTrasColisionCtamov($request, $codigoEmpresa);
 				}
 
-				usleep(300000);
+				// Backoff creciente: el bridge Informix bajo carga suele devolver UNLOAD en INSERT.
+				usleep(min(2_000_000, 400_000 * $intento));
 
 				return $this->guardarAnita($request, $intento + 1);
 			}
@@ -1232,9 +1237,12 @@ class AsientoRepository implements AsientoRepositoryInterface
 		$request['numeroasiento'] = $nuevo;
 
 		$asientoId = (int) ($request['id'] ?? 0);
+		$actualizados = 0;
 		if ($asientoId > 0) {
-			$this->model->whereKey($asientoId)->update(['numeroasiento' => $nuevo]);
+			$actualizados = $this->model->whereKey($asientoId)->update(['numeroasiento' => $nuevo]);
 		}
+		// No fallback por empresa+número: bajo concurrencia puede renumerar otro asiento
+		// (ej. transferencia) que reutilizó el mismo candidato.
 
 		AsientoCtamovRollbackSupport::registrarSiHayTransaccion($empresaId, (string) $nuevo);
 
@@ -1244,6 +1252,7 @@ class AsientoRepository implements AsientoRepositoryInterface
 			'anterior' => $anterior,
 			'nuevo' => $nuevo,
 			'asiento_id' => $asientoId ?: null,
+			'erp_actualizado' => $actualizados > 0,
 		]);
 
 		return $request;
@@ -1400,14 +1409,41 @@ class AsientoRepository implements AsientoRepositoryInterface
 		if (isset($this->path_sistema)) {
 			$data['path_sistema'] = $this->path_sistema;
 		}
-		$parsed = ApiAnita::parsearRespuestaLista((string) $apiAnita->apiCall($data));
-		if ($parsed['error_lectura'] !== null) {
+
+		// Bridge bajo carga a veces lista vacío aunque el nro esté ocupado → luego Informix 239.
+		$ultimoError = null;
+		for ($intento = 1; $intento <= 3; $intento++) {
+			$raw = (string) $apiAnita->apiCall($data);
+			if (ApiAnita::mensajeRespuestaUnloadEnEscritura($raw) !== null) {
+				Log::warning('asiento_ctamov.ocupacion_lectura_unload', [
+					'empresa' => $codigoEmpresa,
+					'numeroasiento' => $nroAsiento,
+					'intento' => $intento,
+				]);
+				usleep(200000 * $intento);
+				continue;
+			}
+			$parsed = ApiAnita::parsearRespuestaLista($raw);
+			if ($parsed['error_lectura'] !== null) {
+				$ultimoError = $parsed['error_lectura'];
+				usleep(200000 * $intento);
+				continue;
+			}
+			if (count($parsed['filas']) > 0) {
+				return true;
+			}
+			if ($intento < 3) {
+				usleep(150000 * $intento);
+			}
+		}
+
+		if ($ultimoError !== null) {
 			throw new \RuntimeException(
-				'No se pudo verificar ocupación de ctamov asiento '.$nroAsiento.': '.$parsed['error_lectura']
+				'No se pudo verificar ocupación de ctamov asiento '.$nroAsiento.': '.$ultimoError
 			);
 		}
 
-		return count($parsed['filas']) > 0;
+		return false;
 	}
 
 	private function assertPeriodoContablePermitido(array $data): void

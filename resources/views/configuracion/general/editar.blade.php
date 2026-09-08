@@ -24,7 +24,7 @@ Configuración general del sistema
                 <div class="card-body">
                     <div class="alert alert-info py-2">
                         Estos valores mandan sobre los defaults de <code>config/</code> y <code>.env</code>.
-                        Incluyen facturación (FCE MiPyME), POS, Libro IVA Digital y el circuito de aprobación de artículos.
+                        Incluyen facturación (FCE MiPyME), POS, Libro IVA Digital, aprobación de artículos y umbrales de Compras / Suscripciones.
                     </div>
 
                     @foreach ($grupos as $nombreGrupo => $parametros)
@@ -70,6 +70,23 @@ Configuración general del sistema
                                         <select class="form-control" name="parametros[{{ $parametro['clave'] }}]" id="{{ $idCampo }}" required>
                                             <option value="1" @selected($valorBool === '1')>Activo</option>
                                             <option value="0" @selected($valorBool === '0')>Inactivo</option>
+                                        </select>
+                                        <small class="form-text text-muted">{{ $parametro['ayuda'] }}</small>
+                                    </div>
+                                </div>
+                            @elseif ($parametro['tipo'] === 'select')
+                                @php
+                                    $idCampo = 'param_'.$parametro['clave'];
+                                    $valorSel = (string) old('parametros.'.$parametro['clave'], $parametro['valor']);
+                                    $opciones = $parametro['opciones'] ?? [];
+                                @endphp
+                                <div class="form-group row">
+                                    <label for="{{ $idCampo }}" class="col-lg-4 control-label text-right pr-2">{{ $parametro['etiqueta'] }}</label>
+                                    <div class="col-lg-4">
+                                        <select class="form-control" name="parametros[{{ $parametro['clave'] }}]" id="{{ $idCampo }}" required>
+                                            @foreach ($opciones as $opValor => $opEtiqueta)
+                                                <option value="{{ $opValor }}" @selected($valorSel === (string) $opValor)>{{ $opEtiqueta }}</option>
+                                            @endforeach
                                         </select>
                                         <small class="form-text text-muted">{{ $parametro['ayuda'] }}</small>
                                     </div>

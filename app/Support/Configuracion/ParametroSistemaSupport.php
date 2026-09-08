@@ -23,10 +23,12 @@ final class ParametroSistemaSupport
 
     public const CLAVE_ARTICULO_APROBACION_ALTA = 'articulo_aprobacion_alta';
 
+    public const CLAVE_SUSCRIPCION_COMPROBANTE_DIA_ESCALAMIENTO = 'suscripcion_comprobante_dia_escalamiento';
+
     private const CACHE_KEY = 'parametro_sistema.mapa';
 
     /**
-     * @return array<string, array{grupo: string, etiqueta: string, ayuda: string, tipo: string, orden: int}>
+     * @return array<string, array{grupo: string, etiqueta: string, ayuda: string, tipo: string, orden: int, opciones?: array<string, string>}>
      */
     public static function definiciones(): array
     {
@@ -59,7 +61,28 @@ final class ParametroSistemaSupport
                 'tipo' => 'boolean',
                 'orden' => 40,
             ],
+            self::CLAVE_SUSCRIPCION_COMPROBANTE_DIA_ESCALAMIENTO => [
+                'grupo' => 'Compras / Suscripciones',
+                'etiqueta' => 'Escalamiento factura de portal',
+                'ayuda' => 'Día del mes del período en que, si sigue faltando el PDF del portal, se avisa a gerencia (destinatarios en Configuración → Modulo aviso). Default: último día (cierre de tarjeta).',
+                'tipo' => 'select',
+                'orden' => 50,
+                'opciones' => self::opcionesDiaEscalamientoSuscripcion(),
+            ],
         ];
+    }
+
+    /**
+     * @return array<string, string>
+     */
+    public static function opcionesDiaEscalamientoSuscripcion(): array
+    {
+        $ops = ['ultimo' => 'Último día del mes (cierre de tarjeta)'];
+        for ($d = 1; $d <= 31; $d++) {
+            $ops[(string) $d] = 'Día '.$d;
+        }
+
+        return $ops;
     }
 
     public static function limiteFce(): float
@@ -118,6 +141,28 @@ final class ParametroSistemaSupport
         return in_array($v, ['1', 'true', 's', 'si', 'sí', 'yes', 'on'], true);
     }
 
+    public static function texto(string $clave, string $fallback): string
+    {
+        $valor = self::mapa()[$clave] ?? null;
+        if ($valor === null || $valor === '') {
+            return $fallback;
+        }
+
+        return trim((string) $valor);
+    }
+
+    /**
+     * Día de escalamiento de factura portal: "ultimo" | "1".."31".
+     * Prioridad: Configuración general → config/.env.
+     */
+    public static function suscripcionComprobanteDiaEscalamiento(): string
+    {
+        return self::texto(
+            self::CLAVE_SUSCRIPCION_COMPROBANTE_DIA_ESCALAMIENTO,
+            (string) config('compras.suscripcion_comprobantes.dia_escalamiento', 'ultimo')
+        );
+    }
+
     /**
      * @return array<string, list<array{clave: string, grupo: string, etiqueta: string, ayuda: string, tipo: string, valor: string}>>
      */
@@ -138,6 +183,9 @@ final class ParametroSistemaSupport
             ];
             if ($def['tipo'] === 'cuentacaja') {
                 $item['cuenta'] = self::cuentaParaFormulario((int) $valor);
+            }
+            if ($def['tipo'] === 'select' && isset($def['opciones']) && is_array($def['opciones'])) {
+                $item['opciones'] = $def['opciones'];
             }
             $grupos[$def['grupo']][] = $item;
         }
@@ -162,6 +210,12 @@ final class ParametroSistemaSupport
                 }
             } elseif ($def['tipo'] === 'boolean') {
                 $valor = self::normalizarBooleanGuardar($valorRaw) ? '1' : '0';
+            } elseif ($def['tipo'] === 'select') {
+                $valor = trim((string) $valorRaw);
+                $ops = $def['opciones'] ?? [];
+                if ($ops !== [] && ! array_key_exists($valor, $ops)) {
+                    $valor = (string) array_key_first($ops);
+                }
             } else {
                 $valor = is_numeric($valorRaw)
                     ? (string) $valorRaw
@@ -225,6 +279,10 @@ final class ParametroSistemaSupport
                 config('articulo.aprobacion_alta.habilitado', false),
                 FILTER_VALIDATE_BOOLEAN
             ) ? '1' : '0',
+            self::CLAVE_SUSCRIPCION_COMPROBANTE_DIA_ESCALAMIENTO => (string) config(
+                'compras.suscripcion_comprobantes.dia_escalamiento',
+                'ultimo'
+            ),
             default => '0',
         };
     }

@@ -128,8 +128,8 @@ class MayorConceptoReporteService
 
     private function aplicarFuenteMayorDesdeFiltros(array $filtros): void
     {
-        $modo = MayorFuenteConsultaSupport::normalizarModo(
-            $filtros['fuente_mayor'] ?? MayorFuenteConsultaSupport::MODO_ERP
+        $modo = MayorConceptoListadoFiltros::normalizarFuenteMayor(
+            $filtros['fuente_mayor'] ?? null
         );
         $this->modoFuenteActivo = $modo;
         $reader = $this->procesador->bridgeReader();
