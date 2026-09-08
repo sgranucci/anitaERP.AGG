@@ -101,9 +101,12 @@ class ArbolaprobacionRepository implements ArbolaprobacionRepositoryInterface
 
     private function ordenNivelesArbol($query)
     {
+        $query->orderBy('centrocosto_id', 'asc');
+        if (\Illuminate\Support\Facades\Schema::hasColumn('arbolaprobacion_nivel', 'rama')) {
+            $query->orderByRaw("CASE WHEN rama = 'A' THEN 1 WHEN rama = 'B' THEN 2 ELSE 3 END");
+        }
+
         return $query
-            ->orderBy('centrocosto_id', 'asc')
-            ->orderByRaw("CASE WHEN rama = 'A' THEN 1 WHEN rama = 'B' THEN 2 ELSE 3 END")
             ->orderBy('nivel', 'asc')
             ->orderBy('desdemonto', 'asc')
             ->orderBy('id', 'asc');
@@ -137,7 +140,7 @@ class ArbolaprobacionRepository implements ArbolaprobacionRepositoryInterface
     public function findPorTipoArbol($tipoarbol)
     {
         $arbolaprobacion = $this->model->where('tipoarbol', $tipoarbol)
-            ->where('estado', 'ACTIVO')
+            ->whereIn('estado', ['ACTIVO', 'Activo'])
             ->with(['arbolaprobacion_niveles' => function ($query) {
                 $this->ordenNivelesArbol($query);
             },
@@ -149,7 +152,7 @@ class ArbolaprobacionRepository implements ArbolaprobacionRepositoryInterface
     public function findPorTipoArbolYEmpresa(string $tipoarbol, int $empresa_id)
     {
         return $this->model->where('tipoarbol', $tipoarbol)
-            ->where('estado', 'ACTIVO')
+            ->whereIn('estado', ['ACTIVO', 'Activo'])
             ->where('empresa_id', $empresa_id)
             ->with(['arbolaprobacion_niveles' => function ($query) {
                 $this->ordenNivelesArbol($query);

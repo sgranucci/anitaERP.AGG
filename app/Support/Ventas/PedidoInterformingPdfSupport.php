@@ -174,10 +174,19 @@ final class PedidoInterformingPdfSupport
         foreach ($pedido->pedido_articulos as $item) {
             /** @var PedidoArticuloInterforming $item */
             $cantidad = (float) ($item->cantidad ?? 0);
-            $precio = (float) ($item->precio ?? 0);
-            $descuento = (float) ($item->descuento ?? 0);
-            $importeLinea = round($cantidad * $precio, 2);
-            $totalSinDto += $importeLinea;
+            $precioLista = (float) ($item->precio ?? 0);
+            $descuentoLinea = (float) ($item->descuento ?? 0);
+            if ($descuentoLinea < 0) {
+                $descuentoLinea = 0;
+            }
+            if ($descuentoLinea > 100) {
+                $descuentoLinea = 100;
+            }
+            $precioNeto = $descuentoLinea > 0.00001
+                ? round($precioLista * (1 - ($descuentoLinea / 100.0)), 6)
+                : $precioLista;
+            $importeLinea = round($cantidad * $precioNeto, 2);
+            $totalSinDto += round($cantidad * $precioLista, 2);
 
             $umd = self::abreviaturaUmd($item->unidadmedida);
             if ($umd === '') {
@@ -219,9 +228,9 @@ final class PedidoInterformingPdfSupport
                 'umd' => $umd,
                 'cantidad_alter' => $cantAlt,
                 'umd_alter' => $umdAlt,
-                'precio' => $precio,
+                'precio' => $precioLista,
                 'total' => $importeLinea,
-                'descuento' => $descuento,
+                'descuento' => $descuentoLinea,
                 'porc_fason' => $porcFason,
                 'precio_fason' => $precioFason,
                 'fason' => $fasonNota,
@@ -233,8 +242,9 @@ final class PedidoInterformingPdfSupport
                 'sku' => $sku !== '' ? $sku : ('ITEM-'.$item->id),
                 'descripcion' => $descripcion,
                 'cantidad' => $cantidad,
-                'precio' => $precio,
-                'descuento' => $descuento,
+                'precio' => $precioNeto,
+                'preciosindescuento' => $precioLista,
+                'descuento' => $descuentoLinea,
                 'descuentointegrado' => $item->descuentointegrado ?? 0,
                 'descuentofinal' => (float) ($pedido->descuento ?? 0),
                 'descuentointegradofinal' => $pedido->descuentointegrado ?? 0,

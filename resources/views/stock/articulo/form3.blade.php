@@ -55,9 +55,9 @@
             </div>
             <div class="col-sm-6">
                 <div class="form-group row">
-                    <label for="oficinacompra_id" class="col-lg-4 col-form-label text-right pr-2 requerido">Oficina de compras</label>
+                    <label for="oficinacompra_id" class="col-lg-4 col-form-label text-right pr-2 @if(config('app.empresa') !== 'INTERFORMING') requerido @endif">Oficina de compras</label>
                     <div class="col-lg-8">
-                    <select id="oficinacompra_id" name="oficinacompra_id" class="form-control" required>
+                    <select id="oficinacompra_id" name="oficinacompra_id" class="form-control" @if(config('app.empresa') !== 'INTERFORMING') required @endif>
                         <option value="">-- Seleccionar --</option>
                         @foreach($oficinacompra_query as $key => $value)
                             @if( isset($producto) && (int) $value->id == (int) old('oficinacompra_id', $producto->oficinacompra_id ?? ''))

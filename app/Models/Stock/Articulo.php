@@ -1688,6 +1688,103 @@ class Articulo extends Model implements Auditable
                 ];
                 break;
 
+            case 'INTERFORMING':
+                $letraTipo = InterformingArticuloAnitaMapperSupport::letraAnitaDesdeTipoarticuloId($request->tipoarticulo_id);
+                $noFactura = ($request->estado == 'INACTIVO') ? 'I' : ($request->nofactura ?? '0');
+                $descCompleta = InterformingArticuloAnitaMapperSupport::sqlTexto(
+                    trim((string) ($request->detalle ?? '')) !== '' ? $request->detalle : $request->descripcion
+                );
+                $data = ['tabla' => $this->tableAnita, 'acc' => 'insert',
+                    'sistema' => 'ventas',
+                    'campos' => '
+					stkm_articulo,
+					stkm_desc,
+					stkm_unidad_medida,
+					stkm_unidad_xenv,
+					stkm_proveedor,
+					stkm_agrupacion,
+					stkm_cta_contable,
+					stkm_cod_impuesto,
+					stkm_descuento,
+					stkm_p_rep,
+					stkm_cod_mon_p_rep,
+					stkm_imp_interno,
+					stkm_cta_cont_ii,
+					stkm_cant_compra1,
+					stkm_cant_compra2,
+					stkm_cant_compra3,
+					stkm_pre_compra1,
+					stkm_pre_compra2,
+					stkm_pre_compra3,
+					stkm_usuario,
+					stkm_terminal,
+					stkm_fe_ult_act,
+					stkm_articulo_prod,
+					stkm_peso_aprox,
+					stkm_marca,
+					stkm_linea,
+					stkm_cta_contablec,
+					stkm_fe_ult_compra,
+					stkm_o_compra,
+					stkm_fl_no_factura,
+					stkm_formula,
+					stkm_ppp,
+					stkm_nombre_foto,
+					stkm_cod_umd,
+					stkm_cod_umd_alter,
+					stkm_fecha_alta,
+					stkm_desc_completa,
+					stkm_tipo_articulo,
+					stkm_subrubro,
+					stkm_lineamaterial,
+					stkm_grupoproducto
+					',
+                    'valores' => "
+					'".str_pad($request->sku, 13, '0', STR_PAD_LEFT)."',
+					'".InterformingArticuloAnitaMapperSupport::sqlTexto($request->descripcion)."',
+					'".InterformingArticuloAnitaMapperSupport::sqlTexto($request->unidadesdemedidas->abreviatura ?? ' ')."',
+					'".($request->unidadesxenvase == null ? 0 : $request->unidadesxenvase)."',
+					'000000',
+					'".str_pad($request->categorias->codigo ?? '0', 4, '0', STR_PAD_LEFT)."',
+					'".($request->cuentascontablesventas->codigo ?? 0)."',
+					'".($request->impuesto_id == null || $request->impuesto_id == ' ' ? 0 : $request->impuesto_id)."',
+					'0',
+					'0',
+					' ',
+					'0',
+					'".($request->cuentascontablesimpinternos->codigo ?? 0)."',
+					'0',
+					'0',
+					'0',
+					'0',
+					'0',
+					'0',
+					'".InterformingArticuloAnitaMapperSupport::sqlTexto(Auth::user()->nombre ?? Auth::user()->name ?? 'ERP')."',
+					'ERP',
+					'".$fecha."',
+					'".InterformingArticuloAnitaMapperSupport::sqlTexto($request->skualternativo, '')."',
+					'".($request->coeficienteconversion == null ? ($request->peso ?? 0) : $request->coeficienteconversion)."',
+					'".($request->mventas ? str_pad($request->mventas->codigo ?? '', 8, '0', STR_PAD_LEFT) : ' ')."',
+					'".($request->lineas ? str_pad($request->lineas->codigo ?? '', 6, '0', STR_PAD_LEFT) : ' ')."',
+					'".($request->cuentascontablescompras->codigo ?? 0)."',
+					'".Carbon::parse($request->fechaultimacompra ?? now())->format('Ymd')."',
+					'0',
+					'".InterformingArticuloAnitaMapperSupport::sqlTexto($noFactura, '0')."',
+					'".$this->codigoFormulaAnita($request)."',
+					'".($request->ppp == null ? 0 : $request->ppp)."',
+					'".InterformingArticuloAnitaMapperSupport::sqlTexto($request->foto, '')."',
+					'".($request->unidadmedida_id ?? 0)."',
+					'".($request->unidadmedidaalternativa_id == null ? 0 : $request->unidadmedidaalternativa_id)."',
+					'".$fecha."',
+					'".$descCompleta."',
+					'".InterformingArticuloAnitaMapperSupport::sqlTexto($letraTipo, ' ')."',
+					'".InterformingArticuloAnitaMapperSupport::sqlTexto($request->subrubro, '')."',
+					'".InterformingArticuloAnitaMapperSupport::sqlTexto($request->lineamaterial, '')."',
+					'".InterformingArticuloAnitaMapperSupport::sqlTexto($request->grupoproducto, '')."'
+					",
+                ];
+                break;
+
             case 'FRASLE':
                 $tipoarticulo = Tipoarticulo::find($request->tipoarticulo_id);
 
@@ -2175,6 +2272,47 @@ class Articulo extends Model implements Auditable
 						stkm_tiempo_entr = '".$diasEntrega."',
 						stkm_period_compra = '".$periodicidadCompra."',
 						stkm_cond_entrega = '".$codigoCondicionEntrega."'",
+                        'whereArmado' => " WHERE stkm_articulo = '".str_pad($id, 13, '0', STR_PAD_LEFT)."' "];
+                    break;
+
+                case 'INTERFORMING':
+                    $letraTipo = InterformingArticuloAnitaMapperSupport::letraAnitaDesdeTipoarticuloId($request->tipoarticulo_id);
+                    $noFactura = ($request->estado == 'INACTIVO') ? 'I' : ($request->nofactura ?? '0');
+                    $descCompleta = InterformingArticuloAnitaMapperSupport::sqlTexto(
+                        trim((string) ($request->detalle ?? '')) !== '' ? $request->detalle : $request->descripcion
+                    );
+                    $pesoAprox = $request->coeficienteconversion ?? $request->peso ?? 0;
+                    $data = ['acc' => 'update', 'tabla' => $this->tableAnita,
+                        'sistema' => 'ventas',
+                        'valores' => " stkm_desc = '".InterformingArticuloAnitaMapperSupport::sqlTexto($request->descripcion)."',
+						stkm_unidad_medida = '".InterformingArticuloAnitaMapperSupport::sqlTexto($request->unidadesdemedidas->abreviatura ?? ' ')."',
+						stkm_unidad_xenv = '".($request->unidadesxenvase ?? 0)."',
+						stkm_proveedor = '000000',
+						stkm_agrupacion = '".$codigo."',
+						stkm_cta_contable = '".($request->cuentascontablesventas->codigo ?? 0)."',
+						stkm_cod_impuesto = '".($request->impuesto_id == null || $request->impuesto_id == ' ' ? 0 : $request->impuesto_id)."',
+						stkm_cta_cont_ii = '".($request->cuentascontablesimpinternos->codigo ?? 0)."',
+						stkm_usuario = '".InterformingArticuloAnitaMapperSupport::sqlTexto(Auth::user()->nombre ?? Auth::user()->name ?? 'ERP')."',
+						stkm_terminal = 'ERP',
+						stkm_fe_ult_act = '".$fecha."',
+						stkm_articulo_prod = '".InterformingArticuloAnitaMapperSupport::sqlTexto($request->skualternativo, '')."',
+						stkm_peso_aprox = '".$pesoAprox."',
+						stkm_marca = '".($request->mventas ? str_pad($request->mventas->codigo ?? '', 8, '0', STR_PAD_LEFT) : ' ')."',
+						stkm_linea = '".($request->lineas ? str_pad($request->lineas->codigo ?? '', 6, '0', STR_PAD_LEFT) : ' ')."',
+						stkm_cta_contablec = '".($request->cuentascontablescompras->codigo ?? 0)."',
+						stkm_fe_ult_compra = '".Carbon::parse($request->fechaultimacompra ?? now())->format('Ymd')."',
+						stkm_o_compra = '0',
+						stkm_fl_no_factura = '".InterformingArticuloAnitaMapperSupport::sqlTexto($noFactura, '0')."',
+						stkm_formula = '".$this->codigoFormulaAnita($request)."',
+						stkm_ppp = '".($request->ppp ?? 0)."',
+						stkm_nombre_foto = '".InterformingArticuloAnitaMapperSupport::sqlTexto($request->foto, '')."',
+						stkm_cod_umd = '".($request->unidadmedida_id ?? 0)."',
+						stkm_cod_umd_alter = '".($request->unidadmedidaalternativa_id ? $request->unidadmedidaalternativa_id : '0')."',
+						stkm_desc_completa = '".$descCompleta."',
+						stkm_tipo_articulo = '".InterformingArticuloAnitaMapperSupport::sqlTexto($letraTipo, ' ')."',
+						stkm_subrubro = '".InterformingArticuloAnitaMapperSupport::sqlTexto($request->subrubro, '')."',
+						stkm_lineamaterial = '".InterformingArticuloAnitaMapperSupport::sqlTexto($request->lineamaterial, '')."',
+						stkm_grupoproducto = '".InterformingArticuloAnitaMapperSupport::sqlTexto($request->grupoproducto, '')."' ",
                         'whereArmado' => " WHERE stkm_articulo = '".str_pad($id, 13, '0', STR_PAD_LEFT)."' "];
                     break;
 

@@ -9,7 +9,7 @@
         * { box-sizing: border-box; }
         body {
             font-family: DejaVu Sans, Arial, sans-serif;
-            font-size: 9px;
+            font-size: 11px;
             color: #17202A;
         }
         table { width: 100%; border-collapse: collapse; table-layout: fixed; }
@@ -22,34 +22,34 @@
             height: auto;
         }
         .marca {
-            font-size: 13px;
+            font-size: 14px;
             font-weight: bold;
             color: #1B4F72;
             margin-top: 2px;
         }
-        .cuit { font-size: 8px; color: #555; margin-top: 1px; }
+        .cuit { font-size: 9px; color: #555; margin-top: 1px; }
         .titulo-doc {
-            font-size: 15px;
+            font-size: 16px;
             font-weight: bold;
             color: #17202A;
             margin: 0;
             text-align: right;
         }
         .subtitulo-doc {
-            font-size: 11px;
+            font-size: 12px;
             font-weight: bold;
             color: #1B4F72;
             margin: 3px 0 0 0;
             text-align: right;
         }
         .meta-doc {
-            font-size: 8px;
+            font-size: 9px;
             color: #555;
             margin: 4px 0 0 0;
             text-align: right;
         }
         h2 {
-            font-size: 10px;
+            font-size: 11px;
             margin: 8px 0 4px 0;
             padding: 4px 6px;
             background: #85C1E9;
@@ -60,7 +60,7 @@
             border: 1px solid #cccccc;
             padding: 4px 6px;
             vertical-align: top;
-            font-size: 9px;
+            font-size: 10px;
         }
         table.cabecera .lbl {
             background: #D6EAF8;
@@ -76,20 +76,20 @@
             color: #17202A;
             border: 1px solid #cccccc;
             padding: 4px 3px;
-            font-size: 8px;
+            font-size: 9px;
             font-weight: bold;
             text-align: center;
         }
         table.items td {
             border: 1px solid #cccccc;
             padding: 3px 3px;
-            font-size: 8px;
+            font-size: 9px;
             vertical-align: top;
         }
         table.items tbody tr:nth-child(even) td { background: #f5f5f5; }
         table.items tbody tr.fason-row td {
             background: #fef9e7;
-            font-size: 7.5px;
+            font-size: 8.5px;
             color: #5d4e00;
             border-top: none;
             padding: 2px 4px 4px 4px;
@@ -98,7 +98,7 @@
         .cen { text-align: center; }
         .totales-cant {
             margin: 8px 0 4px 0;
-            font-size: 9px;
+            font-size: 10px;
             font-weight: bold;
         }
         table.pdf-totales {
@@ -106,7 +106,7 @@
             margin: 4px 0 0 auto;
             border-collapse: collapse;
             page-break-inside: avoid;
-            font-size: 9px;
+            font-size: 10px;
         }
         table.pdf-totales td {
             border: 1px solid #cccccc;
@@ -119,12 +119,12 @@
         table.pdf-totales tr.final td {
             background: #D6EAF8;
             font-weight: bold;
-            font-size: 10px;
+            font-size: 11px;
             color: #1B4F72;
         }
         .leyenda {
             margin-top: 10px;
-            font-size: 8px;
+            font-size: 9px;
             border: 1px solid #cccccc;
             padding: 6px;
             background: #fafafa;
@@ -133,7 +133,7 @@
         .leyenda strong { color: #1B4F72; }
         .pie {
             margin-top: 10px;
-            font-size: 7px;
+            font-size: 8px;
             color: #777;
             text-align: right;
         }
@@ -254,7 +254,7 @@
                 <td>
                     {{ $item['descripcion'] }}
                     @if ($item['articulo_cliente'] !== '')
-                        <br><span style="color:#555;font-size:7px;">Art. cliente: {{ $item['articulo_cliente'] }}</span>
+                        <br><span style="color:#555;font-size:9px;">Art. cliente: {{ $item['articulo_cliente'] }}</span>
                     @endif
                 </td>
                 <td class="cen">{{ $item['fechaentrega'] }}</td>

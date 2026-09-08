@@ -136,8 +136,15 @@
                    value="{{ old('cliente_entrega_id', $pedido->cliente_entrega_id ?? '') }}">
             <input type="hidden" id="entrega_nombre" name="entrega_nombre" value="">
             <input type="hidden" id="fl_cliente_tiene_entrega" value="0">
-            <input type="hidden" id="descuento" name="descuento" value="{{ old('descuento', $pedido->descuento ?? 0) }}">
             <input type="hidden" id="zonavta_id" name="zonavta_id" value="{{ old('zonavta_id', $pedido->zonavta_id ?? '') }}">
+        </div>
+
+        <div class="form-group row">
+            <label for="descuento" class="col-lg-3 col-form-label">Dto. general %</label>
+            <input type="number" step="0.01" min="0" max="100" id="descuento" name="descuento"
+                   class="col-lg-2 form-control"
+                   value="{{ old('descuento', $pedido->descuento ?? 0) }}"
+                   title="Descuento general del cliente (editable)">
         </div>
     </div>
 

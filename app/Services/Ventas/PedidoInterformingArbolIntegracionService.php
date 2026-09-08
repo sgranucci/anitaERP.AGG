@@ -89,7 +89,8 @@ class PedidoInterformingArbolIntegracionService
         $arbol = $arbolaprobacion->first();
         $monto = $this->montoPedido($pedido);
         $monedaId = (int) ($pedido->moneda_id ?? 0);
-        $centrocostoId = 0;
+        // Pedido Interforming no tiene CC: usar el del primer nivel del árbol.
+        $centrocostoId = (int) ($arbol->arbolaprobacion_niveles->first()->centrocosto_id ?? 0);
         $arrayReplace = ArbolAprobacionEnlaceSupport::CARACTERES_REEMPLAZO;
 
         while (true) {
@@ -235,7 +236,17 @@ class PedidoInterformingArbolIntegracionService
             $cant = (float) ($item->cantidad ?? 0);
             $precio = (float) ($item->precio ?? 0);
             $dto = (float) ($item->descuento ?? 0);
+            if ($dto < 0) {
+                $dto = 0;
+            }
+            if ($dto > 100) {
+                $dto = 100;
+            }
             $total += $cant * $precio * (1 - ($dto / 100));
+        }
+        $dtoCab = (float) ($pedido->descuento ?? 0);
+        if ($dtoCab > 0 && $dtoCab <= 100) {
+            $total *= (1 - ($dtoCab / 100));
         }
 
         return round($total, 2);

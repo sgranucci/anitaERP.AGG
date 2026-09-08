@@ -67,6 +67,44 @@ final class InterformingArticuloAnitaMapperSupport
         return $id !== null ? (int) $id : null;
     }
 
+    /**
+     * Letra Anita (I/P/T/R/B) desde tipoarticulo ERP. Vacío si no hay mapeo.
+     */
+    public static function letraAnitaDesdeTipoarticuloId(mixed $tipoarticuloId): string
+    {
+        $id = (int) $tipoarticuloId;
+        if ($id <= 0) {
+            return '';
+        }
+
+        $tipo = Tipoarticulo::query()->find($id, ['id', 'nombre']);
+        if (! $tipo) {
+            return '';
+        }
+
+        $nombreBuscado = mb_strtolower(trim((string) $tipo->nombre));
+        foreach (self::TIPO_ARTICULO_POR_LETRA as $letra => $nombre) {
+            if (mb_strtolower($nombre) === $nombreBuscado) {
+                return $letra;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * Valor SQL entre comillas simples para escritura Anita (escape Informix-safe).
+     */
+    public static function sqlTexto(mixed $valor, string $default = ' '): string
+    {
+        $texto = trim((string) ($valor ?? ''));
+        if ($texto === '') {
+            $texto = $default;
+        }
+
+        return str_replace("'", "''", $texto);
+    }
+
     public static function normalizarCampoVarchar(mixed $valor): ?string
     {
         if ($valor === null) {

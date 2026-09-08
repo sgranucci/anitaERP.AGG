@@ -20,10 +20,15 @@ class Arbolaprobacion extends Model implements Auditable
 
     public function arbolaprobacion_niveles()
     {
-        return $this->hasMany(Arbolaprobacion_Nivel::class, 'arbolaprobacion_id')
+        $rel = $this->hasMany(Arbolaprobacion_Nivel::class, 'arbolaprobacion_id')
             ->with('usuarios')->with('moneda_ids')->with('centrocosto_ids')
-            ->orderBy('centrocosto_id')
-            ->orderByRaw("CASE WHEN rama = 'A' THEN 1 WHEN rama = 'B' THEN 2 ELSE 3 END")
+            ->orderBy('centrocosto_id');
+
+        if (\Illuminate\Support\Facades\Schema::hasColumn('arbolaprobacion_nivel', 'rama')) {
+            $rel->orderByRaw("CASE WHEN rama = 'A' THEN 1 WHEN rama = 'B' THEN 2 ELSE 3 END");
+        }
+
+        return $rel
             ->orderBy('nivel')
             ->orderBy('desdemonto')
             ->orderBy('id');
