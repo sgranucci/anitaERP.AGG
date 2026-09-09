@@ -153,9 +153,17 @@ class PagoproveedorController extends Controller
             return back()->withErrors(['error' => $resultado['errores']])->withInput();
         }
 
+        $pagoId = (int) ($resultado['pagoproveedor_id'] ?? 0);
+        $numero = (string) ($resultado['numerotransaccion'] ?? '');
+        $mensaje = $numero !== ''
+            ? 'Orden de pago '.$numero.' grabada.'
+            : 'Orden de pago grabada.';
+
         return redirect()
-            ->route('editar_pagoproveedor', $resultado['pagoproveedor_id'])
-            ->with('mensaje', 'Orden de pago grabada.');
+            ->route('pagoproveedor', ['empresa_id' => $empresaId])
+            ->with('mensaje', $mensaje)
+            ->with('imprimir_pagoproveedor_url', route('imprimir_pagoproveedor', $pagoId))
+            ->with('imprimir_comprobante_label', 'Imprimir orden de pago');
     }
 
     public function editar(int $id)
@@ -456,6 +464,8 @@ class PagoproveedorController extends Controller
                 'motivo' => $resultado->ganancias->motivo,
                 'detalle' => $resultado->ganancias->detalle,
                 'base' => $input->netoGanancias(),
+                'base_periodo' => $resultado->ganancias->baseCalculo,
+                'base_retenible' => $resultado->ganancias->baseRetenible,
             ],
             'iva' => [
                 'aplica' => $resultado->iva->aplica,
@@ -481,6 +491,7 @@ class PagoproveedorController extends Controller
                 'motivo' => $resultado->iibb->motivo,
                 'detalle' => $resultado->iibb->detalle,
                 'provincia_id' => $resultado->iibb->detalle['provincia_id'] ?? null,
+                'provincia_nombre' => $resultado->iibb->detalle['provincia_nombre'] ?? null,
                 'base' => $input->netoIibb(),
             ],
             'bases' => $bases->toArray(),
@@ -539,12 +550,15 @@ class PagoproveedorController extends Controller
      */
     private function resolverFiltrosListado(Request $request, ?string $busquedaRuta = null): array
     {
-        $empresaDefault = optional($this->empresaRepository->allFiltrado()->first())->id;
+        $empresaDefault = (int) (session('empresa_id') ?: 0);
+        if ($empresaDefault <= 0) {
+            $empresaDefault = (int) (optional($this->empresaRepository->allFiltrado()->first())->id ?: 0);
+        }
 
         return PagoproveedorListadoFiltros::resolverDesdeRequest(
             $request,
             $busquedaRuta,
-            $empresaDefault ? (int) $empresaDefault : null
+            $empresaDefault > 0 ? $empresaDefault : null
         );
     }
 

@@ -79,6 +79,23 @@ $modoConsulta = request()->input('vista') === 'consulta';
                     </a>
                 </li>
                 @endif
+                @if (!empty($puedeVerBandejaTicket))
+                <li class="nav-item">
+                    <a href="{{ $urlBandejaTicket ?? url('ticket/bandeja') }}"
+                       id="anita-nav-bandeja-ticket"
+                       class="nav-link font-weight-bold js-bandeja-ticket-nav"
+                       data-bandeja-ticket-contador
+                       data-contador-url="{{ urlAppCarpeta('ticket/bandeja/contador') }}"
+                       data-count="{{ (int) ($bandejaTicketCount ?? 0) }}"
+                       title="Bandeja de tickets">
+                        <i class="fas fa-tools"></i>
+                        <span class="d-none d-md-inline anita-bandeja-ticket-label">Tickets</span>
+                        <span id="anita-bandeja-ticket-badge"
+                              class="badge badge-warning anita-bandeja-ticket-count js-bandeja-ticket-badge{{ ($bandejaTicketCount ?? 0) > 0 ? '' : ' d-none' }}"
+                              title="Tickets pendientes en tu bandeja">{{ ($bandejaTicketCount ?? 0) > 99 ? '99+' : (int) ($bandejaTicketCount ?? 0) }}</span>
+                    </a>
+                </li>
+                @endif
                 <li class="nav-item">
                     <a href="{{ $urlCentroAyuda }}" class="nav-link font-weight-bold" title="Manual de usuario del sistema" target="_blank" rel="noopener">
                         <i class="fas fa-book-open"></i> <span class="d-none d-md-inline">Centro de ayuda</span>

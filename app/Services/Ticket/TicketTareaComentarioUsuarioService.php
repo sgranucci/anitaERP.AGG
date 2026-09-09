@@ -23,13 +23,16 @@ class TicketTareaComentarioUsuarioService
 {
     private Tecnico_TicketRepositoryInterface $tecnicoTicketRepository;
     private Ticket_EstadoRepositoryInterface $ticketEstadoRepository;
+    private TicketConfiguracionService $ticketConfiguracionService;
 
     public function __construct(
         Tecnico_TicketRepositoryInterface $tecnicoTicketRepository,
-        Ticket_EstadoRepositoryInterface $ticketEstadoRepository
+        Ticket_EstadoRepositoryInterface $ticketEstadoRepository,
+        TicketConfiguracionService $ticketConfiguracionService
     ) {
         $this->tecnicoTicketRepository = $tecnicoTicketRepository;
         $this->ticketEstadoRepository = $ticketEstadoRepository;
+        $this->ticketConfiguracionService = $ticketConfiguracionService;
     }
 
     public function guardar(int $ticketId, int $ticketTareaId, string $comentario): Ticket_Tarea_Comentario_Usuario
@@ -220,6 +223,14 @@ class TicketTareaComentarioUsuarioService
             throw new \RuntimeException('No tiene permiso para comentar en este ticket.');
         }
 
+        if (\App\Support\Ticket\TicketModoOperacionSupport::esClaim((int) $ticket->areadestino_id)) {
+            if (app(TicketBandejaService::class)->puedeComentarOEditarClaim($ticket)) {
+                return;
+            }
+
+            throw new \RuntimeException('Debe tomar el ticket desde la bandeja antes de comentar.');
+        }
+
         if (in_array('editar-ticket', $permisos, true) || in_array('actualizar-ticket', $permisos, true)) {
             return;
         }
@@ -308,9 +319,18 @@ class TicketTareaComentarioUsuarioService
         }
 
         $urlTicket = route('edita_ticket', ['id' => $ticket->id]);
+        $emailsCc = $this->ticketConfiguracionService->emailsCcComentarioAdministracion(
+            $creador,
+            $autor,
+            (int) ($ticket->empresa_id ?? 0) ?: null
+        );
 
         try {
-            Mail::to($creador->email)->send(new ComentarioAdministracionTareaNotificacion(
+            $pending = Mail::to($creador->email);
+            if ($emailsCc !== []) {
+                $pending->cc($emailsCc);
+            }
+            $pending->send(new ComentarioAdministracionTareaNotificacion(
                 $ticket,
                 $ticketTarea,
                 $comentario,
@@ -322,6 +342,7 @@ class TicketTareaComentarioUsuarioService
                 'ticket_id' => $ticket->id,
                 'ticket_tarea_id' => $ticketTarea->id,
                 'destino' => $creador->email,
+                'cc' => $emailsCc,
                 'error' => $e->getMessage(),
             ]);
         }

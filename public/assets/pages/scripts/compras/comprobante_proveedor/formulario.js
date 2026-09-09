@@ -712,6 +712,7 @@ $(function () {
 
         var toleranciaPct = parseFloat($bloque.attr('data-tolerancia-pct')) || 0;
         var importeRef = parseFloat($bloque.attr('data-importe-ref')) || 0;
+        var yaFacturado = parseFloat($bloque.attr('data-ya-facturado')) || 0;
 
         var sumaCom = 0;
         var checks = 0;
@@ -757,13 +758,18 @@ $(function () {
             return;
         }
 
-        var diff = Math.abs(importeRef - sumaCom);
-        var pct = sumaCom > 0.00001 ? (diff / Math.abs(sumaCom)) * 100 : (diff > 0.05 ? 100 : 0);
+        var sumaComDisponible = Math.max(0, sumaCom - yaFacturado);
+        var diff = Math.abs(importeRef - sumaComDisponible);
+        var pct = sumaComDisponible > 0.00001 ? (diff / Math.abs(sumaComDisponible)) * 100 : (diff > 0.05 ? 100 : 0);
         var okCentavos = diff <= 0.05;
         var okTol = okCentavos || pct <= toleranciaPct + 0.0001;
         var cls = okTol ? 'alert-success' : 'alert-danger';
-        var msg = 'Provisión COM (moneda factura): <strong>' + formatearMonto(sumaCom) +
-            '</strong> · Ref. factura: <strong>' + formatearMonto(importeRef) +
+        var msg = 'Provisión COM: <strong>' + formatearMonto(sumaCom) + '</strong>';
+        if (yaFacturado > 0.005) {
+            msg += ' − ya facturado legajo <strong>' + formatearMonto(yaFacturado) +
+                '</strong> = disponible <strong>' + formatearMonto(sumaComDisponible) + '</strong>';
+        }
+        msg += ' · Ref. factura: <strong>' + formatearMonto(importeRef) +
             '</strong> · Diferencia: <strong>' + formatearMonto(diff) +
             '</strong> (' + formatearMonto(pct) + '%) · Tolerancia: ' + formatearMonto(toleranciaPct) + '%';
         if (!okTol) {
@@ -771,7 +777,7 @@ $(function () {
         } else if (!okCentavos && diff > 0) {
             msg += ' — dentro de tolerancia; el excedente neto se prorratea en el asiento sobre artículos COM.';
         } else {
-            msg += ' — coincide con la provisión.';
+            msg += ' — coincide con la provisión disponible.';
         }
         $resumen.removeClass('alert-secondary alert-success alert-warning alert-danger').addClass(cls).html(msg).show();
     }
@@ -1306,6 +1312,147 @@ $(function () {
             $banner.find('.fa-spinner').removeClass('fa-spinner fa-spin').addClass('fa-exclamation-triangle');
         });
     })();
+
+    function cpFmtMonto(n) {
+        if (n === null || n === undefined || n === '') {
+            return '—';
+        }
+        var x = Number(n);
+        if (isNaN(x)) {
+            return '—';
+        }
+        return x.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    function cpFilasOVacias($tbody, rowsHtml) {
+        $tbody.html(rowsHtml || '<tr><td colspan="3" class="text-muted text-center">Sin registros</td></tr>');
+    }
+
+    $(document).on('click', '.js-cp-ver-legajo', function () {
+        var $btn = $(this);
+        var url = $btn.data('url-paquete');
+        var numero = $btn.data('numero') || '';
+        var actual = {
+            precargaId: parseInt($btn.data('precarga-id'), 10) || 0,
+            comprobanteId: parseInt($btn.data('comprobante-id'), 10) || 0,
+            letra: String($('#letra').val() || $btn.data('letra') || '').toUpperCase().trim(),
+            sucursal: parseInt($('#sucursal').val() || $btn.data('sucursal'), 10) || 0,
+            nro: parseInt($('#numerocomprobante').val() || $btn.data('nro'), 10) || 0
+        };
+        if (!url) {
+            return;
+        }
+        $('#modalCpVerLegajo .modal-title').text('Legajo OC ' + numero);
+        $('#cp-legajo-anticipada-banner').addClass('d-none');
+        cpFilasOVacias($('#cp-legajo-facturas-body'), '<tr><td colspan="3" class="text-muted text-center">Cargando…</td></tr>');
+        cpFilasOVacias($('#cp-legajo-comprobantes-body'), '<tr><td colspan="3" class="text-muted text-center">Cargando…</td></tr>');
+        cpFilasOVacias($('#cp-legajo-coms-body'), '<tr><td colspan="3" class="text-muted text-center">Cargando…</td></tr>');
+        cpFilasOVacias($('#cp-legajo-devoluciones-body'), '<tr><td colspan="3" class="text-muted text-center">Cargando…</td></tr>');
+        $('#modalCpVerLegajo').modal('show');
+
+        function coincideDoc(item) {
+            if (!item) {
+                return false;
+            }
+            if (actual.precargaId > 0 && (parseInt(item.id, 10) === actual.precargaId || parseInt(item.precarga_id, 10) === actual.precargaId)) {
+                return true;
+            }
+            if (actual.comprobanteId > 0 && parseInt(item.id, 10) === actual.comprobanteId) {
+                return true;
+            }
+            if (actual.nro <= 0) {
+                return false;
+            }
+            return String(item.letra || '').toUpperCase().trim() === actual.letra
+                && parseInt(item.sucursal, 10) === actual.sucursal
+                && parseInt(item.numerocomprobante, 10) === actual.nro;
+        }
+
+        function badgeEnCarga() {
+            return ' <span class="badge badge-primary ml-1">En carga</span>';
+        }
+
+        $.getJSON(url).done(function (p) {
+            if (p && p.es_anticipada) {
+                $('#cp-legajo-anticipada-banner').removeClass('d-none');
+            }
+            if (p && p.url_oc) {
+                $('#cp-legajo-abrir-oc').attr('href', p.url_oc).removeClass('d-none');
+            } else {
+                $('#cp-legajo-abrir-oc').addClass('d-none');
+            }
+
+            var facHtml = '';
+            (p.facturas || []).forEach(function (f) {
+                var esActual = coincideDoc(f);
+                var doc = String(f.etiqueta || ('#' + f.id));
+                var origen = String(f.origen_label || '');
+                if (origen) {
+                    var suffix = ' (' + origen + ')';
+                    if (doc.slice(-suffix.length) === suffix) {
+                        doc = doc.slice(0, -suffix.length);
+                    }
+                }
+                if (f.url_pdf) {
+                    doc = '<a href="' + f.url_pdf + '" target="_blank" rel="noopener">' + doc + '</a>';
+                }
+                if (esActual) {
+                    doc += badgeEnCarga();
+                }
+                if (origen) {
+                    doc += '<div class="text-muted small text-truncate" title="' + origen.replace(/"/g, '&quot;') + '">' +
+                        origen + '</div>';
+                }
+                facHtml += '<tr class="' + (esActual ? 'table-primary font-weight-bold' : '') + '">' +
+                    '<td class="align-middle">' + doc + '</td><td class="align-middle">' + (f.fecha || '—') +
+                    '</td><td class="text-right align-middle">' + cpFmtMonto(f.total) + '</td></tr>';
+            });
+            cpFilasOVacias($('#cp-legajo-facturas-body'), facHtml);
+
+            var cpHtml = '';
+            (p.comprobantes || []).forEach(function (c) {
+                var esActual = coincideDoc(c);
+                var doc = c.etiqueta || ('#' + c.id);
+                if (c.url) {
+                    doc = '<a href="' + c.url + '" target="_blank" rel="noopener">' + doc + '</a>';
+                }
+                if (esActual) {
+                    doc += badgeEnCarga();
+                }
+                cpHtml += '<tr class="' + (esActual ? 'table-primary font-weight-bold' : '') + '">' +
+                    '<td class="align-middle">' + doc + '</td><td class="align-middle">' + (c.estado || '—') +
+                    '</td><td class="text-right align-middle">' + cpFmtMonto(c.total) + '</td></tr>';
+            });
+            cpFilasOVacias($('#cp-legajo-comprobantes-body'), cpHtml);
+
+            var comHtml = '';
+            (p.coms || []).forEach(function (c) {
+                var doc = c.documento || ('#' + c.id);
+                if (c.url_editar) {
+                    doc = '<a href="' + c.url_editar + '" target="_blank" rel="noopener">' + doc + '</a>';
+                }
+                comHtml += '<tr><td class="align-middle">' + doc + '</td><td class="align-middle">' + (c.fecha || '—') +
+                    '</td><td class="align-middle">' + (c.estado || '—') + '</td></tr>';
+            });
+            cpFilasOVacias($('#cp-legajo-coms-body'), comHtml);
+
+            var devHtml = '';
+            (p.devoluciones || []).forEach(function (d) {
+                var doc = d.documento || ('#' + d.id);
+                if (d.url_editar) {
+                    doc = '<a href="' + d.url_editar + '" target="_blank" rel="noopener">' + doc + '</a>';
+                }
+                devHtml += '<tr><td class="align-middle">' + doc + '</td><td class="align-middle">' + (d.fecha || '—') +
+                    '</td><td class="align-middle">' + (d.estado || '—') + '</td></tr>';
+            });
+            cpFilasOVacias($('#cp-legajo-devoluciones-body'), devHtml);
+        }).fail(function () {
+            cpFilasOVacias($('#cp-legajo-facturas-body'), '<tr><td colspan="3" class="text-danger text-center">No se pudo cargar el legajo</td></tr>');
+            cpFilasOVacias($('#cp-legajo-comprobantes-body'), '');
+            cpFilasOVacias($('#cp-legajo-coms-body'), '');
+            cpFilasOVacias($('#cp-legajo-devoluciones-body'), '');
+        });
+    });
 
     if (!contabilizado) {
         marcarAvisosConceptosLocales();

@@ -1,0 +1,39 @@
+---
+description: Configuraciones de módulo van en Configuración por módulo; acceso en el módulo operativo solo administrador
+alwaysApply: true
+---
+
+# Menú de configuraciones de módulo
+
+En anitaERP las pantallas de **configuración / parametrización** de un módulo siguen esta convención de menú:
+
+## Ubicación canónica
+
+**Configuración → Configuración por módulo → {Módulo} → {pantalla}**
+
+Ejemplos: Contable, Compras, Stock, Ventas, Sueldos, **Tickets**.
+
+- URL y código siguen el módulo de negocio (`ticket/configuracion`, controller en `Ticket\`, etc.).
+- El ítem de menú canónico vive bajo `#configuracion-por-modulo` → `#config-modulo-{modulo}`.
+- Roles operativos que deben configurar (Enc-sistemas, etc.) reciben `menu_rol` en esa rama (hoja + padres necesarios).
+
+## Acceso desde el módulo operativo
+
+Se puede dejar un **atajo** bajo el menú del módulo (ej. Módulo de Tickets), pero:
+
+- **Solo rol `administrador`** en `menu_rol` de ese atajo.
+- Misma URL que la entrada canónica (no duplicar rutas/controllers).
+- No asignar el atajo a encargados/técnicos/operativos.
+
+## Al crear una config nueva
+
+1. Crear/asegurar nodo `#config-modulo-{key}` bajo Configuración por módulo.
+2. Colocar ahí el menú canónico + permisos (`listar/editar/actualizar-…`).
+3. Si hace falta atajo en el módulo: segunda fila de `menu` con la misma URL y **únicamente** `administrador`.
+4. Propagar `menu_rol` a padres de la rama Configuración para que el árbol sea visible.
+5. `SuitecrmPermiso::flushCachePermisos()`.
+
+## No hacer
+
+- Dejar la config **solo** en el menú del módulo operativo para roles no-admin.
+- Crear una URL distinta solo para “estar en Configuración” (rompe consistencia módulo ↔ menú).

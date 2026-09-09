@@ -36,6 +36,7 @@ El prefijo de URL del menú (`menu.url`) define el módulo. Todo el CRUD debe vi
 - APIs de proceso transversal bajo otro prefijo (ej. facturación gastronomía en `stock/gastronomia/api/`) si el menú y el ABM de configuración están en Ventas.
 - Tablas BD con nombre legacy: la tabla puede no cambiar; el **namespace PHP** sí debe seguir al módulo del menú.
 - `App\Http\Requests\Validacion*` puede quedar en la raíz `Http\Requests` (convención del proyecto).
+- Pantallas de **configuración**: menú canónico en **Configuración → Configuración por módulo → {Módulo}**; atajo en el módulo operativo solo para `administrador`. Ver regla `configuracion-menu-por-modulo`.
 
 ## Comprobación rápida
 

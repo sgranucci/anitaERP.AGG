@@ -58,6 +58,7 @@ class OrdencompraLegajoBandejaPaqueteService
         $facturas = $this->facturasDelLegajo($oc);
         $facturas = array_merge($facturas, $this->scansAnitaSinPrecarga($oc, $facturas));
         $coms = $this->comsDelLegajo($oc);
+        $devoluciones = $this->devolucionesDelLegajo($oc);
         $precargaIds = [];
         foreach ($facturas as $f) {
             if (($f['origen'] ?? 'precarga') === 'precarga') {
@@ -73,8 +74,11 @@ class OrdencompraLegajoBandejaPaqueteService
         return [
             'ordencompra_id' => (int) $oc->id,
             'numero' => (string) $oc->numeroordencompra,
+            'es_anticipada' => \App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport::esOcAnticipada($oc),
+            'tratamiento' => (string) ($oc->tratamiento ?? ''),
             'facturas' => $facturas,
             'coms' => $coms,
+            'devoluciones' => $devoluciones,
             'asignadas' => $asignadas,
             'comprobantes' => $comprobantes,
             'pagos' => $pagos,
@@ -204,6 +208,9 @@ class OrdencompraLegajoBandejaPaqueteService
                 'origen' => 'precarga',
                 'origen_label' => PrecargaComprobanteOrigenEntrada::etiqueta($pre->origen_entrada ?? null),
                 'etiqueta' => $this->etiquetaFactura($pre),
+                'letra' => (string) ($pre->letra ?? ''),
+                'sucursal' => (int) ($pre->sucursal ?? 0),
+                'numerocomprobante' => (int) ($pre->numerocomprobante ?? 0),
                 'fecha' => $pre->fechafactura ? $pre->fechafactura->format('d/m/Y') : '',
                 'total' => $pre->total !== null ? (float) $pre->total : null,
                 'estado' => (string) ($pre->estado ?? ''),
@@ -245,6 +252,36 @@ class OrdencompraLegajoBandejaPaqueteService
                     'recepcion' => $id,
                     'inline' => 1,
                 ]),
+                'url_editar' => route('editar_recepcion_proveedor', ['id' => $id]),
+            ];
+        }
+
+        return $out;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function devolucionesDelLegajo(Ordencompra $oc): array
+    {
+        $rows = Recepcion_Proveedor::query()
+            ->where('ordencompra_id', $oc->id)
+            ->where('tipo', Recepcion_Proveedor::TIPO_DEVOLUCION)
+            ->orderByDesc('fecha')
+            ->orderByDesc('id')
+            ->get(['id', 'numerorecepcion', 'fecha', 'estado', 'recepcion_referencia_id']);
+
+        $out = [];
+        foreach ($rows as $rec) {
+            $id = (int) $rec->id;
+            $out[] = [
+                'id' => $id,
+                'documento' => filled($rec->numerorecepcion)
+                    ? 'DEV Nº '.$rec->numerorecepcion
+                    : 'DEV #'.$id,
+                'fecha' => $rec->fecha ? $rec->fecha->format('d/m/Y') : '',
+                'estado' => (string) $rec->estado,
+                'recepcion_referencia_id' => (int) ($rec->recepcion_referencia_id ?? 0) ?: null,
                 'url_editar' => route('editar_recepcion_proveedor', ['id' => $id]),
             ];
         }
@@ -297,9 +334,16 @@ class OrdencompraLegajoBandejaPaqueteService
             ->orderByDesc('id');
 
         $out = [];
-        foreach ($query->get(['id', 'letra', 'sucursal', 'numerocomprobante', 'total', 'estado']) as $cp) {
+        foreach ($query->get([
+            'id', 'letra', 'sucursal', 'numerocomprobante', 'total', 'estado',
+            'precarga_comprobante_proveedor_id',
+        ]) as $cp) {
             $out[] = [
                 'id' => (int) $cp->id,
+                'precarga_id' => (int) ($cp->precarga_comprobante_proveedor_id ?? 0) ?: null,
+                'letra' => (string) ($cp->letra ?? ''),
+                'sucursal' => (int) ($cp->sucursal ?? 0),
+                'numerocomprobante' => (int) ($cp->numerocomprobante ?? 0),
                 'etiqueta' => trim(sprintf(
                     '%s %04d-%08d',
                     $cp->letra ?: 'FC',

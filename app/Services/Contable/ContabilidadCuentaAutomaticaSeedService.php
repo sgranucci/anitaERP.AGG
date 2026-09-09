@@ -59,6 +59,11 @@ class ContabilidadCuentaAutomaticaSeedService
         CuentaAutomaticaClaves::CIERRE_MAQUINA_PAGO24 => '113010009',
         CuentaAutomaticaClaves::VENTAS_IVA_DEBITO_FISCAL => '214010009',
         CuentaAutomaticaClaves::VENTAS_IVA_CREDITO_FISCAL => '114010011',
+        // Mismo plan de cuentas que tesorería Anita RGP/RIP/RSP/RTP (cuentacaja 1/3/4/2).
+        CuentaAutomaticaClaves::PAGO_RETENCION_GANANCIAS => '214010013',
+        CuentaAutomaticaClaves::PAGO_RETENCION_IVA => '214010021',
+        CuentaAutomaticaClaves::PAGO_RETENCION_SUSS => '214010015',
+        CuentaAutomaticaClaves::PAGO_RETENCION_IIBB => '214010014',
         CuentaAutomaticaClaves::SUELDOS_A_PAGAR => '213010001',
         CuentaAutomaticaClaves::SUELDOS_GASTO_REMUNERATIVO => '521060001',
         CuentaAutomaticaClaves::SUELDOS_GASTO_NO_REMUNERATIVO => '521070006',
@@ -92,6 +97,16 @@ class ContabilidadCuentaAutomaticaSeedService
         }
 
         foreach (CuentaAutomaticaClaves::catalogo() as $clave => $meta) {
+            $soloEmpresas = $meta['solo_empresas'] ?? null;
+            if (is_array($soloEmpresas) && $soloEmpresas !== [] && ! in_array($empresaId, $soloEmpresas, true)) {
+                DB::table('contabilidad_cuenta_automatica')
+                    ->where('empresa_id', $empresaId)
+                    ->where('clave', $clave)
+                    ->delete();
+
+                continue;
+            }
+
             $existente = DB::table('contabilidad_cuenta_automatica')
                 ->where('empresa_id', $empresaId)
                 ->where('clave', $clave)

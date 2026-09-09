@@ -11,6 +11,7 @@ use App\Repositories\Ticket\Subcategoria_TicketRepositoryInterface;
 use App\Repositories\Ticket\AreadestinoRepositoryInterface;
 use App\Repositories\Ticket\Sector_TicketRepositoryInterface;
 use App\Repositories\Configuracion\SalaRepositoryInterface;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Ticket\TicketService;
 use App\Services\Ticket\TicketTareaComentarioUsuarioService;
 use App\Models\Ticket\Ticket_Estado;
@@ -31,6 +32,7 @@ class TicketController extends Controller
     private $ticketRepository;
     private $ticket_estadoRepository;
     private $salaRepository;
+    private $empresaRepository;
     private $ticketQuery;
     private $ticketService;
     private $ticketTareaComentarioUsuarioService;
@@ -42,6 +44,7 @@ class TicketController extends Controller
                                 Ticket_EstadoRepositoryInterface $ticket_estadorepository,
                                 SalaRepositoryInterface $salarepository,
                                 Sector_TicketRepositoryInterface $sectorrepository,
+                                EmpresaRepositoryInterface $empresarepository,
                                 TicketService $ticketservice,
                                 TicketQueryInterface $ticketquery,
                                 TicketTareaComentarioUsuarioService $ticketTareaComentarioUsuarioService
@@ -54,6 +57,7 @@ class TicketController extends Controller
         $this->ticket_estadoRepository = $ticket_estadorepository;
         $this->sector_ticketRepository = $sectorrepository;
         $this->salaRepository = $salarepository;
+        $this->empresaRepository = $empresarepository;
         $this->ticketService = $ticketservice;
         $this->ticketQuery = $ticketquery;
         $this->ticketTareaComentarioUsuarioService = $ticketTareaComentarioUsuarioService;
@@ -131,8 +135,16 @@ class TicketController extends Controller
         $areadestino_query = $this->areadestinoRepository->allParaPedido();
         $sector_query = $this->sector_ticketRepository->all();
         $sala_query = $this->salaRepository->all();
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $empresa_id = old('empresa_id', session('empresa_id'));
 
-        return view('ticket.ticket.crear', compact('areadestino_query', 'sector_query', 'sala_query'));
+        return view('ticket.ticket.crear', compact(
+            'areadestino_query',
+            'sector_query',
+            'sala_query',
+            'empresa_query',
+            'empresa_id'
+        ));
     }
 
     /**
@@ -172,8 +184,18 @@ class TicketController extends Controller
         $sector_query = $this->sector_ticketRepository->all();
         $sala_query = $this->salaRepository->all();
         $estado_enum = Ticket_Estado::$enumEstado;
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $empresa_id = old('empresa_id', $data->empresa_id ?? session('empresa_id'));
 
-        return view('ticket.ticket.editar', compact('data', 'areadestino_query', 'sector_query', 'sala_query', 'estado_enum'));
+        return view('ticket.ticket.editar', compact(
+            'data',
+            'areadestino_query',
+            'sector_query',
+            'sala_query',
+            'estado_enum',
+            'empresa_query',
+            'empresa_id'
+        ));
     }
 
     /**

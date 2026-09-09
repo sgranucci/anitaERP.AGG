@@ -12,6 +12,7 @@ use App\Repositories\Ticket\AreadestinoRepositoryInterface;
 use App\Repositories\Ticket\Sector_TicketRepositoryInterface;
 use App\Repositories\Ticket\Turno_TicketRepositoryInterface;
 use App\Repositories\Configuracion\SalaRepositoryInterface;
+use App\Repositories\Configuracion\EmpresaRepositoryInterface;
 use App\Services\Ticket\TicketService;
 use App\Models\Ticket\Ticket_Estado;
 use App\Models\Ticket\Ticket_Tarea_Novedad;
@@ -35,6 +36,7 @@ class Administracion_TicketController extends Controller
     private $ticket_estadoRepository;
     private $turno_ticketRepository;
     private $salaRepository;
+    private $empresaRepository;
     private $ticketQuery;
     private $ticketService;
 
@@ -46,6 +48,7 @@ class Administracion_TicketController extends Controller
                                 SalaRepositoryInterface $salarepository,
                                 Sector_TicketRepositoryInterface $sectorrepository,
                                 Turno_TicketRepositoryInterface $turno_ticketrepository,
+                                EmpresaRepositoryInterface $empresarepository,
                                 TicketService $ticketservice,
                                 TicketQueryInterface $ticketquery
                                 )
@@ -58,6 +61,7 @@ class Administracion_TicketController extends Controller
         $this->sector_ticketRepository = $sectorrepository;
         $this->turno_ticketRepository = $turno_ticketrepository;
         $this->salaRepository = $salarepository;
+        $this->empresaRepository = $empresarepository;
         $this->ticketService = $ticketservice;
         $this->ticketQuery = $ticketquery;
     }
@@ -149,10 +153,13 @@ class Administracion_TicketController extends Controller
         $estado_novedad_json = json_encode(Ticket_Tarea_Novedad::$enumEstado);
         $estado_enum = Ticket_Estado::$enumEstado;
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, AdministracionTicketListadoFiltros::class);
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $empresa_id = old('empresa_id', session('empresa_id'));
 
         return view('ticket.administracion_ticket.crear', compact('areadestino_query', 'sector_query', 'sala_query',
                                                                 'turno_query', 'estado_novedad_enum',
-                                                                'estado_novedad_json', 'estado_enum', 'filtrosQuery'));
+                                                                'estado_novedad_json', 'estado_enum', 'filtrosQuery',
+                                                                'empresa_query', 'empresa_id'));
     }
 
     /**
@@ -194,10 +201,13 @@ class Administracion_TicketController extends Controller
         $estado_novedad_json = json_encode(Ticket_Tarea_Novedad::$enumEstado);
         $estado_enum = Ticket_Estado::$enumEstado;
         $filtrosQuery = QueryRetornoListado::desdeRequest($request, AdministracionTicketListadoFiltros::class);
+        $empresa_query = $this->empresaRepository->allFiltrado();
+        $empresa_id = old('empresa_id', $data->empresa_id ?? session('empresa_id'));
 
         return view('ticket.administracion_ticket.editar', compact('data', 'areadestino_query', 'sector_query', 
                                                                     'sala_query', 'turno_query', 'estado_novedad_enum',
-                                                                    'estado_novedad_json', 'estado_enum', 'filtrosQuery'));
+                                                                    'estado_novedad_json', 'estado_enum', 'filtrosQuery',
+                                                                    'empresa_query', 'empresa_id'));
     }
 
     /**

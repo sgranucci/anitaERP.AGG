@@ -7,12 +7,28 @@
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/pagoproveedor/filtro.js")}}" type="text/javascript"></script>
+@if (session('imprimir_pagoproveedor_url'))
+<script>
+    (function () {
+        var url = @json(session('imprimir_pagoproveedor_url'));
+        if (url) {
+            window.open(url, '_blank', 'noopener');
+        }
+    })();
+</script>
+@endif
 @endsection
 
 @php
     use App\Support\Compras\PagoproveedorListadoFiltros;
+    use App\Support\Caja\IngresoEgresoSolicitudpagoSupport;
     $retornoListadoQuery = \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
     $limpiarUrl = route('pagoproveedor', PagoproveedorListadoFiltros::paraQueryStringEmpresa($filtros ?? []));
+    $tipoOppIeId = IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorConfig();
+    $crearIeParams = array_filter([
+        'tipotransaccion_caja_id' => $tipoOppIeId > 0 ? $tipoOppIeId : null,
+        'empresa_id' => ((int) ($filtros['empresa_id'] ?? 0)) > 0 ? (int) $filtros['empresa_id'] : null,
+    ], static fn ($v) => $v !== null && $v !== '');
 @endphp
 
 @section('contenido')
@@ -34,7 +50,15 @@
                         'inputId' => 'filtro_valor',
                         'nuevoRegistroUrl' => route('crear_pagoproveedor', $retornoListadoQuery),
                         'nuevoRegistroCan' => 'crear-pagoproveedor',
+                        'nuevoRegistroLabel' => 'Nueva OP',
                     ])
+                    @if ($tipoOppIeId > 0 && can('crear-ingresos-egresos-caja', false))
+                        <a href="{{ route('crear_ingresoegreso', $crearIeParams) }}"
+                           class="btn btn-light btn-sm ml-1"
+                           title="Abrir Ingresos/Egresos con tipo Orden de pago (OPP)">
+                            <i class="fa fa-fw fa-exchange"></i> Pago vía IE
+                        </a>
+                    @endif
                 </div>
             </div>
             <form method="get" action="{{ route('pagoproveedor') }}" id="form-filtros-pagoproveedor" class="mb-0">
@@ -55,6 +79,7 @@
                             <th>OP</th>
                             <th>Empresa</th>
                             <th>Proveedor</th>
+                            <th>Descripción</th>
                             <th>Cuentas de caja</th>
                             <th class="text-right">Monto</th>
                             <th>Estado</th>
@@ -77,6 +102,7 @@
                                 </td>
                                 <td>{{ $fila->empresas->nombre ?? '' }}</td>
                                 <td>{{ $fila->proveedores->nombre ?? '' }}</td>
+                                <td><small>{{ $fila->detalle ?? '' }}</small></td>
                                 <td>
                                     @php
                                         $cuentasCaja = $fila instanceof \App\Support\Compras\PagoproveedorListadoFila
@@ -121,7 +147,7 @@
                                 </td>
                             </tr>
                         @empty
-                            <tr><td colspan="8" class="text-center text-muted">Sin órdenes de pago</td></tr>
+                            <tr><td colspan="9" class="text-center text-muted">Sin órdenes de pago</td></tr>
                         @endforelse
                     </tbody>
                 </table>

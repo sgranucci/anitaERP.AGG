@@ -15,6 +15,7 @@ use App\Support\Compras\ComprobanteProveedorFlujoOcComFacSupport;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
 use App\Support\Compras\ComprobanteProveedorLineasFacturaSupport;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
+use App\Support\Compras\ComprobanteProveedorImporteYaFacturadoLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorToleranciaImporteSupport;
 use App\Support\Compras\OrdencompraContratoRutaFacturaSupport;
 
@@ -217,12 +218,34 @@ class ComprobanteProveedorControlesLegajoService
 
         $toleranciaPct = ComprobanteProveedorToleranciaImporteSupport::porcentajeDesdeOc($ordencompra);
 
-        if (ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia($importeFactura, $importeComFactura, $toleranciaPct)) {
+        // a-compprov.c lee_recepcion: descuenta cantfact / _total_facturado antes de comparar.
+        $yaFacturado = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableEnLegajo(
+            (int) $ordencompra->id,
+            $excluirComprobanteId,
+        );
+        $importeComDisponible = ComprobanteProveedorImporteYaFacturadoLegajoSupport::provisionDisponible(
+            $importeComFactura,
+            (float) $yaFacturado['importe'],
+        );
+
+        if (ComprobanteProveedorToleranciaImporteSupport::excedeTolerancia(
+            $importeFactura,
+            $importeComDisponible,
+            $toleranciaPct
+        )) {
+            $detalleYa = ((int) $yaFacturado['cantidad'] > 0)
+                ? sprintf(
+                    ' (COM %s − ya facturado en legajo %s)',
+                    number_format($importeComFactura, 2, ',', '.'),
+                    number_format((float) $yaFacturado['importe'], 2, ',', '.')
+                )
+                : '';
             $detalle = sprintf(
-                'Importe factura (%s) %s vs provisión COM %s%s. Tolerancia permitida: %s%% (centro de costo de la OC).',
+                'Importe factura (%s) %s vs provisión COM disponible %s%s%s. Tolerancia permitida: %s%% (centro de costo de la OC).',
                 $importeMeta['etiqueta'],
                 number_format($importeFactura, 2, ',', '.'),
-                number_format($importeComFactura, 2, ',', '.'),
+                number_format($importeComDisponible, 2, ',', '.'),
+                $detalleYa,
                 abs($importeComMe - $importeComFactura) > 0.05
                     ? ' (ME origen '.number_format($importeComMe, 2, ',', '.').')'
                     : '',

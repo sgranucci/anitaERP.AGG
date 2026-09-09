@@ -16,6 +16,8 @@
     let pendingArticulo = null;
     let pendingOpcionalesCtx = null;
     let pendingOpcionalesSeleccion = null;
+    /** SKUs Waitry con opcionales de fórmula pendientes de cargar en el POS (post-import). */
+    let colaSkusOpcionalesWaitry = [];
     let pendingAbrirCuentaResolver = null;
     let pendingAbrirCuentaReject = null;
     let cobranzaWaitryTotemBloqueada = false;
@@ -890,43 +892,137 @@
         return skus.filter((v, i, a) => a.indexOf(v) === i);
     }
 
+    function normalizarSkuColaWaitry(sku) {
+        let fullSku = String(sku || '').trim();
+        if (!fullSku) {
+            return '';
+        }
+        if (skuDigitosSufijo > 0 && prefijoSku && !skuPermitidoGastronomia(fullSku)) {
+            const esc = prefijoSku.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const soloDigitos = fullSku.replace(new RegExp('^' + esc, 'i'), '');
+            if (/^\d+$/.test(soloDigitos)) {
+                fullSku = prefijoSku + soloDigitos.padStart(skuDigitosSufijo, '0');
+            }
+        }
+        return fullSku;
+    }
+
     /**
-     * Tras importar Waitry: los ítems con fórmula opcional no entran automáticamente;
-     * guía al cajero por el modal de opcionales (mismo flujo que carga manual).
+     * Tras importar Waitry: los ítems con fórmula opcional no entran automáticamente.
+     * Encola TODOS los SKUs pendientes y abre el asistente uno tras otro (antes solo el primero).
      */
     async function cargarPendientesOpcionalesTrasImportWaitry(data) {
         const skus = skusOpcionalesPendientesDesdeImportWaitry(data);
-        if (!skus.length || !cuentaId) return;
+        if (!skus.length || !cuentaId) {
+            colaSkusOpcionalesWaitry = [];
+            return;
+        }
 
+        colaSkusOpcionalesWaitry = skus.slice();
         toast(
-            'Complete en el POS los opcionales de: ' + skus.join(', ') + '.',
+            'Complete en el POS los opcionales de: ' + skus.join(', ') +
+                (skus.length > 1 ? ' (se pedirán uno por uno).' : '.'),
             'warning',
             { soloToast: true, timeOut: 10000, extendedTimeOut: 5000, closeButton: true, progressBar: true },
         );
 
-        for (const sku of skus) {
-            let fullSku = sku;
-            if (skuDigitosSufijo > 0 && prefijoSku && !skuPermitidoGastronomia(sku)) {
-                const esc = prefijoSku.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                const soloDigitos = sku.replace(new RegExp('^' + esc, 'i'), '');
-                if (/^\d+$/.test(soloDigitos)) {
-                    fullSku = prefijoSku + soloDigitos.padStart(skuDigitosSufijo, '0');
-                }
+        setFacturacionLoading(false);
+        limpiarBackdropHuerfanoGastro();
+        await avanzarColaOpcionalesWaitry();
+    }
+
+    /**
+     * Abre el modal del próximo SKU Waitry con opcionales; al confirmar/saltar sigue con el resto.
+     */
+    async function avanzarColaOpcionalesWaitry() {
+        if (!cuentaId) {
+            colaSkusOpcionalesWaitry = [];
+            return;
+        }
+
+        while (colaSkusOpcionalesWaitry.length > 0) {
+            const sku = colaSkusOpcionalesWaitry[0];
+            const fullSku = normalizarSkuColaWaitry(sku);
+            if (!fullSku) {
+                colaSkusOpcionalesWaitry.shift();
+                continue;
             }
+
             try {
                 const cat = await fetchArticuloCatalogoPorSku(fullSku);
                 const a = cat && cat.articulo;
                 if (!a || !a.id) {
                     toast('No se encontró «' + sku + '» en catálogo para cargar opcionales.', 'warning');
+                    colaSkusOpcionalesWaitry.shift();
                     continue;
                 }
-                // Cantidad 1 directa (como Enter en SKU): menos un modal tras import Waitry.
-                await procesarAltaConsumo(a, 1);
+
+                const grupos = await fetchGruposOpcionales(a.id);
+                if (!grupos.length) {
+                    const ok = await agregarLineaApi(a, 1, {});
+                    if (ok) {
+                        colaSkusOpcionalesWaitry.shift();
+                    } else if (modalElementoVisible('modal-opcionales')) {
+                        return;
+                    } else {
+                        colaSkusOpcionalesWaitry.shift();
+                    }
+                    continue;
+                }
+
+                if (bloquearOperacionPosPorJornadaTurno()) {
+                    return;
+                }
+
+                pendingOpcionalesCtx = {
+                    articulo: a,
+                    cantidad: 1,
+                    modo: 'agregar-directo',
+                    grupos: grupos,
+                    colaWaitry: true,
+                    skuWaitry: sku,
+                };
+                pendingOpcionalesSeleccion = null;
+                renderGrillaOpcionales(grupos, a);
+                await mostrarModalOpcionales(function () {
+                    sincronizarVistaPasoOpcional();
+                });
                 return;
             } catch (e) {
                 toast((e.message || 'Error al abrir opcionales') + ' (' + sku + ')', 'error');
+                colaSkusOpcionalesWaitry.shift();
             }
         }
+    }
+
+    function sacarSkuActualColaWaitry(ctx) {
+        if (!ctx || !ctx.colaWaitry) {
+            return;
+        }
+        const skuCtx = String(ctx.skuWaitry || '').trim();
+        if (skuCtx && colaSkusOpcionalesWaitry[0] === skuCtx) {
+            colaSkusOpcionalesWaitry.shift();
+            return;
+        }
+        if (skuCtx) {
+            const idx = colaSkusOpcionalesWaitry.indexOf(skuCtx);
+            if (idx >= 0) {
+                colaSkusOpcionalesWaitry.splice(idx, 1);
+                return;
+            }
+        }
+        if (colaSkusOpcionalesWaitry.length) {
+            colaSkusOpcionalesWaitry.shift();
+        }
+    }
+
+    function programarSiguienteColaWaitry(ctx) {
+        if (!ctx || !ctx.colaWaitry) {
+            return;
+        }
+        window.setTimeout(function () {
+            void avanzarColaOpcionalesWaitry();
+        }, 180);
     }
 
     function mensajesProcesoImportWaitry(waitryOrderId) {
@@ -1325,10 +1421,11 @@
     const GASTRONOMIA_MODAL_Z_BASE = 1050;
     const GASTRONOMIA_MODAL_Z_STEP = 20;
 
-    /** Modales que bloquean la grilla de opcionales si quedan abiertos encima (aviso, import Waitry). */
+    /** Modales que bloquean la grilla de opcionales si quedan abiertos encima (aviso, import Waitry, apertura). */
     const MODALES_CERRAR_ANTES_OPCIONALES = [
         'modal-gastro-aviso',
         'modal-waitry-importar-id',
+        'modal-abrir-cuenta',
     ];
 
     function modalElementoVisible(modalId) {
@@ -6673,14 +6770,25 @@
         pendingOpcionalesCtx = null;
         pendingOpcionalesSeleccion = null;
         $('#modal-opcionales').modal('hide');
-        await agregarLineaApi(ctx.articulo, ctx.cantidad, map);
+        const ok = await agregarLineaApi(ctx.articulo, ctx.cantidad, map);
+        if (ok) {
+            sacarSkuActualColaWaitry(ctx);
+            programarSiguienteColaWaitry(ctx);
+        }
+        // Si falló y reabrió opcionales, agregarLineaApi ya dejó colaWaitry en el nuevo ctx.
     }
 
+    /**
+     * @returns {Promise<boolean>} true si la línea quedó agregada
+     */
     async function agregarLineaApi(articulo, cantidad, opcionales) {
         if (bloquearOperacionPosPorJornadaTurno()) {
-            return;
+            return false;
         }
-        if (!cuentaId) return toast('Seleccione cuenta', 'warning');
+        if (!cuentaId) {
+            toast('Seleccione cuenta', 'warning');
+            return false;
+        }
         try {
             const payload = {
                 articulo_id: articulo.id,
@@ -6701,24 +6809,38 @@
             cargarMesas();
             cargarCuentasActivas();
             focusSkuConsumo();
+            return true;
         } catch (e) {
             if (e.payload && e.payload.requiere_opcionales && Array.isArray(e.payload.grupos) && e.payload.grupos.length) {
                 recordarGruposOpcionales(articulo.id, e.payload.grupos);
-                pendingOpcionalesCtx = {
-                    articulo,
-                    cantidad,
-                    modo: 'agregar-directo',
-                    grupos: e.payload.grupos,
-                };
+                const colaMeta =
+                    pendingOpcionalesCtx && pendingOpcionalesCtx.colaWaitry
+                        ? {
+                              colaWaitry: true,
+                              skuWaitry: pendingOpcionalesCtx.skuWaitry,
+                          }
+                        : colaSkusOpcionalesWaitry.length
+                          ? { colaWaitry: true, skuWaitry: colaSkusOpcionalesWaitry[0] }
+                          : {};
+                pendingOpcionalesCtx = Object.assign(
+                    {
+                        articulo,
+                        cantidad,
+                        modo: 'agregar-directo',
+                        grupos: e.payload.grupos,
+                    },
+                    colaMeta,
+                );
                 pendingOpcionalesSeleccion = null;
                 renderGrillaOpcionales(e.payload.grupos, articulo);
                 await mostrarModalOpcionales(function () {
                     sincronizarVistaPasoOpcional();
                 });
-                return;
+                return false;
             }
             if (e.message && e.message.includes('fetch')) notificarErrorOperacion(String(e));
             else notificarErrorOperacion(e.message);
+            return false;
         }
     }
 
@@ -7548,9 +7670,24 @@
                     return;
                 }
                 if (pendingOpcionalesCtx) {
+                    const ctxCancelado = pendingOpcionalesCtx;
                     pendingOpcionalesCtx = null;
                     pendingOpcionalesSeleccion = null;
                     pendingArticulo = null;
+                    if (ctxCancelado.colaWaitry) {
+                        sacarSkuActualColaWaitry(ctxCancelado);
+                        if (colaSkusOpcionalesWaitry.length) {
+                            toast(
+                                'Opcional omitido. Siguiente pendiente: ' + colaSkusOpcionalesWaitry.join(', '),
+                                'warning',
+                                { soloToast: true, timeOut: 8000 },
+                            );
+                            programarSiguienteColaWaitry(ctxCancelado);
+                        } else {
+                            setTimeout(() => focusSkuConsumo(), 80);
+                        }
+                        return;
+                    }
                     setTimeout(() => focusSkuConsumo(), 80);
                 }
             });

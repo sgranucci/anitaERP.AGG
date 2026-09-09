@@ -1,15 +1,24 @@
 @php
     use App\Support\Ventas\ClienteCuentacorrienteGrillaSupport;
 
+    $destinoImpresion = ClienteCuentacorrienteGrillaSupport::destinoImpresion($data);
     $urlImpresion = ClienteCuentacorrienteGrillaSupport::urlImpresion($data);
     $puedeImprimir = ClienteCuentacorrienteGrillaSupport::puedeImprimirComprobante($data);
+    $urlEdicion = ClienteCuentacorrienteGrillaSupport::urlEdicion($data);
+    $puedeEditar = ClienteCuentacorrienteGrillaSupport::puedeEditarComprobante($data);
 @endphp
 @if ($puedeImprimir && $urlImpresion)
     <a href="{{ $urlImpresion }}"
-       target="_blank"
-       rel="noopener"
-       class="text-primary"
-       title="Imprimir comprobante">
+       class="text-primary js-erp-workspace"
+       data-ws-modo="pdf"
+       data-ws-id="cc-{{ $data->id }}"
+       data-ws-titulo="{{ $destinoImpresion['titulo'] ?? 'Imprimir comprobante' }}"
+       data-ws-meta="{{ $etiquetaComprobante }}"
+       data-ws-pdf="{{ $urlImpresion }}"
+       @if ($puedeEditar && $urlEdicion)
+           data-ws-edit="{{ $urlEdicion }}"
+       @endif
+       title="{{ $destinoImpresion['titulo'] ?? 'Imprimir comprobante' }}">
         {{ $etiquetaComprobante }}
     </a>
 @else

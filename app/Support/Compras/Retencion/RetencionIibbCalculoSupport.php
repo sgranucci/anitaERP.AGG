@@ -58,7 +58,11 @@ final class RetencionIibbCalculoSupport
                 'origen_tasa' => $input->origenTasa,
                 'jurisdiccion' => $input->jurisdiccion,
                 'provincia_id' => $input->provinciaId,
+                'provincia_nombre' => $input->provinciaNombre,
                 'condicion_iibb_id' => $input->condicionIibbId,
+                'minimo_imponible' => $input->minimoImponible,
+                'minimo_retencion' => $input->minimoRetencion,
+                'neto' => $neto,
             ],
         );
     }

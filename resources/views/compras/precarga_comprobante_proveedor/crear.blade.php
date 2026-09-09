@@ -10,6 +10,13 @@
 @endsection
 
 @section('contenido')
+@php
+    $retornoListadoQuery = $retornoListadoQuery
+        ?? \App\Support\Listado\QueryRetornoListado::desdeRequestSiIndex(
+            request(),
+            \App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros::class
+        );
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -18,12 +25,12 @@
             <div class="card-header">
                 <h3 class="card-title">Crear Precarga de Comprobantes de Proveedores</h3>
                 <div class="card-tools">
-                    <a href="{{route('precarga_comprobante_proveedor')}}" class="btn btn-outline-info btn-sm">
+                    <a href="{{route('precarga_comprobante_proveedor', $retornoListadoQuery)}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
             </div>
-            <form action="{{route('guardar_precarga_comprobante_proveedor')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{route('guardar_precarga_comprobante_proveedor', $retornoListadoQuery)}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
                 @csrf
                 <div class="card-body">
                     @include('compras.precarga_comprobante_proveedor.form')

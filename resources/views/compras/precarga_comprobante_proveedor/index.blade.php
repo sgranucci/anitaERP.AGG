@@ -15,9 +15,14 @@
 
 <?php use App\Helpers\biblioteca;
 use App\Support\Compras\PrecargaComprobanteOrigenEntrada;
-use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
+use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros;
+use App\Support\Listado\QueryRetornoListado; ?>
 
 @section('contenido')
+@php
+    $retornoListadoQuery = QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+    $limpiarUrl = route('precarga_comprobante_proveedor', PrecargaComprobanteProveedorListadoFiltros::paraQueryStringEstado($filtros ?? []));
+@endphp
 <div class="row erp-ws-host">
     <div class="col-lg-12">
         @include('includes.mensaje')
@@ -39,7 +44,7 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                     </button>
                     @endif
                     @if (can('crear-precarga-proveedores', false))
-                    <a href="{{ route('crear_precarga_comprobante_proveedor') }}" class="btn btn-outline-secondary btn-sm mr-1">
+                    <a href="{{ route('crear_precarga_comprobante_proveedor', $retornoListadoQuery) }}" class="btn btn-outline-secondary btn-sm mr-1">
                         <i class="fa fa-fw fa-plus-circle"></i> Precarga manual
                     </a>
                     @endif
@@ -47,7 +52,7 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                         'formId' => 'form-filtros-precarga-comprobante-proveedor',
                         'filtroValor' => $filtros['valor'] ?? '',
                         'tieneCriterios' => PrecargaComprobanteProveedorListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
-                        'limpiarUrl' => route('precarga_comprobante_proveedor'),
+                        'limpiarUrl' => $limpiarUrl,
                         'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
                         'toggleTarget' => '#panel-filtros-precarga-comprobante-proveedor',
                         'toggleId' => 'btn-toggle-filtros-precarga-comprobante-proveedor',
@@ -57,7 +62,7 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
             </div>
             <form method="get" action="{{ route('precarga_comprobante_proveedor') }}" id="form-filtros-precarga-comprobante-proveedor" class="mb-0">
                 @include('compras.precarga_comprobante_proveedor.partials.filtros_listado', [
-                    'limpiarUrl' => route('precarga_comprobante_proveedor'),
+                    'limpiarUrl' => $limpiarUrl,
                 ])
             </form>
             @include('compras.precarga_comprobante_proveedor.partials.filtros_externos')
@@ -160,56 +165,32 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                                 @endif
                             </td>
                             <td class="text-nowrap">
-                                @php
-                                    $urlPdfPrecarga = filled($data->rutaalmacenamiento) && puedeVerPrecargaFacturaPdf()
-                                        ? urlAppCarpeta('compras/precarga_comprobante_proveedor/'.$data->id.'/factura-pdf?inline=1')
-                                        : null;
-                                    $tituloPrecarga = trim(sprintf(
-                                        'Precarga #%s %s',
-                                        $data->id,
-                                        $data->nombreproveedor ?? ($data->proveedores->nombre ?? '')
-                                    ));
-                                @endphp
-                                @if ($urlPdfPrecarga)
-                                <a href="{{ $urlPdfPrecarga }}"
-                                   class="btn-accion-tabla tooltipsC js-erp-workspace"
-                                   title="Vista previa PDF (listado a la izquierda)"
-                                   data-ws-id="precarga-{{ $data->id }}"
-                                   data-ws-modo="pdf"
-                                   data-ws-titulo="{{ $tituloPrecarga }}"
-                                   data-ws-meta="{{ PrecargaComprobanteOrigenEntrada::etiqueta($origenPrecarga) }}"
-                                   data-ws-pdf="{{ $urlPdfPrecarga }}"
-                                   @if (can('editar-precarga-proveedores', false))
-                                       data-ws-edit="{{ route('editar_precarga_comprobante_proveedor', ['id' => $data->id]) }}"
-                                   @endif>
+                                @if (filled($data->rutaalmacenamiento) && puedeVerPrecargaFacturaPdf())
+                                <a href="{{ urlAppCarpeta('compras/precarga_comprobante_proveedor/'.$data->id.'/factura-pdf?inline=1') }}"
+                                   class="btn-accion-tabla tooltipsC"
+                                   title="Ver PDF escaneado"
+                                   target="_blank"
+                                   rel="noopener noreferrer">
                                     <i class="fa fa-file-pdf-o text-danger"></i>
                                 </a>
                                 @endif
                                 @if (!empty($data->comprobante_proveedor_id) && (can('editar-comprobante-proveedor', false) || can('listar-comprobante-proveedor', false)))
-                                <a href="{{ route('editar_comprobante_proveedor', ['id' => $data->comprobante_proveedor_id]) }}"
-                                   class="btn-accion-tabla tooltipsC text-primary js-erp-workspace"
-                                   title="Abrir comprobante #{{ $data->comprobante_proveedor_id }} en solapa"
-                                   data-ws-id="precarga-{{ $data->id }}"
-                                   data-ws-modo="edit"
-                                   data-ws-titulo="Comprobante #{{ $data->comprobante_proveedor_id }}"
-                                   data-ws-edit="{{ route('editar_comprobante_proveedor', ['id' => $data->comprobante_proveedor_id]) }}"
-                                   @if ($urlPdfPrecarga)
-                                       data-ws-pdf="{{ $urlPdfPrecarga }}"
-                                   @endif>
+                                <a href="{{ route('editar_comprobante_proveedor', [
+                                        'id' => $data->comprobante_proveedor_id,
+                                        'origen' => \App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport::ORIGEN_PRECARGA,
+                                    ]) }}"
+                                   class="btn-accion-tabla tooltipsC text-primary"
+                                   title="Abrir comprobante #{{ $data->comprobante_proveedor_id }}">
                                     <i class="fa fa-external-link"></i>
                                 </a>
                                 @elseif (can('crear-comprobante-proveedor', false)
                                     && \App\Support\Compras\PrecargaComprobanteEstados::puedeGenerarComprobante((string) ($data->estado ?? '')))
-                                <a href="{{ route('crear_comprobante_proveedor', ['precarga_id' => $data->id]) }}"
-                                   class="btn-accion-tabla tooltipsC text-success js-erp-workspace"
-                                   title="Alta de comprobante en solapa (sin menú)"
-                                   data-ws-id="precarga-{{ $data->id }}"
-                                   data-ws-modo="edit"
-                                   data-ws-titulo="Alta desde precarga #{{ $data->id }}"
-                                   data-ws-edit="{{ route('crear_comprobante_proveedor', ['precarga_id' => $data->id]) }}"
-                                   @if ($urlPdfPrecarga)
-                                       data-ws-pdf="{{ $urlPdfPrecarga }}"
-                                   @endif>
+                                <a href="{{ route('crear_comprobante_proveedor', [
+                                        'precarga_id' => $data->id,
+                                        'origen' => \App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport::ORIGEN_PRECARGA,
+                                    ]) }}"
+                                   class="btn-accion-tabla tooltipsC text-success"
+                                   title="Abrir alta de comprobante desde esta precarga (no graba hasta Guardar)">
                                     <i class="fa fa-file-text-o"></i>
                                 </a>
                                 @endif
@@ -217,24 +198,16 @@ use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros; ?>
                                     && empty($data->comprobante_proveedor_id))
                                     @include('compras.precarga_comprobante_proveedor.partials.boton_marcar_cargada_anita', [
                                         'precargaId' => $data->id,
+                                        'retornoListadoQuery' => $retornoListadoQuery,
                                     ])
                                 @endif
                        			@if (can('editar-precarga-proveedores', false))
-                                	<a href="{{route('editar_precarga_comprobante_proveedor', ['id' => $data->id])}}"
-                                       class="btn-accion-tabla tooltipsC js-erp-workspace"
-                                       title="Editar precarga en solapa (sin menú)"
-                                       data-ws-id="precarga-{{ $data->id }}"
-                                       data-ws-modo="edit"
-                                       data-ws-titulo="{{ $tituloPrecarga }}"
-                                       data-ws-edit="{{ route('editar_precarga_comprobante_proveedor', ['id' => $data->id]) }}"
-                                       @if ($urlPdfPrecarga)
-                                           data-ws-pdf="{{ $urlPdfPrecarga }}"
-                                       @endif>
+                                	<a href="{{route('editar_precarga_comprobante_proveedor', ['id' => $data->id] + $retornoListadoQuery)}}" class="btn-accion-tabla tooltipsC" title="Editar este registro">
                                     <i class="fa fa-edit"></i>
                                 	</a>
 								@endif
                        			@if (can('borrar-precarga-proveedores', false))
-                                <form action="{{route('eliminar_precarga_comprobante_proveedor', ['id' => $data->id])}}" class="d-inline form-eliminar" method="POST">
+                                <form action="{{route('eliminar_precarga_comprobante_proveedor', ['id' => $data->id] + $retornoListadoQuery)}}" class="d-inline form-eliminar" method="POST">
                                     @csrf @method("delete")
                                     <button type="submit" class="btn-accion-tabla eliminar tooltipsC" title="Eliminar este registro">
                                         <i class="fa fa-times-circle text-danger"></i>

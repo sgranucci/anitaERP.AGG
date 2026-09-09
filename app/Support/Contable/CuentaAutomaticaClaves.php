@@ -121,6 +121,21 @@ final class CuentaAutomaticaClaves
      */
     public const PAGO_ANTICIPO_PROVEEDOR = 'pago.anticipo_proveedor';
 
+    /** Haber del asiento de OP: retención Ganancias (RG 830). */
+    public const PAGO_RETENCION_GANANCIAS = 'pago.retencion_ganancias';
+
+    /** Haber del asiento de OP: retención IVA. */
+    public const PAGO_RETENCION_IVA = 'pago.retencion_iva';
+
+    /** Haber del asiento de OP: retención SUSS. */
+    public const PAGO_RETENCION_SUSS = 'pago.retencion_suss';
+
+    /**
+     * Haber del asiento de OP: retención IIBB (fallback).
+     * Preferir la cuenta de Compras → Retención IIBB por provincia; esta clave solo si falta.
+     */
+    public const PAGO_RETENCION_IIBB = 'pago.retencion_iibb';
+
     /** Pasivo laboral: haber del asiento de devengamiento; debe del asiento de pago. */
     public const SUELDOS_A_PAGAR = 'sueldos.a_pagar';
 
@@ -144,7 +159,8 @@ final class CuentaAutomaticaClaves
      *   modulo_tabla: ?string,
      *   modulo_columna: ?string,
      *   env_config: ?string,
-     *   multiple?: bool
+     *   multiple?: bool,
+     *   solo_empresas?: list<int>
      * }>
      */
     public static function catalogo(): array
@@ -522,6 +538,38 @@ final class CuentaAutomaticaClaves
                 'modulo_tabla' => null,
                 'modulo_columna' => null,
                 'env_config' => null,
+            ],
+            self::PAGO_RETENCION_GANANCIAS => [
+                'grupo' => 'Pagos a proveedores',
+                'descripcion' => 'Retención Ganancias (haber OP / RGP)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+                'solo_empresas' => [1, 2, 3],
+            ],
+            self::PAGO_RETENCION_IVA => [
+                'grupo' => 'Pagos a proveedores',
+                'descripcion' => 'Retención IVA (haber OP / RIP)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+                'solo_empresas' => [1, 2, 3],
+            ],
+            self::PAGO_RETENCION_SUSS => [
+                'grupo' => 'Pagos a proveedores',
+                'descripcion' => 'Retención SUSS (haber OP / RSP)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+                'solo_empresas' => [1, 2, 3],
+            ],
+            self::PAGO_RETENCION_IIBB => [
+                'grupo' => 'Pagos a proveedores',
+                'descripcion' => 'Retención IIBB fallback (si la provincia no tiene cuenta en Retención IIBB)',
+                'modulo_tabla' => null,
+                'modulo_columna' => null,
+                'env_config' => null,
+                'solo_empresas' => [1, 2, 3],
             ],
             self::SUELDOS_A_PAGAR => [
                 'grupo' => 'Sueldos',

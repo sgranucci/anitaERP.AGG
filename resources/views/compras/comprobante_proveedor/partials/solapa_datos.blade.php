@@ -1,9 +1,20 @@
 @if ($data->ordencompra_id ?? null)
 <div class="card card-outline card-info mb-3 border-info" id="cp-bloque-ordencompra-destacada">
     <div class="card-body py-3">
+        <style>
+            #cp-bloque-ordencompra-destacada .cp-oc-label { font-size: .95rem; }
+            #cp-bloque-ordencompra-destacada .cp-oc-meta { font-size: .95rem; line-height: 1.45; }
+            #cp-bloque-ordencompra-destacada .cp-oc-badge {
+                font-size: .9rem;
+                font-weight: 600;
+                padding: .4em .65em;
+                vertical-align: middle;
+            }
+            #cp-bloque-ordencompra-destacada .h4 { font-size: 1.45rem; }
+        </style>
         <div class="d-flex flex-wrap align-items-center justify-content-between" style="gap:10px;">
             <div>
-                <div class="text-muted small mb-1"><i class="fa fa-file-text-o"></i> Orden de compra del legajo</div>
+                <div class="text-muted cp-oc-label mb-1"><i class="fa fa-file-text-o"></i> Orden de compra del legajo</div>
                 <div class="h4 mb-0 text-primary font-weight-bold">
                     OC #{{ $data->ordencompras->numeroordencompra ?? $data->ordencompra_id }}
                 </div>
@@ -21,9 +32,9 @@
                     }
                 @endphp
                 @if ($ccDestBanner || $ccDestBannerId > 0)
-                <div class="small mt-1">
+                <div class="cp-oc-meta mt-1">
                     CC destino:
-                    <span class="badge badge-info">
+                    <span class="badge badge-info cp-oc-badge">
                         @if ($ccDestBanner)
                             {{ $ccDestBanner->codigo }} {{ $ccDestBanner->nombre }}
                         @else
@@ -33,34 +44,62 @@
                 </div>
                 @endif
                 @if (optional($data->ordencompras->sector_legajocompras ?? null)->nombre)
-                <div class="small mt-1">
+                <div class="cp-oc-meta mt-1">
                     Sector legajo:
-                    <span class="badge badge-secondary">{{ $data->ordencompras->sector_legajocompras->nombre }}</span>
+                    <span class="badge badge-secondary cp-oc-badge">{{ $data->ordencompras->sector_legajocompras->nombre }}</span>
                 </div>
                 @endif
                 @php
                     $cpPol = $com_politica ?? [];
                 @endphp
-                @if ($cpPol['contrato_vigente'] ?? false)
-                <div class="small mt-2">
-                    <span class="badge badge-info">Contrato vigente</span>
-                    @if ($cpPol['contrato_requiere_recepcion'] ?? false)
-                        <span class="badge badge-warning">Recepción obligatoria</span>
+                @if ($cpPol['es_anticipada'] ?? false)
+                <div class="cp-oc-meta mt-2">
+                    <span class="badge badge-warning cp-oc-badge"><i class="fa fa-clock-o"></i> Legajo anticipado</span>
+                    @if (($cpPol['tiene_com'] ?? false) || ($cpPol['anticipada_elige_modo'] ?? false))
+                        <span class="badge badge-light border cp-oc-badge">Hay COM — puede seguir anticipada o aplicar a recepción</span>
                     @else
-                        <span class="badge badge-secondary">Sin recepción</span>
+                        <span class="badge badge-light border cp-oc-badge">Sin COM todavía</span>
+                    @endif
+                </div>
+                @endif
+                @if (! empty($legajo_otras_facturas))
+                <div class="cp-oc-meta mt-2">
+                    <span class="text-muted">Otras facturas del legajo:</span>
+                    @foreach ($legajo_otras_facturas as $otraFac)
+                        <a href="{{ route('editar_comprobante_proveedor', ['id' => $otraFac['id']]) }}"
+                           class="badge badge-success cp-oc-badge"
+                           target="_blank" rel="noopener"
+                           title="Importe comparable: {{ number_format((float) $otraFac['importe'], 2, ',', '.') }}">
+                            {{ $otraFac['etiqueta'] }}
+                        </a>
+                    @endforeach
+                    @if ((float) ($legajo_ya_facturado_importe ?? 0) > 0)
+                        <span class="text-muted ml-1">
+                            (ya facturado {{ number_format((float) $legajo_ya_facturado_importe, 2, ',', '.') }})
+                        </span>
+                    @endif
+                </div>
+                @endif
+                @if ($cpPol['contrato_vigente'] ?? false)
+                <div class="cp-oc-meta mt-2">
+                    <span class="badge badge-info cp-oc-badge">Contrato vigente</span>
+                    @if ($cpPol['contrato_requiere_recepcion'] ?? false)
+                        <span class="badge badge-warning cp-oc-badge">Recepción obligatoria</span>
+                    @else
+                        <span class="badge badge-secondary cp-oc-badge">Sin recepción</span>
                         @if (($cpPol['contrato_imputacion'] ?? '') === \App\Support\Compras\OrdencompraContratoRutaFacturaSupport::IMPUTACION_ARTICULOS)
-                            <span class="badge badge-light border">Cuenta de artículos OC</span>
+                            <span class="badge badge-light border cp-oc-badge">Cuenta de artículos OC</span>
                         @elseif (($cpPol['contrato_imputacion'] ?? '') === \App\Support\Compras\OrdencompraContratoRutaFacturaSupport::IMPUTACION_MANUAL)
                             @php
                                 $ctaContratoFactura = $data->ordencompras->contrato_cuentacontables ?? null;
                                 $ctaContratoTxt = trim(($ctaContratoFactura->codigo ?? '').' '.($ctaContratoFactura->nombre ?? ''));
                             @endphp
-                            <span class="badge badge-light border">Cuenta del contrato{{ $ctaContratoTxt !== '' ? ': '.$ctaContratoTxt : '' }}</span>
+                            <span class="badge badge-light border cp-oc-badge">Cuenta del contrato{{ $ctaContratoTxt !== '' ? ': '.$ctaContratoTxt : '' }}</span>
                         @endif
                     @endif
                 </div>
                 @elseif ($cpPol['contrato_fuera_de_vigencia'] ?? false)
-                <div class="alert alert-warning py-1 px-2 mt-2 mb-0 small">
+                <div class="alert alert-warning py-1 px-2 mt-2 mb-0 cp-oc-meta">
                     El contrato de esta OC no está vigente. Se aplica el flujo estándar de la empresa.
                 </div>
                 @endif
@@ -76,6 +115,19 @@
                    class="btn btn-primary btn-sm" target="_blank" rel="noopener">
                     <i class="fa fa-external-link"></i> Abrir OC
                 </a>
+                @endif
+                @if (! empty($url_paquete_legajo))
+                <button type="button"
+                        class="btn btn-outline-dark btn-sm js-cp-ver-legajo"
+                        data-url-paquete="{{ $url_paquete_legajo }}"
+                        data-numero="{{ $data->ordencompras->numeroordencompra ?? $data->ordencompra_id }}"
+                        data-precarga-id="{{ (int) old('precarga_comprobante_proveedor_id', $data->precarga_comprobante_proveedor_id ?? 0) }}"
+                        data-comprobante-id="{{ (int) ($data->id ?? 0) }}"
+                        data-letra="{{ old('letra', $data->letra ?? '') }}"
+                        data-sucursal="{{ (int) old('sucursal', $data->sucursal ?? 0) }}"
+                        data-nro="{{ (int) old('numerocomprobante', $data->numerocomprobante ?? 0) }}">
+                    <i class="fa fa-folder-open-o"></i> Ver legajo
+                </button>
                 @endif
                 @if ($mostrarSolapaCom ?? false)
                 <button type="button" class="btn btn-outline-info btn-sm" id="cp-abrir-solapa-com-desde-oc">
@@ -158,6 +210,7 @@
                     $comObligatoria = (bool) ($com_obligatoria ?? false);
                     $comPolitica = $com_politica ?? [];
                     $permiteAnticipada = (bool) ($comPolitica['permite_factura_anticipada'] ?? false);
+                    $anticipadaEligeModo = (bool) ($comPolitica['anticipada_elige_modo'] ?? false);
                     $bloqueaSinCom = (bool) ($comPolitica['bloquea_sin_com'] ?? false);
                     $contratoVigente = (bool) ($comPolitica['contrato_vigente'] ?? false);
                     $contratoRequiereRecepcion = (bool) ($comPolitica['contrato_requiere_recepcion'] ?? false);
@@ -172,6 +225,12 @@
                         $modoActual = \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
                     } elseif ($permiteAnticipada) {
                         $modoActual = \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_OC;
+                    } elseif ($anticipadaEligeModo
+                        && ! in_array($modoActual, [
+                            \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION,
+                            \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_OC,
+                        ], true)) {
+                        $modoActual = \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
                     }
                 @endphp
                 @if ($contratoVigente && $contratoRequiereRecepcion)
@@ -202,7 +261,22 @@
                         value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::etiqueta(\App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_OC) }}">
                     <small class="form-text text-muted">
                         OC anticipada sin COM todavía → factura anticipada. Puede haber varias en el mismo legajo.
-                        Cuando exista COM, pasará a ser obligatoria.
+                    </small>
+                @elseif ($anticipadaEligeModo)
+                    <select name="modo_carga" id="modo_carga" class="form-control">
+                        <option value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION }}"
+                            @if ($modoActual === \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) selected @endif>
+                            {{ \App\Support\Compras\ComprobanteProveedorModoCarga::etiqueta(\App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_RECEPCION) }}
+                        </option>
+                        <option value="{{ \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_OC }}"
+                            @if ($modoActual === \App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_OC) selected @endif>
+                            {{ \App\Support\Compras\ComprobanteProveedorModoCarga::etiqueta(\App\Support\Compras\ComprobanteProveedorModoCarga::ASIGNA_OC) }}
+                            (seguir anticipada)
+                        </option>
+                    </select>
+                    <small class="form-text text-muted">
+                        OC anticipada con recepción (Anita): puede aplicar a la COM o cargar otra factura anticipada.
+                        Contra COM se descuenta lo ya facturado en el legajo.
                     </small>
                 @else
                     <select name="modo_carga" id="modo_carga" class="form-control">

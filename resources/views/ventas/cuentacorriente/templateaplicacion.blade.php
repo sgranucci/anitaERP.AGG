@@ -31,7 +31,7 @@
             <input type="text" style="text-align: right;" name="saldoaplicaciones[]" class="form-control saldoaplicacion" value=""  readonly>
         </td>		
 		<td>
-            <a href="#" class="btn-accion-tabla tooltipsC editarcomprobante" title="Editar este registro">
+            <a href="#" class="btn-accion-tabla tooltipsC editarcomprobante js-erp-workspace" title="Editar en solapa (sin menú)">
                 <i class="fa fa-edit"></i>
             </a>
         </td>

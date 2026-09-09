@@ -296,6 +296,21 @@
     padding-right: 2rem;
 }
 
+.anita-menu-leaf-has-badge > .nav-link {
+    padding-right: 2.6rem;
+}
+
+.anita-menu-count-badge {
+    display: inline-block;
+    margin-left: 0.35rem;
+    vertical-align: middle;
+    font-size: 0.65rem;
+    font-weight: 700;
+    padding: 0.15em 0.4em;
+    border-radius: 0.65rem;
+    line-height: 1.1;
+}
+
 .anita-menu-pin-btn {
     position: absolute;
     right: 0.45rem;

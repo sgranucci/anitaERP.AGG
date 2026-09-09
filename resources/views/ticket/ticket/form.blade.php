@@ -11,6 +11,14 @@
                     <input type="date" name="fecha" id="fecha" class="form-control" value="{{old('fecha', $data->fecha ?? date('Y-m-d'))}}" readonly>
                 </div>
             </div>
+            @include('includes.form-empresa-asignada', [
+                'empresa_query' => $empresa_query ?? collect(),
+                'empresa_id' => $empresa_id ?? ($data->empresa_id ?? session('empresa_id')),
+                'col_label' => 'col-lg-3 col-form-label',
+                'col_input' => 'col-lg-7',
+                'solo_lectura' => $camposBloqueados,
+                'required' => true,
+            ])
             <div class="form-group row">
                 <label for="sala" class="col-lg-3 col-form-label">Sala</label>
                 @if ($camposBloqueados)

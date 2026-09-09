@@ -120,6 +120,10 @@ final class RetencionGananciasCalculoSupport
                 'retencion_periodo' => $retencionPeriodo,
                 'retenido_previo' => $retenidoPrevio,
                 'neto_pago' => $netoPago,
+                'neto_periodo' => $netoPeriodo,
+                'base_retenible' => $baseRetenible,
+                'monto_excedente' => $regimen->montoExcedente,
+                'minimo_retencion' => $regimen->minimoRetencion,
                 'neto_acumulado_previo' => $regimen->tomaAcumulados()
                     ? $this->redondear($input->netoAcumuladoPeriodo)
                     : 0.0,
@@ -281,6 +285,18 @@ final class RetencionGananciasCalculoSupport
         array $detalle,
     ): RetencionGananciasResultado {
         $regimen = $input->regimen;
+
+        $detalle = array_merge([
+            'forma_calculo' => $regimen->formaCalculo,
+            'regimen' => $regimen->regimen,
+            'regimen_id' => $regimen->id,
+            'codigo' => $regimen->codigo,
+            'inscripto' => $input->inscripto,
+            'monto_excedente' => $regimen->montoExcedente,
+            'minimo_retencion' => $regimen->minimoRetencion,
+            'base_retenible' => $baseRetenible,
+            'neto_periodo' => $baseCalculo,
+        ], $detalle);
 
         if ($regimen->minimoRetencion > 0 && $retencionPago > 0 && $retencionPago < $regimen->minimoRetencion) {
             return RetencionGananciasResultado::noAplica(RetencionGananciasResultado::MOTIVO_BAJO_MINIMO_RETENCION, array_merge($detalle, [

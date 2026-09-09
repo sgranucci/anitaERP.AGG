@@ -18,6 +18,7 @@ use App\Support\Compras\ComprobanteProveedorAsientoPreviewSupport;
 use App\Support\Compras\ComprobanteProveedorComContabilidadSupport;
 use App\Support\Compras\ComprobanteProveedorFacturaAnticipadaSupport;
 use App\Support\Compras\ComprobanteProveedorImporteComparacionComSupport;
+use App\Support\Compras\ComprobanteProveedorImporteYaFacturadoLegajoSupport;
 use App\Support\Compras\ComprobanteProveedorMonedaMotor;
 use App\Support\Compras\ComprobanteProveedorModoCarga;
 use App\Support\Compras\ComprobanteProveedorEstados;
@@ -312,7 +313,17 @@ class ComprobanteProveedorAsientoService
         }
 
         if ($usaProvisionCom) {
-            $totalProvision = $this->totalProvisionRecepcionesVinculadas($comprobante);
+            $totalProvisionBruta = $this->totalProvisionRecepcionesVinculadas($comprobante);
+            // a-compprov.c lee_recepcion: disponible = recepción − ya facturado (aplicped).
+            // Sin esto, un anticipo 50/50 falla el asiento al aplicar la 2ª mitad contra la COM completa.
+            $yaFacturado = ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableEnLegajo(
+                (int) ($comprobante->ordencompra_id ?? 0),
+                (int) ($comprobante->id ?? 0) > 0 ? (int) $comprobante->id : null,
+            );
+            $totalProvision = ComprobanteProveedorImporteYaFacturadoLegajoSupport::provisionDisponible(
+                $totalProvisionBruta,
+                (float) $yaFacturado['importe'],
+            );
 
             // Ambos importes ya están en moneda de la factura: un cociente del orden de la
             // cotización solo puede venir de una moneda mal declarada, no de una diferencia
@@ -322,7 +333,7 @@ class ComprobanteProveedorAsientoService
                 $totalProvision,
                 $monedaFactura['moneda_id'],
                 $this->cotizacionEscala($comprobante, $monedaFactura['cotizacion']),
-                'la provisión de las recepciones COM',
+                'la provisión disponible de las recepciones COM',
                 $monedaFactura['nombre'],
             );
 
@@ -338,7 +349,7 @@ class ComprobanteProveedorAsientoService
                 ];
             }
 
-            // Hasta 5% sobre la COM: prorrateo a cuentas de artículos (no cortar la grabación).
+            // Hasta 5% sobre la COM disponible: prorrateo a cuentas de artículos (no cortar la grabación).
             if (ComprobanteProveedorAsientoCuadreSupport::hayDiferenciaAImputar($diferenciaNeto)) {
                 if (! ComprobanteProveedorAsientoCuadreSupport::diferenciaDentroDePorcentaje(
                     $diferenciaNeto,
@@ -348,11 +359,16 @@ class ComprobanteProveedorAsientoService
                         $diferenciaNeto,
                         $totalProvision
                     );
+                    $detalleYa = ((int) $yaFacturado['cantidad'] > 0)
+                        ? ' (COM '.number_format($totalProvisionBruta, 2, ',', '.')
+                            .' − ya facturado '.number_format((float) $yaFacturado['importe'], 2, ',', '.').')'
+                        : '';
                     throw new RuntimeException(
                         'La diferencia entre el neto de la factura ('
                         .number_format($totalNetoConceptos, 2, ',', '.')
-                        .') y la provisión COM ('.number_format($totalProvision, 2, ',', '.')
-                        .') es del '.number_format($pct, 2, ',', '.')
+                        .') y la provisión COM disponible ('.number_format($totalProvision, 2, ',', '.')
+                        .')'.$detalleYa
+                        .' es del '.number_format($pct, 2, ',', '.')
                         .'%, mayor al '.number_format(ComprobanteProveedorAsientoCuadreSupport::TOLERANCIA_PCT, 0)
                         .'%. Revise precios o cantidades; no se puede imputar automáticamente.'
                     );

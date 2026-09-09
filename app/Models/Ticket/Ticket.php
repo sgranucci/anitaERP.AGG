@@ -9,13 +9,14 @@ use Illuminate\Support\Arr;
 use App\Models\Configuracion\Sala;
 use App\Models\Ticket\Sector_Ticket;
 use App\Models\Seguridad\Usuario;
+use App\Models\Configuracion\Empresa;
 use DB;
 
 class Ticket extends Model implements Auditable
 {
     use \OwenIt\Auditing\Auditable;
     protected $fillable = ['fecha', 'sala_id', 'subcategoria_ticket_id', 'areadestino_id', 'sector_id', 'titulo', 'comentario',
-							'usuario_id', 'bienuso_id', 'observacion', 'estado_ticket',
+							'usuario_id', 'empresa_id', 'bienuso_id', 'observacion', 'estado_ticket',
 							'fecha_resolucion', 'hora_resolucion', 'tiempo_insumido_total'];
     protected $table = 'ticket';
 
@@ -74,6 +75,11 @@ class Ticket extends Model implements Auditable
 	public function usuarios()
 	{
         return $this->belongsTo(Usuario::class, 'usuario_id');
+	}
+
+	public function empresa()
+	{
+		return $this->belongsTo(Empresa::class, 'empresa_id');
 	}
 
 	public function scopeConUltimoEstado(Builder $query) 

@@ -152,15 +152,10 @@
                 <td class="text-nowrap">
                     @if ($puedeVerPdf && $fila->puedeVerPdf())
                         <a href="{{ route('tracking_facturas_pdf', ['id' => $fila->id()]) }}"
-                           class="tf-icon-btn js-tf-visor"
-                           data-tf-id="{{ $fila->id() }}"
-                           data-pdf-url="{{ route('tracking_facturas_pdf', ['id' => $fila->id()]) }}"
-                           data-pdf-titulo="{{ $fila->familia() }} {{ $fila->numero() }} — {{ $fila->proveedor() }}"
-                           data-pdf-origen="{{ $fila->pdfOrigen() }}"
-                           @if ($puedeAbrirComprobante)
-                               data-edit-url="{{ route('editar_comprobante_proveedor', ['id' => $fila->id()]) }}"
-                           @endif
-                           title="Vista previa del PDF (listado a la izquierda)">
+                           class="tf-icon-btn"
+                           target="_blank"
+                           rel="noopener noreferrer"
+                           title="Ver PDF">
                             <i class="fa fa-file-pdf-o"></i>
                         </a>
                     @else

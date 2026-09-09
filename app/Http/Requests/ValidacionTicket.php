@@ -36,6 +36,7 @@ class ValidacionTicket extends FormRequest
         return [
             'sector_id' => 'required',
             'sala_id' => 'required',
+            'empresa_id' => 'required|integer|exists:empresa,id',
             'categoria_ticket_id' => 'nullable|integer',
             'subcategoria_ticket_id' => 'nullable|integer|exists:subcategoria_ticket,id',
             'areadestino_id' => 'required',
@@ -50,6 +51,7 @@ class ValidacionTicket extends FormRequest
         return [
             'sector_id' => 'sector',
             'sala_id' => 'sala',
+            'empresa_id' => 'empresa',
             'areadestino_id' => 'área de destino',
             'categoria_ticket_id' => 'categoría',
             'subcategoria_ticket_id' => 'subcategoría',

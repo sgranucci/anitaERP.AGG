@@ -1,9 +1,20 @@
 @if (session("mensaje"))
-    <div class="alert alert-success alert-dismissible" data-auto-dismiss="3000">
+    <div class="alert alert-success alert-dismissible" @if (! session('imprimir_pagoproveedor_url') && ! session('imprimir_comprobante_url')) data-auto-dismiss="3000" @endif>
         <button type="button" class="close" data-dismiss="alert" aria-hidden="true">×</button>
         <h4><i class="icon fa fa-check"></i> Mensaje sistema Anita ERP</h4>
         <ul>
             <li>{{ session("mensaje") }}</li>
+            @php
+                $urlImprimir = session('imprimir_pagoproveedor_url') ?: session('imprimir_comprobante_url');
+                $labelImprimir = session('imprimir_comprobante_label') ?: 'Imprimir comprobante';
+            @endphp
+            @if ($urlImprimir)
+                <li class="mt-1">
+                    <a class="btn btn-sm btn-outline-success" href="{{ $urlImprimir }}" target="_blank" rel="noopener">
+                        <i class="fa fa-print"></i> {{ $labelImprimir }}
+                    </a>
+                </li>
+            @endif
         </ul>
     </div>
 @endif

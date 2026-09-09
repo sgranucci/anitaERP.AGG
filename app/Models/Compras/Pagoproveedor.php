@@ -109,10 +109,10 @@ class Pagoproveedor extends Model
 
     public function etiquetaComprobante(): string
     {
+        // Misma clave Anita MultiEmpresa (tesmov/pago): OPP {empresa}-{nro}, sin letra.
         return sprintf(
-            '%s %s%04d-%s',
-            $this->tipocomprobante,
-            $this->letra,
+            '%s %d-%s',
+            $this->tipocomprobante ?: 'OPP',
             (int) $this->sucursal,
             $this->numerotransaccion
         );

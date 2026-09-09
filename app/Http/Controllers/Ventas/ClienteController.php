@@ -1023,15 +1023,26 @@ class ClienteController extends Controller
     }
 
     // Editar cuenta corriente
-    public function editarCuentaCorriente($cuentacorriente_id)
+    public function editarCuentaCorriente(Request $request, $cuentacorriente_id)
     {
         $cuentacorriente = $this->cliente_cuentacorrienteRepository->find($cuentacorriente_id);
 
-        if ($cuentacorriente->cobranza_id > 0)
-            return $this->cobranzaService->editaUnaCobranza($cuentacorriente->cobranza_id);
+        $params = [];
+        if ($request->boolean('embed')) {
+            $params['embed'] = 1;
+        }
 
-        if ($cuentacorriente->venta_id > 0)
-            return $this->facturacionService->editaUnaFactura($cuentacorriente->venta_id);
+        if ((int) ($cuentacorriente->cobranza_id ?? 0) > 0) {
+            return redirect()->route('editar_cobranza', array_merge([
+                'id' => (int) $cuentacorriente->cobranza_id,
+            ], $params));
+        }
+
+        if ((int) ($cuentacorriente->venta_id ?? 0) > 0) {
+            return redirect()->route('editar_factura', array_merge([
+                'id' => (int) $cuentacorriente->venta_id,
+            ], $params));
+        }
 
         return 'No encontro movimiento a editar';
     }    

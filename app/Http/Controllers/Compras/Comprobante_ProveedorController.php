@@ -22,6 +22,8 @@ use App\Services\Compras\ComprobanteProveedorComLegajoResolucionService;
 use App\Services\Compras\ComprobanteProveedorContabilizarService;
 use App\Services\Compras\ComprobanteProveedorEliminarService;
 use App\Services\Compras\ComprobanteProveedorAsientoService;
+use App\Services\Compras\ComprobanteProveedorInternoPdfService;
+use App\Services\Compras\Tracking\TrackingPdfResolverService;
 use App\Queries\Configuracion\CotizacionQueryInterface;
 use App\Support\Archivos\ArchivoAdjuntoCacheSupport;
 use App\Support\Compras\ComprobanteProveedorArchivoPathSupport;
@@ -52,6 +54,7 @@ use App\Support\Compras\ProveedorFacturasApocrifasSupport;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 class Comprobante_ProveedorController extends Controller
 {
@@ -74,6 +77,8 @@ class Comprobante_ProveedorController extends Controller
         private ComprobanteProveedorComLegajoResolucionService $comLegajoResolucion,
         private CotizacionQueryInterface $cotizacionQuery,
         private PrecargaComprobanteMarcarCargadaAnitaService $marcarCargadaAnitaService,
+        private TrackingPdfResolverService $trackingPdfResolver,
+        private ComprobanteProveedorInternoPdfService $pdfInternoService,
     ) {}
 
     public function index(Request $request)
@@ -242,7 +247,12 @@ class Comprobante_ProveedorController extends Controller
             } catch (\Throwable $e) {
                 return $this->conAvisosControles(
                     redirect()
-                        ->route('editar_comprobante_proveedor', ['id' => $comprobante->id])
+                        ->route(
+                            'editar_comprobante_proveedor',
+                            ['id' => $comprobante->id]
+                                + $this->queryRetornoListado($request)
+                                + ComprobanteProveedorRetornoLegajoSupport::queryParams($request)
+                        )
                         ->with('errores', [
                             'El comprobante se guardó en borrador, pero no se pudo contabilizar. '
                             .'El aviso permanece en esta pantalla hasta que se complete. Motivo: '.$e->getMessage(),
@@ -255,14 +265,15 @@ class Comprobante_ProveedorController extends Controller
                 $this->redirectTrasGuardarComprobante(
                     $request,
                     $comprobante,
-                    'Comprobante contabilizado: asiento, cuenta corriente y sync Anita.'
+                    'Comprobante contabilizado: asiento, cuenta corriente y sync Anita.',
+                    'index'
                 ),
                 $avisos
             );
         }
 
         return $this->conAvisosControles(
-            $this->redirectTrasGuardarComprobante($request, $comprobante, $mensaje),
+            $this->redirectTrasGuardarComprobante($request, $comprobante, $mensaje, 'editar'),
             $avisos
         );
     }
@@ -571,7 +582,10 @@ class Comprobante_ProveedorController extends Controller
             ->first();
         if ($existente) {
             return redirect()
-                ->route('editar_comprobante_proveedor', ['id' => $existente->id])
+                ->route('editar_comprobante_proveedor', [
+                    'id' => $existente->id,
+                    'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_PRECARGA,
+                ])
                 ->with('mensaje', 'Esta precarga ya tiene el comprobante #'.$existente->id.' generado. Se abrió para revisión.');
         }
 
@@ -583,7 +597,10 @@ class Comprobante_ProveedorController extends Controller
         }
 
         // No grabar hasta que el operador pulse Guardar en el alta.
-        return redirect()->route('crear_comprobante_proveedor', ['precarga_id' => $precargaId]);
+        return redirect()->route('crear_comprobante_proveedor', [
+            'precarga_id' => $precargaId,
+            'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_PRECARGA,
+        ]);
     }
 
     public function contabilizar(Request $request, int $id)
@@ -618,7 +635,7 @@ class Comprobante_ProveedorController extends Controller
         );
     }
 
-    public function verFacturaPdf(Request $request, int $id): BinaryFileResponse
+    public function verFacturaPdf(Request $request, int $id): Response
     {
         if (! can('editar-comprobante-proveedor', false)
             && ! can('listar-comprobante-proveedor', false)
@@ -631,19 +648,32 @@ class Comprobante_ProveedorController extends Controller
             abort(404);
         }
 
+        // 1) Adjunto ORIGEN_IA / precarga
         $ruta = ComprobanteProveedorArchivoPathSupport::referenciaPdfPrecarga($comprobante);
         $path = $this->facturaScanPathResolver->resolve($ruta);
+
+        // 2) Convención Facturas_scan/comprobantes/{CUIT}/{Y-m}/…
         if ($path === null) {
             $path = $this->archivoPathSupport->absolutePathDesdeComprobante($comprobante);
         }
 
+        // 3) Cascada completa del tracking (índice Anita, etc.)
         if ($path === null || ! is_readable($path)) {
-            abort(404, 'No se encontró el PDF original de la precarga en Facturas_scan'.($ruta ? ' para: '.$ruta : '.'));
+            $path = $this->trackingPdfResolver->resolver($comprobante)?->ruta;
+        }
+
+        // 4) PDF sintético para FIN/CIN
+        if (($path === null || ! is_readable((string) $path)) && $this->pdfInternoService->puedeGenerar($comprobante)) {
+            return $this->pdfInternoService->generarRespuesta($comprobante, $request->boolean('descargar'));
+        }
+
+        if ($path === null || ! is_readable($path)) {
+            abort(404, 'No se encontró el PDF del comprobante en el ERP ni en el escaneo.');
         }
 
         $nombre = basename($path);
 
-        if ($request->boolean('inline')) {
+        if ($request->boolean('inline') || ! $request->boolean('descargar')) {
             return ArchivoAdjuntoCacheSupport::aplicarAntiCacheNavegador(response()->file($path, [
                 'Content-Type' => 'application/pdf',
                 'Content-Disposition' => 'inline; filename="'.$nombre.'"',
@@ -989,6 +1019,7 @@ class Comprobante_ProveedorController extends Controller
             'tiene_com' => false,
             'debe_asignar_com' => false,
             'permite_factura_anticipada' => false,
+            'anticipada_elige_modo' => false,
             'bloquea_sin_com' => false,
         ];
         if ($data) {
@@ -1023,11 +1054,24 @@ class Comprobante_ProveedorController extends Controller
         }
 
         $toleranciaPct = 0.0;
+        $legajoOtrasFacturas = [];
+        $legajoYaFacturado = ['importe' => 0.0, 'cantidad' => 0, 'items' => []];
+        $urlPaqueteLegajo = null;
         if ($data) {
             $data->loadMissing('ordencompras');
             $oc = $data->ordencompras;
             if ($oc) {
                 $toleranciaPct = ComprobanteProveedorToleranciaImporteSupport::porcentajeDesdeOc($oc);
+                $excluirId = (int) ($data->id ?? 0) ?: null;
+                $legajoYaFacturado = \App\Support\Compras\ComprobanteProveedorImporteYaFacturadoLegajoSupport::sumarComparableEnLegajo(
+                    (int) $oc->id,
+                    $excluirId,
+                );
+                $legajoOtrasFacturas = $legajoYaFacturado['items'];
+                if ((int) $oc->id > 0
+                    && (can('listar-legajo-compra', false) || can('listar-ordencompra', false))) {
+                    $urlPaqueteLegajo = route('ordencompra_legajo_bandeja_paquete', ['id' => (int) $oc->id]);
+                }
             }
         }
 
@@ -1098,6 +1142,9 @@ class Comprobante_ProveedorController extends Controller
             'com_obligatoria' => $comObligatoria,
             'com_politica' => $comPolitica,
             'com_tolerancia_pct' => $toleranciaPct,
+            'legajo_otras_facturas' => $legajoOtrasFacturas,
+            'legajo_ya_facturado_importe' => (float) ($legajoYaFacturado['importe'] ?? 0),
+            'url_paquete_legajo' => $urlPaqueteLegajo,
             'com_resolucion' => $prefill['com_resolucion'] ?? $this->resolverComResolucionFormulario($data, $recepcionesSeleccionadas),
             'asientoPreview' => $asientoPreview,
             'mostrarSolapaAsiento' => ! $bloqueadoEdicion,
@@ -1109,6 +1156,7 @@ class Comprobante_ProveedorController extends Controller
                     $comObligatoria
                     || count($recepcionesSeleccionadas) > 0
                     || ($comPolitica['permite_factura_anticipada'] ?? false)
+                    || ($comPolitica['anticipada_elige_modo'] ?? false)
                     || ($comPolitica['bloquea_sin_com'] ?? false)
                     || (string) ($data->modo_carga ?? '') === ComprobanteProveedorModoCarga::ASIGNA_RECEPCION
                 ),
@@ -1168,6 +1216,15 @@ class Comprobante_ProveedorController extends Controller
         string $fallback = 'editar'
     ) {
         $ocId = (int) ($comprobante->ordencompra_id ?? 0);
+        $origen = ComprobanteProveedorRetornoLegajoSupport::origenDesdeRequest($request);
+        $paramsRetorno = ComprobanteProveedorRetornoLegajoSupport::queryParams($request, $ocId);
+
+        // Grabación provisoria desde precarga: sale al listado de comprobantes (no al de precargas).
+        if ($fallback === 'editar'
+            && $origen === ComprobanteProveedorRetornoLegajoSupport::ORIGEN_PRECARGA) {
+            return $this->redirectIndexConMensaje($request, $mensaje);
+        }
+
         $url = ComprobanteProveedorRetornoLegajoSupport::url($request, $ocId);
         if ($url) {
             return redirect()->to($url)->with('mensaje', $mensaje);
@@ -1177,7 +1234,7 @@ class Comprobante_ProveedorController extends Controller
             return redirect()
                 ->route(
                     'editar_comprobante_proveedor',
-                    ['id' => (int) $comprobante->id] + $this->queryRetornoListado($request)
+                    ['id' => (int) $comprobante->id] + $this->queryRetornoListado($request) + $paramsRetorno
                 )
                 ->with('mensaje', $mensaje);
         }

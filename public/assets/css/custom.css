@@ -774,6 +774,30 @@ body.modo-consulta .navbar-text.text-warning {
     transform: none;
 }
 
+/* Acceso rápido Bandeja de tickets (navbar, igual que Aprobaciones) */
+#anita-nav-bandeja-ticket {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+}
+#anita-nav-bandeja-ticket .anita-bandeja-ticket-label {
+    margin-right: 0;
+}
+#anita-bandeja-ticket-badge.anita-bandeja-ticket-count,
+#anita-nav-bandeja-ticket .anita-bandeja-ticket-count {
+    position: static;
+    top: auto;
+    right: auto;
+    display: inline-block;
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0.28em 0.5em;
+    border-radius: 0.65rem;
+    vertical-align: middle;
+    transform: none;
+}
+
 .anita-manual-md {
     max-width: 920px;
     line-height: 1.55;

@@ -151,4 +151,9 @@ class Comprobante_Proveedor extends Model implements Auditable
     {
         return $this->hasMany(Comprobante_Proveedor_Archivo::class, 'comprobante_proveedor_id');
     }
+
+    public function tracking_indice()
+    {
+        return $this->hasOne(Comprobante_Tracking_Indice::class, 'comprobante_proveedor_id');
+    }
 }

@@ -1218,11 +1218,12 @@ final class IngresoEgresoAnitaTesmovSupport
 
     private static function cotizacionTesmov(int $monedaId, float $cotizacion): float
     {
-        if ($monedaId <= 1) {
-            return 1.0;
+        // También en MN: si viene TC real (p.ej. DOL del día) se conserva para vistas ME.
+        if ($cotizacion > 1.0001) {
+            return $cotizacion;
         }
 
-        return $cotizacion > 0 ? $cotizacion : 1.0;
+        return $monedaId <= 1 ? 1.0 : ($cotizacion > 0 ? $cotizacion : 1.0);
     }
 
     private static function recortar(string $valor, int $max): string

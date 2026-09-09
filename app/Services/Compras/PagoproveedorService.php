@@ -7,7 +7,9 @@ use App\Models\Caja\Caja_Movimiento_Estado;
 use App\Models\Caja\Cheque;
 use App\Models\Compras\Pagoproveedor;
 use App\Models\Compras\Pagoproveedor_Estado;
+use App\Models\Compras\Pagoproveedor_Retencion;
 use App\Models\Compras\Proveedor;
+use App\Support\Numerico\NumeroDecimalLocalSupport;
 use App\Repositories\Caja\Caja_Movimiento_CuentacajaRepositoryInterface;
 use App\Repositories\Caja\Caja_Movimiento_EstadoRepositoryInterface;
 use App\Repositories\Caja\Caja_MovimientoRepositoryInterface;
@@ -23,6 +25,7 @@ use App\Support\Compras\PagoproveedorAplicacionCuentacorrienteSupport;
 use App\Support\Compras\PagoproveedorAsientoArmadoSupport;
 use App\Support\Compras\ProveedorCbuPagoSupport;
 use App\Support\Compras\Retencion\PagoproveedorRetencionPersistenciaSupport;
+use App\Support\Contable\AsientoBalanceSupport;
 use App\Support\Contable\PeriodoContableCierreSupport;
 use Carbon\Carbon;
 use Exception;
@@ -82,6 +85,10 @@ class PagoproveedorService
             (string) ($data['fecha'] ?? date('Y-m-d')),
             $this->cuentacajaRepository,
             $this->cuentacontableRepository,
+            (string) ($data['proveedor_nombre'] ?? ''),
+            (string) ($data['numerotransaccion'] ?? $data['numero_op'] ?? ''),
+            (int) ($data['moneda_id'] ?? 1),
+            NumeroDecimalLocalSupport::aFloat($data['cotizacion'] ?? 1, 1.0),
         );
 
         return ['mensaje' => 'ok', 'asiento' => $asiento];
@@ -102,14 +109,16 @@ class PagoproveedorService
         );
 
         try {
-            $pago = DB::transaction(function () use ($data, $request, $empresaId) {
+            $estado = (string) ($data['estado'] ?? 'CONFIRMADA');
+            if (! in_array($estado, ['PRE CARGA', 'CONFIRMADA'], true)) {
+                $estado = 'CONFIRMADA';
+            }
+            // Validar asiento ANTES de abrir TX / numerar OP / tocar Anita.
+            $this->assertAsientoBalanceadoAntesDeGrabar($data, $estado);
+
+            $pago = DB::transaction(function () use ($data, $request, $empresaId, $estado) {
                 $numero = PagoproveedorAnitaNumeracionSupport::siguienteNumeroConLock($empresaId);
                 $sucursal = PagoproveedorAnitaNumeracionSupport::sucursalParaOp($empresaId);
-
-                $estado = (string) ($data['estado'] ?? 'CONFIRMADA');
-                if (! in_array($estado, ['PRE CARGA', 'CONFIRMADA'], true)) {
-                    $estado = 'CONFIRMADA';
-                }
 
                 $cbuElegido = ProveedorCbuPagoSupport::resolverDesdeRequest(
                     (int) $data['proveedor_id'],
@@ -117,12 +126,19 @@ class PagoproveedorService
                     $data['cbu_pago'] ?? null
                 );
 
+                $monedaId = (int) ($data['moneda_id'] ?? 1);
+                $cotizacion = PagoproveedorAsientoArmadoSupport::cotizacionUnicaDelPago(
+                    $monedaId,
+                    NumeroDecimalLocalSupport::aFloat($data['cotizacion'] ?? 1, 1.0),
+                    (string) ($data['fecha'] ?? date('Y-m-d'))
+                );
+
                 $pago = $this->pagoproveedorRepository->create([
                     'empresa_id' => $empresaId,
                     'tipotransaccion_caja_id' => ($data['tipotransaccion_caja_id'] ?? null)
                         ?: (IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorConfig() ?: null),
                     'tipocomprobante' => (string) ($data['tipocomprobante'] ?? config('pagoproveedor.tipocomprobante_default', 'OPP')),
-                    'letra' => (string) ($data['letra'] ?? config('pagoproveedor.letra_default', 'A')),
+                    'letra' => (string) config('pagoproveedor.letra_default', ' '),
                     'sucursal' => $sucursal,
                     'numerotransaccion' => (string) $numero,
                     'fecha' => $data['fecha'],
@@ -133,8 +149,8 @@ class PagoproveedorService
                     'detalle' => (string) ($data['detalle'] ?? ('Orden de pago Nro. '.$numero)),
                     'estado' => $estado,
                     'monto' => (float) ($data['monto'] ?? $data['totalfinalpago'] ?? 0),
-                    'cotizacion' => (float) ($data['cotizacion'] ?? 1),
-                    'moneda_id' => (int) ($data['moneda_id'] ?? 1),
+                    'cotizacion' => $cotizacion,
+                    'moneda_id' => $monedaId,
                     'modo_cotizacion' => (string) ($data['modo_cotizacion'] ?? config('pagoproveedor.modo_cotizacion_default', 'factura')),
                     'usuario_id' => Auth::id(),
                 ]);
@@ -150,6 +166,7 @@ class PagoproveedorService
             return [
                 'mensaje' => 'ok',
                 'pagoproveedor_id' => $pago->id,
+                'numerotransaccion' => (string) $pago->numerotransaccion,
             ];
         } catch (\Throwable $e) {
             Log::error('pagoproveedor.guardar.fallo', [
@@ -177,6 +194,12 @@ class PagoproveedorService
         );
 
         try {
+            $estado = (string) ($data['estado'] ?? 'CONFIRMADA');
+            if (! in_array($estado, ['PRE CARGA', 'CONFIRMADA'], true)) {
+                $estado = (string) ($this->pagoproveedorRepository->findOrFail($id)->estado ?? 'CONFIRMADA');
+            }
+            $this->assertAsientoBalanceadoAntesDeGrabar($data, $estado);
+
             DB::transaction(function () use ($data, $request, $id) {
                 $pago = $this->pagoproveedorRepository->findOrFail($id);
                 if (in_array($pago->estado, Pagoproveedor::estadosFinalesBloqueados(), true)) {
@@ -189,6 +212,16 @@ class PagoproveedorService
                     $data['cbu_pago'] ?? null
                 );
 
+                $monedaId = (int) ($data['moneda_id'] ?? $pago->moneda_id ?? 1);
+                $cotizacion = PagoproveedorAsientoArmadoSupport::cotizacionUnicaDelPago(
+                    $monedaId,
+                    NumeroDecimalLocalSupport::aFloat(
+                        $data['cotizacion'] ?? $pago->cotizacion ?? 1,
+                        1.0
+                    ),
+                    (string) ($data['fecha'] ?? $pago->fecha?->format('Y-m-d') ?? date('Y-m-d'))
+                );
+
                 $this->pagoproveedorRepository->update([
                     'fecha' => $data['fecha'],
                     'caja_id' => ($data['caja_id'] ?? null) ?: null,
@@ -198,8 +231,8 @@ class PagoproveedorService
                     'detalle' => (string) ($data['detalle'] ?? $pago->detalle),
                     'estado' => (string) ($data['estado'] ?? $pago->estado),
                     'monto' => (float) ($data['monto'] ?? $data['totalfinalpago'] ?? $pago->monto),
-                    'cotizacion' => (float) ($data['cotizacion'] ?? $pago->cotizacion),
-                    'moneda_id' => (int) ($data['moneda_id'] ?? $pago->moneda_id),
+                    'cotizacion' => $cotizacion,
+                    'moneda_id' => $monedaId,
                     'modo_cotizacion' => (string) ($data['modo_cotizacion'] ?? $pago->modo_cotizacion),
                     'tipotransaccion_caja_id' => ($data['tipotransaccion_caja_id'] ?? null)
                         ?: ($pago->tipotransaccion_caja_id ?: IngresoEgresoSolicitudpagoSupport::tipotransaccionCajaIdPorConfig() ?: null),
@@ -238,8 +271,8 @@ class PagoproveedorService
             PagoproveedorAplicacionCuentacorrienteSupport::crearAnticipo(
                 $pago,
                 $anticipo,
-                (int) ($data['moneda_id'] ?? 1),
-                (float) ($data['cotizacion'] ?? 1),
+                (int) ($pago->moneda_id ?: ($data['moneda_id'] ?? 1)),
+                (float) ($pago->cotizacion ?: 1),
             );
         }
 
@@ -262,9 +295,206 @@ class PagoproveedorService
                 ->update(['pagoproveedor_id' => $pago->id]);
         }
 
-        if (! empty($data['cuentacontable_ids']) && $pago->estado !== 'PRE CARGA') {
+        if ($pago->estado !== 'PRE CARGA') {
+            // El asiento del form puede quedar viejo (p.ej. se abrió antes de cargar caja).
+            // Salvo edición manual, se rearma desde deuda/medios/retenciones.
+            if (! $this->asientoFueEditadoManual($data)) {
+                $data = array_merge($data, $this->construirArraysAsientoDesdeOperacion($pago, $data));
+            }
+            if (empty($data['cuentacontable_ids'])) {
+                throw new Exception('No se pudo armar el asiento contable de la OP (sin líneas).');
+            }
             $this->persistirAsiento($pago, $data);
         }
+    }
+
+    /**
+     * @param  array<string, mixed>  $data
+     */
+    private function asientoFueEditadoManual(array $data): bool
+    {
+        foreach ($data['carga_cuentacontable_manuales'] ?? [] as $flag) {
+            if (strtoupper(trim((string) $flag)) === 'S') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Rechaza OP CONFIRMADA con asiento desbalanceado antes de abrir TX / numerar / tocar Anita.
+     *
+     * @param  array<string, mixed>  $data
+     */
+    private function assertAsientoBalanceadoAntesDeGrabar(array $data, string $estado): void
+    {
+        if ($estado === 'PRE CARGA') {
+            return;
+        }
+
+        $cuentas = $data['cuentacontable_ids'] ?? [];
+        if (! is_array($cuentas) || $cuentas === []) {
+            throw new Exception(
+                'Falta el asiento contable. Abra la pestaña Asiento Contable (o revise medios/deuda) antes de grabar.'
+            );
+        }
+
+        AsientoBalanceSupport::assertBalanceadoDesdePayload([
+            'debes' => $data['debeasientos'] ?? $data['debes'] ?? [],
+            'haberes' => $data['haberasientos'] ?? $data['haberes'] ?? [],
+        ], 'asiento de la orden de pago');
+    }
+
+    /**
+     * Rearma arrays de asiento (cuentacontable_ids / debe / haber) desde la operación.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function construirArraysAsientoDesdeOperacion(Pagoproveedor $pago, array $data): array
+    {
+        $datosCaja = [];
+        foreach ($data['cuentacaja_ids'] ?? [] as $i => $cid) {
+            $cid = (int) $cid;
+            $monto = NumeroDecimalLocalSupport::aFloat($data['montos'][$i] ?? 0);
+            if ($cid <= 0 || $monto <= 0) {
+                continue;
+            }
+            $datosCaja[] = [
+                'cuentacaja_ids' => $cid,
+                'moneda_ids' => (int) ($data['moneda_ids'][$i] ?? $pago->moneda_id ?? 1),
+                'montos' => $monto,
+                'cotizaciones' => NumeroDecimalLocalSupport::aFloat(
+                    $data['cotizaciones'][$i] ?? $pago->cotizacion ?? 1,
+                    1.0
+                ),
+                'observaciones' => (string) ($data['observaciones'][$i] ?? ''),
+            ];
+        }
+
+        $datosChequesEmitidos = [];
+        foreach ($data['montocheque_emitidos'] ?? [] as $i => $montoRaw) {
+            $monto = NumeroDecimalLocalSupport::aFloat($montoRaw);
+            if ($monto <= 0) {
+                continue;
+            }
+            $datosChequesEmitidos[] = [
+                'cuentacaja_ids' => (int) ($data['cuentacaja_emitido_ids'][$i] ?? 0),
+                'moneda_ids' => (int) ($data['moneda_emitido_ids'][$i] ?? $pago->moneda_id ?? 1),
+                'montos' => $monto,
+                'cotizaciones' => NumeroDecimalLocalSupport::aFloat(
+                    $data['cotizacioncheque_emitidos'][$i] ?? 1,
+                    1.0
+                ),
+                'fechapagos' => (string) ($data['fechapago_emitidos'][$i] ?? $pago->fecha?->format('Y-m-d') ?? ''),
+                'numerocheques' => (string) ($data['numerocheque_emitidos'][$i] ?? ''),
+            ];
+        }
+
+        $datosChequesRecibidos = [];
+        foreach ($data['montocheque_recibidos'] ?? [] as $i => $montoRaw) {
+            $monto = NumeroDecimalLocalSupport::aFloat($montoRaw);
+            if ($monto <= 0) {
+                continue;
+            }
+            $datosChequesRecibidos[] = [
+                'moneda_ids' => (int) ($data['monedacheque_recibido_ids'][$i] ?? $pago->moneda_id ?? 1),
+                'montos' => $monto,
+                'cotizaciones' => NumeroDecimalLocalSupport::aFloat(
+                    $data['cotizacioncheque_recibidos'][$i] ?? 1,
+                    1.0
+                ),
+            ];
+        }
+
+        $datosComprobantes = [];
+        foreach ($data['idcuentacorrientes'] ?? [] as $i => $ccId) {
+            $ccId = (int) $ccId;
+            $monto = NumeroDecimalLocalSupport::aFloat($data['montoaplicadocomprobantes'][$i] ?? 0);
+            if ($ccId <= 0 || $monto <= 0) {
+                continue;
+            }
+            $datosComprobantes[] = [
+                'proveedor_cuentacorriente_ids' => $ccId,
+                'montos' => $monto,
+                'moneda_ids' => (int) ($data['monedacomprobante_ids'][$i] ?? $pago->moneda_id ?? 1),
+                'cotizaciones' => NumeroDecimalLocalSupport::aFloat(
+                    $data['cotizacioncomprobantes'][$i] ?? $pago->cotizacion ?? 1,
+                    1.0
+                ),
+                'cotizacion_aplicadas' => NumeroDecimalLocalSupport::aFloat(
+                    $data['cotizacion_aplicada_dia'][$i] ?? $data['cotizacioncomprobantes'][$i] ?? 1,
+                    1.0
+                ),
+                'diferencias_cambio' => NumeroDecimalLocalSupport::aFloat($data['diferencias_cambio'][$i] ?? 0),
+            ];
+        }
+
+        $datosRetenciones = [];
+        foreach (
+            Pagoproveedor_Retencion::query()->where('pagoproveedor_id', $pago->id)->get() as $ret
+        ) {
+            $importe = abs((float) ($ret->importe ?? 0));
+            if ($importe <= 0) {
+                continue;
+            }
+            $datosRetenciones[] = [
+                'tiporetencion' => (string) $ret->tiporetencion,
+                'montos' => $importe,
+                'moneda_ids' => (int) ($ret->moneda_id ?: $pago->moneda_id ?: 1),
+                'cotizaciones' => (float) ($ret->cotizacion ?: $pago->cotizacion ?: 1),
+                'provincia_id' => $ret->provincia_id,
+            ];
+        }
+
+        $proveedorNombre = (string) (
+            $pago->proveedores->nombre
+            ?? Proveedor::query()->find((int) $pago->proveedor_id)?->nombre
+            ?? ''
+        );
+
+        $lineas = PagoproveedorAsientoArmadoSupport::armar(
+            $datosCaja,
+            [],
+            $datosChequesEmitidos,
+            $datosChequesRecibidos,
+            $datosComprobantes,
+            $datosRetenciones,
+            (int) $pago->empresa_id,
+            (int) $pago->proveedor_id,
+            $pago->fecha?->format('Y-m-d') ?? date('Y-m-d'),
+            $this->cuentacajaRepository,
+            $this->cuentacontableRepository,
+            $proveedorNombre,
+            (string) ($pago->numerotransaccion ?? ''),
+            (int) ($pago->moneda_id ?: 1),
+            (float) ($pago->cotizacion ?: 1),
+        );
+
+        $out = [
+            'cuentacontable_ids' => [],
+            'centrocostoasiento_ids' => [],
+            'monedaasiento_ids' => [],
+            'debeasientos' => [],
+            'haberasientos' => [],
+            'cotizacionasientos' => [],
+            'observacionasientos' => [],
+            'carga_cuentacontable_manuales' => [],
+        ];
+
+        foreach ($lineas as $linea) {
+            $out['cuentacontable_ids'][] = $linea['cuentacontable_id'];
+            $out['centrocostoasiento_ids'][] = $linea['centrocosto_id'] ?? 0;
+            $out['monedaasiento_ids'][] = $linea['moneda_id'] ?? 1;
+            $out['debeasientos'][] = $linea['debe'] === '' || $linea['debe'] === null ? '' : $linea['debe'];
+            $out['haberasientos'][] = $linea['haber'] === '' || $linea['haber'] === null ? '' : $linea['haber'];
+            $out['cotizacionasientos'][] = $linea['cotizacion'] ?? 1;
+            $out['observacionasientos'][] = $linea['observacion'] ?? '';
+            $out['carga_cuentacontable_manuales'][] = $linea['carga_cuentacontable_manual'] ?? 'N';
+        }
+
+        return $out;
     }
 
     /**
@@ -392,6 +622,27 @@ class PagoproveedorService
             throw new Exception('No hay tipo de transacción OPP configurado para el movimiento de caja de la OP.');
         }
 
+        // Una sola TC del pago (pago.c in_cotizacion) en medios de caja.
+        $fechaPago = $pago->fecha?->format('Y-m-d') ?? date('Y-m-d');
+        $cotPago = PagoproveedorAsientoArmadoSupport::cotizacionUnicaDelPago(
+            (int) ($pago->moneda_id ?: 1),
+            (float) ($pago->cotizacion ?: 1),
+            $fechaPago
+        );
+        if (abs((float) $pago->cotizacion - $cotPago) > 0.0001) {
+            $pago->cotizacion = $cotPago;
+            $pago->save();
+        }
+        $monedasCaja = array_values($payload['moneda_ids'] ?? []);
+        $cotsCaja = [];
+        foreach (array_values($payload['cuentacaja_ids'] ?? []) as $i => $_cid) {
+            $monLin = (int) ($monedasCaja[$i] ?? $pago->moneda_id ?? 1);
+            $cotsCaja[] = PagoproveedorAsientoArmadoSupport::cotizacionParaLinea($monLin, $cotPago);
+        }
+        if ($cotsCaja !== []) {
+            $payload['cotizaciones'] = $cotsCaja;
+        }
+
         $payload['empresa_id'] = $pago->empresa_id;
         $payload['fecha'] = $pago->fecha?->format('Y-m-d');
         $payload['caja_id'] = $pago->caja_id;
@@ -491,6 +742,8 @@ class PagoproveedorService
         $payload['haberes'] = $data['haberasientos'] ?? $data['haberes'] ?? [];
         $payload['cotizaciones'] = $data['cotizacionasientos'] ?? $data['cotizaciones'] ?? [];
         $payload['observaciones'] = $data['observacionasientos'] ?? $data['observaciones'] ?? [];
+        // Clave comprobante Anita (igual que IE OPP / a-movim MultiEmpresa): sin letra.
+        $payload = array_merge($payload, $this->referenciaComprobanteCtamov($pago));
 
         $asiento = $this->asientoRepository->create($payload);
         if ($asiento === 'Error' || ! $asiento) {
@@ -498,6 +751,41 @@ class PagoproveedorService
         }
         $this->asientoMovimientoRepository->create($payload, $asiento->id);
         $this->pagoproveedorRepository->update(['asiento_id' => $asiento->id], $pago->id);
+    }
+
+    /**
+     * tipo/letra/sucursal/nro para ctamov (tesmov/pago usan la misma clave).
+     *
+     * @return array{tipo: string, letra: string, sucursal: int, nro: int}
+     */
+    private function referenciaComprobanteCtamov(Pagoproveedor $pago): array
+    {
+        $tipo = strtoupper(substr(trim((string) ($pago->tipocomprobante ?: 'OPP')), 0, 3));
+        if ($tipo === '') {
+            $tipo = 'OPP';
+        }
+
+        $letra = (string) config('caja.ingresoegreso_anita_tesmov_letra', ' ');
+        if ($letra === '') {
+            $letra = ' ';
+        }
+
+        $empresaAnita = PagoproveedorAnitaNumeracionSupport::codigoEmpresaAnita((int) $pago->empresa_id);
+        if ($empresaAnita <= 0) {
+            $empresaAnita = (int) $pago->empresa_id;
+        }
+
+        $sucursalCfg = config('caja.ingresoegreso_anita_tesmov_sucursal');
+        $sucursal = $sucursalCfg === null || $sucursalCfg === ''
+            ? $empresaAnita
+            : (int) $sucursalCfg;
+
+        return [
+            'tipo' => $tipo,
+            'letra' => $letra,
+            'sucursal' => $sucursal,
+            'nro' => (int) $pago->numerotransaccion,
+        ];
     }
 
     private function registrarEstado(Pagoproveedor $pago, string $estado, string $observacion): void
@@ -759,7 +1047,7 @@ class PagoproveedorService
                 $pago = $this->pagoproveedorRepository->create([
                     'empresa_id' => $empresaId,
                     'tipocomprobante' => (string) config('pagoproveedor.tipocomprobante_default', 'OPP'),
-                    'letra' => (string) config('pagoproveedor.letra_default', 'A'),
+                    'letra' => (string) config('pagoproveedor.letra_default', ' '),
                     'sucursal' => $sucursal,
                     'numerotransaccion' => (string) $numero,
                     'fecha' => $fecha,

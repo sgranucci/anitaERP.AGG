@@ -19,7 +19,8 @@ return [
     ),
 
     'tipocomprobante_default' => 'OPP',
-    'letra_default' => 'A',
+    /** Anita MultiEmpresa (a-movim/pago) usa espacio; no grabar letra A. */
+    'letra_default' => ' ',
     'sucursal_default' => 1,
 
     /** Modo cotización default al abrir el formulario. */

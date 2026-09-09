@@ -136,6 +136,12 @@ class IngresoEgresoSolicitudpagoSupport
         return $tipo ? (int) $tipo->id : 0;
     }
 
+    /** Resuelve tipo OPP/OPA (u otra abreviatura) por código Anita. */
+    public static function tipotransaccionCajaIdPorAbreviaturaPublica(string $abrev): int
+    {
+        return self::tipotransaccionCajaIdPorAbreviatura(strtoupper(trim($abrev)));
+    }
+
     /**
      * @param  array<string, mixed>  $data
      */

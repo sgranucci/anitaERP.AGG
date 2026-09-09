@@ -81,7 +81,7 @@ class PrecargaComprobanteProveedorListadoFiltros
             ]);
         }
 
-        $valor = FiltrosListadoRequest::valorBusqueda($request, $busquedaRuta);
+        $valor = self::normalizarValorBusqueda(FiltrosListadoRequest::valorBusqueda($request, $busquedaRuta));
         $busquedaRapida = $request->boolean('filtro_busqueda_rapida');
 
         $modo = (string) $request->input('filtro_modo', self::MODO_TODOS);
@@ -485,6 +485,20 @@ class PrecargaComprobanteProveedorListadoFiltros
         }
 
         return null;
+    }
+
+    private static function normalizarValorBusqueda(string $valor): string
+    {
+        $valor = trim($valor);
+        if ($valor === '') {
+            return '';
+        }
+        // Permite buscar "#460" igual que "460" (ID / número).
+        if (preg_match('/^#(\d+)$/', $valor, $m) === 1) {
+            return $m[1];
+        }
+
+        return $valor;
     }
 
     private static function patronLike(string $operador, string $valor): string

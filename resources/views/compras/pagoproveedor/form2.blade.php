@@ -1,20 +1,39 @@
 @php
     $movCaja = ($data->caja_movimientos ?? collect())->first();
     $cuentasCaja = $movCaja->caja_movimiento_cuentacajas ?? collect();
+    // Tras error de validación: rehidratar cuentas desde old() para no perder el armado.
+    if ($cuentasCaja->isEmpty() && old('cuentacaja_ids')) {
+        $oldCuentas = [];
+        foreach ((array) old('cuentacaja_ids', []) as $i => $cid) {
+            $cid = (int) $cid;
+            if ($cid <= 0) {
+                continue;
+            }
+            $cc = \App\Models\Caja\Cuentacaja::query()->find($cid);
+            $oldCuentas[] = (object) [
+                'cuentacaja_id' => $cid,
+                'moneda_id' => old('moneda_ids.'.$i, $cc->moneda_id ?? 1),
+                'monto' => old('montos.'.$i, 0),
+                'cotizacion' => old('cotizaciones.'.$i, 1),
+                'observacion' => old('observaciones.'.$i, ''),
+                'cuentacajas' => $cc,
+            ];
+        }
+        $cuentasCaja = collect($oldCuentas);
+    }
 @endphp
 <div class="card form2" style="display: none">
     <h3>Cuentas de caja</h3>
     <div class="card-body">
         <div class="border rounded p-2 mb-3" style="background:#f8f9fa;color:#1b2631;" id="pp-ref-cuentas-caja">
-            <strong>Referencia de lo aplicado:</strong>
-            <span id="pp-ref-aplicado-txt">0,00</span>
-            <span class="text-muted"> (equiv. OP, pantalla Deuda)</span>
-            · Total esta pantalla:
-            <strong id="pp-ref-cuentas-txt">0,00</strong>
-            · Falta / sobra:
-            <strong id="pp-ref-falta-txt">0,00</strong>
+            <strong>Liquidación:</strong>
+            Aplicado <span id="pp-ref-aplicado-txt">0,00</span>
+            − Retenciones <span id="pp-ref-retenciones-txt">0,00</span>
+            = A desembolsar <strong id="pp-ref-desembolsar-txt">0,00</strong>
+            · Medios <strong id="pp-ref-cuentas-txt">0,00</strong>
+            · Cuadra <strong id="pp-ref-falta-txt">0,00</strong>
             <div class="small text-muted mb-0 mt-1">
-                Cargue acá el desembolso. Las retenciones restan en el asiento, no en esta grilla.
+                Cargue en esta grilla el neto a desembolsar (aplicado − retenciones). Las retenciones van al asiento en Haber.
             </div>
         </div>
         <table class="table table-sm table-bordered" id="cuenta-table">
@@ -40,12 +59,12 @@
                             <button type="button" title="Consulta cuentas" style="padding:1;" class="btn-accion-tabla consultacuentacaja tooltipsC">
                                 <i class="fa fa-search text-primary"></i>
                             </button>
-                            <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigo form-control" name="codigos[]" value="{{ $cuenta->cuentacajas->codigo ?? '' }}">
-                            <input type="hidden" class="codigo_previo" name="codigo_previos[]" value="{{ $cuenta->cuentacajas->codigo ?? '' }}">
+                            <input type="text" style="WIDTH: 100px;HEIGHT: 38px" class="codigo form-control" name="codigos[]" value="{{ $cuenta->cuentacajas?->codigo ?? '' }}">
+                            <input type="hidden" class="codigo_previo" name="codigo_previos[]" value="{{ $cuenta->cuentacajas?->codigo ?? '' }}">
                         </div>
                     </td>
                     <td>
-                        <input type="text" style="WIDTH: 250px; HEIGHT: 38px" class="nombre form-control" name="nombres[]" value="{{ $cuenta->cuentacajas->nombre ?? '' }}" readonly>
+                        <input type="text" style="WIDTH: 250px; HEIGHT: 38px" class="nombre form-control" name="nombres[]" value="{{ $cuenta->cuentacajas?->nombre ?? '' }}" readonly>
                     </td>
                     <td>
                         <select name="moneda_ids[]" class="moneda form-control required" required>

@@ -23,6 +23,14 @@
                         : ($data->usuarios->nombre ?? $data->usuarios->usuario ?? '')
                 );
             @endphp
+            @include('includes.form-empresa-asignada', [
+                'empresa_query' => $empresa_query ?? collect(),
+                'empresa_id' => $empresa_id ?? ($data->empresa_id ?? session('empresa_id')),
+                'col_label' => 'col-lg-3 control-label text-right pr-2',
+                'col_input' => 'col-lg-7',
+                'solo_lectura' => ! $esAltaTicket,
+                'required' => true,
+            ])
             <div class="form-group row">
                 <label for="nombre_usuario_genero" class="col-lg-3 control-label text-right pr-2">Gener&oacute; usuario</label>
                 <div class="col-lg-7">

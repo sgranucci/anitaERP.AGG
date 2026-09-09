@@ -40,9 +40,11 @@ final class ComprobanteProveedorFlujoOcComFacSupport
     }
 
     /**
-     * Con flujo estricto: si hay COM disponible, debe facturarse contra COM
-     * (también en OC anticipada que ya recibió).
-     * Sin COM: solo se admite factura anticipada (ASIGNA_OC) si la OC es anticipada.
+     * Con flujo estricto:
+     * - OC no anticipada + COM → factura contra COM.
+     * - OC anticipada sin COM → factura anticipada (ASIGNA_OC); puede haber varias.
+     * - OC anticipada con COM → Anita (a-compprov.c) pregunta S/N si aplicar a recepciones
+     *   o seguir anticipada; acá no forzamos: el operador elige el modo.
      *
      * Contrato vigente: sobrescribe la política (ruta con/sin recepción del contrato).
      *
@@ -52,6 +54,7 @@ final class ComprobanteProveedorFlujoOcComFacSupport
      *     tiene_com: bool,
      *     debe_asignar_com: bool,
      *     permite_factura_anticipada: bool,
+     *     anticipada_elige_modo: bool,
      *     bloquea_sin_com: bool,
      *     contrato_es: bool,
      *     contrato_vigente: bool,
@@ -67,20 +70,26 @@ final class ComprobanteProveedorFlujoOcComFacSupport
         $exige = $oc ? self::exigeFlujo($empresaId) : false;
         $anticipada = self::esOcAnticipada($oc);
 
+        $bloqueaSinCom = false;
+        $permiteAnticipada = false;
+        $anticipadaEligeModo = false;
         $debeAsignarCom = $tieneComDisponibles;
-        if ($exige && ! $tieneComDisponibles && ! $anticipada) {
-            $bloqueaSinCom = true;
+
+        if ($exige) {
+            if ($anticipada && ! $tieneComDisponibles) {
+                $permiteAnticipada = true;
+                $debeAsignarCom = false;
+            } elseif ($anticipada && $tieneComDisponibles) {
+                // a-compprov.c: pregunta si aplicar a OC anticipada con recepciones.
+                $anticipadaEligeModo = true;
+                $debeAsignarCom = false;
+            } elseif (! $tieneComDisponibles) {
+                $bloqueaSinCom = true;
+                $debeAsignarCom = false;
+            } else {
+                $debeAsignarCom = true;
+            }
         } else {
-            $bloqueaSinCom = false;
-        }
-
-        $permiteAnticipada = $exige && $anticipada && ! $tieneComDisponibles;
-
-        if ($exige && ! $tieneComDisponibles && $anticipada) {
-            $debeAsignarCom = false;
-        } elseif ($exige && $tieneComDisponibles) {
-            $debeAsignarCom = true;
-        } elseif (! $exige) {
             $debeAsignarCom = $tieneComDisponibles;
         }
 
@@ -91,10 +100,12 @@ final class ComprobanteProveedorFlujoOcComFacSupport
                 $debeAsignarCom = true;
                 $bloqueaSinCom = ! $tieneComDisponibles;
                 $permiteAnticipada = false;
+                $anticipadaEligeModo = false;
             } else {
                 $debeAsignarCom = false;
                 $bloqueaSinCom = false;
                 $permiteAnticipada = false;
+                $anticipadaEligeModo = false;
             }
         }
 
@@ -104,6 +115,7 @@ final class ComprobanteProveedorFlujoOcComFacSupport
             'tiene_com' => $tieneComDisponibles,
             'debe_asignar_com' => $debeAsignarCom,
             'permite_factura_anticipada' => $permiteAnticipada,
+            'anticipada_elige_modo' => $anticipadaEligeModo,
             'bloquea_sin_com' => $bloqueaSinCom,
             'contrato_es' => (bool) ($contrato['es_contrato'] ?? false),
             'contrato_vigente' => (bool) ($contrato['aplica'] ?? false),
@@ -130,6 +142,20 @@ final class ComprobanteProveedorFlujoOcComFacSupport
 
         if ($politica['permite_factura_anticipada'] ?? false) {
             return ComprobanteProveedorModoCarga::ASIGNA_OC;
+        }
+
+        // Anticipada con COM: Anita pregunta; sugerimos COM y dejamos el modo editable.
+        if (($politica['anticipada_elige_modo'] ?? false)
+            || (($politica['es_anticipada'] ?? false) && ($politica['tiene_com'] ?? false))) {
+            $modo = (string) ($modoActual ?? '');
+            if (in_array($modo, [
+                ComprobanteProveedorModoCarga::ASIGNA_RECEPCION,
+                ComprobanteProveedorModoCarga::ASIGNA_OC,
+            ], true)) {
+                return $modo;
+            }
+
+            return ComprobanteProveedorModoCarga::ASIGNA_RECEPCION;
         }
 
         $modo = (string) ($modoActual ?? '');

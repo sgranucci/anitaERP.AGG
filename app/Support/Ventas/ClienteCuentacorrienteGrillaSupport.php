@@ -86,4 +86,56 @@ final class ClienteCuentacorrienteGrillaSupport
 
         return can('listar-cobranza', false);
     }
+
+    /**
+     * Destino de edición del movimiento (cobranza o factura). Prioriza cobranza.
+     *
+     * @return array{tipo: string, id: int, titulo: string, route: string}|null
+     */
+    public static function destinoEdicion(Cliente_Cuentacorriente $fila): ?array
+    {
+        if ((int) ($fila->cobranza_id ?? 0) > 0) {
+            return [
+                'tipo' => 'cobranza',
+                'id' => (int) $fila->cobranza_id,
+                'titulo' => 'Editar '.self::etiquetaComprobante($fila),
+                'route' => 'editar_cobranza',
+            ];
+        }
+
+        if ((int) ($fila->venta_id ?? 0) > 0) {
+            return [
+                'tipo' => 'venta',
+                'id' => (int) $fila->venta_id,
+                'titulo' => 'Editar '.self::etiquetaComprobante($fila),
+                'route' => 'editar_factura',
+            ];
+        }
+
+        return null;
+    }
+
+    public static function urlEdicion(Cliente_Cuentacorriente $fila): ?string
+    {
+        $destino = self::destinoEdicion($fila);
+        if ($destino === null) {
+            return null;
+        }
+
+        return route($destino['route'], ['id' => $destino['id']]);
+    }
+
+    public static function puedeEditarComprobante(Cliente_Cuentacorriente $fila): bool
+    {
+        $destino = self::destinoEdicion($fila);
+        if ($destino === null) {
+            return false;
+        }
+
+        if ($destino['tipo'] === 'cobranza') {
+            return can('editar-cobranza', false) || can('listar-cobranza', false);
+        }
+
+        return can('editar-factura', false) || can('listar-factura', false);
+    }
 }

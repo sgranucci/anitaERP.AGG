@@ -38,6 +38,24 @@ final class PagoproveedorListadoFila
         return $this->origen === self::ORIGEN_IE_OPP;
     }
 
+    public function conCuentasCaja(string $cuentasCaja): self
+    {
+        return new self(
+            origen: $this->origen,
+            id: $this->id,
+            fecha: $this->fecha,
+            etiqueta: $this->etiqueta,
+            nombreEmpresa: $this->nombreEmpresa,
+            nombreProveedor: $this->nombreProveedor,
+            monto: $this->monto,
+            monedaAbreviatura: $this->monedaAbreviatura,
+            estado: $this->estado,
+            detalle: $this->detalle,
+            solicitudpagoId: $this->solicitudpagoId,
+            cuentasCaja: trim($cuentasCaja),
+        );
+    }
+
     public function etiquetaComprobante(): string
     {
         return $this->etiqueta;
@@ -95,15 +113,17 @@ final class PagoproveedorListadoFila
         }
 
         $origen = (string) $row->origen;
-        $etiqueta = $origen === self::ORIGEN_IE_OPP
-            ? 'OPP '.(string) ($row->numerotransaccion ?? '')
-            : sprintf(
-                '%s %s%04d-%s',
-                (string) ($row->tipocomprobante ?: 'OP'),
-                (string) ($row->letra ?? ''),
-                (int) ($row->sucursal ?? 0),
-                (string) ($row->numerotransaccion ?? '')
-            );
+        $tipo = (string) ($row->tipocomprobante ?: ($origen === self::ORIGEN_IE_OPP ? 'OPP' : 'OP'));
+        $sucursal = (int) ($row->sucursal ?? 0);
+        if ($sucursal <= 0) {
+            $sucursal = (int) ($row->empresa_id ?? 0);
+        }
+        $etiqueta = sprintf(
+            '%s %d-%s',
+            $tipo,
+            $sucursal,
+            (string) ($row->numerotransaccion ?? '')
+        );
 
         return new self(
             origen: $origen,

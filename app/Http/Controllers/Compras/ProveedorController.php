@@ -1055,16 +1055,28 @@ class ProveedorController extends Controller
         );
     }
 
-    public function editarCuentaCorriente($cuentacorriente_id)
+    public function editarCuentaCorriente(Request $request, $cuentacorriente_id)
     {
         can('listar-cuentacorriente-proveedor');
 
         $cuentacorriente = $this->proveedor_cuentacorrienteRepository->find($cuentacorriente_id);
 
+        $params = [];
+        if ($request->boolean('embed')) {
+            $params['embed'] = 1;
+        }
+
+        // OP primero: en imports Anita el crédito puede tener también factura linkeada.
+        if ((int) ($cuentacorriente->pagoproveedor_id ?? 0) > 0) {
+            return redirect()->route('editar_pagoproveedor', array_merge([
+                'id' => (int) $cuentacorriente->pagoproveedor_id,
+            ], $params));
+        }
+
         if ((int) ($cuentacorriente->comprobante_proveedor_id ?? 0) > 0) {
-            return redirect()->route('editar_comprobante_proveedor', [
-                'id' => $cuentacorriente->comprobante_proveedor_id,
-            ]);
+            return redirect()->route('editar_comprobante_proveedor', array_merge([
+                'id' => (int) $cuentacorriente->comprobante_proveedor_id,
+            ], $params));
         }
 
         return 'No encontro movimiento a editar';

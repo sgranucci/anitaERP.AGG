@@ -7,17 +7,32 @@
     $esPadreAbierto = $ramaActiva && $esActivo !== 'active';
     $claseLink = trim($esActivo . ($esPadreAbierto ? ' menu-parent-open' : ''));
     $icono = $item['icono'] ?? 'fa-circle';
+    $esBandejaTicket = $url === 'ticket/bandeja';
+    $mostrarBadgeBandeja = $esBandejaTicket && can('listar-bandeja-ticket', false);
 @endphp
 
 @if (! $tieneSubmenu)
-    <li class="nav-item nav-menu-level-{{ $nivel }} anita-menu-leaf">
-        <a href="{{ url($url) }}" class="nav-link {{ $claseLink }}">
+    <li class="nav-item nav-menu-level-{{ $nivel }} anita-menu-leaf{{ $mostrarBadgeBandeja ? ' anita-menu-leaf-has-badge' : '' }}">
+        <a href="{{ url($url) }}"
+           class="nav-link {{ $claseLink }}{{ $mostrarBadgeBandeja ? ' js-bandeja-ticket-nav' : '' }}"
+           @if ($mostrarBadgeBandeja)
+               data-bandeja-ticket-contador
+               data-contador-url="{{ urlAppCarpeta('ticket/bandeja/contador') }}"
+               data-count="{{ (int) ($bandejaTicketCount ?? 0) }}"
+           @endif
+        >
             @if ($nivel === 0)
                 <i class="nav-icon fa {{ $icono }}"></i>
             @else
                 <i class="nav-icon fas fa-circle nav-icon-dot"></i>
             @endif
-            <p>{{ $item['nombre'] }}</p>
+            <p>
+                {{ $item['nombre'] }}
+                @if ($mostrarBadgeBandeja)
+                    <span class="badge badge-warning anita-menu-count-badge js-bandeja-ticket-badge{{ ($bandejaTicketCount ?? 0) > 0 ? '' : ' d-none' }}"
+                          title="Tickets en cola sin asignar">{{ ($bandejaTicketCount ?? 0) > 99 ? '99+' : (int) ($bandejaTicketCount ?? 0) }}</span>
+                @endif
+            </p>
         </a>
         @auth
             @if ($url !== '')

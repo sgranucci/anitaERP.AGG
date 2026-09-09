@@ -7,8 +7,8 @@
 <style>
     #tabla-paginada th.col-acciones-cc,
     #tabla-paginada td.col-acciones-cc {
-        width: 8.5rem;
-        min-width: 8.5rem;
+        width: 10rem;
+        min-width: 10rem;
         white-space: nowrap;
         text-align: center;
         vertical-align: middle;
@@ -24,6 +24,7 @@
 <script src="{{asset("assets/pages/scripts/compras/cuentacorriente/filtro.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/cuentacorriente/consulta.js")}}" type="text/javascript"></script>
 <script src="{{asset("assets/pages/scripts/compras/cuentacorriente/modo.js")}}" type="text/javascript"></script>
+<script src="{{ asset('assets/pages/scripts/includes/erp-workspace-panel.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/includes/erp-workspace-panel.js')) ?: time() }}" type="text/javascript"></script>
 @endsection
 
 @php

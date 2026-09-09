@@ -9,10 +9,18 @@
         $operadoresJson[$key] = PrecargaComprobanteProveedorListadoFiltros::operadoresParaCampo($key);
     }
     $tieneCriteriosPanel = PrecargaComprobanteProveedorListadoFiltros::tieneCriteriosAplicados($f);
-    $limpiarUrlPanel = $limpiarUrl ?? route('precarga_comprobante_proveedor');
+    $limpiarUrlPanel = $limpiarUrl ?? route('precarga_comprobante_proveedor', PrecargaComprobanteProveedorListadoFiltros::paraQueryStringEstado($f));
+    $estadoScope = (string) ($f['estado_scope'] ?? \App\Support\Compras\PrecargaComprobanteEstados::PENDIENTE);
 @endphp
 <div class="collapse border-bottom" id="panel-filtros-precarga-comprobante-proveedor" data-listado-filtros-panel>
     <input type="hidden" name="filtro_busqueda_rapida" id="filtro_busqueda_rapida" value="">
+    @if ($estadoScope === 'todas')
+        <input type="hidden" name="estado_todas" value="1">
+    @elseif ($estadoScope === \App\Support\Compras\PrecargaComprobanteEstados::GENERADA)
+        <input type="hidden" name="estado" value="{{ \App\Support\Compras\PrecargaComprobanteEstados::GENERADA }}">
+    @elseif ($estadoScope === \App\Support\Compras\PrecargaComprobanteEstados::CARGADA_ANITA)
+        <input type="hidden" name="estado" value="{{ \App\Support\Compras\PrecargaComprobanteEstados::CARGADA_ANITA }}">
+    @endif
     <div class="card-body bg-light py-2 text-body">
         @if($tieneCriteriosPanel)
             <div class="mb-2">

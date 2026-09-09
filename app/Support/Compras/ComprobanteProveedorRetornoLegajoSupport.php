@@ -5,7 +5,8 @@ namespace App\Support\Compras;
 use Illuminate\Http\Request;
 
 /**
- * Si se entra a cargar la FC desde el legajo (bandeja u OC), al terminar se vuelve ahí.
+ * Si se entra a cargar la FC desde legajo, OC o precarga, al terminar se vuelve ahí
+ * (salvo grabación provisoria desde precarga, que va al listado de comprobantes).
  */
 final class ComprobanteProveedorRetornoLegajoSupport
 {
@@ -13,11 +14,15 @@ final class ComprobanteProveedorRetornoLegajoSupport
 
     public const ORIGEN_OC = 'oc';
 
+    public const ORIGEN_PRECARGA = 'precarga';
+
     public static function origenDesdeRequest(Request $request): ?string
     {
         $origen = trim((string) $request->input('origen', $request->query('origen', '')));
 
-        return in_array($origen, [self::ORIGEN_BANDEJA, self::ORIGEN_OC], true) ? $origen : null;
+        return in_array($origen, [self::ORIGEN_BANDEJA, self::ORIGEN_OC, self::ORIGEN_PRECARGA], true)
+            ? $origen
+            : null;
     }
 
     public static function ordencompraIdDesdeRequest(Request $request, ?int $fallback = null): int
@@ -42,8 +47,11 @@ final class ComprobanteProveedorRetornoLegajoSupport
         if ($origen === null) {
             return [];
         }
-        $ocId = self::ordencompraIdDesdeRequest($request, $ordencompraId);
         $params = ['origen' => $origen];
+        if ($origen === self::ORIGEN_PRECARGA) {
+            return $params;
+        }
+        $ocId = self::ordencompraIdDesdeRequest($request, $ordencompraId);
         if ($ocId > 0) {
             $params['ordencompra_id'] = $ocId;
         }
@@ -57,6 +65,9 @@ final class ComprobanteProveedorRetornoLegajoSupport
         if ($origen === null) {
             return null;
         }
+        if ($origen === self::ORIGEN_PRECARGA) {
+            return route('precarga_comprobante_proveedor');
+        }
         $ocId = self::ordencompraIdDesdeRequest($request, $ordencompraId);
         if ($origen === self::ORIGEN_OC && $ocId > 0) {
             return route('editar_ordencompra', ['id' => $ocId]);
@@ -68,7 +79,7 @@ final class ComprobanteProveedorRetornoLegajoSupport
     }
 
     /**
-     * @return array{origen: string, url: string}|null
+     * @return array{origen: string, url: string, etiqueta: string}|null
      */
     public static function paraVista(Request $request, ?int $ordencompraId = null): ?array
     {
@@ -78,6 +89,10 @@ final class ComprobanteProveedorRetornoLegajoSupport
             return null;
         }
 
-        return ['origen' => $origen, 'url' => $url];
+        return [
+            'origen' => $origen,
+            'url' => $url,
+            'etiqueta' => $origen === self::ORIGEN_PRECARGA ? 'Volver a precargas' : 'Volver al legajo',
+        ];
     }
 }

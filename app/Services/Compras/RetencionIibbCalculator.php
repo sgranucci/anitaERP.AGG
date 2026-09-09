@@ -134,6 +134,7 @@ class RetencionIibbCalculator
             $jurisdiccion,
             $provinciaId,
             $condicionId,
+            $provincia?->nombre !== null ? (string) $provincia->nombre : null,
         ));
     }
 

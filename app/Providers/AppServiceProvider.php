@@ -77,10 +77,13 @@ class AppServiceProvider extends ServiceProvider
 
             $misAprobacionesCount = 0;
             $puedeVerMisAprobaciones = false;
+            $puedeVerBandejaTicket = false;
+            $bandejaTicketCount = 0;
             $anitaNotifUnread = 0;
             // Misma estrategia que Cambia password / menú: url()/route() respetan el root real
             // (IP con /anitaERP/public o vhost anitaERP con DocumentRoot=public).
             $urlMisAprobaciones = url('mis-aprobaciones');
+            $urlBandejaTicket = url('ticket/bandeja');
             if (auth()->check()) {
                 try {
                     $bandeja = app(\App\Services\Configuracion\UserTaskBandejaService::class);
@@ -91,6 +94,15 @@ class AppServiceProvider extends ServiceProvider
                 } catch (\Throwable) {
                     $misAprobacionesCount = 0;
                     $puedeVerMisAprobaciones = false;
+                }
+                try {
+                    $puedeVerBandejaTicket = can('listar-bandeja-ticket', false);
+                    if ($puedeVerBandejaTicket) {
+                        $bandejaTicketCount = app(\App\Services\Ticket\TicketBandejaService::class)->contarBadge();
+                    }
+                } catch (\Throwable) {
+                    $puedeVerBandejaTicket = false;
+                    $bandejaTicketCount = 0;
                 }
                 try {
                     if (\Illuminate\Support\Facades\Schema::hasTable('anita_notificacion')) {
@@ -104,7 +116,15 @@ class AppServiceProvider extends ServiceProvider
             $view->with('misAprobacionesCount', $misAprobacionesCount);
             $view->with('urlMisAprobaciones', $urlMisAprobaciones);
             $view->with('puedeVerMisAprobaciones', $puedeVerMisAprobaciones);
+            $view->with('puedeVerBandejaTicket', $puedeVerBandejaTicket);
+            $view->with('bandejaTicketCount', $bandejaTicketCount);
+            $view->with('urlBandejaTicket', $urlBandejaTicket);
             $view->with('anitaNotifUnread', $anitaNotifUnread);
+
+            // Disponible también en el menú lateral (aside se renderiza después del header).
+            View::share('puedeVerBandejaTicket', $puedeVerBandejaTicket);
+            View::share('bandejaTicketCount', $bandejaTicketCount);
+            View::share('urlBandejaTicket', $urlBandejaTicket);
         });
         View::composer(['ventas.cliente.editar'], function ($view) {
             $view->with('suitecrmHabilitado', \App\Support\SuitecrmPermiso::integracionActiva());

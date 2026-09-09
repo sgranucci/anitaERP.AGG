@@ -15,9 +15,11 @@ use App\Services\Compras\PrecargaComprobanteMarcarCargadaAnitaService;
 use App\Services\Compras\ComprobanteProveedorPdfIaService;
 use App\Support\Compras\PrecargaRecepcionErrorRegistrar;
 use App\Support\Compras\ComprobanteProveedorConceptosIvaCoherenciaSupport;
+use App\Support\Compras\ComprobanteProveedorRetornoLegajoSupport;
 use App\Support\Compras\PrecargaComprobanteEstados;
 use App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros;
 use App\Support\Compras\PrecargaFacturaScanPathResolver;
+use App\Support\Listado\QueryRetornoListado;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
@@ -208,7 +210,10 @@ class Precarga_Comprobante_ProveedorController extends Controller
             $mensaje = (string) ($resultado['message'] ?? 'Precarga registrada desde PDF+IA.');
             // No grabar comprobante hasta Guardar: abrir alta prellenada desde la precarga.
             $redirect = can('crear-comprobante-proveedor', false)
-                ? route('crear_comprobante_proveedor', ['precarga_id' => $precargaId])
+                ? route('crear_comprobante_proveedor', [
+                    'precarga_id' => $precargaId,
+                    'origen' => ComprobanteProveedorRetornoLegajoSupport::ORIGEN_PRECARGA,
+                ])
                 : route('editar_precarga_comprobante_proveedor', ['id' => $precargaId]);
             if (can('crear-comprobante-proveedor', false)) {
                 $mensaje .= ' Se abrió el alta del comprobante (no se graba hasta Guardar).';
@@ -322,15 +327,21 @@ class Precarga_Comprobante_ProveedorController extends Controller
      *
      * @return \Illuminate\Http\Response
      */
-    public function crear()
+    public function crear(Request $request)
     {
         can('crear-precarga-proveedores');
 
         $empresa_query = $this->empresaRepository->allFiltrado();
         $tipotransaccion_compra_query = $this->tipotransaccion_compraRepository->all('*');
         $concepto_ivacompra_query = $this->concepto_ivacompraRepository->all();
+        $retornoListadoQuery = $this->queryRetornoListado($request);
 
-        return view('compras.precarga_comprobante_proveedor.crear', compact('empresa_query', 'tipotransaccion_compra_query', 'concepto_ivacompra_query'));
+        return view('compras.precarga_comprobante_proveedor.crear', compact(
+            'empresa_query',
+            'tipotransaccion_compra_query',
+            'concepto_ivacompra_query',
+            'retornoListadoQuery'
+        ));
     }
 
     /**
@@ -356,8 +367,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
                 ->with('errores', ['No se pudo guardar la precarga: '.$e->getMessage()]);
         }
 
-        return redirect('compras/precarga_comprobante_proveedor')
-            ->with('mensaje', 'Precarga guardada y sincronizada con Anita.');
+        return $this->redirectIndexConMensaje($request, 'Precarga guardada y sincronizada con Anita.');
     }
 
     /**
@@ -390,6 +400,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
         $concepto_ivacompra_query = $this->concepto_ivacompraRepository->all();
         $puedeActualizar = can('actualizar-precarga-proveedores', false);
         $soloLectura = $soloConsulta && ! $puedeActualizar;
+        $retornoListadoQuery = $this->queryRetornoListado($request);
 
         return view('compras.precarga_comprobante_proveedor.editar', compact(
             'data',
@@ -398,7 +409,8 @@ class Precarga_Comprobante_ProveedorController extends Controller
             'concepto_ivacompra_query',
             'soloConsulta',
             'soloLectura',
-            'puedeActualizar'
+            'puedeActualizar',
+            'retornoListadoQuery'
         ));
     }
 
@@ -423,12 +435,10 @@ class Precarga_Comprobante_ProveedorController extends Controller
             return response()->json(['mensaje' => 'ok', 'detalle' => $resultado['mensaje']]);
         }
 
-        return redirect()
-            ->route('precarga_comprobante_proveedor')
-            ->with('mensaje', $resultado['mensaje']);
+        return $this->redirectIndexConMensaje($request, $resultado['mensaje']);
     }
 
-    public function detectarCargadasEnAnita()
+    public function detectarCargadasEnAnita(Request $request)
     {
         can('editar-precarga-proveedores');
 
@@ -439,12 +449,13 @@ class Precarga_Comprobante_ProveedorController extends Controller
             );
         } catch (\Throwable $e) {
             return redirect()
-                ->route('precarga_comprobante_proveedor')
+                ->route('precarga_comprobante_proveedor', $this->queryRetornoListado($request))
                 ->with('errores', [$e->getMessage()]);
         }
 
-        $params = [];
+        $params = $this->queryRetornoListado($request);
         if (($resultado['marcadas'] ?? 0) > 0) {
+            unset($params['estado'], $params['estado_todas']);
             $params['estado'] = PrecargaComprobanteEstados::CARGADA_ANITA;
         }
 
@@ -488,8 +499,7 @@ class Precarga_Comprobante_ProveedorController extends Controller
                 ->with('errores', ['No se pudo actualizar la precarga en Anita: '.$e->getMessage()]);
         }
 
-        return redirect('compras/precarga_comprobante_proveedor')
-            ->with('mensaje', 'Precarga actualizada y sincronizada con Anita.');
+        return $this->redirectIndexConMensaje($request, 'Precarga actualizada y sincronizada con Anita.');
     }
 
     private function guardarConceptosPrecarga(Request $request, int $precargaId): void
@@ -550,5 +560,20 @@ class Precarga_Comprobante_ProveedorController extends Controller
         }
 
         return response()->json(['mensaje' => 'ng', 'error' => 'No se pudo eliminar la precarga.']);
+    }
+
+    /**
+     * @return array<string, string|int>
+     */
+    private function queryRetornoListado(Request $request): array
+    {
+        return QueryRetornoListado::desdeRequestSiIndex($request, PrecargaComprobanteProveedorListadoFiltros::class);
+    }
+
+    private function redirectIndexConMensaje(Request $request, string $mensaje)
+    {
+        return redirect()
+            ->route('precarga_comprobante_proveedor', $this->queryRetornoListado($request))
+            ->with('mensaje', $mensaje);
     }
 }

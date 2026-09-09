@@ -30,6 +30,7 @@
 <div id="cp-bloque-recepciones-com" class="mt-2"
      data-tolerancia-pct="{{ $toleranciaPct }}"
      data-importe-ref="{{ $importeRef }}"
+     data-ya-facturado="{{ (float) ($legajo_ya_facturado_importe ?? 0) }}"
      data-cotizacion-factura="{{ $cotizacionFactura }}"
      data-es-me="{{ $esMe ? '1' : '0' }}">
     <div class="card card-outline card-info mb-3">
@@ -48,8 +49,14 @@
                     <strong>Obligatorio</strong> porque el legajo tiene COM disponible (paso de Compras a Cuentas a Pagar).
                 @endif
                 Al guardar se controla cotización (ME) y tolerancia de importe vs provisión COM
+                <em>disponible</em>
                 ({{ number_format($toleranciaPct, 2, ',', '.') }}% según centro de costo de la OC; además ±$0,05).
                 La comparación se hace en la moneda de la factura ({{ $monedaFacturaNombre }}).
+                @if ((float) ($legajo_ya_facturado_importe ?? 0) > 0.005)
+                    Se descuenta lo ya facturado en el legajo
+                    ({{ number_format((float) $legajo_ya_facturado_importe, 2, ',', '.') }}),
+                    igual que Anita resta lo aplicado en <code>aplicped</code>.
+                @endif
                 Al contabilizar: el asiento de la recepción no se modifica; la factura debita la provisión (neto COM),
                 impuestos y —si el neto supera la COM— la diferencia prorrateada en cuentas de artículos; el haber va a proveedores.
             </p>
@@ -287,8 +294,14 @@
 <div class="alert alert-info mt-3" id="cp-bloque-factura-anticipada">
     <i class="fa fa-info-circle"></i>
     <strong>Factura anticipada:</strong> la OC es anticipada y todavía no hay COM con provisión.
-    El neto irá a la cuenta de anticipo. Puede cargar más de una factura anticipada en este legajo;
-    cuando exista recepción COM, las siguientes facturas deberán asociarla.
+    El neto irá a la cuenta de anticipo. Puede cargar más de una factura anticipada en este legajo.
+    Cuando exista recepción, podrá aplicar a la COM o seguir anticipada; contra COM se descuenta lo ya facturado.
+</div>
+@elseif (($com_politica['anticipada_elige_modo'] ?? false))
+<div class="alert alert-info mt-3" id="cp-bloque-factura-anticipada">
+    <i class="fa fa-info-circle"></i>
+    <strong>Legajo anticipado con COM:</strong> elija en modo de carga si aplica a la recepción
+    o carga otra factura anticipada (como en Anita). Contra COM el control usa la provisión menos lo ya facturado.
 </div>
 @elseif (($com_politica['bloquea_sin_com'] ?? false))
 <div class="alert alert-danger mt-3">

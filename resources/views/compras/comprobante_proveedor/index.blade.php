@@ -32,6 +32,11 @@ use App\Support\Listado\QueryRetornoListado;
                         <i class="fa fa-cog"></i> Configuración
                     </a>
                     @endif
+                    @if (can('listar-precarga-proveedores', false))
+                    <a href="{{ route('precarga_comprobante_proveedor') }}" class="btn btn-outline-info btn-sm mr-1">
+                        <i class="fa fa-fw fa-list"></i> Precargas
+                    </a>
+                    @endif
                     @if (can('crear-comprobante-proveedor', false) || can('listar-precarga-proveedores', false))
                     <a href="{{ route('comprobante_proveedor_opciones_carga') }}" class="btn btn-outline-success btn-sm mr-1">
                         <i class="fa fa-fw fa-plus-circle"></i> Cargar factura

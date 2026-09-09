@@ -144,13 +144,7 @@ class PagoproveedorComprobantePdfService
             ?: optional($pago->usuarios)->nombre
             ?: '';
 
-        $nroOp = sprintf(
-            '%s %s %04d-%08d',
-            $pago->tipocomprobante,
-            $pago->letra ?: 'A',
-            (int) $pago->sucursal,
-            (int) $pago->numerotransaccion
-        );
+        $nroOp = $pago->etiquetaComprobante();
 
         $lugarFecha = 'Bs.As. '.optional($pago->fecha)->format('d/m/Y');
 

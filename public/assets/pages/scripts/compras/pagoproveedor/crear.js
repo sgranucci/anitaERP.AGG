@@ -458,7 +458,7 @@ var flModificaAsiento = false;
         }
     }
 
-    function generaAsientoContable() {
+    function generaAsientoContable(onDone) {
         var datosCuentasCaja = [];
         $('#tbody-cuenta-table tr').each(function () {
             var monto = Math.abs(parseFloat($(this).find('.monto').val()) || 0);
@@ -469,7 +469,10 @@ var flModificaAsiento = false;
                 cuentacaja_ids: $(this).find('.cuentacaja_id').val(),
                 moneda_ids: $(this).find('.moneda').val(),
                 montos: monto,
-                cotizaciones: $(this).find('.cotizacion').val(),
+                cotizaciones: (function () {
+                    var cotPago = parseFloat($('#cotizacion').val() || '0') || 0;
+                    return cotPago > 0 ? cotPago : 1;
+                })(),
                 observaciones: $(this).find('.observacion').val()
             });
         });
@@ -499,6 +502,10 @@ var flModificaAsiento = false;
                 empresa_id: $('#empresa_id').val(),
                 proveedor_id: $('#proveedor_id').val(),
                 fecha: $('#fecha').val(),
+                moneda_id: $('#moneda_id').val() || 1,
+                cotizacion: $('#cotizacion').val() || 1,
+                proveedor_nombre: ($('#nombre').val() || $('#proveedor_nombre').val() || ''),
+                numerotransaccion: $('#numerotransaccion').val() || '',
                 datoscaja: JSON.stringify(datosCuentasCaja),
                 datoscontables: JSON.stringify(datosCuentasContables),
                 datoscheques_emitidos: typeof serializarChequesEmitidos === 'function' ? serializarChequesEmitidos() : '[]',
@@ -509,6 +516,9 @@ var flModificaAsiento = false;
             success: function (data) {
                 if (data.mensaje !== 'ok') {
                     alert('Error en generación del asiento contable');
+                    if (typeof onDone === 'function') {
+                        onDone(false);
+                    }
                     return;
                 }
                 $(wrapper).empty();
@@ -554,9 +564,15 @@ var flModificaAsiento = false;
                 totalDebeAsiento = parseFloat($('#totaldebeasiento').val()) || 0;
                 totalHaberAsiento = parseFloat($('#totalhaberasiento').val()) || 0;
                 flModificaAsiento = false;
+                if (typeof onDone === 'function') {
+                    onDone(true);
+                }
             },
             error: function () {
                 alert('Error grave en generación del asiento contable');
+                if (typeof onDone === 'function') {
+                    onDone(false);
+                }
             }
         });
     }
@@ -687,7 +703,24 @@ var flModificaAsiento = false;
                 return;
             }
             completarProveedorEmitidos();
-            $('#form-pagoproveedor').trigger('submit');
+            // Regenera asiento con deuda/medios actuales (evita Haber incompleto / asiento viejo).
+            flModificaAsiento = true;
+            generaAsientoContable(function (ok) {
+                if (!ok) {
+                    return;
+                }
+                if (typeof sumaMontoAsiento === 'function') {
+                    sumaMontoAsiento();
+                }
+                var td = parseFloat($('#totaldebeasiento').val()) || 0;
+                var th = parseFloat($('#totalhaberasiento').val()) || 0;
+                if (Math.abs(td - th) > 0.02) {
+                    alert('El asiento no balancea (Debe ' + td.toFixed(2) + ' vs Haber ' + th.toFixed(2) + '). Revise la pestaña Asiento Contable.');
+                    muestraVentanaAsiento();
+                    return;
+                }
+                $('#form-pagoproveedor').trigger('submit');
+            });
         });
 
         $(document).on('click', '#agrega_renglon_cheque_emitido', function () {

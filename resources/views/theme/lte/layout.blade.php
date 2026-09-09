@@ -238,6 +238,7 @@
             <script src="{{ asset('assets/js/barra-tareas.js') }}"></script>
             @if (!$modoConsulta)
                 <script src="{{ asset('assets/js/mis-aprobaciones-badge.js') }}?v={{ @filemtime(public_path('assets/js/mis-aprobaciones-badge.js')) ?: time() }}"></script>
+                <script src="{{ asset('assets/js/ticket-bandeja-badge.js') }}?v={{ @filemtime(public_path('assets/js/ticket-bandeja-badge.js')) ?: time() }}"></script>
                 <script src="{{ asset('assets/js/anita-notificaciones.js') }}?v={{ @filemtime(public_path('assets/js/anita-notificaciones.js')) ?: time() }}"></script>
                 <script>
                 (function () {

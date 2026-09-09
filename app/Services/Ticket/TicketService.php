@@ -16,6 +16,7 @@ use App\Services\Configuracion\ModuloAvisoService;
 use App\Support\Seguridad\UsuarioOperativoSupport;
 use App\Support\Ticket\AdministracionTicketListadoFiltros;
 use App\Support\Ticket\TicketEstadisticaSupport;
+use App\Support\Ticket\TicketModoOperacionSupport;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -63,16 +64,29 @@ class TicketService
 	{
 		$data = $request->all();
 		$tareasNotificar = [];
+		$areadestinoId = (int) ($data['areadestino_id'] ?? 0);
+		$estadoAlta = TicketModoOperacionSupport::estadoInicialAlta($areadestinoId);
+		$esClaim = TicketModoOperacionSupport::esClaim($areadestinoId);
 
    		// Crea estado
 	   	$data['fechas'][] = Carbon::now();
-	   	$data['estados'][] = Ticket_Estado::$enumEstado[0]['nombre'];
+	   	$data['estados'][] = $estadoAlta;
 		$data['usuario_ids'][] = Auth::user()->id;
-	   	$data['observacionestados'][] = "Alta de Ticket";
+	   	$data['observacionestados'][] = $esClaim
+			? 'Alta de Ticket (cola del área — sin técnico)'
+			: 'Alta de Ticket';
 
-		// Estado del ticket en el alta como "pendiente"
-		$data['estado_ticket'] = Ticket_Estado::$enumEstado[0]['nombre'];
+		// Claim: siempre Sin Asignar hasta que un técnico lo tome (o un encargado asigne).
+		// Dispatch: mismo estado inicial histórico (Sin Asignar) hasta asignación en adm.
+		$data['estado_ticket'] = $estadoAlta;
 		$data['usuario_id'] = $this->resolverUsuarioIdAlta($data, $origen);
+		$data['empresa_id'] = $this->resolverEmpresaIdAlta($data);
+
+		// Carga de usuario en área claim: no crear tareas/técnicos desde el alta.
+		if ($esClaim && $origen !== 'administracion') {
+			unset($data['tarea_ticket_ids'], $data['tecnico_ticket_ids']);
+		}
+
 		DB::beginTransaction();
 		try
 		{
@@ -87,6 +101,22 @@ class TicketService
 				$resultadoTareas = Self::agrega($data, $ticket, $request);
 				$tareasNotificar = $resultadoTareas['tareas_recien_creadas'] ?? [];
 				$tareasAsignacion = $resultadoTareas['tareas_asignacion_tecnico'] ?? [];
+			}
+
+			if ($ticket && $esClaim && $origen === 'administracion' && count($tareasAsignacion) > 0) {
+				// Atajo encargado: si ya asignó técnico al crear, pasa a Pendiente.
+				$estadoPendiente = Ticket_Estado::$enumEstado[1]['nombre'];
+				$ticket->update(['estado_ticket' => $estadoPendiente]);
+				$this->ticket_estadoRepository->creaEstado(
+					(int) $ticket->id,
+					Carbon::now(),
+					$estadoPendiente,
+					Auth::user()->id,
+					'Alta con técnico asignado (área en modo cola)'
+				);
+			} elseif ($ticket && $esClaim) {
+				// Cola: una tarea stub sin técnico para poder «Tomar».
+				$this->asegurarTareaStubClaim($ticket);
 			}
 
 			DB::commit();
@@ -131,6 +161,44 @@ class TicketService
 		return $usuario ? (int) $usuario->id : $authId;
 	}
 
+	/**
+	 * Empresa de origen del ticket: request → sesión → única empresa del usuario.
+	 */
+	private function resolverEmpresaIdAlta(array $data): ?int
+	{
+		$empresaId = (int) ($data['empresa_id'] ?? 0);
+		if ($empresaId > 0) {
+			return $empresaId;
+		}
+
+		$empresaId = (int) (session('empresa_id') ?? 0);
+		if ($empresaId > 0) {
+			return $empresaId;
+		}
+
+		$empresasSesion = session('usuario_empresas');
+		if (is_array($empresasSesion) && count($empresasSesion) === 1) {
+			$id = (int) ($empresasSesion[0]['id'] ?? 0);
+
+			return $id > 0 ? $id : null;
+		}
+
+		$authId = (int) Auth::id();
+		if ($authId <= 0) {
+			return null;
+		}
+
+		$ids = DB::table('usuario_empresa')
+			->where('usuario_id', $authId)
+			->pluck('empresa_id')
+			->map(static fn ($id) => (int) $id)
+			->filter()
+			->unique()
+			->values();
+
+		return $ids->count() === 1 ? (int) $ids->first() : null;
+	}
+
 	private function avisarAltaTecnologiaSiCorresponde($ticket): void
 	{
 		if (! $ticket || ! isset($ticket->id)) {
@@ -142,6 +210,33 @@ class TicketService
 		}
 
 		$this->moduloAvisoService->enviar('ticket', 'alta_tecnologia', (int) $ticket->id);
+	}
+
+	/**
+	 * En áreas claim: garantiza una ticket_tarea sin técnico para que la bandeja pueda «Tomar».
+	 */
+	private function asegurarTareaStubClaim($ticket): void
+	{
+		if (! $ticket || ! isset($ticket->id)) {
+			return;
+		}
+
+		$existe = \App\Models\Ticket\Ticket_Tarea::query()
+			->where('ticket_id', (int) $ticket->id)
+			->exists();
+		if ($existe) {
+			return;
+		}
+
+		$this->ticket_tareaRepository->createUnique([
+			'ticket_id' => (int) $ticket->id,
+			'tarea_id' => null,
+			'detalle' => $ticket->titulo ?: 'Atención del ticket',
+			'fechacarga' => Carbon::now()->toDateString(),
+			'fechaprogramacion' => Carbon::now()->toDateString(),
+			'tecnico_id' => null,
+			'creousuario_id' => (int) Auth::id(),
+		]);
 	}
 
 	/**

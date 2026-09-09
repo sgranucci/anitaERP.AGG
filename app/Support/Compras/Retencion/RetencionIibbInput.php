@@ -17,6 +17,7 @@ final class RetencionIibbInput
         public readonly ?string $jurisdiccion = null,
         public readonly ?int $provinciaId = null,
         public readonly ?int $condicionIibbId = null,
+        public readonly ?string $provinciaNombre = null,
     ) {
     }
 }

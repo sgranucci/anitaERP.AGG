@@ -74,16 +74,22 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
 
             $deuda = Proveedor_Cuentacorriente::query()->with('comprobante_proveedores')->findOrFail($ccId);
             $monedaId = (int) ($deuda->moneda_id ?? $apl['moneda_id'] ?? 1);
-            $cotizacion = (float) ($deuda->cotizacion ?? $apl['cotizacion'] ?? 1);
+            // Libro = TC de la deuda/factura. Liquidación/crédito OP = TC del pago (misma que caja/asiento).
+            $cotFactura = (float) ($deuda->cotizacion ?? $apl['cotizacion'] ?? 1);
+            $cotPago = PagoproveedorAsientoArmadoSupport::cotizacionUnicaDelPago(
+                (int) ($pago->moneda_id ?? 1),
+                (float) ($pago->cotizacion ?: 1),
+                $fecha
+            );
             $cotAplicada = isset($apl['cotizacion_aplicada']) && (float) $apl['cotizacion_aplicada'] > 0
                 ? (float) $apl['cotizacion_aplicada']
-                : $cotizacion;
+                : $cotPago;
             $dc = isset($apl['diferencia_cambio']) ? round((float) $apl['diferencia_cambio'], 4) : null;
             if ($dc === null) {
                 $liq = PagoproveedorLiquidacionSupport::calcular(
                     $monto,
                     $monedaId,
-                    $cotizacion,
+                    $cotFactura,
                     (int) ($pago->moneda_id ?? 1),
                     $cotAplicada
                 );
@@ -99,7 +105,7 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
                 'proveedor_id' => $pago->proveedor_id,
                 'total' => -$monto,
                 'moneda_id' => $monedaId,
-                'cotizacion' => $cotizacion,
+                'cotizacion' => $cotPago,
                 'empresa_id' => $pago->empresa_id,
                 'comprobante_proveedor_id' => $deuda->comprobante_proveedor_id,
                 'comprobante_proveedor_cuota_id' => null,
@@ -111,7 +117,9 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
                 'proveedor_cuentacorriente_id' => $deuda->id,
                 'total' => -$monto,
                 'moneda_id' => $monedaId,
-                'cotizacion' => $cotizacion,
+                'cotizacion' => $cotFactura,
+                'cotizacion_liquidacion' => $cotAplicada,
+                'diferencia_cambio' => $dc ?? 0,
                 'comprobanteaplicado' => $etiquetaOp,
                 'empresa_id' => $pago->empresa_id,
                 'proveedor_cuentacorriente_aplicado_id' => $ccPago->id,
@@ -123,7 +131,9 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
                 'proveedor_cuentacorriente_id' => $ccPago->id,
                 'total' => $monto,
                 'moneda_id' => $monedaId,
-                'cotizacion' => $cotizacion,
+                'cotizacion' => $cotPago,
+                'cotizacion_liquidacion' => $cotAplicada,
+                'diferencia_cambio' => $dc ?? 0,
                 'comprobanteaplicado' => $codigoComp,
                 'comprobante_proveedor_aplicado_id' => $deuda->comprobante_proveedor_id,
                 'empresa_id' => $pago->empresa_id,
@@ -135,7 +145,7 @@ final class PagoproveedorAplicacionCuentacorrienteSupport
                 'pagoproveedor_id' => $pago->id,
                 'proveedor_cuentacorriente_id' => $deuda->id,
                 'montoaplicado' => $monto,
-                'cotizacion' => $cotizacion,
+                'cotizacion' => $cotFactura,
                 'moneda_id' => $monedaId,
                 'cotizacion_aplicada' => $cotAplicada,
                 'diferencia_cambio' => $dc ?? 0,

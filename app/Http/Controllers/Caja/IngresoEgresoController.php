@@ -237,6 +237,14 @@ class IngresoEgresoController extends Controller
                 }
             }
         }
+        // Desde "Pago a proveedores": entrar a IE ya con tipo OPP (u otro id pasado).
+        if ($request->filled('tipotransaccion_caja_id') && empty($data->tipotransaccion_caja_id)) {
+            $tipoId = (int) $request->input('tipotransaccion_caja_id');
+            if ($tipoId > 0) {
+                $data->tipotransaccion_caja_id = $tipoId;
+                session(['tipotransaccion_caja_id' => $tipoId]);
+            }
+        }
         if ($request->filled('empresa_id')) {
             $data->empresa_id = (int) $request->input('empresa_id');
             session(['empresa_id' => $data->empresa_id]);

@@ -167,6 +167,11 @@ class ContabilidadCuentaAutomaticaController extends Controller
 
         $filas = [];
         foreach (CuentaAutomaticaClaves::catalogo() as $clave => $meta) {
+            $soloEmpresas = $meta['solo_empresas'] ?? null;
+            if (is_array($soloEmpresas) && $soloEmpresas !== [] && ! in_array($empresaId, $soloEmpresas, true)) {
+                continue;
+            }
+
             $multiple = ! empty($meta['multiple']);
             $row = $centralRows->get($clave);
             $overrideModulo = CuentaAutomaticaResolver::tieneOverrideModulo($empresaId, $clave);

@@ -8,12 +8,27 @@ use App\Models\Compras\RetencionIIBB;
 use App\Repositories\Caja\CuentacajaRepositoryInterface;
 use App\Repositories\Contable\CuentacontableRepositoryInterface;
 use App\Support\Caja\ChequePropioImputacionSupport;
+use App\Support\Configuracion\CotizacionVigenteSupport;
+use App\Support\Contable\CuentaAutomaticaClaves;
+use App\Support\Contable\CuentaAutomaticaResolver;
 
 /**
  * Preview/armado de asiento TES para orden de pago.
  *
  * Debe: proveedores MN/ME (según OC del comprobante); anticipos por lo pagado sin comprobante.
- * Haber: cuentas de caja, cheques propios (banco/diferidos), cheques entregados (valores a depositar), retenciones.
+ * Haber: cuentas de caja, cheques, retenciones (vía Contable → Cuentas automáticas, no como “valores” Anita).
+ *
+ * Cotización (pago.c in_cotizacion): una sola TC del pago en TODAS las líneas del asiento
+ * (también MN, para poder expresar el movimiento en ME). La diferencia vs cotización de
+ * factura va a diferencia de cambio (P&L), no a otra TC por línea.
+ *
+ * Retenciones: se calculan en MN; en el asiento van en moneda del pago convertidas al
+ * cambio del pago.
+ *
+ * Concepto de movimiento (pago.c):
+ *   sprintf(concepto[0], "Pago: %s #%ld", proveedor15, nro);
+ *   sprintf(concepto[1], "Pago ad.: %-11.11s #%ld", …);  // anticipo
+ *   sprintf(concepto_chp, "%s Ch: %ld", proveedor14, nroCheque);
  */
 final class PagoproveedorAsientoArmadoSupport
 {
@@ -38,8 +53,20 @@ final class PagoproveedorAsientoArmadoSupport
         string $fechaOperacion,
         CuentacajaRepositoryInterface $cuentacajaRepository,
         CuentacontableRepositoryInterface $cuentacontableRepository,
+        string $proveedorNombre = '',
+        string $numeroOp = '',
+        int $monedaPagoId = 1,
+        float $cotizacionPago = 1.0,
     ): array {
+        $monedaLocal = self::monedaLocalId();
+        if ($monedaPagoId <= 0) {
+            $monedaPagoId = $monedaLocal;
+        }
+        $cotizacionPago = self::cotizacionUnicaDelPago($monedaPagoId, $cotizacionPago, $fechaOperacion);
+
         $asiento = [];
+        $conceptoPago = self::conceptoPago($proveedorNombre, $numeroOp);
+        $conceptoAnticipo = self::conceptoPagoAdelantado($proveedorNombre, $numeroOp);
 
         if ($datosContables !== []) {
             foreach ($datosContables as $linea) {
@@ -52,16 +79,18 @@ final class PagoproveedorAsientoArmadoSupport
                 if ($cuenta === null) {
                     continue;
                 }
+                $obs = trim((string) ($linea->observacionasientos ?? ''));
+                $monedaLin = (int) ($linea->monedaasiento_ids ?? $monedaPagoId);
                 $asiento[] = [
                     'cuentacontable_id' => $cuentaId,
                     'codigo' => $cuenta->codigo,
                     'nombre' => $cuenta->nombre,
-                    'moneda_id' => (int) ($linea->monedaasiento_ids ?? 1),
-                    'cotizacion' => (float) ($linea->cotizacionasientos ?? 1),
+                    'moneda_id' => $monedaLin,
+                    'cotizacion' => self::cotizacionParaLinea($monedaLin, $cotizacionPago),
                     'centrocosto_id' => (int) ($linea->centrocostoasiento_ids ?? 0),
                     'debe' => $linea->debeasientos ?? '',
                     'haber' => $linea->haberasientos ?? '',
-                    'observacion' => (string) ($linea->observacionasientos ?? ''),
+                    'observacion' => $obs !== '' ? $obs : $conceptoPago,
                     'carga_cuentacontable_manual' => $linea->carga_cuentacontable_manuales ?? 'N',
                 ];
             }
@@ -79,15 +108,17 @@ final class PagoproveedorAsientoArmadoSupport
             if ($cuentacaja === null || empty($cuentacaja->cuentacontable_id)) {
                 continue;
             }
+            $obs = trim((string) ($mov->observaciones ?? ''));
+            $monedaLin = (int) ($mov->moneda_ids ?? $monedaPagoId);
             self::agregaCuenta(
                 $asiento,
                 (int) $cuentacaja->cuentacontable_id,
-                (int) ($mov->moneda_ids ?? 1),
-                (float) ($mov->cotizaciones ?? 1),
+                $monedaLin,
+                self::cotizacionParaLinea($monedaLin, $cotizacionPago),
                 'H',
                 $monto,
                 $cuentacontableRepository,
-                (string) ($mov->observaciones ?? '')
+                $obs !== '' ? $obs : $conceptoPago
             );
         }
 
@@ -105,68 +136,80 @@ final class PagoproveedorAsientoArmadoSupport
                 $cuentacajaRepository,
                 $cuentacontableRepository
             );
-            if ($cuentaId === null) {
+            if ($cuentaId === null || $cuentaId <= 0) {
                 continue;
             }
+            $monedaLin = (int) ($cheque->moneda_ids ?? $monedaPagoId);
+            $nroCh = (string) ($cheque->numerocheques ?? $cheque->numerocheque ?? '');
             self::agregaCuenta(
                 $asiento,
                 $cuentaId,
-                (int) ($cheque->moneda_ids ?? 1),
-                (float) ($cheque->cotizaciones ?? 1),
+                $monedaLin,
+                self::cotizacionParaLinea($monedaLin, $cotizacionPago),
                 'H',
                 $monto,
                 $cuentacontableRepository,
-                'Cheque propio emitido'
+                self::conceptoChequePropio($proveedorNombre, $nroCh)
             );
         }
 
-        $valoresId = ChequePropioImputacionSupport::resolverCuentacontableIdValoresADepositar(
-            $empresaId,
-            $cuentacontableRepository
-        );
-        if ($valoresId !== null) {
-            foreach ($datosChequesRecibidos as $cheque) {
-                $cheque = self::asObject($cheque);
-                $monto = abs((float) ($cheque->montos ?? 0));
-                if ($monto <= 0) {
-                    continue;
-                }
-                self::agregaCuenta(
-                    $asiento,
-                    $valoresId,
-                    (int) ($cheque->moneda_ids ?? 1),
-                    (float) ($cheque->cotizaciones ?? 1),
-                    'H',
-                    $monto,
-                    $cuentacontableRepository,
-                    'Cheque de terceros entregado'
-                );
-            }
-        }
-
-        foreach ($datosRetenciones as $ret) {
-            $ret = self::asObject($ret);
-            $monto = abs((float) ($ret->montos ?? $ret->importe ?? 0));
+        foreach ($datosChequesRecibidos as $cheque) {
+            $cheque = self::asObject($cheque);
+            $monto = abs((float) ($cheque->montos ?? 0));
             if ($monto <= 0) {
                 continue;
             }
-            $cuentaId = self::resolverCuentaRetencion($ret);
-            if ($cuentaId <= 0) {
+            $cuentaId = ChequePropioImputacionSupport::resolverCuentacontableIdValoresADepositar(
+                $empresaId,
+                $cuentacontableRepository
+            );
+            if ($cuentaId === null || $cuentaId <= 0) {
                 continue;
             }
+            $monedaLin = (int) ($cheque->moneda_ids ?? $monedaPagoId);
             self::agregaCuenta(
                 $asiento,
                 $cuentaId,
-                (int) ($ret->moneda_ids ?? 1),
-                (float) ($ret->cotizaciones ?? 1),
+                $monedaLin,
+                self::cotizacionParaLinea($monedaLin, $cotizacionPago),
                 'H',
                 $monto,
                 $cuentacontableRepository,
-                'Retención '.(string) ($ret->tiporetencion ?? '')
+                $conceptoPago
+            );
+        }
+
+        // Retenciones: importe en MN → moneda del pago al cambio del pago.
+        foreach ($datosRetenciones as $ret) {
+            $ret = self::asObject($ret);
+            $montoMn = abs((float) ($ret->montos ?? $ret->importe ?? 0));
+            if ($montoMn <= 0) {
+                continue;
+            }
+            $cuentaId = self::resolverCuentaRetencion($ret, $empresaId);
+            if ($cuentaId <= 0) {
+                continue;
+            }
+            $montoLin = self::convertirMontoRetencionAMonedaPago($montoMn, $monedaPagoId, $cotizacionPago);
+            self::agregaCuenta(
+                $asiento,
+                $cuentaId,
+                $monedaPagoId,
+                $cotizacionPago,
+                'H',
+                $montoLin,
+                $cuentacontableRepository,
+                $conceptoPago
             );
         }
 
         $proveedor = Proveedor::query()->find($proveedorId);
+        if ($proveedorNombre === '' && $proveedor) {
+            $proveedorNombre = (string) ($proveedor->nombre ?? '');
+            $conceptoPago = self::conceptoPago($proveedorNombre, $numeroOp);
+            $conceptoAnticipo = self::conceptoPagoAdelantado($proveedorNombre, $numeroOp);
+        }
+
         $totalesPorCuenta = [];
         $dcTotal = 0.0;
         $cuentaApRef = 0;
@@ -198,7 +241,8 @@ final class PagoproveedorAsientoArmadoSupport
             if ($cuentaId <= 0) {
                 continue;
             }
-            $cotLinea = (float) ($comp->cotizacion_aplicadas ?? $comp->cotizaciones ?? 1);
+            // Misma TC del pago (no la de la factura). DC cubre la diferencia.
+            $cotLinea = self::cotizacionParaLinea($monedaId, $cotizacionPago);
             $key = $cuentaId.'|'.$monedaId.'|'.$cotLinea;
             if (! isset($totalesPorCuenta[$key])) {
                 $totalesPorCuenta[$key] = [
@@ -223,7 +267,7 @@ final class PagoproveedorAsientoArmadoSupport
                 'D',
                 (float) $fila['monto'],
                 $cuentacontableRepository,
-                'Cancelación proveedores'
+                $conceptoPago
             );
         }
 
@@ -232,13 +276,139 @@ final class PagoproveedorAsientoArmadoSupport
             $dcTotal,
             $cuentaApRef,
             $proveedor,
-            $cuentacontableRepository
+            $cuentacontableRepository,
+            $conceptoPago,
+            $cotizacionPago
         );
 
-        // Último: el anticipo se mide como el residuo del asiento ya completo.
-        self::agregarAnticipoSiCorresponde($asiento, $empresaId, $cuentacontableRepository);
+        self::agregarAnticipoSiCorresponde(
+            $asiento,
+            $empresaId,
+            $cuentacontableRepository,
+            $conceptoAnticipo
+        );
 
         return $asiento;
+    }
+
+    /**
+     * Cotización única del pago (pago.c in_cotizacion). Se usa en todas las líneas.
+     * Si el pago es MN y el header viene en 1, toma la venta DOL del día para poder
+     * expresar el asiento en ME (mismo criterio que facturas PES con TC).
+     */
+    public static function cotizacionUnicaDelPago(
+        int $monedaPagoId,
+        float $cotizacionPago,
+        ?string $fechaOperacion = null
+    ): float {
+        if ($cotizacionPago > 1.0001) {
+            return $cotizacionPago;
+        }
+
+        if ($monedaPagoId <= self::monedaLocalId()) {
+            $dolId = max(2, (int) config('cotizacion.monedaIdCommand', 2));
+            $dia = CotizacionVigenteSupport::ventaValor($fechaOperacion, $dolId);
+            if ($dia > 1.0001) {
+                return $dia;
+            }
+        }
+
+        return $cotizacionPago > 0 ? $cotizacionPago : 1.0;
+    }
+
+    /** TC a grabar en cada línea: siempre la del pago (también en MN). */
+    public static function cotizacionParaLinea(int $monedaLineaId, float $cotizacionPago): float
+    {
+        unset($monedaLineaId);
+
+        return $cotizacionPago > 0 ? $cotizacionPago : 1.0;
+    }
+
+    /**
+     * Retención nace en MN; si el pago es ME se convierte al cambio del pago.
+     */
+    public static function convertirMontoRetencionAMonedaPago(
+        float $montoMn,
+        int $monedaPagoId,
+        float $cotizacionPago
+    ): float {
+        $montoMn = abs($montoMn);
+        if ($montoMn < 0.0001) {
+            return 0.0;
+        }
+        if ($monedaPagoId <= self::monedaLocalId()) {
+            return round($montoMn, 4);
+        }
+        $cot = $cotizacionPago > 0 ? $cotizacionPago : 1.0;
+        if ($cot <= 0) {
+            return round($montoMn, 4);
+        }
+
+        return round($montoMn / $cot, 4);
+    }
+
+    private static function monedaLocalId(): int
+    {
+        return max(1, (int) config('cotizacion.ID_MONEDA_DEFAULT', 1));
+    }
+
+    /**
+     * pago.c: sprintf(concepto[0], "Pago: %s #%ld", xstr, in_recibo);
+     */
+    public static function conceptoPago(string $proveedorNombre, string $numeroOp): string
+    {
+        $nombre = self::truncarNombre($proveedorNombre, 15);
+        $nro = self::numeroParaConcepto($numeroOp);
+
+        return sprintf('Pago: %s #%s', $nombre, $nro);
+    }
+
+    /**
+     * pago.c: sprintf(concepto[1], "Pago ad.: %-11.11s #%ld", xstr, in_recibo);
+     */
+    public static function conceptoPagoAdelantado(string $proveedorNombre, string $numeroOp): string
+    {
+        $nombre = self::truncarNombre($proveedorNombre, 11);
+        $nro = self::numeroParaConcepto($numeroOp);
+
+        return sprintf('Pago ad.: %s #%s', $nombre, $nro);
+    }
+
+    /**
+     * pago.c: sprintf(concepto_chp, "%s Ch: %ld", xstr, tchep[i].cheq);
+     */
+    public static function conceptoChequePropio(string $proveedorNombre, string $numeroCheque): string
+    {
+        $nombre = self::truncarNombre($proveedorNombre, 14);
+        $nro = preg_replace('/\D+/', '', $numeroCheque) ?: $numeroCheque;
+        if ($nro === '') {
+            $nro = '0';
+        }
+
+        return sprintf('%s Ch: %s', $nombre, $nro);
+    }
+
+    private static function truncarNombre(string $nombre, int $max): string
+    {
+        $nombre = trim(preg_replace('/\s+/u', ' ', $nombre) ?? '');
+        if ($nombre === '') {
+            $nombre = 'Proveedor';
+        }
+        if (function_exists('mb_substr')) {
+            return mb_substr($nombre, 0, $max);
+        }
+
+        return substr($nombre, 0, $max);
+    }
+
+    private static function numeroParaConcepto(string $numeroOp): string
+    {
+        $nro = trim($numeroOp);
+        if ($nro === '') {
+            return '0';
+        }
+
+        return $nro;
     }
 
     /**
@@ -248,6 +418,7 @@ final class PagoproveedorAsientoArmadoSupport
         array &$asiento,
         int $empresaId,
         CuentacontableRepositoryInterface $cuentacontableRepository,
+        string $concepto,
     ): void {
         $linea = PagoproveedorAnticipoAsientoSupport::linea($asiento, $empresaId);
         if ($linea === null) {
@@ -262,28 +433,46 @@ final class PagoproveedorAsientoArmadoSupport
             'D',
             $linea['monto'],
             $cuentacontableRepository,
-            'Anticipo a proveedores'
+            $concepto
         );
     }
 
-    private static function resolverCuentaRetencion(object $ret): int
+    /**
+     * Cuenta de retención: Contable → Cuentas automáticas (pago.retencion_*).
+     * IIBB: primero provincia (Compras → Retención IIBB); si no, fallback automático.
+     */
+    private static function resolverCuentaRetencion(object $ret, int $empresaId): int
     {
-        $tipo = strtoupper((string) ($ret->tiporetencion ?? ''));
-        if (in_array($tipo, ['B', 'IIBB'], true)) {
+        $directo = (int) ($ret->cuentacontable_ids ?? $ret->cuentacontable_id ?? 0);
+        if ($directo > 0) {
+            return $directo;
+        }
+
+        $tipo = strtoupper(trim((string) ($ret->tiporetencion ?? '')));
+
+        if (in_array($tipo, ['B', 'IIBB', 'RTP'], true)) {
             $provinciaId = (int) ($ret->provincia_ids ?? $ret->provincia_id ?? 0);
             if ($provinciaId > 0) {
                 $reg = RetencionIIBB::query()->where('provincia_id', $provinciaId)->first();
-                if ($reg && (int) $reg->cuentacontable_id > 0) {
+                if ($reg && (int) ($reg->cuentacontable_id ?? 0) > 0) {
                     return (int) $reg->cuentacontable_id;
                 }
             }
-            $directo = (int) ($ret->cuentacontable_ids ?? 0);
-            if ($directo > 0) {
-                return $directo;
-            }
         }
 
-        return (int) ($ret->cuentacontable_ids ?? 0);
+        $clave = match ($tipo) {
+            'G', 'GANANCIAS', 'RGP' => CuentaAutomaticaClaves::PAGO_RETENCION_GANANCIAS,
+            'I', 'IVA', 'V', 'RIP', 'RIV' => CuentaAutomaticaClaves::PAGO_RETENCION_IVA,
+            'S', 'SUSS', 'RSP' => CuentaAutomaticaClaves::PAGO_RETENCION_SUSS,
+            'B', 'IIBB', 'RTP' => CuentaAutomaticaClaves::PAGO_RETENCION_IIBB,
+            default => null,
+        };
+
+        if ($clave === null || $empresaId <= 0) {
+            return 0;
+        }
+
+        return (int) (CuentaAutomaticaResolver::resolverId($empresaId, $clave) ?? 0);
     }
 
     /**
@@ -351,6 +540,8 @@ final class PagoproveedorAsientoArmadoSupport
         int $cuentaApId,
         ?Proveedor $proveedor,
         CuentacontableRepositoryInterface $cuentacontableRepository,
+        string $concepto,
+        float $cotizacionPago = 1.0,
     ): void {
         $dcTotal = round($dcTotal, 4);
         if (abs($dcTotal) < 0.01) {
@@ -375,29 +566,30 @@ final class PagoproveedorAsientoArmadoSupport
             return;
         }
 
-        $monedaLocal = (int) config('cotizacion.ID_MONEDA_DEFAULT', 1);
+        $monedaLocal = self::monedaLocalId();
+        $cot = self::cotizacionParaLinea($monedaLocal, $cotizacionPago);
         $importe = abs($dcTotal);
         $perdida = $dcTotal > 0;
         self::agregaCuenta(
             $asiento,
             $cuentaDcId,
             $monedaLocal,
-            1,
+            $cot,
             $perdida ? 'D' : 'H',
             $importe,
             $cuentacontableRepository,
-            'Diferencia de cambio OP'
+            $concepto
         );
         if ($cuentaApId > 0) {
             self::agregaCuenta(
                 $asiento,
                 $cuentaApId,
                 $monedaLocal,
-                1,
+                $cot,
                 $perdida ? 'H' : 'D',
                 $importe,
                 $cuentacontableRepository,
-                'Diferencia de cambio OP'
+                $concepto
             );
         }
     }

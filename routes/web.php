@@ -4026,6 +4026,16 @@ Route::post('ticket/administracion_ticket/limpiafiltro', 'Ticket\Administracion_
 Route::get('ticket/informe-estadistico', 'Ticket\TicketEstadisticaReporteController@index')->name('informe_estadistico_ticket');
 Route::get('ticket/listar-informe-estadistico-ticket/{formato}', 'Ticket\TicketEstadisticaReporteController@exportar')->name('listar_informe_estadistico_ticket');
 
+Route::get('ticket/bandeja', 'Ticket\TicketBandejaController@index')->name('consulta_bandeja_ticket');
+Route::get('ticket/bandeja/contador', 'Ticket\TicketBandejaController@contador')->name('contador_bandeja_ticket');
+Route::post('ticket/bandeja/{id}/tomar', 'Ticket\TicketBandejaController@tomar')->name('toma_bandeja_ticket');
+Route::post('ticket/bandeja/{id}/liberar', 'Ticket\TicketBandejaController@liberar')->name('libera_bandeja_ticket');
+Route::post('ticket/bandeja/{id}/asignar', 'Ticket\TicketBandejaController@asignar')->name('asigna_bandeja_ticket');
+
+Route::get('ticket/configuracion', 'Ticket\Configuracion_TicketController@index')->name('consulta_configuracion_ticket');
+Route::put('ticket/configuracion', 'Ticket\Configuracion_TicketController@actualizar')->name('actualiza_configuracion_ticket');
+Route::put('ticket/configuracion/areadestino', 'Ticket\Configuracion_TicketController@actualizarAreadestino')->name('actualiza_configuracion_ticket_areadestino');
+
 /*
  * Salas
  */

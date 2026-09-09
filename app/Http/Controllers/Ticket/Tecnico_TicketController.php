@@ -10,6 +10,7 @@ use App\Http\Requests\ValidacionTecnico_Ticket;
 use App\Repositories\Admin\UsuarioRepositoryInterface;
 use App\Repositories\Ticket\Tecnico_TicketRepositoryInterface;
 use App\Repositories\Ticket\AreadestinoRepositoryInterface;
+use App\Support\Ticket\TecnicoTicketVinculoSupport;
 
 class Tecnico_TicketController extends Controller
 {
@@ -35,8 +36,10 @@ class Tecnico_TicketController extends Controller
     {
         can('listar-tecnico-ticket');
 		$datas = $this->repository->all();
+        $vinculoResumen = TecnicoTicketVinculoSupport::resumen($datas);
+        $usuariosSinFicha = TecnicoTicketVinculoSupport::usuariosRolSinFichaUnica(2);
 
-        return view('ticket.tecnico_ticket.index', compact('datas'));
+        return view('ticket.tecnico_ticket.index', compact('datas', 'vinculoResumen', 'usuariosSinFicha'));
     }
 
     /**

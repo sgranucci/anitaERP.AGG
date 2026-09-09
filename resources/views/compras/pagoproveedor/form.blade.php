@@ -23,8 +23,8 @@
             <div class="col-lg-6" id="div-proveedor">
                 <div class="input-group">
                     <input type="hidden" name="proveedor_id" id="proveedor_id" class="proveedor_id" value="{{ old('proveedor_id', $data->proveedor_id ?? '') }}">
-                    <input type="text" class="form-control codigoproveedor" id="codigoproveedor" placeholder="Código" autocomplete="off" value="{{ old('codigoproveedor', $data->proveedores->codigo ?? '') }}">
-                    <input type="text" class="form-control descripcionproveedor nombreproveedor" id="descripcionproveedor" readonly placeholder="Nombre" value="{{ old('descripcionproveedor', $data->proveedores->nombre ?? '') }}">
+                    <input type="text" class="form-control codigoproveedor" id="codigoproveedor" name="codigoproveedor" placeholder="Código" autocomplete="off" value="{{ old('codigoproveedor', $data->proveedores->codigo ?? '') }}">
+                    <input type="text" class="form-control descripcionproveedor nombreproveedor" id="descripcionproveedor" name="descripcionproveedor" readonly placeholder="Nombre" value="{{ old('descripcionproveedor', $data->proveedores->nombre ?? '') }}">
                     <div class="input-group-append">
                         <button type="button" class="btn btn-info consultaproveedor" title="Consultar"><i class="fa fa-search"></i></button>
                     </div>
@@ -81,8 +81,10 @@
         </div>
         @if ($esEdicion)
             <input type="hidden" id="pagoproveedor_id" value="{{ (int) $data->id }}">
+            <input type="hidden" id="numerotransaccion" value="{{ $data->numerotransaccion ?? '' }}">
         @else
             <input type="hidden" id="pagoproveedor_id" value="">
+            <input type="hidden" id="numerotransaccion" value="">
         @endif
 
         <hr>
@@ -160,7 +162,7 @@
         <input type="hidden" name="monto" id="monto" value="{{ old('monto', $data->monto ?? 0) }}">
         <input type="hidden" name="importe_neto_retencion" id="importe_neto_retencion" value="{{ old('importe_neto_retencion', $data->monto ?? 0) }}">
         <input type="hidden" name="importe_iva_retencion" id="importe_iva_retencion" value="0">
-        <input type="hidden" id="pp-retenciones-json" value="">
+        <input type="hidden" id="pp-retenciones-json" name="pp_retenciones_json" value="{{ old('pp_retenciones_json', '') }}">
         <div class="form-group row totales-por-moneda mt-2"></div>
         <div class="form-group row totales-pagoproveedor mt-1"></div>
     </div>

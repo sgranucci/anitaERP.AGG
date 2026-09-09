@@ -84,7 +84,9 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
                 'comprobante_proveedores.tipotransaccion_compras',
                 'comprobante_proveedores.precarga_comprobante_proveedores',
                 'comprobante_proveedores.comprobante_proveedor_archivos',
+                'comprobante_proveedores.tracking_indice',
                 'pagoproveedores',
+                'proveedor_cuentacorriente_aplicaciones',
                 'monedas',
                 'empresas',
             ])
@@ -94,8 +96,8 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'proveedor_cuentacorriente.empresa_id');
         ProveedorCuentacorrienteListadoFiltros::aplicar($query, $filtros);
 
-        $query->orderBy('proveedor_cuentacorriente.fecha', 'asc')
-            ->orderBy('proveedor_cuentacorriente.id', 'asc');
+        $query->orderBy('proveedor_cuentacorriente.fecha', 'desc')
+            ->orderBy('proveedor_cuentacorriente.id', 'desc');
 
         return $paginar ? $query->paginate(10) : $query->get();
     }
@@ -110,6 +112,7 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
                 'comprobante_proveedores.tipotransaccion_compras',
                 'comprobante_proveedores.precarga_comprobante_proveedores',
                 'comprobante_proveedores.comprobante_proveedor_archivos',
+                'comprobante_proveedores.tracking_indice',
                 'comprobante_proveedores.ordencompras.ordencompra_articulos',
                 'pagoproveedores',
                 'monedas',
@@ -128,8 +131,8 @@ class Proveedor_CuentacorrienteRepository implements Proveedor_CuentacorrienteRe
         $this->empresaRepository->aplicarFiltroEmpresasAsignadas($query, 'proveedor_cuentacorriente.empresa_id');
         ProveedorCuentacorrienteListadoFiltros::aplicar($query, $filtros);
 
-        $query->orderBy('proveedor_cuentacorriente.fecha', 'asc')
-            ->orderBy('proveedor_cuentacorriente.id', 'asc');
+        $query->orderBy('proveedor_cuentacorriente.fecha', 'desc')
+            ->orderBy('proveedor_cuentacorriente.id', 'desc');
 
         return $paginar ? $query->paginate(10) : $query->get();
     }

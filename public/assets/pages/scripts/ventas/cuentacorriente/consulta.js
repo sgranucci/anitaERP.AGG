@@ -53,7 +53,14 @@ $(function () {
 				let url = urlEditarComprobante;
            	    url = url.replace(':id', value.aplicado_id);
 
-                $(".editarcomprobante").attr("href", url);
+                let $edit = $('#aplicacionpedido-table').find('tr').last().find('.editarcomprobante');
+                $edit.attr('href', url)
+                    .addClass('js-erp-workspace')
+                    .attr('data-ws-modo', 'edit')
+                    .attr('data-ws-id', 'cc-apl-' + value.aplicado_id)
+                    .attr('data-ws-titulo', 'Editar ' + (value.comprobante || 'comprobante'))
+                    .attr('data-ws-edit', url)
+                    .attr('title', 'Editar en solapa (sin menú)');
 			});
 		});        
     });

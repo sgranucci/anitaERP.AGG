@@ -13,6 +13,11 @@
 @php
     $soloConsulta = ! empty($soloConsulta);
     $soloLectura = ! empty($soloLectura);
+    $retornoListadoQuery = $retornoListadoQuery
+        ?? \App\Support\Listado\QueryRetornoListado::desdeRequestSiIndex(
+            request(),
+            \App\Support\Compras\PrecargaComprobanteProveedorListadoFiltros::class
+        );
 @endphp
 <div class="row">
     <div class="col-lg-12">
@@ -34,6 +39,7 @@
                 'precargaId' => $data->id,
                 'claseBoton' => 'btn btn-outline-info btn-sm',
                 'etiquetaBoton' => 'Marcar como ya cargada en Anita',
+                'retornoListadoQuery' => $retornoListadoQuery,
             ])
         </div>
         @endif
@@ -78,13 +84,13 @@
                         'claseExtra' => 'mr-2',
                     ])
                     @if (can('listar-precarga-proveedores', false) && ! $soloConsulta)
-                    <a href="{{route('precarga_comprobante_proveedor')}}" class="btn btn-outline-info btn-sm">
+                    <a href="{{route('precarga_comprobante_proveedor', $retornoListadoQuery)}}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                     @endif
                 </div>
             </div>
-            <form action="{{route('actualizar_precarga_comprobante_proveedor', ['id' => $data->id])}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{route('actualizar_precarga_comprobante_proveedor', ['id' => $data->id] + $retornoListadoQuery)}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
                 @csrf @method("put")
                 @if ($soloConsulta)
                     <input type="hidden" name="origen" value="modal_consulta">

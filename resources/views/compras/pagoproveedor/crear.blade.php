@@ -16,6 +16,17 @@
 <script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/form.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/pagoproveedor/form.js')) ?: time() }}" type="text/javascript"></script>
 <script src="{{ asset('assets/pages/scripts/compras/pagoproveedor/crear.js') }}?v={{ @filemtime(public_path('assets/pages/scripts/compras/pagoproveedor/crear.js')) ?: time() }}" type="text/javascript"></script>
 <script>
+    @php
+        $ppOldAplicaciones = [];
+        foreach ((array) old('idcuentacorrientes', []) as $i => $id) {
+            $id = (int) $id;
+            $monto = (float) old('montoaplicadocomprobantes.'.$i, 0);
+            if ($id > 0 && $monto > 0) {
+                $ppOldAplicaciones[] = ['id' => $id, 'monto' => $monto];
+            }
+        }
+    @endphp
+    window.ppOldAplicaciones = @json($ppOldAplicaciones);
     $(function () {
         if (typeof activa_eventos_consulta_cbu_pago === 'function') {
             activa_eventos_consulta_cbu_pago();
