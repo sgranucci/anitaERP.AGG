@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace App\Support\Caja\AnitaSync;
 
+use App\Support\Anita\AnitaTextoSanitizer;
+
 /**
  * Mapeo ERP → columnas Informix rendbingo.
  */
@@ -39,9 +41,14 @@ final class RendicionBingoCabeceraAnitaMapper
 
     public static function texto(mixed $valor, int $maxLen): string
     {
-        $s = str_replace("'", "''", (string) $valor);
+        // Sanitizar antes de escapar: saltos de línea parten el SQL Informix
+        // (error -282 comilla sin cierre) y UTF-8 ilegal dispara -202.
+        $s = AnitaTextoSanitizer::sanitizar((string) $valor);
+        if ($maxLen > 0) {
+            $s = substr($s, 0, $maxLen);
+        }
 
-        return substr($s, 0, $maxLen);
+        return str_replace("'", "''", $s);
     }
 
     public static function camposInsert(): string
