@@ -69,12 +69,28 @@
                value="{{ $item['listaprecio_id'] ?? '' }}">
         <input type="hidden" name="items[{{ $idx }}][incluyeimpuesto]" class="incluyeimpuesto"
                value="{{ $item['incluyeimpuesto'] ?? 'N' }}">
-        <input type="hidden" name="items[{{ $idx }}][estado]" value="{{ $item['estado'] ?? 'P' }}">
         <input type="hidden" name="items[{{ $idx }}][orden_compra]" value="{{ $item['orden_compra'] ?? '' }}">
     </td>
     <td>
         <input type="number" step="0.01" name="items[{{ $idx }}][descuento]" class="form-control form-control-sm"
                value="{{ $item['descuento'] ?? 0 }}">
+    </td>
+    <td class="text-nowrap">
+        @php
+            $estadoItem = (string) ($item['estado'] ?? 'P');
+            $etiquetaItem = \App\Support\Ventas\PedidoEstadosInterforming::etiquetaItem($estadoItem);
+            if (in_array($estadoItem, ['A', 'D', 'E'], true)) {
+                $badgeItem = 'badge badge-success';
+            } elseif ($estadoItem === 'R') {
+                $badgeItem = 'badge badge-danger';
+            } elseif ($estadoItem === 'C') {
+                $badgeItem = 'badge badge-info';
+            } else {
+                $badgeItem = 'badge badge-warning';
+            }
+        @endphp
+        <span class="{{ $badgeItem }}" title="Estado de aprobación del ítem">{{ $etiquetaItem }}</span>
+        <input type="hidden" name="items[{{ $idx }}][estado]" class="item-estado-aprobacion" value="{{ $estadoItem }}">
     </td>
     <td>
         <button type="button" class="btn btn-sm btn-outline-danger btn-quitar-item-pedido-if" title="Quitar">

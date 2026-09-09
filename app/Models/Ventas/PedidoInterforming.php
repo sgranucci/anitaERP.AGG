@@ -50,4 +50,16 @@ class PedidoInterforming extends Pedido
     {
         return PedidoEstadosInterforming::etiquetaCabecera($this->estadopedido);
     }
+
+    public function etiquetaAprobacion(): string
+    {
+        $this->loadMissing('pedido_articulos');
+
+        return PedidoEstadosInterforming::etiquetaAprobacionDesdeItems($this->pedido_articulos);
+    }
+
+    public function badgeClassAprobacion(): string
+    {
+        return PedidoEstadosInterforming::badgeClassAprobacion($this->etiquetaAprobacion());
+    }
 }

@@ -57,6 +57,7 @@ Pedidos Interforming
                             <th>Cliente</th>
                             <th>O. Compra</th>
                             <th>Estado</th>
+                            <th>Aprobación</th>
                             <th>Vendedor</th>
                             <th class="width80" data-orderable="false"></th>
                         </tr>
@@ -71,6 +72,7 @@ Pedidos Interforming
                                 <td>{{ $pedido->clientes->codigo ?? '' }} — {{ $pedido->clientes->nombre ?? '' }}</td>
                                 <td>{{ $pedido->orden_compra }}</td>
                                 <td>{{ $pedido->etiquetaEstado() }}</td>
+                                <td>@include('ventas.pedido.interforming.partials.badge_aprobacion', ['pedido' => $pedido])</td>
                                 <td>{{ $pedido->vendedores->nombre ?? '' }}</td>
                                 <td class="text-nowrap">
                                     <a href="{{ route('listar_pedido_pdf', $pedido->id) }}"
@@ -96,7 +98,7 @@ Pedidos Interforming
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="9" class="text-center">Sin pedidos</td>
+                                <td colspan="10" class="text-center">Sin pedidos</td>
                             </tr>
                         @endforelse
                     </tbody>

@@ -22,6 +22,7 @@ use App\Services\Configuracion\ArbolaprobacionService;
 use App\Support\Compras\OrdencompraEstados;
 use App\Support\Configuracion\ArbolAprobacionEnlaceSupport;
 use App\Support\Configuracion\ArbolaprobacionListadoFiltros;
+use App\Support\Configuracion\ArbolaprobacionNivelDocumentoEstadoSupport;
 use DB;
 use Exception;
 use Illuminate\Http\Request;
@@ -117,10 +118,12 @@ class ArbolaprobacionController extends Controller
         $requisicion_estados_arbol_enum = Requisicion_Estado::estadosArbolRequisicionConfigurables();
         $requisicion_sala_estados_arbol_enum = RequisicionSalaEstado::estadosArbolConfigurables();
         $ordencompra_estados_arbol_enum = OrdencompraEstados::estadosArbolConfigurables();
+        $documento_estado_por_tipo = ArbolaprobacionNivelDocumentoEstadoSupport::mapaOpcionesPorTipo();
+        $tipos_con_estado_doc = ArbolaprobacionNivelDocumentoEstadoSupport::nombresTipoConEstadoDocumento();
         $sector_legajocompra_query = Sector_Legajocompra::query()->orderBy('nombre')->get();
 
         return view('configuracion.arbolaprobacion.crear', compact('empresa_query', 'centrocosto_query', 'moneda_query',
-            'tipoarbol_enum', 'recordatorio_enum', 'estado_enum', 'requisicion_estados_arbol_enum', 'requisicion_sala_estados_arbol_enum', 'ordencompra_estados_arbol_enum', 'sector_legajocompra_query'));
+            'tipoarbol_enum', 'recordatorio_enum', 'estado_enum', 'requisicion_estados_arbol_enum', 'requisicion_sala_estados_arbol_enum', 'ordencompra_estados_arbol_enum', 'documento_estado_por_tipo', 'tipos_con_estado_doc', 'sector_legajocompra_query'));
     }
 
     /**
@@ -184,10 +187,12 @@ class ArbolaprobacionController extends Controller
         $requisicion_estados_arbol_enum = Requisicion_Estado::estadosArbolRequisicionConfigurables();
         $requisicion_sala_estados_arbol_enum = RequisicionSalaEstado::estadosArbolConfigurables();
         $ordencompra_estados_arbol_enum = OrdencompraEstados::estadosArbolConfigurables();
+        $documento_estado_por_tipo = ArbolaprobacionNivelDocumentoEstadoSupport::mapaOpcionesPorTipo();
+        $tipos_con_estado_doc = ArbolaprobacionNivelDocumentoEstadoSupport::nombresTipoConEstadoDocumento();
         $sector_legajocompra_query = Sector_Legajocompra::query()->orderBy('nombre')->get();
 
         return view('configuracion.arbolaprobacion.editar', compact('data', 'empresa_query', 'centrocosto_query', 'moneda_query',
-            'tipoarbol_enum', 'recordatorio_enum', 'estado_enum', 'requisicion_estados_arbol_enum', 'requisicion_sala_estados_arbol_enum', 'ordencompra_estados_arbol_enum', 'sector_legajocompra_query'));
+            'tipoarbol_enum', 'recordatorio_enum', 'estado_enum', 'requisicion_estados_arbol_enum', 'requisicion_sala_estados_arbol_enum', 'ordencompra_estados_arbol_enum', 'documento_estado_por_tipo', 'tipos_con_estado_doc', 'sector_legajocompra_query'));
     }
 
     /**

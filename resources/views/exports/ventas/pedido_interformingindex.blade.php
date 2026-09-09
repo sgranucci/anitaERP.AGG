@@ -2,13 +2,13 @@
 	@if (!empty($reservarFilaLogoExcel))
 		<tbody>
 			<tr>
-				<td colspan="9" style="height: 52px;">&#160;</td>
+				<td colspan="10" style="height: 52px;">&#160;</td>
 			</tr>
 		</tbody>
 	@endif
 	<tbody>
 		<tr>
-			<td colspan="9">
+			<td colspan="10">
 				<h2 style="margin: 0; font-size: 18pt; font-weight: bold;">Listado de pedidos Interforming</h2>
 				@if (!empty($subtituloFiltros))
 					<div style="font-size: 9pt; color: #444;">{{ $subtituloFiltros }}</div>
@@ -25,6 +25,7 @@
 			<th>Cliente</th>
 			<th>O. Compra</th>
 			<th>Estado</th>
+			<th>Aprobaci&oacute;n</th>
 			<th>Vendedor</th>
 			<th>Expreso</th>
 		</tr>
@@ -39,6 +40,7 @@
 				<td>{{ trim(($data->clientes->codigo ?? '').' — '.($data->clientes->nombre ?? ''), " —") }}</td>
 				<td>{{ $data->orden_compra }}</td>
 				<td>{{ $data->etiquetaEstado() }}</td>
+				<td>{{ $data->etiquetaAprobacion() }}</td>
 				<td>{{ $data->vendedores->nombre ?? '' }}</td>
 				<td>{{ $data->transportes->nombre ?? '' }}</td>
 			</tr>

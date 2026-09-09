@@ -149,6 +149,7 @@
     </div>
 
     <div class="col-md-6">
+        <input type="hidden" id="pedido_id" value="{{ $pedido->id ?? '' }}">
         <div class="form-group row">
             <label class="col-lg-3 col-form-label">Fecha</label>
             <input type="date" name="fecha" id="fecha" class="col-lg-3 form-control"
@@ -156,6 +157,13 @@
             <label class="col-lg-2 col-form-label">Estado</label>
             <input type="text" class="col-lg-3 form-control" readonly
                    value="{{ $estadosCabecera[$pedido->estadopedido ?? '0'] ?? ($pedido->estadopedido ?? '') }}">
+        </div>
+        <div class="form-group row">
+            <label class="col-lg-3 col-form-label">Aprobación</label>
+            <div class="col-lg-8 d-flex align-items-center">
+                @include('ventas.pedido.interforming.partials.badge_aprobacion', ['pedido' => $pedido])
+                <small class="text-muted ml-2">Árbol de firmas (distinto del estado de entrega)</small>
+            </div>
         </div>
 
         <div class="form-group row">
@@ -234,6 +242,7 @@
                     <th>% fason</th>
                     <th>Precio</th>
                     <th>Dto</th>
+                    <th>Aprob.</th>
                     <th></th>
                 </tr>
             </thead>

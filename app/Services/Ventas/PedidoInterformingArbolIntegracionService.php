@@ -2,9 +2,9 @@
 
 namespace App\Services\Ventas;
 
-use App\Mail\Configuracion\MailArbolAprobacion;
 use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Configuracion\Arbolaprobacion_Movimiento;
+use App\Models\Ventas\Pedido;
 use App\Models\Ventas\PedidoArticuloInterforming;
 use App\Models\Ventas\PedidoInterforming;
 use App\Repositories\Admin\UsuarioRepositoryInterface;
@@ -16,10 +16,11 @@ use App\Support\Ventas\PedidoInterformingSupport;
 use Auth;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Mail;
 
 /**
- * Árbol de aprobación para pedidos INTERFORMING (comprobante PE).
+ * Árbol de aprobación tipo Pedidos (PE) para cualquier cliente.
+ * Solo actúa si hay un árbol PE activo; sin árbol = no-op.
+ * Mutación de estados ítem Anita (P/A/R) solo en INTERFORMING.
  */
 class PedidoInterformingArbolIntegracionService
 {
@@ -51,16 +52,38 @@ class PedidoInterformingArbolIntegracionService
     }
 
     /**
-     * Dispara el árbol si hay uno activo (no falla si no hay árbol configurado).
+     * Hay al menos un árbol PE activo.
+     */
+    public function hayArbolActivo(): bool
+    {
+        $arboles = $this->arbolaprobacionRepository->findPorTipoArbol($this->nombreTipoArbol());
+
+        return $arboles && $arboles->count() > 0;
+    }
+
+    /**
+     * Dispara el árbol si hay uno activo. Sin árbol configurado → 0 (no-op).
      */
     public function dispararAlGuardar(int $pedidoId): int
     {
-        if (! PedidoInterformingSupport::esInterforming()) {
+        if ($pedidoId <= 0 || ! $this->hayArbolActivo()) {
             return 0;
         }
 
         return app(\App\Services\Configuracion\ArbolaprobacionService::class)
             ->procesaArbolaprobacion(self::TIPO_COMPROBANTE, $pedidoId, 'insert');
+    }
+
+    /**
+     * Hook post-grabación: no tumba el pedido si falla el árbol/mail.
+     */
+    public function dispararAlGuardarSeguro(int $pedidoId): void
+    {
+        try {
+            $this->dispararAlGuardar($pedidoId);
+        } catch (\Throwable $e) {
+            report($e);
+        }
     }
 
     public function procesaArbol(
@@ -70,8 +93,8 @@ class PedidoInterformingArbolIntegracionService
         callable $buscaProximoNivel,
         callable $enviaCorreo,
     ): int {
-        $pedido = PedidoInterforming::query()
-            ->with(['pedido_articulos', 'clientes', 'moneda'])
+        $pedido = Pedido::query()
+            ->with(['pedido_articulos', 'pedido_combinaciones', 'clientes'])
             ->find($comprobanteId);
         if (! $pedido) {
             return 0;
@@ -88,10 +111,14 @@ class PedidoInterformingArbolIntegracionService
 
         $arbol = $arbolaprobacion->first();
         $monto = $this->montoPedido($pedido);
-        $monedaId = (int) ($pedido->moneda_id ?? 0);
-        // Pedido Interforming no tiene CC: usar el del primer nivel del árbol.
-        $centrocostoId = (int) ($arbol->arbolaprobacion_niveles->first()->centrocosto_id ?? 0);
-        $arrayReplace = ArbolAprobacionEnlaceSupport::CARACTERES_REEMPLAZO;
+        $monedaId = $this->monedaIdPedido($pedido);
+        $centrocostoId = 0;
+        foreach ($arbol->arbolaprobacion_niveles as $nivelArbol) {
+            if ($nivelArbol->centrocosto_id !== null) {
+                $centrocostoId = (int) $nivelArbol->centrocosto_id;
+                break;
+            }
+        }
 
         while (true) {
             $estadoAprobacionActual = $leeAprobacionComprobante($tipoarbol, $comprobanteId);
@@ -155,11 +182,6 @@ class PedidoInterformingArbolIntegracionService
                 $linkAprobacion = ArbolAprobacionEnlaceSupport::enlaceAprobar($ip, self::TIPO_COMPROBANTE, (int) $comprobanteId, $hashAprobacion);
                 $linkRechazo = ArbolAprobacionEnlaceSupport::enlaceRechazo($ip, self::TIPO_COMPROBANTE, (int) $comprobanteId, $hashRechazo);
 
-                $enviaCorreo($uid, $tipoarbol, $pedido, $linkAprobacion, $linkRechazo, $linkVisualizar, [
-                    'monto_items' => $monto,
-                    'moneda_abrev_items' => $pedido->moneda->abreviatura ?? '',
-                ]);
-
                 $this->arbolaprobacionMovimientoRepository->create([
                     'arbolaprobacion_id' => $arbol->id,
                     'fechaenvio' => Carbon::now(),
@@ -178,6 +200,15 @@ class PedidoInterformingArbolIntegracionService
                     'estado' => $nombrePendiente,
                     'observacion' => '',
                 ]);
+
+                try {
+                    $enviaCorreo($uid, $tipoarbol, $pedido, $linkAprobacion, $linkRechazo, $linkVisualizar, [
+                        'monto_items' => $monto,
+                        'moneda_abrev_items' => '',
+                    ]);
+                } catch (\Throwable $e) {
+                    report($e);
+                }
             }
 
             return (int) $proximoNivel['proximonivel'];
@@ -186,6 +217,10 @@ class PedidoInterformingArbolIntegracionService
 
     public function finalizaTrasArbolCompleto(int $pedidoId, $usuarioId): void
     {
+        if (! PedidoInterformingSupport::esInterforming()) {
+            return;
+        }
+
         $ahora = Carbon::now()->toDateString();
         PedidoArticuloInterforming::query()
             ->where('pedido_id', $pedidoId)
@@ -203,6 +238,10 @@ class PedidoInterformingArbolIntegracionService
 
     public function rechazaPorRechazo(int $pedidoId, $usuarioId, string $observacion): void
     {
+        if (! PedidoInterformingSupport::esInterforming()) {
+            return;
+        }
+
         PedidoArticuloInterforming::query()
             ->where('pedido_id', $pedidoId)
             ->where(function ($q) {
@@ -223,33 +262,79 @@ class PedidoInterformingArbolIntegracionService
 
     public function montoPedidoPublico(object $pedido): float
     {
-        return $this->montoPedido($pedido instanceof PedidoInterforming
-            ? $pedido
-            : PedidoInterforming::query()->with('pedido_articulos')->findOrFail((int) $pedido->id));
+        if ($pedido instanceof Pedido) {
+            return $this->montoPedido($pedido);
+        }
+
+        return $this->montoPedido(Pedido::query()
+            ->with(['pedido_articulos', 'pedido_combinaciones'])
+            ->findOrFail((int) $pedido->id));
     }
 
-    private function montoPedido(PedidoInterforming $pedido): float
+    private function montoPedido(Pedido $pedido): float
     {
-        $pedido->loadMissing('pedido_articulos');
+        $pedido->loadMissing(['pedido_articulos', 'pedido_combinaciones']);
         $total = 0.0;
-        foreach ($pedido->pedido_articulos as $item) {
-            $cant = (float) ($item->cantidad ?? 0);
-            $precio = (float) ($item->precio ?? 0);
-            $dto = (float) ($item->descuento ?? 0);
-            if ($dto < 0) {
-                $dto = 0;
+
+        if ($pedido->pedido_articulos && $pedido->pedido_articulos->count() > 0) {
+            foreach ($pedido->pedido_articulos as $item) {
+                $total += $this->importeLinea(
+                    (float) ($item->cantidad ?? 0),
+                    (float) ($item->precio ?? 0),
+                    (float) ($item->descuento ?? 0)
+                );
             }
-            if ($dto > 100) {
-                $dto = 100;
+        } elseif ($pedido->pedido_combinaciones && $pedido->pedido_combinaciones->count() > 0) {
+            foreach ($pedido->pedido_combinaciones as $item) {
+                $total += $this->importeLinea(
+                    (float) ($item->cantidad ?? 0),
+                    (float) ($item->precio ?? 0),
+                    (float) ($item->descuento ?? 0)
+                );
             }
-            $total += $cant * $precio * (1 - ($dto / 100));
         }
+
         $dtoCab = (float) ($pedido->descuento ?? 0);
         if ($dtoCab > 0 && $dtoCab <= 100) {
             $total *= (1 - ($dtoCab / 100));
         }
 
         return round($total, 2);
+    }
+
+    private function importeLinea(float $cant, float $precio, float $dto): float
+    {
+        if ($dto < 0) {
+            $dto = 0;
+        }
+        if ($dto > 100) {
+            $dto = 100;
+        }
+
+        return $cant * $precio * (1 - ($dto / 100));
+    }
+
+    private function monedaIdPedido(Pedido $pedido): int
+    {
+        $cab = (int) ($pedido->moneda_id ?? 0);
+        if ($cab > 0) {
+            return $cab;
+        }
+        $pedido->loadMissing(['pedido_articulos', 'pedido_combinaciones']);
+        foreach ($pedido->pedido_articulos ?? [] as $item) {
+            $id = (int) ($item->moneda_id ?? 0);
+            if ($id > 0) {
+                return $id;
+            }
+        }
+        foreach ($pedido->pedido_combinaciones ?? [] as $item) {
+            $id = (int) ($item->moneda_id ?? 0);
+            if ($id > 0) {
+                return $id;
+            }
+        }
+
+        return 1;
     }
 
     private function grabaMovimientoAutomatico(int $arbolId, int $comprobanteId, int $nivel): void

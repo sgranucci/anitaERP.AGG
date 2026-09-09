@@ -1164,6 +1164,10 @@ class PedidoServiceFerli
 
 			return ['error' => $e->getMessage()];
 		}
+
+		app(PedidoInterformingArbolIntegracionService::class)
+			->dispararAlGuardarSeguro((int) ($data['pedido_id'] ?? 0));
+
 		return ['id'=>$data['pedido_id'], 'codigo'=>$data['codigo']];
 	}
 

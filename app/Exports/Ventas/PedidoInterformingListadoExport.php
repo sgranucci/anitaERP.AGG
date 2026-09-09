@@ -24,7 +24,7 @@ class PedidoInterformingListadoExport implements FromView, ShouldAutoSize, WithC
 {
     use Exportable;
 
-    private const COL_ULTIMA = 'I';
+    private const COL_ULTIMA = 'J';
 
     private PedidoInterformingService $pedidoService;
 
@@ -130,8 +130,9 @@ class PedidoInterformingListadoExport implements FromView, ShouldAutoSize, WithC
                 'E' => 36,
                 'F' => 16,
                 'G' => 18,
-                'H' => 22,
+                'H' => 18,
                 'I' => 22,
+                'J' => 22,
             ];
         }
 

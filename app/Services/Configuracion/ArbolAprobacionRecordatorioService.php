@@ -72,7 +72,7 @@ class ArbolAprobacionRecordatorioService
             return false;
         }
         $estado = (string) ($arbol->estado ?? '');
-        if ($estado !== '' && ! in_array($estado, ['Activo', 'Active'], true)) {
+        if ($estado !== '' && ! in_array(mb_strtolower($estado), ['activo', 'active'], true)) {
             return false;
         }
 

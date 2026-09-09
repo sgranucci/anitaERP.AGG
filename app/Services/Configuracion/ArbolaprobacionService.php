@@ -824,10 +824,14 @@ class ArbolaprobacionService
     private function nivelesDelCentrocostoPorRama(Arbolaprobacion $arbol, int $centrocostoId, ?string $rama): array
     {
         $rama = ReArbolRamaCatalog::normalizar($rama);
-        $dual = ReArbolRamaSupport::centrocostoTieneDualRama($arbol, $centrocostoId);
+        $dual = $centrocostoId > 0
+            ? ReArbolRamaSupport::centrocostoTieneDualRama($arbol, $centrocostoId)
+            : false;
         $out = [];
         foreach ($arbol->arbolaprobacion_niveles as $nivel) {
-            if ((int) $nivel->centrocosto_id !== $centrocostoId) {
+            // null = aplica a todos los CC; si hay id, solo ese CC.
+            $nivelCc = $nivel->centrocosto_id;
+            if ($nivelCc !== null && (int) $nivelCc !== $centrocostoId) {
                 continue;
             }
             // Dual + rama explícita: solo esa rama. Dual + rama null: todos los del CC
@@ -978,24 +982,40 @@ class ArbolaprobacionService
                 $extras['link_bandeja'] = urlAppAbsoluta('mis-aprobaciones');
             }
 
-            Mail::to($receivers)->send(new MailArbolAprobacion($ptrcomprobante, $tipoarbol, $linkaprobacion, $linkrechazo, $linkvisualizar, $extras));
+            $mailOk = false;
+            try {
+                Mail::to($receivers)->send(new MailArbolAprobacion($ptrcomprobante, $tipoarbol, $linkaprobacion, $linkrechazo, $linkvisualizar, $extras));
+                $mailOk = true;
+            } catch (\Throwable $e) {
+                report($e);
+                $this->logArbolAprobacion('correo_fallido', [
+                    'tipo_arbol' => $tipoarbol,
+                    'comprobante' => $this->contextoComprobanteArbol($ptrcomprobante),
+                    'destinatario_usuario_id' => (int) $usuario_id,
+                    'destinatario_login' => (string) ($usuario->usuario ?? ''),
+                    'email' => (string) $receivers,
+                    'error' => $e->getMessage(),
+                ]);
+            }
 
             try {
                 app(\App\Services\Configuracion\AnitaNotificacionService::class)
                     ->avisarAprobacionPendiente((int) $usuario_id, (string) $tipoarbol, $ptrcomprobante, $extras);
             } catch (\Throwable) {
-                // El mail ya salió; el aviso in-app no debe romper el circuito.
+                // El aviso in-app no debe romper el circuito (mail ok o fallido).
             }
 
-            $this->logArbolAprobacion('correo_enviado', [
-                'tipo_arbol' => $tipoarbol,
-                'comprobante' => $this->contextoComprobanteArbol($ptrcomprobante),
-                'destinatario_usuario_id' => (int) $usuario_id,
-                'destinatario_login' => (string) ($usuario->usuario ?? ''),
-                'email' => (string) $receivers,
-                'estado_tras_aprobar' => $extras['estado_tras_aprobar'] ?? null,
-                'es_recordatorio' => ! empty($extras['es_recordatorio']),
-            ]);
+            if ($mailOk) {
+                $this->logArbolAprobacion('correo_enviado', [
+                    'tipo_arbol' => $tipoarbol,
+                    'comprobante' => $this->contextoComprobanteArbol($ptrcomprobante),
+                    'destinatario_usuario_id' => (int) $usuario_id,
+                    'destinatario_login' => (string) ($usuario->usuario ?? ''),
+                    'email' => (string) $receivers,
+                    'estado_tras_aprobar' => $extras['estado_tras_aprobar'] ?? null,
+                    'es_recordatorio' => ! empty($extras['es_recordatorio']),
+                ]);
+            }
         } else {
             throw new ModelNotFoundException('Usuario en arbol de aprobación no encontrado');
         }

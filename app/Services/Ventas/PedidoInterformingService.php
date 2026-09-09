@@ -60,7 +60,7 @@ class PedidoInterformingService
         }
 
         $q = PedidoInterforming::query()
-            ->with(['clientes', 'vendedores', 'transportes'])
+            ->with(['clientes', 'vendedores', 'transportes', 'pedido_articulos'])
             ->orderByDesc('id');
 
         if (PedidoInterformingListadoFiltros::tieneCriteriosAplicados($filtros)) {
@@ -139,7 +139,8 @@ class PedidoInterformingService
                 $this->guardarItems($pedido, $items);
 
                 try {
-                    app(PedidoInterformingArbolIntegracionService::class)->dispararAlGuardar((int) $pedido->id);
+                    app(PedidoInterformingArbolIntegracionService::class)
+                        ->dispararAlGuardarSeguro((int) $pedido->id);
                 } catch (\Throwable $e) {
                     report($e);
                 }

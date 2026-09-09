@@ -42,7 +42,8 @@ class SuscripcionAprobadorService
         }
 
         $nombreEmpresa = (string) (DB::table('empresa')->where('id', $empresaId)->value('nombre') ?? '');
-        $estado = (string) (Arbolaprobacion::query()->whereNotNull('estado')->value('estado') ?: 'Activo');
+        // Literal canónico del enum del ABM (no copiar de otro árbol: puede venir "ACTIVO").
+        $estado = (string) (Arbolaprobacion::$enumEstado[0]['nombre'] ?? 'Activo');
 
         return Arbolaprobacion::query()->create([
             'nombre' => trim('Suscripciones — '.$nombreEmpresa),

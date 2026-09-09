@@ -730,5 +730,75 @@
                 $('#seleccionclienteentregaModal').modal('hide');
             }
         });
+
+        leeArbolPedidoIfAlAbrirSolapa();
     });
+
+    function fechaMovimientoArbolTexto(raw) {
+        if (raw == null || raw === '') {
+            return '';
+        }
+        return String(raw).substring(0, 19).replace('T', ' ');
+    }
+
+    function leeArbolPedidoIfAlAbrirSolapa() {
+        var $link = $('#tab-pedido-if-arbol-link');
+        if (!$link.length) {
+            return;
+        }
+        $link.on('shown.bs.tab', function () {
+            leeArbolPedidoIf();
+        });
+    }
+
+    function leeArbolPedidoIf() {
+        var wrapper = $('.container-arbol-pedido-if');
+        if (!wrapper.length) {
+            return;
+        }
+        var pedidoId = $('#pedido_id').val();
+        if (!pedidoId) {
+            wrapper.html('<tr><td colspan="7" class="text-center text-muted">Guarde el pedido para iniciar el árbol.</td></tr>');
+            return;
+        }
+        wrapper.html('<tr><td colspan="7" class="text-center text-muted">Cargando historial…</td></tr>');
+        var base = (typeof carpetaBase !== 'undefined' && carpetaBase) ? carpetaBase : '';
+        var url = base + '/arbolaprobacion/leer_movimiento_aprobacion/PE/' + pedidoId;
+
+        $.ajax({
+            url: url,
+            method: 'GET',
+            dataType: 'json',
+            cache: false
+        }).done(function (historia) {
+            wrapper.empty();
+            var rows = Array.isArray(historia) ? historia : (historia.movimientos || historia);
+            if (!rows || !rows.length) {
+                wrapper.append(
+                    $('<tr></tr>').append(
+                        $('<td colspan="7" class="text-center text-muted"></td>')
+                            .text('Sin movimientos de aprobación. Al guardar el pedido se genera el pendiente del firmante.')
+                    )
+                );
+                return;
+            }
+            $.each(rows, function (index, value) {
+                var $tr = $('<tr></tr>');
+                $tr.append($('<td></td>').text(fechaMovimientoArbolTexto(value.fechaenvio)));
+                $tr.append($('<td></td>').text((value.enviousuarios && value.enviousuarios.nombre) || ''));
+                $tr.append($('<td></td>').text(value.nivel !== undefined && value.nivel !== null ? value.nivel : ''));
+                $tr.append($('<td></td>').text(value.estado || ''));
+                $tr.append($('<td></td>').text(
+                    value.fechaproceso == null || value.fechaproceso === ''
+                        ? ''
+                        : fechaMovimientoArbolTexto(value.fechaproceso)
+                ));
+                $tr.append($('<td></td>').text((value.destinatariousuarios && value.destinatariousuarios.nombre) || ''));
+                $tr.append($('<td></td>').text(value.observacion || ''));
+                wrapper.append($tr);
+            });
+        }).fail(function () {
+            wrapper.html('<tr><td colspan="7" class="text-center text-danger">No se pudo cargar el historial del árbol.</td></tr>');
+        });
+    }
 })(jQuery);

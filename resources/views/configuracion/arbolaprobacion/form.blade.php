@@ -1,7 +1,15 @@
 @php
     $esRequisiciones = (old('tipoarbol', $data->tipoarbol ?? '') === 'Requisiciones');
     $esRequisicionesSala = (old('tipoarbol', $data->tipoarbol ?? '') === 'Requisiciones de sala');
+    $tipoArbolActual = old('tipoarbol', $data->tipoarbol ?? '');
+    $usaEstadoDoc = \App\Support\Configuracion\ArbolaprobacionNivelDocumentoEstadoSupport::usaEstadoDocumento($tipoArbolActual);
+    $docEstadosOpcionesTipo = \App\Support\Configuracion\ArbolaprobacionNivelDocumentoEstadoSupport::opcionesParaTipo($tipoArbolActual);
 @endphp
+
+<script>
+window.AnitaArbolDocumentoEstadoPorTipo = @json($documento_estado_por_tipo ?? []);
+window.AnitaArbolTiposConEstadoDoc = @json($tipos_con_estado_doc ?? []);
+</script>
 
 <div class="anita-arbol-panel">
     <div class="anita-arbol-panel-head">
@@ -43,8 +51,11 @@
                 <div class="col-lg-8">
                     <select id="estado" name="estado" class="form-control" required>
                         <option value="">-- Elija estado --</option>
+                        @php
+                            $estadoActual = (string) old('estado', $data->estado ?? '');
+                        @endphp
                         @foreach($estado_enum as $estado)
-                            <option value="{{ $estado['nombre'] }}" {{ $estado['nombre'] == old('estado',$data->estado??'') ? 'selected' : '' }}>
+                            <option value="{{ $estado['nombre'] }}" {{ strcasecmp((string) $estado['nombre'], $estadoActual) === 0 ? 'selected' : '' }}>
                                 {{ $estado['nombre'] }}
                             </option>
                         @endforeach
@@ -101,7 +112,10 @@
         <div>
             <h2 class="anita-arbol-panel-title">Niveles</h2>
             <p class="anita-arbol-panel-hint">
-                Usuario vacío = auto. En RE, usá Rama A/B cuando el CC tiene dual-rama.
+                Usuario vacío = auto. Centro de costo vacío = todos los CC.
+                @if($esRequisiciones)
+                    En RE, usá Rama A/B cuando el CC tiene dual-rama.
+                @endif
             </p>
         </div>
         <span class="anita-arbol-chip anita-arbol-chip-teal">Circuito</span>
@@ -111,12 +125,15 @@
         <strong>Usuario opcional.</strong>
         Sin usuario, el nivel se aprueba automáticamente.
         @if($esRequisiciones)
-            En requisiciones se aplica el <strong>Estado req.</strong> (default APROBADA).
+            En requisiciones se aplica el <strong>Estado doc.</strong> (default APROBADA).
             <strong>Rama A</strong> = allowlist/auto · <strong>Rama B</strong> = autorización (tipicamente N1 EN COMPRAS → N2 firmantes por monto).
             Las ramas las define el bloque <strong>Circuito RE por cuentas</strong> (allowlist + triggers).
             <strong>Doble apr.</strong> por CC: con S, Desde monto actúa como piso; con N, bandas exclusivas Desde–Hasta.
         @elseif($esRequisicionesSala)
-            En requisiciones de sala se aplica el Estado req. si está definido.
+            En requisiciones de sala se aplica el Estado doc. si está definido.
+        @elseif($tipoArbolActual === 'Pedidos')
+            En <strong>Pedidos</strong> no hay Estado doc. (la aprobación cierra ítems al completar el árbol).
+            Preferí <strong>— Todos —</strong> en centro de costo: el pedido no tiene CC propio.
         @endif
     </div>
 
@@ -132,7 +149,7 @@
                     <th style="width: 9%;">Desde</th>
                     <th style="width: 9%;">Hasta</th>
                     <th style="width: 6%;">Moneda</th>
-                    <th style="width: 12%;">Estado doc.</th>
+                    <th style="width: 12%;" class="col-estado-doc" title="Estado del documento al aprobar este nivel (solo RE/RS/OC/SU)">Estado doc.</th>
                     <th style="width: 7%;" class="col-doble-aprobacion" title="Doble aprobación por CC">Doble</th>
                     <th></th>
                 </tr>
@@ -165,10 +182,14 @@
                             </select>
                         </td>
                         <td>
-                            <select name="centrocosto_ids[]" class="centrocosto form-control form-control-sm required" required data-fouc>
-                                <option value="">-- CC --</option>
+                            @php
+                                $ccSel = old('centrocosto_ids.'.$idxNivel, $arbolaprobacion_niveles->centrocosto_id ?? null);
+                            @endphp
+                            <select name="centrocosto_ids[]" class="centrocosto form-control form-control-sm" data-fouc
+                                    title="Vacío = todos los centros de costo">
+                                <option value="" {{ $ccSel === null || $ccSel === '' ? 'selected' : '' }}>— Todos —</option>
                                 @foreach($centrocosto_query as $value)
-                                    <option value="{{ $value->id }}" {{ (int) $value->id == (int) old('centrocosto_ids[]', $arbolaprobacion_niveles->centrocosto_id ?? '') ? 'selected' : '' }}>
+                                    <option value="{{ $value->id }}" {{ (string) $value->id === (string) $ccSel ? 'selected' : '' }}>
                                         {{ $value->codigo }} - {{ $value->nombre }}
                                     </option>
                                 @endforeach
@@ -200,24 +221,17 @@
                                 @endforeach
                             </select>
                         </td>
-                        <td>
+                        <td class="col-estado-doc">
                             @php
-                                $nombreTipoOc = \App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol[array_search('OC', array_column(\App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
-                                $nombreTipoRs = \App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol[array_search('RS', array_column(\App\Models\Configuracion\Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
-                                $tipoArbolSel = old('tipoarbol', isset($data) ? ($data->tipoarbol ?? '') : '');
-                                $docEstadosOpciones = ($tipoArbolSel === $nombreTipoOc)
-                                    ? ($ordencompra_estados_arbol_enum ?? [])
-                                    : (($tipoArbolSel === $nombreTipoRs)
-                                        ? ($requisicion_sala_estados_arbol_enum ?? [])
-                                        : ($requisicion_estados_arbol_enum ?? []));
                                 $selDoc = old('documento_estado_al_aprobar.'.$idxNivel, $arbolaprobacion_niveles->documento_estado_al_aprobar ?? '');
                                 if ($selDoc === '' && $esRequisiciones) {
                                     $selDoc = 'APROBADA';
                                 }
                             @endphp
-                            <select name="documento_estado_al_aprobar[]" class="form-control form-control-sm" title="Estado del documento al aplicar este nivel">
+                            <select name="documento_estado_al_aprobar[]" class="form-control form-control-sm documento-estado-al-aprobar"
+                                    title="Estado del documento al aplicar este nivel">
                                 <option value="">—</option>
-                                @foreach($docEstadosOpciones as $estDoc)
+                                @foreach($docEstadosOpcionesTipo as $estDoc)
                                     <option value="{{ $estDoc['nombre'] }}" {{ $selDoc == $estDoc['nombre'] ? 'selected' : '' }}>{{ str_replace('_', ' ', $estDoc['nombre']) }}</option>
                                 @endforeach
                             </select>

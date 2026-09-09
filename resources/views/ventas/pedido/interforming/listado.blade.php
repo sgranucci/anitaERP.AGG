@@ -68,14 +68,15 @@
 		<thead>
 			<tr>
 				<th style="width: 5%;">ID</th>
-				<th style="width: 8%;">C&oacute;digo</th>
-				<th style="width: 8%;">Fecha</th>
-				<th style="width: 8%;">Entrega</th>
-				<th style="width: 24%;">Cliente</th>
-				<th style="width: 10%;">O. Compra</th>
-				<th style="width: 12%;">Estado</th>
+				<th style="width: 7%;">C&oacute;digo</th>
+				<th style="width: 7%;">Fecha</th>
+				<th style="width: 7%;">Entrega</th>
+				<th style="width: 20%;">Cliente</th>
+				<th style="width: 9%;">O. Compra</th>
+				<th style="width: 10%;">Estado</th>
+				<th style="width: 11%;">Aprobaci&oacute;n</th>
 				<th style="width: 12%;">Vendedor</th>
-				<th style="width: 13%;">Expreso</th>
+				<th style="width: 12%;">Expreso</th>
 			</tr>
 		</thead>
 		<tbody>
@@ -88,6 +89,7 @@
 					<td>{{ trim(($data->clientes->codigo ?? '').' — '.($data->clientes->nombre ?? ''), " —") }}</td>
 					<td>{{ $data->orden_compra }}</td>
 					<td>{{ $data->etiquetaEstado() }}</td>
+					<td>{{ $data->etiquetaAprobacion() }}</td>
 					<td>{{ $data->vendedores->nombre ?? '' }}</td>
 					<td>{{ $data->transportes->nombre ?? '' }}</td>
 				</tr>

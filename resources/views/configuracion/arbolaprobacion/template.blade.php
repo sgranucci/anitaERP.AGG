@@ -15,8 +15,9 @@
             </select>
         </td>
         <td>
-            <select name="centrocosto_ids[]" class="centrocosto form-control form-control-sm required" required data-fouc>
-                <option value="">-- CC --</option>
+            <select name="centrocosto_ids[]" class="centrocosto form-control form-control-sm" data-fouc
+                    title="Vacío = todos los centros de costo">
+                <option value="">— Todos —</option>
                 @foreach($centrocosto_query as $key => $value)
                     <option value="{{ $value->id }}">{{ $value->codigo }} - {{ $value->nombre }}</option>
                 @endforeach
@@ -46,18 +47,10 @@
                 @endforeach
             </select>
         </td>
-        <td>
-            <select name="documento_estado_al_aprobar[]" class="form-control form-control-sm">
+        <td class="col-estado-doc">
+            <select name="documento_estado_al_aprobar[]" class="form-control form-control-sm documento-estado-al-aprobar"
+                    title="Estado del documento al aplicar este nivel">
                 <option value="">—</option>
-                @foreach(($requisicion_estados_arbol_enum ?? []) as $estReq)
-                    <option value="{{ $estReq['nombre'] }}">{{ str_replace('_', ' ', $estReq['nombre']) }}</option>
-                @endforeach
-                @foreach(($requisicion_sala_estados_arbol_enum ?? []) as $estRs)
-                    <option value="{{ $estRs['nombre'] }}">{{ str_replace('_', ' ', $estRs['nombre']) }}</option>
-                @endforeach
-                @foreach(($ordencompra_estados_arbol_enum ?? []) as $estOc)
-                    <option value="{{ $estOc['nombre'] }}">{{ $estOc['nombre'] }}</option>
-                @endforeach
             </select>
         </td>
         <td class="text-center col-doble-aprobacion">

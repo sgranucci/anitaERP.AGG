@@ -38,10 +38,12 @@
 			actualizarPanelOcArbol();
 			actualizarPanelReCircuitoCuentas();
 			actualizarVisibilidadDobleAprobacion();
+			actualizarEstadoDocumentoPorTipo();
 		});
 		actualizarPanelOcArbol();
 		actualizarPanelReCircuitoCuentas();
 		actualizarVisibilidadDobleAprobacion();
+		actualizarEstadoDocumentoPorTipo();
 
 		$('#agrega_oc_trigger').on('click', agregaFilaOcTrigger);
 		$(document).on('click', '.eliminar_oc_trigger', function (e) {
@@ -93,15 +95,18 @@
 			let centrocosto_id = $(this).val();
 
 			$("#tbody-arbolaprobacion-nivel-table .iiarbolaprobacion_nivel").each(function() {
-				if (centrocosto_id > 0)
-				{
-					if ($(this).parents('tr').find('.centrocosto').val() != centrocosto_id)
-						$(this).closest('tr').hide();
-					else
-						$(this).closest('tr').show();
+				var $tr = $(this).closest('tr');
+				var ccVal = String($tr.find('.centrocosto').val() || '');
+				if (centrocosto_id > 0) {
+					// Mostrar CC exacto o «Todos» (vacío).
+					if (ccVal !== '' && ccVal !== String(centrocosto_id)) {
+						$tr.hide();
+					} else {
+						$tr.show();
+					}
+				} else {
+					$tr.show();
 				}
-				else
-					$(this).closest('tr').show();
     		});
 
 		});		
@@ -130,6 +135,7 @@
     	$("#tbody-arbolaprobacion-nivel-table").append(renglon);
     	actualizaRenglonesArbolaprobacion_Nivel();
 		actualizarVisibilidadDobleAprobacion();
+		actualizarEstadoDocumentoPorTipo();
 
 		activa_eventos(false);
     }
@@ -165,6 +171,40 @@
 		if (!esReq) {
 			$('#tbody-arbolaprobacion-nivel-table tr.item-arbolaprobacion-nivel .rama-re').val('');
 		}
+	}
+
+	function actualizarEstadoDocumentoPorTipo() {
+		var tipo = $('#tipoarbol').val() || '';
+		var mapa = window.AnitaArbolDocumentoEstadoPorTipo || {};
+		var tiposCon = window.AnitaArbolTiposConEstadoDoc || [];
+		var usa = tiposCon.indexOf(tipo) !== -1;
+		var opciones = usa ? (mapa[tipo] || []) : [];
+
+		$('.col-estado-doc').toggle(usa);
+
+		$('#tbody-arbolaprobacion-nivel-table .documento-estado-al-aprobar, #template-renglon-arbolaprobacion-nivel .documento-estado-al-aprobar').each(function () {
+			var $sel = $(this);
+			var actual = String($sel.val() || '');
+			$sel.empty();
+			$sel.append($('<option></option>').attr('value', '').text('—'));
+			opciones.forEach(function (est) {
+				var nombre = est && est.nombre ? est.nombre : '';
+				if (!nombre) {
+					return;
+				}
+				var label = String(nombre).replace(/_/g, ' ');
+				$sel.append($('<option></option>').attr('value', nombre).text(label));
+			});
+			if (usa && actual && $sel.find('option[value="' + actual.replace(/"/g, '\\"') + '"]').length) {
+				$sel.val(actual);
+			} else if (usa && tipo === 'Requisiciones' && $sel.find('option[value="APROBADA"]').length) {
+				$sel.val('APROBADA');
+			} else {
+				$sel.val('');
+			}
+			// No deshabilitar: si no viaja el name, se desalinea con niveles[].
+			$sel.prop('disabled', false);
+		});
 	}
 
 	function agregaFilaReTrigger(e) {

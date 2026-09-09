@@ -887,6 +887,9 @@ class PedidoService
 			$this->pedidoProduccionAvisoService->despacharSiCorresponde((int) $id, $articuloIdsAvisoProduccion);
 		}
 
+		app(PedidoInterformingArbolIntegracionService::class)
+			->dispararAlGuardarSeguro((int) ($data['pedido_id'] ?? 0));
+
 		return ['id'=>$data['pedido_id'], 'codigo'=>$data['codigo']];
 	}
 

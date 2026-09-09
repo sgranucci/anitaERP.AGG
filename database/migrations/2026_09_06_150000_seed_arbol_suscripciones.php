@@ -25,7 +25,8 @@ return new class extends Migration
             return;
         }
 
-        $estado = $this->estadoActivoDeArbolesExistentes();
+        // Literal canónico del enum del ABM (no copiar de otro árbol: puede venir "ACTIVO").
+        $estado = (string) (Arbolaprobacion::$enumEstado[0]['nombre'] ?? 'Activo');
 
         foreach (self::EMPRESAS as $empresaId) {
             if (! DB::table('empresa')->where('id', $empresaId)->exists()) {
@@ -74,21 +75,5 @@ return new class extends Migration
         }
 
         Arbolaprobacion::query()->whereIn('id', $ids)->delete();
-    }
-
-    /**
-     * Reusa el literal de estado que ya usan los árboles vigentes (evita adivinar el enum).
-     */
-    private function estadoActivoDeArbolesExistentes(): string
-    {
-        $estado = DB::table('arbolaprobacion')
-            ->where('tipoarbol', 'Ordenes de compra')
-            ->value('estado');
-
-        if (! $estado) {
-            $estado = DB::table('arbolaprobacion')->value('estado');
-        }
-
-        return (string) ($estado ?: 'Activo');
     }
 };

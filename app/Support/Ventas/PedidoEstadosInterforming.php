@@ -81,4 +81,47 @@ final class PedidoEstadosInterforming
 
         return self::etiquetasItem()[$estado] ?? $estado;
     }
+
+    /**
+     * Resumen de aprobación del árbol a partir de los estados de ítem (penv_estado).
+     *
+     * @param  iterable<int, object|array<string, mixed>>  $items
+     */
+    public static function etiquetaAprobacionDesdeItems(iterable $items): string
+    {
+        $estados = [];
+        foreach ($items as $item) {
+            if (is_array($item)) {
+                $estados[] = (string) ($item['estado'] ?? '');
+            } else {
+                $estados[] = (string) ($item->estado ?? '');
+            }
+        }
+
+        if ($estados === []) {
+            return '—';
+        }
+
+        if (in_array(self::ITEM_RECHAZADO, $estados, true)) {
+            return 'Rechazado';
+        }
+
+        foreach ($estados as $estado) {
+            if ($estado === '' || $estado === self::ITEM_PENDIENTE || $estado === self::ITEM_CONDICIONAL) {
+                return 'Pendiente aprobación';
+            }
+        }
+
+        return 'Aprobado';
+    }
+
+    public static function badgeClassAprobacion(string $etiqueta): string
+    {
+        return match ($etiqueta) {
+            'Aprobado' => 'badge badge-success',
+            'Rechazado' => 'badge badge-danger',
+            'Pendiente aprobación' => 'badge badge-warning',
+            default => 'badge badge-secondary',
+        };
+    }
 }

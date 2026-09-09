@@ -2,9 +2,8 @@
 
 namespace App\Repositories\Configuracion;
 
-use App\Models\Compras\Requisicion_Estado;
-use App\Models\Configuracion\Arbolaprobacion;
 use App\Models\Configuracion\Arbolaprobacion_Nivel;
+use App\Support\Configuracion\ArbolaprobacionNivelDocumentoEstadoSupport;
 use App\Support\Database\EloquentAuditDeleteSupport;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
@@ -77,9 +76,9 @@ class Arbolaprobacion_NivelRepository implements Arbolaprobacion_NivelRepository
         $estados_req = $data['documento_estado_al_aprobar'] ?? [];
         $dobles = $data['doble_aprobacions'] ?? [];
         $ramas = $data['ramas'] ?? [];
-        $tipoarbol = $data['tipoarbol'] ?? DB::table('arbolaprobacion')->where('id', $arbolaprobacion_id)->value('tipoarbol');
-        $nombreTipoRequisiciones = Arbolaprobacion::$enumTipoArbol[array_search('RE', array_column(Arbolaprobacion::$enumTipoArbol, 'valor'))]['nombre'];
-        $estadoAprobadaRequisicion = Requisicion_Estado::$enumEstado[array_search('A', array_column(Requisicion_Estado::$enumEstado, 'valor'))]['nombre'];
+        $tipoarbol = (string) ($data['tipoarbol'] ?? DB::table('arbolaprobacion')->where('id', $arbolaprobacion_id)->value('tipoarbol') ?? '');
+        $usaEstadoDoc = ArbolaprobacionNivelDocumentoEstadoSupport::usaEstadoDocumento($tipoarbol);
+        $defaultEstadoDoc = ArbolaprobacionNivelDocumentoEstadoSupport::defaultParaTipo($tipoarbol);
 
         $guardados = [];
 
@@ -87,18 +86,22 @@ class Arbolaprobacion_NivelRepository implements Arbolaprobacion_NivelRepository
             $rowId = isset($ids[$i]) && $ids[$i] !== '' ? (int) $ids[$i] : null;
             $usuarioId = isset($usuario_ids[$i]) && $usuario_ids[$i] !== '' ? $usuario_ids[$i] : null;
             $estReq = isset($estados_req[$i]) && $estados_req[$i] !== '' ? $estados_req[$i] : null;
-            if ($estReq === null && $tipoarbol === $nombreTipoRequisiciones) {
-                $estReq = $estadoAprobadaRequisicion;
+            if (! $usaEstadoDoc) {
+                $estReq = null;
+            } elseif ($estReq === null && $defaultEstadoDoc !== null) {
+                $estReq = $defaultEstadoDoc;
             }
             $doble = strtoupper(trim((string) ($dobles[$i] ?? 'N')));
             $doble = $doble === 'S' ? 'S' : 'N';
             $ramaRaw = strtoupper(trim((string) ($ramas[$i] ?? '')));
             $rama = in_array($ramaRaw, ['A', 'B'], true) ? $ramaRaw : null;
+            $ccRaw = $centrocosto_ids[$i] ?? null;
+            $centrocostoId = ($ccRaw === null || $ccRaw === '') ? null : (int) $ccRaw;
 
             $payload = [
                 'arbolaprobacion_id' => $arbolaprobacion_id,
                 'nivel' => $niveles[$i],
-                'centrocosto_id' => $centrocosto_ids[$i],
+                'centrocosto_id' => $centrocostoId,
                 'usuario_id' => $usuarioId,
                 'desdemonto' => $desdemontos[$i] ?? null,
                 'hastamonto' => $hastamontos[$i] ?? null,
