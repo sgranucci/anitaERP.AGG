@@ -36,6 +36,8 @@ use App\Models\Stock\Usoarticulo;
 use App\Repositories\Stock\Articulo_CajaRepositoryInterface;
 use App\Repositories\Stock\Articulo_CostoRepositoryInterface;
 use App\Services\Stock\PrecioServiceFerli;
+use App\Support\Listado\QueryRetornoListado;
+use App\Support\Stock\ArticuloFerliListadoFiltros;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -101,6 +103,17 @@ class ArticuloFerliController extends Controller
 
         $usosArticulos = Usoarticulo::all();
 
+        if ($request->boolean('filtro_limpiar')) {
+            return redirect()->route('products.index');
+        }
+
+        $filtros = ArticuloFerliListadoFiltros::resolverDesdeRequest($request);
+        $filtrosQuery = ArticuloFerliListadoFiltros::paraQueryString($filtros);
+        $page = (int) $request->input('page', 0);
+        if ($page > 1) {
+            $filtrosQuery['page'] = $page;
+        }
+
         $art_query = Articulo::select('articulo.id as id', 'sku as stkm_articulo', 'descripcion as stkm_desc',
             'unidadmedida.nombre as stkm_unidad_medida', 'categoria.nombre as stkm_agrupacion', 'mventa.nombre as stkm_marca', 'linea.nombre as stkm_linea',
             'usoarticulo_id', 'nofactura')
@@ -109,84 +122,21 @@ class ArticuloFerliController extends Controller
             ->leftJoin('mventa', 'articulo.mventa_id', '=', 'mventa.id')
             ->leftJoin('linea', 'articulo.linea_id', '=', 'linea.id');
 
-        $filtros = [];
-        if ($request->url() != $request->fullUrl()) {
-            $url = urldecode($request->fullUrl());
-            $components = parse_url($url);
-            parse_str($components['query'], $filtros);
+        ArticuloFerliListadoFiltros::aplicar($art_query, $filtros);
 
-            session(['filtros' => $filtros]);
-        } else {
-            $filtros = session('filtros');
-        }
+        $articulos = $art_query->orderBy('articulo.sku')->paginate(50)->withQueryString();
+        $estadoComb = $filtros['estado_comb'] ?? ArticuloFerliListadoFiltros::ESTADO_COMB_ACTIVAS;
+        $retornoQuery = QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery);
 
-        // Aplica los filtros si es que hay definidos
-        if ($filtros != '' && $filtros['filter_column'] ?? '') {
-            for ($ii = 1; $ii <= count($filtros['filter_column']); $ii++) {
-                if ($filtros['filter_column'][$ii]['type'] == '') {
-                    continue;
-                }
-
-                if ($filtros['filter_column'][$ii]['column'] == 'estado' &&
-                    $filtros['filter_column'][$ii]['type'] == '=') {
-                    if ($filtros['filter_column'][$ii]['value'] == 'S') {
-                        $query = $art_query->whereNotExists(function ($query) {
-                            $query->select(DB::raw(1))
-                                ->from('combinacion')
-                                ->whereRaw('combinacion.articulo_id=articulo.id');
-                        })->where('usoarticulo_id', '=', '1');
-                    } elseif ($filtros['filter_column'][$ii]['value'] == 'A' ||
-                            $filtros['filter_column'][$ii]['value'] == 'I') {
-                        $estado = $filtros['filter_column'][$ii]['value'];
-                        $query = $art_query->whereExists(function ($query) use ($estado) {
-                            $query->select(DB::raw(1))
-                                ->from('combinacion')
-                                ->whereRaw("combinacion.articulo_id=articulo.id and combinacion.estado='".$estado."'");
-                        });
-                    }
-                } else {
-                    switch ($filtros['filter_column'][$ii]['type']) {
-                        case 'in':
-                            $query = $art_query->whereIn($filtros['filter_column'][$ii]['column'], explode(',', $filtros['filter_column'][$ii]['value']));
-                            break;
-                        case 'not in':
-                            $query = $art_query->whereNotIn($filtros['filter_column'][$ii]['column'], explode(',', $filtros['filter_column'][$ii]['value']));
-                            break;
-                        case 'like':
-                        case 'not like':
-                            $query = $art_query->where($filtros['filter_column'][$ii]['column'], $filtros['filter_column'][$ii]['type'], '%'.$filtros['filter_column'][$ii]['value'].'%');
-                            break;
-                        case '':
-                            $query = $art_query->whereExists(function ($query) {
-                                $query->select(DB::raw(1))
-                                    ->from('combinacion')
-                                    ->whereRaw("combinacion.articulo_id=articulo.id and combinacion.estado='A'");
-                            });
-                            break;
-                        default:
-                            if ($filtros['filter_column'][$ii]['value']) {
-                                $query = $art_query->where($filtros['filter_column'][$ii]['column'], $filtros['filter_column'][$ii]['type'], $filtros['filter_column'][$ii]['value']);
-                            }
-                            break;
-                    }
-                }
-
-                if ($filtros['filter_column'][$ii]['sorting'] != '') {
-                    $query = $art_query->orderBy('sku', $filtros['filter_column'][$ii]['sorting']);
-                }
-            }
-        } else {
-            if (config('app.empresa') == 'Calzados Ferli') {
-                $query = $art_query->whereExists(function ($query) {
-                    $query->select(DB::raw(1))
-                        ->from('combinacion')
-                        ->whereRaw("combinacion.articulo_id=articulo.id and combinacion.estado='A'");
-                });
-            }
-        }
-        $articulos = $art_query->get();
-
-        return view('stock.product.list', compact('inactive', 'articulos', 'usosArticulos', 'filtros'));
+        return view('stock.product.list', compact(
+            'inactive',
+            'articulos',
+            'usosArticulos',
+            'filtros',
+            'filtrosQuery',
+            'estadoComb',
+            'retornoQuery'
+        ));
     }
 
     public function list(Request $request)
@@ -196,9 +146,7 @@ class ArticuloFerliController extends Controller
 
     public function limpiafiltro(Request $request)
     {
-        session()->forget('filtros');
-
-        return json_encode(['ok']);
+        return redirect()->route('products.index');
     }
 
     // Consulta productos desde QR de etiquetas
@@ -376,7 +324,7 @@ class ArticuloFerliController extends Controller
         return redirect()->back()->with('status', 'El producto seleccionado se imprimio con exito.');
     }
 
-    public function create()
+    public function create(Request $request)
     {
         can('crear-articulos-disenio');
 
@@ -392,10 +340,11 @@ class ArticuloFerliController extends Controller
         $fondo = Fondo::orderBy('nombre')->get();
         $horma = Horma::orderBy('nombre')->get();
         $serigrafia = Serigrafia::orderBy('nombre')->get();
+        $filtrosQuery = QueryRetornoListado::desdeRequestSiIndex($request, ArticuloFerliListadoFiltros::class);
 
         return view('stock.product.diseno.create', compact('categoria', 'subcategoria', 'linea', 'marca',
             'capellada', 'forro', 'compfondo', 'unidadmedida', 'usosArticulos',
-            'serigrafia', 'horma', 'fondo'));
+            'serigrafia', 'horma', 'fondo', 'filtrosQuery'));
     }
 
     public function save(ValidacionArticuloFerli $request)
@@ -446,10 +395,12 @@ class ArticuloFerliController extends Controller
 
         Mail::to($receivers)->send(new AltaArticulo($request->all(), $request->mventa_id, $request->linea_id));
 
-        return redirect()->route('products.index')->with('status', 'Producto creado');
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ArticuloFerliListadoFiltros::class);
+
+        return redirect()->route('products.index', $filtrosQuery)->with('status', 'Producto creado');
     }
 
-    public function edit($id, $type = null, $filtros = null)
+    public function edit(Request $request, $id, $type = null)
     {
 
         $producto = Articulo::with('categorias')
@@ -493,6 +444,7 @@ class ArticuloFerliController extends Controller
         $fondo = Fondo::orderBy('nombre')->get();
         $horma = Horma::orderBy('nombre')->get();
         $serigrafia = Serigrafia::orderBy('nombre')->get();
+        $filtrosQuery = QueryRetornoListado::desdeRequestSiIndex($request, ArticuloFerliListadoFiltros::class);
 
         if ($type == 'tecnica') {
             $caja_query = Caja::select('cajaproducto.id', 'cajaproducto.nombre',
@@ -501,8 +453,8 @@ class ArticuloFerliController extends Controller
                 ->orderBy('cajaproducto.nombre')->get();
 
             return view('stock.product.tecnica.edit', compact('producto', 'id', 'categoria', 'marca', 'linea', 'compfondo', 'forro', 'usosArticulos', 'tipoCorte', 'punteras',
-                'capellada', 'unidadmedida', 'contrafuertes', 'filtros', 'caja_query',
-                'serigrafia', 'horma', 'fondo'));
+                'capellada', 'unidadmedida', 'contrafuertes', 'caja_query',
+                'serigrafia', 'horma', 'fondo', 'filtrosQuery'));
         } elseif ($type == 'contaduria') {
 
             $ctamae = Cuentacontable::orderBy('codigo')->get();
@@ -516,10 +468,10 @@ class ArticuloFerliController extends Controller
 
             return view('stock.product.contaduria.edit', compact('producto', 'id', 'categoria', 'marca', 'linea',
                 'compfondo', 'forro', 'usosArticulos', 'tipoCorte', 'punteras', 'ctamae', 'codimp',
-                'capellada', 'unidadmedida', 'filtros', 'tarea_query', 'nofactura_enum'));
+                'capellada', 'unidadmedida', 'tarea_query', 'nofactura_enum', 'filtrosQuery'));
         } else {
 
-            return view('stock.product.diseno.edit', compact('producto', 'id', 'categoria', 'subcategoria', 'marca', 'linea', 'compfondo', 'forro', 'usosArticulos', 'tipoCorte', 'punteras', 'capellada', 'unidadmedida', 'filtros'));
+            return view('stock.product.diseno.edit', compact('producto', 'id', 'categoria', 'subcategoria', 'marca', 'linea', 'compfondo', 'forro', 'usosArticulos', 'tipoCorte', 'punteras', 'capellada', 'unidadmedida', 'filtrosQuery'));
         }
 
     }
@@ -542,7 +494,9 @@ class ArticuloFerliController extends Controller
         $Articulo = new Articulo;
         $Articulo->actualizarAnita($producto, $producto->sku);
 
-        return redirect('stock/products')->with('status', 'Articulo actualizado con exito');
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ArticuloFerliListadoFiltros::class);
+
+        return redirect()->route('products.index', $filtrosQuery)->with('status', 'Articulo actualizado con exito');
     }
 
     public function updateTecnica(ValidacionArticuloTecnica $request, $id)
@@ -595,7 +549,9 @@ class ArticuloFerliController extends Controller
         $Articulo = new Articulo;
         $Articulo->actualizarAnita($producto, $producto->sku);
 
-        return redirect('stock/products')->with('status', 'Articulo actualizado con exito');
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ArticuloFerliListadoFiltros::class);
+
+        return redirect()->route('products.index', $filtrosQuery)->with('status', 'Articulo actualizado con exito');
     }
 
     public function updateContaduria(ValidacionArticuloContaduria $request, $id)
@@ -640,7 +596,9 @@ class ArticuloFerliController extends Controller
         $Articulo = new Articulo;
         $Articulo->actualizarAnita($producto, $producto->sku);
 
-        return redirect('stock/products')->with('status', 'Articulo actualizado con exito');
+        $filtrosQuery = QueryRetornoListado::desdeRequest($request, ArticuloFerliListadoFiltros::class);
+
+        return redirect()->route('products.index', $filtrosQuery)->with('status', 'Articulo actualizado con exito');
     }
 
     public function delete(Request $request, $id)

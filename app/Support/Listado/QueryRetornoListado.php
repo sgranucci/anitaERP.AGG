@@ -38,6 +38,8 @@ class QueryRetornoListado
             'mostrar_totalizadoras',
             'filtro_tipocuenta',
             'filtro_nivel',
+            'estado_comb',
+            'filtro_estado',
         ] as $key) {
             if ($request->query->has($key)) {
                 return true;

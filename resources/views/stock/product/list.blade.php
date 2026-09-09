@@ -5,8 +5,7 @@ Art&iacute;culos
 
 @section("scripts")
 <script src="{{asset("assets/pages/scripts/admin/index.js")}}" type="text/javascript"></script>
-<script src="{{asset("assets/pages/scripts/stock/articulo/filtro.js")}}" type="text/javascript"></script>
-
+<script src="{{asset("assets/pages/scripts/includes/listado-filtros.js")}}" type="text/javascript"></script>
 <script>
 function checkState(index){
   var confirmar = confirm("¿Desea inactivar combinaciones de forma masiva?");
@@ -27,31 +26,18 @@ function checkState(index){
     });
   }
 }
-
-function limpiaFiltros(){
-	$('#estado').val('');
-	$('#usoarticulo_id').val('');
-
-    var token = $("meta[name='csrf-token']").attr("content");
-    var data = "_token="+token;
-
-    $.ajax({
-        type: "POST",
-        url: "{{ route('product.limpiafiltro') }}",
-		data: data,
-        success: function(response){
-			window.location.replace(window.location.pathname);
-        }
-    });
-}
-
 </script>
-
 @endsection
 
-<?php use App\Helpers\biblioteca ?>
+<?php
+use App\Helpers\biblioteca;
+use App\Support\Stock\ArticuloFerliListadoFiltros;
+?>
 
 @section('contenido')
+@php
+    $retornoListadoQuery = $retornoQuery ?? \App\Support\Listado\QueryRetornoListado::retornoLinksDesdeFiltrosQuery($filtrosQuery ?? []);
+@endphp
 <meta name="csrf-token" content="{{ csrf_token() }}" />
 <div class="row">
     <div class="col-lg-12">
@@ -59,33 +45,37 @@ function limpiaFiltros(){
         <div class="card card-info">
             <div class="card-header">
                 <h3 class="card-title">Art&iacute;culos</h3>
-                <div class="card-tools">
-                    <a href="{{route('product.create')}}" class="btn btn-outline-secondary btn-sm">
-                       	@if (can('crear-articulos-disenio', false))
-                        	<i class="fa fa-fw fa-plus-circle"></i> Nuevo registro
-						@endif
-                    </a>
-                    <span id="container-button-state">
-                       	@if (can('cambiar-estado-combinaciones', false))
+                <div class="card-tools d-flex flex-wrap align-items-center justify-content-end">
+                    @include('includes.listado.filtros_toolbar', [
+                        'formId' => 'form-filtros-producto-ferli',
+                        'filtroValor' => $filtros['valor'] ?? '',
+                        'tieneCriterios' => ArticuloFerliListadoFiltros::tieneCriteriosAplicados($filtros ?? []),
+                        'limpiarUrl' => route('products.index', ['filtro_limpiar' => 1]),
+                        'placeholder' => 'Búsqueda rápida (tolera errores de tipeo)…',
+                        'toggleTarget' => '#panel-filtros-producto-ferli',
+                        'toggleId' => 'btn-toggle-filtros-producto-ferli',
+                        'inputId' => 'filtro_valor',
+                        'nuevoRegistroUrl' => route('product.create', $retornoListadoQuery),
+                        'nuevoRegistroCan' => 'crear-articulos-disenio',
+                    ])
+                    <span id="container-button-state" class="ml-1">
+                        @if (can('cambiar-estado-combinaciones', false))
                             <button class="btn btn-outline-secondary btn-sm" style="color:white" onclick="checkState(0)">Inactivar combinaciones</button>
                         @endif
                     </span>
-                   	<a href="javascript:void(0)" class="btn btn-outline-secondary btn-sm" id='btn_advanced_filter' data-url-parameter=''
-						title='Filtros y búsquedas avanzadas' class="btn btn-sm btn-default ">
-                       	@if (can('filtrar-articulos', false))
-                       		<i class="fa fa-filter"></i> Filtros y Orden
-						@endif
-                    </a>
-					@if (session()->get('filtros') != '')
-                    	<span id="container-button-state">
-                            <button class="btn btn-outline-secondary btn-sm" style="color:white" onclick="limpiaFiltros()">Limpiar filtros</button>
-                    	</span>
-					@endif
                 </div>
             </div>
+            <form method="get" action="{{ route('products.index') }}" id="form-filtros-producto-ferli" class="mb-0">
+                @include('stock.product.partials.filtros_listado', [
+                    'limpiarUrl' => route('products.index', ['filtro_limpiar' => 1]),
+                ])
+            </form>
+            <div class="card-body py-2 border-bottom bg-white">
+                @include('stock.product.partials.filtros_externos')
+            </div>
             <div class="card-body table-responsive p-0">
-                <table class="table table-striped table-bordered table-hover" id="tabla-data">
-                    <thead>
+                <table class="table table-striped table-bordered table-hover" id="tabla-paginada">
+                    <thead style="background:#85C1E9;color:#17202A;">
                         <tr>
                             <th>C&oacute;digo</th>
                             <th>Descripci&oacute;n</th>
@@ -124,13 +114,13 @@ function limpiaFiltros(){
 									@endif
 								@endif
                        			@if (can('editar-articulos-disenio', false))
-          							<a class="btn-xs btn-primary ml-2" style="padding: 1px" href="product/edit/{{$articulo->id}}/disenio">Diseño</a>
+          							<a class="btn-xs btn-primary ml-2" style="padding: 1px" href="{{ route('product.edit', ['id' => $articulo->id, 'tipo' => 'disenio'] + $retornoListadoQuery) }}">Diseño</a>
 								@endif
                        			@if (can('editar-articulos-tecnica', false))
-          							<a class="btn-xs btn-primary ml-2" style="padding: 1px" href="product/edit/{{$articulo->id}}/tecnica">T&eacute;cnica</a>
+          							<a class="btn-xs btn-primary ml-2" style="padding: 1px" href="{{ route('product.edit', ['id' => $articulo->id, 'tipo' => 'tecnica'] + $retornoListadoQuery) }}">T&eacute;cnica</a>
 								@endif
                        			@if (can('editar-articulos-contaduria', false))
-          							<a class="btn-xs btn-primary ml-2" style="padding: 1px" href="product/edit/{{$articulo->id}}/contaduria">Contable</a>
+          							<a class="btn-xs btn-primary ml-2" style="padding: 1px" href="{{ route('product.edit', ['id' => $articulo->id, 'tipo' => 'contaduria'] + $retornoListadoQuery) }}">Contable</a>
 								@endif
                        			@if (can('imprimir-articulos-qr', false))
           							<a href="product/{{$articulo->stkm_articulo}}/TODO" class="btn-accion-tabla tooltipsC" title="Imprimir QR">
@@ -151,10 +141,13 @@ function limpiaFiltros(){
                     </tbody>
                 </table>
             </div>
+            @if (method_exists($articulos, 'links'))
+                <div class="card-footer clearfix">
+                    {{ $articulos->appends($filtrosQuery ?? [])->links() }}
+                </div>
+            @endif
         </div>
     </div>
 </div>
-
-@include('includes.filtroarticulo')
 
 @endsection

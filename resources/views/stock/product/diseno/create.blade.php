@@ -8,6 +8,9 @@
 @endsection
 
 @section('contenido')
+@php
+    $volverListadoUrl = route('products.index', $filtrosQuery ?? []);
+@endphp
 <div class="row">
     <div class="col-lg-12">
         @include('includes.form-error')
@@ -16,12 +19,12 @@
             <div class="card-header">
                 <h3 class="card-title">Crear Art&iacute;culo - Datos Diseño</h3>
                 <div class="card-tools">
-                    <a href="{{ URL::previous() }}" class="btn btn-outline-info btn-sm">
+                    <a href="{{ $volverListadoUrl }}" class="btn btn-outline-info btn-sm">
                         <i class="fa fa-fw fa-reply-all"></i> Volver al listado
                     </a>
                 </div>
             </div>
-            <form action="{{route('product.save')}}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
+            <form action="{{ route('product.save', $filtrosQuery ?? []) }}" id="form-general" class="form-horizontal form--label-right" method="POST" autocomplete="off">
                 @csrf @method("put")
                 @include('stock.product.diseno.partials.form', ['edit' => false])
 
